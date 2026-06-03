@@ -106,6 +106,7 @@ templ calAlmanacPage(d CalAlmanacMockData) {
 		@calAlmanacTimepiece(d)
 		@calAlmanacWidget(d)
 		@calAlmanacPopover()
+		@calAlmanacCreatePopover(d)
 		// Mock dataset, JSON-serialized for the JS init blocks.
 		// This is the single source of truth — same struct the templ
 		// rendered above.
@@ -113,39 +114,53 @@ templ calAlmanacPage(d CalAlmanacMockData) {
 	</div>
 }
 
-// calAlmanacTimepiece — a small standalone draggable Calendaria-style
-// time widget. Lives separately from the main calendar widget — the
-// idea is that this is the form the eventual "entity-mountable
-// time-piece" takes, just running in the showcase as a free-floating
-// widget. Campaign-wide top-bar integration is TBD per coordinator
-// (operator: "the time-piece should either be an entity or the top
-// bar for the entire campaign... that's been buggy to customize in
-// the past so we'll have coordinator put that down as a tbd feature").
+// calAlmanacTimepiece — REFINEMENT-V3: HOURGLASS replaces snowglobe.
+// Vertical two-chamber glass: trapezoidal chambers meeting at a narrow
+// waist. Top chamber drains, bottom fills; sand particles fall through
+// the waist (animated by JS for the per-day themed-sand effect, which
+// the WEATHER_EFFECTS + CELESTIAL_EFFECTS registries supply via the new
+// sandRender hook). Server pre-renders the rest-state for no-JS &
+// headless screenshots; JS drives animation, flip cadence (dawn/dusk),
+// and themed sand.
+//
+// The DOM is intentionally renderFn-agnostic — JS rebuilds the inside
+// of `[data-cal-hourglass-chambers]` on every theme/day change, so the
+// templ only seeds a default golden rest-state.
 templ calAlmanacTimepiece(d CalAlmanacMockData) {
-	<aside class="cal-almanac-time" data-cal-time style="left:32px; top:840px; width:420px;">
-		<header class="cal-almanac-time__handle" data-cal-time-drag>
-			<span class="cal-almanac-time__tag">Timepiece</span>
+	{{ wfx := currentWeatherEffect(d) }}
+	{{ flipped := isNightPhase(d) }}
+	<aside class={ "cal-almanac-hourglass", "cal-almanac-sky--wfx-" + wfx.ID } data-cal-time data-cal-hourglass-flipped={ boolToStr(flipped) } data-cal-hourglass-theme={ wfx.ID } style="left:32px; top:840px;">
+		<header class="cal-almanac-hourglass__handle" data-cal-time-drag>
+			<span class="cal-almanac-hourglass__tag">Timepiece</span>
+			<span class="cal-almanac-hourglass__theme" data-cal-hourglass-theme-label>{ wfx.Name }</span>
 		</header>
-		<div class="cal-almanac-time__body">
-			@calAlmanacIcon("book", "cal-almanac-time__leadicon")
-			<div class="cal-almanac-time__date">
-				<span class="cal-almanac-time__day">{ fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }, { fmtInt(d.CurrentYear) }</span>
-				<span class="cal-almanac-time__weekday" data-cal-time-weekday>{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name }</span>
+		<div class="cal-almanac-hourglass__stage">
+			<div class="cal-almanac-hourglass__frame" data-cal-hourglass-frame aria-label="Hourglass">
+				// Glass body — two clipped chambers + a central stream channel.
+				<div class="cal-almanac-hourglass__chambers" data-cal-hourglass-chambers>
+					<div class="cal-almanac-hourglass__chamber cal-almanac-hourglass__chamber--top" data-cal-hourglass-chamber="top">
+						<div class="cal-almanac-hourglass__fill" data-cal-hourglass-fill="top" style="--fill:0.62"></div>
+					</div>
+					<div class="cal-almanac-hourglass__waist" aria-hidden="true">
+						<div class="cal-almanac-hourglass__stream" data-cal-hourglass-stream></div>
+					</div>
+					<div class="cal-almanac-hourglass__chamber cal-almanac-hourglass__chamber--bot" data-cal-hourglass-chamber="bot">
+						<div class="cal-almanac-hourglass__fill" data-cal-hourglass-fill="bot" style="--fill:0.38"></div>
+					</div>
+				</div>
+				<span class="cal-almanac-hourglass__glass" aria-hidden="true"></span>
+				<span class="cal-almanac-hourglass__sparkle" data-cal-hourglass-sparkle aria-hidden="true"></span>
 			</div>
-			<div class="cal-almanac-time__clock" data-cal-time-clock>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</div>
-			<div class="cal-almanac-time__pips">
-				if w, ok := dayWeatherType(d, d.CurrentMonth, d.CurrentDay); ok {
-					<span class="cal-almanac-time__pip" data-cal-time-weather title={ w.Name + " · " + fmtInt(w.TempC) + "°C" }>
-						@calAlmanacIcon(w.Icon, "cal-almanac-time__pipicon")
-					</span>
-				}
-				<span class="cal-almanac-time__pip" title={ "Season: " + seasonNameFor(d) }>
-					@calAlmanacIcon("snowflake", "cal-almanac-time__pipicon")
-				</span>
-				<button type="button" class="cal-almanac-time__tick" data-cal-time-tick aria-label="Advance one hour">
-					@calAlmanacIcon("tick", "cal-almanac-time__pipicon")
-				</button>
+		</div>
+		<div class="cal-almanac-hourglass__base">
+			<div class="cal-almanac-hourglass__date">
+				<span class="cal-almanac-hourglass__day">{ fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }, { fmtInt(d.CurrentYear) }</span>
+				<span class="cal-almanac-hourglass__weekday">{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name }</span>
 			</div>
+			<div class="cal-almanac-hourglass__clock" data-cal-time-clock>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</div>
+			<button type="button" class="cal-almanac-hourglass__tick" data-cal-time-tick aria-label="Advance one hour">
+				@calAlmanacIcon("tick", "cal-almanac-hourglass__tickicon")
+			</button>
 		</div>
 	</aside>
 }
@@ -155,44 +170,180 @@ templ calAlmanacTimepiece(d CalAlmanacMockData) {
 // fills + positions it adjacent to whatever the operator clicked
 // (day cell or event chip). Heavy edits still escalate to the side
 // drawer (data-cal-drawer).
+// calAlmanacPopover — REFINEMENT-V2 quick-view tier. Slides in from the
+// right (~360px) with inline-editable basics + summary links + an
+// expand affordance (⤢) that escalates to the full editor drawer.
+// JS fills + slides it; it never reaches the full editor's depth.
 templ calAlmanacPopover() {
-	<div class="cal-almanac-pop" data-cal-pop data-cal-pop-side="top" aria-hidden="true" hidden>
-		<div class="cal-almanac-pop__arrow" data-cal-pop-arrow aria-hidden="true"></div>
-		<header class="cal-almanac-pop__head">
-			<div class="cal-almanac-pop__title-wrap">
-				<h3 class="cal-almanac-pop__title" data-cal-pop-title>—</h3>
-				<p class="cal-almanac-pop__meta" data-cal-pop-meta>—</p>
+	<aside class="cal-almanac-qv" data-cal-qv aria-hidden="true">
+		<header class="cal-almanac-qv__head">
+			<div class="cal-almanac-qv__title-wrap">
+				<input class="cal-almanac-qv__title" data-cal-qv-title value="—" aria-label="Title (editable)"/>
+				<p class="cal-almanac-qv__meta" data-cal-qv-meta>—</p>
 			</div>
-			<button type="button" class="cal-almanac-iconbtn" data-cal-pop-close aria-label="Close">×</button>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-qv-expand aria-label="Expand to full editor" title="Expand ⤢">⤢</button>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-qv-close aria-label="Close">×</button>
 		</header>
-		<nav class="cal-almanac-pop__tabs" role="tablist">
-			<button type="button" class="cal-almanac-pop__tab cal-almanac-pop__tab--active" data-cal-pop-tab="detail" aria-selected="true">Detail</button>
-			<button type="button" class="cal-almanac-pop__tab" data-cal-pop-tab="notes">Notes</button>
-			<button type="button" class="cal-almanac-pop__tab" data-cal-pop-tab="vis">Visibility</button>
+		<div class="cal-almanac-qv__body">
+			<textarea class="cal-almanac-qv__desc" data-cal-qv-desc rows="3" placeholder="Description…"></textarea>
+			<div class="cal-almanac-qv__events" data-cal-qv-events></div>
+			<div class="cal-almanac-qv__state" data-cal-qv-state></div>
+			<div class="cal-almanac-qv__links" data-cal-qv-links></div>
+		</div>
+		<footer class="cal-almanac-qv__foot">
+			<button type="button" class="cal-almanac-btn cal-almanac-btn--primary cal-almanac-btn--sm" data-cal-qv-save>Save</button>
+			<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-qv-expand2>Expand for more ⤢</button>
+		</footer>
+	</aside>
+}
+
+// calAlmanacCreatePopover — REFINEMENT-V3 click-empty-day-to-create
+// flow (Google-Cal-style quick-create). Anchored to whatever cell was
+// clicked, slides in like the quick-view but with a Create header +
+// Create/More-options footer. Re-uses the .cal-almanac-qv positioning
+// + slide animation; differentiated by data-cal-create. Esc/outside
+// click closes; Create commits a mock event; More options escalates
+// to the full editor with data pre-filled.
+templ calAlmanacCreatePopover(d CalAlmanacMockData) {
+	<aside class="cal-almanac-qv cal-almanac-qv--create" data-cal-create aria-hidden="true" aria-label="Create event">
+		<header class="cal-almanac-qv__head cal-almanac-qv__head--create">
+			<div class="cal-almanac-qv__title-wrap">
+				<h2 class="cal-almanac-qv__create-h" data-cal-create-h>Create event</h2>
+				<p class="cal-almanac-qv__meta" data-cal-create-meta>—</p>
+			</div>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-create-close aria-label="Close">×</button>
+		</header>
+		<div class="cal-almanac-qv__body">
+			<input class="cal-almanac-qv__title cal-almanac-qv__title--create" data-cal-create-title placeholder="Event title" aria-label="Event title"/>
+			<div class="cal-almanac-qv__row" style="display:flex;gap:8px">
+				<label class="cal-almanac-qv__lbl">
+					<span>Tier</span>
+					<select class="cal-almanac-qv__sel" data-cal-create-tier>
+						for _, t := range d.Tiers {
+							if t.ID == "standard" {
+								<option value={ t.ID } selected>{ t.Name }</option>
+							} else {
+								<option value={ t.ID }>{ t.Name }</option>
+							}
+						}
+					</select>
+				</label>
+				<label class="cal-almanac-qv__lbl">
+					<span>Category</span>
+					<select class="cal-almanac-qv__sel" data-cal-create-cat>
+						for _, c := range d.Categories {
+							<option value={ c.ID }>{ c.Name }</option>
+						}
+					</select>
+				</label>
+			</div>
+			<textarea class="cal-almanac-qv__desc" data-cal-create-notes rows="2" placeholder="Inline notes (optional)…"></textarea>
+		</div>
+		<footer class="cal-almanac-qv__foot">
+			<button type="button" class="cal-almanac-btn cal-almanac-btn--primary cal-almanac-btn--sm" data-cal-create-commit>Create</button>
+			<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-create-expand>More options ⤢</button>
+		</footer>
+	</aside>
+}
+
+// calAlmanacEditor — REFINEMENT-V2 expanded tier (~480px). Escalation
+// target from the quick-view's expand. Full editor: Detail / Notes /
+// Visibility tabs + the 8-action menu (Create Entity From submenu,
+// Show in Timeline, Share Permalink, Duplicate, Set Recurring, Override
+// Weather, History, Delete). Replaces the old side drawer.
+templ calAlmanacEditor(d CalAlmanacMockData) {
+	<aside class="cal-almanac-editor" data-cal-editor aria-hidden="true">
+		<header class="cal-almanac-editor__head">
+			<div>
+				<h2 class="cal-almanac-editor__title" data-cal-editor-title>Event</h2>
+				<p class="cal-almanac-editor__meta" data-cal-editor-meta>—</p>
+			</div>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-editor-collapse aria-label="Back to quick-view" title="Collapse">⤡</button>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-editor-close aria-label="Close">×</button>
+		</header>
+		<nav class="cal-almanac-editor__tabs" role="tablist">
+			<button type="button" class="cal-almanac-editor__tab cal-almanac-editor__tab--active" data-cal-editor-tab="detail" aria-selected="true">Detail</button>
+			<button type="button" class="cal-almanac-editor__tab" data-cal-editor-tab="notes">Notes</button>
+			<button type="button" class="cal-almanac-editor__tab" data-cal-editor-tab="vis">Visibility</button>
 		</nav>
-		<div class="cal-almanac-pop__panels">
-			<div class="cal-almanac-pop__panel cal-almanac-pop__panel--active" data-cal-pop-panel="detail">
-				<p class="cal-almanac-pop__body" data-cal-pop-desc>—</p>
-				<div class="cal-almanac-pop__events" data-cal-pop-events></div>
-				<div class="cal-almanac-pop__moon" data-cal-pop-moon hidden></div>
-				<div class="cal-almanac-pop__weather" data-cal-pop-weather hidden></div>
+		<div class="cal-almanac-editor__panels">
+			<div class="cal-almanac-editor__panel cal-almanac-editor__panel--active" data-cal-editor-panel="detail">
+				<label class="cal-almanac-editor__lbl">Title</label>
+				<input class="cal-almanac-editor__field" data-cal-editor-f-title/>
+				<label class="cal-almanac-editor__lbl">Description</label>
+				<textarea class="cal-almanac-editor__field cal-almanac-editor__field--area" data-cal-editor-f-desc rows="4"></textarea>
+				<div class="cal-almanac-editor__row">
+					<div>
+						<label class="cal-almanac-editor__lbl">Tier</label>
+						<select class="cal-almanac-editor__field" data-cal-editor-f-tier>
+							for _, t := range d.Tiers {
+								<option value={ t.ID }>{ t.Name }</option>
+							}
+						</select>
+					</div>
+					<div>
+						<label class="cal-almanac-editor__lbl">Category</label>
+						<select class="cal-almanac-editor__field" data-cal-editor-f-cat>
+							for _, c := range d.Categories {
+								<option value={ c.ID }>{ c.Name }</option>
+							}
+						</select>
+					</div>
+				</div>
+				<div class="cal-almanac-editor__linked" data-cal-editor-linked></div>
 			</div>
-			<div class="cal-almanac-pop__panel" data-cal-pop-panel="notes" hidden>
-				<label class="cal-almanac-pop__notes-label" for="cal-pop-notes">Notes — visible to DM only</label>
-				<textarea id="cal-pop-notes" class="cal-almanac-pop__notes" data-cal-pop-notes rows="6" placeholder="Add a note for this day…"></textarea>
-				<p class="cal-almanac-pop__notes-hint">Changes save as you type (showcase is in-memory only).</p>
+			<div class="cal-almanac-editor__panel" data-cal-editor-panel="notes" hidden>
+				<textarea class="cal-almanac-editor__field cal-almanac-editor__field--area" data-cal-editor-notes rows="8" placeholder="Day / event notes (DM-only)…"></textarea>
 			</div>
-			<div class="cal-almanac-pop__panel" data-cal-pop-panel="vis" hidden>
-				<div class="cal-almanac-pop__vis" data-cal-pop-vis></div>
+			<div class="cal-almanac-editor__panel" data-cal-editor-panel="vis" hidden>
+				@calAlmanacVisEditor()
 			</div>
 		</div>
-		<footer class="cal-almanac-pop__foot">
-			<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-pop-open-drawer>
-				Open full editor →
+		// The 8-action menu.
+		<div class="cal-almanac-actions" data-cal-actions>
+			<button type="button" class="cal-almanac-actions__item" data-cal-action="create-entity">
+				@calAlmanacIcon("mask", "cal-almanac-actions__ic")
+				<span>Create Entity From</span><span class="cal-almanac-actions__chev">▸</span>
 			</button>
-			<span class="cal-almanac-pop__foot-hint">Heavy edits open the side drawer.</span>
-		</footer>
-	</div>
+			<button type="button" class="cal-almanac-actions__item" data-cal-action="timeline">
+				@calAlmanacIcon("compass", "cal-almanac-actions__ic")
+				<span>Show in Timeline</span>
+			</button>
+			<button type="button" class="cal-almanac-actions__item" data-cal-action="permalink">
+				@calAlmanacIcon("book", "cal-almanac-actions__ic")
+				<span>Share Permalink</span>
+			</button>
+			<button type="button" class="cal-almanac-actions__item" data-cal-action="duplicate">
+				@calAlmanacIcon("dice", "cal-almanac-actions__ic")
+				<span>Duplicate to date…</span>
+			</button>
+			<button type="button" class="cal-almanac-actions__item" data-cal-action="recurring">
+				@calAlmanacIcon("tick", "cal-almanac-actions__ic")
+				<span data-cal-action-recurring-label>Set as Recurring…</span>
+			</button>
+			<button type="button" class="cal-almanac-actions__item" data-cal-action="override-weather">
+				@calAlmanacIcon("cloud", "cal-almanac-actions__ic")
+				<span>Override Weather…</span>
+			</button>
+			<button type="button" class="cal-almanac-actions__item" data-cal-action="history">
+				@calAlmanacIcon("compass", "cal-almanac-actions__ic")
+				<span>History</span>
+			</button>
+			<button type="button" class="cal-almanac-actions__item cal-almanac-actions__item--danger" data-cal-action="delete">
+				@calAlmanacIcon("flame", "cal-almanac-actions__ic")
+				<span>Delete</span>
+			</button>
+		</div>
+		// Sub-popover surface (Create Entity submenu / duplicate date-pick /
+		// recurrence config / weather-pick / history list / delete confirm).
+		<div class="cal-almanac-subpop" data-cal-subpop hidden>
+			<div class="cal-almanac-subpop__head">
+				<span data-cal-subpop-title>—</span>
+				<button type="button" class="cal-almanac-iconbtn" data-cal-subpop-close aria-label="Close">×</button>
+			</div>
+			<div class="cal-almanac-subpop__body" data-cal-subpop-body></div>
+		</div>
+	</aside>
 }
 
 // calAlmanacIcon — a tiny inline SVG glyph keyed by name. Self-
@@ -252,6 +403,15 @@ templ calAlmanacIcon(name, class string) {
 			case "tick":
 				<circle cx="8" cy="8" r="6"/>
 				<path d="M8 4v4l3 2"/>
+			case "moon":
+				<path d="M10 2a6 6 0 1 0 4 10A5 5 0 0 1 10 2z" fill="currentColor" fill-opacity="0.25"/>
+			case "meteor":
+				<path d="M13 3l-8 8"/>
+				<path d="M5 11l-1 2 2-1z" fill="currentColor"/>
+				<path d="M13 3l1-1M11 3l1.5-.5M13 5l1-.3"/>
+			case "eclipse":
+				<circle cx="8" cy="8" r="6" fill="currentColor" fill-opacity="0.18"/>
+				<circle cx="10" cy="7" r="5" fill="currentColor"/>
 			default:
 				<circle cx="8" cy="8" r="2" fill="currentColor"/>
 		}
@@ -291,85 +451,169 @@ templ calAlmanacWidget(d CalAlmanacMockData) {
 			</div>
 		</header>
 		<div class="cal-almanac-widget__body">
+			@calAlmanacEraVignette(d)
 			@calAlmanacSkyband(d)
-			@calAlmanacEras(d)
 			@calAlmanacGrid(d)
 		</div>
 		<div class="cal-almanac-widget__resize" data-cal-resize aria-hidden="true"></div>
 	</section>
-	@calAlmanacDrawer(d)
+	@calAlmanacEditor(d)
+	@calAlmanacSkyPanel(d)
 }
 
-// calAlmanacEras — a thin strip above the weekday header that paints
-// the era(s) the current month falls into. Each era is a horizontal
-// band colored from its OKLCH literal; the current era is brightened
-// + carries the era name. Operator's canon mandates eras as a first-
-// class concept; this surface renders them, the side drawer's era
-// editor stays as heavy-edit scope.
-templ calAlmanacEras(d CalAlmanacMockData) {
-	<div class="cal-almanac-eras" data-cal-eras>
-		for _, era := range d.Eras {
-			<span
-				class={ "cal-almanac-eras__band", templ.KV("cal-almanac-eras__band--current", eraContainsYear(era, d.CurrentYear)) }
-				style={ "--era-color:" + era.Color + ";" }
-				title={ era.Name + " · " + eraSpanLabel(era) }
-				data-cal-era-id={ era.ID }
-			>
-				<span class="cal-almanac-eras__name">{ era.Name }</span>
-				<span class="cal-almanac-eras__span">{ eraSpanLabel(era) }</span>
-			</span>
-		}
-	</div>
+// calAlmanacEraVignette — REFINEMENT-V2: replaces the horizontal era
+// strip with a top-left corner vignette. The era's color is densest at
+// (0,0) and fades right + down via a radial-ish gradient, so it reads
+// as "this corner belongs to this era" rather than a random middle
+// box. Hover deepens + extends (CSS); never a full square. Click opens
+// the era-detail popover. JS swaps the era on month navigation.
+templ calAlmanacEraVignette(d CalAlmanacMockData) {
+	{{ era := currentEra(d) }}
+	<button
+		type="button"
+		class="cal-almanac-eravig"
+		data-cal-era-vignette
+		data-cal-era-id={ era.ID }
+		style={ "--era-color:" + era.Color + ";" }
+		title={ era.Name + " · " + eraSpanLabel(era) + " — click for era detail" }
+		aria-label={ "Era: " + era.Name }
+	>
+		<span class="cal-almanac-eravig__label">
+			<span class="cal-almanac-eravig__name" data-cal-era-name>{ era.Name }</span>
+			<span class="cal-almanac-eravig__span" data-cal-era-span>{ eraSpanLabel(era) }</span>
+		</span>
+	</button>
 }
 
-// calAlmanacSkyband — the hero. An OKLCH gradient that interpolates
-// dawn/day/dusk/night based on the current SkyTime fraction (0..1).
-// The sun + moon ride an arc across the band. A range slider scrubs
-// the time. Server-renders the initial state from d.SkyTime so the
-// page is meaningfully visible pre-JS; JS recomputes on scrub.
+// calAlmanacSkyband — REFINEMENT-V2: the ambient day-state display.
+// No scrubber bar. Always animating (CSS keyframes drive sun glow,
+// weather particles, celestial streaks). The sun is draggable to scrub
+// time; the time label is click-to-type. Weather + celestial layers
+// are rendered server-side from the current day's data so the page is
+// faithful + screenshot-able pre-JS; JS swaps them on day-change.
 templ calAlmanacSkyband(d CalAlmanacMockData) {
+	{{ wfx := currentWeatherEffect(d) }}
+	{{ cfx := currentCelestialEffects(d) }}
 	<div
-		class="cal-almanac-sky"
+		class={ "cal-almanac-sky", "cal-almanac-sky--wfx-" + wfx.ID }
 		data-cal-sky
+		data-cal-sky-weather={ wfx.ID }
+		data-cal-sky-time-frac={ fmtFloat(d.SkyTime) }
 		style={ "background: " + skybandGradient(d.SkyTime) + ";" }
 	>
-		<div class="cal-almanac-sky__arc">
+		// Weather effect layer — particles are CSS-animated; server
+		// emits a fixed set so it animates with zero JS.
+		<div class="cal-almanac-sky__weather" data-cal-sky-weather-layer>
+			@calAlmanacWeatherParticles(wfx.ID)
+		</div>
+		// Celestial layer — meteor streaks / eclipse disc, per the
+		// day's CelestialEvents (MUST: meteor + eclipse; TBD: glyph).
+		<div class="cal-almanac-sky__celestial" data-cal-sky-celestial-layer>
+			for _, c := range cfx {
+				@calAlmanacCelestialFX(c)
+			}
+		</div>
+		<div class="cal-almanac-sky__arc" data-cal-sky-arc>
 			<span
 				class="cal-almanac-sky__sun"
 				data-cal-sky-sun
 				style={ arcPositionStyle(d.SkyTime, false) }
+				role="slider"
+				aria-label="Time of day — drag to scrub"
+				tabindex="0"
 			></span>
 			for _, m := range d.Moons {
 				<span
-					class="cal-almanac-sky__moon"
+					class={ "cal-almanac-sky__moon", "cal-almanac-sky__moon--" + moonPhaseClass(d, m) }
 					data-cal-sky-moon
 					data-moon-id={ fmtInt(m.ID) }
-					style={ arcPositionStyle(moonTimeFromSky(d.SkyTime, m.PhaseOffset), true) + " background:" + m.Color + ";" }
-					title={ m.Name }
+					style={ arcPositionStyle(moonTimeFromSky(d.SkyTime, m.PhaseOffset), true) + " --moon-color:" + m.Color + ";" }
+					title={ m.Name + " — " + moonPhaseName(d, m) }
 				></span>
 			}
 		</div>
 		<div class="cal-almanac-sky__overlay">
 			<div class="cal-almanac-sky__label">
 				<strong>{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name } · { fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }</strong>
-				<span class="cal-almanac-sky__sub" data-cal-sky-label>{ skyLabelFor(d.SkyTime) } · { seasonNameFor(d) } · clear skies</span>
+				<span class="cal-almanac-sky__sub">
+					// Click-to-type time: the span swaps to an <input> in JS.
+					<button type="button" class="cal-almanac-sky__time" data-cal-sky-time-label title="Click to set the time">{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</button>
+					<span data-cal-sky-sub-rest> · { skyLabelFor(d.SkyTime) } · { seasonNameFor(d) } · { wfx.Name }</span>
+				</span>
 			</div>
-			<div class="cal-almanac-sky__scrub">
-				<label class="cal-almanac-sky__scrub-label" for="cal-almanac-time">Time</label>
-				<input
-					id="cal-almanac-time"
-					type="range"
-					class="cal-almanac-sky__scrub-input"
-					data-cal-sky-scrub
-					min="0"
-					max="1000"
-					step="1"
-					value={ fmtInt(int(d.SkyTime * 1000)) }
-				/>
-				<span class="cal-almanac-sky__scrub-time" data-cal-sky-time>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</span>
+			// "What's happening today" celestial glyphs, bottom-right.
+			<div class="cal-almanac-sky__happening" data-cal-sky-happening>
+				for _, c := range cfx {
+					<span class="cal-almanac-sky__happening-chip" title={ c.Name }>
+						@calAlmanacIcon(celestialIcon(d, c.Type), "cal-almanac-sky__happening-icon")
+					</span>
+				}
 			</div>
 		</div>
 	</div>
+}
+
+// calAlmanacWeatherParticles — emits the CSS-animated particle DOM for
+// a weather effect. MUST tier (rain/snow/thunderstorm/fog/cloudy) get
+// real particles; clear emits nothing; TBD types emit nothing here
+// (their stub label renders in the cell chip + happening row).
+templ calAlmanacWeatherParticles(effectID string) {
+	switch effectID {
+		case "rain", "acid-rain":
+			for i := 0; i < 28; i++ {
+				<span class="cal-almanac-rain" style={ rainDropStyle(i) }></span>
+			}
+		case "thunderstorm":
+			<span class="cal-almanac-cloudbank cal-almanac-cloudbank--dark"></span>
+			for i := 0; i < 30; i++ {
+				<span class="cal-almanac-rain cal-almanac-rain--heavy" style={ rainDropStyle(i) }></span>
+			}
+			<span class="cal-almanac-lightning" data-cal-lightning></span>
+		case "snow":
+			for i := 0; i < 26; i++ {
+				<span class="cal-almanac-snow" style={ snowFlakeStyle(i) }></span>
+			}
+		case "fog":
+			<span class="cal-almanac-fog"></span>
+		case "cloudy":
+			<span class="cal-almanac-cloud cal-almanac-cloud--1"></span>
+			<span class="cal-almanac-cloud cal-almanac-cloud--2"></span>
+			<span class="cal-almanac-cloud cal-almanac-cloud--3"></span>
+	}
+}
+
+// calAlmanacCelestialFX — one celestial effect's visual. MUST: meteor
+// shower (diagonal streaks) + eclipse (occluding disc + sky darken).
+// TBD types render a small labeled stub glyph only.
+templ calAlmanacCelestialFX(c CalAlmanacCelestial) {
+	switch c.Type {
+		case "meteor-shower":
+			<div class="cal-almanac-meteors" data-cal-meteors>
+				for i := 0; i < 6; i++ {
+					<span class="cal-almanac-meteor" style={ meteorStyle(i) }></span>
+				}
+			</div>
+		case "eclipse-solar":
+			<div class="cal-almanac-eclipse cal-almanac-eclipse--solar" data-cal-eclipse></div>
+		case "eclipse-lunar":
+			<div class="cal-almanac-eclipse cal-almanac-eclipse--lunar" data-cal-eclipse></div>
+		default:
+			// TBD stub — small corner label so the registry is wired.
+			<div class="cal-almanac-celestial-stub" title={ c.Name }>{ c.Name }</div>
+	}
+}
+
+// calAlmanacSkyPanel — the read-only "what's happening" slide-out, opened
+// by clicking blank sky. Lists the day's weather + celestial events +
+// sun/moon detail. JS fills + toggles it.
+templ calAlmanacSkyPanel(d CalAlmanacMockData) {
+	<aside class="cal-almanac-skypanel" data-cal-skypanel aria-hidden="true">
+		<header class="cal-almanac-skypanel__head">
+			<h3 class="cal-almanac-skypanel__title" data-cal-skypanel-title>What&#39;s happening</h3>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-skypanel-close aria-label="Close">×</button>
+		</header>
+		<div class="cal-almanac-skypanel__body" data-cal-skypanel-body></div>
+	</aside>
 }
 
 // calAlmanacGrid — month grid + weekday header. Pre-rendered from the
@@ -444,52 +688,30 @@ templ calAlmanacGrid(d CalAlmanacMockData) {
 	</div>
 }
 
-// calAlmanacDrawer — side drawer for event detail + the Q-V2-7 chip-row
-// visibility editor. Initially hidden; JS opens on event click. Forced
-// open under .cal-almanac--proof-drawer for headless screenshots.
-templ calAlmanacDrawer(d CalAlmanacMockData) {
-	<aside class="cal-almanac-drawer" data-cal-drawer aria-hidden="true">
-		<header class="cal-almanac-drawer__head">
-			<div>
-				<h2 class="cal-almanac-drawer__title" data-cal-drawer-title>Event title</h2>
-				<p class="cal-almanac-drawer__meta" data-cal-drawer-meta>Date · tier · category</p>
-			</div>
-			<button type="button" class="cal-almanac-iconbtn" data-cal-drawer-close aria-label="Close drawer">×</button>
-		</header>
-		<div class="cal-almanac-drawer__body">
-			<section class="cal-almanac-drawer__section">
-				<h3 class="cal-almanac-drawer__h3">Description</h3>
-				<p class="cal-almanac-drawer__desc" data-cal-drawer-desc>(Pick an event to view.)</p>
-			</section>
-			<section class="cal-almanac-drawer__section">
-				<h3 class="cal-almanac-drawer__h3">Visibility</h3>
-				<div class="cal-almanac-visibility" data-cal-visibility>
-					<div class="cal-almanac-visibility__radio" role="radiogroup" aria-label="Who can see this">
-						<label class="cal-almanac-visibility__opt">
-							<input type="radio" name="cal-vis" value="public" data-cal-vis-mode checked/>
-							<span>Everyone (public)</span>
-						</label>
-						<label class="cal-almanac-visibility__opt">
-							<input type="radio" name="cal-vis" value="specific" data-cal-vis-mode/>
-							<span>Specific people</span>
-						</label>
-					</div>
-					<div class="cal-almanac-visibility__rules" data-cal-vis-rules hidden>
-						<div class="cal-almanac-visibility__add">
-							<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-vis-add="allow">+ Add allow rule</button>
-							<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-vis-add="deny">+ Add deny rule</button>
-						</div>
-						<ul class="cal-almanac-visibility__chips" data-cal-vis-chips></ul>
-						<p class="cal-almanac-visibility__summary" data-cal-vis-summary>Effective audience: everyone</p>
-					</div>
-				</div>
-			</section>
-			<div class="cal-almanac-drawer__actions">
-				<button type="button" class="cal-almanac-btn cal-almanac-btn--primary" data-cal-drawer-save>Save</button>
-				<button type="button" class="cal-almanac-btn" data-cal-drawer-delete>Delete</button>
-			</div>
+// calAlmanacVisEditor — the Q-V2-7 chip-row visibility editor, reusable
+// inside the expanded editor's Visibility tab (and the quick-view links
+// jump to it). JS hydrates the radio + rule chips per event.
+templ calAlmanacVisEditor() {
+	<div class="cal-almanac-visibility" data-cal-visibility>
+		<div class="cal-almanac-visibility__radio" role="radiogroup" aria-label="Who can see this">
+			<label class="cal-almanac-visibility__opt">
+				<input type="radio" name="cal-vis" value="public" data-cal-vis-mode checked/>
+				<span>Everyone (public)</span>
+			</label>
+			<label class="cal-almanac-visibility__opt">
+				<input type="radio" name="cal-vis" value="specific" data-cal-vis-mode/>
+				<span>Specific people</span>
+			</label>
 		</div>
-	</aside>
+		<div class="cal-almanac-visibility__rules" data-cal-vis-rules hidden>
+			<div class="cal-almanac-visibility__add">
+				<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-vis-add="allow">+ Add allow rule</button>
+				<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-vis-add="deny">+ Add deny rule</button>
+			</div>
+			<ul class="cal-almanac-visibility__chips" data-cal-vis-chips></ul>
+			<p class="cal-almanac-visibility__summary" data-cal-vis-summary>Effective audience: everyone</p>
+		</div>
+	</div>
 }
 
 // --- Go helpers used by the templ ----------------------------------
@@ -503,6 +725,21 @@ func boolToStr(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// isNightPhase — REFINEMENT-V3 hourglass flip cadence. Returns true if
+// the current SkyTime falls between sunset and the next sunrise. The
+// hourglass renders flipped (night-sand on top) for the night half-cycle.
+// Uses a half-open interval so sunrise itself returns false.
+func isNightPhase(d CalAlmanacMockData) bool {
+	t, rise, set := d.SkyTime, d.Sunrise, d.Sunset
+	if rise == 0 && set == 0 {
+		return false
+	}
+	if rise < set {
+		return t < rise || t >= set
+	}
+	return t >= set && t < rise
 }
 
 // skybandGradient — returns a CSS `linear-gradient(...)` string for the
@@ -638,6 +875,166 @@ func eraSpanLabel(era CalAlmanacEra) string {
 		return fmt.Sprintf("%d – ongoing", era.StartYear)
 	}
 	return fmt.Sprintf("%d – %d", era.StartYear, era.EndYear)
+}
+
+// currentEra — the era containing the current year (last match wins so
+// the most-recent era takes precedence on overlap). Falls back to the
+// last era if none matches.
+func currentEra(d CalAlmanacMockData) CalAlmanacEra {
+	var out CalAlmanacEra
+	found := false
+	for _, e := range d.Eras {
+		if eraContainsYear(e, d.CurrentYear) {
+			out = e
+			found = true
+		}
+	}
+	if !found && len(d.Eras) > 0 {
+		out = d.Eras[len(d.Eras)-1]
+	}
+	return out
+}
+
+func fmtFloat(f float64) string { return fmt.Sprintf("%.4f", f) }
+
+// weatherEffectID — maps a named weather-type ID to a render-effect ID
+// the sky-band knows how to draw. MUST effects get full particles; TBD
+// weather types map to their own (stub-rendered) effect ID.
+func weatherEffectID(weatherTypeID string) string {
+	switch weatherTypeID {
+	case "w-clear":
+		return "clear"
+	case "w-cloudy":
+		return "cloudy"
+	case "w-rain":
+		return "rain"
+	case "w-storm":
+		return "thunderstorm"
+	case "w-blizzard":
+		return "snow"
+	case "w-fog":
+		return "fog"
+	case "w-sakura":
+		return "sakura-bloom"
+	case "w-ashfall":
+		return "ashfall"
+	case "w-arcane":
+		return "arcane-winds"
+	case "w-leysurge":
+		return "ley-surge"
+	case "w-acidrain":
+		return "acid-rain"
+	default:
+		return "clear"
+	}
+}
+
+// currentWeatherEffect — the effect-registry entry for the current
+// day's weather. Defaults to clear when the day has no authored weather.
+func currentWeatherEffect(d CalAlmanacMockData) CalAlmanacEffect {
+	id := "clear"
+	if w, ok := dayWeatherType(d, d.CurrentMonth, d.CurrentDay); ok {
+		id = weatherEffectID(w.ID)
+	}
+	for _, e := range d.WeatherEffects {
+		if e.ID == id {
+			return e
+		}
+	}
+	return CalAlmanacEffect{ID: "clear", Name: "Clear", Icon: "sun", Color: "oklch(0.85 0.14 80)", Tier: "must"}
+}
+
+// currentCelestialEffects — the celestial events on the current day.
+func currentCelestialEffects(d CalAlmanacMockData) []CalAlmanacCelestial {
+	key := fmt.Sprintf("%d-%d-%d", d.CurrentYear, d.CurrentMonth, d.CurrentDay)
+	return d.CelestialEvents[key]
+}
+
+// celestialIcon — the registry icon for a celestial type id.
+func celestialIcon(d CalAlmanacMockData, typeID string) string {
+	for _, e := range d.CelestialEffects {
+		if e.ID == typeID {
+			return e.Icon
+		}
+	}
+	return "meteor"
+}
+
+// moonPhaseFraction — 0..1 position in this moon's cycle for the
+// current day (0/1 = new, 0.5 = full).
+func moonPhaseFraction(d CalAlmanacMockData, m CalAlmanacMoon) float64 {
+	epochDays := float64(d.CurrentYear*360 + (d.CurrentMonth-1)*30 + d.CurrentDay)
+	phase := epochDays/m.CycleDays + m.PhaseOffset
+	for phase > 1 {
+		phase -= 1
+	}
+	for phase < 0 {
+		phase += 1
+	}
+	return phase
+}
+
+// moonPhaseClass — a CSS modifier (new/cres-wax/quarter-wax/gibb-wax/
+// full/gibb-wane/quarter-wane/cres-wane) used to render the lit
+// fraction of the moon disc.
+func moonPhaseClass(d CalAlmanacMockData, m CalAlmanacMoon) string {
+	p := moonPhaseFraction(d, m)
+	switch int(p * 8) {
+	case 0:
+		return "new"
+	case 1:
+		return "cres-wax"
+	case 2:
+		return "quarter-wax"
+	case 3:
+		return "gibb-wax"
+	case 4:
+		return "full"
+	case 5:
+		return "gibb-wane"
+	case 6:
+		return "quarter-wane"
+	default:
+		return "cres-wane"
+	}
+}
+
+// moonPhaseName — named phase for this moon on the current day, from
+// the operator-authored MoonPhases vocabulary (falls back to a generic
+// phase name when none covers the percentage).
+func moonPhaseName(d CalAlmanacMockData, m CalAlmanacMoon) string {
+	pct := int(moonPhaseFraction(d, m) * 100)
+	for _, mp := range d.MoonPhases {
+		if mp.MoonID == m.ID && pct >= mp.StartPct && pct < mp.EndPct {
+			return mp.Name
+		}
+	}
+	names := []string{"new", "waxing crescent", "first quarter", "waxing gibbous", "full", "waning gibbous", "last quarter", "waning crescent"}
+	return names[int(moonPhaseFraction(d, m)*8)%8]
+}
+
+// Particle inline-style helpers — spread positions + animation delays
+// so the CSS particle animations look organic without per-particle CSS.
+func rainDropStyle(i int) string {
+	left := (i*37 + 5) % 100
+	delay := float64((i*53)%100) / 100.0
+	dur := 0.5 + float64((i*29)%40)/100.0
+	return fmt.Sprintf("left:%d%%; animation-delay:%.2fs; animation-duration:%.2fs;", left, delay, dur)
+}
+
+func snowFlakeStyle(i int) string {
+	left := (i*41 + 3) % 100
+	delay := float64((i*61)%100) / 100.0
+	dur := 3.0 + float64((i*23)%30)/10.0
+	drift := (i % 5) - 2
+	return fmt.Sprintf("left:%d%%; animation-delay:%.2fs; animation-duration:%.2fs; --drift:%dpx;", left, delay, dur, drift*8)
+}
+
+func meteorStyle(i int) string {
+	top := (i*23 + 4) % 40
+	left := 55 + (i*17)%40
+	delay := float64(i) * 1.7
+	return fmt.Sprintf("top:%d%%; left:%d%%; animation-delay:%.2fs;", top, left, delay)
 }
 
 // calCell — flattened render-ready cell used by the grid template.
