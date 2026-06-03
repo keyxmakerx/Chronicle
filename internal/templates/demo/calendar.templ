@@ -106,6 +106,7 @@ templ calAlmanacPage(d CalAlmanacMockData) {
 		@calAlmanacTimepiece(d)
 		@calAlmanacWidget(d)
 		@calAlmanacPopover()
+		@calAlmanacCreatePopover(d)
 		// Mock dataset, JSON-serialized for the JS init blocks.
 		// This is the single source of truth — same struct the templ
 		// rendered above.
@@ -113,53 +114,52 @@ templ calAlmanacPage(d CalAlmanacMockData) {
 	</div>
 }
 
-// calAlmanacTimepiece — a small standalone draggable Calendaria-style
-// time widget. Lives separately from the main calendar widget — the
-// idea is that this is the form the eventual "entity-mountable
-// time-piece" takes, just running in the showcase as a free-floating
-// widget. Campaign-wide top-bar integration is TBD per coordinator
-// (operator: "the time-piece should either be an entity or the top
-// bar for the entire campaign... that's been buggy to customize in
-// the past so we'll have coordinator put that down as a tbd feature").
-// calAlmanacTimepiece — REFINEMENT-V2: the standalone time-piece widget
-// becomes a SNOWGLOBE. A circular glass dome plays the same sky-band
-// animations (sun + moons + weather + celestial) miniaturized inside;
-// a small base/stand below carries the date + clock + tick button. This
-// is the SMALL companion widget only — the main calendar keeps its
-// panoramic sky-band header.
+// calAlmanacTimepiece — REFINEMENT-V3: HOURGLASS replaces snowglobe.
+// Vertical two-chamber glass: trapezoidal chambers meeting at a narrow
+// waist. Top chamber drains, bottom fills; sand particles fall through
+// the waist (animated by JS for the per-day themed-sand effect, which
+// the WEATHER_EFFECTS + CELESTIAL_EFFECTS registries supply via the new
+// sandRender hook). Server pre-renders the rest-state for no-JS &
+// headless screenshots; JS drives animation, flip cadence (dawn/dusk),
+// and themed sand.
+//
+// The DOM is intentionally renderFn-agnostic — JS rebuilds the inside
+// of `[data-cal-hourglass-chambers]` on every theme/day change, so the
+// templ only seeds a default golden rest-state.
 templ calAlmanacTimepiece(d CalAlmanacMockData) {
 	{{ wfx := currentWeatherEffect(d) }}
-	{{ cfx := currentCelestialEffects(d) }}
-	<aside class="cal-almanac-globe" data-cal-time style="left:32px; top:840px;">
-		<header class="cal-almanac-globe__handle" data-cal-time-drag>
-			<span class="cal-almanac-globe__tag">Timepiece</span>
+	{{ flipped := isNightPhase(d) }}
+	<aside class={ "cal-almanac-hourglass", "cal-almanac-sky--wfx-" + wfx.ID } data-cal-time data-cal-hourglass-flipped={ boolToStr(flipped) } data-cal-hourglass-theme={ wfx.ID } style="left:32px; top:840px;">
+		<header class="cal-almanac-hourglass__handle" data-cal-time-drag>
+			<span class="cal-almanac-hourglass__tag">Timepiece</span>
+			<span class="cal-almanac-hourglass__theme" data-cal-hourglass-theme-label>{ wfx.Name }</span>
 		</header>
-		<div class={ "cal-almanac-globe__dome", "cal-almanac-sky--wfx-" + wfx.ID } data-cal-globe-dome style={ "background: " + skybandGradient(d.SkyTime) + ";" }>
-			<div class="cal-almanac-globe__sky">
-				<span class="cal-almanac-globe__sun" data-cal-globe-sun style={ arcPositionStyle(d.SkyTime, false) }></span>
-				for _, m := range d.Moons {
-					<span class={ "cal-almanac-globe__moon", "cal-almanac-sky__moon--" + moonPhaseClass(d, m) } style={ arcPositionStyle(moonTimeFromSky(d.SkyTime, m.PhaseOffset), true) + " --moon-color:" + m.Color + ";" }></span>
-				}
-				// Mini weather + celestial, confined to the dome.
-				<div class="cal-almanac-globe__weather" data-cal-globe-weather>
-					@calAlmanacWeatherParticles(wfx.ID)
+		<div class="cal-almanac-hourglass__stage">
+			<div class="cal-almanac-hourglass__frame" data-cal-hourglass-frame aria-label="Hourglass">
+				// Glass body — two clipped chambers + a central stream channel.
+				<div class="cal-almanac-hourglass__chambers" data-cal-hourglass-chambers>
+					<div class="cal-almanac-hourglass__chamber cal-almanac-hourglass__chamber--top" data-cal-hourglass-chamber="top">
+						<div class="cal-almanac-hourglass__fill" data-cal-hourglass-fill="top" style="--fill:0.62"></div>
+					</div>
+					<div class="cal-almanac-hourglass__waist" aria-hidden="true">
+						<div class="cal-almanac-hourglass__stream" data-cal-hourglass-stream></div>
+					</div>
+					<div class="cal-almanac-hourglass__chamber cal-almanac-hourglass__chamber--bot" data-cal-hourglass-chamber="bot">
+						<div class="cal-almanac-hourglass__fill" data-cal-hourglass-fill="bot" style="--fill:0.38"></div>
+					</div>
 				</div>
-				<div class="cal-almanac-globe__celestial" data-cal-globe-celestial>
-					for _, c := range cfx {
-						@calAlmanacCelestialFX(c)
-					}
-				</div>
+				<span class="cal-almanac-hourglass__glass" aria-hidden="true"></span>
+				<span class="cal-almanac-hourglass__sparkle" data-cal-hourglass-sparkle aria-hidden="true"></span>
 			</div>
-			<span class="cal-almanac-globe__glass" aria-hidden="true"></span>
 		</div>
-		<div class="cal-almanac-globe__base">
-			<div class="cal-almanac-globe__date">
-				<span class="cal-almanac-globe__day">{ fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }, { fmtInt(d.CurrentYear) }</span>
-				<span class="cal-almanac-globe__weekday">{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name }</span>
+		<div class="cal-almanac-hourglass__base">
+			<div class="cal-almanac-hourglass__date">
+				<span class="cal-almanac-hourglass__day">{ fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }, { fmtInt(d.CurrentYear) }</span>
+				<span class="cal-almanac-hourglass__weekday">{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name }</span>
 			</div>
-			<div class="cal-almanac-globe__clock" data-cal-time-clock>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</div>
-			<button type="button" class="cal-almanac-globe__tick" data-cal-time-tick aria-label="Advance one hour">
-				@calAlmanacIcon("tick", "cal-almanac-globe__tickicon")
+			<div class="cal-almanac-hourglass__clock" data-cal-time-clock>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</div>
+			<button type="button" class="cal-almanac-hourglass__tick" data-cal-time-tick aria-label="Advance one hour">
+				@calAlmanacIcon("tick", "cal-almanac-hourglass__tickicon")
 			</button>
 		</div>
 	</aside>
@@ -193,6 +193,55 @@ templ calAlmanacPopover() {
 		<footer class="cal-almanac-qv__foot">
 			<button type="button" class="cal-almanac-btn cal-almanac-btn--primary cal-almanac-btn--sm" data-cal-qv-save>Save</button>
 			<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-qv-expand2>Expand for more ⤢</button>
+		</footer>
+	</aside>
+}
+
+// calAlmanacCreatePopover — REFINEMENT-V3 click-empty-day-to-create
+// flow (Google-Cal-style quick-create). Anchored to whatever cell was
+// clicked, slides in like the quick-view but with a Create header +
+// Create/More-options footer. Re-uses the .cal-almanac-qv positioning
+// + slide animation; differentiated by data-cal-create. Esc/outside
+// click closes; Create commits a mock event; More options escalates
+// to the full editor with data pre-filled.
+templ calAlmanacCreatePopover(d CalAlmanacMockData) {
+	<aside class="cal-almanac-qv cal-almanac-qv--create" data-cal-create aria-hidden="true" aria-label="Create event">
+		<header class="cal-almanac-qv__head cal-almanac-qv__head--create">
+			<div class="cal-almanac-qv__title-wrap">
+				<h2 class="cal-almanac-qv__create-h" data-cal-create-h>Create event</h2>
+				<p class="cal-almanac-qv__meta" data-cal-create-meta>—</p>
+			</div>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-create-close aria-label="Close">×</button>
+		</header>
+		<div class="cal-almanac-qv__body">
+			<input class="cal-almanac-qv__title cal-almanac-qv__title--create" data-cal-create-title placeholder="Event title" aria-label="Event title"/>
+			<div class="cal-almanac-qv__row" style="display:flex;gap:8px">
+				<label class="cal-almanac-qv__lbl">
+					<span>Tier</span>
+					<select class="cal-almanac-qv__sel" data-cal-create-tier>
+						for _, t := range d.Tiers {
+							if t.ID == "standard" {
+								<option value={ t.ID } selected>{ t.Name }</option>
+							} else {
+								<option value={ t.ID }>{ t.Name }</option>
+							}
+						}
+					</select>
+				</label>
+				<label class="cal-almanac-qv__lbl">
+					<span>Category</span>
+					<select class="cal-almanac-qv__sel" data-cal-create-cat>
+						for _, c := range d.Categories {
+							<option value={ c.ID }>{ c.Name }</option>
+						}
+					</select>
+				</label>
+			</div>
+			<textarea class="cal-almanac-qv__desc" data-cal-create-notes rows="2" placeholder="Inline notes (optional)…"></textarea>
+		</div>
+		<footer class="cal-almanac-qv__foot">
+			<button type="button" class="cal-almanac-btn cal-almanac-btn--primary cal-almanac-btn--sm" data-cal-create-commit>Create</button>
+			<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-create-expand>More options ⤢</button>
 		</footer>
 	</aside>
 }
@@ -676,6 +725,21 @@ func boolToStr(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// isNightPhase — REFINEMENT-V3 hourglass flip cadence. Returns true if
+// the current SkyTime falls between sunset and the next sunrise. The
+// hourglass renders flipped (night-sand on top) for the night half-cycle.
+// Uses a half-open interval so sunrise itself returns false.
+func isNightPhase(d CalAlmanacMockData) bool {
+	t, rise, set := d.SkyTime, d.Sunrise, d.Sunset
+	if rise == 0 && set == 0 {
+		return false
+	}
+	if rise < set {
+		return t < rise || t >= set
+	}
+	return t >= set && t < rise
 }
 
 // skybandGradient — returns a CSS `linear-gradient(...)` string for the

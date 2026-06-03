@@ -347,9 +347,8 @@ func TestDemoCalendar_RefinementV2Hooks(t *testing.T) {
 		// Era corner vignette.
 		"data-cal-era-vignette",
 		"cal-almanac-eravig",
-		// Snowglobe timepiece.
-		"cal-almanac-globe__dome",
-		"data-cal-globe-sun",
+		// Time-piece common hooks (v3 hourglass — replaces v2 snowglobe).
+		"data-cal-time",
 		"data-cal-time-tick",
 		"data-cal-time-clock",
 		// Named weather chip + category icons + recurring marker (carried).
@@ -462,23 +461,199 @@ func TestCalAlmanac_ActionMenu8Items(t *testing.T) {
 
 // TestCalAlmanac_SnowglobeTimepiece — the timepiece is now a snowglobe
 // dome, not the old horizontal strip.
-func TestCalAlmanac_SnowglobeTimepiece(t *testing.T) {
+// TestCalAlmanac_HourglassRenders — REFINEMENT-V3: the snowglobe is
+// replaced by a vertical hourglass. Markup hooks required for JS
+// chamber/stream rendering + theme attribute + flip data-attribute.
+func TestCalAlmanac_HourglassRenders(t *testing.T) {
 	var buf bytes.Buffer
 	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
-	for _, h := range []string{"cal-almanac-globe", "cal-almanac-globe__dome", "cal-almanac-globe__glass", "data-cal-globe-sun"} {
+	for _, h := range []string{
+		"cal-almanac-hourglass",
+		"cal-almanac-hourglass__frame",
+		"data-cal-hourglass-chambers",
+		"data-cal-hourglass-stream",
+		`data-cal-hourglass-fill="top"`,
+		`data-cal-hourglass-fill="bot"`,
+		`data-cal-hourglass-chamber="top"`,
+		`data-cal-hourglass-chamber="bot"`,
+		"data-cal-hourglass-theme",
+		"data-cal-hourglass-flipped",
+		"cal-almanac-hourglass__waist",
+		"cal-almanac-hourglass__sparkle",
+		// drag handle + tick + clock preserved across the swap.
+		"data-cal-time-drag",
+		"data-cal-time-tick",
+		"data-cal-time-clock",
+	} {
 		if !strings.Contains(html, h) {
-			t.Errorf("snowglobe markup missing: %s", h)
+			t.Errorf("hourglass markup missing: %s", h)
 		}
 	}
-	if strings.Contains(html, "cal-almanac-time__clock") || strings.Contains(html, "cal-almanac-time__pips") {
-		t.Errorf("old horizontal-strip timepiece markup should be gone")
+	// Snowglobe markup should be gone — the dome class set in particular.
+	if strings.Contains(html, "cal-almanac-globe__dome") || strings.Contains(html, `data-cal-globe-dome`) {
+		t.Errorf("snowglobe markup should be removed in v3")
+	}
+}
+
+// TestCalAlmanac_HourglassFlipMechanism — the flip is tied to sunrise /
+// sunset on the mock data, with a JS helper picking the orientation
+// from VIEW.timeFrac. Pin the helper + the mock fields exist.
+func TestCalAlmanac_HourglassFlipMechanism(t *testing.T) {
+	m := CalAlmanacMock()
+	if m.Sunrise <= 0 || m.Sunrise >= 1 {
+		t.Errorf("CalAlmanacMockData.Sunrise expected (0,1), got %v", m.Sunrise)
+	}
+	if m.Sunset <= 0 || m.Sunset >= 1 {
+		t.Errorf("CalAlmanacMockData.Sunset expected (0,1), got %v", m.Sunset)
+	}
+	if m.Sunset <= m.Sunrise {
+		t.Errorf("expected Sunset > Sunrise on the default mock day, got rise=%v set=%v", m.Sunrise, m.Sunset)
+	}
+	// isNightPhase honors the interval.
+	noon := CalAlmanacMockData{SkyTime: 0.50, Sunrise: 0.25, Sunset: 0.75}
+	midnight := CalAlmanacMockData{SkyTime: 0.05, Sunrise: 0.25, Sunset: 0.75}
+	if isNightPhase(noon) {
+		t.Errorf("noon should be day phase")
+	}
+	if !isNightPhase(midnight) {
+		t.Errorf("midnight should be night phase")
 	}
 	js := readCalAlmanacJS(t)
-	if !strings.Contains(js, "registerInitBlock('snowglobe-timepiece'") {
-		t.Errorf("snowglobe-timepiece init block missing")
+	for _, h := range []string{
+		"registerInitBlock('hourglass-render'",
+		"registerInitBlock('hourglass-flip'",
+		"isNightFrac",
+		"applyHourglassFlip",
+		"applyHourglassLevels",
+	} {
+		if !strings.Contains(js, h) {
+			t.Errorf("hourglass flip-mechanism JS missing: %s", h)
+		}
+	}
+}
+
+// TestCalAlmanac_SandRendererRegistry — WEATHER_EFFECTS + CELESTIAL_EFFECTS
+// gain a sandRender hook for every MUST-tier entry. TBD-stub entries
+// also get a placeholder hook (default golden / tinted via CSS).
+func TestCalAlmanac_SandRendererRegistry(t *testing.T) {
+	js := readCalAlmanacJS(t)
+	// Hook installer present + a themed-sand init block.
+	for _, h := range []string{
+		"registerInitBlock('hourglass-themed-sand'",
+		"hookSandRenderers",
+		"defaultSandRender",
+		"streakSandRender",
+		"bigDropSandRender",
+		"applySandTheme",
+	} {
+		if !strings.Contains(js, h) {
+			t.Errorf("sand-renderer registry hook missing: %s", h)
+		}
+	}
+	// MUST-tier weather sandRender assignments present.
+	for _, key := range []string{"WEATHER_EFFECTS.clear", "WEATHER_EFFECTS.rain", "WEATHER_EFFECTS.snow", "WEATHER_EFFECTS.thunderstorm", "WEATHER_EFFECTS.fog", "WEATHER_EFFECTS.cloudy"} {
+		if !strings.Contains(js, key+".sandRender") {
+			t.Errorf("expected sandRender assigned on %s", key)
+		}
+	}
+	// MUST-tier celestial sandRender assignments.
+	for _, key := range []string{"CELESTIAL_EFFECTS['meteor-shower']", "CELESTIAL_EFFECTS['eclipse-solar']", "CELESTIAL_EFFECTS['eclipse-lunar']"} {
+		if !strings.Contains(js, key+".sandRender") {
+			t.Errorf("expected sandRender assigned on %s", key)
+		}
+	}
+}
+
+// TestCalAlmanac_CreatePopupFlow — click-empty-day → mini create popup.
+// Pin the markup + the JS init block + the expand → editor escalation.
+func TestCalAlmanac_CreatePopupFlow(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, h := range []string{
+		"data-cal-create",
+		"data-cal-create-title",
+		"data-cal-create-tier",
+		"data-cal-create-cat",
+		"data-cal-create-notes",
+		"data-cal-create-commit",
+		"data-cal-create-expand",
+		"data-cal-create-close",
+		"cal-almanac-qv--create",
+	} {
+		if !strings.Contains(html, h) {
+			t.Errorf("create-popup markup missing: %s", h)
+		}
+	}
+	js := readCalAlmanacJS(t)
+	for _, h := range []string{
+		"registerInitBlock('popup-create-flow'",
+		"openCreatePopup",
+		"closeCreatePopup",
+		"readCreateForm",
+		"mockCreateEvent",
+		"expandToEditor", // escalation path target
+	} {
+		if !strings.Contains(js, h) {
+			t.Errorf("create-popup JS missing: %s", h)
+		}
+	}
+}
+
+// TestCalAlmanac_MockCreateEvent — Go-side CreateEvent appends to the
+// in-memory events slice with a generated id when none is provided.
+func TestCalAlmanac_MockCreateEvent(t *testing.T) {
+	m := CalAlmanacMock()
+	before := len(m.Events)
+	ev := CalAlmanacCreateEvent(&m, CalAlmanacEventDraft{
+		Name:     "Battle of Five Armies",
+		Month:    m.CurrentMonth,
+		Day:      m.CurrentDay,
+		Tier:     "major",
+		Category: "session",
+	})
+	if len(m.Events) != before+1 {
+		t.Fatalf("expected events slice to grow by 1, got %d -> %d", before, len(m.Events))
+	}
+	if ev.ID == "" {
+		t.Errorf("CreateEvent should populate id; got empty")
+	}
+	if ev.Name != "Battle of Five Armies" {
+		t.Errorf("name not round-tripped: %q", ev.Name)
+	}
+	if ev.Hour != -1 {
+		t.Errorf("expected Hour -1 (all-day default), got %d", ev.Hour)
+	}
+	// Default tier coalescing.
+	ev2 := CalAlmanacCreateEvent(&m, CalAlmanacEventDraft{Name: "Untiered", Month: m.CurrentMonth, Day: m.CurrentDay})
+	if ev2.Tier != "standard" {
+		t.Errorf("expected tier to default to 'standard', got %q", ev2.Tier)
+	}
+}
+
+// TestCalAlmanac_V3ProofClasses — every forced-state proof class the
+// dispatch enumerates is defined in the CSS so headless screenshots
+// can lock the state.
+func TestCalAlmanac_V3ProofClasses(t *testing.T) {
+	src := stripCalCSSComments(readCalAlmanacCSS(t))
+	for _, klass := range []string{
+		".cal-almanac--proof-hourglass-rest",
+		".cal-almanac--proof-hourglass-flip-active",
+		".cal-almanac--proof-hourglass-rain",
+		".cal-almanac--proof-hourglass-eclipse",
+		".cal-almanac--proof-hourglass-meteor",
+		".cal-almanac--proof-hourglass-snow",
+		".cal-almanac--proof-popup-create-mini",
+		".cal-almanac--proof-popup-create-expanded",
+	} {
+		if !strings.Contains(src, klass) {
+			t.Errorf("v3 proof class missing in CSS: %s", klass)
+		}
 	}
 }
 

@@ -357,9 +357,192 @@
   function eraSpan(e) { return e.end_year ? (e.start_year + ' – ' + e.end_year) : (e.start_year + ' – ongoing'); }
 
   // ============================================================
-  // Block: snowglobe-timepiece — drag + tick
+  // REFINEMENT-V3 — Hourglass time-piece
   // ============================================================
-  registerInitBlock('snowglobe-timepiece', function () {
+  // The hourglass replaces the snowglobe. Composition:
+  //   - hourglass-render   : drag + tick + chamber-level update on tick
+  //   - hourglass-flip     : sunrise/sunset cadence wiring
+  //   - hourglass-themed-sand : applies the per-day weather/celestial
+  //                             sand theme via WEATHER/CELESTIAL_EFFECTS
+  //                             registries' sandRender hook.
+  // ============================================================
+
+  // sandRender(box, ctx) — re-paints the stream box's grains. Pure
+  // particle emission; chamber colours come from the data-theme
+  // attribute (CSS-driven, see cal-almanac.css). Each registry entry
+  // may override the default to inject themed grains.
+  function defaultSandRender(box) {
+    if (!box) return;
+    box.innerHTML = '';
+    var n = 15; // base count — kept low for perf (see stop-and-flag #2)
+    for (var i = 0; i < n; i++) {
+      var g = document.createElement('span');
+      g.className = 'cal-almanac-hourglass__grain';
+      g.style.setProperty('--dur', (0.7 + (i % 5) * 0.12).toFixed(2) + 's');
+      g.style.setProperty('--delay', ((i * 73) % 100 / 100).toFixed(2) + 's');
+      box.appendChild(g);
+    }
+  }
+  function streakSandRender(box) {
+    defaultSandRender(box);
+    if (!box) return;
+    for (var i = 0; i < 4; i++) {
+      var s = document.createElement('span');
+      s.className = 'cal-almanac-hourglass__grain cal-almanac-hourglass__grain--streak';
+      s.style.setProperty('--dur', '0.55s');
+      s.style.setProperty('--delay', (i * 0.22).toFixed(2) + 's');
+      box.appendChild(s);
+    }
+  }
+  function bigDropSandRender(box) {
+    if (!box) return;
+    box.innerHTML = '';
+    for (var i = 0; i < 12; i++) {
+      var g = document.createElement('span');
+      g.className = 'cal-almanac-hourglass__grain cal-almanac-hourglass__grain--big';
+      g.style.setProperty('--dur', (0.9 + (i % 4) * 0.18).toFixed(2) + 's');
+      g.style.setProperty('--delay', ((i * 83) % 100 / 100).toFixed(2) + 's');
+      box.appendChild(g);
+    }
+  }
+  // Compose helper — used when celestial + weather both active.
+  function composeSand(box, prefer) {
+    if (prefer === 'celestial' && WEATHER_EFFECTS && CELESTIAL_EFFECTS) {
+      var cs = (window.__currentCelestialIDs || []);
+      for (var i = 0; i < cs.length; i++) {
+        var fx = CELESTIAL_EFFECTS[cs[i]];
+        if (fx && fx.sandRender) { fx.sandRender(box); return true; }
+      }
+    }
+    return false;
+  }
+
+  function hookSandRenderers() {
+    // MUST-tier weather
+    if (WEATHER_EFFECTS.clear)        WEATHER_EFFECTS.clear.sandRender = defaultSandRender;
+    if (WEATHER_EFFECTS.cloudy)       WEATHER_EFFECTS.cloudy.sandRender = defaultSandRender;
+    if (WEATHER_EFFECTS.rain)         WEATHER_EFFECTS.rain.sandRender = bigDropSandRender;
+    if (WEATHER_EFFECTS.thunderstorm) WEATHER_EFFECTS.thunderstorm.sandRender = function (box) {
+      bigDropSandRender(box);
+      // Brief flash element — sky-band lightning syncs the timing via CSS.
+      var flash = document.createElement('span');
+      flash.className = 'cal-almanac-hourglass__grain cal-almanac-hourglass__grain--streak';
+      flash.style.setProperty('--dur', '1.2s');
+      flash.style.setProperty('--delay', '0.4s');
+      box && box.appendChild(flash);
+    };
+    if (WEATHER_EFFECTS.snow) WEATHER_EFFECTS.snow.sandRender = defaultSandRender;
+    if (WEATHER_EFFECTS.fog)  WEATHER_EFFECTS.fog.sandRender = function (box) {
+      defaultSandRender(box);
+      // Fog grains are softened by CSS (already gray-tinted via --sand-color).
+    };
+    // TBD weather stubs — single default-shaped renderer; theme-coloured by CSS.
+    ['ashfall', 'acid-rain', 'arcane-winds', 'ley-surge', 'sakura-bloom'].forEach(function (id) {
+      if (WEATHER_EFFECTS[id]) WEATHER_EFFECTS[id].sandRender = defaultSandRender;
+    });
+
+    // MUST-tier celestial
+    if (CELESTIAL_EFFECTS['meteor-shower']) CELESTIAL_EFFECTS['meteor-shower'].sandRender = streakSandRender;
+    if (CELESTIAL_EFFECTS['eclipse-solar']) CELESTIAL_EFFECTS['eclipse-solar'].sandRender = function (box) {
+      defaultSandRender(box);
+      // Eclipse glow is rendered via CSS box-shadow on the waist when
+      // [data-cal-hourglass-theme="eclipse-solar"] is set.
+    };
+    if (CELESTIAL_EFFECTS['eclipse-lunar']) CELESTIAL_EFFECTS['eclipse-lunar'].sandRender = function (box) {
+      defaultSandRender(box);
+    };
+    // TBD celestial stubs.
+    ['volcanic', 'ice-age', 'plague', 'arcane-surge', 'moon-special', 'aurora', 'comet'].forEach(function (id) {
+      if (CELESTIAL_EFFECTS[id]) CELESTIAL_EFFECTS[id].sandRender = defaultSandRender;
+    });
+  }
+
+  // Picks the active sand theme for the current day. Celestial wins
+  // over weather per dispatch stop-and-flag #3 (multi-effect resolution).
+  function activeSandThemeForDay(m, day) {
+    var cel = celestialFor(m, day);
+    if (cel && cel.length) return { id: cel[0].type, kind: 'celestial' };
+    var wtypeID = dayWeatherTypeID(m, day);
+    var effID = wtypeID ? weatherEffectID(wtypeID) : 'clear';
+    return { id: effID, kind: 'weather' };
+  }
+
+  function applySandTheme(m, day) {
+    var hg = document.querySelector('[data-cal-time]');
+    if (!hg) return;
+    var theme = activeSandThemeForDay(m, day);
+    hg.setAttribute('data-cal-hourglass-theme', theme.id);
+    var label = hg.querySelector('[data-cal-hourglass-theme-label]');
+    if (label) {
+      var name = theme.id;
+      if (theme.kind === 'weather') {
+        var w = (DATA.weather_effects || []).find(function (e) { return e.id === theme.id; });
+        if (w) name = w.name;
+      } else {
+        var c = (DATA.celestial_effects || []).find(function (e) { return e.id === theme.id; });
+        if (c) name = c.name;
+      }
+      label.textContent = name;
+    }
+    var stream = hg.querySelector('[data-cal-hourglass-stream]');
+    if (stream) {
+      var reg = theme.kind === 'celestial' ? CELESTIAL_EFFECTS[theme.id] : WEATHER_EFFECTS[theme.id];
+      var fn = (reg && reg.sandRender) || defaultSandRender;
+      fn(stream);
+    }
+  }
+
+  function isNightFrac(t) {
+    var rise = (DATA && DATA.sunrise) || 0.25;
+    var set  = (DATA && DATA.sunset)  || 0.75;
+    if (rise < set) return t < rise || t >= set;
+    return t >= set && t < rise;
+  }
+
+  function applyHourglassLevels(t) {
+    var hg = document.querySelector('[data-cal-time]');
+    if (!hg) return;
+    var rise = (DATA && DATA.sunrise) || 0.25;
+    var set  = (DATA && DATA.sunset)  || 0.75;
+    var night = isNightFrac(t);
+    // Fraction of the current half-day remaining (1 → fresh, 0 → empty).
+    var halfRemaining;
+    if (!night) {
+      var dayLen = (set - rise + 1) % 1; if (dayLen === 0) dayLen = 0.5;
+      halfRemaining = Math.max(0, Math.min(1, (set - t + (t < rise ? -1 : 0)) / dayLen));
+      if (t < rise) halfRemaining = 0; // before sunrise → day-sand not started
+    } else {
+      var nightLen = (rise - set + 1) % 1; if (nightLen === 0) nightLen = 0.5;
+      var elapsed = (t - set + 1) % 1;
+      halfRemaining = Math.max(0, Math.min(1, 1 - (elapsed / nightLen)));
+    }
+    var topFill = hg.querySelector('[data-cal-hourglass-fill="top"]');
+    var botFill = hg.querySelector('[data-cal-hourglass-fill="bot"]');
+    if (topFill) topFill.style.setProperty('--fill', halfRemaining.toFixed(3));
+    if (botFill) botFill.style.setProperty('--fill', (1 - halfRemaining).toFixed(3));
+  }
+
+  // Flip orientation when the day-state crosses sunrise/sunset. Tracks
+  // last-applied state so we only animate on crossings.
+  var __hgLastNight = null;
+  function applyHourglassFlip(t, opts) {
+    var hg = document.querySelector('[data-cal-time]');
+    if (!hg) return;
+    var night = isNightFrac(t);
+    var first = (__hgLastNight === null);
+    if (!first && night === __hgLastNight) return;
+    __hgLastNight = night;
+    if (first || (opts && opts.instant)) {
+      hg.setAttribute('data-cal-hourglass-flipped', night ? 'true' : 'false');
+      return;
+    }
+    // Animate the crossing.
+    hg.setAttribute('data-cal-hourglass-flipping', 'true');
+    hg.setAttribute('data-cal-hourglass-flipped', night ? 'true' : 'false');
+    setTimeout(function () { hg.removeAttribute('data-cal-hourglass-flipping'); }, 1500);
+  }
+
+  registerInitBlock('hourglass-render', function () {
     var widget = document.querySelector('[data-cal-time]');
     var handle = document.querySelector('[data-cal-time-drag]');
     var tick = document.querySelector('[data-cal-time-tick]');
@@ -382,6 +565,31 @@
       var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
       applyTime((VIEW.timeFrac + 1 / hpd) % 1.0);
     });
+    // Initial state.
+    applyHourglassLevels(VIEW.timeFrac);
+  });
+
+  registerInitBlock('hourglass-flip', function () {
+    applyHourglassFlip(VIEW.timeFrac, { instant: true });
+    // Subscribe to time changes by wrapping applyTime.
+    var prev = applyTime;
+    window.__applyTimeOrig = prev;
+    applyTime = function (t) {
+      prev(t);
+      applyHourglassLevels(t);
+      applyHourglassFlip(t);
+    };
+  });
+
+  registerInitBlock('hourglass-themed-sand', function () {
+    hookSandRenderers();
+    applySandTheme(VIEW.month, VIEW.day);
+    // Re-apply on day-change. We piggyback on renderSkyForDay by wrapping.
+    var prev = renderSkyForDay;
+    renderSkyForDay = function (m, day) {
+      prev(m, day);
+      applySandTheme(m, day);
+    };
   });
 
   // ============================================================
@@ -830,6 +1038,153 @@
       fillState(VIEW.month, s); fillLinks(null); showQuickview();
     }
     grid.addEventListener('pointerup', end); grid.addEventListener('pointercancel', end);
+  });
+
+  // ============================================================
+  // REFINEMENT-V3 — Click-empty-day → mini "Create event" popup
+  // ============================================================
+  // Flow:
+  //   1. Listener observes day-cell clicks where there's no existing
+  //      event chip under the cursor.
+  //   2. Opens the .cal-almanac-qv--create popup pre-filled with the
+  //      clicked date.
+  //   3. "Create" button commits a new event to DATA.events (in-memory
+  //      mock; the page repaint shows the chip in the cell).
+  //   4. "More options ⤢" button escalates to the full editor with the
+  //      mini popup's data pre-filled so operator doesn't re-type.
+  // ============================================================
+
+  var CREATE_CTX = null; // { month, day, sourceCell }
+
+  function openCreatePopup(m, day, sourceCell) {
+    var pop = document.querySelector('[data-cal-create]');
+    if (!pop) return;
+    CREATE_CTX = { month: m, day: day, sourceCell: sourceCell };
+    // Close any other popups to avoid layering noise.
+    closeQuickview(); closeEditor(); closeSkyPanel();
+    var meta = pop.querySelector('[data-cal-create-meta]');
+    if (meta) meta.textContent = monthName(m) + ' ' + day + ', ' + DATA.current_year + ' ' + DATA.calendar.epoch_name;
+    var title = pop.querySelector('[data-cal-create-title]'); if (title) title.value = '';
+    var notes = pop.querySelector('[data-cal-create-notes]'); if (notes) notes.value = '';
+    var tier  = pop.querySelector('[data-cal-create-tier]');  if (tier)  tier.value  = 'standard';
+    var cat   = pop.querySelector('[data-cal-create-cat]');   if (cat && DATA.categories && DATA.categories[0]) cat.value = DATA.categories[0].id;
+    pop.setAttribute('data-cal-qv-open', 'true');
+    pop.setAttribute('aria-hidden', 'false');
+    setTimeout(function () { if (title) title.focus(); }, 30);
+  }
+  function closeCreatePopup() {
+    var pop = document.querySelector('[data-cal-create]');
+    if (!pop) return;
+    pop.setAttribute('data-cal-qv-open', 'false');
+    pop.setAttribute('data-cal-qv-zoomed', 'false');
+    pop.setAttribute('aria-hidden', 'true');
+  }
+
+  function readCreateForm() {
+    if (!CREATE_CTX) return null;
+    var pop = document.querySelector('[data-cal-create]'); if (!pop) return null;
+    return {
+      title: (pop.querySelector('[data-cal-create-title]') || {}).value || '',
+      tier:  (pop.querySelector('[data-cal-create-tier]')  || {}).value || 'standard',
+      cat:   (pop.querySelector('[data-cal-create-cat]')   || {}).value || '',
+      notes: (pop.querySelector('[data-cal-create-notes]') || {}).value || '',
+      month: CREATE_CTX.month,
+      day:   CREATE_CTX.day
+    };
+  }
+
+  // Mock-data CreateEvent — appends an event to the in-memory dataset
+  // and repaints the affected cell. Mirrors the eventual production
+  // service-layer signature so the showcase pattern ports cleanly.
+  function mockCreateEvent(form) {
+    if (!DATA || !form) return null;
+    DATA.events = DATA.events || [];
+    var id = 'm-' + Math.random().toString(36).slice(2, 8);
+    var ev = {
+      id: id,
+      name: form.title || 'Untitled event',
+      description: form.notes || '',
+      month: form.month,
+      day: form.day,
+      hour: -1,
+      tier: form.tier,
+      category: form.cat,
+      visibility: 'public'
+    };
+    DATA.events.push(ev);
+    repaintCellChips(form.month, form.day);
+    return ev;
+  }
+
+  function repaintCellChips(m, day) {
+    var cell = document.querySelector('[data-cal-cell][data-cell-month="' + m + '"][data-cell-day="' + day + '"]');
+    if (!cell) return;
+    var chipBox = cell.querySelector('[data-cal-cell-chips]') || cell;
+    // Remove only mock-added chips (those with id prefix m-) so we don't
+    // accidentally drop the server-rendered chips.
+    var existing = chipBox.querySelectorAll('[data-cal-event-id^="m-"]');
+    existing.forEach(function (n) { n.parentNode && n.parentNode.removeChild(n); });
+    eventsForDay(m, day).forEach(function (e) {
+      if (!e || !e.id || e.id.indexOf('m-') !== 0) return; // only render mock-added; server chips already present
+      var span = document.createElement('span');
+      var cat = categoryById(e.category) || {};
+      span.className = 'cal-almanac-chip cal-almanac-chip--' + e.tier;
+      span.setAttribute('data-cal-event-id', e.id);
+      span.style.setProperty('--chip-cat', cat.color || 'oklch(0.62 0.18 240)');
+      span.textContent = e.name;
+      chipBox.appendChild(span);
+    });
+  }
+
+  registerInitBlock('popup-create-flow', function () {
+    var pop = document.querySelector('[data-cal-create]');
+    if (!pop) return;
+    // Listen for empty-cell-bg clicks. Existing event chips have
+    // [data-cal-event-id]; clicks on those take the existing
+    // popup-slidein path. We hit-test by walking up from the target.
+    document.addEventListener('click', function (ev) {
+      // Skip clicks inside any popup, editor, time-piece, or sky.
+      if (ev.target.closest('[data-cal-qv]') || ev.target.closest('[data-cal-create]') ||
+          ev.target.closest('[data-cal-editor]') || ev.target.closest('[data-cal-time]') ||
+          ev.target.closest('[data-cal-skypanel]') || ev.target.closest('[data-cal-event-id]') ||
+          ev.target.closest('[data-cal-sky]')) return;
+      var cell = ev.target.closest('[data-cal-cell]');
+      if (!cell) return;
+      // If the click landed on a chip child (caught above) we'd have
+      // bailed; reaching here means it's an empty-area-of-cell click.
+      var m = +cell.getAttribute('data-cell-month'), day = +cell.getAttribute('data-cell-day');
+      // Don't preempt the existing popup-slidein day click — only fire
+      // create when the cell has zero events for the day.
+      var evs = eventsForDay(m, day) || [];
+      if (evs.length === 0) { openCreatePopup(m, day, cell); ev.stopPropagation(); }
+    }, true);
+    var close = pop.querySelector('[data-cal-create-close]');
+    if (close) close.addEventListener('click', closeCreatePopup);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCreatePopup(); });
+    var commit = pop.querySelector('[data-cal-create-commit]');
+    if (commit) commit.addEventListener('click', function () {
+      var form = readCreateForm(); if (!form) return;
+      mockCreateEvent(form);
+      flash(commit, 'Created ✓');
+      setTimeout(closeCreatePopup, 700);
+    });
+    var expand = pop.querySelector('[data-cal-create-expand]');
+    if (expand) expand.addEventListener('click', function () {
+      var form = readCreateForm(); if (!form) return;
+      // Build a CTX as if the operator had clicked an existing event,
+      // so the editor pre-fills cleanly via hydrateEditor.
+      var draft = {
+        id: 'new-pending',
+        name: form.title || 'New event',
+        description: form.notes || '',
+        month: form.month, day: form.day, hour: -1,
+        tier: form.tier, category: form.cat, visibility: 'public',
+        allow_users: [], deny_users: []
+      };
+      CTX = { kind: 'event', event: draft, month: form.month, day: form.day };
+      pop.setAttribute('data-cal-qv-zoomed', 'true');
+      expandToEditor();
+    });
   });
 
   // ============================================================

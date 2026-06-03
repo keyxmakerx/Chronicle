@@ -11,6 +11,8 @@
 
 package demo
 
+import "fmt"
+
 // CalAlmanacMockData is the full self-contained dataset for the
 // Almanac showcase calendar. Single function so templ + JSON-embed for
 // the JS share one source of truth.
@@ -48,6 +50,13 @@ type CalAlmanacMockData struct {
 	// initial sun + render the initial gradient server-side, so the
 	// page is meaningfully screenshottable before JS runs.
 	SkyTime float64 `json:"sky_time"`
+	// Sunrise / Sunset are 0..1 day fractions used by the hourglass
+	// flip cadence (REFINEMENT-V3). The hourglass orients day-sand on
+	// top at sunrise and flips to night-sand at sunset. If a calendar
+	// has no per-day sunrise/sunset table, these are the campaign-wide
+	// defaults (06:00 / 18:00 on a 24-hour day).
+	Sunrise float64 `json:"sunrise"`
+	Sunset  float64 `json:"sunset"`
 }
 
 type CalAlmanacCalendar struct {
@@ -249,6 +258,8 @@ func CalAlmanacMock() CalAlmanacMockData {
 		CurrentMonth: 4, // Tarsakh — spring, festival-rich
 		CurrentDay:   14,
 		SkyTime:      0.52, // shortly past noon, sun high
+		Sunrise:      0.25, // 06:00 on a 24-hour day
+		Sunset:       0.75, // 18:00 on a 24-hour day
 		Months: []CalAlmanacMonth{
 			{1, "Hammer", 30, false},
 			{2, "Alturiak", 30, false},
@@ -491,4 +502,48 @@ func CalAlmanacMock() CalAlmanacMockData {
 			{"comet", "Comet", "meteor", "oklch(0.86 0.10 210)", "tbd"},
 		},
 	}
+}
+
+// CalAlmanacCreateEvent — REFINEMENT-V3 mock-data helper for the
+// click-empty-day-to-create-event flow. Mirrors the eventual production
+// service signature (returns the created event); the showcase uses this
+// from the JS side as `mockCreateEvent`, but having a Go-side equivalent
+// keeps the templ-rendered initial state consistent if a test or a
+// future server-side pre-render wants to seed events without going
+// through JS.
+//
+// Mock-only: appends to the in-memory slice; in-session lifetime.
+func CalAlmanacCreateEvent(d *CalAlmanacMockData, form CalAlmanacEventDraft) CalAlmanacEvent {
+	ev := CalAlmanacEvent{
+		ID:          form.ID,
+		Name:        form.Name,
+		Description: form.Description,
+		Month:       form.Month,
+		Day:         form.Day,
+		Hour:        -1,
+		Tier:        form.Tier,
+		Category:    form.Category,
+		Visibility:  "public",
+	}
+	if ev.ID == "" {
+		ev.ID = fmt.Sprintf("m-%d-%d-%d", d.CurrentYear, form.Month, form.Day)
+	}
+	if ev.Tier == "" {
+		ev.Tier = "standard"
+	}
+	d.Events = append(d.Events, ev)
+	return ev
+}
+
+// CalAlmanacEventDraft — request shape for CalAlmanacCreateEvent. Kept
+// narrow on purpose (mock surface; the production service has the full
+// Event shape).
+type CalAlmanacEventDraft struct {
+	ID          string
+	Name        string
+	Description string
+	Month       int
+	Day         int
+	Tier        string
+	Category    string
 }
