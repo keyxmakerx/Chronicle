@@ -53,12 +53,159 @@ templ calAlmanacPage(d CalAlmanacMockData) {
 	<div class="cal-almanac-shell">
 		@calAlmanacIntro()
 		@calAlmanacDesignSwitcher()
+		@calAlmanacTimepiece(d)
 		@calAlmanacWidget(d)
+		@calAlmanacPopover()
 		// Mock dataset, JSON-serialized for the JS init blocks.
 		// This is the single source of truth — same struct the templ
 		// rendered above.
 		<script id="cal-almanac-data" type="application/json">{ calAlmanacMockJSON(d) }</script>
 	</div>
+}
+
+// calAlmanacTimepiece — a small standalone draggable Calendaria-style
+// time widget. Lives separately from the main calendar widget — the
+// idea is that this is the form the eventual "entity-mountable
+// time-piece" takes, just running in the showcase as a free-floating
+// widget. Campaign-wide top-bar integration is TBD per coordinator
+// (operator: "the time-piece should either be an entity or the top
+// bar for the entire campaign... that's been buggy to customize in
+// the past so we'll have coordinator put that down as a tbd feature").
+templ calAlmanacTimepiece(d CalAlmanacMockData) {
+	<aside class="cal-almanac-time" data-cal-time style="left:32px; top:840px; width:420px;">
+		<header class="cal-almanac-time__handle" data-cal-time-drag>
+			<span class="cal-almanac-time__tag">Timepiece</span>
+		</header>
+		<div class="cal-almanac-time__body">
+			@calAlmanacIcon("book", "cal-almanac-time__leadicon")
+			<div class="cal-almanac-time__date">
+				<span class="cal-almanac-time__day">{ fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }, { fmtInt(d.CurrentYear) }</span>
+				<span class="cal-almanac-time__weekday" data-cal-time-weekday>{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name }</span>
+			</div>
+			<div class="cal-almanac-time__clock" data-cal-time-clock>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</div>
+			<div class="cal-almanac-time__pips">
+				if w, ok := dayWeatherType(d, d.CurrentMonth, d.CurrentDay); ok {
+					<span class="cal-almanac-time__pip" data-cal-time-weather title={ w.Name + " · " + fmtInt(w.TempC) + "°C" }>
+						@calAlmanacIcon(w.Icon, "cal-almanac-time__pipicon")
+					</span>
+				}
+				<span class="cal-almanac-time__pip" title={ "Season: " + seasonNameFor(d) }>
+					@calAlmanacIcon("snowflake", "cal-almanac-time__pipicon")
+				</span>
+				<button type="button" class="cal-almanac-time__tick" data-cal-time-tick aria-label="Advance one hour">
+					@calAlmanacIcon("tick", "cal-almanac-time__pipicon")
+				</button>
+			</div>
+		</div>
+	</aside>
+}
+
+// calAlmanacPopover — the anchored popover that replaces the
+// right-edge drawer for quick interactions. Hidden by default; JS
+// fills + positions it adjacent to whatever the operator clicked
+// (day cell or event chip). Heavy edits still escalate to the side
+// drawer (data-cal-drawer).
+templ calAlmanacPopover() {
+	<div class="cal-almanac-pop" data-cal-pop data-cal-pop-side="top" aria-hidden="true" hidden>
+		<div class="cal-almanac-pop__arrow" data-cal-pop-arrow aria-hidden="true"></div>
+		<header class="cal-almanac-pop__head">
+			<div class="cal-almanac-pop__title-wrap">
+				<h3 class="cal-almanac-pop__title" data-cal-pop-title>—</h3>
+				<p class="cal-almanac-pop__meta" data-cal-pop-meta>—</p>
+			</div>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-pop-close aria-label="Close">×</button>
+		</header>
+		<nav class="cal-almanac-pop__tabs" role="tablist">
+			<button type="button" class="cal-almanac-pop__tab cal-almanac-pop__tab--active" data-cal-pop-tab="detail" aria-selected="true">Detail</button>
+			<button type="button" class="cal-almanac-pop__tab" data-cal-pop-tab="notes">Notes</button>
+			<button type="button" class="cal-almanac-pop__tab" data-cal-pop-tab="vis">Visibility</button>
+		</nav>
+		<div class="cal-almanac-pop__panels">
+			<div class="cal-almanac-pop__panel cal-almanac-pop__panel--active" data-cal-pop-panel="detail">
+				<p class="cal-almanac-pop__body" data-cal-pop-desc>—</p>
+				<div class="cal-almanac-pop__events" data-cal-pop-events></div>
+				<div class="cal-almanac-pop__moon" data-cal-pop-moon hidden></div>
+				<div class="cal-almanac-pop__weather" data-cal-pop-weather hidden></div>
+			</div>
+			<div class="cal-almanac-pop__panel" data-cal-pop-panel="notes" hidden>
+				<label class="cal-almanac-pop__notes-label" for="cal-pop-notes">Notes — visible to DM only</label>
+				<textarea id="cal-pop-notes" class="cal-almanac-pop__notes" data-cal-pop-notes rows="6" placeholder="Add a note for this day…"></textarea>
+				<p class="cal-almanac-pop__notes-hint">Changes save as you type (showcase is in-memory only).</p>
+			</div>
+			<div class="cal-almanac-pop__panel" data-cal-pop-panel="vis" hidden>
+				<div class="cal-almanac-pop__vis" data-cal-pop-vis></div>
+			</div>
+		</div>
+		<footer class="cal-almanac-pop__foot">
+			<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-pop-open-drawer>
+				Open full editor →
+			</button>
+			<span class="cal-almanac-pop__foot-hint">Heavy edits open the side drawer.</span>
+		</footer>
+	</div>
+}
+
+// calAlmanacIcon — a tiny inline SVG glyph keyed by name. Self-
+// contained, no external icon font, no dependency. Each glyph is a
+// hand-drawn primitive sized to currentColor so we can recolor via
+// CSS. New names get a fallback dot so unknown icons don't NPE.
+templ calAlmanacIcon(name, class string) {
+	<svg class={ "cal-almanac-icon", class } viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		switch name {
+			case "dice":
+				<path d="M3 4l5-2 5 2v8l-5 2-5-2z"/>
+				<path d="M3 4l5 2 5-2"/>
+				<path d="M8 6v8"/>
+			case "flame":
+				<path d="M8 2c1 3 4 4 4 7a4 4 0 1 1-8 0c0-2 1-3 2-4 0 1 1 2 2 1 0-2 0-3 0-4z" fill="currentColor" fill-opacity="0.18"/>
+			case "compass":
+				<circle cx="8" cy="8" r="6"/>
+				<path d="M10.5 5.5l-1.5 4.5-4.5 1.5 1.5-4.5z" fill="currentColor" fill-opacity="0.25"/>
+			case "mask":
+				<path d="M3 5c0-1 1-2 2-2h6c1 0 2 1 2 2v3a5 5 0 0 1-10 0z"/>
+				<circle cx="6" cy="7" r="0.6" fill="currentColor"/>
+				<circle cx="10" cy="7" r="0.6" fill="currentColor"/>
+			case "spire":
+				<path d="M8 1l-2 5h4z" fill="currentColor" fill-opacity="0.25"/>
+				<path d="M5 6h6v2H5z"/>
+				<path d="M4 8h8v6H4z"/>
+				<path d="M8 10v4"/>
+			case "hearth":
+				<path d="M2 14V5l6-3 6 3v9"/>
+				<path d="M6 14v-4h4v4"/>
+			case "sun":
+				<circle cx="8" cy="8" r="3" fill="currentColor" fill-opacity="0.3"/>
+				<path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3"/>
+			case "cloud":
+				<path d="M4 11h8a3 3 0 0 0 0-6 4 4 0 0 0-7-2 3 3 0 0 0-1 8z"/>
+			case "rain":
+				<path d="M4 8h8a3 3 0 0 0 0-6 4 4 0 0 0-7-1 3 3 0 0 0-1 7z"/>
+				<path d="M5 12v2M8 12v2M11 12v2"/>
+			case "fog":
+				<path d="M2 6h12M3 9h10M2 12h12"/>
+			case "storm":
+				<path d="M4 8h8a3 3 0 0 0 0-6 4 4 0 0 0-7-1 3 3 0 0 0-1 7z"/>
+				<path d="M8 9l-2 4h2l-1 2 3-4h-2z" fill="currentColor"/>
+			case "snowflake":
+				<path d="M8 2v12M2 8h12M3.5 3.5l9 9M3.5 12.5l9-9"/>
+			case "petal":
+				<path d="M8 3c2 0 3 2 3 4s-1 4-3 4-3-2-3-4 1-4 3-4z" fill="currentColor" fill-opacity="0.25"/>
+				<path d="M8 11v3"/>
+			case "ember":
+				<circle cx="8" cy="9" r="3" fill="currentColor" fill-opacity="0.25"/>
+				<path d="M5 4l1 2M11 4l-1 2M8 2v2"/>
+			case "swirl":
+				<path d="M3 8a5 5 0 0 1 10 0 3 3 0 0 1-6 0 1 1 0 0 1 2 0"/>
+			case "book":
+				<path d="M3 3h4l1 1v9l-1-1H3z" fill="currentColor" fill-opacity="0.15"/>
+				<path d="M13 3H9L8 4v9l1-1h4z" fill="currentColor" fill-opacity="0.15"/>
+			case "tick":
+				<circle cx="8" cy="8" r="6"/>
+				<path d="M8 4v4l3 2"/>
+			default:
+				<circle cx="8" cy="8" r="2" fill="currentColor"/>
+		}
+	</svg>
 }
 
 templ calAlmanacIntro() {
@@ -98,11 +245,34 @@ templ calAlmanacWidget(d CalAlmanacMockData) {
 		</header>
 		<div class="cal-almanac-widget__body">
 			@calAlmanacSkyband(d)
+			@calAlmanacEras(d)
 			@calAlmanacGrid(d)
 		</div>
 		<div class="cal-almanac-widget__resize" data-cal-resize aria-hidden="true"></div>
 	</section>
 	@calAlmanacDrawer(d)
+}
+
+// calAlmanacEras — a thin strip above the weekday header that paints
+// the era(s) the current month falls into. Each era is a horizontal
+// band colored from its OKLCH literal; the current era is brightened
+// + carries the era name. Operator's canon mandates eras as a first-
+// class concept; this surface renders them, the side drawer's era
+// editor stays as heavy-edit scope.
+templ calAlmanacEras(d CalAlmanacMockData) {
+	<div class="cal-almanac-eras" data-cal-eras>
+		for _, era := range d.Eras {
+			<span
+				class={ "cal-almanac-eras__band", templ.KV("cal-almanac-eras__band--current", eraContainsYear(era, d.CurrentYear)) }
+				style={ "--era-color:" + era.Color + ";" }
+				title={ era.Name + " · " + eraSpanLabel(era) }
+				data-cal-era-id={ era.ID }
+			>
+				<span class="cal-almanac-eras__name">{ era.Name }</span>
+				<span class="cal-almanac-eras__span">{ eraSpanLabel(era) }</span>
+			</span>
+		}
+	</div>
 }
 
 // calAlmanacSkyband — the hero. An OKLCH gradient that interpolates
@@ -183,20 +353,31 @@ templ calAlmanacGrid(d CalAlmanacMockData) {
 						if cell.MoonGlyph != "" {
 							<span class="cal-almanac-cell__moon" title={ cell.MoonTitle }>{ cell.MoonGlyph }</span>
 						}
-						if cell.WeatherPip != "" {
-							<span class={ "cal-almanac-cell__weather", "cal-almanac-cell__weather--" + cell.WeatherPip } title={ cell.WeatherTitle }></span>
+						if cell.WeatherID != "" {
+							<span
+								class={ "cal-almanac-cell__wchip", "cal-almanac-cell__wchip--" + cell.WeatherCat }
+								style={ "--w-color:" + cell.WeatherColor + ";" }
+								title={ cell.WeatherName }
+							>
+								@calAlmanacIcon(cell.WeatherIcon, "cal-almanac-cell__wicon")
+							</span>
 						}
 					</div>
 					<div class="cal-almanac-cell__chips">
 						for _, ev := range cell.Events {
 							<button
 								type="button"
-								class={ "cal-almanac-chip", "cal-almanac-chip--" + ev.Tier }
+								class={ "cal-almanac-chip", "cal-almanac-chip--" + ev.Tier, templ.KV("cal-almanac-chip--recurring", ev.RecurringRef != "") }
 								data-cal-event-id={ ev.ID }
 								style={ "--chip-cat:" + ev.CategoryColor + ";" }
 								title={ ev.Name + " — " + ev.TierLabel }
 							>
 								<span class="cal-almanac-chip__bar" aria-hidden="true"></span>
+								if ev.CategoryIcon != "" {
+									<span class="cal-almanac-chip__icon" aria-hidden="true">
+										@calAlmanacIcon(ev.CategoryIcon, "")
+									</span>
+								}
 								<span class="cal-almanac-chip__name">{ ev.Name }</span>
 								if ev.Time != "" {
 									<span class="cal-almanac-chip__time">{ ev.Time }</span>
@@ -398,19 +579,37 @@ func seasonNameFor(d CalAlmanacMockData) string {
 	return name
 }
 
+func eraContainsYear(era CalAlmanacEra, y int) bool {
+	if era.EndYear == 0 {
+		return y >= era.StartYear
+	}
+	return y >= era.StartYear && y <= era.EndYear
+}
+
+func eraSpanLabel(era CalAlmanacEra) string {
+	if era.EndYear == 0 {
+		return fmt.Sprintf("%d – ongoing", era.StartYear)
+	}
+	return fmt.Sprintf("%d – %d", era.StartYear, era.EndYear)
+}
+
 // calCell — flattened render-ready cell used by the grid template.
 type calCell struct {
-	Day, Month, Year      int
-	IsCurrent             bool // day is in the focused month (vs prev/next preview)
-	IsToday               bool
-	IsRestDay             bool
-	IsFestival            bool
-	FestivalName          string
-	MoonGlyph             string
-	MoonTitle             string
-	WeatherPip            string
-	WeatherTitle          string
-	Events                []calCellEvent
+	Day, Month, Year int
+	IsCurrent        bool // day is in the focused month (vs prev/next preview)
+	IsToday          bool
+	IsRestDay        bool
+	IsFestival       bool
+	FestivalName     string
+	MoonGlyph        string
+	MoonPhaseName    string // e.g. "The Silver Crown"
+	MoonTitle        string
+	WeatherID        string // matches a WeatherType.ID; empty = no named weather
+	WeatherName      string
+	WeatherIcon      string
+	WeatherColor     string
+	WeatherCat       string
+	Events           []calCellEvent
 }
 
 type calCellEvent struct {
@@ -418,8 +617,11 @@ type calCellEvent struct {
 	Name          string
 	Tier          string
 	TierLabel     string
+	Category      string
 	CategoryColor string
+	CategoryIcon  string
 	Time          string
+	RecurringRef  string
 }
 
 // gridCells — produces the 6-row × 10-day-week grid cells for the
@@ -453,27 +655,37 @@ func gridCells(d CalAlmanacMockData) []calCell {
 				c.FestivalName = f.Name
 			}
 		}
-		// Moon glyph: render the dominant moon's phase for the day.
-		c.MoonGlyph, c.MoonTitle = moonGlyphFor(d, day)
-		// Weather pip: deterministic from (year+month+day) hash; one of
-		// clear/cloud/rain/storm. (Mock; real plugin can replace.)
-		c.WeatherPip, c.WeatherTitle = weatherFor(d.CurrentYear, d.CurrentMonth, day)
-		// Events on this day (single + multi-day spans).
+		// Moon glyph + named phase. moonGlyphFor now consults
+		// d.MoonPhases first; falls back to procedural if no named
+		// phase covers the current cycle percentage.
+		c.MoonGlyph, c.MoonPhaseName, c.MoonTitle = moonGlyphFor(d, day)
+		// Named weather: look up d.DayWeather first; fall back to the
+		// procedural pip only when no authored weather is set. This
+		// matches Calendaria's "named weather vocabulary" pattern.
+		if w, ok := dayWeatherType(d, d.CurrentMonth, day); ok {
+			c.WeatherID = w.ID
+			c.WeatherName = w.Name
+			c.WeatherIcon = w.Icon
+			c.WeatherColor = w.Color
+			c.WeatherCat = w.Category
+		}
+		// One-off events on this day (single + multi-day spans).
 		for _, ev := range d.Events {
 			if !eventTouchesDay(ev, d.CurrentMonth, day) {
 				continue
 			}
-			cce := calCellEvent{
-				ID:            ev.ID,
-				Name:          ev.Name,
-				Tier:          ev.Tier,
-				TierLabel:     tierLabel(d, ev.Tier),
-				CategoryColor: categoryColor(d, ev.Category),
+			c.Events = append(c.Events, eventToCellEvent(d, ev))
+		}
+		// Expand recurring templates that hit this day. Per-instance
+		// overrides (the rec.Overrides map keyed by "Y-M-D") replace
+		// the name for that specific instance — demonstrating the
+		// "edit this instance only" pattern.
+		for _, rec := range d.Recurring {
+			if !recurringTouchesDay(rec, d.CurrentYear, d.CurrentMonth, day) {
+				continue
 			}
-			if ev.Hour >= 0 {
-				cce.Time = fmt.Sprintf("%02d:00", ev.Hour)
-			}
-			c.Events = append(c.Events, cce)
+			ev := recurringInstance(d, rec, d.CurrentYear, d.CurrentMonth, day)
+			c.Events = append(c.Events, eventToCellEvent(d, ev))
 		}
 		cells = append(cells, c)
 	}
@@ -524,41 +736,123 @@ func categoryColor(d CalAlmanacMockData, id string) string {
 	return "oklch(0.55 0.04 260)"
 }
 
-// moonGlyphFor — picks a unicode moon glyph for the day based on the
-// dominant moon's phase. Pure visual hint; the Almanac shows the
-// largest visible moon on each day.
-func moonGlyphFor(d CalAlmanacMockData, day int) (string, string) {
+func categoryIcon(d CalAlmanacMockData, id string) string {
+	for _, c := range d.Categories {
+		if c.ID == id {
+			return c.Icon
+		}
+	}
+	return ""
+}
+
+// eventToCellEvent — projects a CalAlmanacEvent into the flattened
+// shape the templ renders. Used both for one-off and recurring-
+// instance events.
+func eventToCellEvent(d CalAlmanacMockData, ev CalAlmanacEvent) calCellEvent {
+	cce := calCellEvent{
+		ID:            ev.ID,
+		Name:          ev.Name,
+		Tier:          ev.Tier,
+		TierLabel:     tierLabel(d, ev.Tier),
+		Category:      ev.Category,
+		CategoryColor: categoryColor(d, ev.Category),
+		CategoryIcon:  categoryIcon(d, ev.Category),
+		RecurringRef:  ev.RecurringRef,
+	}
+	if ev.Hour >= 0 {
+		cce.Time = fmt.Sprintf("%02d:00", ev.Hour)
+	}
+	return cce
+}
+
+// moonGlyphFor — returns (glyph, phaseName, label) for the dominant
+// moon on this day. Walks the operator-authored MoonPhases first so
+// named phases ("The Silver Crown") win over procedural percentages.
+// Glyph falls back to procedural if no named span matches.
+func moonGlyphFor(d CalAlmanacMockData, day int) (string, string, string) {
 	if len(d.Moons) == 0 {
-		return "", ""
+		return "", "", ""
 	}
 	m := d.Moons[0]
-	// Days since arbitrary epoch (mock uses currentYear*360 + (monthIdx*30) + day for stability).
 	epochDays := float64(d.CurrentYear*360 + (d.CurrentMonth-1)*30 + day)
-	phase := (epochDays/m.CycleDays + m.PhaseOffset)
+	phase := epochDays/m.CycleDays + m.PhaseOffset
 	for phase > 1 {
 		phase -= 1
 	}
 	for phase < 0 {
 		phase += 1
 	}
-	// 8 glyphs around the cycle.
+	pct := int(phase * 100)
+	// Try operator-authored named phases first.
+	for _, mp := range d.MoonPhases {
+		if mp.MoonID != m.ID {
+			continue
+		}
+		if pct >= mp.StartPct && pct < mp.EndPct {
+			label := fmt.Sprintf("%s — %s (%d%%)", m.Name, mp.Name, pct)
+			return mp.Glyph, mp.Name, label
+		}
+	}
+	// Procedural fallback.
 	glyphs := []string{"●", "◐", "◑", "○", "○", "◐", "◑", "●"}
 	g := glyphs[int(phase*8)%8]
-	label := fmt.Sprintf("%s · phase %.2f", m.Name, phase)
-	return g, label
+	return g, "", fmt.Sprintf("%s · phase %.2f", m.Name, phase)
 }
 
-func weatherFor(y, m, d int) (string, string) {
-	h := (y*131 + m*17 + d*7) % 10
-	switch {
-	case h < 6:
-		return "clear", "Clear"
-	case h < 8:
-		return "cloud", "Cloudy"
-	case h < 9:
-		return "rain", "Rain"
-	default:
-		return "storm", "Storm"
+// dayWeatherType — operator-authored DayWeather mapping for the day.
+// Returns the matching WeatherType (or zero + false). The grid uses
+// this; the procedural weatherFor() stays as a backup for days that
+// don't have a named entry.
+func dayWeatherType(d CalAlmanacMockData, m, day int) (CalAlmanacWeatherType, bool) {
+	key := fmt.Sprintf("%d-%d-%d", d.CurrentYear, m, day)
+	id, ok := d.DayWeather[key]
+	if !ok {
+		return CalAlmanacWeatherType{}, false
+	}
+	for _, w := range d.WeatherTypes {
+		if w.ID == id {
+			return w, true
+		}
+	}
+	return CalAlmanacWeatherType{}, false
+}
+
+// recurringTouchesDay — true when the recurring template generates an
+// instance on (y, m, day). Naïve linear walk — fine for showcase scope
+// (mock has 1 template); the real plugin uses indexed expansion.
+func recurringTouchesDay(rec CalAlmanacRecurring, y, m, day int) bool {
+	if rec.IntervalDays <= 0 {
+		return false
+	}
+	// Day-count from start within the same year (mock only spans one).
+	start := (rec.StartMonth-1)*30 + rec.StartDay
+	cur := (m-1)*30 + day
+	if cur < start {
+		return false
+	}
+	return (cur-start)%rec.IntervalDays == 0
+}
+
+// recurringInstance — synthesises a CalAlmanacEvent for the recurring
+// occurrence on (y, m, day), applying an override if present.
+func recurringInstance(d CalAlmanacMockData, rec CalAlmanacRecurring, y, m, day int) CalAlmanacEvent {
+	key := fmt.Sprintf("%d-%d-%d", y, m, day)
+	name := rec.Name
+	if rec.Overrides != nil {
+		if n, ok := rec.Overrides[key]; ok {
+			name = n
+		}
+	}
+	return CalAlmanacEvent{
+		ID:           rec.ID + "@" + key,
+		Name:         name,
+		Description:  rec.Description,
+		Year:         y, Month: m, Day: day,
+		Hour:         rec.Hour,
+		Tier:         rec.Tier,
+		Category:     rec.Category,
+		Visibility:   "public",
+		RecurringRef: rec.ID,
 	}
 }
 

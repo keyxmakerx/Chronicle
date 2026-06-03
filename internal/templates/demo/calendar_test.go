@@ -228,6 +228,115 @@ func TestDemoCalendar_AlmanacHooks(t *testing.T) {
 	}
 }
 
+// TestDemoCalendar_RefinementMockData — operator's refinement pass
+// (post-PR-#385) adds named-vocabulary data to the mock so the demo
+// reads like worldbuilding instead of procedural fill. Pin the
+// presence of each new structure.
+func TestDemoCalendar_RefinementMockData(t *testing.T) {
+	d := CalAlmanacMock()
+	if len(d.Eras) < 3 {
+		t.Errorf("expected ≥3 eras (past + current + ancient); got %d", len(d.Eras))
+	}
+	var current int
+	for _, e := range d.Eras {
+		if eraContainsYear(e, d.CurrentYear) {
+			current++
+		}
+	}
+	if current == 0 {
+		t.Errorf("no era contains the current year %d", d.CurrentYear)
+	}
+	if len(d.WeatherTypes) < 8 {
+		t.Errorf("expected ≥8 named weather types across categories; got %d", len(d.WeatherTypes))
+	}
+	// Categories present.
+	wcats := map[string]bool{}
+	for _, w := range d.WeatherTypes {
+		wcats[w.Category] = true
+	}
+	for _, want := range []string{"standard", "severe", "environmental", "fantasy"} {
+		if !wcats[want] {
+			t.Errorf("weather vocabulary missing category %q", want)
+		}
+	}
+	if len(d.MoonPhases) < 8 {
+		t.Errorf("expected ≥8 named moon phases for the primary moon; got %d", len(d.MoonPhases))
+	}
+	if len(d.DayWeather) < 10 {
+		t.Errorf("expected ≥10 day-keyed weather entries; got %d", len(d.DayWeather))
+	}
+	if len(d.DayNotes) < 1 {
+		t.Errorf("expected ≥1 day note in the showcase mock; got %d", len(d.DayNotes))
+	}
+	if len(d.Recurring) < 1 {
+		t.Errorf("expected ≥1 recurring template demonstrating recurring + override pattern; got %d", len(d.Recurring))
+	}
+	// At least one recurring template must carry per-instance overrides.
+	anyOverride := false
+	for _, r := range d.Recurring {
+		if len(r.Overrides) > 0 {
+			anyOverride = true
+			break
+		}
+	}
+	if !anyOverride {
+		t.Errorf("expected at least one recurring template to demonstrate per-instance overrides")
+	}
+	// Categories all carry an Icon (no empties).
+	for _, c := range d.Categories {
+		if c.Icon == "" {
+			t.Errorf("category %q is missing an Icon glyph", c.ID)
+		}
+	}
+}
+
+// TestDemoCalendar_PopoverAndTimepiece — the refinement adds an
+// anchored popover (replacing the right-edge drawer for quick edits)
+// + a standalone timepiece widget. Pin their markup hooks.
+func TestDemoCalendar_PopoverAndTimepiece(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DemoCalendar().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	for _, h := range []string{
+		// Popover.
+		"data-cal-pop",
+		"data-cal-pop-title",
+		"data-cal-pop-meta",
+		"data-cal-pop-desc",
+		`data-cal-pop-tab="detail"`,
+		`data-cal-pop-tab="notes"`,
+		`data-cal-pop-tab="vis"`,
+		"data-cal-pop-notes",
+		"data-cal-pop-open-drawer",
+		"data-cal-pop-close",
+		"data-cal-pop-arrow",
+		// Eras.
+		"data-cal-eras",
+		"cal-almanac-eras__band--current",
+		// Timepiece.
+		"data-cal-time",
+		"data-cal-time-drag",
+		"data-cal-time-tick",
+		"data-cal-time-clock",
+		// Named weather chip in cells.
+		"cal-almanac-cell__wchip",
+		// Category icons in event chips.
+		"cal-almanac-chip__icon",
+		// Recurring marker.
+		"cal-almanac-chip--recurring",
+	} {
+		if !strings.Contains(html, h) {
+			t.Errorf("refinement hook missing: %s", h)
+		}
+	}
+	// The side drawer stays for heavy edits — must still exist.
+	if !strings.Contains(html, "data-cal-drawer") {
+		t.Errorf("side drawer markup should still be present (heavy-edit escalation target)")
+	}
+}
+
 // ---- helpers ------------------------------------------------------
 
 func stripCalCSSComments(src string) string {

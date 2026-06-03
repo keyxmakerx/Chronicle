@@ -222,26 +222,322 @@
   });
 
   // ============================================================
-  // Block 5 — event click -> drawer open.
+  // Block 5 — event/day click -> anchored popover.
+  //
+  // Replaces the prior right-edge drawer for quick interactions:
+  // clicking a chip pops up FROM that chip; clicking a day cell pops
+  // up FROM the cell. Heavy edits still open the side drawer via the
+  // popover's "Open full editor →" footer button.
   // ============================================================
+  function findEventById(id) {
+    if (!DATA) return null;
+    // Recurring instances have IDs like "rec-session@1492-4-14"; the
+    // event isn't in DATA.events, but the popover can still display
+    // the override + template description.
+    if (id && id.indexOf('@') !== -1) {
+      var parts = id.split('@');
+      var recId = parts[0];
+      var key = parts[1];
+      var rec = (DATA.recurring || []).find(function (r) { return r.id === recId; });
+      if (rec) {
+        var name = (rec.overrides && rec.overrides[key]) || rec.name;
+        var dParts = key.split('-');
+        return {
+          id: id,
+          name: name,
+          description: rec.description,
+          year: parseInt(dParts[0], 10),
+          month: parseInt(dParts[1], 10),
+          day: parseInt(dParts[2], 10),
+          hour: rec.hour,
+          tier: rec.tier,
+          category: rec.category,
+          visibility: 'public',
+          recurring_ref: rec.id,
+        };
+      }
+    }
+    return (DATA.events || []).find(function (e) { return e.id === id; }) || null;
+  }
+  function dayWeather(m, day) {
+    if (!DATA || !DATA.day_weather) return null;
+    var key = DATA.current_year + '-' + m + '-' + day;
+    var wid = DATA.day_weather[key];
+    if (!wid) return null;
+    return (DATA.weather_types || []).find(function (w) { return w.id === wid; }) || null;
+  }
+  function dayNote(m, day) {
+    if (!DATA || !DATA.day_notes) return '';
+    return DATA.day_notes[DATA.current_year + '-' + m + '-' + day] || '';
+  }
+  function setDayNote(m, day, text) {
+    if (!DATA) return;
+    if (!DATA.day_notes) DATA.day_notes = {};
+    DATA.day_notes[DATA.current_year + '-' + m + '-' + day] = text;
+  }
+  function eventsForDay(m, day) {
+    if (!DATA) return [];
+    var out = [];
+    (DATA.events || []).forEach(function (e) {
+      if (eventTouchesDay(e, m, day)) out.push(e);
+    });
+    (DATA.recurring || []).forEach(function (rec) {
+      if (recurringTouchesDay(rec, DATA.current_year, m, day)) {
+        out.push(findEventById(rec.id + '@' + DATA.current_year + '-' + m + '-' + day));
+      }
+    });
+    return out;
+  }
+  function eventTouchesDay(e, m, day) {
+    if (!e.end_month) return e.month === m && e.day === day;
+    if (e.month === m && day >= e.day) {
+      if (e.end_month === m && day <= e.end_day) return true;
+      if (e.end_month > m) return true;
+    }
+    if (e.end_month === m && day <= e.end_day && e.month < m) return true;
+    if (e.month < m && e.end_month > m) return true;
+    return false;
+  }
+  function recurringTouchesDay(rec, y, m, day) {
+    if (!rec.interval_days) return false;
+    var start = (rec.start_month - 1) * 30 + rec.start_day;
+    var cur = (m - 1) * 30 + day;
+    if (cur < start) return false;
+    return (cur - start) % rec.interval_days === 0;
+  }
+  function categoryById(id) {
+    if (!DATA) return null;
+    return (DATA.categories || []).find(function (c) { return c.id === id; }) || null;
+  }
+  function moonPhaseFor(m, day) {
+    if (!DATA || !DATA.moons || !DATA.moons.length) return null;
+    var moon = DATA.moons[0];
+    var epochDays = DATA.current_year * 360 + (m - 1) * 30 + day;
+    var phase = epochDays / moon.cycle_days + moon.phase_offset;
+    while (phase < 0) phase += 1;
+    while (phase > 1) phase -= 1;
+    var pct = Math.floor(phase * 100);
+    var named = (DATA.moon_phases || []).find(function (mp) {
+      return mp.moon_id === moon.id && pct >= mp.start_pct && pct < mp.end_pct;
+    });
+    return { moon: moon, pct: pct, name: named ? named.name : null, glyph: named ? named.glyph : null };
+  }
+
   registerInitBlock('event-click', function () {
-    var drawer = document.querySelector('[data-cal-drawer]');
-    var titleEl = document.querySelector('[data-cal-drawer-title]');
-    var metaEl  = document.querySelector('[data-cal-drawer-meta]');
-    var descEl  = document.querySelector('[data-cal-drawer-desc]');
-    if (!drawer || !titleEl) return;
+    var pop = document.querySelector('[data-cal-pop]');
+    if (!pop) return;
     document.addEventListener('click', function (ev) {
+      // Ignore clicks inside the popover itself (tabs, notes, etc.).
+      if (ev.target.closest('[data-cal-pop]')) return;
+      // Ignore clicks on the timepiece widget so it doesn't open
+      // an event-popover on top of itself.
+      if (ev.target.closest('[data-cal-time]')) return;
+
       var chip = ev.target.closest('[data-cal-event-id]');
-      if (!chip) return;
-      var id = chip.getAttribute('data-cal-event-id');
-      var ev2 = (DATA && DATA.events) ? DATA.events.find(function (e) { return e.id === id; }) : null;
-      if (!ev2) return;
-      titleEl.textContent = ev2.name;
-      var dateLabel = monthName(ev2.month) + ' ' + ev2.day + ' · tier ' + ev2.tier + ' · ' + ev2.category;
-      metaEl.textContent = dateLabel;
-      descEl.textContent = ev2.description || '(no description)';
-      // Visibility editor: hydrate from event.
-      hydrateVisibility(ev2);
+      var cell = ev.target.closest('[data-cal-cell]');
+      if (chip) {
+        openEventPopover(findEventById(chip.getAttribute('data-cal-event-id')), chip);
+        return;
+      }
+      if (cell) {
+        var m = parseInt(cell.getAttribute('data-cell-month'), 10);
+        var day = parseInt(cell.getAttribute('data-cell-day'), 10);
+        openDayPopover(m, day, cell);
+        return;
+      }
+      // Click outside calendar surfaces → close popover.
+      closePopover();
+    });
+  });
+
+  function openEventPopover(ev, anchor) {
+    if (!ev || !anchor) return;
+    var cat = categoryById(ev.category) || {};
+    setPopoverTitle(ev.name, monthName(ev.month) + ' ' + ev.day + ' · ' + cat.name + (ev.hour >= 0 ? ' · ' + String(ev.hour).padStart(2, '0') + ':00' : ''));
+    setPopoverDesc(ev.description || '(No description.)');
+    var note = ev.recurring_ref ? '<p style="margin:6px 0 0;font-size:11px;color:oklch(0.74 0.022 261)">↻ Recurring (' + ev.recurring_ref + ') — edits affect this instance only.</p>' : '';
+    var eventsBox = document.querySelector('[data-cal-pop-events]');
+    if (eventsBox) eventsBox.innerHTML = note;
+    setPopoverMoonWeather(null, null);
+    hydrateVisibility(ev);
+    var noteEl = document.querySelector('[data-cal-pop-notes]');
+    if (noteEl) noteEl.value = ''; // events don't carry per-day notes
+    rememberPopoverContext({ kind: 'event', event: ev, day: null, month: null });
+    positionAndShowPopover(anchor);
+  }
+  function openDayPopover(m, day, anchor) {
+    var wd = (DATA && DATA.weekdays) ? DATA.weekdays[(day - 1) % DATA.weekdays.length] : null;
+    setPopoverTitle(monthName(m) + ' ' + day, (wd ? wd.name : '') + ' · ' + DATA.current_year + ' ' + DATA.calendar.epoch_name);
+    setPopoverDesc('Day at a glance — events, weather, moon phase, notes.');
+    var events = eventsForDay(m, day);
+    var eventsBox = document.querySelector('[data-cal-pop-events]');
+    if (eventsBox) {
+      eventsBox.innerHTML = '';
+      events.forEach(function (e) {
+        if (!e) return;
+        var cat = categoryById(e.category) || {};
+        var row = document.createElement('div');
+        row.className = 'cal-almanac-pop__event';
+        row.style.setProperty('--chip-cat', cat.color || 'oklch(0.62 0.18 240)');
+        row.innerHTML =
+          '<span class="cal-almanac-pop__event-icon">●</span>' +
+          '<span class="cal-almanac-pop__event-name">' + escapeHTML(e.name) + '</span>' +
+          (e.hour >= 0 ? '<span class="cal-almanac-pop__event-time">' + String(e.hour).padStart(2, '0') + ':00</span>' : '');
+        row.addEventListener('click', function () { openEventPopover(e, anchor); });
+        eventsBox.appendChild(row);
+      });
+      if (!events.length) {
+        var emp = document.createElement('div');
+        emp.style.cssText = 'font-size:11px;color:oklch(0.62 0.022 261);font-style:italic;padding:4px 0;';
+        emp.textContent = 'No events on this day.';
+        eventsBox.appendChild(emp);
+      }
+    }
+    var w = dayWeather(m, day);
+    var mp = moonPhaseFor(m, day);
+    setPopoverMoonWeather(w, mp);
+    var noteEl = document.querySelector('[data-cal-pop-notes]');
+    if (noteEl) noteEl.value = dayNote(m, day);
+    // Default day-popover visibility editor: public.
+    hydrateVisibility({ visibility: 'public', allow_users: [], deny_users: [] });
+    rememberPopoverContext({ kind: 'day', event: null, day: day, month: m });
+    positionAndShowPopover(anchor);
+  }
+  function setPopoverTitle(t, meta) {
+    var titleEl = document.querySelector('[data-cal-pop-title]');
+    var metaEl = document.querySelector('[data-cal-pop-meta]');
+    if (titleEl) titleEl.textContent = t;
+    if (metaEl) metaEl.textContent = meta;
+  }
+  function setPopoverDesc(t) {
+    var d = document.querySelector('[data-cal-pop-desc]');
+    if (d) d.textContent = t;
+  }
+  function setPopoverMoonWeather(w, mp) {
+    var mw = document.querySelector('[data-cal-pop-moon]');
+    var ww = document.querySelector('[data-cal-pop-weather]');
+    if (mw) {
+      if (mp && mp.name) {
+        mw.removeAttribute('hidden');
+        mw.innerHTML = '<strong>' + (mp.glyph || '') + '</strong> ' + escapeHTML(mp.moon.name) + ' — ' + escapeHTML(mp.name) + ' <span style="opacity:.6;font-family:JetBrains Mono,monospace">(' + mp.pct + '%)</span>';
+      } else {
+        mw.setAttribute('hidden', '');
+      }
+    }
+    if (ww) {
+      if (w) {
+        ww.removeAttribute('hidden');
+        ww.style.setProperty('--w-color', w.color);
+        ww.style.borderLeft = '3px solid ' + w.color;
+        ww.innerHTML = '<strong>' + escapeHTML(w.name) + '</strong> <span style="opacity:.7">·</span> ' + w.temp_c + '°C <span style="opacity:.7">·</span> ' + escapeHTML(w.category);
+      } else {
+        ww.setAttribute('hidden', '');
+      }
+    }
+  }
+  var popoverCtx = null;
+  function rememberPopoverContext(ctx) { popoverCtx = ctx; }
+  function positionAndShowPopover(anchor) {
+    var pop = document.querySelector('[data-cal-pop]');
+    if (!pop || !anchor) return;
+    pop.removeAttribute('hidden');
+    pop.setAttribute('aria-hidden', 'false');
+    // Position: prefer above the anchor; flip below if no room.
+    var ar = anchor.getBoundingClientRect();
+    var pw = 360;
+    var ph = 320; // estimate; we re-measure after show
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var left = ar.left + (ar.width / 2) - (pw / 2);
+    left = Math.max(8, Math.min(left, vw - pw - 8));
+    var side = 'top';
+    var top = ar.top - ph - 10;
+    if (top < 8) {
+      side = 'bottom';
+      top = ar.bottom + 10;
+    }
+    pop.style.left = left + 'px';
+    pop.style.top  = top + 'px';
+    pop.setAttribute('data-cal-pop-side', side);
+    pop.setAttribute('data-cal-pop-open', 'true');
+    // Re-position arrow to point at the anchor's center within the popover's width.
+    var arrow = pop.querySelector('[data-cal-pop-arrow]');
+    if (arrow) {
+      var anchorCenterAbs = ar.left + ar.width / 2;
+      var arrowLeft = Math.max(12, Math.min(anchorCenterAbs - left - 5, pw - 18));
+      arrow.style.left = arrowLeft + 'px';
+      arrow.style.marginLeft = '0';
+    }
+  }
+  function closePopover() {
+    var pop = document.querySelector('[data-cal-pop]');
+    if (!pop) return;
+    pop.setAttribute('data-cal-pop-open', 'false');
+    pop.setAttribute('aria-hidden', 'true');
+    setTimeout(function () { pop.setAttribute('hidden', ''); }, 220);
+  }
+  function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ============================================================
+  // Block 5b — popover tab switcher + close + escalate to drawer.
+  // ============================================================
+  registerInitBlock('popover-controls', function () {
+    var pop = document.querySelector('[data-cal-pop]');
+    if (!pop) return;
+    // Tabs.
+    pop.querySelectorAll('[data-cal-pop-tab]').forEach(function (t) {
+      t.addEventListener('click', function () {
+        var name = t.getAttribute('data-cal-pop-tab');
+        pop.querySelectorAll('[data-cal-pop-tab]').forEach(function (o) {
+          o.classList.toggle('cal-almanac-pop__tab--active', o === t);
+          o.setAttribute('aria-selected', o === t ? 'true' : 'false');
+        });
+        pop.querySelectorAll('[data-cal-pop-panel]').forEach(function (p) {
+          var active = p.getAttribute('data-cal-pop-panel') === name;
+          p.classList.toggle('cal-almanac-pop__panel--active', active);
+          if (active) p.removeAttribute('hidden');
+          else p.setAttribute('hidden', '');
+        });
+      });
+    });
+    // Close.
+    var close = pop.querySelector('[data-cal-pop-close]');
+    if (close) close.addEventListener('click', closePopover);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') closePopover();
+    });
+    // Notes — persist into in-memory mock on input.
+    var notes = pop.querySelector('[data-cal-pop-notes]');
+    if (notes) notes.addEventListener('input', function () {
+      if (popoverCtx && popoverCtx.kind === 'day') {
+        setDayNote(popoverCtx.month, popoverCtx.day, notes.value);
+      }
+    });
+    // Escalate to the side drawer for heavy edits.
+    var escal = pop.querySelector('[data-cal-pop-open-drawer]');
+    if (escal) escal.addEventListener('click', function () {
+      var drawer = document.querySelector('[data-cal-drawer]');
+      if (!drawer) return;
+      var titleEl = document.querySelector('[data-cal-drawer-title]');
+      var metaEl  = document.querySelector('[data-cal-drawer-meta]');
+      var descEl  = document.querySelector('[data-cal-drawer-desc]');
+      if (popoverCtx && popoverCtx.event) {
+        var e = popoverCtx.event;
+        if (titleEl) titleEl.textContent = e.name;
+        if (metaEl) metaEl.textContent = monthName(e.month) + ' ' + e.day + ' · tier ' + e.tier + ' · ' + e.category;
+        if (descEl) descEl.textContent = e.description || '(no description)';
+        hydrateVisibility(e);
+      } else if (popoverCtx && popoverCtx.kind === 'day') {
+        if (titleEl) titleEl.textContent = monthName(popoverCtx.month) + ' ' + popoverCtx.day;
+        if (metaEl) metaEl.textContent = 'Day editor';
+        if (descEl) descEl.textContent = 'Edit events, weather, moon override, and per-day notes for this date.';
+        hydrateVisibility({ visibility: 'public' });
+      }
+      closePopover();
       drawer.setAttribute('data-cal-drawer-open', 'true');
       drawer.setAttribute('aria-hidden', 'false');
     });
@@ -453,6 +749,70 @@
     if (prev)  prev.addEventListener('click',  function () { monthIdx = (monthIdx - 1 + DATA.months.length) % DATA.months.length; paint(); });
     if (next)  next.addEventListener('click',  function () { monthIdx = (monthIdx + 1) % DATA.months.length; paint(); });
     if (today) today.addEventListener('click', function () { monthIdx = DATA.current_month - 1; paint(); });
+  });
+
+  // ============================================================
+  // Block 10 — timepiece widget. Draggable like the main widget;
+  // its own state for the "tick +1h" button. Sky-band scrubber +
+  // timepiece clock stay in sync (scrubbing sky updates the
+  // timepiece, ticking the timepiece updates the sky).
+  // ============================================================
+  registerInitBlock('timepiece', function () {
+    var widget = document.querySelector('[data-cal-time]');
+    var handle = document.querySelector('[data-cal-time-drag]');
+    var clockEl = document.querySelector('[data-cal-time-clock]');
+    var tick = document.querySelector('[data-cal-time-tick]');
+    var scrub = document.querySelector('[data-cal-sky-scrub]');
+    if (!widget || !handle) return;
+
+    // --- drag ---
+    var dragging = false, sx = 0, sy = 0, sl = 0, st = 0;
+    handle.addEventListener('pointerdown', function (ev) {
+      dragging = true;
+      widget.setAttribute('data-cal-time-dragging', 'true');
+      try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
+      sx = ev.clientX; sy = ev.clientY;
+      var rect = widget.getBoundingClientRect();
+      sl = rect.left; st = rect.top;
+      widget.style.left = sl + window.scrollX + 'px';
+      widget.style.top  = st + window.scrollY + 'px';
+      ev.preventDefault();
+    });
+    handle.addEventListener('pointermove', function (ev) {
+      if (!dragging) return;
+      widget.style.left = (sl + window.scrollX + (ev.clientX - sx)) + 'px';
+      widget.style.top  = (st + window.scrollY + (ev.clientY - sy)) + 'px';
+    });
+    function dragEnd(ev) {
+      if (!dragging) return;
+      dragging = false;
+      widget.removeAttribute('data-cal-time-dragging');
+      try { handle.releasePointerCapture(ev.pointerId); } catch (e) {}
+    }
+    handle.addEventListener('pointerup', dragEnd);
+    handle.addEventListener('pointercancel', dragEnd);
+
+    // --- tick +1h: advances SkyTime by 1/hours_per_day; wraps at 1.0 ---
+    if (tick && scrub) {
+      tick.addEventListener('click', function () {
+        var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
+        var step = 1 / hpd;
+        var t = parseInt(scrub.value, 10) / 1000;
+        t = (t + step) % 1.0;
+        scrub.value = String(Math.round(t * 1000));
+        scrub.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+    // Keep clock in sync with scrubber.
+    if (scrub && clockEl) {
+      scrub.addEventListener('input', function () {
+        var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
+        var t = parseInt(scrub.value, 10) / 1000;
+        var total = Math.floor(t * hpd * 60);
+        var h = Math.floor(total / 60), m = total % 60;
+        clockEl.textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+      });
+    }
   });
 
   // ============================================================

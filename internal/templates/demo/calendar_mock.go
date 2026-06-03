@@ -24,6 +24,13 @@ type CalAlmanacMockData struct {
 	Tiers     []CalAlmanacTier    `json:"tiers"`
 	Categories []CalAlmanacCategory `json:"categories"`
 	Events    []CalAlmanacEvent   `json:"events"`
+	// Refinement (post-PR-#385) — operator-requested vocabularies.
+	Eras         []CalAlmanacEra         `json:"eras"`           // colored bands behind the grid
+	WeatherTypes []CalAlmanacWeatherType `json:"weather_types"`  // named weather vocabulary
+	MoonPhases   []CalAlmanacMoonPhase   `json:"moon_phases"`    // named phase vocabulary (per-moon)
+	DayWeather   map[string]string       `json:"day_weather"`    // "Y-M-D" -> weather-type ID
+	DayNotes     map[string]string       `json:"day_notes"`      // "Y-M-D" -> free-text note
+	Recurring    []CalAlmanacRecurring   `json:"recurring"`      // weekly/monthly templates
 	// CurrentMonth + Year are what the grid renders on initial load.
 	CurrentYear  int `json:"current_year"`
 	CurrentMonth int `json:"current_month"` // 1-indexed
@@ -89,6 +96,10 @@ type CalAlmanacCategory struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Color string `json:"color"`
+	// Icon — name of an inline SVG glyph rendered by the templ's
+	// calAlmanacIcon helper (sword, mask, hearth, etc.). No external
+	// font/icon dependency.
+	Icon string `json:"icon"`
 }
 
 type CalAlmanacEvent struct {
@@ -106,6 +117,67 @@ type CalAlmanacEvent struct {
 	Visibility  string `json:"visibility"` // "public"/"specific"
 	AllowUsers  []string `json:"allow_users,omitempty"`
 	DenyUsers   []string `json:"deny_users,omitempty"`
+	// RecurringRef — if non-empty, this event was generated from the
+	// recurring template with this ID. Lets the popover offer
+	// "edit this instance only" vs "edit the series."
+	RecurringRef string `json:"recurring_ref,omitempty"`
+}
+
+// CalAlmanacEra — a named historical span rendered as a colored band
+// above the weekday header. Eras can stretch many years; the demo
+// shows the current era as the active band + 2 adjacent for context.
+type CalAlmanacEra struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	StartYear  int    `json:"start_year"`
+	EndYear    int    `json:"end_year"`     // 0 = ongoing
+	Color      string `json:"color"`        // OKLCH literal
+	Description string `json:"description,omitempty"`
+}
+
+// CalAlmanacWeatherType — a named weather condition the operator
+// authored once, then references on specific days. Matches Calendaria's
+// "Select Weather" vocabulary (clear/cloudy/sakura bloom/arcane winds).
+type CalAlmanacWeatherType struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Category string `json:"category"` // "standard" / "severe" / "environmental" / "fantasy"
+	Icon     string `json:"icon"`     // inline SVG glyph name
+	Color    string `json:"color"`    // OKLCH literal; tints the chip
+	TempC    int    `json:"temp_c"`   // °C; informational
+}
+
+// CalAlmanacMoonPhase — a named span of a moon's phase cycle. Each
+// moon owns a list of phases keyed by start_pct/end_pct (0..100),
+// matching the Calendaria moon-phases editor. Operator can name a
+// phase (e.g. "The Silver Crown") so it reads like worldbuilding,
+// not a procedural percentage.
+type CalAlmanacMoonPhase struct {
+	MoonID   int    `json:"moon_id"`
+	Name     string `json:"name"`
+	StartPct int    `json:"start_pct"` // 0..100
+	EndPct   int    `json:"end_pct"`
+	Glyph    string `json:"glyph"`     // unicode moon glyph (rendered as fallback over the SVG)
+}
+
+// CalAlmanacRecurring — a recurring-event template. The mock has one
+// example (weekly session) that the templ expands into per-week
+// instances within the focused month. Real plugin would persist these
+// + per-instance overrides.
+type CalAlmanacRecurring struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	StartMonth    int    `json:"start_month"`
+	StartDay      int    `json:"start_day"`
+	IntervalDays  int    `json:"interval_days"` // e.g. 7 = weekly (on the tenday this is "every other week")
+	Hour          int    `json:"hour"`
+	Tier          string `json:"tier"`
+	Category      string `json:"category"`
+	// Overrides — per-instance edits. Key is "Y-M-D"; value is the
+	// replacement name (showcase scope — production would override
+	// any field).
+	Overrides map[string]string `json:"overrides,omitempty"`
 }
 
 // CalAlmanacMock returns the in-memory mock dataset. Pure function;
@@ -171,53 +243,134 @@ func CalAlmanacMock() CalAlmanacMockData {
 			{"detail", "Detail", "oklch(0.55 0.04 260)"},   // muted
 		},
 		Categories: []CalAlmanacCategory{
-			{"session", "Session", "oklch(0.65 0.16 145)"},     // emerald
-			{"festival", "Festival", "oklch(0.78 0.16 75)"},    // amber
-			{"travel", "Travel", "oklch(0.68 0.14 200)"},       // teal
-			{"npc", "NPC arc", "oklch(0.70 0.18 320)"},         // magenta
-			{"world", "World event", "oklch(0.62 0.18 30)"},    // orange-red
-			{"downtime", "Downtime", "oklch(0.65 0.06 260)"},   // muted blue
+			{"session", "Session", "oklch(0.65 0.16 145)", "dice"},      // emerald — d20 die
+			{"festival", "Festival", "oklch(0.78 0.16 75)", "flame"},   // amber — bonfire
+			{"travel", "Travel", "oklch(0.68 0.14 200)", "compass"},    // teal — wayfinder
+			{"npc", "NPC arc", "oklch(0.70 0.18 320)", "mask"},         // magenta — face/mask
+			{"world", "World event", "oklch(0.62 0.18 30)", "spire"},   // orange-red — tower
+			{"downtime", "Downtime", "oklch(0.65 0.06 260)", "hearth"}, // muted blue — fireside
+		},
+		Eras: []CalAlmanacEra{
+			{"era-first", "First Age", -3000, 0, "oklch(0.50 0.10 240)", "Ages-long dawn of the realm."},
+			{"era-kings", "Age of Kings", 1, 1487, "oklch(0.62 0.16 75)", "The lineage of mortal kings."},
+			{"era-reckoning", "Reckoning", 1488, 0, "oklch(0.62 0.18 22)", "Current era. Began with the falling Spire."},
+		},
+		WeatherTypes: []CalAlmanacWeatherType{
+			// Standard
+			{"w-clear", "Clear", "standard", "sun", "oklch(0.85 0.14 80)", 18},
+			{"w-cloudy", "Cloudy", "standard", "cloud", "oklch(0.74 0.02 240)", 14},
+			{"w-rain", "Rain", "standard", "rain", "oklch(0.62 0.12 240)", 11},
+			{"w-fog", "Fog", "standard", "fog", "oklch(0.70 0.02 240)", 9},
+			// Severe
+			{"w-storm", "Thunderstorm", "severe", "storm", "oklch(0.52 0.20 285)", 8},
+			{"w-blizzard", "Blizzard", "severe", "snowflake", "oklch(0.85 0.04 240)", -12},
+			// Environmental — operator's authored vocabulary, not procedural.
+			{"w-sakura", "Sakura Bloom", "environmental", "petal", "oklch(0.80 0.12 350)", 16},
+			{"w-ashfall", "Ashfall", "environmental", "ember", "oklch(0.60 0.04 30)", 4},
+			// Fantasy
+			{"w-arcane", "Arcane Winds", "fantasy", "swirl", "oklch(0.72 0.22 290)", -2},
+			{"w-leysurge", "Ley Surge", "fantasy", "swirl", "oklch(0.65 0.20 195)", 10},
+			{"w-acidrain", "Acid Rain", "fantasy", "rain", "oklch(0.70 0.18 145)", 8},
+		},
+		MoonPhases: []CalAlmanacMoonPhase{
+			// Selûne (moon 1) — operator's naming convention from the
+			// Calendaria mockups. 8 phases, each 12.5% of the 30-day cycle.
+			{1, "The Dark Sister", 0, 12, "●"},
+			{1, "The Growing — early", 12, 25, "◐"},
+			{1, "The Growing — middle", 25, 37, "◐"},
+			{1, "The Growing — late", 37, 50, "◐"},
+			{1, "The Silver Crown", 50, 62, "○"},
+			{1, "The Fading — early", 62, 75, "◑"},
+			{1, "The Fading — middle", 75, 87, "◑"},
+			{1, "The Fading — late", 87, 100, "◑"},
+			// Shar (moon 2) — fewer named phases; mostly procedural.
+			{2, "Shar — hidden", 0, 25, "●"},
+			{2, "Shar — quarter", 25, 75, "◑"},
+			{2, "Shar — full dark", 75, 100, "●"},
+		},
+		DayWeather: map[string]string{
+			"1492-4-1":  "w-arcane",   // operator's Calendaria reference
+			"1492-4-2":  "w-cloudy",
+			"1492-4-3":  "w-cloudy",
+			"1492-4-4":  "w-rain",
+			"1492-4-5":  "w-clear",
+			"1492-4-6":  "w-clear",
+			"1492-4-7":  "w-storm",    // The Spire falls — storm
+			"1492-4-8":  "w-fog",
+			"1492-4-9":  "w-fog",
+			"1492-4-10": "w-clear",
+			"1492-4-11": "w-clear",
+			"1492-4-12": "w-rain",
+			"1492-4-13": "w-rain",
+			"1492-4-14": "w-clear",    // today
+			"1492-4-15": "w-clear",
+			"1492-4-17": "w-leysurge", // fantasy weather highlight
+			"1492-4-18": "w-cloudy",
+			"1492-4-22": "w-acidrain",
+			"1492-4-23": "w-clear",    // Selûne full
+			"1492-4-25": "w-sakura",   // environmental highlight
+			"1492-4-26": "w-sakura",
+			"1492-4-30": "w-clear",    // Greengrass
+		},
+		DayNotes: map[string]string{
+			"1492-4-7":  "World-breaking day. Note the players' reactions; tremors echo for the rest of the tenday.",
+			"1492-4-14": "Today. Session 14 prep: reveal the lich in the crypt only after the third combat round, NOT on entry.",
+			"1492-4-17": "Ley Surge — Rolan's sun-blade reacts. He gets a free attune-shift this day.",
+			"1492-4-23": "Selûne full. Marisha asks for a ritual — DM keep an eye on which player rolls best Insight.",
+		},
+		Recurring: []CalAlmanacRecurring{
+			{
+				ID: "rec-session",
+				Name: "Weekly Session",
+				Description: "Recurring D&D session — Seventh-day evenings at the Sigil & Lantern.",
+				StartMonth: 4, StartDay: 7,
+				IntervalDays: 7,
+				Hour: 19,
+				Tier: "standard",
+				Category: "session",
+				Overrides: map[string]string{
+					"1492-4-14": "Session 14: The Crypt Below",
+					"1492-4-21": "Session 15: Audience with the Lord",
+					"1492-4-28": "Session 16: The Long Road",
+				},
+			},
 		},
 		Events: []CalAlmanacEvent{
 			// Major / world events
 			{"e1", "The Burning of the Spire", "A celestial tower falls; tremors felt in every city. World turns on this day.",
-				1492, 4, 7, 0, 0, -1, "major", "world", "public", nil, nil},
+				1492, 4, 7, 0, 0, -1, "major", "world", "public", nil, nil, ""},
 			{"e2", "Greengrass Festival", "Annual fertility festival across the realm. Mead, music, and renewals.",
-				1492, 4, 30, 0, 0, -1, "major", "festival", "public", nil, nil},
+				1492, 4, 30, 0, 0, -1, "major", "festival", "public", nil, nil, ""},
 			{"e3", "Caravan to Waterdeep", "Multi-day overland trek with the merchants of Daggerford.",
-				1492, 4, 12, 4, 16, -1, "standard", "travel", "public", nil, nil},
+				1492, 4, 12, 4, 16, -1, "standard", "travel", "public", nil, nil, ""},
 
-			// Standard / session-y events
-			{"e4", "Session 14: The Crypt Below", "Party descends to find the source of the tremors. Live 7pm.",
-				1492, 4, 14, 0, 0, 19, "standard", "session", "public", nil, nil},
-			{"e5", "Session 15: Audience with the Lord", "Court politics in the citadel; reveal of the Burning Spire's cause.",
-				1492, 4, 21, 0, 0, 19, "standard", "session", "public", nil, nil},
-			{"e6", "Session 16: The Long Road", "Travel + side hooks; light combat session.",
-				1492, 4, 28, 0, 0, 19, "standard", "session", "public", nil, nil},
+			// (e4/e5/e6 sessions removed — the Recurring template
+			// "rec-session" above now generates them via overrides so
+			// they demonstrate the recurring + per-instance pattern.)
 
 			// NPC arcs (some private)
 			{"e7", "Marisha returns", "NPC re-appears in Daggerford with news from the north.",
-				1492, 4, 9, 0, 0, 14, "standard", "npc", "specific", []string{"alice"}, nil},
+				1492, 4, 9, 0, 0, 14, "standard", "npc", "specific", []string{"alice"}, nil, ""},
 			{"e8", "The Black Letter", "Sealed letter delivered to the party. DM eyes only — reveal timing TBD.",
-				1492, 4, 18, 0, 0, 22, "detail", "npc", "specific", nil, []string{"bob", "carol"}},
+				1492, 4, 18, 0, 0, 22, "detail", "npc", "specific", nil, []string{"bob", "carol"}, ""},
 
 			// Downtime / detail
 			{"e9", "Crafting: Sun-blade", "Rolan finishes the inscription on his sun-blade.",
-				1492, 4, 5, 0, 0, 10, "detail", "downtime", "public", nil, nil},
+				1492, 4, 5, 0, 0, 10, "detail", "downtime", "public", nil, nil, ""},
 			{"e10", "Library research", "Aedric searches the temple library for references to the Spire.",
-				1492, 4, 10, 0, 0, 14, "detail", "downtime", "public", nil, nil},
+				1492, 4, 10, 0, 0, 14, "detail", "downtime", "public", nil, nil, ""},
 			{"e11", "Selûne full", "Lunar phase: Selûne is full. +1 to ritual rolls under moonlight.",
-				1492, 4, 23, 0, 0, -1, "detail", "world", "public", nil, nil},
+				1492, 4, 23, 0, 0, -1, "detail", "world", "public", nil, nil, ""},
 			{"e12", "Shar new", "Lunar phase: Shar is new. -1 to shadow-magic resists.",
-				1492, 4, 1, 0, 0, -1, "detail", "world", "public", nil, nil},
+				1492, 4, 1, 0, 0, -1, "detail", "world", "public", nil, nil, ""},
 
 			// Adjacent-month spill so the prior + next month preview cells show content
 			{"e13", "Spring rains begin", "Weather shifts; travel difficulty +1 for a tenday.",
-				1492, 3, 28, 4, 8, -1, "standard", "world", "public", nil, nil},
+				1492, 3, 28, 4, 8, -1, "standard", "world", "public", nil, nil, ""},
 			{"e14", "Session 17: A Quiet Tenday", "Downtime session; player goals.",
-				1492, 5, 5, 0, 0, 19, "standard", "session", "public", nil, nil},
+				1492, 5, 5, 0, 0, 19, "standard", "session", "public", nil, nil, "rec-session"},
 			{"e15", "The Spire re-ignites", "Major world beat. Locks in only after the party returns from the crypt.",
-				1492, 5, 12, 0, 0, -1, "major", "world", "public", nil, nil},
+				1492, 5, 12, 0, 0, -1, "major", "world", "public", nil, nil, ""},
 		},
 	}
 }
