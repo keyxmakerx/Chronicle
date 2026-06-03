@@ -2779,6 +2779,24 @@ func (a *App) RegisterRoutes() {
 		return middleware.Render(c, http.StatusOK, demo.DemoShowcase())
 	}, auth.RequireAuth(authService))
 
+	// Candidate calendar designs for the V2 plugin port. Per the
+	// operator's page-separation directive (2026-06-03): each design
+	// lives on its OWN isolated route loading ONLY its own CSS+JS, so a
+	// bug in one design can never affect another. `/demo/calendar` is a
+	// tiny plain-link index (no design assets); each design is a sibling
+	// route. Designs 2 (Linear) + 3 (Compact) get their own routes when
+	// they ship. Mock data only (no backend); operator selects the
+	// winning design, the real plugin port follows. Auth-gated; exposes
+	// no campaign data. Dispatches:
+	// dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-1-ALMANAC.md +
+	// dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-2-LINEAR.md.
+	e.GET("/demo/calendar", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoCalendarIndex())
+	}, auth.RequireAuth(authService))
+	e.GET("/demo/calendar/almanac", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoCalendarAlmanac())
+	}, auth.RequireAuth(authService))
+
 	// --- Layout Data Injector ---
 	// Registers the callback that copies auth/campaign data from Echo's
 	// context into Go's context.Context so Templ templates can read it.

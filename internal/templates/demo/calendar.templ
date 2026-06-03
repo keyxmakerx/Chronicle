@@ -1,0 +1,932 @@
+// calendar.templ — C-CAL-SHOWCASE-DESIGN-1-ALMANAC.
+//
+// Design 1 of 2-3 candidate calendar designs for the V2 plugin port.
+// "Almanac": atmospheric / Calendaria-but-better identity with an OKLCH
+// animated sky-band header (sun + moon arc + scrubber), a fantasy-Harptos
+// month grid with tier-colored event chips + moon glyphs + weather pips,
+// click-event-→-drawer with the Q-V2-7 chip-row visibility editor, drag-
+// to-create, and the whole thing wrapped in a draggable + resizable
+// widget shell (the end-goal form).
+//
+// Carry-forward discipline (the showcase-saga lessons, binding):
+//   - Self-contained .cal-almanac-* CSS in static/css/cal-almanac.css;
+//     no @layer, no Tailwind utilities, no canon tokens — hardcoded
+//     OKLCH per the locked canon. Nothing else in the repo targets these
+//     classes, so there's no cascade fight to lose.
+//   - Externalized JS at static/js/cal-almanac.js, loaded `defer`;
+//     INIT_BLOCKS-style per-block try/catch. No inline <script> body.
+//   - Mock data lives in calendar_mock.go (CalAlmanacMock) and is BOTH
+//     server-rendered into the grid (so screenshots are faithful without
+//     JS) AND embedded as JSON for the JS to read (single source of truth).
+//   - Forced-state CSS classes (.cal-almanac--proof-drawer, --proof-drag,
+//     --proof-hover) on the page root let the headless verification
+//     capture animated states; inert in real use.
+//
+// Cross-refs:
+//   - dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-1-ALMANAC.md (this dispatch)
+//   - decisions/2026-05-28-cal-timeline-v2-design.md (§A1/A2/B1/B2/B4/C1 +
+//     Wave 1 clarifications + Q-V2-7)
+//   - plans/2026-06-01-calendaria-research.md (sky-band §7, data §6)
+//   - decisions/2026-05-29-chronicle-design-canon.md (D1-D10)
+//   - internal/plugins/calendar/model.go (shape the design ports to)
+
+package demo
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// DemoCalendarIndex — the tiny `/demo/calendar` landing page. Per the
+// operator's page-separation directive (2026-06-03): each calendar
+// design lives on its OWN route loading ONLY its own CSS+JS, so a bug
+// in one design can never affect another. The index is plain links
+// only — it loads NO design CSS and NO design JS of its own (just the
+// site shell), so it's the safe hub between fully isolated designs.
+templ DemoCalendarIndex() {
+	@layouts.App("Chronicle calendar designs") {
+		<div style="max-width:760px; margin:0 auto; padding:48px 24px; font-family:'Inter Variable','Inter',system-ui,sans-serif; color:oklch(0.985 0.002 247.839);">
+			<h1 style="margin:0 0 8px; font-size:26px; font-weight:600;">Chronicle calendar designs</h1>
+			<p style="margin:0 0 28px; color:oklch(0.707 0.022 261.325); line-height:1.6;">
+				Candidate calendar designs for the V2 plugin. Each lives on its own isolated page — its own styles and scripts, nothing shared — so one can&#39;t break another. Open one, use it, tell me in chat what you think.
+			</p>
+			<div style="display:flex; flex-direction:column; gap:12px;">
+				@calIndexLink("/demo/calendar/almanac", "Almanac", "Atmospheric. Animated OKLCH sky-band, era band, named weather + moons, recurring events, anchored popovers, draggable widget + timepiece.", true)
+				@calIndexLink("/demo/calendar/linear", "Linear", "Flat / information-dense. Razor radii, horizontal time-strip, spreadsheet feel. (Coming next.)", false)
+				@calIndexLink("/demo/calendar/compact", "Compact", "Dense / typography-forward. Tight grid, content-first cells. (Coming next.)", false)
+			</div>
+		</div>
+	}
+}
+
+// calIndexLink — one row on the index. A real <a href> for a live
+// design; a muted non-link placeholder for one not yet built.
+templ calIndexLink(href, name, desc string, live bool) {
+	if live {
+		<a
+			href={ templ.SafeURL(href) }
+			style="display:block; padding:16px 18px; background:oklch(0.22 0.022 264); border:1px solid oklch(0.34 0.030 259); border-radius:10px; text-decoration:none; color:inherit;"
+		>
+			<div style="display:flex; align-items:baseline; gap:10px;">
+				<span style="font-size:16px; font-weight:600;">{ name }</span>
+				<span style="font-size:11px; color:oklch(0.65 0.16 145); text-transform:uppercase; letter-spacing:0.06em;">Live</span>
+				<span style="margin-left:auto; color:oklch(0.707 0.022 261.325);">→</span>
+			</div>
+			<p style="margin:4px 0 0; font-size:13px; color:oklch(0.707 0.022 261.325); line-height:1.5;">{ desc }</p>
+		</a>
+	} else {
+		<div style="padding:16px 18px; background:oklch(0.18 0.020 264); border:1px dashed oklch(0.32 0.025 260); border-radius:10px; opacity:0.7;">
+			<div style="display:flex; align-items:baseline; gap:10px;">
+				<span style="font-size:16px; font-weight:600;">{ name }</span>
+				<span style="font-size:11px; color:oklch(0.74 0.022 261); text-transform:uppercase; letter-spacing:0.06em;">Coming next</span>
+			</div>
+			<p style="margin:4px 0 0; font-size:13px; color:oklch(0.62 0.022 261); line-height:1.5;">{ desc }</p>
+		</div>
+	}
+}
+
+// DemoCalendarAlmanac renders the Almanac calendar (Design 1) on its
+// own isolated route `/demo/calendar/almanac`. Loads ONLY cal-almanac
+// CSS + JS — no shared design assets, per the page-separation
+// directive. Designs 2 (Linear) and 3 (Compact) get sibling routes +
+// their own isolated asset files.
+templ DemoCalendarAlmanac() {
+	@layouts.App("Chronicle calendar — Almanac") {
+		<link rel="stylesheet" href="/static/css/cal-almanac.css"/>
+		@calAlmanacPage(CalAlmanacMock())
+		<script src="/static/js/cal-almanac.js" defer></script>
+	}
+}
+
+templ calAlmanacPage(d CalAlmanacMockData) {
+	<div class="cal-almanac-shell">
+		@calAlmanacIntro()
+		@calAlmanacTimepiece(d)
+		@calAlmanacWidget(d)
+		@calAlmanacPopover()
+		// Mock dataset, JSON-serialized for the JS init blocks.
+		// This is the single source of truth — same struct the templ
+		// rendered above.
+		<script id="cal-almanac-data" type="application/json">{ calAlmanacMockJSON(d) }</script>
+	</div>
+}
+
+// calAlmanacTimepiece — a small standalone draggable Calendaria-style
+// time widget. Lives separately from the main calendar widget — the
+// idea is that this is the form the eventual "entity-mountable
+// time-piece" takes, just running in the showcase as a free-floating
+// widget. Campaign-wide top-bar integration is TBD per coordinator
+// (operator: "the time-piece should either be an entity or the top
+// bar for the entire campaign... that's been buggy to customize in
+// the past so we'll have coordinator put that down as a tbd feature").
+templ calAlmanacTimepiece(d CalAlmanacMockData) {
+	<aside class="cal-almanac-time" data-cal-time style="left:32px; top:840px; width:420px;">
+		<header class="cal-almanac-time__handle" data-cal-time-drag>
+			<span class="cal-almanac-time__tag">Timepiece</span>
+		</header>
+		<div class="cal-almanac-time__body">
+			@calAlmanacIcon("book", "cal-almanac-time__leadicon")
+			<div class="cal-almanac-time__date">
+				<span class="cal-almanac-time__day">{ fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }, { fmtInt(d.CurrentYear) }</span>
+				<span class="cal-almanac-time__weekday" data-cal-time-weekday>{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name }</span>
+			</div>
+			<div class="cal-almanac-time__clock" data-cal-time-clock>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</div>
+			<div class="cal-almanac-time__pips">
+				if w, ok := dayWeatherType(d, d.CurrentMonth, d.CurrentDay); ok {
+					<span class="cal-almanac-time__pip" data-cal-time-weather title={ w.Name + " · " + fmtInt(w.TempC) + "°C" }>
+						@calAlmanacIcon(w.Icon, "cal-almanac-time__pipicon")
+					</span>
+				}
+				<span class="cal-almanac-time__pip" title={ "Season: " + seasonNameFor(d) }>
+					@calAlmanacIcon("snowflake", "cal-almanac-time__pipicon")
+				</span>
+				<button type="button" class="cal-almanac-time__tick" data-cal-time-tick aria-label="Advance one hour">
+					@calAlmanacIcon("tick", "cal-almanac-time__pipicon")
+				</button>
+			</div>
+		</div>
+	</aside>
+}
+
+// calAlmanacPopover — the anchored popover that replaces the
+// right-edge drawer for quick interactions. Hidden by default; JS
+// fills + positions it adjacent to whatever the operator clicked
+// (day cell or event chip). Heavy edits still escalate to the side
+// drawer (data-cal-drawer).
+templ calAlmanacPopover() {
+	<div class="cal-almanac-pop" data-cal-pop data-cal-pop-side="top" aria-hidden="true" hidden>
+		<div class="cal-almanac-pop__arrow" data-cal-pop-arrow aria-hidden="true"></div>
+		<header class="cal-almanac-pop__head">
+			<div class="cal-almanac-pop__title-wrap">
+				<h3 class="cal-almanac-pop__title" data-cal-pop-title>—</h3>
+				<p class="cal-almanac-pop__meta" data-cal-pop-meta>—</p>
+			</div>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-pop-close aria-label="Close">×</button>
+		</header>
+		<nav class="cal-almanac-pop__tabs" role="tablist">
+			<button type="button" class="cal-almanac-pop__tab cal-almanac-pop__tab--active" data-cal-pop-tab="detail" aria-selected="true">Detail</button>
+			<button type="button" class="cal-almanac-pop__tab" data-cal-pop-tab="notes">Notes</button>
+			<button type="button" class="cal-almanac-pop__tab" data-cal-pop-tab="vis">Visibility</button>
+		</nav>
+		<div class="cal-almanac-pop__panels">
+			<div class="cal-almanac-pop__panel cal-almanac-pop__panel--active" data-cal-pop-panel="detail">
+				<p class="cal-almanac-pop__body" data-cal-pop-desc>—</p>
+				<div class="cal-almanac-pop__events" data-cal-pop-events></div>
+				<div class="cal-almanac-pop__moon" data-cal-pop-moon hidden></div>
+				<div class="cal-almanac-pop__weather" data-cal-pop-weather hidden></div>
+			</div>
+			<div class="cal-almanac-pop__panel" data-cal-pop-panel="notes" hidden>
+				<label class="cal-almanac-pop__notes-label" for="cal-pop-notes">Notes — visible to DM only</label>
+				<textarea id="cal-pop-notes" class="cal-almanac-pop__notes" data-cal-pop-notes rows="6" placeholder="Add a note for this day…"></textarea>
+				<p class="cal-almanac-pop__notes-hint">Changes save as you type (showcase is in-memory only).</p>
+			</div>
+			<div class="cal-almanac-pop__panel" data-cal-pop-panel="vis" hidden>
+				<div class="cal-almanac-pop__vis" data-cal-pop-vis></div>
+			</div>
+		</div>
+		<footer class="cal-almanac-pop__foot">
+			<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-pop-open-drawer>
+				Open full editor →
+			</button>
+			<span class="cal-almanac-pop__foot-hint">Heavy edits open the side drawer.</span>
+		</footer>
+	</div>
+}
+
+// calAlmanacIcon — a tiny inline SVG glyph keyed by name. Self-
+// contained, no external icon font, no dependency. Each glyph is a
+// hand-drawn primitive sized to currentColor so we can recolor via
+// CSS. New names get a fallback dot so unknown icons don't NPE.
+templ calAlmanacIcon(name, class string) {
+	<svg class={ "cal-almanac-icon", class } viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		switch name {
+			case "dice":
+				<path d="M3 4l5-2 5 2v8l-5 2-5-2z"/>
+				<path d="M3 4l5 2 5-2"/>
+				<path d="M8 6v8"/>
+			case "flame":
+				<path d="M8 2c1 3 4 4 4 7a4 4 0 1 1-8 0c0-2 1-3 2-4 0 1 1 2 2 1 0-2 0-3 0-4z" fill="currentColor" fill-opacity="0.18"/>
+			case "compass":
+				<circle cx="8" cy="8" r="6"/>
+				<path d="M10.5 5.5l-1.5 4.5-4.5 1.5 1.5-4.5z" fill="currentColor" fill-opacity="0.25"/>
+			case "mask":
+				<path d="M3 5c0-1 1-2 2-2h6c1 0 2 1 2 2v3a5 5 0 0 1-10 0z"/>
+				<circle cx="6" cy="7" r="0.6" fill="currentColor"/>
+				<circle cx="10" cy="7" r="0.6" fill="currentColor"/>
+			case "spire":
+				<path d="M8 1l-2 5h4z" fill="currentColor" fill-opacity="0.25"/>
+				<path d="M5 6h6v2H5z"/>
+				<path d="M4 8h8v6H4z"/>
+				<path d="M8 10v4"/>
+			case "hearth":
+				<path d="M2 14V5l6-3 6 3v9"/>
+				<path d="M6 14v-4h4v4"/>
+			case "sun":
+				<circle cx="8" cy="8" r="3" fill="currentColor" fill-opacity="0.3"/>
+				<path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3"/>
+			case "cloud":
+				<path d="M4 11h8a3 3 0 0 0 0-6 4 4 0 0 0-7-2 3 3 0 0 0-1 8z"/>
+			case "rain":
+				<path d="M4 8h8a3 3 0 0 0 0-6 4 4 0 0 0-7-1 3 3 0 0 0-1 7z"/>
+				<path d="M5 12v2M8 12v2M11 12v2"/>
+			case "fog":
+				<path d="M2 6h12M3 9h10M2 12h12"/>
+			case "storm":
+				<path d="M4 8h8a3 3 0 0 0 0-6 4 4 0 0 0-7-1 3 3 0 0 0-1 7z"/>
+				<path d="M8 9l-2 4h2l-1 2 3-4h-2z" fill="currentColor"/>
+			case "snowflake":
+				<path d="M8 2v12M2 8h12M3.5 3.5l9 9M3.5 12.5l9-9"/>
+			case "petal":
+				<path d="M8 3c2 0 3 2 3 4s-1 4-3 4-3-2-3-4 1-4 3-4z" fill="currentColor" fill-opacity="0.25"/>
+				<path d="M8 11v3"/>
+			case "ember":
+				<circle cx="8" cy="9" r="3" fill="currentColor" fill-opacity="0.25"/>
+				<path d="M5 4l1 2M11 4l-1 2M8 2v2"/>
+			case "swirl":
+				<path d="M3 8a5 5 0 0 1 10 0 3 3 0 0 1-6 0 1 1 0 0 1 2 0"/>
+			case "book":
+				<path d="M3 3h4l1 1v9l-1-1H3z" fill="currentColor" fill-opacity="0.15"/>
+				<path d="M13 3H9L8 4v9l1-1h4z" fill="currentColor" fill-opacity="0.15"/>
+			case "tick":
+				<circle cx="8" cy="8" r="6"/>
+				<path d="M8 4v4l3 2"/>
+			default:
+				<circle cx="8" cy="8" r="2" fill="currentColor"/>
+		}
+	</svg>
+}
+
+templ calAlmanacIntro() {
+	<header class="cal-almanac-intro">
+		// Back-link to the index. A plain <a> (full navigation) — no
+		// shared tab strip, per the page-separation directive. Each
+		// design page is fully isolated; navigation happens via the
+		// index, not an in-page switcher.
+		<a class="cal-almanac-back" href="/demo/calendar">‹ Calendar designs</a>
+		<h1 class="cal-almanac-intro__title">Chronicle calendar — Design 1 · Almanac</h1>
+		<p class="cal-almanac-intro__text">
+			Atmospheric, almanac-style. <strong>Drag the calendar by its header</strong> to move the widget anywhere on the page; <strong>drag the corner</strong> to resize. Scrub the time-of-day band to watch dawn → noon → dusk → night. Click an event or day for an anchored popover; heavy edits open the side drawer. Drag across empty days to create.
+		</p>
+	</header>
+}
+
+// calAlmanacWidget — the draggable/resizable widget shell that the whole
+// Almanac calendar lives inside. The shell has a grab-handle bar at the
+// top (drag to move), a resize handle at the bottom-right corner, and a
+// body that holds the sky-band + grid + sidebar.
+templ calAlmanacWidget(d CalAlmanacMockData) {
+	<section
+		class="cal-almanac-widget"
+		data-cal-widget
+		style={ "left:32px; top:24px; width:1080px; height:780px;" }
+	>
+		<header class="cal-almanac-widget__handle" data-cal-drag-handle>
+			<span class="cal-almanac-widget__title">{ d.Calendar.Name } · { d.Months[d.CurrentMonth-1].Name } { fmtInt(d.CurrentYear) } { d.Calendar.EpochName }</span>
+			<div class="cal-almanac-widget__actions">
+				<button type="button" class="cal-almanac-iconbtn" data-cal-prev aria-label="Previous month">‹</button>
+				<button type="button" class="cal-almanac-iconbtn" data-cal-today aria-label="Today">·</button>
+				<button type="button" class="cal-almanac-iconbtn" data-cal-next aria-label="Next month">›</button>
+			</div>
+		</header>
+		<div class="cal-almanac-widget__body">
+			@calAlmanacSkyband(d)
+			@calAlmanacEras(d)
+			@calAlmanacGrid(d)
+		</div>
+		<div class="cal-almanac-widget__resize" data-cal-resize aria-hidden="true"></div>
+	</section>
+	@calAlmanacDrawer(d)
+}
+
+// calAlmanacEras — a thin strip above the weekday header that paints
+// the era(s) the current month falls into. Each era is a horizontal
+// band colored from its OKLCH literal; the current era is brightened
+// + carries the era name. Operator's canon mandates eras as a first-
+// class concept; this surface renders them, the side drawer's era
+// editor stays as heavy-edit scope.
+templ calAlmanacEras(d CalAlmanacMockData) {
+	<div class="cal-almanac-eras" data-cal-eras>
+		for _, era := range d.Eras {
+			<span
+				class={ "cal-almanac-eras__band", templ.KV("cal-almanac-eras__band--current", eraContainsYear(era, d.CurrentYear)) }
+				style={ "--era-color:" + era.Color + ";" }
+				title={ era.Name + " · " + eraSpanLabel(era) }
+				data-cal-era-id={ era.ID }
+			>
+				<span class="cal-almanac-eras__name">{ era.Name }</span>
+				<span class="cal-almanac-eras__span">{ eraSpanLabel(era) }</span>
+			</span>
+		}
+	</div>
+}
+
+// calAlmanacSkyband — the hero. An OKLCH gradient that interpolates
+// dawn/day/dusk/night based on the current SkyTime fraction (0..1).
+// The sun + moon ride an arc across the band. A range slider scrubs
+// the time. Server-renders the initial state from d.SkyTime so the
+// page is meaningfully visible pre-JS; JS recomputes on scrub.
+templ calAlmanacSkyband(d CalAlmanacMockData) {
+	<div
+		class="cal-almanac-sky"
+		data-cal-sky
+		style={ "background: " + skybandGradient(d.SkyTime) + ";" }
+	>
+		<div class="cal-almanac-sky__arc">
+			<span
+				class="cal-almanac-sky__sun"
+				data-cal-sky-sun
+				style={ arcPositionStyle(d.SkyTime, false) }
+			></span>
+			for _, m := range d.Moons {
+				<span
+					class="cal-almanac-sky__moon"
+					data-cal-sky-moon
+					data-moon-id={ fmtInt(m.ID) }
+					style={ arcPositionStyle(moonTimeFromSky(d.SkyTime, m.PhaseOffset), true) + " background:" + m.Color + ";" }
+					title={ m.Name }
+				></span>
+			}
+		</div>
+		<div class="cal-almanac-sky__overlay">
+			<div class="cal-almanac-sky__label">
+				<strong>{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name } · { fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }</strong>
+				<span class="cal-almanac-sky__sub" data-cal-sky-label>{ skyLabelFor(d.SkyTime) } · { seasonNameFor(d) } · clear skies</span>
+			</div>
+			<div class="cal-almanac-sky__scrub">
+				<label class="cal-almanac-sky__scrub-label" for="cal-almanac-time">Time</label>
+				<input
+					id="cal-almanac-time"
+					type="range"
+					class="cal-almanac-sky__scrub-input"
+					data-cal-sky-scrub
+					min="0"
+					max="1000"
+					step="1"
+					value={ fmtInt(int(d.SkyTime * 1000)) }
+				/>
+				<span class="cal-almanac-sky__scrub-time" data-cal-sky-time>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</span>
+			</div>
+		</div>
+	</div>
+}
+
+// calAlmanacGrid — month grid + weekday header. Pre-rendered from the
+// mock so it's faithful pre-JS. Each empty cell is drag-create-able; each
+// event chip opens the drawer.
+templ calAlmanacGrid(d CalAlmanacMockData) {
+	<div class="cal-almanac-grid" data-cal-grid>
+		<div class="cal-almanac-grid__wd-row">
+			for _, w := range d.Weekdays {
+				<div
+					class={ "cal-almanac-grid__wd", templ.KV("cal-almanac-grid__wd--rest", w.IsRestDay) }
+					title={ w.Name }
+				>{ w.Short }</div>
+			}
+		</div>
+		<div class="cal-almanac-grid__cells">
+			for _, cell := range gridCells(d) {
+				<div
+					class={ calCellClass(cell) }
+					data-cal-cell
+					data-cell-day={ fmtInt(cell.Day) }
+					data-cell-month={ fmtInt(cell.Month) }
+					data-cell-year={ fmtInt(cell.Year) }
+					data-rest-day={ boolToStr(cell.IsRestDay) }
+				>
+					<div class="cal-almanac-cell__head">
+						<span class="cal-almanac-cell__day">{ fmtInt(cell.Day) }</span>
+						if cell.MoonGlyph != "" {
+							<span class="cal-almanac-cell__moon" title={ cell.MoonTitle }>{ cell.MoonGlyph }</span>
+						}
+						if cell.WeatherID != "" {
+							<span
+								class={ "cal-almanac-cell__wchip", "cal-almanac-cell__wchip--" + cell.WeatherCat }
+								style={ "--w-color:" + cell.WeatherColor + ";" }
+								title={ cell.WeatherName }
+							>
+								@calAlmanacIcon(cell.WeatherIcon, "cal-almanac-cell__wicon")
+							</span>
+						}
+					</div>
+					<div class="cal-almanac-cell__chips">
+						for _, ev := range cell.Events {
+							<button
+								type="button"
+								class={ "cal-almanac-chip", "cal-almanac-chip--" + ev.Tier, templ.KV("cal-almanac-chip--recurring", ev.RecurringRef != "") }
+								data-cal-event-id={ ev.ID }
+								style={ "--chip-cat:" + ev.CategoryColor + ";" }
+								title={ ev.Name + " — " + ev.TierLabel }
+							>
+								<span class="cal-almanac-chip__bar" aria-hidden="true"></span>
+								if ev.CategoryIcon != "" {
+									<span class="cal-almanac-chip__icon" aria-hidden="true">
+										@calAlmanacIcon(ev.CategoryIcon, "")
+									</span>
+								}
+								<span class="cal-almanac-chip__name">{ ev.Name }</span>
+								if ev.Time != "" {
+									<span class="cal-almanac-chip__time">{ ev.Time }</span>
+								}
+							</button>
+						}
+					</div>
+				</div>
+			}
+		</div>
+		// Drag-create ghost — JS positions/sizes this element during
+		// a drag; the .cal-almanac--proof-drag class on the page root
+		// also reveals it in a fixed position for headless screenshots.
+		<div class="cal-almanac-grid__ghost" data-cal-drag-ghost aria-hidden="true">
+			<span>New event</span>
+		</div>
+	</div>
+}
+
+// calAlmanacDrawer — side drawer for event detail + the Q-V2-7 chip-row
+// visibility editor. Initially hidden; JS opens on event click. Forced
+// open under .cal-almanac--proof-drawer for headless screenshots.
+templ calAlmanacDrawer(d CalAlmanacMockData) {
+	<aside class="cal-almanac-drawer" data-cal-drawer aria-hidden="true">
+		<header class="cal-almanac-drawer__head">
+			<div>
+				<h2 class="cal-almanac-drawer__title" data-cal-drawer-title>Event title</h2>
+				<p class="cal-almanac-drawer__meta" data-cal-drawer-meta>Date · tier · category</p>
+			</div>
+			<button type="button" class="cal-almanac-iconbtn" data-cal-drawer-close aria-label="Close drawer">×</button>
+		</header>
+		<div class="cal-almanac-drawer__body">
+			<section class="cal-almanac-drawer__section">
+				<h3 class="cal-almanac-drawer__h3">Description</h3>
+				<p class="cal-almanac-drawer__desc" data-cal-drawer-desc>(Pick an event to view.)</p>
+			</section>
+			<section class="cal-almanac-drawer__section">
+				<h3 class="cal-almanac-drawer__h3">Visibility</h3>
+				<div class="cal-almanac-visibility" data-cal-visibility>
+					<div class="cal-almanac-visibility__radio" role="radiogroup" aria-label="Who can see this">
+						<label class="cal-almanac-visibility__opt">
+							<input type="radio" name="cal-vis" value="public" data-cal-vis-mode checked/>
+							<span>Everyone (public)</span>
+						</label>
+						<label class="cal-almanac-visibility__opt">
+							<input type="radio" name="cal-vis" value="specific" data-cal-vis-mode/>
+							<span>Specific people</span>
+						</label>
+					</div>
+					<div class="cal-almanac-visibility__rules" data-cal-vis-rules hidden>
+						<div class="cal-almanac-visibility__add">
+							<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-vis-add="allow">+ Add allow rule</button>
+							<button type="button" class="cal-almanac-btn cal-almanac-btn--sm" data-cal-vis-add="deny">+ Add deny rule</button>
+						</div>
+						<ul class="cal-almanac-visibility__chips" data-cal-vis-chips></ul>
+						<p class="cal-almanac-visibility__summary" data-cal-vis-summary>Effective audience: everyone</p>
+					</div>
+				</div>
+			</section>
+			<div class="cal-almanac-drawer__actions">
+				<button type="button" class="cal-almanac-btn cal-almanac-btn--primary" data-cal-drawer-save>Save</button>
+				<button type="button" class="cal-almanac-btn" data-cal-drawer-delete>Delete</button>
+			</div>
+		</div>
+	</aside>
+}
+
+// --- Go helpers used by the templ ----------------------------------
+
+// fmtInt — small int→string for templ expressions.
+func fmtInt(i int) string { return fmt.Sprintf("%d", i) }
+
+// boolToStr — bool→"true"/"false" for data-attr expressions.
+func boolToStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+// skybandGradient — returns a CSS `linear-gradient(...)` string for the
+// sky-band at the given t (0..1 fraction of day). Three hardcoded
+// keyframes (dawn / day / dusk / night) blended via the time fraction.
+// Pure OKLCH per canon D2; deterministic so the server render matches
+// the JS recompute exactly.
+func skybandGradient(t float64) string {
+	// Keyframes (top→bottom 2-stop gradient), each chosen to read on the
+	// dark page background:
+	//   midnight  0.00  → deep indigo on near-black
+	//   dawn      0.25  → coral on lavender
+	//   noon      0.50  → bright cyan-blue on pale blue
+	//   dusk      0.75  → amber on rose
+	//   midnight  1.00  → back to deep indigo
+	type stop struct{ top, bot string }
+	stops := []stop{
+		{"oklch(0.18 0.05 270)", "oklch(0.10 0.04 270)"}, // midnight
+		{"oklch(0.55 0.13 30)", "oklch(0.35 0.10 305)"},  // dawn
+		{"oklch(0.78 0.13 220)", "oklch(0.62 0.10 230)"}, // noon
+		{"oklch(0.62 0.16 60)", "oklch(0.38 0.12 350)"},  // dusk
+		{"oklch(0.18 0.05 270)", "oklch(0.10 0.04 270)"}, // midnight (wrap)
+	}
+	// Each stop sits at t = i/4 (0, .25, .5, .75, 1). Find segment + lerp.
+	seg := int(t * 4)
+	if seg < 0 {
+		seg = 0
+	}
+	if seg > 3 {
+		seg = 3
+	}
+	// We don't lerp OKLCH literally in Go — instead we let CSS
+	// color-mix do the work for the JS path, and for the server render
+	// we just snap to the nearest keyframe (the JS overrides on init
+	// anyway for live scrubbing). Snap = nearest of the 4 quarters.
+	q := int(t*4 + 0.5)
+	if q < 0 {
+		q = 0
+	}
+	if q > 4 {
+		q = 4
+	}
+	s := stops[q]
+	return "linear-gradient(180deg, " + s.top + " 0%, " + s.bot + " 100%)"
+}
+
+// arcPositionStyle — places a sun/moon along a half-circle arc above
+// the band. t maps so 0.25 = horizon-east, 0.5 = zenith, 0.75 =
+// horizon-west; out-of-band hours dip below.
+func arcPositionStyle(t float64, isMoon bool) string {
+	// Normalize: sun arc is awake 0.25..0.75; moon awake 0.75..0.25
+	// (we shift by 0.5 inside the moon-time helper before calling).
+	// Map awake-fraction (0..1) → x: 8% .. 92%, y: bottom-bias parabola.
+	wake := (t - 0.25) / 0.5
+	if wake < -0.1 || wake > 1.1 {
+		// Off-screen below horizon.
+		return "left:50%; top:120%; opacity:0;"
+	}
+	x := 8.0 + wake*84.0
+	// Parabolic arc: y = bottom - (4 * wake * (1-wake)) * arcHeight
+	y := 95.0 - 4.0*wake*(1.0-wake)*85.0
+	opacity := 1.0
+	if wake < 0 || wake > 1 {
+		opacity = 0.6
+	}
+	return fmt.Sprintf("left:%.1f%%; top:%.1f%%; opacity:%.2f;", x, y, opacity)
+}
+
+func moonTimeFromSky(skyT, offset float64) float64 {
+	// Moon rises ~12h after sun; phase offset shifts that.
+	t := skyT - 0.5 + offset
+	for t < 0 {
+		t += 1
+	}
+	for t > 1 {
+		t -= 1
+	}
+	return t
+}
+
+func skyLabelFor(t float64) string {
+	switch {
+	case t < 0.20:
+		return "Pre-dawn"
+	case t < 0.32:
+		return "Dawn"
+	case t < 0.45:
+		return "Morning"
+	case t < 0.55:
+		return "Midday"
+	case t < 0.70:
+		return "Afternoon"
+	case t < 0.82:
+		return "Dusk"
+	default:
+		return "Night"
+	}
+}
+
+func clockFor(t float64, hoursPerDay int) string {
+	if hoursPerDay <= 0 {
+		hoursPerDay = 24
+	}
+	total := int(t * float64(hoursPerDay) * 60)
+	h := total / 60
+	m := total % 60
+	return fmt.Sprintf("%02d:%02d", h, m)
+}
+
+func seasonNameFor(d CalAlmanacMockData) string {
+	// Pick the latest season whose Start month <= current.
+	cur := d.CurrentMonth
+	name := d.Seasons[0].Name
+	bestStart := -1
+	for _, s := range d.Seasons {
+		if s.Start <= cur && s.Start > bestStart {
+			bestStart = s.Start
+			name = s.Name
+		}
+	}
+	return name
+}
+
+func eraContainsYear(era CalAlmanacEra, y int) bool {
+	if era.EndYear == 0 {
+		return y >= era.StartYear
+	}
+	return y >= era.StartYear && y <= era.EndYear
+}
+
+func eraSpanLabel(era CalAlmanacEra) string {
+	if era.EndYear == 0 {
+		return fmt.Sprintf("%d – ongoing", era.StartYear)
+	}
+	return fmt.Sprintf("%d – %d", era.StartYear, era.EndYear)
+}
+
+// calCell — flattened render-ready cell used by the grid template.
+type calCell struct {
+	Day, Month, Year int
+	IsCurrent        bool // day is in the focused month (vs prev/next preview)
+	IsToday          bool
+	IsRestDay        bool
+	IsFestival       bool
+	FestivalName     string
+	MoonGlyph        string
+	MoonPhaseName    string // e.g. "The Silver Crown"
+	MoonTitle        string
+	WeatherID        string // matches a WeatherType.ID; empty = no named weather
+	WeatherName      string
+	WeatherIcon      string
+	WeatherColor     string
+	WeatherCat       string
+	Events           []calCellEvent
+}
+
+type calCellEvent struct {
+	ID            string
+	Name          string
+	Tier          string
+	TierLabel     string
+	Category      string
+	CategoryColor string
+	CategoryIcon  string
+	Time          string
+	RecurringRef  string
+}
+
+// gridCells — produces the 6-row × 10-day-week grid cells for the
+// focused month, padding the leading + trailing slots from neighbouring
+// months. Mirrors the standard Month-grid plugin layout (CurrentMonth +
+// weekday-aligned start). Tendays (10-day week), so 30 days = exactly
+// 3 weeks; no padding needed for a clean Harptos render — but we keep
+// the helper general for future months that need it.
+func gridCells(d CalAlmanacMockData) []calCell {
+	mIdx := d.CurrentMonth - 1
+	month := d.Months[mIdx]
+	weekLen := len(d.Weekdays)
+	// Days in month → grid cells. With a tenday and a 30-day month,
+	// month starts on weekday 1 — no leading pad needed for visual
+	// honesty. We render exactly `days` cells (3 rows of 10).
+	cells := make([]calCell, 0, month.Days)
+	for day := 1; day <= month.Days; day++ {
+		wdIdx := (day - 1) % weekLen
+		c := calCell{
+			Day:       day,
+			Month:     d.CurrentMonth,
+			Year:      d.CurrentYear,
+			IsCurrent: true,
+			IsToday:   day == d.CurrentDay,
+			IsRestDay: d.Weekdays[wdIdx].IsRestDay,
+		}
+		// Festival flag.
+		for _, f := range d.Festivals {
+			if f.Month == d.CurrentMonth && f.Day == day {
+				c.IsFestival = true
+				c.FestivalName = f.Name
+			}
+		}
+		// Moon glyph + named phase. moonGlyphFor now consults
+		// d.MoonPhases first; falls back to procedural if no named
+		// phase covers the current cycle percentage.
+		c.MoonGlyph, c.MoonPhaseName, c.MoonTitle = moonGlyphFor(d, day)
+		// Named weather: look up d.DayWeather first; fall back to the
+		// procedural pip only when no authored weather is set. This
+		// matches Calendaria's "named weather vocabulary" pattern.
+		if w, ok := dayWeatherType(d, d.CurrentMonth, day); ok {
+			c.WeatherID = w.ID
+			c.WeatherName = w.Name
+			c.WeatherIcon = w.Icon
+			c.WeatherColor = w.Color
+			c.WeatherCat = w.Category
+		}
+		// One-off events on this day (single + multi-day spans).
+		for _, ev := range d.Events {
+			if !eventTouchesDay(ev, d.CurrentMonth, day) {
+				continue
+			}
+			c.Events = append(c.Events, eventToCellEvent(d, ev))
+		}
+		// Expand recurring templates that hit this day. Per-instance
+		// overrides (the rec.Overrides map keyed by "Y-M-D") replace
+		// the name for that specific instance — demonstrating the
+		// "edit this instance only" pattern.
+		for _, rec := range d.Recurring {
+			if !recurringTouchesDay(rec, d.CurrentYear, d.CurrentMonth, day) {
+				continue
+			}
+			ev := recurringInstance(d, rec, d.CurrentYear, d.CurrentMonth, day)
+			c.Events = append(c.Events, eventToCellEvent(d, ev))
+		}
+		cells = append(cells, c)
+	}
+	return cells
+}
+
+func eventTouchesDay(ev CalAlmanacEvent, m, d int) bool {
+	// Single-day.
+	if ev.EndMonth == 0 {
+		return ev.Month == m && ev.Day == d
+	}
+	// Multi-day: in the focused month between start and end.
+	// Coarse: only handle same-month or adjacent-month spans correctly;
+	// good enough for the showcase mock.
+	if ev.Month == m && d >= ev.Day {
+		// inside same month
+		if ev.EndMonth == m && d <= ev.EndDay {
+			return true
+		}
+		if ev.EndMonth > m {
+			return true
+		}
+	}
+	if ev.EndMonth == m && d <= ev.EndDay && ev.Month < m {
+		return true
+	}
+	if ev.Month < m && ev.EndMonth > m {
+		return true
+	}
+	return false
+}
+
+func tierLabel(d CalAlmanacMockData, id string) string {
+	for _, t := range d.Tiers {
+		if t.ID == id {
+			return t.Name
+		}
+	}
+	return id
+}
+
+func categoryColor(d CalAlmanacMockData, id string) string {
+	for _, c := range d.Categories {
+		if c.ID == id {
+			return c.Color
+		}
+	}
+	return "oklch(0.55 0.04 260)"
+}
+
+func categoryIcon(d CalAlmanacMockData, id string) string {
+	for _, c := range d.Categories {
+		if c.ID == id {
+			return c.Icon
+		}
+	}
+	return ""
+}
+
+// eventToCellEvent — projects a CalAlmanacEvent into the flattened
+// shape the templ renders. Used both for one-off and recurring-
+// instance events.
+func eventToCellEvent(d CalAlmanacMockData, ev CalAlmanacEvent) calCellEvent {
+	cce := calCellEvent{
+		ID:            ev.ID,
+		Name:          ev.Name,
+		Tier:          ev.Tier,
+		TierLabel:     tierLabel(d, ev.Tier),
+		Category:      ev.Category,
+		CategoryColor: categoryColor(d, ev.Category),
+		CategoryIcon:  categoryIcon(d, ev.Category),
+		RecurringRef:  ev.RecurringRef,
+	}
+	if ev.Hour >= 0 {
+		cce.Time = fmt.Sprintf("%02d:00", ev.Hour)
+	}
+	return cce
+}
+
+// moonGlyphFor — returns (glyph, phaseName, label) for the dominant
+// moon on this day. Walks the operator-authored MoonPhases first so
+// named phases ("The Silver Crown") win over procedural percentages.
+// Glyph falls back to procedural if no named span matches.
+func moonGlyphFor(d CalAlmanacMockData, day int) (string, string, string) {
+	if len(d.Moons) == 0 {
+		return "", "", ""
+	}
+	m := d.Moons[0]
+	epochDays := float64(d.CurrentYear*360 + (d.CurrentMonth-1)*30 + day)
+	phase := epochDays/m.CycleDays + m.PhaseOffset
+	for phase > 1 {
+		phase -= 1
+	}
+	for phase < 0 {
+		phase += 1
+	}
+	pct := int(phase * 100)
+	// Try operator-authored named phases first.
+	for _, mp := range d.MoonPhases {
+		if mp.MoonID != m.ID {
+			continue
+		}
+		if pct >= mp.StartPct && pct < mp.EndPct {
+			label := fmt.Sprintf("%s — %s (%d%%)", m.Name, mp.Name, pct)
+			return mp.Glyph, mp.Name, label
+		}
+	}
+	// Procedural fallback.
+	glyphs := []string{"●", "◐", "◑", "○", "○", "◐", "◑", "●"}
+	g := glyphs[int(phase*8)%8]
+	return g, "", fmt.Sprintf("%s · phase %.2f", m.Name, phase)
+}
+
+// dayWeatherType — operator-authored DayWeather mapping for the day.
+// Returns the matching WeatherType (or zero + false). The grid uses
+// this; the procedural weatherFor() stays as a backup for days that
+// don't have a named entry.
+func dayWeatherType(d CalAlmanacMockData, m, day int) (CalAlmanacWeatherType, bool) {
+	key := fmt.Sprintf("%d-%d-%d", d.CurrentYear, m, day)
+	id, ok := d.DayWeather[key]
+	if !ok {
+		return CalAlmanacWeatherType{}, false
+	}
+	for _, w := range d.WeatherTypes {
+		if w.ID == id {
+			return w, true
+		}
+	}
+	return CalAlmanacWeatherType{}, false
+}
+
+// recurringTouchesDay — true when the recurring template generates an
+// instance on (y, m, day). Naïve linear walk — fine for showcase scope
+// (mock has 1 template); the real plugin uses indexed expansion.
+func recurringTouchesDay(rec CalAlmanacRecurring, y, m, day int) bool {
+	if rec.IntervalDays <= 0 {
+		return false
+	}
+	// Day-count from start within the same year (mock only spans one).
+	start := (rec.StartMonth-1)*30 + rec.StartDay
+	cur := (m-1)*30 + day
+	if cur < start {
+		return false
+	}
+	return (cur-start)%rec.IntervalDays == 0
+}
+
+// recurringInstance — synthesises a CalAlmanacEvent for the recurring
+// occurrence on (y, m, day), applying an override if present.
+func recurringInstance(d CalAlmanacMockData, rec CalAlmanacRecurring, y, m, day int) CalAlmanacEvent {
+	key := fmt.Sprintf("%d-%d-%d", y, m, day)
+	name := rec.Name
+	if rec.Overrides != nil {
+		if n, ok := rec.Overrides[key]; ok {
+			name = n
+		}
+	}
+	return CalAlmanacEvent{
+		ID:           rec.ID + "@" + key,
+		Name:         name,
+		Description:  rec.Description,
+		Year:         y, Month: m, Day: day,
+		Hour:         rec.Hour,
+		Tier:         rec.Tier,
+		Category:     rec.Category,
+		Visibility:   "public",
+		RecurringRef: rec.ID,
+	}
+}
+
+// calCellClass — builds the class list for a grid cell.
+func calCellClass(c calCell) string {
+	cls := "cal-almanac-cell"
+	if c.IsRestDay {
+		cls += " cal-almanac-cell--rest"
+	}
+	if c.IsToday {
+		cls += " cal-almanac-cell--today"
+	}
+	if c.IsFestival {
+		cls += " cal-almanac-cell--festival"
+	}
+	if !c.IsCurrent {
+		cls += " cal-almanac-cell--other"
+	}
+	return cls
+}
+
+// calAlmanacMockJSON — serializes the mock dataset for the JS init
+// blocks. Pure helper; safe to call from a templ expression.
+func calAlmanacMockJSON(d CalAlmanacMockData) string {
+	b, err := json.Marshal(d)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
