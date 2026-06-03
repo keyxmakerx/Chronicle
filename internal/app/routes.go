@@ -2779,17 +2779,22 @@ func (a *App) RegisterRoutes() {
 		return middleware.Render(c, http.StatusOK, demo.DemoShowcase())
 	}, auth.RequireAuth(authService))
 
-	// C-CAL-SHOWCASE-DESIGN-1-ALMANAC — Design 1 of 2-3 candidate
-	// calendar designs for the V2 plugin port. "Almanac" identity:
-	// animated OKLCH sky-band header (sun + moon arc + scrubber),
-	// fantasy month grid with tier-colored events, click→drawer with
-	// the chip-row visibility editor, drag-to-create, wrapped in a
-	// draggable + resizable widget shell. Mock data only (no backend
-	// wiring) — operator selects the winning design, the real plugin
-	// port follows. Auth-gated; exposes no campaign data. Dispatch:
-	// dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-1-ALMANAC.md.
+	// Candidate calendar designs for the V2 plugin port. Per the
+	// operator's page-separation directive (2026-06-03): each design
+	// lives on its OWN isolated route loading ONLY its own CSS+JS, so a
+	// bug in one design can never affect another. `/demo/calendar` is a
+	// tiny plain-link index (no design assets); each design is a sibling
+	// route. Designs 2 (Linear) + 3 (Compact) get their own routes when
+	// they ship. Mock data only (no backend); operator selects the
+	// winning design, the real plugin port follows. Auth-gated; exposes
+	// no campaign data. Dispatches:
+	// dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-1-ALMANAC.md +
+	// dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-2-LINEAR.md.
 	e.GET("/demo/calendar", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, demo.DemoCalendar())
+		return middleware.Render(c, http.StatusOK, demo.DemoCalendarIndex())
+	}, auth.RequireAuth(authService))
+	e.GET("/demo/calendar/almanac", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoCalendarAlmanac())
 	}, auth.RequireAuth(authService))
 
 	// --- Layout Data Injector ---

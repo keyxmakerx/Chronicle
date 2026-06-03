@@ -65,42 +65,16 @@
 }
 .cal-almanac-intro__text strong { color: oklch(0.985 0.002 247.839); }
 
-/* ---- Design switcher --------------------------------------------- */
-.cal-almanac-switch {
-  display: inline-flex;
-  gap: 4px;
-  margin: 14px 0 22px;
-  padding: 4px;
-  background: oklch(0.22 0.022 264);
-  border: 1px solid oklch(0.32 0.025 260);
-  border-radius: 8px;
-}
-.cal-almanac-switch__btn {
-  padding: 6px 14px;
-  background: transparent;
+/* ---- Back-link to the calendar-designs index --------------------- */
+.cal-almanac-back {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: 12px;
   color: oklch(0.74 0.022 261);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color var(--cal-d-micro) var(--cal-ease-standard),
-              color var(--cal-d-micro) var(--cal-ease-standard);
+  text-decoration: none;
+  transition: color var(--cal-d-micro) var(--cal-ease-standard);
 }
-.cal-almanac-switch__btn:hover:not(:disabled) {
-  background: oklch(0.28 0.025 264);
-  color: oklch(0.985 0.002 247.839);
-}
-.cal-almanac-switch__btn--active {
-  background: oklch(0.58 0.20 270);
-  color: oklch(0.99 0 0);
-  cursor: default;
-}
-.cal-almanac-switch__btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
+.cal-almanac-back:hover { color: oklch(0.985 0.002 247.839); }
 
 /* ---- Widget shell (draggable + resizable) ------------------------ */
 .cal-almanac-widget {

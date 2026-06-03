@@ -39,9 +39,60 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// DemoCalendar renders the Almanac calendar showcase inside the
-// standard app shell.
-templ DemoCalendar() {
+// DemoCalendarIndex — the tiny `/demo/calendar` landing page. Per the
+// operator's page-separation directive (2026-06-03): each calendar
+// design lives on its OWN route loading ONLY its own CSS+JS, so a bug
+// in one design can never affect another. The index is plain links
+// only — it loads NO design CSS and NO design JS of its own (just the
+// site shell), so it's the safe hub between fully isolated designs.
+templ DemoCalendarIndex() {
+	@layouts.App("Chronicle calendar designs") {
+		<div style="max-width:760px; margin:0 auto; padding:48px 24px; font-family:'Inter Variable','Inter',system-ui,sans-serif; color:oklch(0.985 0.002 247.839);">
+			<h1 style="margin:0 0 8px; font-size:26px; font-weight:600;">Chronicle calendar designs</h1>
+			<p style="margin:0 0 28px; color:oklch(0.707 0.022 261.325); line-height:1.6;">
+				Candidate calendar designs for the V2 plugin. Each lives on its own isolated page — its own styles and scripts, nothing shared — so one can&#39;t break another. Open one, use it, tell me in chat what you think.
+			</p>
+			<div style="display:flex; flex-direction:column; gap:12px;">
+				@calIndexLink("/demo/calendar/almanac", "Almanac", "Atmospheric. Animated OKLCH sky-band, era band, named weather + moons, recurring events, anchored popovers, draggable widget + timepiece.", true)
+				@calIndexLink("/demo/calendar/linear", "Linear", "Flat / information-dense. Razor radii, horizontal time-strip, spreadsheet feel. (Coming next.)", false)
+				@calIndexLink("/demo/calendar/compact", "Compact", "Dense / typography-forward. Tight grid, content-first cells. (Coming next.)", false)
+			</div>
+		</div>
+	}
+}
+
+// calIndexLink — one row on the index. A real <a href> for a live
+// design; a muted non-link placeholder for one not yet built.
+templ calIndexLink(href, name, desc string, live bool) {
+	if live {
+		<a
+			href={ templ.SafeURL(href) }
+			style="display:block; padding:16px 18px; background:oklch(0.22 0.022 264); border:1px solid oklch(0.34 0.030 259); border-radius:10px; text-decoration:none; color:inherit;"
+		>
+			<div style="display:flex; align-items:baseline; gap:10px;">
+				<span style="font-size:16px; font-weight:600;">{ name }</span>
+				<span style="font-size:11px; color:oklch(0.65 0.16 145); text-transform:uppercase; letter-spacing:0.06em;">Live</span>
+				<span style="margin-left:auto; color:oklch(0.707 0.022 261.325);">→</span>
+			</div>
+			<p style="margin:4px 0 0; font-size:13px; color:oklch(0.707 0.022 261.325); line-height:1.5;">{ desc }</p>
+		</a>
+	} else {
+		<div style="padding:16px 18px; background:oklch(0.18 0.020 264); border:1px dashed oklch(0.32 0.025 260); border-radius:10px; opacity:0.7;">
+			<div style="display:flex; align-items:baseline; gap:10px;">
+				<span style="font-size:16px; font-weight:600;">{ name }</span>
+				<span style="font-size:11px; color:oklch(0.74 0.022 261); text-transform:uppercase; letter-spacing:0.06em;">Coming next</span>
+			</div>
+			<p style="margin:4px 0 0; font-size:13px; color:oklch(0.62 0.022 261); line-height:1.5;">{ desc }</p>
+		</div>
+	}
+}
+
+// DemoCalendarAlmanac renders the Almanac calendar (Design 1) on its
+// own isolated route `/demo/calendar/almanac`. Loads ONLY cal-almanac
+// CSS + JS — no shared design assets, per the page-separation
+// directive. Designs 2 (Linear) and 3 (Compact) get sibling routes +
+// their own isolated asset files.
+templ DemoCalendarAlmanac() {
 	@layouts.App("Chronicle calendar — Almanac") {
 		<link rel="stylesheet" href="/static/css/cal-almanac.css"/>
 		@calAlmanacPage(CalAlmanacMock())
@@ -52,7 +103,6 @@ templ DemoCalendar() {
 templ calAlmanacPage(d CalAlmanacMockData) {
 	<div class="cal-almanac-shell">
 		@calAlmanacIntro()
-		@calAlmanacDesignSwitcher()
 		@calAlmanacTimepiece(d)
 		@calAlmanacWidget(d)
 		@calAlmanacPopover()
@@ -210,19 +260,16 @@ templ calAlmanacIcon(name, class string) {
 
 templ calAlmanacIntro() {
 	<header class="cal-almanac-intro">
+		// Back-link to the index. A plain <a> (full navigation) — no
+		// shared tab strip, per the page-separation directive. Each
+		// design page is fully isolated; navigation happens via the
+		// index, not an in-page switcher.
+		<a class="cal-almanac-back" href="/demo/calendar">‹ Calendar designs</a>
 		<h1 class="cal-almanac-intro__title">Chronicle calendar — Design 1 · Almanac</h1>
 		<p class="cal-almanac-intro__text">
-			Atmospheric, almanac-style. <strong>Drag the calendar by its header</strong> to move the widget anywhere on the page; <strong>drag the corner</strong> to resize. Scrub the time-of-day band to watch dawn → noon → dusk → night. Click any event for the side drawer. Drag across empty days to create.
+			Atmospheric, almanac-style. <strong>Drag the calendar by its header</strong> to move the widget anywhere on the page; <strong>drag the corner</strong> to resize. Scrub the time-of-day band to watch dawn → noon → dusk → night. Click an event or day for an anchored popover; heavy edits open the side drawer. Drag across empty days to create.
 		</p>
 	</header>
-}
-
-templ calAlmanacDesignSwitcher() {
-	<nav class="cal-almanac-switch" aria-label="Calendar designs">
-		<button type="button" class="cal-almanac-switch__btn cal-almanac-switch__btn--active" aria-pressed="true">Almanac</button>
-		<button type="button" class="cal-almanac-switch__btn" disabled title="Ships next">Linear · coming next</button>
-		<button type="button" class="cal-almanac-switch__btn" disabled title="Ships next">Compact · coming next</button>
-	</nav>
 }
 
 // calAlmanacWidget — the draggable/resizable widget shell that the whole

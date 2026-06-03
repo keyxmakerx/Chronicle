@@ -22,7 +22,7 @@ import (
 
 func TestDemoCalendar_RendersWithoutPanic(t *testing.T) {
 	var buf bytes.Buffer
-	if err := DemoCalendar().Render(context.Background(), &buf); err != nil {
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	if buf.Len() < 2000 {
@@ -51,7 +51,7 @@ func TestDemoCalendar_RouteRegistered(t *testing.T) {
 // (carry-forward: never inline a demo-specific <script> body).
 func TestCalAlmanacJS_ExternalFileLoaded(t *testing.T) {
 	var buf bytes.Buffer
-	if err := DemoCalendar().Render(context.Background(), &buf); err != nil {
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
@@ -119,21 +119,53 @@ func TestCalAlmanacCSS_SelfContained(t *testing.T) {
 	}
 }
 
-// TestDemoCalendar_DesignSwitcher — the Almanac/Linear/Compact switcher
-// renders with Almanac active and Linear/Compact scaffolded as disabled.
-func TestDemoCalendar_DesignSwitcher(t *testing.T) {
-	var buf bytes.Buffer
-	if err := DemoCalendar().Render(context.Background(), &buf); err != nil {
-		t.Fatalf("render: %v", err)
+// TestDemoCalendar_PageSeparation — per the operator's page-separation
+// directive (2026-06-03): each design lives on its OWN isolated route.
+// The `/demo/calendar` index is plain links (no design CSS/JS); the
+// Almanac lives at `/demo/calendar/almanac` and loads ONLY its own
+// assets. The in-page tab switcher is gone (a bug in one design must
+// never reach another). Pin: index routes registered, index has links
+// to all three designs + carries no design assets, and the Almanac
+// page carries a back-link instead of a tab strip.
+func TestDemoCalendar_PageSeparation(t *testing.T) {
+	// Wire snapshot has both the index and the almanac sub-route.
+	root := calDemoRepoRoot(t)
+	b, err := os.ReadFile(filepath.Join(root, "internal", "wire", "routes_snapshot.txt"))
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
 	}
-	html := buf.String()
-	if !strings.Contains(html, "cal-almanac-switch__btn--active") {
-		t.Errorf("active design tab marker missing")
+	snap := string(b)
+	if !strings.Contains(snap, "/demo/calendar/almanac") {
+		t.Errorf("wire snapshot missing the isolated /demo/calendar/almanac route")
 	}
-	for _, name := range []string{"Almanac", "Linear", "Compact"} {
-		if !strings.Contains(html, name) {
-			t.Errorf("design switcher missing %q", name)
+
+	// Index page: plain links to each design, NO design CSS/JS.
+	var idx bytes.Buffer
+	if err := DemoCalendarIndex().Render(context.Background(), &idx); err != nil {
+		t.Fatalf("render index: %v", err)
+	}
+	ih := idx.String()
+	for _, link := range []string{`href="/demo/calendar/almanac"`, "Almanac", "Linear", "Compact"} {
+		if !strings.Contains(ih, link) {
+			t.Errorf("index page missing %q", link)
 		}
+	}
+	if strings.Contains(ih, "cal-almanac.css") || strings.Contains(ih, "cal-almanac.js") {
+		t.Errorf("index page must NOT load any design CSS/JS (page-separation isolation)")
+	}
+
+	// Almanac page: a back-link to the index, and NO in-page tab
+	// switcher (the superseded approach).
+	var alm bytes.Buffer
+	if err := DemoCalendarAlmanac().Render(context.Background(), &alm); err != nil {
+		t.Fatalf("render almanac: %v", err)
+	}
+	ah := alm.String()
+	if !strings.Contains(ah, `href="/demo/calendar"`) {
+		t.Errorf("almanac page missing the back-link to the designs index")
+	}
+	if strings.Contains(ah, "cal-almanac-switch") {
+		t.Errorf("almanac page still has the superseded in-page tab switcher; navigation must be via the index")
 	}
 }
 
@@ -201,7 +233,7 @@ func TestDemoCalendar_MockDataComplete(t *testing.T) {
 // means the corresponding interaction won't fire.
 func TestDemoCalendar_AlmanacHooks(t *testing.T) {
 	var buf bytes.Buffer
-	if err := DemoCalendar().Render(context.Background(), &buf); err != nil {
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
@@ -295,7 +327,7 @@ func TestDemoCalendar_RefinementMockData(t *testing.T) {
 // + a standalone timepiece widget. Pin their markup hooks.
 func TestDemoCalendar_PopoverAndTimepiece(t *testing.T) {
 	var buf bytes.Buffer
-	if err := DemoCalendar().Render(context.Background(), &buf); err != nil {
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
