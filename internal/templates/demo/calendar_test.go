@@ -470,18 +470,15 @@ func TestCalAlmanac_HourglassRenders(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
+	// V4: the hourglass is now an SVG frame standing on a horizontal shelf.
 	for _, h := range []string{
-		"cal-almanac-hourglass",
 		"cal-almanac-hourglass__frame",
-		"data-cal-hourglass-chambers",
-		"data-cal-hourglass-stream",
+		"cal-almanac-hourglass__svg",
 		`data-cal-hourglass-fill="top"`,
 		`data-cal-hourglass-fill="bot"`,
-		`data-cal-hourglass-chamber="top"`,
-		`data-cal-hourglass-chamber="bot"`,
 		"data-cal-hourglass-theme",
 		"data-cal-hourglass-flipped",
-		"cal-almanac-hourglass__waist",
+		"data-cal-hourglass-canvas",
 		"cal-almanac-hourglass__sparkle",
 		// drag handle + tick + clock preserved across the swap.
 		"data-cal-time-drag",
@@ -494,7 +491,7 @@ func TestCalAlmanac_HourglassRenders(t *testing.T) {
 	}
 	// Snowglobe markup should be gone — the dome class set in particular.
 	if strings.Contains(html, "cal-almanac-globe__dome") || strings.Contains(html, `data-cal-globe-dome`) {
-		t.Errorf("snowglobe markup should be removed in v3")
+		t.Errorf("snowglobe markup should be removed")
 	}
 }
 
@@ -672,8 +669,236 @@ func TestCalAlmanac_EraVignetteNoStrip(t *testing.T) {
 		t.Errorf("era corner-vignette markup missing")
 	}
 	js := readCalAlmanacJS(t)
-	if !strings.Contains(js, "registerInitBlock('era-vignette'") {
-		t.Errorf("era-vignette init block missing")
+	if !strings.Contains(js, "registerInitBlock('era-overlay'") {
+		t.Errorf("era-overlay init block missing (v4 renamed era-vignette → era-overlay)")
+	}
+}
+
+// ============================================================
+// REFINEMENT-V4 tests
+// ============================================================
+
+// TestCalAlmanac_EraOverlayBounded — the era marker is small + capped and
+// never overlaps the title bar (it lives inside the sky-band). Asserts on
+// the CSS size cap + the structural placement (badge is the only hit
+// target; the halo is pointer-events:none).
+func TestCalAlmanac_EraOverlayBounded(t *testing.T) {
+	css := stripCalCSSComments(readCalAlmanacCSS(t))
+	// Hard 25% cap present on the era wrapper.
+	if !strings.Contains(css, "max-width: 25%") || !strings.Contains(css, "max-height: 25%") {
+		t.Errorf("era wrapper must hard-cap at 25%% of the calendar")
+	}
+	// Base size token <= 120px.
+	if !strings.Contains(css, "--cal-era-size: 116px") {
+		t.Errorf("era base size token should be <=120px (116px)")
+	}
+	// The halo is never a hit target; only the badge is.
+	if !strings.Contains(css, ".cal-almanac-eravig__halo") || !strings.Contains(css, ".cal-almanac-eravig__badge") {
+		t.Errorf("era must split into a pointer-events:none halo + a hit-target badge")
+	}
+	html := renderAlmanac(t)
+	// The era marker renders inside the sky-band (animation window).
+	if !strings.Contains(html, "data-cal-era-badge") || !strings.Contains(html, "data-cal-era-halo") {
+		t.Errorf("era badge + halo markup missing")
+	}
+}
+
+// TestCalAlmanac_EraEffectsRegistry — ERA_EFFECTS exists with the MUST
+// era types + editable params (color + particleSpec).
+func TestCalAlmanac_EraEffectsRegistry(t *testing.T) {
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "registerInitBlock('era-effects-registry'") {
+		t.Errorf("era-effects-registry init block missing")
+	}
+	for _, id := range []string{"ERA_EFFECTS.golden", "ERA_EFFECTS.dark", "ERA_EFFECTS.war", "ERA_EFFECTS.mythic", "ERA_EFFECTS.ancient", "ERA_EFFECTS.neutral"} {
+		if !strings.Contains(js, id) {
+			t.Errorf("ERA_EFFECTS missing era type: %s", id)
+		}
+	}
+	// Each entry carries an editable colour ramp + a particleSpec.
+	if !strings.Contains(js, "particleSpec:") || !strings.Contains(js, "lightness:") {
+		t.Errorf("ERA_EFFECTS entries must expose editable colour + particleSpec")
+	}
+}
+
+// TestCalAlmanac_EraPointerEventsSafe — the era element must NOT intercept
+// the time controls or day-cell clicks (the v3 root cause). Asserts the
+// pointer-events discipline + z-index ordering in CSS.
+func TestCalAlmanac_EraPointerEventsSafe(t *testing.T) {
+	css := stripCalCSSComments(readCalAlmanacCSS(t))
+	// Wrapper + halo are pointer-events:none; the sun + time controls sit
+	// above the era z-index.
+	if !strings.Contains(css, ".cal-almanac-eravig {") {
+		t.Fatalf("era wrapper rule missing")
+	}
+	// The sky arc (sun) is z-index 5 (above era z3); time overlay z6.
+	if !strings.Contains(css, "z-index: 5") || !strings.Contains(css, "z-index: 6") {
+		t.Errorf("sun arc (z5) + time overlay (z6) must sit above the era marker (z3)")
+	}
+	// The halo explicitly disables pointer events.
+	idx := strings.Index(css, ".cal-almanac-eravig__halo {")
+	if idx < 0 {
+		t.Fatalf("era halo rule missing")
+	}
+	if !strings.Contains(css[idx:idx+400], "pointer-events: none") {
+		t.Errorf("era halo must be pointer-events:none")
+	}
+}
+
+// TestCalAlmanac_ParticleEngineRegistryWiring — weather/celestial entries
+// carry particleSpec data; the engine reads them.
+func TestCalAlmanac_ParticleEngineRegistryWiring(t *testing.T) {
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "registerInitBlock('particle-engine'") {
+		t.Errorf("particle-engine init block missing")
+	}
+	if !strings.Contains(js, "CalParticleEngine") || !strings.Contains(js, "createSurface") {
+		t.Errorf("shared CalParticleEngine missing")
+	}
+	// Specs are data on the registries.
+	for _, h := range []string{
+		"WEATHER_EFFECTS.rain = {", "particleSpec: {",
+		"CELESTIAL_EFFECTS['meteor-shower']",
+		"feedSkyEngine", "setEmitters",
+	} {
+		if !strings.Contains(js, h) {
+			t.Errorf("particle engine wiring missing: %s", h)
+		}
+	}
+	// Perf guards (binding §B3).
+	for _, g := range []string{"IntersectionObserver", "visibilitychange", "prefers-reduced-motion", "hardwareConcurrency", "devicePixelRatio"} {
+		if !strings.Contains(js, g) {
+			t.Errorf("particle engine perf guard missing: %s", g)
+		}
+	}
+}
+
+// TestCalAlmanac_TimepieceShelfMarkup — the timepiece is a horizontal
+// shelf with the vertical hourglass centered + flanking text regions.
+func TestCalAlmanac_TimepieceShelfMarkup(t *testing.T) {
+	html := renderAlmanac(t)
+	for _, h := range []string{
+		"cal-almanac-shelf",
+		"cal-almanac-shelf__stage",
+		"cal-almanac-shelf__bar",
+		"cal-almanac-shelf__flank--left",
+		"cal-almanac-shelf__flank--right",
+		"cal-almanac-shelf__plinth",
+		"data-cal-shelf-frame",
+	} {
+		if !strings.Contains(html, h) {
+			t.Errorf("shelf markup missing: %s", h)
+		}
+	}
+	// The old vertical-only hourglass aside class should be gone.
+	if strings.Contains(html, `class="cal-almanac-hourglass cal-almanac-sky`) {
+		t.Errorf("v3 vertical hourglass root should be replaced by the shelf")
+	}
+}
+
+// TestCalAlmanac_HourglassInternals — grain-texture (SVG sand) + the
+// in-glass falling-stream canvas are present (replaces "just a shape").
+func TestCalAlmanac_HourglassInternals(t *testing.T) {
+	html := renderAlmanac(t)
+	for _, h := range []string{
+		"cal-almanac-hourglass__sand",
+		"cal-almanac-hourglass__outline",
+		"cal-almanac-hourglass__rim",
+		"cal-almanac-hourglass__reflect",
+		"data-cal-hourglass-canvas",
+	} {
+		if !strings.Contains(html, h) {
+			t.Errorf("hourglass internals markup missing: %s", h)
+		}
+	}
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "registerInitBlock('hourglass-internals'") {
+		t.Errorf("hourglass-internals init block missing")
+	}
+	if !strings.Contains(js, "feedHourglassStream") || !strings.Contains(js, "GLASS_SURFACE") {
+		t.Errorf("in-glass canvas stream wiring missing")
+	}
+}
+
+// TestCalAlmanac_CreateEditorOpens — the #5 regression guard: the empty-day
+// click path mounts the create popover + escalates to the editor.
+func TestCalAlmanac_CreateEditorOpens(t *testing.T) {
+	html := renderAlmanac(t)
+	for _, h := range []string{"data-cal-create", "data-cal-create-commit", "data-cal-create-expand"} {
+		if !strings.Contains(html, h) {
+			t.Errorf("create popover markup missing: %s", h)
+		}
+	}
+	js := readCalAlmanacJS(t)
+	for _, h := range []string{"registerInitBlock('popup-create-flow'", "openCreatePopup", "expandToEditor"} {
+		if !strings.Contains(js, h) {
+			t.Errorf("create-flow JS missing: %s", h)
+		}
+	}
+}
+
+// TestCalAlmanac_DemoControlsPanel — the beta-test panel is present on the
+// demo route (it lives in the demo templ only).
+func TestCalAlmanac_DemoControlsPanel(t *testing.T) {
+	html := renderAlmanac(t)
+	for _, h := range []string{
+		"data-cal-democtl",
+		"data-cal-democtl-era",
+		"data-cal-democtl-weather",
+		"data-cal-democtl-celestial",
+		"data-cal-democtl-time",
+		"data-cal-democtl-frame",
+		"data-cal-democtl-profile",
+	} {
+		if !strings.Contains(html, h) {
+			t.Errorf("demo-controls markup missing: %s", h)
+		}
+	}
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "registerInitBlock('demo-controls'") {
+		t.Errorf("demo-controls init block missing")
+	}
+}
+
+// TestCalAlmanac_ReducedMotionEngineGuard — the engine must not auto-start
+// under reduced-motion; it renders one static frame instead.
+func TestCalAlmanac_ReducedMotionEngineGuard(t *testing.T) {
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "drawStaticFrame") {
+		t.Errorf("engine must have a static-frame path for reduced-motion")
+	}
+	if !strings.Contains(js, "reducedNow") {
+		t.Errorf("engine must gate on reduced-motion (reducedNow)")
+	}
+	css := stripCalCSSComments(readCalAlmanacCSS(t))
+	if !strings.Contains(css, "prefers-reduced-motion: reduce") {
+		t.Errorf("reduced-motion media query missing")
+	}
+}
+
+// TestCalAlmanac_V4ProofClasses — the dispatch's forced-state classes are
+// all defined for the headless gate.
+func TestCalAlmanac_V4ProofClasses(t *testing.T) {
+	css := stripCalCSSComments(readCalAlmanacCSS(t))
+	for _, klass := range []string{
+		".cal-almanac--proof-era-rest",
+		".cal-almanac--proof-era-hover",
+		".cal-almanac--proof-era-responsive-small",
+		".cal-almanac--proof-weather-rain-animated",
+		".cal-almanac--proof-weather-fog-animated",
+		".cal-almanac--proof-weather-snow-animated",
+		".cal-almanac--proof-celestial-meteor-slow",
+		".cal-almanac--proof-celestial-eclipse",
+		".cal-almanac--proof-timepiece-shelf",
+		".cal-almanac--proof-hourglass-internals",
+		".cal-almanac--proof-time-edit-reachable",
+		".cal-almanac--proof-create-editor-open",
+		".cal-almanac--proof-create-editor-expanded",
+		".cal-almanac--proof-demo-controls",
+	} {
+		if !strings.Contains(css, klass) {
+			t.Errorf("v4 proof class missing: %s", klass)
+		}
 	}
 }
 
@@ -681,6 +906,14 @@ func TestCalAlmanac_EraVignetteNoStrip(t *testing.T) {
 
 func stripCalCSSComments(src string) string {
 	return regexp.MustCompile(`(?s)/\*.*?\*/`).ReplaceAllString(src, "")
+}
+func renderAlmanac(t *testing.T) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := DemoCalendarAlmanac().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	return buf.String()
 }
 func calDemoRepoRoot(t *testing.T) string {
 	t.Helper()

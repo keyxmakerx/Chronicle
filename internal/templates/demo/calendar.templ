@@ -107,11 +107,87 @@ templ calAlmanacPage(d CalAlmanacMockData) {
 		@calAlmanacWidget(d)
 		@calAlmanacPopover()
 		@calAlmanacCreatePopover(d)
+		@calAlmanacDemoControls(d)
 		// Mock dataset, JSON-serialized for the JS init blocks.
 		// This is the single source of truth — same struct the templ
 		// rendered above.
 		<script id="cal-almanac-data" type="application/json">{ calAlmanacMockJSON(d) }</script>
 	</div>
+}
+
+// calAlmanacDemoControls — REFINEMENT-V4 §E3 beta-test harness. A
+// collapsible panel that drives era / weather / celestial / time-of-day
+// / timepiece-theme / particle-profile live so the operator can test
+// every fix in one place. SHOWCASE-ONLY: this template ships only on the
+// /demo/calendar/almanac route — it is never imported by production or
+// shared templates.
+templ calAlmanacDemoControls(d CalAlmanacMockData) {
+	<aside class="cal-almanac-democtl" data-cal-democtl aria-label="Demo controls">
+		<button type="button" class="cal-almanac-democtl__toggle" data-cal-democtl-toggle aria-label="Toggle demo controls">⚙ Demo</button>
+		<div class="cal-almanac-democtl__body">
+			<h3 class="cal-almanac-democtl__h">Beta controls</h3>
+			<label class="cal-almanac-democtl__row">
+				<span>Era type</span>
+				<select data-cal-democtl-era>
+					<option value="golden">Golden Age</option>
+					<option value="dark">Age of Decline</option>
+					<option value="war">Age of Conflict</option>
+					<option value="mythic">Mythic Era</option>
+					<option value="ancient">Forgotten Age</option>
+					<option value="neutral">Neutral</option>
+				</select>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Era size</span>
+				<input type="range" min="56" max="120" value="116" data-cal-democtl-era-size/>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Era hue</span>
+				<input type="range" min="0" max="360" value="85" data-cal-democtl-era-hue/>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Weather</span>
+				<select data-cal-democtl-weather>
+					<option value="clear">Clear</option>
+					<option value="cloudy">Cloudy</option>
+					<option value="rain">Rain</option>
+					<option value="thunderstorm">Thunderstorm</option>
+					<option value="snow">Snow</option>
+					<option value="fog">Fog</option>
+				</select>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Celestial</span>
+				<select data-cal-democtl-celestial>
+					<option value="none">None</option>
+					<option value="meteor-shower">Meteor shower</option>
+					<option value="eclipse-solar">Solar eclipse</option>
+					<option value="eclipse-lunar">Lunar eclipse</option>
+				</select>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Time of day</span>
+				<input type="range" min="0" max="1000" value="520" data-cal-democtl-time/>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Frame</span>
+				<select data-cal-democtl-frame>
+					<option value="brass">Brass</option>
+					<option value="silver">Silver</option>
+					<option value="wood">Wood</option>
+				</select>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Particles</span>
+				<select data-cal-democtl-profile>
+					<option value="high">High</option>
+					<option value="normal" selected>Normal</option>
+					<option value="low">Low</option>
+				</select>
+			</label>
+			<p class="cal-almanac-democtl__note" data-cal-democtl-readout>—</p>
+		</div>
+	</aside>
 }
 
 // calAlmanacTimepiece — REFINEMENT-V3: HOURGLASS replaces snowglobe.
@@ -129,38 +205,59 @@ templ calAlmanacPage(d CalAlmanacMockData) {
 templ calAlmanacTimepiece(d CalAlmanacMockData) {
 	{{ wfx := currentWeatherEffect(d) }}
 	{{ flipped := isNightPhase(d) }}
-	<aside class={ "cal-almanac-hourglass", "cal-almanac-sky--wfx-" + wfx.ID } data-cal-time data-cal-hourglass-flipped={ boolToStr(flipped) } data-cal-hourglass-theme={ wfx.ID } style="left:32px; top:840px;">
-		<header class="cal-almanac-hourglass__handle" data-cal-time-drag>
-			<span class="cal-almanac-hourglass__tag">Timepiece</span>
-			<span class="cal-almanac-hourglass__theme" data-cal-hourglass-theme-label>{ wfx.Name }</span>
+	// REFINEMENT-V4: the timepiece is a horizontal SHELF bar with the
+	// vertical hourglass standing centered on it. Date/time flank left,
+	// season/year flank right ("the hourglass sits on a shelf"). The
+	// hourglass gains SVG glass detailing, grain-textured sand, and a
+	// canvas clipped to the glass interior for the visible falling stream.
+	<aside class={ "cal-almanac-shelf", "cal-almanac-sky--wfx-" + wfx.ID } data-cal-time data-cal-hourglass-flipped={ boolToStr(flipped) } data-cal-hourglass-theme={ wfx.ID } data-cal-shelf-frame="brass" style="left:32px; top:840px;">
+		<header class="cal-almanac-shelf__handle" data-cal-time-drag>
+			<span class="cal-almanac-shelf__tag">Timepiece</span>
+			<span class="cal-almanac-shelf__theme" data-cal-hourglass-theme-label>{ wfx.Name }</span>
 		</header>
-		<div class="cal-almanac-hourglass__stage">
+		// The hourglass stands above the shelf, centered.
+		<div class="cal-almanac-shelf__stage">
 			<div class="cal-almanac-hourglass__frame" data-cal-hourglass-frame aria-label="Hourglass">
-				// Glass body — two clipped chambers + a central stream channel.
-				<div class="cal-almanac-hourglass__chambers" data-cal-hourglass-chambers>
-					<div class="cal-almanac-hourglass__chamber cal-almanac-hourglass__chamber--top" data-cal-hourglass-chamber="top">
-						<div class="cal-almanac-hourglass__fill" data-cal-hourglass-fill="top" style="--fill:0.62"></div>
-					</div>
-					<div class="cal-almanac-hourglass__waist" aria-hidden="true">
-						<div class="cal-almanac-hourglass__stream" data-cal-hourglass-stream></div>
-					</div>
-					<div class="cal-almanac-hourglass__chamber cal-almanac-hourglass__chamber--bot" data-cal-hourglass-chamber="bot">
-						<div class="cal-almanac-hourglass__fill" data-cal-hourglass-fill="bot" style="--fill:0.38"></div>
-					</div>
-				</div>
-				<span class="cal-almanac-hourglass__glass" aria-hidden="true"></span>
+				// SVG glass detailing: engraved rim + reflection + chambers.
+				<svg class="cal-almanac-hourglass__svg" viewBox="0 0 60 110" aria-hidden="true">
+					<defs>
+						<linearGradient id="calHgGlass" x1="0" y1="0" x2="1" y2="0">
+							<stop offset="0" stop-color="oklch(1 0 0)" stop-opacity="0.20"></stop>
+							<stop offset="0.5" stop-color="oklch(1 0 0)" stop-opacity="0.02"></stop>
+							<stop offset="1" stop-color="oklch(1 0 0)" stop-opacity="0.14"></stop>
+						</linearGradient>
+						<clipPath id="calHgTop"><path d="M6 8 H54 L33 53 H27 Z"></path></clipPath>
+						<clipPath id="calHgBot"><path d="M27 57 H33 L54 102 H6 Z"></path></clipPath>
+					</defs>
+					// Chamber sand fills (clipped); JS sets --fill via the rects' transform.
+					<g clip-path="url(#calHgTop)">
+						<rect class="cal-almanac-hourglass__sand" data-cal-hourglass-fill="top" x="0" y="8" width="60" height="45" style="--fill:0.62"></rect>
+					</g>
+					<g clip-path="url(#calHgBot)">
+						<rect class="cal-almanac-hourglass__sand" data-cal-hourglass-fill="bot" x="0" y="57" width="60" height="45" style="--fill:0.38"></rect>
+					</g>
+					// Engraved glass outline + rim highlights.
+					<path class="cal-almanac-hourglass__outline" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z"></path>
+					<rect class="cal-almanac-hourglass__rim" x="3" y="4" width="54" height="5" rx="2"></rect>
+					<rect class="cal-almanac-hourglass__rim" x="3" y="101" width="54" height="5" rx="2"></rect>
+					<path class="cal-almanac-hourglass__reflect" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z" fill="url(#calHgGlass)"></path>
+				</svg>
+				// Canvas clipped to the glass interior — the visible falling stream.
+				<canvas class="cal-almanac-hourglass__canvas" data-cal-hourglass-canvas aria-hidden="true"></canvas>
 				<span class="cal-almanac-hourglass__sparkle" data-cal-hourglass-sparkle aria-hidden="true"></span>
 			</div>
 		</div>
-		<div class="cal-almanac-hourglass__base">
-			<div class="cal-almanac-hourglass__date">
-				<span class="cal-almanac-hourglass__day">{ fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }, { fmtInt(d.CurrentYear) }</span>
-				<span class="cal-almanac-hourglass__weekday">{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name }</span>
+		// The shelf bar: flanking text + the decorative base the glass rests on.
+		<div class="cal-almanac-shelf__bar">
+			<div class="cal-almanac-shelf__flank cal-almanac-shelf__flank--left">
+				<span class="cal-almanac-shelf__primary">{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name } { fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }</span>
+				<span class="cal-almanac-shelf__secondary"><button type="button" class="cal-almanac-shelf__clock" data-cal-time-clock data-cal-time-tick title="Click to advance an hour">{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</button> · { skyLabelFor(d.SkyTime) }</span>
 			</div>
-			<div class="cal-almanac-hourglass__clock" data-cal-time-clock>{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</div>
-			<button type="button" class="cal-almanac-hourglass__tick" data-cal-time-tick aria-label="Advance one hour">
-				@calAlmanacIcon("tick", "cal-almanac-hourglass__tickicon")
-			</button>
+			<div class="cal-almanac-shelf__plinth" aria-hidden="true"></div>
+			<div class="cal-almanac-shelf__flank cal-almanac-shelf__flank--right">
+				<span class="cal-almanac-shelf__primary">{ seasonNameFor(d) }</span>
+				<span class="cal-almanac-shelf__secondary">Year { fmtInt(d.CurrentYear) } { d.Calendar.EpochName }</span>
+			</div>
 		</div>
 	</aside>
 }
@@ -451,7 +548,6 @@ templ calAlmanacWidget(d CalAlmanacMockData) {
 			</div>
 		</header>
 		<div class="cal-almanac-widget__body">
-			@calAlmanacEraVignette(d)
 			@calAlmanacSkyband(d)
 			@calAlmanacGrid(d)
 		</div>
@@ -467,22 +563,39 @@ templ calAlmanacWidget(d CalAlmanacMockData) {
 // as "this corner belongs to this era" rather than a random middle
 // box. Hover deepens + extends (CSS); never a full square. Click opens
 // the era-detail popover. JS swaps the era on month navigation.
+// calAlmanacEraVignette — REFINEMENT-V4: a SMALL corner marker anchored
+// INSIDE the sky-band (the animation window), never over the title bar.
+// Two layers: (1) a pointer-events:NONE gradient halo that may bleed
+// visually; (2) a small pointer-events:AUTO badge that is the only hit
+// target — sized to the visible badge, NOT the gradient bleed, so it
+// never intercepts the sun / time-label / day-cell clicks beneath it
+// (the v3 root-cause of "can't edit time" + "editor won't open"). Size,
+// position, and OKLCH colour are all CSS custom properties driven by JS
+// (ResizeObserver → responsive sizing) + the demo-controls panel.
 templ calAlmanacEraVignette(d CalAlmanacMockData) {
 	{{ era := currentEra(d) }}
-	<button
-		type="button"
+	<div
 		class="cal-almanac-eravig"
 		data-cal-era-vignette
 		data-cal-era-id={ era.ID }
-		style={ "--era-color:" + era.Color + ";" }
-		title={ era.Name + " · " + eraSpanLabel(era) + " — click for era detail" }
-		aria-label={ "Era: " + era.Name }
+		data-cal-era-name-key={ era.Name }
+		aria-hidden="true"
 	>
-		<span class="cal-almanac-eravig__label">
+		// Gradient halo — visual only, never a hit target.
+		<span class="cal-almanac-eravig__halo" data-cal-era-halo></span>
+		// The only clickable element: a compact badge sized to itself.
+		<button
+			type="button"
+			class="cal-almanac-eravig__badge"
+			data-cal-era-badge
+			data-cal-era-id={ era.ID }
+			title={ era.Name + " · " + eraSpanLabel(era) + " — click for era detail" }
+			aria-label={ "Era: " + era.Name }
+		>
 			<span class="cal-almanac-eravig__name" data-cal-era-name>{ era.Name }</span>
 			<span class="cal-almanac-eravig__span" data-cal-era-span>{ eraSpanLabel(era) }</span>
-		</span>
-	</button>
+		</button>
+	</div>
 }
 
 // calAlmanacSkyband — REFINEMENT-V2: the ambient day-state display.
@@ -513,6 +626,12 @@ templ calAlmanacSkyband(d CalAlmanacMockData) {
 				@calAlmanacCelestialFX(c)
 			}
 		</div>
+		// REFINEMENT-V4: shared-engine canvas. The single rAF particle
+		// engine renders weather + celestial + era-hover particles here.
+		// pointer-events:none so it never intercepts the time controls.
+		<canvas class="cal-almanac-sky__canvas" data-cal-sky-canvas aria-hidden="true"></canvas>
+		// Era corner marker — anchored inside this animation window.
+		@calAlmanacEraVignette(d)
 		<div class="cal-almanac-sky__arc" data-cal-sky-arc>
 			<span
 				class="cal-almanac-sky__sun"

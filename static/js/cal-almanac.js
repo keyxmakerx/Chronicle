@@ -51,6 +51,271 @@
   function pad2(n) { return String(n).padStart(2, '0'); }
 
   // ============================================================
+  // REFINEMENT-V4 — Shared canvas particle engine (§B)
+  // ============================================================
+  // ONE rAF loop drives EVERY particle surface (the sky-band canvas + the
+  // in-glass hourglass canvas). Effects are DATA (`particleSpec`), not
+  // code paths — the registries supply specs; the engine owns the loop,
+  // the pool, and every perf guard. This is design-neutral infrastructure
+  // (no `.cal-almanac-*` coupling) so the Timeline Tuner can lift it
+  // verbatim; coordinator decides whether to extract to a shared file.
+  //
+  // Perf discipline (binding, §B3): single shared rAF; pooled particles
+  // (never GC-churned); global live cap; IntersectionObserver pause when
+  // offscreen; visibilitychange pause; DPR clamped 2×; reduced-motion
+  // renders ONE static frame and never starts the loop; low-power
+  // auto-detect drops to a 20-particle profile.
+  var CalParticleEngine = (function () {
+    var PROFILES = { high: 80, normal: 40, low: 20 };
+    var prefersReduced = (function () {
+      try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+    })();
+    // Forced-state proof classes can pin reduced-motion in headless shots.
+    function reducedNow() {
+      if (prefersReduced) return true;
+      try { return !!document.querySelector('.cal-almanac--proof-reduced-motion'); } catch (e) { return false; }
+    }
+    var autoLow = (function () {
+      try { return (navigator.hardwareConcurrency || 8) <= 4; } catch (e) { return false; }
+    })();
+
+    var surfaces = [];          // { canvas, ctx, w, h, dpr, emitters, particles, pool, visible, clip }
+    var running = false, rafId = null, lastTs = 0;
+    var profile = autoLow ? 'low' : 'normal';
+    var globalCap = PROFILES[profile];
+    var probeFrames = 0, probeOverBudget = 0;
+
+    function liveCount() { var n = 0; for (var i = 0; i < surfaces.length; i++) n += surfaces[i].particles.length; return n; }
+
+    function makeParticle() {
+      return { x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, size: 1, alpha: 1, shape: 'dot', color: '#fff', blur: 0, trail: false, blend: 'source-over', active: false };
+    }
+    function fromPool(s) { return s.pool.length ? s.pool.pop() : makeParticle(); }
+    function toPool(s, p) { p.active = false; if (s.pool.length < 120) s.pool.push(p); }
+
+    function rng(a, b) { return a + Math.random() * (b - a); }
+
+    function createSurface(canvas, opts) {
+      opts = opts || {};
+      var ctx = canvas.getContext('2d');
+      var s = { canvas: canvas, ctx: ctx, w: 0, h: 0, dpr: 1, emitters: [], particles: [], pool: [], visible: true, clip: opts.clip || null, spawnAcc: {} };
+      resize(s);
+      surfaces.push(s);
+      // Pause when the surface scrolls offscreen.
+      try {
+        if ('IntersectionObserver' in window) {
+          var io = new IntersectionObserver(function (ents) {
+            s.visible = ents[0] ? ents[0].isIntersecting : true;
+            sync();
+          }, { threshold: 0.01 });
+          io.observe(canvas);
+          s.io = io;
+        }
+      } catch (e) {}
+      return {
+        setEmitters: function (specs) { setEmitters(s, specs); },
+        clear: function () { s.emitters = []; },
+        resize: function () { resize(s); },
+        staticFrame: function () { drawStaticFrame(s); },
+        destroy: function () { destroy(s); }
+      };
+    }
+
+    function resize(s) {
+      var r = s.canvas.getBoundingClientRect();
+      var dpr = Math.min(window.devicePixelRatio || 1, 2); // clamp 2×
+      s.w = Math.max(1, Math.round(r.width));
+      s.h = Math.max(1, Math.round(r.height));
+      s.dpr = dpr;
+      s.canvas.width = s.w * dpr;
+      s.canvas.height = s.h * dpr;
+      s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function setEmitters(s, specs) {
+      s.emitters = [];
+      s.spawnAcc = {};
+      (specs || []).forEach(function (spec, i) {
+        if (!spec) return;
+        s.emitters.push({ id: i, spec: spec });
+        s.spawnAcc[i] = 0;
+      });
+      if (reducedNow()) { drawStaticFrame(s); return; }
+      sync();
+    }
+
+    // Spawn one particle from a spec into surface s.
+    function spawn(s, spec) {
+      if (liveCount() >= globalCap) return;
+      var p = fromPool(s);
+      var sz = spec.sizeRange || [1, 2];
+      p.size = rng(sz[0], sz[1]);
+      p.shape = spec.shape || 'dot';
+      p.color = spec.color || '#fff';
+      p.blur = spec.blur || 0;
+      p.trail = !!spec.trail;
+      p.blend = spec.blend || 'source-over';
+      p.alpha = spec.alpha != null ? spec.alpha : 1;
+      var vel = spec.velocity || { x: [0, 0], y: [40, 60] };
+      p.vx = rng((vel.x || [0, 0])[0], (vel.x || [0, 0])[1]);
+      p.vy = rng((vel.y || [0, 0])[0], (vel.y || [0, 0])[1]);
+      // Spawn position: top edge for fallers, full-width for drifters.
+      if (spec.spawn === 'stream') {
+        // hourglass waist: spawn at the neck centre with slight scatter.
+        p.x = s.w * 0.5 + rng(-s.w * 0.06, s.w * 0.06);
+        p.y = s.h * (spec.streamTop != null ? spec.streamTop : 0.42);
+      } else if (p.vy < 0 || spec.spawn === 'left') {
+        p.x = rng(-s.w * 0.1, 0);
+        p.y = rng(0, s.h);
+      } else {
+        p.x = rng(0, s.w);
+        p.y = rng(-s.h * 0.1, p.shape === 'streak-long' ? 0 : -2);
+      }
+      p.life = 0;
+      p.max = spec.maxLifeRange ? rng(spec.maxLifeRange[0], spec.maxLifeRange[1]) : 6;
+      p.active = true;
+      s.particles.push(p);
+    }
+
+    function step(ts) {
+      if (!running) return;
+      var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.016;
+      lastTs = ts;
+      // Frame-time probe → auto low-power.
+      if (probeFrames < 30) {
+        probeFrames++;
+        if (dt * 1000 > 24) probeOverBudget++;
+        if (probeFrames === 30 && probeOverBudget > 10 && profile !== 'low') setProfile('low');
+      }
+      for (var si = 0; si < surfaces.length; si++) {
+        var s = surfaces[si];
+        if (!s.visible) continue;
+        var ctx = s.ctx;
+        ctx.clearRect(0, 0, s.w, s.h);
+        if (s.clip) { ctx.save(); s.clip(ctx, s.w, s.h); }
+        // Emit.
+        for (var ei = 0; ei < s.emitters.length; ei++) {
+          var em = s.emitters[ei], spec = em.spec;
+          var alive = 0;
+          for (var k = 0; k < s.particles.length; k++) if (s.particles[k].emId === em.id) alive++;
+          var rate = spec.spawnRate || 0;
+          s.spawnAcc[em.id] = (s.spawnAcc[em.id] || 0) + rate * dt;
+          while (s.spawnAcc[em.id] >= 1 && alive < (spec.maxAlive || 20) && liveCount() < globalCap) {
+            s.spawnAcc[em.id] -= 1;
+            var before = s.particles.length;
+            spawn(s, spec);
+            if (s.particles.length > before) { s.particles[s.particles.length - 1].emId = em.id; alive++; }
+          }
+        }
+        // Integrate + draw.
+        for (var pi = s.particles.length - 1; pi >= 0; pi--) {
+          var p = s.particles[pi];
+          p.x += p.vx * dt; p.y += p.vy * dt; p.life += dt;
+          var off = p.y > s.h + 12 || p.x > s.w + 80 || p.x < -80 || p.life > p.max;
+          if (off) { s.particles.splice(pi, 1); toPool(s, p); continue; }
+          drawParticle(ctx, p);
+        }
+        if (s.clip) ctx.restore();
+      }
+      if (liveCount() > 0 || hasEmitters()) rafId = requestAnimationFrame(step);
+      else { running = false; rafId = null; }
+    }
+
+    function hasEmitters() { for (var i = 0; i < surfaces.length; i++) if (surfaces[i].emitters.length) return true; return false; }
+
+    function drawParticle(ctx, p) {
+      ctx.globalAlpha = p.alpha;
+      ctx.globalCompositeOperation = p.blend;
+      ctx.fillStyle = p.color;
+      ctx.strokeStyle = p.color;
+      if (p.blur) { ctx.shadowBlur = p.blur; ctx.shadowColor = p.color; } else { ctx.shadowBlur = 0; }
+      switch (p.shape) {
+        case 'streak':
+          ctx.lineWidth = p.size; ctx.beginPath();
+          ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03); ctx.stroke();
+          break;
+        case 'streak-long':
+          ctx.lineWidth = p.size; ctx.beginPath();
+          ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.12, p.y - p.vy * 0.12); ctx.stroke();
+          break;
+        case 'blob':
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 6.283); ctx.fill();
+          break;
+        case 'flake':
+        case 'grain':
+        case 'dot':
+        default:
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 6.283); ctx.fill();
+          break;
+      }
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.shadowBlur = 0;
+    }
+
+    // One frozen representative frame for reduced-motion / static gate.
+    function drawStaticFrame(s) {
+      var ctx = s.ctx;
+      ctx.clearRect(0, 0, s.w, s.h);
+      if (s.clip) { ctx.save(); s.clip(ctx, s.w, s.h); }
+      s.emitters.forEach(function (em) {
+        var spec = em.spec, n = Math.min(spec.maxAlive || 6, 8);
+        for (var i = 0; i < n; i++) {
+          var p = makeParticle();
+          p.size = rng((spec.sizeRange || [1, 2])[0], (spec.sizeRange || [1, 2])[1]);
+          p.shape = spec.shape || 'dot'; p.color = spec.color || '#fff';
+          p.blur = spec.blur || 0; p.alpha = (spec.alpha != null ? spec.alpha : 1) * 0.9;
+          p.blend = spec.blend || 'source-over';
+          p.x = rng(0, s.w); p.y = rng(0, s.h);
+          var vel = spec.velocity || { x: [0, 0], y: [40, 60] };
+          p.vx = (vel.x || [0, 0])[1]; p.vy = (vel.y || [40, 60])[1];
+          drawParticle(ctx, p);
+        }
+      });
+      if (s.clip) ctx.restore();
+    }
+
+    function sync() {
+      if (reducedNow()) { surfaces.forEach(drawStaticFrame); return; }
+      if (!running && hasEmitters() && anyVisible()) { running = true; lastTs = 0; rafId = requestAnimationFrame(step); }
+    }
+    function anyVisible() { for (var i = 0; i < surfaces.length; i++) if (surfaces[i].visible) return true; return false; }
+
+    function destroy(s) {
+      var idx = surfaces.indexOf(s); if (idx >= 0) surfaces.splice(idx, 1);
+      try { if (s.io) s.io.disconnect(); } catch (e) {}
+    }
+
+    function setProfile(name) {
+      if (!PROFILES[name]) return;
+      profile = name; globalCap = PROFILES[name];
+      // Trim live particles down to the new cap.
+      while (liveCount() > globalCap) {
+        for (var i = 0; i < surfaces.length && liveCount() > globalCap; i++) {
+          if (surfaces[i].particles.length) toPool(surfaces[i], surfaces[i].particles.pop());
+        }
+      }
+    }
+
+    // Tab-hidden pause / resume.
+    try {
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } running = false; }
+        else sync();
+      });
+    } catch (e) {}
+
+    return {
+      createSurface: createSurface,
+      setProfile: setProfile,
+      profile: function () { return profile; },
+      cap: function () { return globalCap; },
+      live: liveCount,
+      reduced: reducedNow,
+      sync: sync
+    };
+  })();
+  window.CalParticleEngine = CalParticleEngine;
+
+  // ============================================================
   // Block: data
   // ============================================================
   registerInitBlock('data', function () {
@@ -89,18 +354,23 @@
           'left:' + left + '%;animation-delay:' + delay + 's;animation-duration:' + dur + 's;');
       }
     }
-    WEATHER_EFFECTS.clear = { id: 'clear', tier: 'must', renderFn: function () {} };
+    // V4: each MUST entry now also carries a `particleSpec` the shared
+    // canvas engine reads (data, not code). The CSS-DOM renderFn stays as
+    // the no-JS / server-render fallback. `null` particleSpec = no canvas
+    // particles (CSS ambient only).
+    WEATHER_EFFECTS.clear = { id: 'clear', tier: 'must', renderFn: function () {}, particleSpec: null };
     WEATHER_EFFECTS.cloudy = { id: 'cloudy', tier: 'must', renderFn: function (box) {
       spawn('cal-almanac-cloud cal-almanac-cloud--1', box);
       spawn('cal-almanac-cloud cal-almanac-cloud--2', box);
       spawn('cal-almanac-cloud cal-almanac-cloud--3', box);
-    } };
-    WEATHER_EFFECTS.rain = { id: 'rain', tier: 'must', renderFn: function (box) { rain(box, false); } };
+    }, particleSpec: { shape: 'blob', color: 'oklch(0.72 0.02 250 / 0.10)', sizeRange: [40, 90], velocity: { x: [10, 24], y: [-2, 2] }, spawnRate: 0.3, maxAlive: 5, blend: 'screen', blur: 6, spawn: 'left' } };
+    WEATHER_EFFECTS.rain = { id: 'rain', tier: 'must', renderFn: function (box) { rain(box, false); },
+      particleSpec: { shape: 'streak', color: 'oklch(0.74 0.07 235 / 0.7)', sizeRange: [1, 2.4], velocity: { x: [-12, 8], y: [200, 280] }, spawnRate: 22, maxAlive: 30 } };
     WEATHER_EFFECTS.thunderstorm = { id: 'thunderstorm', tier: 'must', renderFn: function (box) {
       spawn('cal-almanac-cloudbank cal-almanac-cloudbank--dark', box);
       rain(box, true);
       var l = spawn('cal-almanac-lightning', box); l.setAttribute('data-cal-lightning', '');
-    } };
+    }, particleSpec: { shape: 'streak', color: 'oklch(0.78 0.08 240 / 0.8)', sizeRange: [1.4, 3], velocity: { x: [-22, 6], y: [260, 340] }, spawnRate: 34, maxAlive: 38 } };
     WEATHER_EFFECTS.snow = { id: 'snow', tier: 'must', renderFn: function (box) {
       for (var i = 0; i < 26; i++) {
         var left = (i * 41 + 3) % 100;
@@ -109,16 +379,21 @@
         var drift = ((i % 5) - 2) * 8;
         spawn('cal-almanac-snow', box, 'left:' + left + '%;animation-delay:' + delay + 's;animation-duration:' + dur + 's;--drift:' + drift + 'px;');
       }
-    } };
-    WEATHER_EFFECTS.fog = { id: 'fog', tier: 'must', renderFn: function (box) { spawn('cal-almanac-fog', box); } };
-    // TBD stubs — registry-wired; visual deferred.
+    }, particleSpec: { shape: 'flake', color: 'oklch(0.98 0.01 240 / 0.9)', sizeRange: [1.5, 3], velocity: { x: [-14, 14], y: [30, 60] }, spawnRate: 14, maxAlive: 28 } };
+    WEATHER_EFFECTS.fog = { id: 'fog', tier: 'must', renderFn: function (box) { spawn('cal-almanac-fog', box); },
+      particleSpec: { shape: 'blob', color: 'oklch(0.82 0.01 245 / 0.12)', sizeRange: [60, 140], velocity: { x: [8, 20], y: [-2, 2] }, spawnRate: 0.3, maxAlive: 8, blend: 'screen', blur: 8, spawn: 'left' } };
+    // TBD stubs — registry-wired; minimal tinted ambient spec (faint
+    // motes in the type's colour); adding fidelity = editing the spec.
+    var tbdTint = { ashfall: 'oklch(0.5 0.02 60 / 0.4)', 'acid-rain': 'oklch(0.78 0.18 125 / 0.5)', 'arcane-winds': 'oklch(0.66 0.22 310 / 0.5)', 'ley-surge': 'oklch(0.72 0.20 290 / 0.5)', 'sakura-bloom': 'oklch(0.84 0.10 350 / 0.6)' };
     ['ashfall', 'acid-rain', 'arcane-winds', 'ley-surge', 'sakura-bloom'].forEach(function (id) {
-      WEATHER_EFFECTS[id] = { id: id, tier: 'tbd', renderFn: function () {} };
+      WEATHER_EFFECTS[id] = { id: id, tier: 'tbd', renderFn: function () {},
+        particleSpec: { shape: 'dot', color: tbdTint[id], sizeRange: [1.5, 3], velocity: { x: [-10, 10], y: [20, 50] }, spawnRate: 4, maxAlive: 10 } };
     });
     window.__calWeatherEffects = WEATHER_EFFECTS;
   });
 
   registerInitBlock('celestial-registry', function () {
+    // meteor-shower: SLOW per operator — long trailed streaks, low spawn.
     CELESTIAL_EFFECTS['meteor-shower'] = { id: 'meteor-shower', tier: 'must', renderFn: function (box) {
       var wrap = document.createElement('div'); wrap.className = 'cal-almanac-meteors'; wrap.setAttribute('data-cal-meteors', '');
       for (var i = 0; i < 6; i++) {
@@ -126,20 +401,59 @@
         spawn('cal-almanac-meteor', wrap, 'top:' + top + '%;left:' + left + '%;animation-delay:' + delay + 's;');
       }
       box.appendChild(wrap);
-    } };
+    }, particleSpec: { shape: 'streak-long', color: 'oklch(0.95 0.06 80 / 0.9)', sizeRange: [2, 4], velocity: { x: [-150, -95], y: [60, 110] }, spawnRate: 0.6, maxAlive: 6, trail: true, blend: 'lighter' } };
+    // Eclipses are SVG/CSS discs — no canvas particles.
     CELESTIAL_EFFECTS['eclipse-solar'] = { id: 'eclipse-solar', tier: 'must', renderFn: function (box) {
       var e = document.createElement('div'); e.className = 'cal-almanac-eclipse cal-almanac-eclipse--solar'; box.appendChild(e);
-    } };
+    }, particleSpec: null };
     CELESTIAL_EFFECTS['eclipse-lunar'] = { id: 'eclipse-lunar', tier: 'must', renderFn: function (box) {
       var e = document.createElement('div'); e.className = 'cal-almanac-eclipse cal-almanac-eclipse--lunar'; box.appendChild(e);
-    } };
+    }, particleSpec: null };
+    var celTint = { volcanic: 'oklch(0.58 0.20 35 / 0.6)', 'ice-age': 'oklch(0.88 0.06 220 / 0.5)', plague: 'oklch(0.62 0.14 145 / 0.5)', 'arcane-surge': 'oklch(0.70 0.22 300 / 0.6)', 'moon-special': 'oklch(0.88 0.06 95 / 0.6)', aurora: 'oklch(0.78 0.16 160 / 0.5)', comet: 'oklch(0.86 0.10 210 / 0.7)' };
     ['volcanic', 'ice-age', 'plague', 'arcane-surge', 'moon-special', 'aurora', 'comet'].forEach(function (id) {
       CELESTIAL_EFFECTS[id] = { id: id, tier: 'tbd', renderFn: function (box, ctx) {
         var s = document.createElement('div'); s.className = 'cal-almanac-celestial-stub'; s.textContent = (ctx && ctx.name) || id; box.appendChild(s);
-      } };
+      }, particleSpec: { shape: 'dot', color: celTint[id], sizeRange: [1.5, 3.5], velocity: { x: [-8, 8], y: [10, 40] }, spawnRate: 2, maxAlive: 6 } };
     });
     window.__calCelestialEffects = CELESTIAL_EFFECTS;
   });
+
+  // ============================================================
+  // Block: era-effects-registry (§A5) — each era type gets a signature
+  // hover animation (particleSpec + palette + size/position) the engine
+  // renders. Adding an era type = a data object, not a refactor.
+  // ============================================================
+  var ERA_EFFECTS = {};
+  registerInitBlock('era-effects-registry', function () {
+    // Each entry: { color {hue,chroma,lightness,opacity}, particleSpec,
+    // size, position }. All editable via the demo-controls panel.
+    ERA_EFFECTS.golden = { id: 'golden', name: 'Golden Age', color: { hue: 85, chroma: 0.14, lightness: 0.78, opacity: 0.34 },
+      particleSpec: { shape: 'dot', color: 'oklch(0.88 0.13 85 / 0.8)', sizeRange: [1, 2.4], velocity: { x: [-6, 6], y: [-26, -12] }, spawnRate: 6, maxAlive: 12, blend: 'lighter' } };
+    ERA_EFFECTS.dark = { id: 'dark', name: 'Age of Decline', color: { hue: 285, chroma: 0.03, lightness: 0.32, opacity: 0.42 },
+      particleSpec: { shape: 'blob', color: 'oklch(0.3 0.02 285 / 0.18)', sizeRange: [30, 70], velocity: { x: [6, 16], y: [-2, 2] }, spawnRate: 0.4, maxAlive: 5, blend: 'source-over', blur: 6, spawn: 'left' } };
+    ERA_EFFECTS.war = { id: 'war', name: 'Age of Conflict', color: { hue: 32, chroma: 0.16, lightness: 0.55, opacity: 0.4 },
+      particleSpec: { shape: 'dot', color: 'oklch(0.72 0.19 38 / 0.85)', sizeRange: [1, 2.6], velocity: { x: [-8, 10], y: [-30, -14] }, spawnRate: 5, maxAlive: 10, blend: 'lighter' } };
+    ERA_EFFECTS.mythic = { id: 'mythic', name: 'Mythic Era', color: { hue: 305, chroma: 0.18, lightness: 0.66, opacity: 0.4 },
+      particleSpec: { shape: 'dot', color: 'oklch(0.82 0.2 305 / 0.85)', sizeRange: [1, 3], velocity: { x: [-12, 12], y: [-22, -8] }, spawnRate: 5, maxAlive: 10, blend: 'lighter' } };
+    ERA_EFFECTS.ancient = { id: 'ancient', name: 'Forgotten Age', color: { hue: 70, chroma: 0.04, lightness: 0.6, opacity: 0.36 },
+      particleSpec: { shape: 'dot', color: 'oklch(0.7 0.04 70 / 0.6)', sizeRange: [1, 2], velocity: { x: [-8, 8], y: [-10, 8] }, spawnRate: 4, maxAlive: 9 } };
+    ERA_EFFECTS.neutral = { id: 'neutral', name: 'Era', color: { hue: 250, chroma: 0.04, lightness: 0.6, opacity: 0.32 },
+      particleSpec: { shape: 'dot', color: 'oklch(0.78 0.04 250 / 0.6)', sizeRange: [1, 2], velocity: { x: [-6, 6], y: [-14, -4] }, spawnRate: 3, maxAlive: 7 } };
+    window.__calEraEffects = ERA_EFFECTS;
+  });
+  // Map an era's mock id / name to an ERA_EFFECTS key. Mock eras don't
+  // carry a type field yet; classify by name keyword with a neutral
+  // fallback (data-driven; a real Era.type would replace this).
+  function eraEffectFor(era) {
+    if (!era) return ERA_EFFECTS.neutral;
+    var n = (era.effect_type || era.name || '').toLowerCase();
+    if (/golden|prosper|bloom|dawn/.test(n)) return ERA_EFFECTS.golden;
+    if (/dark|decline|fall|shadow|silence/.test(n)) return ERA_EFFECTS.dark;
+    if (/war|conflict|sundering|strife|blood/.test(n)) return ERA_EFFECTS.war;
+    if (/myth|arcane|wonder|magic|weave/.test(n)) return ERA_EFFECTS.mythic;
+    if (/ancient|forgotten|elder|first/.test(n)) return ERA_EFFECTS.ancient;
+    return ERA_EFFECTS.neutral;
+  }
 
   // ============================================================
   // Day-state lookups
@@ -162,6 +476,11 @@
   // for the displayed day. (Initial day server-rendered; this drives
   // day-change swaps + keeps the snowglobe in sync.)
   // ============================================================
+  // V4: when the canvas engine is live, particle effects (rain/snow/fog/
+  // meteor/etc.) render on the canvas; the DOM layers keep only the
+  // non-particle pieces (eclipse disc, lightning flash, cloud banks, TBD
+  // glyphs). The server-rendered DOM particles are the no-JS fallback.
+  var SKY_SURFACE = null; // engine handle for the sky-band canvas
   function renderSkyForDay(m, day) {
     var sky = document.querySelector('[data-cal-sky]');
     if (!sky) return;
@@ -169,23 +488,33 @@
     var effID = wtypeID ? weatherEffectID(wtypeID) : 'clear';
     sky.setAttribute('data-cal-sky-weather', effID);
     sky.className = sky.className.replace(/cal-almanac-sky--wfx-\S+/g, '').trim() + ' cal-almanac-sky--wfx-' + effID;
+    var engineLive = !!SKY_SURFACE;
+    var events = celestialFor(m, day);
     // Weather layer.
     var wlayer = sky.querySelector('[data-cal-sky-weather-layer]');
     if (wlayer) {
       wlayer.innerHTML = '';
       var w = WEATHER_EFFECTS[effID];
-      if (w) w.renderFn(wlayer, weatherTypeById(wtypeID) || {});
+      // Only fall back to CSS-DOM particles when the canvas isn't driving
+      // them. Thunderstorm's lightning flash is a DOM element either way.
+      if (w && (!engineLive || !w.particleSpec)) {
+        w.renderFn(wlayer, weatherTypeById(wtypeID) || {});
+      } else if (engineLive && effID === 'thunderstorm') {
+        var l = spawn('cal-almanac-lightning', wlayer); l.setAttribute('data-cal-lightning', '');
+      }
     }
     // Celestial layer.
     var clayer = sky.querySelector('[data-cal-sky-celestial-layer]');
-    var events = celestialFor(m, day);
     if (clayer) {
       clayer.innerHTML = '';
       events.forEach(function (c) {
         var fx = CELESTIAL_EFFECTS[c.type];
-        if (fx) fx.renderFn(clayer, c);
+        // Particle celestials (meteor) go to the canvas; discs/glyphs stay DOM.
+        if (fx && (!engineLive || !fx.particleSpec)) fx.renderFn(clayer, c);
       });
     }
+    // Feed the canvas engine with this day's active particle specs.
+    if (engineLive) feedSkyEngine(effID, events);
     // Happening chips bottom-right.
     var hap = sky.querySelector('[data-cal-sky-happening]');
     if (hap) {
@@ -221,9 +550,46 @@
     (DATA.seasons || []).forEach(function (s) { if (s.start <= VIEW.month && s.start > bs) { bs = s.start; best = s.name; } });
     return best;
   }
+  // Active sky emitters = weather particleSpec + celestial particleSpecs
+  // + an optional era-hover spec (layered, transient). Recomputed whenever
+  // weather/day/era-hover changes.
+  var ERA_HOVER_SPEC = null;
+  function feedSkyEngine(effID, events) {
+    if (!SKY_SURFACE) return;
+    var specs = [];
+    var w = WEATHER_EFFECTS[effID];
+    if (w && w.particleSpec) specs.push(w.particleSpec);
+    (events || []).forEach(function (c) {
+      var fx = CELESTIAL_EFFECTS[c.type];
+      if (fx && fx.particleSpec) specs.push(fx.particleSpec);
+    });
+    if (ERA_HOVER_SPEC) specs.push(ERA_HOVER_SPEC);
+    SKY_SURFACE.setEmitters(specs);
+  }
+  function refeedSky() {
+    var effID = dayWeatherTypeID(VIEW.month, VIEW.day);
+    effID = effID ? weatherEffectID(effID) : 'clear';
+    feedSkyEngine(effID, celestialFor(VIEW.month, VIEW.day));
+  }
+
+  registerInitBlock('particle-engine', function () {
+    var canvas = document.querySelector('[data-cal-sky-canvas]');
+    if (!canvas || !window.CalParticleEngine) return;
+    SKY_SURFACE = CalParticleEngine.createSurface(canvas, {});
+    window.__calSkyEngine = SKY_SURFACE;
+    // Keep the canvas backing store sized to the sky-band as it resizes.
+    try {
+      if ('ResizeObserver' in window) {
+        var ro = new ResizeObserver(function () { SKY_SURFACE.resize(); refeedSky(); });
+        ro.observe(canvas);
+      }
+    } catch (e) {}
+  });
+
   registerInitBlock('sky-band-ambient', function () {
     // Re-render once on init so the JS-built layers match the registries
-    // (the server pre-render is for no-JS; this keeps the source single).
+    // (the server pre-render is for no-JS; this keeps the source single)
+    // and the canvas engine gets its first emitter set.
     renderSkyForDay(VIEW.month, VIEW.day);
   });
 
@@ -338,23 +704,75 @@
   }
 
   // ============================================================
-  // Block: era-vignette — click → era detail (in a sub-popover reusing
-  // the quick-view shell as a lightweight info panel).
+  // Block: era-overlay (§A) — responsive sizing + OKLCH colour from the
+  // ERA_EFFECTS registry + badge-click → era detail + badge-hover →
+  // signature particle animation via the shared engine.
   // ============================================================
-  registerInitBlock('era-vignette', function () {
+  function currentEraObj() {
     var vig = document.querySelector('[data-cal-era-vignette]');
-    if (!vig) return;
-    vig.addEventListener('click', function () {
-      var era = (DATA.eras || []).find(function (e) { return e.id === vig.getAttribute('data-cal-era-id'); });
-      if (!era) return;
-      openSkyPanel('Era · ' + era.name, [
-        '<div class="cal-almanac-skypanel__row"><b>' + esc(era.name) + '</b></div>',
-        '<div class="cal-almanac-skypanel__row">' + esc(eraSpan(era)) + '</div>',
-        era.description ? '<div class="cal-almanac-skypanel__row">' + esc(era.description) + '</div>' : ''
+    if (!vig || !DATA) return null;
+    return (DATA.eras || []).find(function (e) { return e.id === vig.getAttribute('data-cal-era-id'); }) || null;
+  }
+  // Apply an ERA_EFFECTS palette + size/position to the era element via
+  // CSS custom properties. Size is responsive: a fraction of the sky-band
+  // width, clamped to <=120px (base) and the CSS 25% hard cap.
+  function applyEraParams(el, eff, sky) {
+    if (!el || !eff) return;
+    var c = eff.color || {};
+    if (c.hue != null) el.style.setProperty('--cal-era-hue', c.hue);
+    if (c.chroma != null) el.style.setProperty('--cal-era-chroma', c.chroma);
+    if (c.lightness != null) el.style.setProperty('--cal-era-lightness', c.lightness);
+    if (c.opacity != null) el.style.setProperty('--cal-era-opacity', c.opacity);
+    // Responsive size: ~22% of the sky-band width, capped 64..120px.
+    if (sky) {
+      var w = sky.getBoundingClientRect().width || 1080;
+      var size = Math.max(64, Math.min(120, Math.round(w * 0.115)));
+      el.style.setProperty('--cal-era-size', size + 'px');
+    }
+    el.setAttribute('data-cal-era-effect', eff.id);
+  }
+  registerInitBlock('era-overlay', function () {
+    var vig = document.querySelector('[data-cal-era-vignette]');
+    var badge = document.querySelector('[data-cal-era-badge]');
+    var sky = document.querySelector('[data-cal-sky]');
+    if (!vig || !badge) return;
+    var era = currentEraObj();
+    var eff = eraEffectFor(era);
+    applyEraParams(vig, eff, sky);
+    // Responsive re-size as the widget changes dimensions.
+    try {
+      if ('ResizeObserver' in window && sky) {
+        var ro = new ResizeObserver(function () { applyEraParams(vig, eraEffectFor(currentEraObj()), sky); });
+        ro.observe(sky);
+      }
+    } catch (e) {}
+    // Badge click → era detail panel.
+    badge.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var e = currentEraObj();
+      if (!e) return;
+      openSkyPanel('Era · ' + e.name, [
+        '<div class="cal-almanac-skypanel__row"><b>' + esc(e.name) + '</b></div>',
+        '<div class="cal-almanac-skypanel__row">' + esc(eraSpan(e)) + '</div>',
+        e.description ? '<div class="cal-almanac-skypanel__row">' + esc(e.description) + '</div>' : ''
       ].join(''));
     });
+    // Badge hover → layer the era's signature particles into the sky.
+    badge.addEventListener('mouseenter', function () {
+      var ef = eraEffectFor(currentEraObj());
+      ERA_HOVER_SPEC = (ef && ef.particleSpec) || null;
+      refeedSky();
+    });
+    badge.addEventListener('mouseleave', function () { ERA_HOVER_SPEC = null; refeedSky(); });
   });
   function eraSpan(e) { return e.end_year ? (e.start_year + ' – ' + e.end_year) : (e.start_year + ' – ongoing'); }
+  // Re-expose for the demo-controls panel: lets the operator drive era
+  // params live (§E3).
+  function setEraParam(name, value) {
+    var vig = document.querySelector('[data-cal-era-vignette]');
+    if (vig) vig.style.setProperty('--cal-era-' + name, value);
+  }
+  window.__calSetEraParam = setEraParam;
 
   // ============================================================
   // REFINEMENT-V3 — Hourglass time-piece
@@ -467,6 +885,25 @@
     return { id: effID, kind: 'weather' };
   }
 
+  // V4: the in-glass falling stream is a canvas surface (clipped to the
+  // glass interior), driven by the shared engine. This handle is created
+  // in the hourglass-internals block.
+  var GLASS_SURFACE = null;
+  function feedHourglassStream() {
+    if (!GLASS_SURFACE) return;
+    var hg = document.querySelector('[data-cal-time]');
+    var stream = 'oklch(0.86 0.16 80)';
+    if (hg) {
+      var v = getComputedStyle(hg).getPropertyValue('--sand-stream');
+      if (v && v.trim()) stream = v.trim();
+    }
+    // ~8-15 grains, slow, slight scatter, spawned at the neck.
+    GLASS_SURFACE.setEmitters([{
+      shape: 'grain', color: stream, sizeRange: [1, 2], spawn: 'stream', streamTop: 0.42,
+      velocity: { x: [-6, 6], y: [38, 64] }, spawnRate: 9, maxAlive: 13
+    }]);
+  }
+
   function applySandTheme(m, day) {
     var hg = document.querySelector('[data-cal-time]');
     if (!hg) return;
@@ -484,12 +921,8 @@
       }
       label.textContent = name;
     }
-    var stream = hg.querySelector('[data-cal-hourglass-stream]');
-    if (stream) {
-      var reg = theme.kind === 'celestial' ? CELESTIAL_EFFECTS[theme.id] : WEATHER_EFFECTS[theme.id];
-      var fn = (reg && reg.sandRender) || defaultSandRender;
-      fn(stream);
-    }
+    // Re-feed the in-glass canvas stream with the new theme colour.
+    feedHourglassStream();
   }
 
   function isNightFrac(t) {
@@ -581,9 +1014,37 @@
     };
   });
 
+  // hourglass-internals (§D2): create the in-glass canvas surface,
+  // clipped to the glass interior, and feed it the falling-stream grains
+  // via the SHARED engine (one rAF, two surfaces). This MUST run before
+  // hourglass-themed-sand so applySandTheme can feed it.
+  registerInitBlock('hourglass-internals', function () {
+    var canvas = document.querySelector('[data-cal-hourglass-canvas]');
+    if (!canvas || !window.CalParticleEngine) return;
+    // Clip to the hourglass silhouette (proportional to the viewBox path
+    // M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z on a 60×110 viewBox).
+    function clip(ctx, w, h) {
+      var sx = w / 60, sy = h / 110;
+      ctx.beginPath();
+      ctx.moveTo(6 * sx, 8 * sy); ctx.lineTo(54 * sx, 8 * sy); ctx.lineTo(33 * sx, 53 * sy);
+      ctx.lineTo(33 * sx, 57 * sy); ctx.lineTo(54 * sx, 102 * sy); ctx.lineTo(6 * sx, 102 * sy);
+      ctx.lineTo(27 * sx, 57 * sy); ctx.lineTo(27 * sx, 53 * sy); ctx.closePath();
+      ctx.clip();
+    }
+    GLASS_SURFACE = CalParticleEngine.createSurface(canvas, { clip: clip });
+    window.__calGlassEngine = GLASS_SURFACE;
+    try {
+      if ('ResizeObserver' in window) {
+        var ro = new ResizeObserver(function () { GLASS_SURFACE.resize(); feedHourglassStream(); });
+        ro.observe(canvas);
+      }
+    } catch (e) {}
+  });
+
   registerInitBlock('hourglass-themed-sand', function () {
     hookSandRenderers();
     applySandTheme(VIEW.month, VIEW.day);
+    feedHourglassStream();
     // Re-apply on day-change. We piggyback on renderSkyForDay by wrapping.
     var prev = renderSkyForDay;
     renderSkyForDay = function (m, day) {
@@ -1200,6 +1661,64 @@
     if (prev) prev.addEventListener('click', function () { mi = (mi - 1 + DATA.months.length) % DATA.months.length; paint(); });
     if (next) next.addEventListener('click', function () { mi = (mi + 1) % DATA.months.length; paint(); });
     if (today) today.addEventListener('click', function () { mi = DATA.current_month - 1; paint(); VIEW.day = DATA.current_day; renderSkyForDay(VIEW.month, VIEW.day); });
+  });
+
+  // ============================================================
+  // Block: demo-controls (§E3) — the beta-test harness. Showcase-only;
+  // drives era / weather / celestial / time / frame / particle-profile
+  // live so the operator can exercise every fix in one place.
+  // ============================================================
+  // A demo weather/celestial override that the sky render path consults.
+  var DEMO = { weather: null, celestial: null };
+  function demoApplySky() {
+    var sky = document.querySelector('[data-cal-sky]');
+    if (!sky || !SKY_SURFACE) return;
+    var effID = DEMO.weather || (function () { var w = dayWeatherTypeID(VIEW.month, VIEW.day); return w ? weatherEffectID(w) : 'clear'; })();
+    sky.setAttribute('data-cal-sky-weather', effID);
+    sky.className = sky.className.replace(/cal-almanac-sky--wfx-\S+/g, '').trim() + ' cal-almanac-sky--wfx-' + effID;
+    var specs = [];
+    var w = WEATHER_EFFECTS[effID]; if (w && w.particleSpec) specs.push(w.particleSpec);
+    var events = DEMO.celestial && DEMO.celestial !== 'none' ? [{ type: DEMO.celestial, name: DEMO.celestial }] : celestialFor(VIEW.month, VIEW.day);
+    (events || []).forEach(function (c) { var fx = CELESTIAL_EFFECTS[c.type]; if (fx && fx.particleSpec) specs.push(fx.particleSpec); });
+    if (ERA_HOVER_SPEC) specs.push(ERA_HOVER_SPEC);
+    SKY_SURFACE.setEmitters(specs);
+    // Drive the eclipse disc / meteor DOM + the hourglass sand theme too.
+    var clayer = sky.querySelector('[data-cal-sky-celestial-layer]');
+    if (clayer) { clayer.innerHTML = ''; (events || []).forEach(function (c) { var fx = CELESTIAL_EFFECTS[c.type]; if (fx && !fx.particleSpec) fx.renderFn(clayer, c); }); }
+    var hg = document.querySelector('[data-cal-time]');
+    if (hg) {
+      var themeId = (DEMO.celestial && DEMO.celestial !== 'none') ? DEMO.celestial : effID;
+      hg.setAttribute('data-cal-hourglass-theme', themeId);
+      feedHourglassStream();
+    }
+  }
+  registerInitBlock('demo-controls', function () {
+    var panel = document.querySelector('[data-cal-democtl]');
+    if (!panel) return;
+    var toggle = panel.querySelector('[data-cal-democtl-toggle]');
+    var readout = panel.querySelector('[data-cal-democtl-readout]');
+    function say(msg) { if (readout) readout.textContent = msg; }
+    if (toggle) toggle.addEventListener('click', function () {
+      var open = panel.getAttribute('data-cal-democtl-open') === 'true';
+      panel.setAttribute('data-cal-democtl-open', open ? 'false' : 'true');
+    });
+    function bind(sel, fn) { var el = panel.querySelector(sel); if (el) el.addEventListener('input', function () { fn(el.value); }); }
+    var vig = document.querySelector('[data-cal-era-vignette]');
+    var sky = document.querySelector('[data-cal-sky]');
+    bind('[data-cal-democtl-era]', function (v) {
+      var eff = ERA_EFFECTS[v] || ERA_EFFECTS.neutral;
+      applyEraParams(vig, eff, sky);
+      ERA_HOVER_SPEC = (eff && eff.particleSpec) || null; refeedSky();
+      say('era=' + v);
+    });
+    bind('[data-cal-democtl-era-size]', function (v) { setEraParam('size', v + 'px'); say('era size ' + v + 'px'); });
+    bind('[data-cal-democtl-era-hue]', function (v) { setEraParam('hue', v); say('era hue ' + v); });
+    bind('[data-cal-democtl-weather]', function (v) { DEMO.weather = v; demoApplySky(); say('weather=' + v); });
+    bind('[data-cal-democtl-celestial]', function (v) { DEMO.celestial = v; demoApplySky(); say('celestial=' + v); });
+    bind('[data-cal-democtl-time]', function (v) { applyTime(Math.max(0, Math.min(1, v / 1000))); say('time ' + (v / 10).toFixed(0) + '%'); });
+    bind('[data-cal-democtl-frame]', function (v) { var hg = document.querySelector('[data-cal-time]'); if (hg) hg.setAttribute('data-cal-shelf-frame', v); say('frame=' + v); });
+    bind('[data-cal-democtl-profile]', function (v) { if (window.CalParticleEngine) CalParticleEngine.setProfile(v); say('particles=' + v + ' (cap ' + (window.CalParticleEngine ? CalParticleEngine.cap() : '?') + ')'); });
+    say('ready · cap ' + (window.CalParticleEngine ? CalParticleEngine.cap() : '?'));
   });
 
   // ============================================================
