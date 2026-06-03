@@ -2779,6 +2779,19 @@ func (a *App) RegisterRoutes() {
 		return middleware.Render(c, http.StatusOK, demo.DemoShowcase())
 	}, auth.RequireAuth(authService))
 
+	// C-CAL-SHOWCASE-DESIGN-1-ALMANAC — Design 1 of 2-3 candidate
+	// calendar designs for the V2 plugin port. "Almanac" identity:
+	// animated OKLCH sky-band header (sun + moon arc + scrubber),
+	// fantasy month grid with tier-colored events, click→drawer with
+	// the chip-row visibility editor, drag-to-create, wrapped in a
+	// draggable + resizable widget shell. Mock data only (no backend
+	// wiring) — operator selects the winning design, the real plugin
+	// port follows. Auth-gated; exposes no campaign data. Dispatch:
+	// dispatches/chronicle/C-CAL-SHOWCASE-DESIGN-1-ALMANAC.md.
+	e.GET("/demo/calendar", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoCalendar())
+	}, auth.RequireAuth(authService))
+
 	// --- Layout Data Injector ---
 	// Registers the callback that copies auth/campaign data from Echo's
 	// context into Go's context.Context so Templ templates can read it.
