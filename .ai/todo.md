@@ -119,6 +119,30 @@ _See `.ai/audit.md` for the full feature parity & completeness audit. Audit item
 
 New capabilities ordered by priority for alpha release.
 
+### Calendar Showcase: World-State Effects (C-CAL-WORLDSTATE-EFFECTS-SYSTEM)
+
+Synced world-state animation system — ONE `worldState` drives BOTH the Almanac
+sky-band AND the hourglass time-piece. Mock-data only, `/demo/calendar/almanac`.
+Spec: `docs/design/world-state-effects/` (README + BUILD-PLAN + CATALOG + prototypes).
+
+- [~] **Wave 0 — Foundation (the spine)** — `worldState` object (CATALOG Part 8) +
+  `setWorldState(patch)` changedKeys-gated pub/sub front door; unified `EFFECTS`
+  registry (per-surface renderers skyBand/hgTop/hgBottom/hgSand/timeline) projected
+  ADDITIVELY over the legacy `WEATHER_EFFECTS`/`CELESTIAL_EFFECTS` maps; sky-band +
+  hourglass both subscribe; explicit back→front `resolveLayers` order; v5
+  applyTime/renderSkyForDay monkey-patch wraps replaced by shims into setWorldState
+  (every caller preserved). Tests: `internal/templates/demo/calendar_worldstate_test.go`
+  (static) + `test/js/worldstate.test.mjs` (runtime, `make test-js`). *Pending operator
+  screenshot sign-off (no headless browser in build env — see flag).*
+- [ ] **Wave 1 — Hourglass core + sun** — swap painted-`<picture>` sun → `lorc/sun.svg`
+  (keep `resolveSunState` + `sun-bloom`); port glass hourglass + heightmap sand;
+  bottom chamber day/night from `worldState.timeOfDay`.
+- [ ] **Wave 2 — MUST effects** (CATALOG Parts 3/4): time-of-day, sun+tint, moons w/
+  named phases, clear/cloudy/rain/fog/thunderstorm/snow, meteor-shower, solar+lunar
+  eclipse, blood-moon, aurora, mood-tint — both surfaces.
+- [ ] **Wave 3 — Time-control verb layer** — play/pause(float)/rewind(sand-up)/ff/step.
+- [ ] **Wave 4 — SHOULD effects** · [ ] **Wave 5 — NICE/EXOTIC long tail** (on demand).
+
 ### Alpha-Critical (Must Have)
 
 - [x] **Media management for owners** — Campaign-scoped media browser at `/campaigns/:id/media` (Owner-only): grid view with thumbnails, "referenced by" entity queries, delete with warnings, upload from browser, pagination, storage stats. Admin already had `/admin/storage`.

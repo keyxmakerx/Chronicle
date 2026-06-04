@@ -129,6 +129,7 @@ Wiki All-Pages mobile-layout cosmetic fix (`data-entity-id` on the shared `Entit
 - **Draw Steel spin-up** — pending its own security audit per `cordinator/decisions/2026-05-26-draw-steel-spin-up-strategy.md`.
 - **AI Export Pipeline** — scoping locked per `cordinator/decisions/2026-05-26-ai-export-pipeline-design.md`; implementation pending.
 - **Plugin Host interface design pass** — tracked in `cordinator/decisions/2026-05-23-plugin-registration.md`. Deferred from Chunk A.
+- **C-CAL-WORLDSTATE-EFFECTS-SYSTEM** — synced world-state animation (Almanac sky-band + hourglass) on `/demo/calendar/almanac`, mock-data only. Spec in `docs/design/world-state-effects/`. **Wave 0 (foundation spine: `worldState` + `setWorldState` pub/sub + unified `EFFECTS` registry + both surfaces subscribe) implemented on `claude/sweet-davinci-1cqat`, pending operator screenshot sign-off** (build env has no headless browser; logic verified via `make test-js` + Go static tests). Waves 1–5 queued in `.ai/todo.md §2`.
 
 ### Archive
 
