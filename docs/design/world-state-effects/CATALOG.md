@@ -135,20 +135,35 @@ A global color overlay both surfaces, `{ color, intensity }`. This is your "add 
 
 ---
 
-## PART 6 — DM TIME-CONTROL behaviors (the verb layer — your floating/reverse idea) ⏯️
+## PART 6 — DM TIME-CONTROL behaviors (D&D verb layer, NOT VCR playback) ⏯️
 
-> These modulate **everything** globally. They're tied to the DM's playback controls (play / pause / rewind / fast-forward), same controls that scrub the calendar.
+> **Operator reframing 2026-06-04 — binding:** *"A real-to-life timepiece isn't actually useful. It can look live, but you get what i mean. Like 'play' is just the timepiece slowly filling up, reaching a point where it stops filling (maybe 1/3 or so) but the sand keeps pouring."*
+
+**Key principle:** D&D session time moves in **narrative chunks** (an hour of travel, a long rest, a week of downtime) — NOT real-time seconds. The atmospheric animation runs **always** for ambient feel; the **timepiece fill** represents elapsed in-game time in the current period / half-day. Visual atmosphere is decoupled from game-time progression.
+
+### The verbs (D&D mechanics)
 
 | Control | Hourglass behavior | Sky-band behavior |
 |---|---|---|
-| **▶ Play (forward)** | sand falls normally, pile builds | time advances, sun/clouds/moons move forward |
-| **⏸ Pause** | **sand FREEZES & floats** — mid-air grains hover, top sand lifts slightly, stream suspended, gentle bob/shimmer ("suspended in amber") | sun/clouds/moons freeze; subtle ambient float only |
-| **◀ Rewind / reverse** | **sand falls UPWARD** — grains flow back up through neck, pile un-piles into top, stream reverses | sun reverses arc (sets in east), clouds drift backward, star/event anims reverse |
-| **⏩ Fast-forward** | sand accelerates, pile builds fast | time + all motion accelerate |
-| **⏭ Step** | jump by increment (day/hour) | snap to next/prev step |
-| **■ Stop / reset** | sand resets to start of period | clock resets to period start |
+| **+N time** (advance time by hour / day / long-rest / custom) | Timepiece fill advances proportionally to N. **Caps at ~1/3** so the piece doesn't visually "run out" mid-session. Sand particles **keep pouring visually** for atmosphere regardless of fill state. | Sun/clouds/moons advance to the new time. Smooth transition over ~600ms. |
+| **Set time** (jump to specific date/time) | Snap fill to that fraction of the period. Brief settling animation. | Snap to that date's state. Brief crossfade. |
+| **Step back** (undo last advance) | Fill rewinds to previous state. | Sun/clouds/moons reverse to previous state. |
+| **Period boundary reached** (fill caps at ~1/3, or DM hits "end day") | **Dawn/dusk flip** — whole piece rotates 180°, what was the bottom is now the top, fresh sand for the next half-day. | Sky transitions through dawn (or dusk) sequence. |
+| **⏸ Pause atmosphere** (rare — for screenshots / dramatic effect) | All animation freezes — sand mid-air, stream suspended, "suspended in amber." | Sun/clouds/moons freeze in place. |
 
-**Implementation note:** this is a global `{ direction: +1/0/-1, speed }` multiplier on every animation's time delta, plus a special **pause-float mode** (grains get tiny buoyancy + bob instead of gravity). Reverse = negate velocity / run the heightmap deposit in reverse (un-deposit from pile back into stream going up).
+### What's NOT in the D&D model (rejected)
+
+- **No real-time "play" button that ticks the clock per real second** — D&D sessions don't work that way.
+- **No "fast-forward" verb** — collapsed into "advance time by N." Variable N is the speed control.
+- **No "rewind" verb in the VCR sense** — collapsed into "step back" (single-undo) + "set time" (jump). Reverse-sand-falls-up is a *visual* during step-back animation, not a continuous mode.
+
+### Implementation
+
+- `worldState.timeOfDay` advances in discrete jumps when DM clicks **+1hr / +1day / +long-rest** etc. The atmospheric animation always runs (ambient continuous).
+- `worldState.timepieceFill` (0-0.33) is a derived value: fraction of current period that's elapsed. Independent variable; ambient sand stream keeps running.
+- When `timepieceFill` reaches the cap (~0.33 default; configurable per campaign), the dawn/dusk flip animation triggers, the chambers swap conceptually, `timepieceFill` resets to 0 for the new period.
+- **Step-back** plays a brief reverse-sand animation (~400ms) showing grains lifting back up the stream, then settles at the previous `timepieceFill`. Not a continuous mode.
+- **Pause atmosphere** is mostly for screenshots — a `worldState.atmospherePaused: true` flag freezes all animation deltas globally. Probably surfaces as a hotkey, not a primary control.
 
 ---
 
@@ -425,3 +440,103 @@ play (forward) · **pause (float)** · **rewind (sand falls up)** · fast-forwar
 ---
 
 *This catalog becomes the spec for expanding the existing `WEATHER_EFFECTS` + `CELESTIAL_EFFECTS` registries (from Almanac refinement v2/v4) into the unified world-state registry that drives both the sky-band and the hourglass. It folds into the v5.5 (sun + hourglass) and v6 (full effects) dispatches.*
+
+---
+
+# PART 12 — LOCKED PICKS (2026-06-04, binding for Wave 2 implementation)
+
+After an extensive operator-driven design exploration session 2026-06-04, the following sets are LOCKED. Chronicle Dev: when Wave 2 (MUST effects implementation) fires, use these as the asset/registry spec.
+
+## 12.1 — Moon library (LOCKED)
+
+**Total: ~28 moon options.** Owner picks per-moon + tint color. For multi-moon worlds: a "randomize" button picks across the set so visually distinct moons appear by default.
+
+### Professional emoji icons (vendored)
+
+| Source | License | What | Vendor path |
+|---|---|---|---|
+| **Google Noto Emoji** | OFL 1.1 | All 8 lunar phases (`1f311`–`1f318`) + crescent (`1f319`) + 4 face variants (`1f31a`/`1f31b`/`1f31c`/`1f31d`) | `static/vendor/noto-emoji/moons/` |
+| **Twitter Twemoji** | CC-BY 4.0 | All 8 lunar phases + crescent + 4 face variants (same Unicode set) | `static/vendor/twemoji/moons/` |
+
+### Procedural designs (coordinator-authored, embedded in code)
+
+| ID | Name | Category |
+|---|---|---|
+| `moon-watercolor` | Watercolor wash | Stylized |
+| `moon-holographic` | Holographic / iridescent (animated hue-shift, reduced-motion safe) | Stylized |
+| `moon-etched` | Etched cross-hatching (astronomy-book aesthetic) | Stylized |
+| `moon-constellation` | Constellation map (craters as stars + connection lines) | Stylized |
+| `moon-realistic-full` | Realistic shaded sphere — baseline (real maria + Tycho ray system + named craters) | Realistic |
+| `moon-realistic-eclipse` | Realistic blood-moon / eclipse variant | Realistic |
+| `moon-realistic-selene` | Selene Classic (refined baseline) | Realistic-small |
+| `moon-realistic-silver` | Pale Silver bright glossy | Realistic-small |
+| `moon-realistic-warm` | Warm Cream golden-hour tones | Realistic-small |
+| `moon-realistic-ancient` | Ancient Cratered (Mercury-like, heavy pockmarking) | Realistic-major |
+| `moon-realistic-icy` | Icy Europa-style (white-blue with linea cracks) | Realistic-major |
+| `moon-realistic-volcanic` | Volcanic Io-style (yellow-orange + active red volcanoes) | Realistic-major |
+
+**Source for procedural SVG markup:** `docs/design/world-state-effects/prototypes/moon-realistic-iterations.html` + `moon-mega-survey.html` + `moon-procedurals-batch2.html`. Chronicle Dev extracts the SVGs from these prototype files when wiring Wave 2 (one-time, ~5-10 min per design).
+
+**Per-moon config in `worldState.moons[i]`:**
+```js
+{
+  id: 'selune',
+  name: 'Selûne',
+  baseDesign: 'moon-realistic-selene',  // any locked design ID above
+  tint: '#d4d4d8',                      // CSS color; renderer swaps fill on the procedural SVGs
+  phaseSource: 'noto' | 'twemoji' | 'css-clip',  // how phases render
+  size: 1.0,
+  orbitSpeed: 1.0,
+  namedPhases: [ {start_pct, end_pct, name}, ... ]  // optional per-moon named-phase vocab
+}
+```
+
+## 12.2 — Weather + celestial effects bundle (LOCKED — 10 effects)
+
+All 10 ship in Wave 2 as `EFFECTS` registry entries with sky-band renderers. Each = ~30-60 LOC of canvas drawing wired through `CalParticleEngine`.
+
+| Effect ID | Category | What it does |
+|---|---|---|
+| `weather-clear` | Standard | Subtle drifting wisps. Baseline "alive but quiet" sky. |
+| `weather-cloudy` | Standard | 3 parallax cloud layers, soft white blobs drifting at different speeds |
+| `weather-rain` | Standard | Falling diagonal blue streaks. Density configurable. |
+| `weather-thunderstorm` | Severe | Heavy rain + lightning flash (~every 4s) + jagged bolt |
+| `weather-snow` | Standard | Drifting flakes with horizontal sway |
+| `weather-fog` | Standard | Large translucent grey blobs drifting horizontally, multiple layers |
+| `weather-tornado` | Severe | Rotating dark funnel + debris spiraling around it + whorl indicators |
+| `weather-ashfall` | Environmental | Grey flakes drifting slowly + reddish sky from distant fire |
+| `celestial-meteor-shower` | Event | Bright streaks with glowing trails + star field + twinkling stars |
+| `celestial-aurora` | Event | 3 overlapping rippling color curtains (green / violet / cyan) + stars |
+
+**Source for canvas renderers:** `docs/design/world-state-effects/prototypes/weather-effects-preview.html` (committed alongside this CATALOG update). Each effect's setup function in that file is the spec.
+
+**Per-effect entry shape (production):**
+```js
+EFFECTS['weather-rain'] = {
+  id: 'weather-rain',
+  name: 'Rain',
+  category: 'standard-weather',
+  tier: 'MUST',
+  skyBand: rainSkyRender,       // ported from prototype file
+  hgTop: null,
+  hgBottom: null,
+  hgSand: { color: '#bfe0ff' }, // hourglass sand recolors blue
+  timeline: rainTimelineGlyph,  // small icon for timeline axis
+  particleSpec: { ... }         // for shared engine integration
+};
+```
+
+## 12.3 — Sun + hourglass (already locked, recap)
+
+- **Sun:** `lorc/sun.svg` (game-icons.net, CC-BY 3.0) — shipped in PR #389. Plus `lorc/eclipse.svg` for eclipse state.
+- **Hourglass:** dark-wood frame (procedural SVG with `feTurbulence` wood grain + `feDiffuseLighting` bevel) + procedural glass (`feSpecularLighting` gloss) + canvas heightmap sand (slope-limited avalanche). Wave 1c in progress on branch `claude/sweet-davinci-1cqat-wave1b`.
+
+## 12.4 — Out of scope (deferred to V3 or post-deadline)
+
+- **Atmospherics settings editor** (per-effect intensity overrides, palette overrides) — too many settings; revisit V3
+- The ~130 long-tail effects in Part 11 (eldritch-ink, plague, sakura-bloom, etc.) — registry-ready, ship visuals incrementally as desired
+- Per-moon procedural SVG variants beyond the locked 12 — operator can add more later via the same registry pattern
+
+---
+
+*Section 12 added 2026-06-04 capturing the locked outcome of the moon + weather design session. Chronicle Dev: this is the binding spec for Wave 2 effects implementation. Source SVGs / canvas code live in `prototypes/` directory alongside this CATALOG.*

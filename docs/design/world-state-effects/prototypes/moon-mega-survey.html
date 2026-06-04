@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Moon — mega survey: 6 emoji packs + 10 procedural styles</title>
+<style>
+  body { font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif; background:#15171e; color:#e8e6e3; margin:0; padding:2rem; line-height:1.55; }
+  h1 { color:#cfd6e8; margin-top:0; }
+  h2 { color:#a3b0d1; border-bottom:1px solid #444; padding-bottom:.4rem; margin-top:2.5rem; }
+  h3 { color:#cfd6e8; font-size:.95rem; margin:1rem 0 .4rem; }
+  h4 { color:#a3b0d1; font-size:.85rem; margin:0 0 .35rem; }
+  .intro { max-width:780px; opacity:.9; }
+  code { background:#2a2a2a; padding:1px 6px; border-radius:3px; font-size:.85em; }
+  .note { background:#1f2530; border-left:3px solid #6c8cd0; padding:.9rem 1.1rem; border-radius:4px; font-size:.9rem; margin:1.2rem 0; max-width:780px; }
+  .badge { display:inline-block; padding:1px 7px; border-radius:9px; font-size:.62rem; opacity:.85; margin-left:6px; vertical-align:2px; }
+  .badge-mit { background:#1e3a2e; color:#a8e4c0; }
+  .badge-cc { background:#3a2e1e; color:#e4c8a0; }
+  .badge-ofl { background:#2e1e3a; color:#c0a8e4; }
+  .badge-apache { background:#1e2a3a; color:#a8c0e4; }
+  .badge-pr { background:#3d2a48; color:#e2c4ff; }
+  a { color:#cfd6e8; }
+
+  /* pack grids */
+  .pack-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:.6rem; margin:1rem 0; max-width:1100px; }
+  .pack-grid.col-4 { grid-template-columns:repeat(4, 1fr); max-width:540px; }
+  .pack-grid.col-8 { grid-template-columns:repeat(8, 1fr); max-width:880px; }
+  .icon-cell { text-align:center; }
+  .icon-frame {
+    background:radial-gradient(circle at 50% 38%, #1a2240, #0a0e1e 78%);
+    padding:8px; border-radius:6px; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  }
+  .icon-frame img, .icon-frame svg { width:100%; height:100%; }
+  .icon-label { font-size:.62rem; opacity:.6; margin-top:3px; font-family:monospace; line-height:1.2; word-wrap:break-word; }
+
+  /* color emoji recoloring helpers */
+  .invert img { filter:invert(1); mix-blend-mode:normal; }
+
+  /* procedural section */
+  .proc-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1.2rem; max-width:1200px; margin:1.5rem 0; }
+  .proc-card { background:#1c1e26; border:1px solid #2f323d; border-radius:8px; padding:.8rem; text-align:center; }
+  .proc-card .pframe {
+    background:radial-gradient(circle at 50% 38%, #1a2240, #0a0e1e 78%);
+    padding:10px; border-radius:6px; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  }
+  .proc-card svg { width:100%; height:100%; }
+  .proc-card .slug { font-family:monospace; font-size:.7rem; opacity:.55; margin-top:.4rem; }
+  .proc-card .name { font-size:.85rem; color:#cfd6e8; margin-top:.3rem; font-weight:500; }
+</style>
+</head>
+<body>
+
+<h1>Moon — mega survey</h1>
+
+<div class="intro">
+<p><strong>§A: ~40 professional moon icons across 6 open-source emoji packs.</strong> All licenses listed. <strong>§B: 10 procedural styles in different aesthetics</strong> — geometric / crystalline / mosaic / pixel-art / line-art / neon / tribal / topographic / wireframe / alchemical. These don't try to compete with emoji illustrators at hand-drawn realism; they lean into SVG's geometric strengths instead. Pick anything from anywhere.</p>
+</div>
+
+<!-- =================================================================
+     §A — PROFESSIONAL EMOJI PACKS
+     ================================================================= -->
+<h2>§A — Professional emoji packs (6 sets, all open source)</h2>
+
+<h3>game-icons.net <span class="badge badge-cc">CC-BY 3.0</span> · fantasy / woodcut</h3>
+<div class="pack-grid">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/moon.svg" style="mix-blend-mode:screen"></div><div class="icon-label">lorc/moon</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/moon-claws.svg" style="mix-blend-mode:screen"></div><div class="icon-label">lorc/moon-claws</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/delapouite/moon-orbit.svg" style="mix-blend-mode:screen"></div><div class="icon-label">delapouite/moon-orbit</div></div>
+</div>
+
+<h3>Microsoft Fluent Emoji <span class="badge badge-mit">MIT</span> · Flat variant (8 phases)</h3>
+<div class="pack-grid col-8">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/New%20moon/Flat/new_moon_flat.svg"></div><div class="icon-label">new</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Waxing%20crescent%20moon/Flat/waxing_crescent_moon_flat.svg"></div><div class="icon-label">wax cres</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/First%20quarter%20moon/Flat/first_quarter_moon_flat.svg"></div><div class="icon-label">first qtr</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Waxing%20gibbous%20moon/Flat/waxing_gibbous_moon_flat.svg"></div><div class="icon-label">wax gibb</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Full%20moon/Flat/full_moon_flat.svg"></div><div class="icon-label">full</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Waning%20gibbous%20moon/Flat/waning_gibbous_moon_flat.svg"></div><div class="icon-label">wan gibb</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Last%20quarter%20moon/Flat/last_quarter_moon_flat.svg"></div><div class="icon-label">last qtr</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Waning%20crescent%20moon/Flat/waning_crescent_moon_flat.svg"></div><div class="icon-label">wan cres</div></div>
+</div>
+
+<h4>Microsoft Fluent · Color variant (3D-ish)</h4>
+<div class="pack-grid col-4">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Full%20moon/Color/full_moon_color.svg"></div><div class="icon-label">full</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Crescent%20moon/Color/crescent_moon_color.svg"></div><div class="icon-label">crescent</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Full%20moon%20face/Color/full_moon_face_color.svg"></div><div class="icon-label">full+face</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/New%20moon%20face/Color/new_moon_face_color.svg"></div><div class="icon-label">new+face</div></div>
+</div>
+
+<h3>Noto Emoji <span class="badge badge-ofl">OFL 1.1</span> · 8 phases + 4 face variants</h3>
+<div class="pack-grid col-8">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f311.svg"></div><div class="icon-label">new</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f312.svg"></div><div class="icon-label">wax cres</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f313.svg"></div><div class="icon-label">first qtr</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f314.svg"></div><div class="icon-label">wax gibb</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f315.svg"></div><div class="icon-label">full</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f316.svg"></div><div class="icon-label">wan gibb</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f317.svg"></div><div class="icon-label">last qtr</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f318.svg"></div><div class="icon-label">wan cres</div></div>
+</div>
+<h4>Noto · face variants + crescent</h4>
+<div class="pack-grid col-4">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f319.svg"></div><div class="icon-label">crescent</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f31a.svg"></div><div class="icon-label">new+face</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f31b.svg"></div><div class="icon-label">first+face</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u1f31d.svg"></div><div class="icon-label">full+face</div></div>
+</div>
+
+<h3>Twemoji (Twitter) <span class="badge badge-cc">CC-BY 4.0</span> · 8 phases</h3>
+<div class="pack-grid col-8">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f311.svg"></div><div class="icon-label">new</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f312.svg"></div><div class="icon-label">wax cres</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f313.svg"></div><div class="icon-label">first qtr</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f314.svg"></div><div class="icon-label">wax gibb</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f315.svg"></div><div class="icon-label">full</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f316.svg"></div><div class="icon-label">wan gibb</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f317.svg"></div><div class="icon-label">last qtr</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f318.svg"></div><div class="icon-label">wan cres</div></div>
+</div>
+<h4>Twemoji · face variants</h4>
+<div class="pack-grid col-4">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f319.svg"></div><div class="icon-label">crescent</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f31a.svg"></div><div class="icon-label">new+face</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f31b.svg"></div><div class="icon-label">first+face</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@master/assets/svg/1f31d.svg"></div><div class="icon-label">full+face</div></div>
+</div>
+
+<h3>OpenMoji (color variant) <span class="badge badge-cc">CC-BY-SA 4.0</span> · 8 phases</h3>
+<div class="pack-grid col-8">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F311.svg"></div><div class="icon-label">new</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F312.svg"></div><div class="icon-label">wax cres</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F313.svg"></div><div class="icon-label">first qtr</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F314.svg"></div><div class="icon-label">wax gibb</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F315.svg"></div><div class="icon-label">full</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F316.svg"></div><div class="icon-label">wan gibb</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F317.svg"></div><div class="icon-label">last qtr</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F318.svg"></div><div class="icon-label">wan cres</div></div>
+</div>
+<h4>OpenMoji · face variants + crescent</h4>
+<div class="pack-grid col-4">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F319.svg"></div><div class="icon-label">crescent</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F31A.svg"></div><div class="icon-label">new+face</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F31B.svg"></div><div class="icon-label">first+face</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@master/color/svg/1F31D.svg"></div><div class="icon-label">full+face</div></div>
+</div>
+
+<h3>Blobmoji <span class="badge badge-apache">Apache 2.0</span> · the blob-style aesthetic</h3>
+<div class="pack-grid col-4">
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/C1710/blobmoji@main/svg/emoji_u1f315.svg"></div><div class="icon-label">full</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/C1710/blobmoji@main/svg/emoji_u1f319.svg"></div><div class="icon-label">crescent</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/C1710/blobmoji@main/svg/emoji_u1f31d.svg"></div><div class="icon-label">full+face</div></div>
+  <div class="icon-cell"><div class="icon-frame"><img src="https://cdn.jsdelivr.net/gh/C1710/blobmoji@main/svg/emoji_u1f31a.svg"></div><div class="icon-label">new+face</div></div>
+</div>
+
+<div class="note">
+That's ~40 professional moon icons across 6 packs. Counting all phases × face variants × Flat/Color, the actual total is over 60. All open source. Multiple aesthetic registers — woodcut fantasy, flat icon, 3D detailed, blob, painterly. Mix any combination across your moons.
+</div>
+
+<!-- =================================================================
+     §B — PROCEDURAL — 10 styles in SVG-native aesthetics
+     ================================================================= -->
+<h2>§B — 10 procedural styles (different aesthetics where SVG actually shines)</h2>
+
+<div class="note">
+These don't try to replicate hand-illustrated emoji. They lean into SVG's geometric strengths: sacred symmetry, low-poly facets, stained glass borders, pixel grids, line work, gradient glows. Each style is its own design language. Default colors shown; all recolor via fill swap.
+</div>
+
+<div class="proc-grid">
+
+  <!-- 1. MANDALA -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="100" cy="100" r="80" fill="none" stroke="#d4d4d8" stroke-width="1.2"/>
+        <circle cx="100" cy="100" r="64" fill="none" stroke="#d4d4d8" stroke-width="1"/>
+        <circle cx="100" cy="100" r="48" fill="#9a9aa3" opacity=".35"/>
+        <circle cx="100" cy="100" r="32" fill="none" stroke="#d4d4d8" stroke-width="1"/>
+        <circle cx="100" cy="100" r="14" fill="#d4d4d8"/>
+        <g stroke="#d4d4d8" stroke-width="1" fill="none">
+          <g><line x1="100" y1="20" x2="100" y2="180"/><line x1="20" y1="100" x2="180" y2="100"/>
+             <line x1="44" y1="44" x2="156" y2="156"/><line x1="156" y1="44" x2="44" y2="156"/></g>
+        </g>
+        <g fill="#d4d4d8">
+          <circle cx="100" cy="32" r="3"/><circle cx="100" cy="168" r="3"/>
+          <circle cx="32" cy="100" r="3"/><circle cx="168" cy="100" r="3"/>
+          <circle cx="52" cy="52" r="2.5"/><circle cx="148" cy="148" r="2.5"/>
+          <circle cx="148" cy="52" r="2.5"/><circle cx="52" cy="148" r="2.5"/>
+        </g>
+        <g stroke="#d4d4d8" stroke-width=".8" fill="none">
+          <path d="M 100,52 Q 116,68 132,52"/>
+          <path d="M 148,100 Q 132,116 148,132"/>
+          <path d="M 100,148 Q 84,132 68,148"/>
+          <path d="M 52,100 Q 68,84 52,68"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">1. Mandala</div>
+    <div class="slug">moon-mandala</div>
+  </div>
+
+  <!-- 2. CRYSTALLINE / LOW POLY -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="#15171e" stroke-width=".5" stroke-linejoin="round">
+          <polygon points="100,28 50,60 60,100" fill="#e0e0e6"/>
+          <polygon points="100,28 150,60 140,100" fill="#c0c0c8"/>
+          <polygon points="100,28 50,60 100,60" fill="#d0d0d8"/>
+          <polygon points="100,28 150,60 100,60" fill="#b0b0b8"/>
+          <polygon points="50,60 60,100 30,108" fill="#a8a8b0"/>
+          <polygon points="150,60 140,100 170,108" fill="#9090a0"/>
+          <polygon points="60,100 100,100 80,140" fill="#c8c8d0"/>
+          <polygon points="140,100 100,100 120,140" fill="#a8a8b0"/>
+          <polygon points="30,108 60,100 80,140 50,150" fill="#888894"/>
+          <polygon points="170,108 140,100 120,140 150,150" fill="#787884"/>
+          <polygon points="80,140 100,100 120,140" fill="#b0b0b8"/>
+          <polygon points="50,150 80,140 100,172" fill="#9898a4"/>
+          <polygon points="150,150 120,140 100,172" fill="#787884"/>
+          <polygon points="80,140 100,172 120,140" fill="#a0a0ac"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">2. Crystalline (low-poly)</div>
+    <div class="slug">moon-crystalline</div>
+  </div>
+
+  <!-- 3. STAINED GLASS -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <clipPath id="mg-sg-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="78" fill="#15171e"/>
+        <g clip-path="url(#mg-sg-clip)" stroke="#15171e" stroke-width="3">
+          <path d="M 22,100 Q 60,60 100,80 Q 140,100 178,100 L 178,100 L 22,100 Z" fill="#a0b8d8"/>
+          <path d="M 22,100 Q 60,140 100,120 Q 140,100 178,100 L 178,178 L 22,178 Z" fill="#5070a0"/>
+          <path d="M 100,80 Q 130,90 140,70 Q 145,55 130,40 Z" fill="#c8d8e8"/>
+          <path d="M 60,80 Q 75,90 80,70 Q 80,55 65,50 Z" fill="#8fa8c8"/>
+          <path d="M 50,140 Q 70,160 90,150 Q 100,145 90,130 Z" fill="#3a5080"/>
+          <path d="M 130,140 Q 150,160 130,170 Q 110,165 120,140 Z" fill="#406090"/>
+          <circle cx="100" cy="100" r="10" fill="#fce5ac"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">3. Stained Glass</div>
+    <div class="slug">moon-stained-glass</div>
+  </div>
+
+  <!-- 4. MOSAIC -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <clipPath id="mg-mos-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <g clip-path="url(#mg-mos-clip)" stroke="#0a0e1e" stroke-width=".7">
+          <g fill="#d4d4d8">
+            <rect x="22" y="22" width="16" height="16"/><rect x="40" y="22" width="16" height="16" fill="#b8b8c0"/>
+            <rect x="58" y="22" width="16" height="16"/><rect x="76" y="22" width="16" height="16" fill="#c0c0c8"/>
+            <rect x="94" y="22" width="16" height="16" fill="#8a8a92"/><rect x="112" y="22" width="16" height="16"/>
+            <rect x="130" y="22" width="16" height="16" fill="#a0a0a8"/><rect x="148" y="22" width="16" height="16"/>
+            <rect x="22" y="40" width="16" height="16" fill="#a0a0a8"/><rect x="40" y="40" width="16" height="16" fill="#8a8a92"/>
+            <rect x="58" y="40" width="16" height="16"/><rect x="76" y="40" width="16" height="16" fill="#a0a0a8"/>
+            <rect x="94" y="40" width="16" height="16" fill="#7c7c85"/><rect x="112" y="40" width="16" height="16"/>
+            <rect x="130" y="40" width="16" height="16" fill="#c0c0c8"/><rect x="148" y="40" width="16" height="16"/>
+            <rect x="22" y="58" width="16" height="16"/><rect x="40" y="58" width="16" height="16" fill="#8a8a92"/>
+            <rect x="58" y="58" width="16" height="16" fill="#a0a0a8"/><rect x="76" y="58" width="16" height="16" fill="#7c7c85"/>
+            <rect x="94" y="58" width="16" height="16" fill="#8a8a92"/><rect x="112" y="58" width="16" height="16" fill="#a0a0a8"/>
+            <rect x="130" y="58" width="16" height="16"/><rect x="148" y="58" width="16" height="16" fill="#b8b8c0"/>
+            <rect x="22" y="76" width="16" height="16" fill="#b8b8c0"/><rect x="40" y="76" width="16" height="16" fill="#a0a0a8"/>
+            <rect x="58" y="76" width="16" height="16" fill="#7c7c85"/><rect x="76" y="76" width="16" height="16" fill="#a0a0a8"/>
+            <rect x="94" y="76" width="16" height="16"/><rect x="112" y="76" width="16" height="16" fill="#8a8a92"/>
+            <rect x="130" y="76" width="16" height="16" fill="#a0a0a8"/><rect x="148" y="76" width="16" height="16"/>
+            <rect x="22" y="94" width="16" height="16"/><rect x="40" y="94" width="16" height="16"/>
+            <rect x="58" y="94" width="16" height="16" fill="#a0a0a8"/><rect x="76" y="94" width="16" height="16" fill="#8a8a92"/>
+            <rect x="94" y="94" width="16" height="16"/><rect x="112" y="94" width="16" height="16" fill="#7c7c85"/>
+            <rect x="130" y="94" width="16" height="16" fill="#8a8a92"/><rect x="148" y="94" width="16" height="16"/>
+            <rect x="22" y="112" width="16" height="16" fill="#a0a0a8"/><rect x="40" y="112" width="16" height="16"/>
+            <rect x="58" y="112" width="16" height="16" fill="#b8b8c0"/><rect x="76" y="112" width="16" height="16" fill="#a0a0a8"/>
+            <rect x="94" y="112" width="16" height="16" fill="#8a8a92"/><rect x="112" y="112" width="16" height="16"/>
+            <rect x="130" y="112" width="16" height="16" fill="#a0a0a8"/><rect x="148" y="112" width="16" height="16" fill="#7c7c85"/>
+            <rect x="22" y="130" width="16" height="16" fill="#8a8a92"/><rect x="40" y="130" width="16" height="16"/>
+            <rect x="58" y="130" width="16" height="16"/><rect x="76" y="130" width="16" height="16" fill="#a0a0a8"/>
+            <rect x="94" y="130" width="16" height="16" fill="#b8b8c0"/><rect x="112" y="130" width="16" height="16"/>
+            <rect x="130" y="130" width="16" height="16" fill="#a0a0a8"/><rect x="148" y="130" width="16" height="16" fill="#8a8a92"/>
+            <rect x="22" y="148" width="16" height="16"/><rect x="40" y="148" width="16" height="16" fill="#a0a0a8"/>
+            <rect x="58" y="148" width="16" height="16" fill="#8a8a92"/><rect x="76" y="148" width="16" height="16" fill="#a0a0a8"/>
+            <rect x="94" y="148" width="16" height="16"/><rect x="112" y="148" width="16" height="16" fill="#b8b8c0"/>
+            <rect x="130" y="148" width="16" height="16" fill="#7c7c85"/><rect x="148" y="148" width="16" height="16" fill="#a0a0a8"/>
+          </g>
+        </g>
+      </svg>
+    </div>
+    <div class="name">4. Mosaic Tile</div>
+    <div class="slug">moon-mosaic</div>
+  </div>
+
+  <!-- 5. PIXEL ART -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+        <g fill="#d4d4d8">
+          <rect x="5" y="2" width="6" height="1"/><rect x="3" y="3" width="10" height="1"/>
+          <rect x="2" y="4" width="12" height="2"/><rect x="1" y="6" width="14" height="4"/>
+          <rect x="2" y="10" width="12" height="2"/><rect x="3" y="12" width="10" height="1"/>
+          <rect x="5" y="13" width="6" height="1"/>
+        </g>
+        <g fill="#8a8a92">
+          <rect x="4" y="5" width="2" height="1"/><rect x="3" y="6" width="3" height="1"/>
+          <rect x="9" y="6" width="2" height="2"/><rect x="6" y="8" width="2" height="2"/>
+          <rect x="11" y="9" width="2" height="1"/><rect x="4" y="10" width="2" height="1"/>
+        </g>
+        <g fill="#fff" opacity=".5">
+          <rect x="4" y="4" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">5. Pixel Art (8-bit)</div>
+    <div class="slug">moon-pixel-8bit</div>
+  </div>
+
+  <!-- 6. LINE ART MINIMAL -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <g fill="none" stroke="#d4d4d8" stroke-width="1.6" stroke-linecap="round">
+          <circle cx="100" cy="100" r="60"/>
+          <path d="M 100,40 A 60,60 0 0,0 140,82"/>
+          <circle cx="50" cy="40" r="1.2" fill="#d4d4d8"/>
+          <circle cx="160" cy="55" r="1" fill="#d4d4d8"/>
+          <circle cx="50" cy="160" r="1.2" fill="#d4d4d8"/>
+          <circle cx="155" cy="150" r="1" fill="#d4d4d8"/>
+          <path d="M 30,25 L 32,29 L 36,31 L 32,33 L 30,37 L 28,33 L 24,31 L 28,29 Z" stroke-width=".8"/>
+          <path d="M 170,170 L 172,174 L 176,176 L 172,178 L 170,182 L 168,178 L 164,176 L 168,174 Z" stroke-width=".8"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">6. Line Art (minimal)</div>
+    <div class="slug">moon-lineart</div>
+  </div>
+
+  <!-- 7. CYBERPUNK NEON -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="mg-neon-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <circle cx="100" cy="100" r="60" fill="#0a0e1e" stroke="#ff44cc" stroke-width="2" filter="url(#mg-neon-glow)"/>
+        <circle cx="100" cy="100" r="50" fill="none" stroke="#44ccff" stroke-width="1.5" opacity=".7" filter="url(#mg-neon-glow)"/>
+        <g stroke="#44ccff" stroke-width="1" fill="none" opacity=".6">
+          <path d="M 100,40 L 100,60 M 100,140 L 100,160 M 40,100 L 60,100 M 140,100 L 160,100"/>
+        </g>
+        <circle cx="80" cy="85" r="6" fill="#ff44cc" filter="url(#mg-neon-glow)" opacity=".7"/>
+        <circle cx="125" cy="110" r="4" fill="#44ccff" filter="url(#mg-neon-glow)" opacity=".7"/>
+        <circle cx="90" cy="125" r="3" fill="#ff44cc" filter="url(#mg-neon-glow)" opacity=".7"/>
+      </svg>
+    </div>
+    <div class="name">7. Cyberpunk Neon</div>
+    <div class="slug">moon-neon</div>
+  </div>
+
+  <!-- 8. TRIBAL / RUNIC -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="100" cy="100" r="62" fill="#d4d4d8"/>
+        <circle cx="100" cy="100" r="62" fill="none" stroke="#3a3a3e" stroke-width="2.5"/>
+        <g stroke="#3a3a3e" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M 80,55 L 80,75 M 72,62 L 88,68 M 72,68 L 88,62"/>
+          <path d="M 115,60 L 130,60 L 122,75 Z"/>
+          <path d="M 70,100 L 78,92 L 86,100 L 78,108 Z M 78,92 L 78,108"/>
+          <path d="M 122,108 Q 132,104 134,114 Q 130,124 122,120 Q 118,114 122,108 Z M 122,108 L 122,120"/>
+          <circle cx="100" cy="135" r="5"/><path d="M 100,128 L 100,142"/>
+          <path d="M 145,138 L 145,148 M 140,143 L 150,143"/>
+          <path d="M 55,138 L 55,148 M 50,143 L 60,143"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">8. Tribal / Runic</div>
+    <div class="slug">moon-tribal-runic</div>
+  </div>
+
+  <!-- 9. TOPOGRAPHIC / CONTOUR -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <clipPath id="mg-topo-clip"><circle cx="100" cy="100" r="76"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="76" fill="#1f2530"/>
+        <g clip-path="url(#mg-topo-clip)" stroke="#a0b8d8" stroke-width="1" fill="none" opacity=".75">
+          <path d="M 100,38 C 130,38 140,55 130,75 C 145,90 140,115 115,118 C 95,128 70,118 70,98 C 65,80 80,55 100,38 Z"/>
+          <path d="M 100,50 C 125,50 134,65 126,80 C 138,92 134,112 113,115 C 96,123 76,115 76,99 C 73,84 84,65 100,50 Z"/>
+          <path d="M 100,62 C 120,62 128,72 122,84 C 130,93 127,108 110,112 C 96,118 82,112 82,100 C 80,88 88,73 100,62 Z"/>
+          <path d="M 100,72 C 116,72 122,80 118,90 C 124,96 120,108 108,110 C 96,114 86,108 86,100 C 85,90 92,80 100,72 Z"/>
+          <path d="M 100,82 C 110,82 115,88 112,95 C 115,99 112,106 105,108 C 96,110 90,106 90,100 C 89,93 95,88 100,82 Z"/>
+          <path d="M 100,92 C 105,92 108,95 106,99 C 108,102 105,106 102,107 C 96,108 94,105 94,100 C 94,96 97,93 100,92 Z"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">9. Topographic (contour)</div>
+    <div class="slug">moon-topographic</div>
+  </div>
+
+  <!-- 10. ALCHEMICAL / SYMBOLIC -->
+  <div class="proc-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="100" cy="100" r="70" fill="none" stroke="#d4d4d8" stroke-width="2"/>
+        <path d="M 100,40 A 60,60 0 0,0 100,160 A 35,60 0 0,1 100,40 Z" fill="#d4d4d8"/>
+        <g fill="none" stroke="#d4d4d8" stroke-width="1.2">
+          <circle cx="100" cy="100" r="80"/>
+          <path d="M 100,20 L 105,30 L 95,30 Z" fill="#d4d4d8"/>
+          <path d="M 100,180 L 95,170 L 105,170 Z" fill="#d4d4d8"/>
+          <circle cx="20" cy="100" r="3" fill="#d4d4d8"/>
+          <circle cx="180" cy="100" r="3" fill="#d4d4d8"/>
+        </g>
+        <g stroke="#d4d4d8" stroke-width=".8" fill="none">
+          <path d="M 140,70 L 145,75 L 150,70 M 145,68 L 145,78"/>
+          <path d="M 145,125 L 145,135 M 140,130 L 150,130"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">10. Alchemical Glyph</div>
+    <div class="slug">moon-alchemical</div>
+  </div>
+
+</div>
+
+<div class="note" style="margin-top:2rem;">
+<strong>Production model:</strong> Each picked moon = one SVG vendored at <code>static/vendor/moons/{source}/{name}.svg</code>. Owner picks per-moon variant + tint color. For multi-moon worlds: a "randomize" button picks a different variant for each new moon. License attribution lives in one <code>CREDITS.md</code>: each emoji set's license line + a "procedural designs CC0" line.
+</div>
+
+<div class="note">
+<strong>Reply with anything you want — by pack name, by phase, by procedural number, or any combination.</strong> "All 8 Noto phases for default moons + procedural mandala + procedural neon for special-event moons" works fine. We pick freely.
+</div>
+
+</body>
+</html>
