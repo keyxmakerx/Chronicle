@@ -125,22 +125,31 @@ Synced world-state animation system — ONE `worldState` drives BOTH the Almanac
 sky-band AND the hourglass time-piece. Mock-data only, `/demo/calendar/almanac`.
 Spec: `docs/design/world-state-effects/` (README + BUILD-PLAN + CATALOG + prototypes).
 
-- [~] **Wave 0 — Foundation (the spine)** — `worldState` object (CATALOG Part 8) +
+- [x] **Wave 0 — Foundation (the spine)** — `worldState` object (CATALOG Part 8) +
   `setWorldState(patch)` changedKeys-gated pub/sub front door; unified `EFFECTS`
   registry (per-surface renderers skyBand/hgTop/hgBottom/hgSand/timeline) projected
-  ADDITIVELY over the legacy `WEATHER_EFFECTS`/`CELESTIAL_EFFECTS` maps; sky-band +
-  hourglass both subscribe; explicit back→front `resolveLayers` order; v5
-  applyTime/renderSkyForDay monkey-patch wraps replaced by shims into setWorldState
-  (every caller preserved). Tests: `internal/templates/demo/calendar_worldstate_test.go`
-  (static) + `test/js/worldstate.test.mjs` (runtime, `make test-js`). *Pending operator
-  screenshot sign-off (no headless browser in build env — see flag).*
-- [ ] **Wave 1 — Hourglass core + sun** — swap painted-`<picture>` sun → `lorc/sun.svg`
-  (keep `resolveSunState` + `sun-bloom`); port glass hourglass + heightmap sand;
-  bottom chamber day/night from `worldState.timeOfDay`.
-- [ ] **Wave 2 — MUST effects** (CATALOG Parts 3/4): time-of-day, sun+tint, moons w/
-  named phases, clear/cloudy/rain/fog/thunderstorm/snow, meteor-shower, solar+lunar
-  eclipse, blood-moon, aurora, mood-tint — both surfaces.
-- [ ] **Wave 3 — Time-control verb layer** — play/pause(float)/rewind(sand-up)/ff/step.
+  ADDITIVELY over the legacy `WEATHER_EFFECTS`/`CELESTIAL_EFFECTS` maps; both surfaces
+  subscribe; explicit back→front `resolveLayers` order; v5 monkey-patch wraps replaced
+  by shims into setWorldState. **Shipped (PR #388).**
+- [x] **Wave 1 — Hourglass core + sun** — sun supersession (painted `<picture>` →
+  vendored inline `lorc/sun.svg`, kept `resolveSunState` + `sun-bloom`); glass+wood
+  hourglass (SVG-filter materials) + canvas heightmap sand (slope-limited avalanche)
+  + bottom-chamber day/night from `worldState.timeOfDay` (engine per-surface frame
+  hook); v4 dawn/dusk flip preserved (canvas counter-rotates). **Shipped (PR #389 + #390).**
+- [~] **Wave 2 — MUST effects** (CATALOG §12):
+  - [x] **2a Weather + celestial bundle** (10): clear/cloudy/rain/thunderstorm/snow/fog/
+    tornado/ashfall + meteor-shower/aurora — `EFFECTS` renderers on the shared frame
+    hook, hgSand sync. **Shipped (PR #391).**
+  - [x] **2b Moon library** (~28): vendored Noto/Twemoji lunar sets + 12 procedural
+    SVGs; `MOON_DESIGNS` registry; emoji + css-clip phase paths; named-phase popover;
+    demo design picker + Randomize + Add. **Shipped (PR #394).**
+  - [~] **2c Mood-tint wash** (CATALOG Part 5) — global `overlay`-blend wash over both
+    surfaces as resolution step 6 (sky-band div + hourglass canvas composite over
+    sand); 8 presets + custom + intensity + clear; static (no rAF), reduced-motion-safe.
+    **In review (this PR)** — closes the Wave 2 MUST set.
+- [ ] **Wave 3 — Time-control verb layer** (CATALOG Part 6, D&D narrative-chunk model):
+  +1hr / +1day / long-rest / step-back, fill caps ~1/3, dawn/dusk flip on fill-cap,
+  atmosphere-pause. NOT VCR playback.
 - [ ] **Wave 4 — SHOULD effects** · [ ] **Wave 5 — NICE/EXOTIC long tail** (on demand).
 
 ### Alpha-Critical (Must Have)

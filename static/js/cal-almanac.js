@@ -510,6 +510,7 @@
       if (changed.indexOf('timeOfDay') !== -1) renderTimePipeline(st.timeOfDay);
       if (wsAffectsDay(changed)) renderDayPipeline(st.date.month, st.date.day);
       if (changed.indexOf('moons') !== -1) applyMoonDesigns();
+      if (changed.indexOf('moodTint') !== -1) applyMoodTint();
     });
     // 2) sun (celestial-bodies layer): resolve + apply painted-sun state;
     // recolour the sun-bloom emitter on a time move (matches the v5 order:
@@ -999,8 +1000,9 @@
       var wt = weatherTypeById(wtypeID) || (DATA.weather_effects || []).find(function (e) { return e.id === effID; });
       rest.textContent = ' · ' + skyLabel(VIEW.timeFrac) + ' · ' + seasonName() + ' · ' + (wt ? wt.name : 'Clear');
     }
-    // WAVE 2: repaint moon designs/phases for the displayed day.
+    // WAVE 2: repaint moon designs/phases for the displayed day + the mood wash.
     if (typeof applyMoonDesigns === 'function') applyMoonDesigns();
+    if (typeof applyMoodTint === 'function') applyMoodTint();
   }
   // Public day-change entry point → unified world-state (Wave 0 shim).
   // Preserves every caller (sky-band-ambient init, weather-override,
@@ -1222,6 +1224,52 @@
   window.__calMoonDesigns = MOON_DESIGNS;
   window.__calApplyMoonDesigns = applyMoonDesigns;
   window.__calMoonSim = { phaseIndex: moonPhaseIndex, namedPhase: moonNamedPhase, cyclePct: moonCyclePct, emojiCodes: EMOJI_PHASE_CODES, phaseClasses: MOON_PHASE_CLASS };
+
+  // ============================================================
+  // WAVE 2 — Player mood-tint wash (CATALOG Part 5; resolution step 6).
+  // ============================================================
+  // A global color wash tinting BOTH surfaces at once — the simplest proof of
+  // the shared-registry sync. Sky-band: a mix-blend 'overlay' div above
+  // weather+events (below the text label). Hourglass: a canvas 'overlay'
+  // composite over both chambers + sand (in HG_INTERIOR.draw). STATIC — no
+  // rAF; recomputed only on setWorldState, so reduced-motion-safe by
+  // construction (it still renders, just doesn't animate). Independent of
+  // weather/events; intensity 0 / no color = a fully transparent no-op.
+  var MOOD_PRESETS = {
+    'ominous-red': { color: 'oklch(0.55 0.22 25)', intensity: 0.45 },
+    'eerie-green': { color: 'oklch(0.70 0.20 150)', intensity: 0.40 },
+    'melancholy-blue': { color: 'oklch(0.55 0.16 250)', intensity: 0.42 },
+    'festive-gold': { color: 'oklch(0.85 0.16 85)', intensity: 0.40 },
+    'cursed-violet': { color: 'oklch(0.55 0.22 305)', intensity: 0.45 },
+    'holy-white': { color: 'oklch(0.97 0.02 95)', intensity: 0.40 },
+    'void-black': { color: 'oklch(0.15 0.02 280)', intensity: 0.50 },
+    'frostbite-cyan': { color: 'oklch(0.85 0.12 200)', intensity: 0.40 }
+  };
+  // Legibility cap (stop-and-flag: mood TINTS, never erases weather/events).
+  var MOOD_ALPHA_CAP = 0.8;
+  function moodWashAlpha(intensity) { return Math.max(0, Math.min(MOOD_ALPHA_CAP, intensity || 0)); }
+  function applyMoodTint() {
+    var mood = (worldState && worldState.moodTint) || { color: null, intensity: 0 };
+    var a = moodWashAlpha(mood.intensity), on = !!(mood.color && a > 0);
+    var sky = document.querySelector('[data-cal-sky]');
+    if (sky) {
+      var wash = sky.querySelector('[data-cal-mood-wash]');
+      if (!wash) {
+        wash = document.createElement('div');
+        wash.className = 'cal-almanac-sky__mood-wash';
+        wash.setAttribute('data-cal-mood-wash', '');
+        wash.setAttribute('aria-hidden', 'true');
+        var label = sky.querySelector('[data-cal-sky-overlay]');
+        if (label) sky.insertBefore(wash, label); else sky.appendChild(wash);
+      }
+      wash.style.background = on ? mood.color : 'transparent';
+      wash.style.opacity = on ? a.toFixed(3) : '0';
+    }
+    // Hourglass interior composites the same wash on its next frame.
+    if (typeof HG_INTERIOR !== 'undefined' && HG_INTERIOR.setMood) HG_INTERIOR.setMood(on ? mood.color : null, a);
+  }
+  window.__calApplyMoodTint = applyMoodTint;
+  window.__calMoodPresets = MOOD_PRESETS;
 
   function clockStr(t) {
     var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
@@ -1772,11 +1820,25 @@
       ctx.globalAlpha = 0.95;
       for (var k = 0; k < stream.length; k++) { var s2 = stream[k]; ctx.beginPath(); ctx.arc(s2.x * sx, s2.y * sy, s2.r * sx, 0, 6.283); ctx.fill(); }
       ctx.globalAlpha = 1;
+      // WAVE 2 — mood-tint composite (resolution step 6): washes BOTH chambers
+      // + the sand via an 'overlay' blend (screen-on-light / multiply-on-dark),
+      // clipped to the glass interior. Composes ONTO the already-drawn sand —
+      // never clobbers the weather/event sand color.
+      if (_moodColor && _moodA > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'overlay';
+        ctx.globalAlpha = _moodA;
+        ctx.fillStyle = _moodColor;
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+      }
     }
+    var _moodColor = null, _moodA = 0;
+    function setMood(color, alpha) { _moodColor = color || null; _moodA = alpha || 0; }
     // Engine frame hook: step the sim when time advances (dt>0); always draw
     // (dt=0 = the reduced-motion static frame).
     function frame(ctx, w, h, dt) { if (dt > 0) { _t += dt; stepSim(dt); } draw(ctx, w, h); }
-    return { frame: frame, setSandColor: setSandColor, reset: reset };
+    return { frame: frame, setSandColor: setSandColor, setMood: setMood, reset: reset };
   })();
 
   registerInitBlock('hourglass-render', function () {
@@ -2551,6 +2613,25 @@
         tint: null, size: 0.7 + Math.random() * 0.5, orbitSpeed: 0.6 + Math.random() * 0.8, orbitOffset: Math.random(),
         phase: null, namedPhase: null, cyclePct: null, namedPhases: [] });
       setWorldState({ moons: ms }); say('moons=' + ms.length);
+    });
+
+    // WAVE 2 mood-tint controls. Preset buttons set {color,intensity}; the
+    // custom picker / intensity slider override; clear sets intensity → 0.
+    function curMoodIntensity() { var m = worldState && worldState.moodTint; return (m && m.intensity) || 0.4; }
+    panel.querySelectorAll('[data-cal-democtl-mood-preset]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-mood'), p = MOOD_PRESETS[id];
+        if (p) { setWorldState({ moodTint: { color: p.color, intensity: p.intensity } }); say('mood=' + id); }
+      });
+    });
+    bind('[data-cal-democtl-mood-color]', function (v) {
+      setWorldState({ moodTint: { color: v, intensity: curMoodIntensity() } }); say('mood color=' + v);
+    });
+    bind('[data-cal-democtl-mood-intensity]', function (v) {
+      setWorldState({ moodTint: { intensity: Math.max(0, Math.min(1, v / 100)) } }); say('mood intensity=' + v + '%');
+    });
+    onClick('[data-cal-democtl-mood-clear]', function () {
+      setWorldState({ moodTint: { intensity: 0 } }); say('mood cleared');
     });
     say('ready · cap ' + (window.CalParticleEngine ? CalParticleEngine.cap() : '?'));
   });
