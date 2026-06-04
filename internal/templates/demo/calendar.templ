@@ -255,7 +255,13 @@ templ calAlmanacTimepiece(d CalAlmanacMockData) {
 		// The hourglass stands above the shelf, centered.
 		<div class="cal-almanac-shelf__stage">
 			<div class="cal-almanac-hourglass__frame" data-cal-hourglass-frame aria-label="Hourglass">
-				// SVG glass detailing: engraved rim + reflection + chambers.
+				// WAVE 1: canvas interior FIRST (below the glass shell) — the
+				// engine frame hook renders the day/night sky + heightmap sand
+				// here, clipped to the glass silhouette in JS.
+				<canvas class="cal-almanac-hourglass__canvas" data-cal-hourglass-canvas aria-hidden="true"></canvas>
+				// SVG glass shell ON TOP: engraved outline + rim + reflection.
+				// (The v4 SVG sand-fill rects are superseded by the canvas
+				// heightmap; the chamber clip-paths moved to the JS surface clip.)
 				<svg class="cal-almanac-hourglass__svg" viewBox="0 0 60 110" aria-hidden="true">
 					<defs>
 						<linearGradient id="calHgGlass" x1="0" y1="0" x2="1" y2="0">
@@ -263,24 +269,12 @@ templ calAlmanacTimepiece(d CalAlmanacMockData) {
 							<stop offset="0.5" stop-color="oklch(1 0 0)" stop-opacity="0.02"></stop>
 							<stop offset="1" stop-color="oklch(1 0 0)" stop-opacity="0.14"></stop>
 						</linearGradient>
-						<clipPath id="calHgTop"><path d="M6 8 H54 L33 53 H27 Z"></path></clipPath>
-						<clipPath id="calHgBot"><path d="M27 57 H33 L54 102 H6 Z"></path></clipPath>
 					</defs>
-					// Chamber sand fills (clipped); JS sets --fill via the rects' transform.
-					<g clip-path="url(#calHgTop)">
-						<rect class="cal-almanac-hourglass__sand" data-cal-hourglass-fill="top" x="0" y="8" width="60" height="45" style="--fill:0.62"></rect>
-					</g>
-					<g clip-path="url(#calHgBot)">
-						<rect class="cal-almanac-hourglass__sand" data-cal-hourglass-fill="bot" x="0" y="57" width="60" height="45" style="--fill:0.38"></rect>
-					</g>
-					// Engraved glass outline + rim highlights.
 					<path class="cal-almanac-hourglass__outline" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z"></path>
 					<rect class="cal-almanac-hourglass__rim" x="3" y="4" width="54" height="5" rx="2"></rect>
 					<rect class="cal-almanac-hourglass__rim" x="3" y="101" width="54" height="5" rx="2"></rect>
 					<path class="cal-almanac-hourglass__reflect" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z" fill="url(#calHgGlass)"></path>
 				</svg>
-				// Canvas clipped to the glass interior — the visible falling stream.
-				<canvas class="cal-almanac-hourglass__canvas" data-cal-hourglass-canvas aria-hidden="true"></canvas>
 				<span class="cal-almanac-hourglass__sparkle" data-cal-hourglass-sparkle aria-hidden="true"></span>
 			</div>
 		</div>

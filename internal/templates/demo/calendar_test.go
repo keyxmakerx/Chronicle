@@ -474,8 +474,6 @@ func TestCalAlmanac_HourglassRenders(t *testing.T) {
 	for _, h := range []string{
 		"cal-almanac-hourglass__frame",
 		"cal-almanac-hourglass__svg",
-		`data-cal-hourglass-fill="top"`,
-		`data-cal-hourglass-fill="bot"`,
 		"data-cal-hourglass-theme",
 		"data-cal-hourglass-flipped",
 		"data-cal-hourglass-canvas",
@@ -796,12 +794,12 @@ func TestCalAlmanac_TimepieceShelfMarkup(t *testing.T) {
 	}
 }
 
-// TestCalAlmanac_HourglassInternals — grain-texture (SVG sand) + the
-// in-glass falling-stream canvas are present (replaces "just a shape").
+// TestCalAlmanac_HourglassInternals — the glass shell (outline/rim/reflect) +
+// the in-glass interior canvas are present; WAVE 1 drives the interior
+// (heightmap sand + day/night) via the engine's per-surface frame hook.
 func TestCalAlmanac_HourglassInternals(t *testing.T) {
 	html := renderAlmanac(t)
 	for _, h := range []string{
-		"cal-almanac-hourglass__sand",
 		"cal-almanac-hourglass__outline",
 		"cal-almanac-hourglass__rim",
 		"cal-almanac-hourglass__reflect",
@@ -816,7 +814,7 @@ func TestCalAlmanac_HourglassInternals(t *testing.T) {
 		t.Errorf("hourglass-internals init block missing")
 	}
 	if !strings.Contains(js, "feedHourglassStream") || !strings.Contains(js, "GLASS_SURFACE") {
-		t.Errorf("in-glass canvas stream wiring missing")
+		t.Errorf("in-glass canvas wiring missing")
 	}
 }
 

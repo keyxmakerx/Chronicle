@@ -211,7 +211,7 @@
     function createSurface(canvas, opts) {
       opts = opts || {};
       var ctx = canvas.getContext('2d');
-      var s = { canvas: canvas, ctx: ctx, w: 0, h: 0, dpr: 1, emitters: [], particles: [], pool: [], visible: true, clip: opts.clip || null, spawnAcc: {} };
+      var s = { canvas: canvas, ctx: ctx, w: 0, h: 0, dpr: 1, emitters: [], particles: [], pool: [], visible: true, clip: opts.clip || null, spawnAcc: {}, frame: opts.frame || null, frameT: 0 };
       resize(s);
       surfaces.push(s);
       // Pause when the surface scrolls offscreen.
@@ -230,6 +230,12 @@
         clear: function () { s.emitters = []; },
         resize: function () { resize(s); },
         staticFrame: function () { drawStaticFrame(s); },
+        // WAVE 1: a per-surface frame hook drawn UNDER the particles on the
+        // one shared rAF (used by the hourglass interior: heightmap sand +
+        // day/night sky). Minimal addition — no scene-graph. A surface with a
+        // frame keeps the loop alive even with zero particles; reduced-motion
+        // draws it once via drawStaticFrame (dt=0 → the hook draws, doesn't step).
+        setFrame: function (fn) { s.frame = fn || null; sync(); },
         destroy: function () { destroy(s); }
       };
     }
@@ -306,6 +312,8 @@
         var ctx = s.ctx;
         ctx.clearRect(0, 0, s.w, s.h);
         if (s.clip) { ctx.save(); s.clip(ctx, s.w, s.h); }
+        // WAVE 1 frame hook — interior render (heightmap/day-night) UNDER particles.
+        if (s.frame) { s.frameT += dt; try { s.frame(ctx, s.w, s.h, dt, s.frameT); } catch (e) { try { console.error('[cal-almanac] frame', e); } catch (e2) {} } }
         // Emit.
         for (var ei = 0; ei < s.emitters.length; ei++) {
           var em = s.emitters[ei], spec = em.spec;
@@ -330,11 +338,12 @@
         }
         if (s.clip) ctx.restore();
       }
-      if (liveCount() > 0 || hasEmitters()) rafId = requestAnimationFrame(step);
+      if (liveCount() > 0 || hasEmitters() || hasFrames()) rafId = requestAnimationFrame(step);
       else { running = false; rafId = null; }
     }
 
     function hasEmitters() { for (var i = 0; i < surfaces.length; i++) if (surfaces[i].emitters.length) return true; return false; }
+    function hasFrames() { for (var i = 0; i < surfaces.length; i++) if (surfaces[i].frame) return true; return false; }
 
     function drawParticle(ctx, p) {
       ctx.globalAlpha = p.alpha;
@@ -369,6 +378,8 @@
       var ctx = s.ctx;
       ctx.clearRect(0, 0, s.w, s.h);
       if (s.clip) { ctx.save(); s.clip(ctx, s.w, s.h); }
+      // WAVE 1: one static interior frame (dt=0 → the hook draws without stepping).
+      if (s.frame) { try { s.frame(ctx, s.w, s.h, 0, s.frameT); } catch (e) {} }
       s.emitters.forEach(function (em) {
         var spec = em.spec, n = Math.min(spec.maxAlive || 6, 8);
         for (var i = 0; i < n; i++) {
@@ -388,7 +399,7 @@
 
     function sync() {
       if (reducedNow()) { surfaces.forEach(drawStaticFrame); return; }
-      if (!running && hasEmitters() && anyVisible()) { running = true; lastTs = 0; rafId = requestAnimationFrame(step); }
+      if (!running && (hasEmitters() || hasFrames()) && anyVisible()) { running = true; lastTs = 0; rafId = requestAnimationFrame(step); }
     }
     function anyVisible() { for (var i = 0; i < surfaces.length; i++) if (surfaces[i].visible) return true; return false; }
 
@@ -1225,23 +1236,20 @@
     return { id: effID, kind: 'weather' };
   }
 
-  // V4: the in-glass falling stream is a canvas surface (clipped to the
-  // glass interior), driven by the shared engine. This handle is created
-  // in the hourglass-internals block.
+  // The in-glass interior is a canvas surface (clipped to the glass silhouette)
+  // driven by the shared engine's frame hook (WAVE 1). The handle is created
+  // in the hourglass-internals block. The sand grains + pile are owned by
+  // HG_INTERIOR (heightmap sim), not engine emitters — so feedHourglassStream
+  // now just syncs the themed sand COLOUR into the sim.
   var GLASS_SURFACE = null;
   function feedHourglassStream() {
-    if (!GLASS_SURFACE) return;
     var hg = document.querySelector('[data-cal-time]');
     var stream = 'oklch(0.86 0.16 80)';
     if (hg) {
       var v = getComputedStyle(hg).getPropertyValue('--sand-stream');
       if (v && v.trim()) stream = v.trim();
     }
-    // ~8-15 grains, slow, slight scatter, spawned at the neck.
-    GLASS_SURFACE.setEmitters([{
-      shape: 'grain', color: stream, sizeRange: [1, 2], spawn: 'stream', streamTop: 0.42,
-      velocity: { x: [-6, 6], y: [38, 64] }, spawnRate: 9, maxAlive: 13
-    }]);
+    HG_INTERIOR.setSandColor(stream);
   }
 
   function applySandTheme(m, day) {
@@ -1315,6 +1323,132 @@
     setTimeout(function () { hg.removeAttribute('data-cal-hourglass-flipping'); }, 1500);
   }
 
+  // ============================================================
+  // WAVE 1 — Hourglass interior sim (heightmap sand + day/night).
+  // ============================================================
+  // Ported from prototypes/hourglass-meteor-daynight-mockup.html into the
+  // production 60×110 triangular geometry. Runs on the engine's per-surface
+  // frame hook (one shared rAF; reduced-motion → one static frame). The
+  // BOTTOM chamber renders the current half-day sky from worldState.timeOfDay
+  // (sun arcs + sets behind the sand horizon, stars emerge); the live pile is
+  // a slope-limited column-height heightmap fed by the neck stream. The v4
+  // dawn/dusk FLIP (applyHourglassFlip) is preserved + orthogonal — the glass
+  // shell still rotates 180° at the boundary; the canvas counter-rotates (CSS)
+  // so the sand always obeys gravity and the sky stays upright.
+
+  // --- pure heightmap + sky math (unit-tested in test/js/hourglass.test.mjs) ---
+  // Slope-limited avalanche: any column-pair steeper than the angle-of-repose
+  // slope sheds half the excess to its lower neighbour. A few passes/frame.
+  function hgAvalanche(bh, repose, iters) {
+    var n = bh.length;
+    for (var it = 0; it < iters; it++) {
+      for (var i = 0; i < n - 1; i++) {
+        var d = bh[i] - bh[i + 1];
+        if (d > repose) { var mv = (d - repose) * 0.5; bh[i] -= mv; bh[i + 1] += mv; }
+        else if (-d > repose) { var mv2 = (-d - repose) * 0.5; bh[i + 1] -= mv2; bh[i] += mv2; }
+      }
+    }
+    return bh;
+  }
+  function hgHex(h) { h = h.replace('#', ''); return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)]; }
+  function hgMix(a, b, t) { var A = hgHex(a), B = hgHex(b); return 'rgb(' + Math.round(A[0] + (B[0] - A[0]) * t) + ',' + Math.round(A[1] + (B[1] - A[1]) * t) + ',' + Math.round(A[2] + (B[2] - A[2]) * t) + ')'; }
+  // Day→night sky keyframes keyed by timeOfDay (0..1) → [topColor, botColor].
+  var HG_SKY = [
+    [0.00, '#04060f', '#0a0c1c'], [0.20, '#0a0f28', '#1a1a3a'], [0.28, '#5a86c0', '#e6a06a'],
+    [0.50, '#4a86c8', '#bfe0ff'], [0.70, '#5a86c0', '#e6895a'], [0.80, '#2a2350', '#7a4d6a'], [1.00, '#04060f', '#0a0c1c']
+  ];
+  function hgSkyForTimeOfDay(tod) {
+    if (tod < 0) tod = 0; if (tod > 1) tod = 1;
+    for (var i = 0; i < HG_SKY.length - 1; i++) {
+      if (tod >= HG_SKY[i][0] && tod <= HG_SKY[i + 1][0]) {
+        var span = (HG_SKY[i + 1][0] - HG_SKY[i][0]) || 1, t = (tod - HG_SKY[i][0]) / span;
+        return [hgMix(HG_SKY[i][1], HG_SKY[i + 1][1], t), hgMix(HG_SKY[i][2], HG_SKY[i + 1][2], t)];
+      }
+    }
+    var L = HG_SKY[HG_SKY.length - 1]; return [L[1], L[2]];
+  }
+  // Sun position within the bottom chamber for a timeOfDay: arcs left→right,
+  // rises then sinks toward the horizon, fades out near dawn/dusk. y is the
+  // normalized arc height (0 horizon → 1 zenith); not visible outside the day.
+  function hgSunPos(tod) {
+    var DAWN = 0.22, DUSK = 0.80;
+    if (tod <= DAWN || tod >= DUSK) return { visible: false, x: 0, y: 0, alpha: 0 };
+    var pp = (tod - DAWN) / (DUSK - DAWN);
+    var alpha = pp < 0.12 ? pp / 0.12 : (pp > 0.88 ? (1 - pp) / 0.12 : 1);
+    return { visible: true, x: pp, y: Math.sin(Math.PI * pp), alpha: Math.max(0, Math.min(1, alpha)) };
+  }
+  // Star fade-in (0 day → 1 deep night), used for twinkle alpha.
+  function hgStarFade(tod) {
+    if (tod < 0.22 || tod > 0.80) return 1;
+    if (tod < 0.30) return Math.max(0, (0.30 - tod) / 0.08);
+    if (tod > 0.72) return Math.max(0, (tod - 0.72) / 0.08);
+    return 0;
+  }
+  window.__calHgSim = { avalanche: hgAvalanche, sky: hgSkyForTimeOfDay, sun: hgSunPos, starFade: hgStarFade };
+
+  // Stateful bottom-chamber interior. Geometry in viewBox 60×110 coords:
+  // bottom chamber triangle (6,102)-(54,102)-(33,57)-(27,57); neck ~ y55.
+  var HG_INTERIOR = (function () {
+    var BCOLS = 48, V_BX0 = 6, V_BW = 48, V_FLOOR = 102, V_CEIL = 57, V_NECK = 55;
+    var bcwV = V_BW / BCOLS, reposeV = bcwV * 0.9, CHAMBER = V_FLOOR - V_CEIL;
+    var bh = new Float32Array(BCOLS), stream = [], _t = 0;
+    var sandColor = 'oklch(0.86 0.16 80)';
+    function setSandColor(c) { if (c && String(c).trim()) sandColor = String(c).trim(); }
+    function reset() { for (var i = 0; i < BCOLS; i++) bh[i] = 0; stream.length = 0; }
+    function stepSim(dt) {
+      var f = Math.min(3, dt / 0.016);            // normalize to ~60fps sim rate
+      if (stream.length < 18) stream.push({ x: 30 + (Math.random() - 0.5) * 2.2, y: V_NECK, vy: 0.7 + Math.random() * 0.4, vx: (Math.random() - 0.5) * 0.12, r: 0.5 + Math.random() * 0.8 });
+      for (var n = stream.length - 1; n >= 0; n--) {
+        var s = stream[n]; s.vy += 0.02 * f; s.y += s.vy * f; s.x += s.vx * f;
+        if (s.y >= V_CEIL) {
+          var col = Math.floor((s.x - V_BX0) / bcwV); if (col < 0) col = 0; if (col > BCOLS - 1) col = BCOLS - 1;
+          if (s.y >= V_FLOOR - bh[col]) { bh[col] += bcwV * 0.5; stream.splice(n, 1); continue; }
+        }
+        if (s.y > V_FLOOR + 2) stream.splice(n, 1);
+      }
+      hgAvalanche(bh, reposeV, 3);
+      var mx = 0; for (var j = 0; j < BCOLS; j++) if (bh[j] > mx) mx = bh[j];
+      if (mx > CHAMBER) reset();                  // chamber full → cadence reset (flip owns the real boundary)
+    }
+    function draw(ctx, w, h) {
+      var sx = w / 60, sy = h / 110;
+      var tod = (worldState && typeof worldState.timeOfDay === 'number') ? worldState.timeOfDay : 0.5;
+      var sky = hgSkyForTimeOfDay(tod), y0 = V_CEIL * sy, y1 = V_FLOOR * sy;
+      var g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, sky[0]); g.addColorStop(1, sky[1]);
+      ctx.fillStyle = g; ctx.fillRect(V_BX0 * sx, y0, V_BW * sx, y1 - y0);
+      var dark = hgStarFade(tod);
+      if (dark > 0.02) {
+        ctx.fillStyle = '#fff';
+        for (var i = 0; i < 14; i++) {
+          var stx = (V_BX0 + (i * 37 % V_BW)) * sx, sty = (V_CEIL + 2 + (i * 53 % (CHAMBER - 6))) * sy, tw = 0.5 + 0.5 * Math.sin(_t * 2 + i);
+          ctx.globalAlpha = dark * tw * 0.9; ctx.beginPath(); ctx.arc(stx, sty, 0.7 * sx, 0, 6.283); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      var sun = hgSunPos(tod);
+      if (sun.visible) {
+        var cx = (V_BX0 + sun.x * V_BW) * sx, arcTop = (V_CEIL + 6) * sy, arcBot = (V_FLOOR - 4) * sy, cy = arcBot - (arcBot - arcTop) * sun.y;
+        ctx.globalAlpha = sun.alpha;
+        var rg = ctx.createRadialGradient(cx, cy, 1, cx, cy, 9 * sx); rg.addColorStop(0, 'rgba(255,240,200,.9)'); rg.addColorStop(1, 'rgba(255,200,120,0)');
+        ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(cx, cy, 9 * sx, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#fff3cf'; ctx.beginPath(); ctx.arc(cx, cy, 3.2 * sx, 0, 6.283); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // pile (heightmap) — drawn AFTER the sun so the sun sinks behind it
+      ctx.beginPath(); ctx.moveTo(V_BX0 * sx, V_FLOOR * sy);
+      for (var c = 0; c < BCOLS; c++) ctx.lineTo((V_BX0 + c * bcwV + bcwV / 2) * sx, (V_FLOOR - bh[c]) * sy);
+      ctx.lineTo((V_BX0 + V_BW) * sx, V_FLOOR * sy); ctx.closePath();
+      ctx.fillStyle = sandColor; ctx.fill();
+      ctx.globalAlpha = 0.95;
+      for (var k = 0; k < stream.length; k++) { var s2 = stream[k]; ctx.beginPath(); ctx.arc(s2.x * sx, s2.y * sy, s2.r * sx, 0, 6.283); ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
+    // Engine frame hook: step the sim when time advances (dt>0); always draw
+    // (dt=0 = the reduced-motion static frame).
+    function frame(ctx, w, h, dt) { if (dt > 0) { _t += dt; stepSim(dt); } draw(ctx, w, h); }
+    return { frame: frame, setSandColor: setSandColor, reset: reset };
+  })();
+
   registerInitBlock('hourglass-render', function () {
     var widget = document.querySelector('[data-cal-time]');
     var handle = document.querySelector('[data-cal-time-drag]');
@@ -1367,6 +1501,10 @@
       ctx.clip();
     }
     GLASS_SURFACE = CalParticleEngine.createSurface(canvas, { clip: clip });
+    // WAVE 1: the interior (heightmap sand + day/night sky) renders via the
+    // engine's per-surface frame hook — one shared rAF, reduced-motion-gated.
+    GLASS_SURFACE.setFrame(function (ctx, w, h, dt) { HG_INTERIOR.frame(ctx, w, h, dt); });
+    feedHourglassStream();
     window.__calGlassEngine = GLASS_SURFACE;
     try {
       if ('ResizeObserver' in window) {
