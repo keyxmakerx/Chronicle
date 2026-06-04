@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Glass hourglass — POC v3 (sand + tilt + depth)</title>
+<style>
+  body { font-family:-apple-system,system-ui,sans-serif; background:#15171e; color:#e8e6e3; margin:0; padding:2rem; line-height:1.55; }
+  h1 { color:#f0d090; margin-top:0; }
+  .intro,.tech { max-width:760px; }
+  code { background:#2a2a2a; padding:1px 6px; border-radius:3px; font-size:.85em; }
+  .stage { display:flex; flex-wrap:wrap; gap:3rem; align-items:flex-end; margin:2.5rem 0; }
+  .piece { text-align:center; }
+  .piece .label { font-size:.8rem; opacity:.6; margin-top:.9rem; }
+  .backing { background:radial-gradient(circle at 50% 35%, #2c3550, #141824 78%); padding:34px 40px; border-radius:14px; display:inline-block; perspective:1000px; }
+  .hero { transform:scale(1.5); transform-origin:bottom center; margin:0 3rem 3rem; }
+  .hg { transform:rotateY(-11deg) rotateX(3deg); }
+  .tech { background:#21222b; border:1px solid #34363f; border-radius:6px; padding:1rem 1.2rem; font-size:.9rem; margin:1.5rem 0; }
+  .tech li { margin:.35rem 0; }
+  .src { opacity:.55; font-size:.85rem; margin-top:2rem; max-width:760px; }
+  @keyframes fall { 0%{transform:translateY(0);opacity:0;} 14%{opacity:1;} 86%{opacity:1;} 100%{transform:translateY(72px);opacity:0;} }
+  @keyframes impact { 0%,100%{transform:translateY(0) scale(1);opacity:0;} 50%{transform:translateY(-4px) scale(1.1);opacity:.8;} }
+  @keyframes shimmer { 0%,100%{opacity:.3;} 50%{opacity:.55;} }
+  .grain { animation:fall 1.8s linear infinite; }
+  .grain:nth-child(2){animation-delay:.5s;} .grain:nth-child(3){animation-delay:.95s;} .grain:nth-child(4){animation-delay:1.35s;}
+  .spark { animation:impact 1.2s ease-in-out infinite; }
+  .spark:nth-child(2){animation-delay:.4s;} .spark:nth-child(3){animation-delay:.8s;}
+  .streak { animation:shimmer 4.5s ease-in-out infinite; }
+  @media (prefers-reduced-motion:reduce){ .grain,.spark,.streak{animation:none;} }
+</style>
+</head>
+<body>
+<h1>Glass hourglass — POC v3</h1>
+<div class="intro"><p>Top-bulb gloss toned down, sand rebuilt (funnel surface + conical pile + 3D shading + grain), and a gentle tilt with rounded-volume shading so it reads as a real object on a shelf.</p></div>
+
+<div class="stage">
+  <div class="piece hero">
+    <div class="backing">
+      <svg class="hg" width="200" height="300" viewBox="0 0 220 320" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="woodTex" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.85 0.018" numOctaves="4" seed="11" result="n"/>
+            <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.16  0 0 0 0 0.085  0 0 0 0 0.03  0 0 0 0.8 0"/>
+          </filter>
+          <filter id="woodBevel" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2.2" result="b"/>
+            <feDiffuseLighting in="b" surfaceScale="3.5" diffuseConstant="1" lighting-color="#caa46a" result="d"><feDistantLight azimuth="235" elevation="60"/></feDiffuseLighting>
+            <feComposite in="d" in2="SourceAlpha" operator="in" result="dc"/>
+            <feBlend in="SourceGraphic" in2="dc" mode="multiply"/>
+          </filter>
+          <!-- toned-down glass gloss: tighter hotspot, weaker -->
+          <filter id="glassSpec" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+            <feSpecularLighting in="b" surfaceScale="5" specularConstant="0.7" specularExponent="30" lighting-color="#ffffff" result="s"><fePointLight x="55" y="40" z="150"/></feSpecularLighting>
+            <feComposite in="s" in2="SourceAlpha" operator="in"/>
+          </filter>
+          <!-- 3D shading for the sand mound/funnel -->
+          <filter id="sandShade" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2.4" result="b"/>
+            <feDiffuseLighting in="b" surfaceScale="4.5" diffuseConstant="1.05" lighting-color="#fff6df" result="d"><feDistantLight azimuth="235" elevation="58"/></feDiffuseLighting>
+            <feComposite in="d" in2="SourceAlpha" operator="in" result="dc"/>
+            <feBlend in="SourceGraphic" in2="dc" mode="multiply"/>
+          </filter>
+          <filter id="sandTex" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="3" result="n"/>
+            <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.32  0 0 0 0 0.2  0 0 0 0 0.04  0 0 0 0.6 0"/>
+          </filter>
+
+          <linearGradient id="wood" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2e1c0c"/><stop offset=".42" stop-color="#7a4f25"/><stop offset=".6" stop-color="#5b3819"/><stop offset="1" stop-color="#241509"/></linearGradient>
+          <linearGradient id="woodTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6b451f"/><stop offset=".5" stop-color="#9a6a35"/><stop offset="1" stop-color="#5b3819"/></linearGradient>
+          <linearGradient id="glassFill" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#cfe6ff" stop-opacity=".05"/><stop offset=".5" stop-color="#eaf4ff" stop-opacity=".15"/><stop offset="1" stop-color="#cfe6ff" stop-opacity=".05"/></linearGradient>
+          <!-- cylindrical volume: dark dense edges, clear center -->
+          <linearGradient id="cyl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0a1626" stop-opacity=".5"/><stop offset=".2" stop-color="#0a1626" stop-opacity="0"/><stop offset=".8" stop-color="#0a1626" stop-opacity="0"/><stop offset="1" stop-color="#0a1626" stop-opacity=".55"/></linearGradient>
+          <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0"><stop offset=".38" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".22"/><stop offset=".62" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <linearGradient id="glassHi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".6"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <radialGradient id="refl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".4"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+          <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5ecd5"/><stop offset="1" stop-color="#c9ba93"/></linearGradient>
+          <radialGradient id="pile" cx=".5" cy=".15" r=".95"><stop offset="0" stop-color="#f8f1dd"/><stop offset="1" stop-color="#bca982"/></radialGradient>
+
+          <clipPath id="topBulb"><path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z"/></clipPath>
+          <clipPath id="lowerBulb"><path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z"/></clipPath>
+          <clipPath id="frameClip">
+            <rect x="18" y="14" width="184" height="22" rx="7"/><rect x="18" y="286" width="184" height="22" rx="7"/>
+            <rect x="28" y="32" width="9" height="258" rx="3"/><rect x="183" y="32" width="9" height="258" rx="3"/>
+            <rect x="92" y="152" width="36" height="13" rx="3.5"/>
+          </clipPath>
+          <clipPath id="sandClip">
+            <path d="M56,78 Q110,102 164,78 C152,116 124,150 110,156 C96,150 68,116 56,78 Z"/>
+            <path d="M52,284 C70,256 96,238 110,232 C124,238 150,256 168,284 Z"/>
+            <rect x="108" y="156" width="4" height="78"/>
+          </clipPath>
+        </defs>
+
+        <ellipse cx="110" cy="307" rx="82" ry="7" fill="#000" opacity=".4"/>
+
+        <!-- FRAME -->
+        <g filter="url(#woodBevel)">
+          <g clip-path="url(#frameClip)">
+            <rect x="0" y="0" width="220" height="320" fill="url(#wood)"/>
+            <rect x="0" y="0" width="220" height="320" filter="url(#woodTex)" opacity=".85"/>
+          </g>
+        </g>
+        <!-- 3D turned-wood cap tops (elliptical faces, sell the tilt) -->
+        <ellipse cx="110" cy="15" rx="92" ry="7.5" fill="url(#woodTop)"/>
+        <ellipse cx="110" cy="287" rx="92" ry="6.5" fill="url(#woodTop)" opacity=".75"/>
+
+        <!-- GLASS base + cylindrical edge shading -->
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="url(#glassFill)"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="url(#glassFill)"/>
+        <g clip-path="url(#topBulb)"><rect x="40" y="36" width="140" height="124" fill="url(#cyl)"/></g>
+        <g clip-path="url(#lowerBulb)"><rect x="40" y="160" width="140" height="124" fill="url(#cyl)"/></g>
+
+        <!-- SAND: funnel top + conical pile, 3D-shaded, grain-textured -->
+        <g filter="url(#sandShade)">
+          <path d="M56,78 Q110,102 164,78 C152,116 124,150 110,156 C96,150 68,116 56,78 Z" fill="url(#sand)"/>
+          <path d="M52,284 C70,256 96,238 110,232 C124,238 150,256 168,284 Z" fill="url(#pile)"/>
+        </g>
+        <rect x="108" y="156" width="4" height="78" fill="url(#sand)" opacity=".9"/>
+        <!-- grain speckle clipped to sand -->
+        <g clip-path="url(#sandClip)"><rect x="0" y="0" width="220" height="320" filter="url(#sandTex)" opacity=".6"/></g>
+        <!-- animated falling grains, land on the pile apex -->
+        <g clip-path="url(#lowerBulb)">
+          <circle class="grain" cx="110" cy="160" r="2.2" fill="#efe3c4"/><circle class="grain" cx="109" cy="160" r="1.8" fill="#ddcfa6"/>
+          <circle class="grain" cx="111" cy="160" r="2" fill="#f3ead2"/><circle class="grain" cx="110" cy="160" r="1.6" fill="#cdbf99"/>
+          <!-- impact spray at the pile apex -->
+          <circle class="spark" cx="104" cy="232" r="1.5" fill="#f3ead2"/><circle class="spark" cx="116" cy="232" r="1.4" fill="#e7d8b0"/><circle class="spark" cx="110" cy="230" r="1.3" fill="#fff4dc"/>
+        </g>
+
+        <!-- GLASS GLOSS (toned down, esp. top) -->
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="#fff" filter="url(#glassSpec)" opacity=".4" style="mix-blend-mode:screen"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="#fff" filter="url(#glassSpec)" opacity=".6" style="mix-blend-mode:screen"/>
+
+        <!-- central curved sheen + edge streaks + reflection -->
+        <g clip-path="url(#topBulb)"><rect x="40" y="36" width="140" height="124" fill="url(#sheen)"/></g>
+        <g clip-path="url(#lowerBulb)"><rect x="40" y="160" width="140" height="124" fill="url(#sheen)"/></g>
+        <ellipse class="streak" cx="74" cy="84" rx="4.5" ry="40" transform="rotate(-17 74 84)" fill="url(#glassHi)"/>
+        <ellipse class="streak" cx="150" cy="232" rx="4" ry="38" transform="rotate(16 150 232)" fill="url(#glassHi)"/>
+        <ellipse cx="68" cy="62" rx="8" ry="12" fill="url(#refl)"/>
+
+        <!-- rim -->
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.3"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.3"/>
+        <!-- neck collar on top -->
+        <rect x="92" y="152" width="36" height="13" rx="3.5" fill="url(#wood)" filter="url(#woodBevel)"/>
+      </svg>
+    </div>
+    <div class="label">Toned gloss · funnel + conical pile · 3D-shaded sand · tilt + rounded-volume shading</div>
+  </div>
+</div>
+
+<div class="tech">
+<strong>What changed in v3:</strong>
+<ul>
+<li><strong>Gloss</strong> — top bulb specular dropped to 0.4 opacity with a tighter hotspot (<code>specularExponent</code> 22→30, <code>specularConstant</code> 0.95→0.7). Bottom kept slightly stronger for grounding.</li>
+<li><strong>Sand</strong> — top surface is now a concave <em>funnel</em> (draining sand dips toward the neck); the bottom is a true <em>conical pile</em> with apex under the stream; both get <code>feDiffuseLighting</code> so they read as 3D volume; finer grain speckle; thinner stream; falling grains now land on the pile with a little impact spray.</li>
+<li><strong>Depth &amp; tilt</strong> — gentle <code>perspective + rotateY(-11deg)</code>, elliptical turned-wood cap tops, and a cylindrical edge-shading gradient on the glass (dark dense edges, clear center) so the bulbs read as rounded glass volumes rather than flat cutouts.</li>
+</ul>
+All filters are static (computed once, zero per-frame cost); only grains animate.
+</div>
+
+<div class="src">
+<em>Still can't pre-render here — if the tilt looks too strong, the sand shading too dark, or a filter washes out, tell me the specifics and I'll tune. Each piece (gloss / sand / tilt) is an independent knob.</em>
+</div>
+</body>
+</html>

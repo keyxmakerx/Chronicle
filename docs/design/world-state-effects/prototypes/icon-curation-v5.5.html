@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Almanac fidelity v5.5 — icon curation (fixed render)</title>
+<style>
+  body {
+    font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    background: #1a1a1a; color: #e8e6e3; margin: 0; padding: 2rem; line-height: 1.5;
+  }
+  h1 { color: #f0d090; margin-top: 0; }
+  h2 { color: #d0a060; border-bottom: 1px solid #444; padding-bottom: .4rem; margin-top: 2.5rem; }
+  .intro { max-width: 760px; opacity: .9; }
+  code { background: #2a2a2a; padding: 1px 6px; border-radius: 3px; font-size: .9em; }
+  .fix-note { background: #2a1f1f; border-left: 3px solid #d08060; padding: .8rem 1rem; border-radius: 4px; margin: 1rem 0; max-width: 760px; font-size: .9rem; }
+  .pick-instr { background: #1f2a1f; border-left: 3px solid #80c080; padding: 1rem; border-radius: 4px; margin: 1.5rem 0; max-width: 760px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; margin: 1.5rem 0; }
+  .card { background: #232323; border: 1px solid #3a3a3a; border-radius: 8px; padding: 1rem; }
+  .card h3 { margin: 0 0 .25rem; color: #e8c890; font-size: 1.05rem; }
+  .slug { font-family: monospace; font-size: .8rem; opacity: .65; word-break: break-all; }
+  .desc { font-size: .85rem; opacity: .8; margin: .5rem 0 0; }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: .9rem; }
+  .swatch {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; padding: 10px; isolation: isolate;
+    /* dark sky-band-like backing, the environment these actually live on */
+    background: radial-gradient(circle at 50% 38%, #2c3550, #141824 75%);
+  }
+  .swatch img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: screen; }
+  /* silhouette: luminous white icon, black box knocked out by screen blend */
+  .sw-shape img { filter: none; }
+  /* warm/gold mood */
+  .sw-warm  img { filter: sepia(1) saturate(7) brightness(1.18) hue-rotate(-12deg); }
+  /* eclipse/special crimson mood */
+  .sw-cool  img { filter: sepia(1) saturate(12) brightness(1.0) hue-rotate(-48deg); }
+  .caption { font-size: .72rem; opacity: .55; text-align: center; margin-top: 5px; }
+  a { color: #e8c890; }
+</style>
+</head>
+<body>
+
+<h1>Almanac fidelity v5.5 — icon curation</h1>
+
+<div class="fix-note">
+<strong>Render fixed.</strong> Last version showed solid squares — my filter bug, not yours. The game-icons SVGs are a white icon on an opaque black square, and my old filter flattened the whole thing. Now using <code>mix-blend-mode: screen</code> to drop the black box, on a dark sky-gradient backing (the real environment these live on). You should now see actual icons.
+</div>
+
+<div class="intro">
+<p>Candidate base icons from <a href="https://game-icons.net" target="_blank">game-icons.net</a> (CC-BY 3.0, one line in <code>CREDITS.md</code> covers all). Each shown three ways: <strong>silhouette</strong> (luminous white, the default sky-band look), <strong>warm</strong> (gold-tinted day mood), <strong>crimson</strong> (eclipse / blood-moon mood). Tints are CSS filters — the real build recolors per state the same way, and adds animated rays / glow / sparkle particles on top.</p>
+</div>
+
+<div class="pick-instr">
+<strong>What I need:</strong> pick ONE sun + ONE hourglass. Reply with slugs — e.g. <em>"sun: <code>sun-radiations</code>, hourglass: <code>hourglass</code>"</em>. If none land, tell me the direction that's off (too geometric / cartoony / simple / busy) and I'll pull a second round.
+</div>
+
+<h2>Sun candidates</h2>
+<div class="grid">
+
+  <div class="card">
+    <h3>sun</h3><div class="slug">lorc/sun.svg</div>
+    <p class="desc">Stylized geometric sun, woodcut-fantasy, interlocking radiating pattern.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sun.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sun.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sun.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+  <div class="card">
+    <h3>sunbeams</h3><div class="slug">lorc/sunbeams.svg</div>
+    <p class="desc">Sun with radiating beams — classic radiant silhouette.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sunbeams.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sunbeams.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sunbeams.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+  <div class="card">
+    <h3>sun-radiations</h3><div class="slug">lorc/sun-radiations.svg</div>
+    <p class="desc">Sun emitting radiations — often the most radiant of the Lorc set.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sun-radiations.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sun-radiations.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sun-radiations.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+  <div class="card">
+    <h3>explosion-rays</h3><div class="slug">lorc/explosion-rays.svg</div>
+    <p class="desc">Radiating burst — could read as solar flare / corona.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/explosion-rays.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/explosion-rays.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/explosion-rays.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+  <div class="card">
+    <h3>sunrise</h3><div class="slug">lorc/sunrise.svg</div>
+    <p class="desc">Sunrise variant — possible dedicated dawn-state alt.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sunrise.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sunrise.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sunrise.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+  <div class="card">
+    <h3>sun-priest <em>(Delapouite)</em></h3><div class="slug">delapouite/sun-priest.svg</div>
+    <p class="desc">Ornate ceremonial sun — more elaborate detailing.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/delapouite/sun-priest.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/delapouite/sun-priest.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/delapouite/sun-priest.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+  <div class="card">
+    <h3>aztec-calendar-sun <em>(Delapouite)</em></h3><div class="slug">delapouite/aztec-calendar-sun.svg</div>
+    <p class="desc">Aztec calendar sun — ornate, high-detail, specific cultural read.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/delapouite/aztec-calendar-sun.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/delapouite/aztec-calendar-sun.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/delapouite/aztec-calendar-sun.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+  <div class="card">
+    <h3>sundial</h3><div class="slug">lorc/sundial.svg</div>
+    <p class="desc">Sundial — instrument-of-time read rather than celestial body. Long shot.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sundial.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sundial.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sundial.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+</div>
+
+<h2>Eclipse (state-specific, regardless of sun pick)</h2>
+<div class="grid">
+  <div class="card">
+    <h3>eclipse</h3><div class="slug">lorc/eclipse.svg</div>
+    <p class="desc">Native eclipse silhouette. The sun icon swaps to this only when a solar eclipse is active; the other 4 states use your chosen sun recolored.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/eclipse.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/eclipse.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/eclipse.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+</div>
+
+<h2>Hourglass candidates</h2>
+<div class="grid">
+
+  <div class="card">
+    <h3>hourglass</h3><div class="slug">lorc/hourglass.svg</div>
+    <p class="desc">Ornate frame (top + bottom bars) with visible sand wedges. Best form + detail balance.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/hourglass.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/hourglass.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/hourglass.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+  <div class="card">
+    <h3>sands-of-time</h3><div class="slug">lorc/sands-of-time.svg</div>
+    <p class="desc">Alternate hourglass — typically more atmospheric, less frame-heavy.</p>
+    <div class="row">
+      <div class="swatch sw-shape"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sands-of-time.svg" alt=""></div>
+      <div class="swatch sw-warm"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sands-of-time.svg" alt=""></div>
+      <div class="swatch sw-cool"><img src="https://cdn.jsdelivr.net/gh/game-icons/icons@master/lorc/sands-of-time.svg" alt=""></div>
+    </div>
+    <div class="caption">silhouette · warm · crimson</div>
+  </div>
+
+</div>
+
+<p style="opacity:.55; font-size:.85rem; margin-top:3rem;">
+Icons © their artists, CC-BY 3.0 — <a href="https://github.com/game-icons/icons" target="_blank">github.com/game-icons/icons</a>, mirrored via <a href="https://www.jsdelivr.com/" target="_blank">jsDelivr</a>. If any icon still doesn't render, your browser may be blocking the CDN — tell me and I'll inline the SVG source directly instead.
+</p>
+
+</body>
+</html>
