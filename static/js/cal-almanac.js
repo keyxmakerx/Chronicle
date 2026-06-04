@@ -1,8 +1,20 @@
-// cal-almanac.js — C-CAL-SHOWCASE-DESIGN-1-ALMANAC + REFINEMENT-V2.
+// cal-almanac.js — C-CAL-SHOWCASE-DESIGN-1-ALMANAC + REFINEMENT-V2..V5 +
+// WORLD-STATE WAVE 0.
 //
 // Per-interaction INIT_BLOCKS, each wrapped in its own try/catch so one
 // failing handler can't kill the rest. Mock data is read from the inline
 // JSON the templ emits; nothing here talks to a backend.
+//
+// WAVE 0 modules (synced world-state spine):
+//   world-state            — the single `worldState` object (CATALOG Part 8)
+//     + setWorldState(patch) pub/sub front door (changedKeys-gated notify)
+//   world-state-subscribers — sky-band + hourglass both subscribe; one
+//     setWorldState() call re-renders BOTH in back→front layer order
+//   unified-effects        — ONE EFFECTS registry (per-surface renderers
+//     skyBand/hgTop/hgBottom/hgSand/timeline); WEATHER_EFFECTS +
+//     CELESTIAL_EFFECTS are now thin projections over it (additive)
+//   applyTime / renderSkyForDay are thin shims into setWorldState, so every
+//     existing entry point (drag, tick, day-nav, override, demo) is preserved
 //
 // REFINEMENT-V2 modules:
 //   weather-registry / celestial-registry — WEATHER_EFFECTS +
@@ -40,7 +52,108 @@
   var DATA = null;
   // The displayed day (operator can click around the grid). Defaults to
   // the calendar's current day. Time-of-day is a 0..1 fraction.
+  // VIEW is the legacy v3/v4/v5 mirror; Wave 0 makes `worldState` the single
+  // source of truth and keeps VIEW in lockstep so existing code that still
+  // reads VIEW (currentSunState, the render pipelines) sees the same values.
   var VIEW = { year: 0, month: 0, day: 0, timeFrac: 0.5 };
+
+  // ============================================================
+  // WAVE 0 — the shared world-state model + pub/sub (CATALOG Part 8).
+  // ============================================================
+  // ONE object drives BOTH surfaces (sky-band + hourglass). Change it once
+  // via setWorldState(patch) → every subscriber re-renders. This replaces
+  // the v3/v4/v5 implicit sync (which monkey-patch-wrapped applyTime +
+  // renderSkyForDay); those are now thin shims into setWorldState so every
+  // existing caller (drag-scrub, time-input, tick, day-nav,
+  // weather-override, demo-controls) is preserved verbatim.
+  var worldState = null;     // seeded from DATA/VIEW in the 'world-state' block
+  var WS_SUBS = [];          // ordered surface subscribers
+
+  function subscribeWorldState(fn) { if (typeof fn === 'function') WS_SUBS.push(fn); }
+
+  // Structural equality for the small one-level world-state values (numbers,
+  // strings, {…} param bags, and the moons[]/events[] arrays). Used to skip
+  // no-op patches so a subscriber never re-renders on an unchanged value.
+  function wsEqual(a, b) {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    var aArr = Array.isArray(a), bArr = Array.isArray(b);
+    if (aArr || bArr) {
+      if (!aArr || !bArr || a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i++) if (!wsEqual(a[i], b[i])) return false;
+      return true;
+    }
+    var ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    for (var j = 0; j < ka.length; j++) {
+      if (!Object.prototype.hasOwnProperty.call(b, ka[j])) return false;
+      if (!wsEqual(a[ka[j]], b[ka[j]])) return false;
+    }
+    return true;
+  }
+  // Field-merge a patch value onto the current value so a partial patch
+  // ({weather:{type:'rain'}}) keeps the untouched fields (intensity). Arrays
+  // and scalars replace wholesale; only plain objects merge.
+  function wsMerge(cur, patchVal) {
+    if (patchVal && typeof patchVal === 'object' && !Array.isArray(patchVal) &&
+        cur && typeof cur === 'object' && !Array.isArray(cur)) {
+      var merged = {}, k;
+      for (k in cur) if (Object.prototype.hasOwnProperty.call(cur, k)) merged[k] = cur[k];
+      for (k in patchVal) if (Object.prototype.hasOwnProperty.call(patchVal, k)) merged[k] = patchVal[k];
+      return merged;
+    }
+    return patchVal;
+  }
+  // THE front door. Shallow-merges patch into worldState and notifies
+  // subscribers with the list of keys that ACTUALLY changed. A no-op patch
+  // (same value) notifies nobody — keeps per-effect renders cold unless the
+  // state truly moved. Returns the changedKeys array (used by tests).
+  function setWorldState(patch) {
+    if (!worldState || !patch || typeof patch !== 'object') return [];
+    var changed = [];
+    for (var k in patch) {
+      if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
+      var next = wsMerge(worldState[k], patch[k]);
+      if (!wsEqual(worldState[k], next)) { worldState[k] = next; changed.push(k); }
+    }
+    if (!changed.length) return changed;
+    // Mirror into VIEW before notifying so currentSunState() and the render
+    // pipelines read one consistent truth.
+    if (worldState.date) { VIEW.year = worldState.date.year; VIEW.month = worldState.date.month; VIEW.day = worldState.date.day; }
+    if (typeof worldState.timeOfDay === 'number') VIEW.timeFrac = worldState.timeOfDay;
+    for (var i = 0; i < WS_SUBS.length; i++) {
+      try { WS_SUBS[i](worldState, changed); }
+      catch (e) { try { console.error('[cal-almanac] ws-subscriber', e); } catch (e2) {} }
+    }
+    return changed;
+  }
+  window.__calSetWorldState = setWorldState;
+  window.__calSubscribeWorldState = subscribeWorldState;
+
+  // The back→front render-resolution order (CATALOG Part 0). Both surfaces
+  // compose layers in this order; the subscriber registration order in
+  // 'world-state-subscribers' honours it. resolveLayers(state) returns the
+  // layers currently ACTIVE for a state — used by tests now and by later
+  // waves to drive layer painting; some layers are structural no-ops until
+  // their wave lands (season=W1, moodTint=W2, timeControl=W3).
+  var WS_LAYER_ORDER = ['timeOfDay', 'season', 'celestial', 'weather', 'events', 'moodTint', 'timeControl'];
+  function resolveLayers(state) {
+    state = state || worldState || {};
+    return WS_LAYER_ORDER.filter(function (layer) {
+      switch (layer) {
+        case 'timeOfDay': return typeof state.timeOfDay === 'number';
+        case 'season': return !!state.season;
+        case 'celestial': return (state.sun != null) || (state.moons && state.moons.length > 0);
+        case 'weather': return !!(state.weather && state.weather.type && state.weather.type !== 'clear');
+        case 'events': return !!(state.events && state.events.length);
+        case 'moodTint': return !!(state.moodTint && state.moodTint.color && state.moodTint.intensity > 0);
+        case 'timeControl': return !!(state.timeControl && (state.timeControl.direction !== 1 || state.timeControl.speed !== 1));
+        default: return false;
+      }
+    });
+  }
+  window.__calLayerOrder = WS_LAYER_ORDER;
+  window.__calResolveLayers = resolveLayers;
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -334,6 +447,68 @@
   });
 
   // ============================================================
+  // Block: world-state (Wave 0) — seed `worldState` from DATA/VIEW so the
+  // opening frame is byte-identical to v5. Runs right after 'data'.
+  // ============================================================
+  registerInitBlock('world-state', function () {
+    var wType = (function () { var w = dayWeatherTypeID(VIEW.month, VIEW.day); return w ? weatherEffectID(w) : 'clear'; })();
+    worldState = {
+      timeOfDay: VIEW.timeFrac,                                  // 0..1
+      season: seasonName(),                                      // derived label
+      date: { year: VIEW.year, month: VIEW.month, day: VIEW.day },
+      sun: { tint: null },                                       // CATALOG Part 2 (Wave 2 fills tint)
+      moons: (DATA.moons || []).map(function (mn) {              // 0..N dynamic
+        return { id: mn.id, phase: null, namedPhase: null, tint: null,
+          size: mn.size || 1, orbitSpeed: 1, orbitOffset: mn.phase_offset || 0, cyclePct: null };
+      }),
+      weather: { type: wType, intensity: 1 },                   // {type,intensity}
+      events: celestialFor(VIEW.month, VIEW.day),               // can stack
+      moodTint: { color: null, intensity: 0 },                  // player overlay (Wave 2)
+      timeControl: { direction: 1, speed: 1 }                   // DM verb layer (Wave 3)
+    };
+    window.__calWorldState = worldState;
+  });
+
+  // ============================================================
+  // Block: world-state-subscribers (Wave 0) — both surfaces subscribe to
+  // worldState. Registered here (before the render/init blocks) so they're
+  // live for every runtime setWorldState() call; the per-block initial
+  // renders still run explicitly, so init behaviour is unchanged.
+  //
+  // Notify order = back→front render-resolution per CATALOG Part 0:
+  //   1) sky-core   — time-of-day base sky + day weather/celestial layers
+  //   2) sun        — celestial bodies (resolve painted-sun state + bloom)
+  //   3) hourglass  — hg levels/flip (time) + sand theme/stream (day/weather)
+  // (season / events / mood-tint / time-control layers are wired here as
+  // change-keys now; their visuals fill in Waves 1–3.)
+  // ============================================================
+  function wsAffectsDay(changed) {
+    return changed.indexOf('date') !== -1 || changed.indexOf('weather') !== -1 ||
+           changed.indexOf('events') !== -1 || changed.indexOf('season') !== -1;
+  }
+  registerInitBlock('world-state-subscribers', function () {
+    // 1) sky core.
+    subscribeWorldState(function (st, changed) {
+      if (changed.indexOf('timeOfDay') !== -1) renderTimePipeline(st.timeOfDay);
+      if (wsAffectsDay(changed)) renderDayPipeline(st.date.month, st.date.day);
+    });
+    // 2) sun (celestial-bodies layer): resolve + apply painted-sun state;
+    // recolour the sun-bloom emitter on a time move (matches the v5 order:
+    // applySunState → refeedSky).
+    subscribeWorldState(function (st, changed) {
+      if (changed.indexOf('timeOfDay') !== -1 || wsAffectsDay(changed)) {
+        applySunState(currentSunState());
+        if (changed.indexOf('timeOfDay') !== -1) refeedSky();
+      }
+    });
+    // 3) hourglass.
+    subscribeWorldState(function (st, changed) {
+      if (changed.indexOf('timeOfDay') !== -1) { applyHourglassLevels(st.timeOfDay); applyHourglassFlip(st.timeOfDay); }
+      if (wsAffectsDay(changed)) { applySandTheme(st.date.month, st.date.day); feedHourglassStream(); }
+    });
+  });
+
+  // ============================================================
   // Registries (dispatch §F). renderFn(container, ctx) builds the
   // particle/visual DOM for one effect on the displayed day. MUST tier
   // gets full renders; TBD entries draw a small label stub only.
@@ -451,6 +626,43 @@
   }
 
   // ============================================================
+  // Block: unified-effects (Wave 0) — ONE registry keyed by effect id,
+  // each entry exposing per-surface renderers (skyBand / hgTop / hgBottom /
+  // hgSand / timeline) per CATALOG Part 0.
+  //
+  // ADDITIVE by design (coordinator D1): the entries here are the SAME
+  // objects as WEATHER_EFFECTS / CELESTIAL_EFFECTS, so every existing
+  // call-site keeps working — the two legacy maps are now thin domain
+  // projections (weather subset / celestial subset) over EFFECTS. Adding any
+  // of the ~140 CATALOG effects later = one EFFECTS entry + its renderFns,
+  // no refactor. Preserve that property.
+  //   skyBand  ← the existing DOM/particle builder (renderFn)
+  //   hgSand   ← delegates live to the sandRender hook (wired later in
+  //              hookSandRenderers, after this block runs)
+  //   hgTop / hgBottom / timeline ← optional hooks filled by later waves
+  // ============================================================
+  var EFFECTS = {};
+  function projectIntoEffects(src, category) {
+    Object.keys(src).forEach(function (id) {
+      var e = src[id];
+      if (!e) return;
+      if (e.category == null) e.category = category;
+      if (e.skyBand == null) e.skyBand = e.renderFn || null;
+      if (!('hgTop' in e)) e.hgTop = null;
+      if (!('hgBottom' in e)) e.hgBottom = null;
+      if (!('timeline' in e)) e.timeline = null;
+      // Live delegate so hgSand reflects the sandRender hooked later.
+      if (e.hgSand == null) e.hgSand = function (box, ctx) { return e.sandRender ? e.sandRender(box, ctx) : undefined; };
+      EFFECTS[id] = e;
+    });
+  }
+  registerInitBlock('unified-effects', function () {
+    projectIntoEffects(WEATHER_EFFECTS, 'weather');
+    projectIntoEffects(CELESTIAL_EFFECTS, 'celestial');
+    window.__calEffects = EFFECTS;
+  });
+
+  // ============================================================
   // Block: era-effects-registry (§A5) — each era type gets a signature
   // hover animation (particleSpec + palette + size/position) the engine
   // renders. Adding an era type = a data object, not a refactor.
@@ -513,15 +725,25 @@
   // non-particle pieces (eclipse disc, lightning flash, cloud banks, TBD
   // glyphs). The server-rendered DOM particles are the no-JS fallback.
   var SKY_SURFACE = null; // engine handle for the sky-band canvas
-  function renderSkyForDay(m, day) {
+  // renderDayPipeline — the base day render (weather + celestial layers +
+  // happening chips + label + canvas emitter feed). Wave 0: invoked by the
+  // sky-core subscriber on a day/weather/events change; the public
+  // renderSkyForDay() shim below routes callers through setWorldState.
+  function renderDayPipeline(m, day) {
     var sky = document.querySelector('[data-cal-sky]');
     if (!sky) return;
+    // worldState is the source of truth (Wave 0). It's kept in lockstep with
+    // the authored DATA on every day-nav, so normal navigation renders
+    // identically to v5; a synthetic setWorldState({weather|events}) now
+    // actually paints. wtypeID (raw type, for the label) still comes from the
+    // authored day; the effect id can be overridden by worldState.
     var wtypeID = dayWeatherTypeID(m, day);
-    var effID = wtypeID ? weatherEffectID(wtypeID) : 'clear';
+    var effID = (worldState && worldState.weather && worldState.weather.type) ||
+                (wtypeID ? weatherEffectID(wtypeID) : 'clear');
     sky.setAttribute('data-cal-sky-weather', effID);
     sky.className = sky.className.replace(/cal-almanac-sky--wfx-\S+/g, '').trim() + ' cal-almanac-sky--wfx-' + effID;
     var engineLive = !!SKY_SURFACE;
-    var events = celestialFor(m, day);
+    var events = (worldState && worldState.events) ? worldState.events : celestialFor(m, day);
     // Weather layer.
     var wlayer = sky.querySelector('[data-cal-sky-weather-layer]');
     if (wlayer) {
@@ -560,12 +782,26 @@
         hap.appendChild(chip);
       });
     }
-    // Label suffix (weather name + season).
+    // Label suffix (weather name + season). Prefer the authored raw type;
+    // for a synthetic worldState weather, fall back to the effect-id meta so
+    // the label still names it (e.g. 'Rain').
     var rest = sky.querySelector('[data-cal-sky-sub-rest]');
     if (rest) {
-      var wt = weatherTypeById(wtypeID);
+      var wt = weatherTypeById(wtypeID) || (DATA.weather_effects || []).find(function (e) { return e.id === effID; });
       rest.textContent = ' · ' + skyLabel(VIEW.timeFrac) + ' · ' + seasonName() + ' · ' + (wt ? wt.name : 'Clear');
     }
+  }
+  // Public day-change entry point → unified world-state (Wave 0 shim).
+  // Preserves every caller (sky-band-ambient init, weather-override,
+  // month-nav "today"); the sky-core/sun/hourglass subscribers do the work.
+  function renderSkyForDay(m, day) {
+    var wtypeID = dayWeatherTypeID(m, day);
+    var effID = wtypeID ? weatherEffectID(wtypeID) : 'clear';
+    setWorldState({
+      date: { year: (DATA && DATA.current_year) || (worldState && worldState.date.year) || 0, month: m, day: day },
+      weather: { type: effID },
+      events: celestialFor(m, day)
+    });
   }
   // Tiny unicode glyph fallback for the happening chips (the SVG icon
   // set is server-side; JS-built chips use a glyph).
@@ -604,9 +840,12 @@
     SKY_SURFACE.setEmitters(specs);
   }
   function refeedSky() {
-    var effID = dayWeatherTypeID(VIEW.month, VIEW.day);
-    effID = effID ? weatherEffectID(effID) : 'clear';
-    feedSkyEngine(effID, celestialFor(VIEW.month, VIEW.day));
+    // Source from worldState so a synthetic weather/event survives a later
+    // time-change refeed (normal nav is identical — worldState mirrors DATA).
+    var effID = (worldState && worldState.weather && worldState.weather.type) ||
+                (function () { var w = dayWeatherTypeID(VIEW.month, VIEW.day); return w ? weatherEffectID(w) : 'clear'; })();
+    var events = (worldState && worldState.events) ? worldState.events : celestialFor(VIEW.month, VIEW.day);
+    feedSkyEngine(effID, events);
   }
 
   registerInitBlock('particle-engine', function () {
@@ -626,8 +865,10 @@
   registerInitBlock('sky-band-ambient', function () {
     // Re-render once on init so the JS-built layers match the registries
     // (the server pre-render is for no-JS; this keeps the source single)
-    // and the canvas engine gets its first emitter set.
-    renderSkyForDay(VIEW.month, VIEW.day);
+    // and the canvas engine gets its first emitter set. Call the base
+    // pipeline directly (not the setWorldState shim) so init stays identical
+    // to v5 — subscribers handle subsequent runtime changes.
+    renderDayPipeline(VIEW.month, VIEW.day);
   });
 
   // ============================================================
@@ -653,7 +894,11 @@
     var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
     var total = Math.floor(t * hpd * 60); return pad2(Math.floor(total / 60)) + ':' + pad2(total % 60);
   }
-  function applyTime(t, opts) {
+  // renderTimePipeline — the base time render (sky gradient, sun arc, moons,
+  // clocks, snowglobe). Wave 0: invoked by the sky-core subscriber on a
+  // timeOfDay change; the public applyTime() shim below routes callers
+  // through setWorldState.
+  function renderTimePipeline(t) {
     t = Math.max(0, Math.min(0.9999, t));
     VIEW.timeFrac = t;
     var sky = document.querySelector('[data-cal-sky]');
@@ -676,6 +921,12 @@
       var mm = (DATA.moons || [])[idx]; var off = mm ? mm.phase_offset : 0;
       var mt = t - 0.5 + off; while (mt < 0) mt += 1; while (mt > 1) mt -= 1; place(mn, arcPos(mt));
     });
+  }
+  // Public time-change entry point → unified world-state (Wave 0 shim).
+  // Preserves every caller (drag-scrub, time-input, hourglass tick,
+  // demo-controls slider); the subscribers re-render both surfaces.
+  function applyTime(t) {
+    setWorldState({ timeOfDay: Math.max(0, Math.min(0.9999, t)) });
   }
   registerInitBlock('sun-drag-scrub', function () {
     var sun = document.querySelector('[data-cal-sky-sun]');
@@ -839,7 +1090,7 @@
     return events[0].type;
   }
   function currentSunState(events) {
-    var evs = events || celestialFor(VIEW.month, VIEW.day);
+    var evs = events || (worldState && worldState.events) || celestialFor(VIEW.month, VIEW.day);
     return resolveSunState(VIEW.timeFrac, activeCelestialId(evs), isSpecialMoonDayFor(VIEW.month, VIEW.day));
   }
   // Apply the resolved state to the sun element. Crossfading + CSS pulse
@@ -854,21 +1105,9 @@
   }
   registerInitBlock('sun-state', function () {
     applySunState(currentSunState());
-    // Re-evaluate whenever time changes (the v3 applyTime wrap is already
-    // in place; we hook in the same way).
-    var prev = applyTime;
-    applyTime = function (t) {
-      prev(t);
-      applySunState(currentSunState());
-      // Recompute sun-bloom spec for the new state.
-      if (typeof refeedSky === 'function') refeedSky();
-    };
-    // And on day change.
-    var prevSky = renderSkyForDay;
-    renderSkyForDay = function (m, day) {
-      prevSky(m, day);
-      applySunState(currentSunState());
-    };
+    // Wave 0: the painted-sun state is re-resolved by the sun subscriber
+    // (registered in 'world-state-subscribers') on every timeOfDay/day
+    // change — the v5 applyTime/renderSkyForDay monkey-patching is gone.
   });
   window.__calResolveSunState = resolveSunState;
 
@@ -976,10 +1215,13 @@
   // Picks the active sand theme for the current day. Celestial wins
   // over weather per dispatch stop-and-flag #3 (multi-effect resolution).
   function activeSandThemeForDay(m, day) {
-    var cel = celestialFor(m, day);
+    // Source from worldState (kept in lockstep with DATA on day-nav) so a
+    // synthetic setWorldState({weather|events}) re-themes the sand too;
+    // celestial still wins over weather per stop-and-flag #3.
+    var cel = (worldState && worldState.events) ? worldState.events : celestialFor(m, day);
     if (cel && cel.length) return { id: cel[0].type, kind: 'celestial' };
-    var wtypeID = dayWeatherTypeID(m, day);
-    var effID = wtypeID ? weatherEffectID(wtypeID) : 'clear';
+    var effID = (worldState && worldState.weather && worldState.weather.type) ||
+                (function () { var w = dayWeatherTypeID(m, day); return w ? weatherEffectID(w) : 'clear'; })();
     return { id: effID, kind: 'weather' };
   }
 
@@ -1102,14 +1344,9 @@
 
   registerInitBlock('hourglass-flip', function () {
     applyHourglassFlip(VIEW.timeFrac, { instant: true });
-    // Subscribe to time changes by wrapping applyTime.
-    var prev = applyTime;
-    window.__applyTimeOrig = prev;
-    applyTime = function (t) {
-      prev(t);
-      applyHourglassLevels(t);
-      applyHourglassFlip(t);
-    };
+    // Wave 0: hg levels + flip are driven by the hourglass subscriber
+    // (registered in 'world-state-subscribers') on every timeOfDay change —
+    // the v5 applyTime monkey-patch wrap is gone.
   });
 
   // hourglass-internals (§D2): create the in-glass canvas surface,
@@ -1143,12 +1380,9 @@
     hookSandRenderers();
     applySandTheme(VIEW.month, VIEW.day);
     feedHourglassStream();
-    // Re-apply on day-change. We piggyback on renderSkyForDay by wrapping.
-    var prev = renderSkyForDay;
-    renderSkyForDay = function (m, day) {
-      prev(m, day);
-      applySandTheme(m, day);
-    };
+    // Wave 0: the sand theme is re-applied by the hourglass subscriber
+    // (registered in 'world-state-subscribers') on every day/weather change —
+    // the v5 renderSkyForDay monkey-patch wrap is gone.
   });
 
   // ============================================================
