@@ -902,6 +902,178 @@ func TestCalAlmanac_V4ProofClasses(t *testing.T) {
 	}
 }
 
+// ============================================================
+// REFINEMENT-V5 — painted sun prototype tests
+// ============================================================
+
+// TestCalAlmanacSun_StateResolution — the resolveSunState() JS pure
+// function picks the right state across the precedence ladder
+// (eclipse > special > dawn/dusk window > default). We assert against
+// the embedded JS source rather than spinning a runtime; the resolver
+// is tiny and visible.
+func TestCalAlmanacSun_StateResolution(t *testing.T) {
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "function resolveSunState(") {
+		t.Fatalf("resolveSunState() missing")
+	}
+	// Precedence checks present + bounds match dispatch spec.
+	for _, h := range []string{
+		`activeCelestial === 'eclipse-solar'`, `return 'eclipse'`,
+		`isSpecialMoonDay`, `return 'special'`,
+		`timeFrac > 0.20 && timeFrac < 0.32`, `return 'dawn'`,
+		`timeFrac > 0.68 && timeFrac < 0.80`, `return 'dusk'`,
+		`return 'default'`,
+	} {
+		if !strings.Contains(js, h) {
+			t.Errorf("sun-state resolution missing: %s", h)
+		}
+	}
+}
+
+// TestCalAlmanacSun_AssetsReferenced — the markup references every one
+// of the 5 painted sun-state assets (both WebP + PNG).
+func TestCalAlmanacSun_AssetsReferenced(t *testing.T) {
+	html := renderAlmanac(t)
+	for _, state := range []string{"default", "dawn", "dusk", "eclipse", "special"} {
+		webp := "/static/img/cal-almanac/celestial/sun-" + state + ".webp"
+		png := "/static/img/cal-almanac/celestial/sun-" + state + ".png"
+		if !strings.Contains(html, webp) {
+			t.Errorf("sun WebP asset reference missing: %s", webp)
+		}
+		if !strings.Contains(html, png) {
+			t.Errorf("sun PNG fallback reference missing: %s", png)
+		}
+	}
+}
+
+// TestCalAlmanacSun_PictureFallback — the painted sun renders via
+// <picture><source><img> per state for the WebP+PNG fallback contract.
+func TestCalAlmanacSun_PictureFallback(t *testing.T) {
+	html := renderAlmanac(t)
+	for _, frag := range []string{
+		"<picture",
+		`<source srcset="/static/img/cal-almanac/celestial/sun-default.webp" type="image/webp"`,
+		`<img src="/static/img/cal-almanac/celestial/sun-default.png"`,
+		`data-cal-sun-state="default"`,
+		`data-cal-sun-state-img="default"`,
+		`data-cal-sun-state-img="eclipse"`,
+	} {
+		if !strings.Contains(html, frag) {
+			t.Errorf("<picture>/state markup missing fragment: %s", frag)
+		}
+	}
+}
+
+// TestCalAlmanacSun_PaintedAssetsExist — the 5 painted sun assets (placeholder
+// or real) are actually committed to the repo, both WebP and PNG, and within
+// the file-size budget per the dispatch (≤300 KB hard cap).
+func TestCalAlmanacSun_PaintedAssetsExist(t *testing.T) {
+	root := calDemoRepoRoot(t)
+	dir := filepath.Join(root, "static", "img", "cal-almanac", "celestial")
+	// Per dispatch: 80-150 KB target, 300 KB soft-flag, 500 KB hard block.
+	const softCap = 300 * 1024
+	const hardCap = 500 * 1024
+	for _, state := range []string{"default", "dawn", "dusk", "eclipse", "special"} {
+		for _, ext := range []string{"webp", "png"} {
+			p := filepath.Join(dir, "sun-"+state+"."+ext)
+			st, err := os.Stat(p)
+			if err != nil {
+				t.Errorf("sun asset missing: %s (%v)", p, err)
+				continue
+			}
+			if st.Size() > hardCap {
+				t.Errorf("sun asset %s exceeds HARD cap (%d bytes > %d)", p, st.Size(), hardCap)
+			} else if st.Size() > softCap {
+				t.Logf("note: sun asset %s exceeds 300KB soft-flag (%d bytes) — consider re-optimizing", p, st.Size())
+			}
+		}
+	}
+}
+
+// TestCalAlmanacSun_ReducedMotion — under prefers-reduced-motion every
+// layer freezes (CSS rotation, CSS pulse) and the canvas engine refuses
+// to start its loop (already covered by V4's drawStaticFrame path).
+func TestCalAlmanacSun_ReducedMotion(t *testing.T) {
+	css := stripCalCSSComments(readCalAlmanacCSS(t))
+	if !strings.Contains(css, "@media (prefers-reduced-motion: reduce)") {
+		t.Fatalf("reduced-motion media query missing")
+	}
+	// Find the sun-targeting reduced-motion rule near the end of the file
+	// — every CSS animation on the sun layer must be `animation: none`.
+	if !strings.Contains(css, ".cal-almanac-sun__layer img { animation: none !important") {
+		t.Errorf("sun-layer image animation must be `animation: none !important` under reduced-motion")
+	}
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "reducedNow") || !strings.Contains(js, "drawStaticFrame") {
+		t.Errorf("engine's reduced-motion path missing (v4 carryover)")
+	}
+}
+
+// TestCalAlmanacSun_BloomCelestialEntry — the sun-bloom celestial-effect
+// entry exists, is alwaysActive, and ships a sunBloomSpec(state) variant.
+func TestCalAlmanacSun_BloomCelestialEntry(t *testing.T) {
+	js := readCalAlmanacJS(t)
+	for _, h := range []string{
+		`CELESTIAL_EFFECTS['sun-bloom']`,
+		`alwaysActive: true`,
+		`function sunBloomSpec(`,
+	} {
+		if !strings.Contains(js, h) {
+			t.Errorf("sun-bloom celestial entry / spec missing: %s", h)
+		}
+	}
+}
+
+// TestCalAlmanacSun_BloomParticleCapSafe — the per-state max-alive
+// parameter never exceeds the dispatch's cap of 14 for any sun state.
+func TestCalAlmanacSun_BloomParticleCapSafe(t *testing.T) {
+	js := readCalAlmanacJS(t)
+	// The spec literal lives inside sunBloomSpec; pin the `maxAlive` lines.
+	// Eclipse is the densest at 14; default/dawn/dusk/special ≤ 8.
+	if !strings.Contains(js, "var maxAlive = state === 'eclipse' ? 14 : 8;") {
+		t.Errorf("sun-bloom particle cap rule should pin 14 for eclipse, 8 otherwise")
+	}
+}
+
+// TestCalAlmanacSun_DemoControlsDropdown — the showcase demo-controls panel
+// gains a Sun-state dropdown so the operator can force any of the 5 states.
+func TestCalAlmanacSun_DemoControlsDropdown(t *testing.T) {
+	html := renderAlmanac(t)
+	if !strings.Contains(html, "data-cal-democtl-sun") {
+		t.Errorf("demo-controls sun-state dropdown missing")
+	}
+	for _, state := range []string{"default", "dawn", "dusk", "eclipse", "special"} {
+		if !strings.Contains(html, `value="`+state+`"`) {
+			t.Errorf("demo-controls dropdown option missing for state %q", state)
+		}
+	}
+	js := readCalAlmanacJS(t)
+	if !strings.Contains(js, "[data-cal-democtl-sun]") {
+		t.Errorf("demo-controls JS handler for sun-state missing")
+	}
+}
+
+// TestCalAlmanacSun_V5ProofClasses — all five painted-sun proof classes
+// (one per state) exist in CSS for the headless screenshot gate.
+func TestCalAlmanacSun_V5ProofClasses(t *testing.T) {
+	css := stripCalCSSComments(readCalAlmanacCSS(t))
+	for _, state := range []string{"default", "dawn", "dusk", "eclipse", "special"} {
+		klass := ".cal-almanac--proof-sun-" + state
+		if !strings.Contains(css, klass) {
+			t.Errorf("v5 sun-state proof class missing: %s", klass)
+		}
+	}
+}
+
+// TestCalAlmanacSun_MockSpecialMoonDays — the mock data exposes a
+// SpecialMoonDays list (the source for the painted sun-special state).
+func TestCalAlmanacSun_MockSpecialMoonDays(t *testing.T) {
+	m := CalAlmanacMock()
+	if len(m.SpecialMoonDays) == 0 {
+		t.Fatalf("CalAlmanacMockData.SpecialMoonDays should be seeded for the showcase")
+	}
+}
+
 // ---- helpers ------------------------------------------------------
 
 func stripCalCSSComments(src string) string {

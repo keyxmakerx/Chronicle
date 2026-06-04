@@ -111,7 +111,16 @@ templ calAlmanacPage(d CalAlmanacMockData) {
 		// Mock dataset, JSON-serialized for the JS init blocks.
 		// This is the single source of truth — same struct the templ
 		// rendered above.
-		<script id="cal-almanac-data" type="application/json">{ calAlmanacMockJSON(d) }</script>
+		// V5 BUGFIX (preexisting since v3): templ does NOT interpolate `{
+		// expr }` inside <script> bodies, so the v3/v4 `<script type=
+		// "application/json">{ calAlmanacMockJSON(d) }</script>` node was
+		// emitting that literal text — the JS `data` init block was
+		// failing JSON.parse silently and the showcase was running
+		// entirely on the templ-rendered static state. Switching to a
+		// data-attribute on a sibling element sidesteps the script-body
+		// interpolation hole: data-* attribute values DO interpolate, and
+		// the JS reads `node.getAttribute(...)` instead of textContent.
+		<div id="cal-almanac-data" data-cal-almanac-data={ calAlmanacMockJSON(d) } aria-hidden="true" hidden></div>
 	</div>
 }
 
@@ -170,6 +179,16 @@ templ calAlmanacDemoControls(d CalAlmanacMockData) {
 				<input type="range" min="0" max="1000" value="520" data-cal-democtl-time/>
 			</label>
 			<label class="cal-almanac-democtl__row">
+				<span>Sun state</span>
+				<select data-cal-democtl-sun>
+					<option value="default">Default</option>
+					<option value="dawn">Dawn</option>
+					<option value="dusk">Dusk</option>
+					<option value="eclipse">Eclipse</option>
+					<option value="special">Special</option>
+				</select>
+			</label>
+			<label class="cal-almanac-democtl__row">
 				<span>Frame</span>
 				<select data-cal-democtl-frame>
 					<option value="brass">Brass</option>
@@ -188,6 +207,19 @@ templ calAlmanacDemoControls(d CalAlmanacMockData) {
 			<p class="cal-almanac-democtl__note" data-cal-democtl-readout>—</p>
 		</div>
 	</aside>
+}
+
+// calAlmanacSunPicture — REFINEMENT-V5: one painted sun-state <picture>.
+// 5 of these stack inside the sun button (default / dawn / dusk / eclipse
+// / special); only the one whose data-cal-sun-state-img matches the
+// parent's data-cal-sun-state is `opacity:1`. That gives a free 800ms
+// crossfade on state change without re-loading anything (all 5 preload).
+// WebP is served to modern browsers; PNG is the fallback.
+templ calAlmanacSunPicture(state string) {
+	<picture class="cal-almanac-sun__layer" data-cal-sun-state-img={ state }>
+		<source srcset={ "/static/img/cal-almanac/celestial/sun-" + state + ".webp" } type="image/webp"/>
+		<img src={ "/static/img/cal-almanac/celestial/sun-" + state + ".png" } alt="" aria-hidden="true" loading="eager"/>
+	</picture>
 }
 
 // calAlmanacTimepiece — REFINEMENT-V3: HOURGLASS replaces snowglobe.
@@ -633,14 +665,26 @@ templ calAlmanacSkyband(d CalAlmanacMockData) {
 		// Era corner marker — anchored inside this animation window.
 		@calAlmanacEraVignette(d)
 		<div class="cal-almanac-sky__arc" data-cal-sky-arc>
-			<span
-				class="cal-almanac-sky__sun"
+			// V5 layered sun: LAYER 1 (painted base via <picture>) + LAYER 2
+			// (CSS animation — slow corona rotation + glow breathing) +
+			// LAYER 3 (canvas particle bloom via the v4 engine, added on
+			// init). The element is still the drag-the-sun target.
+			<button
+				type="button"
+				class="cal-almanac-sun cal-almanac-sky__sun"
 				data-cal-sky-sun
+				data-cal-sun-state="default"
 				style={ arcPositionStyle(d.SkyTime, false) }
 				role="slider"
 				aria-label="Time of day — drag to scrub"
 				tabindex="0"
-			></span>
+			>
+				@calAlmanacSunPicture("default")
+				@calAlmanacSunPicture("dawn")
+				@calAlmanacSunPicture("dusk")
+				@calAlmanacSunPicture("eclipse")
+				@calAlmanacSunPicture("special")
+			</button>
 			for _, m := range d.Moons {
 				<span
 					class={ "cal-almanac-sky__moon", "cal-almanac-sky__moon--" + moonPhaseClass(d, m) }

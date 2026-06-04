@@ -57,6 +57,11 @@ type CalAlmanacMockData struct {
 	// defaults (06:00 / 18:00 on a 24-hour day).
 	Sunrise float64 `json:"sunrise"`
 	Sunset  float64 `json:"sunset"`
+	// SpecialMoonDays (REFINEMENT-V5) — "Y-M-D" keys flagged for the
+	// painted-sun "special" state (blood sun / harvest sun coincidences).
+	// Empty for most days; populated for the rare events. Tuner's
+	// atmospheric backdrop reads the same field.
+	SpecialMoonDays []string `json:"special_moon_days"`
 }
 
 type CalAlmanacCalendar struct {
@@ -260,6 +265,10 @@ func CalAlmanacMock() CalAlmanacMockData {
 		SkyTime:      0.52, // shortly past noon, sun high
 		Sunrise:      0.25, // 06:00 on a 24-hour day
 		Sunset:       0.75, // 18:00 on a 24-hour day
+		// V5: day 30 = a "blood sun" coincidence (showcase mock data).
+		// The painted sun-special asset renders for this day; demo-controls
+		// panel can force any day to test all 5 states live.
+		SpecialMoonDays: []string{"1492-4-30"},
 		Months: []CalAlmanacMonth{
 			{1, "Hammer", 30, false},
 			{2, "Alturiak", 30, false},

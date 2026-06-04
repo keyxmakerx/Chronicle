@@ -321,7 +321,12 @@
   registerInitBlock('data', function () {
     var node = document.getElementById('cal-almanac-data');
     if (!node) throw new Error('cal-almanac-data JSON node missing');
-    DATA = JSON.parse(node.textContent || '{}');
+    // V5 BUGFIX: switched from `<script type="application/json">…body…` (where
+    // templ doesn't interpolate `{ expr }`) to a `data-` attribute on a div
+    // (which does interpolate). Fall back to textContent so any legacy
+    // markup that ships the old script-tag form keeps working.
+    var raw = node.getAttribute('data-cal-almanac-data') || node.textContent || '{}';
+    DATA = JSON.parse(raw);
     VIEW.year = DATA.current_year;
     VIEW.month = DATA.current_month;
     VIEW.day = DATA.current_day;
@@ -415,8 +420,35 @@
         var s = document.createElement('div'); s.className = 'cal-almanac-celestial-stub'; s.textContent = (ctx && ctx.name) || id; box.appendChild(s);
       }, particleSpec: { shape: 'dot', color: celTint[id], sizeRange: [1.5, 3.5], velocity: { x: [-8, 8], y: [10, 40] }, spawnRate: 2, maxAlive: 6 } };
     });
+    // V5: sun-bloom — additive sparkles around the painted sun position.
+    // Unlike date-triggered celestial entries, this one runs WHENEVER
+    // the sun is visible (see alwaysActive). Spec is a function of the
+    // current sun state so the bloom recolours / densifies appropriately.
+    // No renderFn — this is a pure canvas-engine emitter; it doesn't go
+    // into the DOM celestial layer.
+    CELESTIAL_EFFECTS['sun-bloom'] = {
+      id: 'sun-bloom',
+      tier: 'must',
+      alwaysActive: true,
+      renderFn: function () {},
+      // particleSpec is fixed (default state); engine emitter uses this.
+      // State-parameterized variant goes through sunBloomSpec() below so
+      // the sun state can recolor/densify the bloom live.
+      particleSpec: { shape: 'dot', color: 'oklch(0.92 0.16 75 / 0.8)', sizeRange: [1.5, 3.5], velocity: { x: [-12, 12], y: [-12, 12] }, spawnRate: 1.2, maxAlive: 8, blend: 'lighter' }
+    };
     window.__calCelestialEffects = CELESTIAL_EFFECTS;
   });
+  // V5: state-parameterized sun-bloom emitter spec. Cap-safe (max 14).
+  function sunBloomSpec(state) {
+    if (!state) state = 'default';
+    var color = state === 'eclipse' ? 'oklch(0.97 0.06 85 / 0.95)'
+              : state === 'special' ? 'oklch(0.72 0.22 25 / 0.9)'
+              : state === 'dawn' || state === 'dusk' ? 'oklch(0.85 0.20 40 / 0.85)'
+              : 'oklch(0.92 0.16 75 / 0.8)';
+    var spawnRate = state === 'eclipse' ? 3 : state === 'special' ? 2.5 : 1.2;
+    var maxAlive = state === 'eclipse' ? 14 : 8;
+    return { shape: 'dot', color: color, sizeRange: [1.5, 3.5], velocity: { x: [-14, 14], y: [-14, 14] }, spawnRate: spawnRate, maxAlive: maxAlive, blend: 'lighter' };
+  }
 
   // ============================================================
   // Block: era-effects-registry (§A5) — each era type gets a signature
@@ -564,6 +596,11 @@
       if (fx && fx.particleSpec) specs.push(fx.particleSpec);
     });
     if (ERA_HOVER_SPEC) specs.push(ERA_HOVER_SPEC);
+    // V5: the sun-bloom particles are an `alwaysActive` emitter that runs
+    // whenever the sun is visible (every state but TBD-off-cases). The
+    // spec is parameterized by current sun state — see sunBloomSpec().
+    var sb = sunBloomSpec(currentSunState(events));
+    if (sb) specs.push(sb);
     SKY_SURFACE.setEmitters(specs);
   }
   function refeedSky() {
@@ -773,6 +810,67 @@
     if (vig) vig.style.setProperty('--cal-era-' + name, value);
   }
   window.__calSetEraParam = setEraParam;
+
+  // ============================================================
+  // REFINEMENT-V5 — Painted sun state machine
+  // ============================================================
+  // resolveSunState — pure function: given (timeFrac, activeCelestial id,
+  // isSpecialMoonDay) returns the right state ID. Eclipse > special >
+  // dawn/dusk window > default. The thresholds are 0.20-0.32 (dawn) and
+  // 0.68-0.80 (dusk) — wider than the visual horizon to give the painted
+  // dawn/dusk asset breathing room around sunrise/sunset.
+  function resolveSunState(timeFrac, activeCelestial, isSpecialMoonDay) {
+    if (activeCelestial === 'eclipse-solar') return 'eclipse';
+    if (isSpecialMoonDay) return 'special';
+    if (timeFrac > 0.20 && timeFrac < 0.32) return 'dawn';
+    if (timeFrac > 0.68 && timeFrac < 0.80) return 'dusk';
+    return 'default';
+  }
+  // Helper: is the current day flagged as a special-moon-day? Read from
+  // the mock SpecialMoonDays array (added in v5 if not present).
+  function isSpecialMoonDayFor(m, day) {
+    if (!DATA || !DATA.special_moon_days) return false;
+    var k = key(DATA.current_year, m, day);
+    return DATA.special_moon_days.indexOf(k) !== -1;
+  }
+  // Helper: the active celestial id for the current day, or null.
+  function activeCelestialId(events) {
+    if (!events || !events.length) return null;
+    return events[0].type;
+  }
+  function currentSunState(events) {
+    var evs = events || celestialFor(VIEW.month, VIEW.day);
+    return resolveSunState(VIEW.timeFrac, activeCelestialId(evs), isSpecialMoonDayFor(VIEW.month, VIEW.day));
+  }
+  // Apply the resolved state to the sun element. Crossfading + CSS pulse
+  // is driven by the matching layer's CSS rule.
+  function applySunState(state) {
+    var sun = document.querySelector('[data-cal-sky-sun]');
+    if (!sun) return;
+    state = state || 'default';
+    if (sun.getAttribute('data-cal-sun-state') !== state) {
+      sun.setAttribute('data-cal-sun-state', state);
+    }
+  }
+  registerInitBlock('sun-state', function () {
+    applySunState(currentSunState());
+    // Re-evaluate whenever time changes (the v3 applyTime wrap is already
+    // in place; we hook in the same way).
+    var prev = applyTime;
+    applyTime = function (t) {
+      prev(t);
+      applySunState(currentSunState());
+      // Recompute sun-bloom spec for the new state.
+      if (typeof refeedSky === 'function') refeedSky();
+    };
+    // And on day change.
+    var prevSky = renderSkyForDay;
+    renderSkyForDay = function (m, day) {
+      prevSky(m, day);
+      applySunState(currentSunState());
+    };
+  });
+  window.__calResolveSunState = resolveSunState;
 
   // ============================================================
   // REFINEMENT-V3 — Hourglass time-piece
@@ -1718,6 +1816,10 @@
     bind('[data-cal-democtl-time]', function (v) { applyTime(Math.max(0, Math.min(1, v / 1000))); say('time ' + (v / 10).toFixed(0) + '%'); });
     bind('[data-cal-democtl-frame]', function (v) { var hg = document.querySelector('[data-cal-time]'); if (hg) hg.setAttribute('data-cal-shelf-frame', v); say('frame=' + v); });
     bind('[data-cal-democtl-profile]', function (v) { if (window.CalParticleEngine) CalParticleEngine.setProfile(v); say('particles=' + v + ' (cap ' + (window.CalParticleEngine ? CalParticleEngine.cap() : '?') + ')'); });
+    // V5 sun-state dropdown: lets the operator cycle painted sun states
+    // independently from time/celestial. Forces the state attribute; the
+    // CSS does the crossfade.
+    bind('[data-cal-democtl-sun]', function (v) { applySunState(v); refeedSky(); say('sun=' + v); });
     say('ready · cap ' + (window.CalParticleEngine ? CalParticleEngine.cap() : '?'));
   });
 
