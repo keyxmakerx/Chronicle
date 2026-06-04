@@ -1,0 +1,47 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v5-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset=".55" stop-color="#dbe8f0"/>
+            <stop offset="1" stop-color="#3a5878"/>
+          </radialGradient>
+          <radialGradient id="v5-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".82" stop-color="#a8d0f0" stop-opacity="0"/>
+            <stop offset="1" stop-color="#a8d0f0" stop-opacity=".35"/>
+          </radialGradient>
+          <radialGradient id="v5-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#10182a" stop-opacity=".4"/>
+            <stop offset=".8" stop-color="#10182a" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v5-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="1.8" numOctaves="2" seed="5"/><feColorMatrix values="0 0 0 0 .12  0 0 0 0 .2  0 0 0 0 .28  0 0 0 .2 0"/></filter>
+          <filter id="v5-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="2"/><feSpecularLighting surfaceScale="6" specularConstant="1.2" specularExponent="30" lighting-color="#ffffff"><fePointLight x="55" y="48" z="160"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <clipPath id="v5-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#v5-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v5-base)"/>
+        <g clip-path="url(#v5-clip)">
+          <rect width="200" height="200" filter="url(#v5-tex)" opacity=".4"/>
+          <!-- linea (Europa-style cracks) — long thin dark curves -->
+          <g stroke="#3a5070" stroke-width=".8" fill="none" opacity=".6" stroke-linecap="round">
+            <path d="M 32,82 Q 80,72 138,90 Q 168,100 175,118"/>
+            <path d="M 28,118 Q 70,128 110,118 Q 152,108 170,82"/>
+            <path d="M 60,30 Q 78,80 88,140 Q 92,170 90,180"/>
+            <path d="M 140,28 Q 124,78 118,138"/>
+            <path d="M 22,98 Q 60,100 100,98 Q 140,96 178,100"/>
+            <path d="M 78,40 Q 90,90 78,160"/>
+            <path d="M 124,42 Q 116,90 124,160"/>
+          </g>
+          <!-- thicker crack -->
+          <g stroke="#2a3850" stroke-width="1.5" fill="none" opacity=".5" stroke-linecap="round">
+            <path d="M 50,60 Q 80,80 110,72 Q 140,68 168,90"/>
+            <path d="M 38,130 Q 70,142 108,140 Q 142,138 165,148"/>
+          </g>
+          <!-- very few craters (icy surface is mostly smooth) -->
+          <g transform="translate(110 90)"><circle r="3" fill="#3a5878"/><path d="M -2.4,-2 A 3.2,3.2 0 0,1 2.4,-2" stroke="#fff" stroke-width=".7" fill="none" opacity=".85"/></g>
+          <g transform="translate(72 110)"><circle r="2.2" fill="#3a5878"/><path d="M -1.8,-1.4 A 2.4,2.4 0 0,1 1.8,-1.4" stroke="#fff" stroke-width=".55" fill="none" opacity=".8"/></g>
+          <g fill="#3a5878" opacity=".5"><circle cx="148" cy="118" r="1.5"/><circle cx="48" cy="86" r="1.2"/></g>
+          <circle cx="100" cy="100" r="78" fill="url(#v5-term)"/>
+        </g>
+        <!-- strong icy specular -->
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v5-spec)" opacity="1" style="mix-blend-mode:screen"/>
+      </svg>

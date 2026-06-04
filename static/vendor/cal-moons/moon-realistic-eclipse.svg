@@ -1,0 +1,59 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="r3-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#e8a878"/>
+            <stop offset=".4" stop-color="#a8482c"/>
+            <stop offset=".8" stop-color="#601a18"/>
+            <stop offset="1" stop-color="#1a0608"/>
+          </radialGradient>
+          <radialGradient id="r3-corona" cx=".5" cy=".5" r=".55">
+            <stop offset=".5" stop-color="#ff7848" stop-opacity="0"/>
+            <stop offset=".75" stop-color="#ff7848" stop-opacity=".22"/>
+            <stop offset="1" stop-color="#ff7848" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="r3-umbra" cx=".55" cy=".5" r=".55">
+            <stop offset="0" stop-color="#1a0608" stop-opacity="0"/>
+            <stop offset=".6" stop-color="#1a0608" stop-opacity=".3"/>
+            <stop offset=".9" stop-color="#1a0608" stop-opacity=".55"/>
+          </radialGradient>
+          <filter id="r3-tex" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="3" seed="13"/>
+            <feColorMatrix values="0 0 0 0 .25  0 0 0 0 .08  0 0 0 0 .04  0 0 0 .35 0"/>
+          </filter>
+          <filter id="r3-spec" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feSpecularLighting surfaceScale="3" specularConstant=".4" specularExponent="20" lighting-color="#ffa080">
+              <fePointLight x="60" y="50" z="170"/>
+            </feSpecularLighting>
+            <feComposite in2="SourceAlpha" operator="in"/>
+          </filter>
+          <clipPath id="r3-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <!-- background stars -->
+        <g fill="#fff" opacity=".8">
+          <circle cx="22" cy="38" r=".8"/><circle cx="178" cy="46" r=".9"/>
+          <circle cx="14" cy="148" r="1"/><circle cx="186" cy="158" r=".8"/>
+          <circle cx="34" cy="20" r=".6"/><circle cx="166" cy="180" r=".7"/>
+        </g>
+        <!-- atmospheric corona -->
+        <circle cx="100" cy="100" r="94" fill="url(#r3-corona)"/>
+        <!-- base sphere (blood color) -->
+        <circle cx="100" cy="100" r="78" fill="url(#r3-base)"/>
+        <g clip-path="url(#r3-clip)">
+          <rect width="200" height="200" filter="url(#r3-tex)" opacity=".5"/>
+          <!-- subtle maria still visible -->
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#3a0808" opacity=".55"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#3a0808" opacity=".5"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#3a0808" opacity=".5"/>
+          <!-- craters -->
+          <g fill="#1a0608" opacity=".7">
+            <circle cx="48" cy="88" r="3.5"/>
+            <circle cx="78" cy="142" r="3"/>
+            <circle cx="118" cy="100" r="2.5"/>
+            <circle cx="140" cy="78" r="2"/>
+          </g>
+          <!-- umbral shadow -->
+          <circle cx="100" cy="100" r="78" fill="url(#r3-umbra)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#r3-spec)" opacity=".5" style="mix-blend-mode:screen"/>
+      </svg>

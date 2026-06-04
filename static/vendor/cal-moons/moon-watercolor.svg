@@ -1,0 +1,12 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="wc-blur"><feGaussianBlur stdDeviation="4"/></filter>
+          <filter id="wc-blur2"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        <circle cx="92" cy="92" r="72" fill="#a8b8d8" opacity=".5" filter="url(#wc-blur2)"/>
+        <circle cx="100" cy="100" r="65" fill="#d8e0ec" opacity=".7" filter="url(#wc-blur)"/>
+        <circle cx="100" cy="100" r="55" fill="#f0f4fa" opacity=".75" filter="url(#wc-blur)"/>
+        <ellipse cx="80" cy="80" rx="22" ry="16" fill="#8090b0" opacity=".4" filter="url(#wc-blur)"/>
+        <ellipse cx="118" cy="110" rx="18" ry="14" fill="#8090b0" opacity=".35" filter="url(#wc-blur)"/>
+        <ellipse cx="95" cy="125" rx="14" ry="10" fill="#8090b0" opacity=".3" filter="url(#wc-blur)"/>
+      </svg>

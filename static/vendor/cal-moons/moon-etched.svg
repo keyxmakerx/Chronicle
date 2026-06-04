@@ -1,0 +1,30 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="hatch-h" patternUnits="userSpaceOnUse" width="3" height="3" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="3" stroke="#0a0e1e" stroke-width=".5"/>
+          </pattern>
+          <pattern id="hatch-cross" patternUnits="userSpaceOnUse" width="3" height="3" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="3" stroke="#0a0e1e" stroke-width=".5"/>
+            <line x1="0" y1="0" x2="3" y2="0" stroke="#0a0e1e" stroke-width=".5"/>
+          </pattern>
+          <mask id="etch-rightmask">
+            <circle cx="100" cy="100" r="70" fill="white"/>
+            <ellipse cx="80" cy="100" rx="44" ry="68" fill="black"/>
+          </mask>
+          <mask id="etch-crossmask">
+            <circle cx="100" cy="100" r="70" fill="black"/>
+            <ellipse cx="140" cy="115" rx="22" ry="32" fill="white"/>
+          </mask>
+        </defs>
+        <circle cx="100" cy="100" r="72" fill="#f0eddc" stroke="#0a0e1e" stroke-width="2"/>
+        <circle cx="100" cy="100" r="72" fill="url(#hatch-h)" mask="url(#etch-rightmask)" opacity=".5"/>
+        <circle cx="100" cy="100" r="72" fill="url(#hatch-cross)" mask="url(#etch-crossmask)" opacity=".55"/>
+        <g fill="#0a0e1e" stroke="#0a0e1e" stroke-width="1">
+          <circle cx="78" cy="80" r="6"/><circle cx="118" cy="90" r="4"/>
+          <circle cx="88" cy="125" r="7"/><circle cx="130" cy="138" r="4.5"/>
+        </g>
+        <g stroke="#0a0e1e" stroke-width="1.5" stroke-linecap="round" fill="none">
+          <path d="M 28,28 L 38,38 M 38,28 L 28,38"/>
+          <path d="M 165,38 L 175,48 M 175,38 L 165,48"/>
+        </g>
+      </svg>
