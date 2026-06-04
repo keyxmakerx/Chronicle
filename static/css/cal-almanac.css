@@ -1175,6 +1175,15 @@
   .cal-almanac-shell .cal-almanac-sky__mood-wash { transition: none; }
 }
 
+/* WAVE 3 — atmosphere-pause ("suspended in amber"): freeze every CSS animation
+ * under the shell. The canvas surfaces freeze in parallel via
+ * CalParticleEngine.setPaused() (the shared rAF stops, holding the last frame). */
+.cal-almanac-shell[data-cal-atmosphere-paused="true"] *,
+.cal-almanac-shell[data-cal-atmosphere-paused="true"] *::before,
+.cal-almanac-shell[data-cal-atmosphere-paused="true"] *::after {
+  animation-play-state: paused !important;
+}
+
 /* Time label button (replaces scrubber). */
 .cal-almanac-shell .cal-almanac-sky__time {
   background: oklch(0 0 0 / 0.25);

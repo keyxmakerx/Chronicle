@@ -146,10 +146,13 @@ Spec: `docs/design/world-state-effects/` (README + BUILD-PLAN + CATALOG + protot
   - [~] **2c Mood-tint wash** (CATALOG Part 5) — global `overlay`-blend wash over both
     surfaces as resolution step 6 (sky-band div + hourglass canvas composite over
     sand); 8 presets + custom + intensity + clear; static (no rAF), reduced-motion-safe.
-    **In review (this PR)** — closes the Wave 2 MUST set.
-- [ ] **Wave 3 — Time-control verb layer** (CATALOG Part 6, D&D narrative-chunk model):
-  +1hr / +1day / long-rest / step-back, fill caps ~1/3, dawn/dusk flip on fill-cap,
-  atmosphere-pause. NOT VCR playback.
+    **Shipped (PR #395)** — closed the Wave 2 MUST set.
+- [~] **Wave 3 — Time-control verb layer** (CATALOG Part 6, D&D narrative-chunk model):
+  +1hr / +1day / long-rest / custom (smooth ~600ms time tween) / set-time / step-back
+  (single-undo + ~400ms reverse-sand) / atmosphere-pause; `timepieceFill` 0–0.33 caps →
+  reuse the dawn/dusk flip + reset; verbs tween on the shared rAF (`engine.addTick`),
+  reduced-motion → instant snaps. Mechanics in `window.__calTimeControl` (reusable by
+  the future GM Live Control Panel). NOT VCR playback. **In review (this PR).**
 - [ ] **Wave 4 — SHOULD effects** · [ ] **Wave 5 — NICE/EXOTIC long tail** (on demand).
 
 ### Alpha-Critical (Must Have)

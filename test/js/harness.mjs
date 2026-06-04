@@ -28,7 +28,10 @@ export const MOCK = {
 };
 
 // Build a fresh, fully-initialised sandbox (the IIFE auto-runs init()).
-export function boot() {
+// opts.reduced → matchMedia reports prefers-reduced-motion (so Wave-3 time
+// tweens resolve to instant snaps synchronously, testable without a real rAF).
+export function boot(opts) {
+  opts = opts || {};
   const dataEl = {
     getAttribute: (n) => (n === 'data-cal-almanac-data' ? JSON.stringify(MOCK) : null),
     textContent: '',
@@ -44,7 +47,7 @@ export function boot() {
     console,
     navigator: { hardwareConcurrency: 8 },
     devicePixelRatio: 1,
-    matchMedia: () => ({ matches: false }),
+    matchMedia: () => ({ matches: !!opts.reduced }),
     requestAnimationFrame: () => 0,
     cancelAnimationFrame: () => {},
     setTimeout, clearTimeout,
