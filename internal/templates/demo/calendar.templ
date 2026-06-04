@@ -263,6 +263,18 @@ templ calAlmanacDemoControls(d CalAlmanacMockData) {
 			<div class="cal-almanac-democtl__row">
 				<button type="button" data-cal-democtl-mood-clear>✖ Clear mood</button>
 			</div>
+			// WAVE 3 time-control verbs (showcase-only; D&D narrative-chunk model).
+			<div class="cal-almanac-democtl__row cal-almanac-democtl__timeverbs" data-cal-democtl-timecontrol>
+				<button type="button" data-cal-democtl-tc="hour">+1 hr</button>
+				<button type="button" data-cal-democtl-tc="day">+1 day</button>
+				<button type="button" data-cal-democtl-tc="rest">+ Long rest</button>
+			</div>
+			<div class="cal-almanac-democtl__row cal-almanac-democtl__timeverbs">
+				<button type="button" data-cal-democtl-tc="set-dawn">Set dawn</button>
+				<button type="button" data-cal-democtl-tc="set-dusk">Set dusk</button>
+				<button type="button" data-cal-democtl-tc="stepback">↶ Step back</button>
+				<button type="button" data-cal-democtl-tc="pause" title="or press Space">⏸ Pause</button>
+			</div>
 			<p class="cal-almanac-democtl__note" data-cal-democtl-readout>—</p>
 		</div>
 	</aside>

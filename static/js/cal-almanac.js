@@ -194,6 +194,12 @@
 
     var surfaces = [];          // { canvas, ctx, w, h, dpr, emitters, particles, pool, visible, clip }
     var running = false, rafId = null, lastTs = 0;
+    // WAVE 3: shared-rAF tween hooks + global atmosphere-pause. addTick(fn)
+    // registers a per-frame callback (dt seconds) — lets the time-control
+    // tweens (~600ms advance / ~400ms reverse-sand) run on the ONE loop, no new
+    // rAF. enginePaused freezes everything ("suspended in amber").
+    var ENGINE_TICKS = [];
+    var enginePaused = false;
     var profile = autoLow ? 'low' : 'normal';
     var globalCap = PROFILES[profile];
     var probeFrames = 0, probeOverBudget = 0;
@@ -300,6 +306,8 @@
       if (!running) return;
       var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.016;
       lastTs = ts;
+      // WAVE 3: drive shared-rAF tweens first (time-control transitions).
+      for (var ti = ENGINE_TICKS.length - 1; ti >= 0; ti--) { try { ENGINE_TICKS[ti](dt); } catch (e) { try { console.error('[cal-almanac] tick', e); } catch (e2) {} } }
       // Frame-time probe → auto low-power.
       if (probeFrames < 30) {
         probeFrames++;
@@ -338,7 +346,7 @@
         }
         if (s.clip) ctx.restore();
       }
-      if (liveCount() > 0 || hasEmitters() || hasFrames()) rafId = requestAnimationFrame(step);
+      if (liveCount() > 0 || hasEmitters() || hasFrames() || ENGINE_TICKS.length) rafId = requestAnimationFrame(step);
       else { running = false; rafId = null; }
     }
 
@@ -398,8 +406,9 @@
     }
 
     function sync() {
+      if (enginePaused) return;                 // WAVE 3: frozen "in amber"
       if (reducedNow()) { surfaces.forEach(drawStaticFrame); return; }
-      if (!running && (hasEmitters() || hasFrames()) && anyVisible()) { running = true; lastTs = 0; rafId = requestAnimationFrame(step); }
+      if (!running && (hasEmitters() || hasFrames() || ENGINE_TICKS.length) && anyVisible()) { running = true; lastTs = 0; rafId = requestAnimationFrame(step); }
     }
     function anyVisible() { for (var i = 0; i < surfaces.length; i++) if (surfaces[i].visible) return true; return false; }
 
@@ -427,6 +436,28 @@
       });
     } catch (e) {}
 
+    // WAVE 3: register a per-frame tween on the shared rAF; returns a remover.
+    function addTick(fn) {
+      if (typeof fn !== 'function') return function () {};
+      ENGINE_TICKS.push(fn); sync();
+      return function () { var i = ENGINE_TICKS.indexOf(fn); if (i >= 0) ENGINE_TICKS.splice(i, 1); };
+    }
+    // WAVE 3: global atmosphere-pause — freeze (stop the loop, hold the last
+    // frame) or resume. Surfaces keep their last-drawn pixels = "in amber".
+    function setPaused(b) {
+      enginePaused = !!b;
+      if (enginePaused) { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } running = false; }
+      else sync();
+    }
+
+    // Tab-hidden pause / resume (respects an explicit atmosphere-pause).
+    try {
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } running = false; }
+        else if (!enginePaused) sync();
+      });
+    } catch (e) {}
+
     return {
       createSurface: createSurface,
       setProfile: setProfile,
@@ -434,7 +465,10 @@
       cap: function () { return globalCap; },
       live: liveCount,
       reduced: reducedNow,
-      sync: sync
+      sync: sync,
+      addTick: addTick,
+      setPaused: setPaused,
+      paused: function () { return enginePaused; }
     };
   })();
   window.CalParticleEngine = CalParticleEngine;
@@ -482,7 +516,9 @@
       weather: { type: wType, intensity: 1 },                   // {type,intensity}
       events: celestialFor(VIEW.month, VIEW.day),               // can stack
       moodTint: { color: null, intensity: 0 },                  // player overlay (Wave 2)
-      timeControl: { direction: 1, speed: 1 }                   // DM verb layer (Wave 3)
+      timeControl: { direction: 1, speed: 1 },                  // DM verb intent
+      timepieceFill: 0,                                         // 0..~0.33 elapsed-period fill (Wave 3)
+      atmospherePaused: false                                   // freeze "in amber" (Wave 3)
     };
     window.__calWorldState = worldState;
   });
@@ -1271,6 +1307,126 @@
   window.__calApplyMoodTint = applyMoodTint;
   window.__calMoodPresets = MOOD_PRESETS;
 
+  // ============================================================
+  // WAVE 3 — Time-control verb layer (CATALOG Part 6, D&D narrative-chunk model).
+  // ============================================================
+  // NOT VCR playback. Atmospheric animation runs ALWAYS; timepieceFill (0..CAP)
+  // is elapsed in-game time this period, capped so the piece never visually
+  // runs out (ambient sand pours regardless). Verbs jump time in narrative
+  // chunks (+1hr / +1day / long-rest / custom), set-time, step-back (single
+  // undo + ~400ms reverse-sand), and atmosphere-pause. The ~600ms time
+  // transition + reverse-sand tween on the SHARED rAF (engine.addTick) — no new
+  // loop; prefers-reduced-motion → instant snaps with the correct end-state.
+  var TC_FILL_CAP = 0.33;          // configurable per campaign
+  var TC_HISTORY = [];             // step-back undo stack of {timeOfDay,date,fill}
+  var TC_ACTIVE = null;            // current tween remover (cancel on a new verb)
+  function tcHpd() { return (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24; }
+  function tcPeriodHours() { return tcHpd() / 2; }
+  function tcReduced() { try { return !!(window.CalParticleEngine && CalParticleEngine.reduced()); } catch (e) { return false; } }
+  // Tween progress 0..1 over durMs on the shared rAF. Reduced-motion → instant.
+  function tcTween(durMs, onUpdate, onDone) {
+    if (TC_ACTIVE) { TC_ACTIVE(); TC_ACTIVE = null; }
+    if (tcReduced() || !(window.CalParticleEngine && CalParticleEngine.addTick)) { onUpdate(1); if (onDone) onDone(); return; }
+    var elapsed = 0;
+    var remove = CalParticleEngine.addTick(function (dt) {
+      elapsed += dt * 1000;
+      var p = elapsed / durMs; if (p > 1) p = 1; if (p < 0) p = 0;
+      onUpdate(p);
+      if (p >= 1) { remove(); if (TC_ACTIVE === remove) TC_ACTIVE = null; if (onDone) onDone(); }
+    });
+    TC_ACTIVE = remove;
+  }
+  function tcSnapshot() {
+    if (!worldState) return;
+    TC_HISTORY.push({ timeOfDay: worldState.timeOfDay, date: Object.assign({}, worldState.date), fill: worldState.timepieceFill });
+    if (TC_HISTORY.length > 24) TC_HISTORY.shift();
+  }
+  // Set fill (clamped to the cap) on both the state + the hourglass base.
+  function tcSetFill(f) {
+    var capped = Math.max(0, Math.min(TC_FILL_CAP, f));
+    setWorldState({ timepieceFill: capped });
+    if (HG_INTERIOR.setFill) HG_INTERIOR.setFill(capped / TC_FILL_CAP);
+  }
+  // Period boundary (fill hit the cap / "end day"): reuse the dawn/dusk flip,
+  // swap chambers, reset fill to 0 for the fresh period.
+  function tcPeriodBoundary() {
+    if (typeof forceHourglassFlip === 'function') forceHourglassFlip();
+    tcSetFill(0);
+  }
+  function tcDayWeather(m, day) { var w = dayWeatherTypeID(m, day); return w ? weatherEffectID(w) : 'clear'; }
+  // Move the calendar cursor by n days (30-day months); repaint to that day's
+  // weather/moons/events via the day pipeline.
+  function tcAdvanceDateBy(n) {
+    if (!worldState) return;
+    var d = Object.assign({}, worldState.date), months = ((DATA.months || []).length) || 12;
+    d.day += n;
+    while (d.day > 30) { d.day -= 30; d.month += 1; if (d.month > months) { d.month = 1; d.year += 1; } }
+    while (d.day < 1) { d.day += 30; d.month -= 1; if (d.month < 1) { d.month = months; d.year -= 1; } }
+    setWorldState({ date: d, weather: { type: tcDayWeather(d.month, d.day) }, events: celestialFor(d.month, d.day) });
+  }
+  // +N hours: smooth ~600ms time transition (date rolls at midnight), then bump
+  // fill (cap → period boundary).
+  function tcAdvanceHours(hours) {
+    if (!worldState) return;
+    tcSnapshot();
+    var hpd = tcHpd(), from = worldState.timeOfDay, deltaFrac = hours / hpd;
+    var rawEnd = from + deltaFrac, dayInc = Math.floor(rawEnd), end = rawEnd - dayInc;
+    tcTween(600, function (p) {
+      var cur = from + deltaFrac * p, frac = cur - Math.floor(cur);
+      setWorldState({ timeOfDay: Math.max(0, Math.min(0.9999, frac)) });
+    }, function () {
+      if (dayInc > 0) tcAdvanceDateBy(dayInc);
+      setWorldState({ timeOfDay: Math.max(0, Math.min(0.9999, end)) });
+      var nf = worldState.timepieceFill + (hours / tcPeriodHours()) * TC_FILL_CAP;
+      if (nf >= TC_FILL_CAP) tcPeriodBoundary(); else tcSetFill(nf);
+    });
+  }
+  // Period fraction (0..1) of a time-of-day within its current half-day.
+  function tcPeriodFrac(t) {
+    var rise = (DATA && DATA.sunrise) || 0.25, set = (DATA && DATA.sunset) || 0.75;
+    if (t >= rise && t < set) return (t - rise) / (set - rise);
+    var nl = (rise - set + 1) % 1 || 0.5, e = (t - set + 1) % 1; return Math.max(0, Math.min(1, e / nl));
+  }
+  // Set-time: snap to a time-of-day (brief crossfade) + snap fill to its period
+  // fraction. The renderTimePipeline crossfades the sky/gradient.
+  function tcSetTime(t) {
+    tcSnapshot();
+    setWorldState({ timeOfDay: Math.max(0, Math.min(0.9999, t)) });
+    tcSetFill(tcPeriodFrac(t) * TC_FILL_CAP);
+  }
+  // Step-back: single undo of the last verb + the ~400ms reverse-sand flourish.
+  function tcStepBack() {
+    if (!TC_HISTORY.length) return false;
+    var prev = TC_HISTORY.pop();
+    if (HG_INTERIOR.reverseSand) HG_INTERIOR.reverseSand();
+    var from = worldState.timeOfDay;
+    tcTween(400, function (p) {
+      var cur = from + (prev.timeOfDay - from) * p;
+      setWorldState({ timeOfDay: Math.max(0, Math.min(0.9999, cur)) });
+    }, function () {
+      setWorldState({ date: Object.assign({}, prev.date), timeOfDay: Math.max(0, Math.min(0.9999, prev.timeOfDay)),
+        weather: { type: tcDayWeather(prev.date.month, prev.date.day) }, events: celestialFor(prev.date.month, prev.date.day) });
+      tcSetFill(prev.fill);
+    });
+    return true;
+  }
+  // Atmosphere-pause: freeze everything ("suspended in amber"). Stops the shared
+  // rAF (engine holds the last frame) + pauses CSS animations via a shell class.
+  function tcSetPaused(paused) {
+    setWorldState({ atmospherePaused: !!paused });
+    try { if (window.CalParticleEngine && CalParticleEngine.setPaused) CalParticleEngine.setPaused(!!paused); } catch (e) {}
+    var shell = document.querySelector('.cal-almanac-shell');
+    if (shell) { if (paused) shell.setAttribute('data-cal-atmosphere-paused', 'true'); else shell.removeAttribute('data-cal-atmosphere-paused'); }
+  }
+  function tcTogglePause() { tcSetPaused(!(worldState && worldState.atmospherePaused)); }
+  // Public verb API (the future GM Live Control Panel reuses these).
+  var TIME_CONTROL = {
+    advanceHours: tcAdvanceHours, advanceDays: tcAdvanceDateBy, longRest: function () { tcAdvanceHours(8); },
+    setTime: tcSetTime, stepBack: tcStepBack, togglePause: tcTogglePause, setPaused: tcSetPaused,
+    setFill: tcSetFill, fillCap: TC_FILL_CAP, history: TC_HISTORY
+  };
+  window.__calTimeControl = TIME_CONTROL;
+
   function clockStr(t) {
     var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
     var total = Math.floor(t * hpd * 60); return pad2(Math.floor(total / 60)) + ':' + pad2(total % 60);
@@ -1700,6 +1856,18 @@
     hg.setAttribute('data-cal-hourglass-flipped', night ? 'true' : 'false');
     setTimeout(function () { hg.removeAttribute('data-cal-hourglass-flipping'); }, 1500);
   }
+  // WAVE 3: force the period-boundary flip (fill hit the cap / "end day") even
+  // without a time-of-day crossing — toggles the chambers + keeps __hgLastNight
+  // in sync so the Wave-1 crossing logic doesn't immediately undo it.
+  function forceHourglassFlip() {
+    var hg = document.querySelector('[data-cal-time]');
+    if (!hg) return;
+    var nowFlipped = hg.getAttribute('data-cal-hourglass-flipped') === 'true';
+    __hgLastNight = !nowFlipped;
+    hg.setAttribute('data-cal-hourglass-flipping', 'true');
+    hg.setAttribute('data-cal-hourglass-flipped', nowFlipped ? 'false' : 'true');
+    setTimeout(function () { hg.removeAttribute('data-cal-hourglass-flipping'); }, 1500);
+  }
 
   // ============================================================
   // WAVE 1 — Hourglass interior sim (heightmap sand + day/night).
@@ -1771,10 +1939,22 @@
     var bcwV = V_BW / BCOLS, reposeV = bcwV * 0.9, CHAMBER = V_FLOOR - V_CEIL;
     var bh = new Float32Array(BCOLS), stream = [], _t = 0;
     var sandColor = 'oklch(0.86 0.16 80)';
+    // WAVE 3: fillFloor = the verb-controlled elapsed-period fill (a guaranteed
+    // minimum sand level the ambient pour builds on, decoupled from the ambient
+    // heightmap `bh`). _reverseT = the brief step-back "grains lift" flourish.
+    var fillFloor = 0, _reverseT = 0;
     function setSandColor(c) { if (c && String(c).trim()) sandColor = String(c).trim(); }
+    function setFill(frac01) { fillFloor = Math.max(0, Math.min(1, frac01 || 0)) * (CHAMBER * 0.6); }
+    function reverseSand() { _reverseT = 0.4; }     // 400ms reverse-sand visual
     function reset() { for (var i = 0; i < BCOLS; i++) bh[i] = 0; stream.length = 0; }
     function stepSim(dt) {
       var f = Math.min(3, dt / 0.016);            // normalize to ~60fps sim rate
+      if (_reverseT > 0) {
+        // Step-back flourish: grains lift back up the neck for ~400ms.
+        _reverseT -= dt;
+        for (var r = stream.length - 1; r >= 0; r--) { var g = stream[r]; g.vy = -Math.abs(g.vy) - 0.4; g.y += g.vy * f; if (g.y < V_NECK - 6) stream.splice(r, 1); }
+        return;
+      }
       if (stream.length < 18) stream.push({ x: 30 + (Math.random() - 0.5) * 2.2, y: V_NECK, vy: 0.7 + Math.random() * 0.4, vx: (Math.random() - 0.5) * 0.12, r: 0.5 + Math.random() * 0.8 });
       for (var n = stream.length - 1; n >= 0; n--) {
         var s = stream[n]; s.vy += 0.02 * f; s.y += s.vy * f; s.x += s.vx * f;
@@ -1812,9 +1992,10 @@
         ctx.fillStyle = '#fff3cf'; ctx.beginPath(); ctx.arc(cx, cy, 3.2 * sx, 0, 6.283); ctx.fill();
         ctx.globalAlpha = 1;
       }
-      // pile (heightmap) — drawn AFTER the sun so the sun sinks behind it
+      // pile (heightmap) — drawn AFTER the sun so the sun sinks behind it. The
+      // visible column = max(ambient pile, the verb-controlled fillFloor).
       ctx.beginPath(); ctx.moveTo(V_BX0 * sx, V_FLOOR * sy);
-      for (var c = 0; c < BCOLS; c++) ctx.lineTo((V_BX0 + c * bcwV + bcwV / 2) * sx, (V_FLOOR - bh[c]) * sy);
+      for (var c = 0; c < BCOLS; c++) ctx.lineTo((V_BX0 + c * bcwV + bcwV / 2) * sx, (V_FLOOR - Math.max(bh[c], fillFloor)) * sy);
       ctx.lineTo((V_BX0 + V_BW) * sx, V_FLOOR * sy); ctx.closePath();
       ctx.fillStyle = sandColor; ctx.fill();
       ctx.globalAlpha = 0.95;
@@ -1838,7 +2019,7 @@
     // Engine frame hook: step the sim when time advances (dt>0); always draw
     // (dt=0 = the reduced-motion static frame).
     function frame(ctx, w, h, dt) { if (dt > 0) { _t += dt; stepSim(dt); } draw(ctx, w, h); }
-    return { frame: frame, setSandColor: setSandColor, setMood: setMood, reset: reset };
+    return { frame: frame, setSandColor: setSandColor, setMood: setMood, setFill: setFill, reverseSand: reverseSand, reset: reset };
   })();
 
   registerInitBlock('hourglass-render', function () {
@@ -2633,7 +2814,34 @@
     onClick('[data-cal-democtl-mood-clear]', function () {
       setWorldState({ moodTint: { intensity: 0 } }); say('mood cleared');
     });
+
+    // WAVE 3 time-control verbs (showcase buttons; the mechanics live in
+    // TIME_CONTROL / window.__calTimeControl for the future GM panel to reuse).
+    panel.querySelectorAll('[data-cal-democtl-tc]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        switch (btn.getAttribute('data-cal-democtl-tc')) {
+          case 'hour': tcAdvanceHours(1); say('+1 hour'); break;
+          case 'day': tcSnapshot(); tcAdvanceDateBy(1); say('+1 day'); break;
+          case 'rest': tcAdvanceHours(8); say('+ long rest (8h)'); break;
+          case 'set-dawn': tcSetTime(0.26); say('set dawn'); break;
+          case 'set-dusk': tcSetTime(0.74); say('set dusk'); break;
+          case 'stepback': say(tcStepBack() ? 'step back' : 'nothing to undo'); break;
+          case 'pause': tcTogglePause(); say(worldState.atmospherePaused ? 'atmosphere paused' : 'resumed'); break;
+        }
+      });
+    });
     say('ready · cap ' + (window.CalParticleEngine ? CalParticleEngine.cap() : '?'));
+  });
+
+  // WAVE 3: atmosphere-pause hotkey (Space) — ignored while typing in a field.
+  registerInitBlock('time-control-hotkey', function () {
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== ' ' && ev.code !== 'Space') return;
+      var el = document.activeElement, tag = el && el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el && el.isContentEditable)) return;
+      if (!document.querySelector('[data-cal-sky]')) return;   // almanac page only
+      ev.preventDefault(); tcTogglePause();
+    });
   });
 
   // ============================================================
