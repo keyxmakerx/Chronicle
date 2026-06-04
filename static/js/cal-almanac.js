@@ -674,6 +674,196 @@
   });
 
   // ============================================================
+  // WAVE 2 — Weather + celestial sky-band renderers (CATALOG §12.2).
+  // ============================================================
+  // 10 effects ported from prototypes/weather-effects-preview.html. Each is a
+  // FACTORY returning a frame(ctx,w,h,dt) closure, run on the SHARED engine via
+  // the Wave-1 per-surface frame hook (one rAF, capped, reduced-motion → one
+  // static frame at dt=0). Unlike the prototype these draw TRANSLUCENT overlays
+  // only (no opaque sky fill) so the production sky gradient + DOM sun/moons
+  // show through; sun-bloom particles still layer on top. Motion is
+  // dt-normalized to the prototype's ~60fps tuning.
+  var WEATHER_RENDERERS = {};
+  (function () {
+    function k(dt) { return Math.min(3, dt * 60); }   // per-frame scale (≈60fps)
+    // 1. CLEAR — drifting wisps.
+    WEATHER_RENDERERS['weather-clear'] = function () {
+      var ws = null;
+      return function (ctx, W, H, dt) {
+        if (!ws) { ws = []; for (var i = 0; i < 5; i++) ws.push({ x: Math.random() * W, y: H * (0.12 + Math.random() * 0.32), r: W * 0.035 + Math.random() * W * 0.05, vx: 0.15 + Math.random() * 0.1, o: 0.07 + Math.random() * 0.1 }); }
+        var s = k(dt);
+        for (var i = 0; i < ws.length; i++) { var w = ws[i]; w.x += w.vx * s; if (w.x > W + w.r) w.x = -w.r;
+          var g = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, w.r); g.addColorStop(0, 'rgba(255,255,255,' + w.o + ')'); g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, 7); ctx.fill(); }
+      };
+    };
+    // 2. CLOUDY — 3 parallax layers.
+    WEATHER_RENDERERS['weather-cloudy'] = function () {
+      var layers = null;
+      return function (ctx, W, H, dt) {
+        if (!layers) { layers = [{ c: [], vx: 0.15, y: 0.2, size: W * 0.05, o: 0.32 }, { c: [], vx: 0.3, y: 0.36, size: W * 0.07, o: 0.5 }, { c: [], vx: 0.55, y: 0.56, size: W * 0.09, o: 0.68 }];
+          for (var li = 0; li < layers.length; li++) { var L = layers[li]; for (var i = 0; i < 4; i++) L.c.push({ x: Math.random() * W * 1.5 - W * 0.25, y: H * L.y + (Math.random() * 16 - 8), r: L.size + Math.random() * W * 0.03 }); } }
+        var s = k(dt);
+        for (var li2 = 0; li2 < layers.length; li2++) { var L2 = layers[li2]; for (var j = 0; j < L2.c.length; j++) { var c = L2.c[j]; c.x += L2.vx * s; if (c.x > W + c.r) c.x = -c.r * 2;
+          var g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r); g.addColorStop(0, 'rgba(248,250,255,' + L2.o + ')'); g.addColorStop(0.7, 'rgba(220,225,235,' + (L2.o * 0.5) + ')'); g.addColorStop(1, 'rgba(220,225,235,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 7); ctx.fill(); } }
+      };
+    };
+    // 3. RAIN — diagonal streaks.
+    WEATHER_RENDERERS['weather-rain'] = function () {
+      var drops = [];
+      return function (ctx, W, H, dt) {
+        var s = k(dt), cap = Math.round(W * 0.25);
+        for (var n = 0; n < 2 * s; n++) if (drops.length < cap) drops.push({ x: Math.random() * W * 1.2 - W * 0.1, y: -10, vx: -1.5, vy: 7 + Math.random() * 3, len: 10 + Math.random() * 6 });
+        ctx.strokeStyle = 'rgba(180,200,230,.55)'; ctx.lineWidth = 1;
+        for (var i = drops.length - 1; i >= 0; i--) { var d = drops[i]; d.x += d.vx * s; d.y += d.vy * s;
+          ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + d.vx * 1.8, d.y + d.len); ctx.stroke();
+          if (d.y > H + 10) drops.splice(i, 1); }
+      };
+    };
+    // 4. THUNDERSTORM — heavy rain + periodic lightning flash + bolt.
+    WEATHER_RENDERERS['weather-thunderstorm'] = function () {
+      var drops = [], f = 0, flashT = 0, nextFlash = 60 + Math.random() * 120;
+      return function (ctx, W, H, dt) {
+        var s = k(dt); f += s; var flashing = flashT > 0;
+        if (flashing) { ctx.fillStyle = 'rgba(210,225,245,0.18)'; ctx.fillRect(0, 0, W, H); }
+        var cap = Math.round(W * 0.38);
+        for (var n = 0; n < 3 * s; n++) if (drops.length < cap) drops.push({ x: Math.random() * W * 1.2 - W * 0.1, y: -10, vx: -2, vy: 9 + Math.random() * 4, len: 12 + Math.random() * 8 });
+        ctx.strokeStyle = flashing ? 'rgba(220,230,240,.7)' : 'rgba(180,200,230,.6)'; ctx.lineWidth = 1.2;
+        for (var i = drops.length - 1; i >= 0; i--) { var d = drops[i]; d.x += d.vx * s; d.y += d.vy * s;
+          ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + d.vx * 1.8, d.y + d.len); ctx.stroke(); if (d.y > H + 10) drops.splice(i, 1); }
+        if (f > nextFlash) { flashT = 6; nextFlash = f + 180 + Math.random() * 120; }
+        if (flashT > 0) flashT -= s;
+        if (flashT > 3) { ctx.strokeStyle = '#fffae0'; ctx.lineWidth = 2; ctx.beginPath();
+          var x = W * 0.25 + Math.random() * W * 0.5, y = 0; ctx.moveTo(x, y);
+          while (y < H * 0.6) { x += (Math.random() - 0.5) * 30; y += 15 + Math.random() * 15; ctx.lineTo(x, y); } ctx.stroke(); }
+      };
+    };
+    // 5. SNOW — drifting flakes with sway.
+    WEATHER_RENDERERS['weather-snow'] = function () {
+      var fl = [], t = 0;
+      return function (ctx, W, H, dt) {
+        var s = k(dt); t += dt; var cap = Math.round(W * 0.22);
+        for (var n = 0; n < 2 * s; n++) if (fl.length < cap) fl.push({ x: Math.random() * W, y: -10, vy: 0.8 + Math.random() * 0.8, r: 1 + Math.random() * 2, ph: Math.random() * 6.28, swA: 0.6 + Math.random() * 0.6 });
+        ctx.fillStyle = 'rgba(255,255,255,.85)';
+        for (var i = fl.length - 1; i >= 0; i--) { var f = fl[i]; f.y += f.vy * s; f.x += Math.sin(t * 2.5 + f.ph) * f.swA * s;
+          ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill(); if (f.y > H + 5) fl.splice(i, 1); }
+      };
+    };
+    // 6. FOG — large translucent grey blobs.
+    WEATHER_RENDERERS['weather-fog'] = function () {
+      var bl = null;
+      return function (ctx, W, H, dt) {
+        if (!bl) { bl = []; for (var i = 0; i < 6; i++) bl.push({ x: Math.random() * W * 1.5 - W * 0.25, y: H * (0.15 + Math.random() * 0.7), r: W * 0.12 + Math.random() * W * 0.12, vx: 0.1 + Math.random() * 0.15, o: 0.18 + Math.random() * 0.18 }); }
+        var s = k(dt);
+        for (var i2 = 0; i2 < bl.length; i2++) { var b = bl[i2]; b.x += b.vx * s; if (b.x > W + b.r) b.x = -b.r * 2;
+          var g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r); g.addColorStop(0, 'rgba(200,205,215,' + b.o + ')'); g.addColorStop(1, 'rgba(200,205,215,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill(); }
+      };
+    };
+    // 7. TORNADO — rotating funnel + spiraling debris + whorls.
+    WEATHER_RENDERERS['weather-tornado'] = function () {
+      var debris = null, t = 0;
+      return function (ctx, W, H, dt) {
+        var fx = W * 0.55; t += dt; var s = k(dt);
+        if (!debris) { debris = []; for (var i = 0; i < 30; i++) debris.push({ a: Math.random() * 6.28, h: Math.random() * H, r: 5 + Math.random() * 60, sp: 0.05 + Math.random() * 0.04, size: 1 + Math.random() * 2 }); }
+        ctx.fillStyle = 'rgba(40,35,45,.55)'; ctx.beginPath(); ctx.moveTo(fx - 8, 0); ctx.lineTo(fx + 8, 0); ctx.lineTo(fx + 40, H); ctx.lineTo(fx - 40, H); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(20,15,25,.4)'; ctx.beginPath(); ctx.moveTo(fx - 4, 0); ctx.lineTo(fx + 4, 0); ctx.lineTo(fx + 24, H); ctx.lineTo(fx - 24, H); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(80,75,85,.7)';
+        for (var d = 0; d < debris.length; d++) { var db = debris[d]; db.a += db.sp * s; var yr = db.h / H, radius = db.r * (0.4 + yr * 0.6);
+          ctx.beginPath(); ctx.arc(fx + Math.cos(db.a) * radius, db.h + Math.sin(db.a * 2) * 3, db.size, 0, 7); ctx.fill(); }
+        ctx.strokeStyle = 'rgba(140,135,145,.4)'; ctx.lineWidth = 1;
+        for (var i3 = 0; i3 < 4; i3++) { var y = (t * 30 + i3 * 50) % H, ww = 12 + (y / H) * 30;
+          ctx.beginPath(); ctx.moveTo(fx - ww + Math.cos(t * 3 + i3) * 3, y); ctx.lineTo(fx + ww + Math.cos(t * 3 + i3) * 3, y); ctx.stroke(); }
+      };
+    };
+    // 8. ASHFALL — slow grey flakes + faint reddish wash.
+    WEATHER_RENDERERS['weather-ashfall'] = function () {
+      var fl = [], t = 0;
+      return function (ctx, W, H, dt) {
+        var s = k(dt); t += dt;
+        ctx.fillStyle = 'rgba(120,40,25,0.10)'; ctx.fillRect(0, 0, W, H);
+        var cap = Math.round(W * 0.18);
+        for (var n = 0; n < 1 * s; n++) if (fl.length < cap) fl.push({ x: Math.random() * W, y: -10, vy: 0.5 + Math.random() * 0.6, r: 0.8 + Math.random() * 1.5, ph: Math.random() * 6.28, swA: 0.3 + Math.random() * 0.4 });
+        ctx.fillStyle = 'rgba(140,130,120,.7)';
+        for (var i = fl.length - 1; i >= 0; i--) { var f = fl[i]; f.y += f.vy * s; f.x += Math.sin(t * 2.5 + f.ph) * f.swA * s;
+          ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill(); if (f.y > H + 5) fl.splice(i, 1); }
+      };
+    };
+    // 9. METEOR SHOWER — streaks + trails + twinkling star field.
+    WEATHER_RENDERERS['celestial-meteor-shower'] = function () {
+      var meteors = [], stars = null, spawnT = 0, t = 0;
+      return function (ctx, W, H, dt) {
+        var s = k(dt); t += dt; spawnT += s;
+        if (!stars) { stars = []; for (var i = 0; i < 35; i++) stars.push({ x: Math.random() * W, y: Math.random() * H, r: 0.4 + Math.random() * 0.9, ph: Math.random() * 6.28 }); }
+        for (var si = 0; si < stars.length; si++) { var st = stars[si], tw = 0.55 + 0.45 * Math.sin(t * 2 + st.ph); ctx.fillStyle = 'rgba(255,255,255,' + tw + ')'; ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, 7); ctx.fill(); }
+        if (spawnT > 25 + Math.random() * 30 && meteors.length < 6) { spawnT = 0; meteors.push({ x: W + 10, y: -10 + Math.random() * H * 0.3, vx: -3 - Math.random() * 1.5, vy: 2 + Math.random(), trail: [] }); }
+        for (var i2 = meteors.length - 1; i2 >= 0; i2--) { var m = meteors[i2]; m.trail.push({ x: m.x, y: m.y }); if (m.trail.length > 10) m.trail.shift(); m.x += m.vx * s; m.y += m.vy * s;
+          for (var j = 0; j < m.trail.length; j++) { var tp = m.trail[j], a = j / m.trail.length; ctx.fillStyle = 'rgba(255,200,150,' + (a * 0.55) + ')'; ctx.beginPath(); ctx.arc(tp.x, tp.y, 1.5 * a + 0.3, 0, 7); ctx.fill(); }
+          ctx.fillStyle = 'rgba(255,240,210,.95)'; ctx.beginPath(); ctx.arc(m.x, m.y, 2.2, 0, 7); ctx.fill();
+          ctx.fillStyle = 'rgba(255,210,130,.45)'; ctx.beginPath(); ctx.arc(m.x, m.y, 4, 0, 7); ctx.fill();
+          if (m.x < -10 || m.y > H + 10) meteors.splice(i2, 1); }
+      };
+    };
+    // 10. AURORA — 3 rippling curtains + stars.
+    WEATHER_RENDERERS['celestial-aurora'] = function () {
+      var stars = null, t = 0;
+      var cols = [{ r: 80, g: 255, b: 140, ph: 0, freq: 0.012, amp: 25 }, { r: 160, g: 80, b: 255, ph: 1.5, freq: 0.014, amp: 30 }, { r: 80, g: 200, b: 255, ph: 3.0, freq: 0.010, amp: 20 }];
+      return function (ctx, W, H, dt) {
+        t += dt;
+        if (!stars) { stars = []; for (var i = 0; i < 25; i++) stars.push({ x: Math.random() * W, y: Math.random() * H, r: 0.4 + Math.random() * 0.7, ph: Math.random() * 6.28 }); }
+        for (var si = 0; si < stars.length; si++) { var st = stars[si], tw = 0.55 + 0.45 * Math.sin(t * 2 + st.ph); ctx.fillStyle = 'rgba(255,255,255,' + (tw * 0.7) + ')'; ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, 7); ctx.fill(); }
+        var baseY = H * 0.12, topY = H * 0.5;
+        for (var ci = 0; ci < cols.length; ci++) { var col = cols[ci]; ctx.fillStyle = 'rgba(' + col.r + ',' + col.g + ',' + col.b + ',.30)'; ctx.beginPath();
+          ctx.moveTo(0, baseY + Math.sin(t + col.ph) * col.amp);
+          for (var x = 0; x <= W; x += 10) ctx.lineTo(x, baseY + Math.sin(x * col.freq + t * 2 + col.ph) * col.amp);
+          for (var x2 = W; x2 >= 0; x2 -= 10) ctx.lineTo(x2, topY + Math.sin(x2 * col.freq * 0.7 + t * 1.5 + col.ph + 1) * col.amp * 0.7);
+          ctx.closePath(); ctx.fill(); }
+      };
+    };
+  })();
+  window.__calWeatherRenderers = WEATHER_RENDERERS;
+
+  // WAVE 2 EFFECTS entries (§12.2): per-surface shape over the renderers.
+  // hgSand recolors the hourglass sand; timeline is a glyph hook for the
+  // future Tuner axis. skyBand is the renderer FACTORY (feedSkyEngine
+  // instantiates a fresh closure per activation).
+  var WEATHER_FX_META = {
+    'weather-clear': { name: 'Clear', category: 'standard-weather', sand: 'oklch(0.86 0.16 80)', glyph: '○' },
+    'weather-cloudy': { name: 'Cloudy', category: 'standard-weather', sand: 'oklch(0.74 0.03 250)', glyph: '☁' },
+    'weather-rain': { name: 'Rain', category: 'standard-weather', sand: 'oklch(0.74 0.10 235)', glyph: '☂' },
+    'weather-thunderstorm': { name: 'Thunderstorm', category: 'severe-weather', sand: 'oklch(0.66 0.12 250)', glyph: '⚡' },
+    'weather-snow': { name: 'Snow', category: 'standard-weather', sand: 'oklch(0.96 0.01 240)', glyph: '❄' },
+    'weather-fog': { name: 'Fog', category: 'standard-weather', sand: 'oklch(0.80 0.01 245)', glyph: '≋' },
+    'weather-tornado': { name: 'Tornado', category: 'severe-weather', sand: 'oklch(0.45 0.02 290)', glyph: '🌪' },
+    'weather-ashfall': { name: 'Ashfall', category: 'environmental-weather', sand: 'oklch(0.50 0.04 40)', glyph: '◍' },
+    'celestial-meteor-shower': { name: 'Meteor Shower', category: 'celestial-event', sand: 'oklch(0.90 0.10 85)', glyph: '★' },
+    'celestial-aurora': { name: 'Aurora', category: 'celestial-event', sand: 'oklch(0.82 0.16 160)', glyph: '✦' }
+  };
+  registerInitBlock('weather-fx', function () {
+    Object.keys(WEATHER_FX_META).forEach(function (id) {
+      var meta = WEATHER_FX_META[id];
+      EFFECTS[id] = {
+        id: id, name: meta.name, category: meta.category, tier: 'must',
+        skyBand: WEATHER_RENDERERS[id], hgTop: null, hgBottom: null,
+        hgSand: { color: meta.sand }, timeline: meta.glyph, particleSpec: null
+      };
+    });
+    window.__calEffects = EFFECTS;
+  });
+  // Map a legacy weather effId / event type → the Wave 2 rich renderer id.
+  function weatherV2Id(effID, events) {
+    var evs = events || [];
+    for (var i = 0; i < evs.length; i++) {
+      if (evs[i].type === 'meteor-shower' || evs[i].type === 'celestial-meteor-shower') return 'celestial-meteor-shower';
+      if (evs[i].type === 'aurora' || evs[i].type === 'celestial-aurora') return 'celestial-aurora';
+    }
+    if (WEATHER_RENDERERS[effID]) return effID;                 // already a v2 id
+    var map = { clear: 'weather-clear', cloudy: 'weather-cloudy', rain: 'weather-rain', thunderstorm: 'weather-thunderstorm', snow: 'weather-snow', fog: 'weather-fog', tornado: 'weather-tornado', ashfall: 'weather-ashfall' };
+    return map[effID] || null;
+  }
+
+  // ============================================================
   // Block: era-effects-registry (§A5) — each era type gets a signature
   // hover animation (particleSpec + palette + size/position) the engine
   // renders. Adding an era type = a data object, not a refactor.
@@ -835,17 +1025,24 @@
   var ERA_HOVER_SPEC = null;
   function feedSkyEngine(effID, events) {
     if (!SKY_SURFACE) return;
+    // WAVE 2: a rich frame renderer for the mapped weather/celestial effect
+    // (events win over weather for the dramatic layer). Falls back to the
+    // legacy per-effect particleSpec only when no v2 renderer applies.
+    var v2 = weatherV2Id(effID, events);
+    SKY_SURFACE.setFrame(v2 && WEATHER_RENDERERS[v2] ? WEATHER_RENDERERS[v2]() : null);
     var specs = [];
-    var w = WEATHER_EFFECTS[effID];
-    if (w && w.particleSpec) specs.push(w.particleSpec);
-    (events || []).forEach(function (c) {
-      var fx = CELESTIAL_EFFECTS[c.type];
-      if (fx && fx.particleSpec) specs.push(fx.particleSpec);
-    });
+    if (!v2) {
+      var w = WEATHER_EFFECTS[effID];
+      if (w && w.particleSpec) specs.push(w.particleSpec);
+      (events || []).forEach(function (c) {
+        var fx = CELESTIAL_EFFECTS[c.type];
+        if (fx && fx.particleSpec) specs.push(fx.particleSpec);
+      });
+    }
     if (ERA_HOVER_SPEC) specs.push(ERA_HOVER_SPEC);
-    // V5: the sun-bloom particles are an `alwaysActive` emitter that runs
-    // whenever the sun is visible (every state but TBD-off-cases). The
-    // spec is parameterized by current sun state — see sunBloomSpec().
+    // V5: sun-bloom is an alwaysActive emitter; it layers ON TOP of the
+    // Wave 2 weather frame (frame draws under particles). Parameterized by
+    // current sun state — see sunBloomSpec().
     var sb = sunBloomSpec(currentSunState(events));
     if (sb) specs.push(sb);
     SKY_SURFACE.setEmitters(specs);
@@ -1243,11 +1440,17 @@
   // now just syncs the themed sand COLOUR into the sim.
   var GLASS_SURFACE = null;
   function feedHourglassStream() {
-    var hg = document.querySelector('[data-cal-time]');
     var stream = 'oklch(0.86 0.16 80)';
-    if (hg) {
-      var v = getComputedStyle(hg).getPropertyValue('--sand-stream');
-      if (v && v.trim()) stream = v.trim();
+    // WAVE 2: prefer the active weather/celestial effect's hgSand colour so
+    // the hourglass sand recolors in sync with the sky-band. Fall back to the
+    // legacy per-theme --sand-stream CSS var.
+    var effID = (worldState && worldState.weather && worldState.weather.type) || 'clear';
+    var v2 = (typeof weatherV2Id === 'function') ? weatherV2Id(effID, worldState && worldState.events) : null;
+    if (v2 && EFFECTS[v2] && EFFECTS[v2].hgSand && EFFECTS[v2].hgSand.color) {
+      stream = EFFECTS[v2].hgSand.color;
+    } else {
+      var hg = document.querySelector('[data-cal-time]');
+      if (hg) { var v = getComputedStyle(hg).getPropertyValue('--sand-stream'); if (v && v.trim()) stream = v.trim(); }
     }
     HG_INTERIOR.setSandColor(stream);
   }
