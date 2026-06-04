@@ -1619,26 +1619,31 @@
 }
 .cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-flipped="true"] .cal-almanac-hourglass__frame { transform: rotate(180deg); }
 .cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-flipping="true"] .cal-almanac-hourglass__frame { pointer-events: none; }
-.cal-almanac-shell .cal-almanac-hourglass__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-/* Sand fill rects clip-revealed; --fill drives the vertical offset. */
-.cal-almanac-shell .cal-almanac-hourglass__sand {
-  fill: var(--sand-color);
-  transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
-}
-.cal-almanac-shell .cal-almanac-hourglass__sand[data-cal-hourglass-fill="top"] { transform: translateY(calc((1 - var(--fill)) * 45px)); }
-.cal-almanac-shell .cal-almanac-hourglass__sand[data-cal-hourglass-fill="bot"] { transform: translateY(calc((1 - var(--fill)) * -45px)); }
+/* The glass shell SVG sits ON TOP of the canvas interior (DOM order +
+ * z-index). The v4 sand-fill rects are superseded by the canvas heightmap. */
+.cal-almanac-shell .cal-almanac-hourglass__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; z-index: 2; }
 .cal-almanac-shell .cal-almanac-hourglass__outline { fill: none; stroke: var(--shelf-frame-hi); stroke-width: 1.4; opacity: 0.85; }
-.cal-almanac-shell .cal-almanac-hourglass__rim { fill: var(--shelf-frame); stroke: var(--shelf-frame-hi); stroke-width: 0.8; }
+/* WAVE 1c: wood end-caps — fill comes from the inline #calHgWood gradient +
+ * bevel filter, so no CSS fill here (it would override the gradient). */
+.cal-almanac-shell .cal-almanac-hourglass__rim { stroke: none; }
+/* Glass specular gloss (feSpecularLighting) — screen-blended highlight. */
+.cal-almanac-shell .cal-almanac-hourglass__gloss { stroke: none; opacity: 0.5; mix-blend-mode: screen; }
 .cal-almanac-shell .cal-almanac-hourglass__reflect { stroke: none; }
-/* Canvas clipped to the glass interior — visible falling stream. */
+/* Canvas interior (day/night sky + heightmap sand), clipped in JS to the
+ * glass silhouette. Sits BELOW the glass shell (z-index 1 < svg's 2). */
 .cal-almanac-shell .cal-almanac-hourglass__canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
+  z-index: 1;
+  transition: transform 1.5s cubic-bezier(0.2, 0, 0, 1);
 }
+/* WAVE 1: the whole frame rotates 180° at the dawn/dusk flip; counter-rotate
+ * the canvas so the sand still obeys gravity and the day/night sky stays
+ * upright (the flip re-orients the glass shell, not the physics). */
+.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-flipped="true"] .cal-almanac-hourglass__canvas { transform: rotate(180deg); }
 .cal-almanac-shell .cal-almanac-hourglass__sparkle {
   position: absolute;
   inset: 0;
