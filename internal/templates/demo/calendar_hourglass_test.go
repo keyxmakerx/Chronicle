@@ -87,6 +87,30 @@ func TestCalAlmanac_EnginePerfCapsSurvive(t *testing.T) {
 	}
 }
 
+// TestCalAlmanac_HourglassMaterials — WAVE 1c: dark-wood frame (feTurbulence
+// grain + feDiffuseLighting bevel) + procedural glass (feSpecularLighting
+// gloss). All filters are static; only the canvas interior animates.
+func TestCalAlmanac_HourglassMaterials(t *testing.T) {
+	html := renderAlmanac(t)
+	for _, m := range []string{
+		"feTurbulence",                 // wood grain
+		"feDiffuseLighting",            // wood bevel
+		"feSpecularLighting",           // glass gloss
+		`id="calHgWood"`,               // wood gradient
+		`url(#calHgWoodBevel)`,         // bevel applied to the caps
+		`url(#calHgWoodGrain)`,         // grain overlay
+		"cal-almanac-hourglass__gloss", // gloss path
+	} {
+		if !strings.Contains(html, m) {
+			t.Errorf("hourglass material marker missing: %q", m)
+		}
+	}
+	// Filters must be static (no SMIL <animate> inside the hourglass SVG defs).
+	if strings.Contains(html, "<animate") {
+		t.Errorf("hourglass SVG must use static filters, found an <animate> element")
+	}
+}
+
 // TestCalAlmanac_OldSandRectsGone — the v4 SVG sand-fill rects are superseded
 // by the canvas heightmap.
 func TestCalAlmanac_OldSandRectsGone(t *testing.T) {

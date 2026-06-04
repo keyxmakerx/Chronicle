@@ -269,10 +269,53 @@ templ calAlmanacTimepiece(d CalAlmanacMockData) {
 							<stop offset="0.5" stop-color="oklch(1 0 0)" stop-opacity="0.02"></stop>
 							<stop offset="1" stop-color="oklch(1 0 0)" stop-opacity="0.14"></stop>
 						</linearGradient>
+						// WAVE 1c — dark-wood frame + procedural glass. All filters
+						// are STATIC (computed once; zero per-frame cost) per the
+						// binding convention; only the canvas interior animates.
+						<linearGradient id="calHgWood" x1="0" y1="0" x2="1" y2="0">
+							<stop offset="0" stop-color="#2e1c0c"></stop>
+							<stop offset="0.42" stop-color="#7a4f25"></stop>
+							<stop offset="0.6" stop-color="#5b3819"></stop>
+							<stop offset="1" stop-color="#241509"></stop>
+						</linearGradient>
+						// feTurbulence wood grain knocked into a brown matrix.
+						<filter id="calHgWoodGrain" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+							<feTurbulence type="fractalNoise" baseFrequency="0.9 0.05" numOctaves="4" seed="11" result="n"></feTurbulence>
+							<feColorMatrix in="n" type="matrix" values="0 0 0 0 0.16  0 0 0 0 0.085  0 0 0 0 0.03  0 0 0 0.75 0"></feColorMatrix>
+						</filter>
+						// feDiffuseLighting bevel — turns the flat caps into rounded wood.
+						<filter id="calHgWoodBevel" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+							<feGaussianBlur in="SourceAlpha" stdDeviation="1.1" result="b"></feGaussianBlur>
+							<feDiffuseLighting in="b" surfaceScale="2.4" diffuseConstant="1" lighting-color="#caa46a" result="d">
+								<feDistantLight azimuth="235" elevation="60"></feDistantLight>
+							</feDiffuseLighting>
+							<feComposite in="d" in2="SourceAlpha" operator="in" result="dc"></feComposite>
+							<feBlend in="SourceGraphic" in2="dc" mode="multiply"></feBlend>
+						</filter>
+						// feSpecularLighting glass gloss — a soft hotspot on the bulbs.
+						<filter id="calHgGloss" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+							<feGaussianBlur in="SourceAlpha" stdDeviation="2.2" result="b"></feGaussianBlur>
+							<feSpecularLighting in="b" surfaceScale="3" specularConstant="0.5" specularExponent="28" lighting-color="#ffffff" result="s">
+								<fePointLight x="16" y="12" z="40"></fePointLight>
+							</feSpecularLighting>
+							<feComposite in="s" in2="SourceAlpha" operator="in"></feComposite>
+						</filter>
+						<clipPath id="calHgBulbs"><path d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z"></path></clipPath>
 					</defs>
+					// glass specular gloss over the bulbs (clipped; screen-blended)
+					<g clip-path="url(#calHgBulbs)">
+						<path class="cal-almanac-hourglass__gloss" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z" fill="oklch(1 0 0)" filter="url(#calHgGloss)"></path>
+					</g>
+					// engraved glass outline
 					<path class="cal-almanac-hourglass__outline" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z"></path>
-					<rect class="cal-almanac-hourglass__rim" x="3" y="4" width="54" height="5" rx="2"></rect>
-					<rect class="cal-almanac-hourglass__rim" x="3" y="101" width="54" height="5" rx="2"></rect>
+					// dark-wood end caps: wood gradient + bevel, with a grain overlay
+					<g filter="url(#calHgWoodBevel)">
+						<rect class="cal-almanac-hourglass__rim" x="3" y="3" width="54" height="6" rx="2" fill="url(#calHgWood)"></rect>
+						<rect class="cal-almanac-hourglass__rim" x="3" y="101" width="54" height="6" rx="2" fill="url(#calHgWood)"></rect>
+					</g>
+					<rect x="3" y="3" width="54" height="6" rx="2" filter="url(#calHgWoodGrain)" opacity="0.55"></rect>
+					<rect x="3" y="101" width="54" height="6" rx="2" filter="url(#calHgWoodGrain)" opacity="0.55"></rect>
+					// reflection sheen
 					<path class="cal-almanac-hourglass__reflect" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z" fill="url(#calHgGlass)"></path>
 				</svg>
 				<span class="cal-almanac-hourglass__sparkle" data-cal-hourglass-sparkle aria-hidden="true"></span>
