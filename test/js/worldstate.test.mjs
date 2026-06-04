@@ -1,76 +1,11 @@
-// worldstate.test.mjs — Wave 0 runtime test for cal-almanac.js.
-//
-// The almanac JS is a browser IIFE, so we run it inside a node `vm` context
-// with a minimal DOM stub (every querySelector returns null → the render
-// pipelines no-op safely; we only exercise the world-state pub/sub logic).
-// This is the runtime complement to the Go static-assertion tests: it proves
-// setWorldState's changedKeys diffing (incl. the no-op-patch guard) and the
-// unified EFFECTS projection actually behave at runtime.
-//
-// Run: node --test test/js/   (or `make test-js`)
+// worldstate.test.mjs — Wave 0 runtime tests for cal-almanac.js. Proves
+// setWorldState's changedKeys diffing (incl. the no-op-patch guard), the
+// unified EFFECTS projection, and the resolveLayers ordering actually behave
+// at runtime. Harness (node vm + DOM stub) lives in ./harness.mjs.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import vm from 'node:vm';
-
-const here = dirname(fileURLToPath(import.meta.url));
-const jsPath = join(here, '..', '..', 'static', 'js', 'cal-almanac.js');
-
-// Arrays returned from the vm context carry the sandbox realm's
-// Array.prototype, which deepStrictEqual rejects. Copy to a host array of
-// (primitive) strings before comparing.
-const arr = (x) => Array.from(x);
-
-// Minimal mock matching what the seed + lookups read.
-const MOCK = {
-  current_year: 1, current_month: 1, current_day: 1, sky_time: 0.5,
-  seasons: [{ start: 1, name: 'Spring' }],
-  calendar: { hours_per_day: 24 },
-  moons: [{ id: 1, phase_offset: 0.1, size: 1 }],
-  day_weather: {}, celestial_events: {},
-  weather_types: [], weather_effects: [], celestial_effects: [],
-};
-
-// Build a fresh, fully-initialised sandbox (the IIFE auto-runs init()).
-function boot() {
-  const dataEl = {
-    getAttribute: (n) => (n === 'data-cal-almanac-data' ? JSON.stringify(MOCK) : null),
-    textContent: '',
-  };
-  const node = () => ({
-    className: '', style: { setProperty() {} },
-    setAttribute() {}, getAttribute() { return null; }, removeAttribute() {},
-    appendChild() {}, replaceWith() {}, addEventListener() {},
-    querySelector() { return null; }, querySelectorAll() { return []; },
-    getBoundingClientRect() { return { left: 0, top: 0, width: 1080, height: 200 }; },
-  });
-  const sandbox = {
-    console,
-    navigator: { hardwareConcurrency: 8 },
-    devicePixelRatio: 1,
-    matchMedia: () => ({ matches: false }),
-    requestAnimationFrame: () => 0,
-    cancelAnimationFrame: () => {},
-    setTimeout, clearTimeout,
-    scrollX: 0, scrollY: 0,
-    document: {
-      readyState: 'complete',
-      getElementById: (id) => (id === 'cal-almanac-data' ? dataEl : null),
-      querySelector: () => null,
-      querySelectorAll: () => [],
-      addEventListener: () => {},
-      createElement: () => node(),
-    },
-  };
-  sandbox.window = sandbox;   // browser code references `window.…`
-  sandbox.global = sandbox;
-  vm.createContext(sandbox);
-  vm.runInContext(readFileSync(jsPath, 'utf8'), sandbox, { filename: 'cal-almanac.js' });
-  return sandbox.window;
-}
+import { boot, arr } from './harness.mjs';
 
 test('all init blocks succeed under the DOM stub', () => {
   const w = boot();
@@ -126,10 +61,8 @@ test('no-op patch (same value) changes nothing and notifies nobody', () => {
   w.__calSubscribeWorldState((st, changed) => seen.push(arr(changed)));
   const a = arr(w.__calSetWorldState({ timeOfDay: 0.8 })); // same → no-op
   assert.deepEqual(a, [], 'timeOfDay no-op → empty changedKeys');
-  // weather already 'clear' from seed → no-op even via a partial patch
   const b = arr(w.__calSetWorldState({ weather: { type: 'clear' } }));
   assert.deepEqual(b, [], 'weather no-op → empty changedKeys');
-  // partial patch that does not move a field is still a no-op (field-merge)
   const c = arr(w.__calSetWorldState({ weather: { intensity: 1 } }));
   assert.deepEqual(c, [], 'weather intensity unchanged → empty changedKeys');
   assert.equal(seen.length, 0, 'no subscriber fired for any no-op');
@@ -139,11 +72,8 @@ test('resolveLayers returns active layers in back→front order', () => {
   const w = boot();
   assert.deepEqual(arr(w.__calLayerOrder),
     ['timeOfDay', 'season', 'celestial', 'weather', 'events', 'moodTint', 'timeControl']);
-  // Seeded state: time + season + celestial(sun/moons) active; weather is
-  // 'clear' (skipped), no events, no mood, default time-control.
   assert.deepEqual(arr(w.__calResolveLayers(w.__calWorldState)),
     ['timeOfDay', 'season', 'celestial']);
-  // Turn weather on → weather layer appears, still in order.
   w.__calSetWorldState({ weather: { type: 'rain' } });
   assert.deepEqual(arr(w.__calResolveLayers(w.__calWorldState)),
     ['timeOfDay', 'season', 'celestial', 'weather']);
