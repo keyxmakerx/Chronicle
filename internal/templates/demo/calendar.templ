@@ -241,6 +241,28 @@ templ calAlmanacDemoControls(d CalAlmanacMockData) {
 				<button type="button" data-cal-democtl-moon-randomize>🎲 Randomize moons</button>
 				<button type="button" data-cal-democtl-moon-add>＋ Add moon</button>
 			</div>
+			// WAVE 2 mood-tint (showcase-only): preset washes + custom + intensity.
+			<div class="cal-almanac-democtl__row cal-almanac-democtl__moods" data-cal-democtl-mood-presets>
+				<button type="button" data-cal-democtl-mood-preset data-mood="ominous-red">Ominous Red</button>
+				<button type="button" data-cal-democtl-mood-preset data-mood="eerie-green">Eerie Green</button>
+				<button type="button" data-cal-democtl-mood-preset data-mood="melancholy-blue">Melancholy Blue</button>
+				<button type="button" data-cal-democtl-mood-preset data-mood="festive-gold">Festive Gold</button>
+				<button type="button" data-cal-democtl-mood-preset data-mood="cursed-violet">Cursed Violet</button>
+				<button type="button" data-cal-democtl-mood-preset data-mood="holy-white">Holy White</button>
+				<button type="button" data-cal-democtl-mood-preset data-mood="void-black">Void Black</button>
+				<button type="button" data-cal-democtl-mood-preset data-mood="frostbite-cyan">Frostbite Cyan</button>
+			</div>
+			<label class="cal-almanac-democtl__row">
+				<span>Mood color</span>
+				<input type="color" value="#c83232" data-cal-democtl-mood-color/>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Mood intensity</span>
+				<input type="range" min="0" max="100" value="0" data-cal-democtl-mood-intensity/>
+			</label>
+			<div class="cal-almanac-democtl__row">
+				<button type="button" data-cal-democtl-mood-clear>✖ Clear mood</button>
+			</div>
 			<p class="cal-almanac-democtl__note" data-cal-democtl-readout>—</p>
 		</div>
 	</aside>
