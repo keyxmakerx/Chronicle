@@ -266,8 +266,8 @@ func CalAlmanacMock() CalAlmanacMockData {
 		Sunrise:      0.25, // 06:00 on a 24-hour day
 		Sunset:       0.75, // 18:00 on a 24-hour day
 		// V5: day 30 = a "blood sun" coincidence (showcase mock data).
-		// The painted sun-special asset renders for this day; demo-controls
-		// panel can force any day to test all 5 states live.
+		// The sun icon recolors to the 'special' state for this day (Wave 1
+		// inline-SVG sun); demo-controls panel can force any state live.
 		SpecialMoonDays: []string{"1492-4-30"},
 		Months: []CalAlmanacMonth{
 			{1, "Hammer", 30, false},

@@ -930,82 +930,92 @@ func TestCalAlmanacSun_StateResolution(t *testing.T) {
 	}
 }
 
-// TestCalAlmanacSun_AssetsReferenced — the markup references every one
-// of the 5 painted sun-state assets (both WebP + PNG).
-func TestCalAlmanacSun_AssetsReferenced(t *testing.T) {
-	html := renderAlmanac(t)
-	for _, state := range []string{"default", "dawn", "dusk", "eclipse", "special"} {
-		webp := "/static/img/cal-almanac/celestial/sun-" + state + ".webp"
-		png := "/static/img/cal-almanac/celestial/sun-" + state + ".png"
-		if !strings.Contains(html, webp) {
-			t.Errorf("sun WebP asset reference missing: %s", webp)
-		}
-		if !strings.Contains(html, png) {
-			t.Errorf("sun PNG fallback reference missing: %s", png)
-		}
-	}
-}
-
-// TestCalAlmanacSun_PictureFallback — the painted sun renders via
-// <picture><source><img> per state for the WebP+PNG fallback contract.
-func TestCalAlmanacSun_PictureFallback(t *testing.T) {
+// TestCalAlmanacSun_InlineIcon — WAVE 1 supersession: the sun renders as an
+// inline lorc/sun.svg icon (recolored per state via CSS), with the native
+// lorc/eclipse.svg for the eclipse state. The painted-<picture>/WebP/PNG
+// machinery is gone.
+func TestCalAlmanacSun_InlineIcon(t *testing.T) {
 	html := renderAlmanac(t)
 	for _, frag := range []string{
-		"<picture",
-		`<source srcset="/static/img/cal-almanac/celestial/sun-default.webp" type="image/webp"`,
-		`<img src="/static/img/cal-almanac/celestial/sun-default.png"`,
 		`data-cal-sun-state="default"`,
-		`data-cal-sun-state-img="default"`,
-		`data-cal-sun-state-img="eclipse"`,
+		`data-cal-sun-icon="sun"`,
+		`data-cal-sun-icon="eclipse"`,
+		`viewBox="0 0 512 512"`,
+		`fill="currentColor"`,
 	} {
 		if !strings.Contains(html, frag) {
-			t.Errorf("<picture>/state markup missing fragment: %s", frag)
+			t.Errorf("inline-SVG sun markup missing fragment: %s", frag)
+		}
+	}
+	for _, gone := range []string{
+		"<picture",
+		"/static/img/cal-almanac/celestial/sun-",
+		"data-cal-sun-state-img",
+	} {
+		if strings.Contains(html, gone) {
+			t.Errorf("superseded painted-sun markup still present: %s", gone)
 		}
 	}
 }
 
-// TestCalAlmanacSun_PaintedAssetsExist — the 5 painted sun assets (placeholder
-// or real) are actually committed to the repo, both WebP and PNG, and within
-// the file-size budget per the dispatch (≤300 KB hard cap).
-func TestCalAlmanacSun_PaintedAssetsExist(t *testing.T) {
+// TestCalAlmanacSun_VendoredIcons — the CC-BY icons are vendored locally (no
+// runtime CDN) and attributed in CREDITS.md.
+func TestCalAlmanacSun_VendoredIcons(t *testing.T) {
 	root := calDemoRepoRoot(t)
-	dir := filepath.Join(root, "static", "img", "cal-almanac", "celestial")
-	// Per dispatch: 80-150 KB target, 300 KB soft-flag, 500 KB hard block.
-	const softCap = 300 * 1024
-	const hardCap = 500 * 1024
+	for _, p := range []string{
+		filepath.Join(root, "static", "vendor", "game-icons", "lorc", "sun.svg"),
+		filepath.Join(root, "static", "vendor", "game-icons", "lorc", "eclipse.svg"),
+	} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("vendored icon missing: %s (%v)", p, err)
+		}
+	}
+	credits, err := os.ReadFile(filepath.Join(root, "CREDITS.md"))
+	if err != nil {
+		t.Fatalf("CREDITS.md missing: %v", err)
+	}
+	for _, must := range []string{"game-icons", "CC-BY", "lorc/sun.svg"} {
+		if !strings.Contains(string(credits), must) {
+			t.Errorf("CREDITS.md missing attribution marker: %q", must)
+		}
+	}
+	// No runtime CDN reference for the icons (inlined/vendored only).
+	html := renderAlmanac(t)
+	if strings.Contains(html, "jsdelivr") || strings.Contains(html, "cdn.jsdelivr") {
+		t.Errorf("sun icon must be inlined/vendored, not hot-loaded from a CDN")
+	}
+}
+
+// TestCalAlmanacSun_PaintedAssetsRemoved — the abandoned painted placeholders
+// are gone from the repo (supersession cleanup).
+func TestCalAlmanacSun_PaintedAssetsRemoved(t *testing.T) {
+	dir := filepath.Join(calDemoRepoRoot(t), "static", "img", "cal-almanac", "celestial")
 	for _, state := range []string{"default", "dawn", "dusk", "eclipse", "special"} {
 		for _, ext := range []string{"webp", "png"} {
 			p := filepath.Join(dir, "sun-"+state+"."+ext)
-			st, err := os.Stat(p)
-			if err != nil {
-				t.Errorf("sun asset missing: %s (%v)", p, err)
-				continue
-			}
-			if st.Size() > hardCap {
-				t.Errorf("sun asset %s exceeds HARD cap (%d bytes > %d)", p, st.Size(), hardCap)
-			} else if st.Size() > softCap {
-				t.Logf("note: sun asset %s exceeds 300KB soft-flag (%d bytes) — consider re-optimizing", p, st.Size())
+			if _, err := os.Stat(p); err == nil {
+				t.Errorf("abandoned painted sun asset still present: %s", p)
 			}
 		}
 	}
 }
 
-// TestCalAlmanacSun_ReducedMotion — under prefers-reduced-motion every
-// layer freezes (CSS rotation, CSS pulse) and the canvas engine refuses
-// to start its loop (already covered by V4's drawStaticFrame path).
+// TestCalAlmanacSun_ReducedMotion — under prefers-reduced-motion the sun icon
+// freezes (rotation + pulse) and the canvas engine refuses to start its loop;
+// the v5 state-resolution (resolveSunState) + canvas sun-bloom are preserved.
 func TestCalAlmanacSun_ReducedMotion(t *testing.T) {
 	css := stripCalCSSComments(readCalAlmanacCSS(t))
 	if !strings.Contains(css, "@media (prefers-reduced-motion: reduce)") {
 		t.Fatalf("reduced-motion media query missing")
 	}
-	// Find the sun-targeting reduced-motion rule near the end of the file
-	// — every CSS animation on the sun layer must be `animation: none`.
-	if !strings.Contains(css, ".cal-almanac-sun__layer img { animation: none !important") {
-		t.Errorf("sun-layer image animation must be `animation: none !important` under reduced-motion")
+	if !strings.Contains(css, ".cal-almanac-sun__icon { animation: none !important") {
+		t.Errorf("sun icon animation must be `animation: none !important` under reduced-motion")
 	}
 	js := readCalAlmanacJS(t)
-	if !strings.Contains(js, "reducedNow") || !strings.Contains(js, "drawStaticFrame") {
-		t.Errorf("engine's reduced-motion path missing (v4 carryover)")
+	for _, keep := range []string{"reducedNow", "drawStaticFrame", "function resolveSunState", "sun-bloom"} {
+		if !strings.Contains(js, keep) {
+			t.Errorf("preserved engine/sun marker missing: %s", keep)
+		}
 	}
 }
 
