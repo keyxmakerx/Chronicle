@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Moon — 10 more procedurals (3 realistic + 7 diverse styles)</title>
+<style>
+  body { font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif; background:#15171e; color:#e8e6e3; margin:0; padding:2rem; line-height:1.55; }
+  h1 { color:#cfd6e8; margin-top:0; }
+  h2 { color:#a3b0d1; border-bottom:1px solid #444; padding-bottom:.4rem; margin-top:2.5rem; }
+  .intro { max-width:780px; opacity:.9; }
+  code { background:#2a2a2a; padding:1px 6px; border-radius:3px; font-size:.85em; }
+  .note { background:#1f2530; border-left:3px solid #6c8cd0; padding:.9rem 1.1rem; border-radius:4px; font-size:.9rem; margin:1.2rem 0; max-width:780px; }
+  .badge-real { background:#3a2e1e; color:#e4c8a0; padding:1px 7px; border-radius:9px; font-size:.65rem; margin-left:6px; vertical-align:2px; }
+
+  /* realistic moons — larger so the shading detail is visible */
+  .real-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:1.2rem; max-width:1200px; margin:1.5rem 0; }
+  .real-card { background:#1c1e26; border:1px solid #2f323d; border-radius:8px; padding:1rem; text-align:center; }
+  .real-card .pframe {
+    background:radial-gradient(circle at 50% 38%, #1a2240, #0a0e1e 78%);
+    padding:14px; border-radius:6px; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  }
+  .real-card svg { width:100%; height:100%; }
+  .real-card .name { font-size:.95rem; color:#cfd6e8; margin-top:.5rem; font-weight:500; }
+  .real-card .slug { font-family:monospace; font-size:.7rem; opacity:.55; margin-top:.25rem; }
+  .real-card .desc { font-size:.8rem; opacity:.78; margin-top:.4rem; }
+
+  /* stylized moons — smaller grid */
+  .style-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:1.1rem; max-width:1200px; margin:1.5rem 0; }
+  .style-card { background:#1c1e26; border:1px solid #2f323d; border-radius:8px; padding:.8rem; text-align:center; }
+  .style-card .pframe {
+    background:radial-gradient(circle at 50% 38%, #1a2240, #0a0e1e 78%);
+    padding:10px; border-radius:6px; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  }
+  .style-card svg { width:100%; height:100%; }
+  .style-card .name { font-size:.85rem; color:#cfd6e8; margin-top:.4rem; font-weight:500; }
+  .style-card .slug { font-family:monospace; font-size:.68rem; opacity:.55; margin-top:.2rem; }
+  .style-card .desc { font-size:.74rem; opacity:.7; margin-top:.3rem; }
+
+  @keyframes irid-shift { 0%, 100% { filter:hue-rotate(0deg); } 50% { filter:hue-rotate(60deg); } }
+  .iridescent-anim { animation: irid-shift 6s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .iridescent-anim { animation: none; } }
+</style>
+</head>
+<body>
+
+<h1>Moon — 10 more procedurals</h1>
+
+<div class="intro">
+<p>Continuing from the first 10 (mandala / crystalline / stained-glass / mosaic / pixel / line-art / neon / tribal / topographic / alchemical). This batch: <strong>3 realistic shaded moons using SVG filter stacks</strong> (feSpecularLighting + feDiffuseLighting + feTurbulence for real 3D rendering) + <strong>7 distinct styles</strong> not yet covered (watercolor, origami, holographic, etched, sumi-e, constellation map, embroidered).</p>
+</div>
+
+<!-- =================================================================
+     REALISTIC 3D-SHADED MOONS
+     ================================================================= -->
+<h2>Realistic — SVG filter shading <span class="badge-real">3 moons</span></h2>
+
+<div class="note">
+Each uses a layered filter stack: <code>feDiffuseLighting</code> with a distant light source for spherical surface shading, <code>feSpecularLighting</code> with a point light for highlight, <code>feTurbulence</code> + <code>feColorMatrix</code> for surface texture. Maria placed at real lunar coordinates (Imbrium, Serenitatis, Tranquillitatis, Crisium, Fecunditatis, Nubium). Discrete craters have bright sun-facing rims + dark shadow rims.
+</div>
+
+<div class="real-grid">
+
+  <!-- ============================================================
+       REALISTIC 1: FULL ILLUMINATED — overhead-ish lighting
+       ============================================================ -->
+  <div class="real-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="r1-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#f8f4e8"/>
+            <stop offset=".55" stop-color="#c8c4b8"/>
+            <stop offset="1" stop-color="#544f44"/>
+          </radialGradient>
+          <radialGradient id="r1-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".85" stop-color="#b8c4d8" stop-opacity="0"/>
+            <stop offset="1" stop-color="#b8c4d8" stop-opacity=".25"/>
+          </radialGradient>
+          <radialGradient id="r1-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#181410" stop-opacity=".5"/>
+            <stop offset=".8" stop-color="#181410" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="r1-tex" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="3" seed="7"/>
+            <feColorMatrix values="0 0 0 0 .2  0 0 0 0 .18  0 0 0 0 .14  0 0 0 .35 0"/>
+          </filter>
+          <filter id="r1-spec" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feSpecularLighting surfaceScale="4" specularConstant=".7" specularExponent="22" lighting-color="#fff8e0">
+              <fePointLight x="60" y="50" z="180"/>
+            </feSpecularLighting>
+            <feComposite in2="SourceAlpha" operator="in"/>
+          </filter>
+          <clipPath id="r1-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <!-- atmospheric halo -->
+        <circle cx="100" cy="100" r="92" fill="url(#r1-atm)"/>
+        <!-- base sphere -->
+        <circle cx="100" cy="100" r="78" fill="url(#r1-base)"/>
+        <g clip-path="url(#r1-clip)">
+          <!-- surface texture -->
+          <rect width="200" height="200" filter="url(#r1-tex)" opacity=".55"/>
+          <!-- maria (real geography, smoother curves) -->
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#7a7468" opacity=".55"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#7a7468" opacity=".5"/>
+          <path d="M 96,60 Q 110,58 122,68 Q 128,82 116,86 Q 100,84 96,72 Q 92,64 96,60 Z" fill="#7a7468" opacity=".55"/>
+          <ellipse cx="136" cy="78" rx="9" ry="11" fill="#7a7468" opacity=".5"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#7a7468" opacity=".55"/>
+          <path d="M 100,118 Q 114,114 124,126 Q 124,140 110,142 Q 96,138 98,124 Q 96,120 100,118 Z" fill="#7a7468" opacity=".5"/>
+          <!-- discrete craters: each = dark bowl + bright sun-facing rim -->
+          <!-- Tycho with ray system -->
+          <g transform="translate(78 142)">
+            <g opacity=".15" stroke="#f8f4e8" stroke-width=".5" fill="none">
+              <line x1="0" y1="0" x2="-22" y2="-12"/><line x1="0" y1="0" x2="22" y2="-10"/>
+              <line x1="0" y1="0" x2="-14" y2="-22"/><line x1="0" y1="0" x2="16" y2="-20"/>
+              <line x1="0" y1="0" x2="0" y2="-28"/><line x1="0" y1="0" x2="-22" y2="2"/>
+              <line x1="0" y1="0" x2="22" y2="0"/>
+            </g>
+            <circle r="3.5" fill="#181410"/>
+            <path d="M -2.8,-2.5 A 3.8,3.8 0 0,1 2.8,-2.5" stroke="#f8f4e8" stroke-width=".9" fill="none" opacity=".75"/>
+          </g>
+          <!-- Copernicus -->
+          <g transform="translate(48 88)">
+            <circle r="4" fill="#181410"/>
+            <path d="M -3.2,-2.6 A 4.4,4.4 0 0,1 3.2,-2.6" stroke="#f8f4e8" stroke-width=".7" fill="none" opacity=".7"/>
+            <circle r=".7" fill="#f8f4e8" opacity=".55"/>
+          </g>
+          <!-- Kepler -->
+          <g transform="translate(30 96)">
+            <circle r="2.5" fill="#181410"/>
+            <path d="M -2,-1.6 A 2.8,2.8 0 0,1 2,-1.6" stroke="#f8f4e8" stroke-width=".55" fill="none" opacity=".65"/>
+          </g>
+          <!-- Aristarchus (bright) -->
+          <g transform="translate(22 78)">
+            <circle r="2" fill="#f8f4e8" opacity=".8"/>
+            <circle r="1.2" fill="#181410"/>
+          </g>
+          <!-- small craters -->
+          <g fill="#181410" opacity=".65">
+            <circle cx="56" cy="42" r="1.5"/><circle cx="118" cy="44" r="1.2"/>
+            <circle cx="146" cy="100" r="1.6"/><circle cx="38" cy="124" r="1.3"/>
+            <circle cx="150" cy="156" r="1.4"/><circle cx="98" cy="160" r="1.1"/>
+            <circle cx="120" cy="100" r="1"/>
+          </g>
+          <!-- terminator -->
+          <circle cx="100" cy="100" r="78" fill="url(#r1-term)"/>
+        </g>
+        <!-- specular highlight -->
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#r1-spec)" opacity=".7" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <div class="name">11. Realistic Full Illuminated</div>
+    <div class="slug">moon-realistic-full</div>
+    <div class="desc">Spherical shading via radial gradient + feDiffuseLighting bevel. feSpecularLighting hotspot at upper-left. Real maria + Tycho ray system. Atmospheric edge halo.</div>
+  </div>
+
+  <!-- ============================================================
+       REALISTIC 2: SIDELIT / HALF MOON
+       ============================================================ -->
+  <div class="real-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="r2-base" cx=".25" cy=".4" r=".75">
+            <stop offset="0" stop-color="#f8f4e8"/>
+            <stop offset=".4" stop-color="#c8c4b8"/>
+            <stop offset=".75" stop-color="#403628"/>
+            <stop offset="1" stop-color="#0a0805"/>
+          </radialGradient>
+          <radialGradient id="r2-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".85" stop-color="#b8c4d8" stop-opacity="0"/>
+            <stop offset="1" stop-color="#b8c4d8" stop-opacity=".22"/>
+          </radialGradient>
+          <linearGradient id="r2-earthshine" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#5a6480" stop-opacity="0"/>
+            <stop offset="1" stop-color="#5a6480" stop-opacity=".18"/>
+          </linearGradient>
+          <filter id="r2-tex" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="3" seed="11"/>
+            <feColorMatrix values="0 0 0 0 .2  0 0 0 0 .18  0 0 0 0 .14  0 0 0 .3 0"/>
+          </filter>
+          <filter id="r2-spec" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feSpecularLighting surfaceScale="5" specularConstant=".9" specularExponent="20" lighting-color="#fff8e0">
+              <fePointLight x="20" y="60" z="160"/>
+            </feSpecularLighting>
+            <feComposite in2="SourceAlpha" operator="in"/>
+          </filter>
+          <clipPath id="r2-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+          <clipPath id="r2-litside"><rect x="0" y="0" width="115" height="200"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#r2-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#r2-base)"/>
+        <g clip-path="url(#r2-clip)">
+          <rect width="200" height="200" filter="url(#r2-tex)" opacity=".45"/>
+          <!-- maria only visible on lit half -->
+          <g clip-path="url(#r2-litside)">
+            <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#5a5448" opacity=".55"/>
+            <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#5a5448" opacity=".5"/>
+            <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#5a5448" opacity=".55"/>
+          </g>
+          <!-- craters only on lit half with strong shadow direction -->
+          <g clip-path="url(#r2-litside)">
+            <g transform="translate(48 88)">
+              <circle r="4" fill="#0a0805"/>
+              <path d="M -3.5,-2.5 A 4.5,4.5 0 0,1 3.5,-1.5" stroke="#f8f4e8" stroke-width=".8" fill="none" opacity=".85"/>
+            </g>
+            <g transform="translate(32 60)">
+              <circle r="2.5" fill="#0a0805"/>
+              <path d="M -2.2,-1.4 A 2.8,2.8 0 0,1 2.2,-.8" stroke="#f8f4e8" stroke-width=".6" fill="none" opacity=".8"/>
+            </g>
+            <g transform="translate(28 130)">
+              <circle r="3" fill="#0a0805"/>
+              <path d="M -2.6,-1.8 A 3.2,3.2 0 0,1 2.6,-1" stroke="#f8f4e8" stroke-width=".7" fill="none" opacity=".8"/>
+            </g>
+            <g fill="#0a0805" opacity=".7">
+              <circle cx="60" cy="42" r="1.4"/><circle cx="80" cy="106" r="1.2"/>
+              <circle cx="42" cy="148" r="1.5"/><circle cx="72" cy="148" r="1"/>
+            </g>
+          </g>
+          <!-- earthshine on dark side (faint blue cast) -->
+          <rect x="100" y="22" width="80" height="156" fill="url(#r2-earthshine)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#r2-spec)" opacity=".8" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <div class="name">12. Realistic Sidelit (Half Moon)</div>
+    <div class="slug">moon-realistic-sidelit</div>
+    <div class="desc">Strong directional light from left → dramatic terminator. Only the lit half shows surface features. Subtle earthshine (blue cast) on the dark side — light bouncing off Earth.</div>
+  </div>
+
+  <!-- ============================================================
+       REALISTIC 3: ECLIPSE / BLOOD MOON
+       ============================================================ -->
+  <div class="real-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="r3-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#e8a878"/>
+            <stop offset=".4" stop-color="#a8482c"/>
+            <stop offset=".8" stop-color="#601a18"/>
+            <stop offset="1" stop-color="#1a0608"/>
+          </radialGradient>
+          <radialGradient id="r3-corona" cx=".5" cy=".5" r=".55">
+            <stop offset=".5" stop-color="#ff7848" stop-opacity="0"/>
+            <stop offset=".75" stop-color="#ff7848" stop-opacity=".22"/>
+            <stop offset="1" stop-color="#ff7848" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="r3-umbra" cx=".55" cy=".5" r=".55">
+            <stop offset="0" stop-color="#1a0608" stop-opacity="0"/>
+            <stop offset=".6" stop-color="#1a0608" stop-opacity=".3"/>
+            <stop offset=".9" stop-color="#1a0608" stop-opacity=".55"/>
+          </radialGradient>
+          <filter id="r3-tex" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="3" seed="13"/>
+            <feColorMatrix values="0 0 0 0 .25  0 0 0 0 .08  0 0 0 0 .04  0 0 0 .35 0"/>
+          </filter>
+          <filter id="r3-spec" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feSpecularLighting surfaceScale="3" specularConstant=".4" specularExponent="20" lighting-color="#ffa080">
+              <fePointLight x="60" y="50" z="170"/>
+            </feSpecularLighting>
+            <feComposite in2="SourceAlpha" operator="in"/>
+          </filter>
+          <clipPath id="r3-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <!-- background stars -->
+        <g fill="#fff" opacity=".8">
+          <circle cx="22" cy="38" r=".8"/><circle cx="178" cy="46" r=".9"/>
+          <circle cx="14" cy="148" r="1"/><circle cx="186" cy="158" r=".8"/>
+          <circle cx="34" cy="20" r=".6"/><circle cx="166" cy="180" r=".7"/>
+        </g>
+        <!-- atmospheric corona -->
+        <circle cx="100" cy="100" r="94" fill="url(#r3-corona)"/>
+        <!-- base sphere (blood color) -->
+        <circle cx="100" cy="100" r="78" fill="url(#r3-base)"/>
+        <g clip-path="url(#r3-clip)">
+          <rect width="200" height="200" filter="url(#r3-tex)" opacity=".5"/>
+          <!-- subtle maria still visible -->
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#3a0808" opacity=".55"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#3a0808" opacity=".5"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#3a0808" opacity=".5"/>
+          <!-- craters -->
+          <g fill="#1a0608" opacity=".7">
+            <circle cx="48" cy="88" r="3.5"/>
+            <circle cx="78" cy="142" r="3"/>
+            <circle cx="118" cy="100" r="2.5"/>
+            <circle cx="140" cy="78" r="2"/>
+          </g>
+          <!-- umbral shadow -->
+          <circle cx="100" cy="100" r="78" fill="url(#r3-umbra)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#r3-spec)" opacity=".5" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <div class="name">13. Realistic Blood Moon (Eclipse)</div>
+    <div class="slug">moon-realistic-eclipse</div>
+    <div class="desc">Reddish-orange gradient from atmospheric refraction during lunar eclipse. Umbral shadow on edge, soft red corona around. Maria + craters still visible through the red. Star field behind.</div>
+  </div>
+
+</div>
+
+<!-- =================================================================
+     7 OTHER STYLES — diverse aesthetics
+     ================================================================= -->
+<h2>7 more diverse styles</h2>
+
+<div class="style-grid">
+
+  <!-- 14. WATERCOLOR -->
+  <div class="style-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="wc-blur"><feGaussianBlur stdDeviation="4"/></filter>
+          <filter id="wc-blur2"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        <circle cx="92" cy="92" r="72" fill="#a8b8d8" opacity=".5" filter="url(#wc-blur2)"/>
+        <circle cx="100" cy="100" r="65" fill="#d8e0ec" opacity=".7" filter="url(#wc-blur)"/>
+        <circle cx="100" cy="100" r="55" fill="#f0f4fa" opacity=".75" filter="url(#wc-blur)"/>
+        <ellipse cx="80" cy="80" rx="22" ry="16" fill="#8090b0" opacity=".4" filter="url(#wc-blur)"/>
+        <ellipse cx="118" cy="110" rx="18" ry="14" fill="#8090b0" opacity=".35" filter="url(#wc-blur)"/>
+        <ellipse cx="95" cy="125" rx="14" ry="10" fill="#8090b0" opacity=".3" filter="url(#wc-blur)"/>
+      </svg>
+    </div>
+    <div class="name">14. Watercolor Wash</div>
+    <div class="slug">moon-watercolor</div>
+    <div class="desc">Soft blurred color washes</div>
+  </div>
+
+  <!-- 15. ORIGAMI -->
+  <div class="style-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="#3a3a40" stroke-width=".5" stroke-linejoin="round">
+          <polygon points="100,30 60,55 70,100" fill="#e8e8ec"/>
+          <polygon points="100,30 140,55 130,100" fill="#c4c4ca"/>
+          <polygon points="60,55 30,90 50,110" fill="#a8a8b0"/>
+          <polygon points="140,55 170,90 150,110" fill="#8888a0"/>
+          <polygon points="70,100 50,110 70,160" fill="#d0d0d6"/>
+          <polygon points="130,100 150,110 130,160" fill="#9898a4"/>
+          <polygon points="70,100 130,100 100,140" fill="#b8b8c0"/>
+          <polygon points="70,160 100,140 130,160 100,175" fill="#a0a0ac"/>
+          <polygon points="50,110 70,100 70,160" fill="#bcbcc4"/>
+          <polygon points="150,110 130,100 130,160" fill="#90909c"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">15. Origami (folded paper)</div>
+    <div class="slug">moon-origami</div>
+    <div class="desc">Folded polygon panels with crease lines</div>
+  </div>
+
+  <!-- 16. HOLOGRAPHIC -->
+  <div class="style-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="iri" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ff8ad8"/>
+            <stop offset=".25" stop-color="#a8d8ff"/>
+            <stop offset=".5" stop-color="#a8ffc8"/>
+            <stop offset=".75" stop-color="#ffd8a8"/>
+            <stop offset="1" stop-color="#d8a8ff"/>
+          </linearGradient>
+          <radialGradient id="iri-inner" cx=".4" cy=".35" r=".5">
+            <stop offset="0" stop-color="#fff" stop-opacity=".7"/>
+            <stop offset=".5" stop-color="#fff" stop-opacity=".15"/>
+            <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="100" r="75" fill="url(#iri)" class="iridescent-anim"/>
+        <circle cx="100" cy="100" r="75" fill="url(#iri-inner)"/>
+        <ellipse cx="78" cy="78" rx="14" ry="8" fill="#fff" opacity=".4" transform="rotate(-25 78 78)"/>
+      </svg>
+    </div>
+    <div class="name">16. Holographic / Iridescent</div>
+    <div class="slug">moon-holographic</div>
+    <div class="desc">Rainbow gradient that hue-shifts on a 6s cycle (reduced-motion safe)</div>
+  </div>
+
+  <!-- 17. ETCHED / ENGRAVING -->
+  <div class="style-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="hatch-h" patternUnits="userSpaceOnUse" width="3" height="3" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="3" stroke="#0a0e1e" stroke-width=".5"/>
+          </pattern>
+          <pattern id="hatch-cross" patternUnits="userSpaceOnUse" width="3" height="3" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="3" stroke="#0a0e1e" stroke-width=".5"/>
+            <line x1="0" y1="0" x2="3" y2="0" stroke="#0a0e1e" stroke-width=".5"/>
+          </pattern>
+          <mask id="etch-rightmask">
+            <circle cx="100" cy="100" r="70" fill="white"/>
+            <ellipse cx="80" cy="100" rx="44" ry="68" fill="black"/>
+          </mask>
+          <mask id="etch-crossmask">
+            <circle cx="100" cy="100" r="70" fill="black"/>
+            <ellipse cx="140" cy="115" rx="22" ry="32" fill="white"/>
+          </mask>
+        </defs>
+        <circle cx="100" cy="100" r="72" fill="#f0eddc" stroke="#0a0e1e" stroke-width="2"/>
+        <circle cx="100" cy="100" r="72" fill="url(#hatch-h)" mask="url(#etch-rightmask)" opacity=".5"/>
+        <circle cx="100" cy="100" r="72" fill="url(#hatch-cross)" mask="url(#etch-crossmask)" opacity=".55"/>
+        <g fill="#0a0e1e" stroke="#0a0e1e" stroke-width="1">
+          <circle cx="78" cy="80" r="6"/><circle cx="118" cy="90" r="4"/>
+          <circle cx="88" cy="125" r="7"/><circle cx="130" cy="138" r="4.5"/>
+        </g>
+        <g stroke="#0a0e1e" stroke-width="1.5" stroke-linecap="round" fill="none">
+          <path d="M 28,28 L 38,38 M 38,28 L 28,38"/>
+          <path d="M 165,38 L 175,48 M 175,38 L 165,48"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">17. Etched / Engraving</div>
+    <div class="slug">moon-etched</div>
+    <div class="desc">Cross-hatching pattern fills, MTG card art / astronomy book style</div>
+  </div>
+
+  <!-- 18. SUMI-E / INK BRUSH -->
+  <div class="style-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="ink-rough" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency=".04" numOctaves="2"/>
+            <feDisplacementMap in="SourceGraphic" scale="3"/>
+          </filter>
+        </defs>
+        <!-- single sweeping crescent brushstroke -->
+        <path d="M 70,38 Q 130,40 144,80 Q 150,115 132,148 Q 100,170 65,156 Q 50,145 58,135 Q 95,150 122,128 Q 138,108 128,80 Q 110,55 70,52 Q 60,48 70,38 Z"
+              fill="#1a1a1f" filter="url(#ink-rough)"/>
+        <!-- a few sparse ink dots (stars) -->
+        <g fill="#1a1a1f">
+          <circle cx="28" cy="58" r="1.5"/>
+          <circle cx="165" cy="155" r="1.2"/>
+          <circle cx="38" cy="148" r="1"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">18. Sumi-e / Ink Brush</div>
+    <div class="slug">moon-sumie</div>
+    <div class="desc">Single sweeping brush stroke, sparse ink dots. Japanese aesthetic.</div>
+  </div>
+
+  <!-- 19. CONSTELLATION MAP -->
+  <div class="style-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="100" cy="100" r="72" fill="none" stroke="#5a6480" stroke-width="1" opacity=".5"/>
+        <!-- constellation lines connecting "craters as stars" -->
+        <g stroke="#a8b8d8" stroke-width=".8" opacity=".6" fill="none">
+          <path d="M 60,55 L 90,72 L 125,62 L 145,90 L 122,118 L 90,108 L 70,128 L 100,148 L 135,138"/>
+          <path d="M 90,72 L 70,90 L 90,108"/>
+          <path d="M 125,62 L 122,90 L 122,118"/>
+        </g>
+        <!-- "stars" = crater positions -->
+        <g fill="#fff">
+          <circle cx="60" cy="55" r="2.5"/>
+          <circle cx="90" cy="72" r="3"/>
+          <circle cx="125" cy="62" r="2"/>
+          <circle cx="145" cy="90" r="2.2"/>
+          <circle cx="122" cy="118" r="2.8"/>
+          <circle cx="90" cy="108" r="2"/>
+          <circle cx="70" cy="90" r="1.8"/>
+          <circle cx="122" cy="90" r="1.6"/>
+          <circle cx="70" cy="128" r="2.2"/>
+          <circle cx="100" cy="148" r="3"/>
+          <circle cx="135" cy="138" r="2.5"/>
+        </g>
+        <!-- glow on biggest stars -->
+        <g fill="#fff" opacity=".25">
+          <circle cx="90" cy="72" r="5"/>
+          <circle cx="100" cy="148" r="5"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">19. Constellation Map</div>
+    <div class="slug">moon-constellation</div>
+    <div class="desc">Moon as a star-chart — craters as stars, connection lines as constellations</div>
+  </div>
+
+  <!-- 20. EMBROIDERED / STITCHED -->
+  <div class="style-card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="stitch-pat" patternUnits="userSpaceOnUse" width="8" height="8">
+            <rect width="8" height="8" fill="#d4d4d8"/>
+            <line x1="0" y1="0" x2="8" y2="8" stroke="#b0b0b8" stroke-width=".5"/>
+            <line x1="8" y1="0" x2="0" y2="8" stroke="#b0b0b8" stroke-width=".5"/>
+          </pattern>
+        </defs>
+        <circle cx="100" cy="100" r="68" fill="url(#stitch-pat)" stroke="#3a3a40" stroke-width="2" stroke-dasharray="4,2"/>
+        <!-- crater patches with stitched outline -->
+        <ellipse cx="78" cy="78" rx="14" ry="11" fill="#8a8a92" stroke="#3a3a40" stroke-width="1.5" stroke-dasharray="3,1.5"/>
+        <ellipse cx="120" cy="105" rx="12" ry="8" fill="#8a8a92" stroke="#3a3a40" stroke-width="1.5" stroke-dasharray="3,1.5"/>
+        <circle cx="65" cy="125" r="6" fill="#8a8a92" stroke="#3a3a40" stroke-width="1.5" stroke-dasharray="3,1.5"/>
+        <circle cx="135" cy="140" r="5" fill="#8a8a92" stroke="#3a3a40" stroke-width="1.5" stroke-dasharray="3,1.5"/>
+        <!-- French knots (small filled dots) -->
+        <g fill="#3a3a40">
+          <circle cx="50" cy="60" r="2"/>
+          <circle cx="150" cy="80" r="2"/>
+          <circle cx="45" cy="150" r="2"/>
+          <circle cx="155" cy="155" r="2"/>
+        </g>
+      </svg>
+    </div>
+    <div class="name">20. Embroidered / Stitched</div>
+    <div class="slug">moon-embroidered</div>
+    <div class="desc">Stitch pattern fill, dashed thread outlines, French-knot dots</div>
+  </div>
+
+</div>
+
+<div class="note" style="margin-top:2rem;">
+<strong>Total procedural library now = 20 designs.</strong> Combined with the 6 emoji packs (~40 pro icons), the moon library has ~60 options to pick from. For a multi-moon world: each moon picks one variant; tint via fill swap. For a "randomize" feature: pick uniformly across all 60.
+</div>
+
+<div class="note">
+Reply with any subset that lands — by number ("realistic 11, 12, etched 17, sumi-e 18"), or by category ("all 3 realistic + iridescent + constellation"), or "all of them." I lock whatever you pick and we move on.
+</div>
+
+</body>
+</html>

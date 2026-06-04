@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Moon — 6 realistic iterations on #11</title>
+<style>
+  body { font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif; background:#15171e; color:#e8e6e3; margin:0; padding:2rem; line-height:1.55; }
+  h1 { color:#cfd6e8; margin-top:0; }
+  h2 { color:#a3b0d1; border-bottom:1px solid #444; padding-bottom:.4rem; margin-top:2.5rem; }
+  .intro { max-width:780px; opacity:.9; }
+  code { background:#2a2a2a; padding:1px 6px; border-radius:3px; font-size:.85em; }
+  .note { background:#1f2530; border-left:3px solid #6c8cd0; padding:.9rem 1.1rem; border-radius:4px; font-size:.9rem; margin:1.2rem 0; max-width:780px; }
+  .locks { background:#1f2a1f; border-left:3px solid #80c080; padding:1rem; border-radius:4px; margin:1.5rem 0; max-width:780px; font-size:.9rem; }
+  .badge { display:inline-block; padding:1px 7px; border-radius:9px; font-size:.62rem; opacity:.85; margin-left:6px; vertical-align:2px; }
+  .badge-small { background:#1e3a2e; color:#a8e4c0; }
+  .badge-major { background:#3a1e2e; color:#e4a8c0; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:1.2rem; max-width:1200px; margin:1.5rem 0; }
+  .card { background:#1c1e26; border:1px solid #2f323d; border-radius:8px; padding:1rem; text-align:center; }
+  .pframe {
+    background:radial-gradient(circle at 50% 38%, #1a2240, #0a0e1e 78%);
+    padding:14px; border-radius:6px; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  }
+  .pframe svg { width:100%; height:100%; }
+  .card h3 { color:#cfd6e8; margin:.6rem 0 .2rem; font-size:.95rem; display:flex; align-items:center; justify-content:center; gap:.3rem; }
+  .card .slug { font-family:monospace; font-size:.7rem; opacity:.55; }
+  .card .desc { font-size:.78rem; opacity:.78; margin-top:.4rem; }
+</style>
+</head>
+<body>
+
+<h1>Moon — 6 iterations on Realistic Full (#11)</h1>
+
+<div class="intro">
+<p>6 variations of <code>moon-realistic-full</code> — 3 small tonal/lighting changes keeping the same lunar character, 3 major variations showing what the SVG filter stack does for genuinely different moon types (icy, volcanic, ancient-cratered).</p>
+</div>
+
+<div class="locks">
+<strong>Locked from prior rounds:</strong> Google Noto Emoji · Twitter Twemoji · Etched (17) · Holographic (16) · Watercolor (14) · Constellation (19) · Realistic Full Illuminated (11). Plus the original 10 procedurals from batch 1. Adding whichever of these 6 you like to the set.
+</div>
+
+<h2>Small variations <span class="badge badge-small">tonal / lighting</span></h2>
+
+<div class="grid">
+
+  <!-- ============================================================
+       VARIATION 1: Selene Classic (refined original)
+       ============================================================ -->
+  <div class="card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v1-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#f8f4e8"/>
+            <stop offset=".55" stop-color="#c8c4b8"/>
+            <stop offset="1" stop-color="#544f44"/>
+          </radialGradient>
+          <radialGradient id="v1-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".85" stop-color="#b8c4d8" stop-opacity="0"/>
+            <stop offset="1" stop-color="#b8c4d8" stop-opacity=".25"/>
+          </radialGradient>
+          <radialGradient id="v1-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#181410" stop-opacity=".5"/>
+            <stop offset=".8" stop-color="#181410" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v1-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="3" seed="7"/><feColorMatrix values="0 0 0 0 .2  0 0 0 0 .18  0 0 0 0 .14  0 0 0 .35 0"/></filter>
+          <filter id="v1-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feSpecularLighting surfaceScale="4" specularConstant=".7" specularExponent="22" lighting-color="#fff8e0"><fePointLight x="60" y="50" z="180"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <clipPath id="v1-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#v1-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v1-base)"/>
+        <g clip-path="url(#v1-clip)">
+          <rect width="200" height="200" filter="url(#v1-tex)" opacity=".55"/>
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#7a7468" opacity=".55"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#7a7468" opacity=".5"/>
+          <path d="M 96,60 Q 110,58 122,68 Q 128,82 116,86 Q 100,84 96,72 Q 92,64 96,60 Z" fill="#7a7468" opacity=".55"/>
+          <ellipse cx="136" cy="78" rx="9" ry="11" fill="#7a7468" opacity=".5"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#7a7468" opacity=".55"/>
+          <path d="M 100,118 Q 114,114 124,126 Q 124,140 110,142 Q 96,138 98,124 Q 96,120 100,118 Z" fill="#7a7468" opacity=".5"/>
+          <g transform="translate(78 142)">
+            <g opacity=".15" stroke="#f8f4e8" stroke-width=".5" fill="none">
+              <line x1="0" y1="0" x2="-22" y2="-12"/><line x1="0" y1="0" x2="22" y2="-10"/>
+              <line x1="0" y1="0" x2="-14" y2="-22"/><line x1="0" y1="0" x2="16" y2="-20"/>
+              <line x1="0" y1="0" x2="0" y2="-28"/>
+            </g>
+            <circle r="3.5" fill="#181410"/>
+            <path d="M -2.8,-2.5 A 3.8,3.8 0 0,1 2.8,-2.5" stroke="#f8f4e8" stroke-width=".9" fill="none" opacity=".75"/>
+          </g>
+          <g transform="translate(48 88)"><circle r="4" fill="#181410"/><path d="M -3.2,-2.6 A 4.4,4.4 0 0,1 3.2,-2.6" stroke="#f8f4e8" stroke-width=".7" fill="none" opacity=".7"/><circle r=".7" fill="#f8f4e8" opacity=".55"/></g>
+          <g transform="translate(30 96)"><circle r="2.5" fill="#181410"/><path d="M -2,-1.6 A 2.8,2.8 0 0,1 2,-1.6" stroke="#f8f4e8" stroke-width=".55" fill="none" opacity=".65"/></g>
+          <g transform="translate(22 78)"><circle r="2" fill="#f8f4e8" opacity=".8"/><circle r="1.2" fill="#181410"/></g>
+          <g fill="#181410" opacity=".65">
+            <circle cx="56" cy="42" r="1.5"/><circle cx="118" cy="44" r="1.2"/><circle cx="146" cy="100" r="1.6"/>
+            <circle cx="38" cy="124" r="1.3"/><circle cx="150" cy="156" r="1.4"/><circle cx="98" cy="160" r="1.1"/>
+          </g>
+          <circle cx="100" cy="100" r="78" fill="url(#v1-term)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v1-spec)" opacity=".7" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <h3>21. Selene Classic <span class="badge badge-small">small</span></h3>
+    <div class="slug">moon-realistic-selene</div>
+    <div class="desc">The baseline, slightly refined. Warm-cream base, blue atmospheric halo, standard upper-left lighting. Earth's moon.</div>
+  </div>
+
+  <!-- ============================================================
+       VARIATION 2: Pale Silver Bright
+       ============================================================ -->
+  <div class="card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v2-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset=".55" stop-color="#dde0e8"/>
+            <stop offset="1" stop-color="#5e6878"/>
+          </radialGradient>
+          <radialGradient id="v2-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".82" stop-color="#c8d8f0" stop-opacity="0"/>
+            <stop offset="1" stop-color="#c8d8f0" stop-opacity=".35"/>
+          </radialGradient>
+          <radialGradient id="v2-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#181c28" stop-opacity=".45"/>
+            <stop offset=".8" stop-color="#181c28" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v2-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="3" seed="9"/><feColorMatrix values="0 0 0 0 .18  0 0 0 0 .2  0 0 0 0 .24  0 0 0 .25 0"/></filter>
+          <filter id="v2-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="2.5"/><feSpecularLighting surfaceScale="5" specularConstant="1" specularExponent="25" lighting-color="#fff"><fePointLight x="55" y="48" z="170"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <clipPath id="v2-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#v2-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v2-base)"/>
+        <g clip-path="url(#v2-clip)">
+          <rect width="200" height="200" filter="url(#v2-tex)" opacity=".4"/>
+          <!-- lighter maria, less contrast -->
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#8c95a8" opacity=".35"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#8c95a8" opacity=".32"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#8c95a8" opacity=".35"/>
+          <path d="M 100,118 Q 114,114 124,126 Q 124,140 110,142 Q 96,138 98,124 Q 96,120 100,118 Z" fill="#8c95a8" opacity=".32"/>
+          <!-- fewer, smaller craters -->
+          <g transform="translate(48 88)"><circle r="3.5" fill="#384458"/><path d="M -2.8,-2.2 A 3.8,3.8 0 0,1 2.8,-2.2" stroke="#ffffff" stroke-width=".7" fill="none" opacity=".8"/></g>
+          <g transform="translate(78 142)"><circle r="3" fill="#384458"/><path d="M -2.4,-2 A 3.2,3.2 0 0,1 2.4,-2" stroke="#ffffff" stroke-width=".8" fill="none" opacity=".75"/></g>
+          <g transform="translate(30 96)"><circle r="2" fill="#384458"/></g>
+          <g fill="#384458" opacity=".55">
+            <circle cx="118" cy="44" r="1.2"/><circle cx="146" cy="100" r="1.4"/>
+            <circle cx="150" cy="156" r="1.2"/><circle cx="56" cy="42" r="1"/>
+          </g>
+          <circle cx="100" cy="100" r="78" fill="url(#v2-term)"/>
+        </g>
+        <!-- stronger specular for "glossy" feel -->
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v2-spec)" opacity=".95" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <h3>22. Pale Silver <span class="badge badge-small">small</span></h3>
+    <div class="slug">moon-realistic-silver</div>
+    <div class="desc">Lighter, more reflective base (almost white). Glossier specular hotspot. Fewer crater features. Cool blue atmospheric halo. Reads "young / pristine."</div>
+  </div>
+
+  <!-- ============================================================
+       VARIATION 3: Warm Cream
+       ============================================================ -->
+  <div class="card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v3-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#fff4d8"/>
+            <stop offset=".55" stop-color="#dac49c"/>
+            <stop offset="1" stop-color="#5e4a30"/>
+          </radialGradient>
+          <radialGradient id="v3-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".82" stop-color="#ffd49a" stop-opacity="0"/>
+            <stop offset="1" stop-color="#ffd49a" stop-opacity=".3"/>
+          </radialGradient>
+          <radialGradient id="v3-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#2a1808" stop-opacity=".5"/>
+            <stop offset=".8" stop-color="#2a1808" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v3-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="1.5" numOctaves="3" seed="11"/><feColorMatrix values="0 0 0 0 .25  0 0 0 0 .18  0 0 0 0 .1  0 0 0 .35 0"/></filter>
+          <filter id="v3-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feSpecularLighting surfaceScale="4" specularConstant=".7" specularExponent="22" lighting-color="#ffe8b8"><fePointLight x="60" y="50" z="180"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <clipPath id="v3-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#v3-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v3-base)"/>
+        <g clip-path="url(#v3-clip)">
+          <rect width="200" height="200" filter="url(#v3-tex)" opacity=".5"/>
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#8c6e3a" opacity=".55"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#8c6e3a" opacity=".5"/>
+          <path d="M 96,60 Q 110,58 122,68 Q 128,82 116,86 Q 100,84 96,72 Q 92,64 96,60 Z" fill="#8c6e3a" opacity=".55"/>
+          <ellipse cx="136" cy="78" rx="9" ry="11" fill="#8c6e3a" opacity=".5"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#8c6e3a" opacity=".55"/>
+          <path d="M 100,118 Q 114,114 124,126 Q 124,140 110,142 Q 96,138 98,124 Q 96,120 100,118 Z" fill="#8c6e3a" opacity=".5"/>
+          <g transform="translate(78 142)">
+            <g opacity=".15" stroke="#fff4d8" stroke-width=".5" fill="none">
+              <line x1="0" y1="0" x2="-22" y2="-12"/><line x1="0" y1="0" x2="22" y2="-10"/>
+              <line x1="0" y1="0" x2="-14" y2="-22"/><line x1="0" y1="0" x2="16" y2="-20"/>
+            </g>
+            <circle r="3.5" fill="#2a1808"/>
+            <path d="M -2.8,-2.5 A 3.8,3.8 0 0,1 2.8,-2.5" stroke="#ffe8b8" stroke-width=".9" fill="none" opacity=".75"/>
+          </g>
+          <g transform="translate(48 88)"><circle r="4" fill="#2a1808"/><path d="M -3.2,-2.6 A 4.4,4.4 0 0,1 3.2,-2.6" stroke="#ffe8b8" stroke-width=".7" fill="none" opacity=".7"/></g>
+          <g transform="translate(30 96)"><circle r="2.5" fill="#2a1808"/></g>
+          <g transform="translate(22 78)"><circle r="2" fill="#ffe8b8" opacity=".8"/><circle r="1.2" fill="#2a1808"/></g>
+          <g fill="#2a1808" opacity=".65">
+            <circle cx="56" cy="42" r="1.5"/><circle cx="118" cy="44" r="1.2"/><circle cx="146" cy="100" r="1.6"/>
+            <circle cx="38" cy="124" r="1.3"/><circle cx="150" cy="156" r="1.4"/><circle cx="98" cy="160" r="1.1"/>
+          </g>
+          <circle cx="100" cy="100" r="78" fill="url(#v3-term)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v3-spec)" opacity=".65" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <h3>23. Warm Cream <span class="badge badge-small">small</span></h3>
+    <div class="slug">moon-realistic-warm</div>
+    <div class="desc">Warmer base (cream / sandy tan). Brown-toned maria + craters instead of grey. Golden specular hotspot. Warm honey-amber halo. Reads "golden hour."</div>
+  </div>
+
+</div>
+
+<h2>Major variations <span class="badge badge-major">different worlds entirely</span></h2>
+
+<div class="grid">
+
+  <!-- ============================================================
+       VARIATION 4: HEAVILY CRATERED ANCIENT
+       ============================================================ -->
+  <div class="card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v4-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#c8c0b0"/>
+            <stop offset=".55" stop-color="#988e78"/>
+            <stop offset="1" stop-color="#382e1c"/>
+          </radialGradient>
+          <radialGradient id="v4-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".82" stop-color="#b8a890" stop-opacity="0"/>
+            <stop offset="1" stop-color="#b8a890" stop-opacity=".22"/>
+          </radialGradient>
+          <radialGradient id="v4-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#0a0604" stop-opacity=".55"/>
+            <stop offset=".8" stop-color="#0a0604" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v4-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="2" numOctaves="3" seed="13"/><feColorMatrix values="0 0 0 0 .18  0 0 0 0 .15  0 0 0 0 .08  0 0 0 .5 0"/></filter>
+          <filter id="v4-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="4"/><feSpecularLighting surfaceScale="3" specularConstant=".4" specularExponent="18" lighting-color="#fff0c8"><fePointLight x="55" y="48" z="200"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <clipPath id="v4-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#v4-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v4-base)"/>
+        <g clip-path="url(#v4-clip)">
+          <rect width="200" height="200" filter="url(#v4-tex)" opacity=".7"/>
+          <!-- MANY large maria, denser -->
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#3a2818" opacity=".6"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#3a2818" opacity=".55"/>
+          <path d="M 96,60 Q 110,58 122,68 Q 128,82 116,86 Q 100,84 96,72 Q 92,64 96,60 Z" fill="#3a2818" opacity=".6"/>
+          <ellipse cx="136" cy="78" rx="11" ry="13" fill="#3a2818" opacity=".55"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#3a2818" opacity=".6"/>
+          <path d="M 100,118 Q 114,114 124,126 Q 124,140 110,142 Q 96,138 98,124 Q 96,120 100,118 Z" fill="#3a2818" opacity=".55"/>
+          <path d="M 138,138 Q 152,134 158,144 Q 156,154 144,154 Q 132,150 138,138 Z" fill="#3a2818" opacity=".55"/>
+          <path d="M 30,148 Q 42,146 48,154 Q 46,162 36,162 Q 26,160 30,148 Z" fill="#3a2818" opacity=".55"/>
+          <!-- many large + medium craters -->
+          <g transform="translate(48 88)"><circle r="5" fill="#0a0604"/><path d="M -4,-3.2 A 5.4,5.4 0 0,1 4,-3.2" stroke="#fff0c8" stroke-width="1" fill="none" opacity=".75"/><circle r="1" fill="#fff0c8" opacity=".55"/></g>
+          <g transform="translate(78 142)"><circle r="4.5" fill="#0a0604"/><path d="M -3.6,-2.8 A 4.8,4.8 0 0,1 3.6,-2.8" stroke="#fff0c8" stroke-width=".9" fill="none" opacity=".7"/></g>
+          <g transform="translate(30 96)"><circle r="3.5" fill="#0a0604"/><path d="M -2.8,-2 A 3.8,3.8 0 0,1 2.8,-2" stroke="#fff0c8" stroke-width=".7" fill="none" opacity=".7"/></g>
+          <g transform="translate(22 78)"><circle r="2.5" fill="#fff0c8" opacity=".75"/><circle r="1.6" fill="#0a0604"/></g>
+          <g transform="translate(110 60)"><circle r="3" fill="#0a0604"/><path d="M -2.4,-1.8 A 3.2,3.2 0 0,1 2.4,-1.8" stroke="#fff0c8" stroke-width=".6" fill="none" opacity=".65"/></g>
+          <g transform="translate(152 110)"><circle r="2.8" fill="#0a0604"/><path d="M -2.2,-1.6 A 3,3 0 0,1 2.2,-1.6" stroke="#fff0c8" stroke-width=".6" fill="none" opacity=".65"/></g>
+          <g transform="translate(118 158)"><circle r="3.2" fill="#0a0604"/><path d="M -2.6,-2 A 3.4,3.4 0 0,1 2.6,-2" stroke="#fff0c8" stroke-width=".7" fill="none" opacity=".7"/></g>
+          <!-- many small craters (dense cratering) -->
+          <g fill="#0a0604" opacity=".75">
+            <circle cx="56" cy="42" r="2"/><circle cx="118" cy="44" r="1.5"/>
+            <circle cx="146" cy="100" r="2"/><circle cx="38" cy="124" r="1.8"/>
+            <circle cx="150" cy="156" r="1.6"/><circle cx="98" cy="160" r="1.5"/>
+            <circle cx="74" cy="50" r="1.4"/><circle cx="92" cy="56" r="1.2"/>
+            <circle cx="64" cy="100" r="1.5"/><circle cx="86" cy="98" r="1.3"/>
+            <circle cx="112" cy="106" r="1.4"/><circle cx="138" cy="58" r="1.6"/>
+            <circle cx="62" cy="158" r="1.3"/><circle cx="98" cy="138" r="1.2"/>
+            <circle cx="140" cy="120" r="1.5"/><circle cx="42" cy="62" r="1.1"/>
+            <circle cx="170" cy="90" r="1.4"/><circle cx="170" cy="130" r="1.2"/>
+            <circle cx="86" cy="78" r="1"/><circle cx="124" cy="78" r="1.2"/>
+            <circle cx="100" cy="46" r="1"/><circle cx="156" cy="50" r="1.1"/>
+          </g>
+          <circle cx="100" cy="100" r="78" fill="url(#v4-term)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v4-spec)" opacity=".55" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <h3>24. Ancient Cratered <span class="badge badge-major">major</span></h3>
+    <div class="slug">moon-realistic-ancient</div>
+    <div class="desc">Heavy cratering (~30+ visible), dusty/oxidized brown tones, deeper maria, weaker specular. Reads "old, weathered, Mercury-like."</div>
+  </div>
+
+  <!-- ============================================================
+       VARIATION 5: ICY (Europa-style)
+       ============================================================ -->
+  <div class="card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v5-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset=".55" stop-color="#dbe8f0"/>
+            <stop offset="1" stop-color="#3a5878"/>
+          </radialGradient>
+          <radialGradient id="v5-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".82" stop-color="#a8d0f0" stop-opacity="0"/>
+            <stop offset="1" stop-color="#a8d0f0" stop-opacity=".35"/>
+          </radialGradient>
+          <radialGradient id="v5-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#10182a" stop-opacity=".4"/>
+            <stop offset=".8" stop-color="#10182a" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v5-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="1.8" numOctaves="2" seed="5"/><feColorMatrix values="0 0 0 0 .12  0 0 0 0 .2  0 0 0 0 .28  0 0 0 .2 0"/></filter>
+          <filter id="v5-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="2"/><feSpecularLighting surfaceScale="6" specularConstant="1.2" specularExponent="30" lighting-color="#ffffff"><fePointLight x="55" y="48" z="160"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <clipPath id="v5-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#v5-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v5-base)"/>
+        <g clip-path="url(#v5-clip)">
+          <rect width="200" height="200" filter="url(#v5-tex)" opacity=".4"/>
+          <!-- linea (Europa-style cracks) — long thin dark curves -->
+          <g stroke="#3a5070" stroke-width=".8" fill="none" opacity=".6" stroke-linecap="round">
+            <path d="M 32,82 Q 80,72 138,90 Q 168,100 175,118"/>
+            <path d="M 28,118 Q 70,128 110,118 Q 152,108 170,82"/>
+            <path d="M 60,30 Q 78,80 88,140 Q 92,170 90,180"/>
+            <path d="M 140,28 Q 124,78 118,138"/>
+            <path d="M 22,98 Q 60,100 100,98 Q 140,96 178,100"/>
+            <path d="M 78,40 Q 90,90 78,160"/>
+            <path d="M 124,42 Q 116,90 124,160"/>
+          </g>
+          <!-- thicker crack -->
+          <g stroke="#2a3850" stroke-width="1.5" fill="none" opacity=".5" stroke-linecap="round">
+            <path d="M 50,60 Q 80,80 110,72 Q 140,68 168,90"/>
+            <path d="M 38,130 Q 70,142 108,140 Q 142,138 165,148"/>
+          </g>
+          <!-- very few craters (icy surface is mostly smooth) -->
+          <g transform="translate(110 90)"><circle r="3" fill="#3a5878"/><path d="M -2.4,-2 A 3.2,3.2 0 0,1 2.4,-2" stroke="#fff" stroke-width=".7" fill="none" opacity=".85"/></g>
+          <g transform="translate(72 110)"><circle r="2.2" fill="#3a5878"/><path d="M -1.8,-1.4 A 2.4,2.4 0 0,1 1.8,-1.4" stroke="#fff" stroke-width=".55" fill="none" opacity=".8"/></g>
+          <g fill="#3a5878" opacity=".5"><circle cx="148" cy="118" r="1.5"/><circle cx="48" cy="86" r="1.2"/></g>
+          <circle cx="100" cy="100" r="78" fill="url(#v5-term)"/>
+        </g>
+        <!-- strong icy specular -->
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v5-spec)" opacity="1" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <h3>25. Icy (Europa-style) <span class="badge badge-major">major</span></h3>
+    <div class="slug">moon-realistic-icy</div>
+    <div class="desc">White-blue icy surface, network of dark cracks (linea) crisscrossing the surface, very few craters (young ice resurfacing), strong cold specular, blue atmospheric halo.</div>
+  </div>
+
+  <!-- ============================================================
+       VARIATION 6: VOLCANIC (Io-style)
+       ============================================================ -->
+  <div class="card">
+    <div class="pframe">
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v6-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#ffe888"/>
+            <stop offset=".5" stop-color="#dca838"/>
+            <stop offset="1" stop-color="#4a2808"/>
+          </radialGradient>
+          <radialGradient id="v6-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".82" stop-color="#ffa848" stop-opacity="0"/>
+            <stop offset="1" stop-color="#ffa848" stop-opacity=".4"/>
+          </radialGradient>
+          <radialGradient id="v6-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#2a1808" stop-opacity=".4"/>
+            <stop offset=".8" stop-color="#2a1808" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v6-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="3" seed="17"/><feColorMatrix values="0 0 0 0 .3  0 0 0 0 .1  0 0 0 0 0  0 0 0 .35 0"/></filter>
+          <filter id="v6-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feSpecularLighting surfaceScale="3" specularConstant=".6" specularExponent="20" lighting-color="#fff0c0"><fePointLight x="55" y="48" z="170"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <radialGradient id="v6-volc1" cx=".5" cy=".5" r=".5">
+            <stop offset="0" stop-color="#ff5028"/><stop offset=".6" stop-color="#a02808"/><stop offset="1" stop-color="#3a0a04" stop-opacity="0"/>
+          </radialGradient>
+          <clipPath id="v6-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="94" fill="url(#v6-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v6-base)"/>
+        <g clip-path="url(#v6-clip)">
+          <rect width="200" height="200" filter="url(#v6-tex)" opacity=".5"/>
+          <!-- dark volcanic patches (calderas / sulfur plains) — irregular blobs -->
+          <path d="M 38,52 Q 50,42 64,50 Q 72,62 60,72 Q 46,76 36,68 Q 28,58 38,52 Z" fill="#3a1808" opacity=".7"/>
+          <path d="M 86,40 Q 100,38 108,50 Q 110,62 96,66 Q 82,62 80,52 Q 78,42 86,40 Z" fill="#3a1808" opacity=".65"/>
+          <path d="M 124,82 Q 140,78 146,92 Q 140,108 124,104 Q 112,98 116,86 Q 118,82 124,82 Z" fill="#3a1808" opacity=".7"/>
+          <path d="M 56,124 Q 72,118 84,128 Q 86,142 70,148 Q 52,142 50,132 Q 50,126 56,124 Z" fill="#3a1808" opacity=".7"/>
+          <path d="M 100,148 Q 116,144 124,156 Q 122,168 108,168 Q 96,164 96,156 Q 96,150 100,148 Z" fill="#3a1808" opacity=".65"/>
+          <!-- active volcano hotspots (red-orange glow) -->
+          <circle cx="50" cy="60" r="6" fill="url(#v6-volc1)"/>
+          <circle cx="50" cy="60" r="1.8" fill="#ff8038"/>
+          <circle cx="130" cy="92" r="5" fill="url(#v6-volc1)"/>
+          <circle cx="130" cy="92" r="1.5" fill="#ff8038"/>
+          <circle cx="68" cy="134" r="4.5" fill="url(#v6-volc1)"/>
+          <circle cx="68" cy="134" r="1.3" fill="#ff8038"/>
+          <!-- sulfur yellow lighter patches -->
+          <ellipse cx="148" cy="58" rx="10" ry="6" fill="#fff8b0" opacity=".5" transform="rotate(-15 148 58)"/>
+          <ellipse cx="38" cy="100" rx="8" ry="5" fill="#fff8b0" opacity=".45"/>
+          <ellipse cx="156" cy="140" rx="9" ry="5" fill="#fff8b0" opacity=".5"/>
+          <!-- a few craters -->
+          <g fill="#2a1808" opacity=".5">
+            <circle cx="100" cy="80" r="1.8"/><circle cx="120" cy="125" r="1.5"/>
+            <circle cx="44" cy="148" r="1.4"/>
+          </g>
+          <circle cx="100" cy="100" r="78" fill="url(#v6-term)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v6-spec)" opacity=".55" style="mix-blend-mode:screen"/>
+      </svg>
+    </div>
+    <h3>26. Volcanic (Io-style) <span class="badge badge-major">major</span></h3>
+    <div class="slug">moon-realistic-volcanic</div>
+    <div class="desc">Yellow-orange sulfurous surface, dark caldera patches, 3 active red-orange volcanic glow spots, warm orange atmospheric halo. Reads "alive, dangerous, geologically active."</div>
+  </div>
+
+</div>
+
+<div class="note" style="margin-top:2rem;">
+Reply with which of these 6 land. By number, by "all the small ones" / "all the major ones," or "selene + icy + volcanic" — whatever. I lock the picks and the moon library is done.
+</div>
+
+</body>
+</html>
