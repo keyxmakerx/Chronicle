@@ -1,0 +1,28 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="100" cy="100" r="72" fill="none" stroke="#5a6480" stroke-width="1" opacity=".5"/>
+        <!-- constellation lines connecting "craters as stars" -->
+        <g stroke="#a8b8d8" stroke-width=".8" opacity=".6" fill="none">
+          <path d="M 60,55 L 90,72 L 125,62 L 145,90 L 122,118 L 90,108 L 70,128 L 100,148 L 135,138"/>
+          <path d="M 90,72 L 70,90 L 90,108"/>
+          <path d="M 125,62 L 122,90 L 122,118"/>
+        </g>
+        <!-- "stars" = crater positions -->
+        <g fill="#fff">
+          <circle cx="60" cy="55" r="2.5"/>
+          <circle cx="90" cy="72" r="3"/>
+          <circle cx="125" cy="62" r="2"/>
+          <circle cx="145" cy="90" r="2.2"/>
+          <circle cx="122" cy="118" r="2.8"/>
+          <circle cx="90" cy="108" r="2"/>
+          <circle cx="70" cy="90" r="1.8"/>
+          <circle cx="122" cy="90" r="1.6"/>
+          <circle cx="70" cy="128" r="2.2"/>
+          <circle cx="100" cy="148" r="3"/>
+          <circle cx="135" cy="138" r="2.5"/>
+        </g>
+        <!-- glow on biggest stars -->
+        <g fill="#fff" opacity=".25">
+          <circle cx="90" cy="72" r="5"/>
+          <circle cx="100" cy="148" r="5"/>
+        </g>
+      </svg>

@@ -1,0 +1,48 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v3-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#fff4d8"/>
+            <stop offset=".55" stop-color="#dac49c"/>
+            <stop offset="1" stop-color="#5e4a30"/>
+          </radialGradient>
+          <radialGradient id="v3-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".82" stop-color="#ffd49a" stop-opacity="0"/>
+            <stop offset="1" stop-color="#ffd49a" stop-opacity=".3"/>
+          </radialGradient>
+          <radialGradient id="v3-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#2a1808" stop-opacity=".5"/>
+            <stop offset=".8" stop-color="#2a1808" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v3-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="1.5" numOctaves="3" seed="11"/><feColorMatrix values="0 0 0 0 .25  0 0 0 0 .18  0 0 0 0 .1  0 0 0 .35 0"/></filter>
+          <filter id="v3-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feSpecularLighting surfaceScale="4" specularConstant=".7" specularExponent="22" lighting-color="#ffe8b8"><fePointLight x="60" y="50" z="180"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <clipPath id="v3-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#v3-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v3-base)"/>
+        <g clip-path="url(#v3-clip)">
+          <rect width="200" height="200" filter="url(#v3-tex)" opacity=".5"/>
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#8c6e3a" opacity=".55"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#8c6e3a" opacity=".5"/>
+          <path d="M 96,60 Q 110,58 122,68 Q 128,82 116,86 Q 100,84 96,72 Q 92,64 96,60 Z" fill="#8c6e3a" opacity=".55"/>
+          <ellipse cx="136" cy="78" rx="9" ry="11" fill="#8c6e3a" opacity=".5"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#8c6e3a" opacity=".55"/>
+          <path d="M 100,118 Q 114,114 124,126 Q 124,140 110,142 Q 96,138 98,124 Q 96,120 100,118 Z" fill="#8c6e3a" opacity=".5"/>
+          <g transform="translate(78 142)">
+            <g opacity=".15" stroke="#fff4d8" stroke-width=".5" fill="none">
+              <line x1="0" y1="0" x2="-22" y2="-12"/><line x1="0" y1="0" x2="22" y2="-10"/>
+              <line x1="0" y1="0" x2="-14" y2="-22"/><line x1="0" y1="0" x2="16" y2="-20"/>
+            </g>
+            <circle r="3.5" fill="#2a1808"/>
+            <path d="M -2.8,-2.5 A 3.8,3.8 0 0,1 2.8,-2.5" stroke="#ffe8b8" stroke-width=".9" fill="none" opacity=".75"/>
+          </g>
+          <g transform="translate(48 88)"><circle r="4" fill="#2a1808"/><path d="M -3.2,-2.6 A 4.4,4.4 0 0,1 3.2,-2.6" stroke="#ffe8b8" stroke-width=".7" fill="none" opacity=".7"/></g>
+          <g transform="translate(30 96)"><circle r="2.5" fill="#2a1808"/></g>
+          <g transform="translate(22 78)"><circle r="2" fill="#ffe8b8" opacity=".8"/><circle r="1.2" fill="#2a1808"/></g>
+          <g fill="#2a1808" opacity=".65">
+            <circle cx="56" cy="42" r="1.5"/><circle cx="118" cy="44" r="1.2"/><circle cx="146" cy="100" r="1.6"/>
+            <circle cx="38" cy="124" r="1.3"/><circle cx="150" cy="156" r="1.4"/><circle cx="98" cy="160" r="1.1"/>
+          </g>
+          <circle cx="100" cy="100" r="78" fill="url(#v3-term)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v3-spec)" opacity=".65" style="mix-blend-mode:screen"/>
+      </svg>

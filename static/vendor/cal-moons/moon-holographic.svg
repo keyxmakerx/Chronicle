@@ -1,0 +1,19 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="iri" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ff8ad8"/>
+            <stop offset=".25" stop-color="#a8d8ff"/>
+            <stop offset=".5" stop-color="#a8ffc8"/>
+            <stop offset=".75" stop-color="#ffd8a8"/>
+            <stop offset="1" stop-color="#d8a8ff"/>
+          </linearGradient>
+          <radialGradient id="iri-inner" cx=".4" cy=".35" r=".5">
+            <stop offset="0" stop-color="#fff" stop-opacity=".7"/>
+            <stop offset=".5" stop-color="#fff" stop-opacity=".15"/>
+            <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="100" r="75" fill="url(#iri)" class="iridescent-anim"/>
+        <circle cx="100" cy="100" r="75" fill="url(#iri-inner)"/>
+        <ellipse cx="78" cy="78" rx="14" ry="8" fill="#fff" opacity=".4" transform="rotate(-25 78 78)"/>
+      </svg>

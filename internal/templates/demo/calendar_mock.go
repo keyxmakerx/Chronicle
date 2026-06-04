@@ -91,6 +91,12 @@ type CalAlmanacMoon struct {
 	CycleDays   float64 `json:"cycle_days"`
 	PhaseOffset float64 `json:"phase_offset"`
 	Color       string  `json:"color"` // OKLCH literal
+	// WAVE 2 moon library (CATALOG §12.1): per-moon design + phase source.
+	BaseDesign  string  `json:"base_design"`  // a MOON_DESIGNS id (procedural) or 'noto'/'twemoji'
+	PhaseSource string  `json:"phase_source"` // 'noto' | 'twemoji' | 'css-clip'
+	Tint        string  `json:"tint"`         // optional CSS color tint
+	OrbitSpeed  float64 `json:"orbit_speed"`  // cycle-rate multiplier
+	Size        float64 `json:"size"`         // disc scale
 }
 
 type CalAlmanacSeason struct {
@@ -296,8 +302,12 @@ func CalAlmanacMock() CalAlmanacMockData {
 			{10, "Tenth-day", "10th", true}, // rest day
 		},
 		Moons: []CalAlmanacMoon{
-			{1, "Selûne", 30.4, 0.0, "oklch(0.92 0.05 95)"},     // pale gold
-			{2, "Shar", 28.0, 0.5, "oklch(0.42 0.06 280)"},      // dark indigo
+			// Selûne — realistic procedural with css-clip phases (pale gold).
+			{ID: 1, Name: "Selûne", CycleDays: 30.4, PhaseOffset: 0.0, Color: "oklch(0.92 0.05 95)",
+				BaseDesign: "moon-realistic-selene", PhaseSource: "css-clip", OrbitSpeed: 1.0, Size: 1.0},
+			// Shar — Noto emoji phase glyphs, indigo-tinted, smaller.
+			{ID: 2, Name: "Shar", CycleDays: 28.0, PhaseOffset: 0.5, Color: "oklch(0.42 0.06 280)",
+				BaseDesign: "noto", PhaseSource: "noto", Tint: "oklch(0.42 0.06 280)", OrbitSpeed: 1.0, Size: 0.85},
 		},
 		Seasons: []CalAlmanacSeason{
 			{1, "Winter", 12, "oklch(0.55 0.10 240)"},

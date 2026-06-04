@@ -1,0 +1,58 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="v4-base" cx=".4" cy=".35" r=".75">
+            <stop offset="0" stop-color="#c8c0b0"/>
+            <stop offset=".55" stop-color="#988e78"/>
+            <stop offset="1" stop-color="#382e1c"/>
+          </radialGradient>
+          <radialGradient id="v4-atm" cx=".5" cy=".5" r=".55">
+            <stop offset=".82" stop-color="#b8a890" stop-opacity="0"/>
+            <stop offset="1" stop-color="#b8a890" stop-opacity=".22"/>
+          </radialGradient>
+          <radialGradient id="v4-term" cx="1" cy=".55" r=".55">
+            <stop offset="0" stop-color="#0a0604" stop-opacity=".55"/>
+            <stop offset=".8" stop-color="#0a0604" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="v4-tex" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="2" numOctaves="3" seed="13"/><feColorMatrix values="0 0 0 0 .18  0 0 0 0 .15  0 0 0 0 .08  0 0 0 .5 0"/></filter>
+          <filter id="v4-spec" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="4"/><feSpecularLighting surfaceScale="3" specularConstant=".4" specularExponent="18" lighting-color="#fff0c8"><fePointLight x="55" y="48" z="200"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <clipPath id="v4-clip"><circle cx="100" cy="100" r="78"/></clipPath>
+        </defs>
+        <circle cx="100" cy="100" r="92" fill="url(#v4-atm)"/>
+        <circle cx="100" cy="100" r="78" fill="url(#v4-base)"/>
+        <g clip-path="url(#v4-clip)">
+          <rect width="200" height="200" filter="url(#v4-tex)" opacity=".7"/>
+          <!-- MANY large maria, denser -->
+          <path d="M 28,52 Q 38,42 56,46 Q 70,56 68,72 Q 60,84 42,80 Q 24,72 24,60 Q 22,54 28,52 Z" fill="#3a2818" opacity=".6"/>
+          <path d="M 68,40 Q 80,36 90,44 Q 96,54 88,62 Q 76,66 68,58 Q 60,48 68,40 Z" fill="#3a2818" opacity=".55"/>
+          <path d="M 96,60 Q 110,58 122,68 Q 128,82 116,86 Q 100,84 96,72 Q 92,64 96,60 Z" fill="#3a2818" opacity=".6"/>
+          <ellipse cx="136" cy="78" rx="11" ry="13" fill="#3a2818" opacity=".55"/>
+          <path d="M 50,108 Q 64,104 78,112 Q 82,128 70,134 Q 50,134 44,120 Q 42,112 50,108 Z" fill="#3a2818" opacity=".6"/>
+          <path d="M 100,118 Q 114,114 124,126 Q 124,140 110,142 Q 96,138 98,124 Q 96,120 100,118 Z" fill="#3a2818" opacity=".55"/>
+          <path d="M 138,138 Q 152,134 158,144 Q 156,154 144,154 Q 132,150 138,138 Z" fill="#3a2818" opacity=".55"/>
+          <path d="M 30,148 Q 42,146 48,154 Q 46,162 36,162 Q 26,160 30,148 Z" fill="#3a2818" opacity=".55"/>
+          <!-- many large + medium craters -->
+          <g transform="translate(48 88)"><circle r="5" fill="#0a0604"/><path d="M -4,-3.2 A 5.4,5.4 0 0,1 4,-3.2" stroke="#fff0c8" stroke-width="1" fill="none" opacity=".75"/><circle r="1" fill="#fff0c8" opacity=".55"/></g>
+          <g transform="translate(78 142)"><circle r="4.5" fill="#0a0604"/><path d="M -3.6,-2.8 A 4.8,4.8 0 0,1 3.6,-2.8" stroke="#fff0c8" stroke-width=".9" fill="none" opacity=".7"/></g>
+          <g transform="translate(30 96)"><circle r="3.5" fill="#0a0604"/><path d="M -2.8,-2 A 3.8,3.8 0 0,1 2.8,-2" stroke="#fff0c8" stroke-width=".7" fill="none" opacity=".7"/></g>
+          <g transform="translate(22 78)"><circle r="2.5" fill="#fff0c8" opacity=".75"/><circle r="1.6" fill="#0a0604"/></g>
+          <g transform="translate(110 60)"><circle r="3" fill="#0a0604"/><path d="M -2.4,-1.8 A 3.2,3.2 0 0,1 2.4,-1.8" stroke="#fff0c8" stroke-width=".6" fill="none" opacity=".65"/></g>
+          <g transform="translate(152 110)"><circle r="2.8" fill="#0a0604"/><path d="M -2.2,-1.6 A 3,3 0 0,1 2.2,-1.6" stroke="#fff0c8" stroke-width=".6" fill="none" opacity=".65"/></g>
+          <g transform="translate(118 158)"><circle r="3.2" fill="#0a0604"/><path d="M -2.6,-2 A 3.4,3.4 0 0,1 2.6,-2" stroke="#fff0c8" stroke-width=".7" fill="none" opacity=".7"/></g>
+          <!-- many small craters (dense cratering) -->
+          <g fill="#0a0604" opacity=".75">
+            <circle cx="56" cy="42" r="2"/><circle cx="118" cy="44" r="1.5"/>
+            <circle cx="146" cy="100" r="2"/><circle cx="38" cy="124" r="1.8"/>
+            <circle cx="150" cy="156" r="1.6"/><circle cx="98" cy="160" r="1.5"/>
+            <circle cx="74" cy="50" r="1.4"/><circle cx="92" cy="56" r="1.2"/>
+            <circle cx="64" cy="100" r="1.5"/><circle cx="86" cy="98" r="1.3"/>
+            <circle cx="112" cy="106" r="1.4"/><circle cx="138" cy="58" r="1.6"/>
+            <circle cx="62" cy="158" r="1.3"/><circle cx="98" cy="138" r="1.2"/>
+            <circle cx="140" cy="120" r="1.5"/><circle cx="42" cy="62" r="1.1"/>
+            <circle cx="170" cy="90" r="1.4"/><circle cx="170" cy="130" r="1.2"/>
+            <circle cx="86" cy="78" r="1"/><circle cx="124" cy="78" r="1.2"/>
+            <circle cx="100" cy="46" r="1"/><circle cx="156" cy="50" r="1.1"/>
+          </g>
+          <circle cx="100" cy="100" r="78" fill="url(#v4-term)"/>
+        </g>
+        <circle cx="100" cy="100" r="78" fill="#fff" filter="url(#v4-spec)" opacity=".55" style="mix-blend-mode:screen"/>
+      </svg>
