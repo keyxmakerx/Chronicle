@@ -468,9 +468,16 @@
       season: seasonName(),                                      // derived label
       date: { year: VIEW.year, month: VIEW.month, day: VIEW.day },
       sun: { tint: null },                                       // CATALOG Part 2 (Wave 2 fills tint)
-      moons: (DATA.moons || []).map(function (mn) {              // 0..N dynamic
-        return { id: mn.id, phase: null, namedPhase: null, tint: null,
-          size: mn.size || 1, orbitSpeed: 1, orbitOffset: mn.phase_offset || 0, cyclePct: null };
+      moons: (DATA.moons || []).map(function (mn) {              // 0..N dynamic (CATALOG §12.1)
+        return {
+          id: mn.id, name: mn.name,
+          baseDesign: mn.base_design || 'moon-realistic-selene', // a MOON_DESIGNS id or emoji family
+          tint: mn.tint || mn.color || null,                     // procedural fill-tint overlay
+          phaseSource: mn.phase_source || 'css-clip',            // 'noto' | 'twemoji' | 'css-clip'
+          size: mn.size || 1, orbitSpeed: mn.orbit_speed || 1, orbitOffset: mn.phase_offset || 0,
+          phase: null, namedPhase: null, cyclePct: null,
+          namedPhases: (DATA.moon_phases || []).filter(function (p) { return p.moon_id === mn.id; })
+        };
       }),
       weather: { type: wType, intensity: 1 },                   // {type,intensity}
       events: celestialFor(VIEW.month, VIEW.day),               // can stack
@@ -498,10 +505,11 @@
            changed.indexOf('events') !== -1 || changed.indexOf('season') !== -1;
   }
   registerInitBlock('world-state-subscribers', function () {
-    // 1) sky core.
+    // 1) sky core (+ Wave 2 moon designs on a moons[] mutation).
     subscribeWorldState(function (st, changed) {
       if (changed.indexOf('timeOfDay') !== -1) renderTimePipeline(st.timeOfDay);
       if (wsAffectsDay(changed)) renderDayPipeline(st.date.month, st.date.day);
+      if (changed.indexOf('moons') !== -1) applyMoonDesigns();
     });
     // 2) sun (celestial-bodies layer): resolve + apply painted-sun state;
     // recolour the sun-bloom emitter on a time move (matches the v5 order:
@@ -991,6 +999,8 @@
       var wt = weatherTypeById(wtypeID) || (DATA.weather_effects || []).find(function (e) { return e.id === effID; });
       rest.textContent = ' · ' + skyLabel(VIEW.timeFrac) + ' · ' + seasonName() + ' · ' + (wt ? wt.name : 'Clear');
     }
+    // WAVE 2: repaint moon designs/phases for the displayed day.
+    if (typeof applyMoonDesigns === 'function') applyMoonDesigns();
   }
   // Public day-change entry point → unified world-state (Wave 0 shim).
   // Preserves every caller (sky-band-ambient init, weather-override,
@@ -1098,6 +1108,121 @@
     return { left: 8 + wake * 84, top: 95 - 4 * wake * (1 - wake) * 85, opacity: (wake < 0 || wake > 1) ? 0.6 : 1 };
   }
   function place(el, p) { el.style.left = p.left.toFixed(1) + '%'; el.style.top = p.top.toFixed(1) + '%'; el.style.opacity = p.opacity.toFixed(2); }
+
+  // ============================================================
+  // WAVE 2 — Moon library (CATALOG §12.1).
+  // ============================================================
+  // Owner picks a per-moon DESIGN + tint; phases render per the moon's
+  // phaseSource. This is a GLYPH-SOURCE SWAP only — the sky-arc placement
+  // (arcPos, below) and the named-phase popover are unchanged. 12 procedural
+  // designs (vendored SVG, css-clip phase) + 2 emoji families (vendored Noto /
+  // Twemoji, phase-index glyph swap). All static except moon-holographic's
+  // CSS hue-shift, which freezes under reduced-motion (see cal-almanac.css).
+  var MOON_DESIGNS = {
+    'moon-watercolor': { name: 'Watercolor', category: 'stylized', phaseSource: 'css-clip' },
+    'moon-holographic': { name: 'Holographic', category: 'stylized', phaseSource: 'css-clip', animated: true },
+    'moon-etched': { name: 'Etched', category: 'stylized', phaseSource: 'css-clip' },
+    'moon-constellation': { name: 'Constellation', category: 'stylized', phaseSource: 'css-clip' },
+    'moon-realistic-selene': { name: 'Selene Classic', category: 'realistic-small', phaseSource: 'css-clip' },
+    'moon-realistic-silver': { name: 'Pale Silver', category: 'realistic-small', phaseSource: 'css-clip' },
+    'moon-realistic-warm': { name: 'Warm Cream', category: 'realistic-small', phaseSource: 'css-clip' },
+    'moon-realistic-full': { name: 'Realistic Full', category: 'realistic-major', phaseSource: 'css-clip' },
+    'moon-realistic-eclipse': { name: 'Blood Moon (Eclipse)', category: 'realistic-major', phaseSource: 'css-clip' },
+    'moon-realistic-ancient': { name: 'Ancient Cratered', category: 'realistic-major', phaseSource: 'css-clip' },
+    'moon-realistic-icy': { name: 'Icy (Europa)', category: 'realistic-major', phaseSource: 'css-clip' },
+    'moon-realistic-volcanic': { name: 'Volcanic (Io)', category: 'realistic-major', phaseSource: 'css-clip' },
+    'noto': { name: 'Noto Emoji', category: 'emoji', phaseSource: 'noto' },
+    'twemoji': { name: 'Twemoji', category: 'emoji', phaseSource: 'twemoji' }
+  };
+  // 8-phase emoji Unicode (new → waxing → full → waning).
+  var EMOJI_PHASE_CODES = ['1f311', '1f312', '1f313', '1f314', '1f315', '1f316', '1f317', '1f318'];
+  var MOON_PHASE_CLASS = ['new', 'cres-wax', 'quarter-wax', 'gibb-wax', 'full', 'gibb-wane', 'quarter-wane', 'cres-wane'];
+  function moonDesignSrc(id) { return '/static/vendor/cal-moons/' + id + '.svg'; }
+  function emojiSrc(family, code) { return '/static/vendor/' + (family === 'twemoji' ? 'twemoji' : 'noto-emoji') + '/moons/' + code + '.svg'; }
+
+  // Cycle position 0..1 of a moon's lunar month (separate from the intra-day
+  // arc). Derived from the displayed day + the moon's orbit params so it's
+  // deterministic for the mock. ~30-day synodic period.
+  function moonCyclePct(moon) {
+    var dayIndex = ((VIEW.month - 1) * 30 + (VIEW.day - 1));
+    var period = 30 / (moon.orbitSpeed || 1);
+    var pct = ((dayIndex / period) + (moon.orbitOffset || 0)) % 1;
+    if (pct < 0) pct += 1;
+    return pct;
+  }
+  function moonPhaseIndex(pct) { return ((Math.round(pct * 8) % 8) + 8) % 8; }
+  // Named-phase walk (CATALOG §2 vocab): the popover reads "The Silver Crown",
+  // not a raw number. Walk the moon's namedPhases spans first; procedural
+  // fallback only when none covers the day.
+  function moonNamedPhase(moon, pct) {
+    var p = pct * 100, spans = moon.namedPhases || [];
+    for (var i = 0; i < spans.length; i++) {
+      var s = spans[i], a = s.start_pct, b = s.end_pct;
+      if (a <= b ? (p >= a && p < b) : (p >= a || p < b)) return s.name;
+    }
+    return ['New', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'][moonPhaseIndex(pct)];
+  }
+  function moonById(id) { return (worldState && worldState.moons || []).find(function (m) { return m.id === id; }) || null; }
+
+  // Paint one moon element from its worldState design/phase/tint.
+  function applyMoonDesign(el, moon) {
+    if (!el || !moon) return;
+    var design = MOON_DESIGNS[moon.baseDesign] || MOON_DESIGNS['moon-realistic-selene'];
+    var src = moon.phaseSource || design.phaseSource, pct = moonCyclePct(moon);
+    moon.cyclePct = pct; moon.phase = moonPhaseIndex(pct); moon.namedPhase = moonNamedPhase(moon, pct);
+    el.style.setProperty('--moon-size', (moon.size || 1).toFixed(2));
+    if (moon.tint) el.style.setProperty('--moon-color', moon.tint);
+    if (src === 'noto' || src === 'twemoji') {
+      // Emoji glyph already encodes the phase → no css-clip terminator.
+      el.setAttribute('data-cal-moon-mode', 'emoji');
+      el.style.setProperty('--moon-img', 'url(' + emojiSrc(src, EMOJI_PHASE_CODES[moon.phase]) + ')');
+    } else {
+      el.setAttribute('data-cal-moon-mode', 'procedural');
+      el.setAttribute('data-cal-moon-design', moon.baseDesign);
+      el.style.setProperty('--moon-img', 'url(' + moonDesignSrc(moon.baseDesign) + ')');
+      // css-clip phase via the existing ::after terminator class.
+      el.className = el.className.replace(/cal-almanac-sky__moon--\S+/g, '').trim() + ' cal-almanac-sky__moon--' + MOON_PHASE_CLASS[moon.phase];
+      el.setAttribute('data-cal-moon-animated', design.animated ? 'true' : 'false');
+    }
+    var nm = moon.name ? moon.name + ' — ' + moon.namedPhase : moon.namedPhase;
+    el.setAttribute('title', nm);
+  }
+  // Place a moon on its arc from worldState.timeOfDay + orbitOffset.
+  function moonArcPlace(el, moon) {
+    var t = (worldState && typeof worldState.timeOfDay === 'number') ? worldState.timeOfDay : VIEW.timeFrac;
+    var mt = t - 0.5 + (moon.orbitOffset || 0); while (mt < 0) mt += 1; while (mt > 1) mt -= 1;
+    place(el, arcPos(mt));
+  }
+  // Reconcile the moon DOM with worldState.moons (the source of truth):
+  // create elements for new moons, repaint design/phase/tint, place them, and
+  // remove orphans. Lets the demo add / remove / randomize moons live.
+  function applyMoonDesigns() {
+    var sky = document.querySelector('[data-cal-sky]');
+    var arc = sky && sky.querySelector('[data-cal-sky-arc]');
+    if (!sky || !arc) return;
+    var moons = (worldState && worldState.moons) || [], seen = {};
+    moons.forEach(function (moon) {
+      seen[moon.id] = true;
+      var el = sky.querySelector('[data-cal-sky-moon][data-moon-id="' + moon.id + '"]');
+      if (!el) {
+        el = document.createElement('span');
+        el.className = 'cal-almanac-sky__moon';
+        el.setAttribute('data-cal-sky-moon', '');
+        el.setAttribute('data-moon-id', String(moon.id));
+        arc.appendChild(el);
+      }
+      applyMoonDesign(el, moon);
+      moonArcPlace(el, moon);
+    });
+    sky.querySelectorAll('[data-cal-sky-moon]').forEach(function (el) {
+      var id = parseInt(el.getAttribute('data-moon-id'), 10);
+      if (!seen[id] && el.parentNode) el.parentNode.removeChild(el);
+    });
+  }
+  window.__calMoonDesigns = MOON_DESIGNS;
+  window.__calApplyMoonDesigns = applyMoonDesigns;
+  window.__calMoonSim = { phaseIndex: moonPhaseIndex, namedPhase: moonNamedPhase, cyclePct: moonCyclePct, emojiCodes: EMOJI_PHASE_CODES, phaseClasses: MOON_PHASE_CLASS };
+
   function clockStr(t) {
     var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
     var total = Math.floor(t * hpd * 60); return pad2(Math.floor(total / 60)) + ':' + pad2(total % 60);
@@ -1115,7 +1240,9 @@
       var sun = sky.querySelector('[data-cal-sky-sun]'); if (sun) place(sun, arcPos(t));
       sky.querySelectorAll('[data-cal-sky-moon]').forEach(function (mn) {
         var id = parseInt(mn.getAttribute('data-moon-id'), 10), off = 0;
-        (DATA.moons || []).forEach(function (mm) { if (mm.id === id) off = mm.phase_offset; });
+        var wm = moonById(id);                                  // WAVE 2: orbit from worldState (incl. demo-added moons)
+        if (wm) off = wm.orbitOffset || 0;
+        else (DATA.moons || []).forEach(function (mm) { if (mm.id === id) off = mm.phase_offset; });
         var mt = t - 0.5 + off; while (mt < 0) mt += 1; while (mt > 1) mt -= 1; place(mn, arcPos(mt));
       });
       var rest = sky.querySelector('[data-cal-sky-sub-rest]');
@@ -2395,6 +2522,36 @@
     // independently from time/celestial. Forces the state attribute; the
     // CSS does the crossfade.
     bind('[data-cal-democtl-sun]', function (v) { applySunState(v); refeedSky(); say('sun=' + v); });
+
+    // WAVE 2 moon library controls. Mutate clones of worldState.moons + push
+    // via setWorldState so the 'moons' subscriber repaints (wsEqual needs new
+    // objects to detect the change).
+    function curMoons() { return (worldState && worldState.moons || []).map(function (m) { return Object.assign({}, m); }); }
+    function designPhaseSource(d) { return (MOON_DESIGNS[d] || {}).phaseSource || 'css-clip'; }
+    bind('[data-cal-democtl-moon-design]', function (v) {
+      var ms = curMoons(); if (!ms.length) return;
+      ms[0].baseDesign = v; ms[0].phaseSource = designPhaseSource(v);
+      setWorldState({ moons: ms }); say('moon[0] design=' + v);
+    });
+    bind('[data-cal-democtl-moon-tint]', function (v) {
+      var ms = curMoons(); if (!ms.length) return; ms[0].tint = v; setWorldState({ moons: ms }); say('moon[0] tint=' + v);
+    });
+    function onClick(sel, fn) { var el = panel.querySelector(sel); if (el) el.addEventListener('click', fn); }
+    onClick('[data-cal-democtl-moon-randomize]', function () {
+      var ms = curMoons(); if (!ms.length) return;
+      var keys = Object.keys(MOON_DESIGNS);
+      for (var i = keys.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = keys[i]; keys[i] = keys[j]; keys[j] = t; }
+      ms.forEach(function (m, i) { var d = keys[i % keys.length]; m.baseDesign = d; m.phaseSource = designPhaseSource(d); });
+      setWorldState({ moons: ms }); say('randomized ' + ms.length + ' moons');
+    });
+    onClick('[data-cal-democtl-moon-add]', function () {
+      var ms = curMoons(); var maxId = 0; ms.forEach(function (m) { if (m.id > maxId) maxId = m.id; });
+      var keys = Object.keys(MOON_DESIGNS), d = keys[Math.floor(Math.random() * keys.length)];
+      ms.push({ id: maxId + 1, name: 'Moon ' + (maxId + 1), baseDesign: d, phaseSource: designPhaseSource(d),
+        tint: null, size: 0.7 + Math.random() * 0.5, orbitSpeed: 0.6 + Math.random() * 0.8, orbitOffset: Math.random(),
+        phase: null, namedPhase: null, cyclePct: null, namedPhases: [] });
+      setWorldState({ moons: ms }); say('moons=' + ms.length);
+    });
     say('ready · cap ' + (window.CalParticleEngine ? CalParticleEngine.cap() : '?'));
   });
 

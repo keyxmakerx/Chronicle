@@ -204,6 +204,43 @@ templ calAlmanacDemoControls(d CalAlmanacMockData) {
 					<option value="low">Low</option>
 				</select>
 			</label>
+			// WAVE 2 moon library (showcase-only): design picker + tint applied
+			// to the first moon, plus Randomize (spread distinct designs) + Add.
+			<label class="cal-almanac-democtl__row">
+				<span>Moon design</span>
+				<select data-cal-democtl-moon-design>
+					<optgroup label="Stylized">
+						<option value="moon-watercolor">Watercolor</option>
+						<option value="moon-holographic">Holographic</option>
+						<option value="moon-etched">Etched</option>
+						<option value="moon-constellation">Constellation</option>
+					</optgroup>
+					<optgroup label="Realistic — small">
+						<option value="moon-realistic-selene">Selene Classic</option>
+						<option value="moon-realistic-silver">Pale Silver</option>
+						<option value="moon-realistic-warm">Warm Cream</option>
+					</optgroup>
+					<optgroup label="Realistic — major">
+						<option value="moon-realistic-full">Realistic Full</option>
+						<option value="moon-realistic-eclipse">Blood Moon (Eclipse)</option>
+						<option value="moon-realistic-ancient">Ancient Cratered</option>
+						<option value="moon-realistic-icy">Icy (Europa)</option>
+						<option value="moon-realistic-volcanic">Volcanic (Io)</option>
+					</optgroup>
+					<optgroup label="Emoji">
+						<option value="noto">Noto Emoji</option>
+						<option value="twemoji">Twemoji</option>
+					</optgroup>
+				</select>
+			</label>
+			<label class="cal-almanac-democtl__row">
+				<span>Moon tint</span>
+				<input type="color" value="#d4d4d8" data-cal-democtl-moon-tint/>
+			</label>
+			<div class="cal-almanac-democtl__row">
+				<button type="button" data-cal-democtl-moon-randomize>🎲 Randomize moons</button>
+				<button type="button" data-cal-democtl-moon-add>＋ Add moon</button>
+			</div>
 			<p class="cal-almanac-democtl__note" data-cal-democtl-readout>—</p>
 		</div>
 	</aside>
@@ -725,11 +762,15 @@ templ calAlmanacSkyband(d CalAlmanacMockData) {
 				@calAlmanacSunIcon()
 			</button>
 			for _, m := range d.Moons {
+				// WAVE 2: data-cal-moon-mode/design seed the library renderer;
+				// JS (applyMoonDesigns) sets --moon-img + refines the phase.
 				<span
 					class={ "cal-almanac-sky__moon", "cal-almanac-sky__moon--" + moonPhaseClass(d, m) }
 					data-cal-sky-moon
 					data-moon-id={ fmtInt(m.ID) }
-					style={ arcPositionStyle(moonTimeFromSky(d.SkyTime, m.PhaseOffset), true) + " --moon-color:" + m.Color + ";" }
+					data-cal-moon-mode={ moonDesignMode(m) }
+					data-cal-moon-design={ moonBaseDesign(m) }
+					style={ arcPositionStyle(moonTimeFromSky(d.SkyTime, m.PhaseOffset), true) + " --moon-color:" + moonTintOf(m) + "; --moon-size:" + moonSizeOf(m) + ";" }
 					title={ m.Name + " — " + moonPhaseName(d, m) }
 				></span>
 			}
@@ -1174,6 +1215,40 @@ func moonPhaseFraction(d CalAlmanacMockData, m CalAlmanacMoon) float64 {
 		phase += 1
 	}
 	return phase
+}
+
+// WAVE 2 moon-library seed helpers (the JS renderer refines at runtime).
+// moonDesignMode — 'emoji' for the vendored Noto/Twemoji glyph families,
+// else 'procedural' (a vendored SVG disc with css-clip phases).
+func moonDesignMode(m CalAlmanacMoon) string {
+	if m.PhaseSource == "noto" || m.PhaseSource == "twemoji" {
+		return "emoji"
+	}
+	return "procedural"
+}
+
+// moonBaseDesign — the MOON_DESIGNS id, defaulting to the baseline realistic.
+func moonBaseDesign(m CalAlmanacMoon) string {
+	if m.BaseDesign != "" {
+		return m.BaseDesign
+	}
+	return "moon-realistic-selene"
+}
+
+// moonTintOf — the tint overlay color, falling back to the base color.
+func moonTintOf(m CalAlmanacMoon) string {
+	if m.Tint != "" {
+		return m.Tint
+	}
+	return m.Color
+}
+
+// moonSizeOf — the disc scale (default 1.0).
+func moonSizeOf(m CalAlmanacMoon) string {
+	if m.Size > 0 {
+		return fmt.Sprintf("%.2f", m.Size)
+	}
+	return "1"
 }
 
 // moonPhaseClass — a CSS modifier (new/cres-wax/quarter-wax/gibb-wax/
