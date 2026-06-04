@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hourglass POC v5 — thematic chambers + realistic sand</title>
+<style>
+  body { font-family:-apple-system,system-ui,sans-serif; background:#15171e; color:#e8e6e3; margin:0; padding:2rem; line-height:1.55; }
+  h1 { color:#f0d090; margin-top:0; } h2 { color:#d0a060; border-bottom:1px solid #444; padding-bottom:.4rem; margin-top:2.4rem; }
+  .intro,.tech,.legend { max-width:800px; }
+  code { background:#2a2a2a; padding:1px 6px; border-radius:3px; font-size:.85em; }
+  .stage { display:flex; flex-wrap:wrap; gap:3.5rem; align-items:flex-end; margin:2rem 0; }
+  .piece { text-align:center; } .piece .label { font-size:.8rem; opacity:.65; margin-top:.9rem; }
+  .backing { background:radial-gradient(circle at 50% 35%, #2c3550, #141824 78%); padding:34px 40px; border-radius:14px; display:inline-block; perspective:1100px; }
+  .hero { transform:scale(1.45); transform-origin:bottom center; margin:0 2.5rem 2.5rem; }
+  .hg { transform:rotateX(7deg); }
+  .tech { background:#21222b; border:1px solid #34363f; border-radius:6px; padding:1rem 1.2rem; font-size:.9rem; margin:1.4rem 0; }
+  .legend { font-size:.85rem; opacity:.85; }
+  .src { opacity:.55; font-size:.85rem; margin-top:2rem; max-width:800px; }
+  @keyframes shimmer { 0%,100%{opacity:.28;} 50%{opacity:.5;} }
+  @keyframes rise { 0%{transform:translateY(0);opacity:0;} 20%{opacity:.9;} 100%{transform:translateY(-58px);opacity:0;} }
+  .streak { animation:shimmer 4.5s ease-in-out infinite; }
+  .mote { animation:rise 3.4s ease-in infinite; }
+  .mote:nth-child(2){animation-delay:1.1s;} .mote:nth-child(3){animation-delay:2.2s;}
+  @media (prefers-reduced-motion:reduce){ .streak,.mote{animation:none;} }
+</style>
+</head>
+<body>
+<h1>Hourglass POC v5 — thematic chambers + realistic sand</h1>
+<div class="intro"><p>Top chamber glows with the period's <strong>events</strong> (here: a warm festival gold, motes rising); bottom chamber holds the <strong>time of day</strong> (here: dusk). Plus subtle glass grit + edge color-fringing to break the "too clean" look. Sand below is slower with more realistic grains.</p></div>
+
+<h2>1 · Thematic hourglass</h2>
+<div class="stage">
+  <div class="piece hero">
+    <div class="backing">
+      <svg class="hg" width="200" height="300" viewBox="0 0 220 320" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="woodTex" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.85 0.018" numOctaves="4" seed="11" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.16  0 0 0 0 0.085  0 0 0 0 0.03  0 0 0 0.8 0"/></filter>
+          <filter id="woodBevel" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="2.2" result="b"/><feDiffuseLighting in="b" surfaceScale="3.5" diffuseConstant="1" lighting-color="#caa46a" result="d"><feDistantLight azimuth="235" elevation="60"/></feDiffuseLighting><feComposite in="d" in2="SourceAlpha" operator="in" result="dc"/><feBlend in="SourceGraphic" in2="dc" mode="multiply"/></filter>
+          <filter id="glassSpec" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/><feSpecularLighting in="b" surfaceScale="5" specularConstant="0.7" specularExponent="30" lighting-color="#ffffff" result="s"><fePointLight x="55" y="40" z="150"/></feSpecularLighting><feComposite in="s" in2="SourceAlpha" operator="in"/></filter>
+          <filter id="sandShade" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="2.4" result="b"/><feDiffuseLighting in="b" surfaceScale="4.5" diffuseConstant="1.05" lighting-color="#fff6df" result="d"><feDistantLight azimuth="235" elevation="58"/></feDiffuseLighting><feComposite in="d" in2="SourceAlpha" operator="in" result="dc"/><feBlend in="SourceGraphic" in2="dc" mode="multiply"/></filter>
+          <filter id="sandTex" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="3" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.32  0 0 0 0 0.2  0 0 0 0 0.04  0 0 0 0.6 0"/></filter>
+          <!-- glass grit: faint speckle to kill the too-clean look -->
+          <filter id="grit" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.5" numOctaves="3" seed="19" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.06 0"/></filter>
+          <!-- gentle refraction of the chamber backdrop through the glass curve -->
+          <filter id="refract" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.03" numOctaves="2" seed="5" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="9" xChannelSelector="R" yChannelSelector="G"/></filter>
+
+          <linearGradient id="wood" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2e1c0c"/><stop offset=".42" stop-color="#7a4f25"/><stop offset=".6" stop-color="#5b3819"/><stop offset="1" stop-color="#241509"/></linearGradient>
+          <linearGradient id="woodTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6b451f"/><stop offset=".5" stop-color="#9a6a35"/><stop offset="1" stop-color="#5b3819"/></linearGradient>
+          <linearGradient id="glassFill" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#cfe6ff" stop-opacity=".04"/><stop offset=".5" stop-color="#eaf4ff" stop-opacity=".12"/><stop offset="1" stop-color="#cfe6ff" stop-opacity=".04"/></linearGradient>
+          <linearGradient id="cyl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0a1626" stop-opacity=".5"/><stop offset=".2" stop-color="#0a1626" stop-opacity="0"/><stop offset=".8" stop-color="#0a1626" stop-opacity="0"/><stop offset="1" stop-color="#0a1626" stop-opacity=".55"/></linearGradient>
+          <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0"><stop offset=".38" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".2"/><stop offset=".62" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <linearGradient id="glassHi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <radialGradient id="refl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+          <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5ecd5"/><stop offset="1" stop-color="#c9ba93"/></linearGradient>
+          <radialGradient id="pile" cx=".5" cy=".15" r=".95"><stop offset="0" stop-color="#f8f1dd"/><stop offset="1" stop-color="#bca982"/></radialGradient>
+          <!-- THEMATIC: top = event glow (festival gold) -->
+          <radialGradient id="eventGlow" cx=".5" cy=".32" r=".62"><stop offset="0" stop-color="#ffcf6e" stop-opacity=".5"/><stop offset=".6" stop-color="#f0a23c" stop-opacity=".22"/><stop offset="1" stop-color="#f0a23c" stop-opacity="0"/></radialGradient>
+          <!-- THEMATIC: bottom = time-of-day (dusk) -->
+          <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#37265c"/><stop offset=".5" stop-color="#a44d6e"/><stop offset="1" stop-color="#e6895a"/></linearGradient>
+
+          <clipPath id="topBulb"><path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z"/></clipPath>
+          <clipPath id="lowerBulb"><path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z"/></clipPath>
+          <clipPath id="frameClip"><rect x="18" y="14" width="184" height="22" rx="7"/><rect x="18" y="286" width="184" height="22" rx="7"/><rect x="28" y="32" width="9" height="258" rx="3"/><rect x="183" y="32" width="9" height="258" rx="3"/><rect x="92" y="152" width="36" height="13" rx="3.5"/></clipPath>
+          <clipPath id="sandClip"><path d="M56,78 Q110,102 164,78 C152,116 124,150 110,156 C96,150 68,116 56,78 Z"/><path d="M52,284 C70,256 96,238 110,232 C124,238 150,256 168,284 Z"/><rect x="108" y="156" width="4" height="78"/></clipPath>
+        </defs>
+
+        <ellipse cx="110" cy="307" rx="82" ry="7" fill="#000" opacity=".4"/>
+        <g filter="url(#woodBevel)"><g clip-path="url(#frameClip)"><rect x="0" y="0" width="220" height="320" fill="url(#wood)"/><rect x="0" y="0" width="220" height="320" filter="url(#woodTex)" opacity=".85"/></g></g>
+        <ellipse cx="110" cy="15" rx="92" ry="7.5" fill="url(#woodTop)"/>
+        <ellipse cx="110" cy="287" rx="92" ry="6.5" fill="url(#woodTop)" opacity=".75"/>
+
+        <!-- THEMATIC BACKDROPS (deepest layer, refracted through glass) -->
+        <g clip-path="url(#topBulb)" filter="url(#refract)"><rect x="40" y="36" width="140" height="124" fill="url(#eventGlow)"/></g>
+        <g clip-path="url(#lowerBulb)" filter="url(#refract)"><rect x="40" y="160" width="140" height="124" fill="url(#dusk)" opacity=".5"/></g>
+        <!-- rising event motes in top chamber -->
+        <g clip-path="url(#topBulb)">
+          <circle class="mote" cx="98" cy="130" r="1.6" fill="#ffe6a8"/><circle class="mote" cx="118" cy="135" r="1.3" fill="#ffd98a"/><circle class="mote" cx="108" cy="128" r="1.5" fill="#fff0c8"/>
+        </g>
+
+        <!-- glass body + cylindrical edges -->
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="url(#glassFill)"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="url(#glassFill)"/>
+        <g clip-path="url(#topBulb)"><rect x="40" y="36" width="140" height="124" fill="url(#cyl)"/></g>
+        <g clip-path="url(#lowerBulb)"><rect x="40" y="160" width="140" height="124" fill="url(#cyl)"/></g>
+
+        <!-- SAND -->
+        <g filter="url(#sandShade)">
+          <path d="M56,78 Q110,102 164,78 C152,116 124,150 110,156 C96,150 68,116 56,78 Z" fill="url(#sand)"/>
+          <path d="M52,284 C70,256 96,238 110,232 C124,238 150,256 168,284 Z" fill="url(#pile)"/>
+        </g>
+        <rect x="108" y="156" width="4" height="78" fill="url(#sand)" opacity=".88"/>
+        <g clip-path="url(#sandClip)"><rect x="0" y="0" width="220" height="320" filter="url(#sandTex)" opacity=".55"/></g>
+
+        <!-- gloss + grit + highlights -->
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="#fff" filter="url(#glassSpec)" opacity=".38" style="mix-blend-mode:screen"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="#fff" filter="url(#glassSpec)" opacity=".55" style="mix-blend-mode:screen"/>
+        <g clip-path="url(#topBulb)"><rect x="40" y="36" width="140" height="124" filter="url(#grit)"/></g>
+        <g clip-path="url(#lowerBulb)"><rect x="40" y="160" width="140" height="124" filter="url(#grit)"/></g>
+        <g clip-path="url(#topBulb)"><rect x="40" y="36" width="140" height="124" fill="url(#sheen)"/></g>
+        <g clip-path="url(#lowerBulb)"><rect x="40" y="160" width="140" height="124" fill="url(#sheen)"/></g>
+        <ellipse class="streak" cx="74" cy="84" rx="4.5" ry="40" transform="rotate(-17 74 84)" fill="url(#glassHi)"/>
+        <ellipse class="streak" cx="150" cy="232" rx="4" ry="38" transform="rotate(16 150 232)" fill="url(#glassHi)"/>
+        <ellipse cx="68" cy="62" rx="8" ry="12" fill="url(#refl)"/>
+
+        <!-- rim + chromatic edge fringing (subtle RGB split) -->
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="none" stroke="#66ccff" stroke-opacity=".22" stroke-width="1.3" transform="translate(-0.8,0)"/>
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="none" stroke="#ff6688" stroke-opacity=".22" stroke-width="1.3" transform="translate(0.8,0)"/>
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.2"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.2"/>
+        <rect x="92" y="152" width="36" height="13" rx="3.5" fill="url(#wood)" filter="url(#woodBevel)"/>
+      </svg>
+    </div>
+    <div class="label">top = festival events (gold glow + motes) · bottom = dusk · grit + edge fringing</div>
+  </div>
+</div>
+
+<div class="legend">
+<strong>What the chamber colors would mean (driven by data, "obvious but not too much"):</strong><br>
+Top (events) — gold = festival/celebration · red = war/conflict · teal-violet = magic/discovery · grey-violet = mourning.&nbsp;&nbsp;
+Bottom (time of day) — peach = dawn · blue = midday · crimson = dusk · indigo = night.
+</div>
+
+<h2>2 · Sand — slower, more realistic grains</h2>
+<div class="intro"><p>Slowed down, with varied grain size/opacity, motion-streaked falling grains, gentle stream waver, and impact scatter on landing. Same cheap heightmap underneath.</p></div>
+<div class="stage">
+  <div class="piece"><div class="backing"><canvas id="sandcv" width="220" height="240" style="display:block"></canvas></div><div class="label">realistic falling grains + heightmap pile</div></div>
+</div>
+
+<div class="tech">
+<strong>Honest note on glass realism:</strong> grit speckle, edge color-fringing, and refraction of the chamber backdrop are layered in here — the documented levers for breaking the "too clean / fake" look. They help, but inline SVG has a ceiling; this is <em>premium-stylized</em>, not photoreal (photoreal needs WebGL, which is a much heavier dependency). The upside: the refraction lever is also what powers the thematic chambers — realism and feature are one mechanism.
+</div>
+
+<div class="src"><em>Can't pre-render here. Tell me: is the thematic-chamber direction right (and is the intensity "obvious but not too much")? Is the sand speed/realism closer? The glass — do the grit/fringing/refraction touches help, or is v4 still the better base?</em></div>
+
+<script>
+(function(){
+  var cv=document.getElementById('sandcv'); if(!cv) return;
+  var ctx=cv.getContext('2d'); var W=cv.width,H=cv.height;
+  var COLS=64, cw=W/COLS; var height=new Float32Array(COLS);
+  var parts=[]; var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var repose=cw*0.85, t=0;
+  function spawn(){ if(parts.length<22){ parts.push({ x:W/2+(Math.random()-0.5)*3, y:6, vx:(Math.random()-0.5)*0.18, vy:0.5+Math.random()*0.35, r:0.6+Math.random()*1.0, a:0.5+Math.random()*0.5, hue:Math.random() }); } }
+  function step(){
+    t+=0.05;
+    for(var k=0;k<parts.length;k++){ var p=parts[k];
+      p.vy+=0.022; p.vx+=Math.sin(t+p.y*0.05)*0.004; // gentle waver
+      p.x+=p.vx; p.y+=p.vy;
+      var c=Math.floor(p.x/cw); if(c<0)c=0; if(c>COLS-1)c=COLS-1;
+      if(p.y>=H-height[c]){ height[c]+=cw*0.5; p.dead=true;
+        if(Math.random()<0.4){ parts.push({x:p.x,y:H-height[c]-2,vx:(Math.random()-0.5)*0.8,vy:-0.5-Math.random()*0.5,r:0.6+Math.random()*0.6,a:0.7,hue:p.hue,scatter:true}); }
+      }
+    }
+    parts=parts.filter(function(p){return !p.dead && p.y<H+10;});
+    for(var it=0; it<3; it++){ for(var i=0;i<COLS-1;i++){ var d=height[i]-height[i+1];
+      if(d>repose){var m=(d-repose)*0.5;height[i]-=m;height[i+1]+=m;}
+      else if(-d>repose){var m2=(-d-repose)*0.5;height[i+1]-=m2;height[i]+=m2;} } }
+    var mx=0; for(var j=0;j<COLS;j++){if(height[j]>mx)mx=height[j];}
+    if(mx>H*0.72){ for(var q=0;q<COLS;q++)height[q]=0; }
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.beginPath(); ctx.moveTo(0,H);
+    for(var i=0;i<COLS;i++){ ctx.lineTo(i*cw+cw/2,H-height[i]); }
+    ctx.lineTo(W,H); ctx.closePath();
+    var g=ctx.createLinearGradient(0,H-90,0,H); g.addColorStop(0,'#f5ecd5'); g.addColorStop(1,'#bca982'); ctx.fillStyle=g; ctx.fill();
+    for(var m=0;m<parts.length;m++){ var p=parts[m];
+      var col = p.hue<0.5 ? '#efe3c4' : '#d8c79c';
+      ctx.globalAlpha=p.a; ctx.fillStyle=col;
+      if(!p.scatter && p.vy>1){ // motion streak when falling fast
+        ctx.beginPath(); ctx.ellipse(p.x,p.y,p.r,p.r*2.2,0,0,7); ctx.fill();
+      } else { ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill(); }
+    }
+    ctx.globalAlpha=1;
+  }
+  function loop(){ if(!reduce){ spawn(); step(); } draw(); requestAnimationFrame(loop); }
+  if(reduce){ for(var i=0;i<COLS;i++){ height[i]=Math.max(0,70-Math.abs(i-COLS/2)*cw*0.85); } }
+  loop();
+})();
+</script>
+</body>
+</html>

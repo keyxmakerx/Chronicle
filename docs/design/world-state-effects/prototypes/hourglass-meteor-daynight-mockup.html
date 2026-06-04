@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hourglass — meteor shower + day/night mockup</title>
+<style>
+  body { font-family:-apple-system,system-ui,sans-serif; background:#0f1118; color:#e8e6e3; margin:0; padding:2rem; line-height:1.55; }
+  h1 { color:#f0d090; margin-top:0; }
+  .intro,.note { max-width:780px; }
+  code { background:#2a2a2a; padding:1px 6px; border-radius:3px; font-size:.85em; }
+  .stage { display:flex; justify-content:center; margin:2rem 0; }
+  .backing { background:radial-gradient(circle at 50% 30%, #20283e, #0a0c14 80%); padding:46px 60px; border-radius:16px; perspective:1100px; }
+  /* the three stacked layers, tilted together */
+  .vessel { position:relative; width:220px; height:320px; transform:scale(1.5) rotateX(7deg); transform-origin:center; }
+  .vessel > * { position:absolute; inset:0; width:220px; height:320px; }
+  #icv { z-index:2; }
+  .note { background:#1b1d27; border:1px solid #2f323d; border-radius:6px; padding:1rem 1.2rem; font-size:.9rem; margin:1.6rem auto; }
+  @keyframes shimmer { 0%,100%{opacity:.25;} 50%{opacity:.45;} }
+  .streak { animation:shimmer 5s ease-in-out infinite; }
+  @media (prefers-reduced-motion:reduce){ .streak{animation:none;} }
+</style>
+</head>
+<body>
+<h1>Hourglass — meteor shower + day/night mockup</h1>
+<div class="intro"><p><strong>Top chamber:</strong> a meteor shower falls, each meteor landing in the sand with a splash of flung grains + an impact flash. <strong>Bottom chamber:</strong> an independent sky cycle — the sun arcs down, sets through dusk, and night falls to near-black as stars emerge. Canvas drives the interior; the SVG glass shell sits on top.</p></div>
+
+<div class="stage">
+  <div class="backing">
+    <div class="vessel">
+
+      <!-- LAYER 1 (back): frame + faint glass back -->
+      <svg viewBox="0 0 220 320" xmlns="http://www.w3.org/2000/svg" style="z-index:1">
+        <defs>
+          <filter id="woodTex" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.85 0.018" numOctaves="4" seed="11" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0.16  0 0 0 0 0.085  0 0 0 0 0.03  0 0 0 0.8 0"/></filter>
+          <filter id="woodBevel" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="2.2" result="b"/><feDiffuseLighting in="b" surfaceScale="3.5" diffuseConstant="1" lighting-color="#caa46a" result="d"><feDistantLight azimuth="235" elevation="60"/></feDiffuseLighting><feComposite in="d" in2="SourceAlpha" operator="in" result="dc"/><feBlend in="SourceGraphic" in2="dc" mode="multiply"/></filter>
+          <linearGradient id="wood" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2e1c0c"/><stop offset=".42" stop-color="#7a4f25"/><stop offset=".6" stop-color="#5b3819"/><stop offset="1" stop-color="#241509"/></linearGradient>
+          <linearGradient id="woodTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6b451f"/><stop offset=".5" stop-color="#9a6a35"/><stop offset="1" stop-color="#5b3819"/></linearGradient>
+          <clipPath id="frameClip"><rect x="18" y="14" width="184" height="22" rx="7"/><rect x="18" y="286" width="184" height="22" rx="7"/><rect x="28" y="32" width="9" height="258" rx="3"/><rect x="183" y="32" width="9" height="258" rx="3"/></clipPath>
+        </defs>
+        <ellipse cx="110" cy="307" rx="82" ry="7" fill="#000" opacity=".45"/>
+        <g filter="url(#woodBevel)"><g clip-path="url(#frameClip)"><rect x="0" y="0" width="220" height="320" fill="url(#wood)"/><rect x="0" y="0" width="220" height="320" filter="url(#woodTex)" opacity=".85"/></g></g>
+        <ellipse cx="110" cy="15" rx="92" ry="7.5" fill="url(#woodTop)"/>
+        <ellipse cx="110" cy="287" rx="92" ry="6.5" fill="url(#woodTop)" opacity=".75"/>
+        <!-- dark glass back so canvas interior reads -->
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="#0a0e18"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="#0a0e18"/>
+      </svg>
+
+      <!-- LAYER 2 (mid): dynamic interior -->
+      <canvas id="icv" width="440" height="640"></canvas>
+
+      <!-- LAYER 3 (front): glass gloss + rim -->
+      <svg viewBox="0 0 220 320" xmlns="http://www.w3.org/2000/svg" style="z-index:3">
+        <defs>
+          <filter id="glassSpec" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/><feSpecularLighting in="b" surfaceScale="5" specularConstant="0.6" specularExponent="32" lighting-color="#ffffff" result="s"><fePointLight x="55" y="40" z="150"/></feSpecularLighting><feComposite in="s" in2="SourceAlpha" operator="in"/></filter>
+          <linearGradient id="cyl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0a1626" stop-opacity=".5"/><stop offset=".2" stop-color="#0a1626" stop-opacity="0"/><stop offset=".8" stop-color="#0a1626" stop-opacity="0"/><stop offset="1" stop-color="#0a1626" stop-opacity=".55"/></linearGradient>
+          <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0"><stop offset=".4" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".16"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <linearGradient id="glassHi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <radialGradient id="refl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+          <clipPath id="topBulb"><path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z"/></clipPath>
+          <clipPath id="lowerBulb"><path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z"/></clipPath>
+        </defs>
+        <g clip-path="url(#topBulb)"><rect x="40" y="36" width="140" height="124" fill="url(#cyl)"/></g>
+        <g clip-path="url(#lowerBulb)"><rect x="40" y="160" width="140" height="124" fill="url(#cyl)"/></g>
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="#fff" filter="url(#glassSpec)" opacity=".3" style="mix-blend-mode:screen"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="#fff" filter="url(#glassSpec)" opacity=".42" style="mix-blend-mode:screen"/>
+        <g clip-path="url(#topBulb)"><rect x="40" y="36" width="140" height="124" fill="url(#sheen)"/></g>
+        <g clip-path="url(#lowerBulb)"><rect x="40" y="160" width="140" height="124" fill="url(#sheen)"/></g>
+        <ellipse class="streak" cx="74" cy="84" rx="4.5" ry="40" transform="rotate(-17 74 84)" fill="url(#glassHi)"/>
+        <ellipse cx="68" cy="62" rx="8" ry="12" fill="url(#refl)"/>
+        <path d="M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.2"/>
+        <path d="M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.2"/>
+        <rect x="92" y="152" width="36" height="13" rx="3.5" fill="url(#wood)" filter="url(#woodBevel)"/>
+      </svg>
+
+    </div>
+  </div>
+</div>
+
+<div class="note">
+<strong>What's happening:</strong> the top is a meteor emitter — each meteor falls with a glowing trail, hits the sand surface (the funnel line), throws a burst of sand grains and a quick flash, then the grains arc back down. The bottom runs a ~22s sky clock: day → the sun arcs down and sets → dusk colours → night fades to near-black with stars twinkling in → loops. The neck keeps a thin sand stream running between them. In production this is the v4 canvas engine with these two emitters added; the glass shell + frame are the SVG we locked.
+<br><br>
+<em>Can't pre-render here — if a layer's misaligned, the sun clips oddly, or the meteors land in the wrong place, tell me and I'll nudge coordinates.</em>
+</div>
+
+<script>
+(function(){
+  var cv=document.getElementById('icv'); if(!cv) return;
+  var ctx=cv.getContext('2d'); ctx.scale(2,2); // draw in 220x320 space
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var topBulb=new Path2D("M40,36 L180,36 C168,96 128,150 110,160 C92,150 52,96 40,36 Z");
+  var lowBulb=new Path2D("M110,160 C128,170 168,224 180,284 L40,284 C52,224 92,170 110,160 Z");
+
+  // ---- helpers ----
+  function hex(h){ h=h.replace('#',''); return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]; }
+  function mix(a,b,t){ a=hex(a); b=hex(b); return 'rgb('+Math.round(a[0]+(b[0]-a[0])*t)+','+Math.round(a[1]+(b[1]-a[1])*t)+','+Math.round(a[2]+(b[2]-a[2])*t)+')'; }
+  // sky keyframes: [phase, topColor, botColor]
+  var SK=[ [0,'#4a86c8','#bfe0ff'], [0.42,'#5a86c0','#cfe0f0'], [0.55,'#7a4a78','#e6895a'], [0.68,'#2a2350','#7a4d6a'], [0.80,'#0a0f28','#1a1a3a'], [1.0,'#04060f','#0a0c1c'] ];
+  function skyAt(p){ for(var i=0;i<SK.length-1;i++){ if(p>=SK[i][0]&&p<=SK[i+1][0]){ var t=(p-SK[i][0])/(SK[i+1][0]-SK[i][0]); return [mix(SK[i][1],SK[i+1][1],t), mix(SK[i][2],SK[i+1][2],t)]; } } return [SK[5][1],SK[5][2]]; }
+
+  // top-chamber sand surface line (funnel): y for a given x
+  function sandY(x){ var n=(x-110)/54; if(n<-1)n=-1; if(n>1)n=1; return 80 + 22*(1-n*n); }
+
+  var meteors=[], splash=[], flashes=[], stream=[];
+  var stars=[]; for(var i=0;i<26;i++){ stars.push({x:46+Math.random()*128, y:166+Math.random()*70, r:0.5+Math.random()*1.1, ph:Math.random()*6.28}); }
+  var t=0, metTimer=0;
+
+  // ---- bottom-chamber heightmap pile (slope-limited avalanche) ----
+  var BCOLS=64, BX0=40, BW=140, bcw=BW/BCOLS, FLOOR=284;
+  var bheight=new Float32Array(BCOLS), brepose=bcw*0.85;
+
+  function spawnMeteor(){ var x=60+Math.random()*100; meteors.push({x:x, y:38, vx:-0.5-Math.random()*0.6, vy:1.4+Math.random()*0.8, trail:[]}); }
+  function impact(x,y){
+    flashes.push({x:x,y:y,r:2,a:0.9});
+    var n=6+Math.floor(Math.random()*5);
+    for(var i=0;i<n;i++){ var ang=-Math.PI/2 + (Math.random()-0.5)*1.9; var sp=1.1+Math.random()*1.8;
+      splash.push({x:x,y:y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,r:0.7+Math.random()*0.9,life:1}); }
+  }
+
+  function step(){
+    t+=0.016;
+    // meteors
+    metTimer-=0.016; if(metTimer<=0){ spawnMeteor(); metTimer=0.9+Math.random()*1.2; }
+    for(var k=0;k<meteors.length;k++){ var m=meteors[k];
+      m.trail.push({x:m.x,y:m.y}); if(m.trail.length>9)m.trail.shift();
+      m.x+=m.vx; m.y+=m.vy;
+      if(m.y>=sandY(m.x)){ impact(m.x, sandY(m.x)); m.dead=true; }
+    }
+    meteors=meteors.filter(function(m){return !m.dead && m.y<170 && m.x>38;});
+    // splash grains (gravity, settle on surface)
+    for(var s=0;s<splash.length;s++){ var g=splash[s]; g.vy+=0.085; g.x+=g.vx; g.y+=g.vy;
+      if(g.vy>0 && g.y>=sandY(g.x)){ g.life-=0.18; g.y=sandY(g.x); g.vx*=0.5; g.vy=0; } }
+    splash=splash.filter(function(g){return g.life>0;});
+    // flashes
+    for(var f=0;f<flashes.length;f++){ flashes[f].r+=0.7; flashes[f].a-=0.06; }
+    flashes=flashes.filter(function(f){return f.a>0;});
+    // neck stream — varied grains, deposit into the bottom heightmap
+    if(stream.length<20){ stream.push({x:110+(Math.random()-0.5)*2.5,y:158,vx:(Math.random()-0.5)*0.14,vy:0.7+Math.random()*0.4,r:0.6+Math.random()*0.9,a:0.6+Math.random()*0.4}); }
+    for(var n2=0;n2<stream.length;n2++){ var st=stream[n2]; st.vy+=0.02; st.vx+=Math.sin(t+st.y*0.05)*0.003; st.x+=st.vx; st.y+=st.vy;
+      if(st.y>=162){ // entered the bottom chamber — test against pile surface
+        var col=Math.floor((st.x-BX0)/bcw); if(col<0)col=0; if(col>BCOLS-1)col=BCOLS-1;
+        if(st.y >= FLOOR-bheight[col]){ bheight[col]+=bcw*0.5; st.dead=true; }
+      }
+    }
+    stream=stream.filter(function(s){return !s.dead && s.y<FLOOR+4;});
+    // slope-limited avalanche
+    for(var it=0; it<3; it++){ for(var i=0;i<BCOLS-1;i++){ var d=bheight[i]-bheight[i+1];
+      if(d>brepose){ var mv=(d-brepose)*0.5; bheight[i]-=mv; bheight[i+1]+=mv; }
+      else if(-d>brepose){ var mv2=(-d-brepose)*0.5; bheight[i+1]-=mv2; bheight[i]+=mv2; } } }
+    // reset when the pile fills the chamber (in production this is the flip)
+    var mx=0; for(var j=0;j<BCOLS;j++){ if(bheight[j]>mx)mx=bheight[j]; }
+    if(mx>108){ for(var q=0;q<BCOLS;q++) bheight[q]=0; }
+  }
+
+  function draw(){
+    var p=(t/22)%1; // 22s day/night cycle
+    ctx.clearRect(0,0,220,320);
+
+    // ===== TOP CHAMBER =====
+    ctx.save(); ctx.clip(topBulb);
+    // faint night sky in top so meteors read
+    ctx.fillStyle='#0b1024'; ctx.fillRect(40,36,140,124);
+    // top sand (funnel)
+    ctx.beginPath(); ctx.moveTo(56,78);
+    ctx.quadraticCurveTo(110,102,164,78);
+    ctx.bezierCurveTo(152,116,124,150,110,156);
+    ctx.bezierCurveTo(96,150,68,116,56,78); ctx.closePath();
+    var sg=ctx.createLinearGradient(0,78,0,156); sg.addColorStop(0,'#f0e4c6'); sg.addColorStop(1,'#c2b288'); ctx.fillStyle=sg; ctx.fill();
+    // meteors (trail + head)
+    for(var k=0;k<meteors.length;k++){ var m=meteors[k];
+      for(var i=0;i<m.trail.length;i++){ var tp=m.trail[i]; var a=i/m.trail.length;
+        ctx.globalAlpha=a*0.6; ctx.fillStyle='#ffb469'; ctx.beginPath(); ctx.arc(tp.x,tp.y,1.6*a+0.3,0,7); ctx.fill(); }
+      ctx.globalAlpha=1; ctx.fillStyle='#fff3d8'; ctx.beginPath(); ctx.arc(m.x,m.y,2.1,0,7); ctx.fill();
+      ctx.fillStyle='rgba(255,210,130,.5)'; ctx.beginPath(); ctx.arc(m.x,m.y,3.6,0,7); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    // impact flashes
+    for(var f=0;f<flashes.length;f++){ var fl=flashes[f]; ctx.globalAlpha=fl.a; ctx.strokeStyle='#ffe9b8'; ctx.lineWidth=1.1; ctx.beginPath(); ctx.arc(fl.x,fl.y,fl.r,0,7); ctx.stroke(); }
+    ctx.globalAlpha=1;
+    // splash grains
+    ctx.fillStyle='#efe3c4';
+    for(var s=0;s<splash.length;s++){ var g=splash[s]; ctx.globalAlpha=Math.min(1,g.life); ctx.beginPath(); ctx.arc(g.x,g.y,g.r,0,7); ctx.fill(); }
+    ctx.globalAlpha=1;
+    ctx.restore();
+
+    // ===== BOTTOM CHAMBER =====
+    ctx.save(); ctx.clip(lowBulb);
+    var sky=skyAt(p);
+    var bg=ctx.createLinearGradient(0,160,0,284); bg.addColorStop(0,sky[0]); bg.addColorStop(1,sky[1]); ctx.fillStyle=bg; ctx.fillRect(40,160,140,124);
+    // stars (fade in toward night)
+    var starA = p<0.6?0 : Math.min(1,(p-0.6)/0.18); if(p>0.97) starA*= (1-(p-0.97)/0.03);
+    if(starA>0){ for(var i=0;i<stars.length;i++){ var stz=stars[i]; var tw=0.6+0.4*Math.sin(t*2+stz.ph);
+      ctx.globalAlpha=starA*tw; ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(stz.x,stz.y,stz.r,0,7); ctx.fill(); } ctx.globalAlpha=1; }
+    // sun: arcs down and sets (visible p<0.62) — drawn BEFORE the sand so it sinks behind the horizon
+    if(p<0.62){ var pp=p/0.62; var sx=150-70*pp; var sy=178+96*pp; var sa=pp<0.85?1:(1-(pp-0.85)/0.15);
+      ctx.globalAlpha=sa;
+      var gg=ctx.createRadialGradient(sx,sy,2,sx,sy,26); gg.addColorStop(0,'rgba(255,224,150,.7)'); gg.addColorStop(1,'rgba(255,200,120,0)'); ctx.fillStyle=gg; ctx.beginPath(); ctx.arc(sx,sy,26,0,7); ctx.fill();
+      ctx.strokeStyle='rgba(255,225,150,.7)'; ctx.lineWidth=1.3;
+      for(var r=0;r<10;r++){ var ang=r/10*6.28+t*0.3; ctx.beginPath(); ctx.moveTo(sx+Math.cos(ang)*11,sy+Math.sin(ang)*11); ctx.lineTo(sx+Math.cos(ang)*17,sy+Math.sin(ang)*17); ctx.stroke(); }
+      var sb=ctx.createRadialGradient(sx-3,sy-3,1,sx,sy,10); sb.addColorStop(0,'#fff3cf'); sb.addColorStop(1,'#f0a83c'); ctx.fillStyle=sb; ctx.beginPath(); ctx.arc(sx,sy,9,0,7); ctx.fill();
+      ctx.globalAlpha=1;
+    }
+    // bottom sand pile — LIVE heightmap (grows from the stream, avalanches at repose angle)
+    ctx.beginPath(); ctx.moveTo(BX0,FLOOR);
+    for(var i=0;i<BCOLS;i++){ ctx.lineTo(BX0+i*bcw+bcw/2, FLOOR-bheight[i]); }
+    ctx.lineTo(BX0+BW,FLOOR); ctx.closePath();
+    var pg=ctx.createLinearGradient(0,FLOOR-100,0,FLOOR); pg.addColorStop(0,'#f4ecd2'); pg.addColorStop(1,'#bca982'); ctx.fillStyle=pg; ctx.fill();
+    ctx.restore();
+
+    // ===== NECK STREAM (drawn last, so falling grains aren't painted over by the sky) =====
+    for(var n2=0;n2<stream.length;n2++){ var st=stream[n2]; ctx.globalAlpha=st.a; ctx.fillStyle='#e7d8b0';
+      if(st.vy>1){ ctx.beginPath(); ctx.ellipse(st.x,st.y,st.r,st.r*2.1,0,0,7); ctx.fill(); }
+      else { ctx.beginPath(); ctx.arc(st.x,st.y,st.r,0,7); ctx.fill(); } }
+    ctx.globalAlpha=1;
+  }
+
+  function loop(){ if(!reduce){ step(); } draw(); requestAnimationFrame(loop); }
+  if(reduce){ t=2; draw(); } else { loop(); }
+})();
+</script>
+</body>
+</html>
