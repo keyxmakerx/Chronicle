@@ -1908,16 +1908,16 @@
 }
 
 /* =================================================================
-   REFINEMENT-V5 — Painted sun (3-layer composition)
+   WAVE 1 — Sun (inline lorc/sun.svg icon, recolored per state)
    ----------------------------------------------------------------
-   Layer 1: a stack of 5 <picture> elements (one per state). Only the
-            current state's image is opacity:1; the others are 0. That
-            gives a free crossfade on state change, and all 5 preload
-            so swaps are instant.
-   Layer 2: this CSS — slow corona rotation + breathing glow filter +
-            per-state pulse variants. transform/opacity only (GPU).
-   Layer 3: canvas particle bloom — handled by the v4 engine via the
-            new CELESTIAL_EFFECTS['sun-bloom'] entry (in cal-almanac.js).
+   Supersedes the v5 painted-<picture> sun (AI assets, abandoned).
+   Layer 1: two stacked inline SVG icons (sun + eclipse); only the
+            state's icon shows. The sun path is `currentColor`, so the
+            button's `color` recolors it per state.
+   Layer 2: this CSS — slow corona rotation + breathing glow +
+            per-state pulse variants. transform/opacity/filter/color.
+   Layer 3: canvas particle bloom — v4 engine, CELESTIAL_EFFECTS
+            ['sun-bloom'] in cal-almanac.js (unchanged).
    ================================================================= */
 .cal-almanac-shell .cal-almanac-sun {
   --cal-sun-size: 180px;
@@ -1930,48 +1930,53 @@
   padding: 0;
   cursor: grab;
   touch-action: none;
-  pointer-events: auto;       /* re-enable: this IS the drag handle */
+  pointer-events: auto;        /* re-enable: this IS the drag handle */
+  color: oklch(0.86 0.16 78);  /* default sun gold (recolors the icon) */
 }
 .cal-almanac-shell .cal-almanac-sun:active { cursor: grabbing; }
-/* Each <picture> stacks; only the matching state is visible. */
-.cal-almanac-shell .cal-almanac-sun__layer {
+/* Inline icon layers stack; only the matching state's icon is visible. */
+.cal-almanac-shell .cal-almanac-sun__icon {
   position: absolute;
   inset: 0;
-  display: block;
-  opacity: 0;
-  transition: opacity 800ms cubic-bezier(0.16, 1, 0.3, 1),
-              filter 1200ms cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: none;
-}
-.cal-almanac-shell .cal-almanac-sun__layer img {
   width: 100%;
   height: 100%;
   display: block;
-  /* slow rotation makes the painted corona detail feel alive at rest */
+  opacity: 0;
+  pointer-events: none;
+  /* slow rotation makes the radiating detail feel alive at rest */
   animation: cal-sun-rotate 120s linear infinite;
   filter: drop-shadow(0 0 16px oklch(0.85 0.18 60 / 0.45));
+  transition: opacity 800ms cubic-bezier(0.16, 1, 0.3, 1),
+              filter 1200ms cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, filter;
 }
-/* Show only the layer whose state matches the parent. */
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="default"] .cal-almanac-sun__layer[data-cal-sun-state-img="default"],
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="dawn"]    .cal-almanac-sun__layer[data-cal-sun-state-img="dawn"],
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="dusk"]    .cal-almanac-sun__layer[data-cal-sun-state-img="dusk"],
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__layer[data-cal-sun-state-img="eclipse"],
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="special"] .cal-almanac-sun__layer[data-cal-sun-state-img="special"] {
+/* default/dawn/dusk/special → sun icon; eclipse → native eclipse icon. */
+.cal-almanac-shell .cal-almanac-sun:not([data-cal-sun-state="eclipse"]) .cal-almanac-sun__icon[data-cal-sun-icon="sun"],
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"] {
   opacity: 1;
 }
-/* Per-state filter + animation variations. */
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="dawn"]    .cal-almanac-sun__layer img,
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="dusk"]    .cal-almanac-sun__layer img {
+/* Per-state recolor + glow. */
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="dawn"],
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="dusk"] {
+  color: oklch(0.78 0.20 45);  /* warm low-sun orange */
+}
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="dawn"] .cal-almanac-sun__icon,
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="dusk"] .cal-almanac-sun__icon {
   filter: drop-shadow(0 0 24px oklch(0.75 0.22 35 / 0.55));
   animation-duration: 180s; /* slower at dawn/dusk for moodier feel */
 }
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__layer img {
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="eclipse"] {
+  color: oklch(0.32 0.04 280);  /* darkened disc */
+}
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__icon {
   filter: drop-shadow(0 0 32px oklch(0.95 0.05 90 / 0.65));
   animation: cal-sun-rotate 240s linear infinite,
              cal-sun-eclipse-pulse 4s ease-in-out infinite;
 }
-.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="special"] .cal-almanac-sun__layer img {
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="special"] {
+  color: oklch(0.58 0.21 25);  /* blood/special crimson */
+}
+.cal-almanac-shell .cal-almanac-sun[data-cal-sun-state="special"] .cal-almanac-sun__icon {
   filter: drop-shadow(0 0 28px oklch(0.55 0.20 25 / 0.70));
   animation: cal-sun-rotate 90s linear infinite,
              cal-sun-special-pulse 3s ease-in-out infinite;
@@ -1986,29 +1991,27 @@
   50%      { filter: drop-shadow(0 0 40px oklch(0.55 0.20 25 / 0.90)); }
 }
 /* Forced-state proof classes for the headless gate. */
-.cal-almanac--proof-sun-default .cal-almanac-sun { --proof: 1; }
-.cal-almanac--proof-sun-dawn    .cal-almanac-sun { --proof: 1; }
-.cal-almanac--proof-sun-dusk    .cal-almanac-sun { --proof: 1; }
-.cal-almanac--proof-sun-eclipse .cal-almanac-sun { --proof: 1; }
+.cal-almanac--proof-sun-default .cal-almanac-sun,
+.cal-almanac--proof-sun-dawn    .cal-almanac-sun,
+.cal-almanac--proof-sun-dusk    .cal-almanac-sun,
+.cal-almanac--proof-sun-eclipse .cal-almanac-sun,
 .cal-almanac--proof-sun-special .cal-almanac-sun { --proof: 1; }
-.cal-almanac--proof-sun-default .cal-almanac-sun__layer[data-cal-sun-state-img="default"],
-.cal-almanac--proof-sun-dawn    .cal-almanac-sun__layer[data-cal-sun-state-img="dawn"],
-.cal-almanac--proof-sun-dusk    .cal-almanac-sun__layer[data-cal-sun-state-img="dusk"],
-.cal-almanac--proof-sun-eclipse .cal-almanac-sun__layer[data-cal-sun-state-img="eclipse"],
-.cal-almanac--proof-sun-special .cal-almanac-sun__layer[data-cal-sun-state-img="special"] {
+.cal-almanac--proof-sun-default .cal-almanac-sun__icon[data-cal-sun-icon="sun"],
+.cal-almanac--proof-sun-dawn    .cal-almanac-sun__icon[data-cal-sun-icon="sun"],
+.cal-almanac--proof-sun-dusk    .cal-almanac-sun__icon[data-cal-sun-icon="sun"],
+.cal-almanac--proof-sun-special .cal-almanac-sun__icon[data-cal-sun-icon="sun"],
+.cal-almanac--proof-sun-eclipse .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"] {
   opacity: 1 !important;
 }
-.cal-almanac--proof-sun-default .cal-almanac-sun__layer:not([data-cal-sun-state-img="default"]),
-.cal-almanac--proof-sun-dawn    .cal-almanac-sun__layer:not([data-cal-sun-state-img="dawn"]),
-.cal-almanac--proof-sun-dusk    .cal-almanac-sun__layer:not([data-cal-sun-state-img="dusk"]),
-.cal-almanac--proof-sun-eclipse .cal-almanac-sun__layer:not([data-cal-sun-state-img="eclipse"]),
-.cal-almanac--proof-sun-special .cal-almanac-sun__layer:not([data-cal-sun-state-img="special"]) {
+.cal-almanac--proof-sun-default .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"],
+.cal-almanac--proof-sun-dawn    .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"],
+.cal-almanac--proof-sun-dusk    .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"],
+.cal-almanac--proof-sun-special .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"],
+.cal-almanac--proof-sun-eclipse .cal-almanac-sun__icon[data-cal-sun-icon="sun"] {
   opacity: 0 !important;
 }
-/* Reduced motion: freeze ALL three layers — CSS rotate, CSS pulse, AND
- * (via the engine's reducedNow gate) canvas bloom. Static painted asset
- * remains visible. Easy to miss one — see dispatch stop-and-flag. */
+/* Reduced motion: freeze rotation + pulse; the static recolored icon
+ * stays visible (canvas bloom is frozen via the engine's reducedNow gate). */
 @media (prefers-reduced-motion: reduce) {
-  .cal-almanac-shell .cal-almanac-sun__layer img { animation: none !important; }
-  .cal-almanac-shell .cal-almanac-sun__layer     { transition: opacity 200ms linear; }
+  .cal-almanac-shell .cal-almanac-sun__icon { animation: none !important; transition: opacity 200ms linear; }
 }
