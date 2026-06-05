@@ -30,15 +30,15 @@ type SessionLister interface {
 // CalendarSession is a lightweight session representation for calendar display.
 // Avoids importing the sessions package directly.
 type CalendarSession struct {
-	ID            string
-	Name          string
-	ScheduledDate string // YYYY-MM-DD
-	Status        string
-	IsRecurring   bool
+	ID              string
+	Name            string
+	ScheduledDate   string // YYYY-MM-DD
+	Status          string
+	IsRecurring     bool
 	RecurrenceLabel string
-	AcceptedCount int
-	TotalCount    int
-	UserRSVP      string // Current user's RSVP status (empty if not attendee).
+	AcceptedCount   int
+	TotalCount      int
+	UserRSVP        string // Current user's RSVP status (empty if not attendee).
 }
 
 // Handler processes HTTP requests for the calendar plugin.
@@ -198,15 +198,16 @@ func (h *Handler) Show(c echo.Context) error {
 	}
 
 	data := CalendarViewData{
-		Calendar:   cal,
-		Year:       year,
-		MonthIndex: month,
-		Events:     events,
-		CampaignID: cc.Campaign.ID,
-		UserID:     userID,
-		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:  middleware.GetCSRFToken(c),
+		Calendar:        cal,
+		Year:            year,
+		MonthIndex:      month,
+		Events:          events,
+		CampaignID:      cc.Campaign.ID,
+		UserID:          userID,
+		IsOwner:         cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
+		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
+		CSRFToken:       middleware.GetCSRFToken(c),
 	}
 
 	// For real-life calendars, fetch sessions that fall in this month.
@@ -279,15 +280,16 @@ func (h *Handler) EmbedCalendar(c echo.Context) error {
 	}
 
 	data := CalendarViewData{
-		Calendar:   cal,
-		Year:       year,
-		MonthIndex: month,
-		Events:     events,
-		CampaignID: cc.Campaign.ID,
-		UserID:     userID,
-		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:  middleware.GetCSRFToken(c),
+		Calendar:        cal,
+		Year:            year,
+		MonthIndex:      month,
+		Events:          events,
+		CampaignID:      cc.Campaign.ID,
+		UserID:          userID,
+		IsOwner:         cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
+		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
+		CSRFToken:       middleware.GetCSRFToken(c),
 	}
 
 	return middleware.Render(c, http.StatusOK, CalendarEmbedFragment(cc, data))
@@ -332,7 +334,7 @@ func (h *Handler) ShowWeek(c echo.Context) error {
 	}
 	// Calculate absolute day and find the week start.
 	yearLength := cal.YearLength()
-	absDay := year*yearLength
+	absDay := year * yearLength
 	for i := 0; i < month-1 && i < len(cal.Months); i++ {
 		absDay += cal.Months[i].Days
 		if cal.IsLeapYear(year) {
@@ -402,16 +404,17 @@ func (h *Handler) ShowWeek(c echo.Context) error {
 	_ = startAbsDay // used for calculation only
 
 	data := WeekViewData{
-		Calendar:   cal,
-		Year:       startYear,
-		MonthIndex: startMonth,
-		StartDay:   startDay,
-		Events:     events,
-		CampaignID: cc.Campaign.ID,
-		UserID:     userID,
-		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:  middleware.GetCSRFToken(c),
+		Calendar:        cal,
+		Year:            startYear,
+		MonthIndex:      startMonth,
+		StartDay:        startDay,
+		Events:          events,
+		CampaignID:      cc.Campaign.ID,
+		UserID:          userID,
+		IsOwner:         cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
+		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
+		CSRFToken:       middleware.GetCSRFToken(c),
 	}
 
 	// For real-life calendars, fetch sessions.
@@ -476,16 +479,17 @@ func (h *Handler) ShowDay(c echo.Context) error {
 	}
 
 	data := DayViewData{
-		Calendar:   cal,
-		Year:       year,
-		MonthIndex: month,
-		Day:        day,
-		Events:     events,
-		CampaignID: cc.Campaign.ID,
-		UserID:     userID,
-		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:  middleware.GetCSRFToken(c),
+		Calendar:        cal,
+		Year:            year,
+		MonthIndex:      month,
+		Day:             day,
+		Events:          events,
+		CampaignID:      cc.Campaign.ID,
+		UserID:          userID,
+		IsOwner:         cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
+		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
+		CSRFToken:       middleware.GetCSRFToken(c),
 	}
 
 	// For real-life calendars, fetch sessions for this day.
@@ -518,12 +522,13 @@ func (h *Handler) SessionsFragment(c echo.Context) error {
 	}
 
 	data := CalendarViewData{
-		Calendar:   cal,
-		CampaignID: cc.Campaign.ID,
-		UserID:     userID,
-		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:  middleware.GetCSRFToken(c),
+		Calendar:        cal,
+		CampaignID:      cc.Campaign.ID,
+		UserID:          userID,
+		IsOwner:         cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
+		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
+		CSRFToken:       middleware.GetCSRFToken(c),
 	}
 
 	// Fetch all planned sessions for the campaign.
@@ -783,9 +788,10 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		}
 	}
 
-	// Only Owners can create dm_only events; Scribes default to 'everyone'.
+	// Only co-DMs (Owner or DM-grantee) can author dm_only events; everyone
+	// else is downgraded to 'everyone'. Co-DM capability (C-CAL-COGM-CAPABILITY).
 	visibility := req.Visibility
-	if visibility == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+	if visibility == "dm_only" && !cc.CanAuthorDmOnly() && !cc.IsSiteAdmin {
 		visibility = "everyone"
 	}
 
@@ -874,9 +880,10 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	// Only Owners can set dm_only visibility; Scribes default to 'everyone'.
+	// Only co-DMs (Owner or DM-grantee) can set dm_only visibility; everyone
+	// else is downgraded to 'everyone'. Co-DM capability (C-CAL-COGM-CAPABILITY).
 	visibility := req.Visibility
-	if visibility == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+	if visibility == "dm_only" && !cc.CanAuthorDmOnly() && !cc.IsSiteAdmin {
 		visibility = "everyone"
 	}
 
@@ -1417,13 +1424,14 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 	}
 
 	data := TimelineViewData{
-		Calendar:   cal,
-		Year:       year,
-		Events:     events,
-		CampaignID: cc.Campaign.ID,
-		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:   cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:  middleware.GetCSRFToken(c),
+		Calendar:        cal,
+		Year:            year,
+		Events:          events,
+		CampaignID:      cc.Campaign.ID,
+		IsOwner:         cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
+		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
+		CSRFToken:       middleware.GetCSRFToken(c),
 	}
 
 	if middleware.IsHTMX(c) {
@@ -1513,12 +1521,12 @@ func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 	}
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarImported, "calendar", cal.ID, cal.Name,
 		map[string]any{
-			"format":    result.Format,
-			"months":    len(result.Months),
-			"weekdays":  len(result.Weekdays),
-			"moons":     len(result.Moons),
-			"seasons":   len(result.Seasons),
-			"eras":      len(result.Eras),
+			"format":   result.Format,
+			"months":   len(result.Months),
+			"weekdays": len(result.Weekdays),
+			"moons":    len(result.Moons),
+			"seasons":  len(result.Seasons),
+			"eras":     len(result.Eras),
 		})
 
 	// Return JSON response with summary.
@@ -1665,7 +1673,13 @@ type CalendarViewData struct {
 	UserID     string
 	IsOwner    bool
 	IsScribe   bool
-	CSRFToken  string
+	// CanAuthorDmOnly: may the viewer create/mark dm_only content? Co-DM
+	// capability (Owner OR DM-grantee) — C-CAL-COGM-CAPABILITY. Gates the
+	// "DM Only" visibility option so a Scribe isn't offered an action the
+	// server downgrades (the UI-lie fix). NOT the same as IsOwner: a co-DM
+	// is not an Owner but can author secrets.
+	CanAuthorDmOnly bool
+	CSRFToken       string
 }
 
 // CurrentMonthDef returns the month definition for the current view month.
@@ -1781,7 +1795,10 @@ type TimelineViewData struct {
 	CampaignID string
 	IsOwner    bool
 	IsScribe   bool
-	CSRFToken  string
+	// CanAuthorDmOnly: co-DM capability (Owner or DM-grantee) —
+	// C-CAL-COGM-CAPABILITY. Gates the dm_only authoring affordances.
+	CanAuthorDmOnly bool
+	CSRFToken       string
 }
 
 // MonthName returns the month name for a 1-based month index.
@@ -1831,7 +1848,10 @@ type WeekViewData struct {
 	UserID     string
 	IsOwner    bool
 	IsScribe   bool
-	CSRFToken  string
+	// CanAuthorDmOnly: co-DM capability (Owner or DM-grantee) —
+	// C-CAL-COGM-CAPABILITY. Gates the dm_only authoring affordances.
+	CanAuthorDmOnly bool
+	CSRFToken       string
 }
 
 // WeekDay represents a single day in the week view.
@@ -1989,7 +2009,10 @@ type DayViewData struct {
 	UserID     string
 	IsOwner    bool
 	IsScribe   bool
-	CSRFToken  string
+	// CanAuthorDmOnly: co-DM capability (Owner or DM-grantee) —
+	// C-CAL-COGM-CAPABILITY. Gates the dm_only authoring affordances.
+	CanAuthorDmOnly bool
+	CSRFToken       string
 }
 
 // MonthName returns the name of the current month.
@@ -2007,7 +2030,7 @@ func (d DayViewData) WeekdayName() string {
 		return ""
 	}
 	yearLength := d.Calendar.YearLength()
-	absDay := d.Year*yearLength
+	absDay := d.Year * yearLength
 	for i := 0; i < d.MonthIndex-1 && i < len(d.Calendar.Months); i++ {
 		absDay += d.Calendar.Months[i].Days
 		if d.Calendar.IsLeapYear(d.Year) {

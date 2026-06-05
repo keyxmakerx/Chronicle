@@ -264,6 +264,24 @@ func (cc *CampaignContext) VisibilityRole() int {
 	return int(cc.MemberRole)
 }
 
+// CanControlWorldState reports whether the user may drive live world-state
+// (advance time, set weather/mood) — the authority the Phase-4 GM panel and
+// the world-state PUT (#401) gate on. Co-DM capability (C-CAL-COGM-CAPABILITY,
+// D6): the campaign Owner OR a DM-grantee. A DmGrant is now a co-DM grant, not
+// just secret-viewing — see CanAuthorDmOnly + the relabeled grant UI.
+func (cc *CampaignContext) CanControlWorldState() bool {
+	return cc.MemberRole >= RoleOwner || cc.IsDmGranted
+}
+
+// CanAuthorDmOnly reports whether the user may CREATE/mark dm_only content
+// (e.g. a secret coming eclipse). Same co-DM capability as world-state
+// control. Distinct from CanSeeDmOnly (read) — authoring is the write side a
+// DmGrant now also confers. Route the calendar create/edit + the visibility
+// UI through this so the grant is honored (not just VisibilityRole).
+func (cc *CampaignContext) CanAuthorDmOnly() bool {
+	return cc.MemberRole >= RoleOwner || cc.IsDmGranted
+}
+
 // OwnershipTransfer represents a pending campaign ownership transfer.
 type OwnershipTransfer struct {
 	ID         string    `json:"id"`

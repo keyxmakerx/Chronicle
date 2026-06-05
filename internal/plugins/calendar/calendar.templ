@@ -1060,7 +1060,12 @@ templ eventModal(data CalendarViewData) {
 						<label class="block text-xs font-medium text-fg-body mb-1">Visibility</label>
 						<select name="visibility" id="evt-visibility" class="input w-full">
 							<option value="everyone">Everyone</option>
-							<option value="dm_only">DM Only</option>
+							// Co-DM capability (C-CAL-COGM-CAPABILITY): only offer "DM
+							// Only" to those who can author it (Owner or co-DM) — a Scribe
+							// would otherwise be offered an action the server downgrades.
+							if data.CanAuthorDmOnly {
+								<option value="dm_only">DM Only</option>
+							}
 						</select>
 					</div>
 					<div>

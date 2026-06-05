@@ -652,8 +652,8 @@ templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer 
 				this.saving = false;
 			}
 		}`, cc.Campaign.ID, cc.Campaign.ID, cc.Campaign.ID) }>
-			<h2 class="text-lg font-semibold text-fg mb-2">DM Privileges</h2>
-			<p class="text-sm text-fg-secondary mb-4">Grant members the ability to see DM-only content without giving them full ownership.</p>
+			<h2 class="text-lg font-semibold text-fg mb-2">Co-DM Access</h2>
+			<p class="text-sm text-fg-secondary mb-4">Make a trusted member a <strong>co-DM</strong>: they can see DM-only content, control the live world-state (advance time, weather, mood), and author secrets — without full ownership (no transfer, delete, member management, or calendar structure editing).</p>
 			<div x-show="loading" class="text-sm text-fg-muted"><i class="fa-solid fa-spinner fa-spin"></i> Loading members...</div>
 			<div x-show="!loading">
 				<template x-if="members.length === 0">
@@ -667,7 +667,7 @@ templ settingsPeopleTab(cc *CampaignContext, members []CampaignMember, transfer 
 								<span class="text-sm font-medium text-fg" x-text="m.display_name || m.email"></span>
 								<span class="text-xs text-fg-muted ml-1" x-text="m.role === 2 ? '(Scribe)' : '(Player)'"></span>
 							</div>
-							<span x-show="isGranted(m.user_id)" class="text-[10px] text-accent font-medium">DM View</span>
+							<span x-show="isGranted(m.user_id)" class="text-[10px] text-accent font-medium">Co-DM</span>
 						</label>
 					</template>
 				</div>

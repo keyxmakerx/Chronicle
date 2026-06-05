@@ -114,7 +114,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// (D6) is the route role here, kept out of the service. No calId: the
 	// handler resolves the active calendar (or ?calendarId=).
 	cg.GET("/calendar/world-state", h.GetWorldState, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.PUT("/calendar/world-state", h.PutWorldState, campaigns.RequireRole(campaigns.RoleOwner))
+	// Co-DM capability (C-CAL-COGM-CAPABILITY / D6): world-state control is
+	// Owner OR DM-grantee, not Owner-only. This is the #401 seam widened —
+	// it's what lets a co-DM drive the Phase-4 GM panel.
+	cg.PUT("/calendar/world-state", h.PutWorldState,
+		campaigns.RequireCapability((*campaigns.CampaignContext).CanControlWorldState,
+			"world-state control requires Owner or co-DM access"))
 
 	// V2 calendar shell (Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
 	// Additive: lives alongside V1 routes during the migration; V1
