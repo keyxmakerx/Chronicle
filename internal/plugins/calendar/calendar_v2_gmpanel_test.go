@@ -79,6 +79,30 @@ func TestSetWorldState_AdvancePersists(t *testing.T) {
 	}
 }
 
+// TestSetWorldState_WeatherPersists: the GM weather override writes the
+// current date's authored weather (calendar_day_weather) via the PUT path.
+func TestSetWorldState_WeatherPersists(t *testing.T) {
+	cal := gmTestCalendar() // current = 1492-6-15
+	var gotCal, gotType string
+	var gotY, gotMo, gotD int
+	repo := &mockCalendarRepo{
+		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) { c := *cal; return &c, nil },
+		setDayWeatherFn: func(_ context.Context, calendarID string, year, month, day int, wt string) error {
+			gotCal, gotY, gotMo, gotD, gotType = calendarID, year, month, day, wt
+			return nil
+		},
+	}
+	svc := NewCalendarService(repo)
+	rain := "rain"
+	if err := svc.SetWorldState(context.Background(), "cal-1", WorldStateUpdateInput{Weather: &rain}); err != nil {
+		t.Fatalf("SetWorldState weather: %v", err)
+	}
+	if gotCal != "cal-1" || gotType != "rain" || gotY != 1492 || gotMo != 6 || gotD != 15 {
+		t.Errorf("weather override wrote (%s, %d-%d-%d, %q); want (cal-1, 1492-6-15, rain)",
+			gotCal, gotY, gotMo, gotD, gotType)
+	}
+}
+
 // TestGMPanel_AuthorityGated: the panel renders ONLY for capability holders.
 func TestGMPanel_AuthorityGated(t *testing.T) {
 	render := func(canControl bool) string {
@@ -91,7 +115,10 @@ func TestGMPanel_AuthorityGated(t *testing.T) {
 	}
 
 	holder := render(true)
-	for _, want := range []string{"data-gm-panel", "data-gm-advance", "data-gm-set-time", "data-gm-set-date", "data-gm-pause"} {
+	for _, want := range []string{
+		"data-gm-panel", "data-gm-advance", "data-gm-set-time", "data-gm-set-date", "data-gm-pause",
+		"data-gm-weather", "data-gm-set-weather", "data-gm-mood", "data-gm-mood-clear", // 4b
+	} {
 		if !strings.Contains(holder, want) {
 			t.Errorf("capability holder panel missing %q", want)
 		}

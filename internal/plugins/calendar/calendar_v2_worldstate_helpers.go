@@ -126,6 +126,56 @@ func wsYearLabel(data CalendarV2ViewData) string {
 	return fmt.Sprintf("Year %d%s", data.WorldState.Date.Year, epoch)
 }
 
+// gmMoodPreset is one selectable mood-tint swatch in the GM panel (4b),
+// mirroring the showcase MOOD_PRESETS. Color is the OKLCH the wash applies —
+// the swatch shows the canvas color it represents (a color-picker swatch, not
+// themeable chrome), so the rendering-canvas exemption logic still holds.
+type gmMoodPreset struct {
+	Key       string
+	Label     string
+	Color     string
+	Intensity float64
+}
+
+// gmMoodPresets returns the 8 showcase mood presets verbatim (cal-almanac.js
+// MOOD_PRESETS) so the production picker == the validated showcase set.
+func gmMoodPresets() []gmMoodPreset {
+	return []gmMoodPreset{
+		{"ominous-red", "Ominous", "oklch(0.55 0.22 25)", 0.45},
+		{"eerie-green", "Eerie", "oklch(0.70 0.20 150)", 0.40},
+		{"melancholy-blue", "Melancholy", "oklch(0.55 0.16 250)", 0.42},
+		{"festive-gold", "Festive", "oklch(0.85 0.16 85)", 0.40},
+		{"cursed-violet", "Cursed", "oklch(0.55 0.22 305)", 0.45},
+		{"holy-white", "Holy", "oklch(0.97 0.02 95)", 0.40},
+		{"void-black", "Void", "oklch(0.15 0.02 280)", 0.50},
+		{"frostbite-cyan", "Frostbite", "oklch(0.85 0.12 200)", 0.40},
+	}
+}
+
+// gmWeatherType is one selectable weather override (4b). IDs match the engine
+// WEATHER_EFFECTS MUST tier so the band renders the chosen condition.
+type gmWeatherType struct {
+	ID    string
+	Label string
+}
+
+// gmWeatherTypes returns the MUST-tier weather conditions the GM can set.
+func gmWeatherTypes() []gmWeatherType {
+	return []gmWeatherType{
+		{"clear", "Clear"}, {"cloudy", "Cloudy"}, {"rain", "Rain"},
+		{"thunderstorm", "Thunderstorm"}, {"snow", "Snow"}, {"fog", "Fog"},
+	}
+}
+
+// gmCurrentWeather returns the current seed weather type for the select
+// default ("clear" when none).
+func gmCurrentWeather(data CalendarV2ViewData) string {
+	if data.WorldState != nil && data.WorldState.Weather.Type != "" {
+		return data.WorldState.Weather.Type
+	}
+	return "clear"
+}
+
 // titleCaseFirst upper-cases the first rune of s (ASCII-simple; weather ids
 // are lowercase ASCII).
 func titleCaseFirst(s string) string {

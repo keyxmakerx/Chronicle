@@ -155,6 +155,10 @@ type WorldStateUpdateInput struct {
 	// (+1hr / +1day / +long-rest / step-back); Time is the absolute
 	// set-time/set-date path. Apply Advance OR Time, not both.
 	Advance *WorldStateAdvance
+	// Weather, when non-nil, sets the CURRENT date's authored weather type
+	// (calendar_day_weather, #401). The GM panel's weather override (4b). A
+	// thin string slice — no structural editing through it.
+	Weather *string
 }
 
 // WorldStateAdvance is a signed relative clock move for the GM panel verbs.

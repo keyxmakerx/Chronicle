@@ -93,6 +93,8 @@ type putWorldStateBody struct {
 		Hours   int `json:"hours"`
 		Minutes int `json:"minutes"`
 	} `json:"advance"`
+	// Weather is the GM panel's current-period weather override (4b).
+	Weather *string `json:"weather"`
 }
 
 // PutWorldState — PUT /campaigns/:id/calendar/world-state.
@@ -133,6 +135,9 @@ func (h *Handler) PutWorldState(c echo.Context) error {
 			Hours:   body.Advance.Hours,
 			Minutes: body.Advance.Minutes,
 		}
+	}
+	if body.Weather != nil {
+		input.Weather = body.Weather
 	}
 
 	if err := h.svc.SetWorldState(ctx, cal.ID, input); err != nil {
