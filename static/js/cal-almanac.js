@@ -1513,6 +1513,7 @@
     }
     // Sync clocks (sky time label + hourglass clock).
     document.querySelectorAll('[data-cal-sky-time-label], [data-cal-time-clock]').forEach(function (c) { c.textContent = clockStr(t); });
+    if (window.__calSyncTimeAria) window.__calSyncTimeAria();   // R1: keep the time-slider a11y in sync
   }
   // Public time-change entry point → unified world-state (Wave 0 shim).
   // Preserves every caller (drag-scrub, time-input, hourglass tick,
@@ -1520,57 +1521,104 @@
   function applyTime(t) {
     setWorldState({ timeOfDay: Math.max(0, Math.min(0.9999, t)) });
   }
-  registerInitBlock('sun-drag-scrub', function () {
-    var sun = document.querySelector('[data-cal-sky-sun]');
-    var sky = document.querySelector('[data-cal-sky]');
-    if (!sun || !sky) return;
-    var dragging = false;
-    sun.addEventListener('pointerdown', function (ev) {
-      dragging = true;
-      ev.stopPropagation(); // don't start the widget-shell drag
-      try { sun.setPointerCapture(ev.pointerId); } catch (e) {}
-      ev.preventDefault();
-    });
-    sun.addEventListener('pointermove', function (ev) {
-      if (!dragging) return;
-      var r = sky.getBoundingClientRect();
-      var frac = (ev.clientX - r.left) / r.width;
-      // Map x 8%..92% → time 0.25..0.75 (the visible arc), clamp outside to night.
-      var t = 0.25 + ((frac - 0.08) / 0.84) * 0.5;
-      applyTime(t);
-    });
-    function end(ev) { if (!dragging) return; dragging = false; try { sun.releasePointerCapture(ev.pointerId); } catch (e) {} }
-    sun.addEventListener('pointerup', end);
-    sun.addEventListener('pointercancel', end);
-  });
+  // R1: the SUN is passive now (decorative, aria-hidden) — it just tracks
+  // worldState.timeOfDay (placement + recolor + bloom). No drag wiring.
+
+  function hpdOf() { return (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24; }
+  function monthLen(m) { var mo = (DATA && DATA.months || [])[m - 1]; return (mo && mo.days) || 30; }
 
   // ============================================================
-  // Block: time-label-input — click time → type a specific time
+  // R1 — time control = the TIME readout (drag / arrow-keys / type). The slider
+  // a11y the hardening deferred from the sun lives here.
   // ============================================================
-  registerInitBlock('time-label-input', function () {
+  registerInitBlock('time-control', function () {
     var label = document.querySelector('[data-cal-sky-time-label]');
     if (!label) return;
-    label.addEventListener('click', function () {
+    label.setAttribute('role', 'slider');
+    label.setAttribute('aria-label', 'Time of day — drag horizontally or use arrow keys; click to type');
+    label.setAttribute('aria-valuemin', '0');
+    label.setAttribute('tabindex', '0');
+    function syncAria() {
+      var perDay = hpdOf() * 60, total = Math.floor(VIEW.timeFrac * perDay);
+      label.setAttribute('aria-valuemax', String(perDay - 1));
+      label.setAttribute('aria-valuenow', String(total));
+      label.setAttribute('aria-valuetext', clockStr(VIEW.timeFrac));
+    }
+    window.__calSyncTimeAria = syncAria;
+    syncAria();
+    function openTimeInput() {
       var input = document.createElement('input');
       input.className = 'cal-almanac-sky__time-input';
       input.value = label.textContent;
       label.replaceWith(input);
       input.focus(); input.select();
       function commit(save) {
-        if (save) {
-          var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
-          var t = parseTime(input.value, hpd);
-          if (t != null) applyTime(t);
-        }
-        input.replaceWith(label);
-        label.textContent = clockStr(VIEW.timeFrac);
+        if (save) { var t = parseTime(input.value, hpdOf()); if (t != null) applyTime(t); }
+        input.replaceWith(label); label.textContent = clockStr(VIEW.timeFrac); syncAria();
+        try { label.focus(); } catch (e) {}
       }
-      input.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Enter') commit(true);
-        if (ev.key === 'Escape') commit(false);
-      });
+      input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') commit(true); if (ev.key === 'Escape') commit(false); });
       input.addEventListener('blur', function () { commit(true); });
+    }
+    // Drag-to-scrub (a full day over ~600px); a click without movement opens
+    // the type-to-set input.
+    var down = false, moved = false, sx = 0, startT = 0;
+    label.addEventListener('pointerdown', function (ev) { down = true; moved = false; sx = ev.clientX; startT = VIEW.timeFrac; try { label.setPointerCapture(ev.pointerId); } catch (e) {} ev.stopPropagation(); });
+    label.addEventListener('pointermove', function (ev) {
+      if (!down) return; var dx = ev.clientX - sx; if (Math.abs(dx) > 3) moved = true;
+      if (moved) { var t = ((startT + dx / 600) % 1 + 1) % 1; applyTime(t); syncAria(); ev.preventDefault(); }
     });
+    function up(ev) { if (!down) return; down = false; try { label.releasePointerCapture(ev.pointerId); } catch (e) {} if (!moved) openTimeInput(); }
+    label.addEventListener('pointerup', up); label.addEventListener('pointercancel', up);
+    // Keyboard slider a11y: ←/→ step a minute, PageUp/Down an hour, Home/End day bounds.
+    label.addEventListener('keydown', function (ev) {
+      var step = 1 / (hpdOf() * 60), big = 1 / hpdOf(), t = VIEW.timeFrac, handled = true;
+      switch (ev.key) {
+        case 'ArrowLeft': case 'ArrowDown': t -= step; break;
+        case 'ArrowRight': case 'ArrowUp': t += step; break;
+        case 'PageDown': t -= big; break;
+        case 'PageUp': t += big; break;
+        case 'Home': t = 0; break;
+        case 'End': t = 0.9999; break;
+        case 'Enter': case ' ': ev.preventDefault(); openTimeInput(); return;
+        default: handled = false;
+      }
+      if (handled) { ev.preventDefault(); t = ((t % 1) + 1) % 1; applyTime(Math.min(0.9999, Math.max(0, t))); syncAria(); }
+    });
+  });
+
+  // ============================================================
+  // R2 — date setter: click the date readout → day / named-month / year + Go.
+  // Commits setWorldState({date}); both surfaces + the grid repaint.
+  // ============================================================
+  registerInitBlock('date-setter', function () {
+    var trigger = document.querySelector('[data-cal-sky-date]');
+    var pop = document.querySelector('[data-cal-datesetter]');
+    if (!trigger || !pop) return;
+    var dayI = pop.querySelector('[data-cal-datesetter-day]');
+    var monI = pop.querySelector('[data-cal-datesetter-month]');
+    var yrI = pop.querySelector('[data-cal-datesetter-year]');
+    function syncDayMax() { if (dayI && monI) dayI.max = String(monthLen(parseInt(monI.value, 10) || 1)); }
+    function open() {
+      var d = (worldState && worldState.date) || { year: VIEW.year, month: VIEW.month, day: VIEW.day };
+      if (yrI) yrI.value = d.year; if (monI) monI.value = String(d.month);
+      syncDayMax(); if (dayI) dayI.value = d.day;
+      pop.setAttribute('data-cal-datesetter-open', 'true'); pop.setAttribute('aria-hidden', 'false');
+      openDialog(pop, closePop);
+    }
+    function closePop() { pop.setAttribute('data-cal-datesetter-open', 'false'); pop.setAttribute('aria-hidden', 'true'); closeDialog(pop); }
+    function commit() {
+      var months = ((DATA.months || []).length) || 12;
+      var y = parseInt(yrI.value, 10), mo = parseInt(monI.value, 10), day = parseInt(dayI.value, 10);
+      if (isNaN(y) || isNaN(mo) || isNaN(day)) return;
+      mo = Math.max(1, Math.min(months, mo)); day = Math.max(1, Math.min(monthLen(mo), day));
+      setWorldState({ date: { year: y, month: mo, day: day }, weather: { type: tcDayWeather(mo, day) }, events: celestialFor(mo, day) });
+      closePop();
+    }
+    trigger.addEventListener('click', open);
+    if (monI) monI.addEventListener('change', syncDayMax);
+    var go = pop.querySelector('[data-cal-datesetter-go]'); if (go) go.addEventListener('click', commit);
+    var cancel = pop.querySelector('[data-cal-datesetter-cancel]'); if (cancel) cancel.addEventListener('click', closePop);
   });
   function parseTime(str, hpd) {
     str = String(str).trim();

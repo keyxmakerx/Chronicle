@@ -943,10 +943,44 @@
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 13px;
   padding: 2px 8px;
-  cursor: pointer;
+  cursor: grab;                 /* R1: the TIME readout is the drag control */
+  touch-action: none;
   transition: background-color var(--cal-d-micro) var(--cal-ease-standard);
 }
 .cal-almanac-shell .cal-almanac-sky__time:hover { background: oklch(0 0 0 / 0.40); }
+.cal-almanac-shell .cal-almanac-sky__time:active { cursor: grabbing; }
+.cal-almanac-shell .cal-almanac-sky__time:focus-visible { outline: 2px solid oklch(0.85 0.18 140); outline-offset: 2px; }
+/* R1: the sun is passive now — decorative, not the drag target. */
+.cal-almanac-shell .cal-almanac-sky__sun--passive { cursor: default; pointer-events: none; }
+/* R2: the date readout is a clickable setter trigger. */
+.cal-almanac-shell .cal-almanac-sky__date {
+  background: transparent; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: left;
+  border-radius: 5px;
+}
+.cal-almanac-shell .cal-almanac-sky__date:hover strong { text-decoration: underline dotted; }
+.cal-almanac-shell .cal-almanac-sky__date:focus-visible { outline: 2px solid oklch(0.85 0.18 140); outline-offset: 2px; }
+/* R2: date-setter popover. */
+.cal-almanac-shell .cal-almanac-datesetter {
+  position: absolute; top: 44px; left: 14px; z-index: 40;
+  display: none; flex-direction: column; gap: 8px;
+  background: oklch(0.20 0.02 264); border: 1px solid oklch(1 0 0 / 0.14);
+  border-radius: 8px; padding: 12px; box-shadow: 0 8px 24px oklch(0 0 0 / 0.45);
+  color: oklch(0.96 0.01 260); font-size: 13px; min-width: 200px;
+}
+.cal-almanac-shell .cal-almanac-datesetter[data-cal-datesetter-open="true"] { display: flex; }
+.cal-almanac-shell .cal-almanac-datesetter__field { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cal-almanac-shell .cal-almanac-datesetter__field span { opacity: 0.75; }
+.cal-almanac-shell .cal-almanac-datesetter__field input,
+.cal-almanac-shell .cal-almanac-datesetter__field select {
+  background: oklch(0.14 0.02 264); color: oklch(0.985 0 0);
+  border: 1px solid oklch(1 0 0 / 0.14); border-radius: 5px; padding: 3px 6px; font-size: 13px; min-width: 96px;
+}
+.cal-almanac-shell .cal-almanac-datesetter__actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }
+.cal-almanac-shell .cal-almanac-datesetter__actions button {
+  background: oklch(0.30 0.03 264); color: oklch(0.985 0 0); border: 1px solid oklch(1 0 0 / 0.14);
+  border-radius: 5px; padding: 4px 12px; cursor: pointer; font-size: 13px;
+}
+.cal-almanac-shell .cal-almanac-datesetter__actions button[data-cal-datesetter-go] { background: oklch(0.55 0.16 250); }
 .cal-almanac-shell .cal-almanac-sky__time-input {
   width: 70px;
   background: oklch(0 0 0 / 0.45);
