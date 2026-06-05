@@ -9,6 +9,7 @@ package calendar
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -137,6 +138,21 @@ func (h *Handler) ShowV2(c echo.Context) error {
 			if events, err := h.svc.ListEventsForMonth(ctx, active.ID, data.Year, data.Month, role, userID); err == nil {
 				data.Events = events
 			}
+		}
+
+		// Live ambient worldState (C-CAL-WORLDSTATE-PRODUCTION-PORT, 2a).
+		// Build the CATALOG Part-8 seed for the cursor date (dm_only
+		// celestial events filtered by role) and stash both the struct (for
+		// server-side container rendering) and its JSON (for the engine).
+		// Best-effort: a seed failure must not break the calendar grid.
+		if seed, serr := h.svc.BuildWorldStateSeed(ctx, active.ID, data.Year, data.Month, data.Day, role, userID); serr == nil {
+			data.WorldState = seed
+			if raw, jerr := json.Marshal(seed); jerr == nil {
+				data.WorldStateJSON = string(raw)
+			}
+		} else {
+			slog.Warn("build worldstate seed failed; calendar_v2 renders without ambient layer",
+				slog.String("calendar_id", active.ID), slog.Any("error", serr))
 		}
 	}
 

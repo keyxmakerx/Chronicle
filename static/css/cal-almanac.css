@@ -1,6 +1,21 @@
 /* cal-almanac.css — C-CAL-SHOWCASE-DESIGN-1-ALMANAC.
  *
- * Self-contained styles for the Almanac calendar at /demo/calendar.
+ * Self-contained styles for the Almanac calendar at /demo/calendar AND the
+ * live worldState surface on calendar_v2 (C-CAL-WORLDSTATE-PRODUCTION-PORT,
+ * Phase 2a — the same engine drives both).
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ RENDERING-CANVAS CSS — EXEMPT FROM CUSTOMIZATION-READINESS.              │
+ * │ Per decisions/2026-06-05-rendering-canvas-css-exemption.md: this whole   │
+ * │ file is a rendering canvas (sky / sun / moon / weather / hourglass       │
+ * │ light-gradients), NOT themeable chrome, so its hardcoded OKLCH gradient   │
+ * │ stops are an intentional exemption. The future Wave-6 customization-      │
+ * │ readiness sweep SKIPS this block — these literals are not hardcoded-      │
+ * │ color debt. Actual calendar_v2 UI chrome (panels, borders, text,         │
+ * │ buttons, date/time controls) stays on V2 design tokens elsewhere; the    │
+ * │ exemption does NOT leak into chrome. Per-campaign canvas tinting is a    │
+ * │ deliberate Phase-6 feature, out of scope here.                           │
+ * └─────────────────────────────────────────────────────────────────────────┘
  *
  * BROWSER SUPPORT (D3 — evergreen-only, documented 2026-06): this showcase uses
  * OKLCH + color-mix(in oklch, …) pervasively with NO hex fallback (97 uses, some
