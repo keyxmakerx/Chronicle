@@ -77,6 +77,18 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 		}
 	}
 
+	if input.Weather != nil {
+		// GM weather override (4b): authored weather for the CURRENT date
+		// (calendar_day_weather upsert). Empty string clears to "clear".
+		wt := *input.Weather
+		if wt == "" {
+			wt = "clear"
+		}
+		if err := s.repo.SetDayWeather(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, wt); err != nil {
+			return fmt.Errorf("set day weather: %w", err)
+		}
+	}
+
 	if input.Advance != nil {
 		// Relative clock move (GM panel verbs) with full signed rollover.
 		// Computed here + written through UpdateCalendar so the same

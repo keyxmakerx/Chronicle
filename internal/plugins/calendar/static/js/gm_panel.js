@@ -91,6 +91,30 @@
             });
         }
 
+        // --- Weather override (persists to calendar_day_weather) ---
+        var setWeatherBtn = panel.querySelector('[data-gm-set-weather]');
+        if (setWeatherBtn) {
+            setWeatherBtn.addEventListener('click', function () {
+                var sel = panel.querySelector('[data-gm-weather]');
+                commit({ weather: sel ? sel.value : 'clear' }, setWeatherBtn);
+            });
+        }
+
+        // --- Mood-tint preset swatches (persist to mood_tint_*) ---
+        panel.querySelectorAll('[data-gm-mood]').forEach(function (sw) {
+            sw.addEventListener('click', function () {
+                var intensity = parseFloat(sw.dataset.gmMoodIntensity || '0.4');
+                commit({ moodTint: { color: sw.dataset.gmMoodColor, intensity: isNaN(intensity) ? 0.4 : intensity } }, sw);
+            });
+        });
+        var moodClearBtn = panel.querySelector('[data-gm-mood-clear]');
+        if (moodClearBtn) {
+            moodClearBtn.addEventListener('click', function () {
+                // Null color + 0 intensity clears the wash (server NULLs both columns).
+                commit({ moodTint: { color: null, intensity: 0 } }, moodClearBtn);
+            });
+        }
+
         // --- Pause (client-only atmosphere freeze; not persisted) ---
         var pauseBtn = panel.querySelector('[data-gm-pause]');
         if (pauseBtn) {

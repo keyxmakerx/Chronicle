@@ -88,6 +88,45 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 					</div>
 					<button type="button" class="btn-secondary text-xs mt-1.5 w-full" data-gm-set-date>Set date</button>
 				</div>
+				// Weather override (4b) — persists to calendar_day_weather for
+				// the current date via the PUT.
+				<div class="pt-1 border-t border-edge">
+					<div class="text-xs font-medium text-fg-secondary mb-1">Weather</div>
+					<div class="flex items-center gap-1.5">
+						<select class="input text-xs flex-1" data-gm-weather aria-label="Weather">
+							for _, w := range gmWeatherTypes() {
+								if w.ID == gmCurrentWeather(data) {
+									<option value={ w.ID } selected>{ w.Label }</option>
+								} else {
+									<option value={ w.ID }>{ w.Label }</option>
+								}
+							}
+						</select>
+						<button type="button" class="btn-secondary text-xs" data-gm-set-weather>Set</button>
+					</div>
+				</div>
+				// Mood-tint picker (4b) — preset swatches show the canvas color
+				// they apply (a color picker, not chrome); persists to mood_tint_*.
+				<div>
+					<div class="flex items-center justify-between mb-1">
+						<span class="text-xs font-medium text-fg-secondary">Mood tint</span>
+						<button type="button" class="text-xs text-fg-secondary hover:text-fg" data-gm-mood-clear>Clear</button>
+					</div>
+					<div class="grid grid-cols-4 gap-1.5">
+						for _, p := range gmMoodPresets() {
+							<button
+								type="button"
+								class="h-7 rounded border border-edge transition-transform duration-micro hover:scale-110"
+								data-gm-mood
+								data-gm-mood-color={ p.Color }
+								data-gm-mood-intensity={ fmt.Sprintf("%.2f", p.Intensity) }
+								style={ "background:" + p.Color }
+								title={ p.Label }
+								aria-label={ "Mood: " + p.Label }
+							></button>
+						}
+					</div>
+				</div>
 				// Atmosphere pause — client-only freeze (ephemeral; not persisted).
 				<div class="pt-1 border-t border-edge">
 					<button type="button" class="btn-secondary text-xs w-full" data-gm-pause aria-pressed="false">
