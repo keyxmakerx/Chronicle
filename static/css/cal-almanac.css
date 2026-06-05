@@ -2,6 +2,25 @@
  *
  * Self-contained styles for the Almanac calendar at /demo/calendar.
  *
+ * BROWSER SUPPORT (D3 — evergreen-only, documented 2026-06): this showcase uses
+ * OKLCH + color-mix(in oklch, …) pervasively with NO hex fallback (97 uses, some
+ * JS-generated). Supported on Chrome/Edge 111+ · Firefox 113+ · Safari 16.4+.
+ * Older browsers are shown a clear notice instead of a broken (transparent/black)
+ * UI — see the `.cal-almanac-unsupported` @supports guard just below. Full hex
+ * fallbacks are intentionally NOT built (pending operator decision D3).
+ */
+/* §7 browser-compat guard. */
+.cal-almanac-unsupported { display: none; }
+@supports not ((color: oklch(0 0 0)) and (background: color-mix(in oklch, red, blue))) {
+  .cal-almanac-shell > *:not(.cal-almanac-unsupported) { display: none !important; }
+  .cal-almanac-unsupported {
+    display: block; margin: 2rem auto; max-width: 36rem; padding: 1rem 1.25rem;
+    border: 1px solid #888; border-radius: 8px; background: #1c1c1c; color: #eee;
+    font: 500 15px/1.5 system-ui, sans-serif; text-align: center;
+  }
+}
+
+/*
  * Architecture (carrying the showcase-saga lessons forward):
  *   - Unique .cal-almanac-* prefix. Nothing else in the repo targets
  *     these classes; the rules have no cascade fight to lose — the
@@ -19,7 +38,6 @@
  *
  * Forced-state classes for headless screenshots:
  *   - .cal-almanac--proof-hover    : applies all :hover end-states
- *   - .cal-almanac--proof-drawer   : forces the drawer open
  *   - .cal-almanac--proof-drag     : reveals the drag-create ghost
  *   - .cal-almanac--time-{0..4}    : freezes sky-band at quarter-times
  * Inert in production (the page root never carries them).
@@ -347,9 +365,6 @@
   border-radius: 50%;
   background: oklch(0.85 0.10 230);
 }
-.cal-almanac-cell__weather--cloud { background: oklch(0.72 0.02 240); }
-.cal-almanac-cell__weather--rain  { background: oklch(0.60 0.12 240); }
-.cal-almanac-cell__weather--storm { background: oklch(0.50 0.20 290); box-shadow: 0 0 6px oklch(0.65 0.22 290 / 0.7); }
 .cal-almanac-cell__chips {
   display: flex;
   flex-direction: column;
@@ -463,61 +478,6 @@
   height: 60px;
 }
 
-/* ---- Drawer ----------------------------------------------------- */
-.cal-almanac-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 380px;
-  max-width: 92vw;
-  height: 100vh;
-  background: oklch(0.20 0.022 264);
-  border-left: 1px solid oklch(0.34 0.030 259);
-  box-shadow: -18px 0 38px -10px oklch(0 0 0 / 0.50);
-  display: flex;
-  flex-direction: column;
-  z-index: 60;
-  transform: translateX(100%);
-  opacity: 0;
-  pointer-events: none;
-  transition: transform var(--cal-d-standard) var(--cal-ease-out),
-              opacity var(--cal-d-standard) var(--cal-ease-out);
-}
-.cal-almanac-drawer[data-cal-drawer-open="true"],
-.cal-almanac--proof-drawer .cal-almanac-drawer {
-  transform: translateX(0);
-  opacity: 1;
-  pointer-events: auto;
-}
-.cal-almanac-drawer__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 16px 18px;
-  border-bottom: 1px solid oklch(0.32 0.028 260);
-}
-.cal-almanac-drawer__title { margin: 0; font-size: 16px; font-weight: 600; }
-.cal-almanac-drawer__meta { margin: 2px 0 0; font-size: 12px; color: oklch(0.74 0.022 261); }
-.cal-almanac-drawer__body { padding: 16px 18px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; flex: 1 1 auto; }
-.cal-almanac-drawer__section { display: flex; flex-direction: column; gap: 8px; }
-.cal-almanac-drawer__h3 {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: oklch(0.74 0.022 261);
-}
-.cal-almanac-drawer__desc { margin: 0; color: oklch(0.92 0.02 250); line-height: 1.55; }
-.cal-almanac-drawer__actions {
-  display: flex;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid oklch(0.30 0.025 260);
-}
-
 /* Buttons (drawer + visibility editor — minimal, self-contained). */
 .cal-almanac-btn {
   padding: 7px 14px;
@@ -606,8 +566,6 @@
   }
   .cal-almanac-chip:hover,
   .cal-almanac-btn:hover { transform: none; }
-  .cal-almanac-drawer[data-cal-drawer-open="true"],
-  .cal-almanac--proof-drawer .cal-almanac-drawer { transform: translateX(0); }
 }
 
 /* ============================================================
@@ -633,31 +591,6 @@
   padding: 6px 8px;
   background: oklch(0.18 0.022 264);
   border-bottom: 1px solid oklch(0.30 0.025 260);
-}
-.cal-almanac-shell .cal-almanac-eras__band {
-  position: relative;
-  flex: 1 1 0;
-  padding: 5px 10px;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  border-radius: 4px;
-  border: 1px solid color-mix(in oklch, var(--era-color), oklch(0 0 0) 35%);
-  background: color-mix(in oklch, oklch(0.20 0.020 264), var(--era-color) 12%);
-  font-size: 11px;
-  color: color-mix(in oklch, oklch(0.985 0 0), var(--era-color) 25%);
-  opacity: 0.55;
-  cursor: default;
-  transition: opacity var(--cal-d-micro) var(--cal-ease-standard),
-              background var(--cal-d-micro) var(--cal-ease-standard);
-}
-.cal-almanac-shell .cal-almanac-eras__band:hover { opacity: 0.85; }
-.cal-almanac-shell .cal-almanac-eras__band--current {
-  opacity: 1;
-  background: color-mix(in oklch, oklch(0.22 0.022 264), var(--era-color) 24%);
-  border-color: var(--era-color);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--era-color), transparent 60%);
 }
 .cal-almanac-shell .cal-almanac-eras__name { font-weight: 600; }
 .cal-almanac-shell .cal-almanac-eras__span {
@@ -715,189 +648,6 @@
     var(--chip-cat, oklch(0.62 0.18 240)) 0 4px,
     transparent 4px 7px
   );
-}
-
-/* ---- Anchored popover ------------------------------------------- */
-.cal-almanac-shell .cal-almanac-pop {
-  position: fixed;
-  z-index: 90;
-  width: 360px;
-  max-width: calc(100vw - 24px);
-  background: oklch(0.20 0.022 264);
-  border: 1px solid oklch(0.40 0.030 259);
-  border-radius: 10px;
-  box-shadow: 0 18px 38px -12px oklch(0 0 0 / 0.55),
-              0 6px 14px -2px  oklch(0 0 0 / 0.35);
-  opacity: 0;
-  transform: translateY(-4px) scale(0.98);
-  pointer-events: none;
-  transition: opacity var(--cal-d-standard) var(--cal-ease-out),
-              transform var(--cal-d-standard) var(--cal-ease-out);
-}
-.cal-almanac-shell .cal-almanac-pop[hidden] { display: none; }
-.cal-almanac-shell .cal-almanac-pop[data-cal-pop-open="true"] {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-.cal-almanac-shell .cal-almanac-pop__arrow {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: oklch(0.20 0.022 264);
-  border-right: 1px solid oklch(0.40 0.030 259);
-  border-bottom: 1px solid oklch(0.40 0.030 259);
-}
-.cal-almanac-shell .cal-almanac-pop[data-cal-pop-side="top"]    .cal-almanac-pop__arrow { bottom: -6px; left: 50%; margin-left: -5px; transform: rotate(45deg); }
-.cal-almanac-shell .cal-almanac-pop[data-cal-pop-side="bottom"] .cal-almanac-pop__arrow { top: -6px;    left: 50%; margin-left: -5px; transform: rotate(225deg); }
-.cal-almanac-shell .cal-almanac-pop[data-cal-pop-side="left"]   .cal-almanac-pop__arrow { right: -6px;  top: 50%; margin-top: -5px;  transform: rotate(-45deg); }
-.cal-almanac-shell .cal-almanac-pop[data-cal-pop-side="right"]  .cal-almanac-pop__arrow { left: -6px;   top: 50%; margin-top: -5px;  transform: rotate(135deg); }
-
-.cal-almanac-shell .cal-almanac-pop__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid oklch(0.30 0.025 260);
-}
-.cal-almanac-shell .cal-almanac-pop__title-wrap { flex: 1 1 auto; min-width: 0; }
-.cal-almanac-shell .cal-almanac-pop__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: oklch(0.985 0 0);
-}
-.cal-almanac-shell .cal-almanac-pop__meta {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: oklch(0.74 0.022 261);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-}
-.cal-almanac-shell .cal-almanac-pop__tabs {
-  display: flex;
-  gap: 4px;
-  padding: 6px 10px 0;
-}
-.cal-almanac-shell .cal-almanac-pop__tab {
-  flex: 1 1 0;
-  padding: 5px 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-bottom: 2px solid transparent;
-  color: oklch(0.74 0.022 261);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 5px 5px 0 0;
-  transition: background-color var(--cal-d-micro) var(--cal-ease-standard),
-              color var(--cal-d-micro) var(--cal-ease-standard),
-              border-color var(--cal-d-micro) var(--cal-ease-standard);
-}
-.cal-almanac-shell .cal-almanac-pop__tab:hover { color: oklch(0.985 0 0); background: oklch(0.26 0.025 264); }
-.cal-almanac-shell .cal-almanac-pop__tab--active {
-  color: oklch(0.985 0 0);
-  background: oklch(0.24 0.022 264);
-  border-bottom-color: oklch(0.58 0.20 270);
-}
-.cal-almanac-shell .cal-almanac-pop__panels { padding: 10px 14px 12px; }
-.cal-almanac-shell .cal-almanac-pop__panel { display: none; }
-.cal-almanac-shell .cal-almanac-pop__panel--active { display: block; }
-.cal-almanac-shell .cal-almanac-pop__body {
-  margin: 0 0 8px;
-  color: oklch(0.92 0.02 250);
-  line-height: 1.55;
-  font-size: 13px;
-}
-.cal-almanac-shell .cal-almanac-pop__events {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.cal-almanac-shell .cal-almanac-pop__moon,
-.cal-almanac-shell .cal-almanac-pop__weather {
-  margin-top: 10px;
-  padding: 8px 10px;
-  background: oklch(0.18 0.022 264);
-  border-radius: 6px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: oklch(0.92 0.02 250);
-}
-.cal-almanac-shell .cal-almanac-pop__moon[hidden],
-.cal-almanac-shell .cal-almanac-pop__weather[hidden] { display: none; }
-.cal-almanac-shell .cal-almanac-pop__notes-label {
-  display: block;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: oklch(0.74 0.022 261);
-  margin-bottom: 6px;
-}
-.cal-almanac-shell .cal-almanac-pop__notes {
-  width: 100%;
-  background: oklch(0.16 0.022 264);
-  color: oklch(0.985 0 0);
-  border: 1px solid oklch(0.34 0.030 259);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font: inherit;
-  font-size: 13px;
-  resize: vertical;
-  min-height: 90px;
-  transition: border-color var(--cal-d-micro) var(--cal-ease-standard);
-}
-.cal-almanac-shell .cal-almanac-pop__notes:focus {
-  outline: none;
-  border-color: oklch(0.58 0.20 270);
-}
-.cal-almanac-shell .cal-almanac-pop__notes-hint {
-  margin: 6px 0 0;
-  font-size: 11px;
-  color: oklch(0.62 0.022 261);
-}
-.cal-almanac-shell .cal-almanac-pop__foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px 10px;
-  border-top: 1px solid oklch(0.30 0.025 260);
-}
-.cal-almanac-shell .cal-almanac-pop__foot-hint {
-  font-size: 11px;
-  color: oklch(0.62 0.022 261);
-  margin-left: auto;
-}
-.cal-almanac-shell .cal-almanac-pop__vis { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
-.cal-almanac-shell .cal-almanac-pop__vis label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-
-/* Compact event row inside popover. */
-.cal-almanac-shell .cal-almanac-pop__event {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: oklch(0.18 0.022 264);
-  border-left: 3px solid var(--chip-cat, oklch(0.55 0.025 264));
-  border-radius: 4px;
-  font-size: 12px;
-}
-.cal-almanac-shell .cal-almanac-pop__event-icon { color: var(--chip-cat); }
-.cal-almanac-shell .cal-almanac-pop__event-name { flex: 1 1 auto; }
-.cal-almanac-shell .cal-almanac-pop__event-time {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 11px;
-  color: oklch(0.74 0.022 261);
-}
-
-/* Force-states for headless screenshots. */
-.cal-almanac--proof-pop .cal-almanac-pop {
-  display: block !important;
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
 }
 
 /* ---- Timepiece widget (standalone draggable) -------------------- */
@@ -1347,105 +1097,6 @@
 .cal-almanac--proof-sky-rain .cal-almanac-sky__weather::before,
 .cal-almanac--proof-sky-meteor .cal-almanac-sky__celestial::before { content: ""; }
 
-/* ---- Snowglobe time-piece -------------------------------------- */
-.cal-almanac-shell .cal-almanac-globe {
-  position: absolute;
-  width: 188px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  user-select: none;
-}
-.cal-almanac-shell .cal-almanac-globe__handle {
-  width: 100%;
-  text-align: center;
-  padding: 3px;
-  cursor: grab;
-}
-.cal-almanac-shell .cal-almanac-globe[data-cal-time-dragging="true"] .cal-almanac-globe__handle { cursor: grabbing; }
-.cal-almanac-shell .cal-almanac-globe__tag {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: oklch(0.62 0.022 261);
-}
-.cal-almanac-shell .cal-almanac-globe__dome {
-  position: relative;
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 2px solid oklch(0.42 0.03 258);
-  box-shadow: 0 12px 26px -8px oklch(0 0 0 / 0.6),
-              inset 0 0 24px oklch(0 0 0 / 0.4);
-}
-.cal-almanac-shell .cal-almanac-globe__sky { position: absolute; inset: 0; }
-.cal-almanac-shell .cal-almanac-globe__sun {
-  position: absolute;
-  width: 22px; height: 22px;
-  margin-left: -11px; margin-top: -11px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, oklch(0.98 0.08 90), oklch(0.82 0.18 65));
-  box-shadow: 0 0 14px oklch(0.85 0.18 75 / 0.6);
-}
-.cal-almanac-shell .cal-almanac-globe__moon {
-  position: absolute;
-  width: 14px; height: 14px;
-  margin-left: -7px; margin-top: -7px;
-  border-radius: 50%;
-  background: var(--moon-color, oklch(0.9 0.04 95));
-  overflow: hidden;
-}
-.cal-almanac-shell .cal-almanac-globe__moon::after {
-  content: ""; position: absolute; inset: 0; border-radius: 50%;
-  background: oklch(0.10 0.02 264);
-}
-.cal-almanac-shell .cal-almanac-globe__weather,
-.cal-almanac-shell .cal-almanac-globe__celestial { position: absolute; inset: 0; overflow: hidden; }
-.cal-almanac-shell .cal-almanac-globe__weather .cal-almanac-rain { height: 8px; }
-.cal-almanac-shell .cal-almanac-globe__weather .cal-almanac-snow { width: 3px; height: 3px; }
-.cal-almanac-shell .cal-almanac-globe__glass {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(circle at 32% 26%, oklch(1 0 0 / 0.30) 0, oklch(1 0 0 / 0.0) 28%),
-             radial-gradient(circle at 70% 80%, oklch(0 0 0 / 0.25) 0, oklch(0 0 0 / 0.0) 40%);
-}
-.cal-almanac-shell .cal-almanac-globe__base {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: -6px;
-  padding: 8px 12px;
-  background: linear-gradient(180deg, oklch(0.30 0.025 264), oklch(0.22 0.020 264));
-  border: 1px solid oklch(0.40 0.030 258);
-  border-radius: 10px;
-  box-shadow: 0 8px 18px -8px oklch(0 0 0 / 0.5);
-}
-.cal-almanac-shell .cal-almanac-globe__date { display: flex; flex-direction: column; gap: 1px; }
-.cal-almanac-shell .cal-almanac-globe__day {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12px; font-weight: 600; color: oklch(0.985 0 0);
-}
-.cal-almanac-shell .cal-almanac-globe__weekday {
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: oklch(0.62 0.022 261);
-}
-.cal-almanac-shell .cal-almanac-globe__clock {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 16px; font-weight: 600; color: oklch(0.78 0.18 60);
-  text-shadow: 0 0 8px oklch(0.78 0.18 60 / 0.35);
-}
-.cal-almanac-shell .cal-almanac-globe__tick {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; padding: 0; margin-left: auto;
-  background: oklch(0.26 0.022 264); border: 1px solid oklch(0.36 0.028 260);
-  border-radius: 6px; color: oklch(0.85 0.04 220); cursor: pointer;
-  transition: background-color var(--cal-d-micro) var(--cal-ease-standard), border-color var(--cal-d-micro) var(--cal-ease-standard);
-}
-.cal-almanac-shell .cal-almanac-globe__tick:hover { background: oklch(0.34 0.03 264); border-color: oklch(0.58 0.20 270); color: oklch(0.985 0 0); }
-.cal-almanac-shell .cal-almanac-globe__tickicon { width: 14px; height: 14px; }
-
 /* ---- Quick-view (tier 1) --------------------------------------- */
 .cal-almanac-shell .cal-almanac-qv {
   position: fixed;
@@ -1604,10 +1255,6 @@
   background: oklch(0.17 0.02 264); border-radius: 6px; font-size: 13px;
 }
 .cal-almanac-shell .cal-almanac-skypanel__row-ic { width: 16px; height: 16px; flex: none; }
-
-/* Snowglobe proof (historical; v3 retires the snowglobe but keeps the
-   class harmless if the templ still ships it). */
-.cal-almanac--proof-snowglobe .cal-almanac-globe { outline: 1px dashed oklch(0.5 0.1 260 / 0.4); }
 
 /* =================================================================
    REFINEMENT-V4 — Horizontal shelf timepiece + SVG hourglass

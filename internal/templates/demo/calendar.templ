@@ -102,6 +102,13 @@ templ DemoCalendarAlmanac() {
 
 templ calAlmanacPage(d CalAlmanacMockData) {
 	<div class="cal-almanac-shell">
+		// §7 browser-compat (D3 — evergreen-only). Shown ONLY when the browser
+		// lacks OKLCH/color-mix support (the showcase uses them pervasively with
+		// no hex fallback). Hidden on supporting browsers via @supports.
+		<div class="cal-almanac-unsupported" role="alert">
+			This calendar showcase needs a modern browser with OKLCH color support
+			(Chrome/Edge 111+, Firefox 113+, Safari 16.4+).
+		</div>
 		@calAlmanacIntro()
 		@calAlmanacTimepiece(d)
 		@calAlmanacWidget(d)

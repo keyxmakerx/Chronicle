@@ -43,26 +43,35 @@ export function boot(opts) {
     querySelector() { return null; }, querySelectorAll() { return []; },
     getBoundingClientRect() { return { left: 0, top: 0, width: 1080, height: 200 }; },
   });
+  // engine mode: a mock 2D context + a manually-pumped rAF, so the particle
+  // engine actually runs (it needs a real canvas + getContext) — lets us test
+  // the rAF resilience guard + setProfile cap-trim against the live loop.
+  const grad = { addColorStop() {} };
+  const ctx2d = new Proxy({}, { get: (_, k) => (k === 'createLinearGradient' || k === 'createRadialGradient') ? () => grad : () => {} });
+  const canvas = () => Object.assign(node(), { width: 320, height: 200, getContext: () => ctx2d });
+  const rafQ = [];
   const sandbox = {
     console,
     navigator: { hardwareConcurrency: 8 },
     devicePixelRatio: 1,
     matchMedia: () => ({ matches: !!opts.reduced }),
-    requestAnimationFrame: () => 0,
+    requestAnimationFrame: opts.engine ? ((cb) => { rafQ.push(cb); sandbox.__rafCount = (sandbox.__rafCount || 0) + 1; return rafQ.length; }) : (() => 0),
     cancelAnimationFrame: () => {},
     setTimeout, clearTimeout,
     scrollX: 0, scrollY: 0,
     document: {
       readyState: 'complete',
       getElementById: (id) => (id === 'cal-almanac-data' ? dataEl : null),
-      querySelector: () => null,
+      querySelector: (sel) => (opts.engine && typeof sel === 'string' && sel.indexOf('canvas') !== -1) ? canvas() : null,
       querySelectorAll: () => [],
       addEventListener: () => {},
-      createElement: () => node(),
+      createElement: (tag) => (tag === 'canvas' ? canvas() : node()),
     },
   };
   sandbox.window = sandbox;
   sandbox.global = sandbox;
+  // pump(n) runs up to n queued rAF callbacks (one frame each).
+  sandbox.__pump = (n) => { for (let i = 0; i < (n || 1) && rafQ.length; i++) { const cb = rafQ.shift(); try { cb(16 * (i + 1)); } catch (e) { sandbox.__pumpThrew = true; } } };
   vm.createContext(sandbox);
   vm.runInContext(readFileSync(jsPath, 'utf8'), sandbox, { filename: 'cal-almanac.js' });
   return sandbox.window;
