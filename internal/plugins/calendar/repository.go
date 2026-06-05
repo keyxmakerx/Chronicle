@@ -124,6 +124,19 @@ type CalendarRepository interface {
 
 	// Event visibility.
 	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
+
+	// Entity ties (migration 009 / C-CAL-ENTITY-TIES-DATA-MODEL). Cascade
+	// on entity/event/era delete is DB-enforced (ON DELETE CASCADE), so
+	// there is no unlink-all method. Implementations in
+	// entity_ties_repository.go.
+	LinkEntityEvent(ctx context.Context, entityID, eventID, role string) error
+	UnlinkEntityEvent(ctx context.Context, entityID, eventID string) error
+	LinkEntityEra(ctx context.Context, entityID string, eraID int, role *string) error
+	UnlinkEntityEra(ctx context.Context, entityID string, eraID int) error
+	EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error)
+	EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error)
+	EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error)
+	ErasForEntity(ctx context.Context, entityID string) ([]EntityEraTie, error)
 }
 
 // calendarRepo is the MariaDB implementation of CalendarRepository.

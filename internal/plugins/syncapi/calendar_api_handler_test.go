@@ -173,6 +173,25 @@ func (s *stubCalendarSvc) ListAllEvents(context.Context, string) ([]calendar.Eve
 }
 func (s *stubCalendarSvc) SetEventPublisher(calendar.CalendarEventPublisher) {}
 
+// C-CAL-ENTITY-TIES-DATA-MODEL added these to CalendarService; syncapi
+// doesn't use them. Zero-value returns are fine for these tests.
+func (s *stubCalendarSvc) LinkEntityToEvent(context.Context, string, string, string) error { return nil }
+func (s *stubCalendarSvc) UnlinkEntityFromEvent(context.Context, string, string) error      { return nil }
+func (s *stubCalendarSvc) LinkEntityToEra(context.Context, string, int, *string) error       { return nil }
+func (s *stubCalendarSvc) UnlinkEntityFromEra(context.Context, string, int) error            { return nil }
+func (s *stubCalendarSvc) EventsForEntity(context.Context, string) ([]calendar.EntityEventTie, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) ErasForEntity(context.Context, string) ([]calendar.EntityEraTie, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) EntitiesForEvent(context.Context, string) ([]calendar.EntityTieRef, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) EntitiesForEra(context.Context, int) ([]calendar.EntityTieRef, error) {
+	return nil, nil
+}
+
 // Compile-time check.
 var _ calendar.CalendarService = (*stubCalendarSvc)(nil)
 
