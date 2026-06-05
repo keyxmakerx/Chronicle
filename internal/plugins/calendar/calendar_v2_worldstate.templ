@@ -1,0 +1,178 @@
+// calendar_v2_worldstate.templ — the LIVE ambient worldState band on
+// calendar_v2 (C-CAL-WORLDSTATE-PRODUCTION-PORT, Phase 2a).
+//
+// This is the "it's real" milestone: the validated showcase engine
+// (static/js/cal-almanac.js) now renders the sky / sun / moons / weather /
+// hourglass / mood from REAL campaign data — the BuildWorldStateSeed output
+// (#401) embedded on #cal-v2-worldstate. READ-ONLY for this slice: the
+// time-drag / date-setter / day-pane controls are PROD_SKIP-ped in the engine
+// and land in 2b/2c (GM live-control is Phase 4).
+//
+// The markup here is the engine's binding scaffold + a no-JS first-paint:
+//   - moon elements are CREATED by the engine (applyMoonDesigns) from the
+//     seed — no per-moon loop here.
+//   - the weather / celestial / canvas layers are EMPTY containers the engine
+//     populates on load.
+// Rendering-canvas CSS is exempt per
+// decisions/2026-06-05-rendering-canvas-css-exemption.md (see cal-almanac.css
+// header). Chrome around the band stays on V2 tokens.
+
+package calendar
+
+// worldStateBandV2 renders the ambient strip (sky band + hourglass) above the
+// calendar grid. Renders nothing when there's no active calendar / seed.
+templ worldStateBandV2(data CalendarV2ViewData) {
+	if wsActive(data) {
+		// The CATALOG Part-8 seed blob the engine consumes (cal-almanac.js
+		// 'data' block detects #cal-v2-worldstate → production mode).
+		<div id="cal-v2-worldstate" data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
+		// Layout-only inline styles (no color) size the canvas region + place
+		// the hourglass — they override the demo's full-page positioning in
+		// the shared canvas CSS without touching it. Final sizing is an
+		// operator visual-gate item.
+		<section class="cal-v2-worldstate-band relative w-full overflow-hidden border-b border-edge" style="height:200px" data-cal-v2-worldstate-band aria-label="Today in the world">
+			@worldStateSkyBandV2(data)
+			@worldStateHourglassV2(data)
+		</section>
+		// Load the rendering-canvas CSS + the shared engine. Same assets the
+		// /demo showcase uses; the engine self-detects production mode.
+		<link rel="stylesheet" href="/static/css/cal-almanac.css"/>
+		<script src="/static/js/cal-almanac.js" defer></script>
+	}
+}
+
+// worldStateSkyBandV2 — the sky surface scaffold. The engine paints the
+// gradient, sun arc, moons, weather + celestial particles, and mood wash from
+// the seed on load; the labels below are the read-only first-paint.
+templ worldStateSkyBandV2(data CalendarV2ViewData) {
+	<div
+		class={ "cal-almanac-sky", "cal-almanac-sky--wfx-" + wsWeatherID(data) }
+		data-cal-sky
+		data-cal-sky-weather={ wsWeatherID(data) }
+		data-cal-sky-time-frac={ wsTimeFrac(data) }
+		style="position:absolute;inset:0"
+	>
+		<div class="cal-almanac-sky__weather" data-cal-sky-weather-layer></div>
+		<div class="cal-almanac-sky__celestial" data-cal-sky-celestial-layer></div>
+		<canvas class="cal-almanac-sky__canvas" data-cal-sky-canvas aria-hidden="true"></canvas>
+		<div class="cal-almanac-sky__arc" data-cal-sky-arc>
+			// Passive sun — the engine positions + recolors it from time-of-day.
+			// (Moons are created by the engine, not rendered here.)
+			<div
+				class="cal-almanac-sun cal-almanac-sky__sun cal-almanac-sky__sun--passive"
+				data-cal-sky-sun
+				data-cal-sun-state="default"
+				aria-hidden="true"
+			></div>
+		</div>
+		<div class="cal-almanac-sky__overlay">
+			<div class="cal-almanac-sky__label">
+				// READ-ONLY: 2a ships no date/time controls (2c / Phase 4 wire
+				// these into PUT /calendar/world-state). Plain text, not buttons.
+				<strong data-cal-sky-date>{ wsDatePrimary(data) }</strong>
+				<span class="cal-almanac-sky__sub">
+					<span data-cal-sky-time-label>{ wsClock(data) }</span>
+					<span data-cal-sky-sub-rest> · { wsSkyPhase(data) } · { wsSeason(data) } · { wsWeatherLabel(data) }</span>
+				</span>
+			</div>
+			<div class="cal-almanac-sky__happening" data-cal-sky-happening>
+				for _, ev := range data.WorldState.Events {
+					<span class="cal-almanac-sky__happening-chip" title={ ev.Name }>
+						<span class="cal-almanac-sky__happening-icon" aria-hidden="true">✦</span>
+					</span>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// wsSeason returns the seed's season label (empty when none).
+func wsSeason(data CalendarV2ViewData) string {
+	if data.WorldState == nil {
+		return ""
+	}
+	return data.WorldState.Season
+}
+
+// worldStateHourglassV2 — the companion time-piece. Static SVG glass shell
+// (ported verbatim from the showcase); the engine draws the day/night sky +
+// heightmap sand on the canvas interior. Read-only: the demo's drag handle +
+// clock-advance button are dropped (Phase 4 GM control).
+templ worldStateHourglassV2(data CalendarV2ViewData) {
+	<aside
+		class={ "cal-almanac-shelf", "cal-almanac-sky--wfx-" + wsWeatherID(data) }
+		data-cal-time
+		data-cal-hourglass-flipped="false"
+		data-cal-hourglass-theme={ wsWeatherID(data) }
+		data-cal-shelf-frame="brass"
+		style="position:absolute;right:24px;bottom:8px;left:auto;top:auto;width:230px;z-index:6"
+	>
+		<header class="cal-almanac-shelf__handle">
+			<span class="cal-almanac-shelf__tag">Timepiece</span>
+			<span class="cal-almanac-shelf__theme" data-cal-hourglass-theme-label>{ wsWeatherLabel(data) }</span>
+		</header>
+		<div class="cal-almanac-shelf__stage">
+			<div class="cal-almanac-hourglass__frame" data-cal-hourglass-frame aria-label="Hourglass">
+				<canvas class="cal-almanac-hourglass__canvas" data-cal-hourglass-canvas aria-hidden="true"></canvas>
+				<svg class="cal-almanac-hourglass__svg" viewBox="0 0 60 110" aria-hidden="true">
+					<defs>
+						<linearGradient id="calHgGlassV2" x1="0" y1="0" x2="1" y2="0">
+							<stop offset="0" stop-color="oklch(1 0 0)" stop-opacity="0.20"></stop>
+							<stop offset="0.5" stop-color="oklch(1 0 0)" stop-opacity="0.02"></stop>
+							<stop offset="1" stop-color="oklch(1 0 0)" stop-opacity="0.14"></stop>
+						</linearGradient>
+						<linearGradient id="calHgWoodV2" x1="0" y1="0" x2="1" y2="0">
+							<stop offset="0" stop-color="#2e1c0c"></stop>
+							<stop offset="0.42" stop-color="#7a4f25"></stop>
+							<stop offset="0.6" stop-color="#5b3819"></stop>
+							<stop offset="1" stop-color="#241509"></stop>
+						</linearGradient>
+						<filter id="calHgWoodGrainV2" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+							<feTurbulence type="fractalNoise" baseFrequency="0.9 0.05" numOctaves="4" seed="11" result="n"></feTurbulence>
+							<feColorMatrix in="n" type="matrix" values="0 0 0 0 0.16  0 0 0 0 0.085  0 0 0 0 0.03  0 0 0 0.75 0"></feColorMatrix>
+						</filter>
+						<filter id="calHgWoodBevelV2" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+							<feGaussianBlur in="SourceAlpha" stdDeviation="1.1" result="b"></feGaussianBlur>
+							<feDiffuseLighting in="b" surfaceScale="2.4" diffuseConstant="1" lighting-color="#caa46a" result="d">
+								<feDistantLight azimuth="235" elevation="60"></feDistantLight>
+							</feDiffuseLighting>
+							<feComposite in="d" in2="SourceAlpha" operator="in" result="dc"></feComposite>
+							<feBlend in="SourceGraphic" in2="dc" mode="multiply"></feBlend>
+						</filter>
+						<filter id="calHgGlossV2" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+							<feGaussianBlur in="SourceAlpha" stdDeviation="2.2" result="b"></feGaussianBlur>
+							<feSpecularLighting in="b" surfaceScale="3" specularConstant="0.5" specularExponent="28" lighting-color="#ffffff" result="s">
+								<fePointLight x="16" y="12" z="40"></fePointLight>
+							</feSpecularLighting>
+							<feComposite in="s" in2="SourceAlpha" operator="in"></feComposite>
+						</filter>
+						<clipPath id="calHgBulbsV2"><path d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z"></path></clipPath>
+					</defs>
+					<g clip-path="url(#calHgBulbsV2)">
+						<path class="cal-almanac-hourglass__gloss" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z" fill="oklch(1 0 0)" filter="url(#calHgGlossV2)"></path>
+					</g>
+					<path class="cal-almanac-hourglass__outline" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z"></path>
+					<g filter="url(#calHgWoodBevelV2)">
+						<rect class="cal-almanac-hourglass__rim" x="3" y="3" width="54" height="6" rx="2" fill="url(#calHgWoodV2)"></rect>
+						<rect class="cal-almanac-hourglass__rim" x="3" y="101" width="54" height="6" rx="2" fill="url(#calHgWoodV2)"></rect>
+					</g>
+					<rect x="3" y="3" width="54" height="6" rx="2" filter="url(#calHgWoodGrainV2)" opacity="0.55"></rect>
+					<rect x="3" y="101" width="54" height="6" rx="2" filter="url(#calHgWoodGrainV2)" opacity="0.55"></rect>
+					<path class="cal-almanac-hourglass__reflect" d="M6 8 H54 L33 53 V57 L54 102 H6 L27 57 V53 Z" fill="url(#calHgGlassV2)"></path>
+				</svg>
+				<span class="cal-almanac-hourglass__sparkle" data-cal-hourglass-sparkle aria-hidden="true"></span>
+			</div>
+		</div>
+		<div class="cal-almanac-shelf__bar">
+			<div class="cal-almanac-shelf__flank cal-almanac-shelf__flank--left">
+				<span class="cal-almanac-shelf__primary">{ wsDatePrimary(data) }</span>
+				<span class="cal-almanac-shelf__secondary"><span data-cal-time-clock>{ wsClock(data) }</span> · { wsSkyPhase(data) }</span>
+			</div>
+			<div class="cal-almanac-shelf__plinth" aria-hidden="true"></div>
+			<div class="cal-almanac-shelf__flank cal-almanac-shelf__flank--right">
+				<span class="cal-almanac-shelf__primary">{ wsSeason(data) }</span>
+				<span class="cal-almanac-shelf__secondary">{ wsYearLabel(data) }</span>
+			</div>
+		</div>
+	</aside>
+}

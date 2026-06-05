@@ -37,6 +37,7 @@
     var r = [];
     for (var i = 0; i < INIT_BLOCKS.length; i++) {
       var b = INIT_BLOCKS[i];
+      if (PROD && PROD_SKIP[b.name]) { r.push({ name: b.name, status: 'SKIPPED_PROD' }); continue; }
       try { b.runner(); r.push({ name: b.name, status: 'OK' }); }
       catch (err) { r.push({ name: b.name, status: 'FAILED', error: (err && err.message) || String(err) });
         try { console.error('[cal-almanac]', b.name, err); } catch (e) {} }
@@ -56,6 +57,30 @@
   // source of truth and keeps VIEW in lockstep so existing code that still
   // reads VIEW (currentSunState, the render pipelines) sees the same values.
   var VIEW = { year: 0, month: 0, day: 0, timeFrac: 0.5 };
+
+  // ============================================================
+  // PRODUCTION MODE (C-CAL-WORLDSTATE-PRODUCTION-PORT, Phase 2a).
+  // The same engine drives BOTH the /demo showcase AND the live
+  // calendar_v2 surface. In production the server hands us the
+  // worldState seed directly (BuildWorldStateSeed → CATALOG Part-8
+  // shape) on `#cal-v2-worldstate`, instead of the mock DATA blob the
+  // demo builds worldState from. PROD is detected in the 'data' block.
+  //
+  // PROD_SKIP lists the demo-only / interaction init blocks that must
+  // NOT run on production (the GM controls are Phase 4; the day-pane /
+  // editor interaction is Phase 2b/2c). Skipping them here — rather than
+  // guarding each block — keeps the cut in one auditable place and means
+  // demo-controls genuinely do not ship to prod. The /demo path is
+  // unaffected (PROD stays false there).
+  var PROD = false;
+  var PROD_SEED = null;
+  var PROD_SKIP = {
+    'time-control': 1, 'date-setter': 1, 'time-control-hotkey': 1, // time/date controls (2c / Phase 4)
+    'popup-slidein': 1, 'popup-expand': 1, 'popup-create-flow': 1, // two-tier pane + editor (2b)
+    'drag-create': 1, 'action-menu': 1, 'visibility-editor': 1, 'sky-panel': 1, // interaction (2b)
+    'dialog-a11y': 1, // no dialogs on the read-only 2a surface
+    'widget-drag': 1, 'widget-resize': 1, 'month-nav': 1, 'demo-controls': 1 // showcase-only chrome
+  };
 
   // ============================================================
   // WAVE 0 — the shared world-state model + pub/sub (CATALOG Part 8).
@@ -520,6 +545,22 @@
   // Block: data
   // ============================================================
   registerInitBlock('data', function () {
+    // PRODUCTION (2a): the server embeds the worldState seed directly on
+    // `#cal-v2-worldstate`. There is no mock DATA blob to navigate; the
+    // seed is the current-day worldState. Stash it + seed VIEW, and give
+    // DATA a minimal stub so any date-derived helper is safe (the demo
+    // navigation/recompute paths are PROD_SKIP-ped, so DATA is unused).
+    var prodNode = document.getElementById('cal-v2-worldstate');
+    if (prodNode) {
+      PROD = true;
+      PROD_SEED = JSON.parse(prodNode.getAttribute('data-cal-worldstate') || '{}');
+      var pd = PROD_SEED.date || {};
+      VIEW.year = pd.year || 0; VIEW.month = pd.month || 1; VIEW.day = pd.day || 1;
+      VIEW.timeFrac = (PROD_SEED.timeOfDay != null) ? PROD_SEED.timeOfDay : 0.5;
+      DATA = { current_year: VIEW.year, current_month: VIEW.month, current_day: VIEW.day,
+        moons: [], moon_phases: [], celestial_events: {}, weather_types: [], weather_days: {} };
+      return;
+    }
     var node = document.getElementById('cal-almanac-data');
     if (!node) throw new Error('cal-almanac-data JSON node missing');
     // V5 BUGFIX: switched from `<script type="application/json">…body…` (where
@@ -539,6 +580,21 @@
   // opening frame is byte-identical to v5. Runs right after 'data'.
   // ============================================================
   registerInitBlock('world-state', function () {
+    // PRODUCTION (2a): the seed already IS the CATALOG Part-8 worldState
+    // (BuildWorldStateSeed emits that exact shape — #401's parity test
+    // pins it). Use it verbatim; the server omits the ephemeral
+    // live-control fields (timepieceFill / timeControl direction-speed),
+    // so default those client-side.
+    if (PROD) {
+      worldState = PROD_SEED;
+      if (worldState.timepieceFill == null) worldState.timepieceFill = 0;
+      if (worldState.atmospherePaused == null) worldState.atmospherePaused = false;
+      if (!worldState.timeControl) worldState.timeControl = { direction: 1, speed: 1 };
+      if (!worldState.moons) worldState.moons = [];
+      if (!worldState.events) worldState.events = [];
+      window.__calWorldState = worldState;
+      return;
+    }
     var wType = (function () { var w = dayWeatherTypeID(VIEW.month, VIEW.day); return w ? weatherEffectID(w) : 'clear'; })();
     worldState = {
       timeOfDay: VIEW.timeFrac,                                  // 0..1
@@ -1238,6 +1294,12 @@
   // arc). Derived from the displayed day + the moon's orbit params so it's
   // deterministic for the mock. ~30-day synodic period.
   function moonCyclePct(moon) {
+    // PRODUCTION: the server already computed the true cycle position from
+    // the real calendar (BuildWorldStateSeed → moon.cyclePct), which honors
+    // the calendar's actual month lengths + cycle_days. The demo's 30-day
+    // synodic approximation below is only correct for the mock, so prefer
+    // the seed value in prod.
+    if (PROD && typeof moon.cyclePct === 'number') return moon.cyclePct;
     var dayIndex = ((VIEW.month - 1) * 30 + (VIEW.day - 1));
     var period = 30 / (moon.orbitSpeed || 1);
     var pct = ((dayIndex / period) + (moon.orbitOffset || 0)) % 1;
