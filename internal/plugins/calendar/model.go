@@ -54,6 +54,11 @@ type Calendar struct {
 	LeapYearOffset int     `json:"leap_year_offset"`
 	SortOrder      int     `json:"sort_order"`
 	IsDefault      bool    `json:"is_default"`
+	// Persisted live mood-tint wash (migration 008 /
+	// C-CAL-WORLDSTATE-SERVER-MODEL). Both nil = no mood set. D2 is a
+	// page-load read, so plain nullable columns suffice.
+	MoodTintColor     *string  `json:"mood_tint_color,omitempty"`
+	MoodTintIntensity *float64 `json:"mood_tint_intensity,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 
@@ -216,6 +221,12 @@ type Weekday struct {
 }
 
 // Moon is a celestial body with a phase cycle used for moon phase display.
+//
+// BaseDesign / Tint / PhaseSource / Size / OrbitSpeed are the moon-library
+// render params (migration 008 / C-CAL-WORLDSTATE-SERVER-MODEL). They mirror
+// the showcase's MOON_DESIGNS parameters so a moon's appearance can be
+// authored rather than hardcoded in JS. Existing moons read the column
+// defaults ('moon-realistic-selene' / null / 'css-clip' / 1 / 1).
 type Moon struct {
 	ID          int     `json:"id"`
 	CalendarID  string  `json:"calendar_id"`
@@ -223,6 +234,11 @@ type Moon struct {
 	CycleDays   float64 `json:"cycle_days"`
 	PhaseOffset float64 `json:"phase_offset"`
 	Color       string  `json:"color"`
+	BaseDesign  string  `json:"base_design"`
+	Tint        *string `json:"tint,omitempty"`
+	PhaseSource string  `json:"phase_source"`
+	Size        float64 `json:"size"`
+	OrbitSpeed  float64 `json:"orbit_speed"`
 }
 
 // MoonPhase returns the phase (0.0–1.0) of this moon on a given absolute day

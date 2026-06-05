@@ -137,6 +137,17 @@ type CalendarRepository interface {
 	EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error)
 	EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error)
 	ErasForEntity(ctx context.Context, entityID string) ([]EntityEraTie, error)
+	// World-state model (migration 008 / C-CAL-WORLDSTATE-SERVER-MODEL).
+	// All reads are scoped to a single date (year/month/day) except
+	// GetMoonPhasesForCalendar which loads the named-phase vocab for every
+	// moon of a calendar in one query. Implementations live in
+	// worldstate_repository.go.
+	GetDayWeather(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error)
+	SetDayWeather(ctx context.Context, calendarID string, year, month, day int, weatherType string) error
+	GetCelestialEvents(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error)
+	GetMoonPhasesForCalendar(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
+	GetSpecialDays(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
+	SetMoodTint(ctx context.Context, calendarID string, color *string, intensity *float64) error
 }
 
 // calendarRepo is the MariaDB implementation of CalendarRepository.
@@ -149,11 +160,15 @@ func NewCalendarRepository(db *sql.DB) CalendarRepository {
 	return &calendarRepo{db: db}
 }
 
-// calendarCols is the column list for calendar queries.
+// calendarCols is the column list for calendar queries. mood_tint_* are the
+// persisted live-mood columns added in migration 008
+// (C-CAL-WORLDSTATE-SERVER-MODEL); appended last so the column order of the
+// pre-008 prefix is unchanged.
 const calendarCols = `id, campaign_id, mode, name, description, epoch_name, current_year,
         current_month, current_day, hours_per_day, minutes_per_hour, seconds_per_minute,
         current_hour, current_minute, leap_year_every, leap_year_offset,
-        sort_order, is_default, created_at, updated_at`
+        sort_order, is_default, created_at, updated_at,
+        mood_tint_color, mood_tint_intensity`
 
 // scanCalendar reads a row into a Calendar struct.
 func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
@@ -165,7 +180,8 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 		&cal.CurrentHour, &cal.CurrentMinute,
 		&cal.LeapYearEvery, &cal.LeapYearOffset,
 		&cal.SortOrder, &cal.IsDefault,
-		&cal.CreatedAt, &cal.UpdatedAt)
+		&cal.CreatedAt, &cal.UpdatedAt,
+		&cal.MoodTintColor, &cal.MoodTintIntensity)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -445,10 +461,13 @@ func (r *calendarRepo) SetMoons(ctx context.Context, calendarID string, moons []
 	return tx.Commit()
 }
 
-// GetMoons returns all moons for a calendar.
+// GetMoons returns all moons for a calendar, including the moon-library
+// render params added in migration 008 (base_design/tint/phase_source/size/
+// orbit_speed). Existing moons read the column defaults.
 func (r *calendarRepo) GetMoons(ctx context.Context, calendarID string) ([]Moon, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, calendar_id, name, cycle_days, phase_offset, color
+		`SELECT id, calendar_id, name, cycle_days, phase_offset, color,
+		        base_design, tint, phase_source, size, orbit_speed
 		 FROM calendar_moons WHERE calendar_id = ?`, calendarID)
 	if err != nil {
 		return nil, err
@@ -458,7 +477,8 @@ func (r *calendarRepo) GetMoons(ctx context.Context, calendarID string) ([]Moon,
 	var moons []Moon
 	for rows.Next() {
 		var m Moon
-		if err := rows.Scan(&m.ID, &m.CalendarID, &m.Name, &m.CycleDays, &m.PhaseOffset, &m.Color); err != nil {
+		if err := rows.Scan(&m.ID, &m.CalendarID, &m.Name, &m.CycleDays, &m.PhaseOffset, &m.Color,
+			&m.BaseDesign, &m.Tint, &m.PhaseSource, &m.Size, &m.OrbitSpeed); err != nil {
 			return nil, err
 		}
 		moons = append(moons, m)

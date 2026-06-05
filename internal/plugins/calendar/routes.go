@@ -98,6 +98,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Backward-compat routes: redirect old /calendar paths to /calendars.
 	pub.GET("/calendar", h.legacyRedirect)
 
+	// World-state seed (C-CAL-WORLDSTATE-SERVER-MODEL). GET is Player+
+	// (read; GM-only celestial events are filtered for non-DM viewers in
+	// the seed builder). PUT (set live mood + advance/set time) is
+	// Owner-only for now — the seam for the Phase-3 co-GM capability grant
+	// (D6) is the route role here, kept out of the service. No calId: the
+	// handler resolves the active calendar (or ?calendarId=).
+	cg.GET("/calendar/world-state", h.GetWorldState, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/calendar/world-state", h.PutWorldState, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// V2 calendar shell (Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
 	// Additive: lives alongside V1 routes during the migration; V1
 	// surface remains operational. Cutover decision happens when
