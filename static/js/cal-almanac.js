@@ -302,30 +302,27 @@
       s.particles.push(p);
     }
 
-    function step(ts) {
-      if (!running) return;
-      var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.016;
-      lastTs = ts;
-      // WAVE 3: drive shared-rAF tweens first (time-control transitions).
-      for (var ti = ENGINE_TICKS.length - 1; ti >= 0; ti--) { try { ENGINE_TICKS[ti](dt); } catch (e) { try { console.error('[cal-almanac] tick', e); } catch (e2) {} } }
-      // Frame-time probe → auto low-power.
-      if (probeFrames < 30) {
-        probeFrames++;
-        if (dt * 1000 > 24) probeOverBudget++;
-        if (probeFrames === 30 && probeOverBudget > 10 && profile !== 'low') setProfile('low');
-      }
-      for (var si = 0; si < surfaces.length; si++) {
-        var s = surfaces[si];
-        if (!s.visible) continue;
-        var ctx = s.ctx;
-        ctx.clearRect(0, 0, s.w, s.h);
-        if (s.clip) { ctx.save(); s.clip(ctx, s.w, s.h); }
-        // WAVE 1 frame hook — interior render (heightmap/day-night) UNDER particles.
-        if (s.frame) { s.frameT += dt; try { s.frame(ctx, s.w, s.h, dt, s.frameT); } catch (e) { try { console.error('[cal-almanac] frame', e); } catch (e2) {} } }
-        // Emit.
-        for (var ei = 0; ei < s.emitters.length; ei++) {
-          var em = s.emitters[ei], spec = em.spec;
-          var alive = 0;
+    // Rate-limited error logging so one bad spec doesn't spam the console.
+    var _engineLogged = {};
+    function engineLogOnce(tag, e) {
+      if (_engineLogged[tag]) return; _engineLogged[tag] = true;
+      try { console.error('[cal-almanac] ' + tag, (e && e.message) || e); } catch (e2) {}
+    }
+
+    // Render ONE surface. Every inner loop is guarded so a throwing
+    // particleSpec / frame is skipped, never escaping to kill the shared rAF.
+    function renderSurface(s, dt) {
+      var ctx = s.ctx;
+      ctx.clearRect(0, 0, s.w, s.h);
+      if (s.clip) { ctx.save(); s.clip(ctx, s.w, s.h); }
+      // WAVE 1 frame hook — interior render (heightmap/day-night) UNDER particles.
+      if (s.frame) { s.frameT += dt; try { s.frame(ctx, s.w, s.h, dt, s.frameT); } catch (e) { engineLogOnce('frame', e); } }
+      // Emit — per-emitter guarded; a persistently-throwing emitter is disabled.
+      for (var ei = 0; ei < s.emitters.length; ei++) {
+        var em = s.emitters[ei];
+        if (em.disabled) continue;
+        try {
+          var spec = em.spec, alive = 0;
           for (var k = 0; k < s.particles.length; k++) if (s.particles[k].emId === em.id) alive++;
           var rate = spec.spawnRate || 0;
           s.spawnAcc[em.id] = (s.spawnAcc[em.id] || 0) + rate * dt;
@@ -335,19 +332,51 @@
             spawn(s, spec);
             if (s.particles.length > before) { s.particles[s.particles.length - 1].emId = em.id; alive++; }
           }
+        } catch (e) {
+          em.errCount = (em.errCount || 0) + 1;
+          engineLogOnce('emitter', e);
+          if (em.errCount >= 3) { em.disabled = true; try { console.error('[cal-almanac] emitter disabled after repeated errors', em.spec); } catch (e2) {} }
         }
-        // Integrate + draw.
-        for (var pi = s.particles.length - 1; pi >= 0; pi--) {
-          var p = s.particles[pi];
-          p.x += p.vx * dt; p.y += p.vy * dt; p.life += dt;
-          var off = p.y > s.h + 12 || p.x > s.w + 80 || p.x < -80 || p.life > p.max;
-          if (off) { s.particles.splice(pi, 1); toPool(s, p); continue; }
-          drawParticle(ctx, p);
-        }
-        if (s.clip) ctx.restore();
       }
-      if (liveCount() > 0 || hasEmitters() || hasFrames() || ENGINE_TICKS.length) rafId = requestAnimationFrame(step);
-      else { running = false; rafId = null; }
+      // Integrate + draw — per-particle guarded; a bad particle is recycled.
+      for (var pi = s.particles.length - 1; pi >= 0; pi--) {
+        var p = s.particles[pi];
+        try {
+          p.x += p.vx * dt; p.y += p.vy * dt; p.life += dt;
+          var offscr = p.y > s.h + 12 || p.x > s.w + 80 || p.x < -80 || p.life > p.max;
+          if (offscr) { s.particles.splice(pi, 1); toPool(s, p); continue; }
+          drawParticle(ctx, p);
+        } catch (e) { s.particles.splice(pi, 1); toPool(s, p); engineLogOnce('particle', e); }
+      }
+      if (s.clip) ctx.restore();
+    }
+
+    function step(ts) {
+      if (!running) return;
+      var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.016;
+      lastTs = ts;
+      // The whole body is guarded + the reschedule is in `finally`, so NOTHING
+      // (a bad tick, spec, frame) can silently kill the shared rAF for both
+      // surfaces — the loop always reschedules.
+      try {
+        // WAVE 3: drive shared-rAF tweens first (time-control transitions).
+        for (var ti = ENGINE_TICKS.length - 1; ti >= 0; ti--) { try { ENGINE_TICKS[ti](dt); } catch (e) { engineLogOnce('tick', e); } }
+        // Frame-time probe → auto low-power.
+        if (probeFrames < 30) {
+          probeFrames++;
+          if (dt * 1000 > 24) probeOverBudget++;
+          if (probeFrames === 30 && probeOverBudget > 10 && profile !== 'low') setProfile('low');
+        }
+        for (var si = 0; si < surfaces.length; si++) {
+          var s = surfaces[si];
+          if (!s.visible) continue;
+          try { renderSurface(s, dt); } catch (e) { engineLogOnce('surface', e); try { if (s.clip) s.ctx.restore(); } catch (e2) {} }
+        }
+      } catch (e) { engineLogOnce('step', e); }
+      finally {
+        if (liveCount() > 0 || hasEmitters() || hasFrames() || ENGINE_TICKS.length) rafId = requestAnimationFrame(step);
+        else { running = false; rafId = null; }
+      }
     }
 
     function hasEmitters() { for (var i = 0; i < surfaces.length; i++) if (surfaces[i].emitters.length) return true; return false; }
@@ -731,6 +760,13 @@
   var WEATHER_RENDERERS = {};
   (function () {
     function k(dt) { return Math.min(3, dt * 60); }   // per-frame scale (≈60fps)
+    // §5 perf: scale the frame-renderer self-caps with the active particle
+    // profile so a thunderstorm doesn't cost full price on weak hardware
+    // (setProfile('low') now reduces these too).
+    function pcap(base) {
+      var sc = 1; try { var p = CalParticleEngine.profile(); sc = p === 'low' ? 0.45 : (p === 'high' ? 1.15 : 1); } catch (e) {}
+      return Math.max(4, Math.round(base * sc));
+    }
     // 1. CLEAR — drifting wisps.
     WEATHER_RENDERERS['weather-clear'] = function () {
       var ws = null;
@@ -758,7 +794,7 @@
     WEATHER_RENDERERS['weather-rain'] = function () {
       var drops = [];
       return function (ctx, W, H, dt) {
-        var s = k(dt), cap = Math.round(W * 0.25);
+        var s = k(dt), cap = pcap(W * 0.25);
         for (var n = 0; n < 2 * s; n++) if (drops.length < cap) drops.push({ x: Math.random() * W * 1.2 - W * 0.1, y: -10, vx: -1.5, vy: 7 + Math.random() * 3, len: 10 + Math.random() * 6 });
         ctx.strokeStyle = 'rgba(180,200,230,.55)'; ctx.lineWidth = 1;
         for (var i = drops.length - 1; i >= 0; i--) { var d = drops[i]; d.x += d.vx * s; d.y += d.vy * s;
@@ -772,7 +808,7 @@
       return function (ctx, W, H, dt) {
         var s = k(dt); f += s; var flashing = flashT > 0;
         if (flashing) { ctx.fillStyle = 'rgba(210,225,245,0.18)'; ctx.fillRect(0, 0, W, H); }
-        var cap = Math.round(W * 0.38);
+        var cap = pcap(W * 0.38);
         for (var n = 0; n < 3 * s; n++) if (drops.length < cap) drops.push({ x: Math.random() * W * 1.2 - W * 0.1, y: -10, vx: -2, vy: 9 + Math.random() * 4, len: 12 + Math.random() * 8 });
         ctx.strokeStyle = flashing ? 'rgba(220,230,240,.7)' : 'rgba(180,200,230,.6)'; ctx.lineWidth = 1.2;
         for (var i = drops.length - 1; i >= 0; i--) { var d = drops[i]; d.x += d.vx * s; d.y += d.vy * s;
@@ -788,7 +824,7 @@
     WEATHER_RENDERERS['weather-snow'] = function () {
       var fl = [], t = 0;
       return function (ctx, W, H, dt) {
-        var s = k(dt); t += dt; var cap = Math.round(W * 0.22);
+        var s = k(dt); t += dt; var cap = pcap(W * 0.22);
         for (var n = 0; n < 2 * s; n++) if (fl.length < cap) fl.push({ x: Math.random() * W, y: -10, vy: 0.8 + Math.random() * 0.8, r: 1 + Math.random() * 2, ph: Math.random() * 6.28, swA: 0.6 + Math.random() * 0.6 });
         ctx.fillStyle = 'rgba(255,255,255,.85)';
         for (var i = fl.length - 1; i >= 0; i--) { var f = fl[i]; f.y += f.vy * s; f.x += Math.sin(t * 2.5 + f.ph) * f.swA * s;
@@ -828,7 +864,7 @@
       return function (ctx, W, H, dt) {
         var s = k(dt); t += dt;
         ctx.fillStyle = 'rgba(120,40,25,0.10)'; ctx.fillRect(0, 0, W, H);
-        var cap = Math.round(W * 0.18);
+        var cap = pcap(W * 0.18);
         for (var n = 0; n < 1 * s; n++) if (fl.length < cap) fl.push({ x: Math.random() * W, y: -10, vy: 0.5 + Math.random() * 0.6, r: 0.8 + Math.random() * 1.5, ph: Math.random() * 6.28, swA: 0.3 + Math.random() * 0.4 });
         ctx.fillStyle = 'rgba(140,130,120,.7)';
         for (var i = fl.length - 1; i >= 0; i--) { var f = fl[i]; f.y += f.vy * s; f.x += Math.sin(t * 2.5 + f.ph) * f.swA * s;
@@ -1205,7 +1241,10 @@
   // Paint one moon element from its worldState design/phase/tint.
   function applyMoonDesign(el, moon) {
     if (!el || !moon) return;
-    var design = MOON_DESIGNS[moon.baseDesign] || MOON_DESIGNS['moon-realistic-selene'];
+    // §6: resolve to a KNOWN design id so the vendored src can never 404 on an
+    // unknown baseDesign (falls back to the baseline realistic moon).
+    var designId = MOON_DESIGNS[moon.baseDesign] ? moon.baseDesign : 'moon-realistic-selene';
+    var design = MOON_DESIGNS[designId];
     var src = moon.phaseSource || design.phaseSource, pct = moonCyclePct(moon);
     moon.cyclePct = pct; moon.phase = moonPhaseIndex(pct); moon.namedPhase = moonNamedPhase(moon, pct);
     el.style.setProperty('--moon-size', (moon.size || 1).toFixed(2));
@@ -1216,8 +1255,8 @@
       el.style.setProperty('--moon-img', 'url(' + emojiSrc(src, EMOJI_PHASE_CODES[moon.phase]) + ')');
     } else {
       el.setAttribute('data-cal-moon-mode', 'procedural');
-      el.setAttribute('data-cal-moon-design', moon.baseDesign);
-      el.style.setProperty('--moon-img', 'url(' + moonDesignSrc(moon.baseDesign) + ')');
+      el.setAttribute('data-cal-moon-design', designId);
+      el.style.setProperty('--moon-img', 'url(' + moonDesignSrc(designId) + ')');
       // css-clip phase via the existing ::after terminator class.
       el.className = el.className.replace(/cal-almanac-sky__moon--\S+/g, '').trim() + ' cal-almanac-sky__moon--' + MOON_PHASE_CLASS[moon.phase];
       el.setAttribute('data-cal-moon-animated', design.animated ? 'true' : 'false');
@@ -1452,14 +1491,8 @@
       var rest = sky.querySelector('[data-cal-sky-sub-rest]');
       if (rest) { var parts = rest.textContent.split(' · '); parts[1] = skyLabel(t); rest.textContent = parts.join(' · '); }
     }
-    // Sync clocks (sky time label + snowglobe).
+    // Sync clocks (sky time label + hourglass clock).
     document.querySelectorAll('[data-cal-sky-time-label], [data-cal-time-clock]').forEach(function (c) { c.textContent = clockStr(t); });
-    // Sync the snowglobe sun/moons.
-    var gsun = document.querySelector('[data-cal-globe-sun]'); if (gsun) place(gsun, arcPos(t));
-    document.querySelectorAll('.cal-almanac-globe__moon').forEach(function (mn, idx) {
-      var mm = (DATA.moons || [])[idx]; var off = mm ? mm.phase_offset : 0;
-      var mt = t - 0.5 + off; while (mt < 0) mt += 1; while (mt > 1) mt -= 1; place(mn, arcPos(mt));
-    });
   }
   // Public time-change entry point → unified world-state (Wave 0 shim).
   // Preserves every caller (drag-scrub, time-input, hourglass tick,
@@ -1529,6 +1562,7 @@
     if (h < 0 || h >= hpd || min < 0 || min >= 60) return null;
     return (h * 60 + min) / (hpd * 60);
   }
+  window.__calParseTime = parseTime;
 
   // ============================================================
   // Block: era-overlay (§A) — responsive sizing + OKLCH colour from the
@@ -1698,17 +1732,6 @@
       g.style.setProperty('--delay', ((i * 83) % 100 / 100).toFixed(2) + 's');
       box.appendChild(g);
     }
-  }
-  // Compose helper — used when celestial + weather both active.
-  function composeSand(box, prefer) {
-    if (prefer === 'celestial' && WEATHER_EFFECTS && CELESTIAL_EFFECTS) {
-      var cs = (window.__currentCelestialIDs || []);
-      for (var i = 0; i < cs.length; i++) {
-        var fx = CELESTIAL_EFFECTS[cs[i]];
-        if (fx && fx.sandRender) { fx.sandRender(box); return true; }
-      }
-    }
-    return false;
   }
 
   function hookSandRenderers() {
@@ -1938,6 +1961,7 @@
     var BCOLS = 48, V_BX0 = 6, V_BW = 48, V_FLOOR = 102, V_CEIL = 57, V_NECK = 55;
     var bcwV = V_BW / BCOLS, reposeV = bcwV * 0.9, CHAMBER = V_FLOOR - V_CEIL;
     var bh = new Float32Array(BCOLS), stream = [], _t = 0;
+    var _skyGrad = null, _skyGradKey = '';   // §5 perf: cached sky gradient
     var sandColor = 'oklch(0.86 0.16 80)';
     // WAVE 3: fillFloor = the verb-controlled elapsed-period fill (a guaranteed
     // minimum sand level the ambient pour builds on, decoupled from the ambient
@@ -1971,8 +1995,16 @@
     function draw(ctx, w, h) {
       var sx = w / 60, sy = h / 110;
       var tod = (worldState && typeof worldState.timeOfDay === 'number') ? worldState.timeOfDay : 0.5;
-      var sky = hgSkyForTimeOfDay(tod), y0 = V_CEIL * sy, y1 = V_FLOOR * sy;
-      var g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, sky[0]); g.addColorStop(1, sky[1]);
+      var y0 = V_CEIL * sy, y1 = V_FLOOR * sy;
+      // §5 perf: cache the sky gradient by size + quantized time-of-day so we
+      // don't allocate a new gradient on every frame (only when it changes).
+      var gkey = w + 'x' + h + ':' + Math.round(tod * 200);
+      if (gkey !== _skyGradKey) {
+        var sky = hgSkyForTimeOfDay(tod);
+        _skyGrad = ctx.createLinearGradient(0, y0, 0, y1); _skyGrad.addColorStop(0, sky[0]); _skyGrad.addColorStop(1, sky[1]);
+        _skyGradKey = gkey;
+      }
+      var g = _skyGrad;
       ctx.fillStyle = g; ctx.fillRect(V_BX0 * sx, y0, V_BW * sx, y1 - y0);
       var dark = hgStarFade(tod);
       if (dark > 0.02) {
@@ -2711,30 +2743,10 @@
   // drives era / weather / celestial / time / frame / particle-profile
   // live so the operator can exercise every fix in one place.
   // ============================================================
-  // A demo weather/celestial override that the sky render path consults.
-  var DEMO = { weather: null, celestial: null };
-  function demoApplySky() {
-    var sky = document.querySelector('[data-cal-sky]');
-    if (!sky || !SKY_SURFACE) return;
-    var effID = DEMO.weather || (function () { var w = dayWeatherTypeID(VIEW.month, VIEW.day); return w ? weatherEffectID(w) : 'clear'; })();
-    sky.setAttribute('data-cal-sky-weather', effID);
-    sky.className = sky.className.replace(/cal-almanac-sky--wfx-\S+/g, '').trim() + ' cal-almanac-sky--wfx-' + effID;
-    var specs = [];
-    var w = WEATHER_EFFECTS[effID]; if (w && w.particleSpec) specs.push(w.particleSpec);
-    var events = DEMO.celestial && DEMO.celestial !== 'none' ? [{ type: DEMO.celestial, name: DEMO.celestial }] : celestialFor(VIEW.month, VIEW.day);
-    (events || []).forEach(function (c) { var fx = CELESTIAL_EFFECTS[c.type]; if (fx && fx.particleSpec) specs.push(fx.particleSpec); });
-    if (ERA_HOVER_SPEC) specs.push(ERA_HOVER_SPEC);
-    SKY_SURFACE.setEmitters(specs);
-    // Drive the eclipse disc / meteor DOM + the hourglass sand theme too.
-    var clayer = sky.querySelector('[data-cal-sky-celestial-layer]');
-    if (clayer) { clayer.innerHTML = ''; (events || []).forEach(function (c) { var fx = CELESTIAL_EFFECTS[c.type]; if (fx && !fx.particleSpec) fx.renderFn(clayer, c); }); }
-    var hg = document.querySelector('[data-cal-time]');
-    if (hg) {
-      var themeId = (DEMO.celestial && DEMO.celestial !== 'none') ? DEMO.celestial : effID;
-      hg.setAttribute('data-cal-hourglass-theme', themeId);
-      feedHourglassStream();
-    }
-  }
+  // Demo weather/celestial overrides drive the REAL worldState path (so they
+  // get the Wave-2 frame renderers + hgSand sync), not a parallel copy.
+  function demoSetWeather(v) { setWorldState({ weather: { type: v } }); }
+  function demoSetCelestial(v) { setWorldState({ events: (v && v !== 'none') ? [{ type: v, name: v }] : [] }); }
   registerInitBlock('demo-controls', function () {
     var panel = document.querySelector('[data-cal-democtl]');
     if (!panel) return;
@@ -2756,8 +2768,8 @@
     });
     bind('[data-cal-democtl-era-size]', function (v) { setEraParam('size', v + 'px'); say('era size ' + v + 'px'); });
     bind('[data-cal-democtl-era-hue]', function (v) { setEraParam('hue', v); say('era hue ' + v); });
-    bind('[data-cal-democtl-weather]', function (v) { DEMO.weather = v; demoApplySky(); say('weather=' + v); });
-    bind('[data-cal-democtl-celestial]', function (v) { DEMO.celestial = v; demoApplySky(); say('celestial=' + v); });
+    bind('[data-cal-democtl-weather]', function (v) { demoSetWeather(v); say('weather=' + v); });
+    bind('[data-cal-democtl-celestial]', function (v) { demoSetCelestial(v); say('celestial=' + v); });
     bind('[data-cal-democtl-time]', function (v) { applyTime(Math.max(0, Math.min(1, v / 1000))); say('time ' + (v / 10).toFixed(0) + '%'); });
     bind('[data-cal-democtl-frame]', function (v) { var hg = document.querySelector('[data-cal-time]'); if (hg) hg.setAttribute('data-cal-shelf-frame', v); say('frame=' + v); });
     bind('[data-cal-democtl-profile]', function (v) { if (window.CalParticleEngine) CalParticleEngine.setProfile(v); say('particles=' + v + ' (cap ' + (window.CalParticleEngine ? CalParticleEngine.cap() : '?') + ')'); });

@@ -982,6 +982,17 @@ func TestCalAlmanacSun_VendoredIcons(t *testing.T) {
 	if strings.Contains(html, "jsdelivr") || strings.Contains(html, "cdn.jsdelivr") {
 		t.Errorf("sun icon must be inlined/vendored, not hot-loaded from a CDN")
 	}
+	// The vendored files are the verbatim CC-BY ORIGINALS (kept for attribution)
+	// and still carry game-icons' opaque black background rect. The SERVED sun is
+	// a hand-cleaned INLINE copy in the templ — assert THAT is clean (no black-bg
+	// rect, recolorable via currentColor), so the vendored test can't give false
+	// confidence about what actually renders.
+	if strings.Contains(html, "M0 0h512v512H0z") {
+		t.Errorf("the served/inlined sun must NOT carry the opaque black background rect")
+	}
+	if !strings.Contains(html, `fill="currentColor"`) {
+		t.Errorf("the served/inlined sun must be recolorable (fill=currentColor)")
+	}
 }
 
 // TestCalAlmanacSun_PaintedAssetsRemoved — the abandoned painted placeholders
