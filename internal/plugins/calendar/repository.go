@@ -145,6 +145,7 @@ type CalendarRepository interface {
 	GetDayWeather(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error)
 	SetDayWeather(ctx context.Context, calendarID string, year, month, day int, weatherType string) error
 	GetCelestialEvents(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error)
+	AddCelestialEvent(ctx context.Context, ce CelestialEvent) error
 	GetMoonPhasesForCalendar(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
 	GetSpecialDays(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
 	SetMoodTint(ctx context.Context, calendarID string, color *string, intensity *float64) error

@@ -159,6 +159,23 @@ type WorldStateUpdateInput struct {
 	// (calendar_day_weather, #401). The GM panel's weather override (4b). A
 	// thin string slice — no structural editing through it.
 	Weather *string
+	// TriggerEvent, when non-nil, adds a celestial event on the CURRENT date
+	// (calendar_celestial_events). The GM panel's "trigger world-event" (4c).
+	// Visibility is resolved by the handler from CanAuthorDmOnly before it
+	// reaches the service (capability stays at the route/handler layer).
+	TriggerEvent *WorldStateTriggerEvent
+}
+
+// WorldStateTriggerEvent is a GM-triggered celestial event (meteor shower /
+// eclipse / blood moon) on the current day. Type is validated against the
+// known set; Visibility is "everyone" or "dm_only" (already capability-checked
+// by the handler).
+type WorldStateTriggerEvent struct {
+	Type          string
+	Name          string
+	StartHour     int
+	DurationHours int
+	Visibility    string
 }
 
 // WorldStateAdvance is a signed relative clock move for the GM panel verbs.

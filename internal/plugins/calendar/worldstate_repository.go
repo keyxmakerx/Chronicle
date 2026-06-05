@@ -67,6 +67,23 @@ func (r *calendarRepo) GetCelestialEvents(ctx context.Context, calendarID string
 	return out, rows.Err()
 }
 
+// AddCelestialEvent inserts a GM-triggered celestial event (the panel's
+// trigger-world-event, 4c). The date + visibility are set by the caller; the
+// id/created_at default in the table.
+func (r *calendarRepo) AddCelestialEvent(ctx context.Context, ce CelestialEvent) error {
+	vis := ce.Visibility
+	if vis == "" {
+		vis = "everyone"
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_celestial_events
+		   (calendar_id, year, month, day, type, start_hour, duration_hours, name, visibility)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ce.CalendarID, ce.Year, ce.Month, ce.Day, ce.Type,
+		ce.StartHour, ce.DurationHours, ce.Name, vis)
+	return err
+}
+
 // GetMoonPhasesForCalendar loads the named-phase vocab for every moon of a
 // calendar in one join, returning it keyed by moon id. Moons with no authored
 // vocab are simply absent from the map (the assembler falls back to

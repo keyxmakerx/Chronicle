@@ -95,6 +95,15 @@ type putWorldStateBody struct {
 	} `json:"advance"`
 	// Weather is the GM panel's current-period weather override (4b).
 	Weather *string `json:"weather"`
+	// TriggerEvent is the GM panel's "trigger world-event" (4c). DmOnly is
+	// honored only for capability holders (CanAuthorDmOnly).
+	TriggerEvent *struct {
+		Type          string `json:"type"`
+		Name          string `json:"name"`
+		StartHour     int    `json:"start_hour"`
+		DurationHours int    `json:"duration_hours"`
+		DmOnly        bool   `json:"dm_only"`
+	} `json:"triggerEvent"`
 }
 
 // PutWorldState — PUT /campaigns/:id/calendar/world-state.
@@ -138,6 +147,23 @@ func (h *Handler) PutWorldState(c echo.Context) error {
 	}
 	if body.Weather != nil {
 		input.Weather = body.Weather
+	}
+	if body.TriggerEvent != nil {
+		te := body.TriggerEvent
+		// dm_only is honored only for capability holders (co-DM authoring);
+		// otherwise the triggered event is public. Capability check stays at
+		// the handler layer, mirroring the calendar event create path.
+		vis := storageVisibilityEveryone
+		if te.DmOnly && campaigns.GetCampaignContext(c).CanAuthorDmOnly() {
+			vis = storageVisibilityDMOnly
+		}
+		input.TriggerEvent = &WorldStateTriggerEvent{
+			Type:          te.Type,
+			Name:          te.Name,
+			StartHour:     te.StartHour,
+			DurationHours: te.DurationHours,
+			Visibility:    vis,
+		}
 	}
 
 	if err := h.svc.SetWorldState(ctx, cal.ID, input); err != nil {
