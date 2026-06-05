@@ -60,6 +60,15 @@ type mockCalendarRepo struct {
 	// Wave 1.7A §G sidebar pin preference injection.
 	getSidebarPinnedFn func(ctx context.Context, userID, campaignID string) (bool, error)
 	setSidebarPinnedFn func(ctx context.Context, userID, campaignID string, pinned bool) error
+	// C-CAL-ENTITY-TIES-DATA-MODEL: link-table injection.
+	linkEntityEventFn   func(ctx context.Context, entityID, eventID, role string) error
+	unlinkEntityEventFn func(ctx context.Context, entityID, eventID string) error
+	linkEntityEraFn     func(ctx context.Context, entityID string, eraID int, role *string) error
+	unlinkEntityEraFn   func(ctx context.Context, entityID string, eraID int) error
+	entitiesForEventFn  func(ctx context.Context, eventID string) ([]EntityTieRef, error)
+	entitiesForEraFn    func(ctx context.Context, eraID int) ([]EntityTieRef, error)
+	eventsForEntityFn   func(ctx context.Context, entityID string) ([]EntityEventTie, error)
+	erasForEntityFn     func(ctx context.Context, entityID string) ([]EntityEraTie, error)
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {

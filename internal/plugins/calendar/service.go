@@ -114,6 +114,20 @@ type CalendarService interface {
 	ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error
 	ListAllEvents(ctx context.Context, calendarID string) ([]Event, error)
 
+	// Entity ties (C-CAL-ENTITY-TIES-DATA-MODEL). Optional M:N both ways
+	// with a participation role. This is the cross-plugin surface the
+	// entities plugin consumes (via an interface, never a repo import) to
+	// render the entity-side Events/Eras sections. Role is validated
+	// against the four pinned ParticipationRoles; era roles are optional.
+	LinkEntityToEvent(ctx context.Context, entityID, eventID, role string) error
+	UnlinkEntityFromEvent(ctx context.Context, entityID, eventID string) error
+	LinkEntityToEra(ctx context.Context, entityID string, eraID int, role *string) error
+	UnlinkEntityFromEra(ctx context.Context, entityID string, eraID int) error
+	EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error)
+	ErasForEntity(ctx context.Context, entityID string) ([]EntityEraTie, error)
+	EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error)
+	EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error)
+
 	// Wiring.
 	SetEventPublisher(pub CalendarEventPublisher)
 }
