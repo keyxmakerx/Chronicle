@@ -168,6 +168,28 @@ func RequireRole(minRole Role) echo.MiddlewareFunc {
 	}
 }
 
+// RequireCapability gates a route on a CampaignContext capability predicate
+// (e.g. (*CampaignContext).CanControlWorldState) rather than a flat MemberRole
+// threshold — so a co-DM grantee passes where RequireRole(RoleOwner) would
+// reject them (C-CAL-COGM-CAPABILITY / D6). Must be applied after
+// RequireCampaignAccess. denyMsg is the 403 message on failure.
+func RequireCapability(check func(*CampaignContext) bool, denyMsg string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			cc := GetCampaignContext(c)
+			if cc == nil {
+				return apperror.NewInternal(
+					fmt.Errorf("RequireCapability used without RequireCampaignAccess"),
+				)
+			}
+			if !check(cc) {
+				return apperror.NewForbidden(denyMsg)
+			}
+			return next(c)
+		}
+	}
+}
+
 // RejectIfArchived blocks mutating requests (POST/PUT/DELETE) to archived
 // campaigns. GET and HEAD requests pass through for read-only access.
 // Must be applied after RequireCampaignAccess.
