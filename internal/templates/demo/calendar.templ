@@ -424,7 +424,7 @@ templ calAlmanacTimepiece(d CalAlmanacMockData) {
 // expand affordance (⤢) that escalates to the full editor drawer.
 // JS fills + slides it; it never reaches the full editor's depth.
 templ calAlmanacPopover() {
-	<aside class="cal-almanac-qv" data-cal-qv aria-hidden="true">
+	<aside class="cal-almanac-qv" data-cal-qv aria-hidden="true" role="dialog" aria-modal="true" aria-label="Day quick view" tabindex="-1">
 		<header class="cal-almanac-qv__head">
 			<div class="cal-almanac-qv__title-wrap">
 				<input class="cal-almanac-qv__title" data-cal-qv-title value="—" aria-label="Title (editable)"/>
@@ -454,7 +454,7 @@ templ calAlmanacPopover() {
 // click closes; Create commits a mock event; More options escalates
 // to the full editor with data pre-filled.
 templ calAlmanacCreatePopover(d CalAlmanacMockData) {
-	<aside class="cal-almanac-qv cal-almanac-qv--create" data-cal-create aria-hidden="true" aria-label="Create event">
+	<aside class="cal-almanac-qv cal-almanac-qv--create" data-cal-create aria-hidden="true" role="dialog" aria-modal="true" aria-label="Create event" tabindex="-1">
 		<header class="cal-almanac-qv__head cal-almanac-qv__head--create">
 			<div class="cal-almanac-qv__title-wrap">
 				<h2 class="cal-almanac-qv__create-h" data-cal-create-h>Create event</h2>
@@ -501,7 +501,7 @@ templ calAlmanacCreatePopover(d CalAlmanacMockData) {
 // Show in Timeline, Share Permalink, Duplicate, Set Recurring, Override
 // Weather, History, Delete). Replaces the old side drawer.
 templ calAlmanacEditor(d CalAlmanacMockData) {
-	<aside class="cal-almanac-editor" data-cal-editor aria-hidden="true">
+	<aside class="cal-almanac-editor" data-cal-editor aria-hidden="true" role="dialog" aria-modal="true" aria-label="Event editor" tabindex="-1">
 		<header class="cal-almanac-editor__head">
 			<div>
 				<h2 class="cal-almanac-editor__title" data-cal-editor-title>Event</h2>
@@ -891,7 +891,7 @@ templ calAlmanacCelestialFX(c CalAlmanacCelestial) {
 // by clicking blank sky. Lists the day's weather + celestial events +
 // sun/moon detail. JS fills + toggles it.
 templ calAlmanacSkyPanel(d CalAlmanacMockData) {
-	<aside class="cal-almanac-skypanel" data-cal-skypanel aria-hidden="true">
+	<aside class="cal-almanac-skypanel" data-cal-skypanel aria-hidden="true" role="dialog" aria-modal="true" aria-label="What's happening" tabindex="-1">
 		<header class="cal-almanac-skypanel__head">
 			<h3 class="cal-almanac-skypanel__title" data-cal-skypanel-title>What&#39;s happening</h3>
 			<button type="button" class="cal-almanac-iconbtn" data-cal-skypanel-close aria-label="Close">×</button>
