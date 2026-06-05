@@ -73,6 +73,7 @@ type mockCalendarRepo struct {
 	getDayWeatherFn      func(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error)
 	setDayWeatherFn      func(ctx context.Context, calendarID string, year, month, day int, weatherType string) error
 	getCelestialEventsFn func(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error)
+	addCelestialEventFn  func(ctx context.Context, ce CelestialEvent) error
 	getMoonPhasesFn      func(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
 	getSpecialDaysFn     func(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
 	setMoodTintFn        func(ctx context.Context, calendarID string, color *string, intensity *float64) error

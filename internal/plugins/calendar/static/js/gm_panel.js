@@ -115,6 +115,26 @@
             });
         }
 
+        // --- Trigger world-event (persists to calendar_celestial_events) ---
+        var triggerBtn = panel.querySelector('[data-gm-trigger-event]');
+        if (triggerBtn) {
+            triggerBtn.addEventListener('click', function () {
+                var typeSel = panel.querySelector('[data-gm-event-type]');
+                var dmOnlyEl = panel.querySelector('[data-gm-event-dmonly]');
+                var type = typeSel ? typeSel.value : '';
+                var label = (typeSel && typeSel.options[typeSel.selectedIndex]) ? typeSel.options[typeSel.selectedIndex].text : type;
+                commit({
+                    triggerEvent: {
+                        type: type,
+                        name: label,
+                        start_hour: 22,
+                        duration_hours: 2,
+                        dm_only: !!(dmOnlyEl && dmOnlyEl.checked),
+                    },
+                }, triggerBtn);
+            });
+        }
+
         // --- Pause (client-only atmosphere freeze; not persisted) ---
         var pauseBtn = panel.querySelector('[data-gm-pause]');
         if (pauseBtn) {

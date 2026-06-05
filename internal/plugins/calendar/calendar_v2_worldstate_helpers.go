@@ -167,6 +167,23 @@ func gmWeatherTypes() []gmWeatherType {
 	}
 }
 
+// gmCelestialType is one GM-triggerable world-event (4c). IDs match the
+// service's knownCelestialTypes + the engine's CELESTIAL_EFFECTS.
+type gmCelestialType struct {
+	ID    string
+	Label string
+}
+
+// gmCelestialTypes returns the triggerable celestial events.
+func gmCelestialTypes() []gmCelestialType {
+	return []gmCelestialType{
+		{"meteor-shower", "Meteor shower"},
+		{"eclipse-solar", "Solar eclipse"},
+		{"eclipse-lunar", "Lunar eclipse"},
+		{"blood-moon", "Blood moon"},
+	}
+}
+
 // gmCurrentWeather returns the current seed weather type for the select
 // default ("clear" when none).
 func gmCurrentWeather(data CalendarV2ViewData) string {

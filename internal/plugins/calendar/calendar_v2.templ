@@ -65,6 +65,10 @@ type CalendarV2ViewData struct {
 	// capability (Owner or DM-grantee) — gates the GM live-control panel
 	// (Phase 4). Players/Scribes never receive the panel markup.
 	CanControlWorldState bool
+	// CanAuthorDmOnly: may the viewer author dm_only content? Co-DM capability
+	// — gates the event drawer's restricted-visibility option + the GM panel's
+	// trigger-event dm_only toggle (Phase 4c; the V2 half of the Phase-3 fix).
+	CanAuthorDmOnly bool
 }
 
 // CalendarV2Page is the full-page V2 shell. HTMX swaps target the
@@ -706,7 +710,18 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 					<label class="block text-xs font-medium text-fg-secondary mb-1">Description</label>
 					<textarea class="input text-sm w-full" data-field="description" rows="3"></textarea>
 				</div>
-				@calwidget.VisibilityEditor(buildEventVisibilityEditor(data))
+				// dm_only authoring gate (Phase 4c — the V2 half of the Phase-3
+				// fix): only co-DMs (CanAuthorDmOnly) get the restricted-
+				// visibility editor. When absent, readVisibilityEditor() defaults
+				// to public, so a Scribe can only create everyone-visible events
+				// (the server downgrade still backstops this).
+				if data.CanAuthorDmOnly {
+					@calwidget.VisibilityEditor(buildEventVisibilityEditor(data))
+				} else {
+					<p class="text-xs text-fg-secondary italic" data-event-visibility-locked>
+						<i class="fa-solid fa-globe mr-1" aria-hidden="true"></i>Visible to everyone
+					</p>
+				}
 				// Attach-entity picker (C-CAL-WORLDSTATE-PRODUCTION-PORT 2b):
 				// persists real entity_event_links with a participation_role.
 				// Roles come from the Go enum (data-ties-roles) so the JS never

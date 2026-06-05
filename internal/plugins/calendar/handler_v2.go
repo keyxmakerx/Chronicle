@@ -83,6 +83,7 @@ func (h *Handler) ShowV2(c echo.Context) error {
 		IsOwner:              cc.MemberRole >= campaigns.RoleOwner,
 		IsScribe:             cc.MemberRole >= campaigns.RoleScribe,
 		CanControlWorldState: cc.CanControlWorldState(),
+		CanAuthorDmOnly:      cc.CanAuthorDmOnly(),
 		CSRFToken:            middleware.GetCSRFToken(c),
 		TierDefinitions:      h.loadTierDefinitions(ctx, cc.Campaign.ID),
 		SidebarPinned:        sidebarPinned,

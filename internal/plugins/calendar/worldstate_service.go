@@ -89,6 +89,29 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 		}
 	}
 
+	if input.TriggerEvent != nil {
+		// GM trigger-world-event (4c): add a celestial event on the CURRENT
+		// date. Type is validated against the known set; visibility was
+		// already capability-resolved by the handler.
+		te := input.TriggerEvent
+		if !isKnownCelestialType(te.Type) {
+			return apperror.NewValidation("unknown celestial event type")
+		}
+		if err := s.repo.AddCelestialEvent(ctx, CelestialEvent{
+			CalendarID:    calendarID,
+			Year:          cal.CurrentYear,
+			Month:         cal.CurrentMonth,
+			Day:           cal.CurrentDay,
+			Type:          te.Type,
+			StartHour:     te.StartHour,
+			DurationHours: te.DurationHours,
+			Name:          te.Name,
+			Visibility:    te.Visibility,
+		}); err != nil {
+			return fmt.Errorf("add celestial event: %w", err)
+		}
+	}
+
 	if input.Advance != nil {
 		// Relative clock move (GM panel verbs) with full signed rollover.
 		// Computed here + written through UpdateCalendar so the same
@@ -239,6 +262,18 @@ func floorMod(a, b int) int {
 	}
 	return m
 }
+
+// knownCelestialTypes is the GM-triggerable celestial event vocabulary (4c).
+// Matches the showcase CELESTIAL_EFFECTS MUST tier + blood-moon.
+var knownCelestialTypes = map[string]bool{
+	"meteor-shower": true,
+	"eclipse-solar": true,
+	"eclipse-lunar": true,
+	"blood-moon":    true,
+}
+
+// isKnownCelestialType guards the trigger-event write against arbitrary types.
+func isKnownCelestialType(t string) bool { return knownCelestialTypes[t] }
 
 // derefOr returns *p when p is non-nil, else fallback. Used by SetWorldState
 // for partial date/time sets.
