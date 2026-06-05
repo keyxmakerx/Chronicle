@@ -17,6 +17,7 @@ DELETE	/backdrop	internal/plugins/campaigns/routes.go
 DELETE	/calendar/events/:eventID	internal/plugins/syncapi/routes.go
 DELETE	/calendars/:calId	internal/plugins/calendar/routes.go
 DELETE	/calendars/:calId/events/:eid	internal/plugins/calendar/routes.go
+DELETE	/calendars/:calId/events/:eid/entities/:entityId	internal/plugins/calendar/routes.go
 DELETE	/campaigns/:id	internal/plugins/admin/routes.go
 DELETE	/campaigns/:id/leave	internal/plugins/admin/routes.go
 DELETE	/campaigns/:id/storage	internal/plugins/settings/routes.go
@@ -158,6 +159,7 @@ GET	/calendars/:calId	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/day	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/embed	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/event-categories	internal/plugins/calendar/routes.go
+GET	/calendars/:calId/events/:eid/entities	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/export	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/sessions-fragment	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/settings	internal/plugins/calendar/routes.go
@@ -564,6 +566,7 @@ PUT	/calendars/:calId/cycles	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/eras	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/event-categories	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/events/:eid	internal/plugins/calendar/routes.go
+PUT	/calendars/:calId/events/:eid/entities/:entityId	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/events/:eid/visibility	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/festivals	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/months	internal/plugins/calendar/routes.go
