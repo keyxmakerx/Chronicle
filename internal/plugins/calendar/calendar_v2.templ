@@ -80,6 +80,8 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 			data-cal-v2-is-owner={ boolToStr(data.IsOwner) }
 			data-cal-v2-events={ v2EventsJSON(data) }
 			data-cal-v2-sidebar-pinned={ boolToStr(data.SidebarPinned) }
+			data-cal-v2-year={ fmt.Sprintf("%d", data.Year) }
+			data-cal-v2-month={ fmt.Sprintf("%d", data.Month) }
 		>
 			if data.ActiveCalendar != nil && data.SidebarPinned {
 				@miniMonthV2Sidebar(data)
@@ -230,6 +232,10 @@ templ dayDetailPopoverV2() {
 				<i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
 			</button>
 		</div>
+		// WorldState peek (2b-2): the clicked day's moon phase(s) + weather +
+		// celestial events, fetched read-only from GET /calendar/world-state
+		// (the #401 seed, dm_only filtered by role). Hidden until populated.
+		<div class="mb-2 pb-2 border-b border-edge hidden space-y-0.5 text-xs" data-day-popover-worldstate></div>
 		<div class="space-y-1 max-h-64 overflow-y-auto" data-day-popover-list></div>
 	</div>
 }

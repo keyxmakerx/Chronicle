@@ -188,6 +188,54 @@
             }
             if (title) title.textContent = 'Day ' + day;
             if (list) renderPopoverList(list, day);
+            renderWorldStatePeek(day);
+        }
+
+        // WorldState peek (2b-2): fetch the clicked day's seed (#401 GET,
+        // dm_only filtered by role) and show its moon phase(s) + weather +
+        // celestial events read-only above the events list. Reuses the same
+        // BuildWorldStateSeed the 2a band renders — no new endpoint.
+        function wsEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+        function wsTitleCase(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+        function renderWorldStatePeek(day) {
+            var box = popover.querySelector('[data-day-popover-worldstate]');
+            if (!box) return;
+            box.classList.add('hidden');
+            box.innerHTML = '';
+            var cid = root.dataset.calV2CampaignId;
+            var calId = root.dataset.calV2CalendarId;
+            var year = root.dataset.calV2Year;
+            var month = root.dataset.calV2Month;
+            if (!cid || !year || !month) return;
+            var url = '/campaigns/' + cid + '/calendar/world-state?year=' + year +
+                '&month=' + month + '&day=' + day + (calId ? '&calendarId=' + calId : '');
+            window.Chronicle.apiFetch(url, { method: 'GET' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (ws) { if (ws) fillWorldStatePeek(box, ws); })
+                .catch(function () {});
+        }
+
+        function fillWorldStatePeek(box, ws) {
+            var rows = [];
+            if (ws.weather && ws.weather.type) {
+                rows.push('<div><span class="text-fg-secondary">Weather:</span> ' + wsEsc(wsTitleCase(ws.weather.type)) + '</div>');
+            }
+            (ws.moons || []).forEach(function (m) {
+                if (m && m.name) {
+                    rows.push('<div><span class="text-fg-secondary">' + wsEsc(m.name) + ':</span> ' + wsEsc(m.namedPhase || '') + '</div>');
+                }
+            });
+            (ws.events || []).forEach(function (ev) {
+                if (ev && ev.name) rows.push('<div>✦ ' + wsEsc(ev.name) + '</div>');
+            });
+            if (!rows.length) return;
+            box.innerHTML = rows.join('');
+            box.classList.remove('hidden');
         }
 
         function renderPopoverList(listEl, day) {
