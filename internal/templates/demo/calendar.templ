@@ -424,7 +424,7 @@ templ calAlmanacTimepiece(d CalAlmanacMockData) {
 // expand affordance (⤢) that escalates to the full editor drawer.
 // JS fills + slides it; it never reaches the full editor's depth.
 templ calAlmanacPopover() {
-	<aside class="cal-almanac-qv" data-cal-qv aria-hidden="true">
+	<aside class="cal-almanac-qv" data-cal-qv aria-hidden="true" role="dialog" aria-modal="true" aria-label="Day quick view" tabindex="-1">
 		<header class="cal-almanac-qv__head">
 			<div class="cal-almanac-qv__title-wrap">
 				<input class="cal-almanac-qv__title" data-cal-qv-title value="—" aria-label="Title (editable)"/>
@@ -454,7 +454,7 @@ templ calAlmanacPopover() {
 // click closes; Create commits a mock event; More options escalates
 // to the full editor with data pre-filled.
 templ calAlmanacCreatePopover(d CalAlmanacMockData) {
-	<aside class="cal-almanac-qv cal-almanac-qv--create" data-cal-create aria-hidden="true" aria-label="Create event">
+	<aside class="cal-almanac-qv cal-almanac-qv--create" data-cal-create aria-hidden="true" role="dialog" aria-modal="true" aria-label="Create event" tabindex="-1">
 		<header class="cal-almanac-qv__head cal-almanac-qv__head--create">
 			<div class="cal-almanac-qv__title-wrap">
 				<h2 class="cal-almanac-qv__create-h" data-cal-create-h>Create event</h2>
@@ -501,7 +501,7 @@ templ calAlmanacCreatePopover(d CalAlmanacMockData) {
 // Show in Timeline, Share Permalink, Duplicate, Set Recurring, Override
 // Weather, History, Delete). Replaces the old side drawer.
 templ calAlmanacEditor(d CalAlmanacMockData) {
-	<aside class="cal-almanac-editor" data-cal-editor aria-hidden="true">
+	<aside class="cal-almanac-editor" data-cal-editor aria-hidden="true" role="dialog" aria-modal="true" aria-label="Event editor" tabindex="-1">
 		<header class="cal-almanac-editor__head">
 			<div>
 				<h2 class="cal-almanac-editor__title" data-cal-editor-title>Event</h2>
@@ -785,23 +785,19 @@ templ calAlmanacSkyband(d CalAlmanacMockData) {
 		// Era corner marker — anchored inside this animation window.
 		@calAlmanacEraVignette(d)
 		<div class="cal-almanac-sky__arc" data-cal-sky-arc>
-			// WAVE 1 sun: LAYER 1 (inline lorc/sun.svg icon, recolored per
-			// state via CSS) + LAYER 2 (CSS animation — slow corona rotation
-			// + glow breathing) + LAYER 3 (canvas particle bloom via the v4
-			// engine, added on init). The element is still the drag-the-sun
-			// target. (Superseded the v5 painted-<picture> base.)
-			<button
-				type="button"
-				class="cal-almanac-sun cal-almanac-sky__sun"
+			// R1: the sun is now a PASSIVE visual — it tracks worldState.timeOfDay
+			// (arc position + recolor + canvas bloom) but is no longer the drag
+			// target. The TIME readout is the control (see the label below).
+			// Decorative + aria-hidden; not focusable / not interactive.
+			<div
+				class="cal-almanac-sun cal-almanac-sky__sun cal-almanac-sky__sun--passive"
 				data-cal-sky-sun
 				data-cal-sun-state="default"
 				style={ arcPositionStyle(d.SkyTime, false) }
-				role="slider"
-				aria-label="Time of day — drag to scrub"
-				tabindex="0"
+				aria-hidden="true"
 			>
 				@calAlmanacSunIcon()
-			</button>
+			</div>
 			for _, m := range d.Moons {
 				// WAVE 2: data-cal-moon-mode/design seed the library renderer;
 				// JS (applyMoonDesigns) sets --moon-img + refines the phase.
@@ -818,12 +814,44 @@ templ calAlmanacSkyband(d CalAlmanacMockData) {
 		</div>
 		<div class="cal-almanac-sky__overlay">
 			<div class="cal-almanac-sky__label">
-				<strong>{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name } · { fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }</strong>
+				// R2: the date readout opens the day/month/year setter (named months).
+				<button type="button" class="cal-almanac-sky__date" data-cal-sky-date title="Click to set the date">
+					<strong>{ d.Weekdays[(d.CurrentDay-1)%len(d.Weekdays)].Name } · { fmtInt(d.CurrentDay) } { d.Months[d.CurrentMonth-1].Name }</strong>
+				</button>
 				<span class="cal-almanac-sky__sub">
-					// Click-to-type time: the span swaps to an <input> in JS.
-					<button type="button" class="cal-almanac-sky__time" data-cal-sky-time-label title="Click to set the time">{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</button>
+					// R1: the TIME readout is the draggable control (drag horizontally
+					// or arrow-keys to scrub; click to type). role=slider a11y here.
+					<button type="button" class="cal-almanac-sky__time" data-cal-sky-time-label title="Drag, arrow-keys, or click to set the time">{ clockFor(d.SkyTime, d.Calendar.HoursPerDay) }</button>
 					<span data-cal-sky-sub-rest> · { skyLabelFor(d.SkyTime) } · { seasonNameFor(d) } · { wfx.Name }</span>
 				</span>
+			</div>
+			// R2: date setter popover — day / named-month / year + Go. Hidden
+			// until the date readout is clicked; commits setWorldState({date}).
+			<div class="cal-almanac-datesetter" data-cal-datesetter aria-hidden="true" role="dialog" aria-modal="true" aria-label="Set date" tabindex="-1">
+				<label class="cal-almanac-datesetter__field">
+					<span>Day</span>
+					<input type="number" min="1" max="30" data-cal-datesetter-day value={ fmtInt(d.CurrentDay) }/>
+				</label>
+				<label class="cal-almanac-datesetter__field">
+					<span>Month</span>
+					<select data-cal-datesetter-month>
+						for i, mo := range d.Months {
+							if i == d.CurrentMonth-1 {
+								<option value={ fmtInt(i + 1) } selected>{ mo.Name }</option>
+							} else {
+								<option value={ fmtInt(i + 1) }>{ mo.Name }</option>
+							}
+						}
+					</select>
+				</label>
+				<label class="cal-almanac-datesetter__field">
+					<span>Year</span>
+					<input type="number" data-cal-datesetter-year value={ fmtInt(d.CurrentYear) }/>
+				</label>
+				<div class="cal-almanac-datesetter__actions">
+					<button type="button" data-cal-datesetter-go>Go</button>
+					<button type="button" data-cal-datesetter-cancel>Cancel</button>
+				</div>
 			</div>
 			// "What's happening today" celestial glyphs, bottom-right.
 			<div class="cal-almanac-sky__happening" data-cal-sky-happening>
@@ -891,7 +919,7 @@ templ calAlmanacCelestialFX(c CalAlmanacCelestial) {
 // by clicking blank sky. Lists the day's weather + celestial events +
 // sun/moon detail. JS fills + toggles it.
 templ calAlmanacSkyPanel(d CalAlmanacMockData) {
-	<aside class="cal-almanac-skypanel" data-cal-skypanel aria-hidden="true">
+	<aside class="cal-almanac-skypanel" data-cal-skypanel aria-hidden="true" role="dialog" aria-modal="true" aria-label="What's happening" tabindex="-1">
 		<header class="cal-almanac-skypanel__head">
 			<h3 class="cal-almanac-skypanel__title" data-cal-skypanel-title>What&#39;s happening</h3>
 			<button type="button" class="cal-almanac-iconbtn" data-cal-skypanel-close aria-label="Close">×</button>
