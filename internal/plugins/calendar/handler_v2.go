@@ -75,16 +75,17 @@ func (h *Handler) ShowV2(c echo.Context) error {
 	}
 
 	data := CalendarV2ViewData{
-		ActiveCalendar:  active,
-		AllCalendars:    allCalendars,
-		View:            view,
-		CampaignID:      cc.Campaign.ID,
-		UserID:          userID,
-		IsOwner:         cc.MemberRole >= campaigns.RoleOwner,
-		IsScribe:        cc.MemberRole >= campaigns.RoleScribe,
-		CSRFToken:       middleware.GetCSRFToken(c),
-		TierDefinitions: h.loadTierDefinitions(ctx, cc.Campaign.ID),
-		SidebarPinned:   sidebarPinned,
+		ActiveCalendar:       active,
+		AllCalendars:         allCalendars,
+		View:                 view,
+		CampaignID:           cc.Campaign.ID,
+		UserID:               userID,
+		IsOwner:              cc.MemberRole >= campaigns.RoleOwner,
+		IsScribe:             cc.MemberRole >= campaigns.RoleScribe,
+		CanControlWorldState: cc.CanControlWorldState(),
+		CSRFToken:            middleware.GetCSRFToken(c),
+		TierDefinitions:      h.loadTierDefinitions(ctx, cc.Campaign.ID),
+		SidebarPinned:        sidebarPinned,
 	}
 
 	// Cursor (year/month/day) — fall back to the calendar's stored

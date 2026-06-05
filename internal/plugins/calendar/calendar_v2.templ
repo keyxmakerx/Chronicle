@@ -61,6 +61,10 @@ type CalendarV2ViewData struct {
 	// the ambient band simply doesn't render.
 	WorldState     *WorldStateSeed
 	WorldStateJSON string
+	// CanControlWorldState: may the viewer drive the live world-state? Co-DM
+	// capability (Owner or DM-grantee) — gates the GM live-control panel
+	// (Phase 4). Players/Scribes never receive the panel markup.
+	CanControlWorldState bool
 }
 
 // CalendarV2Page is the full-page V2 shell. HTMX swaps target the
@@ -99,11 +103,17 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 		if data.ActiveCalendar != nil && data.IsScribe {
 			@eventV2Drawer(data)
 		}
+		// GM live-control panel (Phase 4) — server-gated: only capability
+		// holders (Owner / co-DM) receive the markup at all.
+		@gmControlPanelV2(data)
 		if data.ActiveCalendar != nil {
 			@shortcutsModalV2()
 			@dayDetailPopoverV2()
 			<script src="/static/plugins/calendar/js/event_grid.js" defer></script>
 			<script src="/static/plugins/calendar/js/calendar_v2_shell.js" defer></script>
+			if data.CanControlWorldState {
+				<script src="/static/plugins/calendar/js/gm_panel.js" defer></script>
+			}
 		}
 	}
 }

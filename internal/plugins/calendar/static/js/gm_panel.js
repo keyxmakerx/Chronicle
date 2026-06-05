@@ -1,0 +1,132 @@
+// gm_panel.js — the GM live-control panel wiring (C-CAL-WORLDSTATE-GM-LIVE-
+// CONTROL-PANEL, Phase 4a). Only loaded for capability holders (the templ +
+// the page gate on CanControlWorldState), so this never reaches a player.
+//
+// Source of truth = the server. Every control round-trips PUT
+// /calendar/world-state (#401, capability-gated by #406); the PUT response is
+// the freshly-built seed, which we hand to the engine's window.__calSetWorldState
+// so the ambient band (2a) re-renders the new state without a full reload.
+// Pause is the lone client-only control (atmosphere freeze is ephemeral per
+// #401 — it is the GM's own view, not persisted).
+(function () {
+    'use strict';
+
+    function init() {
+        var panel = document.querySelector('[data-gm-panel]');
+        if (!panel) return;
+        var root = document.querySelector('[data-cal-v2-root]');
+        if (!root) return;
+        var campaignID = root.dataset.calV2CampaignId;
+        var calendarID = root.dataset.calV2CalendarId;
+        var csrfToken = root.dataset.calV2CsrfToken;
+
+        var url = '/campaigns/' + campaignID + '/calendar/world-state' +
+            (calendarID ? '?calendarId=' + calendarID : '');
+
+        // PUT a writable world-state slice, then re-render the band from the
+        // authoritative response seed (or reload as a fallback).
+        function commit(body, btn) {
+            if (btn) btn.disabled = true;
+            window.Chronicle.apiFetch(url, {
+                method: 'PUT', body: body, headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (resp) {
+                if (!resp.ok) {
+                    return resp.json().catch(function () { return {}; }).then(function (b) {
+                        throw new Error((b && b.message) || 'World-state update failed');
+                    });
+                }
+                return resp.json();
+            }).then(function (seed) {
+                if (seed && window.__calSetWorldState) {
+                    window.__calSetWorldState(seed); // re-render the ambient band in place
+                } else {
+                    window.location.reload(); // engine not ready → page-load read
+                }
+            }).catch(function (e) {
+                window.Chronicle.notify((e && e.message) || 'Update failed', 'error');
+            }).then(function () {
+                if (btn) btn.disabled = false;
+            });
+        }
+
+        function num(sel, fallback) {
+            var el = panel.querySelector(sel);
+            if (!el) return fallback;
+            var n = parseInt(el.value, 10);
+            return isNaN(n) ? fallback : n;
+        }
+
+        // --- Advance verbs (signed; rollover server-side) ---
+        panel.querySelectorAll('[data-gm-advance]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                commit({
+                    advance: {
+                        days: parseInt(btn.dataset.gmDays || '0', 10) || 0,
+                        hours: parseInt(btn.dataset.gmHours || '0', 10) || 0,
+                        minutes: parseInt(btn.dataset.gmMinutes || '0', 10) || 0,
+                    },
+                }, btn);
+            });
+        });
+
+        // --- Absolute set time ---
+        var setTimeBtn = panel.querySelector('[data-gm-set-time]');
+        if (setTimeBtn) {
+            setTimeBtn.addEventListener('click', function () {
+                commit({ time: { hour: num('[data-gm-time-hour]', 0), minute: num('[data-gm-time-minute]', 0) } }, setTimeBtn);
+            });
+        }
+
+        // --- Absolute set date ---
+        var setDateBtn = panel.querySelector('[data-gm-set-date]');
+        if (setDateBtn) {
+            setDateBtn.addEventListener('click', function () {
+                commit({
+                    time: {
+                        year: num('[data-gm-date-year]', 0),
+                        month: num('[data-gm-date-month]', 1),
+                        day: num('[data-gm-date-day]', 1),
+                    },
+                }, setDateBtn);
+            });
+        }
+
+        // --- Pause (client-only atmosphere freeze; not persisted) ---
+        var pauseBtn = panel.querySelector('[data-gm-pause]');
+        if (pauseBtn) {
+            var paused = false;
+            pauseBtn.addEventListener('click', function () {
+                paused = !paused;
+                try {
+                    if (window.CalParticleEngine && window.CalParticleEngine.setPaused) {
+                        window.CalParticleEngine.setPaused(paused);
+                    }
+                } catch (e) {}
+                pauseBtn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+                var label = pauseBtn.querySelector('[data-gm-pause-label]');
+                if (label) label.textContent = paused ? 'Resume atmosphere' : 'Pause atmosphere';
+            });
+        }
+
+        // --- Collapse / expand ---
+        var toggle = panel.querySelector('[data-gm-panel-toggle]');
+        var bodyEl = panel.querySelector('#gm-panel-body');
+        if (toggle && bodyEl) {
+            toggle.addEventListener('click', function () {
+                var expanded = toggle.getAttribute('aria-expanded') !== 'false';
+                expanded = !expanded;
+                bodyEl.classList.toggle('hidden', !expanded);
+                toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                toggle.setAttribute('aria-label', expanded ? 'Collapse panel' : 'Expand panel');
+                var icon = toggle.querySelector('i');
+                if (icon) icon.className = expanded ? 'fa-solid fa-chevron-down text-xs' : 'fa-solid fa-chevron-up text-xs';
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
