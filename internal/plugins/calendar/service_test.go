@@ -69,6 +69,13 @@ type mockCalendarRepo struct {
 	entitiesForEraFn    func(ctx context.Context, eraID int) ([]EntityTieRef, error)
 	eventsForEntityFn   func(ctx context.Context, entityID string) ([]EntityEventTie, error)
 	erasForEntityFn     func(ctx context.Context, entityID string) ([]EntityEraTie, error)
+	// C-CAL-WORLDSTATE-SERVER-MODEL: migration-008 table injection.
+	getDayWeatherFn      func(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error)
+	setDayWeatherFn      func(ctx context.Context, calendarID string, year, month, day int, weatherType string) error
+	getCelestialEventsFn func(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error)
+	getMoonPhasesFn      func(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
+	getSpecialDaysFn     func(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
+	setMoodTintFn        func(ctx context.Context, calendarID string, color *string, intensity *float64) error
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {

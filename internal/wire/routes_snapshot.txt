@@ -151,6 +151,7 @@ GET	/calendar/v2/:calId	internal/plugins/calendar/routes.go
 GET	/calendar/v2/:calId/:view	internal/plugins/calendar/routes.go
 GET	/calendar/v2/:calId/settings/:resource	internal/plugins/calendar/routes.go
 GET	/calendar/weather	internal/plugins/syncapi/routes.go
+GET	/calendar/world-state	internal/plugins/calendar/routes.go
 GET	/calendars	internal/plugins/calendar/routes.go
 GET	/calendars	internal/plugins/syncapi/routes.go
 GET	/calendars/:calId	internal/plugins/calendar/routes.go
@@ -558,6 +559,7 @@ PUT	/calendar/seasons	internal/plugins/syncapi/routes.go
 PUT	/calendar/settings	internal/plugins/syncapi/routes.go
 PUT	/calendar/weather	internal/plugins/syncapi/routes.go
 PUT	/calendar/weekdays	internal/plugins/syncapi/routes.go
+PUT	/calendar/world-state	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/cycles	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/eras	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/event-categories	internal/plugins/calendar/routes.go

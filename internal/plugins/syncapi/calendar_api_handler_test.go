@@ -192,6 +192,15 @@ func (s *stubCalendarSvc) EntitiesForEra(context.Context, int) ([]calendar.Entit
 	return nil, nil
 }
 
+// C-CAL-WORLDSTATE-SERVER-MODEL added these to CalendarService; syncapi
+// doesn't use them. Zero-value returns are fine for these tests.
+func (s *stubCalendarSvc) BuildWorldStateSeed(context.Context, string, int, int, int, int, string) (*calendar.WorldStateSeed, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) SetWorldState(context.Context, string, calendar.WorldStateUpdateInput) error {
+	return nil
+}
+
 // Compile-time check.
 var _ calendar.CalendarService = (*stubCalendarSvc)(nil)
 

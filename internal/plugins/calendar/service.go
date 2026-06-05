@@ -127,9 +127,38 @@ type CalendarService interface {
 	ErasForEntity(ctx context.Context, entityID string) ([]EntityEraTie, error)
 	EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error)
 	EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error)
+	// World-state (C-CAL-WORLDSTATE-SERVER-MODEL). BuildWorldStateSeed
+	// assembles the Part-8 seed for a date, filtering GM-only celestial
+	// events by role/userID. SetWorldState persists the writable parts
+	// (live mood + date/time) and emits calendar.worldstate.changed.
+	BuildWorldStateSeed(ctx context.Context, calendarID string, year, month, day, role int, userID string) (*WorldStateSeed, error)
+	SetWorldState(ctx context.Context, calendarID string, input WorldStateUpdateInput) error
 
 	// Wiring.
 	SetEventPublisher(pub CalendarEventPublisher)
+}
+
+// WorldStateUpdateInput is the writable slice of world-state the PUT exposes.
+// A nil section is left untouched, so a caller can set mood without touching
+// time and vice-versa. timepieceFill / timeControl are intentionally absent —
+// they are ephemeral session state, never persisted (CATALOG Part 6).
+type WorldStateUpdateInput struct {
+	// Mood, when non-nil, writes the live mood-tint columns. Color nil +
+	// Intensity 0 clears the wash.
+	Mood *WorldStateMoodTint
+	// Time, when non-nil, sets the calendar's current date/time. Any nil
+	// sub-field preserves the current stored value.
+	Time *WorldStateTimeSet
+}
+
+// WorldStateTimeSet is a partial date/time set for SetWorldState. Pointer
+// fields distinguish "set to this value" from "leave unchanged".
+type WorldStateTimeSet struct {
+	Year   *int
+	Month  *int
+	Day    *int
+	Hour   *int
+	Minute *int
 }
 
 // CalendarEventPublisher emits domain events when calendar data changes.
