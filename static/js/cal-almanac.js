@@ -180,8 +180,22 @@
   // auto-detect drops to a 20-particle profile.
   var CalParticleEngine = (function () {
     var PROFILES = { high: 80, normal: 40, low: 20 };
-    var prefersReduced = (function () {
-      try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+    // Slice 2: live reduced-motion — re-read on OS-setting change mid-session
+    // (was read once at module-eval). On RM-on we freeze to a static frame; on
+    // RM-off we resume the loop.
+    var prefersReduced = false;
+    (function () {
+      try {
+        var mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+        prefersReduced = mq.matches;
+        var onRMChange = function () {
+          prefersReduced = mq.matches;
+          if (prefersReduced) { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } running = false; surfaces.forEach(drawStaticFrame); }
+          else sync();
+        };
+        if (mq.addEventListener) mq.addEventListener('change', onRMChange);
+        else if (mq.addListener) mq.addListener(onRMChange);
+      } catch (e) {}
     })();
     // Forced-state proof classes can pin reduced-motion in headless shots.
     function reducedNow() {
@@ -795,6 +809,9 @@
       var drops = [];
       return function (ctx, W, H, dt) {
         var s = k(dt), cap = pcap(W * 0.25);
+        // Slice 2: seed a full spread on the first frame so a reduced-motion
+        // static frame (dt=0) shows representative rain, not a blank sky.
+        if (!drops.length) for (var q = 0; q < cap; q++) drops.push({ x: Math.random() * W * 1.2 - W * 0.1, y: Math.random() * H, vx: -1.5, vy: 7 + Math.random() * 3, len: 10 + Math.random() * 6 });
         for (var n = 0; n < 2 * s; n++) if (drops.length < cap) drops.push({ x: Math.random() * W * 1.2 - W * 0.1, y: -10, vx: -1.5, vy: 7 + Math.random() * 3, len: 10 + Math.random() * 6 });
         ctx.strokeStyle = 'rgba(180,200,230,.55)'; ctx.lineWidth = 1;
         for (var i = drops.length - 1; i >= 0; i--) { var d = drops[i]; d.x += d.vx * s; d.y += d.vy * s;
@@ -809,6 +826,7 @@
         var s = k(dt); f += s; var flashing = flashT > 0;
         if (flashing) { ctx.fillStyle = 'rgba(210,225,245,0.18)'; ctx.fillRect(0, 0, W, H); }
         var cap = pcap(W * 0.38);
+        if (!drops.length) for (var q = 0; q < cap; q++) drops.push({ x: Math.random() * W * 1.2 - W * 0.1, y: Math.random() * H, vx: -2, vy: 9 + Math.random() * 4, len: 12 + Math.random() * 8 });
         for (var n = 0; n < 3 * s; n++) if (drops.length < cap) drops.push({ x: Math.random() * W * 1.2 - W * 0.1, y: -10, vx: -2, vy: 9 + Math.random() * 4, len: 12 + Math.random() * 8 });
         ctx.strokeStyle = flashing ? 'rgba(220,230,240,.7)' : 'rgba(180,200,230,.6)'; ctx.lineWidth = 1.2;
         for (var i = drops.length - 1; i >= 0; i--) { var d = drops[i]; d.x += d.vx * s; d.y += d.vy * s;
@@ -825,6 +843,7 @@
       var fl = [], t = 0;
       return function (ctx, W, H, dt) {
         var s = k(dt); t += dt; var cap = pcap(W * 0.22);
+        if (!fl.length) for (var q = 0; q < cap; q++) fl.push({ x: Math.random() * W, y: Math.random() * H, vy: 0.8 + Math.random() * 0.8, r: 1 + Math.random() * 2, ph: Math.random() * 6.28, swA: 0.6 + Math.random() * 0.6 });
         for (var n = 0; n < 2 * s; n++) if (fl.length < cap) fl.push({ x: Math.random() * W, y: -10, vy: 0.8 + Math.random() * 0.8, r: 1 + Math.random() * 2, ph: Math.random() * 6.28, swA: 0.6 + Math.random() * 0.6 });
         ctx.fillStyle = 'rgba(255,255,255,.85)';
         for (var i = fl.length - 1; i >= 0; i--) { var f = fl[i]; f.y += f.vy * s; f.x += Math.sin(t * 2.5 + f.ph) * f.swA * s;
@@ -865,6 +884,7 @@
         var s = k(dt); t += dt;
         ctx.fillStyle = 'rgba(120,40,25,0.10)'; ctx.fillRect(0, 0, W, H);
         var cap = pcap(W * 0.18);
+        if (!fl.length) for (var q = 0; q < cap; q++) fl.push({ x: Math.random() * W, y: Math.random() * H, vy: 0.5 + Math.random() * 0.6, r: 0.8 + Math.random() * 1.5, ph: Math.random() * 6.28, swA: 0.3 + Math.random() * 0.4 });
         for (var n = 0; n < 1 * s; n++) if (fl.length < cap) fl.push({ x: Math.random() * W, y: -10, vy: 0.5 + Math.random() * 0.6, r: 0.8 + Math.random() * 1.5, ph: Math.random() * 6.28, swA: 0.3 + Math.random() * 0.4 });
         ctx.fillStyle = 'rgba(140,130,120,.7)';
         for (var i = fl.length - 1; i >= 0; i--) { var f = fl[i]; f.y += f.vy * s; f.x += Math.sin(t * 2.5 + f.ph) * f.swA * s;
@@ -2196,7 +2216,7 @@
     [qv.querySelector('[data-cal-qv-expand]'), qv.querySelector('[data-cal-qv-expand2]')].forEach(function (b) {
       if (b) b.addEventListener('click', expandToEditor);
     });
-    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeEditor(); closeQuickview(); closeSkyPanel(); } });
+    // Escape handled centrally by the 'dialog-a11y' block (closes the topmost open dialog).
   });
 
   function openEventQuickview(e) {
@@ -2262,8 +2282,58 @@
     if (e && e.recurring_ref) lk('Recurring series', 'detail');
     if (e && (DATA.event_entities || {})[e.id]) lk('Entities (' + (DATA.event_entities[e.id] || []).length + ')', 'detail');
   }
-  function showQuickview() { var qv = document.querySelector('[data-cal-qv]'); if (qv) { qv.setAttribute('data-cal-qv-open', 'true'); qv.setAttribute('data-cal-qv-zoomed', 'false'); qv.setAttribute('aria-hidden', 'false'); } closeSkyPanel(); }
-  function closeQuickview() { var qv = document.querySelector('[data-cal-qv]'); if (qv) { qv.setAttribute('data-cal-qv-open', 'false'); qv.setAttribute('aria-hidden', 'true'); } }
+  // ============================================================
+  // Slice 2 a11y — dialog focus management (shared by quick-view / editor /
+  // create / sky-panel). focus-INTO on open, focus-RESTORE to the trigger on
+  // close, Tab focus-TRAP while open, and ONE Escape handler that closes the
+  // topmost open dialog (replaces the two drifted Escape listeners).
+  // ============================================================
+  var DIALOG_STACK = []; // { el, trigger, close }
+  function dlgFocusables(el) {
+    return Array.prototype.slice.call(el.querySelectorAll(
+      'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+    ));
+  }
+  function openDialog(el, closeFn) {
+    if (!el) return;
+    // avoid double-push if re-opened.
+    for (var i = 0; i < DIALOG_STACK.length; i++) if (DIALOG_STACK[i].el === el) return;
+    var trigger = document.activeElement;
+    DIALOG_STACK.push({ el: el, trigger: trigger, close: closeFn });
+    var f = dlgFocusables(el);
+    var target = f[0] || el;
+    try { setTimeout(function () { try { target.focus(); } catch (e) {} }, 0); } catch (e) {}
+  }
+  function closeDialog(el) {
+    for (var i = DIALOG_STACK.length - 1; i >= 0; i--) {
+      if (DIALOG_STACK[i].el === el) {
+        var d = DIALOG_STACK.splice(i, 1)[0];
+        if (d.trigger && d.trigger.focus) { try { d.trigger.focus(); } catch (e) {} }
+        break;
+      }
+    }
+  }
+  registerInitBlock('dialog-a11y', function () {
+    document.addEventListener('keydown', function (ev) {
+      if (!DIALOG_STACK.length) return;
+      var top = DIALOG_STACK[DIALOG_STACK.length - 1];
+      if (ev.key === 'Escape') { ev.preventDefault(); if (top.close) top.close(); return; }
+      if (ev.key === 'Tab') {
+        var f = dlgFocusables(top.el); if (!f.length) return;
+        var first = f[0], last = f[f.length - 1], a = document.activeElement;
+        // keep focus inside the topmost dialog (trap).
+        if (ev.shiftKey && (a === first || !top.el.contains(a))) { ev.preventDefault(); last.focus(); }
+        else if (!ev.shiftKey && (a === last || !top.el.contains(a))) { ev.preventDefault(); first.focus(); }
+      }
+    });
+  });
+
+  function showQuickview() {
+    var qv = document.querySelector('[data-cal-qv]');
+    if (qv) { qv.setAttribute('data-cal-qv-open', 'true'); qv.setAttribute('data-cal-qv-zoomed', 'false'); qv.setAttribute('aria-hidden', 'false'); openDialog(qv, closeQuickview); }
+    closeSkyPanel();
+  }
+  function closeQuickview() { var qv = document.querySelector('[data-cal-qv]'); if (qv) { qv.setAttribute('data-cal-qv-open', 'false'); qv.setAttribute('aria-hidden', 'true'); closeDialog(qv); } }
   function commitQuickview() {
     if (!CTX) return;
     var title = (document.querySelector('[data-cal-qv-title]') || {}).value;
@@ -2288,10 +2358,11 @@
     if (qv) qv.setAttribute('data-cal-qv-zoomed', 'true');
     hydrateEditor();
     ed.setAttribute('data-cal-editor-open', 'true'); ed.setAttribute('aria-hidden', 'false');
+    openDialog(ed, closeEditor);
   }
   function closeEditor() {
     var ed = document.querySelector('[data-cal-editor]'); var qv = document.querySelector('[data-cal-qv]');
-    if (ed) { ed.setAttribute('data-cal-editor-open', 'false'); ed.setAttribute('aria-hidden', 'true'); }
+    if (ed) { ed.setAttribute('data-cal-editor-open', 'false'); ed.setAttribute('aria-hidden', 'true'); closeDialog(ed); }
     if (qv) qv.setAttribute('data-cal-qv-zoomed', 'false');
     closeSubpop();
   }
@@ -2392,7 +2463,11 @@
       if (r.checked && r.value === 'specific') rules.removeAttribute('hidden'); if (r.checked && r.value === 'public') rules.setAttribute('hidden', ''); refreshVisSummary();
     }); });
     document.querySelectorAll('[data-cal-vis-add]').forEach(function (b) { b.addEventListener('click', function () {
-      var name = window.prompt('Add ' + b.getAttribute('data-cal-vis-add') + ' rule for which user?'); if (!name) return;
+      // §2 FLAG: window.prompt is a DEMO-ONLY shortcut. The Phase-2/4 production
+      // editor (C-CAL-WORLDSTATE-INTERACTION-REDESIGN / the real visibility UI)
+      // replaces this with an inline user-picker — do NOT carry prompt() into
+      // the port. Gated here behind a clearly-labeled demo affordance.
+      var name = window.prompt('[Demo] Add ' + b.getAttribute('data-cal-vis-add') + ' rule for which user? (the production editor uses an inline picker)'); if (!name) return;
       var chips = document.querySelector('[data-cal-vis-chips]'); if (chips) chips.appendChild(visChip(b.getAttribute('data-cal-vis-add'), name.replace(/^@/, ''))); refreshVisSummary();
     }); });
   });
@@ -2507,8 +2582,9 @@
     setText('[data-cal-skypanel-title]', title);
     var body = p.querySelector('[data-cal-skypanel-body]'); if (body) body.innerHTML = html;
     p.setAttribute('data-cal-skypanel-open', 'true'); p.setAttribute('aria-hidden', 'false');
+    openDialog(p, closeSkyPanel);
   }
-  function closeSkyPanel() { var p = document.querySelector('[data-cal-skypanel]'); if (p) { p.setAttribute('data-cal-skypanel-open', 'false'); p.setAttribute('aria-hidden', 'true'); } }
+  function closeSkyPanel() { var p = document.querySelector('[data-cal-skypanel]'); if (p) { p.setAttribute('data-cal-skypanel-open', 'false'); p.setAttribute('aria-hidden', 'true'); closeDialog(p); } }
   registerInitBlock('sky-panel', function () {
     var p = document.querySelector('[data-cal-skypanel]'); if (!p) return;
     var c = p.querySelector('[data-cal-skypanel-close]'); if (c) c.addEventListener('click', closeSkyPanel);
@@ -2606,7 +2682,7 @@
     var cat   = pop.querySelector('[data-cal-create-cat]');   if (cat && DATA.categories && DATA.categories[0]) cat.value = DATA.categories[0].id;
     pop.setAttribute('data-cal-qv-open', 'true');
     pop.setAttribute('aria-hidden', 'false');
-    setTimeout(function () { if (title) title.focus(); }, 30);
+    openDialog(pop, closeCreatePopup);
   }
   function closeCreatePopup() {
     var pop = document.querySelector('[data-cal-create]');
@@ -2614,6 +2690,7 @@
     pop.setAttribute('data-cal-qv-open', 'false');
     pop.setAttribute('data-cal-qv-zoomed', 'false');
     pop.setAttribute('aria-hidden', 'true');
+    closeDialog(pop);
   }
 
   function readCreateForm() {
@@ -2696,7 +2773,7 @@
     }, true);
     var close = pop.querySelector('[data-cal-create-close]');
     if (close) close.addEventListener('click', closeCreatePopup);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCreatePopup(); });
+    // Escape handled centrally by the 'dialog-a11y' block.
     var commit = pop.querySelector('[data-cal-create-commit]');
     if (commit) commit.addEventListener('click', function () {
       var form = readCreateForm(); if (!form) return;
