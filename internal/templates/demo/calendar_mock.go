@@ -39,6 +39,7 @@ type CalAlmanacMockData struct {
 	EventEntities   map[string][]CalAlmanacEntityRef `json:"event_entities"`   // event-id -> linked entities
 	EntityEvents    map[string][]string              `json:"entity_events"`    // entity-id -> event-ids
 	EntityTypes     []CalAlmanacEntityType           `json:"entity_types"`     // "Create Entity From" targets
+	MockEntities    []CalAlmanacEntityRef            `json:"mock_entities"`    // R3 attach-entity picker pool (showcase)
 	WeatherEffects  []CalAlmanacEffect               `json:"weather_effects"`  // registry metadata (MUST + TBD stubs)
 	CelestialEffects []CalAlmanacEffect              `json:"celestial_effects"`// registry metadata (MUST + TBD stubs)
 	// CurrentMonth + Year are what the grid renders on initial load.
@@ -477,6 +478,18 @@ func CalAlmanacMock() CalAlmanacMockData {
 			"e7":  {{"npc", "npc-marisha", "Marisha Coppervein"}},
 			"e8":  {{"item", "item-letter", "The Black Letter"}},
 			"e2":  {{"religion", "rel-chauntea", "Faith of Chauntea"}, {"region", "reg-sword", "Sword Coast"}},
+		},
+		// R3 attach-entity picker pool (mock; the real list comes from the
+		// entity plugin in Phase 2 via C-CAL-ENTITY-TIES-DATA-MODEL).
+		MockEntities: []CalAlmanacEntityRef{
+			{"npc", "npc-marisha", "Marisha Coppervein"},
+			{"npc", "npc-merchant", "Daggerford Merchants"},
+			{"location", "loc-spire", "The Celestial Spire"},
+			{"location", "loc-waterdeep", "Waterdeep"},
+			{"faction", "fac-watch", "The City Watch"},
+			{"item", "item-letter", "The Black Letter"},
+			{"region", "reg-sword", "Sword Coast"},
+			{"religion", "rel-chauntea", "Faith of Chauntea"},
 		},
 		EntityEvents: map[string][]string{
 			"npc-marisha":  {"e7"},

@@ -90,3 +90,47 @@ func TestCalAlmanac_DateSetter(t *testing.T) {
 		}
 	}
 }
+
+// TestCalAlmanac_TwoTierPane — R3: the day pane reshapes the existing two-tier
+// machinery (Model A slide-swap), the big day-pane shows moon/weather/events/
+// +add-event, and the attach-entity picker uses the entity-ties role enum.
+func TestCalAlmanac_TwoTierPane(t *testing.T) {
+	html := renderAlmanac(t)
+	if !strings.Contains(html, "data-cal-editor-daypane") {
+		t.Errorf("the big day-pane container is missing")
+	}
+	js := readCalAlmanacJS(t)
+	for _, m := range []string{
+		"function fillDayPane(m, day)", // moon/weather/events/+add
+		"function moonsForDay(",        // moon peek for the day
+		"function buildAttachPicker(",  // attach-entity picker
+		"var PARTICIPATION_ROLES = ['involved', 'present', 'affected', 'mentioned']", // == entity-ties enum
+		"function collectAttached(",    // {entityId, role}
+		"data-cal-attach",              // picker rows
+		"cal-almanac-editor__addevent", // + Add event
+		"data-cal-editor-mode",         // day vs event mode
+	} {
+		if !strings.Contains(js, m) {
+			t.Errorf("two-tier-pane marker missing: %q", m)
+		}
+	}
+	// Model A: closing the big pane returns to the GRID (closes the mini too).
+	if !strings.Contains(js, "closeQuickview();") {
+		t.Errorf("closing the big pane must return to the grid (close the mini)")
+	}
+	// CSS: the slide-swap + the day-mode toggle.
+	css := readCalAlmanacCSS(t)
+	for _, m := range []string{
+		`data-cal-qv-zoomed="true"`,
+		`data-cal-editor-mode="day"`,
+		"cal-almanac-attach__role",
+	} {
+		if !strings.Contains(css, m) {
+			t.Errorf("two-tier-pane CSS missing: %q", m)
+		}
+	}
+	// The attach-entity picker has a non-empty mock entity pool.
+	if d := CalAlmanacMock(); len(d.MockEntities) == 0 {
+		t.Errorf("mock entity pool for the attach picker is empty")
+	}
+}

@@ -1150,7 +1150,29 @@
   transform: translateX(0); opacity: 1; pointer-events: auto;
 }
 /* When the editor is open, the quick-view slides further left ("zooms out"). */
-.cal-almanac-shell .cal-almanac-qv[data-cal-qv-zoomed="true"] { transform: translateX(-120px) scale(0.96); opacity: 0.5; }
+/* R3 Model A (slide-swap): the mini slides fully OUT as the big slides in. */
+.cal-almanac-shell .cal-almanac-qv[data-cal-qv-zoomed="true"] { transform: translateX(-420px) scale(0.96); opacity: 0; pointer-events: none; }
+/* R3 — day vs event mode: a day shows the day-pane; an event shows the tabs. */
+.cal-almanac-shell .cal-almanac-editor__daypane { display: none; padding: 12px 18px; overflow-y: auto; flex: 1 1 auto; flex-direction: column; gap: 8px; }
+.cal-almanac-shell .cal-almanac-editor[data-cal-editor-mode="day"] .cal-almanac-editor__daypane { display: flex; }
+.cal-almanac-shell .cal-almanac-editor[data-cal-editor-mode="day"] .cal-almanac-editor__tabs,
+.cal-almanac-shell .cal-almanac-editor[data-cal-editor-mode="day"] .cal-almanac-editor__panels { display: none; }
+.cal-almanac-shell .cal-almanac-editor__daysection { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: oklch(0.74 0.022 261); margin-top: 6px; }
+.cal-almanac-shell .cal-almanac-editor__empty { font-size: 12px; font-style: italic; color: oklch(0.62 0.022 261); }
+.cal-almanac-shell .cal-almanac-editor__dayevent {
+  text-align: left; background: oklch(0.16 0.02 264); border: 0; border-left: 3px solid var(--chip-cat, oklch(0.5 0.02 260));
+  border-radius: 5px; padding: 6px 9px; color: oklch(0.96 0.01 260); font-size: 13px; cursor: pointer;
+}
+.cal-almanac-shell .cal-almanac-editor__dayevent:hover { background: oklch(0.20 0.02 264); }
+.cal-almanac-shell .cal-almanac-editor__addevent { align-self: flex-start; margin-top: 4px; }
+.cal-almanac-shell .cal-almanac-editor__addform { display: flex; flex-direction: column; gap: 8px; padding: 10px; background: oklch(0.14 0.02 264); border: 1px solid oklch(1 0 0 / 0.12); border-radius: 7px; }
+.cal-almanac-shell .cal-almanac-attach { display: flex; flex-direction: column; gap: 5px; max-height: 180px; overflow-y: auto; }
+.cal-almanac-shell .cal-almanac-attach__row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.cal-almanac-shell .cal-almanac-attach__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-almanac-shell .cal-almanac-attach__role {
+  background: oklch(0.20 0.02 264); color: oklch(0.985 0 0); border: 1px solid oklch(1 0 0 / 0.14); border-radius: 4px; padding: 2px 5px; font-size: 11px;
+}
+.cal-almanac-shell .cal-almanac-attach__role:disabled { opacity: 0.4; }
 .cal-almanac-shell .cal-almanac-qv__head { display: flex; align-items: flex-start; gap: 6px; padding: 14px 16px 10px; border-bottom: 1px solid oklch(0.30 0.025 260); }
 .cal-almanac-shell .cal-almanac-qv__title-wrap { flex: 1 1 auto; min-width: 0; }
 .cal-almanac-shell .cal-almanac-qv__title {

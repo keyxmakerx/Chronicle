@@ -515,6 +515,10 @@ templ calAlmanacEditor(d CalAlmanacMockData) {
 			<button type="button" class="cal-almanac-editor__tab" data-cal-editor-tab="notes">Notes</button>
 			<button type="button" class="cal-almanac-editor__tab" data-cal-editor-tab="vis">Visibility</button>
 		</nav>
+		// R3: the DAY pane (shown when the editor is opened for a day, not an
+		// event) — moon info · weather · events · + Add event w/ attach-entity
+		// picker. JS (fillDayPane) builds the contents.
+		<div class="cal-almanac-editor__daypane" data-cal-editor-daypane></div>
 		<div class="cal-almanac-editor__panels">
 			<div class="cal-almanac-editor__panel cal-almanac-editor__panel--active" data-cal-editor-panel="detail">
 				<label class="cal-almanac-editor__lbl">Title</label>

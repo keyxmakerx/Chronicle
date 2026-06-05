@@ -2304,9 +2304,22 @@
     var mt = document.querySelector('[data-cal-qv-meta]'); if (mt) mt.textContent = meta;
     var d = document.querySelector('[data-cal-qv-desc]'); if (d) d.value = desc || '';
   }
+  // R3: the day's moon phase(s) for the mini peek + big day-pane. Computes each
+  // moon's named phase for the GIVEN day (not just the current VIEW day).
+  function moonsForDay(m, day) {
+    var moons = (worldState && worldState.moons) || [], dayIndex = (m - 1) * 30 + (day - 1), out = [];
+    for (var i = 0; i < moons.length; i++) {
+      var mo = moons[i], period = 30 / (mo.orbitSpeed || 1);
+      var pct = (((dayIndex / period) + (mo.orbitOffset || 0)) % 1 + 1) % 1;
+      out.push({ name: mo.name || ('Moon ' + mo.id), phase: moonNamedPhase(mo, pct), tint: mo.tint });
+    }
+    return out;
+  }
   function fillState(m, day) {
     var box = document.querySelector('[data-cal-qv-state]'); if (!box) return;
     box.innerHTML = '';
+    // R3 peek: moon phase(s) + weather + celestial events.
+    moonsForDay(m, day).forEach(function (mo) { box.appendChild(stateRow('Moon', mo.name + ' — ' + mo.phase, mo.tint || 'oklch(0.9 0.04 95)')); });
     var wtypeID = dayWeatherTypeID(m, day);
     if (wtypeID) { var wt = weatherTypeById(wtypeID); if (wt) box.appendChild(stateRow('Weather', wt.name + ' · ' + wt.temp_c + '°C', wt.color)); }
     var cel = celestialFor(m, day);
@@ -2400,19 +2413,88 @@
   // ============================================================
   // Block: popup-expand — quick-view → editor (tier 2)
   // ============================================================
+  // R3 Model A (slide-swap): expanding slides the MINI out as the BIG slides in
+  // (CSS via data-cal-qv-zoomed). A day opens the DAY pane (moon/weather/events/
+  // +add); an event opens the editor tabs. Closing the big pane returns to the
+  // GRID (not the mini), restoring focus to the originating cell.
   function expandToEditor() {
     var qv = document.querySelector('[data-cal-qv]'); var ed = document.querySelector('[data-cal-editor]');
     if (!ed) return;
     if (qv) qv.setAttribute('data-cal-qv-zoomed', 'true');
+    var dayMode = !!(CTX && CTX.kind === 'day');
+    ed.setAttribute('data-cal-editor-mode', dayMode ? 'day' : 'event');
     hydrateEditor();
+    if (dayMode) fillDayPane(CTX.month, CTX.day);
     ed.setAttribute('data-cal-editor-open', 'true'); ed.setAttribute('aria-hidden', 'false');
     openDialog(ed, closeEditor);
   }
   function closeEditor() {
     var ed = document.querySelector('[data-cal-editor]'); var qv = document.querySelector('[data-cal-qv]');
     if (ed) { ed.setAttribute('data-cal-editor-open', 'false'); ed.setAttribute('aria-hidden', 'true'); closeDialog(ed); }
-    if (qv) qv.setAttribute('data-cal-qv-zoomed', 'false');
+    // Model A: closing the big pane returns to the grid (close the mini too).
+    if (qv) { qv.setAttribute('data-cal-qv-zoomed', 'false'); if (qv.getAttribute('data-cal-qv-open') === 'true') closeQuickview(); }
     closeSubpop();
+  }
+  // R3 — the four participation roles. MUST match the entity-ties data model
+  // (C-CAL-ENTITY-TIES-DATA-MODEL) so the Phase-2 port wires straight through.
+  var PARTICIPATION_ROLES = ['involved', 'present', 'affected', 'mentioned'];
+  window.__calParticipationRoles = PARTICIPATION_ROLES;
+  function buildAttachPicker() {
+    var wrap = document.createElement('div'); wrap.className = 'cal-almanac-attach'; wrap.setAttribute('data-cal-attach', '');
+    (DATA.mock_entities || []).forEach(function (en) {
+      var row = document.createElement('label'); row.className = 'cal-almanac-attach__row';
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = en.id; cb.setAttribute('data-cal-attach-entity', en.id);
+      var name = document.createElement('span'); name.className = 'cal-almanac-attach__name'; name.textContent = en.name + ' · ' + en.type;
+      var role = document.createElement('select'); role.className = 'cal-almanac-attach__role'; role.setAttribute('data-cal-attach-role', ''); role.disabled = true;
+      PARTICIPATION_ROLES.forEach(function (r) { var o = document.createElement('option'); o.value = r; o.textContent = r; role.appendChild(o); });
+      cb.addEventListener('change', function () { role.disabled = !cb.checked; });
+      row.appendChild(cb); row.appendChild(name); row.appendChild(role); wrap.appendChild(row);
+    });
+    return wrap;
+  }
+  function collectAttached(picker) {
+    var out = [];
+    picker.querySelectorAll('.cal-almanac-attach__row').forEach(function (row) {
+      var cb = row.querySelector('input[type=checkbox]'), role = row.querySelector('[data-cal-attach-role]');
+      if (cb && cb.checked) out.push({ entityId: cb.value, role: role ? role.value : 'involved' });
+    });
+    return out;
+  }
+  // R3 — the BIG day pane default content.
+  function fillDayPane(m, day) {
+    var pane = document.querySelector('[data-cal-editor-daypane]'); if (!pane) return;
+    pane.innerHTML = '';
+    function section(t) { var h = document.createElement('div'); h.className = 'cal-almanac-editor__daysection'; h.textContent = t; pane.appendChild(h); }
+    section('Moons');
+    moonsForDay(m, day).forEach(function (mo) { pane.appendChild(stateRow('Moon', mo.name + ' — ' + mo.phase, mo.tint || 'oklch(0.9 0.04 95)')); });
+    section('Weather');
+    var wtypeID = dayWeatherTypeID(m, day), wt = wtypeID ? weatherTypeById(wtypeID) : null;
+    pane.appendChild(stateRow('Weather', wt ? (wt.name + ' · ' + wt.temp_c + '°C') : 'Clear', wt ? wt.color : 'oklch(0.8 0.04 240)'));
+    section('Events');
+    var evs = eventsForDay(m, day);
+    if (!evs.length) { var em = document.createElement('div'); em.className = 'cal-almanac-editor__empty'; em.textContent = 'No events this day.'; pane.appendChild(em); }
+    evs.forEach(function (e) {
+      if (!e) return;
+      var row = document.createElement('button'); row.type = 'button'; row.className = 'cal-almanac-editor__dayevent';
+      var cat = categoryById(e.category) || {}; row.style.setProperty('--chip-cat', cat.color || 'oklch(0.62 0.18 240)');
+      row.textContent = (e.hour >= 0 ? pad2(e.hour) + ':00 · ' : '') + e.name;
+      row.addEventListener('click', function () {
+        var ed = document.querySelector('[data-cal-editor]'); CTX = { kind: 'event', event: e, month: e.month, day: e.day };
+        if (ed) ed.setAttribute('data-cal-editor-mode', 'event'); hydrateEditor(); setEditorTab('detail');
+      });
+      pane.appendChild(row);
+    });
+    // + Add event → inline form with the attach-entity picker.
+    var addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.className = 'cal-almanac-btn cal-almanac-btn--sm cal-almanac-editor__addevent'; addBtn.textContent = '+ Add event';
+    pane.appendChild(addBtn);
+    var form = document.createElement('div'); form.className = 'cal-almanac-editor__addform'; form.setAttribute('data-cal-addevent', ''); form.hidden = true;
+    var ti = document.createElement('input'); ti.className = 'cal-almanac-editor__field'; ti.placeholder = 'Event title'; ti.setAttribute('data-cal-addevent-title', ''); form.appendChild(ti);
+    var lbl = document.createElement('div'); lbl.className = 'cal-almanac-editor__lbl'; lbl.textContent = 'Attach entities (role per entity)'; form.appendChild(lbl);
+    var picker = buildAttachPicker(); form.appendChild(picker);
+    var save = document.createElement('button'); save.type = 'button'; save.className = 'cal-almanac-btn cal-almanac-btn--primary cal-almanac-btn--sm'; save.textContent = 'Save event'; form.appendChild(save);
+    save.addEventListener('click', function () { var ties = collectAttached(picker); flash(save, 'Saved · ' + ties.length + ' entity tie(s) · demo'); });
+    pane.appendChild(form);
+    addBtn.addEventListener('click', function () { form.hidden = !form.hidden; if (!form.hidden) ti.focus(); });
   }
   function setEditorTab(name) {
     var ed = document.querySelector('[data-cal-editor]'); if (!ed) return;
