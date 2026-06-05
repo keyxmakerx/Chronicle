@@ -1,0 +1,101 @@
+// calendar_v2_gmpanel.templ — the production GM live-control panel on
+// calendar_v2 (C-CAL-WORLDSTATE-GM-LIVE-CONTROL-PANEL, Phase 4a).
+//
+// A docked, collapsible panel that drives the LIVE world-state, persisted
+// server-side so players see it on refresh (D2 — no WS push this phase). The
+// production graduation of the showcase demo-controls — but every control
+// writes through PUT /calendar/world-state (#401), not client mock-mutation.
+//
+// AUTHORITY: rendered ONLY for capability holders (data.CanControlWorldState =
+// Owner or co-DM, #406). Players/Scribes never receive this markup — the gate
+// is server-side, not a CSS hide. Chrome uses calendar_v2 tokens/utility (it's
+// chrome, not rendering canvas — the OKLCH exemption is engine-visuals only).
+//
+// 4a controls: +1hr / +1day / +Long rest / Step back (Part-6 verbs, signed
+// advance) + Set time / Set date (the 2c-deferred absolute write) + ⏸ pause
+// (client-only atmosphere freeze — not persisted per #401). Weather/mood (4b)
+// and trigger-events (4c) extend this panel.
+
+package calendar
+
+import "fmt"
+
+// gmControlPanelV2 renders the GM panel, or nothing when the viewer lacks
+// world-state control (or there's no active calendar).
+templ gmControlPanelV2(data CalendarV2ViewData) {
+	if data.CanControlWorldState && data.ActiveCalendar != nil {
+		<section
+			class="fixed bottom-4 right-4 z-30 w-72 card card-elev border border-edge rounded-lg text-sm"
+			data-gm-panel
+			aria-label="GM world-state controls"
+		>
+			<header class="flex items-center justify-between px-3 py-2 border-b border-edge">
+				<span class="font-semibold text-fg flex items-center gap-2">
+					<i class="fa-solid fa-wand-sparkles text-accent" aria-hidden="true"></i>
+					GM Controls
+				</span>
+				<button
+					type="button"
+					class="text-fg-secondary hover:text-fg transition-colors duration-micro"
+					data-gm-panel-toggle
+					aria-expanded="true"
+					aria-controls="gm-panel-body"
+					aria-label="Collapse panel"
+				>
+					<i class="fa-solid fa-chevron-down text-xs" aria-hidden="true"></i>
+				</button>
+			</header>
+			<div id="gm-panel-body" class="px-3 py-3 space-y-3">
+				// Part-6 advance verbs (signed relative; full rollover server-side).
+				<div>
+					<div class="text-xs font-medium text-fg-secondary mb-1">Advance time</div>
+					<div class="grid grid-cols-2 gap-1.5">
+						<button type="button" class="btn-secondary text-xs" data-gm-advance data-gm-hours="1">+1 hour</button>
+						<button type="button" class="btn-secondary text-xs" data-gm-advance data-gm-days="1">+1 day</button>
+						<button type="button" class="btn-secondary text-xs" data-gm-advance data-gm-hours="8">Long rest</button>
+						<button type="button" class="btn-secondary text-xs" data-gm-advance data-gm-hours="-1">Step back</button>
+					</div>
+				</div>
+				// Absolute set-time (the 2c-deferred write).
+				<div>
+					<div class="text-xs font-medium text-fg-secondary mb-1">Set time</div>
+					<div class="flex items-center gap-1.5">
+						<input type="number" min="0" class="input text-xs w-16" data-gm-time-hour
+							value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentHour) } aria-label="Hour"/>
+						<span class="text-fg-secondary">:</span>
+						<input type="number" min="0" class="input text-xs w-16" data-gm-time-minute
+							value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentMinute) } aria-label="Minute"/>
+						<button type="button" class="btn-secondary text-xs ml-auto" data-gm-set-time>Set</button>
+					</div>
+				</div>
+				// Absolute set-date.
+				<div>
+					<div class="text-xs font-medium text-fg-secondary mb-1">Set date</div>
+					<div class="flex items-center gap-1.5">
+						<input type="number" min="1" class="input text-xs w-14" data-gm-date-day
+							value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentDay) } aria-label="Day"/>
+						<select class="input text-xs flex-1" data-gm-date-month aria-label="Month">
+							for i, m := range data.ActiveCalendar.Months {
+								if i == data.ActiveCalendar.CurrentMonth-1 {
+									<option value={ fmt.Sprintf("%d", i+1) } selected>{ m.Name }</option>
+								} else {
+									<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
+								}
+							}
+						</select>
+						<input type="number" class="input text-xs w-16" data-gm-date-year
+							value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentYear) } aria-label="Year"/>
+					</div>
+					<button type="button" class="btn-secondary text-xs mt-1.5 w-full" data-gm-set-date>Set date</button>
+				</div>
+				// Atmosphere pause — client-only freeze (ephemeral; not persisted).
+				<div class="pt-1 border-t border-edge">
+					<button type="button" class="btn-secondary text-xs w-full" data-gm-pause aria-pressed="false">
+						<i class="fa-solid fa-pause mr-1" aria-hidden="true"></i>
+						<span data-gm-pause-label>Pause atmosphere</span>
+					</button>
+				</div>
+			</div>
+		</section>
+	}
+}

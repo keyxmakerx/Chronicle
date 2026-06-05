@@ -77,6 +77,40 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 		}
 	}
 
+	if input.Advance != nil {
+		// Relative clock move (GM panel verbs) with full signed rollover.
+		// Computed here + written through UpdateCalendar so the same
+		// leap-year/range invariants apply. Loads months for variable-length
+		// day rollover.
+		months, err := s.repo.GetMonths(ctx, calendarID)
+		if err != nil {
+			return fmt.Errorf("get months: %w", err)
+		}
+		if len(months) == 0 {
+			return apperror.NewValidation("calendar has no months configured")
+		}
+		cal.Months = months
+		y, mo, d, h, mi := advanceClock(cal, input.Advance.Days, input.Advance.Hours, input.Advance.Minutes)
+		if err := s.UpdateCalendar(ctx, calendarID, UpdateCalendarInput{
+			Name:             cal.Name,
+			Description:      cal.Description,
+			EpochName:        cal.EpochName,
+			Mode:             cal.Mode,
+			CurrentYear:      y,
+			CurrentMonth:     mo,
+			CurrentDay:       d,
+			CurrentHour:      h,
+			CurrentMinute:    mi,
+			HoursPerDay:      cal.HoursPerDay,
+			MinutesPerHour:   cal.MinutesPerHour,
+			SecondsPerMinute: cal.SecondsPerMinute,
+			LeapYearEvery:    cal.LeapYearEvery,
+			LeapYearOffset:   cal.LeapYearOffset,
+		}); err != nil {
+			return err
+		}
+	}
+
 	if input.Time != nil {
 		// Route the date/time write through UpdateCalendar so leap-year and
 		// hour/minute invariants apply uniformly across every surface. Nil
@@ -116,6 +150,82 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 		"moodTint": moodTintSeed(cal),
 	})
 	return nil
+}
+
+// advanceClock moves the calendar's current date/time by a signed
+// days/hours/minutes delta, returning the new (year, month, day, hour, minute)
+// with full rollover in BOTH directions. Requires cal.Months populated for
+// the variable-length day rollover (leap-year aware via cal.MonthDays). The
+// GM panel's Part-6 verbs (+1hr / +1day / +long-rest / step-back) all funnel
+// through here so rollover lives server-side (the source of truth), not in JS.
+func advanceClock(cal *Calendar, days, hours, minutes int) (year, month, day, hour, minute int) {
+	hpd := cal.HoursPerDay
+	if hpd <= 0 {
+		hpd = 24
+	}
+	mph := cal.MinutesPerHour
+	if mph <= 0 {
+		mph = 60
+	}
+	minutesPerDay := hpd * mph
+
+	// Fold the current within-day time + the hour/minute deltas into a single
+	// minute count, then floor-divide into a (signed) day carry + a positive
+	// minute-of-day. Floored math is required so negative deltas borrow a day.
+	totalMin := cal.CurrentHour*mph + cal.CurrentMinute + hours*mph + minutes
+	dayDelta := days + floorDiv(totalMin, minutesPerDay)
+	minOfDay := floorMod(totalMin, minutesPerDay)
+	hour = minOfDay / mph
+	minute = minOfDay % mph
+
+	year = cal.CurrentYear
+	monthIdx := cal.CurrentMonth - 1
+	day = cal.CurrentDay
+	n := len(cal.Months)
+
+	if dayDelta >= 0 {
+		for i := 0; i < dayDelta; i++ {
+			day++
+			if day > cal.MonthDays(monthIdx, year) {
+				day = 1
+				monthIdx++
+				if monthIdx >= n {
+					monthIdx = 0
+					year++
+				}
+			}
+		}
+	} else {
+		for i := 0; i < -dayDelta; i++ {
+			day--
+			if day < 1 {
+				monthIdx--
+				if monthIdx < 0 {
+					monthIdx = n - 1
+					year--
+				}
+				day = cal.MonthDays(monthIdx, year)
+			}
+		}
+	}
+	return year, monthIdx + 1, day, hour, minute
+}
+
+// floorDiv / floorMod are floored (not truncated-toward-zero) integer
+// division — needed so a negative minute total borrows a whole day correctly.
+func floorDiv(a, b int) int {
+	q := a / b
+	if (a%b != 0) && ((a < 0) != (b < 0)) {
+		q--
+	}
+	return q
+}
+func floorMod(a, b int) int {
+	m := a % b
+	if m != 0 && ((m < 0) != (b < 0)) {
+		m += b
+	}
+	return m
 }
 
 // derefOr returns *p when p is non-nil, else fallback. Used by SetWorldState

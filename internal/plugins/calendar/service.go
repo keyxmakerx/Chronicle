@@ -149,6 +149,19 @@ type WorldStateUpdateInput struct {
 	// Time, when non-nil, sets the calendar's current date/time. Any nil
 	// sub-field preserves the current stored value.
 	Time *WorldStateTimeSet
+	// Advance, when non-nil, moves the clock RELATIVE to the current value
+	// (signed — negative steps back), with full rollover across
+	// minute→hour→day→month→year. This is the GM panel's Part-6 verb path
+	// (+1hr / +1day / +long-rest / step-back); Time is the absolute
+	// set-time/set-date path. Apply Advance OR Time, not both.
+	Advance *WorldStateAdvance
+}
+
+// WorldStateAdvance is a signed relative clock move for the GM panel verbs.
+type WorldStateAdvance struct {
+	Days    int
+	Hours   int
+	Minutes int
 }
 
 // WorldStateTimeSet is a partial date/time set for SetWorldState. Pointer

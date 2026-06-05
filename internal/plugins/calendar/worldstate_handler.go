@@ -86,6 +86,13 @@ type putWorldStateBody struct {
 		Hour   *int `json:"hour"`
 		Minute *int `json:"minute"`
 	} `json:"time"`
+	// Advance is the GM panel's relative-verb path (+1hr / +1day /
+	// +long-rest / step-back). Signed; full rollover server-side.
+	Advance *struct {
+		Days    int `json:"days"`
+		Hours   int `json:"hours"`
+		Minutes int `json:"minutes"`
+	} `json:"advance"`
 }
 
 // PutWorldState — PUT /campaigns/:id/calendar/world-state.
@@ -118,6 +125,13 @@ func (h *Handler) PutWorldState(c echo.Context) error {
 			Day:    body.Time.Day,
 			Hour:   body.Time.Hour,
 			Minute: body.Time.Minute,
+		}
+	}
+	if body.Advance != nil {
+		input.Advance = &WorldStateAdvance{
+			Days:    body.Advance.Days,
+			Hours:   body.Advance.Hours,
+			Minutes: body.Advance.Minutes,
 		}
 	}
 
