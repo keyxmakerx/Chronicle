@@ -12,7 +12,22 @@
 // a direct repo import (CLAUDE.md rule 8).
 package calendar
 
-import "github.com/keyxmakerx/chronicle/internal/apperror"
+import (
+	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+)
+
+// participationRolesCSV joins the canonical roles for the picker's
+// data-ties-roles attribute, so the event-editor JS sources the vocabulary
+// from this single Go enum (no client-side duplication that could drift).
+func participationRolesCSV() string {
+	parts := make([]string, len(ParticipationRoles))
+	for i, r := range ParticipationRoles {
+		parts[i] = string(r)
+	}
+	return strings.Join(parts, ",")
+}
 
 // ParticipationRole is the entity's role in an event/era tie. The vocabulary
 // is PINNED to Phase 1.5's showcase attach-entity picker

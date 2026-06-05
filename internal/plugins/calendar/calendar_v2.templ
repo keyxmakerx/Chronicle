@@ -691,6 +691,27 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 					<textarea class="input text-sm w-full" data-field="description" rows="3"></textarea>
 				</div>
 				@calwidget.VisibilityEditor(buildEventVisibilityEditor(data))
+				// Attach-entity picker (C-CAL-WORLDSTATE-PRODUCTION-PORT 2b):
+				// persists real entity_event_links with a participation_role.
+				// Roles come from the Go enum (data-ties-roles) so the JS never
+				// duplicates the vocabulary. Active for saved events; new events
+				// show the save-first hint (an event needs an id before ties
+				// can attach).
+				<div data-event-ties-section data-ties-roles={ participationRolesCSV() }>
+					<label class="block text-xs font-medium text-fg-secondary mb-1">Entities</label>
+					<div class="flex flex-wrap gap-1 mb-2" data-ties-list aria-live="polite"></div>
+					<div data-ties-picker class="relative hidden">
+						<input
+							type="text"
+							class="input text-sm w-full"
+							data-ties-search
+							placeholder="Search entities to attach…"
+							autocomplete="off"
+						/>
+						<div class="absolute z-10 left-0 right-0 mt-1 card shadow-lg max-h-48 overflow-y-auto hidden" data-ties-results></div>
+					</div>
+					<p class="text-xs text-fg-secondary italic hidden" data-ties-hint>Save the event first to attach entities.</p>
+				</div>
 			</div>
 			<div class="px-4 py-3 border-t border-edge flex items-center justify-between">
 				<button

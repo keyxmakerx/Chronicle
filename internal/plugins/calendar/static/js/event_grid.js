@@ -80,6 +80,9 @@
 
             // Initialize the visibility editor state from the event.
             initVisibilityEditor(prefill);
+
+            // Attach-entity picker (2b): persists real entity_event_links.
+            initEntityTies();
         }
 
         function markDirty() { dirty = true; }
@@ -133,6 +136,143 @@
                 body.visibility_rules = JSON.stringify(vis.rules);
             }
             return body;
+        }
+
+        // --- Attach-entity picker (2b): real entity_event_links ---------
+        // Persists ties through the calendar plugin's tie endpoints; SEARCHES
+        // entities via the entities plugin's own /entities/search (cross-plugin
+        // stays at the API boundary). Roles come from the Go enum via
+        // data-ties-roles so the vocabulary never drifts from the backend.
+
+        var tiesSection = drawer.querySelector('[data-event-ties-section]');
+        var TIE_ROLES = ((tiesSection && tiesSection.getAttribute('data-ties-roles')) ||
+            'involved,present,affected,mentioned').split(',');
+
+        function tiesEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+        function tiesBase() {
+            return '/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + editingID + '/entities';
+        }
+
+        function initEntityTies() {
+            if (!tiesSection) return;
+            var list = tiesSection.querySelector('[data-ties-list]');
+            var picker = tiesSection.querySelector('[data-ties-picker]');
+            var hint = tiesSection.querySelector('[data-ties-hint]');
+            var search = tiesSection.querySelector('[data-ties-search]');
+            var results = tiesSection.querySelector('[data-ties-results]');
+            if (list) list.innerHTML = '';
+            if (results) { results.innerHTML = ''; results.classList.add('hidden'); }
+            if (search) search.value = '';
+            // A new event has no id yet — ties can only attach after it's saved.
+            if (!editingID) {
+                if (picker) picker.classList.add('hidden');
+                if (hint) hint.classList.remove('hidden');
+                return;
+            }
+            if (picker) picker.classList.remove('hidden');
+            if (hint) hint.classList.add('hidden');
+            loadTies();
+            wireTiesSearch(search, results);
+        }
+
+        function loadTies() {
+            window.Chronicle.apiFetch(tiesBase(), { method: 'GET' })
+                .then(function (r) { return r.ok ? r.json() : []; })
+                .then(function (ties) { renderTies(ties || []); })
+                .catch(function () {});
+        }
+
+        function renderTies(ties) {
+            var list = tiesSection.querySelector('[data-ties-list]');
+            if (!list) return;
+            if (!ties.length) {
+                list.innerHTML = '<span class="text-xs text-fg-secondary italic">No entities attached.</span>';
+                return;
+            }
+            list.innerHTML = '';
+            ties.forEach(function (t) {
+                var role = t.participation_role || 'involved';
+                var opts = TIE_ROLES.map(function (r) {
+                    return '<option value="' + r + '"' + (r === role ? ' selected' : '') + '>' + r + '</option>';
+                }).join('');
+                var chip = document.createElement('span');
+                chip.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-2 text-xs';
+                chip.innerHTML = '<span>' + tiesEsc(t.entity_name) + '</span>' +
+                    '<select class="bg-transparent text-xs" data-tie-role aria-label="Participation role">' + opts + '</select>' +
+                    '<button type="button" class="text-fg-secondary hover:text-danger" data-tie-remove aria-label="Remove">&times;</button>';
+                chip.querySelector('[data-tie-role]').addEventListener('change', function (e) {
+                    linkTie(t.entity_id, e.target.value);
+                });
+                chip.querySelector('[data-tie-remove]').addEventListener('click', function () {
+                    unlinkTie(t.entity_id);
+                });
+                list.appendChild(chip);
+            });
+        }
+
+        function linkTie(entityID, role) {
+            window.Chronicle.apiFetch(tiesBase() + '/' + entityID, {
+                method: 'PUT', body: { role: role }, headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (r) {
+                if (r.ok) loadTies(); else window.Chronicle.notify('Attach failed', 'error');
+            }).catch(function () { window.Chronicle.notify('Attach failed', 'error'); });
+        }
+
+        function unlinkTie(entityID) {
+            window.Chronicle.apiFetch(tiesBase() + '/' + entityID, {
+                method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (r) { if (r.ok) loadTies(); }).catch(function () {});
+        }
+
+        var tiesSearchTimer = null;
+        function wireTiesSearch(search, results) {
+            if (!search || search.__tiesWired) return;
+            search.__tiesWired = true;
+            search.addEventListener('input', function () {
+                var q = search.value.trim();
+                if (tiesSearchTimer) clearTimeout(tiesSearchTimer);
+                if (q.length < 2) { results.classList.add('hidden'); results.innerHTML = ''; return; }
+                tiesSearchTimer = setTimeout(function () {
+                    window.Chronicle.apiFetch('/campaigns/' + campaignID + '/entities/search?q=' + encodeURIComponent(q),
+                        { method: 'GET', headers: { 'Accept': 'application/json' } })
+                        .then(function (r) { return r.ok ? r.json() : { results: [] }; })
+                        .then(function (data) { renderTieResults(results, (data && data.results) || []); })
+                        .catch(function () {});
+                }, 200);
+            });
+            document.addEventListener('click', function (e) {
+                if (results && !results.contains(e.target) && e.target !== search) results.classList.add('hidden');
+            });
+        }
+
+        function renderTieResults(results, items) {
+            if (!results) return;
+            if (!items.length) {
+                results.innerHTML = '<div class="px-2 py-1 text-xs text-fg-secondary">No matches</div>';
+                results.classList.remove('hidden');
+                return;
+            }
+            results.innerHTML = '';
+            items.slice(0, 12).forEach(function (it) {
+                var id = it.id || it.entity_id;
+                var name = it.name || it.entity_name || id;
+                var row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'block w-full text-left px-2 py-1 text-xs hover:bg-surface-2';
+                row.textContent = name;
+                row.addEventListener('click', function () {
+                    linkTie(id, 'involved');
+                    results.classList.add('hidden');
+                    var s = tiesSection.querySelector('[data-ties-search]');
+                    if (s) s.value = '';
+                });
+                results.appendChild(row);
+            });
+            results.classList.remove('hidden');
         }
 
         function saveDrawer() {

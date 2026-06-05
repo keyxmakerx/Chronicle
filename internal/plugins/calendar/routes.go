@@ -71,6 +71,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/calendars/:calId/events/:eid/visibility", h.UpdateEventVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/calendars/:calId/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Event<->entity ties (C-CAL-WORLDSTATE-PRODUCTION-PORT 2b): the
+	// production attach-entity picker persists real entity_event_links
+	// (#402) with a participation_role. Read = Player+ (the picker chips
+	// render for anyone who can see the event); attach/detach = Scribe+
+	// (same gate as event edit). IDOR closed via requireEventInCampaign.
+	cg.GET("/calendars/:calId/events/:eid/entities", h.ListEventEntitiesAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/calendars/:calId/events/:eid/entities/:entityId", h.LinkEventEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.DELETE("/calendars/:calId/events/:eid/entities/:entityId", h.UnlinkEventEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Public-capable views: calendar list, grid, timeline, upcoming events, and
 	// entity-event fragments are viewable by players and public campaigns.
 	// These must use AllowPublicCampaignAccess so HTMX lazy-loads from
