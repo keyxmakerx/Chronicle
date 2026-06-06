@@ -36,6 +36,21 @@ func TestTemplateContextExcludesDashboardOnly(t *testing.T) {
 	if !got["entity_calendar"] || !got["title"] {
 		t.Errorf("template-context blocks must appear in the template palette: %v", got)
 	}
+
+	// Regression (operator: "did the fixes break the dashboard version?"):
+	// the DASHBOARD context must STILL include calendar_preview and must NOT
+	// include the template-only blocks — i.e. BUG FIX 1's context filter is
+	// symmetric and didn't strip the dashboard palette.
+	dash := map[string]bool{}
+	for _, m := range reg.TypesForCampaignAndContext(context.Background(), "camp-1", nil, "dashboard") {
+		dash[m.Type] = true
+	}
+	if !dash["calendar_preview"] {
+		t.Errorf("dashboard palette must still include calendar_preview (dashboard version intact)")
+	}
+	if dash["entity_calendar"] || dash["title"] {
+		t.Errorf("template-only blocks must not leak into the dashboard palette: %v", dash)
+	}
 }
 
 // TestTemplateEditorRequestsTemplateContext — BUG FIX 1 (client side): the
