@@ -932,3 +932,26 @@ templ blockSingletonDuplicateError(blockType string) {
 	</div>
 }
 
+// blockUnavailablePlaceholder renders a clear, non-blank notice for a block
+// that's registered but can't render on this page — either a nil renderer
+// (e.g. a dashboard-only block dropped on an entity page) or a context
+// mismatch (template page hosting a dashboard-context block). Defense-in-depth
+// for C-CAL-ENTITY-PAGE-EMBED BUG FIX 2: a misplaced block must never render a
+// SILENT blank (which is what sent the calendar_preview investigation down a
+// wrong-surface chase). Only shown for REGISTERED blocks; unknown/removed
+// types still drop silently (intentional — e.g. the retired map_preview).
+templ blockUnavailablePlaceholder(blockType string) {
+	<div class="card p-3 border border-dashed border-edge text-fg-secondary">
+		<div class="flex items-start gap-2">
+			<i class="fa-solid fa-circle-info mt-0.5" aria-hidden="true"></i>
+			<div>
+				<p class="text-sm font-medium text-fg">Block not available here</p>
+				<p class="text-xs mt-1">
+					The <code class="text-xs font-mono">{ blockType }</code> block isn't available on this page type.
+					Edit the page template and remove it (or pick a block made for entity pages).
+				</p>
+			</div>
+		</div>
+	</div>
+}
+

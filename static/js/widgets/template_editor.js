@@ -58,7 +58,11 @@ Chronicle.register('template-editor', {
       this.blockTypes = this._fallbackBlockTypes;
       return;
     }
-    Chronicle.apiFetch('/campaigns/' + this.campaignId + '/entity-types/block-types')
+    // context=template so the palette EXCLUDES dashboard-only blocks
+    // (e.g. calendar_preview / timeline_preview, which have nil renderers on
+    // entity pages and would render blank). The entity-page calendar embed is
+    // the template-context `entity_calendar` block, which DOES appear here.
+    Chronicle.apiFetch('/campaigns/' + this.campaignId + '/entity-types/block-types?context=template')
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (types) {
         if (types && types.length > 0) {

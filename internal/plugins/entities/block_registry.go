@@ -231,14 +231,29 @@ func (r *BlockRegistry) IsValidForContext(blockType string, editorCtx string) bo
 	return false
 }
 
+// HasRenderer reports whether blockType is registered WITH a non-nil
+// renderer. A registered-but-nil renderer (e.g. calendar_preview, a
+// dashboard-only block whose render lives elsewhere) would otherwise panic on
+// dispatch / render blank — RenderBlock uses this to show a placeholder.
+func (r *BlockRegistry) HasRenderer(blockType string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.entries[blockType]
+	return ok && entry.renderer != nil
+}
+
 // Render dispatches to the registered renderer for the block type.
-// Returns nil if the block type is not registered or if its addon is disabled.
+// Returns nil if the block type is not registered, its renderer is nil, or its
+// addon is disabled.
 func (r *BlockRegistry) Render(goCtx context.Context, ctx BlockRenderContext) templ.Component {
 	r.mu.RLock()
 	entry, ok := r.entries[ctx.Block.Type]
 	r.mu.RUnlock()
 
-	if !ok {
+	if !ok || entry.renderer == nil {
+		// Nil renderer = registered for metadata/validation only (e.g. a
+		// dashboard-only block). Return nil so the caller can decide
+		// (RenderBlock shows a placeholder); never call a nil func.
 		return nil
 	}
 
@@ -406,6 +421,14 @@ func RenderBlock(goCtx context.Context, block TemplateBlock, cc *campaigns.Campa
 	}
 	if reg.IsSingleton(block.Type) && !markRenderedSingleton(goCtx, block.Type) {
 		return blockSingletonDuplicateError(block.Type)
+	}
+	// BUG FIX 2 (C-CAL-ENTITY-PAGE-EMBED): entity pages are template-context.
+	// A REGISTERED block that is dashboard-only (wrong context here) or has a
+	// nil renderer would otherwise render a silent blank — show a clear
+	// placeholder instead. Unregistered/removed types still drop silently
+	// (intentional, e.g. the retired map_preview), handled by reg.Render→nil.
+	if reg.IsValid(block.Type) && (!reg.IsValidForContext(block.Type, "template") || !reg.HasRenderer(block.Type)) {
+		return blockUnavailablePlaceholder(block.Type)
 	}
 	ctx := BlockRenderContext{
 		Block:      block,
