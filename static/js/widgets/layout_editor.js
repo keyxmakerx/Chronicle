@@ -341,9 +341,11 @@
       this.el.innerHTML = '';
       this.el.className = 'flex h-full overflow-hidden';
 
-      // Palette panel.
+      // Palette panel. min-h-0 lets overflow-y-auto actually scroll inside the
+      // flex/h-full parent (flexbox gotcha — without it a long palette
+      // overflows the container instead of scrolling). max-h-full bounds it.
       var palette = document.createElement('div');
-      palette.className = 'w-56 bg-surface-alt border-r border-edge p-3 overflow-y-auto shrink-0';
+      palette.className = 'w-56 bg-surface-alt border-r border-edge p-3 overflow-y-auto shrink-0 min-h-0 max-h-full';
 
       if (this.context === 'template') {
         this._buildTemplatePalette(palette);
@@ -354,7 +356,7 @@
 
       // Canvas area.
       var canvas = document.createElement('div');
-      canvas.className = 'flex-1 overflow-y-auto p-6 bg-surface-alt';
+      canvas.className = 'flex-1 overflow-y-auto p-6 bg-surface-alt min-h-0';
       this.canvas = canvas;
       this.renderCanvas();
       this.el.appendChild(canvas);
@@ -442,12 +444,22 @@
       var rows = this.layout && this.layout.rows ? this.layout.rows : [];
 
       if (rows.length === 0) {
-        this.canvas.innerHTML =
-          '<div class="flex flex-col items-center justify-center h-full text-fg-muted">' +
-            '<i class="fa-solid fa-table-cells-large text-4xl mb-3"></i>' +
-            '<p class="text-sm">' + (this.context === 'template' ? 'Click a row layout on the left to get started' : 'No custom layout yet. Add a row from the palette.') + '</p>' +
-          '</div>';
-        return;
+        if (this.context === 'template') {
+          // Templates seed a default layout in init; an empty one is unusual.
+          this.canvas.innerHTML =
+            '<div class="flex flex-col items-center justify-center h-full text-fg-muted">' +
+              '<i class="fa-solid fa-table-cells-large text-4xl mb-3"></i>' +
+              '<p class="text-sm">Click a row layout on the left to get started</p>' +
+            '</div>';
+          return;
+        }
+        // Dashboard: seed ONE empty full-width row so a fresh layout is
+        // immediately droppable — no "add a row first" step (which was why a
+        // dropped block never landed → blank). Not marked dirty: an untouched
+        // seeded row is harmless on save, and a real drop marks dirty.
+        this._ensureLayout();
+        this.layout.rows.push({ id: uid('row'), columns: [{ id: uid('col'), width: 12, blocks: [] }] });
+        rows = this.layout.rows;
       }
 
       rows.forEach(function (row, rowIdx) {
@@ -1764,10 +1776,12 @@
 
     save: function (callback) {
       var self = this;
-      if (!this.layout) {
-        if (callback) callback();
-        return;
-      }
+      // A Save click MUST always issue a write. Previously this returned
+      // silently when this.layout was null (the fresh/empty-dashboard case),
+      // so the button fired no PUT at all — the operator's "Save does
+      // nothing" bug. Ensure a layout object exists (an empty {rows:[]} is a
+      // valid "clear to default" save) and always proceed to the PUT.
+      this._ensureLayout();
 
       var btn = this._findSaveBtn();
       var status = this._findSaveStatus();
