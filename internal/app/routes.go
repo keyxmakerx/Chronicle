@@ -2238,6 +2238,23 @@ func (a *App) RegisterRoutes() {
 	}, func(ctx entities.BlockRenderContext) templ.Component {
 		return calendar.BlockUpcomingEvents(ctx.CC, entities.BlockConfigLimit(ctx.Block.Config, "limit", 5))
 	})
+	// entity_calendar — the entity-PAGE calendar embed (C-CAL-ENTITY-PAGE-EMBED,
+	// Phase 6). Template context + REAL renderer (the closure captures
+	// calendarService, like map_editor): a compact worldstate band (#401 seed)
+	// + THIS entity's linked events (#402 EventsForEntity, dm_only filtered).
+	// Singleton — the band binds the engine's fixed #cal-v2-worldstate id, so
+	// one per page. Distinct from calendar_preview (dashboard upcoming-events
+	// card) by design.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "entity_calendar", Label: "Calendar (this entity)", Icon: "fa-calendar-days",
+		Description: "Ambient calendar + this entity's linked events",
+		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		if rc.Entity == nil || rc.CC == nil {
+			return templ.NopComponent
+		}
+		return calendar.EntityCalendarBlock(calendarService, rc.CC, rc.Entity.ID, rc.UserID)
+	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
