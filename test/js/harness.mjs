@@ -50,8 +50,16 @@ export function boot(opts) {
   const ctx2d = new Proxy({}, { get: (_, k) => (k === 'createLinearGradient' || k === 'createRadialGradient') ? () => grad : () => {} });
   const canvas = () => Object.assign(node(), { width: 320, height: 200, getContext: () => ctx2d });
   const rafQ = [];
+  // Document event bus + CustomEvent shim (cursor-sync DOM-event protocol,
+  // Tuner §J1). Backward-compatible: tests that don't use it are unaffected.
+  const listeners = {};
+  const bus = { events: [] };
+  class CustomEvent {
+    constructor(type, o) { this.type = type; this.detail = o && o.detail; }
+  }
   const sandbox = {
     console,
+    CustomEvent,
     navigator: { hardwareConcurrency: 8 },
     devicePixelRatio: 1,
     matchMedia: () => ({ matches: !!opts.reduced }),
@@ -64,10 +72,13 @@ export function boot(opts) {
       getElementById: (id) => (id === 'cal-almanac-data' ? dataEl : null),
       querySelector: (sel) => (opts.engine && typeof sel === 'string' && sel.indexOf('canvas') !== -1) ? canvas() : null,
       querySelectorAll: () => [],
-      addEventListener: () => {},
+      addEventListener: (type, cb) => { (listeners[type] = listeners[type] || []).push(cb); },
+      removeEventListener: () => {},
+      dispatchEvent: (ev) => { bus.events.push(ev); (listeners[ev.type] || []).forEach((cb) => { try { cb(ev); } catch (e) { bus.threw = e; } }); return true; },
       createElement: (tag) => (tag === 'canvas' ? canvas() : node()),
     },
   };
+  sandbox.__bus = bus;
   sandbox.window = sandbox;
   sandbox.global = sandbox;
   // pump(n) runs up to n queued rAF callbacks (one frame each).

@@ -1,0 +1,182 @@
+// calendar_timeline_tuner.templ — C-TIMELINE-V2-DESIGN-1-TUNER.
+//
+// "FM Tuner" timeline design (lead of two candidate timeline designs;
+// Ledger is the alternate). A horizontally-centered etched-metal time
+// axis with adaptive tick notches — like an analog radio dial — runs
+// through the middle of the canvas; events stack in swim-lanes above and
+// below; era gradient bands span the full height behind everything;
+// connection arcs reveal on hover; and a subtle atmospheric backdrop
+// paints the cursor day's weather/celestial state.
+//
+// Carry-forward discipline (binding, mirrors the Almanac showcase):
+//   - Self-contained .cal-timeline-tuner-* CSS in static/css/cal-timeline-tuner.css;
+//     no @layer, no @apply, no --chronicle-* tokens. The rendering canvas
+//     (axis surface, era gradients, backdrop) ships hardcoded OKLCH under
+//     the rendering-canvas exemption marker (decisions/2026-06-05-…).
+//   - Externalized JS at static/js/cal-timeline-tuner.js, loaded `defer`,
+//     INIT_BLOCKS-style per-block try/catch. No inline <script> body.
+//   - Mock data lives in timeline_mock.go (CalTimelineTunerMock) embedded
+//     as a JSON data-attribute (single source of truth for the JS).
+//   - Forced-state proof classes on the root let headless verification
+//     capture animated states; inert in real use.
+//   - Page-separation: own isolated route /demo/timeline/tuner loading
+//     ONLY its own CSS+JS, so a bug here can never reach another design.
+//
+// Cross-refs:
+//   - dispatches/chronicle/C-TIMELINE-V2-DESIGN-1-TUNER.md (this dispatch)
+//   - decisions/2026-05-28-cal-timeline-v2-design.md (§A1/A2/A3/B2/C1)
+//   - decisions/2026-06-05-rendering-canvas-css-exemption.md (CSS rule)
+
+package demo
+
+import (
+	"encoding/json"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// DemoTimelineTuner renders the Tuner timeline (lead design) on its own
+// isolated route /demo/timeline/tuner. Loads ONLY cal-timeline-tuner
+// CSS + JS — no shared design assets — per the page-separation directive.
+templ DemoTimelineTuner() {
+	@layouts.App("Chronicle timeline — FM Tuner") {
+		<link rel="stylesheet" href="/static/css/cal-timeline-tuner.css"/>
+		@calTunerPage(CalTimelineTunerMock())
+		<script src="/static/js/cal-timeline-tuner.js" defer></script>
+	}
+}
+
+templ calTunerPage(d TimelineMockData) {
+	<div class="cal-timeline-tuner-shell">
+		// Browser-compat notice — the showcase leans on OKLCH/color-mix with
+		// no hex fallback. Hidden via @supports on supporting browsers.
+		<div class="cal-timeline-tuner-unsupported" role="alert">
+			This timeline showcase needs a modern browser with OKLCH color support
+			(Chrome/Edge 111+, Firefox 113+, Safari 16.4+).
+		</div>
+		<a class="cal-timeline-tuner-back" href="/demo/calendar">‹ Calendar &amp; Timeline designs</a>
+		@calTunerIntro(d)
+		<div class="cal-timeline-tuner-widget" data-tuner-root tabindex="0" aria-label="FM Tuner timeline">
+			@calTunerHeader(d)
+			<div class="cal-timeline-tuner-canvas" data-tuner-canvas>
+				// Z-stack (back→front). The JS paints the dynamic content into
+				// each layer; the server-rendered scaffolding keeps the page
+				// meaningfully screenshottable before JS runs.
+				<div class="cal-timeline-tuner-layer cal-timeline-tuner-eras" data-tuner-era-bands aria-hidden="true"></div>
+				<div class="cal-timeline-tuner-layer cal-timeline-tuner-backdrop" data-tuner-backdrop aria-hidden="true"></div>
+				<div class="cal-timeline-tuner-layer cal-timeline-tuner-lanes cal-timeline-tuner-lanes--upper" data-tuner-lanes-upper></div>
+				<svg class="cal-timeline-tuner-layer cal-timeline-tuner-connections" data-tuner-connections aria-hidden="true" preserveAspectRatio="none"></svg>
+				<div class="cal-timeline-tuner-layer cal-timeline-tuner-lanes cal-timeline-tuner-lanes--lower" data-tuner-lanes-lower></div>
+				<div class="cal-timeline-tuner-axis" data-tuner-axis aria-hidden="true">
+					<div class="cal-timeline-tuner-axis-surface"></div>
+					<div class="cal-timeline-tuner-axis-glow"></div>
+					<div class="cal-timeline-tuner-ticks" data-tuner-ticks></div>
+					<div class="cal-timeline-tuner-overlays" data-tuner-axis-overlays></div>
+				</div>
+				<div class="cal-timeline-tuner-needle" data-tuner-needle aria-hidden="true">
+					<span class="cal-timeline-tuner-needle-cap cal-timeline-tuner-needle-cap--top"></span>
+					<span class="cal-timeline-tuner-needle-line"></span>
+					<span class="cal-timeline-tuner-needle-cap cal-timeline-tuner-needle-cap--bottom"></span>
+					<button type="button" class="cal-timeline-tuner-needle-chip" data-tuner-cursor-chip>—</button>
+				</div>
+			</div>
+			@calTunerFooter(d)
+			@calTunerPopup()
+			@calTunerEraPopover()
+		</div>
+		// Mock dataset, JSON-serialized for the JS init blocks. data-*
+		// attribute values interpolate in templ (unlike <script> bodies);
+		// the JS reads node.getAttribute(...) — same idiom as the Almanac.
+		<div id="cal-tuner-data" data-cal-tuner-data={ calTimelineTunerMockJSON(d) } aria-hidden="true" hidden></div>
+	</div>
+}
+
+// calTunerIntro — the descriptive header above the widget (chrome, on
+// tokens-equivalent literals; not part of the rendering canvas).
+templ calTunerIntro(d TimelineMockData) {
+	<div class="cal-timeline-tuner-intro">
+		<h1 class="cal-timeline-tuner-title">Timeline — FM Tuner</h1>
+		<p class="cal-timeline-tuner-lede">
+			A radio-dial time axis runs through the middle of the canvas. Scrub the needle, wheel to zoom
+			through millennia → days, hover an event to reveal its connections, and watch the day&#39;s weather
+			drift in behind it. Same dataset as the Almanac calendar — a different lens.
+		</p>
+	</div>
+}
+
+// calTunerHeader — top chrome strip: campaign · era · cursor date · zoom.
+templ calTunerHeader(d TimelineMockData) {
+	<div class="cal-timeline-tuner-chrome cal-timeline-tuner-chrome--top">
+		<span class="cal-timeline-tuner-campaign">{ d.Calendar.Name }</span>
+		<span class="cal-timeline-tuner-era-name" data-tuner-era-name>—</span>
+		<span class="cal-timeline-tuner-cursor-date" data-tuner-cursor-date>—</span>
+		<span class="cal-timeline-tuner-chrome-spacer"></span>
+		<label class="cal-timeline-tuner-backdrop-toggle">
+			<input type="checkbox" data-tuner-backdrop-toggle checked/>
+			<span>Atmosphere</span>
+		</label>
+		<span class="cal-timeline-tuner-zoom-label" data-tuner-zoom-label>Year view</span>
+		<button type="button" class="cal-timeline-tuner-btn" data-tuner-zoom-out aria-label="Zoom out">−</button>
+		<button type="button" class="cal-timeline-tuner-btn" data-tuner-zoom-in aria-label="Zoom in">+</button>
+	</div>
+}
+
+// calTunerFooter — bottom chrome strip: grouping · era legend · conn mode.
+templ calTunerFooter(d TimelineMockData) {
+	<div class="cal-timeline-tuner-chrome cal-timeline-tuner-chrome--bottom">
+		<label class="cal-timeline-tuner-group">
+			<span>Lanes</span>
+			<select data-tuner-group>
+				<option value="entity">By entity</option>
+				<option value="category">By category</option>
+				<option value="tier">By tier</option>
+			</select>
+		</label>
+		<div class="cal-timeline-tuner-legend" data-tuner-era-legend></div>
+		<span class="cal-timeline-tuner-chrome-spacer"></span>
+		<label class="cal-timeline-tuner-conn-mode">
+			<input type="checkbox" data-tuner-show-all/>
+			<span>Show all connections</span>
+		</label>
+		<button type="button" class="cal-timeline-tuner-btn" data-tuner-fit>Zoom to fit</button>
+	</div>
+}
+
+// calTunerPopup — the shared event-detail popup (two-tier slidable,
+// structurally mirroring the Almanac popup the §A1 "same card" payoff
+// calls for). Hidden until an event card is clicked.
+templ calTunerPopup() {
+	<div class="cal-timeline-tuner-popup" data-tuner-popup hidden role="dialog" aria-modal="false" aria-label="Event detail">
+		<button type="button" class="cal-timeline-tuner-popup-close" data-tuner-popup-close aria-label="Close">×</button>
+		<div class="cal-timeline-tuner-popup-quickview" data-tuner-popup-quickview>
+			<span class="cal-timeline-tuner-popup-icon" data-tuner-popup-icon></span>
+			<h3 class="cal-timeline-tuner-popup-title" data-tuner-popup-title></h3>
+			<p class="cal-timeline-tuner-popup-date" data-tuner-popup-date></p>
+			<p class="cal-timeline-tuner-popup-meta" data-tuner-popup-meta></p>
+			<button type="button" class="cal-timeline-tuner-popup-expand" data-tuner-popup-expand>More ›</button>
+		</div>
+		<div class="cal-timeline-tuner-popup-expanded" data-tuner-popup-expanded hidden>
+			<p class="cal-timeline-tuner-popup-desc" data-tuner-popup-desc></p>
+			<div class="cal-timeline-tuner-popup-entities" data-tuner-popup-entities></div>
+		</div>
+	</div>
+}
+
+// calTunerEraPopover — the hover-after-dwell era detail popover.
+templ calTunerEraPopover() {
+	<div class="cal-timeline-tuner-era-popover" data-tuner-era-popover hidden role="status">
+		<h4 class="cal-timeline-tuner-era-popover-title" data-tuner-era-popover-title></h4>
+		<p class="cal-timeline-tuner-era-popover-range" data-tuner-era-popover-range></p>
+		<p class="cal-timeline-tuner-era-popover-desc" data-tuner-era-popover-desc></p>
+	</div>
+}
+
+// calTimelineTunerMockJSON — serializes the mock dataset for the JS init
+// blocks. Pure helper; safe to call from a templ expression.
+func calTimelineTunerMockJSON(d TimelineMockData) string {
+	b, err := json.Marshal(d)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}

@@ -1,0 +1,610 @@
+/* cal-timeline-tuner.css — C-TIMELINE-V2-DESIGN-1-TUNER.
+ *
+ * Self-contained styles for the "FM Tuner" timeline showcase at
+ * /demo/timeline/tuner. Page-separated: nothing else in the repo targets
+ * .cal-timeline-tuner-* so there is no cascade fight to lose.
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ RENDERING-CANVAS CSS — EXEMPT FROM CUSTOMIZATION-READINESS.              │
+ * │ Per decisions/2026-06-05-rendering-canvas-css-exemption.md: the axis     │
+ * │ surface, backlit glow, era gradient bands, and atmospheric backdrop are  │
+ * │ a rendering canvas (instrument metal / sky / weather light-gradients),   │
+ * │ NOT themeable chrome, so their hardcoded OKLCH stops are an intentional   │
+ * │ exemption. The future Wave-6 customization-readiness sweep SKIPS these   │
+ * │ literals — they are not hardcoded-color debt. The surrounding chrome     │
+ * │ (header/footer panels, buttons, text, popups) is still plain literals    │
+ * │ here ONLY because the showcase is page-separated; the real port re-skins │
+ * │ chrome onto V2 design tokens. The exemption covers the canvas, not the   │
+ * │ chrome.                                                                   │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * BROWSER SUPPORT (evergreen-only): OKLCH + color-mix(in oklch, …) used
+ * pervasively with no hex fallback. Chrome/Edge 111+ · Firefox 113+ ·
+ * Safari 16.4+. The .cal-timeline-tuner-unsupported banner shows otherwise.
+ *
+ * MOTION (canon §B2, binding): animate transform + opacity ONLY. Never
+ * `transition: all` — every transition lists its properties. Locked
+ * easing/duration below; all auto-animation is zeroed under
+ * prefers-reduced-motion.
+ */
+
+.cal-timeline-tuner-shell {
+  --tnr-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --tnr-dur-fast: 150ms;
+  --tnr-dur: 300ms;
+  --tnr-dur-slow: 400ms;
+  --cal-tuner-backdrop-opacity: 0.2;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+  font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  color: oklch(0.96 0.004 250);
+}
+
+/* Browser-support banner — hidden when OKLCH is supported. */
+.cal-timeline-tuner-unsupported {
+  display: block;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid oklch(0.55 0.18 30);
+  border-radius: 8px;
+  background: oklch(0.28 0.08 30);
+  color: oklch(0.92 0.04 60);
+  font-size: 13px;
+}
+@supports (color: oklch(0.5 0.1 250)) {
+  .cal-timeline-tuner-unsupported { display: none; }
+}
+
+.cal-timeline-tuner-back {
+  display: inline-block;
+  margin-bottom: 14px;
+  color: oklch(0.72 0.03 255);
+  font-size: 13px;
+  text-decoration: none;
+  transition: color var(--tnr-dur-fast) var(--tnr-ease);
+}
+.cal-timeline-tuner-back:hover { color: oklch(0.88 0.05 255); }
+
+.cal-timeline-tuner-intro { margin-bottom: 18px; }
+.cal-timeline-tuner-title { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
+.cal-timeline-tuner-lede {
+  margin: 0;
+  max-width: 70ch;
+  color: oklch(0.72 0.022 261);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+/* ── Widget shell ──────────────────────────────────────────────────── */
+.cal-timeline-tuner-widget {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 800px;
+  height: 600px;
+  min-height: 500px;
+  border: 1px solid oklch(0.34 0.02 260);
+  border-radius: 12px;
+  background: oklch(0.17 0.018 264);
+  box-shadow: 0 18px 48px -24px oklch(0.05 0.02 264 / 0.8);
+  overflow: hidden;
+  outline: none;
+}
+.cal-timeline-tuner-widget:focus-visible {
+  border-color: oklch(0.62 0.16 250);
+}
+
+/* ── Chrome strips (header / footer) ───────────────────────────────── */
+.cal-timeline-tuner-chrome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 0 14px;
+  background: oklch(0.21 0.02 264);
+  font-size: 12px;
+  color: oklch(0.78 0.02 258);
+}
+.cal-timeline-tuner-chrome--top {
+  height: 36px;
+  border-bottom: 1px solid oklch(0.30 0.02 260);
+}
+.cal-timeline-tuner-chrome--bottom {
+  height: 30px;
+  border-top: 1px solid oklch(0.30 0.02 260);
+}
+.cal-timeline-tuner-chrome-spacer { flex: 1 1 auto; }
+
+.cal-timeline-tuner-campaign { font-weight: 600; color: oklch(0.92 0.01 250); }
+.cal-timeline-tuner-era-name {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: oklch(0.30 0.03 260);
+  font-size: 11px;
+}
+.cal-timeline-tuner-cursor-date { font-variant-numeric: tabular-nums; }
+.cal-timeline-tuner-zoom-label { color: oklch(0.70 0.02 258); }
+
+.cal-timeline-tuner-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid oklch(0.36 0.02 260);
+  border-radius: 6px;
+  background: oklch(0.26 0.02 262);
+  color: oklch(0.86 0.02 256);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--tnr-dur-fast) var(--tnr-ease),
+              border-color var(--tnr-dur-fast) var(--tnr-ease),
+              transform var(--tnr-dur-fast) var(--tnr-ease);
+}
+.cal-timeline-tuner-btn:hover {
+  background: oklch(0.32 0.03 262);
+  border-color: oklch(0.48 0.04 258);
+}
+.cal-timeline-tuner-btn:active { transform: translateY(1px); }
+
+.cal-timeline-tuner-backdrop-toggle,
+.cal-timeline-tuner-conn-mode,
+.cal-timeline-tuner-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.cal-timeline-tuner-group select {
+  background: oklch(0.26 0.02 262);
+  color: oklch(0.86 0.02 256);
+  border: 1px solid oklch(0.36 0.02 260);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.cal-timeline-tuner-legend { display: inline-flex; gap: 6px; align-items: center; }
+.cal-timeline-tuner-legend-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  cursor: pointer;
+  color: oklch(0.95 0.01 250);
+  transition: filter var(--tnr-dur-fast) var(--tnr-ease);
+}
+.cal-timeline-tuner-legend-swatch:hover { filter: brightness(1.15); }
+
+/* ── Canvas + layers ───────────────────────────────────────────────── */
+.cal-timeline-tuner-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: hidden;
+  cursor: grab;
+  background: oklch(0.155 0.016 264);
+}
+.cal-timeline-tuner-canvas:active { cursor: grabbing; }
+.cal-timeline-tuner-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cal-timeline-tuner-lanes { pointer-events: auto; }
+.cal-timeline-tuner-connections { width: 100%; height: 100%; }
+
+/* ── EXEMPT CANVAS: era gradient bands ─────────────────────────────── */
+.cal-timeline-tuner-era-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* --band-from / --band-to are OKLCH literals set per-era by the JS. */
+  background: linear-gradient(180deg,
+              color-mix(in oklch, var(--band-from) 70%, transparent) 0%,
+              color-mix(in oklch, var(--band-to) 40%, transparent) 100%);
+  transition: opacity var(--tnr-dur-slow) var(--tnr-ease);
+  opacity: 0.42;
+}
+.cal-timeline-tuner-era-band.is-hover { opacity: 0.52; }
+.cal-timeline-tuner-era-band.is-pulse { animation: tnr-era-pulse 600ms var(--tnr-ease); }
+@keyframes tnr-era-pulse {
+  0% { opacity: 0.42; }
+  40% { opacity: 0.7; }
+  100% { opacity: 0.42; }
+}
+.cal-timeline-tuner-era-watermark {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  font-size: clamp(20px, 3vw, 44px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: oklch(0.96 0.01 250 / 0.28);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── EXEMPT CANVAS: atmospheric backdrop ───────────────────────────── */
+.cal-timeline-tuner-backdrop {
+  opacity: 0;
+  transition: opacity var(--tnr-dur-slow) var(--tnr-ease);
+}
+.cal-timeline-tuner-backdrop.is-active { opacity: var(--cal-tuner-backdrop-opacity); }
+.cal-timeline-tuner-backdrop-fill { position: absolute; inset: 0; }
+/* Weather fills — soft directional light per condition (exempt OKLCH). */
+.cal-timeline-tuner-backdrop-fill[data-fx="rain"] {
+  background: linear-gradient(180deg, oklch(0.50 0.06 240) 0%, oklch(0.34 0.05 245) 100%);
+}
+.cal-timeline-tuner-backdrop-fill[data-fx="thunderstorm"] {
+  background: linear-gradient(180deg, oklch(0.40 0.08 285) 0%, oklch(0.24 0.06 285) 100%);
+}
+.cal-timeline-tuner-backdrop-fill[data-fx="snow"] {
+  background: linear-gradient(180deg, oklch(0.74 0.03 240) 0%, oklch(0.52 0.03 245) 100%);
+}
+.cal-timeline-tuner-backdrop-fill[data-fx="fog"] {
+  background: linear-gradient(180deg, oklch(0.66 0.01 240) 0%, oklch(0.46 0.01 245) 100%);
+}
+.cal-timeline-tuner-backdrop-fill[data-fx="cloudy"] {
+  background: linear-gradient(180deg, oklch(0.58 0.01 240) 0%, oklch(0.40 0.01 245) 100%);
+}
+.cal-timeline-tuner-backdrop-fill[data-fx="meteor-shower"] {
+  background: linear-gradient(160deg, oklch(0.30 0.06 285) 0%, oklch(0.16 0.04 280) 60%);
+}
+.cal-timeline-tuner-backdrop-fill[data-fx="eclipse-solar"],
+.cal-timeline-tuner-backdrop-fill[data-fx="eclipse-lunar"] {
+  background: radial-gradient(circle at 50% 30%, oklch(0.45 0.14 40) 0%, oklch(0.16 0.04 30) 60%);
+}
+/* Special-moon-day sky-band backdrop (sun + moons; rare). */
+.cal-timeline-tuner-backdrop-sky {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, oklch(0.55 0.13 30) 0%, oklch(0.30 0.10 300) 100%);
+}
+.cal-timeline-tuner-backdrop-sun {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  width: 64px;
+  height: 64px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, oklch(0.90 0.15 75) 0%, oklch(0.70 0.18 50) 70%, transparent 100%);
+}
+.cal-timeline-tuner-backdrop-moon {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 38%, oklch(0.92 0.05 95) 0%, oklch(0.62 0.05 95) 100%);
+}
+
+/* ── Swim-lanes ────────────────────────────────────────────────────── */
+.cal-timeline-tuner-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 92px;
+  border-radius: 2px;
+  background: oklch(0.96 0.01 250 / 0.03);
+}
+.cal-timeline-tuner-lane-label {
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: oklch(0.66 0.02 258);
+  pointer-events: none;
+}
+
+/* ── Event cards ───────────────────────────────────────────────────── */
+.cal-timeline-tuner-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  border: 1px solid oklch(0.40 0.02 260);
+  border-left-width: 3px;
+  border-radius: 7px;
+  background: oklch(0.24 0.02 262);
+  color: oklch(0.93 0.01 250);
+  cursor: pointer;
+  pointer-events: auto;
+  overflow: hidden;
+  transition: transform var(--tnr-dur-fast) var(--tnr-ease),
+              box-shadow var(--tnr-dur-fast) var(--tnr-ease),
+              opacity var(--tnr-dur) var(--tnr-ease);
+}
+.cal-timeline-tuner-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px -8px oklch(0.05 0.02 264 / 0.9);
+}
+.cal-timeline-tuner-card.is-dim { opacity: 0.32; }
+.cal-timeline-tuner-card--major { width: 124px; height: 60px; }
+.cal-timeline-tuner-card--standard { width: 92px; height: 44px; }
+.cal-timeline-tuner-card--detail { width: 64px; height: 28px; }
+.cal-timeline-tuner-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-timeline-tuner-card--major .cal-timeline-tuner-card-title { white-space: normal; }
+.cal-timeline-tuner-card-sub {
+  font-size: 9px;
+  color: oklch(0.70 0.02 258);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-timeline-tuner-card-icon { font-size: 11px; }
+.cal-timeline-tuner-card-span {
+  position: absolute;
+  height: 3px;
+  border-radius: 2px;
+  background: oklch(0.60 0.10 250 / 0.7);
+  pointer-events: none;
+}
+.cal-timeline-tuner-cluster {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: oklch(0.34 0.04 262);
+  border: 1px solid oklch(0.46 0.04 258);
+  color: oklch(0.92 0.01 250);
+  font-size: 10px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* ── Connection arcs ───────────────────────────────────────────────── */
+.cal-timeline-tuner-arc {
+  fill: none;
+  stroke-width: 1.8;
+  opacity: 0.72;
+  transition: opacity var(--tnr-dur) var(--tnr-ease);
+}
+.cal-timeline-tuner-arc.is-faded { opacity: 0.15; }
+.cal-timeline-tuner-arc--related { stroke-dasharray: 6 4; }
+.cal-timeline-tuner-arc--mentioned { stroke-dasharray: 2 4; }
+.cal-timeline-tuner-arc.is-drawing {
+  animation: tnr-arc-draw var(--tnr-dur) var(--tnr-ease) forwards;
+}
+@keyframes tnr-arc-draw {
+  from { stroke-dashoffset: var(--arc-len, 400); }
+  to { stroke-dashoffset: 0; }
+}
+
+/* ── EXEMPT CANVAS: the FM-tuner axis ──────────────────────────────── */
+.cal-timeline-tuner-axis {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.cal-timeline-tuner-axis-surface {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, oklch(0.42 0.012 95) 0%, oklch(0.30 0.012 95) 100%);
+  border-top: 1px solid oklch(0.58 0.02 95);
+  border-bottom: 1px solid oklch(0.16 0.01 95);
+}
+.cal-timeline-tuner-axis-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 120% at 50% 50%, oklch(0.78 0.12 75 / 0.22) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cal-timeline-tuner-ticks { position: absolute; inset: 0; pointer-events: none; }
+.cal-timeline-tuner-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background: oklch(0.66 0.02 95);
+  transition: opacity var(--tnr-dur-fast) var(--tnr-ease);
+}
+.cal-timeline-tuner-tick--major {
+  width: 2px;
+  height: 16px;
+  background: oklch(0.90 0.03 90);
+}
+.cal-timeline-tuner-tick--minor { height: 8px; opacity: 0.7; }
+.cal-timeline-tuner-tick.is-entering { animation: tnr-fade-in var(--tnr-dur-fast) var(--tnr-ease); }
+.cal-timeline-tuner-tick.is-leaving { animation: tnr-fade-out var(--tnr-dur-fast) var(--tnr-ease) forwards; }
+@keyframes tnr-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tnr-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.cal-timeline-tuner-tick-label {
+  position: absolute;
+  top: 18px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: oklch(0.82 0.02 90);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Axis registry overlays (weather above, celestial below). */
+.cal-timeline-tuner-overlays { position: absolute; inset: 0; pointer-events: none; }
+.cal-timeline-tuner-glyph {
+  position: absolute;
+  font-size: 13px;
+  line-height: 1;
+  transform: translateX(-50%);
+  cursor: help;
+  pointer-events: auto;
+}
+.cal-timeline-tuner-glyph--weather { top: -16px; }
+.cal-timeline-tuner-glyph--celestial { bottom: -16px; }
+.cal-timeline-tuner-glyph-badge {
+  position: absolute;
+  transform: translateX(-50%);
+  padding: 0 5px;
+  border-radius: 999px;
+  background: oklch(0.30 0.03 262);
+  font-size: 10px;
+  color: oklch(0.88 0.02 256);
+  pointer-events: auto;
+  cursor: help;
+}
+.cal-timeline-tuner-glyph--weather.cal-timeline-tuner-glyph-badge { top: -16px; }
+.cal-timeline-tuner-glyph--celestial.cal-timeline-tuner-glyph-badge { bottom: -16px; }
+
+/* ── Cursor needle ─────────────────────────────────────────────────── */
+.cal-timeline-tuner-needle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.cal-timeline-tuner-needle-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: oklch(0.78 0.16 75);
+  box-shadow: 0 0 6px oklch(0.78 0.16 75 / 0.6);
+}
+.cal-timeline-tuner-needle-cap {
+  position: absolute;
+  left: -5px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+}
+.cal-timeline-tuner-needle-cap--top { top: 0; border-top: 6px solid oklch(0.82 0.16 75); }
+.cal-timeline-tuner-needle-cap--bottom { bottom: 0; border-bottom: 6px solid oklch(0.82 0.16 75); }
+.cal-timeline-tuner-needle-chip {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  border: 1px solid oklch(0.52 0.10 75);
+  border-radius: 6px;
+  background: oklch(0.24 0.04 75);
+  color: oklch(0.92 0.06 80);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background var(--tnr-dur-fast) var(--tnr-ease);
+}
+.cal-timeline-tuner-needle-chip:hover { background: oklch(0.30 0.05 75); }
+.cal-timeline-tuner-needle.is-dragging .cal-timeline-tuner-needle-line {
+  background: oklch(0.86 0.18 78);
+}
+
+/* ── Date-jump + popups ────────────────────────────────────────────── */
+.cal-timeline-tuner-popup {
+  position: absolute;
+  width: 260px;
+  border: 1px solid oklch(0.40 0.03 260);
+  border-radius: 10px;
+  background: oklch(0.22 0.02 264);
+  box-shadow: 0 16px 40px -16px oklch(0.05 0.02 264 / 0.9);
+  z-index: 10;
+  transform: translateY(6px);
+  opacity: 0;
+  transition: transform var(--tnr-dur) var(--tnr-ease),
+              opacity var(--tnr-dur) var(--tnr-ease);
+}
+.cal-timeline-tuner-popup.is-open { transform: translateY(0); opacity: 1; }
+.cal-timeline-tuner-popup-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  border: none;
+  background: none;
+  color: oklch(0.70 0.02 258);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--tnr-dur-fast) var(--tnr-ease);
+}
+.cal-timeline-tuner-popup-close:hover { color: oklch(0.92 0.02 256); }
+.cal-timeline-tuner-popup-quickview { padding: 12px 14px; }
+.cal-timeline-tuner-popup-icon { font-size: 14px; }
+.cal-timeline-tuner-popup-title { margin: 4px 0 2px; font-size: 14px; font-weight: 600; }
+.cal-timeline-tuner-popup-date { margin: 0 0 4px; font-size: 11px; color: oklch(0.72 0.03 80); font-variant-numeric: tabular-nums; }
+.cal-timeline-tuner-popup-meta { margin: 0; font-size: 11px; color: oklch(0.70 0.02 258); }
+.cal-timeline-tuner-popup-expand {
+  margin-top: 8px;
+  border: none;
+  background: none;
+  color: oklch(0.74 0.10 250);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--tnr-dur-fast) var(--tnr-ease);
+}
+.cal-timeline-tuner-popup-expand:hover { color: oklch(0.84 0.12 250); }
+.cal-timeline-tuner-popup-expanded {
+  padding: 0 14px 14px;
+  border-top: 1px solid oklch(0.30 0.02 260);
+}
+.cal-timeline-tuner-popup-desc { margin: 10px 0; font-size: 12px; line-height: 1.5; color: oklch(0.86 0.01 252); }
+.cal-timeline-tuner-popup-entities { display: flex; flex-wrap: wrap; gap: 4px; }
+.cal-timeline-tuner-entity-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: oklch(0.96 0.01 250);
+}
+
+.cal-timeline-tuner-era-popover {
+  position: absolute;
+  width: 220px;
+  padding: 10px 12px;
+  border: 1px solid oklch(0.40 0.03 260);
+  border-radius: 8px;
+  background: oklch(0.22 0.02 264);
+  box-shadow: 0 12px 32px -16px oklch(0.05 0.02 264 / 0.9);
+  z-index: 9;
+  opacity: 0;
+  transition: opacity var(--tnr-dur) var(--tnr-ease);
+}
+.cal-timeline-tuner-era-popover.is-open { opacity: 1; }
+.cal-timeline-tuner-era-popover-title { margin: 0 0 3px; font-size: 13px; font-weight: 600; }
+.cal-timeline-tuner-era-popover-range { margin: 0 0 5px; font-size: 11px; color: oklch(0.72 0.03 80); }
+.cal-timeline-tuner-era-popover-desc { margin: 0; font-size: 11px; line-height: 1.45; color: oklch(0.80 0.01 252); }
+
+/* ── Forced-state proof classes (headless screenshots) ─────────────── */
+.cal-timeline-tuner-shell.cal-tuner--proof-connections-hover .cal-timeline-tuner-arc { opacity: 0.72; }
+.cal-timeline-tuner-shell.cal-tuner--proof-connections-all .cal-timeline-tuner-arc { opacity: 0.4; }
+.cal-timeline-tuner-shell.cal-tuner--proof-popup-open .cal-timeline-tuner-popup { transform: translateY(0); opacity: 1; }
+.cal-timeline-tuner-shell.cal-tuner--proof-era-hover .cal-timeline-tuner-era-popover { opacity: 1; }
+.cal-timeline-tuner-shell.cal-tuner--proof-registry-overlay .cal-timeline-tuner-glyph { outline: 1px dashed oklch(0.6 0.1 75 / 0.4); }
+
+/* ── Reduced motion (canon, binding): zero auto-animations ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  .cal-timeline-tuner-shell *,
+  .cal-timeline-tuner-shell *::before,
+  .cal-timeline-tuner-shell *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

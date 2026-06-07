@@ -155,6 +155,27 @@ Spec: `docs/design/world-state-effects/` (README + BUILD-PLAN + CATALOG + protot
   the future GM Live Control Panel). NOT VCR playback. **In review (this PR).**
 - [ ] **Wave 4 — SHOULD effects** · [ ] **Wave 5 — NICE/EXOTIC long tail** (on demand).
 
+### Timeline Showcase: FM Tuner (C-TIMELINE-V2-DESIGN-1-TUNER)
+
+Lead of two candidate timeline designs (Ledger is the alternate, not yet built).
+Mock-data only, `/demo/timeline/tuner`, page-separated (own CSS+JS). Raw SVG + CSS
+transforms, NO D3 (audit §7). Spec: `cordinator/dispatches/chronicle/C-TIMELINE-V2-DESIGN-1-TUNER.md`.
+
+- [x] **FM Tuner timeline** — radio-dial etched-metal time axis through the middle of
+  the canvas with adaptive tick notches (millennia→days, 7 zoom levels); swim-lanes
+  above & below (group by entity/category/tier); era gradient bands + watermarks behind
+  everything; hover-revealed entity-color-coded connection arcs + show-all toggle;
+  self-contained effect registries with `timelineAxisRender` (axis glyphs) +
+  `timelineBackdropRender` (atmospheric backdrop) hooks; §J2 restrained backdrop
+  (weather + non-routine celestial always; sun+moons ONLY on special-moon days);
+  §J1 cursor-sync DOM-event protocol (`cal:cursor-change`/`cal:event-create`/
+  `cal:date-jump` with loop-prevention + 50ms drag throttle) — Almanac amended to emit/
+  listen too; shared two-tier event popup; exempt-OKLCH canvas CSS with the marker.
+  Mock in `timeline_mock.go`; 15 node tests (`test/js/tuner.test.mjs` +
+  `cursor_sync.test.mjs`) + Go render/discipline tests. **(this PR).**
+- [ ] **Ledger timeline (alternate design)** — flat/record-keeping timeline; operator
+  picks the winning design, then the real port re-skins `timeline_viz.js`. Post-deadline.
+
 ### Alpha-Critical (Must Have)
 
 - [x] **Media management for owners** — Campaign-scoped media browser at `/campaigns/:id/media` (Owner-only): grid view with thumbnails, "referenced by" entity queries, delete with warnings, upload from browser, pagination, storage stats. Admin already had `/admin/storage`.
