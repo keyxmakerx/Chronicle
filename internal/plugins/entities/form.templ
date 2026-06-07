@@ -274,14 +274,22 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 				<p class="mt-1 text-xs text-fg-secondary">Plain text fallback. Use the rich text editor on the page view for full formatting.</p>
 			</div>
 
-			// Per-entity permissions slide-in card (C-PERMISSIONS-INLINE-COMPONENT).
-			// The hidden is_private input that used to ride on this form was
-			// removed because UpdateEntityInput.IsPrivate is now nil-preserving;
-			// the service no longer resets is_private when the field is absent
-			// from the request. The card writes is_private (and visibility +
-			// grants) directly via PUT /permissions.
+			// Read-only Category › Sub-category lineage (C-ENTITY-PERMISSIONS-UX
+			// Part 3). Shows the type's place in the hierarchy; view-only.
+			@entityTypeLineage(entityType)
+
+			// Per-entity permissions editor (C-PERMISSIONS-INLINE-COMPONENT +
+			// C-ENTITY-PERMISSIONS-UX Part 2). data-layout="inline" renders the
+			// widget as a compact summary row that expands IN PLACE (animated,
+			// reduced-motion safe) instead of the right-edge slide-in — opt-in,
+			// so other callers (the create-form draft mount) are unaffected. The
+			// hidden is_private input that used to ride on this form was removed
+			// because UpdateEntityInput.IsPrivate is now nil-preserving; the
+			// widget writes is_private (and visibility + grants) directly via
+			// PUT /permissions (the C-PERMISSIONS-SAVE-FIX path, unchanged).
 			<div
 				data-widget="permissions"
+				data-layout="inline"
 				data-endpoint={ fmt.Sprintf("/campaigns/%s/entities/%s/permissions", cc.Campaign.ID, entity.ID) }
 				data-editable={ fmt.Sprintf("%v", cc.MemberRole >= campaigns.RoleOwner) }
 				data-csrf={ csrfToken }
@@ -296,6 +304,25 @@ templ EntityEditFormComponent(cc *campaigns.CampaignContext, entity *Entity, ent
 			</div>
 		</form>
 	</div>
+}
+
+// entityTypeLineage renders the read-only Category › Sub-category lineage
+// (C-ENTITY-PERMISSIONS-UX Part 3): "‹ParentTypeName› › ‹TypeName›" when the
+// type has a parent, else just "‹TypeName›". View-only — no editing. Renders
+// nothing when the type is unknown.
+templ entityTypeLineage(entityType *EntityType) {
+	if entityType != nil {
+		<div class="flex items-center gap-1.5 text-xs text-fg-secondary" data-type-lineage>
+			<i class="fa-solid fa-sitemap text-fg-muted" aria-hidden="true"></i>
+			if entityType.ParentTypeName != nil && *entityType.ParentTypeName != "" {
+				<span class="text-fg-muted">{ *entityType.ParentTypeName }</span>
+				<i class="fa-solid fa-chevron-right text-[8px] text-fg-muted" aria-hidden="true"></i>
+				<span class="font-medium text-fg-body">{ entityType.Name }</span>
+			} else {
+				<span class="font-medium text-fg-body">{ entityType.Name }</span>
+			}
+		</div>
+	}
 }
 
 // DynamicField renders a single form input based on a field definition.

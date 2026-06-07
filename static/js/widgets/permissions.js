@@ -60,6 +60,11 @@ Chronicle.register('permissions', {
     var editable = config.editable === true;
     var draftMode = config.mode === 'draft';
     var draftTarget = config.draftTarget || null;
+    // Inline layout (C-ENTITY-PERMISSIONS-UX Part 2): opt-in via
+    // data-layout="inline". Renders the editor as a compact summary row that
+    // expands IN PLACE (animated) instead of the right-edge slide-in card.
+    // Pure presentation — reuses renderBody/load/save/grant UI verbatim.
+    var inline = config.layout === 'inline';
 
     // Inject scoped styles once. Card uses CSS variables that flow from
     // the campaign theme (surface/edge/accent) so per-campaign retints
@@ -127,7 +132,21 @@ Chronicle.register('permissions', {
         '.perm-loading { padding: 24px; text-align: center; color: var(--color-fg-muted, #9ca3af); font-size: 13px; }',
         '.perm-readonly-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 13px; background: var(--color-surface-alt, #f3f4f6); color: var(--color-fg-body, #374151); }',
         '.perm-draft-note { font-size: 11px; color: var(--color-fg-muted, #6b7280); margin-top: 10px; padding: 8px 10px; background: var(--color-surface-alt, #f9fafb); border-radius: 6px; border-left: 3px solid var(--color-accent, #6366f1); line-height: 1.4; }',
-        '@media (max-width: 480px) { .perm-card { width: 100%; box-shadow: none; } }'
+        '@media (max-width: 480px) { .perm-card { width: 100%; box-shadow: none; } }',
+        // Inline layout (Part 2): a summary trigger above a collapsible panel
+        // in the form flow. The panel animates open/closed via the
+        // grid-template-rows 0fr↔1fr trick — pure CSS height animation, no JS
+        // measurement, reduced-motion safe.
+        '.perm-inline .perm-trigger { width: 100%; justify-content: flex-start; }',
+        '.perm-inline .perm-trigger .perm-trigger-chevron { margin-left: auto; transition: transform 200ms ease-out; }',
+        '.perm-inline.perm-inline-open .perm-trigger .perm-trigger-chevron { transform: rotate(180deg); }',
+        '.perm-inline-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 280ms ease-out; border: 1px solid var(--color-edge, #e5e7eb); border-top: none; border-radius: 0 0 8px 8px; }',
+        '.perm-inline-panel.perm-open { grid-template-rows: 1fr; }',
+        '.perm-inline-inner { overflow: hidden; min-height: 0; }',
+        '.perm-inline .perm-card-body { padding: 16px; }',
+        '.perm-inline .perm-card-footer { border-top: 1px solid var(--color-edge, #e5e7eb); }',
+        '.perm-inline-open .perm-trigger { border-radius: 8px 8px 0 0; }',
+        '@media (prefers-reduced-motion: reduce) { .perm-inline-panel, .perm-inline .perm-trigger-chevron { transition: none; } }'
       ].join('\n');
       document.head.appendChild(style);
     }
@@ -220,6 +239,12 @@ Chronicle.register('permissions', {
       modeBadge.className = 'perm-trigger-mode';
       modeBadge.textContent = modeLabel(mode);
       trigger.appendChild(modeBadge);
+      // Inline mode: a chevron affordance that rotates when expanded.
+      if (inline) {
+        var chevron = document.createElement('i');
+        chevron.className = 'fa-solid fa-chevron-down text-xs perm-trigger-chevron';
+        trigger.appendChild(chevron);
+      }
     }
 
     function renderBody() {
@@ -595,6 +620,15 @@ Chronicle.register('permissions', {
     function openCard() {
       if (state.open) return;
       state.open = true;
+      // Inline layout: expand the in-flow panel via the grid-rows animation;
+      // no backdrop, no body-scroll lock, no global Escape (it's part of the
+      // form, not a modal).
+      if (inline) {
+        void card.offsetWidth;
+        card.classList.add('perm-open');
+        el.classList.add('perm-inline-open');
+        return;
+      }
       // Trigger reflow before adding the open class so the transform
       // transition actually fires (otherwise the browser collapses the
       // initial translateX(100%) → translateX(0) into the same frame).
@@ -609,6 +643,11 @@ Chronicle.register('permissions', {
     function closeCard() {
       if (!state.open) return;
       state.open = false;
+      if (inline) {
+        card.classList.remove('perm-open');
+        el.classList.remove('perm-inline-open');
+        return;
+      }
       backdrop.classList.remove('perm-open');
       card.classList.remove('perm-open');
       document.removeEventListener('keydown', onEscape);
@@ -627,7 +666,8 @@ Chronicle.register('permissions', {
     trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'perm-trigger';
-    trigger.setAttribute('aria-haspopup', 'dialog');
+    // Inline mode is a disclosure (expands in place), not a modal dialog.
+    trigger.setAttribute('aria-haspopup', inline ? 'true' : 'dialog');
     trigger.setAttribute('aria-expanded', 'false');
     trigger.addEventListener('click', function () {
       if (state.open) {
@@ -637,6 +677,46 @@ Chronicle.register('permissions', {
       }
       trigger.setAttribute('aria-expanded', state.open ? 'true' : 'false');
     });
+
+    if (inline) {
+      // Inline layout: a summary trigger over a collapsible in-flow panel.
+      // No backdrop, no body-attached fixed card — everything lives inside
+      // the mount so it animates open within the form flow.
+      el.classList.add('perm-inline');
+      el.appendChild(trigger);
+
+      card = document.createElement('div');
+      card.className = 'perm-inline-panel';
+      card.setAttribute('role', 'region');
+      card.setAttribute('aria-label', 'Page permissions');
+
+      var inner = document.createElement('div');
+      inner.className = 'perm-inline-inner';
+
+      bodyEl = document.createElement('div');
+      bodyEl.className = 'perm-card-body';
+      inner.appendChild(bodyEl);
+
+      var inlineFooter = document.createElement('div');
+      inlineFooter.className = 'perm-card-footer';
+      statusEl = document.createElement('span');
+      inlineFooter.appendChild(statusEl);
+      inner.appendChild(inlineFooter);
+
+      card.appendChild(inner);
+      el.appendChild(card);
+
+      backdrop = null;
+      el._permState = state;
+      el._permCard = card;
+      el._permBackdrop = null;
+      el._permOnEscape = null;
+
+      renderTrigger();
+      load();
+      return;
+    }
+
     el.appendChild(trigger);
 
     // Build the backdrop + card and attach to body so they overlay
