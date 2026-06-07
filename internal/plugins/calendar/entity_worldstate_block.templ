@@ -1,0 +1,81 @@
+// entity_worldstate_block.templ — read-only view for the entity-page
+// worldState timepiece embed (C-CAL-WORLDSTATE-WIDGETS). The "mini shelf
+// view": the hourglass-on-shelf over a compact sky band, painted by the
+// shared engine (static/js/cal-almanac.js) from the #401 seed. The
+// rendering-canvas CSS is exempt per
+// decisions/2026-06-05-rendering-canvas-css-exemption.md (see the
+// cal-almanac.css header marker); chrome stays on V2 tokens.
+//
+// Graduation to a proper widget: the mount carries data-widget="worldstate"
+// so boot.js auto-mounts it, and the worldState provider singleton
+// (static/js/widgets/worldstate_provider.js) drives live refreshes. The seed
+// is embedded server-side so the first frame paints with zero client fetch;
+// the provider reuses that seed (no redundant /world-state call).
+
+package calendar
+
+import "fmt"
+
+// entityWorldStateBlockView renders the embed. No calendar → friendly
+// "Create calendar" CTA (never blank); otherwise the worldstate widget mount
+// with the seeded band + hourglass shelf.
+templ entityWorldStateBlockView(campaignID string, cal *Calendar, data CalendarV2ViewData) {
+	<div class="card p-0 overflow-hidden" data-entity-worldstate>
+		if cal == nil {
+			// EMPTY STATE: no calendar yet → friendly state + "Create calendar"
+			// CTA to the setup wizard (mirrors entity_calendar item 3).
+			<div class="flex flex-col items-center justify-center py-10 px-4 text-center" data-entity-worldstate-empty>
+				<i class="fa-solid fa-hourglass-half text-3xl text-fg-muted mb-3" aria-hidden="true"></i>
+				<p class="text-sm font-medium text-fg mb-1">No calendar yet</p>
+				<p class="text-xs text-fg-secondary mb-3">Create a calendar to show the world&#39;s current time, sky, and weather here.</p>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID)) }
+					class="btn-primary text-sm"
+				>
+					<i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Create calendar
+				</a>
+			</div>
+		} else {
+			// Engine prod-mode seed blob (#cal-v2-worldstate) → the engine + the
+			// provider both read it; first paint needs no network fetch.
+			<div id="cal-v2-worldstate" data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
+			// Widget mount: boot.js calls Chronicle.register('worldstate') here;
+			// the provider singleton fetches /world-state at most once per page
+			// (or reuses this server seed) and drives live updates. A friendly
+			// client-side error state replaces this body on load failure.
+			<div
+				class="cal-v2-worldstate-band relative w-full overflow-hidden"
+				style="height:200px"
+				data-widget="worldstate"
+				data-variant="hourglass"
+				data-campaign-id={ campaignID }
+				data-worldstate-loading="1"
+				aria-label="Today in the world"
+			>
+				@worldStateSkyBandV2(data)
+				@worldStateHourglassV2(data)
+				// Friendly client-rendered error target (hidden until the widget
+				// flips it on a provider load failure — never a raw 404).
+				<div class="cal-v2-worldstate-error absolute inset-0 hidden flex-col items-center justify-center bg-surface text-center p-4" data-worldstate-error>
+					<i class="fa-solid fa-cloud-bolt text-2xl text-fg-muted mb-2" aria-hidden="true"></i>
+					<p class="text-sm text-fg-secondary">Couldn&#39;t load the world&#39;s current state. Try reloading the page.</p>
+				</div>
+			</div>
+			<link rel="stylesheet" href="/static/css/cal-almanac.css"/>
+			<script src="/static/js/widgets/worldstate_provider.js" defer></script>
+			<script src="/static/js/widgets/worldstate.js" defer></script>
+			<script src="/static/js/cal-almanac.js" defer></script>
+		}
+	</div>
+}
+
+// entityWorldStateUnavailable is the friendly not-found / can't-render state:
+// shown instead of leaking a raw error when the embed has no entity/campaign
+// context to build from (mirrors entity_calendar item 2).
+templ entityWorldStateUnavailable() {
+	<div class="card p-4 text-sm text-fg-secondary" data-entity-worldstate-unavailable>
+		<i class="fa-solid fa-circle-info mr-1.5" aria-hidden="true"></i>
+		This timepiece couldn&#39;t be loaded for this page — the page or its entity may have
+		moved or been removed. Try reloading; if it persists, re-open the entity from its list.
+	</div>
+}

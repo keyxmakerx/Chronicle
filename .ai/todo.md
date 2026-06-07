@@ -176,6 +176,27 @@ transforms, NO D3 (audit §7). Spec: `cordinator/dispatches/chronicle/C-TIMELINE
 - [ ] **Ledger timeline (alternate design)** — flat/record-keeping timeline; operator
   picks the winning design, then the real port re-skins `timeline_viz.js`. Post-deadline.
 
+### Worldstate Widgetization (C-CAL-WORLDSTATE-WIDGETS) — Phase 6
+
+Graduates the showcase worldState renderers into a reusable production widget +
+an entity-page block, completing "all three views entity-able". Spec:
+`cordinator/dispatches/chronicle/C-CAL-WORLDSTATE-WIDGETS.md`.
+
+- [x] **worldState provider singleton** (`static/js/widgets/worldstate_provider.js`) —
+  ONE `/calendar/world-state` fetch per page (memoized) regardless of widget count;
+  ZERO fetch when a server seed is embedded; `subscribe`/`onError`/`current`/`push`;
+  shared rAF; reduced-motion; self-destroy on last unsubscribe. **(this PR).**
+- [x] **worldstate widget** (`static/js/widgets/worldstate.js`, `Chronicle.register`) —
+  mounts via `data-widget="worldstate"`; reuses the shared engine (`cal-almanac.js`)
+  via `window.__calSetWorldState` (no rebuild); friendly client error state. **(this PR).**
+- [x] **entity_worldstate block** (`internal/plugins/calendar/entity_worldstate_block.*`) —
+  the "mini shelf view" (sky band + hourglass-on-shelf), campaign-level,
+  `Contexts:["template","dashboard"]`, Singleton; empty(Create-calendar CTA)/unavailable
+  states mirroring #413. Reuses the exempt `cal-almanac.css` canvas. **(this PR).**
+- [ ] **Wave 4 — per-entity configurable attachment** (owner picks which calendar/date a
+  given entity's widget binds to + config UI + persistence) — OUT of scope, post-deadline
+  widget framework (same boundary the Tuner §Q draws).
+
 ### Alpha-Critical (Must Have)
 
 - [x] **Media management for owners** — Campaign-scoped media browser at `/campaigns/:id/media` (Owner-only): grid view with thumbnails, "referenced by" entity queries, delete with warnings, upload from browser, pagination, storage stats. Admin already had `/admin/storage`.
