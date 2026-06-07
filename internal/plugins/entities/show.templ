@@ -147,16 +147,10 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				hx-swap="innerHTML"
 			></div>
 
-			// Calendar events linked to this entity (lazy-loaded from calendar plugin).
-			// Only rendered when the calendar addon is enabled AND the layout doesn't
-			// already contain a calendar block (to avoid duplicate rendering).
-			if showCalendar && !layoutHasBlock(entityType, "calendar") {
-				<div
-					hx-get={ fmt.Sprintf("/campaigns/%s/calendars/entity-events/%s", cc.Campaign.ID, entity.ID) }
-					hx-trigger="load"
-					hx-swap="innerHTML"
-				></div>
-			}
+			// (The old auto-appended per-entity calendar-events list was retired
+			// in C-CAL-EMBED-CONVERGE-POLISH along with its HTMX route. A
+			// per-entity calendar is now opt-in via the `entity_calendar`
+			// page-template block — the worldstate band + #402 linked events.)
 		</div>
 	}
 }
@@ -167,24 +161,6 @@ func derefStr(s *string) string {
 		return ""
 	}
 	return *s
-}
-
-// layoutHasBlock checks whether the entity type layout contains a block of the given type.
-// Used to avoid duplicate rendering when a block is both in the layout and hardcoded.
-func layoutHasBlock(et *EntityType, blockType string) bool {
-	if et == nil {
-		return false
-	}
-	for _, row := range et.Layout.Rows {
-		for _, col := range row.Columns {
-			for _, block := range col.Blocks {
-				if block.Type == blockType {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // blockMinHeightStyle returns a CSS min-height value for a block based on its

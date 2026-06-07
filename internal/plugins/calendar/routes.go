@@ -101,8 +101,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/calendars/embed", h.EmbedCalendar, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/calendars/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
 
-	// Entity events fragment uses the default calendar (no calId needed).
-	pub.GET("/calendars/entity-events/:eid", h.EntityEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
+	// (The /calendars/entity-events/:eid fragment + its EntityEventsFragment
+	// handler were retired in C-CAL-EMBED-CONVERGE-POLISH — the per-entity
+	// calendar is now the registry-driven `entity_calendar` block.)
 
 	// Backward-compat routes: redirect old /calendar paths to /calendars.
 	pub.GET("/calendar", h.legacyRedirect)

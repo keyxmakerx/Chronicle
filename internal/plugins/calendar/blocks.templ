@@ -9,16 +9,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// BlockCalendarEvents renders a lazy-loaded calendar events section for an entity.
-// The HTMX endpoint handles the no-calendar case gracefully (returns NoContent).
-templ BlockCalendarEvents(cc *campaigns.CampaignContext, entityID string) {
-	<div
-		hx-get={ fmt.Sprintf("/campaigns/%s/calendars/entity-events/%s", cc.Campaign.ID, entityID) }
-		hx-trigger="load"
-		hx-swap="innerHTML"
-	></div>
-}
-
 // CalendarEmbedFragment renders a compact calendar grid for dashboard embedding.
 // Includes month navigation via HTMX that swaps within the embed container.
 templ CalendarEmbedFragment(cc *campaigns.CampaignContext, data CalendarViewData) {
