@@ -16,6 +16,7 @@ type TimelineRepository interface {
 	Create(ctx context.Context, t *Timeline) error
 	GetByID(ctx context.Context, id string) (*Timeline, error)
 	List(ctx context.Context, campaignID string, role int) ([]Timeline, error)
+	ListByCalendar(ctx context.Context, calendarID string, role int) ([]Timeline, error)
 	Update(ctx context.Context, t *Timeline) error
 	Delete(ctx context.Context, id string) error
 
@@ -127,6 +128,47 @@ func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([
 	rows, err := r.db.QueryContext(ctx, query, campaignID)
 	if err != nil {
 		return nil, fmt.Errorf("list timelines: %w", err)
+	}
+	defer rows.Close()
+
+	var result []Timeline
+	for rows.Next() {
+		t := Timeline{}
+		if err := rows.Scan(
+			&t.ID, &t.CampaignID, &t.CalendarID, &t.Name, &t.Description,
+			&t.DescriptionHTML, &t.Color, &t.Icon, &t.Visibility, &t.VisibilityRules,
+			&t.SortOrder, &t.ZoomDefault, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
+			&t.CalendarName, &t.EventCount,
+		); err != nil {
+			return nil, fmt.Errorf("scan timeline: %w", err)
+		}
+		result = append(result, t)
+	}
+	return result, rows.Err()
+}
+
+// ListByCalendar returns the timelines bound to a specific calendar
+// (timelines.calendar_id), role-filtered like List. Backs the cross-plugin
+// "timelines for this calendar" read the Calendars dashboard consumes via a
+// service interface (C-APPS-CAL-DASH-W1) — no new columns, no migration.
+func (r *timelineRepo) ListByCalendar(ctx context.Context, calendarID string, role int) ([]Timeline, error) {
+	visFilter := "AND t.visibility = 'everyone'"
+	if permissions.CanSeeDmOnly(role) {
+		visFilter = ""
+	}
+
+	query := fmt.Sprintf(`
+		SELECT `+timelineCols+`, COALESCE(c.name, ''),
+		       (SELECT COUNT(*) FROM timeline_event_links tel WHERE tel.timeline_id = t.id) +
+		       (SELECT COUNT(*) FROM timeline_events te WHERE te.timeline_id = t.id)
+		FROM timelines t
+		LEFT JOIN calendars c ON c.id = t.calendar_id
+		WHERE t.calendar_id = ? %s
+		ORDER BY t.sort_order, t.name`, visFilter)
+
+	rows, err := r.db.QueryContext(ctx, query, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("list timelines by calendar: %w", err)
 	}
 	defer rows.Close()
 

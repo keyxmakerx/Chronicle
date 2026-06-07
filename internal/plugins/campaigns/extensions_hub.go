@@ -30,6 +30,7 @@ package campaigns
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/a-h/templ"
 )
@@ -49,6 +50,28 @@ var extensionDashboardSlugs = map[string]bool{
 // build target.
 var extensionEntitySetupSlugs = map[string]bool{
 	"calendar": true,
+}
+
+// extensionDashboardPages maps an addon slug to a DEDICATED dashboard page
+// (a full route), as opposed to the inline-panel fragment. When an entry
+// exists, the hub's "Open dashboard" affordance navigates to the page instead
+// of HTMX-swapping the inline panel (E1: the Calendars dashboard is a
+// dedicated page per operator sign-off). Other apps keep the inline panel
+// until they gain a dedicated page. The value is a path template taking the
+// campaign ID. See ExtensionDashboardPageURL.
+var extensionDashboardPages = map[string]string{
+	"calendar": "/campaigns/%s/apps/calendar",
+}
+
+// ExtensionDashboardPageURL returns the dedicated dashboard-page URL for a
+// slug (and true) when one exists, else ("", false) — in which case the hub
+// falls back to the inline-panel fragment affordance.
+func ExtensionDashboardPageURL(slug, campaignID string) (string, bool) {
+	tmpl, ok := extensionDashboardPages[slug]
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf(tmpl, campaignID), true
 }
 
 // HasExtensionDashboard reports whether the given addon slug exposes

@@ -1,0 +1,269 @@
+// app_dashboard.templ — the Calendars management dashboard view
+// (C-APPS-CAL-DASH-W1). Dedicated page, list + detail-pane layout. The detail
+// pane COMPOSES the existing calendar CRUD surfaces (open/settings/setup/
+// delete/active-switch) and shows a READ-ONLY associations panel (entities +
+// timelines). Friendly empty/error states mirror the #413 pattern. Live
+// embeds = Wave 2; inline association management = Wave 3.
+
+package calendar
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CalendarAppDashboardPage renders the full dashboard page.
+templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDashboardData) {
+	@layouts.App("Calendars") {
+		<div class="sm:max-w-5xl mx-auto py-6 px-2 sm:px-4" data-cal-dashboard>
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Apps", Href: fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)},
+				{Label: "Calendars"},
+			})
+			<div class="flex items-center justify-between mb-6">
+				<div>
+					<h1 class="text-xl font-bold text-fg">Calendars</h1>
+					<p class="text-sm text-fg-secondary mt-1">Manage this campaign&#39;s calendars and see what&#39;s linked to each.</p>
+				</div>
+				if data.IsOwner {
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) } class="btn-primary text-sm">
+						<i class="fa-solid fa-plus mr-1" aria-hidden="true"></i> New calendar
+					</a>
+				}
+			</div>
+			if data.LoadError {
+				<div class="card p-4 text-sm text-fg-secondary" data-cal-dashboard-error>
+					<i class="fa-solid fa-circle-info mr-1.5" aria-hidden="true"></i>
+					Couldn&#39;t load the calendars right now. Try reloading the page.
+				</div>
+			} else if len(data.Calendars) == 0 {
+				@calendarAppDashboardEmpty(cc.Campaign.ID)
+			} else {
+				<div class="grid gap-4 md:grid-cols-[18rem_1fr]">
+					// Left: calendars list.
+					<div class="flex flex-col gap-2" data-cal-dashboard-list>
+						for _, cal := range data.Calendars {
+							@calendarAppDashboardListRow(data, cal)
+						}
+					</div>
+					// Right: selected calendar detail (HTMX swap target).
+					<div id="cal-dash-detail">
+						@calendarAppDashboardDetail(data)
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+// calendarAppDashboardListRow renders one selectable calendar in the list.
+// Selecting it HTMX-swaps the detail pane (and pushes the URL so reloads keep
+// the selection).
+templ calendarAppDashboardListRow(data CalendarAppDashboardData, cal Calendar) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar?calId=%s", data.CampaignID, cal.ID)) }
+		hx-get={ fmt.Sprintf("/campaigns/%s/apps/calendar?calId=%s", data.CampaignID, cal.ID) }
+		hx-target="#cal-dash-detail"
+		hx-swap="innerHTML"
+		hx-push-url="true"
+		class={ "card p-3 hover:ring-2 hover:ring-accent/40 transition-all group",
+			templ.KV("ring-2 ring-accent/60", data.Selected != nil && data.Selected.ID == cal.ID) }
+		data-cal-dashboard-row
+		data-calendar-id={ cal.ID }
+	>
+		<div class="flex items-center gap-2">
+			<div class="w-8 h-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
+				if cal.Mode == ModeRealLife {
+					<i class="fa-solid fa-clock" aria-hidden="true"></i>
+				} else {
+					<i class="fa-solid fa-calendar-alt" aria-hidden="true"></i>
+				}
+			</div>
+			<div class="min-w-0 flex-1">
+				<div class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{ cal.Name }</div>
+				<div class="text-[11px] text-fg-muted">{ calDateLabel(cal) }</div>
+			</div>
+			if cal.IsDefault {
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium shrink-0">Default</span>
+			}
+			if data.ActiveID == cal.ID {
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium shrink-0">Active</span>
+			}
+		</div>
+	</a>
+}
+
+// calendarAppDashboardDetail renders the right-hand detail pane for the
+// selected calendar: CRUD-compose actions + the read-only associations panel.
+templ calendarAppDashboardDetail(data CalendarAppDashboardData) {
+	if data.Selected == nil {
+		<div class="card p-8 text-center text-sm text-fg-secondary" data-cal-dashboard-detail-empty>
+			<i class="fa-solid fa-calendar-days text-2xl text-fg-muted mb-2" aria-hidden="true"></i>
+			<p>Select a calendar from the list to manage it.</p>
+		</div>
+	} else {
+		<div class="card p-5" data-cal-dashboard-detail data-calendar-id={ data.Selected.ID }>
+			<div class="flex items-start justify-between gap-3 mb-4">
+				<div class="min-w-0">
+					<h2 class="text-lg font-bold text-fg truncate">{ data.Selected.Name }</h2>
+					<p class="text-xs text-fg-secondary mt-0.5">{ calDateLabel(*data.Selected) }</p>
+				</div>
+				<div class="flex items-center gap-1.5 shrink-0">
+					if data.Selected.IsDefault {
+						<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium">Default</span>
+					}
+					if data.ActiveID == data.Selected.ID {
+						<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium">Active</span>
+					}
+				</div>
+			</div>
+
+			// CRUD-compose actions — link/post to the EXISTING surfaces.
+			@calendarAppDashboardActions(data)
+
+			// Read-only associations panel.
+			<div class="mt-5 pt-4 border-t border-edge grid gap-4 sm:grid-cols-2" data-cal-dashboard-associations>
+				@calendarAppDashboardEntities(data)
+				@calendarAppDashboardTimelines(data)
+			</div>
+		</div>
+	}
+}
+
+// calendarAppDashboardActions — the compose row (no new CRUD).
+templ calendarAppDashboardActions(data CalendarAppDashboardData) {
+	<div class="flex flex-wrap items-center gap-2">
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.Selected.ID)) }
+			class="btn-secondary text-xs"
+		>
+			<i class="fa-solid fa-up-right-from-square mr-1" aria-hidden="true"></i>Open calendar
+		</a>
+		if data.IsOwner {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/settings", data.CampaignID, data.Selected.ID)) }
+				class="btn-secondary text-xs"
+			>
+				<i class="fa-solid fa-gear mr-1" aria-hidden="true"></i>Settings
+			</a>
+		}
+		if data.ActiveID != data.Selected.ID {
+			<form
+				hx-post={ fmt.Sprintf("/campaigns/%s/calendar/v2/switch", data.CampaignID) }
+				class="inline"
+				{ afterRequestRedirect(fmt.Sprintf("/campaigns/%s/apps/calendar?calId=%s", data.CampaignID, data.Selected.ID))... }
+			>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<input type="hidden" name="calendar_id" value={ data.Selected.ID }/>
+				<button type="submit" class="btn-secondary text-xs">
+					<i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>Set active
+				</button>
+			</form>
+		}
+		if data.IsOwner {
+			<button
+				type="button"
+				class="text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10 px-2 py-1 rounded transition-colors"
+				hx-delete={ fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.Selected.ID) }
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+				hx-confirm="Delete this calendar and everything in it? This can't be undone."
+				{ afterRequestRedirect(fmt.Sprintf("/campaigns/%s/apps/calendar", data.CampaignID))... }
+			>
+				<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i>Delete
+			</button>
+		}
+	</div>
+}
+
+// calendarAppDashboardEntities — read-only associated-entities list.
+templ calendarAppDashboardEntities(data CalendarAppDashboardData) {
+	<div data-cal-dashboard-entities>
+		<h3 class="text-xs font-semibold text-fg-secondary uppercase tracking-wider mb-2">
+			<i class="fa-solid fa-users mr-1.5" aria-hidden="true"></i>Linked entities ({ fmt.Sprintf("%d", len(data.Entities)) })
+		</h3>
+		if len(data.Entities) == 0 {
+			<p class="text-xs text-fg-muted italic">No entities are linked to this calendar&#39;s events or eras yet.</p>
+		} else {
+			<ul class="flex flex-col gap-1">
+				for _, ent := range data.Entities {
+					<li>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", data.CampaignID, ent.EntityID)) }
+							class="text-sm text-fg hover:text-accent truncate inline-flex items-center gap-1.5"
+						>
+							if ent.EntityIcon != "" {
+								<i class={ "fa-solid " + ent.EntityIcon, "text-[10px]" } style={ fmt.Sprintf("color:%s", ent.EntityColor) } aria-hidden="true"></i>
+							}
+							{ ent.EntityName }
+						</a>
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+// calendarAppDashboardTimelines — read-only associated-timelines list.
+templ calendarAppDashboardTimelines(data CalendarAppDashboardData) {
+	<div data-cal-dashboard-timelines>
+		<h3 class="text-xs font-semibold text-fg-secondary uppercase tracking-wider mb-2">
+			<i class="fa-solid fa-timeline mr-1.5" aria-hidden="true"></i>Timelines ({ fmt.Sprintf("%d", len(data.Timelines)) })
+		</h3>
+		if len(data.Timelines) == 0 {
+			<p class="text-xs text-fg-muted italic">No timelines use this calendar.</p>
+		} else {
+			<ul class="flex flex-col gap-1">
+				for _, tl := range data.Timelines {
+					<li>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines/%s", data.CampaignID, tl.ID)) }
+							class="text-sm text-fg hover:text-accent truncate inline-flex items-center gap-1.5"
+						>
+							if tl.Icon != "" {
+								<i class={ "fa-solid " + tl.Icon, "text-[10px]" } style={ fmt.Sprintf("color:%s", tl.Color) } aria-hidden="true"></i>
+							}
+							{ tl.Name }
+							<span class="text-[10px] text-fg-muted">({ fmt.Sprintf("%d events", tl.EventCount) })</span>
+						</a>
+					</li>
+				}
+			</ul>
+		}
+	</div>
+}
+
+// calendarAppDashboardEmpty — friendly state when the campaign has no calendars.
+templ calendarAppDashboardEmpty(campaignID string) {
+	<div class="card p-10 text-center" data-cal-dashboard-empty>
+		<i class="fa-solid fa-calendar-days text-3xl text-fg-muted mb-3" aria-hidden="true"></i>
+		<p class="text-sm font-medium text-fg mb-1">No calendars yet</p>
+		<p class="text-xs text-fg-secondary mb-4">Create a calendar to track in-world dates, events, and eras.</p>
+		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID)) } class="btn-primary text-sm">
+			<i class="fa-solid fa-plus mr-1" aria-hidden="true"></i>Create calendar
+		</a>
+	</div>
+}
+
+// afterRequestRedirect builds an `hx-on::after-request` attribute that
+// navigates to dest on a successful HTMX request. Passed as a spread
+// templ.Attributes so templ renders it as a plain attribute rather than
+// routing the `hx-on::` name through its ComponentScript handling. Used to
+// refresh the dashboard after the (JSON-returning) active-switch + delete
+// compose actions without changing those endpoints.
+func afterRequestRedirect(dest string) templ.Attributes {
+	return templ.Attributes{
+		"hx-on::after-request": "if(event.detail.successful) window.location.assign('" + dest + "')",
+	}
+}
+
+// calDateLabel formats a calendar's current date, using month names when the
+// calendar's months are loaded (mirrors calendar_list.templ's formatting).
+func calDateLabel(cal Calendar) string {
+	if len(cal.Months) > 0 && cal.CurrentMonth >= 1 && cal.CurrentMonth <= len(cal.Months) {
+		return fmt.Sprintf("%s %d, Year %d", cal.Months[cal.CurrentMonth-1].Name, cal.CurrentDay, cal.CurrentYear)
+	}
+	return fmt.Sprintf("Day %d, Month %d, Year %d", cal.CurrentDay, cal.CurrentMonth, cal.CurrentYear)
+}

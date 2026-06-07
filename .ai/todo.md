@@ -177,6 +177,24 @@ transforms, NO D3 (audit §7). Spec: `cordinator/dispatches/chronicle/C-TIMELINE
 - [ ] **Ledger timeline (alternate design)** — flat/record-keeping timeline; operator
   picks the winning design, then the real port re-skins `timeline_viz.js`. Post-deadline.
 
+### Apps Hub → Calendars Dashboard (E1)
+
+Overhaul/expand the Extensions hub into a hub that opens per-app management
+dashboards; first = Calendars. Audit: `reports/chronicle/2026-06-07-apps-hub-cal-dash-prep-audit.md`.
+
+- [x] **W1 — Calendars dashboard shell (C-APPS-CAL-DASH-W1)** — dedicated page
+  `GET /campaigns/:id/apps/calendar` (Owner), reached from the hub's "Open
+  dashboard" entry for calendar (now a dedicated-page link via
+  `ExtensionDashboardPageURL`). List + detail-pane: left list via `ListCalendars`;
+  right detail COMPOSES existing CRUD (open/settings/setup/delete/active-switch —
+  no new CRUD) + a READ-ONLY associations panel. Two new reads, no migrations:
+  `EntitiesForCalendar` (entity-ties, joins through calendar_events/eras) +
+  `GetTimelinesByCalendarID`→`ListTimelinesForCalendar` exposed cross-plugin via
+  a service-interface adapter (`calendar.TimelineLister`, wired in app/routes.go;
+  no repo cross-import). Friendly empty/error states. Tests:
+  `app_dashboard_test.go`, `entity_ties` read, `timeline/list_by_calendar_test.go`.
+- [ ] **W2** live "see in action" embeds · **W3** inline link/unlink + create-timeline · **W4** generalize per-app dashboard pattern.
+
 ### Worldstate Widgetization (C-CAL-WORLDSTATE-WIDGETS) — Phase 6
 
 Graduates the showcase worldState renderers into a reusable production widget +

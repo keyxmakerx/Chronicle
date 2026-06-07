@@ -122,6 +122,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.RequireCapability((*campaigns.CampaignContext).CanControlWorldState,
 			"world-state control requires Owner or co-DM access"))
 
+	// Calendars management dashboard (C-APPS-CAL-DASH-W1 / E1). A dedicated
+	// page reached from the Extensions hub's per-app "Open dashboard" entry:
+	// list + detail pane, composing the existing CRUD + a read-only
+	// associations panel. Owner-only (management surface, mirrors the
+	// Owner-gated Extensions hub). No :calId in the path — the selected
+	// calendar rides ?calId= so list selection HTMX-swaps the detail pane.
+	cg.GET("/apps/calendar", h.AppDashboard, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// V2 calendar shell (Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
 	// Additive: lives alongside V1 routes during the migration; V1
 	// surface remains operational. Cutover decision happens when

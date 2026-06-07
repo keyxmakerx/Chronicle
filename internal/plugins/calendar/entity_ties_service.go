@@ -57,3 +57,9 @@ func (s *calendarService) EntitiesForEvent(ctx context.Context, eventID string) 
 func (s *calendarService) EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error) {
 	return s.repo.EntitiesForEra(ctx, eraID)
 }
+
+// EntitiesForCalendar returns the distinct entities tied to any event/era of a
+// calendar (the Calendars dashboard associations panel, W1).
+func (s *calendarService) EntitiesForCalendar(ctx context.Context, calendarID string) ([]EntityTieRef, error) {
+	return s.repo.EntitiesForCalendar(ctx, calendarID)
+}

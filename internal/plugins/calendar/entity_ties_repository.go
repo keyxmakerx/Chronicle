@@ -47,6 +47,48 @@ func (r *calendarRepo) UnlinkEntityEra(ctx context.Context, entityID string, era
 	return err
 }
 
+// EntitiesForCalendar returns the DISTINCT entities tied to any event or era
+// of the given calendar — the read behind the Calendars dashboard's read-only
+// associations panel (C-APPS-CAL-DASH-W1). The link tables carry no
+// calendar_id, so the calendar is reached through calendar_events.calendar_id /
+// calendar_eras.calendar_id. DISTINCT collapses an entity tied via several
+// events/eras to one row; participation_role is omitted (it's per-tie, not a
+// single value at calendar scope). Ordered by entity name for a stable render.
+func (r *calendarRepo) EntitiesForCalendar(ctx context.Context, calendarID string) ([]EntityTieRef, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT ent.id, COALESCE(ent.name, ''), COALESCE(et.slug, ''),
+		        COALESCE(et.icon, ''), COALESCE(et.color, '')
+		 FROM (
+		     SELECT l.entity_id
+		     FROM entity_event_links l
+		     JOIN calendar_events e ON e.id = l.event_id
+		     WHERE e.calendar_id = ?
+		     UNION
+		     SELECT l.entity_id
+		     FROM entity_era_links l
+		     JOIN calendar_eras er ON er.id = l.era_id
+		     WHERE er.calendar_id = ?
+		 ) tied
+		 JOIN entities ent ON ent.id = tied.entity_id
+		 LEFT JOIN entity_types et ON et.id = ent.entity_type_id
+		 ORDER BY ent.name`, calendarID, calendarID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []EntityTieRef
+	for rows.Next() {
+		var ref EntityTieRef
+		if err := rows.Scan(&ref.EntityID, &ref.EntityName, &ref.EntityType,
+			&ref.EntityIcon, &ref.EntityColor); err != nil {
+			return nil, err
+		}
+		out = append(out, ref)
+	}
+	return out, rows.Err()
+}
+
 // EntitiesForEvent returns every entity tied to an event with its display info
 // (JOINs entities + entity_types — the same display source the event list
 // uses). Ordered by entity name for a stable picker/chips render.

@@ -442,6 +442,32 @@ func (a *calendarListerAdapter) ListCalendars(ctx context.Context, campaignID st
 	return refs, nil
 }
 
+// timelineForCalendarAdapter wraps timeline.TimelineService to implement the
+// calendar.TimelineLister interface — the reverse-direction cross-plugin read
+// the Calendars dashboard's associations panel needs (C-APPS-CAL-DASH-W1). The
+// calendar plugin never imports the timeline repo; it reaches the timeline
+// service through this adapter at the app boundary (plugin-isolation rule).
+type timelineForCalendarAdapter struct {
+	svc timeline.TimelineService
+}
+
+// ListTimelinesForCalendar returns the timelines bound to a calendar as the
+// calendar plugin's lightweight TimelineRef projection.
+func (a *timelineForCalendarAdapter) ListTimelinesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]calendar.TimelineRef, error) {
+	tls, err := a.svc.ListTimelinesForCalendar(ctx, calendarID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]calendar.TimelineRef, 0, len(tls))
+	for _, t := range tls {
+		refs = append(refs, calendar.TimelineRef{
+			ID: t.ID, Name: t.Name, Color: t.Color, Icon: t.Icon,
+			Visibility: t.Visibility, EventCount: t.EventCount,
+		})
+	}
+	return refs, nil
+}
+
 // calendarEventListerAdapter wraps calendar.CalendarService to implement the
 // timeline.CalendarEventLister interface. Lists all calendar events for the
 // event picker when linking events to a timeline.
@@ -2198,6 +2224,9 @@ func (a *App) RegisterRoutes() {
 	// data load lives inside the factory closure (see
 	// internal/plugins/calendar/extension_dashboard.go).
 	campaignHandler.RegisterExtensionDashboard(calendarHandler.ExtensionDashboardFactory())
+	// Calendars dashboard (E1 W1): inject the cross-plugin timeline read so the
+	// associations panel can list timelines bound to a calendar.
+	calendarHandler.SetTimelineLister(&timelineForCalendarAdapter{svc: timelineSvc})
 	// And the enable-state checker the hub fragment route consults
 	// to render the disabled-extension placeholder. addonService
 	// already exposes IsEnabledForCampaign with the canonical narrow

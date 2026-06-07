@@ -43,11 +43,12 @@ type CalendarSession struct {
 
 // Handler processes HTTP requests for the calendar plugin.
 type Handler struct {
-	svc           CalendarService
-	addonSvc      addons.AddonService
-	sessionLister SessionLister
-	auditSvc      audit.AuditService
-	tierLister    TierDefinitionsLister
+	svc            CalendarService
+	addonSvc       addons.AddonService
+	sessionLister  SessionLister
+	auditSvc       audit.AuditService
+	tierLister     TierDefinitionsLister
+	timelineLister TimelineLister // cross-plugin read for the Calendars dashboard (W1).
 }
 
 // TierDefinitionsLister surfaces the campaign-aware tier vocabulary
