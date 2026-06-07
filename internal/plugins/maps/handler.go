@@ -430,3 +430,17 @@ func (h *Handler) ListMarkersAPI(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, markers)
 }
+
+// MarkerIconsAPI returns Chronicle's canonical map-marker icon vocabulary
+// (C-MAPS-EDITOR-PIN-AND-ICON-PARITY Part A). Chronicle is authoritative for
+// the icon set; this endpoint is the contract the Foundry sync module reads to
+// align its translation table, so the same icon ID renders the same concept on
+// both sides. Static catalog (no per-campaign state) but campaign-scoped +
+// Player-gated to match the rest of the maps API surface.
+func (h *Handler) MarkerIconsAPI(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"default": DefaultMarkerIcon,
+		"icons":   MarkerIconCatalog(),
+		"groups":  MarkerIconGroups(),
+	})
+}

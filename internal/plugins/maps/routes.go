@@ -25,6 +25,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/maps/:mid", h.UpdateMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/maps/:mid", h.DeleteMapAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Canonical marker icon vocabulary (C-MAPS-EDITOR-PIN-AND-ICON-PARITY):
+	// Chronicle is authoritative; the Foundry sync module reads this to align
+	// its icon translation table. No :mid — it's a campaign-static catalog.
+	cg.GET("/maps/marker-icons", h.MarkerIconsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// Marker CRUD (Player can list, Scribe+ can create/edit, Owner can delete).
 	cg.GET("/maps/:mid/markers", h.ListMarkersAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/maps/:mid/markers", h.CreateMarkerAPI, campaigns.RequireRole(campaigns.RoleScribe))
