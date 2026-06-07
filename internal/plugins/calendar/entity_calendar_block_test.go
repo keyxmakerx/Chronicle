@@ -54,13 +54,13 @@ func sampleEmbedSvc() *entityCalBlockStub {
 func TestEntityCalendarBlock_RendersBandAndEvents(t *testing.T) {
 	html := renderEntityCal(t, sampleEmbedSvc(), campaigns.RoleOwner, false)
 	for _, want := range []string{
-		"data-entity-calendar",          // block container
-		"id=\"cal-v2-worldstate\"",      // seed blob → engine prod mode
-		"data-cal-sky",                  // the reused 2a band scaffold
-		"/static/js/cal-almanac.js",     // the shared engine
-		"Linked events",                 // the events section header
-		"Public Siege",                  // the linked event
-		"involved",                      // its participation role
+		"data-entity-calendar",      // block container
+		"id=\"cal-v2-worldstate\"",  // seed blob → engine prod mode
+		"data-cal-sky",              // the reused 2a band scaffold
+		"/static/js/cal-almanac.js", // the shared engine
+		"Linked events",             // the events section header
+		"Public Siege",              // the linked event
+		"involved",                  // its participation role
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("embed missing %q", want)
@@ -88,11 +88,38 @@ func TestEntityCalendarBlock_DmOnlyFiltering(t *testing.T) {
 	}
 }
 
+// TestEntityCalendarBlock_Unavailable: missing entity/campaign context renders
+// the friendly not-found state, never a raw error/blank (item 2).
+func TestEntityCalendarBlock_Unavailable(t *testing.T) {
+	render := func(cc *campaigns.CampaignContext, entityID string) string {
+		var sb strings.Builder
+		if err := EntityCalendarBlock(sampleEmbedSvc(), cc, entityID, "u1").Render(context.Background(), &sb); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		return sb.String()
+	}
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner}
+	for name, html := range map[string]string{
+		"nil cc":       render(nil, "ent-1"),
+		"empty entity": render(cc, ""),
+	} {
+		if !strings.Contains(html, "data-entity-calendar-unavailable") {
+			t.Errorf("%s: expected friendly unavailable state, got: %q", name, html)
+		}
+		if strings.Contains(html, "data-cal-sky") {
+			t.Errorf("%s: must not render the band", name)
+		}
+	}
+}
+
 func TestEntityCalendarBlock_EmptyStates(t *testing.T) {
-	// No calendar → present, not blank; no band.
+	// No calendar → friendly "Create calendar" CTA (C-CAL-EMBED-CONVERGE-POLISH
+	// item 3), not a raw message; no band.
 	noCal := renderEntityCal(t, &entityCalBlockStub{}, campaigns.RoleOwner, false)
-	if !strings.Contains(noCal, "No calendar configured") {
-		t.Errorf("no-calendar should show an empty-but-present state, got: %q", noCal)
+	for _, want := range []string{"data-entity-calendar-empty", "No calendar yet", "Create calendar", "/campaigns/camp-1/calendars"} {
+		if !strings.Contains(noCal, want) {
+			t.Errorf("no-calendar empty state missing %q; got: %q", want, noCal)
+		}
 	}
 	if strings.Contains(noCal, "data-cal-sky") {
 		t.Errorf("no-calendar should not render the band")

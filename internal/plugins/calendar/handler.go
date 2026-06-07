@@ -1321,37 +1321,10 @@ func (h *Handler) AdvanceTimeAPI(c echo.Context) error {
 	return nil
 }
 
-// EntityEventsFragment returns a small HTMX fragment listing calendar events
-// linked to a specific entity. Loaded lazily from entity show pages.
-// Uses the default calendar for the campaign since entity pages don't know which
-// calendar context to use; events from all calendars are included.
-// GET /campaigns/:id/calendars/entity-events/:eid
-func (h *Handler) EntityEventsFragment(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
-	ctx := c.Request().Context()
-	entityID := c.Param("eid")
-
-	cal, err := h.svc.GetCalendar(ctx, cc.Campaign.ID)
-	if err != nil {
-		return err
-	}
-	if cal == nil {
-		// No calendar = no events section.
-		return c.NoContent(http.StatusOK)
-	}
-
-	role := cc.VisibilityRole()
-	userID := auth.GetUserID(c)
-	events, err := h.svc.ListEventsForEntity(ctx, entityID, role, userID)
-	if err != nil {
-		return err
-	}
-	if len(events) == 0 {
-		return c.NoContent(http.StatusOK)
-	}
-
-	return middleware.Render(c, http.StatusOK, EntityEventsSection(cc, cal, events))
-}
+// (EntityEventsFragment — the per-entity calendar-events HTMX fragment — was
+// retired in C-CAL-EMBED-CONVERGE-POLISH. The per-entity calendar is now the
+// `entity_calendar` registry block (worldstate band + #402 linked events);
+// the old auto-appended events list on every entity page is gone with it.)
 
 // UpcomingEventsFragment returns an HTMX fragment with upcoming calendar events.
 // Used by the calendar_preview dashboard block via lazy-loading.

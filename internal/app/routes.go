@@ -2221,13 +2221,10 @@ func (a *App) RegisterRoutes() {
 	entities.RegisterCoreBlocks(blockRegistry)
 
 	// Calendar plugin blocks (requires "calendar" addon).
-	blockRegistry.Register(entities.BlockMeta{
-		Type: "calendar", Label: "Calendar", Icon: "fa-calendar-days",
-		Description: "Entity calendar events", Addon: "calendar",
-		Contexts: []string{"template"},
-	}, func(ctx entities.BlockRenderContext) templ.Component {
-		return calendar.BlockCalendarEvents(ctx.CC, ctx.Entity.ID)
-	})
+	// NOTE: the old per-entity `calendar` block (BlockCalendarEvents) was
+	// retired in C-CAL-EMBED-CONVERGE-POLISH — it was never used and is
+	// superseded by `entity_calendar` (the worldstate band + #402 linked
+	// events). Entity pages now offer exactly one calendar block.
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "upcoming_events", Label: "Upcoming Events", Icon: "fa-calendar-check",
 		Description: "Upcoming calendar events list", Addon: "calendar",
@@ -2250,10 +2247,13 @@ func (a *App) RegisterRoutes() {
 		Description: "Ambient calendar + this entity's linked events",
 		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		if rc.Entity == nil || rc.CC == nil {
-			return templ.NopComponent
+		// EntityCalendarBlock renders the friendly not-found state itself when
+		// the entity/campaign context is missing (no raw error / blank).
+		entityID := ""
+		if rc.Entity != nil {
+			entityID = rc.Entity.ID
 		}
-		return calendar.EntityCalendarBlock(calendarService, rc.CC, rc.Entity.ID, rc.UserID)
+		return calendar.EntityCalendarBlock(calendarService, rc.CC, entityID, rc.UserID)
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).

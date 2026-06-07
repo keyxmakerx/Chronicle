@@ -23,21 +23,22 @@ import (
 // calendar → empty-but-present state; seed/ties errors → the band/list simply
 // omit rather than failing the entity page.
 func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, entityID, userID string) templ.Component {
-	ctx := context.Background()
-	role := 0
-	if cc != nil {
-		role = cc.VisibilityRole()
+	// No entity/campaign context → nothing to build from; render the friendly
+	// not-found state rather than leaking a raw "entity not found" / blank
+	// (C-CAL-EMBED-CONVERGE-POLISH item 2).
+	if cc == nil || cc.Campaign == nil || entityID == "" {
+		return entityCalendarUnavailable()
 	}
+	ctx := context.Background()
+	role := cc.VisibilityRole()
 
 	var (
 		cal      *Calendar
 		seed     *WorldStateSeed
 		seedJSON string
 	)
-	if cc != nil {
-		if c, err := svc.GetCalendar(ctx, cc.Campaign.ID); err == nil {
-			cal = c
-		}
+	if c, err := svc.GetCalendar(ctx, cc.Campaign.ID); err == nil {
+		cal = c
 	}
 	if cal != nil {
 		if s, err := svc.BuildWorldStateSeed(ctx, cal.ID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, role, userID); err == nil {
@@ -64,11 +65,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 	}
 
 	data := CalendarV2ViewData{ActiveCalendar: cal, WorldState: seed, WorldStateJSON: seedJSON}
-	campaignID := ""
-	if cc != nil {
-		campaignID = cc.Campaign.ID
-	}
-	return entityCalendarBlockView(campaignID, cal, data, ties)
+	return entityCalendarBlockView(cc.Campaign.ID, cal, data, ties)
 }
 
 // entityEventHref links a linked-event row to the v2 calendar at that event's
