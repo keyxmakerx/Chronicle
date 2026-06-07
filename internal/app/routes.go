@@ -2256,6 +2256,27 @@ func (a *App) RegisterRoutes() {
 		return calendar.EntityCalendarBlock(calendarService, rc.CC, entityID, rc.UserID)
 	})
 
+	// entity_worldstate — the entity-PAGE worldState timepiece embed
+	// (C-CAL-WORLDSTATE-WIDGETS, Phase 6 widgetization). The "mini shelf
+	// view": the hourglass-on-shelf over a compact sky band, painted by the
+	// shared engine from the #401 seed and driven live by the worldState
+	// provider singleton (widgets/worldstate_provider.js). Completes "all
+	// three views entity-able" (calendar #411/#413, timeline Tuner #414,
+	// worldstate here). Singleton — like entity_calendar it binds the
+	// engine's fixed #cal-v2-worldstate id, so one worldState surface per
+	// page (operator picks entity_calendar OR entity_worldstate per page).
+	// Campaign-level (no per-entity data), so it works in BOTH the entity
+	// page (template) and the campaign dashboard contexts (dispatch D).
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "entity_worldstate", Label: "Worldstate timepiece", Icon: "fa-hourglass-half",
+		Description: "Ambient sky + hourglass shelf for the current world date",
+		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		// EntityWorldStateBlock renders the friendly not-found state itself
+		// when the campaign context is missing (no raw error / blank).
+		return calendar.EntityWorldStateBlock(calendarService, rc.CC, rc.UserID)
+	})
+
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
