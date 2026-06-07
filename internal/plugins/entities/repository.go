@@ -79,10 +79,17 @@ func (r *entityTypeRepository) Create(ctx context.Context, et *EntityType) error
 
 // FindByID retrieves an entity type by its auto-increment ID.
 func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 preset_category, parent_type_id, description, pinned_entity_ids, dashboard_layout,
-	                 fields, layout_json, sort_order, is_default, enabled
-	          FROM entity_types WHERE id = ?`
+	// LEFT JOIN the parent type so ParentTypeName is populated for the
+	// Category › Sub-category lineage line in the entity editor
+	// (C-ENTITY-PERMISSIONS-UX Part 3). Read-only joined field; NULL for
+	// top-level types.
+	query := `SELECT et.id, et.campaign_id, et.slug, et.name, et.name_plural, et.icon, et.color,
+	                 et.preset_category, et.parent_type_id, et.description, et.pinned_entity_ids, et.dashboard_layout,
+	                 et.fields, et.layout_json, et.sort_order, et.is_default, et.enabled,
+	                 parent.name AS parent_type_name
+	          FROM entity_types et
+	          LEFT JOIN entity_types parent ON et.parent_type_id = parent.id
+	          WHERE et.id = ?`
 
 	et := &EntityType{}
 	var fieldsRaw, layoutRaw, pinnedRaw []byte
@@ -90,7 +97,7 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
 		&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
 		&fieldsRaw, &layoutRaw, &et.SortOrder,
-		&et.IsDefault, &et.Enabled,
+		&et.IsDefault, &et.Enabled, &et.ParentTypeName,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("entity type not found")

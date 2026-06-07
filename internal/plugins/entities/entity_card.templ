@@ -39,15 +39,7 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 			<div class="flex items-start justify-between mb-1">
 				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{ entity.Name }</h3>
 				if cc.MemberRole >= campaigns.RoleScribe {
-					if entity.Visibility == VisibilityCustom {
-						<span class="ml-1.5 shrink-0" title="Custom permissions" style="color: #0d9488;">
-							<i class="fa-solid fa-shield-halved text-[10px]"></i>
-						</span>
-					} else if entity.IsPrivate {
-						<span class="text-fg-muted ml-1.5 shrink-0" title="Private (GM only)">
-							<i class="fa-solid fa-lock text-[10px]"></i>
-						</span>
-					}
+					@entityVisibilityBadge(entity)
 				}
 			</div>
 
@@ -81,4 +73,28 @@ templ EntityCard(entity *Entity, cc *campaigns.CampaignContext) {
 			}
 		</div>
 	</a>
+}
+
+// entityVisibilityBadge renders the card's single 3-state visibility badge
+// (C-ENTITY-PERMISSIONS-UX Part 1). One slot, distinct icon + color + tooltip
+// per state, reflecting the visibility model:
+//   - Custom  (Visibility==custom)              — specific grants, teal shield
+//   - DM-Only (Visibility==default && IsPrivate) — scribe+owner only, muted lock
+//   - Everyone (Visibility==default && !IsPrivate) — all members, muted globe
+// Caller gates on Scribe+ (players never see it). Cards only — not sidebar/
+// profile/my-characters (operator scoped this pass to cards).
+templ entityVisibilityBadge(entity *Entity) {
+	if entity.Visibility == VisibilityCustom {
+		<span class="ml-1.5 shrink-0" title="Custom permissions — specific people" style="color: #0d9488;" data-visibility-badge="custom">
+			<i class="fa-solid fa-shield-halved text-[10px]"></i>
+		</span>
+	} else if entity.IsPrivate {
+		<span class="text-fg-muted ml-1.5 shrink-0" title="DM-Only — visible to GMs (Scribe + Owner)" data-visibility-badge="dm_only">
+			<i class="fa-solid fa-lock text-[10px]"></i>
+		</span>
+	} else {
+		<span class="text-fg-muted ml-1.5 shrink-0" title="Everyone — visible to all campaign members" data-visibility-badge="everyone">
+			<i class="fa-solid fa-globe text-[10px]"></i>
+		</span>
+	}
 }
