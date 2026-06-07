@@ -124,10 +124,19 @@ type TimelineService interface {
 
 // timelineService is the default TimelineService implementation.
 type timelineService struct {
-	repo      TimelineRepository
-	calLists  CalendarLister
-	calEvents CalendarEventLister
-	calEras   CalendarEraLister
+	repo           TimelineRepository
+	calLists       CalendarLister
+	calEvents      CalendarEventLister
+	calEras        CalendarEraLister
+	bindingCleaner BindingCleaner
+}
+
+// BindingCleaner sweeps a deleted instance's widget bindings (widget-binding
+// framework integrity hook, C-WIDGET-BINDING-P2). Implemented by
+// widgetbindings.Service; injected via SetBindingCleaner. Optional — nil means
+// "no binding framework wired" (the render-time guard + Sweep are the backstop).
+type BindingCleaner interface {
+	OnInstanceDeleted(ctx context.Context, campaignID, widgetType, instanceID string) (int, error)
 }
 
 // NewTimelineService creates a TimelineService backed by the given repository,
@@ -136,6 +145,11 @@ type timelineService struct {
 func NewTimelineService(repo TimelineRepository, calLists CalendarLister, calEvents CalendarEventLister, calEras CalendarEraLister) TimelineService {
 	return &timelineService{repo: repo, calLists: calLists, calEvents: calEvents, calEras: calEras}
 }
+
+// SetBindingCleaner injects the widget-binding cleanup hook (wired at app
+// startup). Reached via a type assertion in routes.go so the TimelineService
+// interface stays unchanged.
+func (s *timelineService) SetBindingCleaner(c BindingCleaner) { s.bindingCleaner = c }
 
 // CreateTimeline creates a new timeline in a campaign.
 func (s *timelineService) CreateTimeline(ctx context.Context, campaignID string, input CreateTimelineInput) (*Timeline, error) {
@@ -305,6 +319,11 @@ func (s *timelineService) DeleteTimeline(ctx context.Context, timelineID string)
 	}
 	if err := s.repo.Delete(ctx, timelineID); err != nil {
 		return fmt.Errorf("delete timeline: %w", err)
+	}
+	// Widget-binding delete hook (C-WIDGET-BINDING-P2): sweep this timeline's
+	// bindings. Best-effort — the render-time orphan guard + Sweep backstop it.
+	if s.bindingCleaner != nil {
+		_, _ = s.bindingCleaner.OnInstanceDeleted(ctx, t.CampaignID, WidgetTypeTimeline, timelineID)
 	}
 	return nil
 }

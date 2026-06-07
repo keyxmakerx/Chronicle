@@ -47,31 +47,63 @@ templ TimelineEmbedEmpty(cc *campaigns.CampaignContext) {
 	</div>
 }
 
-// BlockTimeline renders a lazy-loaded timeline preview for an entity's campaign.
-// Uses the same HTMX pattern as the dashboard timeline_preview block.
-templ BlockTimeline(cc *campaigns.CampaignContext) {
-	<div
-		data-widget="timeline-widget"
-		data-campaign-id={ cc.Campaign.ID }
-	>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-timeline mr-1.5"></i>Timelines
-			</h2>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				View all
-			</a>
-		</div>
+// BlockTimeline renders the entity-page timeline block. timelineID is the
+// instance resolved by the widget-binding framework (C-WIDGET-BINDING-P2):
+//   - empty (unbound) → today's behavior: a lazy campaign-level PREVIEW LIST
+//     of the campaign's timelines (identical to pre-framework).
+//   - non-empty (bound) → the single bound timeline rendered via the shared
+//     timeline-viz widget (the host's timeline tracks that record).
+templ BlockTimeline(cc *campaigns.CampaignContext, timelineID string) {
+	if timelineID == "" {
 		<div
-			hx-get={ fmt.Sprintf("/campaigns/%s/timelines/preview?limit=5", cc.Campaign.ID) }
-			hx-trigger="intersect once"
-			hx-swap="innerHTML"
-			class="card divide-y divide-edge min-h-[60px]"
+			data-widget="timeline-widget"
+			data-campaign-id={ cc.Campaign.ID }
 		>
-			<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+					<i class="fa-solid fa-timeline mr-1.5"></i>Timelines
+				</h2>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines", cc.Campaign.ID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					View all
+				</a>
+			</div>
+			<div
+				hx-get={ fmt.Sprintf("/campaigns/%s/timelines/preview?limit=5", cc.Campaign.ID) }
+				hx-trigger="intersect once"
+				hx-swap="innerHTML"
+				class="card divide-y divide-edge min-h-[60px]"
+			>
+				<div class="px-4 py-3 text-sm text-fg-muted">Loading...</div>
+			</div>
 		</div>
-	</div>
+	} else {
+		// Bound to a specific timeline: render that one via the shared
+		// timeline-viz widget (it self-fetches /timelines/:id/data; the JS is
+		// global). Mirrors TimelineEmbedFragment's mount contract.
+		<div class="card p-0 overflow-hidden" data-timeline-bound={ timelineID }>
+			<div class="flex items-center justify-between px-3 py-2 border-b border-edge">
+				<span class="text-sm font-medium text-fg">
+					<i class="fa-solid fa-timeline mr-1.5" aria-hidden="true"></i>Timeline
+				</span>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines/%s", cc.Campaign.ID, timelineID)) }
+					class="text-xs text-accent hover:underline"
+				>
+					Open
+				</a>
+			</div>
+			<div
+				data-widget="timeline-viz"
+				data-campaign-id={ cc.Campaign.ID }
+				data-timeline-id={ timelineID }
+				data-api-url={ fmt.Sprintf("/campaigns/%s/timelines/%s/data", cc.Campaign.ID, timelineID) }
+				data-height="320"
+				data-compact="true"
+				class="w-full"
+			></div>
+		</div>
+	}
 }

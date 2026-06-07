@@ -30,7 +30,12 @@ import (
 // service-backed-block pattern). Degrades gracefully: no campaign context →
 // friendly unavailable state; no calendar → "Create calendar" CTA; seed errors
 // → the band omits rather than failing the page.
-func EntityWorldStateBlock(svc CalendarService, cc *campaigns.CampaignContext, userID string) templ.Component {
+//
+// calendarID is the instance resolved by the widget-binding framework for the
+// "worldstate" widget type (C-WIDGET-BINDING-P2): the host's hourglass tracks
+// that calendar's clock. Empty (unbound / no host) falls back to the campaign's
+// default calendar — today's behavior — so unbound renders identically.
+func EntityWorldStateBlock(svc CalendarService, cc *campaigns.CampaignContext, userID, calendarID string) templ.Component {
 	// No campaign context → render the friendly not-found state rather than
 	// leaking a raw error / blank (mirrors entity_calendar item 2).
 	if cc == nil || cc.Campaign == nil {
@@ -44,8 +49,18 @@ func EntityWorldStateBlock(svc CalendarService, cc *campaigns.CampaignContext, u
 		seed     *WorldStateSeed
 		seedJSON string
 	)
-	if c, err := svc.GetCalendar(ctx, cc.Campaign.ID); err == nil {
-		cal = c
+	// Resolve the bound calendar instance first; fall back to the campaign
+	// default exactly as before when unbound (identical output when calendarID
+	// is the default calendar's id — the framework's default path).
+	if calendarID != "" {
+		if c, err := svc.GetCalendarByID(ctx, calendarID); err == nil && c != nil && c.CampaignID == cc.Campaign.ID {
+			cal = c
+		}
+	}
+	if cal == nil {
+		if c, err := svc.GetCalendar(ctx, cc.Campaign.ID); err == nil {
+			cal = c
+		}
 	}
 	if cal != nil {
 		if s, err := svc.BuildWorldStateSeed(ctx, cal.ID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, role, userID); err == nil {

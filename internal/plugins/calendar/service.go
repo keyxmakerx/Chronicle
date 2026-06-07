@@ -209,16 +209,32 @@ type NoopCalendarEventPublisher struct{}
 
 func (NoopCalendarEventPublisher) PublishCalendarEvent(string, string, string, any) {}
 
+// BindingCleaner sweeps a deleted instance's widget bindings (widget-binding
+// framework integrity hook, C-WIDGET-BINDING-P2). Implemented by
+// widgetbindings.Service; injected via SetBindingCleaner so the calendar
+// plugin doesn't hard-depend on the binding service for its core CRUD and
+// tests can mock it. Optional — nil means "no binding framework wired" (the
+// render-time guard + Sweep remain the backstop).
+type BindingCleaner interface {
+	OnInstanceDeleted(ctx context.Context, campaignID, widgetType, instanceID string) (int, error)
+}
+
 // calendarService is the default CalendarService implementation.
 type calendarService struct {
-	repo   CalendarRepository
-	events CalendarEventPublisher
+	repo           CalendarRepository
+	events         CalendarEventPublisher
+	bindingCleaner BindingCleaner
 }
 
 // NewCalendarService creates a CalendarService backed by the given repository.
 func NewCalendarService(repo CalendarRepository) CalendarService {
 	return &calendarService{repo: repo, events: NoopCalendarEventPublisher{}}
 }
+
+// SetBindingCleaner injects the widget-binding cleanup hook (wired at app
+// startup once the binding service exists). Reached via a type assertion in
+// routes.go so the CalendarService interface stays unchanged.
+func (s *calendarService) SetBindingCleaner(c BindingCleaner) { s.bindingCleaner = c }
 
 // SetEventPublisher sets the event publisher for real-time sync.
 func (s *calendarService) SetEventPublisher(pub CalendarEventPublisher) {
@@ -553,6 +569,15 @@ func (s *calendarService) DeleteCalendar(ctx context.Context, calendarID string)
 
 	if err := s.repo.Delete(ctx, calendarID); err != nil {
 		return err
+	}
+
+	// Widget-binding delete hook (C-WIDGET-BINDING-P2): a calendar id is the
+	// instance for BOTH the "calendar" and "worldstate" widget types, so
+	// deleting it must sweep both. Best-effort — the render-time orphan guard +
+	// Sweep are the backstop if this misses.
+	if s.bindingCleaner != nil {
+		_, _ = s.bindingCleaner.OnInstanceDeleted(ctx, campaignID, WidgetTypeCalendar, calendarID)
+		_, _ = s.bindingCleaner.OnInstanceDeleted(ctx, campaignID, WidgetTypeWorldstate, calendarID)
 	}
 
 	// If the deleted calendar was the default, promote the first remaining one.
