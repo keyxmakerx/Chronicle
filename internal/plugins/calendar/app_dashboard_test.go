@@ -167,3 +167,115 @@ func TestCalendarAppDashboard_LoadError(t *testing.T) {
 		t.Errorf("load-error state missing friendly message")
 	}
 }
+
+// --- W2: live "see in action" embeds (C-APPS-CAL-DASH-W2) ---
+
+func sampleW2Active() CalendarAppDashboardData {
+	d := sampleDashboardData()
+	d.SelectedIsActive = true
+	d.WorldState = &WorldStateSeed{TimeOfDay: 0.5, Season: "Spring", Date: WorldStateDate{1492, 4, 14}, Weather: WorldStateWeather{Type: "rain", Intensity: 1}}
+	d.WorldStateJSON = `{"timeOfDay":0.5}`
+	return d
+}
+
+// Active selected calendar → the LIVE worldstate band renders (engine seed +
+// sky scaffold + the shared engine), exactly one surface.
+func TestCalendarAppDashboard_LiveWorldstateWhenActive(t *testing.T) {
+	html := renderDashboardDetail(t, sampleW2Active())
+	for _, want := range []string{
+		"data-cal-dashboard-seeinaction",
+		"data-cal-dashboard-worldstate", // the live band wrapper
+		"id=\"cal-v2-worldstate\"",      // engine prod-mode seed blob
+		"data-cal-sky",                  // sky scaffold (band)
+		"cal-almanac-shelf",             // the hourglass shelf
+		"/static/js/cal-almanac.js",     // the shared engine
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("active worldstate embed missing %q", want)
+		}
+	}
+	if strings.Contains(html, "data-cal-dashboard-worldstate-note") {
+		t.Errorf("active calendar should not show the 'set active' note")
+	}
+	// Exactly ONE live worldstate surface (engine-singleton).
+	if n := strings.Count(html, "id=\"cal-v2-worldstate\""); n != 1 {
+		t.Errorf("expected exactly one #cal-v2-worldstate surface; got %d", n)
+	}
+}
+
+// Non-active selected calendar → NO live worldstate; the friendly note + the
+// engine-free grid instead (the nuance default, no widget surgery).
+func TestCalendarAppDashboard_NonActiveNoWorldstate(t *testing.T) {
+	d := sampleDashboardData() // SelectedIsActive=false, WorldState nil
+	html := renderDashboardDetail(t, d)
+	if !strings.Contains(html, "data-cal-dashboard-worldstate-note") {
+		t.Errorf("non-active calendar should show the 'set active' note")
+	}
+	for _, forbidden := range []string{"id=\"cal-v2-worldstate\"", "data-cal-sky"} {
+		if strings.Contains(html, forbidden) {
+			t.Errorf("non-active calendar must not render the live worldstate (%q)", forbidden)
+		}
+	}
+	// The engine-free month grid lazy-loads for ANY selected calendar.
+	if !strings.Contains(html, `hx-get="/campaigns/camp-1/calendars/cal-1/embed"`) {
+		t.Errorf("grid embed lazy-load missing")
+	}
+}
+
+// The calendar-in-action grid lazy-loads via the existing embed route.
+func TestCalendarAppDashboard_GridEmbedLazyLoad(t *testing.T) {
+	html := renderDashboardDetail(t, sampleW2Active())
+	if !strings.Contains(html, `hx-get="/campaigns/camp-1/calendars/cal-1/embed"`) {
+		t.Errorf("grid should hx-get the existing embed route")
+	}
+	if !strings.Contains(html, `hx-trigger="load"`) || !strings.Contains(html, "data-cal-dashboard-grid") {
+		t.Errorf("grid should lazy-load on insertion")
+	}
+}
+
+// Associated timelines render as the shipped timeline-viz widget mounts.
+func TestCalendarAppDashboard_TimelinePreviews(t *testing.T) {
+	html := renderDashboardDetail(t, sampleW2Active())
+	for _, want := range []string{
+		"data-cal-dashboard-timeline-previews",
+		`data-widget="timeline-viz"`,
+		`data-timeline-id="t1"`,
+		`data-api-url="/campaigns/camp-1/timelines/t1/data"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("timeline preview missing %q", want)
+		}
+	}
+	// No associated timelines → no preview block.
+	noTL := sampleW2Active()
+	noTL.Timelines = nil
+	if strings.Contains(renderDashboardDetail(t, noTL), "data-cal-dashboard-timeline-previews") {
+		t.Errorf("no timelines → no preview block")
+	}
+}
+
+// The page loads D3 (for timeline-viz) only when the selection has timelines.
+func TestCalendarAppDashboard_LoadsD3ForTimelines(t *testing.T) {
+	withTL := renderDashboardPage(t, sampleW2Active())
+	if !strings.Contains(withTL, "d3@7/dist/d3.min.js") {
+		t.Errorf("page should load D3 when there are timeline previews")
+	}
+	noTL := sampleW2Active()
+	noTL.Timelines = nil
+	if strings.Contains(renderDashboardPage(t, noTL), "d3@7/dist/d3.min.js") {
+		t.Errorf("page should not load D3 when there are no timeline previews")
+	}
+}
+
+// W2 selection is a full navigation: list rows are plain hrefs (no HTMX detail
+// swap), so the embed/engine scripts execute on load and teardown is the page
+// unload (one live surface, clean teardown).
+func TestCalendarAppDashboard_RowsAreFullNav(t *testing.T) {
+	html := renderDashboardPage(t, sampleDashboardData())
+	if strings.Contains(html, `hx-target="#cal-dash-detail"`) {
+		t.Errorf("W2 list rows must not HTMX-swap the detail (full-nav for engine scripts)")
+	}
+	if !strings.Contains(html, `href="/campaigns/camp-1/apps/calendar?calId=cal-2"`) {
+		t.Errorf("list rows should be plain navigation links")
+	}
+}

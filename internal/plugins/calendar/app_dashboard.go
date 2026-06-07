@@ -13,6 +13,7 @@ package calendar
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/labstack/echo/v4"
@@ -52,14 +53,26 @@ func (h *Handler) SetTimelineLister(l TimelineLister) { h.timelineLister = l }
 // CalendarAppDashboardData is the projection the dashboard templ renders.
 type CalendarAppDashboardData struct {
 	CampaignID string
-	Calendars  []Calendar    // left list (via ListCalendars)
-	Selected   *Calendar     // right detail (eager-loaded via GetCalendarByID)
-	ActiveID   string        // the user's active calendar, for the "active" badge
+	Calendars  []Calendar     // left list (via ListCalendars)
+	Selected   *Calendar      // right detail (eager-loaded via GetCalendarByID)
+	ActiveID   string         // the user's active calendar, for the "active" badge
 	Entities   []EntityTieRef // associated entities (read-only)
 	Timelines  []TimelineRef  // associated timelines (read-only)
 	LoadError  bool           // true → friendly "couldn't load" state
 	IsOwner    bool
 	CSRFToken  string
+
+	// W2 live "see in action" embeds (C-APPS-CAL-DASH-W2):
+	// SelectedIsActive gates the LIVE worldstate band — the engine binds the
+	// campaign's active calendar (one #cal-v2-worldstate per page), so the
+	// live ambient only renders when the selected calendar IS the active one
+	// (the dispatch's default nuance; no widget surgery). Non-active calendars
+	// still get the engine-free month grid.
+	SelectedIsActive bool
+	// WorldState holds the active calendar's seed (set only when
+	// SelectedIsActive) for the reused worldStateBandV2 component.
+	WorldState     *WorldStateSeed
+	WorldStateJSON string
 }
 
 // AppDashboard renders the Calendars dashboard. Full page on a normal GET;
@@ -111,6 +124,20 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 			data.Selected = sel
 			data.Entities = h.loadCalendarEntities(ctx, sel.ID)
 			data.Timelines = h.loadCalendarTimelines(ctx, sel.ID, role, userID)
+
+			// W2: the LIVE worldstate band renders only for the active
+			// calendar (engine binds the active calendar — see the struct
+			// doc). Build its seed here so the reused worldStateBandV2 paints
+			// on full page load (the engine inits in prod mode from the seed).
+			data.SelectedIsActive = data.ActiveID == sel.ID
+			if data.SelectedIsActive {
+				if seed, berr := h.svc.BuildWorldStateSeed(ctx, sel.ID, sel.CurrentYear, sel.CurrentMonth, sel.CurrentDay, role, userID); berr == nil && seed != nil {
+					data.WorldState = seed
+					if b, merr := json.Marshal(seed); merr == nil {
+						data.WorldStateJSON = string(b)
+					}
+				}
+			}
 		}
 	}
 
