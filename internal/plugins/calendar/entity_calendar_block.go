@@ -22,7 +22,14 @@ import (
 // the established service-backed-block pattern. Degrades gracefully: no
 // calendar → empty-but-present state; seed/ties errors → the band/list simply
 // omit rather than failing the entity page.
-func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, entityID, userID string) templ.Component {
+//
+// calendarID is the instance resolved by the widget-binding framework
+// (C-WIDGET-BINDING-P1-SPINE): the host's own binding, an inherited
+// entity-type template binding, or — the default — the campaign's default
+// calendar. An empty calendarID preserves the pre-framework behavior
+// (fall back to the campaign default), so callers that don't yet resolve a
+// binding keep working unchanged.
+func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, entityID, userID, calendarID string) templ.Component {
 	// No entity/campaign context → nothing to build from; render the friendly
 	// not-found state rather than leaking a raw "entity not found" / blank
 	// (C-CAL-EMBED-CONVERGE-POLISH item 2).
@@ -37,8 +44,18 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		seed     *WorldStateSeed
 		seedJSON string
 	)
-	if c, err := svc.GetCalendar(ctx, cc.Campaign.ID); err == nil {
-		cal = c
+	// Resolve the bound instance first (calendarID), falling back to the
+	// campaign default exactly as before when unbound. Identical output when
+	// calendarID is the default calendar's id (the framework's default path).
+	if calendarID != "" {
+		if c, err := svc.GetCalendarByID(ctx, calendarID); err == nil && c != nil && c.CampaignID == cc.Campaign.ID {
+			cal = c
+		}
+	}
+	if cal == nil {
+		if c, err := svc.GetCalendar(ctx, cc.Campaign.ID); err == nil {
+			cal = c
+		}
 	}
 	if cal != nil {
 		if s, err := svc.BuildWorldStateSeed(ctx, cal.ID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, role, userID); err == nil {

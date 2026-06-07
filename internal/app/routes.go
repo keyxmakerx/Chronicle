@@ -8,46 +8,48 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
-	"github.com/keyxmakerx/chronicle/internal/systems"
-	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
-	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/admin"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/aiexport"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/prompt"
-	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
+	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
-	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
+	"github.com/keyxmakerx/chronicle/internal/plugins/backup"
+	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/designlab"
-	"github.com/keyxmakerx/chronicle/internal/templates/demo"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
+	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
+	"github.com/keyxmakerx/chronicle/internal/plugins/restore"
+	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/plugins/smtp"
-	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
-	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
-	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
+	"github.com/keyxmakerx/chronicle/internal/systems"
+	"github.com/keyxmakerx/chronicle/internal/templates/demo"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 	ws "github.com/keyxmakerx/chronicle/internal/websocket"
-	"github.com/keyxmakerx/chronicle/internal/plugins/armory"
-	"github.com/keyxmakerx/chronicle/internal/plugins/npcs"
 	"github.com/keyxmakerx/chronicle/internal/widgets/entity_notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
@@ -2249,6 +2251,15 @@ func (a *App) RegisterRoutes() {
 	blockRegistry := entities.NewBlockRegistry()
 	entities.RegisterCoreBlocks(blockRegistry)
 
+	// Widget-binding framework (C-WIDGET-BINDING-P1-SPINE): the dynamic
+	// host↔widget-type↔instance registry + service. Widget types register
+	// declaratively; the service resolves a host's instance via the precedence
+	// chain (own binding → entity-type template → default = today's behavior).
+	// P1 registers calendar; maps/timeline/worldstate fold in later (P2/P3).
+	widgetRegistry := widgetbindings.NewRegistry()
+	widgetRegistry.Register(calendar.NewCalendarWidgetType(calendarService))
+	widgetBindingSvc := widgetbindings.NewService(widgetbindings.NewRepository(a.DB), widgetRegistry)
+
 	// Calendar plugin blocks (requires "calendar" addon).
 	// NOTE: the old per-entity `calendar` block (BlockCalendarEvents) was
 	// retired in C-CAL-EMBED-CONVERGE-POLISH — it was never used and is
@@ -2279,10 +2290,29 @@ func (a *App) RegisterRoutes() {
 		// EntityCalendarBlock renders the friendly not-found state itself when
 		// the entity/campaign context is missing (no raw error / blank).
 		entityID := ""
+		entityTypeID := ""
 		if rc.Entity != nil {
 			entityID = rc.Entity.ID
+			entityTypeID = strconv.Itoa(rc.Entity.EntityTypeID)
 		}
-		return calendar.EntityCalendarBlock(calendarService, rc.CC, entityID, rc.UserID)
+		// Resolve the calendar instance through the widget-binding framework:
+		// the entity's own binding → its entity-type template → default
+		// (campaign default calendar = today's behavior). Empty on any error,
+		// which EntityCalendarBlock treats as "use the campaign default" — so
+		// unbound entities render exactly as before (#411–#420 unchanged).
+		calID := ""
+		if rc.CC != nil && rc.CC.Campaign != nil && entityID != "" {
+			host := widgetbindings.HostRef{
+				CampaignID:   rc.CC.Campaign.ID,
+				Type:         widgetbindings.HostTypeEntity,
+				ID:           entityID,
+				EntityTypeID: entityTypeID,
+			}
+			if res, err := widgetBindingSvc.Resolve(context.Background(), host, calendar.WidgetTypeCalendar); err == nil {
+				calID = res.InstanceID
+			}
+		}
+		return calendar.EntityCalendarBlock(calendarService, rc.CC, entityID, rc.UserID, calID)
 	})
 
 	// entity_worldstate — the entity-PAGE worldState timepiece embed
@@ -2337,7 +2367,7 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "map_editor", Label: "Map Editor", Icon: "fa-map-location-dot",
 		Description: "Full per-entity map (markers, drawings, settings)",
-		Addon: "maps", Contexts: []string{"template"},
+		Addon:       "maps", Contexts: []string{"template"},
 		// No ConfigFields — the source of truth is entity.MapID. The
 		// picker is rendered by the block itself, not the layout editor.
 		// Singleton: only one map_editor per layout. The IIFE inside
@@ -2459,7 +2489,7 @@ func (a *App) RegisterRoutes() {
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "entity_manager", Label: "Entity Manager", Icon: "fa-list-check",
 		Description: "Sortable, filterable entity list with visibility controls",
-		Contexts: []string{"template"},
+		Contexts:    []string{"template"},
 	}, func(bctx entities.BlockRenderContext) templ.Component {
 		typeID := entities.BlockConfigInt(bctx.Block.Config, "entity_type_id", 0)
 		return entities.BlockEntityManager(bctx.CC, typeID, bctx.CSRFToken)

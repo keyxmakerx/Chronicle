@@ -19,6 +19,7 @@ internal/plugins/settings/service.go	sanitize_calls=0	html_params=-	html_struct_
 internal/plugins/smtp/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/syncapi/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/plugins/timeline/service.go	sanitize_calls=2	html_params=-	html_struct_fields=DescriptionHTML
+internal/plugins/widgetbindings/service.go	sanitize_calls=0	html_params=-	html_struct_fields=-
 internal/widgets/entity_notes/service.go	sanitize_calls=1	html_params=-	html_struct_fields=BodyHTML
 internal/widgets/notes/service.go	sanitize_calls=2	html_params=-	html_struct_fields=EntryHTML
 internal/widgets/posts/service.go	sanitize_calls=1	html_params=-	html_struct_fields=EntryHTML

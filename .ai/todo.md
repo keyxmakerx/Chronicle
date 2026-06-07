@@ -194,7 +194,16 @@ dashboards; first = Calendars. Audit: `reports/chronicle/2026-06-07-apps-hub-cal
   no repo cross-import). Friendly empty/error states. Tests:
   `app_dashboard_test.go`, `entity_ties` read, `timeline/list_by_calendar_test.go`.
 - [x] **W2 — live "see in action" embeds (C-APPS-CAL-DASH-W2)** — detail pane reuses shipped surfaces (no new widgets): LIVE worldstate band (`worldStateBandV2`) only when the selected calendar is the campaign's ACTIVE one (engine-singleton nuance default; non-active → friendly note); engine-free month grid lazy-loaded via the existing `/calendars/:calId/embed` route; per-associated-timeline `timeline-viz` mounts (D3 at page level). Selection = full navigation (not HTMX swap) so engine/D3 scripts run + teardown is automatic (one live surface). Tests: active-vs-non-active branch, grid lazy-load, timeline previews, D3 gating, full-nav rows.
-- [ ] **W3** inline link/unlink + create-timeline · **W4** generalize per-app dashboard pattern.
+- [~] **W3/W4 SUPERSEDED** by the widget-binding framework (below) — the Calendars dashboard becomes a *consumer* of the binding registry; W1/W2 stand.
+
+### Widget Binding Framework (the real Wave-4)
+
+Generic host (entity/entity-type/dashboard) ↔ widget-type ↔ data-instance binding;
+`entity_calendar`/`entity_worldstate`/`map_editor` are hardcoded special cases.
+Audit: `cordinator/reports/chronicle/2026-06-07-widget-binding-framework-prep-audit.md`. ADR-038.
+
+- [x] **P1 — binding spine + dynamic registry, proven on calendar (C-WIDGET-BINDING-P1-SPINE)** — new `widgetbindings` plugin: polymorphic **FK-free** `widget_bindings` table (`host_type` entity/entity_type/dashboard from day one); a declarative `WidgetType` **Registry**; a `Service` with the precedence resolver (own → entity-type template → default = today's behavior) returning `{InstanceID, Source}`; the integrity kit (per-plugin delete hook + render-time orphan guard + campaign sweep); campaign scope pushed to the repo signature + checked on host AND resolved instance. **Calendar retrofitted** (entity_calendar resolves via the framework; unbound = campaign default → zero behavior change). Tests cover CRUD, precedence, directional cascade (type ≠> own), orphan guard, campaign-scope, source layer. ADR-038 recorded.
+- [ ] **P2** worldstate + timeline register as widget types · **P3** maps → bindings + dashboard-render unification (lights up `host_type='dashboard'`) · **P4** create-or-pick UI + `EntityType.hosts_widget_type` + "Calendars subcategory" wizard (surfaces the entity-type template path built in P1).
 
 ### Worldstate Widgetization (C-CAL-WORLDSTATE-WIDGETS) — Phase 6
 

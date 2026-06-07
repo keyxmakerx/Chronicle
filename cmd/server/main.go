@@ -26,6 +26,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/syncapi"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
 
@@ -258,6 +259,10 @@ func registeredPlugins() []database.PluginSchema {
 		{Slug: "maps", MigrationsFS: mustSub(maps.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "sessions", MigrationsFS: mustSub(sessions.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "timeline", MigrationsFS: mustSub(timeline.MigrationsFS, database.PluginMigrationsSubdir)},
+		// widgetbindings: the generic host↔widget-type↔instance binding table
+		// (C-WIDGET-BINDING-P1-SPINE). FK-free + polymorphic, so plugin order
+		// vs calendar/maps/timeline doesn't matter.
+		{Slug: "widgetbindings", MigrationsFS: mustSub(widgetbindings.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "syncapi", MigrationsFS: mustSub(syncapi.MigrationsFS, database.PluginMigrationsSubdir)},
 		{Slug: "packages", MigrationsFS: mustSub(packages.MigrationsFS, database.PluginMigrationsSubdir)},
 		// foundry_vtt's migration 001 (C-FMC-5c) renames
