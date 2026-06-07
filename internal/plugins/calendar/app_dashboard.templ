@@ -56,6 +56,12 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 				</div>
 			}
 		</div>
+		// D3 backs the timeline-viz previews (timeline_viz.js is already global
+		// in base.templ; D3 is page-loaded, same CDN the timeline page uses /
+		// CSP-allowed). Only loaded when the selected calendar has timelines.
+		if data.Selected != nil && len(data.Timelines) > 0 {
+			<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" defer></script>
+		}
 	}
 }
 
@@ -63,12 +69,13 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 // Selecting it HTMX-swaps the detail pane (and pushes the URL so reloads keep
 // the selection).
 templ calendarAppDashboardListRow(data CalendarAppDashboardData, cal Calendar) {
+	// W2: selection is a FULL navigation (plain href), not an HTMX detail
+	// swap. The live embeds (worldstate engine, timeline-viz/D3) load <script>
+	// tags that HTMX won't execute in swapped content (allowScriptTags=false),
+	// and the engine inits from its seed at page load — so a full load is the
+	// robust path and makes "one live surface + clean teardown" automatic.
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar?calId=%s", data.CampaignID, cal.ID)) }
-		hx-get={ fmt.Sprintf("/campaigns/%s/apps/calendar?calId=%s", data.CampaignID, cal.ID) }
-		hx-target="#cal-dash-detail"
-		hx-swap="innerHTML"
-		hx-push-url="true"
 		class={ "card p-3 hover:ring-2 hover:ring-accent/40 transition-all group",
 			templ.KV("ring-2 ring-accent/60", data.Selected != nil && data.Selected.ID == cal.ID) }
 		data-cal-dashboard-row
@@ -124,6 +131,9 @@ templ calendarAppDashboardDetail(data CalendarAppDashboardData) {
 			// CRUD-compose actions — link/post to the EXISTING surfaces.
 			@calendarAppDashboardActions(data)
 
+			// W2 "see in action" — live embeds reusing shipped widgets.
+			@calendarAppDashboardSeeInAction(data)
+
 			// Read-only associations panel.
 			<div class="mt-5 pt-4 border-t border-edge grid gap-4 sm:grid-cols-2" data-cal-dashboard-associations>
 				@calendarAppDashboardEntities(data)
@@ -131,6 +141,78 @@ templ calendarAppDashboardDetail(data CalendarAppDashboardData) {
 			</div>
 		</div>
 	}
+}
+
+// calendarAppDashboardSeeInAction — W2 live embeds for the selected calendar,
+// reusing shipped surfaces (no new widgets):
+//   - LIVE worldstate band (sky + hourglass) via worldStateBandV2 — only when
+//     the selected calendar is the campaign's active one (engine-singleton
+//     nuance); otherwise a friendly note + the engine-free grid.
+//   - Calendar-in-action: the engine-free CalendarEmbedFragment month grid,
+//     lazy-loaded via the existing /calendars/:calId/embed route (safe for any
+//     selected calendar).
+//   - Associated-timeline previews: the shipped timeline-viz widget mount per
+//     associated timeline (D3 loaded at page level).
+templ calendarAppDashboardSeeInAction(data CalendarAppDashboardData) {
+	<div class="mt-5 pt-4 border-t border-edge" data-cal-dashboard-seeinaction>
+		<h3 class="text-xs font-semibold text-fg-secondary uppercase tracking-wider mb-2">
+			<i class="fa-solid fa-wand-magic-sparkles mr-1.5" aria-hidden="true"></i>See in action
+		</h3>
+		if data.SelectedIsActive && data.WorldState != nil {
+			<div class="relative rounded-lg overflow-hidden border border-edge mb-3" data-cal-dashboard-worldstate>
+				@worldStateBandV2(CalendarV2ViewData{ActiveCalendar: data.Selected, WorldState: data.WorldState, WorldStateJSON: data.WorldStateJSON})
+			</div>
+		} else {
+			<p class="text-xs text-fg-muted mb-3" data-cal-dashboard-worldstate-note>
+				<i class="fa-solid fa-circle-info mr-1" aria-hidden="true"></i>
+				The live world-state (sky + timepiece) shows the campaign&#39;s active calendar. Set this calendar active to see its ambient here.
+			</p>
+		}
+		// Engine-free month grid (lazy via the existing embed route).
+		<div
+			hx-get={ fmt.Sprintf("/campaigns/%s/calendars/%s/embed", data.CampaignID, data.Selected.ID) }
+			hx-trigger="load"
+			hx-swap="innerHTML"
+			class="card overflow-hidden"
+			data-cal-dashboard-grid
+		>
+			<div class="px-4 py-6 text-sm text-fg-muted text-center">Loading calendar…</div>
+		</div>
+		if len(data.Timelines) > 0 {
+			<div class="mt-3 flex flex-col gap-3" data-cal-dashboard-timeline-previews>
+				for _, tl := range data.Timelines {
+					@calendarAppDashboardTimelinePreview(data.CampaignID, tl)
+				}
+			</div>
+		}
+	</div>
+}
+
+// calendarAppDashboardTimelinePreview mounts the shipped timeline-viz widget
+// for one associated timeline (same data-attributes the timeline plugin's own
+// embed uses; the widget JS is global, D3 is loaded at page level). No
+// cross-plugin Go import — just the widget's mount contract.
+templ calendarAppDashboardTimelinePreview(campaignID string, tl TimelineRef) {
+	<div class="card p-0 overflow-hidden" data-cal-dashboard-timeline-preview data-timeline-id={ tl.ID }>
+		<div class="flex items-center justify-between px-3 py-2 border-b border-edge">
+			<span class="text-xs font-medium text-fg truncate">
+				if tl.Icon != "" {
+					<i class={ "fa-solid " + tl.Icon, "text-[10px] mr-1" } style={ fmt.Sprintf("color:%s", tl.Color) } aria-hidden="true"></i>
+				}
+				{ tl.Name }
+			</span>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/timelines/%s", campaignID, tl.ID)) } class="text-xs text-accent hover:underline">Open</a>
+		</div>
+		<div
+			data-widget="timeline-viz"
+			data-campaign-id={ campaignID }
+			data-timeline-id={ tl.ID }
+			data-api-url={ fmt.Sprintf("/campaigns/%s/timelines/%s/data", campaignID, tl.ID) }
+			data-height="240"
+			data-compact="true"
+			class="w-full"
+		></div>
+	</div>
 }
 
 // calendarAppDashboardActions — the compose row (no new CRUD).

@@ -193,7 +193,8 @@ dashboards; first = Calendars. Audit: `reports/chronicle/2026-06-07-apps-hub-cal
   a service-interface adapter (`calendar.TimelineLister`, wired in app/routes.go;
   no repo cross-import). Friendly empty/error states. Tests:
   `app_dashboard_test.go`, `entity_ties` read, `timeline/list_by_calendar_test.go`.
-- [ ] **W2** live "see in action" embeds · **W3** inline link/unlink + create-timeline · **W4** generalize per-app dashboard pattern.
+- [x] **W2 — live "see in action" embeds (C-APPS-CAL-DASH-W2)** — detail pane reuses shipped surfaces (no new widgets): LIVE worldstate band (`worldStateBandV2`) only when the selected calendar is the campaign's ACTIVE one (engine-singleton nuance default; non-active → friendly note); engine-free month grid lazy-loaded via the existing `/calendars/:calId/embed` route; per-associated-timeline `timeline-viz` mounts (D3 at page level). Selection = full navigation (not HTMX swap) so engine/D3 scripts run + teardown is automatic (one live surface). Tests: active-vs-non-active branch, grid lazy-load, timeline previews, D3 gating, full-nav rows.
+- [ ] **W3** inline link/unlink + create-timeline · **W4** generalize per-app dashboard pattern.
 
 ### Worldstate Widgetization (C-CAL-WORLDSTATE-WIDGETS) — Phase 6
 
