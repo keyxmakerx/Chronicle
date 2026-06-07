@@ -64,7 +64,15 @@ func (h *Handler) LoginForm(c echo.Context) error {
 		successMsg = "Your password has been reset. You can now sign in."
 	}
 
-	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", "", successMsg))
+	// Auto-recovery banner: the CSRF middleware bounces a stale/missing-token
+	// login POST here with ?expired=1. This GET already re-issued a fresh token
+	// (above), so the reloaded form works — we just explain why they're back.
+	var errMsg string
+	if c.QueryParam("expired") == "1" {
+		errMsg = middleware.CSRFFriendlyMessage
+	}
+
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg))
 }
 
 // Login processes the login form submission (POST /login).
