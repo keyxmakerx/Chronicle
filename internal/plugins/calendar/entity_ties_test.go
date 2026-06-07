@@ -50,6 +50,12 @@ func (m *mockCalendarRepo) EntitiesForEra(ctx context.Context, eraID int) ([]Ent
 	}
 	return nil, nil
 }
+func (m *mockCalendarRepo) EntitiesForCalendar(ctx context.Context, calendarID string) ([]EntityTieRef, error) {
+	if m.entitiesForCalendarFn != nil {
+		return m.entitiesForCalendarFn(ctx, calendarID)
+	}
+	return nil, nil
+}
 func (m *mockCalendarRepo) EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error) {
 	if m.eventsForEntityFn != nil {
 		return m.eventsForEntityFn(ctx, entityID)

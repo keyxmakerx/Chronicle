@@ -126,6 +126,7 @@ GET	/api/cors	internal/plugins/settings/routes.go
 GET	/api/logs	internal/plugins/syncapi/routes.go
 GET	/api/security	internal/plugins/syncapi/routes.go
 GET	/api/version	internal/plugins/syncapi/routes.go
+GET	/apps/calendar	internal/plugins/calendar/routes.go
 GET	/armory	internal/plugins/armory/routes.go
 GET	/armory/count	internal/plugins/armory/routes.go
 GET	/armory/instances	internal/plugins/armory/routes.go

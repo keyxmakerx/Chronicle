@@ -14,6 +14,7 @@ type mockTimelineRepo struct {
 	createFn              func(ctx context.Context, t *Timeline) error
 	getByIDFn             func(ctx context.Context, id string) (*Timeline, error)
 	listFn                func(ctx context.Context, campaignID string, role int) ([]Timeline, error)
+	listByCalendarFn      func(ctx context.Context, calendarID string, role int) ([]Timeline, error)
 	updateFn              func(ctx context.Context, t *Timeline) error
 	deleteFn              func(ctx context.Context, id string) error
 	searchFn              func(ctx context.Context, campaignID, query string, role int) ([]Timeline, error)
@@ -56,6 +57,13 @@ func (m *mockTimelineRepo) GetByID(ctx context.Context, id string) (*Timeline, e
 func (m *mockTimelineRepo) List(ctx context.Context, campaignID string, role int) ([]Timeline, error) {
 	if m.listFn != nil {
 		return m.listFn(ctx, campaignID, role)
+	}
+	return nil, nil
+}
+
+func (m *mockTimelineRepo) ListByCalendar(ctx context.Context, calendarID string, role int) ([]Timeline, error) {
+	if m.listByCalendarFn != nil {
+		return m.listByCalendarFn(ctx, calendarID, role)
 	}
 	return nil, nil
 }

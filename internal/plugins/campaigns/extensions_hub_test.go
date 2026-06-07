@@ -117,20 +117,21 @@ func TestExtensionsHubFragment_SingleElementArray(t *testing.T) {
 	if !strings.Contains(html, `data-extension-enabled="true"`) {
 		t.Errorf("enabled-state attr missing for enabled card; got:\n%s", html)
 	}
-	// Phase 2: the expand affordance is now wired to the hub
-	// fragment route. The button hx-gets /extensions/calendar/dashboard
-	// into the panel below the catalog (one-card-at-a-time swap).
-	if !strings.Contains(html, `data-extension-dashboard-expand`) {
-		t.Errorf("expand affordance missing on HasDashboard card; got:\n%s", html)
+	// E1 (C-APPS-CAL-DASH-W1): calendar now has a DEDICATED dashboard page,
+	// so its "Open dashboard" affordance navigates to that page rather than
+	// HTMX-swapping the inline panel. (Apps without a dedicated page keep the
+	// inline-panel affordance — covered by ExtensionDashboardPageURL.)
+	if !strings.Contains(html, `data-extension-dashboard-page`) {
+		t.Errorf("calendar should use the dedicated-page affordance; got:\n%s", html)
 	}
-	if !strings.Contains(html, `hx-get="/campaigns/camp-1/extensions/calendar/dashboard"`) {
-		t.Errorf("expand affordance should hx-get the calendar dashboard fragment; got:\n%s", html)
+	if !strings.Contains(html, `href="/campaigns/camp-1/apps/calendar"`) {
+		t.Errorf("calendar dashboard link should point at the dedicated page; got:\n%s", html)
 	}
-	if !strings.Contains(html, `hx-target="#extensions-hub-dashboard-panel"`) {
-		t.Errorf("expand affordance should target the panel slot; got:\n%s", html)
+	if strings.Contains(html, `hx-get="/campaigns/camp-1/extensions/calendar/dashboard"`) {
+		t.Errorf("calendar should no longer use the inline-panel hx-get affordance; got:\n%s", html)
 	}
 	if !strings.Contains(html, "Open dashboard") {
-		t.Errorf("expand affordance copy should read 'Open dashboard'; got:\n%s", html)
+		t.Errorf("affordance copy should read 'Open dashboard'; got:\n%s", html)
 	}
 	// Toggle should target the existing addons endpoint with
 	// redirect_to=extensions-hub so the in-page refresh fires.
@@ -163,9 +164,14 @@ func TestExtensionsHubFragment_MixedEnabledDisabledAndNotInstalled(t *testing.T)
 	if !strings.Contains(html, "Soon</span>") {
 		t.Errorf("uninstalled addon should render Soon badge; got:\n%s", html)
 	}
-	// Only the HasDashboard=true card carries the expand affordance.
-	if c := strings.Count(html, "data-extension-dashboard-expand"); c != 1 {
-		t.Errorf("expand-affordance count = %d, want 1 (only HasDashboard cards); got:\n%s", c, html)
+	// Only the HasDashboard=true card (calendar) carries a dashboard
+	// affordance. Calendar has a dedicated page (E1), so it's the
+	// dedicated-page link, not the inline-panel expand button.
+	if c := strings.Count(html, "data-extension-dashboard-page"); c != 1 {
+		t.Errorf("dashboard-page affordance count = %d, want 1 (calendar only); got:\n%s", c, html)
+	}
+	if strings.Contains(html, "data-extension-dashboard-expand") {
+		t.Errorf("no card should use the inline-panel expand affordance now (calendar has a dedicated page); got:\n%s", html)
 	}
 }
 

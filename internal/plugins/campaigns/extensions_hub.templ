@@ -159,18 +159,33 @@ templ extensionsHubCard(cc *CampaignContext, addon PluginHubAddon, csrfToken str
 		// button.
 		if addon.HasDashboard {
 			<div class="mt-3 pt-3 border-t border-edge-light flex items-center justify-end">
-				<button
-					type="button"
-					class="text-xs text-accent hover:underline px-2 py-1 rounded transition-colors duration-micro"
-					hx-get={ fmt.Sprintf("/campaigns/%s/extensions/%s/dashboard", cc.Campaign.ID, addon.Slug) }
-					hx-target="#extensions-hub-dashboard-panel"
-					hx-swap="innerHTML"
-					data-extension-dashboard-expand
-					data-extension-dashboard-slug={ addon.Slug }
-				>
-					<i class="fa-solid fa-table-columns text-[10px] mr-1"></i>
-					Open dashboard
-				</button>
+				if pageURL, ok := ExtensionDashboardPageURL(addon.Slug, cc.Campaign.ID); ok {
+					// Dedicated dashboard page (E1: Calendars). Navigate to it
+					// rather than HTMX-swapping the inline panel.
+					<a
+						href={ templ.SafeURL(pageURL) }
+						class="text-xs text-accent hover:underline px-2 py-1 rounded transition-colors duration-micro"
+						data-extension-dashboard-page
+						data-extension-dashboard-slug={ addon.Slug }
+					>
+						<i class="fa-solid fa-table-columns text-[10px] mr-1"></i>
+						Open dashboard
+					</a>
+				} else {
+					// Inline-panel fragment (apps without a dedicated page yet).
+					<button
+						type="button"
+						class="text-xs text-accent hover:underline px-2 py-1 rounded transition-colors duration-micro"
+						hx-get={ fmt.Sprintf("/campaigns/%s/extensions/%s/dashboard", cc.Campaign.ID, addon.Slug) }
+						hx-target="#extensions-hub-dashboard-panel"
+						hx-swap="innerHTML"
+						data-extension-dashboard-expand
+						data-extension-dashboard-slug={ addon.Slug }
+					>
+						<i class="fa-solid fa-table-columns text-[10px] mr-1"></i>
+						Open dashboard
+					</button>
+				}
 			</div>
 		}
 	</div>

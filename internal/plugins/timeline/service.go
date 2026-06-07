@@ -81,6 +81,7 @@ type TimelineService interface {
 	CreateTimeline(ctx context.Context, campaignID string, input CreateTimelineInput) (*Timeline, error)
 	GetTimeline(ctx context.Context, timelineID string) (*Timeline, error)
 	ListTimelines(ctx context.Context, campaignID string, role int, userID string) ([]Timeline, error)
+	ListTimelinesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]Timeline, error)
 	UpdateTimeline(ctx context.Context, timelineID string, input UpdateTimelineInput) error
 	DeleteTimeline(ctx context.Context, timelineID string) error
 
@@ -212,6 +213,28 @@ func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, 
 	}
 
 	// Apply per-user visibility rules (Owners always see everything).
+	if !permissions.CanSeeDmOnly(role) && userID != "" {
+		filtered := timelines[:0]
+		for _, t := range timelines {
+			if canUserView(t.Visibility, t.VisibilityRules, role, userID) {
+				filtered = append(filtered, t)
+			}
+		}
+		timelines = filtered
+	}
+	return timelines, nil
+}
+
+// ListTimelinesForCalendar returns the timelines bound to a calendar,
+// role-filtered + per-user visibility-filtered (same rules as ListTimelines).
+// Exposed cross-plugin (calendar's Calendars dashboard) via the TimelineService
+// interface — the calendar plugin reaches it through an adapter, never a repo
+// import (C-APPS-CAL-DASH-W1, plugin-isolation convention).
+func (s *timelineService) ListTimelinesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]Timeline, error) {
+	timelines, err := s.repo.ListByCalendar(ctx, calendarID, role)
+	if err != nil {
+		return nil, fmt.Errorf("list timelines for calendar: %w", err)
+	}
 	if !permissions.CanSeeDmOnly(role) && userID != "" {
 		filtered := timelines[:0]
 		for _, t := range timelines {
