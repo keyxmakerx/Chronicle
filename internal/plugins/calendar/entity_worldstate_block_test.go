@@ -31,7 +31,7 @@ func (s *entityWSBlockStub) BuildWorldStateSeed(context.Context, string, int, in
 func renderEntityWS(t *testing.T, svc CalendarService, cc *campaigns.CampaignContext) string {
 	t.Helper()
 	var sb strings.Builder
-	if err := EntityWorldStateBlock(svc, cc, "user-1").Render(context.Background(), &sb); err != nil {
+	if err := EntityWorldStateBlock(svc, cc, "user-1", "").Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	return sb.String()

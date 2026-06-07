@@ -2258,7 +2258,26 @@ func (a *App) RegisterRoutes() {
 	// P1 registers calendar; maps/timeline/worldstate fold in later (P2/P3).
 	widgetRegistry := widgetbindings.NewRegistry()
 	widgetRegistry.Register(calendar.NewCalendarWidgetType(calendarService))
+	// P2: worldstate (instance = a calendar id, a view over the clock) +
+	// timeline (instance = a timeline record) register as widget types.
+	widgetRegistry.Register(calendar.NewWorldStateWidgetType(calendarService))
+	widgetRegistry.Register(timeline.NewTimelineWidgetType(timelineSvc))
 	widgetBindingSvc := widgetbindings.NewService(widgetbindings.NewRepository(a.DB), widgetRegistry)
+	// P2: wire the delete hooks P1 left unconnected. The calendar/timeline
+	// services call OnInstanceDeleted on delete so a removed instance's
+	// bindings are swept promptly (render-time guard + Sweep are the backstop).
+	// Reached via a type assertion so the CalendarService/TimelineService
+	// interfaces stay unchanged.
+	if c, ok := calendarService.(interface {
+		SetBindingCleaner(calendar.BindingCleaner)
+	}); ok {
+		c.SetBindingCleaner(widgetBindingSvc)
+	}
+	if t, ok := timelineSvc.(interface {
+		SetBindingCleaner(timeline.BindingCleaner)
+	}); ok {
+		t.SetBindingCleaner(widgetBindingSvc)
+	}
 
 	// Calendar plugin blocks (requires "calendar" addon).
 	// NOTE: the old per-entity `calendar` block (BlockCalendarEvents) was
@@ -2333,7 +2352,23 @@ func (a *App) RegisterRoutes() {
 	}, func(rc entities.BlockRenderContext) templ.Component {
 		// EntityWorldStateBlock renders the friendly not-found state itself
 		// when the campaign context is missing (no raw error / blank).
-		return calendar.EntityWorldStateBlock(calendarService, rc.CC, rc.UserID)
+		// P2: resolve the host's hourglass calendar via the "worldstate" widget
+		// type (own binding → entity-type template → default = campaign default
+		// calendar). Empty/unbound → today's behavior. Dashboard-as-host stays
+		// default until P3.
+		calID := ""
+		if rc.CC != nil && rc.CC.Campaign != nil && rc.Entity != nil {
+			host := widgetbindings.HostRef{
+				CampaignID:   rc.CC.Campaign.ID,
+				Type:         widgetbindings.HostTypeEntity,
+				ID:           rc.Entity.ID,
+				EntityTypeID: strconv.Itoa(rc.Entity.EntityTypeID),
+			}
+			if res, err := widgetBindingSvc.Resolve(context.Background(), host, calendar.WidgetTypeWorldstate); err == nil {
+				calID = res.InstanceID
+			}
+		}
+		return calendar.EntityWorldStateBlock(calendarService, rc.CC, rc.UserID, calID)
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
@@ -2342,7 +2377,22 @@ func (a *App) RegisterRoutes() {
 		Description: "Timeline preview with events", Addon: "timeline",
 		Contexts: []string{"template"},
 	}, func(ctx entities.BlockRenderContext) templ.Component {
-		return timeline.BlockTimeline(ctx.CC)
+		// P2: resolve the host's bound timeline via the "timeline" widget type.
+		// Unbound (no default) → empty → BlockTimeline keeps today's campaign
+		// preview list. Bound → that single timeline.
+		timelineID := ""
+		if ctx.CC != nil && ctx.CC.Campaign != nil && ctx.Entity != nil {
+			host := widgetbindings.HostRef{
+				CampaignID:   ctx.CC.Campaign.ID,
+				Type:         widgetbindings.HostTypeEntity,
+				ID:           ctx.Entity.ID,
+				EntityTypeID: strconv.Itoa(ctx.Entity.EntityTypeID),
+			}
+			if res, err := widgetBindingSvc.Resolve(context.Background(), host, timeline.WidgetTypeTimeline); err == nil {
+				timelineID = res.InstanceID
+			}
+		}
+		return timeline.BlockTimeline(ctx.CC, timelineID)
 	})
 
 	// Maps plugin blocks (requires "maps" addon).
