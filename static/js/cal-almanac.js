@@ -2888,6 +2888,8 @@
     if (commit) commit.addEventListener('click', function () {
       var form = readCreateForm(); if (!form) return;
       mockCreateEvent(form);
+      // Cursor-sync (Tuner §J1): tell sibling widgets a new event exists.
+      try { if (window.__calCursorSync) window.__calCursorSync.emitEventCreate(form.id || null, { year: VIEW.year, month: form.month, day: form.day }); } catch (e) {}
       flash(commit, 'Created ✓');
       setTimeout(closeCreatePopup, 700);
     });
@@ -3041,6 +3043,61 @@
       if (!document.querySelector('[data-cal-sky]')) return;   // almanac page only
       ev.preventDefault(); tcTogglePause();
     });
+  });
+
+  // ============================================================
+  // Block: cursor-sync — cross-widget cursor protocol (Tuner §J1)
+  // ============================================================
+  // Almanac participates in the cal:cursor-change / cal:event-create
+  // DOM-event protocol so a sibling timeline (Tuner) on the same page
+  // stays in sync. Standalone (no siblings): emits are harmless no-ops
+  // with nothing listening. Loop-prevention is by sourceWidgetId.
+  registerInitBlock('cursor-sync', function () {
+    var selfId = 'almanac-' + Math.random().toString(36).slice(2, 9);
+    var applyingExternal = false;
+    // Prime from current world-state so subscribing below doesn't emit a
+    // spurious cursor-change at load.
+    var lastTod = (window.__calWorldState && typeof window.__calWorldState.timeOfDay === 'number')
+      ? window.__calWorldState.timeOfDay : null;
+    var sync = { selfId: selfId, type: 'calendar', lastExternal: null, lastEmitted: null };
+
+    function emit(name, detail) {
+      detail = detail || {}; detail.sourceWidgetId = selfId; detail.sourceWidgetType = 'calendar';
+      sync.lastEmitted = detail;
+      try { document.dispatchEvent(new CustomEvent(name, { detail: detail })); } catch (e) {}
+    }
+    // The create-popup Create button calls this so siblings refresh.
+    sync.emitEventCreate = function (eventId, date) { emit('cal:event-create', { eventId: eventId, date: date }); };
+
+    // Emit cal:cursor-change when our time-of-day moves (sun-drag / type /
+    // slider all route through setWorldState → the subscriber below),
+    // unless the move came from an external sibling.
+    if (window.__calSubscribeWorldState) {
+      try {
+        window.__calSubscribeWorldState(function (ws) {
+          if (!ws || typeof ws.timeOfDay !== 'number' || ws.timeOfDay === lastTod) return;
+          lastTod = ws.timeOfDay;
+          if (applyingExternal) return;
+          emit('cal:cursor-change', { date: { year: VIEW.year, month: VIEW.month, day: VIEW.day }, skyTime: ws.timeOfDay });
+        });
+      } catch (e) {}
+    }
+
+    // Listen for a sibling's cursor change → mirror its time-of-day onto
+    // the sky band (loop-prevented; external apply suppresses re-emit).
+    try {
+      document.addEventListener('cal:cursor-change', function (ev) {
+        var d = ev && ev.detail; if (!d || d.sourceWidgetId === selfId) return;
+        sync.lastExternal = d;
+        if (typeof d.skyTime === 'number' && window.__calSetWorldState) {
+          applyingExternal = true;
+          try { window.__calSetWorldState({ timeOfDay: d.skyTime }); } catch (e) {}
+          applyingExternal = false;
+        }
+      });
+    } catch (e) {}
+
+    window.__calCursorSync = sync;
   });
 
   // ============================================================

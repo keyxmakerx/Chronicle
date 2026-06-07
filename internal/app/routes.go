@@ -2813,6 +2813,12 @@ func (a *App) RegisterRoutes() {
 	e.GET("/demo/calendar/almanac", func(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, demo.DemoCalendarAlmanac())
 	}, auth.RequireAuth(authService))
+	// Timeline showcase (C-TIMELINE-V2-DESIGN-1-TUNER). Own isolated
+	// route per the page-separation directive; loads only its own
+	// CSS+JS. Lead of two candidate timeline designs (Ledger alternate).
+	e.GET("/demo/timeline/tuner", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoTimelineTuner())
+	}, auth.RequireAuth(authService))
 
 	// --- Layout Data Injector ---
 	// Registers the callback that copies auth/campaign data from Echo's

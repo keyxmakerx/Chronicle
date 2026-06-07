@@ -190,6 +190,7 @@ GET	/database/schema	internal/plugins/admin/routes.go
 GET	/demo/calendar	internal/app/routes.go
 GET	/demo/calendar/almanac	internal/app/routes.go
 GET	/demo/showcase	internal/app/routes.go
+GET	/demo/timeline/tuner	internal/app/routes.go
 GET	/design-lab	internal/plugins/designlab/routes.go
 GET	/dm-grants	internal/plugins/campaigns/routes.go
 GET	/edit	internal/plugins/campaigns/routes.go
