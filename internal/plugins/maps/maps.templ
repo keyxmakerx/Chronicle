@@ -256,6 +256,11 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			>
 				<i class="fa-solid fa-map-pin mr-1"></i> Place Marker
 			</button>
+			// Inline-create hint: double-clicking the map drops a pin without
+			// leaving the editor (Part B). Hidden on small screens to save room.
+			<span class="text-[11px] text-fg-muted hidden sm:inline" data-map-pin-hint>
+				<i class="fa-solid fa-circle-info mr-1"></i>or double-click the map to add a pin
+			</span>
 			<button
 				type="button"
 				class="btn-secondary text-xs"
@@ -324,6 +329,10 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				maxZoom: 3,
 				zoomSnap: 0.25,
 				attributionControl: false,
+				// Double-click is repurposed for inline pin creation (Scribe+),
+				// so disable Leaflet's default double-click-to-zoom — otherwise
+				// the create gesture would also zoom the map underneath it.
+				doubleClickZoom: false,
 			});
 
 			// Set image bounds and add overlay if image exists.
@@ -471,17 +480,35 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 				}
 			};
 
+			// Coordinate helper: Leaflet latlng (CRS.Simple, origin bottom-left)
+			// → marker percentage coords (origin top-left), clamped to 0-100.
+			function latLngToPercent(latlng) {
+				var x = Math.max(0, Math.min(100, (latlng.lng / w) * 100));
+				var y = Math.max(0, Math.min(100, ((h - latlng.lat) / h) * 100));
+				return { x: x, y: y };
+			}
+
+			// Single-click create — only while the "Place Marker" toggle is on.
+			// Kept so the existing toolbar affordance still works.
 			map.on('click', function(e) {
 				if (!placingMode || !isScribe) return;
-
-				var x = (e.latlng.lng / w) * 100;
-				var y = ((h - e.latlng.lat) / h) * 100;
-				x = Math.max(0, Math.min(100, x));
-				y = Math.max(0, Math.min(100, y));
-
-				// Open create marker modal with coordinates pre-filled.
-				openCreateMarker(x, y);
+				var p = latLngToPercent(e.latlng);
+				openCreateMarker(p.x, p.y);
 				togglePlaceMode();
+			});
+
+			// Double-click create — pin editing INSIDE the editor without the
+			// separate toolbar toggle (C-MAPS-EDITOR-PIN-AND-ICON-PARITY Part B).
+			// Scribe+ only; double-click avoids the pan/single-click conflict the
+			// dispatch flagged, and doubleClickZoom is disabled above so the map
+			// doesn't zoom under the new pin. The bulk "Place Marker" toggle and
+			// the marker list management stay as they were.
+			map.on('dblclick', function(e) {
+				if (!isScribe) return;
+				// If place mode happens to be on, turn it off so the cursor resets.
+				if (placingMode) togglePlaceMode();
+				var p = latLngToPercent(e.latlng);
+				openCreateMarker(p.x, p.y);
 			});
 
 			// Create marker modal handlers.
@@ -829,61 +856,16 @@ templ markerModal(data MapViewData) {
 					<div>
 						<label class="block text-xs font-medium text-fg-body mb-1">Icon</label>
 						<select name="icon" id="mk-icon" class="input w-full">
-							<optgroup label="General">
-								<option value="fa-map-pin">Pin</option>
-								<option value="fa-location-dot">Location</option>
-								<option value="fa-star">Star</option>
-								<option value="fa-flag">Flag</option>
-								<option value="fa-landmark">Landmark</option>
-							</optgroup>
-							<optgroup label="Settlements">
-								<option value="fa-city">City</option>
-								<option value="fa-house">House</option>
-								<option value="fa-shop">Shop</option>
-								<option value="fa-building">Town</option>
-								<option value="fa-tent">Village</option>
-								<option value="fa-campground">Camp</option>
-							</optgroup>
-							<optgroup label="Fortifications">
-								<option value="fa-castle">Castle</option>
-								<option value="fa-chess-rook">Tower</option>
-								<option value="fa-shield-halved">Fortress</option>
-								<option value="fa-tower-observation">Watchtower</option>
-							</optgroup>
-							<optgroup label="Dungeons &amp; Ruins">
-								<option value="fa-dungeon">Dungeon</option>
-								<option value="fa-skull">Danger</option>
-								<option value="fa-skull-crossbones">Ruins</option>
-								<option value="fa-door-open">Entrance</option>
-								<option value="fa-stairs">Underground</option>
-							</optgroup>
-							<optgroup label="Nature">
-								<option value="fa-mountain">Mountain</option>
-								<option value="fa-tree">Forest</option>
-								<option value="fa-water">Water</option>
-								<option value="fa-mountain-sun">Hills</option>
-								<option value="fa-mound">Cave</option>
-							</optgroup>
-							<optgroup label="Maritime">
-								<option value="fa-anchor">Port</option>
-								<option value="fa-ship">Ship</option>
-								<option value="fa-sailboat">Sailboat</option>
-								<option value="fa-bridge">Bridge</option>
-							</optgroup>
-							<optgroup label="Sacred &amp; Magic">
-								<option value="fa-cross">Temple</option>
-								<option value="fa-place-of-worship">Shrine</option>
-								<option value="fa-hat-wizard">Wizard</option>
-								<option value="fa-book-open">Library</option>
-								<option value="fa-gem">Treasure</option>
-								<option value="fa-wand-sparkles">Magic</option>
-							</optgroup>
-							<optgroup label="Resources">
-								<option value="fa-helmet-safety">Mine</option>
-								<option value="fa-wheat-awn">Farm</option>
-								<option value="fa-wine-glass">Tavern</option>
-								<option value="fa-hammer">Forge</option>
-							</optgroup>
+							// Rendered from the canonical icon catalog (marker_icons.go)
+							// so the picker, the stored value, and the Foundry sync
+							// contract all share one source of truth (icon parity).
+							for _, grp := range MarkerIconGroups() {
+								<optgroup label={ grp.Category }>
+									for _, ic := range grp.Icons {
+										<option value={ ic.ID }>{ ic.Label }</option>
+									}
+								</optgroup>
+							}
 						</select>
 					</div>
 					<div>
