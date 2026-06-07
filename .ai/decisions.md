@@ -1490,3 +1490,52 @@ Three security/correctness defenses:
   `BACKUP_SCRIPT_PATH`, `RESTORE_SCRIPT_PATH`, `CHRONICLE_VERSION`
   entries; §7 (Rollback / Scenario A) is rewritten to use
   `scripts/restore.sh --manifest` against pre-migration manifests.
+
+## ADR-038: Widget bindings — polymorphic, FK-free association table
+
+**Date:** 2026-06-07 · **Status:** Accepted · **Wave:** C-WIDGET-BINDING-P1-SPINE (E "real Wave-4")
+
+**Context.** The widget-binding framework needs to map a *host*
+(entity / entity-type / dashboard) to a *data instance* (a calendar / map /
+timeline …) per *widget type*. `entities.map_id` is the existing hardcoded
+special case (one entity → one map). We need the generic table.
+
+**Decision.** `widget_bindings(id, campaign_id, host_type, host_id,
+widget_type, instance_id, …)` is **polymorphic and FK-free** on both `host_id`
+and `instance_id`. `host_type`/`widget_type` are an immutable, append-only
+namespace validated **in app code, not a DB enum**.
+
+**Why not the integrity-preserving alternatives** (the ones a DBA would reach
+for first):
+- *Exclusive-arc / nullable-FK-per-type* (`calendar_id`, `map_id`, … columns,
+  each FK'd, with a CHECK that exactly one is set) and *join-table-per-type*
+  (`entity_calendar_bindings`, `entity_map_bindings`, …) both **buy real
+  referential integrity** — but at the cost of **per-widget-type schema churn**,
+  which is exactly the hardcoding this framework exists to abolish (the
+  "dynamic, not hardcoded" requirement). A new widget type would mean a
+  migration every time.
+- More decisively, a hard FK is **impossible here**: `instance_id` references a
+  *different* table depending on `widget_type` (calendars **or** maps **or**
+  timelines), and those are **plugin-owned** tables. Per the migration-ordering
+  rule (`.ai/conventions.md` §Migration Safety — core runs before plugins, and
+  a binding table referencing plugin tables would crash a fresh DB), the FK we'd
+  want can't be collected anyway.
+
+**Consequence / mitigation (this is load-bearing, not optional).** FK-free
+means the *application* is the only integrity backstop (MariaDB has no RLS).
+Integrity is enforced as an **AND** of three mechanisms — not "or":
+1. **Per-plugin delete hook** — `Service.OnInstanceDeleted` (owning plugins
+   call it when an instance is deleted).
+2. **Always-on render-time orphan guard** — `Resolve` validates every candidate
+   via `WidgetType.InstanceExists` (which also enforces campaign scope) and
+   skips/sweeps dead bindings, falling through to the default.
+3. **Periodic campaign integrity sweep** — `Service.Sweep`.
+Campaign scope is pushed down to the repository signature (an unscoped read is
+unrepresentable) and checked on **both** `host_id` and the resolved
+`instance_id`. The table lives in the `widgetbindings` plugin; being FK-free,
+its migration order vs calendar/maps/timeline is irrelevant.
+
+**References.** `reports/chronicle/2026-06-07-widget-binding-framework-prep-audit.md`
+(§3), `reports/chronicle/2026-06-07-widget-binding-precedent-research.md`
+(polymorphic-association / multi-tenant-scoping precedent; Foundry #9818
+cascade-direction bug → directional cascade test).

@@ -34,7 +34,7 @@ func renderEntityCal(t *testing.T, svc CalendarService, role campaigns.Role, dmG
 	t.Helper()
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: role, IsDmGranted: dmGranted}
 	var sb strings.Builder
-	if err := EntityCalendarBlock(svc, cc, "ent-1", "user-1").Render(context.Background(), &sb); err != nil {
+	if err := EntityCalendarBlock(svc, cc, "ent-1", "user-1", "").Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	return sb.String()
@@ -93,7 +93,7 @@ func TestEntityCalendarBlock_DmOnlyFiltering(t *testing.T) {
 func TestEntityCalendarBlock_Unavailable(t *testing.T) {
 	render := func(cc *campaigns.CampaignContext, entityID string) string {
 		var sb strings.Builder
-		if err := EntityCalendarBlock(sampleEmbedSvc(), cc, entityID, "u1").Render(context.Background(), &sb); err != nil {
+		if err := EntityCalendarBlock(sampleEmbedSvc(), cc, entityID, "u1", "").Render(context.Background(), &sb); err != nil {
 			t.Fatalf("render: %v", err)
 		}
 		return sb.String()
