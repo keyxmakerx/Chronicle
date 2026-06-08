@@ -89,6 +89,16 @@ test('Q1: clear weather leaves the sun at full brightness', () => {
   assert.equal(parseFloat(sun.style.opacity), 1, 'clear midday sun is full opacity');
 });
 
+test('Q1: at night the sun is hidden — the weather floor does NOT lift it', () => {
+  // t=0.95 → arcPos opacity 0 (below the horizon). The dim/floor is gated on
+  // the sun being up, so even clear weather must leave it fully hidden.
+  const { sun } = boot(baseSeed({ timeOfDay: 0.95, weather: { type: 'clear', intensity: 1 } }));
+  assert.equal(parseFloat(sun.style.opacity), 0, 'the sun must set — invisible at night');
+  // And a stormy night must also stay hidden (floor is daytime-only).
+  const storm = boot(baseSeed({ timeOfDay: 0.02, weather: { type: 'thunderstorm', intensity: 1 } }));
+  assert.equal(parseFloat(storm.sun.style.opacity), 0, 'no sun on a stormy night either');
+});
+
 test('E1: the sun-bloom emitter spec anchors to the sun (spawn:"sun")', () => {
   const { sandbox } = boot(baseSeed({ weather: { type: 'clear', intensity: 1 } }));
   const bloom = sandbox.window.__calCelestialEffects['sun-bloom'];
