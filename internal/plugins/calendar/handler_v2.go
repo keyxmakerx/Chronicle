@@ -66,6 +66,18 @@ func (h *Handler) ShowV2(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		// W1 (R3): GetActiveCalendar returns a SHALLOW row (no Months/Weekdays).
+		// The grid + week/day math need them eager-loaded — without this the
+		// no-:calId Week view indexes empty cal.Months and the Month grid renders
+		// against an empty structure. Re-fetch eagerly, matching the explicit
+		// :calId path (requireCalendarInCampaign → GetCalendarByID → eagerLoad).
+		// Best-effort: keep the shallow row on a re-fetch miss (addDaysSimple is
+		// guarded regardless).
+		if active != nil {
+			if full, ferr := h.svc.GetCalendarByID(ctx, active.ID); ferr == nil && full != nil {
+				active = full
+			}
+		}
 	}
 
 	// Sidebar pin preference (Wave 1.7A §G). Default TRUE; nil-safe.
@@ -170,6 +182,14 @@ func (h *Handler) ShowV2(c echo.Context) error {
 // rolling over (PR 4 keeps Week-view in a single calendar year; PR 5
 // can refine for year-boundary spans).
 func addDaysSimple(cal *Calendar, month, day, n int) (int, int) {
+	// W1 (R3 crash-guard): a calendar resolved without eager-loaded
+	// sub-resources (the no-:calId active path) has zero Months, and the
+	// trailing `cal.Months[month-1]` would then index cal.Months[-1] → panic.
+	// Bail to the input date; the eager-load in ShowV2 makes this unreachable
+	// on real data, but the guard stands on its own.
+	if cal == nil || len(cal.Months) == 0 {
+		return month, day
+	}
 	for n > 0 && month <= len(cal.Months) {
 		remaining := cal.Months[month-1].Days - day
 		if n <= remaining {

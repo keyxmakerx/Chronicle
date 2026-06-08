@@ -203,16 +203,6 @@ func monthDays(data CalendarV2ViewData) []monthDay {
 	return out
 }
 
-// v2DayOfYear returns the 1-indexed day-of-year for (month, day) in
-// the given calendar. Sums Months[0..month-2].Days then adds day.
-func v2DayOfYear(cal *Calendar, month, day int) int {
-	doy := day
-	for i := 0; i < month-1 && i < len(cal.Months); i++ {
-		doy += cal.Months[i].Days
-	}
-	return doy
-}
-
 // monthDayClasses returns the Tailwind classes for a Month-view cell
 // based on today/rest-day markers. Token-driven (uses --accent-* +
 // neutral tints already published by Wave 0 PR #357 + theme system).
@@ -908,13 +898,16 @@ func weekDays(data CalendarV2ViewData) []weekDay {
 	curYear, curMonth, curDay := startYear, startMonth, startDay
 	for i := 0; i < cols; i++ {
 		isToday := curYear == cal.CurrentYear && curMonth == cal.CurrentMonth && curDay == cal.CurrentDay
-		// Rest-day check: day-of-year modulo week-length lands on a
-		// weekday with IsRestDay=true.
+		// Rest-day check: the year-aware weekday index lands on a weekday
+		// with IsRestDay=true.
 		isRest := false
 		weekdayName := ""
 		if curMonth >= 1 && curMonth <= len(cal.Months) {
-			doy := v2DayOfYear(cal, curMonth, curDay)
-			idx := (doy - 1) % cols
+			// W1: year-AWARE weekday (the shared #428 core) — this was the 3rd and
+			// last year-blind path. The old (v2DayOfYear-1)%cols dropped the year
+			// term, so the Week-view columns drifted out of agreement with the
+			// Month grid (#428) and the worldstate band label (#430).
+			idx := v2WeekdayIndexFor(cal, curYear, curMonth, curDay)
 			if idx >= 0 && idx < len(cal.Weekdays) {
 				isRest = cal.Weekdays[idx].IsRestDay
 				weekdayName = cal.Weekdays[idx].Name

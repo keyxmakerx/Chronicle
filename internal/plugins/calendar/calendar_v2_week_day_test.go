@@ -72,6 +72,39 @@ func TestWeekDays_TodayHighlightOnMatchingDay(t *testing.T) {
 	}
 }
 
+// TestWeekDays_YearAwareWeekday (W1): the Week view was the 3rd year-blind
+// weekday path — it used (v2DayOfYear-1)%cols, dropping the year term, so its
+// columns disagreed with the Month grid (#428) and the band label (#430). Now
+// it routes through v2WeekdayIndexFor: real-life June 8 2026 reads "Mon", NOT
+// the year-blind "Thu" the old formula produced for that day-of-year.
+func TestWeekDays_YearAwareWeekday(t *testing.T) {
+	cal := gregorian2026()
+	data := CalendarV2ViewData{ActiveCalendar: cal, Year: 2026, Month: 6, Day: 8}
+	var got string
+	for _, d := range weekDays(data) {
+		if d.Month == 6 && d.Day == 8 {
+			got = d.Weekday
+		}
+	}
+	if got != "Mon" {
+		t.Errorf("June 8 2026 weekday = %q; want \"Mon\" (year-aware, not the year-blind \"Thu\")", got)
+	}
+}
+
+// TestAddDaysSimple_EmptyMonthsNoPanic (W1 / R3 crash-guard): a calendar
+// resolved without eager-loaded sub-resources has zero Months; the old loop
+// then indexed cal.Months[-1]. The guard returns the input date instead of
+// panicking. (ShowV2 also eager-loads now, but the guard stands alone.)
+func TestAddDaysSimple_EmptyMonthsNoPanic(t *testing.T) {
+	m, d := addDaysSimple(&Calendar{}, 1, 1, 6) // no Months
+	if m != 1 || d != 1 {
+		t.Errorf("addDaysSimple(emptyMonths) = %d/%d; want 1/1 (guarded bail)", m, d)
+	}
+	if m, d := addDaysSimple(nil, 3, 4, 2); m != 3 || d != 4 {
+		t.Errorf("addDaysSimple(nil) = %d/%d; want 3/4 (guarded bail)", m, d)
+	}
+}
+
 func TestWeekDays_RestDayCycle(t *testing.T) {
 	// 7-day week; Saturday (index 6) is rest day.
 	cal := &Calendar{

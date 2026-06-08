@@ -157,6 +157,41 @@ func TestSkyBandAmbientInit_RunsTimePaint(t *testing.T) {
 	}
 }
 
+// TestWorldStateBandV2_RendersSunIcons (W1 — the headline "no sun" fix): the
+// band must render the sun's visible icon SVG layers. .cal-almanac-sun is a
+// transparent box; the ONLY visible pixels are these .cal-almanac-sun__icon
+// SVGs. They lived only in the /demo templ and were never ported, so the engine
+// positioned an empty, invisible box. The shared partial fixes the full-page
+// band AND both entity embeds (all render via worldStateSkyBandV2).
+func TestWorldStateBandV2_RendersSunIcons(t *testing.T) {
+	html := renderBand(t, sampleV2WorldStateData())
+	for _, want := range []string{
+		`data-cal-sun-icon="sun"`,     // the default/dawn/dusk/special sun graphic
+		`data-cal-sun-icon="eclipse"`, // the eclipse-state graphic
+		`class="cal-almanac-sun__icon"`,
+		`fill="currentColor"`, // recolored per sun-state by CSS
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("sun must render its icon layers; missing %q", want)
+		}
+	}
+}
+
+// TestWorldStateSkyBandV2_NilWorldStateNoPanic (W1 / R2 crash-guard): the entity
+// embeds call worldStateSkyBandV2 directly (guarded only by cal != nil), so a
+// transient BuildWorldStateSeed DB error leaves WorldState nil while the band
+// still renders. Ranging .Events would panic — the band must render safely.
+func TestWorldStateSkyBandV2_NilWorldStateNoPanic(t *testing.T) {
+	data := CalendarV2ViewData{ActiveCalendar: &Calendar{ID: "c", Name: "X", HoursPerDay: 24}} // WorldState nil
+	var sb strings.Builder
+	if err := worldStateSkyBandV2(data).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render sky band with nil WorldState: %v", err)
+	}
+	if !strings.Contains(sb.String(), "data-cal-sky") {
+		t.Errorf("band should still render its sky scaffold with a nil seed")
+	}
+}
+
 // TestWorldStateBandV2_ReadOnly: 2a ships no control affordances — no date
 // setter, no draggable time slider, no demo controls. (Controls are 2b/2c.)
 func TestWorldStateBandV2_ReadOnly(t *testing.T) {

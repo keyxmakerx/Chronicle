@@ -255,14 +255,21 @@ func TestCalendarAppDashboard_TimelinePreviews(t *testing.T) {
 }
 
 // The page loads D3 (for timeline-viz) only when the selection has timelines.
+// W1 (R1): D3 is the VENDORED copy (`/static/vendor/d3.min.js`), not the
+// jsdelivr CDN — `script-src 'self'` blocked the CDN script so the viz never ran.
 func TestCalendarAppDashboard_LoadsD3ForTimelines(t *testing.T) {
+	const d3Src = "/static/vendor/d3.min.js"
 	withTL := renderDashboardPage(t, sampleW2Active())
-	if !strings.Contains(withTL, "d3@7/dist/d3.min.js") {
-		t.Errorf("page should load D3 when there are timeline previews")
+	if !strings.Contains(withTL, d3Src) {
+		t.Errorf("page should load vendored D3 when there are timeline previews")
+	}
+	// Regression guard: never reintroduce the CSP-blocked CDN URL.
+	if strings.Contains(withTL, "jsdelivr") {
+		t.Errorf("D3 must be self-hosted, not loaded from jsdelivr (CSP script-src 'self')")
 	}
 	noTL := sampleW2Active()
 	noTL.Timelines = nil
-	if strings.Contains(renderDashboardPage(t, noTL), "d3@7/dist/d3.min.js") {
+	if strings.Contains(renderDashboardPage(t, noTL), d3Src) {
 		t.Errorf("page should not load D3 when there are no timeline previews")
 	}
 }

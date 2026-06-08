@@ -750,6 +750,10 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 	weekdaySource := cal.Days.Values
 	if len(weekdaySource) == 0 {
 		// Some Calendaria files use "weeks" instead of "days.values".
+		// W1 (R4 crash-guard): cal.Days.Values is a nil map when "days.values"
+		// is absent — writing into it ("assignment to entry in nil map") panics
+		// the import. Allocate before the fallback copy.
+		weekdaySource = make(map[string]calWeekday, len(cal.Weeks))
 		for k, w := range cal.Weeks {
 			weekdaySource[k] = calWeekday(w)
 		}

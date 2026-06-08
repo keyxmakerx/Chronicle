@@ -52,10 +52,18 @@
   // destroy the prior surfaces (and disconnect their IO) + clear the subscriber
   // and tick lists + drop the cursor listener so nothing accumulates across
   // navigations and no rAF paints to a detached canvas.
+  // W1 (E3): ResizeObservers created by the prod init blocks (particle canvas,
+  // era overlay, hourglass) were local vars, never disconnected — so each
+  // boosted-nav re-init left the old observers firing resize()/refeed against
+  // reassigned globals. Track them here so teardownProd can disconnect them.
+  var PROD_OBSERVERS = [];
+  function trackObserver(ro) { if (ro) PROD_OBSERVERS.push(ro); return ro; }
   function teardownProd() {
     try { if (SKY_SURFACE && SKY_SURFACE.destroy) SKY_SURFACE.destroy(); } catch (e) {}
     try { if (GLASS_SURFACE && GLASS_SURFACE.destroy) GLASS_SURFACE.destroy(); } catch (e) {}
     SKY_SURFACE = null; GLASS_SURFACE = null;
+    for (var oi = 0; oi < PROD_OBSERVERS.length; oi++) { try { PROD_OBSERVERS[oi].disconnect(); } catch (e) {} }
+    PROD_OBSERVERS.length = 0;
     WS_SUBS.length = 0;
     try { if (window.CalParticleEngine && CalParticleEngine.resetTicks) CalParticleEngine.resetTicks(); } catch (e) {}
     if (cursorSyncHandler) {
@@ -380,6 +388,14 @@
         // hourglass waist: spawn at the neck centre with slight scatter.
         p.x = s.w * 0.5 + rng(-s.w * 0.06, s.w * 0.06);
         p.y = s.h * (spec.streamTop != null ? spec.streamTop : 0.42);
+      } else if (spec.spawn === 'sun') {
+        // W1 (E1): anchor the sun-bloom sparkles to the PAINTED SUN position
+        // (arcPos for the current time-of-day), with a tight scatter. The old
+        // edge-spawn (vy<0 → left edge / else → top full-width) scattered the
+        // bloom as "mini suns" across the whole band, on top of every weather.
+        var ap = arcPos(VIEW.timeFrac);
+        p.x = s.w * (ap.left / 100) + rng(-s.w * 0.035, s.w * 0.035);
+        p.y = s.h * (ap.top / 100) + rng(-s.h * 0.06, s.h * 0.06);
       } else if (p.vy < 0 || spec.spawn === 'left') {
         p.x = rng(-s.w * 0.1, 0);
         p.y = rng(0, s.h);
@@ -820,7 +836,7 @@
       // particleSpec is fixed (default state); engine emitter uses this.
       // State-parameterized variant goes through sunBloomSpec() below so
       // the sun state can recolor/densify the bloom live.
-      particleSpec: { shape: 'dot', color: 'oklch(0.92 0.16 75 / 0.8)', sizeRange: [1.5, 3.5], velocity: { x: [-12, 12], y: [-12, 12] }, spawnRate: 1.2, maxAlive: 8, blend: 'lighter' }
+      particleSpec: { shape: 'dot', color: 'oklch(0.92 0.16 75 / 0.8)', sizeRange: [1.5, 3.5], velocity: { x: [-12, 12], y: [-12, 12] }, spawnRate: 1.2, maxAlive: 8, blend: 'lighter', spawn: 'sun' }
     };
     window.__calCelestialEffects = CELESTIAL_EFFECTS;
   });
@@ -833,7 +849,7 @@
               : 'oklch(0.92 0.16 75 / 0.8)';
     var spawnRate = state === 'eclipse' ? 3 : state === 'special' ? 2.5 : 1.2;
     var maxAlive = state === 'eclipse' ? 14 : 8;
-    return { shape: 'dot', color: color, sizeRange: [1.5, 3.5], velocity: { x: [-14, 14], y: [-14, 14] }, spawnRate: spawnRate, maxAlive: maxAlive, blend: 'lighter' };
+    return { shape: 'dot', color: color, sizeRange: [1.5, 3.5], velocity: { x: [-14, 14], y: [-14, 14] }, spawnRate: spawnRate, maxAlive: maxAlive, blend: 'lighter', spawn: 'sun' };
   }
 
   // ============================================================
@@ -1201,8 +1217,18 @@
     // the label still names it (e.g. 'Rain').
     var rest = sky.querySelector('[data-cal-sky-sub-rest]');
     if (rest) {
-      var wt = weatherTypeById(wtypeID) || (DATA.weather_effects || []).find(function (e) { return e.id === effID; });
-      rest.textContent = ' · ' + skyLabel(VIEW.timeFrac) + ' · ' + seasonName() + ' · ' + (wt ? wt.name : 'Clear');
+      if (PROD) {
+        // W1 (E2): in production DATA is an empty stub, so the demo path below
+        // would force a BLANK season + literal "Clear", clobbering the correct
+        // server-rendered season/weather on first paint. Source both from the
+        // seed worldState instead so the text matches the visuals.
+        var prodSeason = (worldState && worldState.season) || '';
+        var prodWx = (worldState && worldState.weather && worldState.weather.type) || 'clear';
+        rest.textContent = ' · ' + skyLabel(VIEW.timeFrac) + ' · ' + prodSeason + ' · ' + titleCaseWeather(prodWx);
+      } else {
+        var wt = weatherTypeById(wtypeID) || (DATA.weather_effects || []).find(function (e) { return e.id === effID; });
+        rest.textContent = ' · ' + skyLabel(VIEW.timeFrac) + ' · ' + seasonName() + ' · ' + (wt ? wt.name : 'Clear');
+      }
     }
     // WAVE 2: repaint moon designs/phases for the displayed day + the mood wash.
     if (typeof applyMoonDesigns === 'function') applyMoonDesigns();
@@ -1225,6 +1251,10 @@
   function glyphFor(icon) {
     return ({ meteor: '★', eclipse: '◑', sun: '☀', moon: '☾', snowflake: '❄', ember: '◆', swirl: '✦' })[icon] || '✦';
   }
+  // W1 (E2): production weather label from a seed effect-id (capitalize first
+  // rune). Mirrors the Go wsWeatherLabel for the MUST-tier ids (clear/cloudy/
+  // rain/thunderstorm/snow/fog) without needing the DATA weather catalog.
+  function titleCaseWeather(id) { return id ? id.charAt(0).toUpperCase() + id.slice(1) : 'Clear'; }
   function skyLabel(t) {
     if (t < 0.20) return 'Pre-dawn'; if (t < 0.32) return 'Dawn'; if (t < 0.45) return 'Morning';
     if (t < 0.55) return 'Midday'; if (t < 0.70) return 'Afternoon'; if (t < 0.82) return 'Dusk'; return 'Night';
@@ -1260,7 +1290,10 @@
     // Wave 2 weather frame (frame draws under particles). Parameterized by
     // current sun state — see sunBloomSpec().
     var sb = sunBloomSpec(currentSunState(events));
-    if (sb) specs.push(sb);
+    // W1 (E1): only emit the bloom while the sun is above the horizon (daytime).
+    // At night arcPos opacity is 0 — without this gate the 'sun'-anchored bloom
+    // would spawn at the off-screen sun position and leak stray dots.
+    if (sb && arcPos(VIEW.timeFrac).opacity > 0) specs.push(sb);
     SKY_SURFACE.setEmitters(specs);
   }
   function refeedSky() {
@@ -1280,7 +1313,7 @@
     // Keep the canvas backing store sized to the sky-band as it resizes.
     try {
       if ('ResizeObserver' in window) {
-        var ro = new ResizeObserver(function () { SKY_SURFACE.resize(); refeedSky(); });
+        var ro = trackObserver(new ResizeObserver(function () { SKY_SURFACE.resize(); refeedSky(); }));
         ro.observe(canvas);
       }
     } catch (e) {}
@@ -1327,6 +1360,20 @@
     return { left: 8 + wake * 84, top: 95 - 4 * wake * (1 - wake) * 85, opacity: (wake < 0 || wake > 1) ? 0.6 : 1 };
   }
   function place(el, p) { el.style.left = p.left.toFixed(1) + '%'; el.style.top = p.top.toFixed(1) + '%'; el.style.opacity = p.opacity.toFixed(2); }
+  // Q1 (operator): how much each weather condition DIMS the sun. Clear + the
+  // exotic tints leave it full; overcast/precipitation dim it progressively.
+  // The caller floors the result (0.28) so the sun is NEVER fully hidden while
+  // above the horizon — even a thunderstorm leaves it at least faintly visible.
+  function sunWeatherDim(effID) {
+    switch (effID) {
+      case 'thunderstorm': return 0.40;
+      case 'fog':          return 0.50;
+      case 'rain':         return 0.55;
+      case 'snow':         return 0.62;
+      case 'cloudy':       return 0.72;
+      default:             return 1; // clear + exotic tints
+    }
+  }
 
   // ============================================================
   // WAVE 2 — Moon library (CATALOG §12.1).
@@ -1631,7 +1678,18 @@
     var sky = document.querySelector('[data-cal-sky]');
     if (sky) {
       sky.style.background = gradAt(t);
-      var sun = sky.querySelector('[data-cal-sky-sun]'); if (sun) place(sun, arcPos(t));
+      var sun = sky.querySelector('[data-cal-sky-sun]');
+      if (sun) {
+        var ap = arcPos(t);
+        place(sun, ap);
+        // Q1: weather dims but never fully hides the sun. arcPos already fades
+        // it at the horizon (opacity 0 = below); only apply the weather factor
+        // (with a daytime floor) while it is actually up.
+        if (ap.opacity > 0) {
+          var sunEff = (worldState && worldState.weather && worldState.weather.type) || 'clear';
+          sun.style.opacity = Math.max(ap.opacity * sunWeatherDim(sunEff), 0.28).toFixed(2);
+        }
+      }
       sky.querySelectorAll('[data-cal-sky-moon]').forEach(function (mn) {
         var id = parseInt(mn.getAttribute('data-moon-id'), 10), off = 0;
         var wm = moonById(id);                                  // WAVE 2: orbit from worldState (incl. demo-added moons)
@@ -1802,7 +1860,7 @@
     // Responsive re-size as the widget changes dimensions.
     try {
       if ('ResizeObserver' in window && sky) {
-        var ro = new ResizeObserver(function () { applyEraParams(vig, eraEffectFor(currentEraObj()), sky); });
+        var ro = trackObserver(new ResizeObserver(function () { applyEraParams(vig, eraEffectFor(currentEraObj()), sky); }));
         ro.observe(sky);
       }
     } catch (e) {}
@@ -2312,7 +2370,7 @@
     window.__calGlassEngine = GLASS_SURFACE;
     try {
       if ('ResizeObserver' in window) {
-        var ro = new ResizeObserver(function () { GLASS_SURFACE.resize(); feedHourglassStream(); });
+        var ro = trackObserver(new ResizeObserver(function () { GLASS_SURFACE.resize(); feedHourglassStream(); }));
         ro.observe(canvas);
       }
     } catch (e) {}
