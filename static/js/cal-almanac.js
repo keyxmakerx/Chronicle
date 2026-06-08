@@ -44,7 +44,42 @@
     }
     return r;
   }
+  // teardownProd tears down the live production surfaces/subscribers/ticks/
+  // listeners before a re-init (C-WIDGET-BINDING-QA2). The worldstate band is
+  // injected by hx-boost navigation + the P4b binding swap; under
+  // htmx.config.allowScriptTags=false the band's <script> never re-runs, so the
+  // already-loaded engine must re-bind itself to the freshly-swapped band. We
+  // destroy the prior surfaces (and disconnect their IO) + clear the subscriber
+  // and tick lists + drop the cursor listener so nothing accumulates across
+  // navigations and no rAF paints to a detached canvas.
+  function teardownProd() {
+    try { if (SKY_SURFACE && SKY_SURFACE.destroy) SKY_SURFACE.destroy(); } catch (e) {}
+    try { if (GLASS_SURFACE && GLASS_SURFACE.destroy) GLASS_SURFACE.destroy(); } catch (e) {}
+    SKY_SURFACE = null; GLASS_SURFACE = null;
+    WS_SUBS.length = 0;
+    try { if (window.CalParticleEngine && CalParticleEngine.resetTicks) CalParticleEngine.resetTicks(); } catch (e) {}
+    if (cursorSyncHandler) {
+      try { document.removeEventListener('cal:cursor-change', cursorSyncHandler); } catch (e) {}
+      cursorSyncHandler = null;
+    }
+    worldState = null;
+  }
+
   function init() {
+    // PRODUCTION (live calendar_v2 + entity embeds): the band carries the
+    // #cal-v2-worldstate seed. Re-init PER BAND NODE so a boosted-nav / P4b swap
+    // that injects a fresh band re-paints (the prior band is torn down first).
+    var band = (typeof document !== 'undefined' && document.getElementById)
+      ? document.getElementById('cal-v2-worldstate') : null;
+    if (band) {
+      if (band.__calInited) return;   // this exact band node is already live
+      teardownProd();                 // clean up a previous band's engine state
+      window.__calAlmanacResults = runAll();
+      band.__calInited = true;
+      window.__calAlmanacInited = true;
+      return;
+    }
+    // DEMO / no-band page: init exactly once (unchanged behavior).
     if (window.__calAlmanacInited) return;
     window.__calAlmanacResults = runAll();
     window.__calAlmanacInited = true;
@@ -93,6 +128,10 @@
   // weather-override, demo-controls) is preserved verbatim.
   var worldState = null;     // seeded from DATA/VIEW in the 'world-state' block
   var WS_SUBS = [];          // ordered surface subscribers
+  // C-WIDGET-BINDING-QA2: the cursor-sync document listener, held so a prod
+  // re-init (htmx:afterSettle) can remove it before re-binding — otherwise
+  // listeners accumulate across boosted navigations.
+  var cursorSyncHandler = null;
 
   function subscribeWorldState(fn) { if (typeof fn === 'function') WS_SUBS.push(fn); }
 
@@ -549,7 +588,11 @@
       sync: sync,
       addTick: addTick,
       setPaused: setPaused,
-      paused: function () { return enginePaused; }
+      paused: function () { return enginePaused; },
+      // C-WIDGET-BINDING-QA2: clear all registered per-frame ticks. teardownProd
+      // calls this on a re-init so hourglass ticks (and the rAF they keep alive)
+      // from a swapped-out band don't accumulate across boosted navigations.
+      resetTicks: function () { ENGINE_TICKS.length = 0; }
     };
   })();
   window.CalParticleEngine = CalParticleEngine;
@@ -3097,9 +3140,11 @@
     }
 
     // Listen for a sibling's cursor change → mirror its time-of-day onto
-    // the sky band (loop-prevented; external apply suppresses re-emit).
+    // the sky band (loop-prevented; external apply suppresses re-emit). The
+    // handler is held in cursorSyncHandler so teardownProd() can remove it on
+    // a re-init (C-WIDGET-BINDING-QA2) — no duplicate listeners across nav.
     try {
-      document.addEventListener('cal:cursor-change', function (ev) {
+      cursorSyncHandler = function (ev) {
         var d = ev && ev.detail; if (!d || d.sourceWidgetId === selfId) return;
         sync.lastExternal = d;
         if (typeof d.skyTime === 'number' && window.__calSetWorldState) {
@@ -3107,7 +3152,8 @@
           try { window.__calSetWorldState({ timeOfDay: d.skyTime }); } catch (e) {}
           applyingExternal = false;
         }
-      });
+      };
+      document.addEventListener('cal:cursor-change', cursorSyncHandler);
     } catch (e) {}
 
     window.__calCursorSync = sync;
@@ -3118,4 +3164,12 @@
   // ============================================================
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+  // C-WIDGET-BINDING-QA2: re-init after HTMX swaps so the worldstate band
+  // animates when it arrives via hx-boost navigation OR a P4b binding swap
+  // (the band's <script> can't re-run under allowScriptTags=false). init() is a
+  // cheap no-op when there's no new band, so binding to both events is safe.
+  try {
+    document.addEventListener('htmx:afterSettle', init);
+    document.addEventListener('htmx:load', init);
+  } catch (e) {}
 })();
