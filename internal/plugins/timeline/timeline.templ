@@ -268,8 +268,10 @@ templ TimelineShowFragment(cc *campaigns.CampaignContext, data TimelineViewData)
 
 // timelineShowContent renders the timeline detail page with D3.js visualization.
 templ timelineShowContent(cc *campaigns.CampaignContext, data TimelineViewData) {
-	<!-- D3.js (loaded only on timeline detail pages — large library, not in base layout) -->
-	<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+	<!-- D3.js (loaded only on timeline detail pages — large library, not in base layout).
+	     W1 (R1): served from the vendored copy, not jsdelivr — the CSP is
+	     `script-src 'self'`, so the CDN script was blocked and the viz never ran. -->
+	<script src="/static/vendor/d3.min.js"></script>
 	<div class="sm:max-w-5xl mx-auto py-6 px-2 sm:px-4" x-data="{ manageOpen: false, adminTab: 'visibility' }">
 		@components.Breadcrumbs([]components.BreadcrumbItem{
 			{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
