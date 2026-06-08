@@ -160,7 +160,7 @@ templ calendarAppDashboardSeeInAction(data CalendarAppDashboardData) {
 		</h3>
 		if data.SelectedIsActive && data.WorldState != nil {
 			<div class="relative rounded-lg overflow-hidden border border-edge mb-3" data-cal-dashboard-worldstate>
-				@worldStateBandV2(CalendarV2ViewData{ActiveCalendar: data.Selected, WorldState: data.WorldState, WorldStateJSON: data.WorldStateJSON})
+				@worldStateShelfBandV2(CalendarV2ViewData{ActiveCalendar: data.Selected, WorldState: data.WorldState, WorldStateJSON: data.WorldStateJSON})
 			</div>
 		} else {
 			<p class="text-xs text-fg-muted mb-3" data-cal-dashboard-worldstate-note>

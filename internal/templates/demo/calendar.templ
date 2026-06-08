@@ -36,6 +36,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -772,7 +773,7 @@ templ calAlmanacSkyband(d CalAlmanacMockData) {
 		data-cal-sky
 		data-cal-sky-weather={ wfx.ID }
 		data-cal-sky-time-frac={ fmtFloat(d.SkyTime) }
-		style={ "background: " + skybandGradient(d.SkyTime) + ";" }
+		style={ "background: " + calendar.SkybandGradient(d.SkyTime) + ";" }
 	>
 		// Weather effect layer — particles are CSS-animated; server
 		// emits a fixed set so it animates with zero JS.
@@ -1062,49 +1063,10 @@ func isNightPhase(d CalAlmanacMockData) bool {
 	return t >= set && t < rise
 }
 
-// skybandGradient — returns a CSS `linear-gradient(...)` string for the
-// sky-band at the given t (0..1 fraction of day). Three hardcoded
-// keyframes (dawn / day / dusk / night) blended via the time fraction.
-// Pure OKLCH per canon D2; deterministic so the server render matches
-// the JS recompute exactly.
-func skybandGradient(t float64) string {
-	// Keyframes (top→bottom 2-stop gradient), each chosen to read on the
-	// dark page background:
-	//   midnight  0.00  → deep indigo on near-black
-	//   dawn      0.25  → coral on lavender
-	//   noon      0.50  → bright cyan-blue on pale blue
-	//   dusk      0.75  → amber on rose
-	//   midnight  1.00  → back to deep indigo
-	type stop struct{ top, bot string }
-	stops := []stop{
-		{"oklch(0.18 0.05 270)", "oklch(0.10 0.04 270)"}, // midnight
-		{"oklch(0.55 0.13 30)", "oklch(0.35 0.10 305)"},  // dawn
-		{"oklch(0.78 0.13 220)", "oklch(0.62 0.10 230)"}, // noon
-		{"oklch(0.62 0.16 60)", "oklch(0.38 0.12 350)"},  // dusk
-		{"oklch(0.18 0.05 270)", "oklch(0.10 0.04 270)"}, // midnight (wrap)
-	}
-	// Each stop sits at t = i/4 (0, .25, .5, .75, 1). Find segment + lerp.
-	seg := int(t * 4)
-	if seg < 0 {
-		seg = 0
-	}
-	if seg > 3 {
-		seg = 3
-	}
-	// We don't lerp OKLCH literally in Go — instead we let CSS
-	// color-mix do the work for the JS path, and for the server render
-	// we just snap to the nearest keyframe (the JS overrides on init
-	// anyway for live scrubbing). Snap = nearest of the 4 quarters.
-	q := int(t*4 + 0.5)
-	if q < 0 {
-		q = 0
-	}
-	if q > 4 {
-		q = 4
-	}
-	s := stops[q]
-	return "linear-gradient(180deg, " + s.top + " 0%, " + s.bot + " 100%)"
-}
+// skybandGradient was promoted to calendar.SkybandGradient
+// (C-CAL-V2-WORLDSTATE-BAND-FINISHING Part A) so the /demo showcase and the
+// production calendar_v2 band / entity embeds share ONE gradient and can't
+// drift. This template now calls calendar.SkybandGradient(d.SkyTime) directly.
 
 // arcPositionStyle — places a sun/moon along a half-circle arc above
 // the band. t maps so 0.25 = horizon-east, 0.5 = zenith, 0.75 =
