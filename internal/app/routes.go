@@ -2289,6 +2289,55 @@ func (a *App) RegisterRoutes() {
 	// P4a: the create-or-pick binding UI (picker + bind/create/unbind, Scribe+).
 	widgetbindings.RegisterRoutes(e, widgetbindings.NewHandler(widgetBindingSvc, widgetRegistry), campaignService, authService)
 
+	// renderBoundBlock is the single seam every widget-bound entity block goes
+	// through on FIRST render (C-WIDGET-BINDING-P4b). It resolves the host's
+	// instance via the framework and delegates to the widget type's RenderBlock —
+	// the SAME path the binding handler uses for a post-mutation swap, so the
+	// initial render and the swap are byte-identical (same BlockHost wrapper +
+	// stable id). legacyID is the maps `entity.map_id` fallback: used as the
+	// instance only when nothing resolves, preserving pre-binding behavior
+	// (binding wins; unbound entity with a legacy map_id renders that map).
+	renderBoundBlock := func(widgetType string, rc entities.BlockRenderContext, legacyID string) templ.Component {
+		wt, ok := widgetRegistry.Get(widgetType)
+		if !ok {
+			return templ.NopComponent
+		}
+		hostID := ""
+		entityTypeID := ""
+		if rc.Entity != nil {
+			hostID = rc.Entity.ID
+			entityTypeID = strconv.Itoa(rc.Entity.EntityTypeID)
+		}
+		var res widgetbindings.Resolution
+		if rc.CC != nil && rc.CC.Campaign != nil && hostID != "" {
+			host := widgetbindings.HostRef{
+				CampaignID:   rc.CC.Campaign.ID,
+				Type:         widgetbindings.HostTypeEntity,
+				ID:           hostID,
+				EntityTypeID: entityTypeID,
+			}
+			if r, err := widgetBindingSvc.Resolve(context.Background(), host, widgetType); err == nil {
+				res = r
+			}
+		}
+		// Legacy fallback (maps entity.map_id) only when nothing resolved.
+		if !res.Resolved() && legacyID != "" {
+			res = widgetbindings.Resolution{InstanceID: legacyID, Source: widgetbindings.SourceDefault, WidgetType: widgetType}
+		}
+		role := 0
+		if rc.CC != nil {
+			role = rc.CC.VisibilityRole()
+		}
+		return wt.RenderBlock(context.Background(), widgetbindings.BlockRenderContext{
+			CC:         rc.CC,
+			HostID:     hostID,
+			UserID:     rc.UserID,
+			CSRFToken:  rc.CSRFToken,
+			Role:       role,
+			Resolution: res,
+		})
+	}
+
 	// Calendar plugin blocks (requires "calendar" addon).
 	// NOTE: the old per-entity `calendar` block (BlockCalendarEvents) was
 	// retired in C-CAL-EMBED-CONVERGE-POLISH — it was never used and is
@@ -2316,34 +2365,12 @@ func (a *App) RegisterRoutes() {
 		Description: "Ambient calendar + this entity's linked events",
 		Addon:       "calendar", Contexts: []string{"template"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		// EntityCalendarBlock renders the friendly not-found state itself when
-		// the entity/campaign context is missing (no raw error / blank).
-		entityID := ""
-		entityTypeID := ""
-		if rc.Entity != nil {
-			entityID = rc.Entity.ID
-			entityTypeID = strconv.Itoa(rc.Entity.EntityTypeID)
-		}
-		// Resolve the calendar instance through the widget-binding framework:
-		// the entity's own binding → its entity-type template → default
-		// (campaign default calendar = today's behavior). Empty on any error,
-		// which EntityCalendarBlock treats as "use the campaign default" — so
+		// Resolve the calendar instance + render via the framework seam
+		// (C-WIDGET-BINDING-P4b): own binding → entity-type template → default
+		// (campaign default calendar = today's behavior). EntityCalendarBlock
+		// renders the friendly not-found state itself when context is missing;
 		// unbound entities render exactly as before (#411–#420 unchanged).
-		calID := ""
-		source := ""
-		if rc.CC != nil && rc.CC.Campaign != nil && entityID != "" {
-			host := widgetbindings.HostRef{
-				CampaignID:   rc.CC.Campaign.ID,
-				Type:         widgetbindings.HostTypeEntity,
-				ID:           entityID,
-				EntityTypeID: entityTypeID,
-			}
-			if res, err := widgetBindingSvc.Resolve(context.Background(), host, calendar.WidgetTypeCalendar); err == nil {
-				calID = res.InstanceID
-				source = res.Source
-			}
-		}
-		return calendar.EntityCalendarBlock(calendarService, rc.CC, entityID, rc.UserID, calID, source)
+		return renderBoundBlock(calendar.WidgetTypeCalendar, rc, "")
 	})
 
 	// entity_worldstate — the entity-PAGE worldState timepiece embed
@@ -2362,25 +2389,11 @@ func (a *App) RegisterRoutes() {
 		Description: "Ambient sky + hourglass shelf for the current world date",
 		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		// EntityWorldStateBlock renders the friendly not-found state itself
-		// when the campaign context is missing (no raw error / blank).
-		// P2: resolve the host's hourglass calendar via the "worldstate" widget
-		// type (own binding → entity-type template → default = campaign default
-		// calendar). Empty/unbound → today's behavior. Dashboard-as-host stays
-		// default until P3.
-		calID := ""
-		if rc.CC != nil && rc.CC.Campaign != nil && rc.Entity != nil {
-			host := widgetbindings.HostRef{
-				CampaignID:   rc.CC.Campaign.ID,
-				Type:         widgetbindings.HostTypeEntity,
-				ID:           rc.Entity.ID,
-				EntityTypeID: strconv.Itoa(rc.Entity.EntityTypeID),
-			}
-			if res, err := widgetBindingSvc.Resolve(context.Background(), host, calendar.WidgetTypeWorldstate); err == nil {
-				calID = res.InstanceID
-			}
-		}
-		return calendar.EntityWorldStateBlock(calendarService, rc.CC, rc.UserID, calID)
+		// Resolve the host's hourglass calendar via the "worldstate" widget type
+		// + render via the framework seam (C-WIDGET-BINDING-P4b). Empty/unbound →
+		// today's behavior (campaign default calendar). On the campaign-dashboard
+		// context rc.Entity is nil → no host → default + no affordance (P3b).
+		return renderBoundBlock(calendar.WidgetTypeWorldstate, rc, "")
 	})
 
 	// Timeline plugin blocks (requires "timeline" addon).
@@ -2388,23 +2401,11 @@ func (a *App) RegisterRoutes() {
 		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",
 		Description: "Timeline preview with events", Addon: "timeline",
 		Contexts: []string{"template"},
-	}, func(ctx entities.BlockRenderContext) templ.Component {
-		// P2: resolve the host's bound timeline via the "timeline" widget type.
-		// Unbound (no default) → empty → BlockTimeline keeps today's campaign
-		// preview list. Bound → that single timeline.
-		timelineID := ""
-		if ctx.CC != nil && ctx.CC.Campaign != nil && ctx.Entity != nil {
-			host := widgetbindings.HostRef{
-				CampaignID:   ctx.CC.Campaign.ID,
-				Type:         widgetbindings.HostTypeEntity,
-				ID:           ctx.Entity.ID,
-				EntityTypeID: strconv.Itoa(ctx.Entity.EntityTypeID),
-			}
-			if res, err := widgetBindingSvc.Resolve(context.Background(), host, timeline.WidgetTypeTimeline); err == nil {
-				timelineID = res.InstanceID
-			}
-		}
-		return timeline.BlockTimeline(ctx.CC, timelineID)
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		// Resolve the host's bound timeline + render via the framework seam
+		// (C-WIDGET-BINDING-P4b). Unbound (no default) → empty instance →
+		// BlockTimeline keeps today's campaign preview list. Bound → that one.
+		return renderBoundBlock(timeline.WidgetTypeTimeline, rc, "")
 	})
 
 	// Maps plugin blocks (requires "maps" addon).
@@ -2438,102 +2439,17 @@ func (a *App) RegisterRoutes() {
 		// three layers — see BlockMeta.Singleton docstring.
 		Singleton: true,
 	}, func(rc entities.BlockRenderContext) templ.Component {
-		if rc.Entity == nil || rc.CC == nil {
-			return templ.NopComponent
+		// P4b: resolve + render via the framework seam (the embed/choose/empty
+		// branch logic now lives in maps.mapWidgetType.RenderBlock so the binding
+		// handler can re-render after a bind/unbind). LEGACY FALLBACK preserved:
+		// a widget_bindings row (widget_type="map") wins; an unbound entity with
+		// a legacy entity.map_id renders that map (identical to today). The
+		// bespoke AssignMap picker grid is superseded by the generic picker.
+		legacyID := ""
+		if rc.Entity != nil && rc.Entity.MapID != nil {
+			legacyID = *rc.Entity.MapID
 		}
-		isScribe := rc.CC.MemberRole >= campaigns.RoleScribe
-		// P3a: resolve the map instance through the widget-binding framework
-		// with a LEGACY FALLBACK. Default = today's behavior (entity.map_id);
-		// a widget_bindings row (widget_type="map") wins over the column when
-		// present. Unbound entities → identical to today (the column drives).
-		mapID := ""
-		if rc.Entity.MapID != nil {
-			mapID = *rc.Entity.MapID
-		}
-		host := widgetbindings.HostRef{
-			CampaignID:   rc.CC.Campaign.ID,
-			Type:         widgetbindings.HostTypeEntity,
-			ID:           rc.Entity.ID,
-			EntityTypeID: strconv.Itoa(rc.Entity.EntityTypeID),
-		}
-		if res, err := widgetBindingSvc.Resolve(context.Background(), host, maps.WidgetTypeMap); err == nil && res.Resolved() {
-			mapID = res.InstanceID
-		}
-		// Map assigned: render the inline editor. Build the full
-		// MapViewData server-side so the same templ that powers the
-		// dedicated page can render here. Markers are role+user filtered
-		// at the service layer (player visibility rules).
-		if mapID != "" {
-			ctx := context.Background()
-			m, err := mapsService.GetMap(ctx, mapID)
-			if err != nil || m == nil {
-				// FK should keep this from happening (ON DELETE SET NULL),
-				// but if a race or schema-skew left a dangling map_id,
-				// fall back to the empty state for everyone — better than
-				// 500-ing the whole entity page.
-				slog.Warn("map_editor block: assigned map not found, falling back to empty state",
-					slog.String("entity_id", rc.Entity.ID),
-					slog.String("map_id", mapID),
-					slog.Any("error", err),
-				)
-				if !isScribe {
-					return maps.BlockEntityMapEmpty()
-				}
-				// Fall through to the picker for Scribe+.
-			} else {
-				markers, mErr := mapsService.ListMarkers(ctx, m.ID, int(rc.CC.MemberRole), rc.UserID)
-				if mErr != nil {
-					// Non-fatal — render the map without markers rather than
-					// blocking the page.
-					slog.Warn("map_editor block: failed to list markers",
-						slog.String("map_id", m.ID),
-						slog.Any("error", mErr),
-					)
-					markers = nil
-				}
-				viewData := maps.MapViewData{
-					CampaignID: rc.CC.Campaign.ID,
-					Map:        m,
-					Markers:    markers,
-					IsScribe:   isScribe,
-				}
-				return maps.BlockEntityMapEmbed(rc.CC, rc.Entity.ID, viewData, isScribe)
-			}
-		}
-		// No map + player: empty state.
-		if !isScribe {
-			return maps.BlockEntityMapEmpty()
-		}
-		// No map + Scribe+: render the picker. Pull all maps in the
-		// campaign and present them as cards. ListMaps is cheap (one
-		// query per campaign); the page only renders this branch for
-		// the unassigned case so it's not on the hot path.
-		mapList, err := mapsService.ListMaps(context.Background(), rc.CC.Campaign.ID)
-		if err != nil {
-			slog.Warn("map_editor block: failed to list maps for picker",
-				slog.String("campaign_id", rc.CC.Campaign.ID),
-				slog.Any("error", err),
-			)
-			mapList = nil
-		}
-		cards := make([]maps.EntityMapPickerCard, 0, len(mapList))
-		for _, m := range mapList {
-			imgID := ""
-			if m.ImageID != nil {
-				imgID = *m.ImageID
-			}
-			desc := ""
-			if m.Description != nil {
-				desc = *m.Description
-			}
-			cards = append(cards, maps.EntityMapPickerCard{
-				ID:          m.ID,
-				Name:        m.Name,
-				Description: desc,
-				ImageID:     imgID,
-			})
-		}
-		return maps.BlockEntityMapPicker(rc.CC, rc.Entity.ID, cards, rc.CSRFToken)
+		return renderBoundBlock(maps.WidgetTypeMap, rc, legacyID)
 	})
 
 	// NPC gallery block — embeds a compact NPC grid on entity pages/dashboards.

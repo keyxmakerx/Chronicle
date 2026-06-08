@@ -1,0 +1,48 @@
+// block_host.templ — the generic re-render seam UI (C-WIDGET-BINDING-P4b):
+// the stable swap-target wrapper + the shared Scribe+ "Change…" affordance.
+// Both are widget-type-agnostic so all four widgets (calendar/worldstate/
+// timeline/maps) reuse them — the per-widget block templ just embeds
+// BindingAffordance and the widget type's RenderBlock wraps its block in
+// BlockHost.
+package widgetbindings
+
+import "fmt"
+
+// BlockHost wraps a widget's entity block in the stable swap-target element. A
+// binding mutation returns the same wrapper (RenderBlock → BlockHost), so the
+// HTMX outerHTML swap replaces the block in place and the id survives for the
+// next swap. The wrapper is layout-neutral (display:contents) so it doesn't
+// perturb the entity-page grid.
+templ BlockHost(widgetType, hostID string, inner templ.Component) {
+	<div id={ BlockHostID(widgetType, hostID) } data-widget-host={ widgetType } style="display:contents">
+		@inner
+	</div>
+}
+
+// BindingAffordance is the Scribe+ "Change…" control shared by every widget
+// block: a bound/default badge (from the resolved Source) + a button that loads
+// the generic create-or-pick picker into an inline slot. Callers gate it on
+// Scribe+ (players never render it). Replaces P4a's per-block bespoke affordance
+// so all four widgets surface identical UX.
+templ BindingAffordance(campaignID, widgetType, hostID, widgetLabel, source string) {
+	<div class="flex items-center justify-end gap-2 px-3 pt-2" data-binding-affordance={ widgetType }>
+		if source == SourceOwn {
+			<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium" data-binding-badge="own">Bound</span>
+		} else if source == SourceEntityType {
+			<span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-alt text-fg-muted font-medium" data-binding-badge="entity_type">Inherited</span>
+		} else {
+			<span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-alt text-fg-muted font-medium" data-binding-badge="default">Default</span>
+		}
+		<button
+			type="button"
+			class="text-xs text-accent hover:underline"
+			data-change-binding={ widgetType }
+			hx-get={ fmt.Sprintf("/campaigns/%s/bindings/picker?host_type=entity&host_id=%s&widget_type=%s", campaignID, hostID, widgetType) }
+			hx-target={ "#" + pickerSlotID(widgetType, hostID) }
+			hx-swap="innerHTML"
+		>
+			<i class="fa-solid fa-right-left mr-1" aria-hidden="true"></i>Change { widgetLabel }
+		</button>
+	</div>
+	<div id={ pickerSlotID(widgetType, hostID) } class="px-3"></div>
+}

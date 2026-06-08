@@ -35,7 +35,10 @@ import (
 // "worldstate" widget type (C-WIDGET-BINDING-P2): the host's hourglass tracks
 // that calendar's clock. Empty (unbound / no host) falls back to the campaign's
 // default calendar — today's behavior — so unbound renders identically.
-func EntityWorldStateBlock(svc CalendarService, cc *campaigns.CampaignContext, userID, calendarID string) templ.Component {
+// entityID + source thread the host id and resolution layer (P4b) so Scribe+
+// can open the create-or-pick picker and see bound-vs-default. entityID is empty
+// on the campaign-dashboard context (no per-entity host) → no affordance shown.
+func EntityWorldStateBlock(svc CalendarService, cc *campaigns.CampaignContext, entityID, userID, calendarID, source string) templ.Component {
 	// No campaign context → render the friendly not-found state rather than
 	// leaking a raw error / blank (mirrors entity_calendar item 2).
 	if cc == nil || cc.Campaign == nil {
@@ -72,5 +75,5 @@ func EntityWorldStateBlock(svc CalendarService, cc *campaigns.CampaignContext, u
 	}
 
 	data := CalendarV2ViewData{ActiveCalendar: cal, WorldState: seed, WorldStateJSON: seedJSON}
-	return entityWorldStateBlockView(cc.Campaign.ID, cal, data)
+	return entityWorldStateBlockView(cc.Campaign.ID, cal, data, entityID, source, cc.MemberRole >= campaigns.RoleScribe)
 }

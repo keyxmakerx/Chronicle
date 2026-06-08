@@ -7,7 +7,11 @@
 
 package calendar
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
+)
 
 // entityCalendarBlockView renders the embed. No calendar → empty-but-present;
 // no linked events → header + "no linked events" (never blank).
@@ -29,30 +33,13 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, data CalendarV2V
 				</a>
 			</div>
 		} else {
-			// Scribe+ "Change calendar" affordance (C-WIDGET-BINDING-P4a):
-			// loads the generic create-or-pick picker into the panel below.
-			// Shows bound-vs-default from the resolved binding source. Purely
-			// additive — players never see it; unbound entities render the
-			// campaign default exactly as before.
+			// Scribe+ "Change calendar" affordance (C-WIDGET-BINDING-P4a; the
+			// bespoke markup migrated onto the shared BindingAffordance in P4b).
+			// Loads the generic create-or-pick picker into the inline slot below
+			// and shows bound-vs-default from the resolved source. Purely additive
+			// — players never see it; unbound entities render the campaign default.
 			if isScribe {
-				<div class="flex items-center justify-end gap-2 px-3 pt-2">
-					if source == "own" {
-						<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium" data-binding-badge="own">Bound</span>
-					} else {
-						<span class="text-[10px] px-1.5 py-0.5 rounded bg-surface-alt text-fg-muted font-medium" data-binding-badge="default">Default</span>
-					}
-					<button
-						type="button"
-						class="text-xs text-accent hover:underline"
-						data-change-calendar
-						hx-get={ fmt.Sprintf("/campaigns/%s/bindings/picker?host_type=entity&host_id=%s&widget_type=calendar", campaignID, entityID) }
-						hx-target={ fmt.Sprintf("#cal-binding-picker-%s", entityID) }
-						hx-swap="innerHTML"
-					>
-						<i class="fa-solid fa-right-left mr-1" aria-hidden="true"></i>Change calendar
-					</button>
-				</div>
-				<div id={ fmt.Sprintf("cal-binding-picker-%s", entityID) } class="px-3"></div>
+				@widgetbindings.BindingAffordance(campaignID, WidgetTypeCalendar, entityID, "calendar", source)
 			}
 			// Engine prod-mode seed blob (#cal-v2-worldstate) + the compact sky
 			// band scaffold (reused from 2a). The engine paints from the seed.

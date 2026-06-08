@@ -6,6 +6,7 @@ package timeline
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 )
 
 // TimelineEmbedFragment renders a compact timeline D3 visualization for dashboard embedding.
@@ -53,7 +54,16 @@ templ TimelineEmbedEmpty(cc *campaigns.CampaignContext) {
 //     of the campaign's timelines (identical to pre-framework).
 //   - non-empty (bound) → the single bound timeline rendered via the shared
 //     timeline-viz widget (the host's timeline tracks that record).
-templ BlockTimeline(cc *campaigns.CampaignContext, timelineID string) {
+//
+// entityID + source + isScribe (P4b) thread the host + resolution so Scribe+
+// can open the create-or-pick picker (bind a specific timeline / revert to the
+// preview list). The affordance only shows for a per-entity host.
+templ BlockTimeline(cc *campaigns.CampaignContext, timelineID, entityID, source string, isScribe bool) {
+	if isScribe && entityID != "" {
+		<div class="card p-0 overflow-hidden mb-2" data-timeline-binding>
+			@widgetbindings.BindingAffordance(cc.Campaign.ID, WidgetTypeTimeline, entityID, "timeline", source)
+		</div>
+	}
 	if timelineID == "" {
 		<div
 			data-widget="timeline-widget"

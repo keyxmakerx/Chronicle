@@ -31,7 +31,8 @@ func (s *entityWSBlockStub) BuildWorldStateSeed(context.Context, string, int, in
 func renderEntityWS(t *testing.T, svc CalendarService, cc *campaigns.CampaignContext) string {
 	t.Helper()
 	var sb strings.Builder
-	if err := EntityWorldStateBlock(svc, cc, "user-1", "").Render(context.Background(), &sb); err != nil {
+	// No entityID → campaign-level (no per-entity host, no affordance).
+	if err := EntityWorldStateBlock(svc, cc, "", "user-1", "", "").Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	return sb.String()
@@ -48,17 +49,17 @@ func TestEntityWorldStateBlock_RendersWidgetMount(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner}
 	html := renderEntityWS(t, sampleWSSvc(), cc)
 	for _, want := range []string{
-		"data-entity-worldstate",                       // block container
-		`data-widget="worldstate"`,                     // boot.js mount point
-		`data-variant="hourglass"`,                     // the mini-shelf variant
-		`data-campaign-id="camp-1"`,                    // provider key
-		"id=\"cal-v2-worldstate\"",                     // seed blob → engine prod + provider zero-fetch
-		"data-cal-sky",                                 // the reused sky scaffold
-		"cal-almanac-shelf",                            // the hourglass-on-shelf
-		"data-worldstate-error",                        // friendly client error target
-		"/static/js/widgets/worldstate_provider.js",    // the provider singleton
-		"/static/js/widgets/worldstate.js",             // the widget
-		"/static/js/cal-almanac.js",                    // the shared engine
+		"data-entity-worldstate",                    // block container
+		`data-widget="worldstate"`,                  // boot.js mount point
+		`data-variant="hourglass"`,                  // the mini-shelf variant
+		`data-campaign-id="camp-1"`,                 // provider key
+		"id=\"cal-v2-worldstate\"",                  // seed blob → engine prod + provider zero-fetch
+		"data-cal-sky",                              // the reused sky scaffold
+		"cal-almanac-shelf",                         // the hourglass-on-shelf
+		"data-worldstate-error",                     // friendly client error target
+		"/static/js/widgets/worldstate_provider.js", // the provider singleton
+		"/static/js/widgets/worldstate.js",          // the widget
+		"/static/js/cal-almanac.js",                 // the shared engine
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("worldstate embed missing %q", want)
@@ -86,6 +87,35 @@ func TestEntityWorldStateBlock_NoEntityStillRenders(t *testing.T) {
 	html := renderEntityWS(t, sampleWSSvc(), cc)
 	if !strings.Contains(html, `data-widget="worldstate"`) {
 		t.Errorf("worldstate block should render campaign-level without an entity")
+	}
+}
+
+// P4b: a per-entity host + Scribe gets the "Change worldstate calendar"
+// affordance (shared BindingAffordance), bound-vs-default badge from source.
+func TestEntityWorldStateBlock_ScribeAffordance(t *testing.T) {
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleScribe}
+	var sb strings.Builder
+	if err := EntityWorldStateBlock(sampleWSSvc(), cc, "ent-1", "user-1", "", "own").Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := sb.String()
+	for _, want := range []string{
+		`data-binding-affordance="worldstate"`,
+		`data-binding-badge="own"`,
+		"/campaigns/camp-1/bindings/picker?host_type=entity", // path + first param
+		"host_id=ent-1",
+		"widget_type=worldstate",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("worldstate affordance missing %q", want)
+		}
+	}
+	// A player (no Scribe) must NOT see the affordance.
+	ccP := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RolePlayer}
+	var pb strings.Builder
+	_ = EntityWorldStateBlock(sampleWSSvc(), ccP, "ent-1", "user-1", "", "own").Render(context.Background(), &pb)
+	if strings.Contains(pb.String(), "data-binding-affordance") {
+		t.Errorf("players must not see the binding affordance")
 	}
 }
 

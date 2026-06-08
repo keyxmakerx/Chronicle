@@ -13,8 +13,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
+
+	"github.com/a-h/templ"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 )
 
@@ -70,11 +74,42 @@ func (w *timelineWidgetType) DefaultInstance(ctx context.Context, host widgetbin
 	return "", false, nil
 }
 
-// ListInstances / CreateInstance power the P4 create-or-pick UI; not wired yet.
+// ListInstances returns the campaign's timelines for the create-or-pick UI
+// (C-WIDGET-BINDING-P4b), role-filtered via the service. userID is "" — the
+// picker is Scribe-gated at the route, and the role already authorizes the list.
 func (w *timelineWidgetType) ListInstances(ctx context.Context, campaignID string, role int) ([]widgetbindings.InstanceRef, error) {
-	return nil, widgetbindings.ErrNotImplemented
+	tls, err := w.svc.ListTimelines(ctx, campaignID, role, "")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]widgetbindings.InstanceRef, 0, len(tls))
+	for _, t := range tls {
+		out = append(out, widgetbindings.InstanceRef{ID: t.ID, Name: t.Name, Icon: t.Icon, Color: t.Color})
+	}
+	return out, nil
 }
 
+// CreateInstance makes a barebones (named) timeline and returns its id — the
+// "create new" half of the picker. CreateTimeline applies all the sensible
+// defaults (color/icon/visibility/zoom).
 func (w *timelineWidgetType) CreateInstance(ctx context.Context, campaignID string, input any) (string, error) {
-	return "", widgetbindings.ErrNotImplemented
+	name := ""
+	if ci, ok := input.(widgetbindings.CreateInput); ok {
+		name = strings.TrimSpace(ci.Name)
+	}
+	t, err := w.svc.CreateTimeline(ctx, campaignID, CreateTimelineInput{CampaignID: campaignID, Name: name})
+	if err != nil {
+		return "", err
+	}
+	return t.ID, nil
+}
+
+// RenderBlock re-renders the entity timeline block for an in-place HTMX swap
+// (C-WIDGET-BINDING-P4b). The timeline-viz mount is a data-widget (boot.js
+// re-mounts it on htmx:afterSettle), so the swapped block self-fetches and
+// renders cleanly. Wrapped in BlockHost for the stable swap target.
+func (w *timelineWidgetType) RenderBlock(ctx context.Context, rc widgetbindings.BlockRenderContext) templ.Component {
+	isScribe := rc.Role >= int(campaigns.RoleScribe)
+	inner := BlockTimeline(rc.CC, rc.Resolution.InstanceID, rc.HostID, rc.Resolution.Source, isScribe)
+	return widgetbindings.BlockHost(WidgetTypeTimeline, rc.HostID, inner)
 }

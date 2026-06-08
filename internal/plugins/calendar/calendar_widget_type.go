@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/a-h/templ"
+
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 )
@@ -123,3 +125,12 @@ func NewCalendarWidgetType(svc CalendarService) widgetbindings.WidgetType {
 }
 
 func (w *calendarWidgetType) Slug() string { return WidgetTypeCalendar }
+
+// RenderBlock re-renders the entity_calendar block for an in-place HTMX swap
+// (C-WIDGET-BINDING-P4b). Wrapped in BlockHost so the binding handler's
+// outerHTML swap lands on the stable target id. Delegates to the existing
+// EntityCalendarBlock with the resolved instance + source.
+func (w *calendarWidgetType) RenderBlock(ctx context.Context, rc widgetbindings.BlockRenderContext) templ.Component {
+	inner := EntityCalendarBlock(w.svc, rc.CC, rc.HostID, rc.UserID, rc.Resolution.InstanceID, rc.Resolution.Source)
+	return widgetbindings.BlockHost(WidgetTypeCalendar, rc.HostID, inner)
+}

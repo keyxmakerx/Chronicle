@@ -16,6 +16,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -104,14 +105,15 @@ func (h *Handler) BindAPI(c echo.Context) error {
 	hostID := c.FormValue("host_id")
 	widgetType := c.FormValue("widget_type")
 	instanceID := c.FormValue("instance_id")
-	if _, ok := h.validate(hostType, hostID, widgetType); !ok {
+	wt, ok := h.validate(hostType, hostID, widgetType)
+	if !ok {
 		return apperror.NewBadRequest("unknown host or widget type")
 	}
 	host := hostFrom(cc, hostType, hostID, c.FormValue("entity_type_id"))
 	if err := h.svc.Bind(c.Request().Context(), host, widgetType, instanceID); err != nil {
 		return err
 	}
-	return reloadHost(c)
+	return h.swapHostBlock(c, cc, wt, host, widgetType)
 }
 
 // CreateBindAPI creates a new instance then binds it (Scribe+):
@@ -137,7 +139,7 @@ func (h *Handler) CreateBindAPI(c echo.Context) error {
 	if err := h.svc.Bind(ctx, host, widgetType, instanceID); err != nil {
 		return err
 	}
-	return reloadHost(c)
+	return h.swapHostBlock(c, cc, wt, host, widgetType)
 }
 
 // UnbindAPI removes a host's binding, reverting to the default (Scribe+):
@@ -150,14 +152,18 @@ func (h *Handler) UnbindAPI(c echo.Context) error {
 	hostType := c.QueryParam("host_type")
 	hostID := c.QueryParam("host_id")
 	widgetType := c.QueryParam("widget_type")
-	if _, ok := h.validate(hostType, hostID, widgetType); !ok {
+	entityTypeID := c.QueryParam("entity_type_id")
+	wt, ok := h.validate(hostType, hostID, widgetType)
+	if !ok {
 		return apperror.NewBadRequest("unknown host or widget type")
 	}
-	host := hostFrom(cc, hostType, hostID, "")
+	// Keep entity_type_id so the post-unbind re-Resolve can still surface an
+	// inherited entity-type template binding (the precedence rung below "own").
+	host := hostFrom(cc, hostType, hostID, entityTypeID)
 	if err := h.svc.Unbind(c.Request().Context(), host, widgetType); err != nil {
 		return err
 	}
-	return reloadHost(c)
+	return h.swapHostBlock(c, cc, wt, host, widgetType)
 }
 
 // validate checks the host_type + widget_type against the app-code namespaces
@@ -170,11 +176,32 @@ func (h *Handler) validate(hostType, hostID, widgetType string) (WidgetType, boo
 	return wt, ok
 }
 
-// reloadHost signals the client to reload after a successful bind/create/unbind
-// so the host's widget block re-renders against the new binding. This mirrors
-// the established map-picker UX (AssignMap → full reload) and keeps this plugin
-// free of any cross-plugin block-render coupling (it can't import calendar to
-// re-render the entity_calendar block).
+// swapHostBlock re-resolves the host's binding and renders the widget's block
+// for an in-place HTMX swap (C-WIDGET-BINDING-P4b — replaces P4a's HX-Refresh).
+// The widget plugin owns the block template; this delegates rendering through
+// the registry (RenderBlock) so the binding plugin imports no widget plugin.
+// The rendered fragment is wrapped in BlockHost (by RenderBlock), so the
+// outerHTML swap targeted by the picker controls replaces the block in place.
+// Defensive fallback: if a widget can't render (nil component), reload.
+func (h *Handler) swapHostBlock(c echo.Context, cc *campaigns.CampaignContext, wt WidgetType, host HostRef, widgetType string) error {
+	ctx := c.Request().Context()
+	res, _ := h.svc.Resolve(ctx, host, widgetType)
+	comp := wt.RenderBlock(ctx, BlockRenderContext{
+		CC:         cc,
+		HostID:     host.ID,
+		UserID:     auth.GetUserID(c),
+		CSRFToken:  middleware.GetCSRFToken(c),
+		Role:       cc.VisibilityRole(),
+		Resolution: res,
+	})
+	if comp == nil {
+		return reloadHost(c)
+	}
+	return middleware.Render(c, http.StatusOK, comp)
+}
+
+// reloadHost signals the client to do a full reload — the defensive fallback
+// when a widget can't produce a swap fragment (P4b keeps it only for that).
 func reloadHost(c echo.Context) error {
 	c.Response().Header().Set("HX-Refresh", "true")
 	return c.NoContent(http.StatusOK)
