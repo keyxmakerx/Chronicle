@@ -101,6 +101,17 @@ func entityEventHref(campaignID string, evt Event) string {
 		itoa(evt.Year) + "&month=" + itoa(evt.Month) + "&day=" + itoa(evt.Day)
 }
 
+// openCalendarV2Href is the "Open full calendar" target (C-WIDGET-BINDING-QA2
+// Part B): the V2 shell for the resolved calendar (the bound one, or the
+// campaign-active default when unbound). Empty calendarID → the active-calendar
+// V2 entry. V2 not V1 — consistent with QA1 Bug 1.
+func openCalendarV2Href(campaignID, calendarID string) string {
+	if calendarID == "" {
+		return "/campaigns/" + campaignID + "/calendar/v2"
+	}
+	return "/campaigns/" + campaignID + "/calendar/v2/" + calendarID
+}
+
 // entityEventRole renders the participation role label (empty → "linked").
 // (itoa for the href is the shared helper in subresource_v2.go.)
 func entityEventRole(t EntityEventTie) string {

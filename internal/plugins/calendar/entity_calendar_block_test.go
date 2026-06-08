@@ -128,6 +128,26 @@ func TestEntityCalendarBlock_PreviewPlaceholder(t *testing.T) {
 	}
 }
 
+// TestEntityCalendarBlock_OpenFullCalendarLink (C-WIDGET-BINDING-QA2 Part B):
+// the block header has an "Open full calendar" link to the V2 shell for the
+// resolved calendar, shown for ALL roles (players can view the calendar).
+func TestEntityCalendarBlock_OpenFullCalendarLink(t *testing.T) {
+	for _, role := range []campaigns.Role{campaigns.RolePlayer, campaigns.RoleScribe} {
+		html := renderEntityCal(t, sampleEmbedSvc(), role, false)
+		// V2 shell for the resolved calendar (sampleEmbedSvc's default cal-1).
+		if !strings.Contains(html, "/campaigns/camp-1/calendar/v2/cal-1") {
+			t.Errorf("role %d: missing V2 open-calendar link; got: %q", role, html)
+		}
+		if !strings.Contains(html, "data-open-calendar") || !strings.Contains(html, "Open full calendar") {
+			t.Errorf("role %d: missing the Open-full-calendar affordance", role)
+		}
+		// Must be V2, never the V1 /calendars/<id> view.
+		if strings.Contains(html, `href="/campaigns/camp-1/calendars/cal-1"`) {
+			t.Errorf("role %d: open link must target V2, not the V1 view", role)
+		}
+	}
+}
+
 func TestEntityCalendarBlock_EmptyStates(t *testing.T) {
 	// No calendar → friendly "Create calendar" CTA (C-CAL-EMBED-CONVERGE-POLISH
 	// item 3), not a raw message; no band.

@@ -196,6 +196,20 @@
    * with a color-mix gradient on scrub. */
   transition: background var(--cal-d-large) var(--cal-ease-out);
 }
+/* Production particle-canvas sizing (C-WIDGET-BINDING-QA2). The detailed
+ * `.cal-almanac-shell .cal-almanac-sky__canvas` rule below is scoped to the
+ * /demo shell, which the LIVE calendar_v2 band + the entity-page embeds do NOT
+ * wrap in — so without this the canvas keeps the default 300×150 intrinsic size
+ * and the engine paints particles into a small top-left box instead of across
+ * the band. Match the band: fill it, sit below the sun (z5) + overlay (z6). */
+[data-cal-sky-canvas] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
 .cal-almanac-sky__arc {
   position: absolute;
   inset: 0;

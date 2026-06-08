@@ -33,6 +33,19 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, data CalendarV2V
 				</a>
 			</div>
 		} else {
+			// Header: "Open full calendar" (ALL roles → the V2 shell for the
+			// resolved calendar, C-WIDGET-BINDING-QA2 Part B) on the left, and the
+			// Scribe+ "Change calendar" binding control on the right.
+			<div class="flex items-center justify-between gap-2 px-3 pt-2">
+				<a
+					href={ templ.SafeURL(openCalendarV2Href(campaignID, cal.ID)) }
+					class="text-xs text-accent hover:underline"
+					data-open-calendar
+					title="Open the full calendar"
+				>
+					<i class="fa-solid fa-arrow-up-right-from-square mr-1" aria-hidden="true"></i>Open full calendar
+				</a>
+			</div>
 			// Scribe+ "Change calendar" affordance (C-WIDGET-BINDING-P4a; the
 			// bespoke markup migrated onto the shared BindingAffordance in P4b).
 			// Loads the generic create-or-pick picker into the inline slot below
