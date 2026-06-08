@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
@@ -75,13 +76,38 @@ func (b calendarInstanceBacking) DefaultInstance(ctx context.Context, host widge
 	return cal.ID, true, nil
 }
 
-// ListInstances / CreateInstance power the P4 create-or-pick UI; not wired yet.
+// ListInstances returns the campaign's calendars for the create-or-pick UI
+// (C-WIDGET-BINDING-P4a). Shared by the calendar + worldstate widget types
+// (both bind a calendar id).
 func (b calendarInstanceBacking) ListInstances(ctx context.Context, campaignID string, role int) ([]widgetbindings.InstanceRef, error) {
-	return nil, widgetbindings.ErrNotImplemented
+	cals, err := b.svc.ListCalendars(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]widgetbindings.InstanceRef, 0, len(cals))
+	for _, c := range cals {
+		icon := "fa-calendar-days"
+		if c.Mode == ModeRealLife {
+			icon = "fa-clock"
+		}
+		out = append(out, widgetbindings.InstanceRef{ID: c.ID, Name: c.Name, Icon: icon})
+	}
+	return out, nil
 }
 
+// CreateInstance makes a barebones calendar (named) and returns its id — the
+// "create new" half of the picker. The user refines it later in the calendar
+// editor. CreateCalendar applies all the sensible defaults.
 func (b calendarInstanceBacking) CreateInstance(ctx context.Context, campaignID string, input any) (string, error) {
-	return "", widgetbindings.ErrNotImplemented
+	name := ""
+	if ci, ok := input.(widgetbindings.CreateInput); ok {
+		name = strings.TrimSpace(ci.Name)
+	}
+	cal, err := b.svc.CreateCalendar(ctx, campaignID, CreateCalendarInput{Name: name})
+	if err != nil {
+		return "", err
+	}
+	return cal.ID, nil
 }
 
 // calendarWidgetType is the "calendar" widget type (the entity-page calendar

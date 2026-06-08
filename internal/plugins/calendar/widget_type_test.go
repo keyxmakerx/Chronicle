@@ -12,12 +12,16 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 )
 
-// wtCalStub overrides only the two methods the calendar-instance backing uses.
+// wtCalStub overrides only the methods the calendar-instance backing uses.
 type wtCalStub struct {
 	CalendarService
-	byID       map[string]*Calendar // instanceID -> calendar (carries CampaignID)
-	defaults   map[string]*Calendar // campaignID -> default calendar
-	getByIDErr error                // non-404 error to exercise the "don't sweep on a blip" path
+	byID       map[string]*Calendar  // instanceID -> calendar (carries CampaignID)
+	defaults   map[string]*Calendar  // campaignID -> default calendar
+	list       map[string][]Calendar // campaignID -> calendars (ListInstances)
+	listErr    error                 // forces a ListCalendars failure
+	created    []CreateCalendarInput // captures CreateInstance → CreateCalendar
+	createErr  error                 // forces a CreateCalendar failure
+	getByIDErr error                 // non-404 error to exercise the "don't sweep on a blip" path
 }
 
 func (s *wtCalStub) GetCalendarByID(_ context.Context, id string) (*Calendar, error) {
@@ -34,6 +38,19 @@ func (s *wtCalStub) GetCalendar(_ context.Context, campaignID string) (*Calendar
 		return c, nil
 	}
 	return nil, apperror.NewNotFound("no calendar")
+}
+func (s *wtCalStub) ListCalendars(_ context.Context, campaignID string) ([]Calendar, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	return s.list[campaignID], nil
+}
+func (s *wtCalStub) CreateCalendar(_ context.Context, campaignID string, input CreateCalendarInput) (*Calendar, error) {
+	if s.createErr != nil {
+		return nil, s.createErr
+	}
+	s.created = append(s.created, input)
+	return &Calendar{ID: "new-cal", CampaignID: campaignID, Name: input.Name}, nil
 }
 
 func wtHost(camp string) widgetbindings.HostRef {
@@ -129,5 +146,66 @@ func TestDeleteCalendar_FiresBothDeleteHooks(t *testing.T) {
 	}
 	if !want[WidgetTypeCalendar] || !want[WidgetTypeWorldstate] {
 		t.Errorf("both calendar + worldstate slugs must be swept; got %v", cleaner.calls)
+	}
+}
+
+// ListInstances (C-WIDGET-BINDING-P4a) maps the campaign's calendars to picker
+// InstanceRefs — id + name + a mode-derived icon — for BOTH the calendar and
+// worldstate widget types (they share the calendar-instance backing). An empty
+// campaign yields an empty (non-nil) slice; a service error surfaces.
+func TestCalendarInstanceBacking_ListInstances(t *testing.T) {
+	svc := &wtCalStub{list: map[string][]Calendar{
+		"camp-1": {
+			{ID: "cal-f", CampaignID: "camp-1", Name: "Harptos", Mode: ModeFantasy},
+			{ID: "cal-r", CampaignID: "camp-1", Name: "Earth", Mode: ModeRealLife},
+		},
+	}}
+	for _, wt := range []widgetbindings.WidgetType{NewCalendarWidgetType(svc), NewWorldStateWidgetType(svc)} {
+		refs, err := wt.ListInstances(context.Background(), "camp-1", 0)
+		if err != nil {
+			t.Fatalf("%s: ListInstances: %v", wt.Slug(), err)
+		}
+		if len(refs) != 2 {
+			t.Fatalf("%s: want 2 refs; got %d", wt.Slug(), len(refs))
+		}
+		if refs[0].ID != "cal-f" || refs[0].Name != "Harptos" || refs[0].Icon != "fa-calendar-days" {
+			t.Errorf("%s: fantasy ref = %+v", wt.Slug(), refs[0])
+		}
+		// Real-life calendars get the clock icon.
+		if refs[1].ID != "cal-r" || refs[1].Icon != "fa-clock" {
+			t.Errorf("%s: reallife ref = %+v", wt.Slug(), refs[1])
+		}
+		// Empty campaign → empty, non-nil slice (the picker renders "none yet").
+		empty, err := wt.ListInstances(context.Background(), "camp-none", 0)
+		if err != nil || empty == nil || len(empty) != 0 {
+			t.Errorf("%s: empty campaign should give empty non-nil slice; got %v err=%v", wt.Slug(), empty, err)
+		}
+	}
+	// A ListCalendars failure surfaces (not silently swallowed).
+	if _, err := NewCalendarWidgetType(&wtCalStub{listErr: errors.New("db down")}).ListInstances(context.Background(), "camp-1", 0); err == nil {
+		t.Errorf("ListInstances must surface a service error")
+	}
+}
+
+// CreateInstance (C-WIDGET-BINDING-P4a) creates a named calendar via the service
+// and returns its id — the "create new" half of the picker. The name is taken
+// from the generic CreateInput (trimmed); a create error surfaces.
+func TestCalendarInstanceBacking_CreateInstance(t *testing.T) {
+	svc := &wtCalStub{}
+	id, err := NewCalendarWidgetType(svc).CreateInstance(
+		context.Background(), "camp-1", widgetbindings.CreateInput{Name: "  Harptos  "})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	if id != "new-cal" {
+		t.Errorf("want new calendar id; got %q", id)
+	}
+	if len(svc.created) != 1 || svc.created[0].Name != "Harptos" {
+		t.Errorf("name should be trimmed and passed to CreateCalendar; got %+v", svc.created)
+	}
+	// A create failure surfaces.
+	if _, err := NewCalendarWidgetType(&wtCalStub{createErr: errors.New("nope")}).
+		CreateInstance(context.Background(), "camp-1", widgetbindings.CreateInput{Name: "x"}); err == nil {
+		t.Errorf("CreateInstance must surface a service error")
 	}
 }

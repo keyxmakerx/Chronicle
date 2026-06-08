@@ -2286,6 +2286,8 @@ func (a *App) RegisterRoutes() {
 	}); ok {
 		m.SetBindingCleaner(widgetBindingSvc)
 	}
+	// P4a: the create-or-pick binding UI (picker + bind/create/unbind, Scribe+).
+	widgetbindings.RegisterRoutes(e, widgetbindings.NewHandler(widgetBindingSvc, widgetRegistry), campaignService, authService)
 
 	// Calendar plugin blocks (requires "calendar" addon).
 	// NOTE: the old per-entity `calendar` block (BlockCalendarEvents) was
@@ -2328,6 +2330,7 @@ func (a *App) RegisterRoutes() {
 		// which EntityCalendarBlock treats as "use the campaign default" — so
 		// unbound entities render exactly as before (#411–#420 unchanged).
 		calID := ""
+		source := ""
 		if rc.CC != nil && rc.CC.Campaign != nil && entityID != "" {
 			host := widgetbindings.HostRef{
 				CampaignID:   rc.CC.Campaign.ID,
@@ -2337,9 +2340,10 @@ func (a *App) RegisterRoutes() {
 			}
 			if res, err := widgetBindingSvc.Resolve(context.Background(), host, calendar.WidgetTypeCalendar); err == nil {
 				calID = res.InstanceID
+				source = res.Source
 			}
 		}
-		return calendar.EntityCalendarBlock(calendarService, rc.CC, entityID, rc.UserID, calID)
+		return calendar.EntityCalendarBlock(calendarService, rc.CC, entityID, rc.UserID, calID, source)
 	})
 
 	// entity_worldstate — the entity-PAGE worldState timepiece embed
