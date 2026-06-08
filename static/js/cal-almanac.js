@@ -287,9 +287,22 @@
 
     function resize(s) {
       var r = s.canvas.getBoundingClientRect();
+      var w = Math.round(r.width);
+      var h = Math.round(r.height);
+      // Defense-in-depth (C-WIDGET-BINDING-QA1 Bug 4): bail on a not-yet-laid-out
+      // or absurd rect so a misconfigured/unbounded container can't feed a
+      // degenerate size into the backing store — which throws "Canvas exceeds
+      // max size" / "could not create basic draw target" and, under the
+      // ResizeObserver, floods the console in a loop. This stands on its own
+      // regardless of the layout fix.
+      if (!isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return;
       var dpr = Math.min(window.devicePixelRatio || 1, 2); // clamp 2×
-      s.w = Math.max(1, Math.round(r.width));
-      s.h = Math.max(1, Math.round(r.height));
+      // Cap the CSS dims so the backing store (dims × dpr) stays well under the
+      // browser canvas limit (~32767px); 8192 device px is ample for a band.
+      var MAX_DEVICE = 8192;
+      var maxCSS = Math.floor(MAX_DEVICE / dpr);
+      s.w = Math.min(w, maxCSS);
+      s.h = Math.min(h, maxCSS);
       s.dpr = dpr;
       s.canvas.width = s.w * dpr;
       s.canvas.height = s.h * dpr;

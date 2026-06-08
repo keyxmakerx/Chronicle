@@ -34,11 +34,16 @@ import (
 // so Scribe+ can see bound-vs-default and open the create-or-pick picker. Empty
 // when the framework isn't wired (treated as default).
 func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, entityID, userID, calendarID, source string) templ.Component {
-	// No entity/campaign context → nothing to build from; render the friendly
-	// not-found state rather than leaking a raw "entity not found" / blank
-	// (C-CAL-EMBED-CONVERGE-POLISH item 2).
-	if cc == nil || cc.Campaign == nil || entityID == "" {
+	// No campaign context at all → soft unavailable state (never a raw error).
+	// No concrete entity (entityID == "") → this template-context block is being
+	// rendered on a surface without an entity (the layout/customization editor or
+	// a preview), so show a CALM "previews on the entity page" placeholder rather
+	// than the alarming can't-load copy (C-WIDGET-BINDING-QA1 Bug 2).
+	if cc == nil || cc.Campaign == nil {
 		return entityCalendarUnavailable()
+	}
+	if entityID == "" {
+		return entityCalendarPreviewPlaceholder()
 	}
 	ctx := context.Background()
 	role := cc.VisibilityRole()

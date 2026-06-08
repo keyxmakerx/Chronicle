@@ -11,10 +11,12 @@ import "fmt"
 // BlockHost wraps a widget's entity block in the stable swap-target element. A
 // binding mutation returns the same wrapper (RenderBlock → BlockHost), so the
 // HTMX outerHTML swap replaces the block in place and the id survives for the
-// next swap. The wrapper is layout-neutral (display:contents) so it doesn't
-// perturb the entity-page grid.
+// next swap. The wrapper is a normal block-level element: it MUST generate a box
+// (NOT display:contents) so the entity-page column's `space-y-*` between-block
+// spacing applies to it — display:contents made margins no-ops, butting the
+// widget block against its neighbour (C-WIDGET-BINDING-QA1 Bug 3).
 templ BlockHost(widgetType, hostID string, inner templ.Component) {
-	<div id={ BlockHostID(widgetType, hostID) } data-widget-host={ widgetType } style="display:contents">
+	<div id={ BlockHostID(widgetType, hostID) } data-widget-host={ widgetType }>
 		@inner
 	</div>
 }

@@ -591,10 +591,16 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	}
 
 	// Redirect to settings for fantasy mode so users can immediately customize
-	// months, weekdays, etc. Real-life mode goes straight to the calendar.
+	// months, weekdays, etc. Real-life mode goes straight to the calendar — the
+	// V2 shell (C-WIDGET-BINDING-QA1 Bug 1: was landing on the old V1 view, which
+	// is missing the V2 worldstate features/animations). The fantasy →settings
+	// step is mode-agnostic (the settings editor, not the V1 view). NOTE: the
+	// full V1→V2 cutover (the V1 /calendars/:calId view + its many internal links,
+	// the /calendars Index redirect, the app-dashboard "Open" link) is flagged as
+	// a separate dispatch — this fixes the create LANDING only.
 	if mode == ModeRealLife {
 		return c.Redirect(http.StatusSeeOther,
-			fmt.Sprintf("/campaigns/%s/calendars/%s", cc.Campaign.ID, cal.ID))
+			fmt.Sprintf("/campaigns/%s/calendar/v2/%s", cc.Campaign.ID, cal.ID))
 	}
 	return c.Redirect(http.StatusSeeOther,
 		fmt.Sprintf("/campaigns/%s/calendars/%s/settings", cc.Campaign.ID, cal.ID))
