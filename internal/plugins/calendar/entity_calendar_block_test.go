@@ -88,8 +88,8 @@ func TestEntityCalendarBlock_DmOnlyFiltering(t *testing.T) {
 	}
 }
 
-// TestEntityCalendarBlock_Unavailable: missing entity/campaign context renders
-// the friendly not-found state, never a raw error/blank (item 2).
+// TestEntityCalendarBlock_Unavailable: no campaign context renders the friendly
+// unavailable state, never a raw error/blank (item 2).
 func TestEntityCalendarBlock_Unavailable(t *testing.T) {
 	render := func(cc *campaigns.CampaignContext, entityID string) string {
 		var sb strings.Builder
@@ -98,17 +98,33 @@ func TestEntityCalendarBlock_Unavailable(t *testing.T) {
 		}
 		return sb.String()
 	}
+	// No campaign context → friendly unavailable state, no band.
+	html := render(nil, "ent-1")
+	if !strings.Contains(html, "data-entity-calendar-unavailable") {
+		t.Errorf("nil cc: expected friendly unavailable state, got: %q", html)
+	}
+	if strings.Contains(html, "data-cal-sky") {
+		t.Errorf("nil cc: must not render the band")
+	}
+}
+
+// TestEntityCalendarBlock_PreviewPlaceholder (C-WIDGET-BINDING-QA1 Bug 2): a
+// concrete-entity block rendered WITHOUT an entity (customization/layout editor
+// or preview) shows the CALM "previews on the entity page" placeholder — never
+// the alarming can't-load copy — and never the band.
+func TestEntityCalendarBlock_PreviewPlaceholder(t *testing.T) {
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner}
-	for name, html := range map[string]string{
-		"nil cc":       render(nil, "ent-1"),
-		"empty entity": render(cc, ""),
-	} {
-		if !strings.Contains(html, "data-entity-calendar-unavailable") {
-			t.Errorf("%s: expected friendly unavailable state, got: %q", name, html)
-		}
-		if strings.Contains(html, "data-cal-sky") {
-			t.Errorf("%s: must not render the band", name)
-		}
+	var sb strings.Builder
+	if err := EntityCalendarBlock(sampleEmbedSvc(), cc, "", "u1", "", "").Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := sb.String()
+	if !strings.Contains(html, "data-entity-calendar-preview") {
+		t.Errorf("empty entity: expected calm preview placeholder, got: %q", html)
+	}
+	// Must NOT be the alarming unavailable copy, and must not render the band.
+	if strings.Contains(html, "data-entity-calendar-unavailable") || strings.Contains(html, "data-cal-sky") {
+		t.Errorf("empty entity: must show the preview placeholder only, got: %q", html)
 	}
 }
 

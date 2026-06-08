@@ -351,6 +351,27 @@ func TestMutations_RejectUnknownTypes(t *testing.T) {
 	}
 }
 
+// BlockHost must carry the stable swap-target id AND generate a real box — NOT
+// display:contents, which made the entity-page column's space-y between-block
+// spacing a no-op (C-WIDGET-BINDING-QA1 Bug 3).
+func TestBlockHost_GeneratesBoxForSpacing(t *testing.T) {
+	inner := templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
+		_, err := io.WriteString(w, `<div class="card">x</div>`)
+		return err
+	})
+	var sb strings.Builder
+	if err := BlockHost("calendar", "ent-1", inner).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := sb.String()
+	if !strings.Contains(html, `id="`+BlockHostID("calendar", "ent-1")+`"`) {
+		t.Errorf("BlockHost must carry the stable id; got %q", html)
+	}
+	if strings.Contains(html, "display:contents") {
+		t.Errorf("BlockHost must NOT use display:contents (breaks space-y spacing); got %q", html)
+	}
+}
+
 // isBadRequest reports whether err is a 400 AppError.
 func isBadRequest(err error) bool {
 	if err == nil {

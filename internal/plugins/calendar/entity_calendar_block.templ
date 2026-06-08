@@ -81,14 +81,30 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, data CalendarV2V
 	</div>
 }
 
-// entityCalendarUnavailable is the friendly not-found / can't-render state
-// (C-CAL-EMBED-CONVERGE-POLISH item 2): shown instead of leaking a raw
-// "entity not found" 404 when the embed has no entity/campaign context to
-// build from. Explains what happened + what to do, never a raw error.
+// entityCalendarPreviewPlaceholder is the CALM placeholder shown when the
+// `entity_calendar` (a template-context block) is rendered without a concrete
+// entity — the layout/customization editor or any preview surface
+// (C-WIDGET-BINDING-QA1 Bug 2). It explains the block previews on the entity
+// page; it is NOT an error, so the copy is reassuring, not alarming.
+templ entityCalendarPreviewPlaceholder() {
+	<div class="card p-4 flex items-center gap-3 text-sm text-fg-secondary" data-entity-calendar-preview>
+		<i class="fa-solid fa-calendar-days text-lg text-fg-muted" aria-hidden="true"></i>
+		<span>
+			<span class="font-medium text-fg">Calendar</span> — this block shows the world's
+			date, sky, and this page's linked events. It previews here and renders on each
+			entity's page.
+		</span>
+	</div>
+}
+
+// entityCalendarUnavailable is the friendly can't-render state
+// (C-CAL-EMBED-CONVERGE-POLISH item 2): shown instead of leaking a raw error
+// when the embed has no campaign context to build from. Calm + actionable,
+// never a scary "may have been removed" (softened in C-WIDGET-BINDING-QA1).
 templ entityCalendarUnavailable() {
 	<div class="card p-4 text-sm text-fg-secondary" data-entity-calendar-unavailable>
 		<i class="fa-solid fa-circle-info mr-1.5" aria-hidden="true"></i>
-		This calendar couldn't be loaded for this page — the page or its entity may have
-		moved or been removed. Try reloading; if it persists, re-open the entity from its list.
+		This calendar couldn't be loaded just now. Try reloading the page; if it persists,
+		re-open the entity from its list.
 	</div>
 }
