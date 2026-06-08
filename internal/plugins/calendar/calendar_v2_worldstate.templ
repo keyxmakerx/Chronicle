@@ -19,20 +19,34 @@
 
 package calendar
 
-// worldStateBandV2 renders the ambient strip (sky band + hourglass) above the
-// calendar grid. Renders nothing when there's no active calendar / seed.
+// worldStateBandV2 renders the ambient SKY band above the full calendar page
+// (C-CAL-V2-WORLDSTATE-BAND-FINISHING Part C: SKY ONLY — the hourglass is the
+// compact "shelf" variant). Renders nothing without an active calendar / seed.
 templ worldStateBandV2(data CalendarV2ViewData) {
+	@worldStateBandVariantV2(data, false)
+}
+
+// worldStateShelfBandV2 is the SHELF variant (sky + hourglass timepiece) for
+// compact preview surfaces like the calendar app-dashboard "See in action"
+// card. The entity embeds compose the sky + hourglass directly; this shares the
+// same composition so the dashboard keeps its timepiece (Part C variant split).
+templ worldStateShelfBandV2(data CalendarV2ViewData) {
+	@worldStateBandVariantV2(data, true)
+}
+
+// worldStateBandVariantV2 is the shared band composition — sky always, hourglass
+// only for the shelf variant — so the two callers don't duplicate the seed blob
+// + asset loads (the dispatch's "parameterize a variant, don't duplicate").
+templ worldStateBandVariantV2(data CalendarV2ViewData, withHourglass bool) {
 	if wsActive(data) {
 		// The CATALOG Part-8 seed blob the engine consumes (cal-almanac.js
 		// 'data' block detects #cal-v2-worldstate → production mode).
 		<div id="cal-v2-worldstate" data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
-		// Layout-only inline styles (no color) size the canvas region + place
-		// the hourglass — they override the demo's full-page positioning in
-		// the shared canvas CSS without touching it. Final sizing is an
-		// operator visual-gate item.
 		<section class="cal-v2-worldstate-band relative w-full overflow-hidden border-b border-edge" style="height:200px" data-cal-v2-worldstate-band aria-label="Today in the world">
 			@worldStateSkyBandV2(data)
-			@worldStateHourglassV2(data)
+			if withHourglass {
+				@worldStateHourglassV2(data)
+			}
 		</section>
 		// Load the rendering-canvas CSS + the shared engine. Same assets the
 		// /demo showcase uses; the engine self-detects production mode.
@@ -50,7 +64,7 @@ templ worldStateSkyBandV2(data CalendarV2ViewData) {
 		data-cal-sky
 		data-cal-sky-weather={ wsWeatherID(data) }
 		data-cal-sky-time-frac={ wsTimeFrac(data) }
-		style="position:absolute;inset:0"
+		style={ "background: " + SkybandGradient(wsSkyTimeFloat(data)) + ";position:absolute;inset:0" }
 	>
 		<div class="cal-almanac-sky__weather" data-cal-sky-weather-layer></div>
 		<div class="cal-almanac-sky__celestial" data-cal-sky-celestial-layer></div>

@@ -34,6 +34,48 @@ func wsTimeFrac(data CalendarV2ViewData) string {
 	return fmt.Sprintf("%.4f", data.WorldState.TimeOfDay)
 }
 
+// wsSkyTimeFloat returns the 0..1 time-of-day (default noon) for the SSR sky
+// gradient. nil-safe so a seedless band still paints a sane base.
+func wsSkyTimeFloat(data CalendarV2ViewData) float64 {
+	if data.WorldState == nil {
+		return 0.5
+	}
+	return data.WorldState.TimeOfDay
+}
+
+// SkybandGradient returns the server-rendered base sky gradient for a 0..1
+// time-of-day. SHARED between the /demo showcase and the production
+// calendar_v2 band / entity embeds (C-CAL-V2-WORLDSTATE-BAND-FINISHING Part A —
+// promoted out of the demo package so the two can't drift). It is the FIRST
+// PAINT base only; cal-almanac.js renderTimePipeline overwrites
+// `style.background` with a color-mix gradient when time-of-day changes.
+//
+// Keyframes (top→bottom 2-stop gradient), snapped to the nearest quarter (the
+// engine handles live interpolation):
+//
+//	midnight 0.00 → deep indigo · dawn 0.25 → coral/lavender ·
+//	noon 0.50 → cyan-blue · dusk 0.75 → amber/rose · midnight 1.00 (wrap).
+func SkybandGradient(t float64) string {
+	type stop struct{ top, bot string }
+	stops := []stop{
+		{"oklch(0.18 0.05 270)", "oklch(0.10 0.04 270)"}, // midnight
+		{"oklch(0.55 0.13 30)", "oklch(0.35 0.10 305)"},  // dawn
+		{"oklch(0.78 0.13 220)", "oklch(0.62 0.10 230)"}, // noon
+		{"oklch(0.62 0.16 60)", "oklch(0.38 0.12 350)"},  // dusk
+		{"oklch(0.18 0.05 270)", "oklch(0.10 0.04 270)"}, // midnight (wrap)
+	}
+	// Snap to the nearest of the 5 quarter keyframes (0, .25, .5, .75, 1).
+	q := int(t*4 + 0.5)
+	if q < 0 {
+		q = 0
+	}
+	if q > 4 {
+		q = 4
+	}
+	s := stops[q]
+	return "linear-gradient(180deg, " + s.top + " 0%, " + s.bot + " 100%)"
+}
+
 // wsClock renders the in-world time as H:MM (or HH:MM) from the 0..1
 // time-of-day and the calendar's hours-per-day, matching the demo's clock.
 func wsClock(data CalendarV2ViewData) string {
