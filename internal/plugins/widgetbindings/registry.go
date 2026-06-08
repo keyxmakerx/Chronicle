@@ -10,6 +10,10 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/a-h/templ"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // ErrNotImplemented is returned by P1 stubs (ListInstances/CreateInstance) that
@@ -32,6 +36,23 @@ type InstanceRef struct {
 type CreateInput struct {
 	Name string
 	Raw  map[string]string
+}
+
+// BlockRenderContext is the seam that lets the binding handler re-render a
+// widget's entity block WITHOUT importing the widget plugin
+// (C-WIDGET-BINDING-P4b). Dependency points the safe way: widget plugins
+// depend on widgetbindings, so widgetbindings delegates rendering back through
+// the registry via WidgetType.RenderBlock. It is built from primitives plus the
+// already-imported campaigns type — no widget-plugin import. The Resolution is
+// pre-computed by the caller (the block closure on first render; the handler on
+// a bind/unbind) so RenderBlock is a pure "render this resolved instance".
+type BlockRenderContext struct {
+	CC         *campaigns.CampaignContext
+	HostID     string // the entity id (host)
+	UserID     string // viewing user (player-visibility filtering)
+	CSRFToken  string
+	Role       int // the viewer's effective role (campaigns.Role as int)
+	Resolution Resolution
 }
 
 // WidgetType declares one widget type's behavior to the framework. Owning
@@ -62,6 +83,14 @@ type WidgetType interface {
 	ListInstances(ctx context.Context, campaignID string, role int) ([]InstanceRef, error)
 	// CreateInstance powers the P4 "create new" flow.
 	CreateInstance(ctx context.Context, campaignID string, input any) (instanceID string, err error)
+
+	// RenderBlock re-renders this widget's entity block for the resolved host
+	// (C-WIDGET-BINDING-P4b). It lets a bind/unbind return a swappable fragment
+	// instead of forcing a full page reload — the widget plugin owns the block
+	// template, the binding handler just asks the registry to render it. Wrap the
+	// output in BlockHost so the rendered fragment carries the stable swap-target
+	// id (initial render and post-mutation swap are then byte-identical).
+	RenderBlock(ctx context.Context, rc BlockRenderContext) templ.Component
 }
 
 // Registry holds the registered widget types. Safe for concurrent reads after

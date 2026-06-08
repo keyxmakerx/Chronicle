@@ -10,6 +10,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/a-h/templ"
 )
 
 // --- in-memory repo (no DB; service logic is what we exercise) ---
@@ -112,6 +114,9 @@ func (f *fakeWidget) ListInstances(context.Context, string, int) ([]InstanceRef,
 }
 func (f *fakeWidget) CreateInstance(context.Context, string, any) (string, error) {
 	return "", ErrNotImplemented
+}
+func (f *fakeWidget) RenderBlock(context.Context, BlockRenderContext) templ.Component {
+	return templ.NopComponent
 }
 
 func newSvc(wt WidgetType) (Service, *memRepo) {

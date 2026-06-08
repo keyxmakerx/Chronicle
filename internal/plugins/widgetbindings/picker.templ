@@ -1,10 +1,11 @@
 // picker.templ — the generic create-or-pick binding fragment
-// (C-WIDGET-BINDING-P4a). Widget-type-agnostic: driven entirely by
-// []InstanceRef + the resolved Source, so calendar/worldstate/timeline/maps
-// (P4b) all reuse it. Reuses the map-picker visual language. Loaded by the
-// host widget block's Scribe+ "Change …" affordance (HTMX GET); bind/create/
-// unbind mutate then reload the page (the block re-renders against the new
-// binding). Scribe-gated at the route — players never reach it.
+// (C-WIDGET-BINDING-P4a; swap-target wired in P4b). Widget-type-agnostic:
+// driven entirely by []InstanceRef + the resolved Source, so all four widgets
+// (calendar/worldstate/timeline/maps) reuse it. Reuses the map-picker visual
+// language. Loaded by the host widget block's Scribe+ "Change …" affordance
+// (HTMX GET); bind/create/unbind mutate then return the re-rendered widget
+// block, which HTMX swaps into the BlockHost wrapper IN PLACE (P4b — no full
+// reload). Scribe-gated at the route — players never reach it.
 package widgetbindings
 
 import "fmt"
@@ -45,10 +46,13 @@ templ bindingPicker(d pickerData) {
 			</div>
 		}
 		// Create-new inline form (name only — refine later in the editor).
+		// On success the handler returns the re-rendered widget block; HTMX swaps
+		// it into the BlockHost wrapper (outerHTML) so the block updates in place.
 		<form
 			class="flex items-center gap-2 mb-3"
 			hx-post={ fmt.Sprintf("/campaigns/%s/bindings/create", d.CampaignID) }
-			hx-swap="none"
+			hx-target={ "#" + BlockHostID(d.WidgetType, d.HostID) }
+			hx-swap="outerHTML"
 		>
 			<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
 			<input type="hidden" name="host_type" value={ d.HostType }/>
@@ -73,7 +77,8 @@ templ bindingPicker(d pickerData) {
 				type="button"
 				class="text-xs text-fg-muted hover:text-fg"
 				hx-delete={ fmt.Sprintf("/campaigns/%s/bindings?host_type=%s&host_id=%s&widget_type=%s", d.CampaignID, d.HostType, d.HostID, d.WidgetType) }
-				hx-swap="none"
+				hx-target={ "#" + BlockHostID(d.WidgetType, d.HostID) }
+				hx-swap="outerHTML"
 			>
 				<i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i>Use campaign default
 			</button>
@@ -91,7 +96,8 @@ templ bindingInstanceCard(d pickerData, inst InstanceRef) {
 		data-binding-instance={ inst.ID }
 		hx-post={ fmt.Sprintf("/campaigns/%s/bindings", d.CampaignID) }
 		hx-vals={ fmt.Sprintf(`{"host_type":%q,"host_id":%q,"entity_type_id":%q,"widget_type":%q,"instance_id":%q}`, d.HostType, d.HostID, d.EntityTypeID, d.WidgetType, inst.ID) }
-		hx-swap="none"
+		hx-target={ "#" + BlockHostID(d.WidgetType, d.HostID) }
+		hx-swap="outerHTML"
 	>
 		<span class="w-8 h-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
 			if inst.Icon != "" {

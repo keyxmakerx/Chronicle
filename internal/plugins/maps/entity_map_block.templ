@@ -14,28 +14,19 @@ package maps
 import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
-	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 )
-
-// EntityMapPickerCard is the data for one card in the map picker grid.
-// Kept here (not in model.go) because it's specific to the picker render
-// path — nothing else in the plugin builds these.
-type EntityMapPickerCard struct {
-	ID          string
-	Name        string
-	Description string
-	ImageID     string // empty if the map has no image yet
-}
 
 // BlockEntityMapEmbed renders the per-entity map inline (full editor for
 // Scribe+, view-only for players — the role gate lives inside
-// MapEditorBody). Above the editor: a slim header with the map name plus
-// "Open" (jump to the dedicated map page) and "Change map" (Scribe+ only,
-// drops the assignment so the picker re-renders).
+// MapEditorBody). Above the editor: the shared Scribe+ "Change map" binding
+// affordance (C-WIDGET-BINDING-P4b — replaces the bespoke AssignMap button)
+// plus a slim header with the map name and "Open" (jump to the dedicated map
+// page). source is the resolved binding layer (own/default) for the badge.
 //
 // Sizing: 600px tall by default. Could become a config field later but
 // isn't worth it for v1 — most embeds get a fixed height anyway.
-templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data MapViewData, isScribe bool) {
+templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data MapViewData, isScribe bool, source string) {
 	<div
 		data-widget="entity-map"
 		data-entity-id={ entityID }
@@ -44,6 +35,9 @@ templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data M
 		data-is-scribe={ fmt.Sprintf("%t", isScribe) }
 		class="entity-map-embed"
 	>
+		if isScribe {
+			@widgetbindings.BindingAffordance(cc.Campaign.ID, WidgetTypeMap, entityID, "map", source)
+		}
 		<div class="flex items-center justify-between mb-2">
 			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-map-location-dot mr-1.5"></i>
@@ -61,16 +55,6 @@ templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data M
 				>
 					<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Open
 				</a>
-				if isScribe {
-					<button
-						type="button"
-						class="btn-secondary btn-sm text-xs"
-						data-action="entity-map-change"
-						title="Pick a different map"
-					>
-						<i class="fa-solid fa-shuffle mr-1"></i>Change map
-					</button>
-				}
 			</div>
 		</div>
 		<!-- Inline editor body. Fixed 600px height for the embed (vs.
@@ -82,81 +66,21 @@ templ BlockEntityMapEmbed(cc *campaigns.CampaignContext, entityID string, data M
 	</div>
 }
 
-// BlockEntityMapPicker renders the thumbnail grid Scribe+ users see when
-// the entity has no map assigned yet. Click a card → PUT to the assign
-// endpoint → page refreshes with the inline editor.
-templ BlockEntityMapPicker(cc *campaigns.CampaignContext, entityID string, cards []EntityMapPickerCard, csrfToken string) {
-	<div
-		data-widget="entity-map"
-		data-entity-id={ entityID }
-		data-campaign-id={ cc.Campaign.ID }
-		data-is-scribe="true"
-		data-csrf={ csrfToken }
-		class="entity-map-picker"
-	>
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
-				<i class="fa-solid fa-map-location-dot mr-1.5"></i>Assign a Map
-			</h2>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
-				class="text-xs text-accent hover:underline"
-			>
-				Manage maps
-			</a>
+// BlockEntityMapChoose is the Scribe+ "no map bound yet" state
+// (C-WIDGET-BINDING-P4b — replaces the bespoke BlockEntityMapPicker thumbnail
+// grid). A friendly prompt plus the shared create-or-pick binding affordance:
+// clicking "Change map" opens the generic picker (pick an existing map or
+// create a new one), which writes a `map` widget binding. source is the
+// resolved layer for the badge (default when nothing is bound).
+templ BlockEntityMapChoose(cc *campaigns.CampaignContext, entityID, source string) {
+	<div class="card p-0 overflow-hidden" data-entity-map-choose data-entity-id={ entityID }>
+		@widgetbindings.BindingAffordance(cc.Campaign.ID, WidgetTypeMap, entityID, "map", source)
+		<div class="flex flex-col items-center justify-center py-10 px-4 text-center">
+			<i class="fa-solid fa-map-location-dot text-3xl text-fg-muted mb-3" aria-hidden="true"></i>
+			<p class="text-sm font-medium text-fg mb-1">No map for this page yet</p>
+			<p class="text-xs text-fg-secondary">Use “Change map” above to pick an existing map or create a new one.</p>
 		</div>
-		if len(cards) == 0 {
-			<div class="card p-8 text-center">
-				<i class="fa-solid fa-map text-3xl text-fg-muted mb-3"></i>
-				<p class="text-sm text-fg-secondary mb-3">No maps in this campaign yet.</p>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/maps", cc.Campaign.ID)) }
-					class="btn-primary text-xs"
-				>
-					<i class="fa-solid fa-plus mr-1"></i>Create the first map
-				</a>
-			</div>
-		} else {
-			<div class="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
-				for _, card := range cards {
-					@entityMapPickerCard(cc, card)
-				}
-			</div>
-		}
 	</div>
-}
-
-// entityMapPickerCard renders one map as a clickable thumbnail card.
-// The button carries the map ID; the widget JS issues the PUT and
-// reloads the block on success.
-templ entityMapPickerCard(cc *campaigns.CampaignContext, card EntityMapPickerCard) {
-	<button
-		type="button"
-		class="card p-0 text-left hover:ring-2 hover:ring-accent/50 transition-all overflow-hidden group"
-		data-action="entity-map-pick"
-		data-map-id={ card.ID }
-	>
-		if card.ImageID != "" {
-			<div class="aspect-video bg-surface-alt overflow-hidden">
-				<img
-					src={ layouts.MediaURL(ctx, card.ImageID) }
-					alt={ card.Name }
-					class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-					loading="lazy"
-				/>
-			</div>
-		} else {
-			<div class="aspect-video bg-surface-alt flex items-center justify-center">
-				<i class="fa-solid fa-map text-2xl text-fg-muted"></i>
-			</div>
-		}
-		<div class="p-3">
-			<h3 class="text-sm font-semibold text-fg truncate">{ card.Name }</h3>
-			if card.Description != "" {
-				<p class="text-xs text-fg-secondary mt-1 line-clamp-2">{ card.Description }</p>
-			}
-		</div>
-	</button>
 }
 
 // BlockEntityMapEmpty renders the player-facing empty state when no map

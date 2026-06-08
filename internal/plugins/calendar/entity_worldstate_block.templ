@@ -14,13 +14,22 @@
 
 package calendar
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
+)
 
 // entityWorldStateBlockView renders the embed. No calendar → friendly
 // "Create calendar" CTA (never blank); otherwise the worldstate widget mount
-// with the seeded band + hourglass shelf.
-templ entityWorldStateBlockView(campaignID string, cal *Calendar, data CalendarV2ViewData) {
+// with the seeded band + hourglass shelf. A Scribe+ "Change worldstate
+// calendar" affordance (P4b) lets the host pick which calendar drives the
+// hourglass — shown only when there's a per-entity host (entityID != "").
+templ entityWorldStateBlockView(campaignID string, cal *Calendar, data CalendarV2ViewData, entityID, source string, isScribe bool) {
 	<div class="card p-0 overflow-hidden" data-entity-worldstate>
+		if cal != nil && isScribe && entityID != "" {
+			@widgetbindings.BindingAffordance(campaignID, WidgetTypeWorldstate, entityID, "worldstate calendar", source)
+		}
 		if cal == nil {
 			// EMPTY STATE: no calendar yet → friendly state + "Create calendar"
 			// CTA to the setup wizard (mirrors entity_calendar item 3).

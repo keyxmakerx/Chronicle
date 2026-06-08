@@ -10,12 +10,14 @@ package widgetbindings
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -32,6 +34,7 @@ type fakeWT struct {
 	listErr   error
 	created   []string // captured CreateInstance names
 	newID     string   // id returned by CreateInstance
+	renderNil bool     // when true, RenderBlock returns nil (exercise the reload fallback)
 }
 
 func (f *fakeWT) Slug() string { return f.slug }
@@ -49,6 +52,20 @@ func (f *fakeWT) CreateInstance(_ context.Context, _ string, input any) (string,
 		f.created = append(f.created, ci.Name)
 	}
 	return f.newID, nil
+}
+
+// RenderBlock returns a minimal block fragment wrapped in the stable BlockHost
+// id (so swap tests can assert the in-place fragment), carrying the resolved
+// instance id as a marker. renderNil exercises the handler's reload fallback.
+func (f *fakeWT) RenderBlock(_ context.Context, rc BlockRenderContext) templ.Component {
+	if f.renderNil {
+		return nil
+	}
+	return templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
+		_, err := io.WriteString(w, `<div id="`+BlockHostID(f.slug, rc.HostID)+
+			`" data-fake-block="`+rc.Resolution.InstanceID+`">rendered</div>`)
+		return err
+	})
 }
 
 // stubSvc records the binding mutations + serves a canned Resolution.
@@ -188,9 +205,9 @@ func TestPickerAPI_RejectsUnknownTypes(t *testing.T) {
 }
 
 // BindAPI binds the host to an instance using the ROUTE campaign (never the
-// body) and signals a reload.
-func TestBindAPI_UsesRouteCampaignAndReloads(t *testing.T) {
-	svc := &stubSvc{}
+// body) and returns the re-rendered block fragment for an in-place swap (P4b).
+func TestBindAPI_UsesRouteCampaignAndSwaps(t *testing.T) {
+	svc := &stubSvc{resolution: Resolution{InstanceID: "cal-B", Source: SourceOwn}}
 	h := testHandler(svc, &fakeWT{slug: "calendar"})
 	e := echo.New()
 	form := url.Values{
@@ -220,14 +237,24 @@ func TestBindAPI_UsesRouteCampaignAndReloads(t *testing.T) {
 	if got.widgetType != "calendar" || got.instanceID != "cal-B" {
 		t.Errorf("bind args = %+v", got)
 	}
-	if rec.Header().Get("HX-Refresh") != "true" {
-		t.Errorf("bind should signal HX-Refresh; headers: %v", rec.Header())
+	// P4b: returns the re-rendered block fragment (NOT HX-Refresh), wrapped in
+	// the stable BlockHost id and carrying the freshly-resolved instance.
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d want 200", rec.Code)
+	}
+	if rec.Header().Get("HX-Refresh") != "" {
+		t.Errorf("P4b bind must NOT signal HX-Refresh; got %q", rec.Header().Get("HX-Refresh"))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="`+BlockHostID("calendar", "ent-1")+`"`) || !strings.Contains(body, `data-fake-block="cal-B"`) {
+		t.Errorf("response should be the re-rendered block fragment; got %q", body)
 	}
 }
 
-// CreateBindAPI creates a new instance (name from the form) then binds it.
+// CreateBindAPI creates a new instance (name from the form) then binds it and
+// returns the swap fragment.
 func TestCreateBindAPI_CreatesThenBinds(t *testing.T) {
-	svc := &stubSvc{}
+	svc := &stubSvc{resolution: Resolution{InstanceID: "cal-new", Source: SourceOwn}}
 	wt := &fakeWT{slug: "calendar", newID: "cal-new"}
 	h := testHandler(svc, wt)
 	e := echo.New()
@@ -251,14 +278,18 @@ func TestCreateBindAPI_CreatesThenBinds(t *testing.T) {
 	if svc.bound[0].host.CampaignID != "camp-1" {
 		t.Errorf("create+bind must use the route campaign; got %q", svc.bound[0].host.CampaignID)
 	}
-	if rec.Header().Get("HX-Refresh") != "true" {
-		t.Errorf("create+bind should signal HX-Refresh")
+	if rec.Code != http.StatusOK || rec.Header().Get("HX-Refresh") != "" {
+		t.Errorf("create+bind should swap (200, no HX-Refresh); code=%d refresh=%q", rec.Code, rec.Header().Get("HX-Refresh"))
+	}
+	if !strings.Contains(rec.Body.String(), `data-fake-block="cal-new"`) {
+		t.Errorf("swap fragment should carry the new instance; got %q", rec.Body.String())
 	}
 }
 
-// UnbindAPI removes the host's binding (reverting to default) and reloads.
-func TestUnbindAPI_RemovesBindingAndReloads(t *testing.T) {
-	svc := &stubSvc{}
+// UnbindAPI removes the host's binding (reverting to default) and returns the
+// swap fragment.
+func TestUnbindAPI_RemovesBindingAndSwaps(t *testing.T) {
+	svc := &stubSvc{resolution: Resolution{Source: SourceDefault}}
 	h := testHandler(svc, &fakeWT{slug: "calendar"})
 	e := echo.New()
 	c, rec := hctx(e, http.MethodDelete,
@@ -270,8 +301,30 @@ func TestUnbindAPI_RemovesBindingAndReloads(t *testing.T) {
 	if len(svc.unbound) != 1 || svc.unbound[0].CampaignID != "camp-1" || svc.unbound[0].ID != "ent-1" {
 		t.Errorf("unbind host = %+v", svc.unbound)
 	}
+	if rec.Code != http.StatusOK || rec.Header().Get("HX-Refresh") != "" {
+		t.Errorf("unbind should swap (200, no HX-Refresh); code=%d refresh=%q", rec.Code, rec.Header().Get("HX-Refresh"))
+	}
+	if !strings.Contains(rec.Body.String(), `id="`+BlockHostID("calendar", "ent-1")+`"`) {
+		t.Errorf("unbind should return the re-rendered block; got %q", rec.Body.String())
+	}
+}
+
+// When a widget type can't render a fragment (RenderBlock → nil), the handler
+// falls back to a full reload (HX-Refresh) defensively.
+func TestMutation_FallsBackToReloadWhenRenderNil(t *testing.T) {
+	svc := &stubSvc{}
+	h := testHandler(svc, &fakeWT{slug: "calendar", renderNil: true})
+	e := echo.New()
+	form := url.Values{
+		"host_type": {"entity"}, "host_id": {"ent-1"},
+		"widget_type": {"calendar"}, "instance_id": {"cal-B"},
+	}
+	c, rec := hctx(e, http.MethodPost, "/campaigns/camp-1/bindings", form.Encode())
+	if err := h.BindAPI(c); err != nil {
+		t.Fatalf("BindAPI: %v", err)
+	}
 	if rec.Header().Get("HX-Refresh") != "true" {
-		t.Errorf("unbind should signal HX-Refresh")
+		t.Errorf("nil RenderBlock must fall back to HX-Refresh; headers: %v", rec.Header())
 	}
 }
 
