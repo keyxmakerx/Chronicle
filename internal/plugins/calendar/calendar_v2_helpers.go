@@ -308,7 +308,18 @@ func monthCellEvents(data CalendarV2ViewData, day int) []Event {
 // used a year-BLIND day-of-year, so e.g. real-life June 8 2026 (a Monday)
 // rendered under the wrong column. The year term is what makes it correct.
 func v2WeekdayIndex(data CalendarV2ViewData, day int) int {
-	cal := data.ActiveCalendar
+	return v2WeekdayIndexFor(data.ActiveCalendar, data.Year, data.Month, day)
+}
+
+// v2WeekdayIndexFor is the year-aware weekday-index core
+// (C-CAL-V2-MONTH-GRID-ALIGN-FIX #428): absolute day = Year*YearLength +
+// prior-month days + day, mod week length. Shared by the Month grid + the
+// mini-month (via v2WeekdayIndex) AND the worldstate band date label
+// (wsDatePrimary, C-CAL-V2-SKY-RENDER-COMPLETION) so every surface prints the
+// SAME weekday for a given date. Takes an explicit (year, month, day) because
+// the band labels the seed's current-world date, which can differ from the
+// view's navigated cursor.
+func v2WeekdayIndexFor(cal *Calendar, year, month, day int) int {
 	if cal == nil {
 		return 0
 	}
@@ -316,8 +327,8 @@ func v2WeekdayIndex(data CalendarV2ViewData, day int) int {
 	if wl == 0 {
 		return 0
 	}
-	abs := data.Year * cal.YearLength()
-	for i := 0; i < data.Month-1 && i < len(cal.Months); i++ {
+	abs := year * cal.YearLength()
+	for i := 0; i < month-1 && i < len(cal.Months); i++ {
 		abs += cal.Months[i].Days
 	}
 	abs += day
