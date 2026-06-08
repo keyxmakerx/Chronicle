@@ -29,7 +29,11 @@ import (
 // calendar. An empty calendarID preserves the pre-framework behavior
 // (fall back to the campaign default), so callers that don't yet resolve a
 // binding keep working unchanged.
-func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, entityID, userID, calendarID string) templ.Component {
+// source is the widget-binding resolution layer ("own" | "entity_type" |
+// "default" | "none") threaded from the block closure (C-WIDGET-BINDING-P4a),
+// so Scribe+ can see bound-vs-default and open the create-or-pick picker. Empty
+// when the framework isn't wired (treated as default).
+func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, entityID, userID, calendarID, source string) templ.Component {
 	// No entity/campaign context → nothing to build from; render the friendly
 	// not-found state rather than leaking a raw "entity not found" / blank
 	// (C-CAL-EMBED-CONVERGE-POLISH item 2).
@@ -82,7 +86,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 	}
 
 	data := CalendarV2ViewData{ActiveCalendar: cal, WorldState: seed, WorldStateJSON: seedJSON}
-	return entityCalendarBlockView(cc.Campaign.ID, cal, data, ties)
+	return entityCalendarBlockView(cc.Campaign.ID, cal, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe)
 }
 
 // entityEventHref links a linked-event row to the v2 calendar at that event's

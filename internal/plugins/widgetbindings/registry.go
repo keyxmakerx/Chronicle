@@ -16,12 +16,22 @@ import (
 // P4 (the create-or-pick UI) fills in.
 var ErrNotImplemented = errors.New("widgetbindings: not implemented in this wave")
 
-// InstanceRef is a lightweight instance summary for the (P4) picker.
+// InstanceRef is a lightweight instance summary for the picker.
 type InstanceRef struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Icon  string `json:"icon,omitempty"`
 	Color string `json:"color,omitempty"`
+}
+
+// CreateInput is the generic payload for WidgetType.CreateInstance
+// (C-WIDGET-BINDING-P4a). The binding HTTP handler collects form fields into
+// it (so the handler stays widget-type-agnostic) and each WidgetType
+// type-asserts it and reads what it needs — calendar uses Name; Raw carries
+// any extra fields a future type wants without changing this boundary.
+type CreateInput struct {
+	Name string
+	Raw  map[string]string
 }
 
 // WidgetType declares one widget type's behavior to the framework. Owning

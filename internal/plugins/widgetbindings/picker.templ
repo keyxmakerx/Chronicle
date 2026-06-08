@@ -1,0 +1,110 @@
+// picker.templ — the generic create-or-pick binding fragment
+// (C-WIDGET-BINDING-P4a). Widget-type-agnostic: driven entirely by
+// []InstanceRef + the resolved Source, so calendar/worldstate/timeline/maps
+// (P4b) all reuse it. Reuses the map-picker visual language. Loaded by the
+// host widget block's Scribe+ "Change …" affordance (HTMX GET); bind/create/
+// unbind mutate then reload the page (the block re-renders against the new
+// binding). Scribe-gated at the route — players never reach it.
+package widgetbindings
+
+import "fmt"
+
+// bindingPicker renders the picker fragment for one host + widget type.
+templ bindingPicker(d pickerData) {
+	<div class="card p-4" data-binding-picker data-widget-type={ d.WidgetType }>
+		<div class="flex items-center justify-between mb-3">
+			<h3 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
+				Change { d.WidgetLabel }
+			</h3>
+			<button
+				type="button"
+				class="text-fg-muted hover:text-fg text-sm"
+				onclick="this.closest('[data-binding-picker]').remove()"
+				aria-label="Close"
+			>
+				<i class="fa-solid fa-xmark"></i>
+			</button>
+		</div>
+		// Status line: bound vs. campaign default (from the resolved Source).
+		<p class="text-xs text-fg-muted mb-3" data-binding-source={ d.Source }>
+			if d.Source == "own" {
+				<i class="fa-solid fa-link mr-1 text-accent" aria-hidden="true"></i>Bound to a specific { d.WidgetLabel } on this page.
+			} else if d.Source == "entity_type" {
+				<i class="fa-solid fa-sitemap mr-1" aria-hidden="true"></i>Inherited from this page's type.
+			} else {
+				<i class="fa-solid fa-circle-info mr-1" aria-hidden="true"></i>Using the campaign default.
+			}
+		</p>
+		if len(d.Instances) == 0 {
+			<p class="text-sm text-fg-muted mb-3">No { d.WidgetLabel }s yet — create one below.</p>
+		} else {
+			<div class="grid gap-2 grid-cols-1 sm:grid-cols-2 mb-3">
+				for _, inst := range d.Instances {
+					@bindingInstanceCard(d, inst)
+				}
+			</div>
+		}
+		// Create-new inline form (name only — refine later in the editor).
+		<form
+			class="flex items-center gap-2 mb-3"
+			hx-post={ fmt.Sprintf("/campaigns/%s/bindings/create", d.CampaignID) }
+			hx-swap="none"
+		>
+			<input type="hidden" name="csrf_token" value={ d.CSRFToken }/>
+			<input type="hidden" name="host_type" value={ d.HostType }/>
+			<input type="hidden" name="host_id" value={ d.HostID }/>
+			<input type="hidden" name="entity_type_id" value={ d.EntityTypeID }/>
+			<input type="hidden" name="widget_type" value={ d.WidgetType }/>
+			<input
+				type="text"
+				name="name"
+				class="input text-sm flex-1"
+				placeholder={ fmt.Sprintf("New %s name", d.WidgetLabel) }
+				maxlength="200"
+				required
+			/>
+			<button type="submit" class="btn-primary text-xs whitespace-nowrap">
+				<i class="fa-solid fa-plus mr-1" aria-hidden="true"></i>Create &amp; use
+			</button>
+		</form>
+		// Revert to default (only when an explicit binding exists).
+		if d.Source == "own" || d.Source == "entity_type" {
+			<button
+				type="button"
+				class="text-xs text-fg-muted hover:text-fg"
+				hx-delete={ fmt.Sprintf("/campaigns/%s/bindings?host_type=%s&host_id=%s&widget_type=%s", d.CampaignID, d.HostType, d.HostID, d.WidgetType) }
+				hx-swap="none"
+			>
+				<i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i>Use campaign default
+			</button>
+		}
+	</div>
+}
+
+// bindingInstanceCard is one selectable instance (mirrors the map-picker card).
+// Clicking binds the host to it; the current instance is highlighted.
+templ bindingInstanceCard(d pickerData, inst InstanceRef) {
+	<button
+		type="button"
+		class={ "card p-3 text-left hover:ring-2 hover:ring-accent/50 transition-all flex items-center gap-2",
+			templ.KV("ring-2 ring-accent", inst.ID == d.CurrentID) }
+		data-binding-instance={ inst.ID }
+		hx-post={ fmt.Sprintf("/campaigns/%s/bindings", d.CampaignID) }
+		hx-vals={ fmt.Sprintf(`{"host_type":%q,"host_id":%q,"entity_type_id":%q,"widget_type":%q,"instance_id":%q}`, d.HostType, d.HostID, d.EntityTypeID, d.WidgetType, inst.ID) }
+		hx-swap="none"
+	>
+		<span class="w-8 h-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
+			if inst.Icon != "" {
+				<i class={ "fa-solid", inst.Icon } aria-hidden="true"></i>
+			} else {
+				<i class="fa-solid fa-cube" aria-hidden="true"></i>
+			}
+		</span>
+		<span class="min-w-0 flex-1">
+			<span class="block text-sm font-medium text-fg truncate">{ inst.Name }</span>
+			if inst.ID == d.CurrentID {
+				<span class="block text-[10px] text-accent">Current</span>
+			}
+		</span>
+	</button>
+}
