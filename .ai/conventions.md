@@ -383,6 +383,16 @@ c.Name = req.Name
 func (s *service) Delete(...) error
 ```
 
+## Formatting — do NOT `gofmt -w` over globs
+
+This repo is **not plain-`gofmt`-clean** (many committed files predate / differ
+from the local `gofmt` version's alignment). Running `gofmt -w` over a package
+or `*.go` glob reformats ~dozens of unrelated files and pollutes the diff (and
+risks merge conflicts). **Edit in place**; the Edit tool preserves surrounding
+formatting, and `make`/`templ generate` handle code generation. If you must
+format, scope it to the *exact* files you authored. (Captured after the
+C-WIDGET-BINDING-P2 retro, where a glob `gofmt -w` churned ~24 files.)
+
 ## CI tenet-enforcement guards
 
 Per `C-CI-GUARDS-PHASE-2` (lands four mechanisms enforcing tenets from

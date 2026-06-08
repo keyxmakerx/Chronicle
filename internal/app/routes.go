@@ -2262,6 +2262,9 @@ func (a *App) RegisterRoutes() {
 	// timeline (instance = a timeline record) register as widget types.
 	widgetRegistry.Register(calendar.NewWorldStateWidgetType(calendarService))
 	widgetRegistry.Register(timeline.NewTimelineWidgetType(timelineSvc))
+	// P3a: maps registers (instance = a map id; no campaign default — the
+	// legacy entity.map_id fallback lives in the map_editor closure).
+	widgetRegistry.Register(maps.NewMapWidgetType(mapsService))
 	widgetBindingSvc := widgetbindings.NewService(widgetbindings.NewRepository(a.DB), widgetRegistry)
 	// P2: wire the delete hooks P1 left unconnected. The calendar/timeline
 	// services call OnInstanceDeleted on delete so a removed instance's
@@ -2277,6 +2280,11 @@ func (a *App) RegisterRoutes() {
 		SetBindingCleaner(timeline.BindingCleaner)
 	}); ok {
 		t.SetBindingCleaner(widgetBindingSvc)
+	}
+	if m, ok := mapsService.(interface {
+		SetBindingCleaner(maps.BindingCleaner)
+	}); ok {
+		m.SetBindingCleaner(widgetBindingSvc)
 	}
 
 	// Calendar plugin blocks (requires "calendar" addon).
@@ -2430,13 +2438,30 @@ func (a *App) RegisterRoutes() {
 			return templ.NopComponent
 		}
 		isScribe := rc.CC.MemberRole >= campaigns.RoleScribe
+		// P3a: resolve the map instance through the widget-binding framework
+		// with a LEGACY FALLBACK. Default = today's behavior (entity.map_id);
+		// a widget_bindings row (widget_type="map") wins over the column when
+		// present. Unbound entities → identical to today (the column drives).
+		mapID := ""
+		if rc.Entity.MapID != nil {
+			mapID = *rc.Entity.MapID
+		}
+		host := widgetbindings.HostRef{
+			CampaignID:   rc.CC.Campaign.ID,
+			Type:         widgetbindings.HostTypeEntity,
+			ID:           rc.Entity.ID,
+			EntityTypeID: strconv.Itoa(rc.Entity.EntityTypeID),
+		}
+		if res, err := widgetBindingSvc.Resolve(context.Background(), host, maps.WidgetTypeMap); err == nil && res.Resolved() {
+			mapID = res.InstanceID
+		}
 		// Map assigned: render the inline editor. Build the full
 		// MapViewData server-side so the same templ that powers the
 		// dedicated page can render here. Markers are role+user filtered
 		// at the service layer (player visibility rules).
-		if rc.Entity.MapID != nil && *rc.Entity.MapID != "" {
+		if mapID != "" {
 			ctx := context.Background()
-			m, err := mapsService.GetMap(ctx, *rc.Entity.MapID)
+			m, err := mapsService.GetMap(ctx, mapID)
 			if err != nil || m == nil {
 				// FK should keep this from happening (ON DELETE SET NULL),
 				// but if a race or schema-skew left a dangling map_id,
@@ -2444,7 +2469,7 @@ func (a *App) RegisterRoutes() {
 				// 500-ing the whole entity page.
 				slog.Warn("map_editor block: assigned map not found, falling back to empty state",
 					slog.String("entity_id", rc.Entity.ID),
-					slog.String("map_id", *rc.Entity.MapID),
+					slog.String("map_id", mapID),
 					slog.Any("error", err),
 				)
 				if !isScribe {

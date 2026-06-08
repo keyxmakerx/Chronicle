@@ -56,14 +56,28 @@ type MapService interface {
 
 // mapService is the default MapService implementation.
 type mapService struct {
-	repo   MapRepository
-	events MapEventPublisher
+	repo           MapRepository
+	events         MapEventPublisher
+	bindingCleaner BindingCleaner
+}
+
+// BindingCleaner sweeps a deleted instance's widget bindings (widget-binding
+// framework integrity hook, C-WIDGET-BINDING-P3a). Implemented by
+// widgetbindings.Service; injected via SetBindingCleaner. Optional — nil means
+// "no binding framework wired" (the render-time guard + Sweep are the backstop).
+type BindingCleaner interface {
+	OnInstanceDeleted(ctx context.Context, campaignID, widgetType, instanceID string) (int, error)
 }
 
 // NewMapService creates a MapService backed by the given repository.
 func NewMapService(repo MapRepository) MapService {
 	return &mapService{repo: repo, events: NoopMapEventPublisher{}}
 }
+
+// SetBindingCleaner injects the widget-binding cleanup hook (wired at app
+// startup). Reached via a type assertion in routes.go so the MapService
+// interface stays unchanged.
+func (s *mapService) SetBindingCleaner(c BindingCleaner) { s.bindingCleaner = c }
 
 // SetEventPublisher sets the event publisher for real-time marker sync.
 func (s *mapService) SetEventPublisher(pub MapEventPublisher) {
@@ -171,6 +185,13 @@ func (s *mapService) DeleteMap(ctx context.Context, id string, expectedUpdatedAt
 	}
 	if err := s.repo.DeleteMap(ctx, id); err != nil {
 		return fmt.Errorf("delete map: %w", err)
+	}
+	// Widget-binding delete hook (C-WIDGET-BINDING-P3a): sweep this map's
+	// widget_bindings rows. Best-effort — the render-time orphan guard + Sweep
+	// backstop it. (The legacy entity.map_id is independently SET-NULLed by the
+	// fk_entities_map_id ON DELETE SET NULL constraint — that stays.)
+	if s.bindingCleaner != nil {
+		_, _ = s.bindingCleaner.OnInstanceDeleted(ctx, m.CampaignID, WidgetTypeMap, id)
 	}
 	return nil
 }
