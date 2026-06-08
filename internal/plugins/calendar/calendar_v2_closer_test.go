@@ -81,13 +81,16 @@ func TestMonthWeekRowCount_FantasyTenDayWeek(t *testing.T) {
 		},
 		Month: 1,
 	}
+	// Year 0, day 1 → absolute day 1 → weekday offset 1 (the 1st sits in
+	// column 1). 30 days + 1 leading blank = 31 cells over a 10-day week = 4
+	// rows (C-CAL-V2-MONTH-GRID-ALIGN-FIX: the offset can spill an extra row).
 	got := monthWeekRowCount(data)
-	if got != 3 {
-		t.Errorf("30-day month with 10-day week = %d rows; want 3", got)
+	if got != 4 {
+		t.Errorf("30-day month (10-day week, lead offset 1) = %d rows; want 4", got)
 	}
 }
 
-func TestDaysInRow_FillsTrailingZerosOnPartialRow(t *testing.T) {
+func TestDaysInRow_AppliesLeadingOffsetAndTrailingZeros(t *testing.T) {
 	data := CalendarV2ViewData{
 		ActiveCalendar: &Calendar{
 			Months:   []Month{{Days: 31}},
@@ -95,13 +98,111 @@ func TestDaysInRow_FillsTrailingZerosOnPartialRow(t *testing.T) {
 		},
 		Month: 1,
 	}
-	// Last row (4) holds days 29-31 + 4 filler zeros.
-	row := daysInRow(data, 4)
-	if len(row) != 7 {
-		t.Fatalf("row should always have len = cols; got %d", len(row))
+	// Lead offset 1 (day 1 of year 0 → absolute day 1 → column 1). Row 0 must
+	// start with ONE leading blank, then day 1.
+	first := daysInRow(data, 0)
+	if len(first) != 7 {
+		t.Fatalf("row len must = cols; got %d", len(first))
 	}
-	if row[0] != 29 || row[1] != 30 || row[2] != 31 || row[3] != 0 {
+	if first[0] != 0 || first[1] != 1 || first[6] != 6 {
+		t.Errorf("row 0 should be [0,1,2,3,4,5,6] with the leading blank; got %+v", first)
+	}
+	// With offset 1, day d sits at grid position d → row 4 holds days 28-31
+	// then trailing blanks.
+	row := daysInRow(data, 4)
+	if row[0] != 28 || row[1] != 29 || row[2] != 30 || row[3] != 31 || row[4] != 0 {
 		t.Errorf("last-row pattern wrong; got %+v", row)
+	}
+}
+
+// gregorian2026 builds the real-life Gregorian fixture from the dispatch:
+// June 2026, where the 1st is a Monday and the 8th (today) is a Monday.
+func gregorian2026() *Calendar {
+	return &Calendar{
+		ID:           "greg",
+		CurrentYear:  2026,
+		CurrentMonth: 6,
+		CurrentDay:   8,
+		Months: []Month{
+			{Name: "January", Days: 31}, {Name: "February", Days: 28},
+			{Name: "March", Days: 31}, {Name: "April", Days: 30},
+			{Name: "May", Days: 31}, {Name: "June", Days: 30},
+			{Name: "July", Days: 31}, {Name: "August", Days: 31},
+			{Name: "September", Days: 30}, {Name: "October", Days: 31},
+			{Name: "November", Days: 30}, {Name: "December", Days: 31},
+		},
+		Weekdays: []Weekday{
+			{Name: "Sun"}, {Name: "Mon"}, {Name: "Tue"}, {Name: "Wed"},
+			{Name: "Thu"}, {Name: "Fri"}, {Name: "Sat"},
+		},
+	}
+}
+
+// TestMonthGrid_WeekdayAlignment_June2026 is the headline regression
+// (C-CAL-V2-MONTH-GRID-ALIGN-FIX #1): a month whose 1st is NOT the first
+// weekday must place day 1 under its true weekday column, and a multi-day
+// ribbon must align to the same corrected columns.
+func TestMonthGrid_WeekdayAlignment_June2026(t *testing.T) {
+	data := CalendarV2ViewData{ActiveCalendar: gregorian2026(), Year: 2026, Month: 6, Day: 8}
+
+	// June 1 + June 8 2026 are both Mondays → weekday index 1 (Sun=0).
+	if off := v2MonthLeadOffset(data); off != 1 {
+		t.Fatalf("June 2026 lead offset = %d; want 1 (the 1st is a Monday)", off)
+	}
+	if idx := v2WeekdayIndex(data, 8); idx != 1 {
+		t.Errorf("the 8th should be weekday index 1 (Monday); got %d", idx)
+	}
+
+	// Row 0 has ONE leading blank, then day 1 under Monday (column index 1).
+	r0 := daysInRow(data, 0)
+	if r0[0] != 0 || r0[1] != 1 {
+		t.Errorf("row 0 should be [0,1,...] (day 1 under Monday); got %+v", r0)
+	}
+	// The 8th sits in the next row, again under Monday (column index 1).
+	r1 := daysInRow(data, 1)
+	if r1[1] != 8 {
+		t.Errorf("the 8th should be in column index 1 (Monday) of row 1; got %+v", r1)
+	}
+
+	// A multi-day ribbon (June 8–10) must start in the Monday column. StartCol
+	// is 1-indexed, so the Monday column (index 1) is StartCol 2 — the same
+	// column the day-8 cell occupies.
+	endDay := 10
+	data.Events = []Event{{ID: "war", Year: 2026, Month: 6, Day: 8, EndDay: &endDay, Visibility: "everyone"}}
+	rows := monthRibbonRows(data)
+	var seg *monthRibbonSegment
+	for ri := range rows {
+		for si := range rows[ri] {
+			if rows[ri][si].EventID == "war" {
+				seg = &rows[ri][si]
+			}
+		}
+	}
+	if seg == nil {
+		t.Fatal("expected a ribbon segment for the June 8–10 event")
+	}
+	if seg.StartCol != 2 {
+		t.Errorf("ribbon should start in the Monday column (StartCol 2, aligned with day 8); got %d", seg.StartCol)
+	}
+
+	// Mini-month: same leading blank so day 1 lands under Monday.
+	mini := miniMonthDays(data)
+	if len(mini) < 2 || mini[0].Day != 0 || mini[1].Day != 1 {
+		t.Errorf("mini-month should lead with one blank then day 1; got %+v", mini[:min(2, len(mini))])
+	}
+}
+
+// TestMonthDayClasses_TodayNotBlank (C-CAL-V2-MONTH-GRID-ALIGN-FIX #2): the
+// today cell must NOT carry `today-pulse` — that keyframe ends at opacity:0 with
+// fill-mode:both, which (applied to the cell) made the today cell render blank.
+// The static ring/tint marks today while keeping the number legible.
+func TestMonthDayClasses_TodayNotBlank(t *testing.T) {
+	cls := monthDayClasses(CalendarV2ViewData{}, monthDay{Day: 8, IsToday: true})
+	if strings.Contains(cls, "today-pulse") {
+		t.Errorf("today cell must not use today-pulse (fades to opacity:0); got %q", cls)
+	}
+	if !strings.Contains(cls, "ring-accent") {
+		t.Errorf("today cell should still carry a visible marker; got %q", cls)
 	}
 }
 

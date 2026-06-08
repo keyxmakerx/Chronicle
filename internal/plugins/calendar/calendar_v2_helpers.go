@@ -190,11 +190,10 @@ func monthDays(data CalendarV2ViewData) []monthDay {
 		day := i + 1
 		isToday := data.Year == cal.CurrentYear && data.Month == cal.CurrentMonth && day == cal.CurrentDay
 		isRest := false
-		// Rest-day tint: cycle weekdays per-day-of-year, mark cells
-		// whose weekday has is_rest_day=1.
+		// Rest-day tint: year-aware weekday (matches the corrected grid
+		// placement), mark cells whose weekday has is_rest_day=1.
 		if len(cal.Weekdays) > 0 {
-			doy := v2DayOfYear(cal, data.Month, day)
-			weekdayIdx := (doy - 1) % len(cal.Weekdays)
+			weekdayIdx := v2WeekdayIndex(data, day)
 			if weekdayIdx >= 0 && weekdayIdx < len(cal.Weekdays) && cal.Weekdays[weekdayIdx].IsRestDay {
 				isRest = true
 			}
@@ -220,7 +219,13 @@ func v2DayOfYear(cal *Calendar, month, day int) int {
 func monthDayClasses(_ CalendarV2ViewData, day monthDay) string {
 	switch {
 	case day.IsToday:
-		return "bg-accent/10 ring-2 ring-accent today-pulse"
+		// NOTE: `today-pulse` was removed here (C-CAL-V2-MONTH-GRID-ALIGN-FIX
+		// #2). It is a one-shot keyframe ending at `opacity: 0` with
+		// `animation-fill-mode: both`, and it was applied to the CELL itself —
+		// so today's cell faded to invisible and stayed blank. The static
+		// ring + tint is the persistent today marker; the legible day number
+		// stays visible.
+		return "bg-accent/10 ring-2 ring-accent"
 	case day.IsRestDay:
 		return "bg-surface-2"
 	case day.Filler:
@@ -294,6 +299,44 @@ func monthCellEvents(data CalendarV2ViewData, day int) []Event {
 	return eventsForDay(data.Events, data.Year, data.Month, day)
 }
 
+// v2WeekdayIndex returns the 0-based weekday column for (data.Year, data.Month,
+// day) — year-aware (C-CAL-V2-MONTH-GRID-ALIGN-FIX). It mirrors the V1 grid's
+// CalendarViewData.WeekdayIndex EXACTLY (absolute day = Year*YearLength +
+// prior-month days + day, mod week length) so the V2 Month grid + mini-month
+// place each day under the SAME true weekday V1 already does. The prior V2
+// placement was offset-blind (day 1 always in column 0) and the rest-day shading
+// used a year-BLIND day-of-year, so e.g. real-life June 8 2026 (a Monday)
+// rendered under the wrong column. The year term is what makes it correct.
+func v2WeekdayIndex(data CalendarV2ViewData, day int) int {
+	cal := data.ActiveCalendar
+	if cal == nil {
+		return 0
+	}
+	wl := cal.WeekLength()
+	if wl == 0 {
+		return 0
+	}
+	abs := data.Year * cal.YearLength()
+	for i := 0; i < data.Month-1 && i < len(cal.Months); i++ {
+		abs += cal.Months[i].Days
+	}
+	abs += day
+	idx := abs % wl
+	if idx < 0 {
+		idx += wl
+	}
+	return idx
+}
+
+// v2MonthLeadOffset is the number of leading blank cells before day 1 of the
+// displayed month — the weekday column day 1 falls under. This is the SINGLE
+// shared offset that the day cells (daysInRow), the multi-day ribbons
+// (monthRibbonRows), and the era bands (monthEraBands) all consume, so every
+// layer aligns to the same columns.
+func v2MonthLeadOffset(data CalendarV2ViewData) int {
+	return v2WeekdayIndex(data, 1)
+}
+
 // monthDayFor builds the monthDay struct for a specific day-of-month,
 // reusing the same today/rest-day logic as `monthDays` so per-row
 // rendering matches the original flat grid.
@@ -305,8 +348,10 @@ func monthDayFor(data CalendarV2ViewData, day int) monthDay {
 	isToday := data.Year == cal.CurrentYear && data.Month == cal.CurrentMonth && day == cal.CurrentDay
 	isRest := false
 	if len(cal.Weekdays) > 0 {
-		doy := v2DayOfYear(cal, data.Month, day)
-		weekdayIdx := (doy - 1) % len(cal.Weekdays)
+		// Year-aware weekday so the rest-day tint lines up with the corrected
+		// column placement (C-CAL-V2-MONTH-GRID-ALIGN-FIX) — not the old
+		// year-blind day-of-year, which would shade the wrong column.
+		weekdayIdx := v2WeekdayIndex(data, day)
 		if weekdayIdx >= 0 && weekdayIdx < len(cal.Weekdays) && cal.Weekdays[weekdayIdx].IsRestDay {
 			isRest = true
 		}
@@ -379,7 +424,11 @@ func monthRibbonRows(data CalendarV2ViewData) [][]monthRibbonSegment {
 		return nil
 	}
 	dim := cal.Months[data.Month-1].Days
-	rowCount := (dim + cols - 1) / cols
+	// Shared leading offset so ribbon columns line up with the day cells
+	// (C-CAL-V2-MONTH-GRID-ALIGN-FIX): a day sits at grid position
+	// (day-1+offset), so its row + per-row start day fold in the offset below.
+	offset := v2MonthLeadOffset(data)
+	rowCount := (dim + offset + cols - 1) / cols
 	rows := make([][]monthRibbonSegment, rowCount)
 
 	// Tier sort key: major(2) > standard(1) > minor(0); ties by start day.
@@ -442,11 +491,12 @@ func monthRibbonRows(data CalendarV2ViewData) [][]monthRibbonSegment {
 		if startDay < 1 || endDay < startDay {
 			continue
 		}
-		startRow := (startDay - 1) / cols
-		endRow := (endDay - 1) / cols
+		startRow := (startDay - 1 + offset) / cols
+		endRow := (endDay - 1 + offset) / cols
 		for r := startRow; r <= endRow; r++ {
-			// Per-row column slice:
-			rowStartDay := r*cols + 1
+			// Per-row column slice (offset-aware: day at column 0 of row r is
+			// r*cols+1-offset, so startCol below maps to the corrected columns):
+			rowStartDay := r*cols + 1 - offset
 			rowEndDay := rowStartDay + cols - 1
 			segStartDay := startDay
 			segEndDay := endDay
@@ -679,7 +729,10 @@ func monthEraBands(data CalendarV2ViewData) []eraBand {
 		return nil
 	}
 	dim := cal.Months[data.Month-1].Days
-	rowCount := (dim + cols - 1) / cols
+	// Shared leading offset so era bands cover the same columns as the day cells
+	// (C-CAL-V2-MONTH-GRID-ALIGN-FIX): row 0 starts after `offset` blanks.
+	offset := v2MonthLeadOffset(data)
+	rowCount := (dim + offset + cols - 1) / cols
 
 	var bands []eraBand
 	for _, era := range cal.Eras {
@@ -691,13 +744,21 @@ func monthEraBands(data CalendarV2ViewData) []eraBand {
 		}
 		// Era covers the full year → all weeks in this month.
 		for r := 0; r < rowCount; r++ {
-			rowStartDay := r*cols + 1
+			rowStartDay := r*cols + 1 - offset
 			rowEndDay := rowStartDay + cols - 1
-			if rowEndDay > dim {
-				rowEndDay = dim
+			firstDay := rowStartDay
+			if firstDay < 1 {
+				firstDay = 1 // skip the leading blanks in row 0
 			}
-			startCol := 1
-			span := rowEndDay - rowStartDay + 1
+			if rowEndDay > dim {
+				rowEndDay = dim // skip trailing blanks in the last row
+			}
+			if firstDay > rowEndDay {
+				continue
+			}
+			// 1-indexed grid column of the first real day in this row.
+			startCol := firstDay - rowStartDay + 1
+			span := rowEndDay - firstDay + 1
 			bands = append(bands, eraBand{
 				Name:     era.Name,
 				Color:    era.Color,
@@ -759,7 +820,10 @@ func monthWeekRowCount(data CalendarV2ViewData) int {
 		return 0
 	}
 	dim := data.ActiveCalendar.Months[data.Month-1].Days
-	return (dim + cols - 1) / cols
+	// Include the leading weekday offset: a month whose 1st sits mid-week can
+	// spill into one extra row (C-CAL-V2-MONTH-GRID-ALIGN-FIX).
+	cells := dim + v2MonthLeadOffset(data)
+	return (cells + cols - 1) / cols
 }
 
 // daysInRow returns the day numbers belonging to one week row.
@@ -771,10 +835,14 @@ func daysInRow(data CalendarV2ViewData, row int) []int {
 		return nil
 	}
 	dim := data.ActiveCalendar.Months[data.Month-1].Days
+	offset := v2MonthLeadOffset(data)
 	out := make([]int, cols)
 	for c := 0; c < cols; c++ {
-		d := row*cols + c + 1
-		if d > dim {
+		// Grid position (row*cols+c) maps to day (pos+1-offset): the leading
+		// `offset` cells of row 0 are blanks (0) before day 1, and any trailing
+		// cells past the month length are blanks too (C-CAL-V2-MONTH-GRID-ALIGN).
+		d := row*cols + c + 1 - offset
+		if d < 1 || d > dim {
 			out[c] = 0
 		} else {
 			out[c] = d
@@ -1379,14 +1447,21 @@ func miniMonthDays(data CalendarV2ViewData) []miniMonthDay {
 	}
 	cal := data.ActiveCalendar
 	dim := cal.Months[data.Month-1].Days
-	out := make([]miniMonthDay, dim)
+	// Leading blanks so day 1 lands under its true weekday — same shared offset
+	// as the main grid (C-CAL-V2-MONTH-GRID-ALIGN-FIX). Day==0 → the template
+	// renders an empty filler cell.
+	offset := v2MonthLeadOffset(data)
+	out := make([]miniMonthDay, 0, dim+offset)
+	for i := 0; i < offset; i++ {
+		out = append(out, miniMonthDay{Day: 0})
+	}
 	for i := 0; i < dim; i++ {
 		day := i + 1
-		out[i] = miniMonthDay{
+		out = append(out, miniMonthDay{
 			Day:        day,
 			IsToday:    data.Year == cal.CurrentYear && data.Month == cal.CurrentMonth && day == cal.CurrentDay,
 			IsSelected: day == data.Day,
-		}
+		})
 	}
 	return out
 }
