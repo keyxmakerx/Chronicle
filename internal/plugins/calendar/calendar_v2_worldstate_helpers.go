@@ -106,7 +106,14 @@ func wsDatePrimary(data CalendarV2ViewData) string {
 	}
 	weekday := ""
 	if n := len(cal.Weekdays); n > 0 && ws.Date.Day >= 1 {
-		weekday = cal.Weekdays[(ws.Date.Day-1)%n].Name
+		// Year-AWARE weekday (C-CAL-V2-SKY-RENDER-COMPLETION FIX B): the shared
+		// #428 core, so the band reads e.g. "Monday · 8 June" for real-life June
+		// 2026 — consistent with the grid + mini-month. The old (Day-1)%n was
+		// year- AND month-blind (Jan 8 and Jun 8 printed the same weekday).
+		idx := v2WeekdayIndexFor(cal, ws.Date.Year, ws.Date.Month, ws.Date.Day)
+		if idx >= 0 && idx < n {
+			weekday = cal.Weekdays[idx].Name
+		}
 	}
 	if weekday != "" {
 		return fmt.Sprintf("%s · %d %s", weekday, ws.Date.Day, month)

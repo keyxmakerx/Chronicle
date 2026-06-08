@@ -111,6 +111,52 @@ func TestSkybandGradient_SnapsToKeyframes(t *testing.T) {
 	}
 }
 
+// TestWsDatePrimary_YearAwareWeekday (C-CAL-V2-SKY-RENDER-COMPLETION FIX B): the
+// band date label uses the year-aware weekday (shared #428 core), so real-life
+// June 8 2026 reads "Monday · 8 June" — matching the grid + mini-month, not the
+// old year-blind (Day-1)%n which printed "Sunday".
+func TestWsDatePrimary_YearAwareWeekday(t *testing.T) {
+	// Full weekday names so the assertion reads unambiguously (Monday, not
+	// Sunday). Same Gregorian month structure as the #428 grid fixture.
+	cal := gregorian2026()
+	cal.Weekdays = []Weekday{
+		{Name: "Sunday"}, {Name: "Monday"}, {Name: "Tuesday"}, {Name: "Wednesday"},
+		{Name: "Thursday"}, {Name: "Friday"}, {Name: "Saturday"},
+	}
+	data := CalendarV2ViewData{
+		ActiveCalendar: cal,
+		WorldState:     &WorldStateSeed{Date: WorldStateDate{Year: 2026, Month: 6, Day: 8}},
+	}
+	if got, want := wsDatePrimary(data), "Monday · 8 June"; got != want {
+		t.Errorf("wsDatePrimary(June 8 2026) = %q; want %q (year-aware, not the year-blind Sunday)", got, want)
+	}
+}
+
+// TestSkyBandAmbientInit_RunsTimePaint (C-CAL-V2-SKY-RENDER-COMPLETION FIX A):
+// the init block must run the initial TIME paint (not just the day pipeline) so
+// the sun is placed + the smooth gradient runs on first load / re-init. The
+// harness DOM-stub no-ops the actual paint, so we pin the wiring at the source
+// (same pattern as TestEngineHasProductionSeams).
+func TestSkyBandAmbientInit_RunsTimePaint(t *testing.T) {
+	js := readEngineJS(t)
+	block := js
+	if i := strings.Index(js, "registerInitBlock('sky-band-ambient'"); i >= 0 {
+		end := strings.Index(js[i:], "});")
+		if end > 0 {
+			block = js[i : i+end]
+		}
+	}
+	for _, want := range []string{
+		"renderTimePipeline(VIEW.timeFrac)", // places the sun + smooth gradient
+		"applySunState(currentSunState())",  // sun state + day/night reconcile
+		"refeedSky()",                       // recolor the sun-bloom emitter
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("sky-band-ambient init must run the time paint: missing %q", want)
+		}
+	}
+}
+
 // TestWorldStateBandV2_ReadOnly: 2a ships no control affordances — no date
 // setter, no draggable time slider, no demo controls. (Controls are 2b/2c.)
 func TestWorldStateBandV2_ReadOnly(t *testing.T) {

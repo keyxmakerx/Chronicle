@@ -1293,6 +1293,19 @@
     // pipeline directly (not the setWorldState shim) so init stays identical
     // to v5 — subscribers handle subsequent runtime changes.
     renderDayPipeline(VIEW.month, VIEW.day);
+    // C-CAL-V2-SKY-RENDER-COMPLETION: also do the INITIAL TIME PAINT. The day
+    // pipeline alone leaves the SUN UNPLACED and the smooth gradient unrun —
+    // both live only in renderTimePipeline, which otherwise fires only on a
+    // timeOfDay CHANGE (the sky-core subscriber). The demo got its first
+    // time-paint from the time-slider; production has no equivalent, so on load
+    // there was no sun, a coarse dusk-at-4pm SSR gradient, and night celestial
+    // in daytime. Mirror the time-change subscribers' order (time pipeline →
+    // sun state → refeed sky) for the first frame. This also runs on the QA2
+    // re-init path: runAll() re-executes this block on htmx:afterSettle, so the
+    // sun re-places after boosted nav / a binding swap, not just first load.
+    renderTimePipeline(VIEW.timeFrac);
+    applySunState(currentSunState());
+    refeedSky();
   });
 
   // ============================================================
