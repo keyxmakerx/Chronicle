@@ -521,7 +521,7 @@ templ monthWeekRows(data CalendarV2ViewData) {
 // "+N more" overflow surfaces when a day has more events than fit.
 templ monthDayCell(data CalendarV2ViewData, day monthDay) {
 	<div
-		class={ "border border-edge rounded p-1 min-h-[80px] flex flex-col gap-1 cell-drop-target", monthDayClasses(data, day) }
+		class={ "group border border-edge rounded p-1 min-h-[80px] flex flex-col gap-1 cell-drop-target", monthDayClasses(data, day) }
 		data-cell-year={ fmt.Sprintf("%d", data.Year) }
 		data-cell-month={ fmt.Sprintf("%d", data.Month) }
 		data-cell-day={ fmt.Sprintf("%d", day.Day) }
@@ -529,9 +529,13 @@ templ monthDayCell(data CalendarV2ViewData, day monthDay) {
 		<div class="text-xs font-medium text-fg-secondary flex items-center justify-between">
 			<span>{ fmt.Sprint(day.Day) }</span>
 			if data.IsScribe && len(monthCellEvents(data, day.Day)) == 0 {
+				// Discoverable add affordance (C-CAL-V2-MONTH-GRID-ALIGN-FIX #3):
+				// base-visible (was opacity-0 with no `group` ancestor → never
+				// revealed), brighter on cell hover. The whole empty cell is also
+				// clickable to add (event_grid.js).
 				<button
 					type="button"
-					class="opacity-0 group-hover:opacity-100 text-fg-secondary hover:text-accent transition-opacity duration-micro text-[10px]"
+					class="opacity-50 group-hover:opacity-100 text-fg-secondary hover:text-accent transition-opacity duration-micro text-[10px]"
 					data-cell-add-event="true"
 					aria-label="Create event on this day"
 				>

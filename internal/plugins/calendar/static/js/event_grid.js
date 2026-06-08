@@ -551,6 +551,24 @@
             });
         });
 
+        // Discoverable day selection (C-CAL-V2-MONTH-GRID-ALIGN-FIX #3): make the
+        // WHOLE empty (Scribe) day cell clickable to add an event — not only the
+        // small +. A cell is add-enabled iff it carries the add button (which the
+        // template renders for Scribe+ on days with no events). Clicks on an
+        // event card / button / link are ignored so edit + overflow still work.
+        document.querySelectorAll('.cell-drop-target').forEach(function (cell) {
+            if (!cell.querySelector('[data-cell-add-event]')) return;
+            cell.classList.add('cursor-pointer');
+            cell.addEventListener('click', function (e) {
+                if (e.target.closest('[data-event-card], button, a')) return;
+                openDrawer({
+                    year: parseInt(cell.dataset.cellYear, 10),
+                    month: parseInt(cell.dataset.cellMonth, 10),
+                    day: parseInt(cell.dataset.cellDay, 10),
+                });
+            });
+        });
+
         // --- Drag-to-reschedule via existing PUT endpoint --
 
         var dragSrc = null;
@@ -809,13 +827,27 @@
         document.addEventListener('pointercancel', onPointerUp);
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () {
-            init();
-            initRibbonResize();
-        });
-    } else {
+    // boot() binds the grid handlers once PER ROOT NODE. The V2 shell arrives
+    // via hx-boost navigation (and re-renders on view/date nav), but under
+    // htmx.config.allowScriptTags=false this <script> never re-runs — so we
+    // bind on htmx:afterSettle/htmx:load too, and the per-root guard keeps a
+    // freshly-swapped grid from double-binding (C-CAL-V2-MONTH-GRID-ALIGN-FIX
+    // #3 — the day-add / card-edit handlers weren't binding after boosted nav).
+    function boot() {
+        var root = document.querySelector('[data-cal-v2-root]');
+        if (!root || root.__eventGridInited) return;
+        root.__eventGridInited = true;
         init();
         initRibbonResize();
     }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+    try {
+        document.addEventListener('htmx:afterSettle', boot);
+        document.addEventListener('htmx:load', boot);
+    } catch (e) {}
 })();

@@ -9,7 +9,13 @@
 
     function init() {
         var root = document.querySelector('[data-cal-v2-root]');
-        if (!root) return;
+        // Per-root guard: bind once per shell node. The shell arrives via
+        // hx-boost nav + re-renders on view/date nav; under
+        // allowScriptTags=false this <script> never re-runs, so init() is also
+        // called on htmx:afterSettle/htmx:load below (C-CAL-V2-MONTH-GRID-ALIGN
+        // #3 — the day popover/shortcuts weren't wiring after boosted nav).
+        if (!root || root.__calV2ShellInited) return;
+        root.__calV2ShellInited = true;
         wireShortcuts(root);
         wireDayPopover(root);
         wireSidebarPin(root);
@@ -285,4 +291,8 @@
     } else {
         init();
     }
+    try {
+        document.addEventListener('htmx:afterSettle', init);
+        document.addEventListener('htmx:load', init);
+    } catch (e) {}
 })();

@@ -396,13 +396,18 @@ func TestMonthDays_RestDayTint(t *testing.T) {
 	if len(days) != 7 {
 		t.Fatalf("expected 7 days; got %d", len(days))
 	}
-	// Day 7 (index 6) is Saturday — should be IsRestDay.
-	if !days[6].IsRestDay {
-		t.Error("day 7 (Saturday) should be marked IsRestDay")
+	// Year-aware weekday (C-CAL-V2-MONTH-GRID-ALIGN-FIX): absolute day of
+	// (100,1,d) = 100*7 + d, so weekday index = d % 7. Day 1 = Mon(1),
+	// day 6 = Sat(6, rest), day 7 = Sun(0). The rest tint must line up with the
+	// corrected column placement (the Saturday column), i.e. day 6 not day 7.
+	if !days[5].IsRestDay {
+		t.Error("day 6 (Saturday) should be marked IsRestDay")
 	}
-	// Day 1 (index 0) is Sunday — should NOT be IsRestDay.
 	if days[0].IsRestDay {
-		t.Error("day 1 (Sunday, IsRestDay=false) should NOT be marked")
+		t.Error("day 1 (Monday) should NOT be marked rest")
+	}
+	if days[6].IsRestDay {
+		t.Error("day 7 (Sunday) should NOT be marked rest")
 	}
 }
 
