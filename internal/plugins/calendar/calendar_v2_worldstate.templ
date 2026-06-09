@@ -39,8 +39,11 @@ templ worldStateShelfBandV2(data CalendarV2ViewData) {
 // + asset loads (the dispatch's "parameterize a variant, don't duplicate").
 templ worldStateBandVariantV2(data CalendarV2ViewData, withHourglass bool) {
 	if wsActive(data) {
-		// The CATALOG Part-8 seed blob the engine consumes (cal-almanac.js
-		// 'data' block detects #cal-v2-worldstate → production mode).
+		// The CATALOG Part-8 seed blob the engine consumes; the engine + widgets
+		// detect production by the [data-cal-worldstate] attribute (C-CAL-CLOSEOUT
+		// E7 — not the literal id). This is the full-page / shelf band, one per
+		// page, so it keeps the stable `cal-v2-worldstate` id; the entity embeds
+		// (which can co-occur) namespace theirs per band.
 		<div id="cal-v2-worldstate" data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
 		<section class="cal-v2-worldstate-band relative w-full overflow-hidden border-b border-edge" style="height:200px" data-cal-v2-worldstate-band aria-label="Today in the world">
 			@worldStateSkyBandV2(data)

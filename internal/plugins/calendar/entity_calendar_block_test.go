@@ -11,6 +11,43 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// TestEntityEmbeds_DistinctSeedIds is the E7 guard (C-CAL-CLOSEOUT): a page
+// composing BOTH an entity worldstate embed and an entity calendar embed for
+// the same entity must NOT emit two elements with the same id (invalid HTML
+// that left getElementById binding only the first band). The seed ids are now
+// namespaced per band type, and both carry the [data-cal-worldstate] attribute
+// the engine actually reads.
+func TestEntityEmbeds_DistinctSeedIds(t *testing.T) {
+	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner}
+	var ws, cal strings.Builder
+	if err := EntityWorldStateBlock(sampleWSSvc(), cc, "ent-1", "user-1", "", "own").Render(context.Background(), &ws); err != nil {
+		t.Fatalf("worldstate render: %v", err)
+	}
+	if err := EntityCalendarBlock(sampleEmbedSvc(), cc, "ent-1", "user-1", "", "").Render(context.Background(), &cal); err != nil {
+		t.Fatalf("calendar render: %v", err)
+	}
+	wsID := `id="cal-v2-worldstate-ws-ent-1"`
+	calID := `id="cal-v2-worldstate-cal-ent-1"`
+	if !strings.Contains(ws.String(), wsID) {
+		t.Errorf("worldstate embed missing namespaced seed id %q", wsID)
+	}
+	if !strings.Contains(cal.String(), calID) {
+		t.Errorf("calendar embed missing namespaced seed id %q", calID)
+	}
+	if wsID == calID {
+		t.Fatalf("the two embeds must use distinct ids on a shared page")
+	}
+	// The plain (un-namespaced) duplicate id must be gone from both.
+	for _, h := range []string{ws.String(), cal.String()} {
+		if strings.Contains(h, `id="cal-v2-worldstate"`) {
+			t.Errorf("entity embed still emits the collision-prone plain id")
+		}
+		if !strings.Contains(h, "data-cal-worldstate=") {
+			t.Errorf("entity embed missing the [data-cal-worldstate] seed attribute")
+		}
+	}
+}
+
 // entityCalBlockStub satisfies CalendarService via embedding; only the three
 // methods EntityCalendarBlock calls are overridden.
 type entityCalBlockStub struct {
@@ -55,7 +92,8 @@ func TestEntityCalendarBlock_RendersBandAndEvents(t *testing.T) {
 	html := renderEntityCal(t, sampleEmbedSvc(), campaigns.RoleOwner, false)
 	for _, want := range []string{
 		"data-entity-calendar",      // block container
-		"id=\"cal-v2-worldstate\"",  // seed blob → engine prod mode
+		"id=\"cal-v2-worldstate-cal-ent-1\"", // E7: per-band namespaced seed id (no duplicate-id collisions)
+		"data-cal-worldstate=",               // the seed blob the engine reads by attribute
 		"data-cal-sky",              // the reused 2a band scaffold
 		"/static/js/cal-almanac.js", // the shared engine
 		"Linked events",             // the events section header

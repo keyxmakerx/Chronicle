@@ -60,3 +60,60 @@ test('reduced-motion: no fade (card stays opaque)', () => {
   advanceBtn._click();
   assert.notEqual(panel.style.opacity, '0.42', 'reduced-motion must skip the translucent fade');
 });
+
+// C-CAL-CLOSEOUT §7 — the expanded panel body is capped to the sky band so it
+// scrolls internally instead of overflowing DOWN onto the grid below.
+function plainEl(props) {
+  // Like el() but with offsetHeight/scrollHeight as plain (overridable) data,
+  // not getters — so the §7 cap math can be driven from the test.
+  return Object.assign({
+    dataset: {}, style: {}, offsetHeight: 0, scrollHeight: 0, offsetTop: 0,
+    setAttribute() {}, getAttribute() { return null; }, removeAttribute() {},
+    addEventListener() {}, removeEventListener() {},
+    querySelector() { return null; }, querySelectorAll() { return []; },
+    classList: { toggle() {}, add() {}, remove() {} },
+  }, props);
+}
+
+function bootCollapse() {
+  const toggle = plainEl({ getAttribute: () => 'true' }); // ships expanded
+  const header = plainEl({ offsetHeight: 36 });
+  const body = plainEl({ scrollHeight: 500, offsetHeight: 140 });
+  const region = { clientHeight: 200 };
+  const panel = plainEl({
+    parentElement: region,
+    offsetTop: 12,
+    querySelector(sel) {
+      return sel === '[data-gm-panel-toggle]' ? toggle
+        : sel === '[data-gm-panel-body]' ? body
+        : sel === 'header' ? header : null;
+    },
+  });
+  const root = plainEl({ dataset: { calV2CampaignId: 'c', calV2CalendarId: 'cal' } });
+  const sandbox = {
+    console, matchMedia: () => ({ matches: false }), setTimeout: () => 0, clearTimeout() {},
+    document: {
+      readyState: 'complete',
+      querySelector: (sel) => (sel === '[data-gm-panel]' ? panel : sel === '[data-cal-v2-root]' ? root : null),
+      addEventListener() {}, removeEventListener() {},
+    },
+  };
+  sandbox.window = sandbox;
+  sandbox.Chronicle = { apiFetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }), notify() {} };
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox, { filename: 'gm_panel.js' });
+  return { body };
+}
+
+test('expanded body is capped to the band height and scrolls (never released to none)', () => {
+  const { body } = bootCollapse();
+  // band 200 − top 12 − header 36 − 12 breathing = 140 cap; content 500 → 140px + scroll.
+  assert.equal(body.style.maxHeight, '140px', 'body should be capped to the band, not grown to fit content');
+  assert.equal(body.style.overflowY, 'auto', 'body should scroll internally when content exceeds the band');
+  assert.notEqual(body.style.maxHeight, 'none', 'must NOT release to none (that overflowed onto the grid)');
+});
+
+test('source seam: the expand path caps to the band instead of releasing to none', () => {
+  assert.match(src, /bodyCap/, 'band-cap helper missing');
+  assert.doesNotMatch(src, /maxHeight = 'none'/, 'expanded body must not be released to none');
+});

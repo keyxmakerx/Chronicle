@@ -48,7 +48,10 @@
       if (!window.ChronicleWorldState) { showError(el); return; }
       var campaignId = el.getAttribute('data-campaign-id') || '';
       var provider = window.ChronicleWorldState.get(campaignId);
-      var serverSeed = parseSeed(document.getElementById('cal-v2-worldstate'));
+      // E7: read the server seed by the [data-cal-worldstate] attribute, not a
+      // fixed id (entity embeds namespace their id per band so multi-embed pages
+      // stay valid; the singleton engine binds the first band).
+      var serverSeed = parseSeed(document.querySelector('[data-cal-worldstate]'));
 
       var unsub = provider.subscribe(function (seed) {
         applySeed(seed);

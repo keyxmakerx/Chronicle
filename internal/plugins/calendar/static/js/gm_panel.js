@@ -187,33 +187,55 @@
         if (toggle && bodyEl) {
             var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
             if (reduceMotion) bodyEl.style.transition = 'none';
-            function setExpanded(expanded) {
+            // C-CAL-CLOSEOUT §7: keep the EXPANDED panel WITHIN the sky band so it
+            // never overflows DOWN onto the grid's resize handles / interactions
+            // below the band (the band is sky-only on this page — no hourglass).
+            // Cap the body to the band's remaining height and scroll internally,
+            // instead of releasing to 'none' (which let it grow over the grid).
+            function bodyCap() {
+                var region = panel.parentElement;
+                var header = panel.querySelector('header');
+                var regionH = (region && region.clientHeight) || 200;
+                var headerH = (header && header.offsetHeight) || 40;
+                // band height − panel top − header − a little breathing room.
+                return Math.max(120, regionH - panel.offsetTop - headerH - 12);
+            }
+            function applyExpanded(animate) {
+                var cap = bodyCap();
+                var target = Math.min(bodyEl.scrollHeight, cap);
+                bodyEl.style.overflowY = bodyEl.scrollHeight > cap ? 'auto' : 'hidden';
+                bodyEl.style.opacity = '1';
+                if (animate && !reduceMotion) {
+                    bodyEl.style.maxHeight = target + 'px';
+                } else {
+                    var t = bodyEl.style.transition;
+                    bodyEl.style.transition = 'none';
+                    bodyEl.style.maxHeight = target + 'px';
+                    void bodyEl.offsetHeight; // commit before restoring transition
+                    bodyEl.style.transition = t;
+                }
+            }
+            function setExpanded(expanded, animate) {
                 toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
                 toggle.setAttribute('aria-label', expanded ? 'Collapse panel' : 'Expand panel');
                 var icon = toggle.querySelector('i');
                 if (icon) icon.className = expanded ? 'fa-solid fa-chevron-down text-xs' : 'fa-solid fa-chevron-up text-xs';
                 if (expanded) {
-                    bodyEl.style.opacity = '1';
-                    bodyEl.style.maxHeight = bodyEl.scrollHeight + 'px';
-                    if (reduceMotion) {
-                        bodyEl.style.maxHeight = 'none';
-                    } else {
-                        // Release to auto once expanded so nested content can grow.
-                        var done = function () { bodyEl.style.maxHeight = 'none'; bodyEl.removeEventListener('transitionend', done); };
-                        bodyEl.addEventListener('transitionend', done);
-                    }
+                    applyExpanded(animate);
                 } else {
-                    // From auto height → a fixed px (so the transition has a start),
-                    // force a reflow, then collapse to 0.
-                    bodyEl.style.maxHeight = bodyEl.scrollHeight + 'px';
-                    void bodyEl.offsetHeight;
+                    // From the current (capped) rendered height → 0.
+                    bodyEl.style.overflowY = 'hidden';
+                    bodyEl.style.maxHeight = bodyEl.offsetHeight + 'px';
+                    void bodyEl.offsetHeight; // force a reflow so the transition has a start
                     bodyEl.style.maxHeight = '0px';
                     bodyEl.style.opacity = '0';
                 }
             }
             toggle.addEventListener('click', function () {
-                setExpanded(toggle.getAttribute('aria-expanded') === 'false');
+                setExpanded(toggle.getAttribute('aria-expanded') === 'false', true);
             });
+            // The panel ships expanded — apply the cap on init, no entrance flash.
+            if (toggle.getAttribute('aria-expanded') !== 'false') applyExpanded(false);
         }
     }
 

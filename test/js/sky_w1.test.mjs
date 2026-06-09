@@ -59,7 +59,7 @@ function boot(seedObj) {
     document: {
       readyState: 'complete',
       getElementById: (id) => (id === 'cal-v2-worldstate' ? seed : null),
-      querySelector: (sel) => (sel === '[data-cal-sky]' ? sky : null),
+      querySelector: (sel) => (sel === '[data-cal-worldstate]' ? seed : sel === '[data-cal-sky]' ? sky : null),
       querySelectorAll: () => [],
       createElement: () => el(),
       addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; },

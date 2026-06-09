@@ -18,7 +18,79 @@
         root.__calV2ShellInited = true;
         wireShortcuts(root);
         wireDayPopover(root);
+        wireEventPeek(root);
         wireSidebarPin(root);
+    }
+
+    // --- Event quick-peek (C-CAL-CLOSEOUT PR A §1) --------------
+    //
+    // HOVER an event chip → a compact preview card (title / time / category /
+    // tier). CLICK still opens the full drawer (event_grid.js owns that; the
+    // peek is pointer-events:none so it never swallows the click). Listeners are
+    // bound to `root` (not document) so they die with the shell node on a
+    // boosted-nav swap — no document-listener leak. Touch / no-hover devices
+    // skip the peek entirely and fall straight through to the drawer.
+    function wireEventPeek(root) {
+        var peek = document.getElementById('cal-v2-event-peek');
+        if (!peek) return;
+        if (window.matchMedia && window.matchMedia('(hover: none)').matches) return;
+        var titleEl = peek.querySelector('[data-peek-title]');
+        var timeEl = peek.querySelector('[data-peek-time]');
+        var catEl = peek.querySelector('[data-peek-category]');
+        var tierEl = peek.querySelector('[data-peek-tier]');
+
+        function eventsData() {
+            try { return JSON.parse(root.dataset.calV2Events || '[]'); } catch (e) { return []; }
+        }
+        function titleCase(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+        function pad(n) { return n < 10 ? '0' + n : '' + n; }
+        function fmtTime(ev) {
+            if (ev.all_day) return 'All day';
+            if (ev.start_hour == null) return '';
+            return pad(ev.start_hour) + ':' + pad(ev.start_minute == null ? 0 : ev.start_minute);
+        }
+        function setChip(el, val) {
+            if (!el) return;
+            if (val) { el.textContent = titleCase(val); el.classList.remove('hidden'); }
+            else { el.classList.add('hidden'); }
+        }
+        function hide() { peek.classList.add('hidden'); }
+
+        function show(chip) {
+            var id = chip.dataset.eventId;
+            if (!id) return;
+            var ev = eventsData().filter(function (e) { return e.id === id; })[0];
+            if (!ev) return;
+            if (titleEl) titleEl.textContent = ev.name || 'Event';
+            var t = fmtTime(ev);
+            if (timeEl) { timeEl.textContent = t; timeEl.classList.toggle('hidden', !t); }
+            setChip(catEl, ev.category);
+            setChip(tierEl, ev.tier);
+            // Position below the chip, flipping above / clamping to the viewport.
+            peek.classList.remove('hidden');
+            var rect = chip.getBoundingClientRect();
+            var pr = peek.getBoundingClientRect();
+            var left = Math.min(rect.left, window.innerWidth - pr.width - 8);
+            var top = rect.bottom + 6;
+            if (top + pr.height > window.innerHeight - 8) top = rect.top - pr.height - 6;
+            peek.style.left = Math.max(8, left) + 'px';
+            peek.style.top = Math.max(8, top) + 'px';
+        }
+
+        root.addEventListener('mouseover', function (e) {
+            var chip = e.target.closest && e.target.closest('[data-event-card][data-event-id]');
+            if (chip) show(chip);
+        });
+        root.addEventListener('mouseout', function (e) {
+            var chip = e.target.closest && e.target.closest('[data-event-card][data-event-id]');
+            if (!chip) return;
+            // Ignore moves that stay within the same chip.
+            if (e.relatedTarget && chip.contains(e.relatedTarget)) return;
+            hide();
+        });
+        // A click opens the drawer (event_grid.js) — drop the peek so it never
+        // lingers over the opening drawer.
+        root.addEventListener('click', hide);
     }
 
     // --- Sidebar pin toggle (Wave 1.7A §G) ---

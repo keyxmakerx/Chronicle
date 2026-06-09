@@ -74,11 +74,14 @@
   }
 
   function init() {
-    // PRODUCTION (live calendar_v2 + entity embeds): the band carries the
-    // #cal-v2-worldstate seed. Re-init PER BAND NODE so a boosted-nav / P4b swap
-    // that injects a fresh band re-paints (the prior band is torn down first).
-    var band = (typeof document !== 'undefined' && document.getElementById)
-      ? document.getElementById('cal-v2-worldstate') : null;
+    // PRODUCTION (live calendar_v2 + entity embeds): the band carries the seed
+    // on a [data-cal-worldstate] element (E7: read by ATTRIBUTE, not a fixed id
+    // — entity embeds namespace their id per band so multi-embed pages stay
+    // valid; the singleton engine binds the FIRST band). Re-init PER BAND NODE
+    // so a boosted-nav / P4b swap that injects a fresh band re-paints (the prior
+    // band is torn down first).
+    var band = (typeof document !== 'undefined' && document.querySelector)
+      ? document.querySelector('[data-cal-worldstate]') : null;
     if (band) {
       if (band.__calInited) return;   // this exact band node is already live
       teardownProd();                 // clean up a previous band's engine state
@@ -617,12 +620,13 @@
   // Block: data
   // ============================================================
   registerInitBlock('data', function () {
-    // PRODUCTION (2a): the server embeds the worldState seed directly on
-    // `#cal-v2-worldstate`. There is no mock DATA blob to navigate; the
-    // seed is the current-day worldState. Stash it + seed VIEW, and give
-    // DATA a minimal stub so any date-derived helper is safe (the demo
-    // navigation/recompute paths are PROD_SKIP-ped, so DATA is unused).
-    var prodNode = document.getElementById('cal-v2-worldstate');
+    // PRODUCTION (2a): the server embeds the worldState seed on a
+    // [data-cal-worldstate] element (E7: read by attribute, not a fixed id).
+    // There is no mock DATA blob to navigate; the seed is the current-day
+    // worldState. Stash it + seed VIEW, and give DATA a minimal stub so any
+    // date-derived helper is safe (the demo navigation/recompute paths are
+    // PROD_SKIP-ped, so DATA is unused).
+    var prodNode = document.querySelector('[data-cal-worldstate]');
     if (prodNode) {
       PROD = true;
       PROD_SEED = JSON.parse(prodNode.getAttribute('data-cal-worldstate') || '{}');
@@ -803,8 +807,13 @@
     // meteor-shower: SLOW per operator — long trailed streaks, low spawn.
     CELESTIAL_EFFECTS['meteor-shower'] = { id: 'meteor-shower', tier: 'must', renderFn: function (box) {
       var wrap = document.createElement('div'); wrap.className = 'cal-almanac-meteors'; wrap.setAttribute('data-cal-meteors', '');
+      // E6: spread the DOM-fallback meteors across the WHOLE sky. The previous
+      // seed clustered them at left:55-95% / top:0-40% (the operator's "meteors
+      // in the lower-right" when this CSS-DOM path renders instead of the
+      // full-width canvas renderer). This fallback only paints when the canvas
+      // engine is unavailable; either way it now streaks edge-to-edge.
       for (var i = 0; i < 6; i++) {
-        var top = (i * 23 + 4) % 40, left = 55 + (i * 17) % 40, delay = i * 1.7;
+        var top = (i * 17 + 3) % 55, left = (i * 31 + 6) % 90, delay = i * 1.7;
         spawn('cal-almanac-meteor', wrap, 'top:' + top + '%;left:' + left + '%;animation-delay:' + delay + 's;');
       }
       box.appendChild(wrap);
