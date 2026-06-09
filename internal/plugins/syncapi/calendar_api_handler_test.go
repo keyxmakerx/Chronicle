@@ -73,6 +73,9 @@ func (s *stubCalendarSvc) ListVisibleCalendars(context.Context, string, int, str
 func (s *stubCalendarSvc) GetActiveVisibleCalendar(context.Context, string, int, string) (*calendar.Calendar, error) {
 	return nil, nil
 }
+func (s *stubCalendarSvc) UpdateCalendarVisibility(context.Context, string, calendar.UpdateCalendarVisibilityInput) error {
+	return nil
+}
 func (s *stubCalendarSvc) SetDefaultCalendar(context.Context, string, string) error { return nil }
 func (s *stubCalendarSvc) SetMonths(context.Context, string, []calendar.MonthInput) error {
 	return nil

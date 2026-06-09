@@ -125,6 +125,9 @@ type CalendarRepository interface {
 	// Event visibility.
 	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
 
+	// Per-calendar visibility (C-CAL-DASHBOARD-W5b).
+	UpdateCalendarVisibility(ctx context.Context, calendarID string, visibility string, visRules *string) error
+
 	// Entity ties (migration 009 / C-CAL-ENTITY-TIES-DATA-MODEL). Cascade
 	// on entity/event/era delete is DB-enforced (ON DELETE CASCADE), so
 	// there is no unlink-all method. Implementations in
@@ -1157,6 +1160,17 @@ func (r *calendarRepo) UpdateEventVisibility(ctx context.Context, eventID string
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE calendar_events SET visibility = ?, visibility_rules = ? WHERE id = ?`,
 		visibility, visRules, eventID,
+	)
+	return err
+}
+
+// UpdateCalendarVisibility sets the per-calendar visibility + rules (W5b).
+// Bulk-replace: visibility_rules is written wholesale (the editor sends the
+// complete allow/deny set), mirroring UpdateEventVisibility.
+func (r *calendarRepo) UpdateCalendarVisibility(ctx context.Context, calendarID string, visibility string, visRules *string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE calendars SET visibility = ?, visibility_rules = ? WHERE id = ?`,
+		visibility, visRules, calendarID,
 	)
 	return err
 }

@@ -66,6 +66,7 @@ const (
 	ActionCalendarSeasonsSet         = "calendar.seasons_set"
 	ActionCalendarErasSet            = "calendar.eras_set"
 	ActionCalendarCategoriesSet      = "calendar.categories_set"
+	ActionCalendarVisibilityChanged  = "calendar.visibility_changed"
 	ActionCalendarEraCreated         = "calendar.era_created"
 	ActionCalendarEraUpdated         = "calendar.era_updated"
 	ActionCalendarEraDeleted         = "calendar.era_deleted"

@@ -74,7 +74,7 @@ func TestAppDashboard_OwnerSeesAllCalendars(t *testing.T) {
 		t.Errorf("owner should see ALL calendars (incl. dm_only)")
 	}
 	// Owner gets the sort controls + the per-card Permissions stub + visibility badges.
-	for _, want := range []string{"data-cal-dashboard-sort", "data-cal-permissions-stub", `data-cal-visibility="dm_only"`, `data-cal-visibility="everyone"`} {
+	for _, want := range []string{"data-cal-dashboard-sort", "data-cal-permissions", `data-cal-visibility="dm_only"`, `data-cal-visibility="everyone"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("owner grid missing %q", want)
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	calwidget "github.com/keyxmakerx/chronicle/internal/widgets/calendar_v2"
 )
 
 // CalendarAppDashboardPage renders the full dashboard page.
@@ -52,6 +53,12 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 				</div>
 			}
 		</div>
+		// W5b: the per-calendar permissions editor (owners only — players never
+		// receive the editor DOM nor the PUT route).
+		if data.IsOwner {
+			@calendarPermissionsModal()
+			<script src="/static/plugins/calendar/js/calendar_permissions.js" defer></script>
+		}
 		// D3 backs the timeline-viz previews (timeline_viz.js is already global
 		// in base.templ; D3 is page-loaded, same CDN the timeline page uses /
 		// CSP-allowed). Only loaded when the selected calendar has timelines.
@@ -153,13 +160,15 @@ templ calendarAppDashboardCard(data CalendarAppDashboardData, cal Calendar) {
 				<i class="fa-solid fa-up-right-from-square mr-1" aria-hidden="true"></i>Open
 			</a>
 			if data.IsOwner {
-				// Per-calendar permissions editor is W5b — disabled stub for now.
+				// W5b: opens the per-calendar permissions editor (the modal +
+				// calendar_permissions.js reads these attrs to seed the chip-row).
 				<button
 					type="button"
-					class="btn-secondary text-xs opacity-60 cursor-not-allowed"
-					title="Per-calendar permissions — coming in W5b"
-					disabled
-					data-cal-permissions-stub
+					class="btn-secondary text-xs"
+					data-cal-permissions
+					data-calendar-id={ cal.ID }
+					data-cal-vis-mode={ calVisModeForCard(cal) }
+					data-cal-vis-rules={ calVisRulesAttr(cal) }
 				>
 					<i class="fa-solid fa-user-lock mr-1" aria-hidden="true"></i>Permissions
 				</button>
@@ -192,15 +201,84 @@ templ calendarVisibilityBadge(cal Calendar) {
 // "custom" when it carries per-user allow/deny rules, else "dm_only" or
 // "everyone". Mirrors the W5a resolver's notion of a non-default rule set.
 func calVisibilityKind(cal Calendar) string {
+	// dm_only is the hard GM gate — it wins regardless of any stray rules (the
+	// W5a resolver ignores the allow-list for a dm_only base), so check it first.
+	if cal.Visibility == "dm_only" {
+		return "dm_only"
+	}
 	if cal.VisibilityRules != nil {
 		if r := strings.TrimSpace(*cal.VisibilityRules); r != "" && r != "{}" {
 			return "custom"
 		}
 	}
-	if cal.Visibility == "dm_only" {
-		return "dm_only"
-	}
 	return "everyone"
+}
+
+// calendarPermissionsModal is the W5b per-calendar permissions editor — one
+// shared modal; calendar_permissions.js opens it for the clicked card, seeds the
+// Q-V2-7 chip-row from the card's level+rules, and saves via PUT
+// .../calendars/:calId/visibility. Owner-only (rendered only when data.IsOwner).
+templ calendarPermissionsModal() {
+	<div id="cal-permissions-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" data-cal-permissions-modal>
+		<div class="absolute inset-0 bg-black/50" data-cal-permissions-overlay aria-hidden="true"></div>
+		<div class="relative card p-5 w-full max-w-md max-h-[85vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Calendar permissions">
+			<div class="flex items-center justify-between mb-1">
+				<h2 class="text-base font-bold text-fg">
+					<i class="fa-solid fa-user-lock mr-1.5 text-accent" aria-hidden="true"></i>Who can see this calendar?
+				</h2>
+				<button type="button" class="text-fg-secondary hover:text-fg" data-cal-permissions-close aria-label="Close">
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+			</div>
+			<p class="text-xs text-fg-muted mb-4" data-cal-permissions-calname></p>
+			@calwidget.VisibilityEditor(buildCalendarVisibilityEditor())
+			<div class="flex justify-end gap-2 mt-5 pt-3 border-t border-edge">
+				<button type="button" class="btn-secondary text-sm" data-cal-permissions-close>Cancel</button>
+				<button type="button" class="btn-primary text-sm" data-cal-permissions-save>
+					<i class="fa-solid fa-check mr-1" aria-hidden="true"></i>Save
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// buildCalendarVisibilityEditor is the editor config for the W5b permissions
+// modal — the SAME Q-V2-7 chip-row widget events use, with the extra GM-only
+// mode enabled. Rendered once (default state); calendar_permissions.js
+// populates the current level + rules per card on open.
+func buildCalendarVisibilityEditor() calwidget.VisibilityEditorData {
+	return calwidget.VisibilityEditorData{
+		IsPublic:    true,
+		ShowGMOnly:  true,
+		FieldPrefix: "cal_visibility",
+		AvailableRoles: []calwidget.RoleOption{
+			{Name: "scribe", Label: "Scribes"},
+			{Name: "player", Label: "Players"},
+		},
+	}
+}
+
+// calVisModeForCard maps a calendar's stored level+rules to the editor mode the
+// card hands the modal: "gmonly" (dm_only) · "specific" (everyone + rules) ·
+// "public" (everyone, no rules).
+func calVisModeForCard(cal Calendar) string {
+	switch calVisibilityKind(cal) {
+	case "dm_only":
+		return "gmonly"
+	case "custom":
+		return "specific"
+	default:
+		return "public"
+	}
+}
+
+// calVisRulesAttr returns the calendar's raw {allowed_users,denied_users} JSON
+// (or "") for the card's data attribute; the JS converts it to chip rules.
+func calVisRulesAttr(cal Calendar) string {
+	if cal.VisibilityRules != nil {
+		return *cal.VisibilityRules
+	}
+	return ""
 }
 
 // calDashSortURL builds the dashboard URL for a sort key. htmx=true appends

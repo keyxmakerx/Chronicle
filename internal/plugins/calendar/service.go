@@ -101,6 +101,10 @@ type CalendarService interface {
 	UpdateEvent(ctx context.Context, eventID string, input UpdateEventInput) error
 	DeleteEvent(ctx context.Context, eventID string) error
 	UpdateEventVisibility(ctx context.Context, eventID string, input UpdateEventVisibilityInput) error
+	// UpdateCalendarVisibility sets a calendar's per-calendar visibility +
+	// allow/deny rules (C-CAL-DASHBOARD-W5b). Validates like the event path;
+	// bulk-replaces the rule set.
+	UpdateCalendarVisibility(ctx context.Context, calendarID string, input UpdateCalendarVisibilityInput) error
 	ListEventsForMonth(ctx context.Context, calendarID string, year, month int, role int, userID string) ([]Event, error)
 	ListEventsForEntity(ctx context.Context, entityID string, role int, userID string) ([]Event, error)
 	ListUpcomingEvents(ctx context.Context, calendarID string, limit int, role int, userID string) ([]Event, error)
@@ -1562,6 +1566,29 @@ func (s *calendarService) UpdateEventVisibility(ctx context.Context, eventID str
 		return err
 	}
 	return s.repo.UpdateEventVisibility(ctx, eventID, input.Visibility, input.VisibilityRules)
+}
+
+// UpdateCalendarVisibility validates + persists a calendar's visibility level
+// and per-user rules (C-CAL-DASHBOARD-W5b). Mirrors UpdateEventVisibility: the
+// base level must be everyone|dm_only, the rules must be valid JSON, and the
+// write bulk-replaces visibility_rules. Per the W5a semantic, dm_only is a hard
+// GM-gate (allow-list does not admit players); per-player access uses base
+// 'everyone' + an allowed_users whitelist.
+func (s *calendarService) UpdateCalendarVisibility(ctx context.Context, calendarID string, input UpdateCalendarVisibilityInput) error {
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
+	}
+	if err := validateVisibilityRules(input.VisibilityRules); err != nil {
+		return err
+	}
+	return s.repo.UpdateCalendarVisibility(ctx, calendarID, input.Visibility, input.VisibilityRules)
 }
 
 // ListUpcomingEvents returns the next N events from the calendar's current date.

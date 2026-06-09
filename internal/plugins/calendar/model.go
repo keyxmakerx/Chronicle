@@ -26,6 +26,14 @@ type UpdateEventVisibilityInput struct {
 	VisibilityRules *string `json:"visibility_rules"`
 }
 
+// UpdateCalendarVisibilityInput is the validated input for updating a
+// calendar's per-calendar visibility (C-CAL-DASHBOARD-W5b). Same shape as the
+// event one — the calendar reuses the event visibility model + resolver.
+type UpdateCalendarVisibilityInput struct {
+	Visibility      string  `json:"visibility"`
+	VisibilityRules *string `json:"visibility_rules"`
+}
+
 // Calendar mode constants.
 const (
 	// ModeFantasy indicates a fully custom fantasy calendar.
