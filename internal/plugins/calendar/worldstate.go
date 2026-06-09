@@ -14,7 +14,11 @@
 // Part 6.
 package calendar
 
-import "github.com/keyxmakerx/chronicle/internal/permissions"
+import (
+	"math"
+
+	"github.com/keyxmakerx/chronicle/internal/permissions"
+)
 
 // --- persisted domain types (migration 008) ---
 
@@ -302,7 +306,60 @@ func moonSeeds(cal *Calendar, year, month, day int, moonPhases map[int][]MoonPha
 			NamedPhases: spans,
 		})
 	}
+	// C-CAL-SKY-COMPLETION A: a real-life (Gregorian) calendar with no authored
+	// moons still gets THE Moon — its phase computed LOCALLY from the real
+	// synodic cycle for the shown date (no API, no location: phase is global, the
+	// date is already timezone-synced). Advancing the day moves it through the
+	// real ~29.53-day cycle. Fantasy calendars respect their own config (a moon
+	// the operator adds in settings replaces this default, since len(Moons) > 0).
+	if cal.Mode == ModeRealLife && len(out) == 0 {
+		pct := gregorianMoonPhase(year, month, day)
+		out = append(out, WorldStateMoon{
+			ID:          0,
+			Name:        "Moon",
+			BaseDesign:  "moon-realistic-selene",
+			PhaseSource: "css-clip",
+			Size:        1,
+			OrbitSpeed:  1,
+			// OrbitOffset positions the disc on the night/day arc by phase (the
+			// engine places it at time-0.5+offset): a full moon (pct 0.5) sits
+			// opposite the sun → up at night; a new moon (pct 0) rides with the
+			// sun → up by day. So it's only visible at the realistic times — at
+			// night for most phases — not floating in the noon sky.
+			OrbitOffset: 0.5 - pct,
+			Phase:       moonPhaseIndex(pct),
+			CyclePct:    pct,
+			NamedPhase:  moonNamedPhase(pct, nil),
+			NamedPhases: []WorldStateMoonPhase{},
+		})
+	}
 	return out
+}
+
+// gregorianMoonPhase returns the real Moon's cycle position (0..1, 0 = new moon)
+// for a Gregorian date, computed locally from the synodic month — NO API, NO
+// location (C-CAL-SKY-COMPLETION A). The illuminated phase is global at a given
+// instant; only the date matters, which a real-life calendar already tracks in
+// the user's timezone. Reference: JDN 2451550.1 (2000-01-06) ≈ a new moon.
+func gregorianMoonPhase(year, month, day int) float64 {
+	const synodicMonth = 29.530588853
+	const refNewMoonJDN = 2451550.1
+	days := float64(gregorianJDN(year, month, day)) - refNewMoonJDN
+	phase := math.Mod(days/synodicMonth, 1)
+	if phase < 0 {
+		phase += 1
+	}
+	return phase
+}
+
+// gregorianJDN is the Julian Day Number for a proleptic-Gregorian date (the
+// standard Fliegel–Van Flandern integer formula). Local + exact; used only for
+// the real-Moon phase math.
+func gregorianJDN(y, m, d int) int {
+	a := (14 - m) / 12
+	yy := y + 4800 - a
+	mm := m + 12*a - 3
+	return d + (153*mm+2)/5 + 365*yy + yy/4 - yy/100 + yy/400 - 32045
 }
 
 // toSeedPhases converts persisted MoonPhaseVocab rows into the seed's
