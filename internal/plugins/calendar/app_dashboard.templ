@@ -21,6 +21,8 @@ import (
 templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDashboardData) {
 	@layouts.App("Calendars") {
 		<div class="sm:max-w-5xl mx-auto py-6 px-2 sm:px-4" data-cal-dashboard>
+			// W5d: container-query stylesheet for the adaptive calendar widget.
+			<link rel="stylesheet" href="/static/css/calendar-adaptive.css"/>
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
 				{Label: "Apps", Href: fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)},
@@ -82,6 +84,7 @@ templ calendarAppDashboardGridSection(data CalendarAppDashboardData) {
 				@calendarSortLink(data, "name", "Name")
 				@calendarSortLink(data, "created", "Newest")
 				@calendarSortLink(data, "updated", "Recently active")
+				@calendarSortLink(data, "nextevent", "Next event")
 			</div>
 		}
 		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-cal-dashboard-list>
@@ -152,6 +155,9 @@ templ calendarAppDashboardCard(data CalendarAppDashboardData, cal Calendar) {
 				@calendarVisibilityBadge(cal)
 			}
 		</div>
+		// W5d: adaptive widget — compact "next event" line in a narrow card, the
+		// upcoming agenda when the card is roomy (container-query driven).
+		@adaptiveCalendarWidget(adaptiveCalData{CampaignID: data.CampaignID, Cal: &cal, Agenda: data.Upcoming[cal.ID].Agenda})
 		<div class="flex flex-wrap items-center gap-2 mt-auto pt-1" data-cal-card-actions>
 			<a
 				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2/%s", data.CampaignID, cal.ID)) }
@@ -212,6 +218,90 @@ func calVisibilityKind(cal Calendar) string {
 		}
 	}
 	return "everyone"
+}
+
+// adaptiveCalData drives the adaptive calendar widget (W5d). GridView, when
+// set (the entity embed, with an eager calendar), renders a mini month-grid in
+// full mode; Agenda is the calendar's upcoming events for the agenda list.
+type adaptiveCalData struct {
+	CampaignID string
+	Cal        *Calendar
+	GridView   *CalendarV2ViewData
+	Agenda     []CalendarEventDate
+}
+
+// adaptiveCalendarWidget renders the calendar widget so it adapts to its
+// CONTAINER's width (master plan §8): a compact next-event line by default, and
+// — when the container is roomy — the upcoming agenda plus (where eager
+// calendar data exists) a mini month-grid. Both subtrees ship; calendar-adaptive.css
+// container-queries pick one. Layout only (no motion).
+templ adaptiveCalendarWidget(awd adaptiveCalData) {
+	<div class="cal-adaptive mt-1" data-cal-adaptive>
+		<div class="cal-adaptive__compact" data-cal-adaptive-compact>
+			<div class="text-[11px] text-fg-secondary truncate">{ adaptiveNextLine(awd) }</div>
+		</div>
+		<div class="cal-adaptive__full" data-cal-adaptive-full>
+			if awd.GridView != nil {
+				<div class="grid gap-px text-[10px] mb-2" style={ miniMonthGridStyle(*awd.GridView) } data-cal-adaptive-grid>
+					for _, w := range miniMonthWeekdayLabels(*awd.GridView) {
+						<div class="text-fg-secondary text-center py-0.5 font-medium">{ w }</div>
+					}
+					for _, d := range miniMonthDays(*awd.GridView) {
+						if d.Day == 0 {
+							<div class="py-1"></div>
+						} else {
+							<div class={ "text-center py-1 rounded", miniMonthDayClasses(d) }>{ fmt.Sprint(d.Day) }</div>
+						}
+					}
+				</div>
+			}
+			<div data-cal-adaptive-agenda>
+				if len(awd.Agenda) == 0 {
+					if awd.GridView == nil {
+						<p class="text-[11px] text-fg-muted italic">No upcoming events.</p>
+					}
+				} else {
+					<ul class="flex flex-col gap-0.5">
+						for _, e := range awd.Agenda {
+							<li class="text-[11px] text-fg-secondary flex items-center gap-1.5 min-w-0">
+								<i class="fa-solid fa-circle text-[5px] text-accent shrink-0" aria-hidden="true"></i>
+								<span class="text-fg-muted tabular-nums shrink-0">{ adaptiveEventDate(awd, e) }</span>
+								<span class="truncate">{ e.Name }</span>
+							</li>
+						}
+					</ul>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// embedGridView builds the view data the adaptive widget's full-mode month-grid
+// needs from an eager calendar (the entity embed) — its current month/year.
+func embedGridView(cal *Calendar) *CalendarV2ViewData {
+	if cal == nil {
+		return nil
+	}
+	return &CalendarV2ViewData{ActiveCalendar: cal, Year: cal.CurrentYear, Month: cal.CurrentMonth, Day: cal.CurrentDay}
+}
+
+// adaptiveNextLine is the compact one-liner: the soonest upcoming event, or a
+// calm "no upcoming events".
+func adaptiveNextLine(awd adaptiveCalData) string {
+	if len(awd.Agenda) == 0 {
+		return "No upcoming events"
+	}
+	e := awd.Agenda[0]
+	return "Next: " + e.Name + " · " + adaptiveEventDate(awd, e)
+}
+
+// adaptiveEventDate formats an event date — month name when the calendar's
+// months are eager-loaded (the embed), else numeric M/D (shallow dashboard rows).
+func adaptiveEventDate(awd adaptiveCalData, e CalendarEventDate) string {
+	if awd.Cal != nil && e.Month >= 1 && e.Month <= len(awd.Cal.Months) {
+		return fmt.Sprintf("%s %d", awd.Cal.Months[e.Month-1].Name, e.Day)
+	}
+	return fmt.Sprintf("%d/%d", e.Month, e.Day)
 }
 
 // calendarPermissionsModal is the W5b per-calendar permissions editor — one

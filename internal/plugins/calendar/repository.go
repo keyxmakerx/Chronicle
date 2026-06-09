@@ -128,6 +128,10 @@ type CalendarRepository interface {
 	// Per-calendar visibility (C-CAL-DASHBOARD-W5b).
 	UpdateCalendarVisibility(ctx context.Context, calendarID string, visibility string, visRules *string) error
 
+	// Batch upcoming-events read for the dashboard (C-CAL-DASHBOARD-W5d) — the
+	// next-event sort + the adaptive widget's agenda, in one query.
+	EventDatesForCalendars(ctx context.Context, calIDs []string, role int) (map[string][]CalendarEventDate, error)
+
 	// Entity ties (migration 009 / C-CAL-ENTITY-TIES-DATA-MODEL). Cascade
 	// on entity/event/era delete is DB-enforced (ON DELETE CASCADE), so
 	// there is no unlink-all method. Implementations in
@@ -1129,6 +1133,47 @@ func (r *calendarRepo) ListUpcomingEvents(ctx context.Context, calendarID string
 	defer rows.Close()
 
 	return scanEvents(rows)
+}
+
+// EventDatesForCalendars batch-reads (year,month,day,name) for every event in
+// the given calendars in ONE query (no N+1 across calendars), filtered to
+// dm_only base visibility for non-DM viewers. Ordered by date so the caller can
+// pick each calendar's soonest upcoming event using that calendar's own current
+// date (dates aren't comparable across calendars). W5d — powers the next-event
+// sort + the adaptive widget's agenda.
+func (r *calendarRepo) EventDatesForCalendars(ctx context.Context, calIDs []string, role int) (map[string][]CalendarEventDate, error) {
+	out := map[string][]CalendarEventDate{}
+	if len(calIDs) == 0 {
+		return out, nil
+	}
+	ph := make([]string, len(calIDs))
+	args := make([]any, len(calIDs))
+	for i, id := range calIDs {
+		ph[i] = "?"
+		args[i] = id
+	}
+	visFilter := "AND e.visibility = 'everyone'"
+	if permissions.CanSeeDmOnly(role) {
+		visFilter = ""
+	}
+	q := fmt.Sprintf(`SELECT e.calendar_id, e.year, e.month, e.day, e.name
+		FROM calendar_events e
+		WHERE e.calendar_id IN (%s) %s
+		ORDER BY e.calendar_id, e.year, e.month, e.day, e.name`,
+		strings.Join(ph, ","), visFilter)
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d CalendarEventDate
+		if err := rows.Scan(&d.CalendarID, &d.Year, &d.Month, &d.Day, &d.Name); err != nil {
+			return nil, err
+		}
+		out[d.CalendarID] = append(out[d.CalendarID], d)
+	}
+	return out, rows.Err()
 }
 
 // scanEvents reads event rows into a slice.

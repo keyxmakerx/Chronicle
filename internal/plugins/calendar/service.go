@@ -36,6 +36,10 @@ type CalendarService interface {
 	// viewer may see (C-CAL-DASHBOARD-W5a). Owner/co-DM see all; others see
 	// only calendars whose per-calendar visibility admits them.
 	ListVisibleCalendars(ctx context.Context, campaignID string, role int, userID string) ([]Calendar, error)
+	// UpcomingByCalendar batch-computes each calendar's soonest upcoming event +
+	// a short agenda in ONE query (C-CAL-DASHBOARD-W5d) — powers the next-event
+	// sort + the dashboard adaptive widget's agenda.
+	UpcomingByCalendar(ctx context.Context, cals []Calendar, role int) (map[string]CalendarUpcoming, error)
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 
 	// Active-calendar resolution (V2 Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
@@ -626,6 +630,76 @@ func (s *calendarService) ListVisibleCalendars(ctx context.Context, campaignID s
 		return nil, err
 	}
 	return filterCalendarsByUser(cals, role, userID), nil
+}
+
+// dashboardAgendaCap bounds the per-calendar agenda the dashboard widget shows.
+const dashboardAgendaCap = 3
+
+// UpcomingByCalendar batch-computes, for each calendar, its soonest upcoming
+// event + a short agenda from ONE event query (C-CAL-DASHBOARD-W5d — no N+1).
+// "Upcoming" is relative to each calendar's OWN current date (dates aren't
+// comparable across calendars). Role-filtered at the base-visibility level.
+func (s *calendarService) UpcomingByCalendar(ctx context.Context, cals []Calendar, role int) (map[string]CalendarUpcoming, error) {
+	out := map[string]CalendarUpcoming{}
+	if len(cals) == 0 {
+		return out, nil
+	}
+	ids := make([]string, len(cals))
+	for i, c := range cals {
+		ids[i] = c.ID
+	}
+	byCal, err := s.repo.EventDatesForCalendars(ctx, ids, role)
+	if err != nil {
+		return nil, fmt.Errorf("batch upcoming events: %w", err)
+	}
+	for _, c := range cals {
+		evs := byCal[c.ID] // ordered by (year,month,day)
+		var up CalendarUpcoming
+		for i := range evs {
+			if eventDateAtOrAfter(evs[i], c.CurrentYear, c.CurrentMonth, c.CurrentDay) {
+				next := evs[i]
+				up.Next = &next
+				end := i + dashboardAgendaCap
+				if end > len(evs) {
+					end = len(evs)
+				}
+				up.Agenda = append([]CalendarEventDate(nil), evs[i:end]...)
+				break
+			}
+		}
+		out[c.ID] = up
+	}
+	return out, nil
+}
+
+// eventDateAtOrAfter reports whether event date e is on or after (y,m,d) by
+// (year,month,day) tuple order.
+func eventDateAtOrAfter(e CalendarEventDate, y, m, d int) bool {
+	if e.Year != y {
+		return e.Year > y
+	}
+	if e.Month != m {
+		return e.Month > m
+	}
+	return e.Day >= d
+}
+
+// nextEventApproxDaysUntil returns a monotonic proximity key (approximate days
+// until the next event) for the next-event sort, and whether one exists. Uses a
+// 365-day-year / 30-day-month approximation — exact day counts would need each
+// calendar's eager month lengths; the dashboard rows are shallow, and the
+// approximation is monotonic enough to order calendars by next-event proximity
+// (incl. across a year boundary). Calendars with no upcoming event sort last.
+func nextEventApproxDaysUntil(c Calendar, up CalendarUpcoming) (int, bool) {
+	if up.Next == nil {
+		return 0, false
+	}
+	n := up.Next
+	days := (n.Year-c.CurrentYear)*365 + (n.Month-c.CurrentMonth)*30 + (n.Day - c.CurrentDay)
+	if days < 0 {
+		days = 0
+	}
+	return days, true
 }
 
 // SetDefaultCalendar marks a calendar as the campaign's default, unsetting all others.

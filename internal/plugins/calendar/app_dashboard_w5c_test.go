@@ -91,14 +91,14 @@ func TestSortDashboardCalendars(t *testing.T) {
 
 	// Default: is_default first, then sort_order.
 	def := clone()
-	sortDashboardCalendars(def, "")
+	sortDashboardCalendars(def, "", nil)
 	if def[0].ID != "d" || def[1].ID != "a" || def[2].ID != "b" {
 		t.Errorf("default order = %v; want [d a b] (default-first, then sort_order)", ids(def))
 	}
 
 	// Name: A→Z regardless of default/sort_order.
 	byName := clone()
-	sortDashboardCalendars(byName, "name")
+	sortDashboardCalendars(byName, "name", nil)
 	if byName[0].Name != "Alpha" || byName[1].Name != "Beta" || byName[2].Name != "Delta" {
 		t.Errorf("name order = %v; want Alpha,Beta,Delta", ids(byName))
 	}

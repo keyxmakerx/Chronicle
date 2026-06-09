@@ -66,6 +66,9 @@ type CalendarAppDashboardData struct {
 	// W5c: the active sort key for the card grid (owner control). "" =
 	// the default (is_default-first, then sort_order).
 	Sort string
+	// W5d: per-calendar soonest-upcoming + agenda (batch read), keyed by
+	// calendar ID — drives the next-event sort + the adaptive widget's agenda.
+	Upcoming map[string]CalendarUpcoming
 
 	// W2 live "see in action" embeds (C-APPS-CAL-DASH-W2):
 	// SelectedIsActive gates the LIVE worldstate band — the engine binds the
@@ -117,7 +120,16 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 		data.LoadError = true
 		return h.renderAppDashboard(c, cc, data)
 	}
-	sortDashboardCalendars(cals, data.Sort)
+	// W5d: one batch read for the next-event sort + the adaptive widget's
+	// agenda (best-effort — a failure just omits the agenda / falls back to the
+	// default order). No N+1: a single query across all the dashboard calendars.
+	if up, uerr := h.svc.UpcomingByCalendar(ctx, cals, role); uerr == nil {
+		data.Upcoming = up
+	} else {
+		slog.Warn("calendars dashboard: upcoming batch failed",
+			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", uerr))
+	}
+	sortDashboardCalendars(cals, data.Sort, data.Upcoming)
 	data.Calendars = cals
 
 	// The user's active calendar drives the "active" badge + the default
@@ -179,10 +191,10 @@ func (h *Handler) renderAppDashboard(c echo.Context, cc *campaigns.CampaignConte
 	return middleware.Render(c, 200, CalendarAppDashboardPage(cc, data))
 }
 
-// calendarSortKeys are the supported card-grid sort keys (W5c). "" is the
-// default (is_default-first, then sort_order). next-event sort is a follow-up
-// (it needs a per-calendar "soonest upcoming event" batch read).
-var calendarSortKeys = map[string]bool{"": true, "name": true, "created": true, "updated": true}
+// calendarSortKeys are the supported card-grid sort keys. "" is the default
+// (is_default-first, then sort_order); nextevent (W5d) orders by each
+// calendar's soonest upcoming event.
+var calendarSortKeys = map[string]bool{"": true, "name": true, "created": true, "updated": true, "nextevent": true}
 
 // normalizeCalendarSort clamps an arbitrary ?sort value to a supported key,
 // defaulting unknown values to "" (the is_default/sort_order order).
@@ -193,10 +205,11 @@ func normalizeCalendarSort(s string) string {
 	return ""
 }
 
-// sortDashboardCalendars orders the dashboard cards in place (W5c). Default
-// ("") = is_default-first, then sort_order; name = A→Z; created/updated =
-// most-recent first. Stable so equal keys keep their incoming order.
-func sortDashboardCalendars(cals []Calendar, key string) {
+// sortDashboardCalendars orders the dashboard cards in place. Default ("") =
+// is_default-first, then sort_order; name = A→Z; created/updated = most-recent
+// first; nextevent (W5d) = soonest upcoming event first (calendars with none
+// last), using the batch upcoming map. Stable so equal keys keep input order.
+func sortDashboardCalendars(cals []Calendar, key string, upcoming map[string]CalendarUpcoming) {
 	switch key {
 	case "name":
 		sort.SliceStable(cals, func(i, j int) bool {
@@ -206,6 +219,18 @@ func sortDashboardCalendars(cals []Calendar, key string) {
 		sort.SliceStable(cals, func(i, j int) bool { return cals[i].CreatedAt.After(cals[j].CreatedAt) })
 	case "updated":
 		sort.SliceStable(cals, func(i, j int) bool { return cals[i].UpdatedAt.After(cals[j].UpdatedAt) })
+	case "nextevent":
+		sort.SliceStable(cals, func(i, j int) bool {
+			di, hi := nextEventApproxDaysUntil(cals[i], upcoming[cals[i].ID])
+			dj, hj := nextEventApproxDaysUntil(cals[j], upcoming[cals[j].ID])
+			if hi != hj {
+				return hi // a calendar WITH an upcoming event sorts before one without
+			}
+			if !hi {
+				return false // both have none → keep input order (stable)
+			}
+			return di < dj
+		})
 	default: // is_default first, then sort_order
 		sort.SliceStable(cals, func(i, j int) bool {
 			if cals[i].IsDefault != cals[j].IsDefault {
