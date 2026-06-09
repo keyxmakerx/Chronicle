@@ -84,6 +84,17 @@ func (r *calendarRepo) AddCelestialEvent(ctx context.Context, ce CelestialEvent)
 	return err
 }
 
+// ClearCelestialEvents removes every celestial event on a calendar's given date
+// (C-CAL-GM-PANEL-REWORK B). Calendar-scoped; the date triple is exact so only
+// the current day's events are removed.
+func (r *calendarRepo) ClearCelestialEvents(ctx context.Context, calendarID string, year, month, day int) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM calendar_celestial_events
+		 WHERE calendar_id = ? AND year = ? AND month = ? AND day = ?`,
+		calendarID, year, month, day)
+	return err
+}
+
 // GetMoonPhasesForCalendar loads the named-phase vocab for every moon of a
 // calendar in one join, returning it keyed by moon id. Moons with no authored
 // vocab are simply absent from the map (the assembler falls back to

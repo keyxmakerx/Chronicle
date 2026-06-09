@@ -25,7 +25,7 @@ import "fmt"
 templ gmControlPanelV2(data CalendarV2ViewData) {
 	if data.CanControlWorldState && data.ActiveCalendar != nil {
 		<section
-			class="fixed bottom-4 right-4 z-30 w-72 card card-elev border border-edge rounded-lg text-sm"
+			class="absolute top-3 right-3 z-40 w-72 card card-elev-static border border-edge rounded-lg text-sm"
 			data-gm-panel
 			aria-label="GM world-state controls"
 		>
@@ -45,7 +45,15 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 					<i class="fa-solid fa-chevron-down text-xs" aria-hidden="true"></i>
 				</button>
 			</header>
-			<div id="gm-panel-body" class="px-3 py-3 space-y-3">
+			// Animated collapse: gm_panel.js drives max-height/opacity (the
+			// locked --dur-large/--ease-out motion tokens); it sets transition:none
+			// under prefers-reduced-motion. overflow-hidden so the collapse clips.
+			<div
+				id="gm-panel-body"
+				class="px-3 py-3 space-y-3 overflow-hidden"
+				data-gm-panel-body
+				style="transition: max-height var(--dur-large) var(--ease-out), opacity var(--dur-large) var(--ease-out)"
+			>
 				// Part-6 advance verbs (signed relative; full rollover server-side).
 				<div>
 					<div class="text-xs font-medium text-fg-secondary mb-1">Advance time</div>
@@ -128,9 +136,14 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 					</div>
 				</div>
 				// Trigger world-event (4c) — adds a celestial event on the
-				// current day → calendar_celestial_events via the PUT.
+				// current day → calendar_celestial_events via the PUT. The Clear
+				// removes ALL active world-events on the current day (the "stuck
+				// meteor" off switch — mirrors the mood Clear).
 				<div class="pt-1 border-t border-edge">
-					<div class="text-xs font-medium text-fg-secondary mb-1">Trigger world-event</div>
+					<div class="flex items-center justify-between mb-1">
+						<span class="text-xs font-medium text-fg-secondary">Trigger world-event</span>
+						<button type="button" class="text-xs text-fg-secondary hover:text-fg" data-gm-events-clear>Clear active</button>
+					</div>
 					<div class="flex items-center gap-1.5">
 						<select class="input text-xs flex-1" data-gm-event-type aria-label="World-event type">
 							for _, ev := range gmCelestialTypes() {

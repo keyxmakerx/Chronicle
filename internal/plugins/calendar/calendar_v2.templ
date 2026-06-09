@@ -96,8 +96,15 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 			}
 			<div class="flex-1 flex flex-col min-w-0">
 				// Live ambient worldState band (2a) — read-only for all roles;
-				// renders only when an active calendar + seed exist.
-				@worldStateBandV2(data)
+				// renders only when an active calendar + seed exist. The GM panel
+				// (C-CAL-GM-PANEL-REWORK A) anchors as an overlay INSIDE this
+				// relative region: it reads as "in the band" but the region is NOT
+				// overflow-hidden (the band itself is), so the expanded panel
+				// isn't clipped. Renders nothing for non-capability holders.
+				<div class="relative" data-cal-band-region>
+					@worldStateBandV2(data)
+					@gmControlPanelV2(data)
+				</div>
 				@calendarV2Header(cc, data)
 				<div id="cal-v2-view-slot" class="flex-1 overflow-y-auto px-6 py-4">
 					@calendarV2View(cc, data)
@@ -107,9 +114,8 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 		if data.ActiveCalendar != nil && data.IsScribe {
 			@eventV2Drawer(data)
 		}
-		// GM live-control panel (Phase 4) — server-gated: only capability
-		// holders (Owner / co-DM) receive the markup at all.
-		@gmControlPanelV2(data)
+		// GM live-control panel (Phase 4) is rendered IN the band region above
+		// (C-CAL-GM-PANEL-REWORK A) — server-gated to capability holders there.
 		if data.ActiveCalendar != nil {
 			@shortcutsModalV2()
 			@dayDetailPopoverV2()

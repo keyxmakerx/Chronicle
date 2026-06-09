@@ -184,6 +184,11 @@ type WorldStateUpdateInput struct {
 	// Visibility is resolved by the handler from CanAuthorDmOnly before it
 	// reaches the service (capability stays at the route/handler layer).
 	TriggerEvent *WorldStateTriggerEvent
+	// ClearEvents, when true, removes ALL celestial/world-events on the CURRENT
+	// date (C-CAL-GM-PANEL-REWORK B — the "stuck meteor" off switch, mirroring
+	// the mood Clear). A PUT-input field only; the world-state SEED contract is
+	// unchanged (the cleared day just rebuilds with no events).
+	ClearEvents bool
 }
 
 // WorldStateTriggerEvent is a GM-triggered celestial event (meteor shower /

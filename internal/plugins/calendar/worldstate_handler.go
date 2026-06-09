@@ -104,6 +104,9 @@ type putWorldStateBody struct {
 		DurationHours int    `json:"duration_hours"`
 		DmOnly        bool   `json:"dm_only"`
 	} `json:"triggerEvent"`
+	// ClearEvents removes all world-events on the current day (C-CAL-GM-PANEL-
+	// REWORK B — the "stuck meteor" off switch). PUT-input only; not a seed field.
+	ClearEvents bool `json:"clearEvents"`
 }
 
 // PutWorldState — PUT /campaigns/:id/calendar/world-state.
@@ -165,6 +168,8 @@ func (h *Handler) PutWorldState(c echo.Context) error {
 			Visibility:    vis,
 		}
 	}
+	// B: the GM "clear world-events" off switch (mirrors the mood Clear).
+	input.ClearEvents = body.ClearEvents
 
 	if err := h.svc.SetWorldState(ctx, cal.ID, input); err != nil {
 		return err

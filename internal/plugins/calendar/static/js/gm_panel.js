@@ -14,6 +14,11 @@
     function init() {
         var panel = document.querySelector('[data-gm-panel]');
         if (!panel) return;
+        // C-CAL-GM-PANEL-REWORK C (QA2 class): per-element guard so re-init on
+        // boosted nav binds the freshly-swapped panel once, never the same node
+        // twice (a new panel node has gmWired unset → it binds).
+        if (panel.dataset.gmWired === '1') return;
+        panel.dataset.gmWired = '1';
         var root = document.querySelector('[data-cal-v2-root]');
         if (!root) return;
         var campaignID = root.dataset.calV2CampaignId;
@@ -135,6 +140,14 @@
             });
         }
 
+        // --- Clear active world-events (the "stuck meteor" off switch) ---
+        var clearEventsBtn = panel.querySelector('[data-gm-events-clear]');
+        if (clearEventsBtn) {
+            clearEventsBtn.addEventListener('click', function () {
+                commit({ clearEvents: true }, clearEventsBtn);
+            });
+        }
+
         // --- Pause (client-only atmosphere freeze; not persisted) ---
         var pauseBtn = panel.querySelector('[data-gm-pause]');
         if (pauseBtn) {
@@ -152,18 +165,39 @@
             });
         }
 
-        // --- Collapse / expand ---
+        // --- Collapse / expand (animated max-height; the templ supplies the
+        //     --dur-large/--ease-out transition). Respects reduced-motion. ---
         var toggle = panel.querySelector('[data-gm-panel-toggle]');
-        var bodyEl = panel.querySelector('#gm-panel-body');
+        var bodyEl = panel.querySelector('[data-gm-panel-body]');
         if (toggle && bodyEl) {
-            toggle.addEventListener('click', function () {
-                var expanded = toggle.getAttribute('aria-expanded') !== 'false';
-                expanded = !expanded;
-                bodyEl.classList.toggle('hidden', !expanded);
+            var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+            if (reduceMotion) bodyEl.style.transition = 'none';
+            function setExpanded(expanded) {
                 toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
                 toggle.setAttribute('aria-label', expanded ? 'Collapse panel' : 'Expand panel');
                 var icon = toggle.querySelector('i');
                 if (icon) icon.className = expanded ? 'fa-solid fa-chevron-down text-xs' : 'fa-solid fa-chevron-up text-xs';
+                if (expanded) {
+                    bodyEl.style.opacity = '1';
+                    bodyEl.style.maxHeight = bodyEl.scrollHeight + 'px';
+                    if (reduceMotion) {
+                        bodyEl.style.maxHeight = 'none';
+                    } else {
+                        // Release to auto once expanded so nested content can grow.
+                        var done = function () { bodyEl.style.maxHeight = 'none'; bodyEl.removeEventListener('transitionend', done); };
+                        bodyEl.addEventListener('transitionend', done);
+                    }
+                } else {
+                    // From auto height → a fixed px (so the transition has a start),
+                    // force a reflow, then collapse to 0.
+                    bodyEl.style.maxHeight = bodyEl.scrollHeight + 'px';
+                    void bodyEl.offsetHeight;
+                    bodyEl.style.maxHeight = '0px';
+                    bodyEl.style.opacity = '0';
+                }
+            }
+            toggle.addEventListener('click', function () {
+                setExpanded(toggle.getAttribute('aria-expanded') === 'false');
             });
         }
     }
@@ -173,4 +207,10 @@
     } else {
         init();
     }
+    // C-CAL-GM-PANEL-REWORK C: re-init after boosted navigation (QA2 class) —
+    // under htmx.config.allowScriptTags=false the swapped-in panel's <script>
+    // never re-runs, so the already-loaded driver must re-bind the fresh panel.
+    // The per-element gmWired guard keeps it idempotent.
+    document.addEventListener('htmx:afterSettle', init);
+    document.addEventListener('htmx:load', init);
 })();
