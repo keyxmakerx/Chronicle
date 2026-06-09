@@ -45,9 +45,12 @@ templ entityWorldStateBlockView(campaignID string, cal *Calendar, data CalendarV
 				</a>
 			</div>
 		} else {
-			// Engine prod-mode seed blob (#cal-v2-worldstate) → the engine + the
-			// provider both read it; first paint needs no network fetch.
-			<div id="cal-v2-worldstate" data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
+			// Engine prod-mode seed blob → the engine + the provider read it by
+			// the [data-cal-worldstate] attribute (C-CAL-CLOSEOUT E7: NOT the
+			// literal id, which is now namespaced per band so two worldstate
+			// embeds on one page don't collide on a duplicate id; the singleton
+			// engine binds the first band, the rest render their static SSR sky).
+			<div id={ "cal-v2-worldstate-ws-" + entityID } data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
 			// Widget mount: boot.js calls Chronicle.register('worldstate') here;
 			// the provider singleton fetches /world-state at most once per page
 			// (or reuses this server seed) and drives live updates. A friendly

@@ -45,7 +45,7 @@ function boot() {
     document: {
       readyState: 'complete',
       getElementById: (id) => (id === 'cal-v2-worldstate' ? state.current : null),
-      querySelector: () => null, querySelectorAll: () => [],
+      querySelector: (sel) => (sel === '[data-cal-worldstate]' ? state.current : null), querySelectorAll: () => [],
       createElement: () => band(),
       addEventListener: (type, cb) => { (listeners[type] = listeners[type] || []).push(cb); },
       removeEventListener: (type, cb) => {

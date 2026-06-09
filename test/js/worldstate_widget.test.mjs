@@ -42,7 +42,10 @@ function boot(opts) {
     requestAnimationFrame: () => 0, cancelAnimationFrame: () => {},
     Promise, setTimeout, clearTimeout,
     fetch: opts.fetch || null,
-    document: { getElementById: (id) => (id === 'cal-v2-worldstate' ? seedBlob : null) },
+    document: {
+      getElementById: (id) => (id === 'cal-v2-worldstate' ? seedBlob : null),
+      querySelector: (sel) => (sel === '[data-cal-worldstate]' ? seedBlob : null),
+    },
     // engine seam: present only if opts.engine
     __calSetWorldState: opts.engine ? (p) => { calls.set.push(p); } : undefined,
     __calWorldState: opts.engine ? { timeOfDay: 0 } : undefined,

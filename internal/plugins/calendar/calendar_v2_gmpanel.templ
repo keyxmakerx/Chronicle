@@ -47,7 +47,12 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 			</header>
 			// Animated collapse: gm_panel.js drives max-height/opacity (the
 			// locked --dur-large/--ease-out motion tokens); it sets transition:none
-			// under prefers-reduced-motion. overflow-hidden so the collapse clips.
+			// under prefers-reduced-motion. C-CAL-CLOSEOUT §7: the expanded body is
+			// CAPPED to the sky band's height and scrolls internally (overflow set
+			// by gm_panel.js) so the panel never overflows DOWN onto the grid's
+			// resize handles below the band. overflow-hidden keeps the collapse
+			// clipping; gm_panel.js flips overflow-y to auto when the content is
+			// capped.
 			<div
 				id="gm-panel-body"
 				class="px-3 py-3 space-y-3 overflow-hidden"

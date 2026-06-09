@@ -250,7 +250,7 @@ func TestEngineHasProductionSeams(t *testing.T) {
 		"var PROD = false",                               // production flag
 		"var PROD_SKIP = {",                              // the demo-block skip set
 		"if (PROD && PROD_SKIP[b.name])",                 // runAll skips demo controls in prod
-		"document.getElementById('cal-v2-worldstate')",   // prod seed detection
+		"document.querySelector('[data-cal-worldstate]')", // prod seed detection (E7: by attribute, not a fixed id)
 		"if (PROD) {",                                    // world-state block prod branch
 		"if (PROD && typeof moon.cyclePct === 'number')", // real moon cycle in prod
 	} {

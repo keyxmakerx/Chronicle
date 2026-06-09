@@ -54,9 +54,12 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, data CalendarV2V
 			if isScribe {
 				@widgetbindings.BindingAffordance(campaignID, WidgetTypeCalendar, entityID, "calendar", source)
 			}
-			// Engine prod-mode seed blob (#cal-v2-worldstate) + the compact sky
-			// band scaffold (reused from 2a). The engine paints from the seed.
-			<div id="cal-v2-worldstate" data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
+			// Engine prod-mode seed blob + the compact sky band scaffold (reused
+			// from 2a). The engine reads the seed by the [data-cal-worldstate]
+			// attribute (C-CAL-CLOSEOUT E7: id namespaced per band so a page with
+			// both an entity calendar + worldstate embed doesn't emit a duplicate
+			// id; the singleton engine binds the first, the rest stay static SSR).
+			<div id={ "cal-v2-worldstate-cal-" + entityID } data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
 			<div class="relative w-full overflow-hidden border-b border-edge" style="height:150px">
 				@worldStateSkyBandV2(data)
 			</div>

@@ -53,7 +53,8 @@ func TestEntityWorldStateBlock_RendersWidgetMount(t *testing.T) {
 		`data-widget="worldstate"`,                  // boot.js mount point
 		`data-variant="hourglass"`,                  // the mini-shelf variant
 		`data-campaign-id="camp-1"`,                 // provider key
-		"id=\"cal-v2-worldstate\"",                  // seed blob → engine prod + provider zero-fetch
+		"id=\"cal-v2-worldstate-ws-\"",              // E7: per-band namespaced seed id (no duplicate-id collisions)
+		"data-cal-worldstate=",                      // the seed blob the engine reads by attribute
 		"data-cal-sky",                              // the reused sky scaffold
 		"cal-almanac-shelf",                         // the hourglass-on-shelf
 		"data-worldstate-error",                     // friendly client error target
