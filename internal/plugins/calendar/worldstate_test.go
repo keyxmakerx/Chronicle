@@ -53,6 +53,13 @@ func (m *mockCalendarRepo) AddCelestialEvent(ctx context.Context, ce CelestialEv
 	return nil
 }
 
+func (m *mockCalendarRepo) ClearCelestialEvents(ctx context.Context, calendarID string, year, month, day int) error {
+	if m.clearCelestialEventsFn != nil {
+		return m.clearCelestialEventsFn(ctx, calendarID, year, month, day)
+	}
+	return nil
+}
+
 func (m *mockCalendarRepo) GetMoonPhasesForCalendar(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error) {
 	if m.getMoonPhasesFn != nil {
 		return m.getMoonPhasesFn(ctx, calendarID)

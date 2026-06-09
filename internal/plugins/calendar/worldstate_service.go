@@ -112,7 +112,23 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 		}
 	}
 
+	if input.ClearEvents {
+		// C-CAL-GM-PANEL-REWORK B: the "stuck meteor" off switch — remove every
+		// world-event on the CURRENT day so the rebuilt seed (and the band) drop
+		// them. Mirrors the mood Clear; no new seed field needed.
+		if err := s.repo.ClearCelestialEvents(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay); err != nil {
+			return fmt.Errorf("clear celestial events: %w", err)
+		}
+	}
+
 	if input.Advance != nil {
+		// C-CAL-GM-PANEL-REWORK D (deferred audit finding): clamp the relative
+		// advance. The V1 advance endpoints bound their input; this PUT path did
+		// not, so a huge days/hours/minutes spun advanceClock's day loop — an
+		// authenticated CPU DoS. Legit GM verbs (±1 day, +8h) are unaffected.
+		if err := validateAdvanceMagnitude(input.Advance); err != nil {
+			return err
+		}
 		// Relative clock move (GM panel verbs) with full signed rollover.
 		// Computed here + written through UpdateCalendar so the same
 		// leap-year/range invariants apply. Loads months for variable-length
@@ -151,14 +167,35 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 		// hour/minute invariants apply uniformly across every surface. Nil
 		// sub-fields preserve the stored value (partial set).
 		t := input.Time
+		newYear := derefOr(t.Year, cal.CurrentYear)
+		newMonth := derefOr(t.Month, cal.CurrentMonth)
+		newDay := derefOr(t.Day, cal.CurrentDay)
+		// C-CAL-GM-PANEL-REWORK D (deferred audit finding): bound the absolute
+		// set against the calendar's real structure so a GM PUT can't persist an
+		// out-of-range month/day (e.g. month:999). UpdateCalendar only enforces
+		// the >=1 lower bounds; the month-count / day-count upper bounds need the
+		// months loaded.
+		months, merr := s.repo.GetMonths(ctx, calendarID)
+		if merr != nil {
+			return fmt.Errorf("get months: %w", merr)
+		}
+		cal.Months = months
+		if len(months) > 0 {
+			if newMonth < 1 || newMonth > len(months) {
+				return apperror.NewValidation("month is out of range for this calendar")
+			}
+			if md := cal.MonthDays(newMonth-1, newYear); newDay < 1 || newDay > md {
+				return apperror.NewValidation("day is out of range for that month")
+			}
+		}
 		if err := s.UpdateCalendar(ctx, calendarID, UpdateCalendarInput{
 			Name:             cal.Name,
 			Description:      cal.Description,
 			EpochName:        cal.EpochName,
 			Mode:             cal.Mode,
-			CurrentYear:      derefOr(t.Year, cal.CurrentYear),
-			CurrentMonth:     derefOr(t.Month, cal.CurrentMonth),
-			CurrentDay:       derefOr(t.Day, cal.CurrentDay),
+			CurrentYear:      newYear,
+			CurrentMonth:     newMonth,
+			CurrentDay:       newDay,
 			CurrentHour:      derefOr(t.Hour, cal.CurrentHour),
 			CurrentMinute:    derefOr(t.Minute, cal.CurrentMinute),
 			HoursPerDay:      cal.HoursPerDay,
@@ -282,4 +319,24 @@ func derefOr(p *int, fallback int) int {
 		return *p
 	}
 	return fallback
+}
+
+// validateAdvanceMagnitude bounds a GM relative advance so one PUT can't spin
+// advanceClock's day loop for an unbounded count (C-CAL-GM-PANEL-REWORK D —
+// resolves the deferred audit DoS finding). Mirrors the V1 advance clamp:
+// ±10 years of days, ±10 years of hours/minutes. Real GM verbs (±1 day, +8h)
+// are far inside these bounds.
+func validateAdvanceMagnitude(a *WorldStateAdvance) error {
+	const maxDays, maxHours, maxMinutes = 3650, 87600, 5256000
+	if absInt(a.Days) > maxDays || absInt(a.Hours) > maxHours || absInt(a.Minutes) > maxMinutes {
+		return apperror.NewValidation("advance amount is out of range")
+	}
+	return nil
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
