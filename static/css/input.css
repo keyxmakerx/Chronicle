@@ -473,6 +473,15 @@
     transform: translateY(-2px);
   }
 
+  /* .card-elev-static — C-CAL-VISUAL-POLISH-1 B: the resting elevation of
+   * .card-elev WITHOUT the hover-lift / drag transform. For BIG containers
+   * (the month/week/day grids) where a whole-surface hover-lift is wrong —
+   * that lift is meant for small cards (popovers, nav, switcher, event cards),
+   * which keep .card-elev. */
+  .card-elev-static {
+    box-shadow: var(--elev-resting);
+  }
+
 
   /* ---- Form Inputs ---- */
   .input {

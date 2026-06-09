@@ -422,7 +422,9 @@ templ calendarV2ViewPill(data CalendarV2ViewData, view, label string) {
 // replaces the empty event slots with the event-card composite.
 // Today highlight + rest-day tint come for free via per-cell classes.
 templ monthViewPlaceholder(data CalendarV2ViewData) {
-	<div class="card card-elev p-4">
+	// C-CAL-VISUAL-POLISH-1 B: static elevation (no whole-grid hover-lift; that
+	// lift is for small cards). Small popover/nav/switcher cards keep card-elev.
+	<div class="card card-elev-static p-4">
 		<div class="flex items-center justify-between mb-3">
 			<h2 class="text-lg font-semibold text-fg">
 				{ monthHeading(data) }
@@ -566,7 +568,7 @@ templ monthDayCell(data CalendarV2ViewData, day monthDay) {
 // = calendar's weekday count; rows = hours-per-day. Timed events
 // position via CSS grid-row; all-day events fill the top strip.
 templ weekViewPlaceholder(data CalendarV2ViewData) {
-	<div class="card card-elev p-4" data-week-view="true">
+	<div class="card card-elev-static p-4" data-week-view="true">
 		<div class="flex items-center justify-between mb-3">
 			<h2 class="text-lg font-semibold text-fg">{ weekHeading(data) }</h2>
 			<div class="flex items-center gap-1">
@@ -790,7 +792,7 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 // Events with time render full-width via the standard density;
 // all-day events render in the top strip.
 templ dayViewPlaceholder(data CalendarV2ViewData) {
-	<div class="card card-elev p-4" data-day-view="true">
+	<div class="card card-elev-static p-4" data-day-view="true">
 		<div class="flex items-center justify-between mb-3">
 			<h2 class="text-lg font-semibold text-fg">{ dayHeading(data) }</h2>
 			<div class="flex items-center gap-1">
