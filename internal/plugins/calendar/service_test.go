@@ -1263,6 +1263,11 @@ func TestSearchCalendarEvents_Success(t *testing.T) {
 	if results[0]["type_name"] != "Event" {
 		t.Errorf("expected type_name 'Event', got %q", results[0]["type_name"])
 	}
+	// C-CAL-V1-V2-CUTOVER: the search result deep-links to the V2 shell, not the
+	// retired V1 view.
+	if want := "/campaigns/camp-1/calendar/v2/cal-1"; results[0]["url"] != want {
+		t.Errorf("search url = %q, want %q (V2 shell)", results[0]["url"], want)
+	}
 }
 
 // --- SetSeasons Tests ---

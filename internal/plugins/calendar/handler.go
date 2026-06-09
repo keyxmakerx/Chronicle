@@ -624,10 +624,9 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	// months, weekdays, etc. Real-life mode goes straight to the calendar — the
 	// V2 shell (C-WIDGET-BINDING-QA1 Bug 1: was landing on the old V1 view, which
 	// is missing the V2 worldstate features/animations). The fantasy →settings
-	// step is mode-agnostic (the settings editor, not the V1 view). NOTE: the
-	// full V1→V2 cutover (the V1 /calendars/:calId view + its many internal links,
-	// the /calendars Index redirect, the app-dashboard "Open" link) is flagged as
-	// a separate dispatch — this fixes the create LANDING only.
+	// step is mode-agnostic (the settings editor, not the V1 view). The full
+	// V1→V2 cutover (C-CAL-V1-V2-CUTOVER) since 301'd every V1 view route to V2,
+	// so the settings landing below is itself a preserved route, not a V1 view.
 	if mode == ModeRealLife {
 		return c.Redirect(http.StatusSeeOther,
 			fmt.Sprintf("/campaigns/%s/calendar/v2/%s", cc.Campaign.ID, cal.ID))
