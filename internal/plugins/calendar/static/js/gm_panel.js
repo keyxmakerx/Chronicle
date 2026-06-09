@@ -28,6 +28,18 @@
         var url = '/campaigns/' + campaignID + '/calendar/world-state' +
             (calendarID ? '?calendarId=' + calendarID : '');
 
+        // C-CAL-SKY-COMPLETION C: as the DM advances the day/time, briefly fade
+        // the card translucent so the living sky animates THROUGH it, then
+        // restore. GPU-only (opacity), and skipped entirely under reduced-motion.
+        var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if (!reduceMotion) panel.style.transition = 'opacity 300ms ease';
+        function flashTranslucentForTransition() {
+            if (reduceMotion) return; // no fade under reduced-motion
+            panel.style.opacity = '0.42';
+            clearTimeout(panel.__gmFadeTimer);
+            panel.__gmFadeTimer = setTimeout(function () { panel.style.opacity = ''; }, 900);
+        }
+
         // PUT a writable world-state slice, then re-render the band from the
         // authoritative response seed (or reload as a fallback).
         function commit(body, btn) {
@@ -64,6 +76,7 @@
         // --- Advance verbs (signed; rollover server-side) ---
         panel.querySelectorAll('[data-gm-advance]').forEach(function (btn) {
             btn.addEventListener('click', function () {
+                flashTranslucentForTransition();
                 commit({
                     advance: {
                         days: parseInt(btn.dataset.gmDays || '0', 10) || 0,
@@ -78,6 +91,7 @@
         var setTimeBtn = panel.querySelector('[data-gm-set-time]');
         if (setTimeBtn) {
             setTimeBtn.addEventListener('click', function () {
+                flashTranslucentForTransition();
                 commit({ time: { hour: num('[data-gm-time-hour]', 0), minute: num('[data-gm-time-minute]', 0) } }, setTimeBtn);
             });
         }
@@ -86,6 +100,7 @@
         var setDateBtn = panel.querySelector('[data-gm-set-date]');
         if (setDateBtn) {
             setDateBtn.addEventListener('click', function () {
+                flashTranslucentForTransition();
                 commit({
                     time: {
                         year: num('[data-gm-date-year]', 0),
