@@ -21,6 +21,91 @@
 (function () {
     'use strict';
 
+    // dayRange normalizes a drag from startDay→endDay into an ordered span:
+    // a single cell (start === end) is a single-day add; otherwise a multi-day
+    // range. Pure (exposed for tests). C-CAL-INTERACTIONS.
+    function dayRange(startDay, endDay) {
+        var lo = Math.min(startDay, endDay), hi = Math.max(startDay, endDay);
+        return { startDay: lo, endDay: hi, multi: lo !== hi };
+    }
+    if (typeof window !== 'undefined') window.__calDayRange = dayRange;
+
+    // _openDrawer is the LIVE drawer-opener, refreshed by each init() so the
+    // document-level drag-create (wired once) always calls the current closure.
+    var _openDrawer = null;
+    var _dayDragWired = false;
+
+    // wireDayDragCreateOnce installs the drag-to-create / multiselect on the
+    // month grid ONCE (document-level + live DOM queries), so it survives
+    // boosted-nav re-inits without leaking listeners (the QA2/E8 class). A
+    // pointerdown on an empty Scribe cell starts a day-range selection; dragging
+    // across cells highlights the span; release opens the editor pre-filled
+    // (single cell → single day, multi → multi-day end date).
+    function wireDayDragCreateOnce() {
+        if (_dayDragWired || typeof document === 'undefined') return;
+        _dayDragWired = true;
+        var sel = null;
+        function addableCell(target) {
+            if (!target || !target.closest) return null;
+            var cell = target.closest('.cell-drop-target');
+            if (!cell || !cell.querySelector('[data-cell-add-event]')) return null; // empty Scribe cell
+            if (target.closest('[data-event-card], a, button')) return null;        // not a card / + / overflow
+            return cell;
+        }
+        function highlight(lo, hi) {
+            document.querySelectorAll('.cell-drop-target').forEach(function (c) {
+                var d = parseInt(c.dataset.cellDay, 10);
+                var on = !isNaN(d) && d >= lo && d <= hi;
+                c.classList.toggle('ring-2', on);
+                c.classList.toggle('ring-accent', on);
+            });
+        }
+        function clearHighlight() {
+            document.querySelectorAll('.cell-drop-target.ring-accent').forEach(function (c) {
+                c.classList.remove('ring-2', 'ring-accent');
+            });
+        }
+        document.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0) return;
+            var cell = addableCell(e.target);
+            if (!cell) return;
+            var day = parseInt(cell.dataset.cellDay, 10);
+            if (isNaN(day)) return;
+            sel = {
+                year: parseInt(cell.dataset.cellYear, 10),
+                month: parseInt(cell.dataset.cellMonth, 10),
+                startDay: day, curDay: day,
+            };
+            highlight(day, day);
+        });
+        document.addEventListener('pointermove', function (e) {
+            if (!sel) return;
+            var el = document.elementFromPoint(e.clientX, e.clientY);
+            var cell = el && el.closest ? el.closest('.cell-drop-target') : null;
+            if (!cell) return;
+            var d = parseInt(cell.dataset.cellDay, 10);
+            if (isNaN(d) || d === sel.curDay) return;
+            sel.curDay = d;
+            var r = dayRange(sel.startDay, d);
+            highlight(r.startDay, r.endDay);
+        });
+        document.addEventListener('pointerup', function () {
+            if (!sel) return;
+            var s = sel; sel = null;
+            clearHighlight();
+            if (!_openDrawer) return;
+            var r = dayRange(s.startDay, s.curDay);
+            if (r.multi) {
+                _openDrawer({
+                    year: s.year, month: s.month, day: r.startDay,
+                    end_year: s.year, end_month: s.month, end_day: r.endDay,
+                });
+            } else {
+                _openDrawer({ year: s.year, month: s.month, day: r.startDay });
+            }
+        });
+    }
+
     function init() {
         var root = document.querySelector('[data-cal-v2-root]');
         if (!root) return;
@@ -114,6 +199,22 @@
                 if (el.type === 'checkbox') el.checked = Boolean(value);
                 else el.value = (value === undefined || value === null) ? '' : value;
             });
+            // C-CAL-INTERACTIONS: reflect a multi-day prefill (a drag-create range
+            // or an existing multi-day event) — show the end-date fields + check
+            // the toggle when an end date is present and differs from the start.
+            syncMultiday(hasEndDate(item));
+        }
+
+        // --- Multi-day (end-date) toggle ---------------------------------
+        function multidayToggle() { return drawer.querySelector('[data-multiday-toggle]'); }
+        function syncMultiday(on) {
+            var t = multidayToggle(), f = drawer.querySelector('[data-multiday-fields]');
+            if (t) t.checked = !!on;
+            if (f) f.classList.toggle('hidden', !on);
+        }
+        function hasEndDate(item) {
+            return !!(item && item.end_day != null &&
+                (item.end_year !== item.year || item.end_month !== item.month || item.end_day !== item.day));
         }
 
         function readDrawer() {
@@ -129,6 +230,15 @@
                     if (v !== '') body[field] = v;
                 }
             });
+            // C-CAL-INTERACTIONS: the end-date span only persists when the
+            // multi-day toggle is on — otherwise drop any stale end_* so a
+            // single-day event never carries a leftover span.
+            var mt = multidayToggle();
+            if (!mt || !mt.checked) {
+                delete body.end_year;
+                delete body.end_month;
+                delete body.end_day;
+            }
             // Pull the visibility editor state into the body.
             var vis = readVisibilityEditor();
             body.visibility = vis.mode === 'public' ? 'everyone' : 'dm_only';
@@ -551,23 +661,20 @@
             });
         });
 
-        // Discoverable day selection (C-CAL-V2-MONTH-GRID-ALIGN-FIX #3): make the
-        // WHOLE empty (Scribe) day cell clickable to add an event — not only the
-        // small +. A cell is add-enabled iff it carries the add button (which the
-        // template renders for Scribe+ on days with no events). Clicks on an
-        // event card / button / link are ignored so edit + overflow still work.
+        // Add-enabled (empty Scribe) cells get the pointer cursor. The
+        // drag-create selector (wired ONCE below) handles BOTH a single click
+        // (single-day add — C-CAL-V2-MONTH-GRID-ALIGN-FIX #3) and a drag across
+        // cells (a multi-day range = the operator's "multiselect days").
         document.querySelectorAll('.cell-drop-target').forEach(function (cell) {
-            if (!cell.querySelector('[data-cell-add-event]')) return;
-            cell.classList.add('cursor-pointer');
-            cell.addEventListener('click', function (e) {
-                if (e.target.closest('[data-event-card], button, a')) return;
-                openDrawer({
-                    year: parseInt(cell.dataset.cellYear, 10),
-                    month: parseInt(cell.dataset.cellMonth, 10),
-                    day: parseInt(cell.dataset.cellDay, 10),
-                });
-            });
+            if (cell.querySelector('[data-cell-add-event]')) cell.classList.add('cursor-pointer');
         });
+        // Multi-day end-date fields show/hide with their toggle.
+        var mtoggle = drawer && drawer.querySelector('[data-multiday-toggle]');
+        if (mtoggle) mtoggle.addEventListener('change', function () { syncMultiday(mtoggle.checked); });
+        // Expose the live openDrawer to the document-level drag-create (wired
+        // once so it never leaks listeners across boosted-nav re-inits).
+        _openDrawer = openDrawer;
+        wireDayDragCreateOnce();
 
         // --- Drag-to-reschedule via existing PUT endpoint --
 

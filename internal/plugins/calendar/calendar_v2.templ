@@ -709,6 +709,35 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 						<input type="number" min="1" class="input text-sm w-full" data-field="day"/>
 					</div>
 				</div>
+				// Multi-day span (C-CAL-INTERACTIONS): drag-across-cells on the
+				// month grid pre-fills this; a single-day event leaves it off.
+				// `data-field-multiday` (not data-field) so the toggle isn't sent
+				// as a body field; the end-date inputs use data-field so readDrawer
+				// picks them up (gated by the toggle).
+				<div>
+					<label class="flex items-center gap-2 text-xs text-fg-secondary cursor-pointer">
+						<input type="checkbox" data-field-multiday data-multiday-toggle/>
+						<span>Multi-day event</span>
+					</label>
+					<div class="grid grid-cols-3 gap-2 mt-2 hidden" data-multiday-fields>
+						<div>
+							<label class="block text-[10px] text-fg-secondary mb-1">End year</label>
+							<input type="number" class="input text-sm w-full" data-field="end_year"/>
+						</div>
+						<div>
+							<label class="block text-[10px] text-fg-secondary mb-1">End month</label>
+							<select class="input text-sm w-full" data-field="end_month">
+								for i, m := range data.ActiveCalendar.Months {
+									<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
+								}
+							</select>
+						</div>
+						<div>
+							<label class="block text-[10px] text-fg-secondary mb-1">End day</label>
+							<input type="number" min="1" class="input text-sm w-full" data-field="end_day"/>
+						</div>
+					</div>
+				</div>
 				<div>
 					<label class="block text-xs font-medium text-fg-secondary mb-1">Category</label>
 					<select class="input text-sm w-full" data-field="category">
