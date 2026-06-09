@@ -1693,7 +1693,12 @@
             ['sun-bloom'] in cal-almanac.js (unchanged).
    ================================================================= */
 .cal-almanac-sun {
-  --cal-sun-size: 180px;
+  /* C-CAL-VISUAL-POLISH-1 A: the prod worldstate band is 200px tall, so the
+   * demo's 180px sun was oversized there. Default to a band-appropriate size;
+   * the /demo showcase (a much larger canvas) keeps 180px via the shell-scoped
+   * override below. NOTE: this block was already UN-scoped (W1/#429) — the
+   * de-scope the dispatch expected was in place; the real issue was the size. */
+  --cal-sun-size: 100px;
   position: absolute;
   width: var(--cal-sun-size);
   height: var(--cal-sun-size);
@@ -1706,6 +1711,9 @@
   pointer-events: auto;        /* re-enable: this IS the drag handle */
   color: oklch(0.86 0.16 78);  /* default sun gold (recolors the icon) */
 }
+/* The /demo showcase canvas is far larger than the 200px prod band — keep its
+ * tuned 180px sun (higher specificity wins inside .cal-almanac-shell). */
+.cal-almanac-shell .cal-almanac-sun { --cal-sun-size: 180px; }
 .cal-almanac-sun:active { cursor: grabbing; }
 /* Inline icon layers stack; only the matching state's icon is visible. */
 .cal-almanac-sun__icon {
