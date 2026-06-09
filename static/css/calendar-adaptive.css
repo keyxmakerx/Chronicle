@@ -1,0 +1,35 @@
+/* calendar-adaptive.css — C-CAL-DASHBOARD-W5d.
+ *
+ * The calendar widget renders by its CONTAINER's available width, not the page:
+ * compact by default (narrow container), full when the container is roomy. This
+ * is the "same widget, any host" adaptive principle from master plan §8 — pure
+ * CSS container queries, no JS. It is LAYOUT, not motion, so reduced-motion is
+ * not applicable.
+ *
+ * A host marks its container with `.cal-adaptive` (sets container-type) and
+ * renders BOTH the `__compact` and `__full` subtrees; the query below picks one.
+ * Threshold 380px: a dashboard card in a 3-column grid (~300px) stays compact;
+ * a full-width placement (entity embed, 1-column card) flips to full.
+ */
+
+.cal-adaptive {
+  container-type: inline-size;
+  container-name: cal-widget;
+}
+
+/* Default (and where container queries are unsupported): compact only. */
+.cal-adaptive__full {
+  display: none;
+}
+.cal-adaptive__compact {
+  display: block;
+}
+
+@container cal-widget (min-width: 380px) {
+  .cal-adaptive__full {
+    display: block;
+  }
+  .cal-adaptive__compact {
+    display: none;
+  }
+}

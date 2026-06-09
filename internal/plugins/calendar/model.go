@@ -34,6 +34,24 @@ type UpdateCalendarVisibilityInput struct {
 	VisibilityRules *string `json:"visibility_rules"`
 }
 
+// CalendarEventDate is a lightweight (calendar, date, name) tuple from the W5d
+// batch upcoming read — kept minimal so the cross-calendar query stays cheap.
+type CalendarEventDate struct {
+	CalendarID string
+	Year       int
+	Month      int
+	Day        int
+	Name       string
+}
+
+// CalendarUpcoming is a calendar's next upcoming event + a short agenda
+// (C-CAL-DASHBOARD-W5d), computed from the batch read relative to that
+// calendar's own current date. Next is nil when the calendar has none upcoming.
+type CalendarUpcoming struct {
+	Next   *CalendarEventDate
+	Agenda []CalendarEventDate
+}
+
 // Calendar mode constants.
 const (
 	// ModeFantasy indicates a fully custom fantasy calendar.
