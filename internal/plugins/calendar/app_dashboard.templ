@@ -34,7 +34,7 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 					<p class="text-sm text-fg-secondary mt-1">Manage this campaign&#39;s calendars and see what&#39;s linked to each.</p>
 				</div>
 				if data.IsOwner {
-					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) } class="btn-primary text-sm">
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", cc.Campaign.ID)) } class="btn-primary text-sm">
 						<i class="fa-solid fa-plus mr-1" aria-hidden="true"></i> New calendar
 					</a>
 				}
@@ -498,7 +498,7 @@ templ calendarAppDashboardTimelinePreview(campaignID string, tl TimelineRef) {
 templ calendarAppDashboardActions(data CalendarAppDashboardData) {
 	<div class="flex flex-wrap items-center gap-2">
 		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", data.CampaignID, data.Selected.ID)) }
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2/%s", data.CampaignID, data.Selected.ID)) }
 			class="btn-secondary text-xs"
 		>
 			<i class="fa-solid fa-up-right-from-square mr-1" aria-hidden="true"></i>Open calendar
@@ -605,7 +605,7 @@ templ calendarAppDashboardEmpty(campaignID string, isOwner bool) {
 		if isOwner {
 			<p class="text-sm font-medium text-fg mb-1">No calendars yet</p>
 			<p class="text-xs text-fg-secondary mb-4">Create a calendar to track in-world dates, events, and eras.</p>
-			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID)) } class="btn-primary text-sm">
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) } class="btn-primary text-sm">
 				<i class="fa-solid fa-plus mr-1" aria-hidden="true"></i>Create calendar
 			</a>
 		} else {

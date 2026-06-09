@@ -171,6 +171,7 @@ GET	/calendars/:calId/upcoming	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/weather/zones	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/week	internal/plugins/calendar/routes.go
 GET	/calendars/embed	internal/plugins/calendar/routes.go
+GET	/calendars/new	internal/plugins/calendar/routes.go
 GET	/calendars/upcoming	internal/plugins/calendar/routes.go
 GET	/campaigns	internal/plugins/admin/routes.go
 GET	/campaigns	internal/plugins/campaigns/routes.go

@@ -72,7 +72,7 @@
             '<i class="fa-solid fa-xmark"></i>' +
           '</button>' +
         '</div>' +
-        '<a href="/campaigns/' + encodeURIComponent(this.campaignId) + '/calendars" ' +
+        '<a href="/campaigns/' + encodeURIComponent(this.campaignId) + '/calendar/v2" ' +
            'class="text-xs text-accent hover:underline">' +
           '<i class="fa-solid fa-arrow-right mr-1"></i>Edit in Calendar' +
         '</a>';

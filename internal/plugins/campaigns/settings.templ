@@ -812,7 +812,8 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 func pluginURL(campaignID, slug string) string {
 	switch slug {
 	case "calendar":
-		return fmt.Sprintf("/campaigns/%s/calendars", campaignID)
+		// C-CAL-V1-V2-CUTOVER: the calendar's main page is now the V2 shell.
+		return fmt.Sprintf("/campaigns/%s/calendar/v2", campaignID)
 	case "maps":
 		return fmt.Sprintf("/campaigns/%s/maps", campaignID)
 	case "timeline":

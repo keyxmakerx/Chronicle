@@ -21,6 +21,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 
 	// Calendar creation + import from setup (Owner only).
+	// C-CAL-V1-V2-CUTOVER: /calendars/new is the stable setup-chooser route.
+	// Index now 301s any campaign WITH calendars to V2, so the "New calendar"
+	// affordances (+ V2's empty state) need a dedicated GET to add an additional
+	// calendar without bouncing through the redirect. Static segment, so it wins
+	// over /calendars/:calId in Echo's router.
+	cg.GET("/calendars/new", h.ShowSetup, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars", h.CreateCalendar, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/import-setup", h.ImportFromSetupAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
@@ -96,13 +102,20 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "calendar"),
 	)
+	// C-CAL-V1-V2-CUTOVER: the V1 calendar VIEW routes 301 to V2 (full parity,
+	// W1 fixed week/day). Index keeps its 0-calendar setup branch (no V2 create
+	// flow yet) and 301s any campaign WITH calendars to V2. Show/week/day are
+	// thin redirects. The shared API/data routes above are unchanged (V2's
+	// backend). PRESERVED (no V2 equivalent yet): the TIMELINE (Timeline V2 is a
+	// deferred arc) and the standalone EMBED page — both kept until their V2
+	// surfaces exist.
 	pub.GET("/calendars", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId/timeline", h.ShowTimeline, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId/week", h.ShowWeek, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId/day", h.ShowDay, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendars/:calId", h.RedirectShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireRole(campaigns.RolePlayer)) // PRESERVE: no V2 embed
+	pub.GET("/calendars/:calId/timeline", h.ShowTimeline, campaigns.RequireRole(campaigns.RolePlayer)) // PRESERVE: Timeline V2 deferred
+	pub.GET("/calendars/:calId/week", h.RedirectWeekV2, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendars/:calId/day", h.RedirectDayV2, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendars/:calId/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer)) // PRESERVE: fragment loader
 
 	// Dashboard block routes: no calId, handlers fall back to default calendar.
 	pub.GET("/calendars/embed", h.EmbedCalendar, campaigns.RequireRole(campaigns.RolePlayer))
@@ -164,9 +177,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/calendar/v2/:calId/settings/:resource", h.ShowV2SubresourceSettings, campaigns.RequireRole(campaigns.RolePlayer))
 }
 
-// legacyRedirect handles the old /campaigns/:id/calendar route by redirecting
-// to the new /campaigns/:id/calendars path. Preserves bookmarks and external links.
+// legacyRedirect 301s the bare /campaigns/:id/calendar to V2 (C-CAL-V1-V2-
+// CUTOVER — was → V1 /calendars). V2 resolves the active calendar (or shows the
+// empty-state setup link). Preserves bookmarks + external links.
 func (h *Handler) legacyRedirect(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	return c.Redirect(301, "/campaigns/"+cc.Campaign.ID+"/calendars")
+	return c.Redirect(301, "/campaigns/"+cc.Campaign.ID+"/calendar/v2")
 }

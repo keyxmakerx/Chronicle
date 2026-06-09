@@ -26,7 +26,7 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, data CalendarV2V
 				<p class="text-sm font-medium text-fg mb-1">No calendar yet</p>
 				<p class="text-xs text-fg-secondary mb-3">Create a calendar to show world dates + this page's linked events here.</p>
 				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID)) }
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) }
 					class="btn-primary text-sm"
 				>
 					<i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Create calendar
