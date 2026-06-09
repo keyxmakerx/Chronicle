@@ -32,6 +32,10 @@ type CalendarService interface {
 	UpdateCalendar(ctx context.Context, calendarID string, input UpdateCalendarInput) error
 	DeleteCalendar(ctx context.Context, calendarID string) error
 	ListCalendars(ctx context.Context, campaignID string) ([]Calendar, error)
+	// ListVisibleCalendars is ListCalendars filtered to the calendars the
+	// viewer may see (C-CAL-DASHBOARD-W5a). Owner/co-DM see all; others see
+	// only calendars whose per-calendar visibility admits them.
+	ListVisibleCalendars(ctx context.Context, campaignID string, role int, userID string) ([]Calendar, error)
 	SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error
 
 	// Active-calendar resolution (V2 Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
@@ -41,6 +45,11 @@ type CalendarService interface {
 	// zero calendars. SwitchActiveCalendar validates that the target
 	// calendar belongs to the campaign before persisting.
 	GetActiveCalendar(ctx context.Context, userID, campaignID string) (*Calendar, error)
+	// GetActiveVisibleCalendar is GetActiveCalendar that never returns a
+	// calendar the viewer may not see (C-CAL-DASHBOARD-W5a): if their active /
+	// default calendar is hidden from them, it falls back to the first calendar
+	// they can see. Owner/co-DM are unaffected (they see all).
+	GetActiveVisibleCalendar(ctx context.Context, campaignID string, role int, userID string) (*Calendar, error)
 	SwitchActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error
 
 	// Sidebar pin preference (V2 Wave 1.7A §G). Default TRUE on
@@ -604,6 +613,17 @@ func (s *calendarService) ListCalendars(ctx context.Context, campaignID string) 
 	return cals, nil
 }
 
+// ListVisibleCalendars returns only the campaign's calendars the viewer may
+// see (C-CAL-DASHBOARD-W5a). Campaign-scoped via ListByCampaignID; visibility
+// enforced in the service layer (not UI-only). Owner/co-DM get all.
+func (s *calendarService) ListVisibleCalendars(ctx context.Context, campaignID string, role int, userID string) ([]Calendar, error) {
+	cals, err := s.ListCalendars(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	return filterCalendarsByUser(cals, role, userID), nil
+}
+
 // SetDefaultCalendar marks a calendar as the campaign's default, unsetting all others.
 func (s *calendarService) SetDefaultCalendar(ctx context.Context, campaignID, calendarID string) error {
 	// Verify the calendar belongs to this campaign (IDOR protection).
@@ -666,6 +686,30 @@ func (s *calendarService) GetActiveCalendar(ctx context.Context, userID, campaig
 		return nil, nil
 	}
 	return &list[0], nil
+}
+
+// GetActiveVisibleCalendar resolves the viewer's active calendar but never
+// returns one they may not see (C-CAL-DASHBOARD-W5a). If their active/default
+// calendar is hidden from them, it falls back to the first calendar they can
+// see. Owner/co-DM are unaffected (calendarVisibleTo passes for them).
+func (s *calendarService) GetActiveVisibleCalendar(ctx context.Context, campaignID string, role int, userID string) (*Calendar, error) {
+	cal, err := s.GetActiveCalendar(ctx, userID, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if cal != nil && calendarVisibleTo(cal, role, userID) {
+		return cal, nil
+	}
+	// Active/default calendar is hidden from this viewer — fall back to the
+	// first calendar they can see (nil if none).
+	visible, err := s.ListVisibleCalendars(ctx, campaignID, role, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(visible) == 0 {
+		return nil, nil
+	}
+	return &visible[0], nil
 }
 
 // SwitchActiveCalendar persists the user's calendar choice. Validates
@@ -1837,6 +1881,38 @@ func (s *calendarService) ListAllEvents(ctx context.Context, calendarID string) 
 }
 
 // --- Visibility Helpers ---
+
+// calendarVisibleTo reports whether a viewer may see a calendar
+// (C-CAL-DASHBOARD-W5a). Owner/co-DM (CanSeeDmOnly) and the system context
+// (empty userID) always pass; otherwise the calendar's own visibility + rules
+// decide, via the SAME resolver events use (canUserView). Calendar visibility
+// and event visibility compose: this gates the calendar; events inside a
+// visible calendar are still filtered by filterEventsByUser.
+func calendarVisibleTo(cal *Calendar, role int, userID string) bool {
+	if cal == nil {
+		return false
+	}
+	if permissions.CanSeeDmOnly(role) || userID == "" {
+		return true
+	}
+	return canUserView(cal.Visibility, cal.VisibilityRules, role, userID)
+}
+
+// filterCalendarsByUser drops the calendars a viewer may not see, mirroring
+// filterEventsByUser exactly (C-CAL-DASHBOARD-W5a). Owner/co-DM or the system
+// context get the list unchanged.
+func filterCalendarsByUser(cals []Calendar, role int, userID string) []Calendar {
+	if permissions.CanSeeDmOnly(role) || userID == "" {
+		return cals
+	}
+	filtered := cals[:0]
+	for _, c := range cals {
+		if canUserView(c.Visibility, c.VisibilityRules, role, userID) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
 
 // filterEventsByUser applies per-user visibility rules to a slice of events.
 // Owners always see everything and are not filtered.

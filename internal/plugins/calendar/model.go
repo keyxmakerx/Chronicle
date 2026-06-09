@@ -59,6 +59,13 @@ type Calendar struct {
 	// page-load read, so plain nullable columns suffice.
 	MoodTintColor     *string  `json:"mood_tint_color,omitempty"`
 	MoodTintIntensity *float64 `json:"mood_tint_intensity,omitempty"`
+	// Per-calendar visibility (C-CAL-DASHBOARD-W5a, migration 010). Mirrors the
+	// event model: Visibility is "everyone" | "dm_only"; VisibilityRules is the
+	// optional {allowed_users,denied_users} JSON allow/deny override. Default
+	// "everyone" = visible to all members (the DB default; existing calendars
+	// unaffected). Resolved by canUserView / filterCalendarsByUser.
+	Visibility      string  `json:"visibility"`
+	VisibilityRules *string `json:"visibility_rules,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 
