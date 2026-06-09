@@ -129,6 +129,24 @@ func (h *Handler) requireCalendarInCampaign(c echo.Context, calendarID, campaign
 	return middleware.RequireInCampaign(c.Request().Context(), h.svc.GetCalendarByID, calendarID, campaignID, "calendar")
 }
 
+// requireVisibleCalendar is requireCalendarInCampaign plus a per-calendar
+// visibility check (C-CAL-DASHBOARD-W5a): a viewer who may not see the calendar
+// gets NotFound — identical to a missing calendar, so a hidden calendar's
+// existence never leaks to a player who guesses its ID. Owner/co-DM always
+// pass. Use on player-reachable calendar-by-ID surfaces; owner-gated management
+// routes keep requireCalendarInCampaign.
+func (h *Handler) requireVisibleCalendar(c echo.Context, calendarID, campaignID string) (*Calendar, error) {
+	cal, err := h.requireCalendarInCampaign(c, calendarID, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	cc := campaigns.GetCampaignContext(c)
+	if !calendarVisibleTo(cal, cc.VisibilityRole(), auth.GetUserID(c)) {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return cal, nil
+}
+
 // Index lists all calendars for a campaign. If none exist, shows the setup page.
 // If exactly one exists, redirects to that calendar's detail view.
 // GET /campaigns/:id/calendars

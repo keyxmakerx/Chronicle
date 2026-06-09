@@ -170,7 +170,7 @@ const calendarCols = `id, campaign_id, mode, name, description, epoch_name, curr
         current_month, current_day, hours_per_day, minutes_per_hour, seconds_per_minute,
         current_hour, current_minute, leap_year_every, leap_year_offset,
         sort_order, is_default, created_at, updated_at,
-        mood_tint_color, mood_tint_intensity`
+        mood_tint_color, mood_tint_intensity, visibility, visibility_rules`
 
 // scanCalendar reads a row into a Calendar struct.
 func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
@@ -183,7 +183,8 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 		&cal.LeapYearEvery, &cal.LeapYearOffset,
 		&cal.SortOrder, &cal.IsDefault,
 		&cal.CreatedAt, &cal.UpdatedAt,
-		&cal.MoodTintColor, &cal.MoodTintIntensity)
+		&cal.MoodTintColor, &cal.MoodTintIntensity,
+		&cal.Visibility, &cal.VisibilityRules)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

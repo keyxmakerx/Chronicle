@@ -45,8 +45,10 @@ func (h *Handler) ShowV2(c echo.Context) error {
 	}
 
 	// Load the calendar list once — populates the switcher and lets us
-	// validate `:calId` belongs to the campaign.
-	allCalendars, err := h.svc.ListCalendars(ctx, cc.Campaign.ID)
+	// validate `:calId` belongs to the campaign. W5a: filtered to the
+	// calendars this viewer may see (owners/co-DM get all), so the switcher
+	// never lists a calendar hidden from a player.
+	allCalendars, err := h.svc.ListVisibleCalendars(ctx, cc.Campaign.ID, cc.VisibilityRole(), userID)
 	if err != nil {
 		return err
 	}
@@ -56,13 +58,17 @@ func (h *Handler) ShowV2(c echo.Context) error {
 	//   - otherwise fall through to service-side GetActiveCalendar
 	var active *Calendar
 	if calID != "" {
-		cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+		// W5a: requireVisibleCalendar 404s a calendar hidden from this viewer
+		// (don't leak existence), so a player can't open one by guessing its ID.
+		cal, err := h.requireVisibleCalendar(c, calID, cc.Campaign.ID)
 		if err != nil {
 			return err
 		}
 		active = cal
 	} else {
-		active, err = h.svc.GetActiveCalendar(ctx, userID, cc.Campaign.ID)
+		// W5a: resolve to a calendar the viewer may see — if their active/default
+		// is hidden from them, fall back to their first visible one.
+		active, err = h.svc.GetActiveVisibleCalendar(ctx, cc.Campaign.ID, cc.VisibilityRole(), userID)
 		if err != nil {
 			return err
 		}
