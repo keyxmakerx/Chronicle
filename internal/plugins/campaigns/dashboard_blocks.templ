@@ -295,7 +295,7 @@ templ dashCalendarPreview(cc *CampaignContext, config map[string]any) {
 				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
 			</h2>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2", cc.Campaign.ID)) }
 				class="text-xs text-accent hover:underline"
 			>
 				View calendar
@@ -512,7 +512,7 @@ templ dashCalendarFull(cc *CampaignContext, config map[string]any) {
 				<i class="fa-solid fa-calendar-days mr-1.5"></i>Calendar
 			</h2>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2", cc.Campaign.ID)) }
 				class="text-xs text-accent hover:underline"
 			>
 				Open full page

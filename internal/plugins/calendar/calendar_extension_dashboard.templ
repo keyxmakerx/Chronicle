@@ -39,16 +39,16 @@ templ calendarExtensionDashboard(data calendarExtensionDashboardData) {
 
 // calendarExtensionDashboardEmpty renders the "no calendar
 // configured" branch (zero-calendar campaign). CTA points at the
-// V1 setup page, which is the only working calendar-create flow
-// today (V2 create may not exist yet — surfaced in the Phase 2
-// dispatch stop-and-flag list).
+// V1 setup chooser (/calendars/new — the stable create surface;
+// C-CAL-V1-V2-CUTOVER), still the only working calendar-create
+// flow until a native V2 create ships.
 templ calendarExtensionDashboardEmpty(campaignID string) {
 	<div class="text-center py-8">
 		<i class="fa-solid fa-calendar-plus text-3xl text-accent/70 mb-3" aria-hidden="true"></i>
 		<p class="text-sm text-fg mb-1">No calendar configured for this campaign.</p>
 		<p class="text-xs text-fg-muted mb-4">Create a calendar to track in-world dates, events, seasons, and eras.</p>
 		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID)) }
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) }
 			class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors duration-micro"
 		>
 			<i class="fa-solid fa-plus text-[10px]"></i>

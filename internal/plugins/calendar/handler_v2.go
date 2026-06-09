@@ -187,6 +187,37 @@ func (h *Handler) ShowV2(c echo.Context) error {
 // month when the day exceeds month length. Stops at year-end without
 // rolling over (PR 4 keeps Week-view in a single calendar year; PR 5
 // can refine for year-boundary spans).
+// --- V1 → V2 cutover redirects (C-CAL-V1-V2-CUTOVER) ----------------------
+//
+// The V1 calendar VIEW routes (Show / week / day, and the bare /calendar) 301
+// to their V2 equivalents so every old link + bookmark lands on V2. The V1
+// view handlers/templates are left intact (unrouted) for a follow-on retire —
+// the calendar.templ view tree is large + entangled with the PRESERVED setup /
+// timeline / upcoming surfaces, so deleting it is its own pass. The shared API
+// + data routes (events / settings / world-state / export) are unchanged — V2
+// uses them. The timeline + standalone embed have NO V2 equivalent yet and are
+// preserved (see routes.go).
+
+// v2CalendarRedirect 301s a retired V1 calendar view to V2, preserving :calId
+// and the view segment (month is the V2 default, so "" → /calendar/v2/:calId).
+func (h *Handler) v2CalendarRedirect(c echo.Context, view string) error {
+	cc := campaigns.GetCampaignContext(c)
+	target := "/campaigns/" + cc.Campaign.ID + "/calendar/v2"
+	if calID := c.Param("calId"); calID != "" {
+		target += "/" + calID
+		if view != "" {
+			target += "/" + view
+		}
+	}
+	return c.Redirect(http.StatusMovedPermanently, target)
+}
+
+// RedirectShowV2 / RedirectWeekV2 / RedirectDayV2 are the route targets for the
+// retired V1 view routes.
+func (h *Handler) RedirectShowV2(c echo.Context) error { return h.v2CalendarRedirect(c, "") }
+func (h *Handler) RedirectWeekV2(c echo.Context) error { return h.v2CalendarRedirect(c, "week") }
+func (h *Handler) RedirectDayV2(c echo.Context) error  { return h.v2CalendarRedirect(c, "day") }
+
 func addDaysSimple(cal *Calendar, month, day, n int) (int, int) {
 	// W1 (R3 crash-guard): a calendar resolved without eager-loaded
 	// sub-resources (the no-:calId active path) has zero Months, and the

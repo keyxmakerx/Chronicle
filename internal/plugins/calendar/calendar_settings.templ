@@ -19,7 +19,7 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
 					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s", cc.Campaign.ID, cal.ID)) }
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2/%s", cc.Campaign.ID, cal.ID)) }
 						class="text-fg-muted hover:text-fg transition-colors"
 					>
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

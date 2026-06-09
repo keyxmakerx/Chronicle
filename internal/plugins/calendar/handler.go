@@ -147,8 +147,10 @@ func (h *Handler) requireVisibleCalendar(c echo.Context, calendarID, campaignID 
 	return cal, nil
 }
 
-// Index lists all calendars for a campaign. If none exist, shows the setup page.
-// If exactly one exists, redirects to that calendar's detail view.
+// Index is the V1 calendar entry point. If no calendars exist it shows the
+// setup chooser (the create flow); otherwise it 301s to the V2 shell, which
+// owns the active-calendar + multi-cal switcher views that replaced the V1
+// single/list pages (C-CAL-V1-V2-CUTOVER).
 // GET /campaigns/:id/calendars
 func (h *Handler) Index(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -159,28 +161,38 @@ func (h *Handler) Index(c echo.Context) error {
 		return err
 	}
 
-	// No calendars: show setup page.
+	// No calendars: show the setup chooser (the create flow).
 	if len(cals) == 0 {
-		csrfToken := middleware.GetCSRFToken(c)
-		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
-		}
-		return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
+		return h.renderSetup(c, cc)
 	}
 
-	// Single calendar: redirect directly to it.
-	if len(cals) == 1 {
-		return c.Redirect(http.StatusSeeOther,
-			fmt.Sprintf("/campaigns/%s/calendars/%s", cc.Campaign.ID, cals[0].ID))
-	}
+	// C-CAL-V1-V2-CUTOVER: any campaign WITH calendars goes to V2 — the active
+	// calendar + the multi-cal switcher replace the V1 single/list views. Only
+	// the 0-calendar setup chooser above stays on V1 (no V2 create flow yet; the
+	// V2 empty state links back here). The V1 list templates are retired in a
+	// follow-on.
+	return c.Redirect(http.StatusMovedPermanently,
+		"/campaigns/"+cc.Campaign.ID+"/calendar/v2")
+}
 
-	// Multiple calendars: show list page.
-	isOwner := cc.MemberRole >= campaigns.RoleOwner
+// ShowSetup renders the calendar setup chooser — the stable create-a-calendar
+// entry point. Before the V1→V2 cutover this surface was only reachable via
+// Index when a campaign had zero calendars; now that Index 301s to V2 for any
+// campaign WITH calendars, the "New calendar" affordances (and V2's empty
+// state) need a dedicated route to add an ADDITIONAL calendar without bouncing
+// through the redirect. Owner-gated at the route (creation is Owner-only).
+// GET /campaigns/:id/calendars/new
+func (h *Handler) ShowSetup(c echo.Context) error {
+	return h.renderSetup(c, campaigns.GetCampaignContext(c))
+}
+
+// renderSetup renders the setup chooser as an HTMX fragment or a full page.
+func (h *Handler) renderSetup(c echo.Context, cc *campaigns.CampaignContext) error {
 	csrfToken := middleware.GetCSRFToken(c)
 	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, CalendarListFragment(cc, cals, isOwner, csrfToken))
+		return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
 	}
-	return middleware.Render(c, http.StatusOK, CalendarListPage(cc, cals, isOwner, csrfToken))
+	return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
 }
 
 // Show renders the calendar page (monthly grid view).
@@ -612,10 +624,9 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	// months, weekdays, etc. Real-life mode goes straight to the calendar — the
 	// V2 shell (C-WIDGET-BINDING-QA1 Bug 1: was landing on the old V1 view, which
 	// is missing the V2 worldstate features/animations). The fantasy →settings
-	// step is mode-agnostic (the settings editor, not the V1 view). NOTE: the
-	// full V1→V2 cutover (the V1 /calendars/:calId view + its many internal links,
-	// the /calendars Index redirect, the app-dashboard "Open" link) is flagged as
-	// a separate dispatch — this fixes the create LANDING only.
+	// step is mode-agnostic (the settings editor, not the V1 view). The full
+	// V1→V2 cutover (C-CAL-V1-V2-CUTOVER) since 301'd every V1 view route to V2,
+	// so the settings landing below is itself a preserved route, not a V1 view.
 	if mode == ModeRealLife {
 		return c.Redirect(http.StatusSeeOther,
 			fmt.Sprintf("/campaigns/%s/calendar/v2/%s", cc.Campaign.ID, cal.ID))

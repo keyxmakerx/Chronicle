@@ -31,11 +31,12 @@ func v2PageTitle(data CalendarV2ViewData) string {
 	return data.ActiveCalendar.Name
 }
 
-// v2CreateCalendarHref points to the V1 setup chooser. Until later
-// Wave 1 PRs ship a V2 create flow, the existing setup surface is
-// the create affordance.
+// v2CreateCalendarHref points to the stable V1 setup chooser (/calendars/new).
+// Until a later Wave 1 PR ships a native V2 create flow, the existing setup
+// surface is the create affordance. C-CAL-V1-V2-CUTOVER moved this off the bare
+// /calendars (which now 301s to V2 once any calendar exists).
 func v2CreateCalendarHref(campaignID string) templ.SafeURL {
-	return templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID))
+	return templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID))
 }
 
 // v2ViewHref builds the URL for switching to a different view of the

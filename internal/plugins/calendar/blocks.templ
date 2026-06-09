@@ -26,7 +26,7 @@ templ CalendarEmbedEmpty(cc *campaigns.CampaignContext) {
 		<i class="fa-solid fa-calendar-days text-3xl text-fg-muted mb-3"></i>
 		<p class="text-sm text-fg-secondary mb-2">No calendar configured yet.</p>
 		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", cc.Campaign.ID)) }
 			class="text-sm text-accent hover:underline"
 		>
 			Set up calendar
@@ -83,7 +83,7 @@ templ BlockUpcomingEvents(cc *campaigns.CampaignContext, limit int) {
 				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
 			</h2>
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2", cc.Campaign.ID)) }
 				class="text-xs text-accent hover:underline"
 			>
 				View calendar

@@ -2120,7 +2120,8 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 				"type_name":  typeName,
 				"type_icon":  "fa-calendar",
 				"type_color": "#f59e0b",
-				"url":        fmt.Sprintf("/campaigns/%s/calendars/%s", campaignID, cal.ID),
+				// C-CAL-V1-V2-CUTOVER: search results deep-link to the V2 shell.
+				"url":        fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, cal.ID),
 			})
 		}
 	}
