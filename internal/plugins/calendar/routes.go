@@ -128,7 +128,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// associations panel. Owner-only (management surface, mirrors the
 	// Owner-gated Extensions hub). No :calId in the path — the selected
 	// calendar rides ?calId= so list selection HTMX-swaps the detail pane.
-	cg.GET("/apps/calendar", h.AppDashboard, campaigns.RequireRole(campaigns.RoleOwner))
+	// W5c: Player+ (role-aware) — owners manage all calendars, players see the
+	// read-only card grid of the calendars visible to them (per-calendar
+	// visibility, W5a). The handler branches on role; no data leaks (the
+	// player's list is ListVisibleCalendars and a hidden ?calId is not loaded).
+	cg.GET("/apps/calendar", h.AppDashboard, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// V2 calendar shell (Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
 	// Additive: lives alongside V1 routes during the migration; V1

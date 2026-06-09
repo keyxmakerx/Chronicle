@@ -256,6 +256,14 @@ templ Sidebar() {
 						if IsAddonEnabled(ctx, "npcs") {
 							@sidebarAddonLink(ctx, SidebarItemView{Slug: "npcs", Label: "NPCs", Icon: "fa-users"})
 						}
+						// W5c: the calendar dashboard, like NPCs. Always-on when the
+						// calendar addon is enabled (a per-viewer "has visible calendar"
+						// check would add a DB read to the global layout injector — the
+						// design's approved fallback is always-on + a role-aware
+						// empty-state on the dashboard for players with none shared).
+						if IsAddonEnabled(ctx, "calendar") {
+							@sidebarAddonLink(ctx, SidebarItemView{Slug: "calendar", Label: "Calendar", Icon: "fa-calendar-days"})
+						}
 					}
 				</div>
 
@@ -732,23 +740,26 @@ templ DefaultSidebarNav() {
 
 // addonURLMap maps addon slugs to their sidebar URL paths.
 var addonURLMap = map[string]string{
-	"notes":   "/journal",
-	"npcs":    "/npcs",
-	"armory":  "/armory",
+	"notes":    "/journal",
+	"npcs":     "/npcs",
+	"armory":   "/armory",
+	"calendar": "/apps/calendar", // W5c: the role-aware calendar dashboard
 }
 
 // addonIconMap maps addon slugs to their default icons.
 var addonIconMap = map[string]string{
-	"notes":   "fa-book-open",
-	"npcs":    "fa-users",
-	"armory":  "fa-shield-halved",
+	"notes":    "fa-book-open",
+	"npcs":     "fa-users",
+	"armory":   "fa-shield-halved",
+	"calendar": "fa-calendar-days",
 }
 
 // addonLabelMap maps addon slugs to their display labels.
 var addonLabelMap = map[string]string{
-	"notes":   "Journal",
-	"npcs":    "NPCs",
-	"armory":  "Armory",
+	"notes":    "Journal",
+	"npcs":     "NPCs",
+	"armory":   "Armory",
+	"calendar": "Calendar",
 }
 
 // sidebarDashboardLink renders the Dashboard link in the sidebar.

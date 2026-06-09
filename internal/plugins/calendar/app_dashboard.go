@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sort"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -61,6 +63,9 @@ type CalendarAppDashboardData struct {
 	LoadError  bool           // true → friendly "couldn't load" state
 	IsOwner    bool
 	CSRFToken  string
+	// W5c: the active sort key for the card grid (owner control). "" =
+	// the default (is_default-first, then sort_order).
+	Sort string
 
 	// W2 live "see in action" embeds (C-APPS-CAL-DASH-W2):
 	// SelectedIsActive gates the LIVE worldstate band — the engine binds the
@@ -91,15 +96,28 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 		CampaignID: cc.Campaign.ID,
 		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
 		CSRFToken:  middleware.GetCSRFToken(c),
+		Sort:       normalizeCalendarSort(c.QueryParam("sort")),
 	}
 
-	cals, err := h.svc.ListCalendars(ctx, cc.Campaign.ID)
+	// W5c role-branch: owners manage ALL calendars; players see only the
+	// calendars visible to them (per-calendar visibility, W5a). Enforced in the
+	// service layer (ListVisibleCalendars), not by hiding cards in the view.
+	var (
+		cals []Calendar
+		err  error
+	)
+	if data.IsOwner {
+		cals, err = h.svc.ListCalendars(ctx, cc.Campaign.ID)
+	} else {
+		cals, err = h.svc.ListVisibleCalendars(ctx, cc.Campaign.ID, role, userID)
+	}
 	if err != nil {
 		slog.Warn("calendars dashboard: list failed",
 			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
 		data.LoadError = true
 		return h.renderAppDashboard(c, cc, data)
 	}
+	sortDashboardCalendars(cals, data.Sort)
 	data.Calendars = cals
 
 	// The user's active calendar drives the "active" badge + the default
@@ -119,8 +137,11 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 	}
 	if selID != "" {
 		// Eager-load the full calendar for the detail pane (months for the
-		// date label, eras, etc.). Fall back silently if it's gone.
-		if sel, serr := h.svc.GetCalendarByID(ctx, selID); serr == nil && sel != nil && sel.CampaignID == cc.Campaign.ID {
+		// date label, eras, etc.). Fall back silently if it's gone. W5c: a player
+		// must not open a calendar hidden from them via an explicit ?calId, so the
+		// detail only loads when the viewer may see it (owner/co-DM always can).
+		if sel, serr := h.svc.GetCalendarByID(ctx, selID); serr == nil && sel != nil &&
+			sel.CampaignID == cc.Campaign.ID && calendarVisibleTo(sel, role, userID) {
 			data.Selected = sel
 			data.Entities = h.loadCalendarEntities(ctx, sel.ID)
 			data.Timelines = h.loadCalendarTimelines(ctx, sel.ID, role, userID)
@@ -144,13 +165,55 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 	return h.renderAppDashboard(c, cc, data)
 }
 
-// renderAppDashboard returns the detail fragment for HTMX selection swaps, or
-// the full page otherwise.
+// renderAppDashboard returns a fragment for HTMX swaps (the card grid for a
+// sort change `?grid=1`, else the detail pane for a list selection), or the
+// full page otherwise.
 func (h *Handler) renderAppDashboard(c echo.Context, cc *campaigns.CampaignContext, data CalendarAppDashboardData) error {
 	if middleware.IsHTMX(c) {
+		// W5c: a sort control swaps just the grid section (it carries ?grid=1).
+		if c.QueryParam("grid") == "1" {
+			return middleware.Render(c, 200, calendarAppDashboardGridSection(data))
+		}
 		return middleware.Render(c, 200, calendarAppDashboardDetail(data))
 	}
 	return middleware.Render(c, 200, CalendarAppDashboardPage(cc, data))
+}
+
+// calendarSortKeys are the supported card-grid sort keys (W5c). "" is the
+// default (is_default-first, then sort_order). next-event sort is a follow-up
+// (it needs a per-calendar "soonest upcoming event" batch read).
+var calendarSortKeys = map[string]bool{"": true, "name": true, "created": true, "updated": true}
+
+// normalizeCalendarSort clamps an arbitrary ?sort value to a supported key,
+// defaulting unknown values to "" (the is_default/sort_order order).
+func normalizeCalendarSort(s string) string {
+	if calendarSortKeys[s] {
+		return s
+	}
+	return ""
+}
+
+// sortDashboardCalendars orders the dashboard cards in place (W5c). Default
+// ("") = is_default-first, then sort_order; name = A→Z; created/updated =
+// most-recent first. Stable so equal keys keep their incoming order.
+func sortDashboardCalendars(cals []Calendar, key string) {
+	switch key {
+	case "name":
+		sort.SliceStable(cals, func(i, j int) bool {
+			return strings.ToLower(cals[i].Name) < strings.ToLower(cals[j].Name)
+		})
+	case "created":
+		sort.SliceStable(cals, func(i, j int) bool { return cals[i].CreatedAt.After(cals[j].CreatedAt) })
+	case "updated":
+		sort.SliceStable(cals, func(i, j int) bool { return cals[i].UpdatedAt.After(cals[j].UpdatedAt) })
+	default: // is_default first, then sort_order
+		sort.SliceStable(cals, func(i, j int) bool {
+			if cals[i].IsDefault != cals[j].IsDefault {
+				return cals[i].IsDefault // true sorts before false
+			}
+			return cals[i].SortOrder < cals[j].SortOrder
+		})
+	}
 }
 
 // loadCalendarEntities reads the associated entities, logging+degrading on
