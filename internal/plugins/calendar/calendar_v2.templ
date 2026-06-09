@@ -119,6 +119,7 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 		if data.ActiveCalendar != nil {
 			@shortcutsModalV2()
 			@dayDetailPopoverV2()
+			@eventQuickPeekV2()
 			<script src="/static/plugins/calendar/js/event_grid.js" defer></script>
 			<script src="/static/plugins/calendar/js/calendar_v2_shell.js" defer></script>
 			if data.CanControlWorldState {
@@ -257,6 +258,30 @@ templ dayDetailPopoverV2() {
 		// (the #401 seed, dm_only filtered by role). Hidden until populated.
 		<div class="mb-2 pb-2 border-b border-edge hidden space-y-0.5 text-xs" data-day-popover-worldstate></div>
 		<div class="space-y-1 max-h-64 overflow-y-auto" data-day-popover-list></div>
+	</div>
+}
+
+// eventQuickPeekV2 renders the hover quick-peek card (C-CAL-CLOSEOUT PR A §1 /
+// audit §2-4). HOVERING an event chip shows this compact preview (title / time
+// / category / tier); CLICKING the chip still opens the full drawer (handled in
+// event_grid.js — this peek is pointer-events:none so it never intercepts the
+// click or its own mouseout). calendar_v2_shell.js positions + fills it from the
+// page's event JSON; touch / no-hover devices skip the peek and fall through to
+// the drawer.
+templ eventQuickPeekV2() {
+	<div
+		id="cal-v2-event-peek"
+		class="hidden fixed z-40 card card-elev px-3 py-2 max-w-[15rem] text-xs pointer-events-none popover-scale-in"
+		role="tooltip"
+		aria-hidden="true"
+		data-event-peek
+	>
+		<div class="font-semibold text-fg text-sm leading-snug" data-peek-title></div>
+		<div class="text-fg-secondary mt-0.5 hidden" data-peek-time></div>
+		<div class="flex flex-wrap items-center gap-1 mt-1.5">
+			<span class="hidden px-1.5 py-0.5 rounded bg-surface-2 text-fg-secondary" data-peek-category></span>
+			<span class="hidden px-1.5 py-0.5 rounded bg-surface-2 text-fg-secondary" data-peek-tier></span>
+		</div>
 	</div>
 }
 

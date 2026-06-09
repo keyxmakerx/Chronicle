@@ -71,6 +71,15 @@
             if (!cell) return;
             var day = parseInt(cell.dataset.cellDay, 10);
             if (isNaN(day)) return;
+            // #439 polish: suppress the browser's text-selection while drag-
+            // selecting a day range — otherwise the drag highlights the day-
+            // number TEXT instead of cleanly ringing the cells. preventDefault
+            // stops the selection starting; userSelect:none covers the drag
+            // itself. Both are scoped to the active drag — pointerup restores
+            // normal selection everywhere else, so text selection elsewhere is
+            // untouched.
+            e.preventDefault();
+            document.body.style.userSelect = 'none';
             sel = {
                 year: parseInt(cell.dataset.cellYear, 10),
                 month: parseInt(cell.dataset.cellMonth, 10),
@@ -90,6 +99,7 @@
             highlight(r.startDay, r.endDay);
         });
         document.addEventListener('pointerup', function () {
+            document.body.style.userSelect = '';   // restore normal text selection
             if (!sel) return;
             var s = sel; sel = null;
             clearHighlight();

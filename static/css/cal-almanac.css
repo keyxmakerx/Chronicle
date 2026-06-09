@@ -261,8 +261,10 @@
   pointer-events: none;  /* gradient never blocks; children opt back in */
 }
 .cal-almanac-shell .cal-almanac-sky__time,
-.cal-almanac-shell .cal-almanac-sky__time-input,
-.cal-almanac-shell .cal-almanac-sky__happening { pointer-events: auto; }
+.cal-almanac-shell .cal-almanac-sky__time-input { pointer-events: auto; }
+/* R6: the happening chips render in prod too (read-only) — un-scoped so the
+   hover-title pills receive pointer events outside the demo shell. */
+.cal-almanac-sky__happening { pointer-events: auto; }
 .cal-almanac-sky__label {
   display: flex;
   flex-direction: column;
@@ -1020,12 +1022,12 @@
   font-size: 13px;
   padding: 2px 8px;
 }
-.cal-almanac-shell .cal-almanac-sky__happening {
+.cal-almanac-sky__happening {
   display: inline-flex;
   gap: 6px;
   align-items: center;
 }
-.cal-almanac-shell .cal-almanac-sky__happening-chip {
+.cal-almanac-sky__happening-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1036,7 +1038,7 @@
   border: 1px solid oklch(1 0 0 / 0.14);
   color: oklch(0.92 0.06 90);
 }
-.cal-almanac-shell .cal-almanac-sky__happening-icon { width: 15px; height: 15px; }
+.cal-almanac-sky__happening-icon { width: 15px; height: 15px; }
 
 /* --- Rain --- */
 .cal-almanac-rain {
@@ -1324,7 +1326,7 @@
    ================================================================= */
 
 /* ---- Shelf bar (the timepiece root) ---------------------------- */
-.cal-almanac-shell .cal-almanac-shelf {
+.cal-almanac-shelf {
   position: absolute;
   width: 300px;
   display: flex;
@@ -1343,9 +1345,9 @@
   --shelf-frame: oklch(0.46 0.07 70);
   --shelf-frame-hi: oklch(0.66 0.09 75);
 }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-shelf-frame="silver"] { --shelf-frame: oklch(0.55 0.01 260); --shelf-frame-hi: oklch(0.78 0.01 260); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-shelf-frame="wood"]   { --shelf-frame: oklch(0.40 0.06 50);  --shelf-frame-hi: oklch(0.55 0.08 55); }
-.cal-almanac-shell .cal-almanac-shelf__handle {
+.cal-almanac-shelf[data-cal-shelf-frame="silver"] { --shelf-frame: oklch(0.55 0.01 260); --shelf-frame-hi: oklch(0.78 0.01 260); }
+.cal-almanac-shelf[data-cal-shelf-frame="wood"]   { --shelf-frame: oklch(0.40 0.06 50);  --shelf-frame-hi: oklch(0.55 0.08 55); }
+.cal-almanac-shelf__handle {
   align-self: stretch;
   display: flex;
   align-items: center;
@@ -1360,9 +1362,9 @@
   cursor: grab;
   user-select: none;
 }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-time-dragging="true"] .cal-almanac-shelf__handle { cursor: grabbing; }
-.cal-almanac-shell .cal-almanac-shelf__tag { color: oklch(0.82 0.022 261); }
-.cal-almanac-shell .cal-almanac-shelf__theme {
+.cal-almanac-shelf[data-cal-time-dragging="true"] .cal-almanac-shelf__handle { cursor: grabbing; }
+.cal-almanac-shelf__tag { color: oklch(0.82 0.022 261); }
+.cal-almanac-shelf__theme {
   margin-left: auto;
   font-size: 9px;
   letter-spacing: 0.04em;
@@ -1371,13 +1373,13 @@
   opacity: 0.85;
 }
 /* The hourglass stands above the shelf bar. */
-.cal-almanac-shell .cal-almanac-shelf__stage {
+.cal-almanac-shelf__stage {
   position: relative;
   padding: 12px 0 0;
   display: flex;
   justify-content: center;
 }
-.cal-almanac-shell .cal-almanac-hourglass__frame {
+.cal-almanac-hourglass__frame {
   position: relative;
   width: 60px;
   height: 110px;
@@ -1385,21 +1387,21 @@
   transition: transform 1.5s cubic-bezier(0.2, 0, 0, 1);
   will-change: transform;
 }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-flipped="true"] .cal-almanac-hourglass__frame { transform: rotate(180deg); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-flipping="true"] .cal-almanac-hourglass__frame { pointer-events: none; }
+.cal-almanac-shelf[data-cal-hourglass-flipped="true"] .cal-almanac-hourglass__frame { transform: rotate(180deg); }
+.cal-almanac-shelf[data-cal-hourglass-flipping="true"] .cal-almanac-hourglass__frame { pointer-events: none; }
 /* The glass shell SVG sits ON TOP of the canvas interior (DOM order +
  * z-index). The v4 sand-fill rects are superseded by the canvas heightmap. */
-.cal-almanac-shell .cal-almanac-hourglass__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; z-index: 2; }
-.cal-almanac-shell .cal-almanac-hourglass__outline { fill: none; stroke: var(--shelf-frame-hi); stroke-width: 1.4; opacity: 0.85; }
+.cal-almanac-hourglass__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; z-index: 2; }
+.cal-almanac-hourglass__outline { fill: none; stroke: var(--shelf-frame-hi); stroke-width: 1.4; opacity: 0.85; }
 /* WAVE 1c: wood end-caps — fill comes from the inline #calHgWood gradient +
  * bevel filter, so no CSS fill here (it would override the gradient). */
-.cal-almanac-shell .cal-almanac-hourglass__rim { stroke: none; }
+.cal-almanac-hourglass__rim { stroke: none; }
 /* Glass specular gloss (feSpecularLighting) — screen-blended highlight. */
-.cal-almanac-shell .cal-almanac-hourglass__gloss { stroke: none; opacity: 0.5; mix-blend-mode: screen; }
-.cal-almanac-shell .cal-almanac-hourglass__reflect { stroke: none; }
+.cal-almanac-hourglass__gloss { stroke: none; opacity: 0.5; mix-blend-mode: screen; }
+.cal-almanac-hourglass__reflect { stroke: none; }
 /* Canvas interior (day/night sky + heightmap sand), clipped in JS to the
  * glass silhouette. Sits BELOW the glass shell (z-index 1 < svg's 2). */
-.cal-almanac-shell .cal-almanac-hourglass__canvas {
+.cal-almanac-hourglass__canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1411,8 +1413,8 @@
 /* WAVE 1: the whole frame rotates 180° at the dawn/dusk flip; counter-rotate
  * the canvas so the sand still obeys gravity and the day/night sky stays
  * upright (the flip re-orients the glass shell, not the physics). */
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-flipped="true"] .cal-almanac-hourglass__canvas { transform: rotate(180deg); }
-.cal-almanac-shell .cal-almanac-hourglass__sparkle {
+.cal-almanac-shelf[data-cal-hourglass-flipped="true"] .cal-almanac-hourglass__canvas { transform: rotate(180deg); }
+.cal-almanac-hourglass__sparkle {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -1420,10 +1422,10 @@
   opacity: 0;
   transition: opacity 280ms cubic-bezier(0.2, 0, 0, 1);
 }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-flipping="true"] .cal-almanac-hourglass__sparkle { opacity: 1; }
+.cal-almanac-shelf[data-cal-hourglass-flipping="true"] .cal-almanac-hourglass__sparkle { opacity: 1; }
 
 /* ---- The shelf bar: flanking text + decorative plinth ---------- */
-.cal-almanac-shell .cal-almanac-shelf__bar {
+.cal-almanac-shelf__bar {
   align-self: stretch;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -1432,7 +1434,7 @@
   padding: 4px 12px 12px;
   position: relative;
 }
-.cal-almanac-shell .cal-almanac-shelf__bar::before {
+.cal-almanac-shelf__bar::before {
   /* the shelf surface line the hourglass rests on */
   content: "";
   position: absolute;
@@ -1442,45 +1444,45 @@
   background: linear-gradient(180deg, var(--shelf-frame-hi), var(--shelf-frame));
   box-shadow: 0 1px 2px oklch(0 0 0 / 0.4);
 }
-.cal-almanac-shell .cal-almanac-shelf__flank { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; }
-.cal-almanac-shell .cal-almanac-shelf__flank--right { text-align: right; }
-.cal-almanac-shell .cal-almanac-shelf__primary { font-size: 11px; font-weight: 600; color: oklch(0.92 0.012 260); }
-.cal-almanac-shell .cal-almanac-shelf__secondary { font-size: 10px; font-family: "JetBrains Mono", ui-monospace, monospace; color: oklch(0.70 0.022 261); }
-.cal-almanac-shell .cal-almanac-shelf__plinth {
+.cal-almanac-shelf__flank { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; }
+.cal-almanac-shelf__flank--right { text-align: right; }
+.cal-almanac-shelf__primary { font-size: 11px; font-weight: 600; color: oklch(0.92 0.012 260); }
+.cal-almanac-shelf__secondary { font-size: 10px; font-family: "JetBrains Mono", ui-monospace, monospace; color: oklch(0.70 0.022 261); }
+.cal-almanac-shelf__plinth {
   width: 44px; height: 12px;
   border-radius: 0 0 4px 4px;
   background: linear-gradient(180deg, var(--shelf-frame-hi), var(--shelf-frame));
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.12), 0 2px 3px oklch(0 0 0 / 0.4);
 }
-.cal-almanac-shell .cal-almanac-shelf__clock {
+.cal-almanac-shelf__clock {
   background: none; border: none; padding: 0;
   font-family: inherit; font-size: 11px; color: var(--sand-color); cursor: pointer;
   transition: color 120ms cubic-bezier(0.2,0,0,1);
 }
-.cal-almanac-shell .cal-almanac-shelf__clock:hover { color: oklch(0.96 0.10 85); }
+.cal-almanac-shelf__clock:hover { color: oklch(0.96 0.10 85); }
 
 /* ---- Themed sand recolour (registry → data-theme attribute) ---- */
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="clear"]        { --sand-color: oklch(0.78 0.16 80);  --sand-glow: oklch(0.92 0.13 85 / 0.5);  --sand-stream: oklch(0.86 0.16 80); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="cloudy"]       { --sand-color: oklch(0.62 0.10 80);  --sand-glow: oklch(0.74 0.08 85 / 0.35); --sand-stream: oklch(0.70 0.12 80); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="rain"]         { --sand-color: oklch(0.62 0.14 240); --sand-glow: oklch(0.78 0.12 230 / 0.4); --sand-stream: oklch(0.70 0.16 235); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="thunderstorm"] { --sand-color: oklch(0.55 0.15 250); --sand-glow: oklch(0.92 0.18 90 / 0.55); --sand-stream: oklch(0.68 0.18 245); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="snow"]         { --sand-color: oklch(0.94 0.02 240); --sand-glow: oklch(0.99 0.02 240 / 0.6); --sand-stream: oklch(0.97 0.03 240); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="fog"]          { --sand-color: oklch(0.74 0.012 240); --sand-glow: oklch(0.84 0.008 240 / 0.3); --sand-stream: oklch(0.78 0.012 240); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="eclipse-solar"],
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="eclipse-lunar"] { --sand-color: oklch(0.28 0.02 270); --sand-glow: oklch(0.86 0.04 280 / 0.55); --sand-stream: oklch(0.62 0.05 280); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="meteor-shower"] { --sand-color: oklch(0.82 0.16 75);  --sand-glow: oklch(0.96 0.18 80 / 0.7);  --sand-stream: oklch(0.92 0.18 78); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="volcanic"]     { --sand-color: oklch(0.55 0.18 35); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="plague"]       { --sand-color: oklch(0.62 0.14 145); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="arcane-winds"],
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="arcane-surge"] { --sand-color: oklch(0.66 0.22 310); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="aurora"]       { --sand-color: oklch(0.78 0.18 160); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="ice-age"]      { --sand-color: oklch(0.88 0.06 220); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="comet"]        { --sand-color: oklch(0.82 0.14 200); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="moon-special"] { --sand-color: oklch(0.86 0.04 280); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="ashfall"]      { --sand-color: oklch(0.45 0.02 260); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="acid-rain"]    { --sand-color: oklch(0.78 0.18 125); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="ley-surge"]    { --sand-color: oklch(0.72 0.20 290); }
-.cal-almanac-shell .cal-almanac-shelf[data-cal-hourglass-theme="sakura-bloom"] { --sand-color: oklch(0.84 0.10 350); }
+.cal-almanac-shelf[data-cal-hourglass-theme="clear"]        { --sand-color: oklch(0.78 0.16 80);  --sand-glow: oklch(0.92 0.13 85 / 0.5);  --sand-stream: oklch(0.86 0.16 80); }
+.cal-almanac-shelf[data-cal-hourglass-theme="cloudy"]       { --sand-color: oklch(0.62 0.10 80);  --sand-glow: oklch(0.74 0.08 85 / 0.35); --sand-stream: oklch(0.70 0.12 80); }
+.cal-almanac-shelf[data-cal-hourglass-theme="rain"]         { --sand-color: oklch(0.62 0.14 240); --sand-glow: oklch(0.78 0.12 230 / 0.4); --sand-stream: oklch(0.70 0.16 235); }
+.cal-almanac-shelf[data-cal-hourglass-theme="thunderstorm"] { --sand-color: oklch(0.55 0.15 250); --sand-glow: oklch(0.92 0.18 90 / 0.55); --sand-stream: oklch(0.68 0.18 245); }
+.cal-almanac-shelf[data-cal-hourglass-theme="snow"]         { --sand-color: oklch(0.94 0.02 240); --sand-glow: oklch(0.99 0.02 240 / 0.6); --sand-stream: oklch(0.97 0.03 240); }
+.cal-almanac-shelf[data-cal-hourglass-theme="fog"]          { --sand-color: oklch(0.74 0.012 240); --sand-glow: oklch(0.84 0.008 240 / 0.3); --sand-stream: oklch(0.78 0.012 240); }
+.cal-almanac-shelf[data-cal-hourglass-theme="eclipse-solar"],
+.cal-almanac-shelf[data-cal-hourglass-theme="eclipse-lunar"] { --sand-color: oklch(0.28 0.02 270); --sand-glow: oklch(0.86 0.04 280 / 0.55); --sand-stream: oklch(0.62 0.05 280); }
+.cal-almanac-shelf[data-cal-hourglass-theme="meteor-shower"] { --sand-color: oklch(0.82 0.16 75);  --sand-glow: oklch(0.96 0.18 80 / 0.7);  --sand-stream: oklch(0.92 0.18 78); }
+.cal-almanac-shelf[data-cal-hourglass-theme="volcanic"]     { --sand-color: oklch(0.55 0.18 35); }
+.cal-almanac-shelf[data-cal-hourglass-theme="plague"]       { --sand-color: oklch(0.62 0.14 145); }
+.cal-almanac-shelf[data-cal-hourglass-theme="arcane-winds"],
+.cal-almanac-shelf[data-cal-hourglass-theme="arcane-surge"] { --sand-color: oklch(0.66 0.22 310); }
+.cal-almanac-shelf[data-cal-hourglass-theme="aurora"]       { --sand-color: oklch(0.78 0.18 160); }
+.cal-almanac-shelf[data-cal-hourglass-theme="ice-age"]      { --sand-color: oklch(0.88 0.06 220); }
+.cal-almanac-shelf[data-cal-hourglass-theme="comet"]        { --sand-color: oklch(0.82 0.14 200); }
+.cal-almanac-shelf[data-cal-hourglass-theme="moon-special"] { --sand-color: oklch(0.86 0.04 280); }
+.cal-almanac-shelf[data-cal-hourglass-theme="ashfall"]      { --sand-color: oklch(0.45 0.02 260); }
+.cal-almanac-shelf[data-cal-hourglass-theme="acid-rain"]    { --sand-color: oklch(0.78 0.18 125); }
+.cal-almanac-shelf[data-cal-hourglass-theme="ley-surge"]    { --sand-color: oklch(0.72 0.20 290); }
+.cal-almanac-shelf[data-cal-hourglass-theme="sakura-bloom"] { --sand-color: oklch(0.84 0.10 350); }
 
 /* ---- Create-event popup variant (re-uses .cal-almanac-qv slot) -- */
 .cal-almanac-shell .cal-almanac-qv--create { z-index: 75; }

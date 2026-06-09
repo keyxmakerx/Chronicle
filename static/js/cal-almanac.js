@@ -803,8 +803,13 @@
     // meteor-shower: SLOW per operator — long trailed streaks, low spawn.
     CELESTIAL_EFFECTS['meteor-shower'] = { id: 'meteor-shower', tier: 'must', renderFn: function (box) {
       var wrap = document.createElement('div'); wrap.className = 'cal-almanac-meteors'; wrap.setAttribute('data-cal-meteors', '');
+      // E6: spread the DOM-fallback meteors across the WHOLE sky. The previous
+      // seed clustered them at left:55-95% / top:0-40% (the operator's "meteors
+      // in the lower-right" when this CSS-DOM path renders instead of the
+      // full-width canvas renderer). This fallback only paints when the canvas
+      // engine is unavailable; either way it now streaks edge-to-edge.
       for (var i = 0; i < 6; i++) {
-        var top = (i * 23 + 4) % 40, left = 55 + (i * 17) % 40, delay = i * 1.7;
+        var top = (i * 17 + 3) % 55, left = (i * 31 + 6) % 90, delay = i * 1.7;
         spawn('cal-almanac-meteor', wrap, 'top:' + top + '%;left:' + left + '%;animation-delay:' + delay + 's;');
       }
       box.appendChild(wrap);
