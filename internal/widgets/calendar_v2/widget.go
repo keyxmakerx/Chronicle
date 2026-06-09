@@ -118,6 +118,12 @@ type VisibilityEditorData struct {
 	// (e.g. "event.visibility" vs "entity.visibility"). The hidden
 	// input that round-trips the rules JSON uses this prefix.
 	FieldPrefix string
+	// ShowGMOnly adds a third "GM only" mode (C-CAL-DASHBOARD-W5b — used by the
+	// per-calendar editor; defaults false so events/other hosts render the
+	// original two-mode editor unchanged). IsGMOnly marks it selected; when
+	// set, neither "public" nor "specific" is checked.
+	ShowGMOnly bool
+	IsGMOnly   bool
 }
 
 // UserOption + RoleOption are the picker entries. Kept minimal to

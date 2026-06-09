@@ -71,6 +71,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/calendars/:calId/events/:eid/visibility", h.UpdateEventVisibilityAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/calendars/:calId/events/:eid", h.DeleteEventAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Per-calendar visibility (C-CAL-DASHBOARD-W5b). Owner/co-DM only — same
+	// capability gate the world-state PUT uses, so a co-DM can manage who sees
+	// a calendar. Players never reach this (nor the editor DOM).
+	cg.PUT("/calendars/:calId/visibility", h.UpdateCalendarVisibilityAPI,
+		campaigns.RequireCapability((*campaigns.CampaignContext).CanControlWorldState,
+			"managing calendar visibility requires Owner or co-DM access"))
+
 	// Event<->entity ties (C-CAL-WORLDSTATE-PRODUCTION-PORT 2b): the
 	// production attach-entity picker persists real entity_event_links
 	// (#402) with a participation_role. Read = Player+ (the picker chips

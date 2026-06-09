@@ -30,13 +30,13 @@ templ VisibilityEditor(data VisibilityEditorData) {
 	>
 		<div class="text-sm font-medium text-fg">Who can see this?</div>
 
-		<div class="flex items-center gap-4">
+		<div class="flex flex-wrap items-center gap-4">
 			<label class="flex items-center gap-2 text-sm text-fg cursor-pointer">
 				<input
 					type="radio"
 					name={ data.FieldPrefix + "_mode" }
 					value="public"
-					checked?={ data.IsPublic }
+					checked?={ data.IsPublic && !data.IsGMOnly }
 					data-visibility-mode="public"
 				/>
 				<span class="inline-flex items-center gap-1">
@@ -44,12 +44,30 @@ templ VisibilityEditor(data VisibilityEditorData) {
 					Everyone (public)
 				</span>
 			</label>
+			if data.ShowGMOnly {
+				// W5b: GM-only mode (dm_only). A hard GM/owner gate — players never
+				// see it (the W5a resolver does not admit them via the allow-list;
+				// per-player access is the "Specific people" whitelist instead).
+				<label class="flex items-center gap-2 text-sm text-fg cursor-pointer">
+					<input
+						type="radio"
+						name={ data.FieldPrefix + "_mode" }
+						value="gmonly"
+						checked?={ data.IsGMOnly }
+						data-visibility-mode="gmonly"
+					/>
+					<span class="inline-flex items-center gap-1">
+						<i class="fa-solid fa-lock text-fg-secondary" aria-hidden="true"></i>
+						GM only
+					</span>
+				</label>
+			}
 			<label class="flex items-center gap-2 text-sm text-fg cursor-pointer">
 				<input
 					type="radio"
 					name={ data.FieldPrefix + "_mode" }
 					value="specific"
-					checked?={ !data.IsPublic }
+					checked?={ !data.IsPublic && !data.IsGMOnly }
 					data-visibility-mode="specific"
 				/>
 				<span class="inline-flex items-center gap-1">

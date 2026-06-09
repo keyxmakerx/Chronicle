@@ -987,6 +987,33 @@ func (h *Handler) UpdateEventVisibilityAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// UpdateCalendarVisibilityAPI updates a calendar's per-calendar visibility +
+// allow/deny rules (C-CAL-DASHBOARD-W5b). PUT /campaigns/:id/calendars/:calId/visibility.
+// Route-gated to Owner/co-DM (CanControlWorldState — same population the
+// worldstate PUT uses); IDOR-guarded via requireCalendarInCampaign.
+func (h *Handler) UpdateCalendarVisibilityAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	calID := c.Param("calId")
+
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	var input UpdateCalendarVisibilityInput
+	if err := c.Bind(&input); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+
+	if err := h.svc.UpdateCalendarVisibility(ctx, calID, input); err != nil {
+		return err
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarVisibilityChanged, "calendar", calID, cal.Name,
+		map[string]any{"old_visibility": cal.Visibility, "new_visibility": input.Visibility})
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // UpdateSeasonsAPI replaces all seasons.
 // PUT /campaigns/:id/calendars/:calId/seasons
 func (h *Handler) UpdateSeasonsAPI(c echo.Context) error {

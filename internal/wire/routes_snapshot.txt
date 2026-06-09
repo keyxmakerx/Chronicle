@@ -579,6 +579,7 @@ PUT	/calendars/:calId/months	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/moons	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/seasons	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/settings	internal/plugins/calendar/routes.go
+PUT	/calendars/:calId/visibility	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/weather	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/weather/zones	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/weekdays	internal/plugins/calendar/routes.go
