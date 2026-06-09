@@ -9,6 +9,8 @@ package calendar
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/components"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -40,19 +42,13 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 					Couldn&#39;t load the calendars right now. Try reloading the page.
 				</div>
 			} else if len(data.Calendars) == 0 {
-				@calendarAppDashboardEmpty(cc.Campaign.ID)
+				@calendarAppDashboardEmpty(cc.Campaign.ID, data.IsOwner)
 			} else {
-				<div class="grid gap-4 md:grid-cols-[18rem_1fr]">
-					// Left: calendars list.
-					<div class="flex flex-col gap-2" data-cal-dashboard-list>
-						for _, cal := range data.Calendars {
-							@calendarAppDashboardListRow(data, cal)
-						}
-					</div>
-					// Right: selected calendar detail (HTMX swap target).
-					<div id="cal-dash-detail">
-						@calendarAppDashboardDetail(data)
-					</div>
+				// W5c: a responsive card grid of the (visible) calendars + sort
+				// controls (owner). Selecting a card's name loads its detail below.
+				@calendarAppDashboardGridSection(data)
+				<div id="cal-dash-detail" class="mt-6">
+					@calendarAppDashboardDetail(data)
 				</div>
 			}
 		</div>
@@ -67,24 +63,61 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 	}
 }
 
-// calendarAppDashboardListRow renders one selectable calendar in the list.
-// Selecting it HTMX-swaps the detail pane (and pushes the URL so reloads keep
-// the selection).
-templ calendarAppDashboardListRow(data CalendarAppDashboardData, cal Calendar) {
-	// W2: selection is a FULL navigation (plain href), not an HTMX detail
-	// swap. The live embeds (worldstate engine, timeline-viz/D3) load <script>
-	// tags that HTMX won't execute in swapped content (allowScriptTags=false),
-	// and the engine inits from its seed at page load — so a full load is the
-	// robust path and makes "one live surface + clean teardown" automatic.
+// calendarAppDashboardGridSection renders the sort controls (owner) + the
+// responsive card grid. Wrapped in #cal-dash-grid so a sort control can
+// HTMX-swap (outerHTML) just this section without a full reload.
+templ calendarAppDashboardGridSection(data CalendarAppDashboardData) {
+	<div id="cal-dash-grid">
+		if data.IsOwner {
+			<div class="flex flex-wrap items-center gap-1.5 mb-4 text-xs" data-cal-dashboard-sort role="group" aria-label="Sort calendars">
+				<span class="text-fg-muted mr-1">Sort</span>
+				@calendarSortLink(data, "", "Default")
+				@calendarSortLink(data, "name", "Name")
+				@calendarSortLink(data, "created", "Newest")
+				@calendarSortLink(data, "updated", "Recently active")
+			</div>
+		}
+		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-cal-dashboard-list>
+			for _, cal := range data.Calendars {
+				@calendarAppDashboardCard(data, cal)
+			}
+		</div>
+	</div>
+}
+
+// calendarSortLink is one sort control. It HTMX-swaps just the grid section
+// (the hx-get carries grid=1) and pushes the clean ?sort URL so a reload keeps
+// the order; the plain href is the no-JS fallback.
+templ calendarSortLink(data CalendarAppDashboardData, key, label string) {
 	<a
-		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar?calId=%s", data.CampaignID, cal.ID)) }
-		class={ "card p-3 hover:ring-2 hover:ring-accent/40 transition-all group",
+		href={ templ.SafeURL(calDashSortURL(data.CampaignID, key, false)) }
+		hx-get={ calDashSortURL(data.CampaignID, key, true) }
+		hx-target="#cal-dash-grid"
+		hx-swap="outerHTML"
+		hx-push-url={ calDashSortURL(data.CampaignID, key, false) }
+		class={ "px-2 py-1 rounded transition-colors",
+			templ.KV("bg-accent/10 text-accent font-medium", data.Sort == key),
+			templ.KV("text-fg-secondary hover:text-fg hover:bg-surface", data.Sort != key) }
+		data-cal-sort-key={ key }
+	>
+		{ label }
+	</a>
+}
+
+// calendarAppDashboardCard renders one calendar as a §B1 card: identity +
+// in-world date + badges + actions. Owners get a visibility badge + Open /
+// Permissions (W5b stub) / Settings; players get a read-only card (Open only).
+// The card body is a clean container so the W5d adaptive widget can later render
+// full/compact inside it without restructuring.
+templ calendarAppDashboardCard(data CalendarAppDashboardData, cal Calendar) {
+	<div
+		class={ "card p-4 flex flex-col gap-3 transition-all",
 			templ.KV("ring-2 ring-accent/60", data.Selected != nil && data.Selected.ID == cal.ID) }
 		data-cal-dashboard-row
 		data-calendar-id={ cal.ID }
 	>
-		<div class="flex items-center gap-2">
-			<div class="w-8 h-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
+		<div class="flex items-start gap-2.5">
+			<div class="w-9 h-9 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
 				if cal.Mode == ModeRealLife {
 					<i class="fa-solid fa-clock" aria-hidden="true"></i>
 				} else {
@@ -92,17 +125,93 @@ templ calendarAppDashboardListRow(data CalendarAppDashboardData, cal Calendar) {
 				}
 			</div>
 			<div class="min-w-0 flex-1">
-				<div class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">{ cal.Name }</div>
-				<div class="text-[11px] text-fg-muted">{ calDateLabel(cal) }</div>
+				// Selecting the name loads this calendar's detail below (full nav —
+				// the live embeds load <script> tags HTMX won't re-run).
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar?calId=%s", data.CampaignID, cal.ID)) }
+					class="text-sm font-semibold text-fg hover:text-accent transition-colors truncate block"
+				>{ cal.Name }</a>
+				<div class="text-[11px] text-fg-muted mt-0.5">{ calDateLabel(cal) }</div>
 			</div>
+		</div>
+		<div class="flex flex-wrap items-center gap-1.5">
 			if cal.IsDefault {
-				<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium shrink-0">Default</span>
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium">Default</span>
 			}
 			if data.ActiveID == cal.ID {
-				<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-medium shrink-0">Active</span>
+				<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent font-medium">Active</span>
+			}
+			if data.IsOwner {
+				@calendarVisibilityBadge(cal)
 			}
 		</div>
-	</a>
+		<div class="flex flex-wrap items-center gap-2 mt-auto pt-1" data-cal-card-actions>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2/%s", data.CampaignID, cal.ID)) }
+				class="btn-secondary text-xs"
+			>
+				<i class="fa-solid fa-up-right-from-square mr-1" aria-hidden="true"></i>Open
+			</a>
+			if data.IsOwner {
+				// Per-calendar permissions editor is W5b — disabled stub for now.
+				<button
+					type="button"
+					class="btn-secondary text-xs opacity-60 cursor-not-allowed"
+					title="Per-calendar permissions — coming in W5b"
+					disabled
+					data-cal-permissions-stub
+				>
+					<i class="fa-solid fa-user-lock mr-1" aria-hidden="true"></i>Permissions
+				</button>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/%s/settings", data.CampaignID, cal.ID)) }
+					class="btn-secondary text-xs"
+				>
+					<i class="fa-solid fa-gear mr-1" aria-hidden="true"></i>Settings
+				</a>
+			}
+		</div>
+	</div>
+}
+
+// calendarVisibilityBadge shows a calendar's sharing state to owners: Everyone
+// (default), GM only (dm_only), or Custom (per-user allow/deny rules). Token
+// colors only (customization-ready — no hardcoded palette).
+templ calendarVisibilityBadge(cal Calendar) {
+	switch calVisibilityKind(cal) {
+		case "custom":
+			<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium inline-flex items-center gap-1" data-cal-visibility="custom"><i class="fa-solid fa-user-gear text-[9px]" aria-hidden="true"></i>Custom</span>
+		case "dm_only":
+			<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium inline-flex items-center gap-1" data-cal-visibility="dm_only"><i class="fa-solid fa-lock text-[9px]" aria-hidden="true"></i>GM only</span>
+		default:
+			<span class="text-[10px] px-1.5 py-0.5 rounded bg-surface text-fg-muted border border-edge font-medium inline-flex items-center gap-1" data-cal-visibility="everyone"><i class="fa-solid fa-users text-[9px]" aria-hidden="true"></i>Everyone</span>
+	}
+}
+
+// calVisibilityKind classifies a calendar's visibility for the owner badge:
+// "custom" when it carries per-user allow/deny rules, else "dm_only" or
+// "everyone". Mirrors the W5a resolver's notion of a non-default rule set.
+func calVisibilityKind(cal Calendar) string {
+	if cal.VisibilityRules != nil {
+		if r := strings.TrimSpace(*cal.VisibilityRules); r != "" && r != "{}" {
+			return "custom"
+		}
+	}
+	if cal.Visibility == "dm_only" {
+		return "dm_only"
+	}
+	return "everyone"
+}
+
+// calDashSortURL builds the dashboard URL for a sort key. htmx=true appends
+// grid=1 so the handler returns just the grid section (for the hx-get swap);
+// htmx=false is the clean URL pushed into history / used as the no-JS href.
+func calDashSortURL(campaignID, key string, htmx bool) string {
+	u := fmt.Sprintf("/campaigns/%s/apps/calendar?sort=%s", campaignID, key)
+	if htmx {
+		u += "&grid=1"
+	}
+	return u
 }
 
 // calendarAppDashboardDetail renders the right-hand detail pane for the
@@ -319,15 +428,22 @@ templ calendarAppDashboardTimelines(data CalendarAppDashboardData) {
 	</div>
 }
 
-// calendarAppDashboardEmpty — friendly state when the campaign has no calendars.
-templ calendarAppDashboardEmpty(campaignID string) {
+// calendarAppDashboardEmpty — friendly empty state. Role-aware (W5c): owners
+// are prompted to create one; players (who simply have no calendars shared with
+// them) get a calm "nothing shared yet" with no create affordance.
+templ calendarAppDashboardEmpty(campaignID string, isOwner bool) {
 	<div class="card p-10 text-center" data-cal-dashboard-empty>
 		<i class="fa-solid fa-calendar-days text-3xl text-fg-muted mb-3" aria-hidden="true"></i>
-		<p class="text-sm font-medium text-fg mb-1">No calendars yet</p>
-		<p class="text-xs text-fg-secondary mb-4">Create a calendar to track in-world dates, events, and eras.</p>
-		<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID)) } class="btn-primary text-sm">
-			<i class="fa-solid fa-plus mr-1" aria-hidden="true"></i>Create calendar
-		</a>
+		if isOwner {
+			<p class="text-sm font-medium text-fg mb-1">No calendars yet</p>
+			<p class="text-xs text-fg-secondary mb-4">Create a calendar to track in-world dates, events, and eras.</p>
+			<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", campaignID)) } class="btn-primary text-sm">
+				<i class="fa-solid fa-plus mr-1" aria-hidden="true"></i>Create calendar
+			</a>
+		} else {
+			<p class="text-sm font-medium text-fg mb-1" data-cal-dashboard-empty-player>No calendars shared with you yet</p>
+			<p class="text-xs text-fg-secondary">When the GM shares a calendar with you, it&#39;ll show up here.</p>
+		}
 	</div>
 }
 
