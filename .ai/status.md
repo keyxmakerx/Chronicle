@@ -26,6 +26,7 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 - **Active phase:** Phase 4 (post-hygiene + post-security + plugin-isolation arc closed; G2/F2 follow-ups + NW-2.3 next). See `cordinator/plans/2026-05-21-master-plan.md` for the phase definition.
 - **Coordinator working branch (cordinator artifacts):** `claude/setup-working-memory-vROh3`
 - **Recent cross-cutting decisions** (most recent first):
+  - chronicle#442 (+ r2 follow-up PR) — calendar worldstate overhaul: render-vs-chrome CSS split (`cal-almanac-render.css` + guard test), two-canvas layered `SKY_FX` engine, layered CSS sun, mask cut-out moon phases, full-band GM console (full effects catalog, per-event clear). See `internal/plugins/calendar/.ai.md` §"Worldstate render architecture".
   - `cordinator/decisions/2026-05-26-chronicle-production-safety-system.md` — `RunStartupHealthChecks` rubric + docker-unavailable substitute pattern
   - `cordinator/decisions/2026-05-26-ai-export-pipeline-design.md` — AI export pipeline design (future scope, scoping decisions locked)
   - `cordinator/decisions/2026-05-26-draw-steel-spin-up-strategy.md` — Draw Steel game system spin-up strategy (own security audit first)
