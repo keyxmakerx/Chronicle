@@ -59,7 +59,10 @@ func (s *calendarService) EntitiesForEra(ctx context.Context, eraID int) ([]Enti
 }
 
 // EntitiesForCalendar returns the distinct entities tied to any event/era of a
-// calendar (the Calendars dashboard associations panel, W1).
-func (s *calendarService) EntitiesForCalendar(ctx context.Context, calendarID string) ([]EntityTieRef, error) {
-	return s.repo.EntitiesForCalendar(ctx, calendarID)
+// calendar (the Calendars dashboard associations panel, W1). role + userID are
+// the viewer context threaded to the repo so entity visibility is enforced
+// (cordinator#32 gap #1) — owners/co-DMs see all, players only entities they
+// may themselves see.
+func (s *calendarService) EntitiesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error) {
+	return s.repo.EntitiesForCalendar(ctx, calendarID, role, userID)
 }

@@ -13,22 +13,29 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// The service delegates EntitiesForCalendar to the repo, forwarding the id.
+// The service delegates EntitiesForCalendar to the repo, forwarding the id AND
+// the viewer context (role + userID) so entity visibility can be enforced at
+// the SQL layer (cordinator#32 gap #1). If this seam ever drops role/userID,
+// the repo can't filter and the leak returns.
 func TestEntitiesForCalendar_ServiceDelegates(t *testing.T) {
-	var gotID string
+	var gotID, gotUser string
+	var gotRole int
 	repo := &mockCalendarRepo{
-		entitiesForCalendarFn: func(_ context.Context, calendarID string) ([]EntityTieRef, error) {
-			gotID = calendarID
+		entitiesForCalendarFn: func(_ context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error) {
+			gotID, gotRole, gotUser = calendarID, role, userID
 			return []EntityTieRef{{EntityID: "e1", EntityName: "Gandalf"}}, nil
 		},
 	}
 	svc := NewCalendarService(repo)
-	out, err := svc.EntitiesForCalendar(context.Background(), "cal-1")
+	out, err := svc.EntitiesForCalendar(context.Background(), "cal-1", 1, "user-7")
 	if err != nil {
 		t.Fatalf("EntitiesForCalendar: %v", err)
 	}
 	if gotID != "cal-1" {
 		t.Errorf("repo got id %q, want cal-1", gotID)
+	}
+	if gotRole != 1 || gotUser != "user-7" {
+		t.Errorf("viewer context not forwarded to repo: role=%d user=%q, want role=1 user=user-7", gotRole, gotUser)
 	}
 	if len(out) != 1 || out[0].EntityName != "Gandalf" {
 		t.Errorf("unexpected passthrough result: %+v", out)

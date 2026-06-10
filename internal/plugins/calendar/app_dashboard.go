@@ -155,7 +155,7 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 		if sel, serr := h.svc.GetCalendarByID(ctx, selID); serr == nil && sel != nil &&
 			sel.CampaignID == cc.Campaign.ID && calendarVisibleTo(sel, role, userID) {
 			data.Selected = sel
-			data.Entities = h.loadCalendarEntities(ctx, sel.ID)
+			data.Entities = h.loadCalendarEntities(ctx, sel.ID, role, userID)
 			data.Timelines = h.loadCalendarTimelines(ctx, sel.ID, role, userID)
 
 			// W2: the LIVE worldstate band renders only for the active
@@ -242,9 +242,11 @@ func sortDashboardCalendars(cals []Calendar, key string, upcoming map[string]Cal
 }
 
 // loadCalendarEntities reads the associated entities, logging+degrading on
-// error so a stale read can't 500 the dashboard.
-func (h *Handler) loadCalendarEntities(ctx context.Context, calendarID string) []EntityTieRef {
-	ents, err := h.svc.EntitiesForCalendar(ctx, calendarID)
+// error so a stale read can't 500 the dashboard. role + userID are the viewer
+// context so the associations panel respects entity visibility (cordinator#32
+// gap #1) — a player never sees a dm_only / custom-restricted entity's name.
+func (h *Handler) loadCalendarEntities(ctx context.Context, calendarID string, role int, userID string) []EntityTieRef {
+	ents, err := h.svc.EntitiesForCalendar(ctx, calendarID, role, userID)
 	if err != nil {
 		slog.Warn("calendars dashboard: entities read failed",
 			slog.String("calendar_id", calendarID), slog.Any("error", err))
