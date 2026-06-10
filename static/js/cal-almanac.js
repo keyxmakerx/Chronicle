@@ -1165,16 +1165,16 @@
       return function (ctx, W, H, dt, t) {
         var dark = skyDarkness();
         if (dark < 0.25) return;
-        if (!fs) { fs = []; var n = fxCap(Math.round(W / 90)); for (var i = 0; i < n; i++) fs.push({ x: Math.random() * W, y: H * (0.45 + Math.random() * 0.5), ph: Math.random() * 6.28, sp: 0.5 + Math.random() }); }
+        if (!fs) { fs = []; var n = fxCap(Math.round(W / 50)); for (var i = 0; i < n; i++) fs.push({ x: Math.random() * W, y: H * (0.4 + Math.random() * 0.55), ph: Math.random() * 6.28, sp: 0.5 + Math.random() }); }
         for (var j = 0; j < fs.length; j++) {
           var f = fs[j];
           f.x += Math.sin(t * 0.7 * f.sp + f.ph) * W * 0.012 * dt;
           f.y += Math.cos(t * 0.9 * f.sp + f.ph * 2) * H * 0.05 * dt;
           var pulse = Math.max(0, Math.sin(t * 1.8 * f.sp + f.ph));
           if (pulse < 0.1) continue;
-          ctx.shadowBlur = 8; ctx.shadowColor = 'rgba(190,255,130,1)';
-          ctx.fillStyle = 'rgba(205,255,140,' + (dark * pulse * 0.85).toFixed(3) + ')';
-          ctx.beginPath(); ctx.arc(f.x, f.y, 1.4, 0, 6.283); ctx.fill();
+          ctx.shadowBlur = 11; ctx.shadowColor = 'rgba(190,255,130,1)';
+          ctx.fillStyle = 'rgba(210,255,150,' + Math.min(1, dark * pulse * 1.1).toFixed(3) + ')';
+          ctx.beginPath(); ctx.arc(f.x, f.y, 1.9, 0, 6.283); ctx.fill();
           ctx.shadowBlur = 0;
         }
       };
@@ -1314,7 +1314,7 @@
               + Math.sin(u * 6.283 * c.fr * 2.6 + t * 0.95 + c.ph) * h2 * c.amp * 0.35;
             var th = h2 * c.th * (0.75 + 0.35 * Math.sin(u * 6.283 * c.fr * 1.7 + t * 0.7 + c.ph * 3));
             // per-strip shimmer (the aurora's vertical "search-light" rays)
-            var shim = 0.62 + 0.38 * Math.sin(u * 24 + t * 1.6 + c.ph * 5);
+            var shim = 0.68 + 0.32 * Math.sin(u * 15 + t * 1.6 + c.ph * 5);
             octx.globalAlpha = Math.max(0, aBase * shim);
             octx.fillRect(x - 1, yT, 5, th);
           }
@@ -1333,7 +1333,11 @@
         ctx.save();
         ctx.globalCompositeOperation = 'screen';
         ctx.imageSmoothingEnabled = true;
+        // Blur the upscale so the half-res strips melt into continuous
+        // curtains (the raw strips read as vertical comb-banding).
+        try { ctx.filter = 'blur(3px)'; } catch (e) {}
         ctx.drawImage(off, 0, 0, W, H);
+        try { ctx.filter = 'none'; } catch (e) {}
         ctx.restore();
       };
     };
