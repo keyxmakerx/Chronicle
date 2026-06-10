@@ -25,15 +25,6 @@ func wsWeatherID(data CalendarV2ViewData) string {
 	return data.WorldState.Weather.Type
 }
 
-// wsTimeFrac formats the 0..1 time-of-day for the data attribute the engine
-// reads as a first-paint hint.
-func wsTimeFrac(data CalendarV2ViewData) string {
-	if data.WorldState == nil {
-		return "0.5"
-	}
-	return fmt.Sprintf("%.4f", data.WorldState.TimeOfDay)
-}
-
 // wsSkyTimeFloat returns the 0..1 time-of-day (default noon) for the SSR sky
 // gradient. nil-safe so a seedless band still paints a sane base.
 func wsSkyTimeFloat(data CalendarV2ViewData) float64 {

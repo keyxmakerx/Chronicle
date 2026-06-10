@@ -756,7 +756,6 @@ templ calAlmanacSkyband(d CalAlmanacMockData) {
 		class={ "cal-almanac-sky", "cal-almanac-sky--wfx-" + wfx.ID }
 		data-cal-sky
 		data-cal-sky-weather={ wfx.ID }
-		data-cal-sky-time-frac={ fmtFloat(d.SkyTime) }
 		style={ "background: " + calendar.SkybandGradient(d.SkyTime) + ";" }
 	>
 		// Weather effect layer — particles are CSS-animated; server
@@ -1163,8 +1162,6 @@ func currentEra(d CalAlmanacMockData) CalAlmanacEra {
 	}
 	return out
 }
-
-func fmtFloat(f float64) string { return fmt.Sprintf("%.4f", f) }
 
 // weatherEffectID — maps a named weather-type ID to a render-effect ID
 // the sky-band knows how to draw. MUST effects get full particles; TBD
