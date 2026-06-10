@@ -1099,10 +1099,28 @@ templ customNavLink(link SidebarLink) {
 // Topbar renders the top navigation bar with campaign selector, customizable
 // content area, search, notes, and user menu.
 templ Topbar() {
-	<header
-		class="h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2"
-		style={ topbarInlineStyle(ctx) }
-	>
+	<header class="h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative">
+		if topbarHasCustomStyle(ctx) {
+			// Custom topbar background (solid / gradient / image) renders on a
+			// dedicated full-bleed layer rather than on the <header> itself.
+			// z-index:-1 paints it ABOVE the header's opaque bg-surface fill but
+			// BELOW the in-flow nav content, so the image/gradient can never be
+			// masked by the surface color or the flex children — the original
+			// "saved but invisible" bug. pointer-events:none lets clicks fall
+			// through to the nav controls underneath.
+			<div
+				style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; " + topbarInlineStyle(ctx) }
+				aria-hidden="true"
+			></div>
+			if topbarStyleIsImage(ctx) {
+				// A dark scrim over the photo keeps the nav text + icons legible
+				// regardless of which image the owner uploaded.
+				<div
+					style="position:absolute; inset:0; z-index:-1; pointer-events:none; background:linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0.25));"
+					aria-hidden="true"
+				></div>
+			}
+		}
 		<!-- Left: Hamburger + Campaign selector -->
 		<div class="flex items-center gap-2 shrink-0">
 			<!-- Mobile hamburger -->
@@ -1443,42 +1461,58 @@ templ topbarCenterContent(ctx context.Context) {
 	}
 }
 
-// topbarInlineStyle generates inline CSS for the topbar based on campaign
-// visual customization settings. Returns empty string for default styling.
+// topbarInlineStyle returns the CSS background declaration for the campaign's
+// custom topbar, or an empty string for the default surface styling. The value
+// is applied to the dedicated background LAYER inside the <header> (see Topbar),
+// not the <header> element itself: keeping the background on its own full-bleed
+// layer is what prevents the opaque surface fill and the flex nav children from
+// masking the image or gradient.
 func topbarInlineStyle(ctx context.Context) string {
 	style := GetTopbarStyle(ctx)
-	if style == nil || style.Mode == "" {
+	if style == nil {
 		return ""
 	}
 	switch style.Mode {
 	case "solid":
 		if style.Color != "" {
-			return fmt.Sprintf("background-color: %s; border-color: transparent;", style.Color)
+			return fmt.Sprintf("background-color: %s;", style.Color)
 		}
 	case "gradient":
-		dir := style.GradientDir
-		if dir == "" {
-			dir = "to right"
-		}
-		// Convert shorthand to CSS gradient direction.
-		switch dir {
-		case "to-r":
-			dir = "to right"
-		case "to-br":
-			dir = "to bottom right"
-		case "to-b":
-			dir = "to bottom"
-		}
 		if style.GradientFrom != "" && style.GradientTo != "" {
-			return fmt.Sprintf("background: linear-gradient(%s, %s, %s); border-color: transparent;", dir, style.GradientFrom, style.GradientTo)
+			return fmt.Sprintf("background: linear-gradient(%s, %s, %s);", topbarGradientDir(style.GradientDir), style.GradientFrom, style.GradientTo)
 		}
 	case "image":
 		if style.ImagePath != "" {
-			url := MediaURL(ctx, style.ImagePath)
-			return fmt.Sprintf("background-image: url('%s'); background-size: cover; background-position: center; border-color: transparent;", url)
+			return fmt.Sprintf("background-image: url('%s'); background-size: cover; background-position: center;", MediaURL(ctx, style.ImagePath))
 		}
 	}
 	return ""
+}
+
+// topbarGradientDir converts the stored shorthand gradient direction into a CSS
+// gradient direction keyword, defaulting to "to right" for empty/unknown input.
+func topbarGradientDir(dir string) string {
+	switch dir {
+	case "to-br":
+		return "to bottom right"
+	case "to-b":
+		return "to bottom"
+	default: // "to-r" or empty
+		return "to right"
+	}
+}
+
+// topbarHasCustomStyle reports whether the campaign has a renderable custom
+// topbar background — used to decide whether to emit the background layer.
+func topbarHasCustomStyle(ctx context.Context) bool {
+	return topbarInlineStyle(ctx) != ""
+}
+
+// topbarStyleIsImage reports whether the custom topbar background is an image,
+// which additionally gets a dark scrim layered over it for nav legibility.
+func topbarStyleIsImage(ctx context.Context) bool {
+	style := GetTopbarStyle(ctx)
+	return style != nil && style.Mode == "image" && style.ImagePath != ""
 }
 
 // userInitials returns the first two initials of the user's display name
