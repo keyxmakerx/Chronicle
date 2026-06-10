@@ -36,11 +36,18 @@ test('unified EFFECTS projects both registries with per-surface fields', () => {
     assert.ok('skyBand' in fx[id], id + ' has skyBand');
     assert.ok('hgTop' in fx[id], id + ' has hgTop');
     assert.ok('hgBottom' in fx[id], id + ' has hgBottom');
-    assert.equal(typeof fx[id].hgSand, 'function', id + ' has hgSand delegate');
+    // GM-overhaul: catalog entries carry the CATALOG §12.2 hgSand shape
+    // ({color}) — the hourglass sand recolors from it; legacy projections
+    // may still expose the function delegate.
+    const sand = fx[id].hgSand;
+    assert.ok(typeof sand === 'function' || (sand && typeof sand.color === 'string'),
+      id + ' has an hgSand color or delegate');
     assert.ok('timeline' in fx[id], id + ' has timeline');
   }
-  assert.equal(fx.rain.category, 'weather');
-  assert.equal(fx['meteor-shower'].category, 'celestial');
+  // GM-overhaul: the catalog uses the CATALOG Part-3/4 taxonomy
+  // (standard/severe/environmental/fantasy-weather + celestial-event).
+  assert.ok(/weather$/.test(fx.rain.category), 'rain is a weather category: ' + fx.rain.category);
+  assert.ok(/^celestial/.test(fx['meteor-shower'].category), 'meteor-shower is celestial: ' + fx['meteor-shower'].category);
 });
 
 test('setWorldState returns changedKeys and notifies subscribers', () => {

@@ -60,6 +60,13 @@ func (m *mockCalendarRepo) ClearCelestialEvents(ctx context.Context, calendarID 
 	return nil
 }
 
+func (m *mockCalendarRepo) ClearCelestialEventsByType(ctx context.Context, calendarID string, year, month, day int, eventType string) error {
+	if m.clearCelestialEventsByTypeFn != nil {
+		return m.clearCelestialEventsByTypeFn(ctx, calendarID, year, month, day, eventType)
+	}
+	return nil
+}
+
 func (m *mockCalendarRepo) GetMoonPhasesForCalendar(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error) {
 	if m.getMoonPhasesFn != nil {
 		return m.getMoonPhasesFn(ctx, calendarID)
@@ -86,14 +93,14 @@ func (m *mockCalendarRepo) SetMoodTint(ctx context.Context, calendarID string, c
 func sampleSeedCalendar() *Calendar {
 	silverTint := "#c8d8ff"
 	return &Calendar{
-		ID:             "cal-1",
-		CampaignID:     "camp-1",
-		Name:           "Harptos",
-		CurrentYear:    1492,
-		CurrentMonth:   4,
-		CurrentDay:     15,
-		CurrentHour:    12,
-		CurrentMinute:  0,
+		ID:               "cal-1",
+		CampaignID:       "camp-1",
+		Name:             "Harptos",
+		CurrentYear:      1492,
+		CurrentMonth:     4,
+		CurrentDay:       15,
+		CurrentHour:      12,
+		CurrentMinute:    0,
 		HoursPerDay:      24,
 		MinutesPerHour:   60,
 		SecondsPerMinute: 60,

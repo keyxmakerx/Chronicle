@@ -1,0 +1,715 @@
+/* cal-almanac-render.css — the worldstate WIDGET render layer.
+ *
+ * C-CAL-WORLDSTATE-GM-OVERHAUL: every rule the widget needs to RENDER —
+ * sky, sun, moons, weather + celestial particles, hourglass shelf, mood
+ * wash — lives HERE, unscoped, loaded by EVERY surface that shows the
+ * widget: /demo, /calendar/v2, the entity embeds, and the app dashboard.
+ * Demo-only CHROME (the showcase shell, popups, demo controls) stays in
+ * cal-almanac.css. This split is the structural fix for the recurring
+ * "works in /demo, broken in prod" class: a render rule can no longer be
+ * authored shell-scoped by accident. Guard: test/js/css_render_split.test.mjs
+ * fails the build if `.cal-almanac-shell` appears in this file or a render
+ * selector appears in the chrome file.
+ *
+ * RENDERING-CANVAS CSS — EXEMPT FROM CUSTOMIZATION-READINESS, per
+ * decisions/2026-06-05-rendering-canvas-css-exemption.md: hardcoded OKLCH
+ * literals here are an intentional canvas palette, not themeable chrome.
+ *
+ * Perf discipline: transform/opacity-only animation; explicit easing
+ * tokens; prefers-reduced-motion zeroes every animation at the bottom.
+ */
+
+/* Motion tokens on the RENDER ROOTS (not the demo shell) so transitions
+ * actually run on production surfaces. The shell re-declares the same
+ * values for demo chrome; these are the widget's own copy. */
+.cal-almanac-sky,
+.cal-almanac-shelf {
+  --cal-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --cal-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --cal-d-micro: 120ms;
+  --cal-d-small: 200ms;
+  --cal-d-medium: 320ms;
+  --cal-d-large: 560ms;
+}
+
+/* ---- Sky band core ---------------------------------------------- */
+.cal-almanac-sky {
+  position: relative;
+  overflow: hidden;
+  /* `background` set inline per server-rendered SkyTime; JS replaces
+   * with a color-mix gradient on scrub. */
+  transition: background var(--cal-d-large) var(--cal-ease-out);
+}
+/* Production particle-canvas sizing (C-WIDGET-BINDING-QA2). The detailed
+ * `.cal-almanac-shell .cal-almanac-sky__canvas` rule below is scoped to the
+ * /demo shell, which the LIVE calendar_v2 band + the entity-page embeds do NOT
+ * wrap in — so without this the canvas keeps the default 300×150 intrinsic size
+ * and the engine paints particles into a small top-left box instead of across
+ * the band. Match the band: fill it, sit below the sun (z5) + overlay (z6). */
+[data-cal-sky-canvas] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+.cal-almanac-sky__arc {
+  position: absolute;
+  inset: 0;
+  z-index: 5;            /* above the era marker (z3) + canvas (z2) */
+  pointer-events: none; /* but the sun itself re-enables below */
+}
+
+/* Foreground particle canvas — clouds / precipitation / fog banks paint
+ * OVER the sun + moons (depth: weather is nearer than the celestial
+ * bodies), still under the text overlay (z6). Sits AFTER the arc in the
+ * DOM at the same z-index, so it stacks above the sun without a new
+ * stacking context. */
+[data-cal-sky-canvas-front] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.cal-almanac-sky__moon {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  margin-top: -17px;
+  border-radius: 50%;
+  /* base color is set inline per-moon; shadow gives a phase hint */
+  box-shadow: inset -8px -2px 0 0 oklch(0 0 0 / 0.38),
+              0 0 18px oklch(0.85 0.05 100 / 0.30);
+  pointer-events: none;
+  transition: left var(--cal-d-large) var(--cal-ease-out),
+              top var(--cal-d-large) var(--cal-ease-out),
+              opacity var(--cal-d-large) var(--cal-ease-out);
+}
+.cal-almanac-sky__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 14px 18px;
+  gap: 16px;
+  background: linear-gradient(180deg, transparent 30%, oklch(0 0 0 / 0.50) 100%);
+  z-index: 6;             /* time controls on top */
+  pointer-events: none;  /* gradient never blocks; children opt back in */
+}
+/* R6: the happening chips render in prod too (read-only) — un-scoped so the
+   hover-title pills receive pointer events outside the demo shell. */
+.cal-almanac-sky__happening { pointer-events: auto; }
+.cal-almanac-sky__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: oklch(0.985 0.002 247.839);
+  text-shadow: 0 1px 2px oklch(0 0 0 / 0.5);
+}
+.cal-almanac-sky__label strong { font-size: 16px; font-weight: 600; }
+.cal-almanac-sky__sub { font-size: 12px; opacity: 0.85; }
+
+/* ---- Weather + celestial layer boxes ---------------------------- */
+.cal-almanac-sky__weather,
+.cal-almanac-sky__celestial {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.cal-almanac-sky__celestial { z-index: 2; }
+
+/* =================================================================
+   SUN — layered CSS-art body (C-CAL-WORLDSTATE-GM-OVERHAUL).
+   ----------------------------------------------------------------
+   Replaces the flat lorc/sun.svg sticker: a hot gradient CORE, a soft
+   radial CORONA, and a slowly-rotating RAY WHEEL (clear-sky rays). The
+   engine positions the root on the arc and drives two custom props:
+     --cal-sun-rays  : ray-wheel strength (1 clear → 0 storm/fog)
+     --cal-sun-size  : disc box, derived from the band height
+       (set by the engine from the live band rect, so the same widget
+        scales itself on the 200px prod band, the taller /demo canvas,
+        and any embed — no per-surface override, no drift).
+   States (data-cal-sun-state): default · dawn/dusk (warm palette,
+   lazier rays) · eclipse (dark disc + diamond-ring corona, rays off)
+   · special (crimson omen). GPU-only: transform/opacity transitions.
+   ================================================================= */
+.cal-almanac-sun {
+  --cal-sun-size: 96px;
+  --sun-core: oklch(0.98 0.06 95);
+  --sun-mid: oklch(0.90 0.15 85);
+  --sun-edge: oklch(0.80 0.16 68);
+  --sun-glow: oklch(0.92 0.14 82);
+  --cal-sun-rays: 0.9;
+  position: absolute;
+  width: var(--cal-sun-size);
+  height: var(--cal-sun-size);
+  margin-left: calc(var(--cal-sun-size) * -0.5);
+  margin-top: calc(var(--cal-sun-size) * -0.5);
+  display: block;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  pointer-events: none;
+  transition: left var(--cal-d-large) var(--cal-ease-out),
+              top var(--cal-d-large) var(--cal-ease-out),
+              opacity var(--cal-d-large) var(--cal-ease-out);
+}
+/* Ray wheel — repeating conic spokes, faded in a ring band by mask.
+ * Strength dials with weather (engine sets --cal-sun-rays). */
+.cal-almanac-sun__rays {
+  position: absolute;
+  inset: -34%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    oklch(0.93 0.13 85 / 0.30) 0deg 6deg,
+    transparent 6deg 24deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 26%, #000 36%, transparent 70%);
+  mask-image: radial-gradient(circle, transparent 26%, #000 36%, transparent 70%);
+  opacity: var(--cal-sun-rays);
+  animation: cal-sun-rotate 90s linear infinite;
+  transition: opacity 1200ms var(--cal-ease-out);
+  will-change: transform;
+}
+/* Soft corona halo around the disc. */
+.cal-almanac-sun__corona {
+  position: absolute;
+  inset: -18%;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    oklch(0.94 0.12 86 / 0.50) 0%,
+    oklch(0.90 0.14 80 / 0.16) 45%,
+    transparent 72%);
+  animation: cal-sun-breathe 7s ease-in-out infinite;
+}
+/* The disc itself — off-center highlight reads as a hot core. */
+.cal-almanac-sun__core {
+  position: absolute;
+  inset: 26%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 32%,
+    var(--sun-core) 0%,
+    var(--sun-mid) 55%,
+    var(--sun-edge) 100%);
+  box-shadow:
+    0 0 calc(var(--cal-sun-size) * 0.16) oklch(0.94 0.12 85 / 0.80),
+    0 0 calc(var(--cal-sun-size) * 0.46) oklch(0.88 0.14 80 / 0.32);
+  transition: background 800ms var(--cal-ease-out), box-shadow 800ms var(--cal-ease-out);
+}
+/* Eclipse glyph (vendored lorc/eclipse.svg) — only the eclipse state shows it. */
+.cal-almanac-sun__icon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 800ms var(--cal-ease-out);
+}
+/* Dawn / dusk: warm low-sun palette, lazier rays. */
+.cal-almanac-sun[data-cal-sun-state="dawn"],
+.cal-almanac-sun[data-cal-sun-state="dusk"],
+.cal-almanac--proof-sun-dawn .cal-almanac-sun,
+.cal-almanac--proof-sun-dusk .cal-almanac-sun {
+  --sun-core: oklch(0.95 0.09 70);
+  --sun-mid: oklch(0.84 0.18 55);
+  --sun-edge: oklch(0.72 0.20 40);
+}
+.cal-almanac-sun[data-cal-sun-state="dawn"] .cal-almanac-sun__rays,
+.cal-almanac-sun[data-cal-sun-state="dusk"] .cal-almanac-sun__rays {
+  animation-duration: 150s;
+  opacity: calc(var(--cal-sun-rays) * 0.6);
+}
+/* Special (omen) day: crimson cast + pulse. */
+.cal-almanac-sun[data-cal-sun-state="special"],
+.cal-almanac--proof-sun-special .cal-almanac-sun {
+  --sun-core: oklch(0.88 0.12 35);
+  --sun-mid: oklch(0.70 0.20 28);
+  --sun-edge: oklch(0.55 0.21 25);
+}
+.cal-almanac-sun[data-cal-sun-state="special"] .cal-almanac-sun__core,
+.cal-almanac--proof-sun-special .cal-almanac-sun .cal-almanac-sun__core {
+  animation: cal-sun-special-pulse 3s ease-in-out infinite;
+}
+/* Eclipse: near-black disc + diamond-ring corona; rays off; glyph on. */
+.cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__core,
+.cal-almanac--proof-sun-eclipse .cal-almanac-sun .cal-almanac-sun__core {
+  background: radial-gradient(circle at 40% 36%,
+    oklch(0.22 0.03 290) 0%,
+    oklch(0.12 0.02 280) 70%);
+  box-shadow:
+    0 0 0 2px oklch(0.97 0.04 90 / 0.95),
+    0 0 calc(var(--cal-sun-size) * 0.3) calc(var(--cal-sun-size) * 0.06) oklch(0.95 0.06 90 / 0.60);
+  animation: cal-sun-eclipse-pulse 4s ease-in-out infinite;
+}
+.cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__rays,
+.cal-almanac--proof-sun-eclipse .cal-almanac-sun .cal-almanac-sun__rays { opacity: 0; }
+.cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__corona,
+.cal-almanac--proof-sun-eclipse .cal-almanac-sun .cal-almanac-sun__corona {
+  background: radial-gradient(circle,
+    oklch(0.95 0.05 90 / 0.40) 0%,
+    oklch(0.85 0.05 90 / 0.12) 48%,
+    transparent 70%);
+  animation: none;
+}
+.cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"],
+.cal-almanac--proof-sun-eclipse .cal-almanac-sun .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"] {
+  opacity: 0.35;
+}
+@keyframes cal-sun-rotate { to { transform: rotate(360deg); } }
+@keyframes cal-sun-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.06); opacity: 0.92; }
+}
+@keyframes cal-sun-eclipse-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px oklch(0.97 0.04 90 / 0.95), 0 0 28px 6px oklch(0.95 0.06 90 / 0.60); }
+  50%      { box-shadow: 0 0 0 2px oklch(0.97 0.04 90 / 0.95), 0 0 44px 10px oklch(0.95 0.06 90 / 0.85); }
+}
+@keyframes cal-sun-special-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
+}
+
+
+/* ---- Moons ------------------------------------------------------- */
+/* Moon phase rendering: a shadow disc over the lit base via an inset
+ * gradient. --moon-color sets the lit colour. */
+.cal-almanac-sky__moon {
+  background-color: var(--moon-color, oklch(0.9 0.04 95));
+  /* WAVE 2: the chosen design (procedural SVG or emoji glyph) as the disc. */
+  background-image: var(--moon-img, none);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+  transform: scale(var(--moon-size, 1));
+}
+.cal-almanac-sky__moon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: oklch(0.10 0.02 264);
+}
+/* WAVE 2 — Procedural designs: the vendored SVG disc fills the moon; the
+ * ::after terminator carves the lit fraction (phase); the box-shadow phase
+ * hint is dropped (the SVG + terminator own the look); tint multiplies over. */
+.cal-almanac-sky__moon[data-cal-moon-mode="procedural"] {
+  background-color: transparent;
+  box-shadow: 0 0 18px oklch(0.85 0.05 100 / 0.30);
+}
+.cal-almanac-sky__moon[data-cal-moon-mode="procedural"][style*="--moon-color"]::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: var(--moon-color); mix-blend-mode: multiply; opacity: 0.4; pointer-events: none; z-index: 1;
+}
+/* Emoji designs: the glyph already encodes the phase → no terminator, no tint. */
+.cal-almanac-sky__moon[data-cal-moon-mode="emoji"] {
+  background-color: transparent; background-size: contain; background-repeat: no-repeat;
+  box-shadow: none;
+}
+.cal-almanac-sky__moon[data-cal-moon-mode="emoji"]::after { display: none; }
+/* Holographic — the ONLY animated moon (slow hue-shift). Frozen under
+ * reduced-motion (see the media query below). */
+.cal-almanac-sky__moon[data-cal-moon-design="moon-holographic"] {
+  animation: cal-moon-holo 8s linear infinite;
+}
+@keyframes cal-moon-holo { to { filter: hue-rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .cal-almanac-sky__moon[data-cal-moon-design="moon-holographic"] { animation: none !important; }
+}
+.cal-almanac-sky__moon--new::after     { transform: translateX(0); }
+.cal-almanac-sky__moon--cres-wax::after  { transform: translateX(72%); border-radius: 50%; }
+.cal-almanac-sky__moon--quarter-wax::after { transform: translateX(50%); }
+.cal-almanac-sky__moon--gibb-wax::after  { transform: translateX(28%); opacity: 0.5; }
+.cal-almanac-sky__moon--full::after    { transform: translateX(0); opacity: 0; }
+.cal-almanac-sky__moon--gibb-wane::after { transform: translateX(-28%); opacity: 0.5; }
+.cal-almanac-sky__moon--quarter-wane::after { transform: translateX(-50%); }
+.cal-almanac-sky__moon--cres-wane::after { transform: translateX(-72%); }
+
+/* WAVE 2 — Player mood-tint wash (resolution step 6). A global 'overlay'
+ * blend (screen-on-light / multiply-on-dark) above weather+events, inserted
+ * in the DOM BEFORE the text label so the label stays legible. background +
+ * opacity are set inline by applyMoodTint; intensity 0 = opacity 0 = no-op.
+ * Static (no @keyframes) → renders fine under reduced-motion. */
+.cal-almanac-sky__mood-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0;
+  z-index: 5;
+  transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-almanac-sky__mood-wash { transition: none; }
+}
+
+/* Atmosphere-pause ("suspended in amber") — freeze every CSS animation
+ * under the WIDGET ROOT. De-scoped from the demo shell so the GM pause
+ * freezes production surfaces too; the canvas engine freezes in parallel
+ * via CalParticleEngine.setPaused(). */
+[data-cal-atmosphere-paused="true"] .cal-almanac-sky *,
+[data-cal-atmosphere-paused="true"] .cal-almanac-sky *::before,
+[data-cal-atmosphere-paused="true"] .cal-almanac-sky *::after,
+[data-cal-atmosphere-paused="true"] .cal-almanac-shelf *,
+[data-cal-atmosphere-paused="true"] .cal-almanac-shelf *::before,
+[data-cal-atmosphere-paused="true"] .cal-almanac-shelf *::after,
+.cal-almanac-sky[data-cal-atmosphere-paused="true"] *,
+.cal-almanac-shelf[data-cal-atmosphere-paused="true"] * {
+  animation-play-state: paused !important;
+}
+
+
+/* ---- Happening chips (bottom-right of the band) ------------------ */
+.cal-almanac-sky__happening {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.cal-almanac-sky__happening-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: oklch(0 0 0 / 0.35);
+  border: 1px solid oklch(1 0 0 / 0.14);
+  color: oklch(0.92 0.06 90);
+}
+.cal-almanac-sky__happening-icon { width: 15px; height: 15px; }
+
+/* ---- DOM-fallback weather/celestial particles (no-JS path) ------- */
+.cal-almanac-rain {
+  position: absolute;
+  top: -12%;
+  width: 1.5px;
+  height: 14px;
+  background: linear-gradient(oklch(0.85 0.08 230 / 0), oklch(0.85 0.08 230 / 0.7));
+  animation: cal-rain linear infinite;
+}
+.cal-almanac-rain--heavy { height: 18px; width: 2px; opacity: 0.85; }
+@keyframes cal-rain {
+  0%   { transform: translateY(0); opacity: 0; }
+  10%  { opacity: 1; }
+  100% { transform: translateY(220px); opacity: 0.2; }
+}
+/* --- Snow --- */
+.cal-almanac-snow {
+  position: absolute;
+  top: -6%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: oklch(0.97 0.01 240 / 0.9);
+  animation: cal-snow linear infinite;
+}
+@keyframes cal-snow {
+  0%   { transform: translate(0, 0); opacity: 0; }
+  10%  { opacity: 1; }
+  100% { transform: translate(var(--drift, 0), 200px); opacity: 0.3; }
+}
+/* --- Fog --- */
+.cal-almanac-fog {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 46%;
+  background: linear-gradient(oklch(0.7 0.01 240 / 0), oklch(0.7 0.02 240 / 0.55));
+  backdrop-filter: blur(2px);
+  animation: cal-fog 18s ease-in-out infinite alternate;
+}
+@keyframes cal-fog { from { opacity: 0.5; } to { opacity: 0.85; } }
+/* --- Clouds --- */
+.cal-almanac-cloud {
+  position: absolute;
+  height: 26px;
+  border-radius: 16px;
+  background: oklch(0.85 0.02 250 / 0.30);
+  filter: blur(3px);
+  animation: cal-cloud linear infinite;
+}
+.cal-almanac-cloud--1 { top: 18%; width: 120px; animation-duration: 48s; }
+.cal-almanac-cloud--2 { top: 34%; width: 90px;  animation-duration: 62s; opacity: 0.7; }
+.cal-almanac-cloud--3 { top: 10%; width: 150px; animation-duration: 75s; opacity: 0.5; }
+@keyframes cal-cloud { from { transform: translateX(-180px); } to { transform: translateX(1100px); } }
+.cal-almanac-cloudbank {
+  position: absolute;
+  inset: 0 0 40% 0;
+  background: linear-gradient(oklch(0.25 0.02 264 / 0.55), oklch(0.25 0.02 264 / 0));
+}
+.cal-almanac-cloudbank--dark { background: linear-gradient(oklch(0.16 0.02 264 / 0.7), oklch(0.16 0.02 264 / 0)); }
+/* --- Lightning --- */
+.cal-almanac-lightning {
+  position: absolute;
+  inset: 0;
+  background: oklch(0.98 0.02 250 / 0.85);
+  opacity: 0;
+  animation: cal-lightning 5s steps(1) infinite;
+}
+@keyframes cal-lightning {
+  0%, 92%, 100% { opacity: 0; }
+  93% { opacity: 0.8; }
+  94% { opacity: 0; }
+  95% { opacity: 0.6; }
+  96% { opacity: 0; }
+}
+/* --- Meteors --- */
+.cal-almanac-meteor {
+  position: absolute;
+  width: 80px;
+  height: 2px;
+  background: linear-gradient(90deg, oklch(0.95 0.10 80 / 0), oklch(0.95 0.10 80 / 0.9));
+  transform: rotate(28deg);
+  opacity: 0;
+  animation: cal-meteor 6s linear infinite;
+}
+@keyframes cal-meteor {
+  0%   { transform: translate(0,0) rotate(28deg); opacity: 0; }
+  4%   { opacity: 1; }
+  16%  { transform: translate(-260px, 150px) rotate(28deg); opacity: 0; }
+  100% { opacity: 0; }
+}
+/* --- Eclipse --- */
+.cal-almanac-eclipse {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cal-almanac-eclipse--solar {
+  background: radial-gradient(circle at 50% 38%, oklch(0 0 0 / 0.0) 0, oklch(0 0 0 / 0.55) 16%, oklch(0 0 0 / 0.0) 30%),
+              linear-gradient(oklch(0.10 0.02 60 / 0.45), oklch(0.10 0.02 60 / 0.0));
+  animation: cal-eclipse-pulse 8s ease-in-out infinite;
+}
+.cal-almanac-eclipse--lunar {
+  background: radial-gradient(circle at 76% 30%, oklch(0.55 0.18 25 / 0.5) 0, oklch(0.55 0.18 25 / 0.0) 12%);
+}
+@keyframes cal-eclipse-pulse { 0%,100% { opacity: 0.85; } 50% { opacity: 1; } }
+.cal-almanac-celestial-stub {
+  position: absolute;
+  bottom: 6px;
+  right: 90px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: oklch(0 0 0 / 0.4);
+  color: oklch(0.85 0.08 300);
+  border: 1px dashed oklch(0.6 0.12 300 / 0.5);
+}
+
+/* Forced-state proof classes (headless screenshots). Force a given
+
+/* =================================================================
+   Hourglass shelf (the compact timepiece variant)
+   ================================================================= */
+.cal-almanac-shelf {
+  position: absolute;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: oklch(0.13 0.02 264);
+  border: 1px solid oklch(0.30 0.025 260);
+  border-radius: 12px;
+  box-shadow: 0 6px 18px oklch(0 0 0 / 0.36);
+  z-index: 60;
+  /* themeable sand tokens (recoloured by data-cal-hourglass-theme) */
+  --sand-color: oklch(0.78 0.16 80);
+  --sand-glow:  oklch(0.92 0.13 85 / 0.5);
+  --sand-stream: oklch(0.86 0.16 80);
+  /* themeable shelf-frame material */
+  --shelf-frame: oklch(0.46 0.07 70);
+  --shelf-frame-hi: oklch(0.66 0.09 75);
+}
+.cal-almanac-shelf[data-cal-shelf-frame="silver"] { --shelf-frame: oklch(0.55 0.01 260); --shelf-frame-hi: oklch(0.78 0.01 260); }
+.cal-almanac-shelf[data-cal-shelf-frame="wood"]   { --shelf-frame: oklch(0.40 0.06 50);  --shelf-frame-hi: oklch(0.55 0.08 55); }
+.cal-almanac-shelf__handle {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color: oklch(0.74 0.022 261);
+  background: oklch(0.10 0.018 264);
+  border-bottom: 1px solid oklch(0.30 0.025 260);
+  border-radius: 12px 12px 0 0;
+  cursor: grab;
+  user-select: none;
+}
+.cal-almanac-shelf[data-cal-time-dragging="true"] .cal-almanac-shelf__handle { cursor: grabbing; }
+.cal-almanac-shelf__tag { color: oklch(0.82 0.022 261); }
+.cal-almanac-shelf__theme {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sand-color);
+  opacity: 0.85;
+}
+/* The hourglass stands above the shelf bar. */
+.cal-almanac-shelf__stage {
+  position: relative;
+  padding: 12px 0 0;
+  display: flex;
+  justify-content: center;
+}
+.cal-almanac-hourglass__frame {
+  position: relative;
+  width: 60px;
+  height: 110px;
+  transform-origin: 50% 50%;
+  transition: transform 1.5s cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
+}
+.cal-almanac-shelf[data-cal-hourglass-flipped="true"] .cal-almanac-hourglass__frame { transform: rotate(180deg); }
+.cal-almanac-shelf[data-cal-hourglass-flipping="true"] .cal-almanac-hourglass__frame { pointer-events: none; }
+/* The glass shell SVG sits ON TOP of the canvas interior (DOM order +
+ * z-index). The v4 sand-fill rects are superseded by the canvas heightmap. */
+.cal-almanac-hourglass__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; z-index: 2; }
+.cal-almanac-hourglass__outline { fill: none; stroke: var(--shelf-frame-hi); stroke-width: 1.4; opacity: 0.85; }
+/* WAVE 1c: wood end-caps — fill comes from the inline #calHgWood gradient +
+ * bevel filter, so no CSS fill here (it would override the gradient). */
+.cal-almanac-hourglass__rim { stroke: none; }
+/* Glass specular gloss (feSpecularLighting) — screen-blended highlight. */
+.cal-almanac-hourglass__gloss { stroke: none; opacity: 0.5; mix-blend-mode: screen; }
+.cal-almanac-hourglass__reflect { stroke: none; }
+/* Canvas interior (day/night sky + heightmap sand), clipped in JS to the
+ * glass silhouette. Sits BELOW the glass shell (z-index 1 < svg's 2). */
+.cal-almanac-hourglass__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  transition: transform 1.5s cubic-bezier(0.2, 0, 0, 1);
+}
+/* WAVE 1: the whole frame rotates 180° at the dawn/dusk flip; counter-rotate
+ * the canvas so the sand still obeys gravity and the day/night sky stays
+ * upright (the flip re-orients the glass shell, not the physics). */
+.cal-almanac-shelf[data-cal-hourglass-flipped="true"] .cal-almanac-hourglass__canvas { transform: rotate(180deg); }
+.cal-almanac-hourglass__sparkle {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, oklch(0.96 0.10 90 / 0.55), transparent 40%);
+  opacity: 0;
+  transition: opacity 280ms cubic-bezier(0.2, 0, 0, 1);
+}
+.cal-almanac-shelf[data-cal-hourglass-flipping="true"] .cal-almanac-hourglass__sparkle { opacity: 1; }
+
+/* ---- The shelf bar: flanking text + decorative plinth ---------- */
+.cal-almanac-shelf__bar {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 6px;
+  padding: 4px 12px 12px;
+  position: relative;
+}
+.cal-almanac-shelf__bar::before {
+  /* the shelf surface line the hourglass rests on */
+  content: "";
+  position: absolute;
+  left: 10px; right: 10px; top: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--shelf-frame-hi), var(--shelf-frame));
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.4);
+}
+.cal-almanac-shelf__flank { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; }
+.cal-almanac-shelf__flank--right { text-align: right; }
+.cal-almanac-shelf__primary { font-size: 11px; font-weight: 600; color: oklch(0.92 0.012 260); }
+.cal-almanac-shelf__secondary { font-size: 10px; font-family: "JetBrains Mono", ui-monospace, monospace; color: oklch(0.70 0.022 261); }
+.cal-almanac-shelf__plinth {
+  width: 44px; height: 12px;
+  border-radius: 0 0 4px 4px;
+  background: linear-gradient(180deg, var(--shelf-frame-hi), var(--shelf-frame));
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.12), 0 2px 3px oklch(0 0 0 / 0.4);
+}
+.cal-almanac-shelf__clock {
+  background: none; border: none; padding: 0;
+  font-family: inherit; font-size: 11px; color: var(--sand-color); cursor: pointer;
+  transition: color 120ms cubic-bezier(0.2,0,0,1);
+}
+.cal-almanac-shelf__clock:hover { color: oklch(0.96 0.10 85); }
+
+/* ---- Themed sand recolour (registry → data-theme attribute) ---- */
+.cal-almanac-shelf[data-cal-hourglass-theme="clear"]        { --sand-color: oklch(0.78 0.16 80);  --sand-glow: oklch(0.92 0.13 85 / 0.5);  --sand-stream: oklch(0.86 0.16 80); }
+.cal-almanac-shelf[data-cal-hourglass-theme="cloudy"]       { --sand-color: oklch(0.62 0.10 80);  --sand-glow: oklch(0.74 0.08 85 / 0.35); --sand-stream: oklch(0.70 0.12 80); }
+.cal-almanac-shelf[data-cal-hourglass-theme="rain"]         { --sand-color: oklch(0.62 0.14 240); --sand-glow: oklch(0.78 0.12 230 / 0.4); --sand-stream: oklch(0.70 0.16 235); }
+.cal-almanac-shelf[data-cal-hourglass-theme="thunderstorm"] { --sand-color: oklch(0.55 0.15 250); --sand-glow: oklch(0.92 0.18 90 / 0.55); --sand-stream: oklch(0.68 0.18 245); }
+.cal-almanac-shelf[data-cal-hourglass-theme="snow"]         { --sand-color: oklch(0.94 0.02 240); --sand-glow: oklch(0.99 0.02 240 / 0.6); --sand-stream: oklch(0.97 0.03 240); }
+.cal-almanac-shelf[data-cal-hourglass-theme="fog"]          { --sand-color: oklch(0.74 0.012 240); --sand-glow: oklch(0.84 0.008 240 / 0.3); --sand-stream: oklch(0.78 0.012 240); }
+.cal-almanac-shelf[data-cal-hourglass-theme="eclipse-solar"],
+.cal-almanac-shelf[data-cal-hourglass-theme="eclipse-lunar"] { --sand-color: oklch(0.28 0.02 270); --sand-glow: oklch(0.86 0.04 280 / 0.55); --sand-stream: oklch(0.62 0.05 280); }
+.cal-almanac-shelf[data-cal-hourglass-theme="meteor-shower"] { --sand-color: oklch(0.82 0.16 75);  --sand-glow: oklch(0.96 0.18 80 / 0.7);  --sand-stream: oklch(0.92 0.18 78); }
+.cal-almanac-shelf[data-cal-hourglass-theme="volcanic"]     { --sand-color: oklch(0.55 0.18 35); }
+.cal-almanac-shelf[data-cal-hourglass-theme="plague"]       { --sand-color: oklch(0.62 0.14 145); }
+.cal-almanac-shelf[data-cal-hourglass-theme="arcane-winds"],
+.cal-almanac-shelf[data-cal-hourglass-theme="arcane-surge"] { --sand-color: oklch(0.66 0.22 310); }
+.cal-almanac-shelf[data-cal-hourglass-theme="aurora"]       { --sand-color: oklch(0.78 0.18 160); }
+.cal-almanac-shelf[data-cal-hourglass-theme="ice-age"]      { --sand-color: oklch(0.88 0.06 220); }
+.cal-almanac-shelf[data-cal-hourglass-theme="comet"]        { --sand-color: oklch(0.82 0.14 200); }
+.cal-almanac-shelf[data-cal-hourglass-theme="moon-special"] { --sand-color: oklch(0.86 0.04 280); }
+.cal-almanac-shelf[data-cal-hourglass-theme="ashfall"]      { --sand-color: oklch(0.45 0.02 260); }
+.cal-almanac-shelf[data-cal-hourglass-theme="acid-rain"]    { --sand-color: oklch(0.78 0.18 125); }
+.cal-almanac-shelf[data-cal-hourglass-theme="ley-surge"]    { --sand-color: oklch(0.72 0.20 290); }
+.cal-almanac-shelf[data-cal-hourglass-theme="sakura-bloom"] { --sand-color: oklch(0.84 0.10 350); }
+
+/* ---- Reduced motion: zero all render animation (the canvas engine
+   self-disables via its own reducedNow gate; this covers CSS). ------ */
+@media (prefers-reduced-motion: reduce) {
+  .cal-almanac-rain,
+  .cal-almanac-snow,
+  .cal-almanac-cloud,
+  .cal-almanac-lightning,
+  .cal-almanac-meteor,
+  .cal-almanac-fog,
+  .cal-almanac-eclipse--solar,
+  .cal-almanac-sun__rays,
+  .cal-almanac-sun__corona,
+  .cal-almanac-sun__core {
+    animation: none !important;
+  }
+  .cal-almanac-snow,
+  .cal-almanac-rain { opacity: 0.6; }
+  .cal-almanac-hourglass__frame,
+  .cal-almanac-hourglass__sand,
+  .cal-almanac-hourglass__sparkle { transition: none !important; }
+  .cal-almanac-hourglass__sparkle { opacity: 0 !important; }
+  .cal-almanac-sun,
+  .cal-almanac-sky__moon { transition: left 0.01ms, top 0.01ms, opacity 200ms linear; }
+}
+
+
+/* ---- Moon event treatments (CATALOG §11.8) ------------------------ */
+/* Active celestial events re-dress the moons: the engine sets
+ * data-cal-moon-fx + a --moon-color override; these add the glow. */
+.cal-almanac-sky__moon[data-cal-moon-fx="blood-moon"],
+.cal-almanac-sky__moon[data-cal-moon-fx="eclipse-lunar"] {
+  box-shadow: 0 0 26px 4px oklch(0.50 0.21 27 / 0.55);
+}
+.cal-almanac-sky__moon[data-cal-moon-fx="supermoon"] {
+  box-shadow: 0 0 30px 6px oklch(0.92 0.04 250 / 0.55);
+}
+.cal-almanac-sky__moon[data-cal-moon-fx="harvest-moon"] {
+  box-shadow: 0 0 24px 4px oklch(0.74 0.15 55 / 0.5);
+}
+.cal-almanac-sky__moon[data-cal-moon-fx="blue-moon"] {
+  box-shadow: 0 0 24px 4px oklch(0.72 0.12 240 / 0.5);
+}
+
+/* Headless-gate proof marker: the default sun state needs no override (the
+ * dawn/dusk/eclipse/special proof variants are grouped with their state rules
+ * above); this no-op keeps the 5-state forced-state contract complete. */
+.cal-almanac--proof-sun-default .cal-almanac-sun { --proof: 1; }

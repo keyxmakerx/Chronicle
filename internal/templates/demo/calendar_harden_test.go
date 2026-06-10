@@ -61,8 +61,8 @@ func TestCalAlmanac_DeadCodeGone(t *testing.T) {
 func TestCalAlmanac_PerfAndMoonFix(t *testing.T) {
 	js := readCalAlmanacJS(t)
 	for _, m := range []string{
-		"function pcap(base)", // §5 profile-scaled weather caps
-		"pcap(W * 0.25)",      // applied to a renderer
+		"function fxCap(base)", // §5 profile-scaled weather caps
+		"fxCap(W * (cfg.density",      // applied to the precip renderers
 		"_skyGradKey",         // §5 cached hourglass sky gradient
 		"var designId = MOON_DESIGNS[moon.baseDesign] ? moon.baseDesign", // §6 resolved id (no 404)
 	} {

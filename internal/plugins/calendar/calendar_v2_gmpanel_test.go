@@ -117,7 +117,8 @@ func TestGMPanel_AuthorityGated(t *testing.T) {
 	holder := render(true)
 	for _, want := range []string{
 		"data-gm-panel", "data-gm-advance", "data-gm-set-time", "data-gm-set-date", "data-gm-pause",
-		"data-gm-weather", "data-gm-set-weather", "data-gm-mood", "data-gm-mood-clear", // 4b
+		"data-gm-weather-tile", "data-gm-event-tile", "data-gm-events-clear", // full-catalog console
+		"data-gm-mood", "data-gm-mood-clear", "data-gm-reset", // mood + whole-sky reset
 	} {
 		if !strings.Contains(holder, want) {
 			t.Errorf("capability holder panel missing %q", want)

@@ -31,7 +31,7 @@ func TestCalAlmanac_WeatherBundle(t *testing.T) {
 		"registerInitBlock('weather-fx'",
 		"window.__calWeatherRenderers",
 		"function weatherV2Id(",
-		"var WEATHER_FX_META",
+		"var SKY_FX_META",
 	} {
 		if !strings.Contains(js, m) {
 			t.Errorf("weather-bundle marker missing: %q", m)
@@ -45,7 +45,7 @@ func TestCalAlmanac_WeatherBundle(t *testing.T) {
 func TestCalAlmanac_WeatherFrameWiring(t *testing.T) {
 	js := readCalAlmanacJS(t)
 	for _, m := range []string{
-		"SKY_SURFACE.setFrame(v2 && WEATHER_RENDERERS[v2] ? WEATHER_RENDERERS[v2]() : null)",
+		"SKY_SURFACE.setFrame(composeFrames(L.back))", // layered compositor (back canvas)
 		"EFFECTS[v2].hgSand.color", // hourglass sand syncs to the weather effect
 	} {
 		if !strings.Contains(js, m) {

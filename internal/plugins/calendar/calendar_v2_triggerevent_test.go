@@ -106,11 +106,11 @@ func TestGMPanel_TriggerEventDmOnlyGated(t *testing.T) {
 		return sb.String()
 	}
 	withAuthor := render(true)
-	if !strings.Contains(withAuthor, "data-gm-trigger-event") || !strings.Contains(withAuthor, "data-gm-event-dmonly") {
+	if !strings.Contains(withAuthor, "data-gm-event-tile") || !strings.Contains(withAuthor, "data-gm-event-dmonly") {
 		t.Errorf("co-DM panel should have the trigger control + dm_only toggle")
 	}
 	noAuthor := render(false)
-	if !strings.Contains(noAuthor, "data-gm-trigger-event") {
+	if !strings.Contains(noAuthor, "data-gm-event-tile") {
 		t.Errorf("trigger control should still render (control = CanControlWorldState)")
 	}
 	if strings.Contains(noAuthor, "data-gm-event-dmonly") {

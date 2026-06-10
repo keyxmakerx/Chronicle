@@ -121,6 +121,17 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 		}
 	}
 
+	if input.ClearEventType != "" {
+		// Per-type clear (the GM panel's per-event × chip). Validated against
+		// the same vocabulary as trigger so arbitrary strings never reach SQL.
+		if !isKnownCelestialType(input.ClearEventType) {
+			return apperror.NewValidation("unknown celestial event type")
+		}
+		if err := s.repo.ClearCelestialEventsByType(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, input.ClearEventType); err != nil {
+			return fmt.Errorf("clear celestial events by type: %w", err)
+		}
+	}
+
 	if input.Advance != nil {
 		// C-CAL-GM-PANEL-REWORK D (deferred audit finding): clamp the relative
 		// advance. The V1 advance endpoints bound their input; this PUT path did
@@ -300,13 +311,27 @@ func floorMod(a, b int) int {
 	return m
 }
 
-// knownCelestialTypes is the GM-triggerable celestial event vocabulary (4c).
-// Matches the showcase CELESTIAL_EFFECTS MUST tier + blood-moon.
+// knownCelestialTypes is the GM-triggerable celestial event vocabulary —
+// the FULL catalog the engine renders (C-CAL-WORLDSTATE-GM-OVERHAUL; ids
+// mirror cal-almanac.js SKY_FX / gmCelestialTypes). Expanding it is additive:
+// the PUT wire shape is unchanged, old clients simply never send new ids.
 var knownCelestialTypes = map[string]bool{
 	"meteor-shower": true,
+	"meteor-storm":  true,
+	"shooting-star": true,
+	"star-fall":     true,
+	"comet":         true,
+	"aurora":        true,
+	"arcane-aurora": true,
 	"eclipse-solar": true,
 	"eclipse-lunar": true,
 	"blood-moon":    true,
+	"supermoon":     true,
+	"harvest-moon":  true,
+	"blue-moon":     true,
+	"volcanic":      true,
+	"plague":        true,
+	"ice-age":       true,
 }
 
 // isKnownCelestialType guards the trigger-event write against arbitrary types.
