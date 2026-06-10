@@ -69,7 +69,7 @@ type mockCalendarRepo struct {
 	unlinkEntityEraFn     func(ctx context.Context, entityID string, eraID int) error
 	entitiesForEventFn    func(ctx context.Context, eventID string) ([]EntityTieRef, error)
 	entitiesForEraFn      func(ctx context.Context, eraID int) ([]EntityTieRef, error)
-	entitiesForCalendarFn func(ctx context.Context, calendarID string) ([]EntityTieRef, error)
+	entitiesForCalendarFn func(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error)
 	eventsForEntityFn     func(ctx context.Context, entityID string) ([]EntityEventTie, error)
 	erasForEntityFn       func(ctx context.Context, entityID string) ([]EntityEraTie, error)
 	// C-CAL-WORLDSTATE-SERVER-MODEL: migration-008 table injection.

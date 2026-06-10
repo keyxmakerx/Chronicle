@@ -145,8 +145,10 @@ type CalendarService interface {
 	EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error)
 	EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error)
 	// EntitiesForCalendar lists the distinct entities tied to any event/era of
-	// a calendar (the Calendars dashboard associations panel, W1).
-	EntitiesForCalendar(ctx context.Context, calendarID string) ([]EntityTieRef, error)
+	// a calendar (the Calendars dashboard associations panel, W1), gated by the
+	// viewer's role + userID so players never see dm_only / custom-restricted
+	// entity names (cordinator#32 gap #1). Owners/co-DMs see all.
+	EntitiesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error)
 	// World-state (C-CAL-WORLDSTATE-SERVER-MODEL). BuildWorldStateSeed
 	// assembles the Part-8 seed for a date, filtering GM-only celestial
 	// events by role/userID. SetWorldState persists the writable parts

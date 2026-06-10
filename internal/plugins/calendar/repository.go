@@ -142,7 +142,7 @@ type CalendarRepository interface {
 	UnlinkEntityEra(ctx context.Context, entityID string, eraID int) error
 	EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error)
 	EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error)
-	EntitiesForCalendar(ctx context.Context, calendarID string) ([]EntityTieRef, error)
+	EntitiesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error)
 	EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error)
 	ErasForEntity(ctx context.Context, entityID string) ([]EntityEraTie, error)
 	// World-state model (migration 008 / C-CAL-WORLDSTATE-SERVER-MODEL).

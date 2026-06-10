@@ -9,7 +9,10 @@ package calendar
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // --- mockCalendarRepo entity-ties method stubs ---
@@ -50,9 +53,9 @@ func (m *mockCalendarRepo) EntitiesForEra(ctx context.Context, eraID int) ([]Ent
 	}
 	return nil, nil
 }
-func (m *mockCalendarRepo) EntitiesForCalendar(ctx context.Context, calendarID string) ([]EntityTieRef, error) {
+func (m *mockCalendarRepo) EntitiesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error) {
 	if m.entitiesForCalendarFn != nil {
-		return m.entitiesForCalendarFn(ctx, calendarID)
+		return m.entitiesForCalendarFn(ctx, calendarID, role, userID)
 	}
 	return nil, nil
 }
@@ -215,6 +218,58 @@ func TestEntityTies_BothDirectionQueries(t *testing.T) {
 	eraEnts, _ := svc.EntitiesForEra(ctx, 3)
 	if len(eraEnts) != 1 || eraEnts[0].ParticipationRole != nil {
 		t.Errorf("EntitiesForEra wrong: %+v", eraEnts)
+	}
+}
+
+// TestEntityVisibilityFilter pins cordinator#32 gap #1: the calendar
+// associations panel must apply the SAME entity-visibility policy the entities
+// plugin uses, so a player can't learn the NAME of a dm_only / custom-restricted
+// entity through it. Owners/co-DMs (role >= RoleOwner) get NO filter — they see
+// every tied entity; lower roles get the restrictive fragment that drops
+// private "default" entities and "custom" entities without a matching
+// entity_permissions grant. This mirrors entities/repository.go::visibilityFilter
+// (unexported there) — the two MUST stay in lockstep.
+func TestEntityVisibilityFilter(t *testing.T) {
+	t.Run("owner is unfiltered (sees all, including dm_only)", func(t *testing.T) {
+		frag, args := entityVisibilityFilter(permissions.RoleOwner, "owner-1")
+		if frag != "" || args != nil {
+			t.Fatalf("owner must get no filter; got frag=%q args=%v", frag, args)
+		}
+	})
+
+	for _, role := range []int{permissions.RolePlayer, permissions.RoleScribe} {
+		role := role
+		t.Run("non-owner is filtered", func(t *testing.T) {
+			frag, args := entityVisibilityFilter(role, "user-9")
+			if frag == "" {
+				t.Fatalf("role %d must get a restrictive filter", role)
+			}
+			// Gate on the same columns/tables the entities plugin uses: the
+			// legacy is_private flag (default mode) + custom entity_permissions
+			// (user/role/group grants). Drift from these = drift from policy.
+			for _, want := range []string{
+				"e.visibility = 'default'",
+				"e.is_private = false",
+				"e.visibility = 'custom'",
+				"entity_permissions",
+				"campaign_group_members",
+			} {
+				if !strings.Contains(frag, want) {
+					t.Errorf("filter missing %q (drift from entities policy?)\nfrag=%s", want, frag)
+				}
+			}
+			// Args bind role twice (default-mode threshold + role-grant check)
+			// then userID twice (user grant + group membership).
+			wantArgs := []any{role, role, "user-9", "user-9"}
+			if len(args) != len(wantArgs) {
+				t.Fatalf("arg count = %d, want %d (%v)", len(args), len(wantArgs), args)
+			}
+			for i := range wantArgs {
+				if args[i] != wantArgs[i] {
+					t.Errorf("arg[%d] = %v, want %v", i, args[i], wantArgs[i])
+				}
+			}
+		})
 	}
 }
 

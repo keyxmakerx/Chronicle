@@ -204,7 +204,7 @@ func (s *stubCalendarSvc) EntitiesForEra(context.Context, int) ([]calendar.Entit
 	return nil, nil
 }
 
-func (s *stubCalendarSvc) EntitiesForCalendar(context.Context, string) ([]calendar.EntityTieRef, error) {
+func (s *stubCalendarSvc) EntitiesForCalendar(context.Context, string, int, string) ([]calendar.EntityTieRef, error) {
 	return nil, nil
 }
 
