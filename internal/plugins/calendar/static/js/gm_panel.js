@@ -124,21 +124,29 @@
             panel.setAttribute('data-gm-collapsed', collapsed ? 'true' : 'false');
             if (toggleBtn) toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         }
-        if (toggleBtn) toggleBtn.addEventListener('click', function () { setCollapsed(true); });
+        if (toggleBtn) toggleBtn.addEventListener('click', function () { setSheet(''); setCollapsed(true); });
         if (openBtn) openBtn.addEventListener('click', function () { setCollapsed(false); });
 
-        // --- tabs ---
-        panel.querySelectorAll('[data-gm-tab]').forEach(function (tab) {
-            tab.addEventListener('click', function () {
-                var id = tab.getAttribute('data-gm-tab');
-                panel.querySelectorAll('[data-gm-tab]').forEach(function (t2) {
-                    t2.setAttribute('aria-selected', t2 === tab ? 'true' : 'false');
-                });
-                panel.querySelectorAll('[data-gm-tabpanel]').forEach(function (p) {
-                    if (p.getAttribute('data-gm-tabpanel') === id) p.removeAttribute('hidden');
-                    else p.setAttribute('hidden', '');
-                });
+        // --- full-band sheets (r2): section buttons toggle a glass sheet
+        //     covering the whole sky pane; the strip stays put. ---
+        function setSheet(id) {
+            panel.setAttribute('data-gm-sheet', id || '');
+            panel.querySelectorAll('[data-gm-sheet-open]').forEach(function (b) {
+                b.setAttribute('aria-expanded', b.getAttribute('data-gm-sheet-open') === id ? 'true' : 'false');
             });
+            panel.querySelectorAll('[data-gm-sheet-panel]').forEach(function (p) {
+                if (p.getAttribute('data-gm-sheet-panel') === id) p.removeAttribute('hidden');
+                else p.setAttribute('hidden', '');
+            });
+        }
+        panel.querySelectorAll('[data-gm-sheet-open]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = btn.getAttribute('data-gm-sheet-open');
+                setSheet(panel.getAttribute('data-gm-sheet') === id ? '' : id);
+            });
+        });
+        panel.querySelectorAll('[data-gm-sheet-close]').forEach(function (btn) {
+            btn.addEventListener('click', function () { setSheet(''); });
         });
 
         // --- catalog search filters (weather + events share the pattern) ---

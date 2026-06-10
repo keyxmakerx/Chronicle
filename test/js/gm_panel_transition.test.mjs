@@ -67,23 +67,25 @@ test('advancing the day marks the console for the translucent transition', () =>
 });
 
 test('the transition fade lives in CSS and reduced-motion neutralizes it', () => {
-  assert.match(css, /\[data-gm-transition="true"\] \.gm-console__card\s*\{\s*opacity: 0\.1/,
-    'transition state must fade the card to near-transparent');
+  assert.match(css, /\[data-gm-transition="true"\] \.gm-console__strip,\s*\n\.gm-console\[data-gm-transition="true"\] \.gm-console__sheet \{\s*\n\s*opacity: 0\.1/,
+    'transition state must fade strip + sheet to near-transparent');
   assert.match(css, /prefers-reduced-motion/, 'reduced-motion block missing');
-  assert.match(css, /prefers-reduced-motion[^}]*\{[\s\S]*?\[data-gm-transition="true"\] \.gm-console__card \{ opacity: 1; \}/,
-    'reduced-motion must keep the card fully opaque (no fade)');
+  assert.match(css, /prefers-reduced-motion[\s\S]*?\[data-gm-transition="true"\] \.gm-console__strip \{ opacity: 1; \}/,
+    'reduced-motion must keep the strip fully opaque (no fade)');
 });
 
-test('the console card is height-capped + internally scrollable (never unbounded)', () => {
-  assert.match(css, /\.gm-console__card\s*\{[\s\S]*?max-height: min\(/, 'card must be height-capped');
-  assert.match(css, /\.gm-console__body\s*\{[\s\S]*?overflow-y: auto/, 'body must scroll internally');
-  assert.doesNotMatch(src, /maxHeight = 'none'/, 'JS must not release the body to an unbounded height');
+test('sheets cover the band pane and scroll internally (never unbounded)', () => {
+  assert.match(css, /\.gm-console__sheet\s*\{[\s\S]*?top: 48px/, 'sheets must span the sky pane below the strip');
+  assert.match(css, /\.gm-console__sheet-body\s*\{[\s\S]*?overflow-y: auto/, 'sheet body must scroll internally');
+  assert.match(css, /\.gm-console\s*\{[\s\S]*?pointer-events: none/, 'console root must not block sky clicks');
+  assert.doesNotMatch(src, /maxHeight = 'none'/, 'JS must not release any body to an unbounded height');
 });
 
 test('the console collapses to a pill (data-gm-collapsed contract)', () => {
   assert.match(css, /\.gm-console\[data-gm-collapsed="true"\] \.gm-console__pill \{ display: inline-flex; \}/,
     'collapsed state must show the pill');
-  assert.match(css, /\.gm-console\[data-gm-collapsed="true"\] \.gm-console__card\s*\{[\s\S]*?pointer-events: none/,
-    'collapsed state must disable the card');
+  assert.match(css, /\.gm-console\[data-gm-collapsed="true"\] \.gm-console__strip,[\s\S]*?pointer-events: none/,
+    'collapsed state must disable the strip + sheets');
   assert.match(src, /data-gm-collapsed/, 'JS must drive the collapsed attribute');
+  assert.match(src, /data-gm-sheet-open/, 'JS must wire the section sheet buttons');
 });

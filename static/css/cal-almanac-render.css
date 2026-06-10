@@ -82,9 +82,8 @@
   margin-left: -17px;
   margin-top: -17px;
   border-radius: 50%;
-  /* base color is set inline per-moon; shadow gives a phase hint */
-  box-shadow: inset -8px -2px 0 0 oklch(0 0 0 / 0.38),
-              0 0 18px oklch(0.85 0.05 100 / 0.30);
+  /* base color set inline per-moon; the phase is a mask cut-out (below) */
+  box-shadow: 0 0 18px oklch(0.85 0.05 100 / 0.30);
   pointer-events: none;
   transition: left var(--cal-d-large) var(--cal-ease-out),
               top var(--cal-d-large) var(--cal-ease-out),
@@ -291,13 +290,10 @@
   overflow: hidden;
   transform: scale(var(--moon-size, 1));
 }
-.cal-almanac-sky__moon::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: oklch(0.10 0.02 264);
-}
+/* GM-overhaul r2 (operator): the phase terminator is a transparent CUT-OUT
+ * (CSS mask), not a painted shadow disc — the dark part of the moon shows
+ * the sky through it, like a real crescent. The ::after shadow is retired. */
+.cal-almanac-sky__moon::after { display: none; }
 /* WAVE 2 — Procedural designs: the vendored SVG disc fills the moon; the
  * ::after terminator carves the lit fraction (phase); the box-shadow phase
  * hint is dropped (the SVG + terminator own the look); tint multiplies over. */
@@ -324,14 +320,39 @@
 @media (prefers-reduced-motion: reduce) {
   .cal-almanac-sky__moon[data-cal-moon-design="moon-holographic"] { animation: none !important; }
 }
-.cal-almanac-sky__moon--new::after     { transform: translateX(0); }
-.cal-almanac-sky__moon--cres-wax::after  { transform: translateX(72%); border-radius: 50%; }
-.cal-almanac-sky__moon--quarter-wax::after { transform: translateX(50%); }
-.cal-almanac-sky__moon--gibb-wax::after  { transform: translateX(28%); opacity: 0.5; }
-.cal-almanac-sky__moon--full::after    { transform: translateX(0); opacity: 0; }
-.cal-almanac-sky__moon--gibb-wane::after { transform: translateX(-28%); opacity: 0.5; }
-.cal-almanac-sky__moon--quarter-wane::after { transform: translateX(-50%); }
-.cal-almanac-sky__moon--cres-wane::after { transform: translateX(-72%); }
+/* Phase masks: an offset shadow-circle is CUT from the lit disc. The cut
+ * circle's center mirrors the old terminator offsets; soft 6% feather. The
+ * new moon keeps a faint ghost disc (no mask, low opacity) so the body
+ * still reads in the sky. */
+.cal-almanac-sky__moon--new { opacity: 0.14 !important; }
+.cal-almanac-sky__moon--cres-wax {
+  -webkit-mask-image: radial-gradient(circle at 118% 50%, transparent 0 60%, #000 66%);
+  mask-image: radial-gradient(circle at 118% 50%, transparent 0 60%, #000 66%);
+}
+.cal-almanac-sky__moon--quarter-wax {
+  -webkit-mask-image: linear-gradient(to right, transparent 0 46%, #000 56%);
+  mask-image: linear-gradient(to right, transparent 0 46%, #000 56%);
+}
+.cal-almanac-sky__moon--gibb-wax {
+  -webkit-mask-image: radial-gradient(circle at 185% 50%, transparent 0 60%, #000 70%);
+  mask-image: radial-gradient(circle at 185% 50%, transparent 0 60%, #000 70%);
+}
+.cal-almanac-sky__moon--full {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.cal-almanac-sky__moon--gibb-wane {
+  -webkit-mask-image: radial-gradient(circle at -85% 50%, transparent 0 60%, #000 70%);
+  mask-image: radial-gradient(circle at -85% 50%, transparent 0 60%, #000 70%);
+}
+.cal-almanac-sky__moon--quarter-wane {
+  -webkit-mask-image: linear-gradient(to left, transparent 0 46%, #000 56%);
+  mask-image: linear-gradient(to left, transparent 0 46%, #000 56%);
+}
+.cal-almanac-sky__moon--cres-wane {
+  -webkit-mask-image: radial-gradient(circle at -18% 50%, transparent 0 60%, #000 66%);
+  mask-image: radial-gradient(circle at -18% 50%, transparent 0 60%, #000 66%);
+}
 
 /* WAVE 2 — Player mood-tint wash (resolution step 6). A global 'overlay'
  * blend (screen-on-light / multiply-on-dark) above weather+events, inserted
