@@ -174,21 +174,64 @@ templ calAlmanacDemoControls(d CalAlmanacMockData) {
 			<label class="cal-almanac-democtl__row">
 				<span>Weather</span>
 				<select data-cal-democtl-weather>
-					<option value="clear">Clear</option>
-					<option value="cloudy">Cloudy</option>
-					<option value="rain">Rain</option>
-					<option value="thunderstorm">Thunderstorm</option>
-					<option value="snow">Snow</option>
-					<option value="fog">Fog</option>
+					<optgroup label="Standard weather">
+						<option value="clear">Clear</option>
+						<option value="partly-cloudy">Partly Cloudy</option>
+						<option value="cloudy">Cloudy</option>
+						<option value="overcast">Overcast</option>
+						<option value="mist">Mist</option>
+						<option value="fog">Fog</option>
+						<option value="drizzle">Drizzle</option>
+						<option value="rain">Rain</option>
+						<option value="heavy-rain">Heavy Rain</option>
+						<option value="snow">Snow</option>
+						<option value="snow-flurries">Snow Flurries</option>
+						<option value="hail">Hail</option>
+					</optgroup>
+					<optgroup label="Severe weather">
+						<option value="thunderstorm">Thunderstorm</option>
+						<option value="blizzard">Blizzard</option>
+						<option value="sandstorm">Sandstorm</option>
+						<option value="tornado">Tornado</option>
+					</optgroup>
+					<optgroup label="Environmental weather">
+						<option value="ashfall">Ashfall</option>
+						<option value="ember-rain">Ember Rain</option>
+						<option value="sakura-bloom">Sakura Bloom</option>
+						<option value="falling-leaves">Falling Leaves</option>
+						<option value="pollen-drift">Pollen Drift</option>
+						<option value="fireflies">Fireflies</option>
+					</optgroup>
+					<optgroup label="Fantasy weather">
+						<option value="arcane-winds">Arcane Winds</option>
+						<option value="ley-surge">Ley Surge</option>
+						<option value="acid-rain">Acid Rain</option>
+						<option value="miasma">Miasma</option>
+					</optgroup>
 				</select>
 			</label>
 			<label class="cal-almanac-democtl__row">
 				<span>Celestial</span>
 				<select data-cal-democtl-celestial>
 					<option value="none">None</option>
-					<option value="meteor-shower">Meteor shower</option>
-					<option value="eclipse-solar">Solar eclipse</option>
-					<option value="eclipse-lunar">Lunar eclipse</option>
+					<optgroup label="Celestial events">
+						<option value="meteor-shower">Meteor Shower</option>
+						<option value="meteor-storm">Meteor Storm</option>
+						<option value="shooting-star">Shooting Star</option>
+						<option value="star-fall">Star Fall</option>
+						<option value="comet">Comet</option>
+						<option value="aurora">Aurora</option>
+						<option value="arcane-aurora">Arcane Aurora</option>
+						<option value="eclipse-solar">Solar Eclipse</option>
+						<option value="eclipse-lunar">Lunar Eclipse</option>
+						<option value="blood-moon">Blood Moon</option>
+						<option value="supermoon">Supermoon</option>
+						<option value="harvest-moon">Harvest Moon</option>
+						<option value="blue-moon">Blue Moon</option>
+						<option value="volcanic">Volcanic Unrest</option>
+						<option value="plague">Plague Miasma</option>
+						<option value="ice-age">Deep Freeze</option>
+					</optgroup>
 				</select>
 			</label>
 			<label class="cal-almanac-democtl__row">
