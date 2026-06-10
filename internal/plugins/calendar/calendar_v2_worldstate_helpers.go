@@ -201,35 +201,91 @@ func gmMoodPresets() []gmMoodPreset {
 	}
 }
 
-// gmWeatherType is one selectable weather override (4b). IDs match the engine
-// WEATHER_EFFECTS MUST tier so the band renders the chosen condition.
+// gmWeatherType is one selectable weather condition in the GM console.
+// IDs match the engine's SKY_FX catalog (cal-almanac.js) 1:1 so every tile
+// the panel offers genuinely renders on the band. Glyph is the tile icon;
+// Category groups the catalog browser (Standard / Severe / Environmental /
+// Fantasy — the CATALOG Part-3 taxonomy).
 type gmWeatherType struct {
-	ID    string
-	Label string
+	ID       string
+	Label    string
+	Glyph    string
+	Category string
 }
 
-// gmWeatherTypes returns the MUST-tier weather conditions the GM can set.
+// gmWeatherTypes returns the FULL weather catalog the GM can set
+// (C-CAL-WORLDSTATE-GM-OVERHAUL — the engine renders all of these; the old
+// panel exposed 6 of them). Server-side the weather column is a free string,
+// so expanding this list is purely additive.
 func gmWeatherTypes() []gmWeatherType {
 	return []gmWeatherType{
-		{"clear", "Clear"}, {"cloudy", "Cloudy"}, {"rain", "Rain"},
-		{"thunderstorm", "Thunderstorm"}, {"snow", "Snow"}, {"fog", "Fog"},
+		// Standard
+		{"clear", "Clear", "☀", "Standard"},
+		{"partly-cloudy", "Partly Cloudy", "⛅", "Standard"},
+		{"cloudy", "Cloudy", "☁", "Standard"},
+		{"overcast", "Overcast", "🌥", "Standard"},
+		{"mist", "Mist", "🌫", "Standard"},
+		{"fog", "Fog", "🌁", "Standard"},
+		{"drizzle", "Drizzle", "🌦", "Standard"},
+		{"rain", "Rain", "🌧", "Standard"},
+		{"heavy-rain", "Heavy Rain", "⛈", "Standard"},
+		{"snow-flurries", "Snow Flurries", "🌨", "Standard"},
+		{"snow", "Snow", "❄", "Standard"},
+		{"hail", "Hail", "🧊", "Standard"},
+		// Severe
+		{"thunderstorm", "Thunderstorm", "⚡", "Severe"},
+		{"blizzard", "Blizzard", "🌬", "Severe"},
+		{"sandstorm", "Sandstorm", "🏜", "Severe"},
+		{"tornado", "Tornado", "🌪", "Severe"},
+		// Environmental
+		{"ashfall", "Ashfall", "🌋", "Environmental"},
+		{"ember-rain", "Ember Rain", "🔥", "Environmental"},
+		{"sakura-bloom", "Sakura Bloom", "🌸", "Environmental"},
+		{"falling-leaves", "Falling Leaves", "🍂", "Environmental"},
+		{"pollen-drift", "Pollen Drift", "🌼", "Environmental"},
+		{"fireflies", "Fireflies", "✨", "Environmental"},
+		// Fantasy
+		{"arcane-winds", "Arcane Winds", "🌀", "Fantasy"},
+		{"ley-surge", "Ley Surge", "💜", "Fantasy"},
+		{"acid-rain", "Acid Rain", "☣", "Fantasy"},
+		{"miasma", "Miasma", "☠", "Fantasy"},
 	}
 }
 
-// gmCelestialType is one GM-triggerable world-event (4c). IDs match the
-// service's knownCelestialTypes + the engine's CELESTIAL_EFFECTS.
+// gmCelestialType is one GM-triggerable world-event tile. IDs match the
+// service's knownCelestialTypes AND the engine's SKY_FX renderers — every
+// tile both persists and visibly renders.
 type gmCelestialType struct {
-	ID    string
-	Label string
+	ID       string
+	Label    string
+	Glyph    string
+	Category string
 }
 
-// gmCelestialTypes returns the triggerable celestial events.
+// gmCelestialTypes returns the FULL triggerable world-event catalog
+// (mirrors knownCelestialTypes; the sky-events vs omens grouping is the
+// console's browse taxonomy).
 func gmCelestialTypes() []gmCelestialType {
 	return []gmCelestialType{
-		{"meteor-shower", "Meteor shower"},
-		{"eclipse-solar", "Solar eclipse"},
-		{"eclipse-lunar", "Lunar eclipse"},
-		{"blood-moon", "Blood moon"},
+		// Sky events
+		{"shooting-star", "Shooting Star", "💫", "Sky"},
+		{"meteor-shower", "Meteor Shower", "☄", "Sky"},
+		{"meteor-storm", "Meteor Storm", "🌠", "Sky"},
+		{"star-fall", "Star Fall", "✨", "Sky"},
+		{"comet", "Comet", "☄", "Sky"},
+		{"aurora", "Aurora", "🌌", "Sky"},
+		{"arcane-aurora", "Arcane Aurora", "🔮", "Sky"},
+		// Sun & moons
+		{"eclipse-solar", "Solar Eclipse", "🌑", "Sun & Moons"},
+		{"eclipse-lunar", "Lunar Eclipse", "🌒", "Sun & Moons"},
+		{"blood-moon", "Blood Moon", "🔴", "Sun & Moons"},
+		{"supermoon", "Supermoon", "🌕", "Sun & Moons"},
+		{"harvest-moon", "Harvest Moon", "🌔", "Sun & Moons"},
+		{"blue-moon", "Blue Moon", "🔵", "Sun & Moons"},
+		// Omens
+		{"volcanic", "Volcanic Unrest", "🌋", "Omens"},
+		{"plague", "Plague Miasma", "🦠", "Omens"},
+		{"ice-age", "Deep Freeze", "🧊", "Omens"},
 	}
 }
 
@@ -242,15 +298,24 @@ func gmCurrentWeather(data CalendarV2ViewData) string {
 	return "clear"
 }
 
-// titleCaseFirst upper-cases the first rune of s (ASCII-simple; weather ids
-// are lowercase ASCII).
+// titleCaseFirst renders a dashed weather id as words ("heavy-rain" →
+// "Heavy Rain"; ASCII-simple — weather ids are lowercase ASCII).
 func titleCaseFirst(s string) string {
 	if s == "" {
 		return ""
 	}
 	b := []byte(s)
-	if b[0] >= 'a' && b[0] <= 'z' {
-		b[0] -= 32
+	up := true
+	for i := 0; i < len(b); i++ {
+		if b[i] == '-' {
+			b[i] = ' '
+			up = true
+			continue
+		}
+		if up && b[i] >= 'a' && b[i] <= 'z' {
+			b[i] -= 32
+		}
+		up = false
 	}
 	return string(b)
 }

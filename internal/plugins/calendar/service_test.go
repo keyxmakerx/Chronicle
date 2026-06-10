@@ -11,37 +11,37 @@ import (
 // --- Mock Repository ---
 
 type mockCalendarRepo struct {
-	createFn             func(ctx context.Context, cal *Calendar) error
-	getByCampaignIDFn    func(ctx context.Context, campaignID string) (*Calendar, error)
-	getByIDFn            func(ctx context.Context, id string) (*Calendar, error)
-	updateFn             func(ctx context.Context, cal *Calendar) error
-	deleteFn             func(ctx context.Context, id string) error
-	setMonthsFn          func(ctx context.Context, calendarID string, months []MonthInput) error
-	getMonthsFn          func(ctx context.Context, calendarID string) ([]Month, error)
-	setWeekdaysFn        func(ctx context.Context, calendarID string, weekdays []WeekdayInput) error
-	getWeekdaysFn        func(ctx context.Context, calendarID string) ([]Weekday, error)
-	setMoonsFn           func(ctx context.Context, calendarID string, moons []MoonInput) error
-	getMoonsFn           func(ctx context.Context, calendarID string) ([]Moon, error)
-	setSeasonsFn         func(ctx context.Context, calendarID string, seasons []Season) error
-	getSeasonsFn         func(ctx context.Context, calendarID string) ([]Season, error)
-	setErasFn            func(ctx context.Context, calendarID string, eras []EraInput) error
-	getErasFn            func(ctx context.Context, calendarID string) ([]Era, error)
-	setEventCategoriesFn func(ctx context.Context, calendarID string, cats []EventCategoryInput) error
-	getEventCategoriesFn func(ctx context.Context, calendarID string) ([]EventCategory, error)
-	createEventFn        func(ctx context.Context, evt *Event) error
-	getEventFn           func(ctx context.Context, id string) (*Event, error)
-	updateEventFn        func(ctx context.Context, evt *Event) error
-	deleteEventFn        func(ctx context.Context, id string) error
-	listEventsForMonthFn func(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error)
-	listEventsForYearFn  func(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
+	createFn                 func(ctx context.Context, cal *Calendar) error
+	getByCampaignIDFn        func(ctx context.Context, campaignID string) (*Calendar, error)
+	getByIDFn                func(ctx context.Context, id string) (*Calendar, error)
+	updateFn                 func(ctx context.Context, cal *Calendar) error
+	deleteFn                 func(ctx context.Context, id string) error
+	setMonthsFn              func(ctx context.Context, calendarID string, months []MonthInput) error
+	getMonthsFn              func(ctx context.Context, calendarID string) ([]Month, error)
+	setWeekdaysFn            func(ctx context.Context, calendarID string, weekdays []WeekdayInput) error
+	getWeekdaysFn            func(ctx context.Context, calendarID string) ([]Weekday, error)
+	setMoonsFn               func(ctx context.Context, calendarID string, moons []MoonInput) error
+	getMoonsFn               func(ctx context.Context, calendarID string) ([]Moon, error)
+	setSeasonsFn             func(ctx context.Context, calendarID string, seasons []Season) error
+	getSeasonsFn             func(ctx context.Context, calendarID string) ([]Season, error)
+	setErasFn                func(ctx context.Context, calendarID string, eras []EraInput) error
+	getErasFn                func(ctx context.Context, calendarID string) ([]Era, error)
+	setEventCategoriesFn     func(ctx context.Context, calendarID string, cats []EventCategoryInput) error
+	getEventCategoriesFn     func(ctx context.Context, calendarID string) ([]EventCategory, error)
+	createEventFn            func(ctx context.Context, evt *Event) error
+	getEventFn               func(ctx context.Context, id string) (*Event, error)
+	updateEventFn            func(ctx context.Context, evt *Event) error
+	deleteEventFn            func(ctx context.Context, id string) error
+	listEventsForMonthFn     func(ctx context.Context, calendarID string, year, month int, role int) ([]Event, error)
+	listEventsForYearFn      func(ctx context.Context, calendarID string, year int, role int) ([]Event, error)
 	listEventsForDateRangeFn func(ctx context.Context, calendarID string, year, startMonth, startDay, endMonth, endDay int, role int) ([]Event, error)
-	listEventsForEntityFn func(ctx context.Context, entityID string, role int) ([]Event, error)
-	listUpcomingEventsFn func(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error)
-	searchEventsFn       func(ctx context.Context, calendarID, query string, role int) ([]Event, error)
-	updateEventVisFn     func(ctx context.Context, eventID string, visibility string, visRules *string) error
-	updateCalVisFn       func(ctx context.Context, calendarID string, visibility string, visRules *string) error
-	eventDatesForCalsFn  func(ctx context.Context, calIDs []string, role int) (map[string][]CalendarEventDate, error)
-	listByCampaignIDFn   func(ctx context.Context, campaignID string) ([]Calendar, error)
+	listEventsForEntityFn    func(ctx context.Context, entityID string, role int) ([]Event, error)
+	listUpcomingEventsFn     func(ctx context.Context, calendarID string, year, month, day int, role int, limit int) ([]Event, error)
+	searchEventsFn           func(ctx context.Context, calendarID, query string, role int) ([]Event, error)
+	updateEventVisFn         func(ctx context.Context, eventID string, visibility string, visRules *string) error
+	updateCalVisFn           func(ctx context.Context, calendarID string, visibility string, visRules *string) error
+	eventDatesForCalsFn      func(ctx context.Context, calIDs []string, role int) (map[string][]CalendarEventDate, error)
+	listByCampaignIDFn       func(ctx context.Context, campaignID string) ([]Calendar, error)
 	// Added in C-CAL-NULL-PRESERVE so SetWeather load-merge-write
 	// tests can inject the "existing row" the merge reads from.
 	getWeatherFn func(ctx context.Context, calendarID string) (*Weather, error)
@@ -63,24 +63,25 @@ type mockCalendarRepo struct {
 	getSidebarPinnedFn func(ctx context.Context, userID, campaignID string) (bool, error)
 	setSidebarPinnedFn func(ctx context.Context, userID, campaignID string, pinned bool) error
 	// C-CAL-ENTITY-TIES-DATA-MODEL: link-table injection.
-	linkEntityEventFn   func(ctx context.Context, entityID, eventID, role string) error
-	unlinkEntityEventFn func(ctx context.Context, entityID, eventID string) error
-	linkEntityEraFn     func(ctx context.Context, entityID string, eraID int, role *string) error
-	unlinkEntityEraFn   func(ctx context.Context, entityID string, eraID int) error
+	linkEntityEventFn     func(ctx context.Context, entityID, eventID, role string) error
+	unlinkEntityEventFn   func(ctx context.Context, entityID, eventID string) error
+	linkEntityEraFn       func(ctx context.Context, entityID string, eraID int, role *string) error
+	unlinkEntityEraFn     func(ctx context.Context, entityID string, eraID int) error
 	entitiesForEventFn    func(ctx context.Context, eventID string) ([]EntityTieRef, error)
 	entitiesForEraFn      func(ctx context.Context, eraID int) ([]EntityTieRef, error)
 	entitiesForCalendarFn func(ctx context.Context, calendarID string) ([]EntityTieRef, error)
-	eventsForEntityFn   func(ctx context.Context, entityID string) ([]EntityEventTie, error)
-	erasForEntityFn     func(ctx context.Context, entityID string) ([]EntityEraTie, error)
+	eventsForEntityFn     func(ctx context.Context, entityID string) ([]EntityEventTie, error)
+	erasForEntityFn       func(ctx context.Context, entityID string) ([]EntityEraTie, error)
 	// C-CAL-WORLDSTATE-SERVER-MODEL: migration-008 table injection.
-	getDayWeatherFn      func(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error)
-	setDayWeatherFn      func(ctx context.Context, calendarID string, year, month, day int, weatherType string) error
-	getCelestialEventsFn func(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error)
-	addCelestialEventFn  func(ctx context.Context, ce CelestialEvent) error
-	clearCelestialEventsFn func(ctx context.Context, calendarID string, year, month, day int) error
-	getMoonPhasesFn      func(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
-	getSpecialDaysFn     func(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
-	setMoodTintFn        func(ctx context.Context, calendarID string, color *string, intensity *float64) error
+	getDayWeatherFn              func(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error)
+	setDayWeatherFn              func(ctx context.Context, calendarID string, year, month, day int, weatherType string) error
+	getCelestialEventsFn         func(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error)
+	addCelestialEventFn          func(ctx context.Context, ce CelestialEvent) error
+	clearCelestialEventsFn       func(ctx context.Context, calendarID string, year, month, day int) error
+	clearCelestialEventsByTypeFn func(ctx context.Context, calendarID string, year, month, day int, eventType string) error
+	getMoonPhasesFn              func(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
+	getSpecialDaysFn             func(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
+	setMoodTintFn                func(ctx context.Context, calendarID string, color *string, intensity *float64) error
 }
 
 func (m *mockCalendarRepo) Create(ctx context.Context, cal *Calendar) error {
@@ -726,7 +727,7 @@ func TestUpdateCalendar_EmptyModeLeavesUnchanged(t *testing.T) {
 	svc := newTestCalendarService(repo)
 
 	err := svc.UpdateCalendar(context.Background(), "cal-1", UpdateCalendarInput{
-		Name:             "X",
+		Name: "X",
 		// Mode intentionally omitted.
 		CurrentMonth:     1,
 		CurrentDay:       1,

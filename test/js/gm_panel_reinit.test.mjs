@@ -43,6 +43,7 @@ function boot() {
   const sandbox = {
     console,
     matchMedia: () => ({ matches: false }),
+    setTimeout: () => 0, clearTimeout() {},
     document: {
       readyState: 'complete',
       querySelector: (sel) => (sel === '[data-gm-panel]' ? panel : sel === '[data-cal-v2-root]' ? root : null),

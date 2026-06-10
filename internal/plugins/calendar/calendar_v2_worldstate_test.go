@@ -61,10 +61,11 @@ func TestWorldStateBandV2_EmbedsSeedAndEngine(t *testing.T) {
 		`data-cal-worldstate=`,                // the Part-8 blob the engine reads
 		`&#34;timeOfDay&#34;:0.5`,             // the seed JSON actually embedded (html-escaped)
 		"data-cal-sky", "data-cal-sky-canvas", // sky scaffold the engine paints
+		"data-cal-sky-canvas-front",           // foreground canvas (weather over the sun)
 		"data-cal-sky-weather-layer", "data-cal-sky-celestial-layer",
 		"data-cal-sky-sun",            // passive sun (engine positions it)
 		"background: linear-gradient", // Part A: the SSR base sky gradient
-		"/static/css/cal-almanac.css", // rendering-canvas CSS
+		"/static/css/cal-almanac-render.css", // the widget render layer (render-vs-chrome split)
 		"/static/js/cal-almanac.js",   // the shared engine
 		"Tears of Selune",             // the celestial event chip
 		"Spring", "Rain",              // read-only labels from the seed
@@ -157,22 +158,23 @@ func TestSkyBandAmbientInit_RunsTimePaint(t *testing.T) {
 	}
 }
 
-// TestWorldStateBandV2_RendersSunIcons (W1 — the headline "no sun" fix): the
-// band must render the sun's visible icon SVG layers. .cal-almanac-sun is a
-// transparent box; the ONLY visible pixels are these .cal-almanac-sun__icon
-// SVGs. They lived only in the /demo templ and were never ported, so the engine
-// positioned an empty, invisible box. The shared partial fixes the full-page
-// band AND both entity embeds (all render via worldStateSkyBandV2).
+// TestWorldStateBandV2_RendersSunIcons (W1 "no sun" fix, GM-overhaul body):
+// the band must render the sun's layered CSS-art body — rays + corona + core
+// (.cal-almanac-sun is a transparent box; these spans are the visible sun) —
+// plus the eclipse-state glyph overlay. Shared via CalAlmanacSunBody so the
+// full-page band, both entity embeds AND /demo render the same sun from one
+// source (the audit's "demo-authored, never ported" class can't recur).
 func TestWorldStateBandV2_RendersSunIcons(t *testing.T) {
 	html := renderBand(t, sampleV2WorldStateData())
 	for _, want := range []string{
-		`data-cal-sun-icon="sun"`,     // the default/dawn/dusk/special sun graphic
-		`data-cal-sun-icon="eclipse"`, // the eclipse-state graphic
-		`class="cal-almanac-sun__icon"`,
-		`fill="currentColor"`, // recolored per sun-state by CSS
+		`class="cal-almanac-sun__rays"`,   // clear-sky ray wheel
+		`class="cal-almanac-sun__corona"`, // soft halo
+		`class="cal-almanac-sun__core"`,   // the disc itself
+		`data-cal-sun-icon="eclipse"`,     // the eclipse-state glyph
+		`fill="currentColor"`,             // recolored per sun-state by CSS
 	} {
 		if !strings.Contains(html, want) {
-			t.Errorf("sun must render its icon layers; missing %q", want)
+			t.Errorf("sun must render its layered body; missing %q", want)
 		}
 	}
 }

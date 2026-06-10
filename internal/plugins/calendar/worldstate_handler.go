@@ -107,6 +107,10 @@ type putWorldStateBody struct {
 	// ClearEvents removes all world-events on the current day (C-CAL-GM-PANEL-
 	// REWORK B — the "stuck meteor" off switch). PUT-input only; not a seed field.
 	ClearEvents bool `json:"clearEvents"`
+	// ClearEventType removes only that type's world-events on the current day
+	// (the GM panel's per-event × chip). Additive optional field — absent in
+	// old clients, so the wire contract is unchanged.
+	ClearEventType string `json:"clearEventType"`
 }
 
 // PutWorldState — PUT /campaigns/:id/calendar/world-state.
@@ -170,6 +174,7 @@ func (h *Handler) PutWorldState(c echo.Context) error {
 	}
 	// B: the GM "clear world-events" off switch (mirrors the mood Clear).
 	input.ClearEvents = body.ClearEvents
+	input.ClearEventType = body.ClearEventType
 
 	if err := h.svc.SetWorldState(ctx, cal.ID, input); err != nil {
 		return err

@@ -189,6 +189,10 @@ type WorldStateUpdateInput struct {
 	// the mood Clear). A PUT-input field only; the world-state SEED contract is
 	// unchanged (the cleared day just rebuilds with no events).
 	ClearEvents bool
+	// ClearEventType, when non-empty, removes only THAT event type's
+	// world-events on the current date (the redesigned GM panel's per-event ×
+	// chip). Additive PUT-input field; the seed contract is unchanged.
+	ClearEventType string
 }
 
 // WorldStateTriggerEvent is a GM-triggered celestial event (meteor shower /
@@ -2121,7 +2125,7 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 				"type_icon":  "fa-calendar",
 				"type_color": "#f59e0b",
 				// C-CAL-V1-V2-CUTOVER: search results deep-link to the V2 shell.
-				"url":        fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, cal.ID),
+				"url": fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, cal.ID),
 			})
 		}
 	}

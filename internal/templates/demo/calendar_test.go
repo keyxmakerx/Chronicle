@@ -936,13 +936,15 @@ func TestCalAlmanacSun_InlineIcon(t *testing.T) {
 	html := renderAlmanac(t)
 	for _, frag := range []string{
 		`data-cal-sun-state="default"`,
-		`data-cal-sun-icon="sun"`,
-		`data-cal-sun-icon="eclipse"`,
+		`class="cal-almanac-sun__rays"`,   // layered CSS-art body (GM-overhaul)
+		`class="cal-almanac-sun__corona"`,
+		`class="cal-almanac-sun__core"`,
+		`data-cal-sun-icon="eclipse"`, // eclipse glyph overlay survives
 		`viewBox="0 0 512 512"`,
 		`fill="currentColor"`,
 	} {
 		if !strings.Contains(html, frag) {
-			t.Errorf("inline-SVG sun markup missing fragment: %s", frag)
+			t.Errorf("sun body markup missing fragment: %s", frag)
 		}
 	}
 	for _, gone := range []string{
@@ -1017,8 +1019,8 @@ func TestCalAlmanacSun_ReducedMotion(t *testing.T) {
 	if !strings.Contains(css, "@media (prefers-reduced-motion: reduce)") {
 		t.Fatalf("reduced-motion media query missing")
 	}
-	if !strings.Contains(css, ".cal-almanac-sun__icon { animation: none !important") {
-		t.Errorf("sun icon animation must be `animation: none !important` under reduced-motion")
+	if !strings.Contains(css, ".cal-almanac-sun__rays,") || !strings.Contains(css, ".cal-almanac-sun__core {\n    animation: none !important;") {
+		t.Errorf("sun ray/corona/core animation must be `animation: none !important` under reduced-motion")
 	}
 	js := readCalAlmanacJS(t)
 	for _, keep := range []string{"reducedNow", "drawStaticFrame", "function resolveSunState", "sun-bloom"} {
@@ -1116,11 +1118,18 @@ func calDemoRepoRoot(t *testing.T) string {
 }
 func readCalAlmanacCSS(t *testing.T) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(calDemoRepoRoot(t), "static", "css", "cal-almanac.css"))
+	// The demo page loads the render layer (cal-almanac-render.css — shared
+	// with every production surface) THEN the demo chrome (cal-almanac.css);
+	// its effective stylesheet is the concatenation, so assertions read both.
+	r, err := os.ReadFile(filepath.Join(calDemoRepoRoot(t), "static", "css", "cal-almanac-render.css"))
+	if err != nil {
+		t.Fatalf("read cal-almanac-render.css: %v", err)
+	}
+	c, err := os.ReadFile(filepath.Join(calDemoRepoRoot(t), "static", "css", "cal-almanac.css"))
 	if err != nil {
 		t.Fatalf("read cal-almanac.css: %v", err)
 	}
-	return string(b)
+	return string(r) + "\n" + string(c)
 }
 
 func readCalAlmanacJS(t *testing.T) string {

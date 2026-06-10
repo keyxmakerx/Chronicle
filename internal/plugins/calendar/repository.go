@@ -157,6 +157,10 @@ type CalendarRepository interface {
 	// ClearCelestialEvents removes every celestial event on a calendar's given
 	// date (C-CAL-GM-PANEL-REWORK B — the GM "clear world-events" off switch).
 	ClearCelestialEvents(ctx context.Context, calendarID string, year, month, day int) error
+	// ClearCelestialEventsByType removes only the given TYPE's events on the
+	// date (the GM panel's per-event off switch; ClearCelestialEvents is the
+	// clear-all).
+	ClearCelestialEventsByType(ctx context.Context, calendarID string, year, month, day int, eventType string) error
 	GetMoonPhasesForCalendar(ctx context.Context, calendarID string) (map[int][]MoonPhaseVocab, error)
 	GetSpecialDays(ctx context.Context, calendarID string, year, month, day int) ([]SpecialDay, error)
 	SetMoodTint(ctx context.Context, calendarID string, color *string, intensity *float64) error
