@@ -1,0 +1,69 @@
+// calendar_v2_quickedit.templ — the event QUICK-EDIT card (the operator's
+// "peek (small) editor"): clicking an event chip opens this compact pinned
+// card next to the chip — title + description editable in place with one
+// Save, and a "Full editor" escape hatch into the right-side drawer for
+// everything else (dates, category, visibility, ties). The hover-peek
+// tooltip (eventQuickPeekV2) stays the read-only glance; THIS is the
+// click-tier between glance and drawer (the /demo two-tier model, in
+// production).
+//
+// ROLES: rendered for every viewer of the page, but the editing affordances
+// (inputs + Save + Full editor) are SERVER-GATED to Scribes — players get a
+// read-only card with plain text and no buttons (markup-level gate, not CSS).
+// Wiring lives in event_grid.js (openQuickEdit / closeQuickEdit / quick-save
+// via the existing events PUT).
+
+package calendar
+
+// eventQuickEditV2 renders the hidden quick-edit card scaffold once per page;
+// event_grid.js positions + populates it per clicked event chip.
+templ eventQuickEditV2(data CalendarV2ViewData) {
+	<div
+		id="cal-v2-event-quickedit"
+		class="hidden fixed z-40 card card-elev w-80 max-w-[92vw] text-sm popover-scale-in"
+		role="dialog"
+		aria-label="Event quick edit"
+		data-event-quickedit
+	>
+		<div class="flex items-start gap-2 px-3 pt-3">
+			if data.IsScribe {
+				<input
+					type="text"
+					class="input text-sm flex-1 font-semibold min-w-0"
+					data-qe-name
+					aria-label="Event name"
+					placeholder="Event name"
+				/>
+			} else {
+				<div class="font-semibold text-fg flex-1 leading-snug min-w-0" data-qe-name-ro></div>
+			}
+			<button type="button" class="text-fg-secondary hover:text-fg p-1 -m-1" data-qe-close aria-label="Close">
+				<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+			</button>
+		</div>
+		<div class="px-3 mt-1.5 text-xs text-fg-secondary" data-qe-meta></div>
+		<div class="px-3 mt-2">
+			if data.IsScribe {
+				<textarea
+					class="input text-sm w-full"
+					rows="3"
+					data-qe-desc
+					aria-label="Event description"
+					placeholder="Description…"
+				></textarea>
+			} else {
+				<p class="text-sm text-fg-secondary whitespace-pre-line max-h-28 overflow-y-auto" data-qe-desc-ro></p>
+			}
+		</div>
+		<div class="flex items-center gap-2 px-3 py-3">
+			if data.IsScribe {
+				<button type="button" class="btn-primary text-xs" data-qe-save>Save</button>
+				<button type="button" class="btn-secondary text-xs" data-qe-expand title="Open the full editor drawer">
+					<i class="fa-solid fa-up-right-and-down-left-from-center mr-1" aria-hidden="true"></i>
+					Full editor
+				</button>
+			}
+			<span class="ml-auto text-[10px] text-fg-secondary" data-qe-vis></span>
+		</div>
+	</div>
+}

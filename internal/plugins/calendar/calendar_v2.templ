@@ -120,6 +120,7 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 			@shortcutsModalV2()
 			@dayDetailPopoverV2()
 			@eventQuickPeekV2()
+			@eventQuickEditV2(data)
 			<script src="/static/plugins/calendar/js/event_grid.js" defer></script>
 			<script src="/static/plugins/calendar/js/calendar_v2_shell.js" defer></script>
 			if data.CanControlWorldState {

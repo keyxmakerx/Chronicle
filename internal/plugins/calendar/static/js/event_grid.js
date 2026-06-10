@@ -654,7 +654,10 @@
 
         document.querySelectorAll('[data-event-card]').forEach(function (card) {
             card.addEventListener('click', function () {
-                openDrawer(card.dataset.eventId);
+                // C-CAL-QUICKEDIT: click = the small in-place editor card; the
+                // full drawer stays one tap away ("Full editor") or direct for
+                // non-Scribe viewers when the card scaffold is absent.
+                openQuickEdit(card);
             });
         });
 
@@ -685,6 +688,124 @@
         // once so it never leaks listeners across boosted-nav re-inits).
         _openDrawer = openDrawer;
         wireDayDragCreateOnce();
+
+        // --- Quick-edit card (C-CAL-QUICKEDIT — the "peek" small editor) ---
+        // Click an event chip → a compact pinned card beside it: title +
+        // description editable in place (Scribes), one Save (PUT through the
+        // same events endpoint, body = the stored event merged with the two
+        // edited fields so nothing else is touched), "Full editor" hands off
+        // to the drawer. Players get the same card read-only (server-gated
+        // markup — no inputs/buttons exist for them).
+        var qe = document.getElementById('cal-v2-event-quickedit');
+        var qeID = null, qeDirty = false;
+        function qeEl(sel) { return qe ? qe.querySelector(sel) : null; }
+        function qeFmtTime(ev) {
+            if (ev.all_day) return 'All day';
+            if (ev.start_hour == null) return '';
+            var p2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+            return p2(ev.start_hour) + ':' + p2(ev.start_minute == null ? 0 : ev.start_minute);
+        }
+        function openQuickEdit(card) {
+            var id = card.dataset.eventId;
+            var ev = id ? eventByID(id) : null;
+            if (!qe || !ev) { openDrawer(id); return; } // no scaffold/data → drawer
+            qeID = id; qeDirty = false;
+            var nameI = qeEl('[data-qe-name]');
+            if (nameI) nameI.value = ev.name || '';
+            var nameRo = qeEl('[data-qe-name-ro]');
+            if (nameRo) nameRo.textContent = ev.name || 'Event';
+            var descI = qeEl('[data-qe-desc]');
+            if (descI) descI.value = ev.description || '';
+            var descRo = qeEl('[data-qe-desc-ro]');
+            if (descRo) descRo.textContent = ev.description || '';
+            var meta = qeEl('[data-qe-meta]');
+            if (meta) {
+                var bits = [];
+                bits.push('Day ' + ev.day + (ev.end_day != null && (ev.end_day !== ev.day || ev.end_month !== ev.month) ? ' → ' + ev.end_day : ''));
+                var t = qeFmtTime(ev); if (t) bits.push(t);
+                if (ev.category) bits.push(ev.category);
+                if (ev.tier) bits.push(ev.tier);
+                meta.textContent = bits.join(' · ');
+            }
+            var vis = qeEl('[data-qe-vis]');
+            if (vis) vis.textContent = (ev.visibility && ev.visibility !== 'everyone') ? '\uD83D\uDD12 DM only' : '';
+            // Position beside the chip: below by default, flipped above /
+            // clamped when the viewport runs out.
+            qe.classList.remove('hidden');
+            var rect = card.getBoundingClientRect();
+            var pr = qe.getBoundingClientRect();
+            var left = Math.min(rect.left, window.innerWidth - pr.width - 8);
+            var top = rect.bottom + 6;
+            if (top + pr.height > window.innerHeight - 8) top = rect.top - pr.height - 6;
+            qe.style.left = Math.max(8, left) + 'px';
+            qe.style.top = Math.max(8, top) + 'px';
+            if (nameI && typeof nameI.focus === 'function') nameI.focus();
+        }
+        function closeQuickEdit(force) {
+            if (!qe || qe.classList.contains('hidden')) return;
+            if (qeDirty && !force && !window.confirm('Discard unsaved changes?')) return;
+            qe.classList.add('hidden');
+            qeID = null; qeDirty = false;
+        }
+        function saveQuickEdit(btn) {
+            var ev = qeID ? eventByID(qeID) : null;
+            if (!ev) return;
+            // Merge: the stored event + the two edited fields. Sending the full
+            // stored shape keeps every untouched field (dates, category, tier,
+            // visibility + rules) exactly as it was — a lossless quick-save.
+            var body = {};
+            for (var k in ev) {
+                if (Object.prototype.hasOwnProperty.call(ev, k) && ev[k] !== null && k !== 'id') body[k] = ev[k];
+            }
+            var nameI = qeEl('[data-qe-name]');
+            if (nameI) body.name = nameI.value.trim();
+            var descI = qeEl('[data-qe-desc]');
+            if (descI) body.description = descI.value;
+            if (!body.name) { window.Chronicle.notify('Name is required', 'error'); return; }
+            if (btn) btn.disabled = true;
+            window.Chronicle.apiFetch('/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + qeID, {
+                method: 'PUT', body: body, headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (resp) {
+                if (!resp.ok) {
+                    return resp.json().catch(function () { return {}; }).then(function (b) {
+                        throw new Error((b && b.message) || 'Save failed');
+                    });
+                }
+                closeQuickEdit(true);
+                window.location.reload();
+            }).catch(function (e) {
+                if (btn) btn.disabled = false;
+                window.Chronicle.notify((e && e.message) || 'Save failed', 'error');
+            });
+        }
+        if (qe && qe.dataset.qeWired !== '1') {
+            qe.dataset.qeWired = '1'; // per-node guard (QA2 re-init class)
+            var qeClose = qeEl('[data-qe-close]');
+            if (qeClose) qeClose.addEventListener('click', function () { closeQuickEdit(false); });
+            var qeSave = qeEl('[data-qe-save]');
+            if (qeSave) qeSave.addEventListener('click', function () { saveQuickEdit(qeSave); });
+            var qeExpand = qeEl('[data-qe-expand]');
+            if (qeExpand) qeExpand.addEventListener('click', function () {
+                var id = qeID;
+                closeQuickEdit(true);
+                openDrawer(id);
+            });
+            qe.addEventListener('input', function () { qeDirty = true; });
+            qe.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') { e.stopPropagation(); closeQuickEdit(false); }
+            });
+        }
+        // Outside click closes (root-bound so the listener dies with the page
+        // on a boosted-nav swap — no document-listener leak, the E4/E5 class).
+        root.addEventListener('click', function (e) {
+            if (!qe || qe.classList.contains('hidden')) return;
+            if (qe.contains(e.target)) return;
+            if (e.target.closest && e.target.closest('[data-event-card]')) return; // re-open on another chip
+            closeQuickEdit(false);
+        });
+        // The shell's "+N more" popover falls back to this when no chip is in
+        // the DOM for the event — keep it pointing at the FULL drawer.
+        window.calV2OpenDrawerByID = openDrawer;
 
         // --- Drag-to-reschedule via existing PUT endpoint --
 
