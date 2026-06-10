@@ -68,7 +68,6 @@ templ worldStateSkyBandV2(data CalendarV2ViewData) {
 		class={ "cal-almanac-sky", "cal-almanac-sky--wfx-" + wsWeatherID(data) }
 		data-cal-sky
 		data-cal-sky-weather={ wsWeatherID(data) }
-		data-cal-sky-time-frac={ wsTimeFrac(data) }
 		style={ "background: " + SkybandGradient(wsSkyTimeFloat(data)) + ";position:absolute;inset:0" }
 	>
 		<div class="cal-almanac-sky__weather" data-cal-sky-weather-layer></div>
