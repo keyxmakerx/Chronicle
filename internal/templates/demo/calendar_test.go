@@ -939,9 +939,6 @@ func TestCalAlmanacSun_InlineIcon(t *testing.T) {
 		`class="cal-almanac-sun__rays"`,   // layered CSS-art body (GM-overhaul)
 		`class="cal-almanac-sun__corona"`,
 		`class="cal-almanac-sun__core"`,
-		`data-cal-sun-icon="eclipse"`, // eclipse glyph overlay survives
-		`viewBox="0 0 512 512"`,
-		`fill="currentColor"`,
 	} {
 		if !strings.Contains(html, frag) {
 			t.Errorf("sun body markup missing fragment: %s", frag)

@@ -202,17 +202,6 @@
     0 0 calc(var(--cal-sun-size) * 0.46) oklch(0.88 0.14 80 / 0.32);
   transition: background 800ms var(--cal-ease-out), box-shadow 800ms var(--cal-ease-out);
 }
-/* Eclipse glyph (vendored lorc/eclipse.svg) — only the eclipse state shows it. */
-.cal-almanac-sun__icon {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 800ms var(--cal-ease-out);
-}
 /* Dawn / dusk: warm low-sun palette, lazier rays. */
 .cal-almanac-sun[data-cal-sun-state="dawn"],
 .cal-almanac-sun[data-cal-sun-state="dusk"],
@@ -258,10 +247,6 @@
     oklch(0.85 0.05 90 / 0.12) 48%,
     transparent 70%);
   animation: none;
-}
-.cal-almanac-sun[data-cal-sun-state="eclipse"] .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"],
-.cal-almanac--proof-sun-eclipse .cal-almanac-sun .cal-almanac-sun__icon[data-cal-sun-icon="eclipse"] {
-  opacity: 0.35;
 }
 @keyframes cal-sun-rotate { to { transform: rotate(360deg); } }
 @keyframes cal-sun-breathe {

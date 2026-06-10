@@ -170,12 +170,15 @@ func TestWorldStateBandV2_RendersSunIcons(t *testing.T) {
 		`class="cal-almanac-sun__rays"`,   // clear-sky ray wheel
 		`class="cal-almanac-sun__corona"`, // soft halo
 		`class="cal-almanac-sun__core"`,   // the disc itself
-		`data-cal-sun-icon="eclipse"`,     // the eclipse-state glyph
-		`fill="currentColor"`,             // recolored per sun-state by CSS
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("sun must render its layered body; missing %q", want)
 		}
+	}
+	// The eclipse state is pure CSS (dark disc + diamond ring) — the old
+	// glyph overlay read as a grey artifact and must stay gone.
+	if strings.Contains(html, "data-cal-sun-icon") {
+		t.Errorf("sun body must not carry icon overlays anymore")
 	}
 }
 
