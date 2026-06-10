@@ -2361,8 +2361,11 @@
       var rest = sky.querySelector('[data-cal-sky-sub-rest]');
       if (rest) { var parts = rest.textContent.split(' · '); parts[1] = skyLabel(t); rest.textContent = parts.join(' · '); }
     }
-    // Sync clocks (sky time label + hourglass clock).
+    // Sync clocks (sky time label + hourglass clock) + the shelf's phase
+    // label (it printed the SSR phase forever — "21:36 · Day" after a GM
+    // advance into night).
     document.querySelectorAll('[data-cal-sky-time-label], [data-cal-time-clock]').forEach(function (c) { c.textContent = clockStr(t); });
+    document.querySelectorAll('[data-cal-time-phase]').forEach(function (c) { c.textContent = skyLabel(t); });
     if (window.__calSyncTimeAria) window.__calSyncTimeAria();   // R1: keep the time-slider a11y in sync
   }
   // Public time-change entry point → unified world-state (Wave 0 shim).

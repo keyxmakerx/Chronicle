@@ -520,10 +520,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: oklch(0.13 0.02 264);
-  border: 1px solid oklch(0.30 0.025 260);
+  /* translucent glass — the living sky shows through the timepiece card
+   * (matches the GM console's material; was an opaque slab). */
+  background: oklch(0.14 0.02 264 / 0.58);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  backdrop-filter: blur(10px) saturate(1.1);
+  border: 1px solid oklch(1 0 0 / 0.14);
   border-radius: 12px;
-  box-shadow: 0 6px 18px oklch(0 0 0 / 0.36);
+  box-shadow: 0 6px 18px oklch(0 0 0 / 0.36), inset 0 1px 0 oklch(1 0 0 / 0.07);
   z-index: 60;
   /* themeable sand tokens (recoloured by data-cal-hourglass-theme) */
   --sand-color: oklch(0.78 0.16 80);
