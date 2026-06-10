@@ -25,9 +25,6 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
 ### Medium
 
-- [ ] **Topbar custom image not visible at the top of the site** — Campaign settings → Branding has a "topbar image" upload that persists to the DB but the rendered topbar doesn't show it. The image only appears as a backdrop on the dashboard (a different feature). The `topbarInlineStyle()` helper at `internal/templates/layouts/app.templ:1439` emits a `background-image: url(...)` CSS rule on the `<header>`, but the header is `bg-surface` with flex children that visually mask the background. Needs CSS positioning fix or refactor to render the image as an overlay element. Functional bug — feature is wired but invisible.
-- [ ] **Topbar gradient mode never renders** — Same settings panel offers gradient mode (from-color, to-color, direction). Frontend POSTs to `/campaigns/:id/topbar-style`, handler at `campaigns/handler.go:646` accepts and persists it. But `topbarInlineStyle()` in `app.templ` never produces gradient CSS at render time — likely the `TopbarStyle` struct fields for gradient aren't being hydrated into the layout context (LayoutInjector in `app/routes.go`). Save+reload reverts to default. Functional bug — saves but no visible effect.
-
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
 ### Recently Fixed (2026-04-25)
