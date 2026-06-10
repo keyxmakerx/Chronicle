@@ -1,7 +1,7 @@
 // sky_w1.test.mjs — W1 sky fixes, booted behaviourally in a node vm against a
 // [data-cal-sky] DOM stub (same harness shape as sky_init_paint.test.mjs):
-//   Q1  weather DIMS the sun but never fully hides it (thunderstorm → ~0.40,
-//       floored at 0.28; clear → 1.0).
+//   Q1  weather DIMS the sun but never fully hides it (thunderstorm → a faint
+//       ember floored at 0.10; clear → 1.0).
 //   E1  the sun-bloom emitter spec carries spawn:'sun' so it anchors to the
 //       sun position instead of scattering "mini suns" at the canvas edges.
 //   E2  in production the engine sources the season/weather label from the seed
@@ -80,8 +80,10 @@ test('Q1: thunderstorm dims the sun but keeps it visible (never hidden)', () => 
   const { sun } = boot(baseSeed({ weather: { type: 'thunderstorm', intensity: 1 } }));
   const op = parseFloat(sun.style.opacity);
   assert.ok(!Number.isNaN(op), 'sun opacity set on init');
-  assert.ok(op >= 0.28, `sun must stay at least faintly visible in a storm (got ${op})`);
-  assert.ok(op < 1, `thunderstorm must visibly dim the sun (got ${op})`);
+  // GM-overhaul r2 (operator): a thunderstorm nearly swallows the sun — a
+  // faint ember (floor 0.10), dimmed hard but never fully gone.
+  assert.ok(op >= 0.10, `sun must stay an ember in a storm, never zero (got ${op})`);
+  assert.ok(op <= 0.30, `thunderstorm must dim the sun hard (got ${op})`);
 });
 
 test('Q1: clear weather leaves the sun at full brightness', () => {

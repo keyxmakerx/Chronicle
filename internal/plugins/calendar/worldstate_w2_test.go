@@ -115,7 +115,7 @@ func TestGMPanel_PlayersGetNothing(t *testing.T) {
 	if err := gmControlPanelV2(CalendarV2ViewData{ActiveCalendar: cal, CanControlWorldState: true}).Render(context.Background(), &owner); err != nil {
 		t.Fatalf("render (owner): %v", err)
 	}
-	for _, want := range []string{"data-gm-panel", "data-gm-events-clear", "data-gm-panel-body"} {
+	for _, want := range []string{"data-gm-panel", "data-gm-events-clear", "data-gm-sheet-panel"} {
 		if !strings.Contains(owner.String(), want) {
 			t.Errorf("owner GM panel missing %q", want)
 		}

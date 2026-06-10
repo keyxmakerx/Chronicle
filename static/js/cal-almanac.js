@@ -1086,7 +1086,8 @@
         if (!bl || bl.W !== W) {
           var n = fxCap(cfg.layers || 6);
           bl = { W: W, list: [] };
-          for (var i = 0; i < n; i++) bl.list.push({ x: Math.random() * W * 1.5 - W * 0.25, y: H * (0.12 + Math.random() * 0.75), r: W * (0.10 + Math.random() * 0.13), vx: W * ((cfg.speed || 0.012) * (0.6 + Math.random() * 0.8)), o: (cfg.alpha || 0.2) * (0.7 + Math.random() * 0.6) });
+          var sz = cfg.size || 1;
+          for (var i = 0; i < n; i++) bl.list.push({ x: Math.random() * W * 1.5 - W * 0.25, y: H * (0.12 + Math.random() * 0.75), r: W * (0.10 + Math.random() * 0.13) * sz, vx: W * ((cfg.speed || 0.012) * (0.6 + Math.random() * 0.8)), o: (cfg.alpha || 0.2) * (0.7 + Math.random() * 0.6) });
         }
         var rgb = cfg.rgb || '200,205,215';
         for (var j = 0; j < bl.list.length; j++) {
@@ -1207,6 +1208,19 @@
         }
         var rgb = cfg.rgb || '255,215,150';
         ctx.lineCap = 'round';
+        // impact blooms (fiery meteors detonate just past the horizon line)
+        if (!ms.impacts) ms.impacts = [];
+        for (var bi = ms.impacts.length - 1; bi >= 0; bi--) {
+          var b = ms.impacts[bi]; b.t += dt;
+          var bp = b.t / 0.55;
+          if (bp >= 1) { ms.impacts.splice(bi, 1); continue; }
+          var br = H * (0.06 + bp * 0.3), ba = (1 - bp) * 0.5;
+          var bg = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, br);
+          bg.addColorStop(0, 'rgba(255,230,180,' + (ba * 0.9).toFixed(3) + ')');
+          bg.addColorStop(0.4, 'rgba(255,160,70,' + (ba * 0.55).toFixed(3) + ')');
+          bg.addColorStop(1, 'rgba(255,120,40,0)');
+          ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(b.x, b.y, br, 0, 6.283); ctx.fill();
+        }
         for (var i = ms.length - 1; i >= 0; i--) {
           var m = ms[i];
           m.x += m.vx * dt; m.y += m.vy * dt; m.life += dt;
@@ -1221,10 +1235,44 @@
           grad.addColorStop(1, 'rgba(' + rgb + ',0)');
           ctx.strokeStyle = grad; ctx.lineWidth = (cfg.head || 1.8) * 1.1;
           ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(tx, ty); ctx.stroke();
-          ctx.shadowBlur = 8; ctx.shadowColor = 'rgba(' + rgb + ',0.9)';
-          ctx.fillStyle = 'rgba(255,245,220,.95)';
-          ctx.beginPath(); ctx.arc(m.x, m.y, cfg.head || 1.8, 0, 6.283); ctx.fill();
-          ctx.shadowBlur = 0;
+          if (cfg.fiery) {
+            // burning head: flickering two-tone core + ember sputter shed
+            // behind along the path
+            var flick = 0.85 + Math.random() * 0.3;
+            ctx.shadowBlur = 16; ctx.shadowColor = 'rgba(255,140,50,0.95)';
+            ctx.fillStyle = 'rgba(255,170,80,.9)';
+            ctx.beginPath(); ctx.arc(m.x, m.y, (cfg.head || 3) * flick, 0, 6.283); ctx.fill();
+            ctx.shadowBlur = 8; ctx.shadowColor = 'rgba(255,235,200,1)';
+            ctx.fillStyle = 'rgba(255,245,225,.95)';
+            ctx.beginPath(); ctx.arc(m.x, m.y, (cfg.head || 3) * 0.55 * flick, 0, 6.283); ctx.fill();
+            ctx.shadowBlur = 0;
+            m.sput = (m.sput || 0) + dt;
+            if (m.sput > 0.05) {
+              m.sput = 0;
+              m.embers = m.embers || [];
+              if (m.embers.length < 14) m.embers.push({ x: m.x, y: m.y, t: 0, vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.3) * 30 });
+            }
+            if (m.embers) {
+              for (var ei2 = m.embers.length - 1; ei2 >= 0; ei2--) {
+                var em2 = m.embers[ei2]; em2.t += dt; em2.x += em2.vx * dt; em2.y += em2.vy * dt;
+                var ea = 1 - em2.t / 0.6;
+                if (ea <= 0) { m.embers.splice(ei2, 1); continue; }
+                ctx.fillStyle = 'rgba(255,' + Math.round(120 + 90 * ea) + ',60,' + (ea * 0.8).toFixed(3) + ')';
+                ctx.beginPath(); ctx.arc(em2.x, em2.y, 1 + ea, 0, 6.283); ctx.fill();
+              }
+            }
+          } else {
+            ctx.shadowBlur = 6; ctx.shadowColor = 'rgba(' + rgb + ',0.8)';
+            ctx.fillStyle = 'rgba(255,250,240,.9)';
+            ctx.beginPath(); ctx.arc(m.x, m.y, cfg.head || 1.2, 0, 6.283); ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+          // fiery meteors impact at the horizon (a bloom flares just past the
+          // band's lower edge — the strike lands "off screen")
+          if (cfg.fiery && m.y >= H * 0.96) {
+            ms.impacts.push({ x: m.x + m.vx * 0.05, y: H * 1.0, t: 0 });
+            ms.splice(i, 1); continue;
+          }
           if (m.x < -W * 0.05 || m.y > H * 1.05) ms.splice(i, 1);
         }
       };
@@ -1245,7 +1293,7 @@
       var off = null, octx = null;
       return function (ctx, W, H, dt, t) {
         var dark = skyDarkness();
-        var strength = 0.22 + 0.78 * dark;
+        var strength = (0.5 + 0.5 * dark) * (cfg.boost || 1);
         if (!off || off.width !== Math.ceil(W / 2)) {
           off = (typeof document !== 'undefined' && document.createElement) ? document.createElement('canvas') : null;
           if (!off) return;
@@ -1385,8 +1433,8 @@
     SKY_FX['partly-cloudy'] = { back: [], front: [mkCloudDeck({ coverage: 0.3, darkness: 0.04, alpha: 0.42 })] };
     SKY_FX['cloudy'] = { back: [], front: [mkCloudDeck({ coverage: 0.62, darkness: 0.10, alpha: 0.52 })] };
     SKY_FX['overcast'] = { back: [], front: [mkWash('rgb(120,128,142)', 0.18), mkCloudDeck({ coverage: 1, darkness: 0.24, alpha: 0.55, band: 0.5 })] };
-    SKY_FX['mist'] = { back: [], front: [mkHaze({ rgb: '208,214,224', alpha: 0.11, layers: 5, speed: 0.008 })] };
-    SKY_FX['fog'] = { back: [], front: [mkWash('rgb(168,176,188)', 0.10), mkHaze({ rgb: '200,205,215', alpha: 0.22, layers: 7, speed: 0.010 })] };
+    SKY_FX['mist'] = { back: [], front: [mkWash('rgb(190,198,210)', 0.10), mkHaze({ rgb: '208,214,224', alpha: 0.18, layers: 6, speed: 0.008, size: 1.3 })] };
+    SKY_FX['fog'] = { back: [], front: [mkWash('rgb(172,180,192)', 0.30), mkHaze({ rgb: '204,210,220', alpha: 0.34, layers: 9, speed: 0.012, size: 1.5 })] };
     SKY_FX['drizzle'] = { back: [], front: [mkCloudDeck({ coverage: 0.4, darkness: 0.07, alpha: 0.4 }), mkPrecip({ density: 0.10, speed: 2.2, len: 0.045, color: 'rgba(185,205,232,.4)' })] };
     SKY_FX['rain'] = { back: [], front: [mkCloudDeck({ coverage: 0.55, darkness: 0.10, alpha: 0.48 }), mkPrecip({ density: 0.22, speed: 3.2, len: 0.07 })] };
     SKY_FX['heavy-rain'] = { back: [], front: [mkWash('rgb(48,58,74)', 0.18), mkCloudDeck({ coverage: 0.8, darkness: 0.34, alpha: 0.6 }), mkPrecip({ density: 0.4, speed: 3.9, len: 0.09, width: 1.2 })] };
@@ -1394,7 +1442,7 @@
     SKY_FX['snow-flurries'] = { back: [], front: [mkDrift({ density: 0.06, speed: 0.20, size: 1.6, sway: 0.014 })] };
     SKY_FX['hail'] = { back: [], front: [mkCloudDeck({ coverage: 0.6, darkness: 0.14, alpha: 0.5 }), mkPrecip({ density: 0.16, speed: 4.4, pellet: true, width: 1.5, color: 'rgba(240,246,255,.85)' })] };
     // Severe
-    SKY_FX['thunderstorm'] = { back: [], front: [mkWash('rgb(22,26,40)', 0.38), mkCloudDeck({ coverage: 1, darkness: 0.56, alpha: 0.72, band: 0.4 }), mkPrecip({ density: 0.4, speed: 4.1, len: 0.085, width: 1.2, color: 'rgba(186,205,232,.65)' }), mkLightning()] };
+    SKY_FX['thunderstorm'] = { back: [], front: [mkWash('rgb(16,19,32)', 0.52), mkCloudDeck({ coverage: 1, darkness: 0.66, alpha: 0.8, band: 0.42 }), mkPrecip({ density: 0.4, speed: 4.1, len: 0.085, width: 1.2, color: 'rgba(186,205,232,.65)' }), mkLightning()] };
     SKY_FX['blizzard'] = { back: [], front: [mkWash('rgb(214,224,238)', 0.10), mkDrift({ density: 0.45, speed: 0.9, size: 1.7, sway: 0.030 }), mkHaze({ rgb: '228,236,246', alpha: 0.12, layers: 4, speed: 0.05 })] };
     SKY_FX['sandstorm'] = { back: [], front: [mkWash('rgb(168,128,72)', 0.15), mkHaze({ rgb: '186,148,92', alpha: 0.26, layers: 7, speed: 0.07 }), mkDrift({ density: 0.3, speed: 0.5, size: 1, sway: 0.05, color: 'rgba(205,170,115,.55)' })] };
     SKY_FX['tornado'] = { back: [], front: [mkCloudDeck({ coverage: 0.85, darkness: 0.22, alpha: 0.55, band: 0.4 }), mkTornado()] };
@@ -1411,13 +1459,13 @@
     SKY_FX['acid-rain'] = { back: [mkWash('rgb(80,120,40)', 0.08)], front: [mkCloudDeck({ coverage: 0.5, darkness: 0.14, alpha: 0.45 }), mkPrecip({ density: 0.2, speed: 3.0, len: 0.07, color: 'rgba(160,230,90,.55)' })] };
     SKY_FX['miasma'] = { back: [mkWash('rgb(70,110,60)', 0.08)], front: [mkHaze({ rgb: '120,170,90', alpha: 0.18, layers: 6, speed: 0.012 }), mkDrift({ density: 0.05, speed: 0.08, size: 1.6, rise: true, sway: 0.012, color: 'rgba(150,210,110,.5)' })] };
     // Celestial events
-    SKY_FX['meteor-shower'] = { back: [mkMeteors({ rate: 0.8, max: 8 })], front: [] };
-    SKY_FX['meteor-storm'] = { back: [mkWash('rgb(255,200,120)', 0.04), mkMeteors({ rate: 2.4, max: 16, speed: 0.4, tail: 18 })], front: [] };
-    SKY_FX['shooting-star'] = { back: [mkMeteors({ rate: 0.10, max: 1, tail: 16 })], front: [] };
+    SKY_FX['meteor-shower'] = { back: [mkMeteors({ rate: 1.7, max: 12, speed: 0.34, tail: 11, head: 1.0, rgb: '230,238,255' }), mkMeteors({ rate: 0.35, max: 2, fiery: true, speed: 0.20, tail: 24, head: 3.0, rgb: '255,170,90' })], front: [] };
+    SKY_FX['meteor-storm'] = { back: [mkWash('rgb(255,200,120)', 0.05), mkMeteors({ rate: 3.2, max: 18, speed: 0.42, tail: 12, head: 1.1, rgb: '235,240,255' }), mkMeteors({ rate: 0.6, max: 4, fiery: true, speed: 0.26, tail: 26, head: 3.4, rgb: '255,160,80' })], front: [] };
+    SKY_FX['shooting-star'] = { back: [mkMeteors({ rate: 0.10, max: 1, tail: 16, head: 1.2, rgb: '235,240,255' })], front: [] };
     SKY_FX['star-fall'] = { back: [mkWash('rgb(255,225,160)', 0.05), mkMeteors({ rate: 2.6, max: 18, speed: 0.16, tail: 20, rgb: '255,230,170', head: 2.2 })], front: [] };
     SKY_FX['comet'] = { back: [mkComet()], front: [] };
     SKY_FX['aurora'] = { back: [mkAurora()], front: [] };
-    SKY_FX['arcane-aurora'] = { back: [mkAurora({ cols: [{ rgb: '215,110,255', ph: 0, fr: 1.8, amp: 0.15, base: 0.04 }, { rgb: '130,110,255', ph: 1.8, fr: 1.3, amp: 0.18, base: 0.12 }, { rgb: '255,130,210', ph: 3.4, fr: 2.3, amp: 0.10, base: 0.02 }] })], front: [] };
+    SKY_FX['arcane-aurora'] = { back: [mkAurora({ boost: 1.5, cols: [{ rgb: '225,120,255', ph: 0, fr: 1.8, amp: 0.15, base: 0.04, th: 0.4 }, { rgb: '140,120,255', ph: 1.8, fr: 1.3, amp: 0.18, base: 0.14, th: 0.44 }, { rgb: '255,140,215', ph: 3.4, fr: 2.3, amp: 0.10, base: 0.02, th: 0.3 }] })], front: [] };
     SKY_FX['eclipse-solar'] = { back: [mkWash('rgb(10,10,26)', function () { return 0.38; })], front: [] };
     SKY_FX['eclipse-lunar'] = { back: [mkWash('rgb(120,30,30)', 0.10)], front: [] };
     SKY_FX['blood-moon'] = { back: [mkWash('rgb(140,26,32)', 0.15)], front: [] };
@@ -1779,12 +1827,10 @@
     }
     var specs = [];
     if (ERA_HOVER_SPEC) specs.push(ERA_HOVER_SPEC);
-    // V5: sun-bloom is an alwaysActive emitter anchored to the painted sun.
-    // Only while the sun is up (W1/E1) and not buried under heavy weather —
-    // sparkles leaking through a storm deck read as stray dots.
-    var sb = sunBloomSpec(currentSunState(events));
-    var sunEff = (worldState && worldState.weather && worldState.weather.type) || effID || 'clear';
-    if (sb && arcPos(VIEW.timeFrac).opacity > 0 && sunWeatherDim(sunEff) > 0.7) specs.push(sb);
+    // GM-overhaul r2 (operator): the sun-bloom particle emitter is RETIRED —
+    // its drifting gold dots read as "weird sprites coming off the sun" next
+    // to the CSS ray wheel + corona, which are the sun's liveliness now.
+    // (sunBloomSpec stays defined for the demo-controls panel/tests.)
     SKY_SURFACE.setEmitters(specs);
     if (SKY_FRONT) SKY_FRONT.setEmitters([]);
   }
@@ -1883,11 +1929,11 @@
   // above the horizon — even a thunderstorm leaves it at least faintly visible.
   function sunWeatherDim(effID) {
     switch (effID) {
-      case 'thunderstorm': return 0.40;
+      case 'thunderstorm': return 0.22;
       case 'blizzard':     return 0.42;
       case 'sandstorm':    return 0.45;
       case 'tornado':      return 0.45;
-      case 'fog':          return 0.50;
+      case 'fog':          return 0.25;
       case 'heavy-rain':   return 0.50;
       case 'rain':         return 0.55;
       case 'acid-rain':    return 0.55;
@@ -2285,7 +2331,12 @@
         // (with a daytime floor) while it is actually up. Rays die first.
         var sunEff = (worldState && worldState.weather && worldState.weather.type) || 'clear';
         if (ap.opacity > 0) {
-          sun.style.opacity = Math.max(ap.opacity * sunWeatherDim(sunEff) * arcEdgeFade(wake), 0.28).toFixed(2);
+          // Q1 floor is weather-aware: ordinary cover keeps the sun clearly
+          // visible (0.28); a heavy storm/fog may swallow it to a faint ember
+          // (0.10) — dimmed, never fully gone.
+          var dim = sunWeatherDim(sunEff);
+          var floor = dim <= 0.3 ? 0.10 : 0.28;
+          sun.style.opacity = Math.max(ap.opacity * dim * arcEdgeFade(wake), floor).toFixed(2);
         }
         sun.style.setProperty('--cal-sun-rays', sunRayStrength(sunEff).toFixed(2));
       }
