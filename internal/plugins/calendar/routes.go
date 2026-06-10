@@ -128,16 +128,35 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Backward-compat routes: redirect old /calendar paths to /calendars.
 	pub.GET("/calendar", h.legacyRedirect)
 
-	// World-state seed (C-CAL-WORLDSTATE-SERVER-MODEL). GET is Player+
-	// (read; GM-only celestial events are filtered for non-DM viewers in
-	// the seed builder). PUT (set live mood + advance/set time) is
-	// Owner-only for now — the seam for the Phase-3 co-GM capability grant
-	// (D6) is the route role here, kept out of the service. No calId: the
-	// handler resolves the active calendar (or ?calendarId=).
-	cg.GET("/calendar/world-state", h.GetWorldState, campaigns.RequireRole(campaigns.RolePlayer))
-	// Co-DM capability (C-CAL-COGM-CAPABILITY / D6): world-state control is
-	// Owner OR DM-grantee, not Owner-only. This is the #401 seam widened —
-	// it's what lets a co-DM drive the Phase-4 GM panel.
+	// C-CAL-V1-V2-CUTOVER FIX (cordinator#30): the V2 calendar shell is now the
+	// ONLY live calendar view — every V1 view route above 301s here, so this is
+	// where a public-campaign visitor actually lands. It is a READ surface
+	// (Player+, dm_only filtered by role in the handler), so it MUST live in the
+	// public-capable group like the V1 routes it replaced; otherwise a logged-out
+	// visitor to a PUBLIC campaign is bounced through the redirect into
+	// RequireAuth → 401 → /login. The mutating switch/pin POSTs + the settings
+	// editor stay authenticated (in cg) below.
+	//   GET /campaigns/:id/calendar/v2              — active cal, default view = month
+	//   GET /campaigns/:id/calendar/v2/:calId       — explicit cal, default view = month
+	//   GET /campaigns/:id/calendar/v2/:calId/:view — explicit cal + view (month|week|day)
+	pub.GET("/calendar/v2", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/v2/:calId", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/v2/:calId/:view", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// World-state seed GET (C-CAL-WORLDSTATE-SERVER-MODEL). Player+ READ — the
+	// worldstate band lazy-loads this on the public calendar + entity-embed
+	// surfaces, so it is public-capable (GM-only celestial events are filtered
+	// for non-DM viewers in the seed builder). No calId: the handler resolves
+	// the active calendar (or ?calendarId=). The PUT (set mood / advance time)
+	// stays Owner/co-DM in cg below.
+	pub.GET("/calendar/world-state", h.GetWorldState, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// World-state seed PUT (set live mood + advance/set time). Co-DM capability
+	// (C-CAL-COGM-CAPABILITY / D6): control is Owner OR DM-grantee, not
+	// Owner-only — the #401 seam widened so a co-DM can drive the Phase-4 GM
+	// panel. The matching Player+ READ (GET) is public-capable and registered in
+	// the pub group above (cordinator#30). No calId: the handler resolves the
+	// active calendar (or ?calendarId=).
 	cg.PUT("/calendar/world-state", h.PutWorldState,
 		campaigns.RequireCapability((*campaigns.CampaignContext).CanControlWorldState,
 			"world-state control requires Owner or co-DM access"))
@@ -154,19 +173,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// player's list is ListVisibleCalendars and a hidden ?calId is not loaded).
 	cg.GET("/apps/calendar", h.AppDashboard, campaigns.RequireRole(campaigns.RolePlayer))
 
-	// V2 calendar shell (Wave 1 PR 1 / C-CAL-V2-SHELL-FOUNDATION).
-	// Additive: lives alongside V1 routes during the migration; V1
-	// surface remains operational. Cutover decision happens when
-	// later Wave 1 PRs reach feature parity. URL forms:
-	//   GET  /campaigns/:id/calendar/v2                       — active cal, default view = month
-	//   GET  /campaigns/:id/calendar/v2/:calId                — explicit cal, default view = month
-	//   GET  /campaigns/:id/calendar/v2/:calId/:view          — explicit cal + view (month|week|day)
-	//   POST /campaigns/:id/calendar/v2/switch                — persist multi-cal switcher choice
-	cg.GET("/calendar/v2", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.GET("/calendar/v2/:calId", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
-	cg.GET("/calendar/v2/:calId/:view", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+	// V2 calendar shell mutating / per-user routes (C-CAL-V2-SHELL-FOUNDATION).
+	// The READ views (GET …/calendar/v2[/:calId[/:view]]) are public-capable and
+	// registered in the pub group above (cordinator#30); these POSTs persist
+	// per-user state, so they stay authenticated.
+	//   POST /campaigns/:id/calendar/v2/switch       — persist multi-cal switcher choice
+	//   POST /campaigns/:id/calendar/v2/sidebar-pin  — persist sidebar pin preference (Wave 1.7A §G)
 	cg.POST("/calendar/v2/switch", h.SwitchActiveCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	// Wave 1.7A §G: sidebar pin toggle.
 	cg.POST("/calendar/v2/sidebar-pin", h.SidebarPinAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// V2 sub-resource card grids (Wave 1 PR 2 / C-CAL-V2-SUBRESOURCE-CARDS-A).
