@@ -1099,15 +1099,18 @@ templ customNavLink(link SidebarLink) {
 // Topbar renders the top navigation bar with campaign selector, customizable
 // content area, search, notes, and user menu.
 templ Topbar() {
-	<header class="h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative">
+	<header class="h-14 bg-surface border-b border-edge flex items-center px-3 md:px-5 shrink-0 gap-2 relative isolate">
 		if topbarHasCustomStyle(ctx) {
 			// Custom topbar background (solid / gradient / image) renders on a
 			// dedicated full-bleed layer rather than on the <header> itself.
-			// z-index:-1 paints it ABOVE the header's opaque bg-surface fill but
-			// BELOW the in-flow nav content, so the image/gradient can never be
-			// masked by the surface color or the flex children — the original
-			// "saved but invisible" bug. pointer-events:none lets clicks fall
-			// through to the nav controls underneath.
+			// The header carries isolation:isolate ("isolate" Tailwind class), making
+			// it a stacking context. Inside that context z-index:-1 paints the brand
+			// layer above the header's own surface background but below in-flow nav
+			// content — the image/gradient is visible and the nav stays on top.
+			// Without isolate the header is not a stacking context; negative-z children
+			// escape to the nearest ancestor context and paint before the header
+			// surface, making the brand invisible (the original "saved but invisible" bug).
+			// pointer-events:none lets clicks fall through to the nav controls.
 			<div
 				style={ "position:absolute; inset:0; z-index:-1; pointer-events:none; " + topbarInlineStyle(ctx) }
 				aria-hidden="true"
