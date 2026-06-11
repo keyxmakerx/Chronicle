@@ -168,9 +168,17 @@
             e.stopPropagation();
             menu.classList.toggle('hidden');
           });
-          document.addEventListener('click', function () {
+          // Close the dropdown on outside click. Named + stored on el (and
+          // guarded against re-entry) so destroy() can remove it — mirrors
+          // tag_picker.js:260-264. Otherwise this anonymous document listener
+          // leaks one detached-DOM-holding handler per widget mount.
+          if (el._graphMenuClose) {
+            document.removeEventListener('click', el._graphMenuClose);
+          }
+          el._graphMenuClose = function () {
             menu.classList.add('hidden');
-          });
+          };
+          document.addEventListener('click', el._graphMenuClose);
           menu.addEventListener('click', function (e) { e.stopPropagation(); });
         }
 
@@ -622,6 +630,10 @@
       if (el._graphSimulation) {
         el._graphSimulation.stop();
         delete el._graphSimulation;
+      }
+      if (el._graphMenuClose) {
+        document.removeEventListener('click', el._graphMenuClose);
+        delete el._graphMenuClose;
       }
       el.innerHTML = '';
     }
