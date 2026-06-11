@@ -219,10 +219,14 @@ func (a *App) errorHandler(err error, c echo.Context) {
 		return
 	}
 
-	// For HTMX requests, redirect to login on 401 so the browser navigates
-	// instead of swapping error HTML into a fragment target.
+	// For HTMX requests, redirect to login on 401 — but ONLY for boosted
+	// navigations (real page moves, where landing on /login is what the user
+	// needs). A lazily-loaded FRAGMENT that 401s must NOT hijack the page:
+	// on a public campaign an anonymous visitor's stray authed widget call
+	// was HX-Redirecting the whole browser to /login (cordinator#30 r2).
+	// Fragment 401s fall through to the 4xx toast branch below instead.
 	if isHTMXRequest(c) {
-		if code == http.StatusUnauthorized {
+		if code == http.StatusUnauthorized && c.Request().Header.Get("HX-Boosted") == "true" {
 			c.Response().Header().Set("HX-Redirect", "/login")
 			_ = c.NoContent(http.StatusNoContent)
 			return
