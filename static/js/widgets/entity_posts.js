@@ -325,13 +325,20 @@
           });
         }
 
-        // Close menus on outside click.
-        document.addEventListener('click', function () {
+        // Close menus on outside click. Named + stored on el (and guarded so a
+        // re-render doesn't stack listeners) so destroy() can remove it — mirrors
+        // tag_picker.js:260-264. Otherwise this anonymous document listener leaks
+        // one detached-DOM-holding handler per HTMX navigation.
+        if (el._postsMenuClose) {
+          document.removeEventListener('click', el._postsMenuClose);
+        }
+        el._postsMenuClose = function () {
           var allMenus = el.querySelectorAll('[data-menu]');
           for (var q = 0; q < allMenus.length; q++) {
             allMenus[q].classList.add('hidden');
           }
-        });
+        };
+        document.addEventListener('click', el._postsMenuClose);
 
         // Drag and drop reorder.
         if (editable) {
@@ -403,6 +410,10 @@
     },
 
     destroy: function (el) {
+      if (el._postsMenuClose) {
+        document.removeEventListener('click', el._postsMenuClose);
+        delete el._postsMenuClose;
+      }
       el.innerHTML = '';
     }
   });
