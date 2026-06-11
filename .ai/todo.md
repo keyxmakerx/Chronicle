@@ -19,6 +19,13 @@ Known broken or missing things, ordered by severity.
 
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
+### In flight — 2026-06-11 sweep round (agents dispatched; coordinator-verified findings)
+
+- [~] **Document-listener leaks** in `entity_posts.js` + `relation_graph.js` (cordinator#39 F1/F2) — Agent 1, `C-SWEEP-FIXES-R1` PR 1.
+- [~] **Public-campaign read gaps**: aliases route not in pub group; player-notes block mounts for anonymous; map blocks blank for public viewers (cordinator#39 F3/F5/F4) — Agent 1, `C-SWEEP-FIXES-R1` PR 2. Fog/layers stay auth-only.
+- [~] **Topbar custom branding still masked** (cordinator#29) — header lacks a stacking context, so the z-index:-1 brand layer paints under `bg-surface`; fix = `isolate` on the header — Agent 2, `C-BACKLOG-BUGS-R1`.
+- [~] **May bugs verify-then-fix** — editor dark-on-dark (#8), customizer no-change save + scroll (#10), mobile notepad z-index (#11) — Agent 3, `C-BACKLOG-BUGS-R1`.
+
 ### High
 
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
@@ -80,8 +87,9 @@ Lead of two candidate timeline designs (Ledger is the alternate, not yet built).
 Mock-data only, `/demo/timeline/tuner`, page-separated (own CSS+JS). Raw SVG + CSS
 transforms, NO D3 (audit §7). Spec: `cordinator/dispatches/chronicle/C-TIMELINE-V2-DESIGN-1-TUNER.md`.
 
-- [ ] **Ledger timeline (alternate design)** — flat/record-keeping timeline; operator
-  picks the winning design, then the real port re-skins `timeline_viz.js`. Post-deadline.
+- [x] **Ledger timeline (alternate design)** — shipped as `/demo/timeline/ledger` (chronicle#460,
+  2026-06-11); `/demo/calendar` is the consolidated hub. ⚠️ Operator design pick (Ledger vs Tuner,
+  cordinator#36 Q1) still open — the winner drives Timeline V2 W1.
 
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
@@ -219,7 +227,7 @@ _Lower-priority items to pick up during related sprints or as standalone tasks._
 - [ ] **Admin pagination inline** — admin/users.templ and admin/campaigns.templ have hand-rolled pagination instead of using components.Pagination.
 - [ ] **Modal approach mixed** — Sessions uses dialog element; calendar/other modals use Alpine.js. Should standardize.
 - [ ] **Rate limiting on mutations** — Campaign/entity/widget mutation endpoints have no rate limiting (auth + media do).
-- [ ] **Recurring calendar events (beyond yearly)** — Sessions support weekly/biweekly/monthly, but calendar events only support yearly.
+- [x] **Recurring calendar events (beyond yearly)** — shipped (chronicle#461, 2026-06-11): weekly/biweekly/monthly/custom share the sessions vocabulary; single `Event.OccursOn` expansion predicate; leap-aware monthly; migration 011. Multi-day-span recurrence + recurrence end-date UI controls remain future polish.
 
 **Documentation:**
 - [ ] **Posts widget missing .ai.md** — Only Go widget without documentation file.
