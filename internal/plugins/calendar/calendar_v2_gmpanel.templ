@@ -47,6 +47,18 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 			</button>
 			// The always-visible strip: clock + quick time verbs + sections.
 			<div class="gm-console__strip" data-gm-panel-card>
+				// Collapse handle — fused to the strip's left edge (operator: "part
+				// of the edge, not floating"). Points right, toward the pill tab it
+				// shrinks into.
+				<button
+					type="button"
+					class="gm-console__collapse"
+					data-gm-panel-toggle
+					aria-expanded="true"
+					aria-label="Collapse console"
+				>
+					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+				</button>
 				<span class="gm-console__title" title="GM Console">
 					<i class="fa-solid fa-wand-sparkles" aria-hidden="true"></i>
 				</span>
@@ -73,15 +85,6 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 				</button>
 				<button type="button" class="gm-console__iconbtn" data-gm-reset title="Reset sky — clear weather, world-events and mood">
 					<i class="fa-solid fa-broom" aria-hidden="true"></i>
-				</button>
-				<button
-					type="button"
-					class="gm-console__iconbtn"
-					data-gm-panel-toggle
-					aria-expanded="true"
-					aria-label="Collapse console"
-				>
-					<i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
 				</button>
 			</div>
 			// ---- TIME sheet ----
