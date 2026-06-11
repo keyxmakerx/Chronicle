@@ -202,6 +202,7 @@ GET	/entities	internal/plugins/entities/routes.go
 GET	/entities	internal/plugins/syncapi/routes.go
 GET	/entities/:eid	internal/plugins/entities/routes.go
 GET	/entities/:eid/aliases	internal/plugins/entities/routes.go
+GET	/entities/:eid/aliases	internal/plugins/entities/routes.go
 GET	/entities/:eid/backlinks	internal/plugins/entities/routes.go
 GET	/entities/:eid/edit	internal/plugins/entities/routes.go
 GET	/entities/:eid/entry	internal/plugins/entities/routes.go
@@ -280,11 +281,15 @@ GET	/maps/:mapID/markers/:markerID	internal/plugins/syncapi/routes.go
 GET	/maps/:mapID/tokens	internal/plugins/syncapi/routes.go
 GET	/maps/:mid	internal/plugins/maps/routes.go
 GET	/maps/:mid/drawings	internal/plugins/maps/routes.go
+GET	/maps/:mid/drawings	internal/plugins/maps/routes.go
 GET	/maps/:mid/drawings/:did	internal/plugins/maps/routes.go
 GET	/maps/:mid/fog	internal/plugins/maps/routes.go
 GET	/maps/:mid/layers	internal/plugins/maps/routes.go
 GET	/maps/:mid/layers/:lid	internal/plugins/maps/routes.go
 GET	/maps/:mid/markers	internal/plugins/maps/routes.go
+GET	/maps/:mid/markers	internal/plugins/maps/routes.go
+GET	/maps/:mid/meta	internal/plugins/maps/routes.go
+GET	/maps/:mid/tokens	internal/plugins/maps/routes.go
 GET	/maps/:mid/tokens	internal/plugins/maps/routes.go
 GET	/maps/:mid/tokens/:tid	internal/plugins/maps/routes.go
 GET	/maps/marker-icons	internal/plugins/maps/routes.go

@@ -2880,6 +2880,22 @@ func (h *Handler) GetAliasesAPI(c echo.Context) error {
 	}
 
 	entityID := c.Param("eid")
+
+	// Load the entity to enforce campaign scope + privacy, mirroring
+	// GetEntry/GetFieldsAPI — previously this read aliases by id with no IDOR
+	// or privacy gate (cordinator#39 finding 3). Required before exposing the
+	// route to public-campaign visitors.
+	entity, err := h.service.GetByID(c.Request().Context(), entityID)
+	if err != nil {
+		return err
+	}
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	aliases, err := h.service.GetAliases(c.Request().Context(), entityID)
 	if err != nil {
 		return err
