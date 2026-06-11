@@ -49,22 +49,23 @@ import (
 templ DemoCalendarIndex() {
 	@layouts.App("Chronicle calendar designs") {
 		<div style="max-width:760px; margin:0 auto; padding:48px 24px; font-family:'Inter Variable','Inter',system-ui,sans-serif; color:oklch(0.985 0.002 247.839);">
-			<h1 style="margin:0 0 8px; font-size:26px; font-weight:600;">Chronicle calendar designs</h1>
+			<h1 style="margin:0 0 8px; font-size:26px; font-weight:600;">Chronicle demos</h1>
 			<p style="margin:0 0 28px; color:oklch(0.707 0.022 261.325); line-height:1.6;">
-				Candidate calendar designs for the V2 plugin. Each lives on its own isolated page — its own styles and scripts, nothing shared — so one can&#39;t break another. Open one, use it, tell me in chat what you think.
+				The live design showcases. Everything stale was retired (the old design-canon brochure, the
+				calendar candidates that lost to the Almanac) — what&#39;s here is current. Each page is isolated:
+				its own styles and scripts, nothing shared.
 			</p>
-			<div style="display:flex; flex-direction:column; gap:12px;">
-				@calIndexLink("/demo/calendar/almanac", "Almanac", "Atmospheric. Animated OKLCH sky-band, era band, named weather + moons, recurring events, anchored popovers, draggable widget + timepiece.", true)
-				@calIndexLink("/demo/calendar/linear", "Linear", "Flat / information-dense. Razor radii, horizontal time-strip, spreadsheet feel. (Coming next.)", false)
-				@calIndexLink("/demo/calendar/compact", "Compact", "Dense / typography-forward. Tight grid, content-first cells. (Coming next.)", false)
+			<h2 style="margin:0 0 8px; font-size:20px; font-weight:600;">Calendar</h2>
+			<div style="display:flex; flex-direction:column; gap:12px; margin-bottom:28px;">
+				@calIndexLink("/demo/calendar/almanac", "Almanac (shipped)", "The production worldstate engine's showcase + parity anchor: animated sky, sun/moons, the full weather + celestial catalog, hourglass timepiece. This design WON and powers /calendar/v2.", true)
 			</div>
-			<h2 style="margin:36px 0 8px; font-size:20px; font-weight:600;">Timeline designs</h2>
+			<h2 style="margin:0 0 8px; font-size:20px; font-weight:600;">Timeline V2 — pick one (cordinator#36 Q1)</h2>
 			<p style="margin:0 0 16px; color:oklch(0.707 0.022 261.325); line-height:1.6;">
-				The same dataset as a horizontal timeline — a different lens on the world&#39;s history.
+				The same event dataset as a chronology — two candidate lenses. Open both, pick in chat.
 			</p>
 			<div style="display:flex; flex-direction:column; gap:12px;">
-				@calIndexLink("/demo/timeline/tuner", "FM Tuner", "Radio-dial time axis through the middle, swim-lanes above & below, era gradient bands, hover-revealed connection arcs, adaptive zoom millennia→days, atmospheric backdrop.", true)
-				@calIndexLink("/demo/timeline/ledger", "Ledger", "Flat / record-keeping. Stacked rows, dense annotations, spreadsheet history feel. (Coming next.)", false)
+				@calIndexLink("/demo/timeline/ledger", "Ledger — Design A (recommended)", "Flat record-keeping chronology: era headers, year gutter, dense tier-weighted rows, entity tags, weather glyphs, dm-only locks. Reads like the world's chronicle.", true)
+				@calIndexLink("/demo/timeline/tuner", "Tuner — Design B", "Radio-dial time axis, swim-lanes, era gradient bands, hover connection arcs, adaptive zoom millennia→days.", true)
 			</div>
 		</div>
 	}
@@ -709,7 +710,7 @@ templ calAlmanacIntro() {
 		// shared tab strip, per the page-separation directive. Each
 		// design page is fully isolated; navigation happens via the
 		// index, not an in-page switcher.
-		<a class="cal-almanac-back" href="/demo/calendar">‹ Calendar designs</a>
+		<a class="cal-almanac-back" href="/demo/calendar">‹ Demos</a>
 		<h1 class="cal-almanac-intro__title">Chronicle calendar — Design 1 · Almanac</h1>
 		<p class="cal-almanac-intro__text">
 			Atmospheric, almanac-style. <strong>Drag the calendar by its header</strong> to move the widget anywhere on the page; <strong>drag the corner</strong> to resize. Scrub the time-of-day band to watch dawn → noon → dusk → night. Click an event or day for an anchored popover; heavy edits open the side drawer. Drag across empty days to create.

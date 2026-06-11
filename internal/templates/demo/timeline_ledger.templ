@@ -1,0 +1,161 @@
+// timeline_ledger.templ — Timeline V2 candidate Design A: the LEDGER
+// (Timeline V2 arc W0, cordinator#36 — the flat record-keeping alternate the
+// demo index has promised since the Tuner shipped).
+//
+// A chronology that reads like the world's own chronicle: era headers with
+// tinted gradients → a year gutter → dense, scannable event rows. Tier sets
+// typographic weight (major bold/large · standard · detail muted), categories
+// are colored dots, multi-day events draw a span bar, entity ties and the
+// dm_only lock annotate inline, and each row carries its day's weather glyph
+// (the worldstate axis, ledger-style).
+//
+// Page-separation rules (the demo-arc directive): own isolated route, ONLY
+// its own self-contained `.tl-ledger-*` CSS (inline <style>, no Tailwind, no
+// shared design assets), mock data only, no JS. Canon OKLCH palette.
+package demo
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// ledgerEra / ledgerYear / ledgerRow — the mock chronicle dataset, shaped the
+// way the W1 lens would receive it: eras contain years contain day-rows.
+type ledgerRow struct {
+	Date     string // "Hammer 3" / "Ches 12–19"
+	Title    string
+	Tier     string // major | standard | detail
+	CatColor string // category dot (OKLCH)
+	Category string
+	Entities string // "@Highmoon · @Lord Veyran" ("" = none)
+	Weather  string // glyph ("" = none)
+	WxName   string
+	DMOnly   bool
+	Span     bool // multi-day → span bar
+}
+
+type ledgerYear struct {
+	Label string
+	Rows  []ledgerRow
+}
+
+type ledgerEra struct {
+	Glyph string
+	Name  string
+	Span  string
+	Hue   string // era tint (OKLCH hue band for the header gradient)
+	Years []ledgerYear
+}
+
+func ledgerMock() []ledgerEra {
+	return []ledgerEra{
+		{
+			Glyph: "⚔", Name: "Age of Conflict", Span: "1488 – 1490 DR", Hue: "oklch(0.30 0.08 35 / 0.40)",
+			Years: []ledgerYear{
+				{Label: "1489 DR", Rows: []ledgerRow{
+					{Date: "Eleint 27", Title: "The Border Beacons are lit", Tier: "standard", CatColor: "oklch(0.62 0.18 240)", Category: "war", Entities: "@The Marches", Weather: "🌧", WxName: "Rain"},
+					{Date: "Uktar 4", Title: "Skirmish at the Fordbridge", Tier: "detail", CatColor: "oklch(0.62 0.18 240)", Category: "war", DMOnly: true},
+				}},
+				{Label: "1490 DR", Rows: []ledgerRow{
+					{Date: "Hammer 3", Title: "The Siege of Highmoon breaks", Tier: "major", CatColor: "oklch(0.62 0.18 240)", Category: "battle", Entities: "@Highmoon · @Lord Veyran", Weather: "🌬", WxName: "Blizzard"},
+					{Date: "Ches 12–19", Title: "Council of the Marches", Tier: "standard", CatColor: "oklch(0.65 0.18 145)", Category: "politics", Weather: "🌧", WxName: "Rain", Span: true},
+					{Date: "Ches 14", Title: "Supply caravan arrives late", Tier: "detail", CatColor: "oklch(0.70 0.16 85)", Category: "session", DMOnly: true},
+				}},
+			},
+		},
+		{
+			Glyph: "✨", Name: "The Mythic Restoration", Span: "1491 DR – ongoing", Hue: "oklch(0.30 0.08 305 / 0.40)",
+			Years: []ledgerYear{
+				{Label: "1491 DR", Rows: []ledgerRow{
+					{Date: "Mirtul 1", Title: "The Weave reawakens", Tier: "major", CatColor: "oklch(0.66 0.22 310)", Category: "arcana", Entities: "@The Enclave", Weather: "🌀", WxName: "Arcane Winds"},
+					{Date: "Kythorn 12", Title: "Festival of the Silver Crown", Tier: "standard", CatColor: "oklch(0.62 0.18 240)", Category: "festival", Weather: "🔴", WxName: "Blood Moon"},
+					{Date: "Flamerule 8–11", Title: "The Star-Fall over the Reach", Tier: "standard", CatColor: "oklch(0.66 0.22 310)", Category: "omen", Weather: "☄", WxName: "Meteor Storm", Span: true},
+				}},
+				{Label: "1492 DR", Rows: []ledgerRow{
+					{Date: "Tarsakh 15", Title: "Treaty of the Twin Rivers signed", Tier: "standard", CatColor: "oklch(0.65 0.18 145)", Category: "politics", Entities: "@Riverlands", Weather: "☀", WxName: "Clear"},
+					{Date: "Kythorn 12", Title: "First Festival of the Restoration", Tier: "detail", CatColor: "oklch(0.62 0.18 240)", Category: "festival"},
+				}},
+			},
+		},
+	}
+}
+
+templ DemoTimelineLedger() {
+	@layouts.App("Timeline — Ledger (Design A)") {
+		<style>
+			.tl-ledger-page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; font-family: 'Inter Variable','Inter',system-ui,sans-serif; color: oklch(0.95 0.005 250); }
+			.tl-ledger-back { display: inline-block; margin-bottom: 14px; color: oklch(0.707 0.022 261.325); text-decoration: none; font-size: 13px; }
+			.tl-ledger-back:hover { color: oklch(0.985 0.002 247.839); }
+			.tl-ledger-h1 { margin: 0 0 4px; font-size: 22px; font-weight: 650; }
+			.tl-ledger-sub { margin: 0 0 22px; color: oklch(0.707 0.022 261.325); font-size: 13px; line-height: 1.6; }
+			.tl-ledger { background: oklch(0.20 0.022 264); border: 1px solid oklch(0.32 0.028 260); border-radius: 12px; overflow: hidden; }
+			.tl-ledger-era { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-top: 1px solid oklch(0.32 0.028 260); font-weight: 650; }
+			.tl-ledger-era:first-child { border-top: 0; }
+			.tl-ledger-era small { color: oklch(0.72 0.022 261); font-weight: 400; font-family: 'JetBrains Mono',ui-monospace,monospace; }
+			.tl-ledger-yr { display: flex; border-top: 1px solid oklch(0.27 0.025 262); }
+			.tl-ledger-yr-label { flex: 0 0 86px; padding: 10px 0 10px 18px; font: 600 12px 'JetBrains Mono',ui-monospace,monospace; color: oklch(0.85 0.10 85); }
+			.tl-ledger-rows { flex: 1; border-left: 1px solid oklch(0.32 0.028 260); }
+			.tl-ledger-row { display: flex; align-items: center; gap: 10px; padding: 7px 16px; border-top: 1px solid oklch(0.24 0.022 263); cursor: pointer; transition: background 120ms ease; }
+			.tl-ledger-row:first-child { border-top: 0; }
+			.tl-ledger-row:hover { background: oklch(0.25 0.025 264); }
+			.tl-ledger-d { flex: 0 0 86px; font: 11px 'JetBrains Mono',ui-monospace,monospace; color: oklch(0.72 0.022 261); }
+			.tl-ledger-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+			.tl-ledger-t { font-weight: 600; }
+			.tl-ledger-t--major { font-size: 15px; }
+			.tl-ledger-t--detail { font-weight: 400; color: oklch(0.72 0.022 261); font-size: 13px; }
+			.tl-ledger-chip { font-size: 10px; padding: 2px 7px; border-radius: 99px; background: oklch(0.28 0.03 264); color: oklch(0.72 0.022 261); white-space: nowrap; }
+			.tl-ledger-ent { font-size: 10px; color: oklch(0.78 0.10 200); white-space: nowrap; }
+			.tl-ledger-wx { margin-left: auto; font-size: 13px; opacity: 0.7; }
+			.tl-ledger-lock { font-size: 10px; opacity: 0.7; }
+			.tl-ledger-span { height: 5px; border-radius: 3px; background: linear-gradient(90deg, oklch(0.55 0.16 250), oklch(0.55 0.16 250 / 0.25)); flex: 1; max-width: 130px; }
+			@media (prefers-reduced-motion: reduce) { .tl-ledger-row { transition: none; } }
+		</style>
+		<div class="tl-ledger-page">
+			<a class="tl-ledger-back" href="/demo/calendar">‹ Demos</a>
+			<h1 class="tl-ledger-h1">Timeline — “Ledger” (Design A)</h1>
+			<p class="tl-ledger-sub">
+				The flat record-keeping chronology: era → year → dense rows. Tier sets the type weight, categories
+				are dots, multi-day events draw a span bar, entity ties + dm-only locks annotate inline, and each
+				row carries its day&#39;s weather glyph. In production this is the calendar&#39;s 4th view — the same
+				events as the month grid, as the world&#39;s own chronicle. (Mock data; rows are hover-only here.)
+			</p>
+			<div class="tl-ledger">
+				for _, era := range ledgerMock() {
+					<div class="tl-ledger-era" style={ "background: linear-gradient(90deg," + era.Hue + ", transparent 70%)" }>
+						{ era.Glyph } { era.Name } <small>{ era.Span }</small>
+					</div>
+					for _, yr := range era.Years {
+						<div class="tl-ledger-yr">
+							<div class="tl-ledger-yr-label">{ yr.Label }</div>
+							<div class="tl-ledger-rows">
+								for _, r := range yr.Rows {
+									<div class="tl-ledger-row">
+										<span class="tl-ledger-d">{ r.Date }</span>
+										<span class="tl-ledger-dot" style={ "background:" + r.CatColor }></span>
+										if r.Tier == "major" {
+											<span class="tl-ledger-t tl-ledger-t--major">{ r.Title }</span>
+										} else if r.Tier == "detail" {
+											<span class="tl-ledger-t tl-ledger-t--detail">{ r.Title }</span>
+										} else {
+											<span class="tl-ledger-t">{ r.Title }</span>
+										}
+										if r.Span {
+											<span class="tl-ledger-span"></span>
+										}
+										<span class="tl-ledger-chip">{ r.Category }</span>
+										if r.Entities != "" {
+											<span class="tl-ledger-ent">{ r.Entities }</span>
+										}
+										if r.DMOnly {
+											<span class="tl-ledger-lock">🔒</span>
+										}
+										if r.Weather != "" {
+											<span class="tl-ledger-wx" title={ r.WxName }>{ r.Weather }</span>
+										}
+									</div>
+								}
+							</div>
+						</div>
+					}
+				}
+			</div>
+		</div>
+	}
+}

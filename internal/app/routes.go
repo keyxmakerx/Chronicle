@@ -2857,20 +2857,6 @@ func (a *App) RegisterRoutes() {
 		return c.Redirect(http.StatusSeeOther, "/campaigns")
 	}, auth.RequireAuth(authService))
 
-	// C-V2-DESIGN-REBUILD demo showcase. Third strategic reset of the
-	// demo arc: scrapped the instrument-shaped builds (PRs #375-#383)
-	// for a static, no-JS labeled catalogue at /demo/showcase. Operator
-	// reads it like a brochure and names the options they like in chat;
-	// the coordinator authors Phase 3 (canon tokens ship-wide) from that
-	// plain-language reply. Self-contained .showcase-* CSS — no Tailwind,
-	// no @layer, no JS — so nothing can lose a cascade fight. Auth-gated
-	// mirroring the `/dashboard` precedent above; exposes no campaign
-	// data. Dispatch:
-	// dispatches/chronicle/C-V2-DESIGN-REBUILD-DEMO-RESET-V3-LABELED-SHOWCASE.md.
-	e.GET("/demo/showcase", func(c echo.Context) error {
-		return middleware.Render(c, http.StatusOK, demo.DemoShowcase())
-	}, auth.RequireAuth(authService))
-
 	// Candidate calendar designs for the V2 plugin port. Per the
 	// operator's page-separation directive (2026-06-03): each design
 	// lives on its OWN isolated route loading ONLY its own CSS+JS, so a
@@ -2893,6 +2879,13 @@ func (a *App) RegisterRoutes() {
 	// CSS+JS. Lead of two candidate timeline designs (Ledger alternate).
 	e.GET("/demo/timeline/tuner", func(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, demo.DemoTimelineTuner())
+	}, auth.RequireAuth(authService))
+	// Ledger timeline showcase (Timeline V2 arc W0, cordinator#36): the flat
+	// record-keeping alternate to the Tuner — the second of the two candidate
+	// designs the index has promised since the timeline showcase shipped.
+	// Same isolation rules: own route, own self-contained CSS, mock data only.
+	e.GET("/demo/timeline/ledger", func(c echo.Context) error {
+		return middleware.Render(c, http.StatusOK, demo.DemoTimelineLedger())
 	}, auth.RequireAuth(authService))
 
 	// --- Layout Data Injector ---
