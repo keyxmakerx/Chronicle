@@ -44,6 +44,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 	pub.GET("/maps", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/maps/:mid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
+	// Read-only map data for the embeddable map-widget / entity-map blocks on
+	// public campaigns (cordinator#39 finding 4). meta = image + dimensions +
+	// visibility-filtered markers; markers also exposed standalone. Both reuse
+	// the existing role/visibility filtering and are empty-userID safe.
+	// Drawings/tokens get their own pub group in RegisterDrawingRoutes; fog and
+	// layers stay cg-only (GM tools).
+	pub.GET("/maps/:mid/meta", h.GetMapMetaAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/maps/:mid/markers", h.ListMarkersAPI, campaigns.RequireRole(campaigns.RolePlayer))
 }
 
 // RegisterDrawingRoutes sets up API routes for drawings, tokens, layers, and fog.
@@ -84,4 +92,17 @@ func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaig
 	cg.POST("/maps/:mid/fog", dh.CreateFog, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.DELETE("/maps/:mid/fog/:fid", dh.DeleteFog, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/maps/:mid/fog/reset", dh.ResetFog, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Public-capable READ-ONLY drawings + tokens, so the embeddable map-widget /
+	// entity-map blocks render on public campaigns (cordinator#39 finding 4).
+	// Both list handlers already filter by role (GM-only items hidden from
+	// players) and need no userID, so anonymous public visitors are safe. Writes
+	// stay in cg above; FOG and LAYERS are intentionally NOT exposed (GM tools).
+	pub := e.Group("/campaigns/:id",
+		auth.OptionalAuth(authSvc),
+		campaigns.AllowPublicCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "maps"),
+	)
+	pub.GET("/maps/:mid/drawings", dh.ListDrawings, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/maps/:mid/tokens", dh.ListTokens, campaigns.RequireRole(campaigns.RolePlayer))
 }

@@ -403,6 +403,46 @@ func (h *Handler) DeleteMarkerAPI(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+// GetMapMetaAPI returns the public-capable JSON the embeddable map widget needs
+// (image id + dimensions + visibility-filtered markers) so map-widget /
+// entity-map blocks render on public campaigns without the /api/v1 (Foundry /
+// API-key) path. cordinator#39 finding 4. Role/visibility filtering matches
+// ListMarkersAPI and is empty-userID safe (anonymous public visitors).
+// GET /campaigns/:id/maps/:mid/meta
+func (h *Handler) GetMapMetaAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	mapID := c.Param("mid")
+
+	m, err := h.requireMapInCampaign(c, mapID, cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+
+	role := cc.VisibilityRole()
+	userID := ""
+	if session := c.Get("session"); session != nil {
+		if s, ok := session.(interface{ GetUserID() string }); ok {
+			userID = s.GetUserID()
+		}
+	}
+	markers, err := h.svc.ListMarkers(ctx, mapID, role, userID)
+	if err != nil {
+		return err
+	}
+	if markers == nil {
+		markers = []Marker{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"id":           m.ID,
+		"name":         m.Name,
+		"image_id":     m.ImageID,
+		"image_width":  m.ImageWidth,
+		"image_height": m.ImageHeight,
+		"markers":      markers,
+	})
+}
+
 // ListMarkersAPI returns all markers for a map as JSON.
 // GET /campaigns/:id/maps/:mid/markers
 func (h *Handler) ListMarkersAPI(c echo.Context) error {

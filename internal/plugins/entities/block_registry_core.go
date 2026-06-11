@@ -101,6 +101,15 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		Addon:       "player-notes",
 		Contexts:    []string{"template"},
 	}, func(ctx BlockRenderContext) templ.Component {
+		// Player Notes are per-user and EVERY entity_notes route is RequireAuth,
+		// so the block is meaningless (and 401s) for a viewer with no identity.
+		// On a public campaign an anonymous visitor is GRANTED RolePlayer for
+		// visibility, so MemberRole is NOT a reliable signal — gate on a real
+		// authenticated identity (ctx.UserID, = layouts.GetUserID) instead.
+		// cordinator#39 finding 5.
+		if ctx.UserID == "" {
+			return templ.NopComponent
+		}
 		return blockEntityNotes(ctx.CC, ctx.Entity, ctx.CSRFToken)
 	})
 

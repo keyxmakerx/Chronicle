@@ -152,6 +152,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// entity-level privacy checks (private entities require Scribe+).
 	pub.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
 	pub.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Aliases display data (cordinator#39 finding 3) — the aliases widget mounts
+	// for every viewer, so its read must be public-capable like entry/fields.
+	// GetAliasesAPI now enforces the same IDOR + entity-privacy gate.
+	pub.GET("/entities/:eid/aliases", h.GetAliasesAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Dynamic category route: resolves any entity type slug to a category
 	// dashboard. Echo's router gives static segments (entities, settings, etc.)

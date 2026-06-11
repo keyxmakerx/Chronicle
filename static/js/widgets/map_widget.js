@@ -42,8 +42,12 @@
      */
     _fetchMapData: function (mapId) {
       var self = this;
-      var url = '/api/v1/campaigns/' + encodeURIComponent(this.campaignId) +
-        '/maps/' + encodeURIComponent(mapId);
+      // Public-capable web endpoint (cordinator#39 finding 4) — NOT /api/v1,
+      // which is API-key/Foundry auth with no public-campaign path, so the
+      // block stayed blank for public-campaign visitors. /meta returns the same
+      // image + dimensions + visibility-filtered markers.
+      var url = '/campaigns/' + encodeURIComponent(this.campaignId) +
+        '/maps/' + encodeURIComponent(mapId) + '/meta';
 
       Chronicle.apiFetch(url, { headers: { 'Accept': 'application/json' } })
         .then(function (res) {
