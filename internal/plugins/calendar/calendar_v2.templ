@@ -684,9 +684,11 @@ templ weekViewPlaceholder(data CalendarV2ViewData) {
 //
 // Scribe+ only — Players never receive the drawer DOM.
 templ eventV2Drawer(data CalendarV2ViewData) {
+	// z-50: the full editor must layer ABOVE the GM console (z-40 in the band
+	// region) — the console was hovering over the open drawer.
 	<div
 		id="event-v2-drawer"
-		class="fixed inset-0 z-30 hidden"
+		class="fixed inset-0 z-50 hidden"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="event-v2-drawer-title"

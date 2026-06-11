@@ -75,10 +75,24 @@ test('the transition fade lives in CSS and reduced-motion neutralizes it', () =>
 });
 
 test('sheets cover the band pane and scroll internally (never unbounded)', () => {
-  assert.match(css, /\.gm-console__sheet\s*\{[\s\S]*?top: 48px/, 'sheets must span the sky pane below the strip');
+  assert.match(css, /\.gm-console__sheet\s*\{[\s\S]*?top: 44px/, 'sheets must span the sky pane below the strip');
   assert.match(css, /\.gm-console__sheet-body\s*\{[\s\S]*?overflow-y: auto/, 'sheet body must scroll internally');
   assert.match(css, /\.gm-console\s*\{[\s\S]*?pointer-events: none/, 'console root must not block sky clicks');
   assert.doesNotMatch(src, /maxHeight = 'none'/, 'JS must not release any body to an unbounded height');
+});
+
+test('the console is DOCKED into the pane edge (r3, cordinator#33)', () => {
+  assert.match(css, /\.gm-console__strip \{[\s\S]*?top: 0;[\s\S]*?right: 0;/, 'strip must be flush with the pane corner');
+  assert.match(css, /\.gm-console__strip \{[\s\S]*?border-radius: 0 0 0 12px/, 'strip squares off where it meets the edges');
+  assert.match(css, /\.gm-console__collapse \{/, 'edge-fused collapse handle missing');
+  assert.match(css, /\.gm-console__sheet \{[\s\S]*?left: 0;[\s\S]*?right: 0;[\s\S]*?bottom: 0;/, 'sheets flush to the pane edges');
+});
+
+test('collapsed console is fully inert — visibility cut, no click-traps (r3)', () => {
+  assert.match(css, /data-gm-collapsed="true"\][\s\S]*?visibility: hidden/, 'collapsed strip/sheets must be visibility:hidden');
+  const iconbtnRule = css.match(/\.gm-console__iconbtn \{[^}]*\}/);
+  assert.ok(iconbtnRule, 'iconbtn rule present');
+  assert.doesNotMatch(iconbtnRule[0], /pointer-events: auto/, 'icon buttons must not re-enable hit-testing (the invisible click-trap class)');
 });
 
 test('the console collapses to a pill (data-gm-collapsed contract)', () => {

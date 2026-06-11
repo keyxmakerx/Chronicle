@@ -117,36 +117,44 @@
             return isNaN(n) ? fallback : n;
         }
 
-        // --- collapse to pill / expand ---
+        // --- console state machine (r3, cordinator#33) -------------------
+        // The console's visible state lives in THREE surfaces: data-gm-collapsed
+        // (root), data-gm-sheet (root) and per-sheet [hidden] — plus aria on the
+        // buttons. The r2 code had separate writers, so a missed path could
+        // desync them ("collapsed, yet a sheet shows behind the pill").
+        // applyState is now the ONLY writer: every path — init included —
+        // reconciles ALL surfaces in one place. A collapsed console can never
+        // hold an open sheet.
         var toggleBtn = panel.querySelector('[data-gm-panel-toggle]');
         var openBtn = panel.querySelector('[data-gm-panel-open]');
-        function setCollapsed(collapsed) {
+        function applyState(collapsed, sheet) {
+            if (collapsed) sheet = '';
             panel.setAttribute('data-gm-collapsed', collapsed ? 'true' : 'false');
+            panel.setAttribute('data-gm-sheet', sheet || '');
             if (toggleBtn) toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        }
-        if (toggleBtn) toggleBtn.addEventListener('click', function () { setSheet(''); setCollapsed(true); });
-        if (openBtn) openBtn.addEventListener('click', function () { setCollapsed(false); });
-
-        // --- full-band sheets (r2): section buttons toggle a glass sheet
-        //     covering the whole sky pane; the strip stays put. ---
-        function setSheet(id) {
-            panel.setAttribute('data-gm-sheet', id || '');
             panel.querySelectorAll('[data-gm-sheet-open]').forEach(function (b) {
-                b.setAttribute('aria-expanded', b.getAttribute('data-gm-sheet-open') === id ? 'true' : 'false');
+                b.setAttribute('aria-expanded', b.getAttribute('data-gm-sheet-open') === sheet ? 'true' : 'false');
             });
             panel.querySelectorAll('[data-gm-sheet-panel]').forEach(function (p) {
-                if (p.getAttribute('data-gm-sheet-panel') === id) p.removeAttribute('hidden');
+                if (p.getAttribute('data-gm-sheet-panel') === sheet) p.removeAttribute('hidden');
                 else p.setAttribute('hidden', '');
             });
         }
+        function isCollapsed() { return panel.getAttribute('data-gm-collapsed') === 'true'; }
+        function currentSheet() { return panel.getAttribute('data-gm-sheet') || ''; }
+        // Normalize whatever state the markup arrived in (fresh render, boosted
+        // -nav swap, or a desync from a pre-r3 session) on every (re)init.
+        applyState(isCollapsed(), currentSheet());
+        if (toggleBtn) toggleBtn.addEventListener('click', function () { applyState(true, ''); });
+        if (openBtn) openBtn.addEventListener('click', function () { applyState(false, ''); });
         panel.querySelectorAll('[data-gm-sheet-open]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var id = btn.getAttribute('data-gm-sheet-open');
-                setSheet(panel.getAttribute('data-gm-sheet') === id ? '' : id);
+                applyState(false, currentSheet() === id ? '' : id);
             });
         });
         panel.querySelectorAll('[data-gm-sheet-close]').forEach(function (btn) {
-            btn.addEventListener('click', function () { setSheet(''); });
+            btn.addEventListener('click', function () { applyState(false, ''); });
         });
 
         // --- catalog search filters (weather + events share the pattern) ---
