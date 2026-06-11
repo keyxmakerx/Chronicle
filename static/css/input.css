@@ -757,6 +757,23 @@
     @apply text-amber-500/60 mr-1;
   }
 
+  /* ---- Dark-mode overrides for Tailwind typography prose ---- */
+  /* Tailwind typography hardcodes light-mode colours via --tw-prose-* variables.
+     Map them to Chronicle's CSS variables under .dark so rendered entity content
+     reads correctly without per-element selectors. The explicit `color` property
+     is a belt-and-suspenders fallback in case a browser inlines the variable. */
+  .dark .prose {
+    --tw-prose-body: var(--color-text-body);
+    --tw-prose-headings: var(--color-text-primary);
+    --tw-prose-lead: var(--color-text-body);
+    --tw-prose-links: var(--color-accent);
+    --tw-prose-bold: var(--color-text-primary);
+    --tw-prose-counters: var(--color-text-body);
+    --tw-prose-bullets: var(--color-text-body);
+    --tw-prose-code: var(--color-text-body);
+    color: var(--color-text-body);
+  }
+
   /* ---- Prose styling for dark mode ---- */
   .chronicle-editor__content .tiptap h1,
   .chronicle-editor__content .tiptap h2,
