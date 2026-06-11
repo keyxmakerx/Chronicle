@@ -18,17 +18,21 @@ import (
 templ CampaignShowPage(cc *CampaignContext, transfer *OwnershipTransfer, recentEntities []RecentEntity, csrfToken string) {
 	@layouts.App(cc.Campaign.Name) {
 		<div class="max-w-5xl mx-auto">
-			// VTT update-available banner. NW-2.2 Chunk D moved this
-			// to foundry_vtt; D2-cleanup removed the unused fmBanner
-			// parameter + supporting types. The fragment endpoint
-			// at /foundry-vtt/show-banner-fragment fetches its own
-			// state via fvttService. Owner-only enforced at the route
-			// (requireOwner middleware in foundry_vtt.RegisterOwnerRoutes).
-			<span
-				hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/show-banner-fragment", cc.Campaign.ID) }
-				hx-trigger="load"
-				hx-swap="outerHTML"
-			></span>
+			// VTT update-available banner — OWNER-ONLY MARKUP (cordinator#30 r2):
+			// this span used to render for EVERY viewer while its endpoint sits
+			// behind RequireAuth+requireOwner. For a logged-out visitor on a
+			// PUBLIC campaign the on-load hx-get 401'd and the global error
+			// handler HX-Redirected the whole page to /login — the "public
+			// campaign forces login" bug. Players got an error toast from the
+			// 403 the same way. Never emit an authed fragment call to viewers
+			// who can't pass its gate.
+			if cc.MemberRole >= RoleOwner {
+				<span
+					hx-get={ fmt.Sprintf("/campaigns/%s/foundry-vtt/show-banner-fragment", cc.Campaign.ID) }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></span>
+			}
 			// Pending transfer banner for the target user.
 			if transfer != nil {
 				<div class="alert-warning mb-6">
