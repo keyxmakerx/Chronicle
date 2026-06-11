@@ -69,6 +69,11 @@ type CalendarV2ViewData struct {
 	// — gates the event drawer's restricted-visibility option + the GM panel's
 	// trigger-event dm_only toggle (Phase 4c; the V2 half of the Phase-3 fix).
 	CanAuthorDmOnly bool
+	// EntityTypes: the campaign's entity types, for the drawer "Create entity
+	// from event" action's picker (C-CAL-EDITOR-EXPANSION PR1). Populated only
+	// for Scribes (the only viewers who get the drawer) via the EntityCreator
+	// cross-plugin seam; empty hides the action.
+	EntityTypes []EntityTypeRef
 }
 
 // CalendarV2Page is the full-page V2 shell. HTMX swaps target the
@@ -809,38 +814,99 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 						<i class="fa-solid fa-globe mr-1" aria-hidden="true"></i>Visible to everyone
 					</p>
 				}
-				// Attach-entity picker (C-CAL-WORLDSTATE-PRODUCTION-PORT 2b):
-				// persists real entity_event_links with a participation_role.
-				// Roles come from the Go enum (data-ties-roles) so the JS never
-				// duplicates the vocabulary. Active for saved events; new events
-				// show the save-first hint (an event needs an id before ties
-				// can attach).
-				<div data-event-ties-section data-ties-roles={ participationRolesCSV() }>
-					<label class="block text-xs font-medium text-fg-secondary mb-1">Entities</label>
-					<div class="flex flex-wrap gap-1 mb-2" data-ties-list aria-live="polite"></div>
-					<div data-ties-picker class="relative hidden">
-						<input
-							type="text"
-							class="input text-sm w-full"
-							data-ties-search
-							placeholder="Search entities to attach…"
-							autocomplete="off"
-						/>
-						<div class="absolute z-10 left-0 right-0 mt-1 card shadow-lg max-h-48 overflow-y-auto hidden" data-ties-results></div>
+				// Actions section (C-CAL-EDITOR-EXPANSION PR1). Shown only in EDIT
+				// mode — event_grid.js toggles data-drawer-actions on an existing
+				// event (a new event has no id to act on). The whole drawer is
+				// already server-gated to Scribe+, so these controls are too.
+				<div data-drawer-actions class="hidden border-t border-edge pt-3 space-y-3">
+					<div class="text-[11px] font-semibold text-fg-secondary uppercase tracking-wide">Actions</div>
+					if len(data.EntityTypes) > 0 {
+						// 1. Create entity from event → inline entity-type picker; the
+						// new entity is named after the event + linked to it.
+						<div>
+							<button type="button" class="btn-secondary text-xs w-full justify-start" data-action-create-entity>
+								<i class="fa-solid fa-wand-magic-sparkles mr-1" aria-hidden="true"></i>Create entity from event
+							</button>
+							<div class="hidden mt-2 flex items-center gap-2" data-create-entity-panel>
+								<select class="input text-sm flex-1" data-create-entity-type aria-label="Entity type">
+									for _, et := range data.EntityTypes {
+										<option value={ fmt.Sprintf("%d", et.ID) }>{ et.Name }</option>
+									}
+								</select>
+								<button type="button" class="btn-primary text-xs" data-create-entity-go>Create</button>
+							</div>
+						</div>
+					}
+					// 2. Connect existing entities — the existing ties picker
+					// (initEntityTies in event_grid.js), surfaced here as a labeled
+					// "Linked entities" group. Roles come from the Go enum
+					// (data-ties-roles) so the JS never duplicates the vocabulary.
+					<div data-event-ties-section data-ties-roles={ participationRolesCSV() }>
+						<label class="block text-xs font-medium text-fg-secondary mb-1">Linked entities</label>
+						<div class="flex flex-wrap gap-1 mb-2" data-ties-list aria-live="polite"></div>
+						<div data-ties-picker class="relative hidden">
+							<input
+								type="text"
+								class="input text-sm w-full"
+								data-ties-search
+								placeholder="Search entities to attach…"
+								autocomplete="off"
+							/>
+							<div class="absolute z-10 left-0 right-0 mt-1 card shadow-lg max-h-48 overflow-y-auto hidden" data-ties-results></div>
+						</div>
+						<p class="text-xs text-fg-secondary italic hidden" data-ties-hint>Save the event first to attach entities.</p>
 					</div>
-					<p class="text-xs text-fg-secondary italic hidden" data-ties-hint>Save the event first to attach entities.</p>
+					// 3. Duplicate to date → day/month/year (prefilled +1 day). The
+					// client POSTs the event's full body with the new date (no server
+					// change) — the lossless pattern from saveQuickEdit.
+					<div>
+						<button type="button" class="btn-secondary text-xs w-full justify-start" data-action-duplicate>
+							<i class="fa-solid fa-copy mr-1" aria-hidden="true"></i>Duplicate to date
+						</button>
+						<div class="hidden mt-2 space-y-2" data-duplicate-panel>
+							<div class="grid grid-cols-3 gap-2">
+								<div>
+									<label class="block text-[10px] text-fg-secondary mb-1">Year</label>
+									<input type="number" class="input text-sm w-full" data-dup-year/>
+								</div>
+								<div>
+									<label class="block text-[10px] text-fg-secondary mb-1">Month</label>
+									<select class="input text-sm w-full" data-dup-month>
+										for i, m := range data.ActiveCalendar.Months {
+											<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
+										}
+									</select>
+								</div>
+								<div>
+									<label class="block text-[10px] text-fg-secondary mb-1">Day</label>
+									<input type="number" min="1" class="input text-sm w-full" data-dup-day/>
+								</div>
+							</div>
+							<button type="button" class="btn-primary text-xs" data-duplicate-go>Duplicate</button>
+						</div>
+					</div>
+					// 4. Permalink → copy a focus URL to the clipboard; loading it
+					// opens this event's drawer (event_grid.js focus handler).
+					<div>
+						<button type="button" class="btn-secondary text-xs w-full justify-start" data-action-permalink>
+							<i class="fa-solid fa-link mr-1" aria-hidden="true"></i>Copy link to this event
+						</button>
+					</div>
+					// 5. Delete (Owner) — destructive, last. event_grid.js shows it
+					// only when editing AND owner; uses the existing confirm overlay.
+					<div class="pt-1">
+						<button
+							type="button"
+							class="text-xs text-danger hover:bg-danger/10 px-2 py-1 rounded transition-colors duration-micro hidden"
+							data-drawer-delete="true"
+						>
+							<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i>Delete
+						</button>
+					</div>
 				</div>
 			</div>
-			<div class="px-4 py-3 border-t border-edge flex items-center justify-between">
-				<button
-					type="button"
-					class="text-xs text-danger hover:bg-danger/10 px-2 py-1 rounded transition-colors duration-micro hidden"
-					data-drawer-delete="true"
-				>
-					<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i>
-					Delete
-				</button>
-				<div class="flex items-center gap-2 ml-auto">
+			<div class="px-4 py-3 border-t border-edge flex items-center justify-end">
+				<div class="flex items-center gap-2">
 					<button type="button" class="btn-secondary text-xs" data-drawer-close="true">Cancel</button>
 					<button type="button" class="btn-primary text-xs" data-drawer-save="true">Save</button>
 				</div>

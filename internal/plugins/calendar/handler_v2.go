@@ -107,6 +107,13 @@ func (h *Handler) ShowV2(c echo.Context) error {
 		SidebarPinned:        sidebarPinned,
 	}
 
+	// Entity types for the drawer's "Create entity from event" action
+	// (C-CAL-EDITOR-EXPANSION PR1). Only Scribes get the drawer, and the seam is
+	// optional — best-effort, an empty list just hides the action.
+	if data.IsScribe && h.entityCreator != nil {
+		data.EntityTypes, _ = h.entityCreator.ListEntityTypes(ctx, cc.Campaign.ID)
+	}
+
 	// Cursor (year/month/day) — fall back to the calendar's stored
 	// in-world clock when the URL omits them. Zero-calendar campaigns
 	// skip cursor population since there's no calendar to anchor to.

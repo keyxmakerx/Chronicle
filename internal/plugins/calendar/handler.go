@@ -49,6 +49,7 @@ type Handler struct {
 	auditSvc       audit.AuditService
 	tierLister     TierDefinitionsLister
 	timelineLister TimelineLister // cross-plugin read for the Calendars dashboard (W1).
+	entityCreator  EntityCreator  // cross-plugin write for "create entity from event" (C-CAL-EDITOR-EXPANSION PR1).
 }
 
 // TierDefinitionsLister surfaces the campaign-aware tier vocabulary

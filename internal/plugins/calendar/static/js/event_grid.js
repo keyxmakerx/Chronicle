@@ -144,6 +144,7 @@
 
         var editingID = null; // null = create mode; string = edit mode
         var dirty = false;
+        var currentEvent = null; // the stored event being edited (for the actions)
 
         function eventByID(id) {
             for (var i = 0; i < events.length; i++) {
@@ -182,6 +183,9 @@
 
             // Attach-entity picker (2b): persists real entity_event_links.
             initEntityTies();
+            // Drawer actions (C-CAL-EDITOR-EXPANSION PR1): edit-mode only.
+            currentEvent = editingID ? prefill : null;
+            initDrawerActions(prefill);
         }
 
         function markDirty() { dirty = true; }
@@ -445,6 +449,125 @@
             }).catch(function (e) {
                 window.Chronicle.notify((e && e.message) || 'Delete failed', 'error');
             });
+        }
+
+        // --- Drawer actions (C-CAL-EDITOR-EXPANSION PR1) -----------------
+        // The Actions section is edit-mode only (an existing event has an id to
+        // act on); listeners bind ONCE to the drawer's action controls.
+        var _actionsWired = false;
+        function wireDrawerActionsOnce() {
+            if (_actionsWired) return;
+            _actionsWired = true;
+            var ceBtn = drawer.querySelector('[data-action-create-entity]');
+            var cePanel = drawer.querySelector('[data-create-entity-panel]');
+            if (ceBtn && cePanel) ceBtn.addEventListener('click', function () { cePanel.classList.toggle('hidden'); });
+            var ceGo = drawer.querySelector('[data-create-entity-go]');
+            if (ceGo) ceGo.addEventListener('click', createEntityFromEvent);
+
+            var dupBtn = drawer.querySelector('[data-action-duplicate]');
+            var dupPanel = drawer.querySelector('[data-duplicate-panel]');
+            if (dupBtn && dupPanel) dupBtn.addEventListener('click', function () { dupPanel.classList.toggle('hidden'); });
+            var dupGo = drawer.querySelector('[data-duplicate-go]');
+            if (dupGo) dupGo.addEventListener('click', duplicateToDate);
+
+            var plBtn = drawer.querySelector('[data-action-permalink]');
+            if (plBtn) plBtn.addEventListener('click', copyPermalink);
+        }
+
+        function initDrawerActions(item) {
+            wireDrawerActionsOnce();
+            var actions = drawer.querySelector('[data-drawer-actions]');
+            if (actions) actions.classList.toggle('hidden', !editingID); // edit-mode only
+            // Collapse the inline panels each open.
+            var cePanel = drawer.querySelector('[data-create-entity-panel]');
+            if (cePanel) cePanel.classList.add('hidden');
+            var dupPanel = drawer.querySelector('[data-duplicate-panel]');
+            if (dupPanel) dupPanel.classList.add('hidden');
+            // Prefill the duplicate date to the event's date + 1 day (the operator
+            // can adjust; the server validates the date).
+            if (editingID && item) {
+                setDupField('[data-dup-year]', item.year);
+                setDupField('[data-dup-month]', item.month);
+                setDupField('[data-dup-day]', (item.day || 0) + 1);
+            }
+        }
+        function setDupField(sel, val) {
+            var el = drawer.querySelector(sel);
+            if (el && val != null) el.value = val;
+        }
+
+        // Create entity from event → POSTs the create-entity endpoint, refreshes
+        // the ties so the new entity shows in "Linked entities", and toasts a
+        // link to the new entity's page.
+        function createEntityFromEvent() {
+            if (!editingID) return;
+            var sel = drawer.querySelector('[data-create-entity-type]');
+            var typeID = sel ? parseInt(sel.value, 10) : NaN;
+            if (isNaN(typeID)) { window.Chronicle.notify('Pick an entity type', 'error'); return; }
+            var url = '/campaigns/' + campaignID + '/calendars/' + calendarID + '/events/' + editingID + '/create-entity';
+            window.Chronicle.apiFetch(url, {
+                method: 'POST', body: { entity_type_id: typeID }, headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (r) {
+                if (!r.ok) return r.json().catch(function () { return {}; }).then(function (b) {
+                    throw new Error((b && b.message) || 'Create failed');
+                });
+                return r.json();
+            }).then(function (res) {
+                if (!res) return;
+                var panel = drawer.querySelector('[data-create-entity-panel]');
+                if (panel) panel.classList.add('hidden');
+                loadTies(); // the new entity is linked — reflect it in the chips
+                window.Chronicle.notify(
+                    'Created “' + tiesEsc(res.name) + '” — <a class="underline" href="' + res.edit_url + '">open</a>',
+                    'success', { html: true, duration: 8000 });
+            }).catch(function (e) {
+                window.Chronicle.notify((e && e.message) || 'Create failed', 'error');
+            });
+        }
+
+        // Duplicate to date → POST the create endpoint with the stored event's
+        // full body (lossless, like saveQuickEdit) and the chosen date. The id +
+        // any multi-day span are dropped so the copy is a fresh single-day event.
+        function duplicateToDate() {
+            if (!currentEvent) return;
+            var y = parseInt((drawer.querySelector('[data-dup-year]') || {}).value, 10);
+            var mo = parseInt((drawer.querySelector('[data-dup-month]') || {}).value, 10);
+            var d = parseInt((drawer.querySelector('[data-dup-day]') || {}).value, 10);
+            if (isNaN(y) || isNaN(mo) || isNaN(d)) { window.Chronicle.notify('Pick a date', 'error'); return; }
+            var body = {};
+            for (var k in currentEvent) {
+                if (Object.prototype.hasOwnProperty.call(currentEvent, k)) body[k] = currentEvent[k];
+            }
+            delete body.id;
+            delete body.end_year; delete body.end_month; delete body.end_day;
+            body.year = y; body.month = mo; body.day = d;
+            var url = '/campaigns/' + campaignID + '/calendars/' + calendarID + '/events';
+            window.Chronicle.apiFetch(url, {
+                method: 'POST', body: body, headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (r) {
+                if (!r.ok) return r.json().catch(function () { return {}; }).then(function (b) {
+                    throw new Error((b && b.message) || 'Duplicate failed');
+                });
+                closeDrawer(true);
+                window.location.reload();
+            }).catch(function (e) {
+                window.Chronicle.notify((e && e.message) || 'Duplicate failed', 'error');
+            });
+        }
+
+        // Permalink → copy a focus URL; loading it re-opens this event's drawer
+        // (the focus handler below).
+        function copyPermalink() {
+            if (!editingID) return;
+            var link = window.location.origin + '/campaigns/' + campaignID +
+                '/calendar/v2/' + calendarID + '/month?focus=' + encodeURIComponent(editingID);
+            var ok = function () { window.Chronicle.notify('Link copied', 'success'); };
+            var fail = function () { window.Chronicle.notify('Copy this link: ' + link, 'info', { duration: 0 }); };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(link).then(ok).catch(fail);
+            } else {
+                fail();
+            }
         }
 
         // --- Visibility editor (chip-row builder per Q-V2-7) ---
@@ -815,6 +938,15 @@
         // treats an object arg as a create-mode prefill. Defined only for Scribes
         // (init returns early otherwise), matching the button's server-side gate.
         window.calV2OpenCreateDrawer = function (prefill) { openDrawer(prefill || {}); };
+
+        // Permalink focus-open (C-CAL-EDITOR-EXPANSION PR1): if the URL carries
+        // ?focus=<eventId> and that event is in the page's (visible) set, open its
+        // drawer on load. Unknown/invisible id = silent no-op (eventByID is the
+        // dm_only/visibility-filtered set the server rendered).
+        try {
+            var focusID = new URLSearchParams(window.location.search).get('focus');
+            if (focusID && eventByID(focusID)) openDrawer(focusID);
+        } catch (e) { /* URLSearchParams unsupported — skip */ }
 
         // --- Drag-to-reschedule via existing PUT endpoint --
 

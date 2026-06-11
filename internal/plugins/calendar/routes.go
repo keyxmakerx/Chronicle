@@ -92,6 +92,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/calendars/:calId/events/:eid/entities", h.ListEventEntitiesAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/calendars/:calId/events/:eid/entities/:entityId", h.LinkEventEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/calendars/:calId/events/:eid/entities/:entityId", h.UnlinkEventEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// "Create entity from event" drawer action (C-CAL-EDITOR-EXPANSION PR1):
+	// creates a campaign entity named after the event + links it. Scribe+ (the
+	// drawer's gate); IDOR closed via requireEventInCampaign.
+	cg.POST("/calendars/:calId/events/:eid/create-entity", h.CreateEntityFromEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Public-capable views: calendar list, grid, timeline, upcoming events, and
 	// entity-event fragments are viewable by players and public campaigns.
