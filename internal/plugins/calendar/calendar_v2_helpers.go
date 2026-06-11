@@ -287,7 +287,7 @@ func monthCellVisibleCap() int { return 3 }
 // monthCellEvents returns all single-day events for one Month cell.
 // Multi-day events render via the ribbon layer above the cell row.
 func monthCellEvents(data CalendarV2ViewData, day int) []Event {
-	return eventsForDay(data.Events, data.Year, data.Month, day)
+	return eventsForDay(data.ActiveCalendar, data.Events, data.Year, data.Month, day)
 }
 
 // v2WeekdayIndex returns the 0-based weekday column for (data.Year, data.Month,
@@ -1005,13 +1005,13 @@ func fmtHourLabel(h int) string {
 // the Week view, filtered to those with a time component (timed
 // events render in the hour grid; all-day events render in the strip
 // via allDayEventsForDay).
-func eventsForWeekDay(events []Event, year, month, day int) []Event {
+func eventsForWeekDay(cal *Calendar, events []Event, year, month, day int) []Event {
 	var out []Event
 	for _, e := range events {
 		if isMultiDayEvent(e) {
 			continue
 		}
-		if e.Year != year || e.Month != month || e.Day != day {
+		if !e.OccursOn(cal, year, month, day) { // single recurrence-expansion predicate
 			continue
 		}
 		// Timed = has StartHour set.
@@ -1025,13 +1025,13 @@ func eventsForWeekDay(events []Event, year, month, day int) []Event {
 
 // allDayEventsForDay returns events on a specific day that have no
 // time component — they render in the Week/Day view all-day strip.
-func allDayEventsForDay(events []Event, year, month, day int) []Event {
+func allDayEventsForDay(cal *Calendar, events []Event, year, month, day int) []Event {
 	var out []Event
 	for _, e := range events {
 		if isMultiDayEvent(e) {
 			continue
 		}
-		if e.Year != year || e.Month != month || e.Day != day {
+		if !e.OccursOn(cal, year, month, day) { // single recurrence-expansion predicate
 			continue
 		}
 		if e.StartHour != nil {
@@ -1219,13 +1219,13 @@ func intStr(n int) string { return itoaCal(n) }
 //
 // An event is "single-day" when EndYear/EndMonth/EndDay are nil or
 // when the end date equals the start date.
-func eventsForDay(events []Event, year, month, day int) []Event {
+func eventsForDay(cal *Calendar, events []Event, year, month, day int) []Event {
 	var out []Event
 	for _, e := range events {
-		if e.Year != year || e.Month != month || e.Day != day {
+		if isMultiDayEvent(e) {
 			continue
 		}
-		if isMultiDayEvent(e) {
+		if !e.OccursOn(cal, year, month, day) { // single recurrence-expansion predicate
 			continue
 		}
 		out = append(out, e)

@@ -221,6 +221,7 @@
             // or an existing multi-day event) — show the end-date fields + check
             // the toggle when an end date is present and differs from the start.
             syncMultiday(hasEndDate(item));
+            syncRecurrenceCustom();
         }
 
         // --- Multi-day (end-date) toggle ---------------------------------
@@ -229,6 +230,13 @@
             var t = multidayToggle(), f = drawer.querySelector('[data-multiday-fields]');
             if (t) t.checked = !!on;
             if (f) f.classList.toggle('hidden', !on);
+        }
+        // syncRecurrenceCustom shows the "every N weeks" input only for the
+        // custom recurrence type (C-CAL-EDITOR-EXPANSION PR2).
+        function syncRecurrenceCustom() {
+            var sel = drawer.querySelector('[data-recurrence-type]');
+            var custom = drawer.querySelector('[data-recurrence-custom]');
+            if (custom) custom.classList.toggle('hidden', !sel || sel.value !== 'custom');
         }
         function hasEndDate(item) {
             return !!(item && item.end_day != null &&
@@ -262,6 +270,12 @@
             body.visibility = vis.mode === 'public' ? 'everyone' : 'dm_only';
             if (vis.rules.length > 0) {
                 body.visibility_rules = JSON.stringify(vis.rules);
+            }
+            // Recurrence (C-CAL-EDITOR-EXPANSION PR2): is_recurring is derived
+            // from the Repeats select; the interval only matters for "custom".
+            body.is_recurring = !!body.recurrence_type;
+            if (!body.is_recurring) {
+                delete body.recurrence_interval;
             }
             return body;
         }
@@ -472,6 +486,12 @@
 
             var plBtn = drawer.querySelector('[data-action-permalink]');
             if (plBtn) plBtn.addEventListener('click', copyPermalink);
+
+            var wxBtn = drawer.querySelector('[data-action-weather]');
+            var wxPanel = drawer.querySelector('[data-weather-panel]');
+            if (wxBtn && wxPanel) wxBtn.addEventListener('click', function () { wxPanel.classList.toggle('hidden'); });
+            var wxGo = drawer.querySelector('[data-weather-go]');
+            if (wxGo) wxGo.addEventListener('click', setWeatherForDay);
         }
 
         function initDrawerActions(item) {
@@ -483,6 +503,8 @@
             if (cePanel) cePanel.classList.add('hidden');
             var dupPanel = drawer.querySelector('[data-duplicate-panel]');
             if (dupPanel) dupPanel.classList.add('hidden');
+            var wxPanel = drawer.querySelector('[data-weather-panel]');
+            if (wxPanel) wxPanel.classList.add('hidden');
             // Prefill the duplicate date to the event's date + 1 day (the operator
             // can adjust; the server validates the date).
             if (editingID && item) {
@@ -568,6 +590,33 @@
             } else {
                 fail();
             }
+        }
+
+        // Set weather for this event's day (C-CAL-EDITOR-EXPANSION PR2). GM world
+        // tool — the markup is server-gated to CanControlWorldState. PUTs the
+        // additive weatherDate so the override lands on the event's day, not the
+        // calendar's current date.
+        function setWeatherForDay() {
+            if (!currentEvent) return;
+            var sel = drawer.querySelector('[data-weather-type]');
+            var wt = sel ? sel.value : '';
+            if (!wt) return;
+            var url = '/campaigns/' + campaignID + '/calendar/world-state' +
+                (calendarID ? '?calendarId=' + encodeURIComponent(calendarID) : '');
+            window.Chronicle.apiFetch(url, {
+                method: 'PUT',
+                body: { weather: wt, weatherDate: { year: currentEvent.year, month: currentEvent.month, day: currentEvent.day } },
+                headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (r) {
+                if (!r.ok) return r.json().catch(function () { return {}; }).then(function (b) {
+                    throw new Error((b && b.message) || 'Set weather failed');
+                });
+                var panel = drawer.querySelector('[data-weather-panel]');
+                if (panel) panel.classList.add('hidden');
+                window.Chronicle.notify('Weather set for this day', 'success');
+            }).catch(function (e) {
+                window.Chronicle.notify((e && e.message) || 'Set weather failed', 'error');
+            });
         }
 
         // --- Visibility editor (chip-row builder per Q-V2-7) ---
@@ -811,6 +860,8 @@
         // Multi-day end-date fields show/hide with their toggle.
         var mtoggle = drawer && drawer.querySelector('[data-multiday-toggle]');
         if (mtoggle) mtoggle.addEventListener('change', function () { syncMultiday(mtoggle.checked); });
+        var rtypeSel = drawer && drawer.querySelector('[data-recurrence-type]');
+        if (rtypeSel) rtypeSel.addEventListener('change', syncRecurrenceCustom);
         // Expose the live openDrawer to the document-level drag-create (wired
         // once so it never leaks listeners across boosted-nav re-inits).
         _openDrawer = openDrawer;

@@ -95,6 +95,15 @@ type putWorldStateBody struct {
 	} `json:"advance"`
 	// Weather is the GM panel's current-period weather override (4b).
 	Weather *string `json:"weather"`
+	// WeatherDate, when present alongside Weather, retargets the override to an
+	// arbitrary day (the event drawer's "set weather for this day", C-CAL-EDITOR-
+	// EXPANSION PR2). Additive optional field — absent in old clients, so the
+	// wire contract is unchanged (omitted = current-date behavior).
+	WeatherDate *struct {
+		Year  int `json:"year"`
+		Month int `json:"month"`
+		Day   int `json:"day"`
+	} `json:"weatherDate"`
 	// TriggerEvent is the GM panel's "trigger world-event" (4c). DmOnly is
 	// honored only for capability holders (CanAuthorDmOnly).
 	TriggerEvent *struct {
@@ -154,6 +163,13 @@ func (h *Handler) PutWorldState(c echo.Context) error {
 	}
 	if body.Weather != nil {
 		input.Weather = body.Weather
+		if body.WeatherDate != nil {
+			input.WeatherDate = &WorldStateWeatherDate{
+				Year:  body.WeatherDate.Year,
+				Month: body.WeatherDate.Month,
+				Day:   body.WeatherDate.Day,
+			}
+		}
 	}
 	if body.TriggerEvent != nil {
 		te := body.TriggerEvent

@@ -78,13 +78,20 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 	}
 
 	if input.Weather != nil {
-		// GM weather override (4b): authored weather for the CURRENT date
-		// (calendar_day_weather upsert). Empty string clears to "clear".
+		// GM weather override (4b): authored weather (calendar_day_weather
+		// upsert). Empty string clears to "clear". The target is the CURRENT
+		// date unless input.WeatherDate names another day — the additive
+		// "weather for this day" path (C-CAL-EDITOR-EXPANSION PR2). Absent
+		// WeatherDate is byte-for-byte the prior behavior.
 		wt := *input.Weather
 		if wt == "" {
 			wt = "clear"
 		}
-		if err := s.repo.SetDayWeather(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, wt); err != nil {
+		wy, wm, wd := cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay
+		if input.WeatherDate != nil {
+			wy, wm, wd = input.WeatherDate.Year, input.WeatherDate.Month, input.WeatherDate.Day
+		}
+		if err := s.repo.SetDayWeather(ctx, calendarID, wy, wm, wd, wt); err != nil {
 			return fmt.Errorf("set day weather: %w", err)
 		}
 	}

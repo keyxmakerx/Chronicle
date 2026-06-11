@@ -881,7 +881,7 @@ const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.de
        e.end_year, e.end_month, e.end_day, e.end_hour, e.end_minute,
        e.is_recurring, e.recurrence_type,
        e.recurrence_interval, e.recurrence_end_year, e.recurrence_end_month,
-       e.recurrence_end_day, e.recurrence_max_occurrences,
+       e.recurrence_end_day, e.recurrence_max_occurrences, e.recurrence_day_of_week,
        e.visibility, e.visibility_rules, e.category, e.tier,
        e.color, e.icon, e.all_day,
        e.created_by, e.created_at, e.updated_at,
@@ -899,16 +899,16 @@ func (r *calendarRepo) CreateEvent(ctx context.Context, evt *Event) error {
 		        end_year, end_month, end_day, end_hour, end_minute,
 		        is_recurring, recurrence_type,
 		        recurrence_interval, recurrence_end_year, recurrence_end_month,
-		        recurrence_end_day, recurrence_max_occurrences,
+		        recurrence_end_day, recurrence_max_occurrences, recurrence_day_of_week,
 		        visibility, visibility_rules, category, tier,
 		        color, icon, all_day, created_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		evt.ID, evt.CalendarID, evt.EntityID, evt.Name, evt.Description, evt.DescriptionHTML,
 		evt.Year, evt.Month, evt.Day, evt.StartHour, evt.StartMinute,
 		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
 		evt.IsRecurring, evt.RecurrenceType,
 		evt.RecurrenceInterval, evt.RecurrenceEndYear, evt.RecurrenceEndMonth,
-		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences,
+		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences, evt.RecurrenceDayOfWeek,
 		evt.Visibility, evt.VisibilityRules, evt.Category, evt.Tier,
 		evt.Color, evt.Icon, evt.AllDay, evt.CreatedBy,
 	)
@@ -927,7 +927,7 @@ func (r *calendarRepo) GetEvent(ctx context.Context, id string) (*Event, error) 
 		&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
 		&evt.IsRecurring, &evt.RecurrenceType,
 		&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
-		&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences,
+		&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences, &evt.RecurrenceDayOfWeek,
 		&evt.Visibility, &evt.VisibilityRules, &evt.Category, &evt.Tier,
 		&evt.Color, &evt.Icon, &evt.AllDay,
 		&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
@@ -948,7 +948,7 @@ func (r *calendarRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		     end_year = ?, end_month = ?, end_day = ?, end_hour = ?, end_minute = ?,
 		     is_recurring = ?, recurrence_type = ?,
 		     recurrence_interval = ?, recurrence_end_year = ?, recurrence_end_month = ?,
-		     recurrence_end_day = ?, recurrence_max_occurrences = ?,
+		     recurrence_end_day = ?, recurrence_max_occurrences = ?, recurrence_day_of_week = ?,
 		     visibility = ?, visibility_rules = ?, category = ?, tier = ?,
 		     color = ?, icon = ?, all_day = ?
 		 WHERE id = ?`,
@@ -958,7 +958,7 @@ func (r *calendarRepo) UpdateEvent(ctx context.Context, evt *Event) error {
 		evt.EndYear, evt.EndMonth, evt.EndDay, evt.EndHour, evt.EndMinute,
 		evt.IsRecurring, evt.RecurrenceType,
 		evt.RecurrenceInterval, evt.RecurrenceEndYear, evt.RecurrenceEndMonth,
-		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences,
+		evt.RecurrenceEndDay, evt.RecurrenceMaxOccurrences, evt.RecurrenceDayOfWeek,
 		evt.Visibility, evt.VisibilityRules, evt.Category, evt.Tier,
 		evt.Color, evt.Icon, evt.AllDay, evt.ID,
 	)
@@ -980,15 +980,22 @@ func (r *calendarRepo) ListEventsForMonth(ctx context.Context, calendarID string
 		visFilter = ""
 	}
 
-	// Recurring events appear ONCE at their stored (year, month, day) —
-	// the SQL no longer expands yearly recurring rules across other
-	// years. V3 will ship unified recurring expansion; see
-	// decisions/2026-05-28-cal-timeline-v2-design.md Q-V2-6 resolution.
+	// C-CAL-EDITOR-EXPANSION PR2: fetch this month's events PLUS every
+	// recurring candidate (the four recurrence types) for the calendar — the
+	// recurring rows may have a base date in another month/year but project
+	// into this month. The precise placement is decided in Go by
+	// Event.OccursOn (the single expansion predicate), so the SQL just widens
+	// the candidate set. The visibility filter still applies to every row, so a
+	// dm_only recurring event is withheld entirely from non-DM viewers (its
+	// instances never reach the projection).
 	query := fmt.Sprintf(`
 		SELECT `+eventCols+`
 		FROM calendar_events e `+eventJoins+`
 		WHERE e.calendar_id = ?
-		  AND e.year = ? AND e.month = ?
+		  AND (
+		    (e.year = ? AND e.month = ?)
+		    OR (e.is_recurring = 1 AND e.recurrence_type IN ('weekly','biweekly','monthly','custom'))
+		  )
 		  %s
 		ORDER BY e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
@@ -1059,11 +1066,18 @@ func (r *calendarRepo) ListEventsForDateRange(ctx context.Context, calendarID st
 	}
 
 	// Use composite date value (month*100 + day) for range comparison.
+	// C-CAL-EDITOR-EXPANSION PR2: also pull recurring candidates (any base
+	// date) so they can project into the week/day range; Event.OccursOn does
+	// the precise placement in Go (single expansion predicate). Visibility
+	// still filters every row.
 	query := fmt.Sprintf(`
 		SELECT `+eventCols+`
 		FROM calendar_events e `+eventJoins+`
 		WHERE e.calendar_id = ?
-		  AND e.year = ? AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?
+		  AND (
+		    (e.year = ? AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?)
+		    OR (e.is_recurring = 1 AND e.recurrence_type IN ('weekly','biweekly','monthly','custom'))
+		  )
 		  %s
 		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
