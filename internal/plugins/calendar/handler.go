@@ -807,8 +807,9 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		EndDay          *int    `json:"end_day"`
 		EndHour         *int    `json:"end_hour"`
 		EndMinute       *int    `json:"end_minute"`
-		IsRecurring     bool    `json:"is_recurring"`
-		RecurrenceType  *string `json:"recurrence_type"`
+		IsRecurring        bool    `json:"is_recurring"`
+		RecurrenceType     *string `json:"recurrence_type"`
+		RecurrenceInterval *int    `json:"recurrence_interval"`
 		Visibility      string  `json:"visibility"`
 		VisibilityRules *string `json:"visibility_rules"`
 		Category        *string `json:"category"`
@@ -848,7 +849,8 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		EndHour:         req.EndHour,
 		EndMinute:       req.EndMinute,
 		IsRecurring:     req.IsRecurring,
-		RecurrenceType:  req.RecurrenceType,
+		RecurrenceType:     req.RecurrenceType,
+		RecurrenceInterval: req.RecurrenceInterval,
 		Visibility:      visibility,
 		VisibilityRules: req.VisibilityRules,
 		Category:        req.Category,
@@ -907,8 +909,9 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		EndDay          *int    `json:"end_day"`
 		EndHour         *int    `json:"end_hour"`
 		EndMinute       *int    `json:"end_minute"`
-		IsRecurring     bool    `json:"is_recurring"`
-		RecurrenceType  *string `json:"recurrence_type"`
+		IsRecurring        bool    `json:"is_recurring"`
+		RecurrenceType     *string `json:"recurrence_type"`
+		RecurrenceInterval *int    `json:"recurrence_interval"`
 		Visibility      string  `json:"visibility"`
 		VisibilityRules *string `json:"visibility_rules"`
 		Category        *string `json:"category"`
@@ -940,7 +943,8 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		EndHour:         req.EndHour,
 		EndMinute:       req.EndMinute,
 		IsRecurring:     req.IsRecurring,
-		RecurrenceType:  req.RecurrenceType,
+		RecurrenceType:     req.RecurrenceType,
+		RecurrenceInterval: req.RecurrenceInterval,
 		Visibility:      visibility,
 		VisibilityRules: req.VisibilityRules,
 		Category:        req.Category,

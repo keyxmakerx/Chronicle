@@ -187,6 +187,12 @@ type WorldStateUpdateInput struct {
 	// (calendar_day_weather, #401). The GM panel's weather override (4b). A
 	// thin string slice — no structural editing through it.
 	Weather *string
+	// WeatherDate, when non-nil alongside Weather, retargets the weather write
+	// to that (year, month, day) instead of the calendar's current date — the
+	// additive "set weather for this day" path (C-CAL-EDITOR-EXPANSION PR2).
+	// Absent = current-date behavior, so the wire contract is unchanged for old
+	// clients. Ignored unless Weather is also set.
+	WeatherDate *WorldStateWeatherDate
 	// TriggerEvent, when non-nil, adds a celestial event on the CURRENT date
 	// (calendar_celestial_events). The GM panel's "trigger world-event" (4c).
 	// Visibility is resolved by the handler from CanAuthorDmOnly before it
@@ -220,6 +226,14 @@ type WorldStateAdvance struct {
 	Days    int
 	Hours   int
 	Minutes int
+}
+
+// WorldStateWeatherDate names the date a weather override targets when it is
+// not the calendar's current date (C-CAL-EDITOR-EXPANSION PR2 weather-on-date).
+type WorldStateWeatherDate struct {
+	Year  int
+	Month int
+	Day   int
 }
 
 // WorldStateTimeSet is a partial date/time set for SetWorldState. Pointer

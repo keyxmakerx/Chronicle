@@ -172,6 +172,118 @@ func (c *Calendar) WeekLength() int {
 	return len(c.Weekdays)
 }
 
+// Recurrence type constants — mirror the sessions plugin's vocabulary verbatim
+// (internal/plugins/sessions/model.go) so the two share semantics
+// (C-CAL-EDITOR-EXPANSION PR2). Any other / empty recurrence_type renders ONCE
+// at its stored date, so legacy rows are untouched.
+const (
+	RecurrenceWeekly   = "weekly"   // every week, on the base date's weekday
+	RecurrenceBiWeekly = "biweekly" // every 2 weeks
+	RecurrenceMonthly  = "monthly"  // same day-of-month each month
+	RecurrenceCustom   = "custom"   // every N weeks (RecurrenceInterval)
+)
+
+// absDayIndex returns a calendar-absolute day number for (year, month, day)
+// using the constant year length — identical to the weekday math in
+// v2WeekdayIndexFor, so week alignment stays consistent across the app. month
+// is 1-based.
+func (c *Calendar) absDayIndex(year, month, day int) int {
+	abs := year * c.YearLength()
+	for i := 0; i < month-1 && i < len(c.Months); i++ {
+		abs += c.Months[i].Days
+	}
+	return abs + day
+}
+
+// OccursOn reports whether the event lands on (year, month, day) for cal. The
+// SINGLE recurrence-expansion predicate — every grid/list projection routes
+// through it so there is one source of truth (C-CAL-EDITOR-EXPANSION PR2).
+//
+// Non-recurring events (or a legacy/empty/unknown recurrence_type) match only
+// their stored date — the prior behavior, so existing rows are untouched. The
+// four recurring types expand forward from the base date:
+//   - weekly/biweekly/custom: every (interval × week) days, base-anchored, so
+//     each instance shares the base weekday;
+//   - monthly: the same day-of-month each month, skipped in months too short for
+//     that day (leap-aware via MonthDays).
+//
+// Recurrence stops at the recurrence-end date (inclusive) and/or after
+// RecurrenceMaxOccurrences. Multi-day events are not expanded here (the ribbon
+// layer renders their span).
+func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
+	onBase := e.Year == year && e.Month == month && e.Day == day
+	if !e.IsRecurring || e.RecurrenceType == nil || cal == nil {
+		return onBase
+	}
+	switch *e.RecurrenceType {
+	case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly, RecurrenceCustom:
+		// expanded below
+	default:
+		return onBase // legacy / unknown type → single occurrence
+	}
+
+	base := cal.absDayIndex(e.Year, e.Month, e.Day)
+	target := cal.absDayIndex(year, month, day)
+	if target < base {
+		return false // recurrence only moves forward from the base date
+	}
+	if e.RecurrenceEndYear != nil && e.RecurrenceEndMonth != nil && e.RecurrenceEndDay != nil {
+		if target > cal.absDayIndex(*e.RecurrenceEndYear, *e.RecurrenceEndMonth, *e.RecurrenceEndDay) {
+			return false // past the recurrence-end date
+		}
+	}
+
+	if *e.RecurrenceType == RecurrenceMonthly {
+		if day != e.Day || day > cal.MonthDays(month-1, year) {
+			return false
+		}
+		if e.RecurrenceMaxOccurrences != nil {
+			if n := monthsBetween(cal, e.Year, e.Month, year, month); n < 0 || n >= *e.RecurrenceMaxOccurrences {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Week-based (weekly / biweekly / custom).
+	wl := cal.WeekLength()
+	stride := wl * recurrenceWeeks(*e.RecurrenceType, e.RecurrenceInterval)
+	if stride <= 0 {
+		return onBase
+	}
+	diff := target - base
+	if diff%stride != 0 {
+		return false
+	}
+	if e.RecurrenceMaxOccurrences != nil && diff/stride >= *e.RecurrenceMaxOccurrences {
+		return false // occurrence index (0-based) past the cap
+	}
+	return true
+}
+
+// recurrenceWeeks maps a week-based recurrence type to its week interval.
+func recurrenceWeeks(rtype string, interval *int) int {
+	switch rtype {
+	case RecurrenceBiWeekly:
+		return 2
+	case RecurrenceCustom:
+		if interval != nil && *interval > 0 {
+			return *interval
+		}
+	}
+	return 1 // weekly (and custom with no/invalid interval)
+}
+
+// monthsBetween returns the whole-month offset from (y1,m1) to (y2,m2) using the
+// calendar's (constant) month count. Negative when (y2,m2) precedes (y1,m1).
+func monthsBetween(cal *Calendar, y1, m1, y2, m2 int) int {
+	mc := len(cal.Months)
+	if mc == 0 {
+		return 0
+	}
+	return (y2-y1)*mc + (m2 - m1)
+}
+
 // FormatCurrentTime returns the current time formatted as "HH:MM".
 // Pads hours/minutes with leading zeros based on the max values
 // (e.g. a 24-hour system uses 2 digits, a 100-hour system uses 3).
@@ -413,6 +525,7 @@ type Event struct {
 	RecurrenceEndMonth       *int    `json:"recurrence_end_month,omitempty"`
 	RecurrenceEndDay         *int    `json:"recurrence_end_day,omitempty"`
 	RecurrenceMaxOccurrences *int    `json:"recurrence_max_occurrences,omitempty"`
+	RecurrenceDayOfWeek      *int    `json:"recurrence_day_of_week,omitempty"`
 	Visibility               string  `json:"visibility"`
 	VisibilityRules          *string `json:"visibility_rules,omitempty"`
 	Category                 *string `json:"category,omitempty"`

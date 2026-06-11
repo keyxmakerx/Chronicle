@@ -222,7 +222,7 @@ func TestEventsForWeekDay_OnlyTimedEvents(t *testing.T) {
 		{ID: "allday", Year: 1, Month: 1, Day: 5, Visibility: "everyone"},
 		{ID: "otherday", Year: 1, Month: 1, Day: 6, StartHour: &startH, Visibility: "everyone"},
 	}
-	got := eventsForWeekDay(events, 1, 1, 5)
+	got := eventsForWeekDay(nil, events, 1, 1, 5)
 	if len(got) != 1 || got[0].ID != "timed" {
 		t.Errorf("eventsForWeekDay should only return timed events for matching day; got %+v", got)
 	}
@@ -234,7 +234,7 @@ func TestAllDayEventsForDay_OnlyUntimedEvents(t *testing.T) {
 		{ID: "timed", Year: 1, Month: 1, Day: 5, StartHour: &startH, Visibility: "everyone"},
 		{ID: "allday", Year: 1, Month: 1, Day: 5, Visibility: "everyone"},
 	}
-	got := allDayEventsForDay(events, 1, 1, 5)
+	got := allDayEventsForDay(nil, events, 1, 1, 5)
 	if len(got) != 1 || got[0].ID != "allday" {
 		t.Errorf("allDayEventsForDay should only return untimed events; got %+v", got)
 	}

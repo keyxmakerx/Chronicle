@@ -44,7 +44,7 @@ func TestEventsForDay_FiltersByDateAndMultiDay(t *testing.T) {
 		{ID: "b", Year: 1492, Month: 3, Day: 15, EndDay: &d, Visibility: "everyone"}, // multi-day
 		{ID: "c", Year: 1492, Month: 3, Day: 16, Visibility: "everyone"},
 	}
-	got := eventsForDay(events, 1492, 3, 15)
+	got := eventsForDay(nil, events, 1492, 3, 15)
 	if len(got) != 1 || got[0].ID != "a" {
 		t.Errorf("expected only single-day event 'a' for day 15; got %+v", got)
 	}
