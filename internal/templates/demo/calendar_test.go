@@ -145,9 +145,18 @@ func TestDemoCalendar_PageSeparation(t *testing.T) {
 		t.Fatalf("render index: %v", err)
 	}
 	ih := idx.String()
-	for _, link := range []string{`href="/demo/calendar/almanac"`, "Almanac", "Linear", "Compact"} {
+	// Demo consolidation (Timeline V2 W0): the hub lists ONLY live demos —
+	// the shipped Almanac + the two timeline candidates. The dead Linear/
+	// Compact placeholders and the /demo/showcase brochure are retired.
+	for _, link := range []string{`href="/demo/calendar/almanac"`, "Almanac",
+		`href="/demo/timeline/ledger"`, "Ledger", `href="/demo/timeline/tuner"`, "Tuner"} {
 		if !strings.Contains(ih, link) {
-			t.Errorf("index page missing %q", link)
+			t.Errorf("demo hub missing %q", link)
+		}
+	}
+	for _, gone := range []string{"Linear", "Compact", "/demo/showcase"} {
+		if strings.Contains(ih, gone) {
+			t.Errorf("demo hub must not list the retired %q", gone)
 		}
 	}
 	if strings.Contains(ih, "cal-almanac.css") || strings.Contains(ih, "cal-almanac.js") {
