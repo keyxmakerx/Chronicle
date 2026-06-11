@@ -133,10 +133,11 @@ jobs:
           go-version: '1.24'
 
       - name: Install govulncheck
-        # Pinned: @latest broke CI when x/vuln v1.3.0 started requiring
-        # go >= 1.25 against our go-version 1.24 + GOTOOLCHAIN=local.
-        # Bump this pin alongside the job's go-version.
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.2.0
+        # Pinned: @latest broke CI when x/vuln moved to `go 1.25.0` (v1.2.0+)
+        # against our go-version 1.24 + GOTOOLCHAIN=local. v1.1.4 declares
+        # `go 1.22.0` (verified in its go.mod). Bump this pin together with
+        # the job's go-version when the toolchain moves to 1.25.
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Run govulncheck
         # Advisory: stdlib vulnerabilities require a Go toolchain upgrade.
