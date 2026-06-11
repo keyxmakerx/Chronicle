@@ -16,7 +16,7 @@ import (
 // container the shell JS fills.
 func TestDayPopover_HasWorldStatePeekContainer(t *testing.T) {
 	var sb strings.Builder
-	if err := dayDetailPopoverV2().Render(context.Background(), &sb); err != nil {
+	if err := dayDetailPopoverV2(CalendarV2ViewData{}).Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render popover: %v", err)
 	}
 	if !strings.Contains(sb.String(), "data-day-popover-worldstate") {

@@ -220,53 +220,120 @@
 
     // --- Day-detail popover ------------------------------------
 
+    // wireDayPopover wires the day MINI-VIEW (cordinator#33 item 4): a plain
+    // click on a date cell (ALL roles) — or the "+N more" overflow — opens the
+    // pinned day card with that day's events + worldstate peek + (Scribe) an
+    // "Add event" button. This is now the FIRST tier on a date click, replacing
+    // empty-cell→create-drawer; "Add event" is the create path. A drag ACROSS
+    // cells is the Scribe drag-create (event_grid.js) and must still win, so the
+    // card opens only when the press goes DOWN and UP on the SAME trigger (no
+    // cross-cell drag) — the same single-vs-multi test event_grid uses. Every
+    // listener binds to `root` (or the popover node), never document, so it dies
+    // with the shell on a boosted-nav swap (the E4/E5 leak class).
     function wireDayPopover(root) {
         var popover = document.getElementById('cal-v2-day-popover');
         if (!popover) return;
         var title = popover.querySelector('[data-day-popover-title]');
         var list = popover.querySelector('[data-day-popover-list]');
-        var close = popover.querySelector('[data-day-popover-close]');
 
         function dismiss() { popover.classList.add('hidden'); }
-        if (close) close.addEventListener('click', dismiss);
 
-        document.addEventListener('click', function (e) {
-            // Dismiss when clicking outside the popover.
-            if (!popover.classList.contains('hidden') && !popover.contains(e.target)) {
-                var trigger = e.target.closest('[data-cell-overflow-toggle]');
-                if (!trigger) dismiss();
+        // triggerFor returns an open-descriptor for an element, or null: the
+        // "+N more" overflow button, OR a date-cell click on empty space (not a
+        // chip / button / link). `key` is the element identity used to require
+        // the press to go down AND up on the SAME trigger.
+        function triggerFor(target) {
+            if (!target || !target.closest) return null;
+            var ov = target.closest('[data-cell-overflow-toggle]');
+            if (ov) {
+                var od = parseInt(ov.dataset.cellOverflowDay, 10);
+                return isNaN(od) ? null : { key: ov, anchor: ov, day: od };
+            }
+            var cell = target.closest('[data-day-cell]');
+            if (cell && !target.closest('[data-event-card], a, button')) {
+                var cd = parseInt(cell.dataset.cellDay, 10);
+                return isNaN(cd) ? null : { key: cell, anchor: cell, day: cd };
+            }
+            return null;
+        }
+
+        // Open on a same-trigger press (pointerup, not click) so it survives the
+        // drag-create's pointerdown preventDefault on touch. A cross-cell drag
+        // releases on a different trigger → skipped (event_grid handles the
+        // multiselect-days create). Outside-press dismissal lives on the same
+        // pointerdown.
+        var downTrig = null;
+        root.addEventListener('pointerdown', function (e) {
+            if (e.button != null && e.button !== 0) { downTrig = null; return; }
+            downTrig = triggerFor(e.target);
+            if (!downTrig && !popover.classList.contains('hidden') && !popover.contains(e.target)) {
+                dismiss();
             }
         });
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && !popover.classList.contains('hidden')) dismiss();
+        root.addEventListener('pointerup', function (e) {
+            var down = downTrig; downTrig = null;
+            if (!down) return;
+            var up = triggerFor(e.target);
+            if (!up || up.key !== down.key) return; // dragged off the trigger → not a click
+            openPopover(down.anchor, down.day);
         });
 
-        // Wire each "+N more" trigger.
-        document.querySelectorAll('[data-cell-overflow-toggle]').forEach(function (btn) {
-            btn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                var day = parseInt(btn.dataset.cellOverflowDay, 10);
-                if (isNaN(day)) return;
-                openPopover(btn, day);
+        // Outside-CLICK closer, root-bound (never document) — mirrors the
+        // quick-edit card. The trailing click after an opening pointerup lands on
+        // the trigger, which triggerFor() recognizes, so the card stays open.
+        root.addEventListener('click', function (e) {
+            if (popover.classList.contains('hidden')) return;
+            if (popover.contains(e.target)) return;
+            if (triggerFor(e.target)) return; // a (re)open trigger, not a dismiss
+            dismiss();
+        });
+
+        // Element-scoped wiring (close ×, Add event, Escape) — guarded per node
+        // so a persistent popover isn't double-bound across re-inits. These read
+        // the current day from popover.dataset (set on open) + a live root lookup
+        // rather than a captured closure, so they never act on a stale shell.
+        if (popover.dataset.dvWired !== '1') {
+            popover.dataset.dvWired = '1';
+            var close = popover.querySelector('[data-day-popover-close]');
+            if (close) close.addEventListener('click', dismiss);
+            var add = popover.querySelector('[data-day-popover-add]');
+            if (add) add.addEventListener('click', function () {
+                var d = parseInt(popover.dataset.dvDay, 10);
+                var r = document.querySelector('[data-cal-v2-root]');
+                if (isNaN(d) || !r) return;
+                dismiss();
+                if (window.calV2OpenCreateDrawer) {
+                    window.calV2OpenCreateDrawer({
+                        year: parseInt(r.dataset.calV2Year, 10),
+                        month: parseInt(r.dataset.calV2Month, 10),
+                        day: d,
+                    });
+                }
             });
-        });
+            popover.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') { e.stopPropagation(); dismiss(); }
+            });
+        }
 
         function openPopover(anchor, day) {
-            // Position popover below the anchor, flipping above if it
-            // would extend past the viewport bottom.
-            var rect = anchor.getBoundingClientRect();
-            popover.style.left = rect.left + 'px';
-            popover.style.top = (rect.bottom + 8) + 'px';
-            popover.classList.remove('hidden');
-            // Flip if needed.
-            var pRect = popover.getBoundingClientRect();
-            if (pRect.bottom > window.innerHeight - 8) {
-                popover.style.top = (rect.top - pRect.height - 8) + 'px';
-            }
+            popover.dataset.dvDay = String(day);
             if (title) title.textContent = 'Day ' + day;
             if (list) renderPopoverList(list, day);
             renderWorldStatePeek(day);
+            // Reveal first (so it has dimensions), then position fixed + clamp to
+            // the viewport — left clamped, flipped above if it'd overflow the
+            // bottom — mirroring the quick-edit card's clamp.
+            popover.classList.remove('hidden');
+            var rect = anchor.getBoundingClientRect();
+            var pr = popover.getBoundingClientRect();
+            var left = Math.min(rect.left, window.innerWidth - pr.width - 8);
+            if (left < 8) left = 8;
+            var top = rect.bottom + 8;
+            if (top + pr.height > window.innerHeight - 8) top = rect.top - pr.height - 8;
+            if (top < 8) top = 8;
+            popover.style.left = left + 'px';
+            popover.style.top = top + 'px';
+            if (typeof popover.focus === 'function') popover.focus();
         }
 
         // WorldState peek (2b-2): fetch the clicked day's seed (#401 GET,

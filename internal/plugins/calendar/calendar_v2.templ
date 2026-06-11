@@ -118,7 +118,7 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 		// (C-CAL-GM-PANEL-REWORK A) — server-gated to capability holders there.
 		if data.ActiveCalendar != nil {
 			@shortcutsModalV2()
-			@dayDetailPopoverV2()
+			@dayDetailPopoverV2(data)
 			@eventQuickPeekV2()
 			@eventQuickEditV2(data)
 			<script src="/static/plugins/calendar/js/event_grid.js" defer></script>
@@ -232,15 +232,22 @@ templ shortcutsModalV2() {
 	</div>
 }
 
-// dayDetailPopoverV2 renders the day-detail popover that replaces
-// the decorative "+N more" affordance from PR #366 (Wave 1 PR 5 §J).
-// Plugin-scoped per template-first judgment.
-templ dayDetailPopoverV2() {
+// dayDetailPopoverV2 renders the day MINI-VIEW card (cordinator#33 item 4): the
+// first tier on a date-cell click (all roles), replacing empty-cell→create-drawer.
+// It shows the day's events (click a row → the existing event quick-edit card),
+// a worldstate peek (weather/moons/celestials, GET /calendar/world-state,
+// role-filtered server-side), and — for Scribes only (server-gated markup) — an
+// "Add event" button that opens the prefilled create drawer. It deliberately
+// matches the eventQuickEditV2 design language (card card-elev chrome, close ×,
+// fixed + viewport-clamped, popover-scale-in). Wiring: calendar_v2_shell.js.
+// (It also still serves the "+N more" overflow affordance from PR #366.)
+templ dayDetailPopoverV2(data CalendarV2ViewData) {
 	<div
 		id="cal-v2-day-popover"
-		class="hidden fixed z-30 card card-elev p-3 max-w-xs popover-scale-in"
+		class="hidden fixed z-40 card card-elev p-3 w-64 max-w-[92vw] popover-scale-in"
 		role="dialog"
 		aria-label="Day detail"
+		tabindex="-1"
 		data-day-popover="true"
 	>
 		<div class="flex items-center justify-between mb-2">
@@ -259,6 +266,16 @@ templ dayDetailPopoverV2() {
 		// (the #401 seed, dm_only filtered by role). Hidden until populated.
 		<div class="mb-2 pb-2 border-b border-edge hidden space-y-0.5 text-xs" data-day-popover-worldstate></div>
 		<div class="space-y-1 max-h-64 overflow-y-auto" data-day-popover-list></div>
+		if data.IsScribe {
+			// Create path (Scribe+). SERVER-GATED markup (not CSS): players never
+			// receive this button. Opens the existing create drawer prefilled with
+			// this day via window.calV2OpenCreateDrawer (calendar_v2_shell.js).
+			<div class="mt-2 pt-2 border-t border-edge">
+				<button type="button" class="btn-primary text-xs w-full" data-day-popover-add aria-label="Add event on this day">
+					<i class="fa-solid fa-plus mr-1" aria-hidden="true"></i>Add event
+				</button>
+			</div>
+		}
 	</div>
 }
 
@@ -555,10 +572,11 @@ templ monthWeekRows(data CalendarV2ViewData) {
 // "+N more" overflow surfaces when a day has more events than fit.
 templ monthDayCell(data CalendarV2ViewData, day monthDay) {
 	<div
-		class={ "group border border-edge rounded p-1 min-h-[80px] flex flex-col gap-1 cell-drop-target", monthDayClasses(data, day) }
+		class={ "group border border-edge rounded p-1 min-h-[80px] flex flex-col gap-1 cell-drop-target cursor-pointer", monthDayClasses(data, day) }
 		data-cell-year={ fmt.Sprintf("%d", data.Year) }
 		data-cell-month={ fmt.Sprintf("%d", data.Month) }
 		data-cell-day={ fmt.Sprintf("%d", day.Day) }
+		data-day-cell="true"
 	>
 		<div class="text-xs font-medium text-fg-secondary flex items-center justify-between">
 			<span>{ fmt.Sprint(day.Day) }</span>

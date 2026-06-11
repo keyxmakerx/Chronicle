@@ -106,13 +106,17 @@
             if (!_openDrawer) return;
             var r = dayRange(s.startDay, s.curDay);
             if (r.multi) {
+                // A drag ACROSS cells is the multiselect-days create — it still
+                // wins over a single click and opens the drawer directly.
                 _openDrawer({
                     year: s.year, month: s.month, day: r.startDay,
                     end_year: s.year, end_month: s.month, end_day: r.endDay,
                 });
-            } else {
-                _openDrawer({ year: s.year, month: s.month, day: r.startDay });
             }
+            // A SINGLE-cell press (no drag) no longer opens the drawer: the day
+            // mini-view (calendar_v2_shell.js, all roles) is now the first tier
+            // on a date click, and its "Add event" button is the create path.
+            // cordinator#33 item 4.
         });
     }
 
@@ -806,6 +810,11 @@
         // The shell's "+N more" popover falls back to this when no chip is in
         // the DOM for the event — keep it pointing at the FULL drawer.
         window.calV2OpenDrawerByID = openDrawer;
+        // The day mini-view's "Add event" button (Scribe+) opens the create
+        // drawer prefilled with the clicked day (cordinator#33 item 4). openDrawer
+        // treats an object arg as a create-mode prefill. Defined only for Scribes
+        // (init returns early otherwise), matching the button's server-side gate.
+        window.calV2OpenCreateDrawer = function (prefill) { openDrawer(prefill || {}); };
 
         // --- Drag-to-reschedule via existing PUT endpoint --
 
