@@ -149,6 +149,12 @@ type CalendarService interface {
 	// viewer's role + userID so players never see dm_only / custom-restricted
 	// entity names (cordinator#32 gap #1). Owners/co-DMs see all.
 	EntitiesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error)
+	// CreateEntityFromEvent creates a campaign entity (via the cross-plugin
+	// EntityCreator) named after the event and links it to that event
+	// (C-CAL-EDITOR-EXPANSION PR1). Returns the new entity's id. The creator is
+	// passed in (the handler owns the cross-plugin wiring) so the service stays
+	// free of an entities import.
+	CreateEntityFromEvent(ctx context.Context, creator EntityCreator, campaignID, userID string, typeID int, name, eventID string) (string, error)
 	// World-state (C-CAL-WORLDSTATE-SERVER-MODEL). BuildWorldStateSeed
 	// assembles the Part-8 seed for a date, filtering GM-only celestial
 	// events by role/userID. SetWorldState persists the writable parts

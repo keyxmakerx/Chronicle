@@ -428,6 +428,7 @@ POST	/calendars	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/advance	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/advance-time	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/events	internal/plugins/calendar/routes.go
+POST	/calendars/:calId/events/:eid/create-entity	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/import	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/import/preview	internal/plugins/calendar/routes.go
 POST	/calendars/events	internal/plugins/calendar/routes.go

@@ -4,7 +4,12 @@
 // DB-enforced (ON DELETE CASCADE), so there is no cascade orchestration here.
 package calendar
 
-import "context"
+import (
+	"context"
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+)
 
 // LinkEntityToEvent ties an entity to an event with a participation role.
 // Empty role defaults to "involved" (the picker default); an invalid role is
@@ -20,6 +25,24 @@ func (s *calendarService) LinkEntityToEvent(ctx context.Context, entityID, event
 // UnlinkEntityFromEvent removes an entity<->event tie.
 func (s *calendarService) UnlinkEntityFromEvent(ctx context.Context, entityID, eventID string) error {
 	return s.repo.UnlinkEntityEvent(ctx, entityID, eventID)
+}
+
+// CreateEntityFromEvent creates an entity (via the cross-plugin EntityCreator)
+// named after the event, then links it to that event with the default
+// "involved" role. The entity exists even if the link fails, so a link error is
+// surfaced (not swallowed) for an explicit retry. C-CAL-EDITOR-EXPANSION PR1.
+func (s *calendarService) CreateEntityFromEvent(ctx context.Context, creator EntityCreator, campaignID, userID string, typeID int, name, eventID string) (string, error) {
+	if creator == nil {
+		return "", apperror.NewInternal(fmt.Errorf("entity creator not configured"))
+	}
+	entityID, err := creator.CreateEntity(ctx, campaignID, userID, typeID, name)
+	if err != nil {
+		return "", err
+	}
+	if err := s.repo.LinkEntityEvent(ctx, entityID, eventID, string(ParticipationRoles[0])); err != nil {
+		return "", apperror.NewInternal(fmt.Errorf("linking new entity %s to event %s: %w", entityID, eventID, err))
+	}
+	return entityID, nil
 }
 
 // LinkEntityToEra ties an entity to an era with an optional role (era ties are

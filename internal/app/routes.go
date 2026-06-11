@@ -470,6 +470,40 @@ func (a *timelineForCalendarAdapter) ListTimelinesForCalendar(ctx context.Contex
 	return refs, nil
 }
 
+// calendarEntityCreatorAdapter wraps entities.EntityService to implement the
+// calendar.EntityCreator interface — the cross-plugin write the event drawer's
+// "create entity from event" action needs (C-CAL-EDITOR-EXPANSION PR1). The
+// calendar plugin never imports the entities repo; it reaches the entities
+// service through this adapter at the app boundary (plugin-isolation rule 8).
+type calendarEntityCreatorAdapter struct {
+	svc entities.EntityService
+}
+
+// ListEntityTypes projects the campaign's entity types into the calendar
+// plugin's lightweight EntityTypeRef for the create-entity picker.
+func (a *calendarEntityCreatorAdapter) ListEntityTypes(ctx context.Context, campaignID string) ([]calendar.EntityTypeRef, error) {
+	ts, err := a.svc.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]calendar.EntityTypeRef, 0, len(ts))
+	for _, t := range ts {
+		refs = append(refs, calendar.EntityTypeRef{ID: t.ID, Name: t.Name, Slug: t.Slug})
+	}
+	return refs, nil
+}
+
+// CreateEntity creates a campaign entity of the given type via the entities
+// service's own creation policy (which validates the type belongs to the
+// campaign) and returns its id.
+func (a *calendarEntityCreatorAdapter) CreateEntity(ctx context.Context, campaignID, userID string, typeID int, name string) (string, error) {
+	ent, err := a.svc.Create(ctx, campaignID, userID, entities.CreateEntityInput{Name: name, EntityTypeID: typeID})
+	if err != nil {
+		return "", err
+	}
+	return ent.ID, nil
+}
+
 // calendarEventListerAdapter wraps calendar.CalendarService to implement the
 // timeline.CalendarEventLister interface. Lists all calendar events for the
 // event picker when linking events to a timeline.
@@ -2004,6 +2038,9 @@ func (a *App) RegisterRoutes() {
 	calendarService := calendar.NewCalendarService(calendarRepo)
 	calendarHandler := calendar.NewHandler(calendarService)
 	calendarHandler.SetAddonService(addonService)
+	// "Create entity from event" drawer action (C-CAL-EDITOR-EXPANSION PR1) —
+	// the cross-plugin write seam over the entities service (rule 8).
+	calendarHandler.SetEntityCreator(&calendarEntityCreatorAdapter{svc: entityService})
 
 	// NW-2.2 Chunk F: register calendar in the App's metadata registry +
 	// expose its embedded static assets for serving at /static/plugins/calendar/.
