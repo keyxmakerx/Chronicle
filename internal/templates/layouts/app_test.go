@@ -1,6 +1,7 @@
 package layouts
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -100,4 +101,40 @@ func TestTopbarHasCustomStyle(t *testing.T) {
 	if !topbarHasCustomStyle(ctxWithTopbarStyle(&TopbarStyleData{Mode: "solid", Color: "#ffffff"})) {
 		t.Fatal("solid with a color should report a custom style")
 	}
+}
+
+// TestTopbarHeaderIsolate is the stacking-context pinning test for cordinator#29.
+// The <header> must carry "isolate" (CSS isolation:isolate) so it forms its own
+// stacking context. Without it, z-index:-1 brand layers escape to the nearest
+// ancestor stacking context and paint before the header's own surface background,
+// making any custom topbar color or image invisible to the user.
+func TestTopbarHeaderIsolate(t *testing.T) {
+	ctx := ctxWithTopbarStyle(&TopbarStyleData{Mode: "solid", Color: "#6366f1"})
+	var buf bytes.Buffer
+	if err := Topbar().Render(ctx, &buf); err != nil {
+		t.Fatalf("render Topbar: %v", err)
+	}
+	html := buf.String()
+	headerIdx := strings.Index(html, "<header ")
+	if headerIdx == -1 {
+		t.Fatal("<header> element not found in rendered output")
+	}
+	openTag := html[headerIdx:]
+	closeIdx := strings.Index(openTag, ">")
+	if closeIdx == -1 {
+		t.Fatal("opening <header> tag has no closing '>'")
+	}
+	openTag = openTag[:closeIdx+1]
+	classStart := strings.Index(openTag, ` class="`)
+	if classStart == -1 {
+		t.Fatal("no class attribute on <header>")
+	}
+	classVal := openTag[classStart+8:]
+	classVal = classVal[:strings.Index(classVal, `"`)]
+	for _, c := range strings.Fields(classVal) {
+		if c == "isolate" {
+			return
+		}
+	}
+	t.Fatalf("<header> classes %q must include \"isolate\" — without it z-index:-1 brand layers escape the stacking context and paint behind the header surface", classVal)
 }
