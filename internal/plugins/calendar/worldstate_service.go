@@ -90,6 +90,14 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 		wy, wm, wd := cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay
 		if input.WeatherDate != nil {
 			wy, wm, wd = input.WeatherDate.Year, input.WeatherDate.Month, input.WeatherDate.Day
+			// Structural bounds only — the day must exist on this calendar
+			// (leap-aware via MonthDays). The year is deliberately
+			// unconstrained: fantasy calendars may use year 0 or negative
+			// era years. Keeps a hand-crafted PUT from upserting weather
+			// onto a nonexistent date no read path would ever surface.
+			if wm < 1 || wm > len(cal.Months) || wd < 1 || wd > cal.MonthDays(wm-1, wy) {
+				return apperror.NewValidation("weatherDate is not a date on this calendar")
+			}
 		}
 		if err := s.repo.SetDayWeather(ctx, calendarID, wy, wm, wd, wt); err != nil {
 			return fmt.Errorf("set day weather: %w", err)
