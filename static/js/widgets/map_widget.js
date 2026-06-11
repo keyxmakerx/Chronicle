@@ -185,6 +185,10 @@
         'text-accent hover:underline px-2 py-1 rounded shadow';
       overlay.innerHTML = '<i class="fa-solid fa-expand mr-1"></i>Full map';
       mapDiv.style.position = 'relative';
+      // isolation:isolate creates a stacking context for mapDiv so the
+      // overlay's z-[1000] is contained within it and cannot out-paint
+      // the notes panel (z-50) in the root stacking context.
+      mapDiv.style.isolation = 'isolate';
       mapDiv.appendChild(overlay);
 
       // Invalidate size after render.
