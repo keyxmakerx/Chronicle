@@ -90,17 +90,19 @@ templ ImportReview(d ImportReviewData) {
 			<h3 id="ai-import-review-heading" class="text-base font-semibold text-fg">
 				Review — { strconv.Itoa(d.SummaryCounts.Total) } { pluralize("page", "pages", d.SummaryCounts.Total) } detected
 			</h3>
-			<button
-				type="button"
+			// Cancel NAVIGATES back to the settings tab (boosted full-page
+			// move) instead of hx-targeting the settings route into the
+			// review host — that route renders the FULL page (no fragment
+			// branch), so targeting it into a div nested the whole app
+			// inside itself (operator bug, 2026-06-12).
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
 				class="text-xs text-fg-muted hover:text-fg"
-				hx-get={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
-				hx-target="#ai-import-review-host"
-				hx-swap="innerHTML"
 				aria-label="Discard the parsed pages and return to the import form"
 				title="Discard parse and start over"
 			>
 				<i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i> Cancel
-			</button>
+			</a>
 		</div>
 
 		<div class="text-xs text-fg-muted mb-3">

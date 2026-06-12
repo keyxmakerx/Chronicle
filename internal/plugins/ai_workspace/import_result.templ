@@ -32,17 +32,19 @@ templ ImportResult(d ImportResultData) {
 				<i class="fa-solid fa-check-double mr-1 text-emerald-500" aria-hidden="true"></i>
 				Import complete
 			</h3>
-			<button
-				type="button"
+			// Boosted navigation, NOT an hx-get into the review host: the
+			// settings route renders the FULL page (no fragment branch), so
+			// fragment-targeting it nests the app inside itself. Same fix as
+			// the review screen's Cancel; the footer link at the bottom of
+			// this file always had it right.
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID)) }
 				class="btn-secondary text-xs"
-				hx-get={ fmt.Sprintf("/campaigns/%s/settings?tab=ai-workspace", d.CampaignID) }
-				hx-target="#ai-import-review-host"
-				hx-swap="innerHTML"
 				aria-label="Clear the import result and return to the paste form"
 				title="Clear the result + return to the import form"
 			>
 				<i class="fa-solid fa-arrow-rotate-left mr-1" aria-hidden="true"></i> Import more
-			</button>
+			</a>
 		</div>
 
 		@resultCounters(d.Result)
