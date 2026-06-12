@@ -25,6 +25,14 @@
   var sidebarConfig = null;
   var configEndpoint = null;
 
+  // Escape-key cleanup ref.
+  var escKeyHandler = null;
+
+  // Debounced category-reorder save state.
+  var saveTimer = null;
+  // Snapshot taken at drag-start for one-level undo.
+  var undoItems = null;
+
   // Touch drag state.
   var touchDrag = {
     src: null,
@@ -84,6 +92,10 @@
       if (i) i.className = 'fa-solid fa-check text-[10px]';
     });
 
+    // Escape exits reorg mode without saving any in-flight debounce.
+    escKeyHandler = function (e) { if (e.key === 'Escape') deactivate(); };
+    document.addEventListener('keydown', escKeyHandler);
+
     if (level === 'categories') {
       activateCategoryReorg();
     } else {
@@ -95,6 +107,14 @@
    * Deactivate reorg mode and clean up.
    */
   function deactivate() {
+    // Remove escape handler and cancel any pending debounced save.
+    if (escKeyHandler) {
+      document.removeEventListener('keydown', escKeyHandler);
+      escKeyHandler = null;
+    }
+    clearTimeout(saveTimer);
+    saveTimer = null;
+
     if (level === 'categories') {
       deactivateCategoryReorg();
     } else {
@@ -103,7 +123,7 @@
 
     active = false;
     level = null;
-    document.body.classList.remove('sidebar-reorg-active');
+    document.body.classList.remove('sidebar-reorg-active', 'sidebar-reorg-dragging');
 
     var btn = document.getElementById('sidebar-reorg-toggle');
     if (btn) {
@@ -170,6 +190,12 @@
     links.forEach(function (link) {
       link.setAttribute('draggable', 'true');
 
+      // Inert-link: suppress navigation clicks while reorg mode is active (iOS jiggle-mode semantics).
+      if (!link._reorgClickInert) {
+        link._reorgClickInert = function (e) { e.preventDefault(); e.stopPropagation(); };
+        link.addEventListener('click', link._reorgClickInert, true);
+      }
+
       // Add drag handle if not already present.
       if (!link.querySelector('.reorg-drag-handle')) {
         var handle = document.createElement('span');
@@ -231,7 +257,10 @@
 
   function onCatDragStart(e) {
     catDragSrc = this;
-    this.classList.add('opacity-40');
+    // Snapshot items for one-level undo before the drag mutates anything.
+    undoItems = (sidebarConfig && sidebarConfig.items) ? sidebarConfig.items.slice() : null;
+    this.classList.add('opacity-40', 'sidebar-reorg-drag-lifting');
+    document.body.classList.add('sidebar-reorg-dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', this.getAttribute('data-entity-type-id'));
     // Prevent drill navigation during drag.
@@ -241,35 +270,46 @@
   function onCatDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    if (this === catDragSrc) return;
+    // Show 2-px insertion line above or below based on cursor Y position.
+    var rect = this.getBoundingClientRect();
+    var isTopHalf = e.clientY < rect.top + rect.height / 2;
+    this.classList.toggle('sidebar-reorg-insert-before', isTopHalf);
+    this.classList.toggle('sidebar-reorg-insert-after', !isTopHalf);
   }
 
   function onCatDragEnter(e) {
     e.preventDefault();
-    if (this !== catDragSrc) {
-      this.classList.add('sidebar-reorg-drop-target');
-    }
+    if (this === catDragSrc) return;
+    // Clear indicators on other rows so only the hovered row shows one.
+    document.querySelectorAll('#sidebar-cat-list .sidebar-category-link').forEach(function (l) {
+      if (l !== catDragSrc) {
+        l.classList.remove('sidebar-reorg-insert-before', 'sidebar-reorg-insert-after');
+      }
+    });
   }
 
   function onCatDragLeave() {
-    this.classList.remove('sidebar-reorg-drop-target');
+    this.classList.remove('sidebar-reorg-insert-before', 'sidebar-reorg-insert-after');
   }
 
   function onCatDrop(e) {
     e.preventDefault();
     e.stopPropagation();
-    this.classList.remove('sidebar-reorg-drop-target');
+
+    // Clear all insertion indicators.
+    document.querySelectorAll('#sidebar-cat-list .sidebar-category-link').forEach(function (l) {
+      l.classList.remove('sidebar-reorg-insert-before', 'sidebar-reorg-insert-after', 'sidebar-reorg-drop-target');
+    });
 
     if (catDragSrc && catDragSrc !== this) {
-      // Reorder in DOM.
-      var parent = catDragSrc.parentNode;
-      var items = Array.from(parent.querySelectorAll('.sidebar-category-link'));
-      var fromIdx = items.indexOf(catDragSrc);
-      var toIdx = items.indexOf(this);
-
-      if (fromIdx < toIdx) {
-        parent.insertBefore(catDragSrc, this.nextSibling);
+      // Insert before or after based on cursor Y half.
+      var rect = this.getBoundingClientRect();
+      var insertBefore = e.clientY < rect.top + rect.height / 2;
+      if (insertBefore) {
+        this.parentNode.insertBefore(catDragSrc, this);
       } else {
-        parent.insertBefore(catDragSrc, this);
+        this.parentNode.insertBefore(catDragSrc, this.nextSibling);
       }
 
       saveCategoryOrder();
@@ -277,10 +317,10 @@
   }
 
   function onCatDragEnd() {
-    this.classList.remove('opacity-40');
-    var items = document.querySelectorAll('#sidebar-cat-list .sidebar-category-link');
-    items.forEach(function (item) {
-      item.classList.remove('sidebar-reorg-drop-target');
+    this.classList.remove('opacity-40', 'sidebar-reorg-drag-lifting');
+    document.body.classList.remove('sidebar-reorg-dragging');
+    document.querySelectorAll('#sidebar-cat-list .sidebar-category-link').forEach(function (item) {
+      item.classList.remove('sidebar-reorg-drop-target', 'sidebar-reorg-insert-before', 'sidebar-reorg-insert-after');
     });
   }
 
@@ -323,7 +363,7 @@
       sidebarConfig.items = newItems;
     }
 
-    saveSidebarConfig();
+    scheduledCategorySave();
   }
 
   /**
@@ -363,7 +403,115 @@
   }
 
   /**
-   * Save sidebar config to server.
+   * Debounce wrapper for category reorder saves — fires one PUT 400ms after the
+   * last drop, then shows the undo toast.
+   */
+  function scheduledCategorySave() {
+    clearTimeout(saveTimer);
+    var capturedUndo = undoItems;  // snapshot from drag-start
+    saveTimer = setTimeout(function () {
+      saveTimer = null;
+      persistCategoryReorder(capturedUndo);
+    }, 400);
+  }
+
+  /**
+   * Persist the current items array and show the undo toast on success.
+   * Only used for category reorder (not for visibility or entity toggles).
+   */
+  function persistCategoryReorder(prevItems) {
+    if (!configEndpoint || !sidebarConfig) return;
+
+    Chronicle.apiFetch(configEndpoint, {
+      method: 'PUT',
+      body: {
+        items: sidebarConfig.items || [],
+        hidden_entity_ids: sidebarConfig.hidden_entity_ids || [],
+        hidden_node_ids: sidebarConfig.hidden_node_ids || []
+      }
+    })
+      .then(function (res) {
+        if (res.ok) {
+          showUndoToast(prevItems);
+        } else {
+          Chronicle.notify('Failed to save sidebar order', 'error');
+        }
+      })
+      .catch(function () {
+        Chronicle.notify('Failed to save sidebar order', 'error');
+      });
+  }
+
+  /**
+   * Show a transient toast with an Undo button. Dismisses after 5 s.
+   * Only called after a successful category reorder save.
+   */
+  function showUndoToast(prevItems) {
+    var existing = document.getElementById('sidebar-reorg-undo-toast');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var toast = document.createElement('div');
+    toast.id = 'sidebar-reorg-undo-toast';
+    toast.className = 'sidebar-reorg-undo-toast';
+
+    var msg = document.createTextNode('Sidebar order saved ');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sidebar-reorg-undo-btn';
+    btn.textContent = 'Undo';
+    toast.appendChild(msg);
+    toast.appendChild(btn);
+    document.body.appendChild(toast);
+
+    var dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }
+
+    btn.addEventListener('click', function () {
+      dismiss();
+      undoReorder(prevItems);
+    });
+
+    setTimeout(dismiss, 5000);
+  }
+
+  /**
+   * Restore the category order to prevItems, re-render the DOM, and save immediately.
+   */
+  function undoReorder(prevItems) {
+    if (!prevItems) return;
+    undoItems = null;
+    sidebarConfig.items = prevItems.slice();
+    reorderCatListDOM(sidebarConfig.items);
+    saveSidebarConfig();
+  }
+
+  /**
+   * Re-sort the #sidebar-cat-list DOM links to match the type_id order in items.
+   */
+  function reorderCatListDOM(items) {
+    var catList = document.getElementById('sidebar-cat-list');
+    if (!catList) return;
+    var typeIdOrder = [];
+    (items || []).forEach(function (item) {
+      if (item.type === 'category' && item.type_id) typeIdOrder.push(item.type_id);
+    });
+    var links = Array.from(catList.querySelectorAll('.sidebar-category-link'));
+    typeIdOrder.forEach(function (typeId) {
+      for (var i = 0; i < links.length; i++) {
+        if (parseInt(links[i].getAttribute('data-entity-type-id') || '0', 10) === typeId) {
+          catList.appendChild(links[i]);
+          break;
+        }
+      }
+    });
+  }
+
+  /**
+   * Save sidebar config to server immediately (for visibility toggles and undo).
    * Sends only items + per-entity/node visibility so the server's load-merge-write
    * can preserve legacy fields (entity_type_order etc.) set by other writers.
    */
@@ -379,9 +527,7 @@
       }
     })
       .then(function (res) {
-        if (res.ok) {
-          Chronicle.notify('Sidebar order saved', 'success');
-        } else {
+        if (!res.ok) {
           Chronicle.notify('Failed to save sidebar order', 'error');
         }
       })
@@ -400,7 +546,13 @@
     var links = document.querySelectorAll('#sidebar-cat-list .sidebar-category-link');
     links.forEach(function (link) {
       link.removeAttribute('draggable');
-      link.classList.remove('opacity-40');
+      link.classList.remove('opacity-40', 'sidebar-reorg-insert-before', 'sidebar-reorg-insert-after', 'sidebar-reorg-drag-lifting');
+
+      // Remove inert-link click suppressor.
+      if (link._reorgClickInert) {
+        link.removeEventListener('click', link._reorgClickInert, true);
+        link._reorgClickInert = null;
+      }
 
       // Remove drag handles and visibility toggles.
       var handle = link.querySelector('.reorg-drag-handle');
