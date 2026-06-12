@@ -12,6 +12,8 @@ import "fmt"
 import "strconv"
 import "strings"
 
+import "github.com/keyxmakerx/chronicle/internal/sanitize"
+
 // App renders the authenticated layout with sidebar navigation and a
 // topbar. The main content area is where page-specific content goes.
 templ App(title string) {
@@ -1072,9 +1074,20 @@ func activeDrillSlug(ctx context.Context) string {
 
 // customNavLink renders a single custom link in the sidebar. Used for owner-
 // defined links from the Customization Hub's navigation editor.
+// safeExternalURL re-applies the SafeLinkURL allowlist at RENDER time so a link
+// row stored BEFORE the ingress guard (audit-R2 Finding 1) can never render as
+// javascript:/data:/protocol-relative — defense-in-depth over templ.SafeURL,
+// which deliberately bypasses Templ's URL sanitization. Falls back to "#".
+func safeExternalURL(url string) templ.SafeURL {
+	if u, ok := sanitize.SafeLinkURL(url); ok {
+		return templ.SafeURL(u)
+	}
+	return templ.SafeURL("#")
+}
+
 templ customNavLink(link SidebarLink) {
 	<a
-		href={ templ.SafeURL(link.URL) }
+		href={ safeExternalURL(link.URL) }
 		hx-boost="false"
 		class={ sidebarNavLink, sidebarNavInactive }
 		if isExternalURL(link.URL) {
@@ -1446,7 +1459,7 @@ templ topbarCenterContent(ctx context.Context) {
 			<div class="flex items-center gap-1.5 flex-wrap justify-center">
 				for _, link := range tc.Links {
 					<a
-						href={ templ.SafeURL(link.URL) }
+						href={ safeExternalURL(link.URL) }
 						class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-fg-secondary hover:text-fg hover:bg-surface-alt transition-colors whitespace-nowrap"
 					>
 						if link.Icon != "" {

@@ -39,23 +39,26 @@ type DrawingService interface {
 	// Drawing CRUD.
 	CreateDrawing(ctx context.Context, input CreateDrawingInput) (*Drawing, error)
 	GetDrawing(ctx context.Context, id string) (*Drawing, error)
-	UpdateDrawing(ctx context.Context, id string, input UpdateDrawingInput) error
-	DeleteDrawing(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
+	// mapID on the write methods is the authorization boundary from the URL
+	// path: the object must belong to that map, mirroring the read-path guard
+	// (audit-R2 Finding 2 — IDOR).
+	UpdateDrawing(ctx context.Context, id, mapID string, input UpdateDrawingInput) error
+	DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error
 	ListDrawings(ctx context.Context, mapID string, role int) ([]Drawing, error)
 
 	// Token CRUD.
 	CreateToken(ctx context.Context, input CreateTokenInput) (*Token, error)
 	GetToken(ctx context.Context, id string) (*Token, error)
-	UpdateToken(ctx context.Context, id string, input UpdateTokenInput) error
-	UpdateTokenPosition(ctx context.Context, id string, input UpdateTokenPositionInput) error
-	DeleteToken(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
+	UpdateToken(ctx context.Context, id, mapID string, input UpdateTokenInput) error
+	UpdateTokenPosition(ctx context.Context, id, mapID string, input UpdateTokenPositionInput) error
+	DeleteToken(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error
 	ListTokens(ctx context.Context, mapID string, role int) ([]Token, error)
 
 	// Layer CRUD.
 	CreateLayer(ctx context.Context, input CreateLayerInput) (*Layer, error)
 	GetLayer(ctx context.Context, id string) (*Layer, error)
-	UpdateLayer(ctx context.Context, id string, input UpdateLayerInput) error
-	DeleteLayer(ctx context.Context, id string, expectedUpdatedAt *time.Time) error
+	UpdateLayer(ctx context.Context, id, mapID string, input UpdateLayerInput) error
+	DeleteLayer(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error
 	ListLayers(ctx context.Context, mapID string) ([]Layer, error)
 
 	// Fog CRUD.
@@ -179,10 +182,15 @@ func (s *drawingService) GetDrawing(ctx context.Context, id string) (*Drawing, e
 }
 
 // UpdateDrawing validates input and updates a drawing.
-func (s *drawingService) UpdateDrawing(ctx context.Context, id string, input UpdateDrawingInput) error {
+func (s *drawingService) UpdateDrawing(ctx context.Context, id, mapID string, input UpdateDrawingInput) error {
 	d, err := s.repo.GetDrawing(ctx, id)
 	if err != nil {
 		return err
+	}
+	// IDOR guard (audit-R2 Finding 2): the object must belong to the map in the
+	// URL path. NotFound (not Forbidden) so existence isn't leaked.
+	if d.MapID != mapID {
+		return apperror.NewNotFound("drawing not found")
 	}
 
 	if err := concurrency.Check(d.UpdatedAt, input.ExpectedUpdatedAt, "drawing"); err != nil {
@@ -215,10 +223,13 @@ func (s *drawingService) UpdateDrawing(ctx context.Context, id string, input Upd
 }
 
 // DeleteDrawing removes a drawing.
-func (s *drawingService) DeleteDrawing(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
+func (s *drawingService) DeleteDrawing(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error {
 	d, err := s.repo.GetDrawing(ctx, id)
 	if err != nil {
 		return err
+	}
+	if d.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
+		return apperror.NewNotFound("drawing not found")
 	}
 	if err := concurrency.Check(d.UpdatedAt, expectedUpdatedAt, "drawing"); err != nil {
 		return err
@@ -304,10 +315,13 @@ func (s *drawingService) GetToken(ctx context.Context, id string) (*Token, error
 }
 
 // UpdateToken validates input and updates a token.
-func (s *drawingService) UpdateToken(ctx context.Context, id string, input UpdateTokenInput) error {
+func (s *drawingService) UpdateToken(ctx context.Context, id, mapID string, input UpdateTokenInput) error {
 	t, err := s.repo.GetToken(ctx, id)
 	if err != nil {
 		return err
+	}
+	if t.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
+		return apperror.NewNotFound("token not found")
 	}
 
 	if err := concurrency.Check(t.UpdatedAt, input.ExpectedUpdatedAt, "token"); err != nil {
@@ -356,15 +370,21 @@ func (s *drawingService) UpdateToken(ctx context.Context, id string, input Updat
 // wins; deliberate "drop here" actions can include it to detect
 // cross-user collisions. The pre-fetch is skipped on the no-token path
 // to keep the drag fast path on the same code shape as before.
-func (s *drawingService) UpdateTokenPosition(ctx context.Context, id string, input UpdateTokenPositionInput) error {
+func (s *drawingService) UpdateTokenPosition(ctx context.Context, id, mapID string, input UpdateTokenPositionInput) error {
 	if input.X < 0 || input.X > 100 || input.Y < 0 || input.Y > 100 {
 		return apperror.NewBadRequest("token coordinates must be between 0 and 100")
 	}
+	// Load once: needed for the IDOR guard (audit-R2 Finding 2) AND the optional
+	// concurrency check (the drag path may omit ExpectedUpdatedAt, but the map
+	// boundary must be enforced on every write).
+	t, err := s.repo.GetToken(ctx, id)
+	if err != nil {
+		return err
+	}
+	if t.MapID != mapID {
+		return apperror.NewNotFound("token not found")
+	}
 	if input.ExpectedUpdatedAt != nil {
-		t, err := s.repo.GetToken(ctx, id)
-		if err != nil {
-			return err
-		}
 		if err := concurrency.Check(t.UpdatedAt, input.ExpectedUpdatedAt, "token"); err != nil {
 			return err
 		}
@@ -372,19 +392,20 @@ func (s *drawingService) UpdateTokenPosition(ctx context.Context, id string, inp
 	if err := s.repo.UpdateTokenPosition(ctx, id, input.X, input.Y); err != nil {
 		return err
 	}
-	// Resolve campaign from token's map for the event.
-	t, err := s.repo.GetToken(ctx, id)
-	if err == nil {
-		s.events.PublishTokenPositionEvent(s.campaignForMap(ctx, t.MapID), id, input.X, input.Y)
-	}
+	// Reuse the token loaded above (position update doesn't change its map) to
+	// resolve the campaign for the event.
+	s.events.PublishTokenPositionEvent(s.campaignForMap(ctx, t.MapID), id, input.X, input.Y)
 	return nil
 }
 
 // DeleteToken removes a token.
-func (s *drawingService) DeleteToken(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
+func (s *drawingService) DeleteToken(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error {
 	t, err := s.repo.GetToken(ctx, id)
 	if err != nil {
 		return err
+	}
+	if t.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
+		return apperror.NewNotFound("token not found")
 	}
 	if err := concurrency.Check(t.UpdatedAt, expectedUpdatedAt, "token"); err != nil {
 		return err
@@ -440,10 +461,13 @@ func (s *drawingService) GetLayer(ctx context.Context, id string) (*Layer, error
 }
 
 // UpdateLayer validates input and updates a layer.
-func (s *drawingService) UpdateLayer(ctx context.Context, id string, input UpdateLayerInput) error {
+func (s *drawingService) UpdateLayer(ctx context.Context, id, mapID string, input UpdateLayerInput) error {
 	l, err := s.repo.GetLayer(ctx, id)
 	if err != nil {
 		return err
+	}
+	if l.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
+		return apperror.NewNotFound("layer not found")
 	}
 
 	if err := concurrency.Check(l.UpdatedAt, input.ExpectedUpdatedAt, "layer"); err != nil {
@@ -466,10 +490,13 @@ func (s *drawingService) UpdateLayer(ctx context.Context, id string, input Updat
 }
 
 // DeleteLayer removes a layer.
-func (s *drawingService) DeleteLayer(ctx context.Context, id string, expectedUpdatedAt *time.Time) error {
+func (s *drawingService) DeleteLayer(ctx context.Context, id, mapID string, expectedUpdatedAt *time.Time) error {
 	l, err := s.repo.GetLayer(ctx, id)
 	if err != nil {
 		return err
+	}
+	if l.MapID != mapID { // IDOR guard (audit-R2 Finding 2)
+		return apperror.NewNotFound("layer not found")
 	}
 	if err := concurrency.Check(l.UpdatedAt, expectedUpdatedAt, "layer"); err != nil {
 		return err

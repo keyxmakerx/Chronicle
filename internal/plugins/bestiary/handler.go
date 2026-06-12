@@ -541,5 +541,10 @@ func parsePagination(c echo.Context) (int, int) {
 	if perPage < 1 {
 		perPage = defaultPerPage
 	}
+	// Upper bound (audit-R2 Finding 3) — agree with the service's clampPagination
+	// (maxPerPage) so a `per_page=2147483647` can't force a huge query/allocation.
+	if perPage > maxPerPage {
+		perPage = maxPerPage
+	}
 	return page, perPage
 }

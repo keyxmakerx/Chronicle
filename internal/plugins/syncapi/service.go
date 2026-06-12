@@ -169,10 +169,17 @@ func (s *syncAPIService) ListKeysByCampaign(ctx context.Context, campaignID stri
 	return s.repo.ListKeysByCampaign(ctx, campaignID)
 }
 
+// maxListLimit caps admin list pagination so a caller can't force a huge query
+// / allocation via an oversized limit (audit-R2 Finding 3).
+const maxListLimit = 200
+
 // ListAllKeys returns all API keys with pagination (admin).
 func (s *syncAPIService) ListAllKeys(ctx context.Context, limit, offset int) ([]APIKey, int, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	if limit > maxListLimit {
+		limit = maxListLimit
 	}
 	return s.repo.ListAllKeys(ctx, limit, offset)
 }
@@ -308,6 +315,9 @@ func (s *syncAPIService) LogRequest(ctx context.Context, log *APIRequestLog) err
 func (s *syncAPIService) ListRequestLogs(ctx context.Context, filter RequestLogFilter) ([]APIRequestLog, int, error) {
 	if filter.Limit <= 0 {
 		filter.Limit = 50
+	}
+	if filter.Limit > maxListLimit {
+		filter.Limit = maxListLimit
 	}
 	return s.repo.ListRequestLogs(ctx, filter)
 }

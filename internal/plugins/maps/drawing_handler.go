@@ -162,7 +162,7 @@ func (h *DrawingHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), UpdateDrawingInput{
+	if err := h.drawingSvc.UpdateDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,
@@ -189,7 +189,7 @@ func (h *DrawingHandler) DeleteDrawing(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), ParseExpectedUpdatedAt(c)); err != nil {
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("did"), c.Param("mid"), ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
@@ -356,7 +356,7 @@ func (h *DrawingHandler) UpdateToken(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateToken(c.Request().Context(), c.Param("tid"), UpdateTokenInput{
+	if err := h.drawingSvc.UpdateToken(c.Request().Context(), c.Param("tid"), c.Param("mid"), UpdateTokenInput{
 		Name:              req.Name,
 		ImagePath:         req.ImagePath,
 		X:                 req.X,
@@ -407,7 +407,7 @@ func (h *DrawingHandler) UpdateTokenPosition(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), UpdateTokenPositionInput{
+	if err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), c.Param("tid"), c.Param("mid"), UpdateTokenPositionInput{
 		X:                 req.X,
 		Y:                 req.Y,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
@@ -427,7 +427,7 @@ func (h *DrawingHandler) DeleteToken(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tid"), ParseExpectedUpdatedAt(c)); err != nil {
+	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tid"), c.Param("mid"), ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)
@@ -531,7 +531,7 @@ func (h *DrawingHandler) UpdateLayer(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.drawingSvc.UpdateLayer(c.Request().Context(), c.Param("lid"), UpdateLayerInput{
+	if err := h.drawingSvc.UpdateLayer(c.Request().Context(), c.Param("lid"), c.Param("mid"), UpdateLayerInput{
 		Name:              req.Name,
 		SortOrder:         req.SortOrder,
 		IsVisible:         req.IsVisible,
@@ -554,7 +554,7 @@ func (h *DrawingHandler) DeleteLayer(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("lid"), ParseExpectedUpdatedAt(c)); err != nil {
+	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("lid"), c.Param("mid"), ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

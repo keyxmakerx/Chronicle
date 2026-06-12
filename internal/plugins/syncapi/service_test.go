@@ -825,6 +825,64 @@ func TestListRequestLogs_DefaultLimit(t *testing.T) {
 	}
 }
 
+// TestListAllKeys_ClampsLimit guards the upper bound (audit-R2 Finding 3): an
+// oversized limit must be capped at maxListLimit before it reaches the query.
+func TestListAllKeys_ClampsLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit int
+		want  int
+	}{
+		{"within bounds preserved", 100, 100},
+		{"exact max preserved", maxListLimit, maxListLimit},
+		{"over max clamped", 1000, maxListLimit},
+		{"overflow clamped", 2147483647, maxListLimit},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var captured int
+			repo := &mockSyncAPIRepo{
+				listAllKeysFn: func(_ context.Context, limit, _ int) ([]APIKey, int, error) {
+					captured = limit
+					return nil, 0, nil
+				},
+			}
+			_, _, _ = NewSyncAPIService(repo).ListAllKeys(context.Background(), tc.limit, 0)
+			if captured != tc.want {
+				t.Errorf("limit = %d, want %d", captured, tc.want)
+			}
+		})
+	}
+}
+
+// TestListRequestLogs_ClampsLimit mirrors the key-list clamp on the request-log
+// path (audit-R2 Finding 3).
+func TestListRequestLogs_ClampsLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		limit int
+		want  int
+	}{
+		{"within bounds preserved", 100, 100},
+		{"exact max preserved", maxListLimit, maxListLimit},
+		{"over max clamped", 1000, maxListLimit},
+		{"overflow clamped", 2147483647, maxListLimit},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var captured int
+			repo := &mockSyncAPIRepo{
+				listRequestLogsFn: func(_ context.Context, filter RequestLogFilter) ([]APIRequestLog, int, error) {
+					captured = filter.Limit
+					return nil, 0, nil
+				},
+			}
+			_, _, _ = NewSyncAPIService(repo).ListRequestLogs(context.Background(), RequestLogFilter{Limit: tc.limit})
+			if captured != tc.want {
+				t.Errorf("limit = %d, want %d", captured, tc.want)
+			}
+		})
+	}
+}
+
 func TestGetTopIPs_DefaultLimit(t *testing.T) {
 	var capturedLimit int
 	repo := &mockSyncAPIRepo{
