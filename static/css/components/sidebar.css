@@ -259,11 +259,43 @@
     border-radius: 0 4px 4px 0;
   }
 
-  /* Reorg mode: drop target highlight for category links. */
+  /* Reorg mode: 2-px insertion line between rows (reorder target). */
+  .sidebar-reorg-insert-before {
+    border-top: 2px solid rgb(var(--color-accent-rgb, 99 102 241));
+  }
+  .sidebar-reorg-insert-after {
+    border-bottom: 2px solid rgb(var(--color-accent-rgb, 99 102 241));
+  }
+
+  /* Reorg mode: full-row highlight for drop-into targets (folders). */
   .sidebar-reorg-drop-target {
     background-color: rgb(var(--color-accent-rgb, 99 102 241) / 0.12) !important;
     box-shadow: inset 0 0 0 1px rgb(var(--color-accent-rgb, 99 102 241) / 0.4);
     border-radius: 4px;
+  }
+
+  /* Reorg mode: source-row lift during drag. GPU layer, shadow, slight fade. */
+  .sidebar-reorg-drag-lifting {
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.25);
+    opacity: 0.85;
+    will-change: transform;
+    transform: translateZ(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-reorg-drag-lifting {
+      box-shadow: none;
+      opacity: 0.7;
+      transform: none;
+    }
+  }
+
+  /* Reorg mode: grab cursor on rows; grabbing while dragging. */
+  .sidebar-reorg-active #sidebar-cat-list .sidebar-category-link {
+    cursor: grab;
+  }
+  body.sidebar-reorg-dragging,
+  body.sidebar-reorg-dragging * {
+    cursor: grabbing !important;
   }
 
   /* Reorg mode: drag handle visibility (hidden by default, shown in reorg). */
@@ -279,6 +311,46 @@
   .sidebar-reorg-active #sidebar-cat-list .sidebar-category-link,
   .sidebar-reorg-active #sidebar-entity-tree .sidebar-tree-node {
     transition: background-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  /* Undo toast shown after a category reorder save. */
+  .sidebar-reorg-undo-toast {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-surface, #1e1e2e);
+    border: 1px solid rgb(var(--color-edge-rgb, 55 65 81) / 0.6);
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+    color: var(--color-text-muted, #9ca3af);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    z-index: 9999;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+    animation: sidebar-toast-in 150ms ease;
+  }
+  .sidebar-reorg-undo-btn {
+    font-size: 0.8125rem;
+    color: rgb(var(--color-accent-rgb, 99 102 241));
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+  .sidebar-reorg-undo-btn:hover {
+    opacity: 0.8;
+  }
+  @keyframes sidebar-toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-reorg-undo-toast { animation: none; }
   }
 
   /* Reorg mode active indicator on toggle button. */
