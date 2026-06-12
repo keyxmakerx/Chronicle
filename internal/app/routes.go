@@ -791,7 +791,11 @@ func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, ca
 		cfg.Items = append(cfg.Items, newItem)
 	}
 
-	return a.campaignService.UpdateSidebarConfig(ctx, campaignID, *cfg)
+	// Merge-write: this path only changes Items, so send only Items —
+	// under load-merge-write semantics (#473) the other config fields
+	// are preserved server-side.
+	return a.campaignService.UpdateSidebarConfig(ctx, campaignID,
+		campaigns.UpdateSidebarConfigRequest{Items: &cfg.Items})
 }
 
 // noteEventPublisherAdapter bridges the websocket.EventBus to the

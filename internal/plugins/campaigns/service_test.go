@@ -2,6 +2,7 @@ package campaigns
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -1111,8 +1112,9 @@ func TestUpdateSidebarConfig_Success(t *testing.T) {
 		},
 	}
 	svc := newTestCampaignService(repo, &mockUserFinder{})
-	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", SidebarConfig{
-		EntityTypeOrder: []int{1, 2, 3},
+	order := []int{1, 2, 3}
+	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", UpdateSidebarConfigRequest{
+		EntityTypeOrder: &order,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1125,8 +1127,8 @@ func TestUpdateSidebarConfig_Success(t *testing.T) {
 func TestUpdateSidebarConfig_EntityTypeOrderTooLong(t *testing.T) {
 	svc := newTestCampaignService(&mockCampaignRepo{}, &mockUserFinder{})
 	longOrder := make([]int, 101)
-	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", SidebarConfig{
-		EntityTypeOrder: longOrder,
+	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", UpdateSidebarConfigRequest{
+		EntityTypeOrder: &longOrder,
 	})
 	assertAppError(t, err, 400)
 }
@@ -1134,10 +1136,123 @@ func TestUpdateSidebarConfig_EntityTypeOrderTooLong(t *testing.T) {
 func TestUpdateSidebarConfig_HiddenTooLong(t *testing.T) {
 	svc := newTestCampaignService(&mockCampaignRepo{}, &mockUserFinder{})
 	longHidden := make([]int, 101)
-	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", SidebarConfig{
-		HiddenTypeIDs: longHidden,
+	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", UpdateSidebarConfigRequest{
+		HiddenTypeIDs: &longHidden,
 	})
 	assertAppError(t, err, 400)
+}
+
+// TestUpdateSidebarConfig_MergeAbsentFieldPreserved checks that a field absent
+// from the request leaves the stored value untouched (the load-merge-write core
+// invariant).
+func TestUpdateSidebarConfig_MergeAbsentFieldPreserved(t *testing.T) {
+	// Stored config has entity_type_order set via legacy model.
+	storedConfig := `{"entity_type_order":[10,20]}`
+	var capturedJSON string
+	repo := &mockCampaignRepo{
+		findByIDFn: func(_ context.Context, id string) (*Campaign, error) {
+			return &Campaign{ID: id, SidebarConfig: storedConfig}, nil
+		},
+		updateSidebarConfigFn: func(_ context.Context, _, json string) error {
+			capturedJSON = json
+			return nil
+		},
+	}
+	svc := newTestCampaignService(repo, &mockUserFinder{})
+
+	// Request only sends hidden_entity_ids; entity_type_order must be preserved.
+	ids := []string{"e1", "e2"}
+	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", UpdateSidebarConfigRequest{
+		HiddenEntityIDs: &ids,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got SidebarConfig
+	if err := json.Unmarshal([]byte(capturedJSON), &got); err != nil {
+		t.Fatalf("unmarshal written config: %v", err)
+	}
+	if len(got.EntityTypeOrder) != 2 || got.EntityTypeOrder[0] != 10 {
+		t.Errorf("entity_type_order not preserved: %v", got.EntityTypeOrder)
+	}
+	if len(got.HiddenEntityIDs) != 2 || got.HiddenEntityIDs[0] != "e1" {
+		t.Errorf("hidden_entity_ids not written: %v", got.HiddenEntityIDs)
+	}
+}
+
+// TestUpdateSidebarConfig_MergePresentFieldReplaced verifies that an explicitly
+// sent field (even an empty slice) replaces the stored value.
+func TestUpdateSidebarConfig_MergePresentFieldReplaced(t *testing.T) {
+	storedConfig := `{"items":[{"type":"category","type_id":5,"visible":true}]}`
+	var capturedJSON string
+	repo := &mockCampaignRepo{
+		findByIDFn: func(_ context.Context, id string) (*Campaign, error) {
+			return &Campaign{ID: id, SidebarConfig: storedConfig}, nil
+		},
+		updateSidebarConfigFn: func(_ context.Context, _, json string) error {
+			capturedJSON = json
+			return nil
+		},
+	}
+	svc := newTestCampaignService(repo, &mockUserFinder{})
+
+	// Send an explicit empty items slice — must clear stored items.
+	empty := []SidebarItem{}
+	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", UpdateSidebarConfigRequest{
+		Items: &empty,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got SidebarConfig
+	if err := json.Unmarshal([]byte(capturedJSON), &got); err != nil {
+		t.Fatalf("unmarshal written config: %v", err)
+	}
+	if len(got.Items) != 0 {
+		t.Errorf("items not cleared: %v", got.Items)
+	}
+}
+
+// TestUpdateSidebarConfig_ItemsWrittenPreserveLegacy verifies that sending
+// only items does not wipe legacy fields (entity_type_order, etc.) that were
+// set by the old reorg writer.
+func TestUpdateSidebarConfig_ItemsWrittenPreserveLegacy(t *testing.T) {
+	storedConfig := `{"entity_type_order":[3,1,2],"hidden_type_ids":[2]}`
+	var capturedJSON string
+	repo := &mockCampaignRepo{
+		findByIDFn: func(_ context.Context, id string) (*Campaign, error) {
+			return &Campaign{ID: id, SidebarConfig: storedConfig}, nil
+		},
+		updateSidebarConfigFn: func(_ context.Context, _, json string) error {
+			capturedJSON = json
+			return nil
+		},
+	}
+	svc := newTestCampaignService(repo, &mockUserFinder{})
+
+	items := []SidebarItem{{Type: "category", TypeID: 3, Visible: true}}
+	err := svc.UpdateSidebarConfig(context.Background(), "camp-1", UpdateSidebarConfigRequest{
+		Items: &items,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got SidebarConfig
+	if err := json.Unmarshal([]byte(capturedJSON), &got); err != nil {
+		t.Fatalf("unmarshal written config: %v", err)
+	}
+	if len(got.EntityTypeOrder) != 3 {
+		t.Errorf("entity_type_order wiped: %v", got.EntityTypeOrder)
+	}
+	if len(got.HiddenTypeIDs) != 1 {
+		t.Errorf("hidden_type_ids wiped: %v", got.HiddenTypeIDs)
+	}
+	if len(got.Items) != 1 || got.Items[0].TypeID != 3 {
+		t.Errorf("items not written: %v", got.Items)
+	}
 }
 
 // ============================================================

@@ -774,14 +774,17 @@ type TransferOwnershipRequest struct {
 }
 
 // UpdateSidebarConfigRequest holds the data for updating sidebar configuration.
+// Pointer fields let the server distinguish "field absent from JSON" (nil →
+// preserve stored value) from "field explicitly sent" (non-nil → replace
+// stored value, even an explicitly-empty slice clears the field).
 type UpdateSidebarConfigRequest struct {
-	Items           []SidebarItem `json:"items,omitempty"`
-	EntityTypeOrder []int         `json:"entity_type_order"`
-	HiddenTypeIDs   []int         `json:"hidden_type_ids"`
-	HiddenEntityIDs []string      `json:"hidden_entity_ids"`
-	HiddenNodeIDs   []string      `json:"hidden_node_ids"`
-	CustomSections  []NavSection  `json:"custom_sections,omitempty"`
-	CustomLinks     []NavLink     `json:"custom_links,omitempty"`
+	Items           *[]SidebarItem `json:"items"`
+	EntityTypeOrder *[]int         `json:"entity_type_order"`
+	HiddenTypeIDs   *[]int         `json:"hidden_type_ids"`
+	HiddenEntityIDs *[]string      `json:"hidden_entity_ids"`
+	HiddenNodeIDs   *[]string      `json:"hidden_node_ids"`
+	CustomSections  *[]NavSection  `json:"custom_sections"`
+	CustomLinks     *[]NavLink     `json:"custom_links"`
 }
 
 // --- Service Input DTOs ---
