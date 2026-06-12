@@ -845,6 +845,9 @@ func (s *campaignService) UpdateTopbarContent(ctx context.Context, campaignID st
 			if link.URL == "" {
 				return apperror.NewBadRequest("link URL is required")
 			}
+			if err := validateNavLinkURL(link.Label, link.URL); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -862,6 +865,22 @@ func (s *campaignService) UpdateTopbarContent(ctx context.Context, campaignID st
 	}
 
 	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// validateNavLinkURL rejects an owner-supplied navigation link URL that isn't an
+// http(s) absolute or a same-origin relative path — the stored-XSS /
+// open-redirect ingress guard for sidebar/topbar links (audit-R2 Finding 1).
+// The allowlist lives in sanitize.SafeLinkURL so ingress + egress agree.
+func validateNavLinkURL(label, url string) error {
+	if _, ok := sanitize.SafeLinkURL(url); !ok {
+		name := strings.TrimSpace(label)
+		if name == "" {
+			name = "(unnamed)"
+		}
+		return apperror.NewBadRequest(fmt.Sprintf(
+			"link %q has an invalid URL — use a full http(s):// address or a path starting with /", name))
+	}
+	return nil
 }
 
 // isValidHexColor checks that s is a 7-character hex color (#RRGGBB).
@@ -1209,6 +1228,25 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 	}
 	if len(config.HiddenTypeIDs) > maxSidebarConfigEntries {
 		return apperror.NewBadRequest("hidden type list is too long")
+	}
+	// Stored-XSS / open-redirect guard (audit-R2 Finding 1): owner-supplied link
+	// URLs are rendered to every campaign visitor (incl. anonymous on public
+	// campaigns) via templ.SafeURL, so reject any non-http(s)/non-relative URL.
+	for _, l := range config.CustomLinks {
+		if l.URL == "" {
+			continue
+		}
+		if err := validateNavLinkURL(l.Label, l.URL); err != nil {
+			return err
+		}
+	}
+	for _, it := range config.Items {
+		if it.Type != "link" || it.URL == "" {
+			continue
+		}
+		if err := validateNavLinkURL(it.Label, it.URL); err != nil {
+			return err
+		}
 	}
 
 	configJSON, err := json.Marshal(config)

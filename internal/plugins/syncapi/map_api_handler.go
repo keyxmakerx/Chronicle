@@ -208,7 +208,7 @@ func (h *MapAPIHandler) UpdateDrawing(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, maps.UpdateDrawingInput{
+	err := h.drawingSvc.UpdateDrawing(c.Request().Context(), drawingID, c.Param("mapID"), maps.UpdateDrawingInput{
 		Points:            req.Points,
 		StrokeColor:       req.StrokeColor,
 		StrokeWidth:       req.StrokeWidth,
@@ -232,7 +232,7 @@ func (h *MapAPIHandler) DeleteDrawing(c echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
-	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
+	if err := h.drawingSvc.DeleteDrawing(c.Request().Context(), c.Param("drawingID"), c.Param("mapID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -382,7 +382,7 @@ func (h *MapAPIHandler) UpdateToken(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, maps.UpdateTokenInput{
+	err := h.drawingSvc.UpdateToken(c.Request().Context(), tokenID, c.Param("mapID"), maps.UpdateTokenInput{
 		Name:              req.Name,
 		ImagePath:         req.ImagePath,
 		X:                 req.X,
@@ -435,7 +435,7 @@ func (h *MapAPIHandler) UpdateTokenPosition(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, maps.UpdateTokenPositionInput{
+	err := h.drawingSvc.UpdateTokenPosition(c.Request().Context(), tokenID, c.Param("mapID"), maps.UpdateTokenPositionInput{
 		X:                 req.X,
 		Y:                 req.Y,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
@@ -452,7 +452,7 @@ func (h *MapAPIHandler) DeleteToken(c echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
-	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tokenID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
+	if err := h.drawingSvc.DeleteToken(c.Request().Context(), c.Param("tokenID"), c.Param("mapID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -535,7 +535,7 @@ func (h *MapAPIHandler) UpdateLayer(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	err := h.drawingSvc.UpdateLayer(c.Request().Context(), layerID, maps.UpdateLayerInput{
+	err := h.drawingSvc.UpdateLayer(c.Request().Context(), layerID, c.Param("mapID"), maps.UpdateLayerInput{
 		Name:              req.Name,
 		SortOrder:         req.SortOrder,
 		IsVisible:         req.IsVisible,
@@ -555,7 +555,7 @@ func (h *MapAPIHandler) DeleteLayer(c echo.Context) error {
 	if _, err := h.requireMapInCampaign(c); err != nil {
 		return err
 	}
-	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("layerID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
+	if err := h.drawingSvc.DeleteLayer(c.Request().Context(), c.Param("layerID"), c.Param("mapID"), maps.ParseExpectedUpdatedAt(c)); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
