@@ -1,0 +1,32 @@
+package entities
+
+// effectiveVisibilityBadge renders the entity show-page header glance
+// (C-PERM-W1-TAG-GRANTS B2): the configured 3-state visibility icon
+// (globe/lock/shield, matching the shipped card badge) PLUS, when tag grants
+// widen an otherwise-hidden entity, a distinct amber corner dot and a tooltip
+// naming the tags + subjects. Scribe+ only — the caller gates; players never
+// see it. The tooltip is the safety contract: if the glance can't say a tag
+// exposed the entity, the grant must not exist.
+templ effectiveVisibilityBadge(ev *EffectiveVisibility) {
+	if ev != nil {
+		<span
+			class="relative inline-flex items-center ml-1.5 shrink-0"
+			title={ effectiveVisibilityTooltip(ev) }
+			data-visibility-badge={ ev.BaseState }
+			if ev.WidenedByTags {
+				data-tag-widened="true"
+			}
+		>
+			if ev.BaseState == VisStateCustom {
+				<i class="fa-solid fa-shield-halved text-[11px]" style="color: #0d9488;"></i>
+			} else if ev.BaseState == VisStateDMOnly {
+				<i class="fa-solid fa-lock text-[11px] text-fg-muted"></i>
+			} else {
+				<i class="fa-solid fa-globe text-[11px] text-fg-muted"></i>
+			}
+			if ev.WidenedByTags {
+				<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-surface" aria-hidden="true"></span>
+			}
+		</span>
+	}
+}

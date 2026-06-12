@@ -27,10 +27,15 @@ import (
 // EntityTagFetcher retrieves tags for entities in batch. Defined here to avoid
 // importing the tags widget package, keeping plugins loosely coupled via interfaces.
 // includeDmOnly controls whether dm_only tags are returned (true for Scribes+).
+//
+// GetEntityTagGrants (C-PERM-W1-TAG-GRANTS) carries tag-derived visibility data
+// across the same seam: it resolves the full grant summary for one entity's
+// effective-visibility glance (show-page header badge + permissions editor).
 type EntityTagFetcher interface {
 	GetEntityTagsBatch(ctx context.Context, entityIDs []string, includeDmOnly bool) (map[string][]EntityTagInfo, error)
 	GetEntityTags(ctx context.Context, entityID string, includeDmOnly bool) ([]EntityTagInfo, error)
 	SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error
+	GetEntityTagGrants(ctx context.Context, campaignID, entityID string) ([]EntityTagGrantInfo, error)
 }
 
 // AddonChecker is a narrow interface for checking whether an addon is enabled
@@ -568,6 +573,21 @@ func (h *Handler) Show(c echo.Context) error {
 	// page) and swap the second instance for an inline error rather
 	// than letting their fixed DOM IDs collide silently.
 	ctx = WithSingletonTracker(ctx)
+
+	// Effective-visibility glance (C-PERM-W1-TAG-GRANTS) — Scribe+ only. Compute
+	// the entity's configured visibility plus any tag grants that widen it, and
+	// inject it for the show-page header badge so a tag can never silently
+	// expose content. A grant-lookup failure degrades to the base 3-state badge.
+	if cc.MemberRole >= campaigns.RoleScribe && h.tagFetcher != nil {
+		grants, gerr := h.tagFetcher.GetEntityTagGrants(c.Request().Context(), cc.Campaign.ID, entity.ID)
+		if gerr != nil {
+			slog.Warn("effective-visibility glance: grant lookup failed",
+				slog.String("entity_id", entity.ID), slog.Any("error", gerr))
+		}
+		ev := ComputeEffectiveVisibility(entity, grants)
+		ctx = WithEffectiveVisibility(ctx, &ev)
+	}
+
 	c.SetRequest(c.Request().WithContext(ctx))
 
 	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, csrfToken))
@@ -2062,6 +2082,10 @@ type permissionsResponse struct {
 	Members     []permissionsMember  `json:"members"`
 	Groups      []permissionsGroup   `json:"groups"`
 	Permissions []EntityPermission   `json:"permissions"`
+	// TagGrants are the tag-derived visibility grants on this entity
+	// (C-PERM-W1-TAG-GRANTS). Additive field — pre-existing consumers ignore it.
+	// Feeds the inline editor's effective-visibility summary.
+	TagGrants []EntityTagGrantInfo `json:"tag_grants"`
 }
 
 // permissionsGroup is a campaign group summary for the permissions UI.
@@ -2159,12 +2183,28 @@ func (h *Handler) GetPermissionsAPI(c echo.Context) error {
 		groups = []permissionsGroup{}
 	}
 
+	// Tag-derived grants (C-PERM-W1-TAG-GRANTS) for the inline editor's
+	// effective-visibility summary. Best-effort: a failure here must not break
+	// the permissions editor, so we log and return an empty list.
+	var tagGrants []EntityTagGrantInfo
+	if h.tagFetcher != nil {
+		tagGrants, err = h.tagFetcher.GetEntityTagGrants(ctx, cc.Campaign.ID, entityID)
+		if err != nil {
+			slog.Error("failed to load tag grants for permissions", slog.Any("error", err))
+			tagGrants = nil
+		}
+	}
+	if tagGrants == nil {
+		tagGrants = []EntityTagGrantInfo{}
+	}
+
 	return c.JSON(http.StatusOK, permissionsResponse{
 		Visibility:  entity.Visibility,
 		IsPrivate:   entity.IsPrivate,
 		Members:     members,
 		Groups:      groups,
 		Permissions: grants,
+		TagGrants:   tagGrants,
 	})
 }
 

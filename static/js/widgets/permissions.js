@@ -49,6 +49,7 @@ Chronicle.register('permissions', {
       members: [],
       groups: [],
       permissions: [],
+      tagGrants: [],
       loading: true,
       saving: false,
       saved: false,
@@ -132,6 +133,12 @@ Chronicle.register('permissions', {
         '.perm-loading { padding: 24px; text-align: center; color: var(--color-fg-muted, #9ca3af); font-size: 13px; }',
         '.perm-readonly-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 13px; background: var(--color-surface-alt, #f3f4f6); color: var(--color-fg-body, #374151); }',
         '.perm-draft-note { font-size: 11px; color: var(--color-fg-muted, #6b7280); margin-top: 10px; padding: 8px 10px; background: var(--color-surface-alt, #f9fafb); border-radius: 6px; border-left: 3px solid var(--color-accent, #6366f1); line-height: 1.4; }',
+        // Tag-derived grants note (C-PERM-W1-TAG-GRANTS): amber to distinguish a
+        // widening exposed by a tag from the page-level permission controls.
+        '.perm-tag-note { font-size: 12px; color: var(--color-fg-body, #374151); margin-bottom: 12px; padding: 8px 10px; background: var(--color-surface-alt, #f9fafb); border-radius: 6px; border-left: 3px solid #f59e0b; line-height: 1.5; }',
+        '.perm-tag-note .perm-tag-note-title { font-weight: 600; display: block; margin-bottom: 2px; }',
+        '.perm-tag-note .perm-tag-chip { color: var(--color-fg-muted, #6b7280); }',
+        '.perm-trigger-widened { width: 6px; height: 6px; border-radius: 9999px; background: #f59e0b; margin-left: 4px; }',
         '@media (max-width: 480px) { .perm-card { width: 100%; box-shadow: none; } }',
         // Inline layout (Part 2): a summary trigger above a collapsible panel
         // in the form flow. The panel animates open/closed via the
@@ -239,12 +246,45 @@ Chronicle.register('permissions', {
       modeBadge.className = 'perm-trigger-mode';
       modeBadge.textContent = modeLabel(mode);
       trigger.appendChild(modeBadge);
+      // Tag-widening dot (C-PERM-W1-TAG-GRANTS): an amber pip when an otherwise
+      // hidden page is exposed by a tag grant, mirroring the show-page badge.
+      if (mode !== 'everyone' && state.tagGrants && state.tagGrants.length > 0) {
+        var widened = document.createElement('span');
+        widened.className = 'perm-trigger-widened';
+        widened.setAttribute('data-tag-widened', 'true');
+        widened.setAttribute('title', 'Also visible via tag grants');
+        trigger.appendChild(widened);
+      }
       // Inline mode: a chevron affordance that rotates when expanded.
       if (inline) {
         var chevron = document.createElement('i');
         chevron.className = 'fa-solid fa-chevron-down text-xs perm-trigger-chevron';
         trigger.appendChild(chevron);
       }
+    }
+
+    // renderTagGrantsNote appends a read-only summary of the tag-derived grants
+    // that widen this page's visibility (C-PERM-W1-TAG-GRANTS). It is the
+    // editor-side half of the glance integrity rule: if a tag exposed the page,
+    // the Owner managing permissions must see it, named.
+    function renderTagGrantsNote(parent) {
+      if (!state.tagGrants || state.tagGrants.length === 0) return;
+      var note = document.createElement('div');
+      note.className = 'perm-tag-note';
+      note.setAttribute('data-tag-grants-note', 'true');
+      var title = document.createElement('span');
+      title.className = 'perm-tag-note-title';
+      title.innerHTML = '<i class="fa-solid fa-tag text-xs"></i> Also visible via tags';
+      note.appendChild(title);
+      state.tagGrants.forEach(function (g) {
+        var line = document.createElement('div');
+        line.className = 'perm-tag-chip';
+        var subject = g.subject_label || 'someone';
+        var tag = g.tag_name || g.tag_slug || 'a tag';
+        line.textContent = subject + ' ← ' + tag;
+        note.appendChild(line);
+      });
+      parent.appendChild(note);
     }
 
     function renderBody() {
@@ -292,6 +332,10 @@ Chronicle.register('permissions', {
       }
 
       var mode = getMode();
+
+      // Tag-derived widening note — always shown (read-only + editable) so the
+      // exposure is never silent.
+      renderTagGrantsNote(bodyEl);
 
       // Read-only mode for non-owners: small badge, no controls.
       if (!editable) {
@@ -603,6 +647,10 @@ Chronicle.register('permissions', {
               permission: p.permission
             };
           });
+          // Tag-derived grants (C-PERM-W1-TAG-GRANTS): read-only, additive.
+          // Surfaced so an Owner editing permissions sees that a tag has ALSO
+          // exposed this page — a tag must never silently widen visibility.
+          state.tagGrants = data.tag_grants || [];
           state.loading = false;
           renderTrigger();
           renderBody();

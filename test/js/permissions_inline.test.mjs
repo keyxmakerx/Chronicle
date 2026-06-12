@@ -62,7 +62,7 @@ function findByClass(root, cls) {
   return null;
 }
 
-function boot() {
+function boot(loadData) {
   const head = makeNode('head');
   const body = makeNode('body');
   const styleRegistry = {};
@@ -93,7 +93,8 @@ function boot() {
       escapeHtml: (s) => String(s == null ? '' : s),
       apiFetch: (url, opts) => {
         apiCalls.push({ url, opts });
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ visibility: 'default', is_private: false, members: [], groups: [], permissions: [] }) });
+        const data = loadData || { visibility: 'default', is_private: false, members: [], groups: [], permissions: [] };
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(data) });
       },
     },
   };
@@ -183,4 +184,48 @@ test('destroy cleans up inline mount state', () => {
   assert.ok(el._permState, 'state attached');
   impl.destroy(el);
   assert.equal(el._permState, undefined, 'state cleared on destroy');
+});
+
+// --- C-PERM-W1-TAG-GRANTS: effective-visibility in the inline editor ---
+
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+test('tag grants surface in the inline editor (note + widened trigger pip)', async () => {
+  const { sandbox } = boot({
+    visibility: 'default', is_private: true, members: [], groups: [], permissions: [],
+    tag_grants: [
+      { tag_slug: 'revealed-act-1', tag_name: 'Revealed: Act 1', subject_type: 'role', subject_id: '1', subject_label: 'Players' },
+    ],
+  });
+  const impl = sandbox.Chronicle._impls.permissions;
+  const el = makeNode('div');
+  impl.init(el, { layout: 'inline', editable: true, endpoint: '/perms' });
+  await flush(); // let load() resolve and re-render
+
+  const note = findByClass(el, 'perm-tag-note');
+  assert.ok(note, 'tag-grants note rendered after load');
+  // The exposure must be NAMED (subject + tag), never silent.
+  const text = (function gather(n) {
+    let s = n.textContent || '';
+    for (const c of n.children || []) s += ' ' + gather(c);
+    return s;
+  })(note);
+  assert.ok(/Players/.test(text), 'note names the subject');
+  assert.ok(/Revealed: Act 1/.test(text), 'note names the tag');
+
+  // The collapsed trigger gets the amber widened pip (a dm_only page exposed).
+  const pip = findByClass(el, 'perm-trigger-widened');
+  assert.ok(pip, 'widened pip on the trigger for a tag-exposed dm_only page');
+});
+
+test('no tag note or pip when there are no tag grants', async () => {
+  const { sandbox } = boot({
+    visibility: 'default', is_private: true, members: [], groups: [], permissions: [], tag_grants: [],
+  });
+  const impl = sandbox.Chronicle._impls.permissions;
+  const el = makeNode('div');
+  impl.init(el, { layout: 'inline', editable: true, endpoint: '/perms' });
+  await flush();
+  assert.equal(findByClass(el, 'perm-tag-note'), null, 'no note without grants');
+  assert.equal(findByClass(el, 'perm-trigger-widened'), null, 'no pip without grants');
 });

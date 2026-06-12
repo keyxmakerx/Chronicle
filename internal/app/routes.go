@@ -367,8 +367,10 @@ func (a *backdropUploaderAdapter) UploadBackdrop(ctx context.Context, campaignID
 
 // entityTagFetcherAdapter wraps tags.TagService to implement the
 // entities.EntityTagFetcher interface for batch tag loading in list views.
+// grantSvc backs the tag-grant glance methods (C-PERM-W1-TAG-GRANTS).
 type entityTagFetcherAdapter struct {
-	svc tags.TagService
+	svc      tags.TagService
+	grantSvc tags.TagGrantService
 }
 
 // GetEntityTagsBatch returns minimal tag info for multiple entities.
@@ -405,6 +407,30 @@ func (a *entityTagFetcherAdapter) GetEntityTags(ctx context.Context, entityID st
 // SetEntityTags sets the tags for a single entity.
 func (a *entityTagFetcherAdapter) SetEntityTags(ctx context.Context, entityID string, campaignID string, tagIDs []int) error {
 	return a.svc.SetEntityTags(ctx, entityID, campaignID, tagIDs)
+}
+
+// GetEntityTagGrants resolves the tag-derived visibility grants on one entity
+// for its effective-visibility glance (C-PERM-W1-TAG-GRANTS).
+func (a *entityTagFetcherAdapter) GetEntityTagGrants(ctx context.Context, campaignID, entityID string) ([]entities.EntityTagGrantInfo, error) {
+	if a.grantSvc == nil {
+		return nil, nil
+	}
+	grants, err := a.grantSvc.GrantsForEntity(ctx, campaignID, entityID)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]entities.EntityTagGrantInfo, len(grants))
+	for i, g := range grants {
+		infos[i] = entities.EntityTagGrantInfo{
+			TagName:      g.TagName,
+			TagSlug:      g.TagSlug,
+			TagColor:     g.TagColor,
+			SubjectType:  g.SubjectType,
+			SubjectID:    g.SubjectID,
+			SubjectLabel: g.SubjectLabel,
+		}
+	}
+	return infos, nil
 }
 
 // entityCampaignCheckerAdapter wraps entities.EntityService to implement the
@@ -2172,12 +2198,25 @@ func (a *App) RegisterRoutes() {
 	tagRepo := tags.NewTagRepository(a.DB)
 	tagService := tags.NewTagService(tagRepo)
 	tagHandler := tags.NewHandler(tagService)
+	// Tag visibility grants (C-PERM-W1-TAG-GRANTS): Owner-gated CRUD plus the
+	// effective-visibility glance source. The grant service validates grant
+	// subjects against the campaign (member/group lookups) and resolves their
+	// human labels for the badge tooltip.
+	tagGrantRepo := tags.NewTagPermissionRepository(a.DB)
+	tagGrantService := tags.NewTagGrantService(tagGrantRepo, tagRepo, campaignService, groupService)
+	tagHandler.SetGrantService(tagGrantService)
 	tags.RegisterRoutes(e, tagHandler, campaignService, authService)
+	// Shared tag adapter: feeds the entities glance (SetTagFetcher below) and the
+	// syncapi permissions endpoint (SetTagGrantLister) the same tag-grant view.
+	tagFetcherAdapter := &entityTagFetcherAdapter{svc: tagService, grantSvc: tagGrantService}
 
 	// REST API v1: versioned endpoints for external clients (Foundry VTT, etc.).
 	// Authenticates via API keys, not browser sessions.
 	syncAPIHandler := syncapi.NewAPIHandler(syncService, entityService, campaignService, relService)
 	syncAPIHandler.SetAddonLister(&addonListerAPIAdapter{svc: addonService})
+	// Expose tag-derived grants on the permissions endpoint for Foundry ownership
+	// sync (C-PERM-W1-TAG-GRANTS), reusing the entities glance adapter.
+	syncAPIHandler.SetTagGrantLister(tagFetcherAdapter)
 	syncAPIHandler.SetSystemEnabler(addonService)
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
@@ -2272,7 +2311,7 @@ func (a *App) RegisterRoutes() {
 	// interface shape entities + syncapi use.
 	campaignHandler.SetExtensionEnableChecker(addonService)
 	timelineHandler.SetAuditService(auditService)
-	entityHandler.SetTagFetcher(&entityTagFetcherAdapter{svc: tagService})
+	entityHandler.SetTagFetcher(tagFetcherAdapter)
 	entityHandler.SetTimelineSearcher(timelineSvc)
 	entityHandler.SetMapSearcher(mapsService)
 	entityHandler.SetCalendarSearcher(calendarService)

@@ -18,6 +18,7 @@ import (
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
 	service  TagService
+	grantSvc TagGrantService
 	auditSvc audit.AuditService
 }
 
@@ -30,6 +31,12 @@ func NewHandler(service TagService) *Handler {
 // Called after all plugins are wired to avoid initialization order issues.
 func (h *Handler) SetAuditService(svc audit.AuditService) {
 	h.auditSvc = svc
+}
+
+// SetGrantService sets the tag visibility-grant service. Called after all
+// plugins are wired (it depends on the campaign + group services).
+func (h *Handler) SetGrantService(svc TagGrantService) {
+	h.grantSvc = svc
 }
 
 // logAudit fires a fire-and-forget audit entry. Errors are logged but
