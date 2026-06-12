@@ -1235,20 +1235,27 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 	// Stored-XSS / open-redirect guard (audit-R2 Finding 1): owner-supplied link
 	// URLs are rendered to every campaign visitor (incl. anonymous on public
 	// campaigns) via templ.SafeURL, so reject any non-http(s)/non-relative URL.
-	for _, l := range config.CustomLinks {
-		if l.URL == "" {
-			continue
-		}
-		if err := validateNavLinkURL(l.Label, l.URL); err != nil {
-			return err
+	// Validates the REQUEST's incoming values (merge semantics: nil = field
+	// absent, nothing new to validate; stored values were validated on their
+	// way in and the render-time guard re-checks regardless).
+	if req.CustomLinks != nil {
+		for _, l := range *req.CustomLinks {
+			if l.URL == "" {
+				continue
+			}
+			if err := validateNavLinkURL(l.Label, l.URL); err != nil {
+				return err
+			}
 		}
 	}
-	for _, it := range config.Items {
-		if it.Type != "link" || it.URL == "" {
-			continue
-		}
-		if err := validateNavLinkURL(it.Label, it.URL); err != nil {
-			return err
+	if req.Items != nil {
+		for _, it := range *req.Items {
+			if it.Type != "link" || it.URL == "" {
+				continue
+			}
+			if err := validateNavLinkURL(it.Label, it.URL); err != nil {
+				return err
+			}
 		}
 	}
 
