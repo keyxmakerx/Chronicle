@@ -432,7 +432,17 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	if len(data.Campaign.SidebarConfig) > 0 {
 		var sidebarCfg SidebarConfig
 		if err := json.Unmarshal(data.Campaign.SidebarConfig, &sidebarCfg); err == nil {
-			if err := s.campaigns.UpdateSidebarConfig(ctx, campaignID, sidebarCfg); err != nil {
+			// Import sets all fields explicitly, so wrap in a full request.
+			sidebarReq := UpdateSidebarConfigRequest{
+				Items:           &sidebarCfg.Items,
+				EntityTypeOrder: &sidebarCfg.EntityTypeOrder,
+				HiddenTypeIDs:   &sidebarCfg.HiddenTypeIDs,
+				HiddenEntityIDs: &sidebarCfg.HiddenEntityIDs,
+				HiddenNodeIDs:   &sidebarCfg.HiddenNodeIDs,
+				CustomSections:  &sidebarCfg.CustomSections,
+				CustomLinks:     &sidebarCfg.CustomLinks,
+			}
+			if err := s.campaigns.UpdateSidebarConfig(ctx, campaignID, sidebarReq); err != nil {
 				slog.Warn("import sidebar config failed", slog.Any("error", err))
 			}
 		}

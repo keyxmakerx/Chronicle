@@ -102,7 +102,7 @@ type CampaignService interface {
 	UpdateDefaultVisibility(ctx context.Context, campaignID, visibility string) error
 
 	// Sidebar configuration
-	UpdateSidebarConfig(ctx context.Context, campaignID string, config SidebarConfig) error
+	UpdateSidebarConfig(ctx context.Context, campaignID string, req UpdateSidebarConfigRequest) error
 	GetSidebarConfig(ctx context.Context, campaignID string) (*SidebarConfig, error)
 
 	// Dashboard layout
@@ -726,7 +726,6 @@ func (s *campaignService) GetPendingTransfer(ctx context.Context, campaignID str
 // to prevent abuse via oversized JSON payloads.
 const maxSidebarConfigEntries = 100
 
-// UpdateSidebarConfig updates the campaign's sidebar configuration. Validates
 // UpdateBackdropPath sets or clears the campaign's backdrop image path.
 func (s *campaignService) UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error {
 	return s.repo.UpdateBackdropPath(ctx, campaignID, path)
@@ -1202,13 +1201,47 @@ func (s *campaignService) UpdateDefaultVisibility(ctx context.Context, campaignI
 	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
 }
 
-// array sizes and persists as JSON.
-func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID string, config SidebarConfig) error {
-	if len(config.EntityTypeOrder) > maxSidebarConfigEntries {
+// UpdateSidebarConfig applies a partial update to the stored sidebar config via
+// a load-merge-write pattern. Nil pointer fields in req are absent from the
+// JSON body and are left unchanged; non-nil fields (including explicit empty
+// slices) replace the stored value. This prevents Writers A and B from
+// clobbering each other's model when they only touch a subset of fields.
+func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID string, req UpdateSidebarConfigRequest) error {
+	if req.EntityTypeOrder != nil && len(*req.EntityTypeOrder) > maxSidebarConfigEntries {
 		return apperror.NewBadRequest("entity type order list is too long")
 	}
-	if len(config.HiddenTypeIDs) > maxSidebarConfigEntries {
+	if req.HiddenTypeIDs != nil && len(*req.HiddenTypeIDs) > maxSidebarConfigEntries {
 		return apperror.NewBadRequest("hidden type list is too long")
+	}
+
+	// Read current stored config so absent fields are preserved.
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	config := campaign.ParseSidebarConfig()
+
+	// Merge only the fields present in the request.
+	if req.Items != nil {
+		config.Items = *req.Items
+	}
+	if req.EntityTypeOrder != nil {
+		config.EntityTypeOrder = *req.EntityTypeOrder
+	}
+	if req.HiddenTypeIDs != nil {
+		config.HiddenTypeIDs = *req.HiddenTypeIDs
+	}
+	if req.HiddenEntityIDs != nil {
+		config.HiddenEntityIDs = *req.HiddenEntityIDs
+	}
+	if req.HiddenNodeIDs != nil {
+		config.HiddenNodeIDs = *req.HiddenNodeIDs
+	}
+	if req.CustomSections != nil {
+		config.CustomSections = *req.CustomSections
+	}
+	if req.CustomLinks != nil {
+		config.CustomLinks = *req.CustomLinks
 	}
 
 	configJSON, err := json.Marshal(config)

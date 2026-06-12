@@ -150,13 +150,14 @@
     Chronicle.apiFetch(configEndpoint)
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
-        sidebarConfig = data || { entity_type_order: [], hidden_type_ids: [] };
-        if (!sidebarConfig.entity_type_order) sidebarConfig.entity_type_order = [];
-        if (!sidebarConfig.hidden_type_ids) sidebarConfig.hidden_type_ids = [];
+        sidebarConfig = data || {};
+        if (!sidebarConfig.items) sidebarConfig.items = [];
+        if (!sidebarConfig.hidden_entity_ids) sidebarConfig.hidden_entity_ids = [];
+        if (!sidebarConfig.hidden_node_ids) sidebarConfig.hidden_node_ids = [];
         renderCategoryReorgUI();
       })
       .catch(function () {
-        sidebarConfig = { entity_type_order: [], hidden_type_ids: [] };
+        sidebarConfig = { items: [], hidden_entity_ids: [], hidden_node_ids: [] };
         renderCategoryReorgUI();
       });
   }
@@ -180,7 +181,12 @@
       // Add visibility toggle if not already present.
       var typeId = parseInt(link.getAttribute('data-entity-type-id') || '0', 10);
       if (typeId && !link.querySelector('.reorg-visibility-toggle')) {
-        var isHidden = (sidebarConfig.hidden_type_ids || []).indexOf(typeId) !== -1;
+        // Determine visibility from unified items model; fall back to legacy hidden_type_ids.
+        var foundItem = null;
+        (sidebarConfig.items || []).forEach(function (it) {
+          if (it.type === 'category' && it.type_id === typeId) foundItem = it;
+        });
+        var isHidden = foundItem ? !foundItem.visible : (sidebarConfig.hidden_type_ids || []).indexOf(typeId) !== -1;
         var toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'reorg-visibility-toggle ml-auto p-1 text-xs rounded hover:bg-white/10 transition-colors';
@@ -279,40 +285,74 @@
   }
 
   /**
-   * Read category order from DOM and save to API.
+   * Read category order from DOM and persist via the unified items model.
+   * If items is empty (legacy config), bootstraps from DOM + legacy visibility.
+   * Category slots in items are reordered in-place; non-category items keep
+   * their positions.
    */
   function saveCategoryOrder() {
-    var items = document.querySelectorAll('#sidebar-cat-list .sidebar-category-link');
-    var order = [];
-    items.forEach(function (item) {
-      var id = parseInt(item.getAttribute('data-entity-type-id') || '0', 10);
-      if (id) order.push(id);
+    var domLinks = document.querySelectorAll('#sidebar-cat-list .sidebar-category-link');
+    var domTypeIds = [];
+    domLinks.forEach(function (el) {
+      var id = parseInt(el.getAttribute('data-entity-type-id') || '0', 10);
+      if (id) domTypeIds.push(id);
     });
 
-    sidebarConfig.entity_type_order = order;
+    if (!sidebarConfig.items || !sidebarConfig.items.length) {
+      // Bootstrap unified model from DOM + legacy hidden_type_ids.
+      var legacyHidden = sidebarConfig.hidden_type_ids || [];
+      sidebarConfig.items = domTypeIds.map(function (id) {
+        return { type: 'category', type_id: id, visible: legacyHidden.indexOf(id) === -1 };
+      });
+    } else {
+      // Reorder category slots to match DOM order, preserving non-category items.
+      var byTypeId = {};
+      sidebarConfig.items.forEach(function (item) {
+        if (item.type === 'category' && item.type_id) byTypeId[item.type_id] = item;
+      });
+      var catSlots = [];
+      sidebarConfig.items.forEach(function (item, i) {
+        if (item.type === 'category') catSlots.push(i);
+      });
+      var newItems = sidebarConfig.items.slice();
+      domTypeIds.forEach(function (typeId, i) {
+        if (i < catSlots.length) {
+          newItems[catSlots[i]] = byTypeId[typeId] || { type: 'category', type_id: typeId, visible: true };
+        }
+      });
+      sidebarConfig.items = newItems;
+    }
+
     saveSidebarConfig();
   }
 
   /**
-   * Toggle visibility of a category and save.
+   * Toggle visibility of a category type in the unified items model and save.
    */
   function toggleCategoryVisibility(typeId) {
-    var idx = (sidebarConfig.hidden_type_ids || []).indexOf(typeId);
-    if (idx === -1) {
-      sidebarConfig.hidden_type_ids.push(typeId);
+    if (!sidebarConfig.items) sidebarConfig.items = [];
+
+    var item = null;
+    sidebarConfig.items.forEach(function (it) {
+      if (it.type === 'category' && it.type_id === typeId) item = it;
+    });
+    if (item) {
+      item.visible = !item.visible;
     } else {
-      sidebarConfig.hidden_type_ids.splice(idx, 1);
+      // Not yet in unified model — add it as hidden.
+      item = { type: 'category', type_id: typeId, visible: false };
+      sidebarConfig.items.push(item);
     }
     saveSidebarConfig();
 
     // Update UI immediately.
+    var isNowHidden = !item.visible;
     var link = document.querySelector('#sidebar-cat-list .sidebar-category-link[data-entity-type-id="' + typeId + '"]');
     if (link) {
-      var isNowHidden = sidebarConfig.hidden_type_ids.indexOf(typeId) !== -1;
-      var toggle = link.querySelector('.reorg-visibility-toggle');
-      if (toggle) {
-        toggle.title = isNowHidden ? 'Show in sidebar' : 'Hide from sidebar';
-        toggle.innerHTML = '<i class="fa-solid ' + (isNowHidden ? 'fa-eye-slash text-gray-500' : 'fa-eye text-gray-400') + '"></i>';
+      var toggleBtn = link.querySelector('.reorg-visibility-toggle');
+      if (toggleBtn) {
+        toggleBtn.title = isNowHidden ? 'Show in sidebar' : 'Hide from sidebar';
+        toggleBtn.innerHTML = '<i class="fa-solid ' + (isNowHidden ? 'fa-eye-slash text-gray-500' : 'fa-eye text-gray-400') + '"></i>';
       }
       if (isNowHidden) {
         link.classList.add('opacity-40');
@@ -324,6 +364,8 @@
 
   /**
    * Save sidebar config to server.
+   * Sends only items + per-entity/node visibility so the server's load-merge-write
+   * can preserve legacy fields (entity_type_order etc.) set by other writers.
    */
   function saveSidebarConfig() {
     if (!configEndpoint || !sidebarConfig) return;
@@ -331,12 +373,9 @@
     Chronicle.apiFetch(configEndpoint, {
       method: 'PUT',
       body: {
-        entity_type_order: sidebarConfig.entity_type_order || [],
-        hidden_type_ids: sidebarConfig.hidden_type_ids || [],
+        items: sidebarConfig.items || [],
         hidden_entity_ids: sidebarConfig.hidden_entity_ids || [],
-        hidden_node_ids: sidebarConfig.hidden_node_ids || [],
-        custom_sections: sidebarConfig.custom_sections || [],
-        custom_links: sidebarConfig.custom_links || []
+        hidden_node_ids: sidebarConfig.hidden_node_ids || []
       }
     })
       .then(function (res) {
