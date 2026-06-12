@@ -256,6 +256,12 @@ templ blockTitle(cc *campaigns.CampaignContext, entity *Entity, csrfToken string
 				>
 					<i class="fa-regular fa-star text-lg"></i>
 				</button>
+				// Effective-visibility glance (C-PERM-W1-TAG-GRANTS): the constant
+				// header badge, Scribe+ only. Reads the per-request glance the show
+				// handler injected; nil for players (renders nothing).
+				if cc.MemberRole >= campaigns.RoleScribe {
+					@effectiveVisibilityBadge(GetEffectiveVisibility(ctx))
+				}
 			</div>
 			// Aliases widget: displays alternative names for this entity.
 			<div

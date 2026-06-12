@@ -246,21 +246,27 @@ func TestEntityVisibilityFilter(t *testing.T) {
 			}
 			// Gate on the same columns/tables the entities plugin uses: the
 			// legacy is_private flag (default mode) + custom entity_permissions
-			// (user/role/group grants). Drift from these = drift from policy.
+			// (user/role/group grants) + the additive tag-grant branch
+			// (entity_tags ⋈ tag_permissions). Drift from these = drift from
+			// policy, and the two mirror sites would silently diverge.
 			for _, want := range []string{
 				"e.visibility = 'default'",
 				"e.is_private = false",
 				"e.visibility = 'custom'",
 				"entity_permissions",
 				"campaign_group_members",
+				"entity_tags",
+				"tag_permissions",
 			} {
 				if !strings.Contains(frag, want) {
 					t.Errorf("filter missing %q (drift from entities policy?)\nfrag=%s", want, frag)
 				}
 			}
-			// Args bind role twice (default-mode threshold + role-grant check)
-			// then userID twice (user grant + group membership).
-			wantArgs := []any{role, role, "user-9", "user-9"}
+			// Args bind role twice + userID twice for the entity_permissions
+			// branch (default threshold, role grant, user grant, group
+			// membership), then role + userID + userID again for the additive
+			// tag_permissions branch (role grant, user grant, group membership).
+			wantArgs := []any{role, role, "user-9", "user-9", role, "user-9", "user-9"}
 			if len(args) != len(wantArgs) {
 				t.Fatalf("arg count = %d, want %d (%v)", len(args), len(wantArgs), args)
 			}

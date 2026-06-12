@@ -1064,9 +1064,20 @@ func tagFilterClause(tagSlugs []string) (string, []any) {
 // entity visibility based on the viewer's role, user ID, and the entity's
 // visibility mode. Owners see everything — returns empty string.
 //
-// For non-owners, the filter handles two visibility modes:
+// For non-owners, the filter handles two visibility modes plus an additive
+// tag-grant override:
 //   - "default": uses the legacy is_private flag (Scribe+ sees all, Player sees public only)
 //   - "custom": checks entity_permissions for explicit grants to the user or their role level
+//   - tag grants (additive, C-PERM-W1-TAG-GRANTS): an otherwise-hidden entity
+//     becomes visible if any tag it bears carries a tag_permissions grant whose
+//     subject matches the viewer (role/user/group). This branch can only WIDEN
+//     visibility — it never hides anything — so it sits as a top-level OR.
+//
+// SECURITY-SENSITIVE — MIRRORED VERBATIM in
+// internal/plugins/calendar/entity_ties_repository.go::entityVisibilityFilter
+// (rule 8 forbids importing another plugin's repo, so the policy is replicated).
+// Any change here MUST be applied identically there, and both test suites +
+// the cross-mirror sync pin (TestEntityVisibilityFilter) updated. cordinator#32/#455.
 func visibilityFilter(role int, userID string) (string, []any) {
 	if role >= permissions.RoleOwner {
 		return "", nil
@@ -1087,8 +1098,22 @@ func visibilityFilter(role int, userID string) (string, []any) {
 				))
 			)
 		))
+		OR EXISTS (
+			SELECT 1 FROM entity_tags etg
+			JOIN tag_permissions tp ON tp.tag_id = etg.tag_id
+			WHERE etg.entity_id = e.id
+			AND (
+				(tp.subject_type = 'role' AND CAST(tp.subject_id AS UNSIGNED) <= ?)
+				OR (tp.subject_type = 'user' AND tp.subject_id = ?)
+				OR (tp.subject_type = 'group' AND EXISTS (
+					SELECT 1 FROM campaign_group_members cgmt
+					WHERE cgmt.group_id = CAST(tp.subject_id AS UNSIGNED)
+					AND cgmt.user_id = ?
+				))
+			)
+		)
 	)`
-	return filter, []any{role, role, userID, userID}
+	return filter, []any{role, role, userID, userID, role, userID, userID}
 }
 
 // entityTypeInClause builds " AND e.entity_type_id [= ? | IN (?, ...)]" plus

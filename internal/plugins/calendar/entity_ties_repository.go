@@ -55,9 +55,16 @@ func (r *calendarRepo) UnlinkEntityEra(ctx context.Context, entityID string, era
 // — rule 8 forbids importing another plugin's repo, so we replicate the policy
 // rather than invent a new one). Keep the two in sync: the alias is `e`
 // (entities), the "default" mode honors the legacy is_private flag (Scribe+ see
-// all, players see public only) and the "custom" mode checks entity_permissions
-// for a role/user/group grant. Owners (role >= RoleOwner) get no filter — they
-// see every tied entity, including dm_only / custom-restricted ones.
+// all, players see public only), the "custom" mode checks entity_permissions
+// for a role/user/group grant, and an additive tag-grant branch widens
+// visibility when any tag the entity bears carries a matching tag_permissions
+// grant (C-PERM-W1-TAG-GRANTS — additive only, never hides). Owners
+// (role >= RoleOwner) get no filter — they see every tied entity, including
+// dm_only / custom-restricted ones.
+//
+// SECURITY-SENSITIVE — any change here MUST be applied identically to
+// entities/repository.go::visibilityFilter, with both test suites + the
+// cross-mirror sync pin (TestEntityVisibilityFilter) updated. cordinator#32/#455.
 func entityVisibilityFilter(role int, userID string) (string, []any) {
 	if role >= permissions.RoleOwner {
 		return "", nil
@@ -77,8 +84,22 @@ func entityVisibilityFilter(role int, userID string) (string, []any) {
 				))
 			)
 		))
+		OR EXISTS (
+			SELECT 1 FROM entity_tags etg
+			JOIN tag_permissions tp ON tp.tag_id = etg.tag_id
+			WHERE etg.entity_id = e.id
+			AND (
+				(tp.subject_type = 'role' AND CAST(tp.subject_id AS UNSIGNED) <= ?)
+				OR (tp.subject_type = 'user' AND tp.subject_id = ?)
+				OR (tp.subject_type = 'group' AND EXISTS (
+					SELECT 1 FROM campaign_group_members cgmt
+					WHERE cgmt.group_id = CAST(tp.subject_id AS UNSIGNED)
+					AND cgmt.user_id = ?
+				))
+			)
+		)
 	)`
-	return filter, []any{role, role, userID, userID}
+	return filter, []any{role, role, userID, userID, role, userID, userID}
 }
 
 // EntitiesForCalendar returns the DISTINCT entities tied to any event or era

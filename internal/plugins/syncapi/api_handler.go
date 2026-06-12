@@ -47,6 +47,15 @@ type APIHandler struct {
 	addonLister          AddonLister
 	systemEnabler        SystemEnabler
 	campaignSystemLister CampaignSystemLister
+	tagGrantLister       TagGrantLister
+}
+
+// TagGrantLister resolves an entity's tag-derived visibility grants so the
+// permissions API can expose them additively to the Foundry module
+// (C-PERM-W1-TAG-GRANTS). Satisfied by the same adapter the entities plugin
+// uses for its glance.
+type TagGrantLister interface {
+	GetEntityTagGrants(ctx context.Context, campaignID, entityID string) ([]entities.EntityTagGrantInfo, error)
 }
 
 // NewAPIHandler creates a new API handler with the required service dependencies.
@@ -701,6 +710,12 @@ type permissionsAPIResponse struct {
 	Visibility  entities.VisibilityMode    `json:"visibility"`
 	IsPrivate   bool                       `json:"is_private"`
 	Permissions []entities.EntityPermission `json:"permissions"`
+	// TagGrants exposes tag-derived visibility grants ADDITIVELY
+	// (C-PERM-W1-TAG-GRANTS). A separate array (not folded into Permissions) so
+	// the Foundry module's existing _buildOwnership parser, which reads only
+	// `permissions`, keeps working unchanged; the module opts in by reading
+	// `tag_grants` when it adds tag-reveal support. See the module .ai.md API table.
+	TagGrants []entities.EntityTagGrantInfo `json:"tag_grants"`
 }
 
 // GetEntityPermissions returns the visibility mode and permission grants for an entity.
@@ -731,10 +746,27 @@ func (h *APIHandler) GetEntityPermissions(c echo.Context) error {
 		grants = []entities.EntityPermission{}
 	}
 
+	// Tag-derived grants (C-PERM-W1-TAG-GRANTS), exposed additively for the
+	// Foundry module's ownership sync. Best-effort: a lookup failure must not
+	// break the permissions read the module relies on.
+	var tagGrants []entities.EntityTagGrantInfo
+	if h.tagGrantLister != nil {
+		tagGrants, err = h.tagGrantLister.GetEntityTagGrants(ctx, c.Param("id"), entityID)
+		if err != nil {
+			slog.Error("fetching entity tag grants",
+				slog.String("entity_id", entityID), slog.String("error", err.Error()))
+			tagGrants = nil
+		}
+	}
+	if tagGrants == nil {
+		tagGrants = []entities.EntityTagGrantInfo{}
+	}
+
 	return c.JSON(http.StatusOK, permissionsAPIResponse{
 		Visibility:  entity.Visibility,
 		IsPrivate:   entity.IsPrivate,
 		Permissions: grants,
+		TagGrants:   tagGrants,
 	})
 }
 
@@ -781,6 +813,12 @@ func (h *APIHandler) SetAddonChecker(ac AddonChecker) {
 // SetAddonLister injects the addon lister for the discovery endpoint.
 func (h *APIHandler) SetAddonLister(al AddonLister) {
 	h.addonLister = al
+}
+
+// SetTagGrantLister injects the tag-grant lister so the permissions endpoint
+// can expose tag-derived grants to the Foundry module (C-PERM-W1-TAG-GRANTS).
+func (h *APIHandler) SetTagGrantLister(tgl TagGrantLister) {
+	h.tagGrantLister = tgl
 }
 
 // SetSystemEnabler injects the system enabler for API-level self-healing.

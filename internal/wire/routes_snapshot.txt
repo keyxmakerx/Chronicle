@@ -73,6 +73,7 @@ DELETE	/sidebar-nodes/:nid	internal/plugins/entities/routes.go
 DELETE	/sync/mappings/:mappingID	internal/plugins/syncapi/routes.go
 DELETE	/tags/:tagId	internal/plugins/syncapi/routes.go
 DELETE	/tags/:tagId	internal/widgets/tags/routes.go
+DELETE	/tags/:tagId/grants/:grantId	internal/widgets/tags/routes.go
 DELETE	/timelines/:tid	internal/plugins/timeline/routes.go
 DELETE	/timelines/:tid/connections/:cid	internal/plugins/timeline/routes.go
 DELETE	/timelines/:tid/events/:eid	internal/plugins/timeline/routes.go
@@ -366,6 +367,7 @@ GET	/systems/:systemId/character-fields	internal/plugins/syncapi/routes.go
 GET	/systems/:systemId/item-fields	internal/plugins/syncapi/routes.go
 GET	/tags	internal/plugins/syncapi/routes.go
 GET	/tags	internal/widgets/tags/routes.go
+GET	/tags/:tagId/grants	internal/widgets/tags/routes.go
 GET	/themes	internal/extensions/routes.go
 GET	/timelines	internal/plugins/timeline/routes.go
 GET	/timelines/:tid	internal/plugins/timeline/routes.go
@@ -524,6 +526,7 @@ POST	/sync	internal/plugins/syncapi/routes.go
 POST	/sync/mappings	internal/plugins/syncapi/routes.go
 POST	/tags	internal/plugins/syncapi/routes.go
 POST	/tags	internal/widgets/tags/routes.go
+POST	/tags/:tagId/grants	internal/widgets/tags/routes.go
 POST	/timelines	internal/plugins/timeline/routes.go
 POST	/timelines/:tid/connections	internal/plugins/timeline/routes.go
 POST	/timelines/:tid/events	internal/plugins/timeline/routes.go
