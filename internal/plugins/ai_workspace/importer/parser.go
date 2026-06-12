@@ -38,12 +38,19 @@ var validVisibilities = map[string]bool{
 // no front-matter exists.
 var h1Re = regexp.MustCompile(`(?m)^# +(.+?)\s*$`)
 
-// fmOpenRe matches the opening `---` line of a YAML front-matter
-// block. Anchored at line start so a `---` inside a code block
-// doesn't false-positive. The closing fence is found by scanning
-// forward; we don't use a regex for that to keep the boundary logic
-// linear.
-var fmOpenRe = regexp.MustCompile(`(?m)^---\s*$`)
+// fmOpenRe matches a `---` fence line (3+ dashes — AI output often
+// emits `----`; Markdown treats 3+ as equivalent). Anchored at line
+// start; trailing whitespace/CR tolerated for CRLF pastes. NOTE: a
+// Markdown horizontal rule is the SAME token — splitPages tells the
+// two apart by looking at what follows (see yamlKeyLineRe), so a
+// `---` divider inside a page body no longer corrupts the split.
+var fmOpenRe = regexp.MustCompile(`(?m)^-{3,}\s*$`)
+
+// yamlKeyLineRe matches a line that plausibly starts a YAML mapping
+// entry (`name: …`, `entity_type: …`). Used to distinguish a real
+// front-matter opener (followed by keys) from a horizontal rule
+// (followed by prose).
+var yamlKeyLineRe = regexp.MustCompile(`^\s*[A-Za-z_][\w-]*\s*:`)
 
 // Parse splits raw multi-page markdown into a slice of ParsedPage.
 // Each page is independently parsed + classified; one bad page
@@ -88,12 +95,29 @@ func splitPages(input string) []string {
 		return splitByH1(input)
 	}
 
-	// Pair fences: even-indexed matches are openers, odd-indexed
-	// are closers. Collect only opener positions.
+	// Classify each fence as opener / closer / stray by CONTENT, not
+	// by blind odd/even pairing (the old scheme — one horizontal
+	// rule in a body, or one missing closer, shifted the pairing and
+	// corrupted every page after it; operator-reported 2026-06-12).
+	//
+	// A fence is an OPENER iff the first non-blank line after it
+	// looks like a YAML key (`name: …`). Its CLOSER is the next
+	// fence — consumed only when everything between them still looks
+	// like front-matter; otherwise the block is unclosed and the
+	// error stays contained to that one page (parseOnePage reports
+	// it precisely). A fence followed by prose is a horizontal rule
+	// and is ignored.
 	openerStarts := make([]int, 0, len(fmIdx)/2+1)
-	for i, ix := range fmIdx {
-		if i%2 == 0 {
-			openerStarts = append(openerStarts, ix[0])
+	for i := 0; i < len(fmIdx); i++ {
+		after := input[fmIdx[i][1]:]
+		if !yamlKeyLineRe.MatchString(firstNonBlankLine(after)) {
+			continue // horizontal rule / stray fence — not a page boundary
+		}
+		openerStarts = append(openerStarts, fmIdx[i][0])
+		// Consume the matching closer when the span between reads as
+		// front-matter, so the closer can't be misread as an opener.
+		if i+1 < len(fmIdx) && plausibleFrontMatter(input[fmIdx[i][1]:fmIdx[i+1][0]]) {
+			i++
 		}
 	}
 	if len(openerStarts) == 0 {
@@ -112,6 +136,39 @@ func splitPages(input string) []string {
 		}
 	}
 	return out
+}
+
+// firstNonBlankLine returns the first line of s that contains a
+// non-whitespace character ("" when none). Bounded scan — fence
+// classification only ever needs the line right after the fence.
+func firstNonBlankLine(s string) string {
+	for _, line := range strings.SplitN(s, "\n", 64) {
+		if strings.TrimSpace(line) != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+// plausibleFrontMatter reports whether span reads as the inside of a
+// front-matter block: every non-blank line is a YAML key line, a
+// list/continuation (`- …` or indented), or a comment. Used only to
+// decide whether the fence after span is this block's closer — a
+// false negative just means a missing-closer error surfaces on that
+// page, so this errs strict rather than swallowing body text.
+func plausibleFrontMatter(span string) bool {
+	for _, line := range strings.Split(span, "\n") {
+		t := strings.TrimSpace(line)
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		if yamlKeyLineRe.MatchString(line) || strings.HasPrefix(t, "- ") ||
+			strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // splitByH1 is the fallback splitter — used only when the input
@@ -259,6 +316,14 @@ func extractFrontMatter(s string) (body string, fm FrontMatter, rawYAML string, 
 	if closeIdx == nil {
 		return "", fm, "", fmt.Errorf(
 			"front-matter block is missing its closing `---` line — add `---` on its own line after the YAML keys")
+	}
+	// If the span up to that fence doesn't read as front-matter, the
+	// fence we found is a horizontal rule in the body and the REAL
+	// closer is missing — say that precisely instead of letting the
+	// YAML parser emit a confusing error about body prose.
+	if !plausibleFrontMatter(rest[:closeIdx[0]]) {
+		return "", fm, "", fmt.Errorf(
+			"front-matter block is missing its closing `---` line (the next `---` found looks like a divider inside the body) — add `---` on its own line right after the YAML keys")
 	}
 	rawYAML = rest[:closeIdx[0]]
 	body = strings.TrimSpace(rest[closeIdx[1]:])
