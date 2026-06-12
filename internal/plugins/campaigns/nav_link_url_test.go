@@ -46,29 +46,36 @@ func TestUpdateTopbarContent_RejectsDangerousURLs(t *testing.T) {
 func TestUpdateSidebarConfig_RejectsDangerousURLs(t *testing.T) {
 	newSvc := func(saved *string) *campaignService {
 		return &campaignService{repo: &mockCampaignRepo{
+			findByIDFn: func(_ context.Context, id string) (*Campaign, error) {
+				return &Campaign{ID: id}, nil
+			},
 			updateSidebarConfigFn: func(_ context.Context, _, cfg string) error { *saved = cfg; return nil },
 		}}
 	}
 	// Both the legacy CustomLinks and the newer Items[type=link] are guarded.
+	// (Request form per the #473 merge semantics: pointer fields.)
 	for _, u := range dangerousURLs {
 		var saved string
+		links := []NavLink{{Label: "Evil", URL: u}}
 		if err := newSvc(&saved).UpdateSidebarConfig(context.Background(), "camp-1",
-			SidebarConfig{CustomLinks: []NavLink{{Label: "Evil", URL: u}}}); err == nil {
+			UpdateSidebarConfigRequest{CustomLinks: &links}); err == nil {
 			t.Errorf("CustomLinks should reject %q", u)
 		} else if saved != "" {
 			t.Errorf("rejected CustomLink %q must short-circuit before write", u)
 		}
 
 		saved = ""
+		items := []SidebarItem{{Type: "link", Label: "Evil", URL: u}}
 		if err := newSvc(&saved).UpdateSidebarConfig(context.Background(), "camp-1",
-			SidebarConfig{Items: []SidebarItem{{Type: "link", Label: "Evil", URL: u}}}); err == nil {
+			UpdateSidebarConfigRequest{Items: &items}); err == nil {
 			t.Errorf("Items[link] should reject %q", u)
 		}
 	}
 	// Valid links persist.
 	var saved string
+	okLinks := []NavLink{{Label: "OK", URL: "/campaigns/x"}}
 	if err := newSvc(&saved).UpdateSidebarConfig(context.Background(), "camp-1",
-		SidebarConfig{CustomLinks: []NavLink{{Label: "OK", URL: "/campaigns/x"}}}); err != nil {
+		UpdateSidebarConfigRequest{CustomLinks: &okLinks}); err != nil {
 		t.Errorf("valid sidebar link should be accepted: %v", err)
 	}
 	if saved == "" {
