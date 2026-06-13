@@ -56,11 +56,13 @@ func (r *calendarRepo) UnlinkEntityEra(ctx context.Context, entityID string, era
 // rather than invent a new one). Keep the two in sync: the alias is `e`
 // (entities), the "default" mode honors the legacy is_private flag (Scribe+ see
 // all, players see public only), the "custom" mode checks entity_permissions
-// for a role/user/group grant, and an additive tag-grant branch widens
+// for a role/user/group/public grant, and an additive tag-grant branch widens
 // visibility when any tag the entity bears carries a matching tag_permissions
-// grant (C-PERM-W1-TAG-GRANTS — additive only, never hides). Owners
-// (role >= RoleOwner) get no filter — they see every tied entity, including
-// dm_only / custom-restricted ones.
+// grant (C-PERM-W1-TAG-GRANTS — additive only, never hides). Role-tier matches
+// use subject_id <= role, so a Player-role grant is invisible to an anonymous/
+// public viewer (role 0); the 'public' subject matches everyone, anonymous
+// included (C-PERM-ANON-IDENTITY). Owners (role >= RoleOwner) get no filter —
+// they see every tied entity, including dm_only / custom-restricted ones.
 //
 // SECURITY-SENSITIVE — any change here MUST be applied identically to
 // entities/repository.go::visibilityFilter, with both test suites + the
@@ -77,6 +79,7 @@ func entityVisibilityFilter(role int, userID string) (string, []any) {
 			AND (
 				(ep.subject_type = 'role' AND CAST(ep.subject_id AS UNSIGNED) <= ?)
 				OR (ep.subject_type = 'user' AND ep.subject_id = ?)
+				OR (ep.subject_type = 'public')
 				OR (ep.subject_type = 'group' AND EXISTS (
 					SELECT 1 FROM campaign_group_members cgm
 					WHERE cgm.group_id = CAST(ep.subject_id AS UNSIGNED)
@@ -91,6 +94,7 @@ func entityVisibilityFilter(role int, userID string) (string, []any) {
 			AND (
 				(tp.subject_type = 'role' AND CAST(tp.subject_id AS UNSIGNED) <= ?)
 				OR (tp.subject_type = 'user' AND tp.subject_id = ?)
+				OR (tp.subject_type = 'public')
 				OR (tp.subject_type = 'group' AND EXISTS (
 					SELECT 1 FROM campaign_group_members cgmt
 					WHERE cgmt.group_id = CAST(tp.subject_id AS UNSIGNED)

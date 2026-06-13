@@ -239,11 +239,28 @@ type CampaignMember struct {
 //
 // An admin who joins as Player sees Player-visible content only.
 // An admin who hasn't joined has MemberRole=RoleNone (no content access).
+//
+// Anonymous / public-visitor identity (C-PERM-ANON-IDENTITY): a viewer who is
+// not a member of the campaign (logged-out public visitor, or an authenticated
+// non-member browsing a public campaign) gets MemberRole=RoleNone — strictly
+// BELOW RolePlayer. RolePlayer therefore means "an authenticated party member"
+// and nothing weaker. IsMember/IsAnonymous record WHY MemberRole is what it is,
+// so the visibility-read path and the glance badge can tell "the public" apart
+// from "a Player" without re-deriving it from the role int.
 type CampaignContext struct {
 	Campaign    *Campaign
 	MemberRole  Role // Actual membership role, or RoleNone if not a member.
 	IsSiteAdmin bool // True if user has users.is_admin flag.
 	IsDmGranted bool // True if user has been granted dm_only visibility by Owner.
+	// IsMember is true only when MemberRole came from a real campaign_members
+	// row. False for anonymous visitors, authenticated non-members, and
+	// admins viewing without joining. Lets callers distinguish "RoleNone
+	// because not a member" from a genuine low role.
+	IsMember bool
+	// IsAnonymous is true when there is no authenticated session at all
+	// (logged-out public-campaign visitor). Implies !IsMember. Used by the
+	// glance badge to label content "visible to the public".
+	IsAnonymous bool
 }
 
 // EffectiveRole returns the permission level to use for route-level authorization.
@@ -257,6 +274,12 @@ func (cc *CampaignContext) EffectiveRole() Role {
 // DM-granted users are treated as Owners for visibility purposes so they
 // can see dm_only content, while their actual MemberRole stays unchanged
 // for authorization (create/edit) checks.
+//
+// For anonymous / non-member viewers this returns int(RoleNone) == 0, which is
+// below RolePlayer (1). In the visibility filter a role-tier grant matches when
+// subject_id <= viewerRole, so a viewer at 0 matches no Player-role grant — the
+// public sees only content marked public/everyone (default + not-private, or an
+// explicit 'public' grant), never Player-only or Player-role tag grants.
 func (cc *CampaignContext) VisibilityRole() int {
 	if cc.IsDmGranted {
 		return int(RoleOwner)

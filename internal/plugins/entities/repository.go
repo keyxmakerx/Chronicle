@@ -1067,11 +1067,18 @@ func tagFilterClause(tagSlugs []string) (string, []any) {
 // For non-owners, the filter handles two visibility modes plus an additive
 // tag-grant override:
 //   - "default": uses the legacy is_private flag (Scribe+ sees all, Player sees public only)
-//   - "custom": checks entity_permissions for explicit grants to the user or their role level
+//   - "custom": checks entity_permissions for explicit grants to the user, their
+//     role level, or the 'public' subject
 //   - tag grants (additive, C-PERM-W1-TAG-GRANTS): an otherwise-hidden entity
 //     becomes visible if any tag it bears carries a tag_permissions grant whose
-//     subject matches the viewer (role/user/group). This branch can only WIDEN
-//     visibility — it never hides anything — so it sits as a top-level OR.
+//     subject matches the viewer (role/user/group/public). This branch can only
+//     WIDEN visibility — it never hides anything — so it sits as a top-level OR.
+//
+// Role-tier matching uses subject_id <= role, so a grant to RolePlayer (1) is
+// visible to Player and above but NOT to an anonymous/public viewer (role 0).
+// The 'public' subject matches every viewer including anonymous, giving owners
+// an explicit "reveal to everyone" target distinct from "Players"
+// (C-PERM-ANON-IDENTITY).
 //
 // SECURITY-SENSITIVE — MIRRORED VERBATIM in
 // internal/plugins/calendar/entity_ties_repository.go::entityVisibilityFilter
@@ -1091,6 +1098,7 @@ func visibilityFilter(role int, userID string) (string, []any) {
 			AND (
 				(ep.subject_type = 'role' AND CAST(ep.subject_id AS UNSIGNED) <= ?)
 				OR (ep.subject_type = 'user' AND ep.subject_id = ?)
+				OR (ep.subject_type = 'public')
 				OR (ep.subject_type = 'group' AND EXISTS (
 					SELECT 1 FROM campaign_group_members cgm
 					WHERE cgm.group_id = CAST(ep.subject_id AS UNSIGNED)
@@ -1105,6 +1113,7 @@ func visibilityFilter(role int, userID string) (string, []any) {
 			AND (
 				(tp.subject_type = 'role' AND CAST(tp.subject_id AS UNSIGNED) <= ?)
 				OR (tp.subject_type = 'user' AND tp.subject_id = ?)
+				OR (tp.subject_type = 'public')
 				OR (tp.subject_type = 'group' AND EXISTS (
 					SELECT 1 FROM campaign_group_members cgmt
 					WHERE cgmt.group_id = CAST(tp.subject_id AS UNSIGNED)

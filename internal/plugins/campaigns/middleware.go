@@ -53,6 +53,7 @@ func RequireCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 			if err == nil {
 				// User is a member — set their actual role.
 				cc.MemberRole = member.Role
+				cc.IsMember = true
 			} else if session.IsAdmin {
 				// Not a member but is a site admin — they can still access
 				// the route, but with no content visibility (RoleNone).
@@ -85,8 +86,11 @@ func hasDmGrant(campaign *Campaign, userID string) bool {
 }
 
 // AllowPublicCampaignAccess is like RequireCampaignAccess but also allows
-// unauthenticated users to view public campaigns. Public visitors get
-// RolePlayer (read-only) so they can see non-private entities.
+// unauthenticated users to view public campaigns. Non-member public visitors
+// (logged-out, or authenticated but not a member) get MemberRole=RoleNone —
+// strictly below RolePlayer — so they see only public/everyone content and
+// never Player-only or Player-role tag-granted content (C-PERM-ANON-IDENTITY).
+// RolePlayer is reserved for authenticated party members.
 //
 // Use this on view routes (/campaigns/:id, /campaigns/:id/entities, etc.).
 // Mutating routes should still use RequireCampaignAccess + RequireRole.
@@ -115,13 +119,18 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 				member, err := service.GetMember(c.Request().Context(), campaignID, session.UserID)
 				if err == nil {
 					cc.MemberRole = member.Role
+					cc.IsMember = true
 				} else if session.IsAdmin {
 					cc.MemberRole = RoleNone
 				} else if !campaign.IsPublic {
 					return apperror.NewForbidden("you are not a member of this campaign")
 				} else {
-					// Authenticated non-member viewing public campaign.
-					cc.MemberRole = RolePlayer
+					// Authenticated non-member viewing a public campaign: they
+					// are NOT a party member, so they get the public identity
+					// (RoleNone), not RolePlayer. Their user/group grants still
+					// match (the filter keys those off userID), but Player-role
+					// grants do not. C-PERM-ANON-IDENTITY.
+					cc.MemberRole = RoleNone
 				}
 				cc.IsDmGranted = hasDmGrant(campaign, session.UserID)
 				c.Set(contextKeyCampaign, cc)
@@ -135,8 +144,9 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 
 			cc := &CampaignContext{
 				Campaign:    campaign,
-				MemberRole:  RolePlayer, // Read-only access.
+				MemberRole:  RoleNone, // Anonymous public visitor — below Player.
 				IsSiteAdmin: false,
+				IsAnonymous: true,
 			}
 			c.Set(contextKeyCampaign, cc)
 			return next(c)

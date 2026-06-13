@@ -715,6 +715,13 @@ type permissionsAPIResponse struct {
 	// the Foundry module's existing _buildOwnership parser, which reads only
 	// `permissions`, keeps working unchanged; the module opts in by reading
 	// `tag_grants` when it adds tag-reveal support. See the module .ai.md API table.
+	//
+	// C-PERM-ANON-IDENTITY: subject_type on a grant (in either Permissions or
+	// TagGrants) may now be "public" — an explicit reveal-to-everyone target.
+	// The wire SHAPE is unchanged (still a string enum), so this is additive:
+	// _buildOwnership consumers that don't recognize "public" simply ignore it
+	// (as they already do for unknown subjects). A module SHOULD map a "public"
+	// subject to Foundry's default OBSERVER ownership. Flag for the module .ai.md.
 	TagGrants []entities.EntityTagGrantInfo `json:"tag_grants"`
 }
 
