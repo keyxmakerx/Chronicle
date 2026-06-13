@@ -686,6 +686,19 @@ type EntityRepository interface {
 	// Scoped to campaign for safety.
 	UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error
 
+	// ListSiblingIDsOrdered returns the IDs of all entities sharing a scope
+	// (campaign + entity type + parent), ordered by (sort_order, name) — exactly
+	// the order the sidebar tree renders. Used to re-sequence sort_order densely
+	// on reorder so the name tiebreak can't snap a dragged entity back (the
+	// silent-revert bug). parentID/parentNodeID are mutually exclusive; both nil
+	// means the root scope.
+	ListSiblingIDsOrdered(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error)
+
+	// ResequenceSiblings renumbers sort_order = position (0..N-1) for the given
+	// ordered IDs in a single transaction, scoped to the campaign. Dense, unique
+	// orders make the (sort_order, name) tiebreak deterministic.
+	ResequenceSiblings(ctx context.Context, campaignID string, orderedIDs []string) error
+
 	// FindBacklinks returns entities whose entry_html contains a @mention link
 	// pointing to the given entity. Respects visibility filtering.
 	FindBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
@@ -1514,6 +1527,77 @@ func (r *entityRepository) UpdateSortOrder(ctx context.Context, entityID, campai
 	_, err := r.db.ExecContext(ctx, query, sortOrder, entityID, campaignID)
 	if err != nil {
 		return fmt.Errorf("updating entity sort order: %w", err)
+	}
+	return nil
+}
+
+// ListSiblingIDsOrdered returns the IDs of every entity sharing the given scope
+// (campaign + entity type + parent), ordered by (sort_order, name) — the same
+// order the sidebar tree renders. The caller uses this to renumber the set on
+// reorder; see ResequenceSiblings.
+func (r *entityRepository) ListSiblingIDsOrdered(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error) {
+	// parent_id and parent_node_id are mutually exclusive; the root scope is both
+	// NULL. Pin the inactive column to NULL so a stale value can't widen the set.
+	where := "campaign_id = ? AND entity_type_id = ?"
+	args := []any{campaignID, entityTypeID}
+	switch {
+	case parentNodeID != nil:
+		where += " AND parent_node_id = ? AND parent_id IS NULL"
+		args = append(args, *parentNodeID)
+	case parentID != nil:
+		where += " AND parent_id = ? AND parent_node_id IS NULL"
+		args = append(args, *parentID)
+	default:
+		where += " AND parent_id IS NULL AND parent_node_id IS NULL"
+	}
+
+	query := "SELECT id FROM entities WHERE " + where + " ORDER BY sort_order ASC, name ASC"
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing sibling ids: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning sibling id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ResequenceSiblings writes sort_order = position for each id (0..N-1) in a
+// single transaction. Either every sibling is renumbered or none is, so a
+// partial failure can't leave the set with colliding orders.
+func (r *entityRepository) ResequenceSiblings(ctx context.Context, campaignID string, orderedIDs []string) error {
+	if len(orderedIDs) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin resequence tx: %w", err)
+	}
+	// Rollback is a no-op once Commit succeeds; safe to always defer.
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.PrepareContext(ctx, `UPDATE entities SET sort_order = ?, updated_at = NOW() WHERE id = ? AND campaign_id = ?`)
+	if err != nil {
+		return fmt.Errorf("preparing resequence update: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for position, id := range orderedIDs {
+		if _, err := stmt.ExecContext(ctx, position, id, campaignID); err != nil {
+			return fmt.Errorf("resequencing entity %s: %w", id, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing resequence: %w", err)
 	}
 	return nil
 }

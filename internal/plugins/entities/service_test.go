@@ -145,6 +145,8 @@ type mockEntityRepo struct {
 	listByOwnerFn    func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
 	updateOwnerFn    func(ctx context.Context, entityID string, ownerUserID *string) error
 	updateMapIDFn    func(ctx context.Context, entityID string, mapID *string) error
+	listSiblingIDsFn func(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error)
+	resequenceFn     func(ctx context.Context, campaignID string, orderedIDs []string) error
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -269,6 +271,20 @@ func (m *mockEntityRepo) UpdateParentNode(ctx context.Context, entityID, campaig
 }
 
 func (m *mockEntityRepo) UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error {
+	return nil
+}
+
+func (m *mockEntityRepo) ListSiblingIDsOrdered(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error) {
+	if m.listSiblingIDsFn != nil {
+		return m.listSiblingIDsFn(ctx, campaignID, entityTypeID, parentID, parentNodeID)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) ResequenceSiblings(ctx context.Context, campaignID string, orderedIDs []string) error {
+	if m.resequenceFn != nil {
+		return m.resequenceFn(ctx, campaignID, orderedIDs)
+	}
 	return nil
 }
 
