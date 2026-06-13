@@ -205,41 +205,79 @@ type gmWeatherType struct {
 }
 
 // gmWeatherTypes returns the FULL weather catalog the GM can set
-// (C-CAL-WORLDSTATE-GM-OVERHAUL — the engine renders all of these; the old
-// panel exposed 6 of them). Server-side the weather column is a free string,
-// so expanding this list is purely additive.
+// (C-CAL-WORLDSTATE-GM-OVERHAUL → C-CAL-PARITY-W0W1). The engine renders all
+// of these; server-side the weather column is a free string, so expanding this
+// list is purely additive (stored calendar_day_weather rows keep rendering).
+//
+// Parity (C-CAL-PARITY-W0W1): the first four categories are the 42 Calendaria
+// preset ids verbatim (the sync contract — match exactly), grouped in
+// Calendaria's four categories. The fifth category "Chronicle" holds our
+// native extras that Calendaria lacks (kept, never deleted). IDs here match the
+// engine's SKY_FX catalog (cal-almanac.js) 1:1 — pinned by the completeness
+// test (TestWeatherCatalogContract here + weather_catalog_completeness.test.mjs).
+//
+// Note on the axis ruling (parity plan §B): "meteor-shower" appears here on the
+// WEATHER axis AND in gmCelestialTypes/knownCelestialTypes on the EVENT axis —
+// they coexist by design (rain THROUGH a meteor shower survives the Foundry
+// round-trip). Both render via the same SKY_FX["meteor-shower"].
 func gmWeatherTypes() []gmWeatherType {
 	return []gmWeatherType{
-		// Standard
+		// --- Standard (Calendaria, 13) ---
 		{"clear", "Clear", "☀", "Standard"},
 		{"partly-cloudy", "Partly Cloudy", "⛅", "Standard"},
 		{"cloudy", "Cloudy", "☁", "Standard"},
 		{"overcast", "Overcast", "🌥", "Standard"},
-		{"mist", "Mist", "🌫", "Standard"},
-		{"fog", "Fog", "🌁", "Standard"},
 		{"drizzle", "Drizzle", "🌦", "Standard"},
 		{"rain", "Rain", "🌧", "Standard"},
-		{"heavy-rain", "Heavy Rain", "⛈", "Standard"},
-		{"snow-flurries", "Snow Flurries", "🌨", "Standard"},
+		{"fog", "Fog", "🌁", "Standard"},
+		{"mist", "Mist", "🌫", "Standard"},
+		{"windy", "Windy", "🌬", "Standard"},
+		{"sunshower", "Sunshower", "🌦", "Standard"},
 		{"snow", "Snow", "❄", "Standard"},
-		{"hail", "Hail", "🧊", "Standard"},
-		// Severe
+		{"sleet", "Sleet", "🌧", "Standard"},
+		{"heat-wave", "Heat Wave", "🔆", "Standard"},
+		// --- Severe (Calendaria, 7) ---
+		// hail moves Standard→Severe to match Calendaria (id unchanged; grouping only).
 		{"thunderstorm", "Thunderstorm", "⚡", "Severe"},
 		{"blizzard", "Blizzard", "🌬", "Severe"},
-		{"sandstorm", "Sandstorm", "🏜", "Severe"},
+		{"hail", "Hail", "🧊", "Severe"},
 		{"tornado", "Tornado", "🌪", "Severe"},
-		// Environmental
+		{"hurricane", "Hurricane", "🌀", "Severe"},
+		{"ice-storm", "Ice Storm", "🧊", "Severe"},
+		{"monsoon", "Monsoon", "🌧", "Severe"},
+		// --- Environmental (Calendaria, 8) ---
+		// sandstorm moves Severe→Environmental to match Calendaria (id unchanged).
 		{"ashfall", "Ashfall", "🌋", "Environmental"},
-		{"ember-rain", "Ember Rain", "🔥", "Environmental"},
+		{"sandstorm", "Sandstorm", "🏜", "Environmental"},
+		{"luminous-sky", "Luminous Sky", "🌌", "Environmental"},
 		{"sakura-bloom", "Sakura Bloom", "🌸", "Environmental"},
-		{"falling-leaves", "Falling Leaves", "🍂", "Environmental"},
-		{"pollen-drift", "Pollen Drift", "🌼", "Environmental"},
-		{"fireflies", "Fireflies", "✨", "Environmental"},
-		// Fantasy
-		{"arcane-winds", "Arcane Winds", "🌀", "Fantasy"},
+		{"autumn-leaves", "Autumn Leaves", "🍁", "Environmental"},
+		{"rolling-fog", "Rolling Fog", "🌫", "Environmental"},
+		{"wildfire-smoke", "Wildfire Smoke", "🔥", "Environmental"},
+		{"dust-devil", "Dust Devil", "🌪", "Environmental"},
+		// --- Fantasy (Calendaria, 14) ---
+		{"black-sun", "Black Sun", "🌑", "Fantasy"},
 		{"ley-surge", "Ley Surge", "💜", "Fantasy"},
+		{"aether-haze", "Aether Haze", "🌀", "Fantasy"},
+		{"nullfront", "Nullfront", "⬛", "Fantasy"},
+		{"permafrost-surge", "Permafrost Surge", "❄", "Fantasy"},
+		{"gravewind", "Gravewind", "💀", "Fantasy"},
+		{"veilfall", "Veilfall", "🌫", "Fantasy"},
+		{"arcane-winds", "Arcane Winds", "🌀", "Fantasy"},
 		{"acid-rain", "Acid Rain", "☣", "Fantasy"},
-		{"miasma", "Miasma", "☠", "Fantasy"},
+		{"blood-rain", "Blood Rain", "🩸", "Fantasy"},
+		{"meteor-shower", "Meteor Shower", "☄", "Fantasy"},
+		{"spore-cloud", "Spore Cloud", "🍄", "Fantasy"},
+		{"divine-light", "Divine Light", "✨", "Fantasy"},
+		{"plague-miasma", "Plague Miasma", "☠", "Fantasy"},
+		// --- Chronicle-native extras (kept; Calendaria has no equivalent) ---
+		{"heavy-rain", "Heavy Rain", "⛈", "Chronicle"},
+		{"snow-flurries", "Snow Flurries", "🌨", "Chronicle"},
+		{"ember-rain", "Ember Rain", "🔥", "Chronicle"},
+		{"falling-leaves", "Falling Leaves", "🍂", "Chronicle"},
+		{"pollen-drift", "Pollen Drift", "🌼", "Chronicle"},
+		{"fireflies", "Fireflies", "✨", "Chronicle"},
+		{"miasma", "Miasma", "☠", "Chronicle"},
 	}
 }
 

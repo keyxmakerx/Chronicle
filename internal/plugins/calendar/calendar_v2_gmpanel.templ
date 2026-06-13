@@ -266,8 +266,10 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 }
 
 // gmWeatherCategories returns the weather catalog's category display order.
+// The first four are Calendaria's (C-CAL-PARITY-W0W1); "Chronicle" holds our
+// native extras.
 func gmWeatherCategories() []string {
-	return []string{"Standard", "Severe", "Environmental", "Fantasy"}
+	return []string{"Standard", "Severe", "Environmental", "Fantasy", "Chronicle"}
 }
 
 // gmCelestialCategories returns the world-event catalog's category order.
