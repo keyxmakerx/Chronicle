@@ -98,6 +98,8 @@ func TestTagGrantService_Create_SubjectValidation(t *testing.T) {
 	}{
 		{"valid role player", SubjectRole, "1", nil, nil, false},
 		{"valid role scribe", SubjectRole, "2", nil, nil, false},
+		{"valid public (no subject id)", SubjectPublic, "", nil, nil, false},
+		{"valid public (subject id ignored)", SubjectPublic, "anything", nil, nil, false},
 		{"invalid role zero", SubjectRole, "0", nil, nil, true},
 		{"invalid role too high", SubjectRole, "9", nil, nil, true},
 		{"invalid role non-numeric", SubjectRole, "player", nil, nil, true},
@@ -125,6 +127,32 @@ func TestTagGrantService_Create_SubjectValidation(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+// TestTagGrantService_Create_PublicNormalizesSubjectID pins that a 'public'
+// grant stores an empty subject_id regardless of what the client sent, so the
+// unique key (tag_id, 'public', '') permits exactly one public grant per tag
+// (C-PERM-ANON-IDENTITY).
+func TestTagGrantService_Create_PublicNormalizesSubjectID(t *testing.T) {
+	var captured *TagPermission
+	repo := &mockGrantRepo{createFn: func(_ context.Context, p *TagPermission) error {
+		captured = p
+		p.ID = 1
+		return nil
+	}}
+	svc := NewTagGrantService(repo, tagInCampaign("camp-1"), &mockMemberChecker{}, &mockGroupChecker{})
+	if _, err := svc.Create(context.Background(), "camp-1", 1, SubjectPublic, "junk", "owner-1"); err != nil {
+		t.Fatalf("unexpected error creating public grant: %v", err)
+	}
+	if captured == nil {
+		t.Fatal("Create never reached the repo")
+	}
+	if captured.SubjectType != SubjectPublic {
+		t.Errorf("subject_type = %q, want %q", captured.SubjectType, SubjectPublic)
+	}
+	if captured.SubjectID != "" {
+		t.Errorf("public subject_id must normalize to empty, got %q", captured.SubjectID)
 	}
 }
 
@@ -163,6 +191,7 @@ func TestTagGrantService_GrantsForEntity_ResolvesLabels(t *testing.T) {
 			{TagSlug: "revealed-act-1", SubjectType: SubjectRole, SubjectID: "1"},
 			{TagSlug: "secrets", SubjectType: SubjectGroup, SubjectID: "5"},
 			{TagSlug: "personal", SubjectType: SubjectUser, SubjectID: "u1"},
+			{TagSlug: "town-board", SubjectType: SubjectPublic, SubjectID: ""},
 		}, nil
 	}}
 	svc := NewTagGrantService(repo, tagInCampaign("camp-1"),
@@ -173,7 +202,9 @@ func TestTagGrantService_GrantsForEntity_ResolvesLabels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := map[string]string{"revealed-act-1": "Players", "secrets": "Lorekeepers", "personal": "Alice"}
+	// A public grant must label as "the public" — distinct from "Players" — so
+	// the glance tooltip tells the owner public exposure apart from member-only.
+	want := map[string]string{"revealed-act-1": "Players", "secrets": "Lorekeepers", "personal": "Alice", "town-board": "the public"}
 	for _, g := range grants {
 		if want[g.TagSlug] != g.SubjectLabel {
 			t.Errorf("tag %q: label = %q, want %q", g.TagSlug, g.SubjectLabel, want[g.TagSlug])

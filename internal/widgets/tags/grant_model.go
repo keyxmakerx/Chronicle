@@ -29,6 +29,11 @@ const (
 	// SubjectGroup grants to all members of a campaign group (subject_id is the
 	// group int as text).
 	SubjectGroup = "group"
+	// SubjectPublic grants to EVERYONE, including logged-out/anonymous visitors
+	// on a public campaign. It is the explicit "reveal to the public" target,
+	// strictly wider than SubjectRole "1" (Player = authenticated members).
+	// subject_id is unused and normalized to "" (C-PERM-ANON-IDENTITY).
+	SubjectPublic = "public"
 )
 
 // CreateTagPermissionRequest is the JSON body for granting a tag to a subject.

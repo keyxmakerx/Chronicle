@@ -35,7 +35,8 @@ func TestShowBanner_OwnerOnly(t *testing.T) {
 		name string
 		role Role
 	}{
-		{"anonymous/public-visitor (Player ctx)", RolePlayer},
+		{"anonymous/public-visitor (RoleNone ctx)", RoleNone},
+		{"player", RolePlayer},
 		{"scribe", RoleScribe},
 	} {
 		html := renderShowFor(t, tc.role)

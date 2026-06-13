@@ -237,7 +237,9 @@ func TestEntityVisibilityFilter(t *testing.T) {
 		}
 	})
 
-	for _, role := range []int{permissions.RolePlayer, permissions.RoleScribe} {
+	// RoleNone is the anonymous / public-visitor identity (C-PERM-ANON-IDENTITY)
+	// — filtered like any other non-owner. Mirrors entities/visibility_filter_test.
+	for _, role := range []int{permissions.RoleNone, permissions.RolePlayer, permissions.RoleScribe} {
 		role := role
 		t.Run("non-owner is filtered", func(t *testing.T) {
 			frag, args := entityVisibilityFilter(role, "user-9")
@@ -246,7 +248,7 @@ func TestEntityVisibilityFilter(t *testing.T) {
 			}
 			// Gate on the same columns/tables the entities plugin uses: the
 			// legacy is_private flag (default mode) + custom entity_permissions
-			// (user/role/group grants) + the additive tag-grant branch
+			// (user/role/group/public grants) + the additive tag-grant branch
 			// (entity_tags ⋈ tag_permissions). Drift from these = drift from
 			// policy, and the two mirror sites would silently diverge.
 			for _, want := range []string{
@@ -257,6 +259,8 @@ func TestEntityVisibilityFilter(t *testing.T) {
 				"campaign_group_members",
 				"entity_tags",
 				"tag_permissions",
+				"ep.subject_type = 'public'",
+				"tp.subject_type = 'public'",
 			} {
 				if !strings.Contains(frag, want) {
 					t.Errorf("filter missing %q (drift from entities policy?)\nfrag=%s", want, frag)
@@ -266,6 +270,7 @@ func TestEntityVisibilityFilter(t *testing.T) {
 			// branch (default threshold, role grant, user grant, group
 			// membership), then role + userID + userID again for the additive
 			// tag_permissions branch (role grant, user grant, group membership).
+			// The 'public' subject matches unconditionally and adds NO arg.
 			wantArgs := []any{role, role, "user-9", "user-9", role, "user-9", "user-9"}
 			if len(args) != len(wantArgs) {
 				t.Fatalf("arg count = %d, want %d (%v)", len(args), len(wantArgs), args)
@@ -277,6 +282,24 @@ func TestEntityVisibilityFilter(t *testing.T) {
 			}
 		})
 	}
+
+	// Direction + 'public' guard, mirroring the entities suite: the role tier
+	// must use `<= ?` so anonymous (role 0) never matches a Player grant.
+	t.Run("subject-match shape: role ceiling <= ? and public", func(t *testing.T) {
+		frag, _ := entityVisibilityFilter(permissions.RolePlayer, "u")
+		for _, want := range []string{
+			"tp.subject_type = 'role' AND CAST(tp.subject_id AS UNSIGNED) <= ?",
+			"tp.subject_type = 'public'",
+			"ep.subject_type = 'public'",
+		} {
+			if !strings.Contains(frag, want) {
+				t.Errorf("subject-match missing %q\nfrag=%s", want, frag)
+			}
+		}
+		if strings.Contains(frag, "subject_id AS UNSIGNED) >= ?") {
+			t.Errorf("role-tier comparison must be `<= ?` (anon-below-Player); found `>= ?`\nfrag=%s", frag)
+		}
+	})
 }
 
 // TestEntityTies_OptionalBothWays: zero ties is a valid state on both sides

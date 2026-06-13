@@ -23,7 +23,8 @@ type EntityTagGrantInfo struct {
 // Effective-visibility base states. These name the entity's *configured*
 // visibility before any tag widening, matching the shipped 3-state badge.
 const (
-	// VisStateEveryone — visible to all campaign members (default, not private).
+	// VisStateEveryone — public: visible to everyone, including anonymous /
+	// logged-out visitors on a public campaign (default mode, not private).
 	VisStateEveryone = "everyone"
 	// VisStateDMOnly — visible only to Scribe+ (default mode, is_private).
 	VisStateDMOnly = "dm_only"
@@ -104,7 +105,10 @@ func effectiveVisibilityTooltip(ev *EffectiveVisibility) string {
 	case VisStateDMOnly:
 		base = "DM-Only — visible to GMs (Scribe + Owner)"
 	default:
-		base = "Everyone — visible to all campaign members"
+		// "everyone" (default + not-private) is visible to anonymous/public
+		// visitors too — say so plainly so the owner isn't surprised that a
+		// logged-out stranger can read it (C-PERM-ANON-IDENTITY glance honesty).
+		base = "Public — visible to everyone, including logged-out visitors"
 	}
 	if !ev.WidenedByTags || len(ev.TagGrants) == 0 {
 		return base

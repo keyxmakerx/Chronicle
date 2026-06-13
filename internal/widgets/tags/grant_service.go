@@ -86,6 +86,11 @@ func (s *tagGrantService) Create(ctx context.Context, campaignID string, tagID i
 	if err := s.validateSubject(ctx, campaignID, subjectType, subjectID); err != nil {
 		return nil, err
 	}
+	// A public grant has no subject_id; normalize to "" so the unique key
+	// (tag_id, 'public', '') allows exactly one public grant per tag.
+	if subjectType == SubjectPublic {
+		subjectID = ""
+	}
 	p := &TagPermission{
 		TagID:       tagID,
 		SubjectType: subjectType,
@@ -117,6 +122,11 @@ func (s *tagGrantService) Delete(ctx context.Context, campaignID string, tagID, 
 // (no silent, un-revocable exposure).
 func (s *tagGrantService) validateSubject(ctx context.Context, campaignID, subjectType, subjectID string) error {
 	switch subjectType {
+	case SubjectPublic:
+		// Reveal-to-everyone. No subject_id to validate (normalized to "" on
+		// create). Strictly wider than the Player role; owner-gated like all
+		// grants, so this is a deliberate publication, not an accident.
+		return nil
 	case SubjectRole:
 		role, err := strconv.Atoi(subjectID)
 		if err != nil || role < permissions.RolePlayer || role > permissions.RoleOwner {
@@ -146,7 +156,7 @@ func (s *tagGrantService) validateSubject(ctx context.Context, campaignID, subje
 		}
 		return nil
 	default:
-		return apperror.NewBadRequest("subject type must be role, user, or group")
+		return apperror.NewBadRequest("subject type must be role, user, group, or public")
 	}
 }
 
@@ -166,6 +176,8 @@ func (s *tagGrantService) GrantsForEntity(ctx context.Context, campaignID, entit
 // erroring — the glance must always render something truthful, never blank.
 func (s *tagGrantService) subjectLabel(ctx context.Context, campaignID, subjectType, subjectID string) string {
 	switch subjectType {
+	case SubjectPublic:
+		return "the public"
 	case SubjectRole:
 		switch subjectID {
 		case "1":
