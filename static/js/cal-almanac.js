@@ -1427,6 +1427,83 @@
     };
   }
 
+  // Light shafts: soft god-rays fanning down from the top of the band
+  // (divine-light). Screen-blended gradient wedges that sway by `t` (so a
+  // static dt=0 frame still renders), brighter by day. GPU-cheap: a handful of
+  // linear-gradient quads, no per-pixel work. (C-CAL-PARITY-W0W1 new primitive.)
+  function mkLightShafts(cfg) {
+    cfg = cfg || {};
+    return function () {
+      var shafts = null;
+      return function (ctx, W, H, dt, t) {
+        if (!shafts) {
+          shafts = []; var n = cfg.count || 5;
+          for (var i = 0; i < n; i++) shafts.push({ x: (i + 0.5) / n, w: 0.05 + Math.random() * 0.05, ph: Math.random() * 6.28, sp: 0.2 + Math.random() * 0.3 });
+        }
+        var rgb = cfg.rgb || '255,240,205';
+        var day = 1 - skyDarkness();
+        var a = (cfg.alpha != null ? cfg.alpha : 0.12) * (0.45 + 0.55 * day);
+        ctx.save(); ctx.globalCompositeOperation = 'screen';
+        for (var i = 0; i < shafts.length; i++) {
+          var s = shafts[i];
+          var cx = W * (s.x + Math.sin(t * s.sp + s.ph) * (cfg.sway || 0.02));
+          var topW = W * s.w * 0.30, botW = W * s.w * 1.7;
+          var g = ctx.createLinearGradient(0, 0, 0, H);
+          g.addColorStop(0, 'rgba(' + rgb + ',' + (a * (0.8 + 0.4 * Math.sin(t * 0.6 + s.ph))).toFixed(3) + ')');
+          g.addColorStop(1, 'rgba(' + rgb + ',0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.moveTo(cx - topW, 0); ctx.lineTo(cx + topW, 0); ctx.lineTo(cx + botW, H); ctx.lineTo(cx - botW, H); ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      };
+    };
+  }
+  // Veil: a translucent shimmering sheet that descends and loops (veilfall).
+  // Screen-blended horizontal band advancing by dt (reduced-motion: at dt=0 it
+  // holds position, shimmer driven by `t`). GPU-cheap striping. (new primitive)
+  function mkVeil(cfg) {
+    cfg = cfg || {};
+    return function () {
+      var y = Math.random();
+      return function (ctx, W, H, dt, t) {
+        y += dt * (cfg.speed || 0.06); if (y > 1.4) y -= 1.4;
+        var rgb = cfg.rgb || '205,212,255', a = (cfg.alpha != null ? cfg.alpha : 0.16);
+        var cy = H * (y - 0.2), bh = H * 0.5;
+        ctx.save(); ctx.globalCompositeOperation = 'screen';
+        for (var x = 0; x < W; x += 6) {
+          var sh = 0.55 + 0.45 * Math.sin(x * 0.05 + t * 1.3);
+          var g = ctx.createLinearGradient(0, cy - bh, 0, cy + bh);
+          g.addColorStop(0, 'rgba(' + rgb + ',0)');
+          g.addColorStop(0.5, 'rgba(' + rgb + ',' + (a * sh).toFixed(3) + ')');
+          g.addColorStop(1, 'rgba(' + rgb + ',0)');
+          ctx.fillStyle = g; ctx.fillRect(x, cy - bh, 7, bh * 2);
+        }
+        ctx.restore();
+      };
+    };
+  }
+  // Void front: a desaturating dark wall that sweeps across the band
+  // (nullfront — a wave of "nothing"). Advances by dt with a faint shimmering
+  // leading edge; band-relative. GPU-cheap (one gradient quad + a line). (new)
+  function mkVoidFront(cfg) {
+    cfg = cfg || {};
+    return function () {
+      var x = Math.random();
+      return function (ctx, W, H, dt) {
+        x += dt * (cfg.speed || 0.05); if (x > 1.5) x -= 1.5;
+        var rgb = cfg.rgb || '10,10,16', a = (cfg.alpha != null ? cfg.alpha : 0.48);
+        var cx = W * (x - 0.25), fw = W * 0.5;
+        var g = ctx.createLinearGradient(cx - fw, 0, cx + fw * 0.3, 0);
+        g.addColorStop(0, 'rgba(' + rgb + ',0)');
+        g.addColorStop(0.7, 'rgba(' + rgb + ',' + a.toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(' + rgb + ',0)');
+        ctx.fillStyle = g; ctx.fillRect(cx - fw, 0, fw * 1.3, H);
+        ctx.strokeStyle = 'rgba(150,130,205,' + (a * 0.4).toFixed(3) + ')'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx + fw * 0.3, 0); ctx.lineTo(cx + fw * 0.3, H); ctx.stroke();
+      };
+    };
+  }
+
   // ---- the effect catalog: id → { back: [factories], front: [factories] } ----
   // BACK = behind sun/moons (sky itself); FRONT = in front (nearer weather).
   // Adding an effect = one entry of primitive configs — no engine changes.
@@ -1479,6 +1556,38 @@
     SKY_FX['volcanic'] = { back: [mkWash('rgb(150,52,22)', 0.13)], front: [mkDrift({ density: 0.08, speed: 0.14, size: 1.3, sway: 0.008, color: 'rgba(140,128,120,.6)' }), mkDrift({ density: 0.04, speed: 0.22, size: 1.3, rise: true, sway: 0.012, color: 'rgba(255,140,60,.85)', glow: true })] };
     SKY_FX['plague'] = { back: [mkWash('rgb(80,120,55)', 0.10)], front: [mkHaze({ rgb: '125,175,95', alpha: 0.16, layers: 5, speed: 0.010 })] };
     SKY_FX['ice-age'] = { back: [mkWash('rgb(165,200,230)', 0.14)], front: [mkDrift({ density: 0.08, speed: 0.12, size: 1.5, sway: 0.006 }), mkHaze({ rgb: '210,228,244', alpha: 0.10, layers: 4, speed: 0.006 })] };
+
+    // ---- Calendaria parity presets (C-CAL-PARITY-W0W1) ----
+    // Composed from the existing primitives where possible; the three new
+    // primitives (mkLightShafts/mkVeil/mkVoidFront) serve divine-light/
+    // veilfall/nullfront, which no existing primitive captured.
+    // meteor-shower reuses the celestial-event entry above (axis ruling §B).
+    // Standard
+    SKY_FX['windy'] = { back: [mkWisps()], front: [mkCloudDeck({ coverage: 0.28, darkness: 0.04, alpha: 0.32, band: 0.18 }), mkHaze({ rgb: '224,228,232', alpha: 0.08, layers: 5, speed: 0.09, size: 1.1 })] };
+    SKY_FX['sunshower'] = { back: [mkWisps()], front: [mkCloudDeck({ coverage: 0.22, darkness: 0.03, alpha: 0.28 }), mkPrecip({ density: 0.10, speed: 2.6, len: 0.05, color: 'rgba(200,222,248,.42)' })] };
+    SKY_FX['sleet'] = { back: [], front: [mkCloudDeck({ coverage: 0.55, darkness: 0.12, alpha: 0.5 }), mkPrecip({ density: 0.16, speed: 3.4, len: 0.05, color: 'rgba(205,218,235,.6)' }), mkDrift({ density: 0.05, speed: 0.5, size: 1.1, sway: 0.02, color: 'rgba(226,236,246,.75)' })] };
+    SKY_FX['heat-wave'] = { back: [mkWash('rgb(255,196,118)', 0.05)], front: [mkHaze({ rgb: '255,224,168', alpha: 0.10, layers: 4, speed: 0.02, size: 1.4 })] };
+    // Severe
+    SKY_FX['hurricane'] = { back: [], front: [mkWash('rgb(30,40,55)', 0.40), mkCloudDeck({ coverage: 1, darkness: 0.5, alpha: 0.72, band: 0.5 }), mkPrecip({ density: 0.5, speed: 4.3, len: 0.10, slant: -0.12, width: 1.3, color: 'rgba(182,202,228,.6)' }), mkHaze({ rgb: '150,165,185', alpha: 0.12, layers: 4, speed: 0.10 })] };
+    SKY_FX['ice-storm'] = { back: [], front: [mkWash('rgb(150,175,200)', 0.10), mkCloudDeck({ coverage: 0.7, darkness: 0.2, alpha: 0.55 }), mkPrecip({ density: 0.22, speed: 3.8, len: 0.06, width: 1.2, color: 'rgba(212,230,244,.7)' }), mkDrift({ density: 0.04, speed: 0.4, size: 1, sway: 0.01, color: 'rgba(226,240,250,.7)' })] };
+    SKY_FX['monsoon'] = { back: [], front: [mkWash('rgb(40,52,66)', 0.22), mkCloudDeck({ coverage: 0.9, darkness: 0.4, alpha: 0.66, band: 0.45 }), mkPrecip({ density: 0.55, speed: 4.2, len: 0.11, width: 1.3, color: 'rgba(172,196,226,.6)' }), mkHaze({ rgb: '140,160,185', alpha: 0.10, layers: 3, speed: 0.05 })] };
+    // Environmental
+    SKY_FX['luminous-sky'] = { back: [mkAurora({ boost: 0.8, cols: [{ rgb: '120,255,210', ph: 0, fr: 1.3, amp: 0.10, base: 0.12, th: 0.36 }, { rgb: '120,200,255', ph: 2.0, fr: 1.0, amp: 0.12, base: 0.22, th: 0.40 }] }), mkFireflies()], front: [] };
+    SKY_FX['autumn-leaves'] = { back: [], front: [mkDrift({ density: 0.07, speed: 0.24, size: 2.4, sway: 0.022, shape: 'leaf', colors: ['rgba(205,130,50,.85)', 'rgba(180,95,40,.85)', 'rgba(225,170,60,.85)'] })] };
+    SKY_FX['rolling-fog'] = { back: [], front: [mkWash('rgb(176,184,196)', 0.28), mkHaze({ rgb: '206,212,222', alpha: 0.36, layers: 10, speed: 0.020, size: 1.7 })] };
+    SKY_FX['wildfire-smoke'] = { back: [mkWash('rgb(120,70,40)', 0.12)], front: [mkHaze({ rgb: '150,110,80', alpha: 0.26, layers: 7, speed: 0.025, size: 1.5 }), mkDrift({ density: 0.05, speed: 0.12, size: 1.1, sway: 0.010, color: 'rgba(122,112,102,.6)' })] };
+    SKY_FX['dust-devil'] = { back: [mkWash('rgb(175,140,90)', 0.06)], front: [mkHaze({ rgb: '200,165,110', alpha: 0.16, layers: 5, speed: 0.06, size: 1.1 }), mkDrift({ density: 0.10, speed: 0.4, size: 1, sway: 0.06, color: 'rgba(205,170,115,.55)' })] };
+    // Fantasy
+    SKY_FX['black-sun'] = { back: [mkWash('rgb(8,6,20)', function () { return 0.5; })], front: [mkHaze({ rgb: '44,32,64', alpha: 0.12, layers: 3, speed: 0.010 })] };
+    SKY_FX['aether-haze'] = { back: [mkAurora({ boost: 0.6, cols: [{ rgb: '150,200,255', ph: 0, fr: 1.5, amp: 0.08, base: 0.14, th: 0.30 }] })], front: [mkHaze({ rgb: '172,200,255', alpha: 0.16, layers: 5, speed: 0.015, size: 1.3 })] };
+    SKY_FX['nullfront'] = { back: [], front: [mkVoidFront({ rgb: '10,10,16', alpha: 0.48, speed: 0.05 }), mkHaze({ rgb: '60,60,72', alpha: 0.10, layers: 3, speed: 0.02 })] };
+    SKY_FX['permafrost-surge'] = { back: [mkWash('rgb(180,210,235)', 0.12), mkGroundGlow('150,200,235')], front: [mkDrift({ density: 0.12, speed: 0.4, size: 1.4, sway: 0.010, color: 'rgba(222,238,250,.8)' }), mkHaze({ rgb: '206,228,244', alpha: 0.10, layers: 4, speed: 0.010 })] };
+    SKY_FX['gravewind'] = { back: [mkWash('rgb(40,50,45)', 0.10)], front: [mkHaze({ rgb: '110,125,115', alpha: 0.20, layers: 6, speed: 0.04, size: 1.3 }), mkDrift({ density: 0.05, speed: 0.10, size: 1.2, rise: true, sway: 0.030, color: 'rgba(150,170,155,.5)' })] };
+    SKY_FX['veilfall'] = { back: [mkVeil({ rgb: '205,212,255', alpha: 0.16, speed: 0.06 })], front: [mkDrift({ density: 0.05, speed: 0.18, size: 1.1, sway: 0.02, color: 'rgba(210,216,255,.6)', glow: true })] };
+    SKY_FX['blood-rain'] = { back: [mkWash('rgb(90,15,18)', 0.10)], front: [mkCloudDeck({ coverage: 0.6, darkness: 0.18, alpha: 0.5 }), mkPrecip({ density: 0.24, speed: 3.3, len: 0.07, color: 'rgba(200,40,45,.6)' })] };
+    SKY_FX['spore-cloud'] = { back: [mkWash('rgb(70,95,55)', 0.07)], front: [mkHaze({ rgb: '135,165,95', alpha: 0.16, layers: 5, speed: 0.012 }), mkDrift({ density: 0.08, speed: 0.06, size: 1.2, rise: true, sway: 0.02, color: 'rgba(182,212,120,.55)', glow: true })] };
+    SKY_FX['divine-light'] = { back: [mkWash('rgb(255,240,205)', 0.05), mkLightShafts({ rgb: '255,242,210', alpha: 0.13, count: 5, sway: 0.02 })], front: [] };
+    SKY_FX['plague-miasma'] = { back: [mkWash('rgb(75,105,50)', 0.10)], front: [mkHaze({ rgb: '120,160,80', alpha: 0.20, layers: 7, speed: 0.010, size: 1.4 }), mkDrift({ density: 0.04, speed: 0.07, size: 1.5, rise: true, sway: 0.012, color: 'rgba(150,195,95,.5)' })] };
   })();
   window.__calSkyFx = SKY_FX;
 
@@ -1556,6 +1665,33 @@
     'volcanic': { name: 'Volcanic Unrest', category: 'celestial-event', sand: 'oklch(0.55 0.18 35)', glyph: '▲' },
     'plague': { name: 'Plague Miasma', category: 'celestial-event', sand: 'oklch(0.62 0.14 145)', glyph: '☠' },
     'ice-age': { name: 'Deep Freeze', category: 'celestial-event', sand: 'oklch(0.88 0.06 220)', glyph: '❆' },
+    // ---- Calendaria parity presets (C-CAL-PARITY-W0W1) ----
+    // Standard
+    'windy': { name: 'Windy', category: 'standard-weather', sand: 'oklch(0.82 0.04 120)', glyph: '⇝' },
+    'sunshower': { name: 'Sunshower', category: 'standard-weather', sand: 'oklch(0.82 0.10 90)', glyph: '☂' },
+    'sleet': { name: 'Sleet', category: 'standard-weather', sand: 'oklch(0.82 0.04 235)', glyph: '☂' },
+    'heat-wave': { name: 'Heat Wave', category: 'standard-weather', sand: 'oklch(0.84 0.14 75)', glyph: '☀' },
+    // Severe
+    'hurricane': { name: 'Hurricane', category: 'severe-weather', sand: 'oklch(0.55 0.10 250)', glyph: '🌀' },
+    'ice-storm': { name: 'Ice Storm', category: 'severe-weather', sand: 'oklch(0.84 0.05 230)', glyph: '❄' },
+    'monsoon': { name: 'Monsoon', category: 'severe-weather', sand: 'oklch(0.58 0.10 245)', glyph: '☔' },
+    // Environmental
+    'luminous-sky': { name: 'Luminous Sky', category: 'environmental-weather', sand: 'oklch(0.86 0.16 175)', glyph: '✦' },
+    'autumn-leaves': { name: 'Autumn Leaves', category: 'environmental-weather', sand: 'oklch(0.70 0.12 60)', glyph: '🍁' },
+    'rolling-fog': { name: 'Rolling Fog', category: 'environmental-weather', sand: 'oklch(0.80 0.01 245)', glyph: '≋' },
+    'wildfire-smoke': { name: 'Wildfire Smoke', category: 'environmental-weather', sand: 'oklch(0.50 0.08 50)', glyph: '◍' },
+    'dust-devil': { name: 'Dust Devil', category: 'environmental-weather', sand: 'oklch(0.68 0.08 70)', glyph: '〰' },
+    // Fantasy
+    'black-sun': { name: 'Black Sun', category: 'fantasy-weather', sand: 'oklch(0.25 0.03 290)', glyph: '●' },
+    'aether-haze': { name: 'Aether Haze', category: 'fantasy-weather', sand: 'oklch(0.74 0.12 250)', glyph: '✶' },
+    'nullfront': { name: 'Nullfront', category: 'fantasy-weather', sand: 'oklch(0.30 0.02 290)', glyph: '▰' },
+    'permafrost-surge': { name: 'Permafrost Surge', category: 'fantasy-weather', sand: 'oklch(0.88 0.06 220)', glyph: '❆' },
+    'gravewind': { name: 'Gravewind', category: 'fantasy-weather', sand: 'oklch(0.55 0.04 150)', glyph: '☠' },
+    'veilfall': { name: 'Veilfall', category: 'fantasy-weather', sand: 'oklch(0.80 0.10 285)', glyph: '◈' },
+    'blood-rain': { name: 'Blood Rain', category: 'fantasy-weather', sand: 'oklch(0.50 0.19 27)', glyph: '🩸' },
+    'spore-cloud': { name: 'Spore Cloud', category: 'fantasy-weather', sand: 'oklch(0.72 0.14 130)', glyph: '✺' },
+    'divine-light': { name: 'Divine Light', category: 'fantasy-weather', sand: 'oklch(0.90 0.10 95)', glyph: '✷' },
+    'plague-miasma': { name: 'Plague Miasma', category: 'fantasy-weather', sand: 'oklch(0.62 0.14 145)', glyph: '☠' },
   };
   window.__calSkyFxMeta = SKY_FX_META;
   registerInitBlock('weather-fx', function () {
@@ -1951,7 +2087,28 @@
       case 'cloudy':       return 0.72;
       case 'snow-flurries': return 0.78;
       case 'partly-cloudy': return 0.88;
-      default:             return 1; // clear + exotic tints
+      // Calendaria parity (C-CAL-PARITY-W0W1). Heavy types (<=0.30) hit the
+      // 0.10 ember floor — dimmed, never hidden (Q1); the rest the 0.28 floor.
+      case 'black-sun':    return 0.12;
+      case 'nullfront':    return 0.18;
+      case 'hurricane':    return 0.20;
+      case 'monsoon':      return 0.22;
+      case 'wildfire-smoke': return 0.25;
+      case 'rolling-fog':  return 0.25;
+      case 'ice-storm':    return 0.28;
+      case 'plague-miasma': return 0.28;
+      case 'blood-rain':   return 0.55;
+      case 'permafrost-surge': return 0.58;
+      case 'sleet':        return 0.60;
+      case 'gravewind':    return 0.62;
+      case 'spore-cloud':  return 0.65;
+      case 'aether-haze':  return 0.70;
+      case 'veilfall':     return 0.72;
+      case 'dust-devil':   return 0.72;
+      case 'sunshower':    return 0.85;
+      case 'windy':        return 0.92;
+      case 'heat-wave':    return 0.96;
+      default:             return 1; // clear + exotic tints (divine-light, luminous-sky, etc.)
     }
   }
   // Ray-wheel strength per weather: full spokes only on a (mostly) clear sky;
