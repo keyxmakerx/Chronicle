@@ -349,6 +349,25 @@
         var itemId = entityId || nodeId;
         if (enabled) {
           item.setAttribute('draggable', 'true');
+          // Inert-link: while reorg mode is active, a capture-phase click handler
+          // swallows navigation on the row so tapping an entity leaf doesn't open
+          // its page (mirrors the category fix in #474). The grip handle, eye
+          // toggle, and collapse chevron keep working because the handler bails
+          // out when the click originates on one of those controls; folder
+          // dblclick-rename is a separate event and unaffected. The handler ref is
+          // stored on the item so deactivation removes the exact listener (no leak).
+          if (!item._reorgClickInert) {
+            item._reorgClickInert = function (e) {
+              if (e.target.closest('.reorg-drag-handle') ||
+                  e.target.closest('.reorg-entity-visibility') ||
+                  e.target.closest('.sidebar-tree-toggle')) {
+                return;
+              }
+              e.preventDefault();
+              e.stopPropagation();
+            };
+            item.addEventListener('click', item._reorgClickInert, true);
+          }
           // Add drag handle if not present.
           if (!node.querySelector('.reorg-drag-handle')) {
             var handle = document.createElement('span');
@@ -383,6 +402,12 @@
           }
         } else {
           item.removeAttribute('draggable');
+          // Remove the exact capture-phase inert listener added on activate so
+          // navigation works again on exit (Escape/toggle-off) — no leak.
+          if (item._reorgClickInert) {
+            item.removeEventListener('click', item._reorgClickInert, true);
+            item._reorgClickInert = null;
+          }
           var handle = node.querySelector('.reorg-drag-handle');
           if (handle) handle.remove();
           var eyeToggle = node.querySelector('.reorg-entity-visibility');
@@ -498,17 +523,18 @@
         // Reorder: place before target (same parent).
         var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
         var targetParentId = target.getAttribute('data-parent-id') || null;
-        var sortOrder = calculateSortOrder(target, 'before');
+        var sortOrder = calculateTargetIndex(target, 'before', droppedId);
         reorderEntity(campaignId, droppedId, targetParentId, sortOrder, targetParentNodeId);
       } else {
         // Reparent zone: behavior depends on whether target is a folder.
         var targetIsFolder = !!target.querySelector('[data-is-folder]') || !!target.querySelector('[data-has-children]');
         if (targetIsFolder) {
-          // Target is already a folder — add dragged entity as child.
+          // Target is already a folder — append dragged entity to its children.
+          var appendIdx = folderChildCount(target);
           if (targetNodeId) {
-            reorderEntity(campaignId, droppedId, null, 0, targetNodeId);
+            reorderEntity(campaignId, droppedId, null, appendIdx, targetNodeId);
           } else {
-            reorderEntity(campaignId, droppedId, targetEntityId, 0);
+            reorderEntity(campaignId, droppedId, targetEntityId, appendIdx);
           }
         } else {
           // Target is a leaf — show menu to create a new folder
@@ -615,15 +641,16 @@
         if (lastTouch.clientY < thirdY) {
           var targetParentNodeId = target.getAttribute('data-parent-node-id') || null;
           var targetParentId = target.getAttribute('data-parent-id') || null;
-          var sortOrder = calculateSortOrder(target, 'before');
+          var sortOrder = calculateTargetIndex(target, 'before', touchState.srcId);
           reorderEntity(campaignId, touchState.srcId, targetParentId, sortOrder, targetParentNodeId);
         } else {
           var targetIsFolder = !!target.querySelector('[data-is-folder]') || !!target.querySelector('[data-has-children]');
           if (targetIsFolder) {
+            var appendIdx = folderChildCount(target);
             if (targetNodeId) {
-              reorderEntity(campaignId, touchState.srcId, null, 0, targetNodeId);
+              reorderEntity(campaignId, touchState.srcId, null, appendIdx, targetNodeId);
             } else {
-              reorderEntity(campaignId, touchState.srcId, targetEntityId, 0);
+              reorderEntity(campaignId, touchState.srcId, targetEntityId, appendIdx);
             }
           } else {
             showReparentMenu(lastTouch.clientX, lastTouch.clientY, touchState.srcId, target, campaignId);
@@ -643,37 +670,53 @@
   }
 
   /**
-   * Calculate the sort order for an entity being dropped relative to a target.
-   * Looks at sibling sort_order values to place the entity in the right position.
-   * If there's no room between siblings, returns the target's order (server
-   * will re-normalize the sequence on save).
+   * Compute the 0-based index where a dragged entity should land among its
+   * destination siblings. The server treats this as a desired index, re-sequences
+   * the whole sibling set densely, and persists 0..N — so this MUST be a position
+   * index, never a midpoint sort_order (the old midpoint contract collided with
+   * neighbors and let the name tiebreak silently revert the drop).
+   *
+   *   - before the first sibling → 0
+   *   - before sibling k         → k
+   *   - append (position !== 'before') → siblings.length
+   *
+   * draggedId (optional) is the id being moved. When it already sits *before* the
+   * target in this same list, removing it on the server shifts the target left by
+   * one; we subtract so the moved item lands immediately before the target rather
+   * than one slot too late (the off-by-one that would reintroduce a visible snap).
    */
-  function calculateSortOrder(targetNode, position) {
+  function calculateTargetIndex(targetNode, position, draggedId) {
     var siblings = targetNode.parentNode.querySelectorAll(':scope > .sidebar-tree-node');
     var targetIdx = -1;
+    var draggedIdx = -1;
     for (var i = 0; i < siblings.length; i++) {
-      if (siblings[i] === targetNode) { targetIdx = i; break; }
+      if (siblings[i] === targetNode) targetIdx = i;
+      if (draggedId) {
+        var sibId = siblings[i].getAttribute('data-entity-id') || siblings[i].getAttribute('data-node-id');
+        if (sibId === draggedId) draggedIdx = i;
+      }
     }
 
     if (position === 'before') {
-      if (targetIdx === 0) {
-        // Placing before the first sibling: use target's order - 1 (min 0).
-        var targetEl = targetNode.querySelector('.sidebar-tree-item');
-        var targetOrder = parseInt(targetEl ? targetEl.getAttribute('data-sort-order') : '0', 10) || 0;
-        return Math.max(0, targetOrder - 1);
-      }
-      // Place between previous sibling and target.
-      var prevItem = siblings[targetIdx - 1].querySelector('.sidebar-tree-item');
-      var targetItem = targetNode.querySelector('.sidebar-tree-item');
-      var prevOrder = parseInt(prevItem ? prevItem.getAttribute('data-sort-order') : '0', 10) || 0;
-      var targetOrder2 = parseInt(targetItem ? targetItem.getAttribute('data-sort-order') : '0', 10) || 0;
-      // Use midpoint if there's room, otherwise server re-normalizes.
-      if (targetOrder2 > prevOrder + 1) {
-        return Math.floor((prevOrder + targetOrder2) / 2);
-      }
-      return targetOrder2;
+      if (targetIdx < 0) return 0;
+      var idx = targetIdx;
+      if (draggedIdx !== -1 && draggedIdx < targetIdx) idx -= 1;
+      return idx;
     }
-    return 0;
+    // Append at the end of the sibling list.
+    return siblings.length;
+  }
+
+  /**
+   * Count the direct children currently rendered inside a folder node. Used as
+   * the append index when an entity is dropped *into* a folder, so it lands at
+   * the end of that folder's child list (children stay in the DOM even when the
+   * folder is collapsed, so the count is accurate either way).
+   */
+  function folderChildCount(folderNode) {
+    var container = folderNode.querySelector(':scope > .sidebar-tree-children');
+    if (!container) return 0;
+    return container.querySelectorAll(':scope > .sidebar-tree-node').length;
   }
 
   /**
@@ -900,7 +943,14 @@
       refreshSidebarTree();
     })
     .catch(function (err) {
+      // Surface the failure: a silent console.error is exactly why broken
+      // reorders looked like they "did nothing" before. Re-read so the tree
+      // snaps back to the real server order instead of lying about the move.
       console.error('sidebar_tree: reorder failed', err);
+      if (window.Chronicle && Chronicle.notify) {
+        Chronicle.notify('Could not save the new order — reverting', 'error');
+      }
+      refreshSidebarTree();
     });
   }
 
@@ -1367,5 +1417,17 @@
   } else {
     initTree();
     observeLoadMore();
+  }
+
+  // Test-only hook: exposes the pure drag-index + reorder-payload helpers so the
+  // node:test contract suite can assert them without a real browser DOM. `module`
+  // is undefined when loaded via <script>, so this is a no-op in the browser.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      calculateTargetIndex: calculateTargetIndex,
+      folderChildCount: folderChildCount,
+      reorderEntity: reorderEntity,
+      updateDraggable: updateDraggable
+    };
   }
 })();

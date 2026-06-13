@@ -604,8 +604,40 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 		}
 	}
 
-	if err := s.entities.UpdateSortOrder(ctx, entityID, campaignID, sortOrder); err != nil {
-		return err
+	// Re-sequence the moved entity's new sibling set densely. sortOrder is now a
+	// desired 0-based index among the final siblings, not a raw sort_order value.
+	// Renumbering the whole set 0..N makes orders dense + unique, so the
+	// (sort_order, name) tiebreak in the tree render can't snap the dragged
+	// entity back to alphabetical position (the silent-revert bug).
+	//
+	// The repo list already includes the moved entity at its old position (its
+	// parent was updated just above), so pull it out, clamp the requested index
+	// into [0, len], reinsert at that index, then persist 0..N in one transaction.
+	siblings, err := s.entities.ListSiblingIDsOrdered(ctx, campaignID, entity.EntityTypeID, parentID, parentNodeID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading siblings for reorder: %w", err))
+	}
+
+	ordered := make([]string, 0, len(siblings)+1)
+	for _, id := range siblings {
+		if id != entityID {
+			ordered = append(ordered, id)
+		}
+	}
+
+	idx := sortOrder
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > len(ordered) {
+		idx = len(ordered)
+	}
+	ordered = append(ordered, "")
+	copy(ordered[idx+1:], ordered[idx:])
+	ordered[idx] = entityID
+
+	if err := s.entities.ResequenceSiblings(ctx, campaignID, ordered); err != nil {
+		return apperror.NewInternal(fmt.Errorf("re-sequencing siblings: %w", err))
 	}
 	return nil
 }
