@@ -24,6 +24,15 @@ const (
 	// ActionEntityDeleted is logged when an entity is removed from a campaign.
 	ActionEntityDeleted = "entity.deleted"
 
+	// ActionEntityClaimed is logged when a player claims ownership of a
+	// (character) entity. Distinct from entity.updated so claims are filterable
+	// and read legibly in the activity feed ("Alice claimed Tyne").
+	ActionEntityClaimed = "entity.claimed"
+
+	// ActionEntityOwnerChanged is logged when an Owner/Scribe reassigns or
+	// clears an entity's owner (the GM-side counterpart to a player claim).
+	ActionEntityOwnerChanged = "entity.owner_changed"
+
 	// ActionMemberJoined is logged when a user is added to a campaign.
 	ActionMemberJoined = "member.joined"
 
