@@ -15,7 +15,9 @@ import (
 // showAttributes controls whether the attributes block is rendered (based on addon state).
 // showCalendar gates the lazy-loaded calendar events section to prevent HTMX errors
 // from replacing the page body via HX-Retarget when the calendar addon is not enabled.
-templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, csrfToken string) {
+// claimingEnabled reports whether the Player Character Claiming addon is on (gates the
+// claim affordance); ownerName is the resolved display name of the current owner, if any.
+templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
 		<div class="max-w-6xl mx-auto" data-entity-type-slug={ entityType.Slug }>
 			<!-- Breadcrumb with ancestor chain -->
@@ -45,31 +47,11 @@ templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *
 				<span class="text-fg">{ entity.Name }</span>
 			</nav>
 
-			<!-- Player Character claim banner (CH3). Visible only when:
-			     - entity is unclaimed (owner_user_id IS NULL)
-			     - the entity_type is character-shaped (preset_category=="character"
-			       or slug ends in "-character"). The handler enforces the same
-			       check at POST time, so this guard is purely UX.
-			     The banner uses the Chronicle accent variables so a campaign
-			     theme override automatically retints. -->
-			if entityType != nil && entity.OwnerUserID == nil && isClaimableType(entityType) {
-				<div class="mb-4 rounded-md border border-accent/30 bg-accent/5 px-4 py-3 flex items-center gap-3">
-					<i class="fa-solid fa-user-shield text-accent"></i>
-					<div class="flex-1 min-w-0">
-						<p class="text-sm text-fg">This character is unclaimed.</p>
-						<p class="text-xs text-fg-muted">Claim it to surface on your "My Characters" page.</p>
-					</div>
-					<form
-						method="POST"
-						action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID)) }
-						hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID) }
-						hx-swap="none"
-					>
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<button type="submit" class="btn-primary text-sm">Claim character</button>
-					</form>
-				</div>
-			}
+			<!-- Player Character Claiming banner (PC-CLAIM-3, Parts 1 & 4):
+			     "Claimed by <player>" when owned, the actionable claim banner
+			     when unclaimed + claimable + the addon is enabled, nothing
+			     otherwise. ClaimEntity enforces the same rules server-side. -->
+			@claimBanner(cc, entity, entityType, claimingEnabled, ownerName, csrfToken)
 
 			<!-- Slug-keyed system-package renderer (CH4). When a system
 			     package has registered a renderer for this entity_type

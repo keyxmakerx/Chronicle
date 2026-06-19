@@ -1,0 +1,63 @@
+// claim_banner.templ renders the Player Character Claiming banner shown atop the
+// entity profile page (PC-CLAIM-3, Parts 1 & 4). It resolves to one of three
+// states:
+//   - claimed     → an informational "Claimed by <player>" indicator (shown
+//                   whenever the entity has an owner, regardless of addon state
+//                   so an existing claim is always legible);
+//   - unclaimed   → the actionable "Claim character" banner, gated on BOTH the
+//                   Player Character Claiming addon being enabled for the
+//                   campaign AND the entity type being claimable; or
+//   - nothing     → for non-claimable types, or claimable-but-unclaimed types
+//                   while the addon is disabled.
+// The POST guard in ClaimEntity enforces the same type/owner rules server-side,
+// so this component is purely presentational.
+
+package entities
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// claimBanner renders the owner indicator / claim affordance for the entity
+// show page. ownerName is the claimant's resolved display name ("" when the
+// owner could not be resolved to a current member); claimingEnabled reports
+// whether the player-character-claiming addon is on for this campaign.
+templ claimBanner(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, claimingEnabled bool, ownerName, csrfToken string) {
+	if entity.OwnerUserID != nil {
+		// Claimed: surface who owns this character. Informational only — no
+		// addon gate, so the ownership stays visible even if the Owner later
+		// toggles the addon off.
+		<div class="mb-4 rounded-md border border-edge bg-surface-alt px-4 py-2.5 flex items-center gap-3" data-claim-state="claimed">
+			<i class="fa-solid fa-user-check text-accent"></i>
+			<p class="text-sm text-fg">
+				Claimed by
+				<span class="font-medium">
+					if ownerName != "" {
+						{ ownerName }
+					} else {
+						a player
+					}
+				</span>.
+			</p>
+		</div>
+	} else if claimingEnabled && entityType != nil && isClaimableType(entityType) {
+		// Unclaimed + claimable + addon on: offer the claim action.
+		<div class="mb-4 rounded-md border border-accent/30 bg-accent/5 px-4 py-3 flex items-center gap-3" data-claim-state="unclaimed">
+			<i class="fa-solid fa-user-shield text-accent"></i>
+			<div class="flex-1 min-w-0">
+				<p class="text-sm text-fg">This character is unclaimed.</p>
+				<p class="text-xs text-fg-muted">Claim it to surface on your "My Characters" page.</p>
+			</div>
+			<form
+				method="POST"
+				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID)) }
+				hx-post={ fmt.Sprintf("/campaigns/%s/entities/%s/claim", cc.Campaign.ID, entity.ID) }
+				hx-swap="none"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<button type="submit" class="btn-primary text-sm">Claim character</button>
+			</form>
+		</div>
+	}
+}
