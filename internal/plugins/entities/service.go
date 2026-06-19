@@ -913,6 +913,16 @@ func (s *entityService) ClaimEntity(ctx context.Context, entityID, userID string
 		return nil, err
 	}
 
+	// Feature gate: claiming is part of the Player Character Claiming addon.
+	// When it is disabled for the campaign the endpoint must behave as if it
+	// does not exist — the UI hides the claim affordance, but a hand-rolled
+	// POST would otherwise still set ownership. Mirrors the service-side gate
+	// CreateEntityType applies to player-character sub-types (PC-CLAIM-2) and
+	// the RequireAddon middleware used by maps/calendar/etc.
+	if !s.isAddonEnabled(ctx, entity.CampaignID, AddonPlayerCharacterClaiming) {
+		return nil, apperror.NewForbidden("player character claiming is not enabled for this campaign")
+	}
+
 	// Idempotent: already owned by this user, no-op.
 	if entity.OwnerUserID != nil && *entity.OwnerUserID == userID {
 		return entity, nil
@@ -954,12 +964,38 @@ func (s *entityService) AssignOwner(ctx context.Context, entityID string, ownerU
 	if err != nil {
 		return nil, err
 	}
+
+	// Feature gate: owner reassignment is part of the Player Character
+	// Claiming addon. When it is disabled the endpoint must be unreachable
+	// even though the route is Scribe+ — the GM roster UI that drives it is
+	// hidden while the addon is off, so a hand-rolled PUT is the only way in.
+	// Mirrors ClaimEntity / CreateEntityType.
+	if !s.isAddonEnabled(ctx, entity.CampaignID, AddonPlayerCharacterClaiming) {
+		return nil, apperror.NewForbidden("player character claiming is not enabled for this campaign")
+	}
+
 	// No-op if the new value matches current.
 	switch {
 	case ownerUserID == nil && entity.OwnerUserID == nil:
 		return entity, nil
 	case ownerUserID != nil && entity.OwnerUserID != nil && *ownerUserID == *entity.OwnerUserID:
 		return entity, nil
+	}
+
+	// Type guardrail: an owner may only be *assigned* to a character-shaped
+	// type — the same gate ClaimEntity enforces — so a Scribe cannot stamp
+	// ownership onto a Location (which would then surface in the target
+	// player's "My Characters", since ListByOwner is not visibility- or
+	// type-filtered). Clearing ownership (nil) is always allowed so a stale
+	// claim can be scrubbed regardless of the type's current claimable flag.
+	if ownerUserID != nil {
+		et, err := s.types.FindByID(ctx, entity.EntityTypeID)
+		if err != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("loading entity type for owner assignment: %w", err))
+		}
+		if !isClaimableType(et) {
+			return nil, apperror.NewBadRequest("only character entities can be assigned an owner")
+		}
 	}
 
 	if err := s.entities.UpdateOwner(ctx, entityID, ownerUserID); err != nil {
