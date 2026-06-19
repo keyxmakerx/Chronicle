@@ -13,28 +13,35 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// CategoryDashboardPage renders the full category dashboard.
-templ CategoryDashboardPage(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
+// CategoryDashboardPage renders the full category dashboard. roster is the GM
+// owner-overview data (PC-CLAIM-3); nil for non-claimable types / non-Scribe
+// viewers, in which case no roster panel renders.
+templ CategoryDashboardPage(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string, roster *ClaimRoster) {
 	@layouts.App(et.NamePlural + " - " + cc.Campaign.Name) {
-		@CategoryDashboardContent(cc, et, entities, counts, total, opts, csrfToken)
+		@CategoryDashboardContent(cc, et, entities, counts, total, opts, csrfToken, roster)
 	}
 }
 
 // CategoryDashboardContent renders the category dashboard (for HTMX partial swap).
 // Checks for a custom dashboard layout JSON; if present, renders the custom layout
 // using category block components. Otherwise falls back to the hardcoded default.
-templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
+// The owner-overview roster (when present) is rendered inside each variant's
+// #entity-list root so the search/sort outerHTML swap keeps working.
+templ CategoryDashboardContent(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string, roster *ClaimRoster) {
 	if layout := et.ParseCategoryDashboardLayout(); layout != nil {
-		@customCategoryDashboard(cc, et, layout, entities, total)
+		@customCategoryDashboard(cc, et, layout, entities, total, roster)
 	} else {
-		@defaultCategoryDashboard(cc, et, entities, counts, total, opts, csrfToken)
+		@defaultCategoryDashboard(cc, et, entities, counts, total, opts, csrfToken, roster)
 	}
 }
 
 // customCategoryDashboard renders a category dashboard from a custom layout JSON.
 // Uses the same 12-column grid system as campaign dashboards.
-templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, layout *campaigns.DashboardLayout, entities []Entity, total int) {
+templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, layout *campaigns.DashboardLayout, entities []Entity, total int, roster *ClaimRoster) {
 	<div id="entity-list">
+		if roster != nil {
+			@claimRosterPanel(cc, et, roster)
+		}
 		for _, row := range layout.Rows {
 			<div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
 				for _, col := range row.Columns {
@@ -51,7 +58,7 @@ templ customCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, lay
 
 // defaultCategoryDashboard renders the original hardcoded category dashboard
 // with header, search, pinned pages, grid/table toggle, and pagination.
-templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string) {
+templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, entities []Entity, counts map[int]int, total int, opts ListOptions, csrfToken string, roster *ClaimRoster) {
 	<div
 		id="entity-list"
 		x-data={ fmt.Sprintf("{ view: localStorage.getItem('chronicle_cat_view_%d') || 'grid' }", et.ID) }
@@ -100,6 +107,11 @@ templ defaultCategoryDashboard(cc *campaigns.CampaignContext, et *EntityType, en
 				</div>
 			}
 		</div>
+
+		<!-- GM owner-overview roster (PC-CLAIM-3, Scribe+ only, claimable types) -->
+		if roster != nil {
+			@claimRosterPanel(cc, et, roster)
+		}
 
 		<!-- Tag filter bar + View toggle -->
 		<div class="flex items-center justify-between mb-4 border-b border-edge pb-3">

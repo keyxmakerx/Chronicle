@@ -530,6 +530,20 @@ type UpdateEntityTypeInput struct {
 	Claimable    *bool // New player-claim flag (nil = no change).
 }
 
+// ClaimRoster carries the GM owner-overview data for a claimable category
+// dashboard (PC-CLAIM-3). It is assembled by the Index handler ONLY for a
+// Scribe+ viewer of a claimable entity type with the Player Character Claiming
+// addon enabled; it is nil otherwise, in which case the roster panel is not
+// rendered. Characters lists every entity of the category (not just the
+// paginated dashboard page) so the overview is complete; Members is the set of
+// assignable owners for the reassign dropdown; OwnerNames resolves an entity's
+// owner_user_id to a display name.
+type ClaimRoster struct {
+	Characters []Entity                   // All characters of the category, by name.
+	Members    []campaigns.CampaignMember // Campaign members assignable as owners.
+	OwnerNames map[string]string          // owner_user_id -> display name.
+}
+
 // --- Slug Generation ---
 
 // slugPattern matches one or more non-alphanumeric characters for replacement.

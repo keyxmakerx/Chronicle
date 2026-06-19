@@ -23,7 +23,9 @@ var commonIcons = []string{
 }
 
 // EntityTypesManagePage renders the full entity type management page.
-templ EntityTypesManagePage(cc *campaigns.CampaignContext, entityTypes []EntityType, counts map[int]int, csrfToken, errMsg string) {
+// claimingEnabled reports whether the Player Character Claiming addon is on for
+// this campaign — it surfaces the per-type "Players can claim" toggle.
+templ EntityTypesManagePage(cc *campaigns.CampaignContext, entityTypes []EntityType, counts map[int]int, csrfToken, errMsg string, claimingEnabled bool) {
 	@layouts.App(cc.Campaign.Name + " - Categories") {
 		<div class="max-w-4xl mx-auto">
 			<div class="flex items-center justify-between mb-6">
@@ -45,13 +47,13 @@ templ EntityTypesManagePage(cc *campaigns.CampaignContext, entityTypes []EntityT
 				</div>
 			}
 
-			@EntityTypeListContent(cc, entityTypes, counts, csrfToken)
+			@EntityTypeListContent(cc, entityTypes, counts, csrfToken, claimingEnabled)
 		</div>
 	}
 }
 
 // EntityTypeListContent renders the entity type list and create form (for HTMX partial swap).
-templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityType, counts map[int]int, csrfToken string) {
+templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityType, counts map[int]int, csrfToken string, claimingEnabled bool) {
 	<div id="entity-type-list">
 		// Create new entity type form.
 		<div class="card p-6 mb-6">
@@ -126,6 +128,18 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 						</div>
 					</div>
 				</div>
+				// Player Character Claiming toggle (PC-CLAIM-3, Part 3). The form
+				// posts claimable=true only when checked; unchecked omits it so
+				// the service applies its default (heuristic / PC-type default).
+				if claimingEnabled {
+					<div>
+						<label class="flex items-center gap-2 cursor-pointer">
+							<input type="checkbox" name="claimable" value="true" class="rounded border-edge text-accent"/>
+							<span class="text-sm font-medium text-fg-body">Players can claim entities of this type</span>
+						</label>
+						<p class="text-xs text-fg-muted mt-1 ml-6">Adds a "Claim" button to each page's profile so a player can take ownership.</p>
+					</div>
+				}
 				<div class="flex justify-end">
 					<button type="submit" class="btn-primary">
 						<i class="fa-solid fa-plus mr-1"></i> Add Category
@@ -138,7 +152,7 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 		if len(entityTypes) > 0 {
 			<div class="space-y-3">
 				for _, et := range entityTypes {
-					@EntityTypeCard(cc, &et, counts[et.ID], csrfToken)
+					@EntityTypeCard(cc, &et, counts[et.ID], csrfToken, claimingEnabled)
 				}
 			</div>
 		} else {
@@ -156,11 +170,20 @@ templ EntityTypeListContent(cc *campaigns.CampaignContext, entityTypes []EntityT
 }
 
 // EntityTypeCard renders a single entity type row with edit/delete actions.
-templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount int, csrfToken string) {
+templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount int, csrfToken string, claimingEnabled bool) {
+	{{
+		// When claiming is enabled, the save PUT carries the claimable flag so
+		// the Owner's checkbox choice is persisted; otherwise the flag is left
+		// out of the body and UpdateEntityType preserves the stored value.
+		claimableBody := ""
+		if claimingEnabled {
+			claimableBody = ", claimable: etClaimable"
+		}
+	}}
 	<div
 		class="card p-4"
 		id={ fmt.Sprintf("et-card-%d", et.ID) }
-		x-data={ fmt.Sprintf("{ editing: false, deleting: false, saving: false, saved: false, error: '', etName: '%s', etNamePlural: '%s', etIcon: '%s', etColor: '%s' }", jsEsc(et.Name), jsEsc(et.NamePlural), jsEsc(et.Icon), jsEsc(et.Color)) }
+		x-data={ fmt.Sprintf("{ editing: false, deleting: false, saving: false, saved: false, error: '', etName: '%s', etNamePlural: '%s', etIcon: '%s', etColor: '%s', etClaimable: %s }", jsEsc(et.Name), jsEsc(et.NamePlural), jsEsc(et.Icon), jsEsc(et.Color), strconv.FormatBool(isClaimableType(et))) }
 	>
 		// Display mode.
 		<div x-show="!editing" class="flex items-center justify-between">
@@ -266,6 +289,18 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 				</div>
 			</div>
 
+			// Player Character Claiming toggle (PC-CLAIM-3, Part 3). Only shown
+			// when the addon is enabled — "meaningful only when claiming is on".
+			if claimingEnabled {
+				<div class="pt-1">
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" x-model="etClaimable" class="rounded border-edge text-accent"/>
+						<span class="text-xs font-medium text-fg-body">Players can claim entities of this type</span>
+					</label>
+					<p class="text-[11px] text-fg-muted mt-1 ml-6">Adds a "Claim" button to each page's profile so a player can take ownership.</p>
+				</div>
+			}
+
 			<div class="flex items-center justify-end gap-3 pt-2">
 				<span x-show="saved" x-transition class="text-xs text-green-600">Saved!</span>
 				<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
@@ -282,13 +317,13 @@ templ EntityTypeCard(cc *campaigns.CampaignContext, et *EntityType, entityCount 
 						saving = true; saved = false; error = '';
 						Chronicle.apiFetch('/campaigns/%s/entity-types/%d', {
 							method: 'PUT',
-							body: { name: etName.trim(), name_plural: etNamePlural.trim(), icon: etIcon, color: etColor }
+							body: { name: etName.trim(), name_plural: etNamePlural.trim(), icon: etIcon, color: etColor%s }
 						}).then(r => {
 							if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Failed to save'); });
 							saved = true;
 							setTimeout(() => { window.location.reload(); }, 600);
 						}).catch(e => { error = e.message; }).finally(() => { saving = false; })
-					`, cc.Campaign.ID, et.ID) }
+					`, cc.Campaign.ID, et.ID, claimableBody) }
 				>
 					<span x-show="!saving">Save Changes</span>
 					<span x-show="saving">Saving...</span>

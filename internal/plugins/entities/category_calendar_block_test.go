@@ -37,7 +37,7 @@ func TestCategoryDashboard_CalendarBlockRenders(t *testing.T) {
 	// 2) Render: the custom dashboard must show the calendar card's header.
 	cc := &campaigns.CampaignContext{Campaign: &campaigns.Campaign{ID: "camp-1", Name: "C"}, MemberRole: campaigns.RoleOwner}
 	var buf bytes.Buffer
-	if err := CategoryDashboardContent(cc, et, nil, nil, 0, ListOptions{}, "").Render(context.Background(), &buf); err != nil {
+	if err := CategoryDashboardContent(cc, et, nil, nil, 0, ListOptions{}, "", nil).Render(context.Background(), &buf); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()

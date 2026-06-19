@@ -58,9 +58,28 @@ for player-owned PC actors.
   MariaDB (new `TestEntityTypeRepository_Integration` exercises all six reads +
   INSERT/UPDATE so the claimable scan is proven live); `make migrate-up`/`down`
   round-trip clean.
-- [ ] **Stage 3 — UI (PC-CLAIM-3)**: per-type "Players can claim this" toggle in
-  the type editor; current owner shown on the character page; GM owner overview on
-  the Characters dashboard with reassign/unclaim; claim button honours addon + flag.
+- [x] **Stage 3 — UI (PC-CLAIM-3)**: the player-facing + GM-facing surfaces for
+  the addon + flag that Stage 2 plumbed. **(1) Owner on the character page** — the
+  show page's claim block is extracted to `claim_banner.templ` (`claimBanner`):
+  "Claimed by &lt;DisplayName&gt;" when `OwnerUserID != nil` (the Show handler
+  resolves the id → `CampaignMember.DisplayName` via the existing `memberLister`;
+  falls back to "a player" for a stale/unresolved owner), else the existing
+  unclaimed banner. **(2) GM owner overview** — `category_owner_roster.templ`
+  (`claimRosterPanel`) renders on a claimable category dashboard for **Scribe+**:
+  every character with its owner + a reassign `<select>` (members) and an Unclaim
+  button, both PUT `…/entities/:eid/owner` via `Chronicle.apiFetch`. The Index
+  handler builds the `ClaimRoster` (full type list, capped 100, + members) only
+  when Scribe+ AND claimable AND addon-on, and threads it through
+  `CategoryDashboardContent` *inside* `#entity-list` so the search/sort swap still
+  works. **(3) Per-type toggle** — `EntityTypeCard` (and the Add-Category form)
+  gain a "Players can claim entities of this type" checkbox **only when the addon
+  is enabled**; the quick-edit save rides `claimable` on the PUT (bound to the
+  effective `isClaimableType`), the create form posts `claimable=true` when
+  checked. `EntityTypesPage`/`CreateEntityType` compute `claimingEnabled`.
+  **(4) Claim-button gating** — the unclaimed banner now requires addon-enabled
+  **AND** `isClaimableType(type)`. Tests: `claim_overview_test.go` (helpers +
+  component renders for all three surfaces & gating states). Verified `templ
+  generate`, `go build ./...`, `make test-unit` (43 pkgs green), `go vet`.
 - [ ] **Stage 4 — Foundry (PC-CLAIM-4)**: actor-sync detects the addon, maps
   player-owned PC-type actors → the PC sub-type and auto-claims them (NPCs/monsters
   excluded by actor type + GM ownership); surface "enable Player Character Claiming

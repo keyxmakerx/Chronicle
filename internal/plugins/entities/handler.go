@@ -361,14 +361,27 @@ func (h *Handler) Index(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 
+	// GM owner-overview roster (PC-CLAIM-3, Part 2): for a Scribe+ viewer of a
+	// claimable category with the claiming addon enabled, assemble the full
+	// character list + assignable members so the dashboard can show each
+	// character's owner with reassign/unclaim controls. nil for everyone else,
+	// which hides the panel.
+	var roster *ClaimRoster
+	if activeEntityType != nil &&
+		cc.MemberRole >= campaigns.RoleScribe &&
+		isClaimableType(activeEntityType) &&
+		h.isAddonEnabled(c.Request().Context(), campaignID, AddonPlayerCharacterClaiming) {
+		roster = h.buildClaimRoster(c.Request().Context(), campaignID, activeEntityType.ID, role, userID)
+	}
+
 	// When viewing a specific category (type), render the category dashboard.
 	if activeEntityType != nil {
 		if middleware.IsHTMX(c) {
 			return middleware.Render(c, http.StatusOK,
-				CategoryDashboardContent(cc, activeEntityType, entities, counts, total, opts, csrfToken))
+				CategoryDashboardContent(cc, activeEntityType, entities, counts, total, opts, csrfToken, roster))
 		}
 		return middleware.Render(c, http.StatusOK,
-			CategoryDashboardPage(cc, activeEntityType, entities, counts, total, opts, csrfToken))
+			CategoryDashboardPage(cc, activeEntityType, entities, counts, total, opts, csrfToken, roster))
 	}
 
 	// Otherwise render the "All Pages" grid.
@@ -378,6 +391,37 @@ func (h *Handler) Index(c echo.Context) error {
 	}
 	return middleware.Render(c, http.StatusOK,
 		EntityIndexPage(cc, entities, entityTypes, counts, total, opts, typeID, activeTypeSlug, csrfToken))
+}
+
+// buildClaimRoster assembles the GM owner-overview data for a claimable
+// category (PC-CLAIM-3, Part 2): the campaign's members (assignable owners)
+// plus the full character list for the type — not just the paginated dashboard
+// page — so the roster is a complete picture. role/userID scope the character
+// list to what the viewer may see, matching the dashboard. Returns nil (panel
+// hidden) on any lookup failure; the roster is a non-critical overlay and must
+// never break the dashboard. The PerPage cap (100) bounds very large rosters.
+func (h *Handler) buildClaimRoster(ctx context.Context, campaignID string, typeID, role int, userID string) *ClaimRoster {
+	if h.memberLister == nil {
+		return nil
+	}
+	members, err := h.memberLister.ListMembers(ctx, campaignID)
+	if err != nil {
+		slog.Warn("owner roster: member lookup failed",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return nil
+	}
+	chars, _, err := h.service.List(ctx, campaignID, typeID, role, userID,
+		ListOptions{Page: 1, PerPage: 100, Sort: "name"})
+	if err != nil {
+		slog.Warn("owner roster: character list failed",
+			slog.String("campaign_id", campaignID), slog.Any("error", err))
+		return nil
+	}
+	return &ClaimRoster{
+		Characters: chars,
+		Members:    members,
+		OwnerNames: ownerDisplayNames(members),
+	}
 }
 
 // NewForm renders the entity creation form (GET /campaigns/:id/entities/new).
@@ -583,6 +627,20 @@ func (h *Handler) Show(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 
+	// Player Character Claiming (PC-CLAIM-3): gate the claim affordance on the
+	// addon, and resolve the current owner's display name for the "Claimed by"
+	// banner. The member lookup only runs when the entity is actually claimed.
+	claimingEnabled := h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming)
+	ownerName := ""
+	if entity.OwnerUserID != nil && h.memberLister != nil {
+		if members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID); mErr == nil {
+			ownerName = resolveOwnerName(entity.OwnerUserID, ownerDisplayNames(members))
+		} else {
+			slog.Warn("claim banner: owner name lookup failed",
+				slog.String("entity_id", entity.ID), slog.Any("error", mErr))
+		}
+	}
+
 	// Override the active path to the entity's category URL so the sidebar
 	// stays drilled into the correct category (e.g., /campaigns/{id}/characters)
 	// instead of collapsing because /entities/{eid} doesn't match any category.
@@ -610,7 +668,7 @@ func (h *Handler) Show(c echo.Context) error {
 
 	c.SetRequest(c.Request().WithContext(ctx))
 
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, csrfToken))
+	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken))
 }
 
 // Clone creates a copy of an entity (POST /campaigns/:id/entities/:eid/clone).
@@ -2370,12 +2428,15 @@ func (h *Handler) EntityTypesPage(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 
+	// Surface the per-type "Players can claim" toggle only when the addon is on.
+	claimingEnabled := h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming)
+
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK,
-			EntityTypeListContent(cc, entityTypes, counts, csrfToken))
+			EntityTypeListContent(cc, entityTypes, counts, csrfToken, claimingEnabled))
 	}
 	return middleware.Render(c, http.StatusOK,
-		EntityTypesManagePage(cc, entityTypes, counts, csrfToken, ""))
+		EntityTypesManagePage(cc, entityTypes, counts, csrfToken, "", claimingEnabled))
 }
 
 // CreateEntityType processes the entity type creation form.
@@ -2407,6 +2468,7 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 		counts, _ := h.service.CountByType(c.Request().Context(), cc.Campaign.ID, role, auth.GetUserID(c))
 		csrfToken := middleware.GetCSRFToken(c)
 		errMsg := apperror.UserMessage(err, "failed to create entity type")
+		claimingEnabled := h.isAddonEnabled(c.Request().Context(), cc.Campaign.ID, AddonPlayerCharacterClaiming)
 		// Return partial for HTMX requests so the swap target (#entity-type-list) gets correct content.
 		// Use HX-Trigger to show a toast notification with the error message.
 		if middleware.IsHTMX(c) {
@@ -2419,10 +2481,10 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 				c.Response().Header().Set("HX-Trigger", string(triggerJSON))
 			}
 			return middleware.Render(c, http.StatusOK,
-				EntityTypeListContent(cc, entityTypes, counts, csrfToken))
+				EntityTypeListContent(cc, entityTypes, counts, csrfToken, claimingEnabled))
 		}
 		return middleware.Render(c, http.StatusOK,
-			EntityTypesManagePage(cc, entityTypes, counts, csrfToken, errMsg))
+			EntityTypesManagePage(cc, entityTypes, counts, csrfToken, errMsg, claimingEnabled))
 	}
 
 	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityTypeCreated, strconv.Itoa(et.ID), et.Name)

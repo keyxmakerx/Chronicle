@@ -1,0 +1,139 @@
+// category_owner_roster.templ renders the GM owner-overview roster shown atop a
+// claimable category's dashboard (PC-CLAIM-3, Part 2). It lists every character
+// in the category with its current owner and inline reassign / unclaim controls
+// wired to PUT /campaigns/:id/entities/:eid/owner. The Index handler builds the
+// backing ClaimRoster ONLY for a Scribe+ viewer of a claimable type with the
+// Player Character Claiming addon enabled, so this component performs no role
+// check of its own — a nil roster simply renders nothing.
+
+package entities
+
+import (
+	"fmt"
+	"strconv"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+)
+
+// rosterOwnerLabel returns the display label for a character's owner: the
+// owner's name, "Unknown player" for a claim whose user is no longer a member
+// (stale), or "Unclaimed" when no owner is set.
+func rosterOwnerLabel(char Entity, roster *ClaimRoster) string {
+	if char.OwnerUserID == nil {
+		return "Unclaimed"
+	}
+	if name := roster.OwnerNames[*char.OwnerUserID]; name != "" {
+		return name
+	}
+	return "Unknown player"
+}
+
+// ownerSelectValue returns the option value that should be selected in a
+// character's reassign dropdown — its owner's user id, or "" when unclaimed.
+func ownerSelectValue(char Entity) string {
+	if char.OwnerUserID == nil {
+		return ""
+	}
+	return *char.OwnerUserID
+}
+
+// claimRosterPanel renders the owner-overview card. roster is assumed non-nil
+// (callers guard with `if roster != nil`).
+templ claimRosterPanel(cc *campaigns.CampaignContext, et *EntityType, roster *ClaimRoster) {
+	<div class="card p-4 mb-5" data-claim-roster id="claim-roster">
+		<div class="flex items-center gap-2 mb-3">
+			<i class="fa-solid fa-user-shield text-accent"></i>
+			<h2 class="text-sm font-semibold text-fg">Player Character Roster</h2>
+			<span class="text-xs text-fg-muted">{ strconv.Itoa(len(roster.Characters)) } total</span>
+		</div>
+		if len(roster.Characters) == 0 {
+			<p class="text-xs text-fg-muted">No { et.NamePlural } to assign yet.</p>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="text-left text-[11px] uppercase tracking-wider text-fg-secondary border-b border-edge">
+							<th class="py-1.5 pr-3 font-medium">Character</th>
+							<th class="py-1.5 pr-3 font-medium">Owner</th>
+							<th class="py-1.5 font-medium">Reassign</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, char := range roster.Characters {
+							@claimRosterRow(cc, char, roster)
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+// claimRosterRow renders one character row with its owner label and the inline
+// reassign dropdown + unclaim button. Both controls PUT to the owner endpoint
+// via Chronicle.apiFetch (CSRF auto-attached) and reload on success.
+templ claimRosterRow(cc *campaigns.CampaignContext, char Entity, roster *ClaimRoster) {
+	<tr class="border-b border-edge/50 last:border-0" data-entity-id={ char.ID }>
+		<td class="py-2 pr-3">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", cc.Campaign.ID, char.ID)) }
+				class="font-medium text-fg hover:text-accent transition-colors"
+			>{ char.Name }</a>
+		</td>
+		<td class="py-2 pr-3">
+			if char.OwnerUserID != nil {
+				<span class="inline-flex items-center gap-1.5 text-fg-body">
+					<i class="fa-solid fa-user-check text-[10px] text-accent"></i>
+					{ rosterOwnerLabel(char, roster) }
+				</span>
+			} else {
+				<span class="text-fg-muted">Unclaimed</span>
+			}
+		</td>
+		<td class="py-2">
+			<div class="flex items-center gap-2">
+				<select
+					class="input py-1 text-xs w-auto max-w-[12rem]"
+					aria-label={ fmt.Sprintf("Reassign owner of %s", char.Name) }
+					@change={ rosterAssignJS(cc.Campaign.ID, char.ID, ownerSelectValue(char), "$event.target.value || null") }
+				>
+					<option value="" selected?={ char.OwnerUserID == nil }>— Unclaimed —</option>
+					for _, m := range roster.Members {
+						<option value={ m.UserID } selected?={ char.OwnerUserID != nil && *char.OwnerUserID == m.UserID }>{ rosterMemberLabel(m) }</option>
+					}
+				</select>
+				if char.OwnerUserID != nil {
+					<button
+						type="button"
+						class="btn-ghost btn-sm text-xs text-red-500 hover:text-red-700 dark:text-red-400"
+						title="Unclaim this character"
+						@click={ rosterAssignJS(cc.Campaign.ID, char.ID, ownerSelectValue(char), "null") }
+					>
+						<i class="fa-solid fa-user-slash mr-1"></i> Unclaim
+					</button>
+				}
+			</div>
+		</td>
+	</tr>
+}
+
+// rosterMemberLabel formats a member for the reassign dropdown, falling back to
+// the user id when a display name is missing so the option is never blank.
+func rosterMemberLabel(m campaigns.CampaignMember) string {
+	if m.DisplayName != "" {
+		return m.DisplayName
+	}
+	return m.UserID
+}
+
+// rosterAssignJS builds the Alpine handler that PUTs a new owner (or null) to
+// the owner endpoint and reloads on success. ownerExpr is a JS expression for
+// the owner_user_id value (e.g. "$event.target.value || null" or "null").
+// resetValue is the current owner id, restored into the <select> on failure so
+// the control doesn't lie about state after a rejected change.
+func rosterAssignJS(campaignID, entityID, resetValue, ownerExpr string) string {
+	return fmt.Sprintf(`
+		Chronicle.apiFetch('/campaigns/%s/entities/%s/owner', { method: 'PUT', body: { owner_user_id: %s } })
+			.then(r => { if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Failed to reassign'); }); window.location.reload(); })
+			.catch(e => { window.alert(e.message); if ($event && $event.target && $event.target.tagName === 'SELECT') { $event.target.value = '%s'; } });
+	`, campaignID, entityID, ownerExpr, jsEsc(resetValue))
+}
