@@ -203,6 +203,7 @@ var builtinAddons = []addonDef{
 	{Slug: "sessions", Name: "Sessions", Description: "Track game sessions with scheduling, linked entities, and RSVP.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-calendar-check", Author: "Chronicle"},
 	{Slug: "npcs", Name: "NPC Gallery", Description: "Browse and reveal character entities as NPCs for your players.", Version: "1.0.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-users", Author: "Chronicle"},
 	{Slug: "armory", Name: "Armory & Inventory", Description: "Item catalog, character inventories, and shop management. System-dependent item types with Foundry sync.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-shield-halved", Author: "Chronicle"},
+	{Slug: "player-character-claiming", Name: "Player Character Claiming", Description: "Let players claim ownership of their Player Character entities. Unlocks a claimable \"Player Characters\" sub-type and shows who has claimed which character.", Version: "0.1.0", Category: CategoryPlugin, Status: StatusActive, Icon: "fa-user-check", Author: "Chronicle"},
 
 	// Integrations.
 	{Slug: "sync-api", Name: "Sync API", Description: "Secure REST API for external tool integration (Foundry VTT, Roll20, etc.)", Version: "0.1.0", Category: CategoryIntegration, Status: StatusActive, Icon: "fa-arrows-rotate", Author: "Chronicle"},

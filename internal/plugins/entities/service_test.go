@@ -1789,9 +1789,10 @@ func TestClaimEntity_RejectsNonCharacter(t *testing.T) {
 	assertAppError(t, err, 400)
 }
 
-// TestIsClaimableType pins the heuristic. Two paths to "claimable":
-// preset_category=="character", or slug ends in "-character" / equals
-// "character". Anything else is not claimable.
+// TestIsClaimableType pins the resolution order (PC-CLAIM-2): an explicit
+// claimable flag (TRUE/FALSE) always wins; only an unset (nil) claimable falls
+// back to the legacy heuristic — preset_category=="character", or a slug that
+// ends in "-character" / equals "character". Anything else is not claimable.
 func TestIsClaimableType(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1805,6 +1806,13 @@ func TestIsClaimableType(t *testing.T) {
 		{"slug suffix dnd5e-character", &EntityType{Slug: "dnd5e-character"}, true},
 		{"slug suffix drawsteel-character", &EntityType{Slug: "drawsteel-character"}, true},
 		{"random suffix", &EntityType{Slug: "shopkeeper"}, false},
+		// Explicit flag overrides the heuristic in both directions.
+		{"flag true overrides non-character slug", &EntityType{Slug: "location", Claimable: boolPtr(true)}, true},
+		{"flag false overrides character preset", &EntityType{PresetCategory: strPtr("character"), Claimable: boolPtr(false)}, false},
+		{"flag false overrides -character slug", &EntityType{Slug: "dnd5e-character", Claimable: boolPtr(false)}, false},
+		// An unset player_character preset is claimable via the flag default at
+		// create time, not via this heuristic — so heuristic-only resolves false.
+		{"unset player_character preset uses flag not heuristic", &EntityType{PresetCategory: strPtr(PresetCategoryPlayerCharacter)}, false},
 	}
 	for _, tc := range cases {
 		if got := isClaimableType(tc.et); got != tc.want {
@@ -1973,4 +1981,73 @@ func TestAssignMap_NoVerifierWiredRejectsAll(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected default verifier to reject all map IDs")
 	}
+}
+
+// boolPtr returns a pointer to b — for setting *bool fields like Claimable in
+// table-driven tests. Shared with repository_integration_test.go.
+func boolPtr(b bool) *bool { return &b }
+
+// mockAddonChecker implements AddonChecker for entity-type gate tests.
+type mockAddonChecker struct {
+	enabled map[string]bool // slug → enabled
+	err     error
+}
+
+func (m *mockAddonChecker) IsEnabledForCampaign(_ context.Context, _ string, slug string) (bool, error) {
+	if m.err != nil {
+		return false, m.err
+	}
+	return m.enabled[slug], nil
+}
+
+// TestCreateEntityType_PlayerCharacterGate verifies the addon gate on
+// player-character sub-type creation: rejected when the Player Character
+// Claiming addon is off, and created with claimable defaulted to true when on.
+func TestCreateEntityType_PlayerCharacterGate(t *testing.T) {
+	pcInput := CreateEntityTypeInput{Name: "Player Character"} // slug → "player-character"
+
+	t.Run("rejected when addon disabled", func(t *testing.T) {
+		svc := newTestService(&mockEntityRepo{}, &mockEntityTypeRepo{})
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{}})
+
+		_, err := svc.CreateEntityType(context.Background(), "camp-1", pcInput)
+		assertAppError(t, err, 400)
+	})
+
+	t.Run("created with claimable=true when addon enabled", func(t *testing.T) {
+		var captured *EntityType
+		typeRepo := &mockEntityTypeRepo{
+			createFn: func(_ context.Context, et *EntityType) error {
+				captured = et
+				et.ID = 7
+				return nil
+			},
+		}
+		svc := newTestService(&mockEntityRepo{}, typeRepo)
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+
+		et, err := svc.CreateEntityType(context.Background(), "camp-1", pcInput)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if captured == nil {
+			t.Fatal("expected Create to be called")
+		}
+		if et.Claimable == nil || !*et.Claimable {
+			t.Errorf("PC sub-type claimable: want true, got %v", et.Claimable)
+		}
+	})
+
+	t.Run("non-PC type is never gated", func(t *testing.T) {
+		svc := newTestService(&mockEntityRepo{}, &mockEntityTypeRepo{})
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{}}) // addon OFF
+
+		et, err := svc.CreateEntityType(context.Background(), "camp-1", CreateEntityTypeInput{Name: "Location"})
+		if err != nil {
+			t.Fatalf("unexpected error creating non-PC type: %v", err)
+		}
+		if et.Claimable != nil {
+			t.Errorf("non-PC type claimable: want nil, got %v", *et.Claimable)
+		}
+	})
 }

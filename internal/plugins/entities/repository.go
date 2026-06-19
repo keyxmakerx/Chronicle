@@ -46,6 +46,51 @@ func NewEntityTypeRepository(db *sql.DB) EntityTypeRepository {
 	return &entityTypeRepository{db: db}
 }
 
+// entityTypeColumns is the canonical SELECT column list for entity_types,
+// in the exact order scanEntityType reads them. Centralizing the list and
+// the scan in one place removes what used to be a six-way duplication where
+// a single column/scan-argument drift would panic at runtime (the scan binds
+// by position, not by name — it never fails to compile). Every entity-type
+// read MUST go through this pair; bare column names so it composes into any
+// FROM entity_types query without an alias.
+const entityTypeColumns = `id, campaign_id, slug, name, name_plural, icon, color,
+	preset_category, parent_type_id, claimable, description, pinned_entity_ids, dashboard_layout,
+	fields, layout_json, sort_order, is_default, enabled`
+
+// rowScanner is satisfied by both *sql.Row and *sql.Rows, so scanEntityType
+// can back single-row reads (QueryRow) and row-iteration reads (Query) alike.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanEntityType scans one entity_types row — column order = entityTypeColumns —
+// into an EntityType, decoding the JSON fields/layout/pinned-IDs blobs. The raw
+// Scan error is returned untouched so single-row callers can map sql.ErrNoRows
+// onto a not-found apperror.
+func scanEntityType(s rowScanner) (*EntityType, error) {
+	et := &EntityType{}
+	var fieldsRaw, layoutRaw, pinnedRaw []byte
+	if err := s.Scan(
+		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
+		&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Claimable,
+		&et.Description, &pinnedRaw, &et.DashboardLayout,
+		&fieldsRaw, &layoutRaw, &et.SortOrder,
+		&et.IsDefault, &et.Enabled,
+	); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
+		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
+	}
+	et.Layout = ParseLayoutJSON(layoutRaw)
+	if len(pinnedRaw) > 0 {
+		if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
+			return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
+		}
+	}
+	return et, nil
+}
+
 // Create inserts a new entity type row.
 func (r *entityTypeRepository) Create(ctx context.Context, et *EntityType) error {
 	fieldsJSON, err := json.Marshal(et.Fields)
@@ -57,12 +102,12 @@ func (r *entityTypeRepository) Create(ctx context.Context, et *EntityType) error
 		return fmt.Errorf("marshaling layout: %w", err)
 	}
 
-	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, preset_category, parent_type_id, fields, layout_json, sort_order, is_default, enabled)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO entity_types (campaign_id, slug, name, name_plural, icon, color, preset_category, parent_type_id, claimable, fields, layout_json, sort_order, is_default, enabled)
+	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := r.db.ExecContext(ctx, query,
 		et.CampaignID, et.Slug, et.Name, et.NamePlural,
-		et.Icon, et.Color, et.PresetCategory, et.ParentTypeID, fieldsJSON, layoutJSON, et.SortOrder,
+		et.Icon, et.Color, et.PresetCategory, et.ParentTypeID, et.Claimable, fieldsJSON, layoutJSON, et.SortOrder,
 		et.IsDefault, et.Enabled,
 	)
 	if err != nil {
@@ -78,27 +123,19 @@ func (r *entityTypeRepository) Create(ctx context.Context, et *EntityType) error
 }
 
 // FindByID retrieves an entity type by its auto-increment ID.
+//
+// ParentTypeName (the Category › Sub-category lineage line in the entity
+// editor — C-ENTITY-PERMISSIONS-UX Part 3) is resolved in a second, cheap
+// PK lookup only when the type actually has a parent. That keeps this read
+// on the single shared scanEntityType path with every other entity-type
+// read — the whole point of entityTypeColumns — instead of carrying a
+// bespoke JOIN+scan that would reintroduce the column/scan drift risk.
+// External behavior is unchanged: top-level types still get a nil name, and
+// a parent deleted between the two reads degrades gracefully to nil.
 func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityType, error) {
-	// LEFT JOIN the parent type so ParentTypeName is populated for the
-	// Category › Sub-category lineage line in the entity editor
-	// (C-ENTITY-PERMISSIONS-UX Part 3). Read-only joined field; NULL for
-	// top-level types.
-	query := `SELECT et.id, et.campaign_id, et.slug, et.name, et.name_plural, et.icon, et.color,
-	                 et.preset_category, et.parent_type_id, et.description, et.pinned_entity_ids, et.dashboard_layout,
-	                 et.fields, et.layout_json, et.sort_order, et.is_default, et.enabled,
-	                 parent.name AS parent_type_name
-	          FROM entity_types et
-	          LEFT JOIN entity_types parent ON et.parent_type_id = parent.id
-	          WHERE et.id = ?`
+	query := `SELECT ` + entityTypeColumns + ` FROM entity_types WHERE id = ?`
 
-	et := &EntityType{}
-	var fieldsRaw, layoutRaw, pinnedRaw []byte
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-		&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
-		&fieldsRaw, &layoutRaw, &et.SortOrder,
-		&et.IsDefault, &et.Enabled, &et.ParentTypeName,
-	)
+	et, err := scanEntityType(r.db.QueryRowContext(ctx, query, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("entity type not found")
 	}
@@ -106,13 +143,17 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 		return nil, fmt.Errorf("querying entity type by id: %w", err)
 	}
 
-	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
-		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
-	}
-	et.Layout = ParseLayoutJSON(layoutRaw)
-	if len(pinnedRaw) > 0 {
-		if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
-			return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
+	if et.ParentTypeID != nil {
+		var parentName string
+		switch err := r.db.QueryRowContext(ctx,
+			`SELECT name FROM entity_types WHERE id = ?`, *et.ParentTypeID,
+		).Scan(&parentName); {
+		case err == nil:
+			et.ParentTypeName = &parentName
+		case errors.Is(err, sql.ErrNoRows):
+			// Parent vanished (race / dangling FK after SET NULL window) — leave nil.
+		default:
+			return nil, fmt.Errorf("querying parent entity type name: %w", err)
 		}
 	}
 	return et, nil
@@ -120,44 +161,21 @@ func (r *entityTypeRepository) FindByID(ctx context.Context, id int) (*EntityTyp
 
 // FindBySlug retrieves an entity type by campaign ID and slug.
 func (r *entityTypeRepository) FindBySlug(ctx context.Context, campaignID, slug string) (*EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 preset_category, parent_type_id, description, pinned_entity_ids, dashboard_layout,
-	                 fields, layout_json, sort_order, is_default, enabled
-	          FROM entity_types WHERE campaign_id = ? AND slug = ?`
+	query := `SELECT ` + entityTypeColumns + ` FROM entity_types WHERE campaign_id = ? AND slug = ?`
 
-	et := &EntityType{}
-	var fieldsRaw, layoutRaw, pinnedRaw []byte
-	err := r.db.QueryRowContext(ctx, query, campaignID, slug).Scan(
-		&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-		&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
-		&fieldsRaw, &layoutRaw, &et.SortOrder,
-		&et.IsDefault, &et.Enabled,
-	)
+	et, err := scanEntityType(r.db.QueryRowContext(ctx, query, campaignID, slug))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperror.NewNotFound("entity type not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("querying entity type by slug: %w", err)
 	}
-
-	if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
-		return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
-	}
-	et.Layout = ParseLayoutJSON(layoutRaw)
-	if len(pinnedRaw) > 0 {
-		if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
-			return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
-		}
-	}
 	return et, nil
 }
 
 // ListByCampaign returns all entity types for a campaign, ordered by sort_order.
 func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID string) ([]EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 preset_category, parent_type_id, description, pinned_entity_ids, dashboard_layout,
-	                 fields, layout_json, sort_order, is_default, enabled
-	          FROM entity_types WHERE campaign_id = ? ORDER BY sort_order, name`
+	query := `SELECT ` + entityTypeColumns + ` FROM entity_types WHERE campaign_id = ? ORDER BY sort_order, name`
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID)
 	if err != nil {
@@ -167,26 +185,11 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 
 	var types []EntityType
 	for rows.Next() {
-		var et EntityType
-		var fieldsRaw, layoutRaw, pinnedRaw []byte
-		if err := rows.Scan(
-			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-			&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
-			&fieldsRaw, &layoutRaw, &et.SortOrder,
-			&et.IsDefault, &et.Enabled,
-		); err != nil {
+		et, err := scanEntityType(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scanning entity type row: %w", err)
 		}
-		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
-			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
-		}
-		et.Layout = ParseLayoutJSON(layoutRaw)
-		if len(pinnedRaw) > 0 {
-			if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
-				return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
-			}
-		}
-		types = append(types, et)
+		types = append(types, *et)
 	}
 	return types, rows.Err()
 }
@@ -196,10 +199,7 @@ func (r *entityTypeRepository) ListByCampaign(ctx context.Context, campaignID st
 // parent; this lookup drives both the parent's aggregated entity listing and
 // the +New picker that offers them as layout variants.
 func (r *entityTypeRepository) ListChildTypes(ctx context.Context, parentID int) ([]EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 preset_category, parent_type_id, description, pinned_entity_ids, dashboard_layout,
-	                 fields, layout_json, sort_order, is_default, enabled
-	          FROM entity_types WHERE parent_type_id = ? ORDER BY sort_order, name`
+	query := `SELECT ` + entityTypeColumns + ` FROM entity_types WHERE parent_type_id = ? ORDER BY sort_order, name`
 
 	rows, err := r.db.QueryContext(ctx, query, parentID)
 	if err != nil {
@@ -209,26 +209,11 @@ func (r *entityTypeRepository) ListChildTypes(ctx context.Context, parentID int)
 
 	var types []EntityType
 	for rows.Next() {
-		var et EntityType
-		var fieldsRaw, layoutRaw, pinnedRaw []byte
-		if err := rows.Scan(
-			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-			&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
-			&fieldsRaw, &layoutRaw, &et.SortOrder,
-			&et.IsDefault, &et.Enabled,
-		); err != nil {
+		et, err := scanEntityType(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scanning child entity type row: %w", err)
 		}
-		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
-			return nil, fmt.Errorf("unmarshaling child fields: %w", err)
-		}
-		et.Layout = ParseLayoutJSON(layoutRaw)
-		if len(pinnedRaw) > 0 {
-			if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
-				return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
-			}
-		}
-		types = append(types, et)
+		types = append(types, *et)
 	}
 	return types, rows.Err()
 }
@@ -236,10 +221,7 @@ func (r *entityTypeRepository) ListChildTypes(ctx context.Context, parentID int)
 // ListByPresetCategory returns entity types in a campaign that were created
 // from a system preset with the given category (e.g., "item", "character").
 func (r *entityTypeRepository) ListByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 preset_category, parent_type_id, description, pinned_entity_ids, dashboard_layout,
-	                 fields, layout_json, sort_order, is_default, enabled
-	          FROM entity_types WHERE campaign_id = ? AND preset_category = ? ORDER BY sort_order, name`
+	query := `SELECT ` + entityTypeColumns + ` FROM entity_types WHERE campaign_id = ? AND preset_category = ? ORDER BY sort_order, name`
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID, category)
 	if err != nil {
@@ -249,26 +231,11 @@ func (r *entityTypeRepository) ListByPresetCategory(ctx context.Context, campaig
 
 	var types []EntityType
 	for rows.Next() {
-		var et EntityType
-		var fieldsRaw, layoutRaw, pinnedRaw []byte
-		if err := rows.Scan(
-			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-			&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
-			&fieldsRaw, &layoutRaw, &et.SortOrder,
-			&et.IsDefault, &et.Enabled,
-		); err != nil {
+		et, err := scanEntityType(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scanning entity type row: %w", err)
 		}
-		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
-			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
-		}
-		et.Layout = ParseLayoutJSON(layoutRaw)
-		if len(pinnedRaw) > 0 {
-			if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
-				return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
-			}
-		}
-		types = append(types, et)
+		types = append(types, *et)
 	}
 	return types, rows.Err()
 }
@@ -298,10 +265,7 @@ func (r *entityTypeRepository) UpdateLayout(ctx context.Context, id int, layoutJ
 // per-campaign helpers don't fit when there's no caller campaign.
 // Heavy on a large server; only call from background tasks.
 func (r *entityTypeRepository) ListAll(ctx context.Context) ([]EntityType, error) {
-	query := `SELECT id, campaign_id, slug, name, name_plural, icon, color,
-	                 preset_category, parent_type_id, description, pinned_entity_ids, dashboard_layout,
-	                 fields, layout_json, sort_order, is_default, enabled
-	          FROM entity_types ORDER BY campaign_id, sort_order, name`
+	query := `SELECT ` + entityTypeColumns + ` FROM entity_types ORDER BY campaign_id, sort_order, name`
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -311,26 +275,11 @@ func (r *entityTypeRepository) ListAll(ctx context.Context) ([]EntityType, error
 
 	var types []EntityType
 	for rows.Next() {
-		var et EntityType
-		var fieldsRaw, layoutRaw, pinnedRaw []byte
-		if err := rows.Scan(
-			&et.ID, &et.CampaignID, &et.Slug, &et.Name, &et.NamePlural,
-			&et.Icon, &et.Color, &et.PresetCategory, &et.ParentTypeID, &et.Description, &pinnedRaw, &et.DashboardLayout,
-			&fieldsRaw, &layoutRaw, &et.SortOrder,
-			&et.IsDefault, &et.Enabled,
-		); err != nil {
+		et, err := scanEntityType(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scanning entity type row: %w", err)
 		}
-		if err := json.Unmarshal(fieldsRaw, &et.Fields); err != nil {
-			return nil, fmt.Errorf("unmarshaling entity type fields: %w", err)
-		}
-		et.Layout = ParseLayoutJSON(layoutRaw)
-		if len(pinnedRaw) > 0 {
-			if err := json.Unmarshal(pinnedRaw, &et.PinnedEntityIDs); err != nil {
-				return nil, fmt.Errorf("unmarshaling pinned entity IDs: %w", err)
-			}
-		}
-		types = append(types, et)
+		types = append(types, *et)
 	}
 	return types, rows.Err()
 }
@@ -434,10 +383,10 @@ func (r *entityTypeRepository) Update(ctx context.Context, et *EntityType) error
 	}
 
 	query := `UPDATE entity_types SET name = ?, name_plural = ?, slug = ?, icon = ?, color = ?, fields = ?,
-	          parent_type_id = ? WHERE id = ?`
+	          parent_type_id = ?, claimable = ? WHERE id = ?`
 
 	result, err := r.db.ExecContext(ctx, query,
-		et.Name, et.NamePlural, et.Slug, et.Icon, et.Color, fieldsJSON, et.ParentTypeID, et.ID,
+		et.Name, et.NamePlural, et.Slug, et.Icon, et.Color, fieldsJSON, et.ParentTypeID, et.Claimable, et.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating entity type: %w", err)
