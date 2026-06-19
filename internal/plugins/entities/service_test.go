@@ -1772,6 +1772,59 @@ func TestClaimEntity_RejectsAlreadyClaimed(t *testing.T) {
 	assertAppError(t, err, 409)
 }
 
+// TestClaimEntity_RejectsWhenAddonDisabled guards the API-side feature gate:
+// even though the route is Player+, an unclaimed claimable character must not
+// be claimable when the Player Character Claiming addon is off for the
+// campaign. The UI hides the button; this proves a hand-rolled POST is also
+// refused (403) and never reaches the DB.
+func TestClaimEntity_RejectsWhenAddonDisabled(t *testing.T) {
+	entity := &Entity{ID: "e1", CampaignID: "camp-1", EntityTypeID: 7, OwnerUserID: nil}
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
+		updateOwnerFn: func(_ context.Context, _ string, _ *string) error {
+			t.Fatal("UpdateOwner must not be called when the addon is disabled")
+			return nil
+		},
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, _ int) (*EntityType, error) {
+			return &EntityType{ID: 7, Slug: "character"}, nil
+		},
+	}
+	svc := newTestService(repo, typeRepo)
+	svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{}}) // addon OFF
+	_, err := svc.ClaimEntity(context.Background(), "e1", "player-1")
+	assertAppError(t, err, 403)
+}
+
+// TestClaimEntity_AllowedWhenAddonEnabled is the positive control: with the
+// addon explicitly enabled, the same claim succeeds — proving the gate keys
+// on the right slug rather than blanket-blocking.
+func TestClaimEntity_AllowedWhenAddonEnabled(t *testing.T) {
+	entity := &Entity{ID: "e1", CampaignID: "camp-1", EntityTypeID: 7, OwnerUserID: nil}
+	var capturedOwner *string
+	repo := &mockEntityRepo{
+		findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return entity, nil },
+		updateOwnerFn: func(_ context.Context, _ string, owner *string) error {
+			capturedOwner = owner
+			return nil
+		},
+	}
+	typeRepo := &mockEntityTypeRepo{
+		findByIDFn: func(_ context.Context, _ int) (*EntityType, error) {
+			return &EntityType{ID: 7, Slug: "character"}, nil
+		},
+	}
+	svc := newTestService(repo, typeRepo)
+	svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+	if _, err := svc.ClaimEntity(context.Background(), "e1", "player-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedOwner == nil || *capturedOwner != "player-1" {
+		t.Errorf("expected owner_user_id update to player-1, got %v", capturedOwner)
+	}
+}
+
 // TestClaimEntity_RejectsNonCharacter prevents claiming a Location or
 // Faction by entity_type slug. The handler-level route is Player+ for
 // flexibility; the type-shape gate is what stops misuse.
@@ -1837,7 +1890,7 @@ func TestAssignOwner_SetAndClear(t *testing.T) {
 		{"same owner (no-op)", strPtr("p1"), strPtr("p1"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ent := &Entity{ID: "e1", CampaignID: "c1", OwnerUserID: tc.current}
+			ent := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 7, OwnerUserID: tc.current}
 			called := false
 			repo := &mockEntityRepo{
 				findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
@@ -1846,7 +1899,14 @@ func TestAssignOwner_SetAndClear(t *testing.T) {
 					return nil
 				},
 			}
-			svc := newTestService(repo, &mockEntityTypeRepo{})
+			// Assign now loads the type to enforce the claimable guard; return
+			// a character-shaped type so transitions exercise the write path.
+			typeRepo := &mockEntityTypeRepo{
+				findByIDFn: func(_ context.Context, _ int) (*EntityType, error) {
+					return &EntityType{ID: 7, Slug: "character"}, nil
+				},
+			}
+			svc := newTestService(repo, typeRepo)
 			_, err := svc.AssignOwner(context.Background(), "e1", tc.newOwner)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -1856,6 +1916,70 @@ func TestAssignOwner_SetAndClear(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAssignOwner_AddonAndTypeGates pins the two guards AssignOwner gained
+// alongside ClaimEntity: the endpoint is dead when the addon is off (403), and
+// even with the addon on an owner may only be *assigned* to a claimable type
+// (400 for a Location) while *clearing* a stale owner is always permitted.
+func TestAssignOwner_AddonAndTypeGates(t *testing.T) {
+	character := &EntityType{ID: 7, Slug: "character"} // claimable
+	location := &EntityType{ID: 5, Slug: "location"}   // not claimable
+	typeOf := func(et *EntityType) *mockEntityTypeRepo {
+		return &mockEntityTypeRepo{
+			findByIDFn: func(_ context.Context, _ int) (*EntityType, error) { return et, nil },
+		}
+	}
+
+	t.Run("addon off blocks assignment", func(t *testing.T) {
+		ent := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 7, OwnerUserID: nil}
+		repo := &mockEntityRepo{
+			findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
+			updateOwnerFn: func(_ context.Context, _ string, _ *string) error {
+				t.Fatal("UpdateOwner must not run with the addon off")
+				return nil
+			},
+		}
+		svc := newTestService(repo, typeOf(character))
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{}})
+		_, err := svc.AssignOwner(context.Background(), "e1", strPtr("p1"))
+		assertAppError(t, err, 403)
+	})
+
+	t.Run("non-claimable type rejects assignment", func(t *testing.T) {
+		ent := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 5, OwnerUserID: nil}
+		repo := &mockEntityRepo{
+			findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
+			updateOwnerFn: func(_ context.Context, _ string, _ *string) error {
+				t.Fatal("UpdateOwner must not run for a non-claimable type")
+				return nil
+			},
+		}
+		svc := newTestService(repo, typeOf(location))
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+		_, err := svc.AssignOwner(context.Background(), "e1", strPtr("p1"))
+		assertAppError(t, err, 400)
+	})
+
+	t.Run("clearing a non-claimable type is allowed", func(t *testing.T) {
+		ent := &Entity{ID: "e1", CampaignID: "c1", EntityTypeID: 5, OwnerUserID: strPtr("p1")}
+		cleared := false
+		repo := &mockEntityRepo{
+			findByIDFn: func(_ context.Context, _ string) (*Entity, error) { return ent, nil },
+			updateOwnerFn: func(_ context.Context, _ string, owner *string) error {
+				cleared = owner == nil
+				return nil
+			},
+		}
+		svc := newTestService(repo, typeOf(location))
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+		if _, err := svc.AssignOwner(context.Background(), "e1", nil); err != nil {
+			t.Fatalf("unexpected error clearing owner: %v", err)
+		}
+		if !cleared {
+			t.Error("expected UpdateOwner(nil) to clear the stale owner")
+		}
+	})
 }
 
 // stubMapVerifier is a one-line MapCampaignVerifier for tests. Returning

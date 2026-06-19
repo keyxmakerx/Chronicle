@@ -3183,6 +3183,21 @@ func (h *Handler) ClaimEntity(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	// ACL guard: a player may only claim a character they can actually see.
+	// The claim button only renders on entities the player can view, but a
+	// hand-rolled POST with a known UUID would otherwise let a player claim
+	// (and, via the non-visibility-filtered "My Characters" list, learn the
+	// name of) a hidden character. Use the real member role, not the
+	// view-as-player override. Mirrors the IsPrivate gate the Show handler
+	// applies before rendering.
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entityID, int(cc.MemberRole), userID)
+	if err != nil {
+		return err
+	}
+	if !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	updated, err := h.service.ClaimEntity(c.Request().Context(), entityID, userID)
 	if err != nil {
 		return err
