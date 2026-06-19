@@ -37,13 +37,27 @@ for player-owned PC actors.
   under `entity.claimed` (was generic `entity.updated` + "claimed by <id>"), and
   `AssignOwner` records the new owner in `Details` under `entity.owner_changed`
   (`logAuditWithDetails`). Compile + audit/entities unit tests green.
-- [ ] **Stage 2 — addon + claimable flag (PC-CLAIM-2)**: register
-  `player-character-claiming` in `builtinAddons`; migration `000029` adds
-  `entity_types.claimable BOOLEAN NULL`; model/repo plumb it through every
-  entity_type SELECT/INSERT/scan (⚠ scan-order — verify against a real DB);
-  `isClaimableType` honours the flag (NULL = legacy heuristic). Gate PC sub-type
-  creation in `CreateEntityType` on the addon (the "enable the module" prompt),
-  via the already-injected `AddonChecker`.
+- [x] **Stage 2 — addon + claimable flag (PC-CLAIM-2)**: registered
+  `player-character-claiming` in `builtinAddons` (CategoryPlugin/StatusActive,
+  `fa-user-check`; startup seeder upserts it, no migration). Migration `000029`
+  adds `entity_types.claimable BOOLEAN NULL AFTER parent_type_id` (NULL=unset →
+  legacy heuristic; TRUE/FALSE=explicit Owner choice). `Claimable *bool` plumbed
+  through EntityType + the create/update input & form DTOs. **Repo de-duplicated**:
+  the former 6-way SELECT/scan copy-paste is now a single `entityTypeColumns`
+  const + `scanEntityType(rowScanner)` helper that *every* read routes through
+  (FindByID resolves `ParentTypeName` via a cheap follow-up lookup so it shares
+  the one scan path) — kills the scan-order drift risk; `claimable` added to the
+  Create INSERT + Update. `isClaimableType` now honours the flag (explicit wins;
+  NULL → preset/slug heuristic). `CreateEntityType` gates player-character
+  sub-types (`PresetCategory=="player_character"` or `slug=="player-character"`)
+  on the addon via a service-injected `AddonChecker` (`SetAddonChecker`, wired in
+  `app/routes.go`), rejecting with an "enable the Player Character Claiming addon"
+  apperror when off and defaulting `claimable=true` when on. Verified: `templ
+  generate`, `go build ./...`, `make test-unit` (43 pkgs green, incl. table-driven
+  `isClaimableType` + create-gate tests), and `make test-int` against a real
+  MariaDB (new `TestEntityTypeRepository_Integration` exercises all six reads +
+  INSERT/UPDATE so the claimable scan is proven live); `make migrate-up`/`down`
+  round-trip clean.
 - [ ] **Stage 3 — UI (PC-CLAIM-3)**: per-type "Players can claim this" toggle in
   the type editor; current owner shown on the character page; GM owner overview on
   the Characters dashboard with reassign/unclaim; claim button honours addon + flag.

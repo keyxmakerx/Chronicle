@@ -1855,6 +1855,10 @@ func (a *App) RegisterRoutes() {
 
 	// Wire addon checker into entity handler for conditional attributes rendering.
 	entityHandler.SetAddonChecker(addonService)
+	// Wire the same checker into the entity service so CreateEntityType can
+	// gate player-character sub-type creation on the Player Character Claiming
+	// addon (PC-CLAIM-2).
+	entityService.SetAddonChecker(addonService)
 
 	// Content extensions: user-installable content packs (calendar presets,
 	// entity type templates, entity packs, tag collections, marker icons, themes).

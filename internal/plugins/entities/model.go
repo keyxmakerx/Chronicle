@@ -31,6 +31,7 @@ type EntityType struct {
 	Color           string            `json:"color"`
 	PresetCategory  *string           `json:"preset_category,omitempty"`   // System preset category ("character", "item", "creature").
 	ParentTypeID    *int              `json:"parent_type_id,omitempty"`    // Parent entity type ID for sub-type hierarchy.
+	Claimable       *bool             `json:"claimable,omitempty"`         // nil = unset (legacy heuristic); true/false = explicit Owner choice for player claiming.
 	Description     *string           `json:"description,omitempty"`       // Rich text shown on category dashboard.
 	PinnedEntityIDs []string          `json:"pinned_entity_ids,omitempty"` // Entity IDs pinned to dashboard top.
 	DashboardLayout *string           `json:"dashboard_layout,omitempty"`  // JSON layout; nil = use hardcoded default.
@@ -489,6 +490,7 @@ type CreateEntityTypeRequest struct {
 	Icon         string `json:"icon" form:"icon"`
 	Color        string `json:"color" form:"color"`
 	ParentTypeID *int   `json:"parent_type_id" form:"parent_type_id"`
+	Claimable    *bool  `json:"claimable,omitempty" form:"claimable"`
 }
 
 // UpdateEntityTypeRequest holds the data submitted by the entity type edit form.
@@ -498,8 +500,9 @@ type UpdateEntityTypeRequest struct {
 	Icon         string            `json:"icon" form:"icon"`
 	Color        string            `json:"color" form:"color"`
 	Fields       []FieldDefinition `json:"fields"`
-	ParentTypeID *int              `json:"parent_type_id"` // New parent (nil = no change).
-	ClearParent  bool              `json:"clear_parent"`   // Explicitly remove parent (make top-level).
+	ParentTypeID *int              `json:"parent_type_id"`              // New parent (nil = no change).
+	ClearParent  bool              `json:"clear_parent"`                // Explicitly remove parent (make top-level).
+	Claimable    *bool             `json:"claimable,omitempty" form:"claimable"` // nil = no change; true/false = set the player-claim flag.
 }
 
 // --- Entity Type Service Input DTOs ---
@@ -512,6 +515,7 @@ type CreateEntityTypeInput struct {
 	Color          string
 	PresetCategory string // Optional system preset category (e.g., "item", "character").
 	ParentTypeID   *int   // Optional parent type for sub-type hierarchy.
+	Claimable      *bool  // Optional explicit player-claim flag. nil = unset (service may default it for PC types).
 }
 
 // UpdateEntityTypeInput is the validated input for updating an entity type.
@@ -521,8 +525,9 @@ type UpdateEntityTypeInput struct {
 	Icon         string
 	Color        string
 	Fields       []FieldDefinition
-	ParentTypeID *int // New parent type (nil = no change).
-	ClearParent  bool // Explicitly remove parent (make top-level).
+	ParentTypeID *int  // New parent type (nil = no change).
+	ClearParent  bool  // Explicitly remove parent (make top-level).
+	Claimable    *bool // New player-claim flag (nil = no change).
 }
 
 // --- Slug Generation ---

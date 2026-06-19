@@ -121,6 +121,11 @@ type EntityService interface {
 	// AssignMap. Production startup wires an adapter over maps.MapsService.
 	SetMapVerifier(v MapCampaignVerifier)
 
+	// SetAddonChecker wires the per-campaign addon enablement check used to
+	// gate player-character sub-type creation. Production startup wires the
+	// addons service; when unset the gate fails open (used by tests).
+	SetAddonChecker(checker AddonChecker)
+
 	// HealAutoPluralizedTypes corrects entity_types rows whose
 	// name_plural was double-s'd by the legacy auto-pluralize default.
 	// Returns the count of healed rows. Idempotent; safe to call on
@@ -207,6 +212,7 @@ type entityService struct {
 	sidebarAdder  SidebarAutoAdder
 	blockRegistry *BlockRegistry
 	mapVerifier   MapCampaignVerifier
+	addonChecker  AddonChecker
 }
 
 // NewEntityService creates a new entity service with the given dependencies.
@@ -229,6 +235,26 @@ func (s *entityService) SetMapVerifier(v MapCampaignVerifier) {
 		return
 	}
 	s.mapVerifier = v
+}
+
+// SetAddonChecker wires the per-campaign addon enablement check. Call from
+// startup with the addons service. When unset (tests), isAddonEnabled fails
+// open so the player-character gate never blocks unrelated callers.
+func (s *entityService) SetAddonChecker(checker AddonChecker) {
+	s.addonChecker = checker
+}
+
+// isAddonEnabled reports whether an addon is enabled for the campaign.
+// Fails open (returns true) when the checker is not wired or the lookup
+// errors — matching the fail-open convention used by the handler's
+// isAddonEnabled and the RequireAddon middleware, so a transient addon
+// lookup failure never hard-blocks entity-type creation.
+func (s *entityService) isAddonEnabled(ctx context.Context, campaignID, slug string) bool {
+	if s.addonChecker == nil {
+		return true
+	}
+	enabled, err := s.addonChecker.IsEnabledForCampaign(ctx, campaignID, slug)
+	return err != nil || enabled
 }
 
 // SetEventPublisher sets the event publisher for real-time sync.
@@ -827,8 +853,31 @@ func (s *entityService) ListByOwner(ctx context.Context, campaignID, ownerUserID
 	return s.entities.ListByOwner(ctx, campaignID, ownerUserID)
 }
 
-// isClaimableType reports whether an entity_type is a "character" — i.e.
-// the kind of entity a player can claim ownership of. Two heuristics:
+// Player Character Claiming (PC-CLAIM-2) constants.
+const (
+	// PresetCategoryPlayerCharacter marks an entity type as the player-claimable
+	// "Player Character" sub-type via its system preset category.
+	PresetCategoryPlayerCharacter = "player_character"
+	// SlugPlayerCharacter is the conventional slug for a Player Characters
+	// sub-type created by name ("Player Character" → "player-character").
+	SlugPlayerCharacter = "player-character"
+	// AddonPlayerCharacterClaiming is the addon slug that must be enabled for
+	// a campaign before player-character sub-types can be created.
+	AddonPlayerCharacterClaiming = "player-character-claiming"
+)
+
+// isPlayerCharacterType reports whether a to-be-created entity type is the
+// player-claimable "Player Character" sub-type, by either its preset category
+// or its (already-generated) slug. Drives both the addon gate and the
+// claimable=true default in CreateEntityType.
+func isPlayerCharacterType(presetCategory, slug string) bool {
+	return presetCategory == PresetCategoryPlayerCharacter || slug == SlugPlayerCharacter
+}
+
+// isClaimableType reports whether an entity_type is one a player can claim
+// ownership of. The Owner's explicit choice wins: when claimable is set
+// (TRUE/FALSE) it is authoritative. Only when claimable is NULL (unset) do
+// the legacy heuristics apply:
 //   - preset_category == "character" (set when seeded from a system pack
 //     or the default seed), or
 //   - slug ends in "-character" (e.g. drawsteel-character, dnd5e-character).
@@ -838,6 +887,10 @@ func (s *entityService) ListByOwner(ctx context.Context, campaignID, ownerUserID
 func isClaimableType(et *EntityType) bool {
 	if et == nil {
 		return false
+	}
+	// Explicit Owner choice overrides the heuristic (PC-CLAIM-2).
+	if et.Claimable != nil {
+		return *et.Claimable
 	}
 	if et.PresetCategory != nil && *et.PresetCategory == "character" {
 		return true
@@ -1205,6 +1258,23 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		}
 	}
 
+	// Player-character sub-types are gated behind the Player Character
+	// Claiming addon (PC-CLAIM-2). Creating one while the addon is off would
+	// mint a claimable type the campaign has no claim flow for — reject with a
+	// clear pointer to the toggle. With the addon on, default claimable=true
+	// (unless the caller set it explicitly) so the type is immediately
+	// claimable without a second step.
+	pcType := isPlayerCharacterType(input.PresetCategory, slug)
+	if pcType && !s.isAddonEnabled(ctx, campaignID, AddonPlayerCharacterClaiming) {
+		return nil, apperror.NewBadRequest(
+			`enable the "Player Character Claiming" addon for this campaign before creating a Player Character type`)
+	}
+	claimable := input.Claimable
+	if pcType && claimable == nil {
+		defaultClaimable := true
+		claimable = &defaultClaimable
+	}
+
 	et := &EntityType{
 		CampaignID:     campaignID,
 		Slug:           slug,
@@ -1214,6 +1284,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		Color:          color,
 		PresetCategory: presetCategory,
 		ParentTypeID:   input.ParentTypeID,
+		Claimable:      claimable,
 		Fields:         []FieldDefinition{},
 		Layout:         DefaultLayout(),
 		SortOrder:      maxOrder + 1,
@@ -1329,6 +1400,12 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 			return nil, apperror.NewBadRequest("sub-types cannot be nested more than one level deep")
 		}
 		et.ParentTypeID = input.ParentTypeID
+	}
+
+	// Apply an explicit claimable change; nil preserves the stored value
+	// (et was loaded with the current claimable via FindByID).
+	if input.Claimable != nil {
+		et.Claimable = input.Claimable
 	}
 
 	if err := s.types.Update(ctx, et); err != nil {

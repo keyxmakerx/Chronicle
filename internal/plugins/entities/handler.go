@@ -2397,6 +2397,7 @@ func (h *Handler) CreateEntityType(c echo.Context) error {
 		Icon:         req.Icon,
 		Color:        req.Color,
 		ParentTypeID: req.ParentTypeID,
+		Claimable:    req.Claimable,
 	}
 
 	et, err := h.service.CreateEntityType(c.Request().Context(), cc.Campaign.ID, input)
