@@ -24,6 +24,33 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 - [~] **Document-listener leaks** in `entity_posts.js` + `relation_graph.js` (cordinator#39 F1/F2) — Agent 1, `C-SWEEP-FIXES-R1` PR 1.
 - [~] **Public-campaign read gaps**: aliases route not in pub group; player-notes block mounts for anonymous; map blocks blank for public viewers (cordinator#39 F3/F5/F4) — Agent 1, `C-SWEEP-FIXES-R1` PR 2. Fog/layers stay auth-only.
 - [~] **Topbar custom branding still masked** (cordinator#29) — header lacks a stacking context, so the z-index:-1 brand layer paints under `bg-surface`; fix = `isolate` on the header — Agent 2, `C-BACKLOG-BUGS-R1`.
+
+### Player Character Claiming (PC-CLAIM) — staged feature
+
+Goal: restrict claiming to a "Player Characters" sub-type via an Owner-toggleable
+addon; make claims visible (who claimed what); keep Foundry auto-claim working
+for player-owned PC actors.
+
+- [x] **Stage 1 — claim visibility (PC-CLAIM-1)**: distinct `entity.claimed` /
+  `entity.owner_changed` audit actions (audit/model.go) + activity-feed labels &
+  colors (audit/activity.templ); `ClaimEntity` records the real character name
+  under `entity.claimed` (was generic `entity.updated` + "claimed by <id>"), and
+  `AssignOwner` records the new owner in `Details` under `entity.owner_changed`
+  (`logAuditWithDetails`). Compile + audit/entities unit tests green.
+- [ ] **Stage 2 — addon + claimable flag (PC-CLAIM-2)**: register
+  `player-character-claiming` in `builtinAddons`; migration `000029` adds
+  `entity_types.claimable BOOLEAN NULL`; model/repo plumb it through every
+  entity_type SELECT/INSERT/scan (⚠ scan-order — verify against a real DB);
+  `isClaimableType` honours the flag (NULL = legacy heuristic). Gate PC sub-type
+  creation in `CreateEntityType` on the addon (the "enable the module" prompt),
+  via the already-injected `AddonChecker`.
+- [ ] **Stage 3 — UI (PC-CLAIM-3)**: per-type "Players can claim this" toggle in
+  the type editor; current owner shown on the character page; GM owner overview on
+  the Characters dashboard with reassign/unclaim; claim button honours addon + flag.
+- [ ] **Stage 4 — Foundry (PC-CLAIM-4)**: actor-sync detects the addon, maps
+  player-owned PC-type actors → the PC sub-type and auto-claims them (NPCs/monsters
+  excluded by actor type + GM ownership); surface "enable Player Character Claiming
+  in Chronicle" when the addon is off.
 - [~] **May bugs verify-then-fix** — editor dark-on-dark (#8), customizer no-change save + scroll (#10), mobile notepad z-index (#11) — Agent 3, `C-BACKLOG-BUGS-R1`.
 
 ### High

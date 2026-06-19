@@ -19,6 +19,10 @@ func actionLabel(action string) string {
 		return "updated"
 	case ActionEntityDeleted:
 		return "deleted"
+	case ActionEntityClaimed:
+		return "claimed"
+	case ActionEntityOwnerChanged:
+		return "reassigned owner of"
 	case ActionMemberJoined:
 		return "joined the campaign"
 	case ActionMemberLeft:
@@ -45,6 +49,10 @@ func actionColor(action string) string {
 		return "bg-blue-400 dark:bg-blue-500"
 	case ActionEntityDeleted:
 		return "bg-red-400 dark:bg-red-500"
+	case ActionEntityClaimed:
+		return "bg-green-400 dark:bg-green-500"
+	case ActionEntityOwnerChanged:
+		return "bg-amber-400 dark:bg-amber-500"
 	case ActionMemberJoined:
 		return "bg-violet-400 dark:bg-violet-500"
 	case ActionMemberLeft:

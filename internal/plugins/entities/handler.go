@@ -262,6 +262,26 @@ func (h *Handler) logAudit(c echo.Context, campaignID, action, entityID, entityN
 	}
 }
 
+// logAuditWithDetails is like logAudit but attaches a structured Details map
+// (e.g. the new owner on an ownership change). Fire-and-forget; never blocks.
+func (h *Handler) logAuditWithDetails(c echo.Context, campaignID, action, entityID, entityName string, details map[string]any) {
+	if h.auditSvc == nil {
+		return
+	}
+	userID := auth.GetUserID(c)
+	if err := h.auditSvc.Log(c.Request().Context(), &audit.AuditEntry{
+		CampaignID: campaignID,
+		UserID:     userID,
+		Action:     action,
+		EntityType: "entity",
+		EntityID:   entityID,
+		EntityName: entityName,
+		Details:    details,
+	}); err != nil {
+		slog.Warn("audit log failed", slog.String("action", action), slog.Any("error", err))
+	}
+}
+
 // --- Entity CRUD ---
 
 // Index renders the entity list page (GET /campaigns/:id/entities).
@@ -3105,7 +3125,11 @@ func (h *Handler) ClaimEntity(c echo.Context) error {
 		return err
 	}
 
-	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, "claimed by "+userID)
+	// Distinct, legible audit: the acting user IS the claimant (joined to a
+	// display name in the activity feed), so recording the character's real
+	// name yields "Alice claimed Tyne" — filterable via the entity.claimed
+	// action rather than buried under generic entity.updated.
+	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityClaimed, entityID, entity.Name)
 
 	if middleware.IsHTMX(c) {
 		// Return the entity show page so the claim button disappears.
@@ -3146,7 +3170,9 @@ func (h *Handler) AssignOwner(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	// Membership validation when assigning (not when clearing).
+	// Membership validation when assigning (not when clearing). Capture the
+	// new owner's display name for a legible audit entry.
+	newOwnerName := ""
 	if req.OwnerUserID != nil && *req.OwnerUserID != "" {
 		if h.memberLister == nil {
 			return apperror.NewInternal(fmt.Errorf("member lister not configured"))
@@ -3159,6 +3185,7 @@ func (h *Handler) AssignOwner(c echo.Context) error {
 		for _, m := range members {
 			if m.UserID == *req.OwnerUserID {
 				isMember = true
+				newOwnerName = m.DisplayName
 				break
 			}
 		}
@@ -3175,7 +3202,17 @@ func (h *Handler) AssignOwner(c echo.Context) error {
 		return err
 	}
 
-	h.logAudit(c, cc.Campaign.ID, audit.ActionEntityUpdated, entityID, "owner reassigned")
+	// Record who the character was reassigned to (or cleared) under a distinct,
+	// filterable action — the new owner lives in Details for the activity feed
+	// and API consumers.
+	details := map[string]any{}
+	if req.OwnerUserID != nil {
+		details["new_owner_id"] = *req.OwnerUserID
+		details["new_owner_name"] = newOwnerName
+	} else {
+		details["cleared"] = true
+	}
+	h.logAuditWithDetails(c, cc.Campaign.ID, audit.ActionEntityOwnerChanged, entityID, entity.Name, details)
 
 	return c.JSON(http.StatusOK, updated)
 }
