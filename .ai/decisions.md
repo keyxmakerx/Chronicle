@@ -1539,3 +1539,81 @@ its migration order vs calendar/maps/timeline is irrelevant.
 (§3), `reports/chronicle/2026-06-07-widget-binding-precedent-research.md`
 (polymorphic-association / multi-tenant-scoping precedent; Foundry #9818
 cascade-direction bug → directional cascade test).
+
+---
+
+## ADR-039: Player Character Claiming — Owner-Toggleable Addon + Per-Type Claimable Flag
+
+**Date:** 2026-06-19 · **Status:** Accepted · **Phase:** PC-CLAIM (Stages 1–3 merged)
+
+**Context.** Chronicle needs bidirectional player-character binding for both
+Foundry sync and internal campaign management. A GM must know which player owns
+which character; a player must be able to claim an unclaimed character. The
+feature must be optional (campaigns can opt-in) and extensible (not every
+character-shaped type needs claiming).
+
+**Decision.** Three-part design:
+
+1. **Owner-toggleable addon** (`player-character-claiming`): GMs opt-in per
+   campaign via the Addons panel. Creating a "Player Character" sub-type (a
+   dedicated entity type with `preset_category == "player_character"`) is
+   gated on the addon being enabled. UI surfaces (claim button, owner roster,
+   claimable toggle) are all hidden when the addon is off.
+
+2. **Per-type claimable flag** (`entity_types.claimable BOOLEAN NULL`): allows
+   the Owner fine-grained control. When set (TRUE/FALSE), the Owner's choice
+   is authoritative. When NULL (default/unset), the legacy heuristic applies
+   (preset_category "character" or slug `*-character`). This allows existing
+   campaigns to keep claiming on their "Character" type without manual
+   re-configuration.
+
+3. **"Player Character" sub-type + legacy fallback**: New campaigns can use
+   the dedicated "Player Character" sub-type when the addon is on (explicit,
+   separate from characters that might be NPCs). Existing campaigns keep
+   claiming on their existing "Character" type (heuristic-based). Both paths
+   are supported; neither overwrites the other.
+
+**Claimable-by-default when addon is on:** When an Owner enables the addon
+and creates a new type, the claimable flag defaults to true. This reflects
+the mental model: "I turned on the feature" → "I want my character types to
+be claimable." If the Owner wants a character-shaped type that is *not*
+claimable (e.g., "NPC", "Companion"), they can toggle the flag to false.
+
+**Why this design vs alternatives:**
+
+- **Addon on/off (vs always-on):** Existing campaigns default off. Zero
+  surprise. Opt-in ceremonies reduce feature cruft for campaigns that don't
+  use the feature.
+
+- **Per-type flag (vs all-or-nothing):** Not all character-shaped entities
+  should be claimable. An NPC generator, a companion template, or an "Open
+  Seat" character all have the same *shape* as a PC but aren't owned by
+  players. Per-type control is finer-grained and avoids category-wide toggles.
+
+- **Dedicated PC sub-type (vs hardcoding "Character"):** Separates the concerns.
+  "Player Character" is a campaign-wide opt-in with the addon; "Character" is
+  the general-purpose entity type, which may or may not be claimable. Foundry
+  sync (Stage 4) can look for the PC sub-type specifically and auto-claim
+  player-owned actors into it.
+
+- **Heuristic fallback (vs migration-time decision):** Existing campaigns don't
+  need a migration. The `claimable` column defaults NULL, and the service falls
+  back to the existing heuristic (preset_category "character"). Campaigns can
+  opt-in to explicit control by setting claimable on their types. Zero
+  disruption.
+
+**Audit trail:** New distinct audit actions (`entity.claimed` and
+`entity.owner_changed`) make claiming and reassignment visible in the activity
+log (Stage 1). The claiming player and the character's real name are recorded,
+not opaque IDs.
+
+**Stage 4 (pending):** When the Foundry sync module detects the addon, it maps
+player-owned PC actors (by actor type + GM ownership) to the PC sub-type and
+auto-claims them. This bridges Foundry and Chronicle without manual operator
+configuration.
+
+**References.** `internal/plugins/entities/.ai.md` §"Player Character Claiming",
+`entities/{service.go, handler.go}` (isPlayerCharacterType, isClaimableType,
+ClaimEntity, AssignOwner), `entities/{claim_banner.templ, claim_overview_test.go}`,
+migration 000029.
+
