@@ -176,6 +176,17 @@ swap. They get restarted only when their image changes, which is rare.
 
 ## 7. Rollback
 
+**`migrate-down` safety rule.** Never run `make migrate-down` on live data
+without first running `make backup` and reviewing what the down migration
+does. `000001_baseline.down.sql` wipes all 34 core tables (total data loss).
+`000028_public_grant_subject.down.sql` deletes every `subject_type='public'`
+row from `entity_permissions` (public-visibility grants are unrecoverable
+without a restore). Additionally, backups inside the `chronicle-data` volume
+do not survive `docker compose down -v` — a volume-delete wipes your only
+local safety net. Always keep at least one offsite copy (see §8) before
+running any `migrate-down` or volume operation you are not fully confident
+about.
+
 Three scenarios. All use the existing health-check gate plus the
 pre-migration backup. **No new server code is ever needed for a rollback.**
 

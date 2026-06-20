@@ -325,6 +325,10 @@ CREATE TABLE IF NOT EXISTS calendars ( ... );
    `maps`, `calendars`, etc.) crashes on a fresh DB. If a single data fix needs
    to span both layers, split it: the core part stays in `db/migrations/`, the
    plugin part moves to that plugin's `migrations/` directory.
+8. **`ALTER TABLE ADD COLUMN` must use `IF NOT EXISTS`**: bare `ADD COLUMN`
+   fails with "Error 1060: Duplicate column" if the dirty-state recovery path
+   re-runs the migration. Always write `ALTER TABLE t ADD COLUMN IF NOT EXISTS c ...`
+   so the migration is idempotent and auto-recovery is unconditionally safe.
 
 ### Permission Model
 

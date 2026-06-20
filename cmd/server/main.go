@@ -98,7 +98,7 @@ func main() {
 	// Validates migration version, schema columns, DB health, and security.
 	// Server refuses to start if any fatal check fails.
 	if err := database.RunStartupHealthChecks(db, database.HealthCheckConfig{
-		ExpectedMigrationVersion: 26,
+		ExpectedMigrationVersion: 29,
 		CriticalColumns: map[string][]string{
 			"campaigns":        {"id", "name", "slug", "archived_at", "join_code", "settings", "sidebar_config"},
 			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility", "owner_user_id", "map_id"},
@@ -115,6 +115,13 @@ func main() {
 			// fast instead of every upload silently bypassing dedup and
 			// duplicating storage.
 			"media_files": {"id", "campaign_id", "uploaded_by", "filename", "mime_type", "file_size", "content_hash"},
+			// tag_permissions (migration 27) carries tag-based visibility
+			// grants; missing the table means ALL tag-grant paths 500.
+			"tag_permissions": {"id", "tag_id", "subject_type", "subject_id", "created_by", "created_at"},
+			// claimable (migration 29) is required by the PC-CLAIM ownership
+			// flow; a deploy without it means entity-type pages 500 on any
+			// claim-eligibility check.
+			"entity_types": {"id", "campaign_id", "name", "slug", "claimable"},
 		},
 		Env:        cfg.Env,
 		BaseURL:    cfg.BaseURL,
