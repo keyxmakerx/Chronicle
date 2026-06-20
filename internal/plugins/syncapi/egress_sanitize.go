@@ -22,6 +22,7 @@ package syncapi
 
 import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -81,4 +82,78 @@ func sanitizeCalendarEventsHTMLForEgress(es []calendar.Event) {
 	for i := range es {
 		sanitizeCalendarEventHTMLForEgress(&es[i])
 	}
+}
+
+// --- Inline-secret redaction (P0: DM-secret egress) ---
+//
+// Inline GM secrets are authored as <span data-secret> in the rendered
+// HTML and a "secret"-marked text node in the ProseMirror JSON. The
+// documented contract (static/js/widgets/editor_secret.js) is that they
+// are stripped server-side so players never receive the secret content.
+// The web honors this in entities/handler.go (GetEntry / GetPlayerNotes)
+// for MemberRole < RoleScribe; the /api/v1/* read path must mirror it or
+// a player-role caller reads raw GM prose off entry_html / entry /
+// player_notes — a confirmed launch-blocker leak.
+//
+// This is a ROLE-AWARE transform, distinct from the role-agnostic
+// XSS sanitize above: Owners and Scribes see secrets (with a visual
+// indicator client-side), so we only strip below the RoleScribe bar.
+// The threshold mirrors the web verbatim (campaigns.RoleScribe), so the
+// two paths can't drift on who sees secrets.
+
+// stripEntitySecretsForEgress removes inline GM secrets from an entity
+// response copy when the caller's role is below the secret-visibility
+// bar (mirrors entities/handler.go GetEntry: MemberRole < RoleScribe).
+// Owner/Scribe responses are left untouched. Safe on a nil pointer.
+//
+// Both representations are scrubbed: the rendered HTML fields via
+// StripSecretsHTML (drops the whole <span data-secret> element) and the
+// ProseMirror JSON fields via StripSecretsJSON (drops "secret"-marked
+// text nodes). Stripping only one would leak the secret through the
+// other, since clients may read either.
+//
+// The pointer's referent is replaced with a fresh pointer to a stripped
+// copy (sanitize.* return new strings), so the source-of-truth model the
+// caller scanned from the DB is not mutated in place.
+func stripEntitySecretsForEgress(e *entities.Entity, role int) {
+	if e == nil || role >= int(campaigns.RoleScribe) {
+		return
+	}
+	e.Entry = stripSecretsJSONPtr(e.Entry)
+	e.EntryHTML = stripSecretsHTMLPtr(e.EntryHTML)
+	e.PlayerNotes = stripSecretsJSONPtr(e.PlayerNotes)
+	e.PlayerNotesHTML = stripSecretsHTMLPtr(e.PlayerNotesHTML)
+}
+
+// stripEntitiesSecretsForEgress applies stripEntitySecretsForEgress to
+// every element of a fresh slice (e.g. ListEntities / sync-pull output).
+func stripEntitiesSecretsForEgress(es []entities.Entity, role int) {
+	if role >= int(campaigns.RoleScribe) {
+		return
+	}
+	for i := range es {
+		stripEntitySecretsForEgress(&es[i], role)
+	}
+}
+
+// stripSecretsHTMLPtr is the nullable-pointer companion to
+// sanitize.StripSecretsHTML: nil in, nil out; otherwise a fresh pointer
+// to the stripped HTML. The original referent is not mutated.
+func stripSecretsHTMLPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := sanitize.StripSecretsHTML(*p)
+	return &s
+}
+
+// stripSecretsJSONPtr is the nullable-pointer companion to
+// sanitize.StripSecretsJSON: nil in, nil out; otherwise a fresh pointer
+// to the stripped ProseMirror JSON. The original referent is not mutated.
+func stripSecretsJSONPtr(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := sanitize.StripSecretsJSON(*p)
+	return &s
 }

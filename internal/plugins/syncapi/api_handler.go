@@ -225,6 +225,12 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 	// Defense-in-depth egress sanitize — see egress_sanitize.go.
 	sanitizeEntitiesHTMLForEgress(items)
 
+	// Redact inline GM secrets for callers below the secret-visibility
+	// bar (Player), mirroring the web path. Same P0 leak as GetEntity,
+	// at list scope. Owner/Scribe responses are unchanged.
+	// See C-SYNCAPI-PRELAUNCH-HARDENING.
+	stripEntitiesSecretsForEgress(items, role)
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":     items,
 		"total":    total,
@@ -260,6 +266,14 @@ func (h *APIHandler) GetEntity(c echo.Context) error {
 	// Defense-in-depth egress sanitize — see egress_sanitize.go.
 	sanitizeEntityHTMLForEgress(entity)
 
+	// Redact inline GM secrets for callers below the secret-visibility
+	// bar (Player), mirroring the web GetEntry path. Closes the P0
+	// DM-secret egress leak: the whole-entity CanView gate above lets a
+	// player read this entity, but the secret PROSE inside it must not
+	// ship. Owner/Scribe (>= RoleScribe) responses are unchanged.
+	// See C-SYNCAPI-PRELAUNCH-HARDENING.
+	stripEntitySecretsForEgress(entity, role)
+
 	return c.JSON(http.StatusOK, entity)
 }
 
@@ -293,13 +307,15 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	// If no entity type specified, use the first available type for the campaign.
+	// Reject a missing/zero entity_type_id instead of silently defaulting
+	// to the first available type. Defaulting to types[0] (non-deterministic
+	// "first type", typically Character) is the server-side root of the
+	// calendar-as-Characters bug class: any client with a stale/wrong type
+	// mapping would create entities under an arbitrary category with no
+	// error. The batch-sync create path passes a real type, so no internal
+	// caller regresses. See C-SYNCAPI-PRELAUNCH-HARDENING (P1).
 	if req.EntityTypeID == 0 {
-		types, err := h.entitySvc.GetEntityTypes(c.Request().Context(), c.Param("id"))
-		if err != nil || len(types) == 0 {
-			return apperror.NewBadRequest("no entity types available")
-		}
-		req.EntityTypeID = types[0].ID
+		return apperror.NewBadRequest("entity_type_id is required")
 	}
 
 	// Validate owner_user_id (if provided) is a member of the target
