@@ -99,6 +99,11 @@ const (
 	EventIPBlocked   SecurityEventType = "ip_blocked"
 	EventKeyExpired  SecurityEventType = "key_expired"
 	EventSuspicious  SecurityEventType = "suspicious"
+	// EventKeyOwnerDegraded fires when a stored Bearer key's creator is no
+	// longer an Owner (or member) of the key's campaign. The key keeps syncing
+	// (decoupled from live membership — see APIHandler.resolveRole), but the
+	// lost-access condition is recorded so the operator can rotate the key.
+	EventKeyOwnerDegraded SecurityEventType = "key_owner_degraded"
 )
 
 // SecurityEvent records a security-related API event.

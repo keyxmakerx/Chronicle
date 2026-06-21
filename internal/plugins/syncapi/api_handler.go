@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -74,18 +75,110 @@ func (h *APIHandler) SetCampaignSystemLister(csl CampaignSystemLister) {
 	h.campaignSystemLister = csl
 }
 
-// resolveRole returns the API key owner's role in the campaign for privacy filtering.
-// Falls back to RoleNone if the key owner is no longer a campaign member.
+// keyOwnerDegradedHeader is set on responses when a stored Bearer key's creator
+// has lost Owner access to the key's campaign. The Foundry module can surface it
+// as a "this sync key's owner lost access — rotate it" banner. The key keeps
+// syncing; the header makes the otherwise-silent condition observable.
+const keyOwnerDegradedHeader = "X-Chronicle-Key-Owner-Degraded"
+
+// degradeSignalInterval throttles the heavyweight degrade signals (log line +
+// persisted security event) per key so a high-frequency sync can't flood them,
+// while still re-surfacing the condition periodically.
+const degradeSignalInterval = time.Hour
+
+// degradeSignalThrottle tracks the last time the loud degrade signal fired per
+// API key id (int -> time.Time). The response header is always set; only the
+// log/security-event emit is throttled.
+var degradeSignalThrottle sync.Map
+
+// resolveRole returns the caller's effective role for entity privacy filtering.
+//
+// The resolution differs by auth type (T-B1 visibility correctness, §1B):
+//
+//   - Session-authed callers (synthetic key, ID == synthKeySessionID) keep their
+//     LIVE campaign role. Their synthetic key already mirrors current membership,
+//     and session behavior must not change.
+//   - A real stored Bearer key resolves to Owner-level sync visibility,
+//     DECOUPLED from its creator's current membership. Keys are strictly
+//     Owner-minted (routes.go: POST /api-keys is RequireRole(Owner)) and the
+//     WebSocket path already grants any valid key Owner role
+//     (service.AuthenticateKeyForWS). Mirroring that here makes the REST and WS
+//     surfaces agree and removes the silent-degrade landmine where transferring
+//     ownership or removing a member quietly stripped private/custom entities
+//     from the sync. When the key's creator HAS lost access we still sync, but
+//     we emit a loud, operator-visible signal instead of degrading silently.
 func (h *APIHandler) resolveRole(c echo.Context) int {
 	key := GetAPIKey(c)
 	if key == nil {
 		return 0
 	}
-	member, err := h.campaignSvc.GetMember(c.Request().Context(), key.CampaignID, key.UserID)
-	if err != nil {
-		return 0
+	// Session-authed caller: keep today's live-membership behavior.
+	if key.ID == synthKeySessionID {
+		member, err := h.campaignSvc.GetMember(c.Request().Context(), key.CampaignID, key.UserID)
+		if err != nil {
+			return 0
+		}
+		return int(member.Role)
 	}
-	return int(member.Role)
+	// Stored Bearer key: reliable Owner-level sync visibility, but surface a
+	// lost-access condition loudly rather than silently degrading.
+	h.flagIfKeyOwnerLostAccess(c, key)
+	return int(campaigns.RoleOwner)
+}
+
+// flagIfKeyOwnerLostAccess emits a loud, module-surfaceable signal when a stored
+// Bearer key's creator (key.UserID) is no longer an Owner (or no longer a member)
+// of the key's campaign. We deliberately do NOT downgrade the key's sync
+// visibility here — that silent degrade was the bug. Auto-disabling the key is a
+// separate, operator-visible policy decision left as a follow-up.
+func (h *APIHandler) flagIfKeyOwnerLostAccess(c echo.Context, key *APIKey) {
+	member, err := h.campaignSvc.GetMember(c.Request().Context(), key.CampaignID, key.UserID)
+	// err != nil => creator removed from campaign; role < Owner => demoted.
+	if err == nil && member.Role >= campaigns.RoleOwner {
+		return
+	}
+
+	// Always expose the condition to the client (cheap + idempotent) so the
+	// module can show its banner regardless of log/security-event throttling.
+	c.Response().Header().Set(keyOwnerDegradedHeader, "1")
+
+	if !shouldEmitDegradeSignal(key.ID) {
+		return
+	}
+	reason := "owner_demoted"
+	if err != nil {
+		reason = "owner_removed"
+	}
+	slog.Warn("sync api key owner lost campaign access; key still syncing — rotate it",
+		slog.Int("key_id", key.ID),
+		slog.String("campaign_id", key.CampaignID),
+		slog.String("key_user_id", key.UserID),
+		slog.String("reason", reason),
+	)
+	keyID := key.ID
+	campaignID := key.CampaignID
+	_ = h.syncSvc.LogSecurityEvent(c.Request().Context(), &SecurityEvent{
+		EventType:  EventKeyOwnerDegraded,
+		APIKeyID:   &keyID,
+		CampaignID: &campaignID,
+		IPAddress:  c.RealIP(),
+		UserAgent:  strPtr(c.Request().UserAgent()),
+		Details:    map[string]any{"reason": reason, "key_user_id": key.UserID},
+	})
+}
+
+// shouldEmitDegradeSignal reports whether the loud degrade signal should fire for
+// this key now, throttled to once per degradeSignalInterval. A small race (two
+// concurrent first requests) is harmless for a warning.
+func shouldEmitDegradeSignal(keyID int) bool {
+	now := time.Now()
+	if last, ok := degradeSignalThrottle.Load(keyID); ok {
+		if t, ok := last.(time.Time); ok && now.Sub(t) < degradeSignalInterval {
+			return false
+		}
+	}
+	degradeSignalThrottle.Store(keyID, now)
+	return true
 }
 
 // resolveUserID returns the API key owner's user ID for permission checks.
