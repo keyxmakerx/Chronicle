@@ -202,6 +202,7 @@
         'border:1px solid var(--surface-border,#e5e7eb);border-radius:16px;' +
         'box-shadow:var(--surface-elev,0 16px 36px -8px rgba(0,0,0,.22));}',
       '.cs-overlay__panel:focus{outline:none;}',
+      '.cs-overlay__panel--full{max-width:min(96vw,1180px);width:100%;max-height:92vh;}',
       // box primitive
       '.cs-box{border:1px solid var(--surface-border,#e5e7eb);border-radius:12px;' +
         'background:var(--surface-bg,#fff);overflow:hidden;}',
@@ -264,6 +265,7 @@
     backdrop.className = 'cs-overlay__backdrop';
     var panel = document.createElement('div');
     panel.className = 'cs-overlay__panel';
+    if (opts.panelClass) panel.className += ' ' + opts.panelClass;
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     if (opts.label) panel.setAttribute('aria-label', opts.label);
@@ -278,7 +280,7 @@
     stack.push(entry);
 
     play('fade', backdrop, {});
-    play(opts.transition || 'scale-fade', panel, { origin: opts.origin });
+    play(opts.transition || 'scale-fade', panel, { origin: opts.origin, fromRect: opts.fromRect });
 
     var first = panel.querySelector('[autofocus]');
     try { (first || panel).focus(); } catch (e) { /* focus is best-effort */ }
@@ -308,6 +310,27 @@
   }
 
   function popAllOverlays() { while (stack.length) popOverlay(); }
+
+  // launch(fromEl, content, opts) — the mini→full move: capture fromEl's screen
+  // rect and open `content` as an overlay that GROWS from it (container-transform).
+  // The mini card and the full surface should share one provider (same key) so
+  // the launch is instant + live. opts override transition/panelClass/etc.
+  function launch(fromEl, content, opts) {
+    opts = opts || {};
+    var rect = null;
+    if (fromEl && fromEl.getBoundingClientRect) {
+      var r = fromEl.getBoundingClientRect();
+      rect = { left: r.left, top: r.top, width: r.width, height: r.height };
+    }
+    return pushOverlay(content, {
+      transition: opts.transition || 'container-transform',
+      fromRect: rect,
+      panelClass: opts.panelClass || 'cs-overlay__panel--full',
+      label: opts.label,
+      dismissable: opts.dismissable,
+      origin: opts.origin
+    });
+  }
 
   // Global key handling for the top layer: Escape pops; Tab is trapped within it.
   document.addEventListener('keydown', function (e) {
@@ -403,13 +426,86 @@
     destroy: function (el) { el._csBox = false; }
   });
 
+  // ── data provider (memoized fetch + subscribe) ─────────────────────────────
+  //
+  // Chronicle.surface.provider(key, fetcher, opts) returns a SHARED provider for
+  // `key`: it runs `fetcher()` (a Promise of data) at most once and fans the
+  // result to every subscriber, so multiple boxes / a mini + its full surface on
+  // one key share ONE fetch and live-update together (push). opts.seed adopts a
+  // server-embedded payload (zero network). Self-destroys when the last
+  // subscriber leaves. Generalizes the worldstate provider pattern.
+
+  var providers = {};
+
+  function Provider(key, fetcher) {
+    this.key = key; this._fetcher = fetcher;
+    this.data = null; this.loaded = false; this.error = null;
+    this._promise = null; this._subs = []; this._errSubs = [];
+  }
+  Provider.prototype.load = function () {
+    if (this._promise) return this._promise;
+    var self = this, out;
+    try { out = this._fetcher ? this._fetcher() : Promise.resolve(null); }
+    catch (e) { out = Promise.reject(e); }
+    this._promise = Promise.resolve(out)
+      .then(function (d) { self.data = d; self.loaded = true; self._emit(); return d; })
+      .catch(function (e) { self.error = e; self._emitError(e); throw e; });
+    return this._promise;
+  };
+  Provider.prototype.get = function () { return this.load(); };
+  Provider.prototype.current = function () { return this.data; };
+  Provider.prototype.push = function (d) { this.data = d; this.loaded = true; this._emit(); };
+  Provider.prototype.refresh = function () { this._promise = null; this.error = null; return this.load(); };
+  Provider.prototype.subscribe = function (fn) {
+    if (typeof fn !== 'function') return function () {};
+    this._subs.push(fn);
+    if (this.loaded) { try { fn(this.data); } catch (e) {} } else { this.load(); }
+    var self = this;
+    return function () {
+      var i = self._subs.indexOf(fn); if (i >= 0) self._subs.splice(i, 1);
+      if (!self._subs.length) self.destroy();
+    };
+  };
+  Provider.prototype.onError = function (fn) {
+    if (typeof fn !== 'function') return function () {};
+    this._errSubs.push(fn);
+    if (this.error) { try { fn(this.error); } catch (e) {} }
+    var self = this;
+    return function () { var i = self._errSubs.indexOf(fn); if (i >= 0) self._errSubs.splice(i, 1); };
+  };
+  Provider.prototype._emit = function () {
+    var d = this.data;
+    this._subs.slice().forEach(function (fn) { try { fn(d); } catch (e) {} });
+  };
+  Provider.prototype._emitError = function (e) {
+    this._errSubs.slice().forEach(function (fn) { try { fn(e); } catch (ee) {} });
+  };
+  Provider.prototype.destroy = function () {
+    this._subs = []; this._errSubs = [];
+    if (providers[this.key] === this) delete providers[this.key];
+  };
+
+  function provider(key, fetcher, opts) {
+    key = key || '';
+    var p = providers[key];
+    if (!p) {
+      p = providers[key] = new Provider(key, fetcher);
+      if (opts && opts.seed !== undefined) p.push(opts.seed);
+    } else if (fetcher && !p._fetcher) {
+      p._fetcher = fetcher;
+    }
+    return p;
+  }
+
   // ── expose ────────────────────────────────────────────────────────────────
 
   Chronicle.surface = Chronicle.surface || {};
   Chronicle.surface.transitions = TRANSITIONS;   // the menu (Systems read/extend)
   Chronicle.surface.play = play;
   Chronicle.surface.overlay = { push: pushOverlay, pop: popOverlay, popAll: popAllOverlays };
+  Chronicle.surface.launch = launch;             // mini -> full container-transform
   Chronicle.surface.box = setupBox;              // enhance a box element programmatically
+  Chronicle.surface.provider = provider;         // shared memoized fetch + subscribe
   Chronicle.surface.reducedMotion = reducedMotion;
   Chronicle.surface.cssVar = cssVar;
 
