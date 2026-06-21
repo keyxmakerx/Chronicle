@@ -1659,6 +1659,110 @@ func TestSetEntityPermissions_InvalidVisibility(t *testing.T) {
 	assertAppError(t, err, 400)
 }
 
+// --- SetEntityPermissions event-broadcast tests ---
+
+// capturingEntityEventPublisher records every PublishEntityEvent call so tests
+// can assert that the correct event was emitted with the right entity state.
+type capturingEntityEventPublisher struct {
+	events []capturedEntityEvent
+}
+
+// capturedEntityEvent holds one recorded PublishEntityEvent call.
+type capturedEntityEvent struct {
+	eventType  string
+	campaignID string
+	entityID   string
+	entity     *Entity
+}
+
+func (p *capturingEntityEventPublisher) PublishEntityEvent(eventType, campaignID, entityID string, entity *Entity) {
+	// Store a shallow copy of the entity struct so mutations after the call
+	// don't silently change our assertion data.
+	entityCopy := *entity
+	p.events = append(p.events, capturedEntityEvent{
+		eventType:  eventType,
+		campaignID: campaignID,
+		entityID:   entityID,
+		entity:     &entityCopy,
+	})
+}
+
+func (p *capturingEntityEventPublisher) PublishEntityTypeEvent(string, string, *EntityType) {}
+
+// TestSetEntityPermissions_PublishesUpdatedEvent verifies that SetEntityPermissions
+// emits an "updated" entity event for both visibility modes and that the
+// published entity carries the NEW visibility so downstream consumers
+// (e.g. the Foundry module's _buildOwnership) observe the right state.
+func TestSetEntityPermissions_PublishesUpdatedEvent(t *testing.T) {
+	cases := []struct {
+		description string
+		input       SetPermissionsInput
+		wantVis     VisibilityMode
+	}{
+		{
+			description: "default mode publishes updated event with default visibility",
+			input: SetPermissionsInput{
+				Visibility: VisibilityDefault,
+				IsPrivate:  true,
+			},
+			wantVis: VisibilityDefault,
+		},
+		{
+			description: "custom mode publishes updated event with custom visibility",
+			input: SetPermissionsInput{
+				Visibility: VisibilityCustom,
+				Permissions: []PermissionGrant{
+					{SubjectType: SubjectUser, SubjectID: "user-1", Permission: PermView},
+				},
+			},
+			wantVis: VisibilityCustom,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.description, func(t *testing.T) {
+			entityRepo := &mockEntityRepo{
+				findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+					// Return entity with the OLD (opposite) visibility to confirm
+					// the event carries the NEW one, not the stale DB value.
+					return &Entity{
+						ID:         "ent-1",
+						CampaignID: "camp-1",
+						Name:       "Test",
+						Visibility: VisibilityDefault, // always start with default
+					}, nil
+				},
+			}
+
+			pub := &capturingEntityEventPublisher{}
+			svc := NewEntityService(entityRepo, &mockEntityTypeRepo{}, &mockPermissionRepo{})
+			svc.SetEventPublisher(pub)
+
+			err := svc.SetEntityPermissions(context.Background(), "ent-1", tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(pub.events) != 1 {
+				t.Fatalf("expected 1 published event, got %d", len(pub.events))
+			}
+			ev := pub.events[0]
+			if ev.eventType != "updated" {
+				t.Errorf("expected eventType %q, got %q", "updated", ev.eventType)
+			}
+			if ev.campaignID != "camp-1" {
+				t.Errorf("expected campaignID %q, got %q", "camp-1", ev.campaignID)
+			}
+			if ev.entityID != "ent-1" {
+				t.Errorf("expected entityID %q, got %q", "ent-1", ev.entityID)
+			}
+			if ev.entity.Visibility != tc.wantVis {
+				t.Errorf("published entity.Visibility = %q, want %q", ev.entity.Visibility, tc.wantVis)
+			}
+		})
+	}
+}
+
 // strPtr returns a pointer to the given string.
 func strPtr(s string) *string {
 	return &s
