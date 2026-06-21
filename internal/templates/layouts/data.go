@@ -39,6 +39,7 @@ const (
 	keyMediaURLFunc      ctxKey = "layout_media_url_func"
 	keyMediaThumbFunc    ctxKey = "layout_media_thumb_func"
 	keyExtWidgetScripts  ctxKey = "layout_ext_widget_scripts"
+	keyPluginBodyScripts ctxKey = "layout_plugin_body_scripts"
 	keySidebarItems      ctxKey = "layout_sidebar_items"
 	keyAccentColor       ctxKey = "layout_accent_color"
 	keyBrandName         ctxKey = "layout_brand_name"
@@ -537,6 +538,27 @@ func SetExtWidgetScripts(ctx context.Context, urls []string) context.Context {
 // GetExtWidgetScripts returns extension widget script URLs for the current campaign.
 func GetExtWidgetScripts(ctx context.Context) []string {
 	urls, _ := ctx.Value(keyExtWidgetScripts).([]string)
+	return urls
+}
+
+// --- Plugin Body Scripts ---
+
+// SetPluginBodyScripts stores script URLs that plugins contribute to the
+// page <body> before the extension-widget block. Used so plugins can inject
+// their own widget scripts without hardcoding plugin paths in the core layout.
+// Called from App startup (RegisterRoutes) for always-on plugin assets; the
+// calendar plugin's calendar_widget.js is the canonical first use-case.
+//
+// Unlike SetExtWidgetScripts (per-campaign, set per-request), plugin body
+// scripts are global and constant for the lifetime of the process. They are
+// set once during startup and read by base.templ on every request.
+func SetPluginBodyScripts(ctx context.Context, urls []string) context.Context {
+	return context.WithValue(ctx, keyPluginBodyScripts, urls)
+}
+
+// GetPluginBodyScripts returns plugin-contributed body script URLs.
+func GetPluginBodyScripts(ctx context.Context) []string {
+	urls, _ := ctx.Value(keyPluginBodyScripts).([]string)
 	return urls
 }
 

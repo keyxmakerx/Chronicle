@@ -23,7 +23,7 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 ### Current release + branch state
 
 - **Release line:** 0.0.1 (Release Readiness completed 2026-04-25 — backup scripts + mariadb-client in image + deployment runbook)
-- **Active phase:** Phase 4 (post-hygiene + post-security + plugin-isolation arc closed; G2/F2 follow-ups + NW-2.3 next). See `cordinator/plans/2026-05-21-master-plan.md` for the phase definition.
+- **Active phase:** Pre-launch cleanup — locked macro-sequence: Calendar → Docs-audit → Tech-debt → Bugs → Features. Target launch ~2026-06-26. PC-Claim all 4 stages complete (Foundry PR #64 merged). See `cordinator/plans/2026-05-21-master-plan.md` for the prior phase definition; current dispatch queue drives day-to-day priorities.
 - **Coordinator working branch (cordinator artifacts):** `claude/setup-working-memory-vROh3`
 - **Recent cross-cutting decisions** (most recent first):
   - 2026-06-19 — **Player Character Claiming ALL 4 STAGES COMPLETE (Chronicle PR #480/#481/#482 + gate-enforce; Foundry-module PR #64)**: audit visibility + database layer + UI (claim banner, owner roster, per-type toggle) + Foundry actor-sync addon-aware PC sub-type routing/claiming. Security pass: `.ai/security-audit-2026-06-19-pc-claiming.md`. See `.ai/decisions.md` (ADR-039), `docs/player-character-claiming.md` (operator guide), `entities/.ai.md` §"Player Character Claiming". Cross-repo coordination record: `cordinator/decisions/2026-06-19-pc-claim-design.md` + `cordinator/plans/2026-06-19-pc-claim-arc.md`.
