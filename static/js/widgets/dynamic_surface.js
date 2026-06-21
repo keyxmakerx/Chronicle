@@ -206,15 +206,24 @@
       // box primitive
       '.cs-box{border:1px solid var(--surface-border,#e5e7eb);border-radius:12px;' +
         'background:var(--surface-bg,#fff);overflow:hidden;}',
-      '.cs-box__head{display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;' +
+      '.cs-box__head{display:flex;align-items:center;gap:8px;padding:0 14px;}',
+      '.cs-box__toggle{display:flex;align-items:center;gap:8px;flex:1;padding:10px 0;' +
         'background:none;border:0;cursor:pointer;color:var(--surface-text,#111827);font:inherit;text-align:left;}',
-      '.cs-box__head:hover{background:var(--surface-alt,#f3f4f6);}',
+      '.cs-box__toggle:hover .cs-box__title{color:var(--surface-accent,#6366f1);}',
       '.cs-box__caret{flex:none;width:0;height:0;border-left:5px solid currentColor;' +
         'border-top:4px solid transparent;border-bottom:4px solid transparent;opacity:.6;' +
         'transition:transform var(--surface-dur,200ms) var(--surface-ease,ease);}',
       '.cs-box[data-box-state="expanded"] .cs-box__caret{transform:rotate(90deg);}',
-      '.cs-box__title{font-weight:600;letter-spacing:.02em;flex:1;}',
-      '.cs-box__body{padding:0 14px 12px;color:var(--surface-text-body,#374151);}'
+      '.cs-box__title{font-weight:600;letter-spacing:.02em;}',
+      '.cs-box__body{padding:0 14px 12px;color:var(--surface-text-body,#374151);}',
+      '.cs-box__actions{display:inline-flex;gap:6px;align-items:center;}',
+      // surface grid (rows -> columns -> boxes) + actions
+      '.cs-surface{display:flex;flex-direction:column;gap:16px;}',
+      '.cs-row{display:flex;gap:16px;flex-wrap:wrap;}',
+      '.cs-col{display:flex;flex-direction:column;gap:16px;min-width:240px;}',
+      '.cs-action{padding:4px 10px;border-radius:8px;border:1px solid var(--surface-border,#e5e7eb);' +
+        'background:var(--surface-alt,#f3f4f6);color:var(--surface-text,#111827);font:inherit;font-size:12px;cursor:pointer;}',
+      '.cs-action:hover{background:var(--surface-accent,#6366f1);color:#fff;}'
     ].join('');
     var style = document.createElement('style');
     style.id = 'cs-surface-styles';
@@ -497,6 +506,158 @@
     return p;
   }
 
+  // ── schema-driven mount (rows → columns → boxes) ───────────────────────────
+  //
+  // Chronicle.surface.mount(container, schema) assembles a sheet from a
+  // declarative schema. The FRAME builds the boxes + wires the provider/actions;
+  // a SYSTEM supplies box BODIES via Chronicle.surface.registerBox(name, fn) —
+  // frame mounts, system renders.
+  //
+  //   schema = { provider:{key,endpoint}|{key,seed},
+  //              rows:[ { columns:[ { width, boxes:[ boxDef ] } ] } ] }
+  //   boxDef = { id, title, block, expand?, pinned?, transition?, lazy?,
+  //              endpoint?, actions?:[ {label,on:'overlay'|'api',endpoint?,target?,html?} ] }
+
+  var boxRenderers = {};
+  function registerBox(name, fn) { if (name && typeof fn === 'function') boxRenderers[name] = fn; }
+
+  function buildAction(a, prov) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cs-action';
+    btn.textContent = a.label || '';
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();   // an action must not toggle its box
+      if (a.on === 'overlay') {
+        if (a.html) { pushOverlay(a.html, { transition: a.transition || 'scale-fade' }); return; }
+        if (a.endpoint && Chronicle.apiFetch) {
+          Chronicle.apiFetch(a.endpoint)
+            .then(function (r) { return r && r.text ? r.text() : ''; })
+            .then(function (html) { pushOverlay(html, { transition: a.transition || 'scale-fade' }); })
+            .catch(function () {});
+        }
+      } else if (a.on === 'api' && a.target && Chronicle.apiFetch) {
+        var parts = String(a.target).split(' ');
+        var method = parts.length > 1 ? parts[0] : 'POST';
+        var url = parts.length > 1 ? parts[1] : a.target;
+        Chronicle.apiFetch(url, { method: method })
+          .then(function () { if (prov) prov.refresh(); })
+          .catch(function () {});
+      }
+    });
+    return btn;
+  }
+
+  function buildBox(def, prov, cleanups) {
+    var box = document.createElement('section');
+    box.className = 'cs-box';
+    box.setAttribute('data-box-state', def.expand === 'collapsed' ? 'collapsed' : 'expanded');
+    if (def.transition) box.setAttribute('data-box-transition', def.transition);
+    if (def.pinned) box.setAttribute('data-box-pinned', '');
+    if (def.id) box.setAttribute('data-box-key', def.id);
+
+    var head = document.createElement('div');
+    head.className = 'cs-box__head';
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'cs-box__toggle';
+    toggle.setAttribute('data-box-toggle', '');
+    toggle.innerHTML = '<span class="cs-box__caret"></span><span class="cs-box__title">' +
+      Chronicle.escapeHtml(def.title || '') + '</span>';
+    head.appendChild(toggle);
+    if (def.actions && def.actions.length) {
+      var actWrap = document.createElement('span');
+      actWrap.className = 'cs-box__actions';
+      def.actions.forEach(function (a) { actWrap.appendChild(buildAction(a, prov)); });
+      head.appendChild(actWrap);
+    }
+
+    var body = document.createElement('div');
+    body.className = 'cs-box__body';
+    body.setAttribute('data-box-body', '');
+    box.appendChild(head);
+    box.appendChild(body);
+
+    if (def.block && boxRenderers[def.block]) {
+      var renderFn = boxRenderers[def.block];
+      var paint = function (data) {
+        var out;
+        try { out = renderFn(def, data); } catch (e) { return; }
+        if (out == null) return;
+        if (typeof out === 'string') body.innerHTML = out;
+        else { body.innerHTML = ''; body.appendChild(out); }
+        if (Chronicle.mountWidgets) Chronicle.mountWidgets(body);
+      };
+      if (prov) { var unsub = prov.subscribe(paint); if (cleanups) cleanups.push(unsub); }
+      else paint(null);
+    } else if (def.lazy && def.endpoint) {
+      box.setAttribute('data-box-lazy', '');
+      box.setAttribute('data-box-endpoint', def.endpoint);
+    }
+
+    setupBox(box);
+    return box;
+  }
+
+  function mount(container, schema) {
+    if (!container || !schema) return null;
+    if (typeof schema === 'string') { try { schema = JSON.parse(schema); } catch (e) { return null; } }
+    injectStyles();
+
+    var cleanups = [];
+    var prov = null;
+    if (schema.provider) {
+      var pk = schema.provider.key || ('surface:' + (schema.provider.endpoint || ''));
+      var ep = schema.provider.endpoint;
+      prov = provider(pk, ep ? function () {
+        return Chronicle.apiFetch(ep).then(function (r) { return r && r.json ? r.json() : null; });
+      } : null, { seed: schema.provider.seed });
+    }
+
+    container.classList.add('cs-surface');
+    (schema.rows || []).forEach(function (row) {
+      var rowEl = document.createElement('div');
+      rowEl.className = 'cs-row';
+      (row.columns || []).forEach(function (col) {
+        var colEl = document.createElement('div');
+        colEl.className = 'cs-col';
+        colEl.style.flex = (col.width || 12) + ' 1 0';
+        (col.boxes || []).forEach(function (boxDef) { colEl.appendChild(buildBox(boxDef, prov, cleanups)); });
+        rowEl.appendChild(colEl);
+      });
+      container.appendChild(rowEl);
+    });
+
+    // Teardown: free the provider subscriptions on unmount (the provider then
+    // self-destroys when its last subscriber leaves).
+    container._csSurfaceCleanup = function () {
+      cleanups.forEach(function (u) { try { u(); } catch (e) {} });
+      cleanups = [];
+    };
+
+    if (prov) prov.load();
+    return prov;
+  }
+
+  // data-widget="dynamic-surface": read the schema from a data attribute or an
+  // inline <script type="application/json" data-surface-schema> child, then mount.
+  Chronicle.register('dynamic-surface', {
+    init: function (el) {
+      if (el._csMounted) return;
+      el._csMounted = true;
+      var schema = el.getAttribute('data-surface-schema');
+      if (!schema) {
+        var node = el.querySelector('script[type="application/json"][data-surface-schema]');
+        if (node) schema = node.textContent;
+      }
+      if (schema) mount(el, schema);
+    },
+    destroy: function (el) {
+      el._csMounted = false;
+      if (el._csSurfaceCleanup) { el._csSurfaceCleanup(); el._csSurfaceCleanup = null; }
+    }
+  });
+
   // ── expose ────────────────────────────────────────────────────────────────
 
   Chronicle.surface = Chronicle.surface || {};
@@ -506,6 +667,8 @@
   Chronicle.surface.launch = launch;             // mini -> full container-transform
   Chronicle.surface.box = setupBox;              // enhance a box element programmatically
   Chronicle.surface.provider = provider;         // shared memoized fetch + subscribe
+  Chronicle.surface.mount = mount;               // build a sheet from a schema
+  Chronicle.surface.registerBox = registerBox;   // a System supplies a box body renderer
   Chronicle.surface.reducedMotion = reducedMotion;
   Chronicle.surface.cssVar = cssVar;
 
