@@ -734,15 +734,31 @@ func (s *entityService) UpdateFields(ctx context.Context, entityID string, field
 		fieldsData = make(map[string]any)
 	}
 
+	// Load the current entity (best-effort) for search_text composition and the
+	// post-update broadcast below.
+	entity, _ := s.entities.FindByID(ctx, entityID)
+
 	// Build search_text from existing entry HTML + new field values.
 	var entryHTML string
-	if entity, err := s.entities.FindByID(ctx, entityID); err == nil && entity.EntryHTML != nil {
+	if entity != nil && entity.EntryHTML != nil {
 		entryHTML = *entity.EntryHTML
 	}
 	searchText := buildSearchText(entryHTML, fieldsData)
 
 	if err := s.entities.UpdateFields(ctx, entityID, fieldsData, searchText); err != nil {
 		return err
+	}
+
+	// Broadcast so live consumers — the web dynamic surface, other open clients,
+	// and the Foundry sync — see the field change immediately, mirroring
+	// Update/TogglePrivate/Claim. Without this, field pushes (e.g. a Foundry
+	// HP/condition update via PUT /entities/:id/fields) stayed invisible until a
+	// manual refresh, breaking the "one model, many consumers" contract (GAP-1).
+	// Carry the new fields on the payload; best-effort (only when the entity
+	// loaded), matching this method's existing tolerance of a load failure.
+	if entity != nil {
+		entity.FieldsData = fieldsData
+		s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
 	}
 	slog.Info("entity fields updated", slog.String("entity_id", entityID))
 	return nil
