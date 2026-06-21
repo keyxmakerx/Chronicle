@@ -53,8 +53,19 @@ func RunMigrations(appDB *sql.DB, dsn string, migrationsPath string) error {
 	err = m.Up()
 
 	// Handle dirty database state: a previous migration failed partway through.
-	// Since our migrations use IF NOT EXISTS / IF EXISTS, it's safe to force
-	// the version back and retry.
+	// golang-migrate marks the version dirty and stops. We force the version
+	// back to the last clean state (dirty_version - 1) and retry, which
+	// re-runs the failed migration from the start.
+	//
+	// NOTE: This recovery is NOT automatically safe for all migrations. It is
+	// safe only when the failed migration is fully idempotent — i.e. every
+	// DDL statement uses IF NOT EXISTS / IF EXISTS / MODIFY rather than a
+	// bare CREATE or ALTER that would error on a second run. Migrations 28 and
+	// 29 (ALTER TABLE ADD COLUMN without IF NOT EXISTS) are NOT idempotent: a
+	// partial run followed by this retry path would fail with
+	// "Error 1060: Duplicate column". For new migrations, use
+	// ALTER TABLE ADD COLUMN IF NOT EXISTS (see .ai/conventions.md §Migration
+	// Safety Rules) to make dirty-state recovery unconditionally safe.
 	if err != nil {
 		var dirtyErr migrate.ErrDirty
 		if errors.As(err, &dirtyErr) {

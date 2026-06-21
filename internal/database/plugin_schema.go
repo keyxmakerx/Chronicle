@@ -225,8 +225,21 @@ func parsePluginMigrations(migrationsFS fs.FS) ([]pluginMigration, error) {
 
 		switch direction {
 		case "up":
+			// Guard against two .up.sql files with the same version number:
+			// the old behaviour silently overwrote, so whichever file was
+			// read last won and the other's SQL was never executed. Error
+			// loudly instead so the collision is caught at startup (plugin
+			// degrades) rather than silently losing a migration.
+			if pairs[version].up != "" {
+				return nil, fmt.Errorf("duplicate plugin migration version %d: two .up.sql files found", version)
+			}
 			pairs[version].up = string(content)
 		case "down":
+			// Same guard for .down.sql: two files with the same version is
+			// always a numbering mistake that must be fixed in source.
+			if pairs[version].down != "" {
+				return nil, fmt.Errorf("duplicate plugin migration version %d: two .down.sql files found", version)
+			}
 			pairs[version].down = string(content)
 		}
 	}
