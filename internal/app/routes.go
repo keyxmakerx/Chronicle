@@ -1993,7 +1993,7 @@ func (a *App) RegisterRoutes() {
 	fvttHandler := foundry_vtt.NewHandler(fvttService)
 	// (Banner adapter wire removed in D2-cleanup; the campaign show
 	// page lazy-loads /foundry-vtt/show-banner-fragment instead.)
-	if a.PluginHealth.IsHealthy("foundry_vtt") && a.PluginHealth.IsHealthy("packages") {
+	if a.PluginHealth.IsHealthy(foundry_vtt.PluginHealthKey) && a.PluginHealth.IsHealthy("packages") {
 		// Register the PostInstallHook with the packages plugin. The
 		// hook fires after every foundry-module typed install and
 		// rewrites module.json's version field to match the installed
@@ -2091,6 +2091,15 @@ func (a *App) RegisterRoutes() {
 		},
 		StaticFS: echo.MustSubFS(calendar.StaticAssetsFS, "static"),
 	})
+	// Finding 4 (M-B2.1): plugin body scripts contributed by plugins at registration
+	// time so base.templ no longer hardcodes plugin asset paths. The calendar widget
+	// is the first contributor; future plugins append to this slice. Injected into
+	// every page's Templ context by the LayoutInjector below.
+	// Follow-up: a WidgetScript field on PluginRegistration would make this implicit
+	// (post-launch C-PLUGIN-CONTRACTS-REFACTOR).
+	pluginBodyScripts := []string{
+		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_widget.js",
+	}
 
 	if a.PluginHealth.IsHealthy("calendar") {
 		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
@@ -2102,7 +2111,7 @@ func (a *App) RegisterRoutes() {
 		// plugin has no compile-time edge into foundry_vtt.
 		// Skipped if foundry_vtt is degraded — the token verifier
 		// wouldn't exist.
-		if a.PluginHealth.IsHealthy("foundry_vtt") {
+		if a.PluginHealth.IsHealthy(foundry_vtt.PluginHealthKey) {
 			calendarAPIHandler := calendar.NewAPIHandler(calendarService, fvttService)
 			calendar.RegisterPublicAPIRoutes(e, calendarAPIHandler, middleware.RateLimit(300, time.Minute))
 		}
@@ -2977,6 +2986,11 @@ func (a *App) RegisterRoutes() {
 	// context into Go's context.Context so Templ templates can read it.
 	// This runs inside middleware.Render() before every template render.
 	middleware.LayoutInjector = func(c echo.Context, ctx context.Context) context.Context {
+		// Inject plugin-contributed body scripts (constant for process lifetime).
+		// Allows plugins to register widget scripts without hardcoding paths in
+		// the core base.templ layout (Finding 4 / M-B2.1 quick-win).
+		ctx = layouts.SetPluginBodyScripts(ctx, pluginBodyScripts)
+
 		// User info from auth session.
 		if session := auth.GetSession(c); session != nil {
 			ctx = layouts.SetIsAuthenticated(ctx, true)

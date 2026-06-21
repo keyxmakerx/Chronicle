@@ -66,12 +66,12 @@ jobs:
         # join so it doesn't fail-self.
         run: ./tools/check-no-instance-hostname.sh
 
-      - name: Plugin isolation guard (M-B2.1)
-        # Per C-CI-GUARDS-PHASE-2 + cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
-        # Diff-scoped FAIL: catches NEW foundry-vtt plugin-name literals
-        # introduced outside internal/plugins/foundry_vtt/. Existing 161
-        # violations in main are grandfathered until NW-2.2 cleanup lands.
-        # Needs full git history for the diff; fetch-depth: 0 below.
+      - name: Plugin isolation guard (M-B2.1 extended)
+        # Per C-MODULARITY-PRELAUNCH-QUICKWINS + cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
+        # Diff-scoped FAIL: catches NEW plugin-name string literals introduced
+        # outside the owning plugin's directory. Extended from foundry-vtt-only
+        # to all plugin slugs (2026-06-21). Existing violations grandfathered.
+        # Needs full git history for the diff; fetch-depth: 0 above.
         run: ./tools/check-plugin-isolation.sh
 
       - name: Templ drift guard (M-O3.1 family)
@@ -82,6 +82,11 @@ jobs:
         run: ./tools/check-templ-drift.sh
 
       - name: Test
+        # Includes M-B2.2 cross-plugin import guard (TestPluginImportGuard in
+        # internal/wire/plugin_import_guard_test.go): fails on any NEW
+        # internal/plugins/A → internal/plugins/B import edge outside the
+        # grandfathered baseline. Per C-MODULARITY-PRELAUNCH-QUICKWINS +
+        # cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
         run: go test ./... -v -short
 
       - name: Decision-citations lint (M-O3.1, WARN-only)

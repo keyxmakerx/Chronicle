@@ -80,10 +80,10 @@ for player-owned PC actors.
   **AND** `isClaimableType(type)`. Tests: `claim_overview_test.go` (helpers +
   component renders for all three surfaces & gating states). Verified `templ
   generate`, `go build ./...`, `make test-unit` (43 pkgs green), `go vet`.
-- [ ] **Stage 4 — Foundry (PC-CLAIM-4)**: actor-sync detects the addon, maps
+- [x] **Stage 4 — Foundry (PC-CLAIM-4)**: actor-sync detects the addon, maps
   player-owned PC-type actors → the PC sub-type and auto-claims them (NPCs/monsters
   excluded by actor type + GM ownership); surface "enable Player Character Claiming
-  in Chronicle" when the addon is off.
+  in Chronicle" when the addon is off. — MERGED FM #64
 - [~] **May bugs verify-then-fix** — editor dark-on-dark (#8), customizer no-change save + scroll (#10), mobile notepad z-index (#11) — Agent 3, `C-BACKLOG-BUGS-R1`.
 
 ### High
