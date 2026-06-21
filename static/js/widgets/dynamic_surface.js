@@ -405,12 +405,26 @@
       head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       el.setAttribute('data-box-state', expanded ? 'expanded' : 'collapsed');
       body.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+      // Cancel any in-flight animation so its fill state can't compose with the
+      // new one (rapid toggles) and so the height isn't clamped by a stale fill.
+      if (body._csAnim) { try { body._csAnim.cancel(); } catch (e) {} body._csAnim = null; }
       if (expanded) {
         body.style.display = '';
-        if (animate) play(transition, body, {}); else body.style.height = '';
+        if (animate) {
+          var a = play(transition, body, {});
+          body._csAnim = a;
+          // After expanding, RELEASE the held px height/overflow so the body
+          // returns to auto and reflows when its content changes (e.g. lazy load).
+          var settle = function () { if (expanded) { body.style.height = ''; body.style.overflow = ''; } };
+          if (a && a.finished && a.finished.then) a.finished.then(settle, settle);
+          else if (a) a.onfinish = settle; else settle();
+        } else {
+          body.style.height = ''; body.style.overflow = '';
+        }
         maybeLoad();
       } else if (animate) {
         var anim = play(transition, body, { reverse: true });
+        body._csAnim = anim;
         var hide = function () { if (!expanded) body.style.display = 'none'; };
         if (anim && anim.finished && anim.finished.then) anim.finished.then(hide, hide);
         else if (anim) anim.onfinish = hide; else hide();
