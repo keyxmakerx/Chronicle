@@ -201,7 +201,19 @@
         'background:var(--surface-bg,#fff);color:var(--surface-text,#111827);' +
         'border:1px solid var(--surface-border,#e5e7eb);border-radius:16px;' +
         'box-shadow:var(--surface-elev,0 16px 36px -8px rgba(0,0,0,.22));}',
-      '.cs-overlay__panel:focus{outline:none;}'
+      '.cs-overlay__panel:focus{outline:none;}',
+      // box primitive
+      '.cs-box{border:1px solid var(--surface-border,#e5e7eb);border-radius:12px;' +
+        'background:var(--surface-bg,#fff);overflow:hidden;}',
+      '.cs-box__head{display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;' +
+        'background:none;border:0;cursor:pointer;color:var(--surface-text,#111827);font:inherit;text-align:left;}',
+      '.cs-box__head:hover{background:var(--surface-alt,#f3f4f6);}',
+      '.cs-box__caret{flex:none;width:0;height:0;border-left:5px solid currentColor;' +
+        'border-top:4px solid transparent;border-bottom:4px solid transparent;opacity:.6;' +
+        'transition:transform var(--surface-dur,200ms) var(--surface-ease,ease);}',
+      '.cs-box[data-box-state="expanded"] .cs-box__caret{transform:rotate(90deg);}',
+      '.cs-box__title{font-weight:600;letter-spacing:.02em;flex:1;}',
+      '.cs-box__body{padding:0 14px 12px;color:var(--surface-text-body,#374151);}'
     ].join('');
     var style = document.createElement('style');
     style.id = 'cs-surface-styles';
@@ -314,12 +326,90 @@
     }
   }, true);
 
+  // ── box primitive (expand / collapse / pin / lazy-load) ────────────────────
+  //
+  // A `data-widget="surface-box"` element with a `[data-box-toggle]` head and a
+  // `[data-box-body]` body. boot.js auto-mounts it. Optional attributes:
+  //   data-box-state="collapsed|expanded"  initial state (default expanded)
+  //   data-box-transition="expand"          which preset animates the body
+  //   data-box-key="vitals"                 persist expanded/collapsed in localStorage
+  //   data-box-pinned                       stays as-is (toggle disabled)
+  //   data-box-lazy + data-box-endpoint     fetch the body's HTML on first expand
+
+  function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
+
+  function setupBox(el) {
+    if (el._csBox) return;
+    var head = el.querySelector('[data-box-toggle]');
+    var body = el.querySelector('[data-box-body]');
+    if (!head || !body) return;
+    el._csBox = true;
+
+    var key = el.getAttribute('data-box-key');
+    var lsKey = key ? ('cs-box:' + key) : null;
+    var stored = lsKey ? lsGet(lsKey) : null;
+    var expanded = stored != null ? (stored === '1')
+      : (el.getAttribute('data-box-state') !== 'collapsed');
+    var transition = el.getAttribute('data-box-transition') || 'expand';
+    var loaded = false;
+
+    function maybeLoad() {
+      if (loaded) return;
+      loaded = true;
+      var ep = el.getAttribute('data-box-endpoint');
+      if (!el.hasAttribute('data-box-lazy') || !ep || !Chronicle.apiFetch) return;
+      Chronicle.apiFetch(ep)
+        .then(function (r) { return r && r.text ? r.text() : ''; })
+        .then(function (html) {
+          // Server-rendered same-origin fragment (same trust model as HTMX swaps).
+          body.innerHTML = typeof html === 'string' ? html : '';
+          if (Chronicle.mountWidgets) Chronicle.mountWidgets(body);
+        })
+        .catch(function () { /* surfaced by the host's own error handling */ });
+    }
+
+    function render(animate) {
+      head.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      el.setAttribute('data-box-state', expanded ? 'expanded' : 'collapsed');
+      body.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+      if (expanded) {
+        body.style.display = '';
+        if (animate) play(transition, body, {}); else body.style.height = '';
+        maybeLoad();
+      } else if (animate) {
+        var anim = play(transition, body, { reverse: true });
+        var hide = function () { if (!expanded) body.style.display = 'none'; };
+        if (anim && anim.finished && anim.finished.then) anim.finished.then(hide, hide);
+        else if (anim) anim.onfinish = hide; else hide();
+      } else {
+        body.style.display = 'none';
+      }
+    }
+
+    function toggle() {
+      if (el.hasAttribute('data-box-pinned')) return;
+      expanded = !expanded;
+      if (lsKey) lsSet(lsKey, expanded ? '1' : '0');
+      render(true);
+    }
+
+    head.addEventListener('click', toggle);
+    render(false);
+  }
+
+  Chronicle.register('surface-box', {
+    init: function (el) { setupBox(el); },
+    destroy: function (el) { el._csBox = false; }
+  });
+
   // ── expose ────────────────────────────────────────────────────────────────
 
   Chronicle.surface = Chronicle.surface || {};
   Chronicle.surface.transitions = TRANSITIONS;   // the menu (Systems read/extend)
   Chronicle.surface.play = play;
   Chronicle.surface.overlay = { push: pushOverlay, pop: popOverlay, popAll: popAllOverlays };
+  Chronicle.surface.box = setupBox;              // enhance a box element programmatically
   Chronicle.surface.reducedMotion = reducedMotion;
   Chronicle.surface.cssVar = cssVar;
 
