@@ -188,11 +188,140 @@
     return (TRANSITIONS[name] || TRANSITIONS['fade'])(el, opts);
   }
 
+  // ── injected component styles (widget convention: JS-injected <style>, like
+  //    entity_tooltip; component styling lives with the widget, not input.css) ──
+
+  function injectStyles() {
+    if (document.getElementById('cs-surface-styles')) return;
+    var css = [
+      '.cs-overlay-root{position:relative;z-index:100;}',
+      '.cs-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;}',
+      '.cs-overlay__backdrop{position:absolute;inset:0;background:var(--surface-overlay,rgba(6,7,11,.55));}',
+      '.cs-overlay__panel{position:relative;max-width:min(92vw,560px);max-height:88vh;overflow:auto;' +
+        'background:var(--surface-bg,#fff);color:var(--surface-text,#111827);' +
+        'border:1px solid var(--surface-border,#e5e7eb);border-radius:16px;' +
+        'box-shadow:var(--surface-elev,0 16px 36px -8px rgba(0,0,0,.22));}',
+      '.cs-overlay__panel:focus{outline:none;}'
+    ].join('');
+    var style = document.createElement('style');
+    style.id = 'cs-surface-styles';
+    style.textContent = css;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  // ── overlay stack (actions push overlays; Escape / backdrop / Back pop one) ──
+  //
+  // push(content, opts) layers a dialog over the page and animates it in with the
+  // chosen preset (default 'scale-fade'); overlays stack (z-index by depth) so a
+  // drill-down can deal another card on top. opts: { transition, origin, label,
+  // dismissable (default true) }. Focus moves into the panel and is trapped within
+  // the TOP layer; pop() restores the prior focus.
+
+  var overlayRoot = null;
+  var stack = [];
+
+  function ensureRoot() {
+    if (!overlayRoot) {
+      overlayRoot = document.createElement('div');
+      overlayRoot.className = 'cs-overlay-root';
+      document.body.appendChild(overlayRoot);
+    }
+    return overlayRoot;
+  }
+
+  function topEntry() { return stack.length ? stack[stack.length - 1] : null; }
+
+  function focusables(root) {
+    var sel = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),' +
+      'textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    return Array.prototype.slice.call(root.querySelectorAll(sel)).filter(function (n) {
+      return n.offsetParent !== null;
+    });
+  }
+
+  function pushOverlay(content, opts) {
+    opts = opts || {};
+    injectStyles();
+    ensureRoot();
+    var entry = { prevFocus: document.activeElement, opts: opts };
+
+    var layer = document.createElement('div');
+    layer.className = 'cs-overlay';
+    layer.style.zIndex = String(100 + stack.length);
+    var backdrop = document.createElement('div');
+    backdrop.className = 'cs-overlay__backdrop';
+    var panel = document.createElement('div');
+    panel.className = 'cs-overlay__panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    if (opts.label) panel.setAttribute('aria-label', opts.label);
+    panel.tabIndex = -1;
+    if (typeof content === 'string') panel.innerHTML = content;
+    else if (content && content.nodeType) panel.appendChild(content);
+
+    layer.appendChild(backdrop);
+    layer.appendChild(panel);
+    overlayRoot.appendChild(layer);
+    entry.layer = layer; entry.panel = panel; entry.backdrop = backdrop;
+    stack.push(entry);
+
+    play('fade', backdrop, {});
+    play(opts.transition || 'scale-fade', panel, { origin: opts.origin });
+
+    var first = panel.querySelector('[autofocus]');
+    try { (first || panel).focus(); } catch (e) { /* focus is best-effort */ }
+
+    if (opts.dismissable !== false) {
+      backdrop.addEventListener('click', function () { popOverlay(); });
+    }
+    return entry;
+  }
+
+  function popOverlay() {
+    var entry = stack.pop();
+    if (!entry) return null;
+    var out = { reverse: true };
+    play('fade', entry.backdrop, out);
+    var anim = play(entry.opts.transition || 'scale-fade', entry.panel, out);
+    function done() {
+      if (entry.layer && entry.layer.parentNode) entry.layer.parentNode.removeChild(entry.layer);
+      if (entry.prevFocus && entry.prevFocus.focus) {
+        try { entry.prevFocus.focus(); } catch (e) { /* element may be gone */ }
+      }
+    }
+    if (anim && anim.finished && anim.finished.then) anim.finished.then(done, done);
+    else if (anim) anim.onfinish = done;
+    else done();
+    return entry;
+  }
+
+  function popAllOverlays() { while (stack.length) popOverlay(); }
+
+  // Global key handling for the top layer: Escape pops; Tab is trapped within it.
+  document.addEventListener('keydown', function (e) {
+    if (!stack.length) return;
+    var top = topEntry();
+    if (e.key === 'Escape') {
+      if (!top || top.opts.dismissable !== false) { e.preventDefault(); e.stopPropagation(); popOverlay(); }
+      return;
+    }
+    if (e.key === 'Tab' && top) {
+      var f = focusables(top.panel);
+      if (!f.length) { e.preventDefault(); try { top.panel.focus(); } catch (ignore) {} return; }
+      var firstEl = f[0], lastEl = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+      else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+    }
+  }, true);
+
   // ── expose ────────────────────────────────────────────────────────────────
 
   Chronicle.surface = Chronicle.surface || {};
   Chronicle.surface.transitions = TRANSITIONS;   // the menu (Systems read/extend)
   Chronicle.surface.play = play;
+  Chronicle.surface.overlay = { push: pushOverlay, pop: popOverlay, popAll: popAllOverlays };
   Chronicle.surface.reducedMotion = reducedMotion;
   Chronicle.surface.cssVar = cssVar;
+
+  injectStyles();
 })();
