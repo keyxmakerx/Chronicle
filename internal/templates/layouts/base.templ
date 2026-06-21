@@ -69,6 +69,11 @@ templ Base(title string) {
 		     are available when Alpine processes x-data expressions. -->
 		<script src="/static/js/boot.js" defer></script>
 
+		<!-- Dynamic-surface motion engine: the frame's transition-preset library
+		     (Chronicle.surface.play / .transitions). Loads after boot.js so the
+		     Chronicle namespace exists. -->
+		<script src="/static/js/widgets/dynamic_surface.js" defer></script>
+
 		<!-- Alpine.js: loaded AFTER boot.js so Chronicle.apiFetch/notify exist
 		     when Alpine initializes and evaluates x-data attributes. -->
 		<script src="/static/vendor/alpine-collapse.min.js" defer></script>

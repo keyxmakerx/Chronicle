@@ -126,6 +126,52 @@
                        0 2px 6px -2px rgb(0 0 0 / 0.08);
     --elev-dragged:    0 16px 36px -8px rgb(0 0 0 / 0.22),
                        0 4px 12px -4px rgb(0 0 0 / 0.12);
+
+    /* ──────────────────────────────────────────────────────────────────
+     * Dynamic-surface token contract — the frame's PUBLIC styling API.
+     *
+     * The stable token set the dynamic-surface framework AND extension widgets
+     * (game systems like Draw Steel) target, so their styling tracks the active
+     * Chronicle theme without reaching into internal --color-* names.
+     *
+     * These are ALIASES to the live --color-, --ease- and --elev- vars above,
+     * so they resolve PER-THEME automatically: var() is resolved lazily in the
+     * cascade, so `background: var(--surface-bg)` yields the light card colour
+     * under :root and the dark card colour under .dark with NO per-mode
+     * override. Defined ONCE here; do not duplicate in .dark.
+     *
+     * Reduced motion is already handled by the global guard at the top of this
+     * file — do not add a duplicate here.
+     * ─────────────────────────────────────────────────────────────── */
+    --surface-bg:            var(--color-card-bg);        /* a raised box / card */
+    --surface-raised:        var(--color-bg-secondary);   /* surface above the page */
+    --surface-page:          var(--color-bg-primary);     /* page beneath surfaces */
+    --surface-alt:           var(--color-bg-tertiary);    /* alt rows / hover fill */
+    --surface-overlay:       rgb(6 7 11 / 0.55);          /* scrim behind a lifted card */
+    --surface-text:          var(--color-text-primary);
+    --surface-text-body:     var(--color-text-body);
+    --surface-text-muted:    var(--color-text-muted);
+    --surface-border:        var(--color-border);
+    --surface-accent:        var(--color-accent);
+    --surface-accent-hover:  var(--color-accent-hover);
+    --surface-ease:          var(--ease-in-out);          /* in-place container morph */
+    --surface-ease-out:      var(--ease-out);             /* arrivals / settle */
+    --surface-dur:           var(--dur-standard);         /* 200ms — expand / overlay */
+    --surface-dur-large:     var(--dur-large);            /* 280ms — view-level */
+    --surface-elev:          var(--elev-hover);           /* a lifted box */
+    --surface-elev-dragged:  var(--elev-dragged);         /* a grabbed / peak-lift box */
+
+    /* Back-compat: un-prefixed names some extension-widget guidance referenced
+     * (they were undefined, so widgets silently fell back to hardcoded colours
+     * and did NOT track the theme). Aliasing them fixes that without edits. */
+    --bg-primary:     var(--color-bg-primary);
+    --bg-secondary:   var(--color-bg-secondary);
+    --bg-tertiary:    var(--color-bg-tertiary);
+    --text-primary:   var(--color-text-primary);
+    --text-secondary: var(--color-text-secondary);
+    --text-muted:     var(--color-text-muted);
+    --border-color:   var(--color-border);
+    --accent:         var(--color-accent);
   }
 
   .dark {
