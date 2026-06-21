@@ -1808,6 +1808,20 @@ func (s *entityService) SetEntityPermissions(ctx context.Context, entityID strin
 		slog.String("visibility", string(input.Visibility)),
 		slog.Int("grants", len(input.Permissions)),
 	)
+
+	// Reflect the new visibility on the in-memory entity before broadcasting so
+	// WebSocket clients (e.g. the Foundry module) receive the NEW state. The
+	// entity fetched above carries the OLD visibility from the DB; the switch
+	// above only called repo helpers (UpdateVisibility / Update) without updating
+	// the struct. We patch both Visibility and IsPrivate here so the published
+	// payload is consistent with what a subsequent GetEntityPermissions call
+	// would return.
+	//
+	// For VisibilityDefault the IsPrivate field was already set on the entity at
+	// the top of that case branch (line 1769), so we only need to set Visibility.
+	entity.Visibility = input.Visibility
+	s.events.PublishEntityEvent("updated", entity.CampaignID, entityID, entity)
+
 	return nil
 }
 
