@@ -1763,6 +1763,62 @@ func TestSetEntityPermissions_PublishesUpdatedEvent(t *testing.T) {
 	}
 }
 
+// TestUpdateFields_PublishesUpdatedEvent verifies that UpdateFields broadcasts an
+// "updated" event carrying the NEW fields, so live consumers (the web dynamic
+// surface, other open clients, the Foundry sync) observe field changes
+// immediately rather than only after a manual refresh (GAP-1). It also confirms
+// the broadcast is best-effort: when the entity can't be loaded, no event fires
+// and no panic occurs — preserving the method's pre-existing tolerance of a
+// load failure.
+func TestUpdateFields_PublishesUpdatedEvent(t *testing.T) {
+	newFields := map[string]any{"stamina_current": 21, "combat_status": []any{"bleeding"}}
+
+	t.Run("publishes updated carrying the new fields", func(t *testing.T) {
+		repo := &mockEntityRepo{
+			findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+				// Stale snapshot — the broadcast must carry the NEW fields, not this.
+				return &Entity{ID: "ent-1", CampaignID: "camp-1", Name: "Tyne",
+					FieldsData: map[string]any{"stamina_current": 30}}, nil
+			},
+		}
+		pub := &capturingEntityEventPublisher{}
+		svc := NewEntityService(repo, &mockEntityTypeRepo{}, &mockPermissionRepo{})
+		svc.SetEventPublisher(pub)
+
+		if err := svc.UpdateFields(context.Background(), "ent-1", newFields); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(pub.events) != 1 {
+			t.Fatalf("expected 1 published event, got %d", len(pub.events))
+		}
+		ev := pub.events[0]
+		if ev.eventType != "updated" || ev.campaignID != "camp-1" || ev.entityID != "ent-1" {
+			t.Errorf("unexpected event: type=%q campaign=%q entity=%q", ev.eventType, ev.campaignID, ev.entityID)
+		}
+		if ev.entity.FieldsData["stamina_current"] != 21 {
+			t.Errorf("published FieldsData[stamina_current] = %v, want 21 (the new value)", ev.entity.FieldsData["stamina_current"])
+		}
+	})
+
+	t.Run("best-effort: entity not loadable -> no event, no panic", func(t *testing.T) {
+		repo := &mockEntityRepo{
+			findByIDFn: func(_ context.Context, _ string) (*Entity, error) {
+				return nil, errors.New("not found")
+			},
+		}
+		pub := &capturingEntityEventPublisher{}
+		svc := NewEntityService(repo, &mockEntityTypeRepo{}, &mockPermissionRepo{})
+		svc.SetEventPublisher(pub)
+
+		if err := svc.UpdateFields(context.Background(), "ent-1", newFields); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(pub.events) != 0 {
+			t.Errorf("expected no event when the entity can't be loaded, got %d", len(pub.events))
+		}
+	})
+}
+
 // strPtr returns a pointer to the given string.
 func strPtr(s string) *string {
 	return &s
