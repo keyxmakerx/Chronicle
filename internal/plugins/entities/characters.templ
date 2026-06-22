@@ -31,45 +31,39 @@ templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
 	<div class="mb-6 flex items-baseline justify-between gap-4">
 		<div>
 			<h1 class="text-2xl font-bold text-fg">Characters</h1>
-			<p class="mt-1 text-sm text-fg-secondary">The party and the active cast of { cc.Campaign.Name }.</p>
+			<p class="mt-1 text-sm text-fg-secondary">The cast of { cc.Campaign.Name }.</p>
 		</div>
-		<a
-			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/me", cc.Campaign.ID)) }
-			class="text-sm text-fg-secondary hover:text-fg whitespace-nowrap"
-		>
-			My characters →
-		</a>
+		if view.ShowPlayers {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/me", cc.Campaign.ID)) }
+				class="text-sm text-fg-secondary hover:text-fg whitespace-nowrap"
+			>
+				My characters →
+			</a>
+		}
 	</div>
 
-	<section class="mb-8">
-		<h2 class="section-header mb-3">The Party</h2>
-		if len(view.Party) == 0 {
-			@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
-		} else {
-			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-				for _, m := range view.Party {
-					@castCard(cc.Campaign.ID, m)
-				}
-			</div>
-		}
-	</section>
-
-	<section>
-		<h2 class="section-header mb-3">Active NPCs</h2>
-		if len(view.ActiveNPCs) == 0 {
-			if view.CanCurate {
-				@castEmpty("fa-masks-theater", "No active NPCs", "Tag any NPC with the \"cast\" tag to feature it here for your players.")
+	if view.ShowPlayers {
+		<section class="mb-8">
+			<h2 class="section-header mb-3">The Party</h2>
+			if len(view.Party) == 0 {
+				@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
 			} else {
-				@castEmpty("fa-masks-theater", "No active NPCs", "Your GM hasn't featured any NPCs yet.")
+				<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+					for _, m := range view.Party {
+						@castCard(cc.Campaign.ID, m)
+					}
+				</div>
 			}
-		} else {
-			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-				for _, m := range view.ActiveNPCs {
-					@castCard(cc.Campaign.ID, m)
-				}
-			</div>
-		}
-	</section>
+		</section>
+	}
+
+	if view.NPCSection != nil {
+		<section>
+			<h2 class="section-header mb-3">NPCs &amp; Monsters</h2>
+			@view.NPCSection
+		</section>
+	}
 }
 
 // castCard is one mini profile card. The whole card links to the entity page

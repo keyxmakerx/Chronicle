@@ -2,7 +2,7 @@ package entities
 
 import "testing"
 
-// memberIDs / npcIDs are small helpers for readable failure messages.
+// castMemberIDs is a small helper for readable failure messages.
 func castMemberIDs(ms []CastMember) []string {
 	out := make([]string, len(ms))
 	for i, m := range ms {
@@ -11,14 +11,13 @@ func castMemberIDs(ms []CastMember) []string {
 	return out
 }
 
-// TestAssembleCastView pins the Characters page assembly rules: the party is the
-// claimed set unioned with the viewer's own (deduped, viewer-first) and the
-// active NPCs are the cast-tagged entities that are not claimed.
-func TestAssembleCastView(t *testing.T) {
+// TestAssembleCastParty pins the party assembly: the claimed set unioned with
+// the viewer's own, deduped by ID and sorted viewer-first.
+func TestAssembleCastParty(t *testing.T) {
 	owner := func(s string) *string { return &s }
 	ownerNames := map[string]string{"u1": "Alice", "u2": "Bob"}
 
-	t.Run("party unions claimed and own, dedups, viewer first", func(t *testing.T) {
+	t.Run("unions claimed and own, dedups, viewer first", func(t *testing.T) {
 		claimed := []Entity{
 			{ID: "a", Name: "Aldric", OwnerUserID: owner("u1")},
 			{ID: "b", Name: "Bryn", OwnerUserID: owner("u2")},
@@ -28,16 +27,16 @@ func TestAssembleCastView(t *testing.T) {
 			{ID: "c", Name: "Cass", OwnerUserID: owner("u2")}, // own, not in claimed
 		}
 
-		view := assembleCastView(claimed, mine, nil, ownerNames, "u2", false)
+		party := assembleCastParty(claimed, mine, ownerNames, "u2")
 
-		if len(view.Party) != 3 {
-			t.Fatalf("party = %v, want 3 deduped members", castMemberIDs(view.Party))
+		if len(party) != 3 {
+			t.Fatalf("party = %v, want 3 deduped members", castMemberIDs(party))
 		}
 		// Viewer u2 owns b and c → both sort first; a (u1) last.
-		if !view.Party[0].IsViewer || !view.Party[1].IsViewer || view.Party[2].IsViewer {
-			t.Errorf("viewer's characters should sort first; got %v", castMemberIDs(view.Party))
+		if !party[0].IsViewer || !party[1].IsViewer || party[2].IsViewer {
+			t.Errorf("viewer's characters should sort first; got %v", castMemberIDs(party))
 		}
-		for _, m := range view.Party {
+		for _, m := range party {
 			if m.Entity.ID == "a" && m.OwnerName != "Alice" {
 				t.Errorf("owner name for a = %q, want Alice", m.OwnerName)
 			}
@@ -50,10 +49,10 @@ func TestAssembleCastView(t *testing.T) {
 		claimed := []Entity{{ID: "a", Name: "Aldric", OwnerUserID: owner("u1")}}
 		mine := []Entity{{ID: "secret", Name: "Hidden", OwnerUserID: owner("u2")}}
 
-		view := assembleCastView(claimed, mine, nil, ownerNames, "u2", false)
+		party := assembleCastParty(claimed, mine, ownerNames, "u2")
 
 		var found bool
-		for _, m := range view.Party {
+		for _, m := range party {
 			if m.Entity.ID == "secret" {
 				found = true
 				if !m.IsViewer {
@@ -62,23 +61,7 @@ func TestAssembleCastView(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("own character missing from party: %v", castMemberIDs(view.Party))
-		}
-	})
-
-	t.Run("active NPCs exclude claimed characters and pass CanCurate", func(t *testing.T) {
-		tagged := []Entity{
-			{ID: "n1", Name: "Innkeeper"},                      // unowned NPC
-			{ID: "p1", Name: "Hero", OwnerUserID: owner("u1")}, // a PC that is also cast-tagged
-		}
-
-		view := assembleCastView(nil, nil, tagged, ownerNames, "u2", true)
-
-		if len(view.ActiveNPCs) != 1 || view.ActiveNPCs[0].Entity.ID != "n1" {
-			t.Fatalf("active NPCs = %v, want only [n1]", castMemberIDs(view.ActiveNPCs))
-		}
-		if !view.CanCurate {
-			t.Errorf("CanCurate should pass through")
+			t.Errorf("own character missing from party: %v", castMemberIDs(party))
 		}
 	})
 }

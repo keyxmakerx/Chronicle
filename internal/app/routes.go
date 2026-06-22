@@ -2277,6 +2277,10 @@ func (a *App) RegisterRoutes() {
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
 	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)
+	// The npcs plugin contributes the NPCs/Monsters section of the unified
+	// Characters page (the standalone NPC gallery folded in). npcHandler
+	// structurally satisfies entities.NPCSectionProvider.
+	entityHandler.SetNPCSectionProvider(npcHandler)
 
 	// Armory plugin: gallery/hub view for item-category entities.
 	armoryRepo := armory.NewArmoryRepository(a.DB)

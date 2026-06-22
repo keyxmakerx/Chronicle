@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -589,14 +590,16 @@ type CastMember struct {
 	IsViewer  bool
 }
 
-// CastView is the Characters page view-model: the party (every claimed player
-// character, viewer-first) and the active NPCs (GM-curated via the `cast` tag),
-// already ordered and flagged for rendering. CanCurate is true for Scribe+
-// viewers, who get the "tag NPCs as cast" hint when the NPC band is empty.
+// CastView is the Characters page view-model. The page has two addon-gated
+// sections: the Party (player characters — shown when ShowPlayers, i.e. the
+// player-character-claiming addon is on) and the NPCs/Monsters section
+// (NPCSection — a templ component contributed by the npcs plugin when its addon
+// is on, nil otherwise). The page itself is only served when at least one of the
+// two is enabled.
 type CastView struct {
-	Party      []CastMember
-	ActiveNPCs []CastMember
-	CanCurate  bool
+	Party       []CastMember
+	ShowPlayers bool
+	NPCSection  templ.Component
 }
 
 // --- Slug Generation ---

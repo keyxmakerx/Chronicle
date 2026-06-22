@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 
@@ -106,6 +107,7 @@ type Handler struct {
 	sessionSearcher    SessionSearcher
 	systemSearcher     SystemSearcher
 	memberLister       MemberLister
+	npcSection         NPCSectionProvider
 	groupLister        GroupLister
 	widgetBlockLister  WidgetBlockLister
 	contentTemplateSvc ContentTemplateService
@@ -3157,16 +3159,29 @@ func (h *Handler) MyCharacters(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, MyCharactersPage(cc, chars))
 }
 
-// CastTagSlug is the conventional tag a GM applies to an NPC to feature it on
-// the Characters page's "Active NPCs" band — zero-migration curation (see the
-// Cordinator 2026-06-22 characters-cast-page design plan).
+// CastTagSlug is the conventional tag a GM applies to an NPC to feature it in
+// the portrait row of the Characters page's NPC section — zero-migration
+// curation (see the Cordinator 2026-06-22 characters-cast-page design plan §5.2).
 const CastTagSlug = "cast"
 
-// Characters renders the per-campaign Characters ("Cast") page: the party
-// (every claimed player character, the viewer's own highlighted and first) plus
-// the active NPCs the GM has tagged `cast`. Each card links to the entity's
-// page and, with the dynamic-surface frame present, launches a mini→full
-// preview (progressive enhancement — the plain link works without JS).
+// AddonNPCs is the addon slug that gates the NPCs/Monsters section.
+const AddonNPCs = "npcs"
+
+// NPCSectionProvider renders the Characters page's NPCs/Monsters section
+// (featured portrait row + revealed list + reveal toggles). It is implemented by
+// the npcs plugin and injected via SetNPCSectionProvider, so the core entities
+// plugin never imports the addon. nil/absent → no NPC section.
+type NPCSectionProvider interface {
+	NPCSection(ctx context.Context, cc *campaigns.CampaignContext, userID, csrfToken, featureTag string) templ.Component
+}
+
+// SetNPCSectionProvider injects the npcs plugin's section renderer.
+func (h *Handler) SetNPCSectionProvider(p NPCSectionProvider) { h.npcSection = p }
+
+// Characters renders the per-campaign Characters page. It has two addon-gated
+// sections: the Party (player characters — when the player-character-claiming
+// addon is on) and NPCs/Monsters (contributed by the npcs plugin when its addon
+// is on). The page 404s when neither addon is enabled.
 //
 // Route: GET /campaigns/:id/characters  (Player+).
 func (h *Handler) Characters(c echo.Context) error {
@@ -3174,7 +3189,24 @@ func (h *Handler) Characters(c echo.Context) error {
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
-	view := h.buildCastView(c.Request().Context(), cc, auth.GetUserID(c))
+	ctx := c.Request().Context()
+	campaignID := cc.Campaign.ID
+	userID := auth.GetUserID(c)
+
+	pcOn := h.isAddonEnabled(ctx, campaignID, AddonPlayerCharacterClaiming)
+	npcsOn := h.isAddonEnabled(ctx, campaignID, AddonNPCs)
+	if !pcOn && !npcsOn {
+		return apperror.NewNotFound("the Characters page requires the Player Character Claiming or NPC Gallery addon")
+	}
+
+	var view CastView
+	view.ShowPlayers = pcOn
+	if pcOn {
+		view.Party = h.buildCastParty(ctx, cc, userID)
+	}
+	if npcsOn && h.npcSection != nil {
+		view.NPCSection = h.npcSection.NPCSection(ctx, cc, userID, middleware.GetCSRFToken(c), CastTagSlug)
+	}
 
 	if middleware.IsHTMX(c) {
 		return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
@@ -3182,14 +3214,12 @@ func (h *Handler) Characters(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, CharactersPage(cc, view))
 }
 
-// buildCastView assembles the Characters page view-model. The party is the
-// campaign-wide claimed set (ListClaimed, visibility-filtered) unioned with the
-// viewer's own characters (ListByOwner — unfiltered, so a player always sees
-// their own PC even if it was marked private), de-duplicated and sorted
-// viewer-first. The active NPCs are the `cast`-tagged entities that are NOT
-// claimed (a claimed character is a PC and belongs in the party). Owner names
-// are resolved best-effort; the page must never fail on a roster lookup.
-func (h *Handler) buildCastView(ctx context.Context, cc *campaigns.CampaignContext, userID string) CastView {
+// buildCastParty fetches the party for the Players section: the campaign-wide
+// claimed set (ListClaimed, visibility-filtered) unioned with the viewer's own
+// characters (ListByOwner — unfiltered, so a player always sees their own PC
+// even if it was marked private). Owner names are resolved best-effort; the page
+// must never fail on a roster lookup.
+func (h *Handler) buildCastParty(ctx context.Context, cc *campaigns.CampaignContext, userID string) []CastMember {
 	campaignID := cc.Campaign.ID
 	role := cc.VisibilityRole()
 
@@ -3200,7 +3230,7 @@ func (h *Handler) buildCastView(ctx context.Context, cc *campaigns.CampaignConte
 		}
 	}
 
-	var claimed, mine, tagged []Entity
+	var claimed, mine []Entity
 	if c, err := h.service.ListClaimed(ctx, campaignID, role, userID); err == nil {
 		claimed = c
 	} else {
@@ -3211,23 +3241,15 @@ func (h *Handler) buildCastView(ctx context.Context, cc *campaigns.CampaignConte
 			mine = m
 		}
 	}
-	npcOpts := ListOptions{Page: 1, PerPage: 100, Sort: "name", TagSlugs: []string{CastTagSlug}}
-	if t, _, err := h.service.List(ctx, campaignID, 0, role, userID, npcOpts); err == nil {
-		tagged = t
-	} else {
-		slog.Warn("cast page: npc list failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
-	}
 
-	return assembleCastView(claimed, mine, tagged, ownerNames, userID, cc.MemberRole >= campaigns.RoleScribe)
+	return assembleCastParty(claimed, mine, ownerNames, userID)
 }
 
-// assembleCastView is the pure assembly step (no IO) behind the Characters page,
-// split out so the ordering/dedup/exclusion rules are unit-testable. The party
-// is the claimed set unioned with the viewer's own characters, de-duplicated by
-// ID and sorted so the viewer's own come first (the rest keep input order). The
-// active NPCs are the `cast`-tagged entities that are NOT claimed (a claimed,
-// tagged character is a player character and already shows in the party).
-func assembleCastView(claimed, mine, tagged []Entity, ownerNames map[string]string, userID string, canCurate bool) CastView {
+// assembleCastParty is the pure assembly step (no IO), split out so the
+// ordering/dedup rules are unit-testable: the claimed set unioned with the
+// viewer's own characters, de-duplicated by ID and sorted so the viewer's own
+// come first (the rest keep input order).
+func assembleCastParty(claimed, mine []Entity, ownerNames map[string]string, userID string) []CastMember {
 	party := []CastMember{}
 	seen := map[string]bool{}
 	addParty := func(e Entity) {
@@ -3251,16 +3273,7 @@ func assembleCastView(claimed, mine, tagged []Entity, ownerNames map[string]stri
 	sort.SliceStable(party, func(i, j int) bool {
 		return party[i].IsViewer && !party[j].IsViewer
 	})
-
-	activeNPCs := []CastMember{}
-	for _, e := range tagged {
-		if e.OwnerUserID != nil {
-			continue
-		}
-		activeNPCs = append(activeNPCs, CastMember{Entity: e})
-	}
-
-	return CastView{Party: party, ActiveNPCs: activeNPCs, CanCurate: canCurate}
+	return party
 }
 
 // ClaimEntity assigns the calling user as the owner of an entity. Idempotent

@@ -346,9 +346,12 @@ templ Sidebar() {
 								}
 							}
 						}
-						<!-- Characters (the Cast): party + active NPCs. A core
-						     campaign view, visible to every member. -->
-						@sidebarCharactersLink(ctx)
+						<!-- Characters (the Cast): Players section + NPCs/Monsters
+						     section, each gated by its addon. Shown when either is
+						     enabled; visible to every member. -->
+						if IsAddonEnabled(ctx, "player-character-claiming") || IsAddonEnabled(ctx, "npcs") {
+							@sidebarCharactersLink(ctx)
+						}
 						<!-- My Characters link (CH2). Visible to Players (the
 						     primary audience) and to Owner/Scribe when
 						     "view as player" mode is on so the owner can
