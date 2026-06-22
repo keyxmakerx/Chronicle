@@ -56,8 +56,8 @@ The `.ai/` tree is AI-process-facing (this index, status, conventions, decisions
 - **`cordinator/reports/chronicle/`** — per-dispatch status reports + audit reports. Canonical home for session deliverables.
 - **`cordinator/dispatches/chronicle/`** — current and historical dispatch specs.
 - **`docs/`** — operator-facing deployment + system docs (deployment.md, api/, bestiary/, system-package-rendering.md, system-plugin-marketplace.md).
-- **`internal/plugins/<X>/.ai.md`** — per-plugin context (purpose, key files, routes, footguns, recent work). Each plugin owns its own `.ai.md`; 22 plugins covered.
-- **`internal/widgets/<X>/.ai.md`** — per-widget context. 9 widgets covered.
+- **`internal/plugins/<X>/.ai.md`** — per-plugin context (purpose, key files, routes, footguns, recent work). Each plugin owns its own `.ai.md`; 24 plugins covered.
+- **`internal/widgets/<X>/.ai.md`** — per-widget context. 9 of 10 widgets covered (one still lacks its `.ai.md` — see backlog).
 - **`internal/systems/<X>/.ai.md`** — per-system content-pack docs.
 - **`tools/`** — CI guard scripts (plugin-isolation, templ-drift, decision-citations, wire-contract test).
 - **Root `README.md`** — human-facing project overview.
@@ -81,4 +81,4 @@ The `templates/` subdirectory contains templates for creating new documentation:
 
 ## Extension-level documentation
 
-Each plugin (`internal/plugins/<name>/`), system (`internal/systems/<name>/`), and widget (`internal/widgets/<name>/`) contains an `.ai.md` file describing its purpose, internal structure, dependencies, routes, business rules, and recent work. Per the plugin-isolation audit, this is now uniformly 22/22 plugins + 9/9 widgets covered (as of NW-2.2 Chunk E, 2026-05-25).
+Each plugin (`internal/plugins/<name>/`), system (`internal/systems/<name>/`), and widget (`internal/widgets/<name>/`) contains an `.ai.md` file describing its purpose, internal structure, dependencies, routes, business rules, and recent work. Per the plugin-isolation audit, this reached uniform coverage in NW-2.2 Chunk E (2026-05-25, then 22/22 + 9/9). Current: **24/24 plugins**, **9/10 widgets** (one widget still lacks its `.ai.md`).

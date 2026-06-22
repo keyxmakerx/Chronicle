@@ -103,7 +103,7 @@ templ castCard(campaignID string, m CastMember) {
 				}
 			</div>
 			<div class="p-3">
-				<h3 class="font-semibold text-fg truncate group-hover:text-accent transition-colors">{ m.Entity.Name }</h3>
+				<h3 class="font-semibold text-fg truncate group-hover:text-accent transition-colors" title={ m.Entity.Name }>{ m.Entity.Name }</h3>
 				<p class="text-xs text-fg-muted mt-0.5 truncate">
 					if m.Entity.TypeName != "" {
 						{ m.Entity.TypeName }
@@ -125,7 +125,7 @@ templ castCard(campaignID string, m CastMember) {
 			data-cast-peek="true"
 			title="Quick look"
 			aria-label={ "Quick look at " + m.Entity.Name }
-			class="absolute top-2 right-2 z-10 inline-flex items-center justify-center w-7 h-7 rounded-md bg-surface/90 border border-edge text-fg-muted opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-accent hover:border-accent transition-all"
+			class="absolute top-2 right-2 z-10 inline-flex items-center justify-center w-7 h-7 rounded-md bg-surface/90 border border-edge text-fg-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent hover:text-accent hover:border-accent transition-all"
 		>
 			<i class="fa-solid fa-expand text-xs"></i>
 		</button>

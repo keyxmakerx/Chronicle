@@ -3206,6 +3206,8 @@ func (h *Handler) Characters(c echo.Context) error {
 	}
 	if npcsOn && h.npcSection != nil {
 		view.NPCSection = h.npcSection.NPCSection(ctx, cc, userID, middleware.GetCSRFToken(c), CastTagSlug)
+	} else if npcsOn {
+		slog.Warn("characters page: npcs addon enabled but no NPCSectionProvider wired", slog.String("campaign_id", campaignID))
 	}
 
 	if middleware.IsHTMX(c) {

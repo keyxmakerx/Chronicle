@@ -1617,3 +1617,67 @@ configuration.
 ClaimEntity, AssignOwner), `entities/{claim_banner.templ, claim_overview_test.go}`,
 migration 000029.
 
+## ADR-040: Dynamic-surface frame — a system-agnostic Widget, not a hardcoded sheet
+
+**Status.** Accepted (2026-06-22). **Context.** The operator wants a dynamic UI: a
+mini surface that promotes into a full-screen sheet with expandable boxes, action
+overlays, and drill-downs — applied first to the character sheet, later the rulebook.
+
+**Decision.** Build it as ONE reusable, **system-agnostic frame** in the Widget tier
+(`Chronicle.surface`, `static/js/widgets/dynamic_surface.js`) — a motion-preset library,
+an overlay stack, an expand/collapse box, a memoized data provider, a mini→full
+`launch`, and a schema-driven `mount` — rather than a bespoke renderer per sheet. **The
+frame owns motion + structure; a System supplies box BODIES** via `registerBox(name, fn)`.
+A System never writes animation code; it names which preset fits each card.
+
+**Why.** Chronicle is genre-agnostic; the same paradigm must serve any game system and
+the rulebook. Separating the frame (Chronicle) from the content (System/plugin) keeps
+"Chronicle owns the template; the system fills it." Built on existing motion tokens
+(`--ease/-dur/-elev-*`) + a new `--surface-*` contract, so it stays theme-aware; all
+presets collapse to a fade under `prefers-reduced-motion`. No new tables — surfaces ride
+a declarative schema; per-user view-state rides localStorage.
+
+**References.** `static/js/widgets/dynamic_surface.js` + `.ai.md`; the admin surface demo
+(`/admin/design-lab`); Cordinator `plans/2026-06-21-dynamic-widget-ui-framework-design.md`.
+
+## ADR-041: `character_surface` as a layout BLOCK + the default for player-character types
+
+**Status.** Accepted (2026-06-22). **Context.** Player characters should open the dynamic
+"big widget" sheet by default, yet stay editable in the existing layout customizer.
+
+**Decision.** Register the surface as a normal entity-page **layout block**
+(`character_surface`, `Contexts:["template"]`, `Singleton`) whose renderer emits a
+`data-widget="dynamic-surface"` container with the entity's data **seeded inline**. Make
+`CharacterLayout()` (the block + permissions) the default layout for
+`isPlayerCharacterType` types in `CreateEntityType`, instead of `DefaultLayout()`.
+
+**Why.** Because it's a registry-driven block, it appears in the layout-editor palette and
+owners compose/rearrange it like any block — no separate "sheet editor." The default
+applies only to NEWLY created PC types (we never rewrite existing customized layouts).
+**Security:** the description box mounts the same role-aware `editor` widget the standard
+`entry` block uses (so GM-only secrets aren't leaked) rather than inlining `EntryHTML`.
+
+**References.** `entities/{character_surface.go, character_surface_block.templ,
+block_registry_core.go, model.go:CharacterLayout, service.go}`,
+`static/js/widgets/character_surface.js`; `entities/.ai.md` §`character_surface`.
+
+## ADR-042: Cross-plugin section injection — `NPCSectionProvider`
+
+**Status.** Accepted (2026-06-22). **Context.** The unified Characters page (in the core
+`entities` plugin) must render an NPCs/Monsters section owned by the `npcs` addon, without
+the core plugin importing the addon (rule 8) or duplicating NPC logic.
+
+**Decision.** `entities` defines an `NPCSectionProvider` interface returning a
+`templ.Component`; `npcs.Handler.NPCSection` **structurally** satisfies it and is injected
+via `entityHandler.SetNPCSectionProvider(npcHandler)` at app wiring. The npcs plugin
+renders its own section (featured tag-row + revealed list + reveal toggle, reusing
+`NPCCardComponent`); entities just slots the component in when the `npcs` addon is on.
+
+**Why.** Keeps domain ownership where it belongs (npcs owns NPC rendering), preserves the
+dependency direction (npcs→entities, never the reverse — npcs needs no import of entities
+since the interface is satisfied implicitly), and generalizes: any addon can contribute a
+section to a core page this way. The standalone `/npcs` gallery page redirected into this.
+
+**References.** `entities/handler.go` (NPCSectionProvider, Characters), `npcs/handler.go`
+(NPCSection), `npcs/npc_section.templ`, `app/routes.go` (SetNPCSectionProvider).
+

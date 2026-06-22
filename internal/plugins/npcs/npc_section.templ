@@ -13,9 +13,9 @@ import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, all []NPCCard, csrfToken string) {
 	if len(featured) > 0 {
 		<div class="mb-5">
-			<p class="text-xs font-medium text-fg-muted mb-2">
-				<i class="fa-solid fa-star text-amber-400 mr-1"></i>Featured
-			</p>
+			<h3 class="text-xs font-medium text-fg-muted mb-2">
+				<i class="fa-solid fa-star text-amber-400 mr-1" aria-hidden="true"></i>Featured
+			</h3>
 			<div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
 				for i := range featured {
 					@NPCCardComponent(cc, &featured[i], csrfToken)

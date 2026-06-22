@@ -149,6 +149,8 @@
     var card = document.createElement('button');
     card.type = 'button';
     card.className = 'sd-mini';
+    card.setAttribute('aria-label', 'Open ' + HERO.name + "'s full character sheet");
+    card.title = 'Open full character sheet';
     var pct = Math.round(HERO.stamina.current / HERO.stamina.max * 100);
     card.innerHTML =
       '<span class="sd-mini__avatar">' + esc(HERO.initials) + '</span>' +

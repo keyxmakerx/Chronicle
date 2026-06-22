@@ -6,6 +6,7 @@ package npcs
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/a-h/templ"
@@ -61,9 +62,15 @@ func (h *Handler) NPCSection(ctx context.Context, cc *campaigns.CampaignContext,
 
 	var featured []NPCCard
 	if featureTag != "" {
-		featured, _, _ = h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 24, Sort: "name", Tag: featureTag})
+		var err error
+		if featured, _, err = h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 24, Sort: "name", Tag: featureTag}); err != nil {
+			slog.Warn("npc section: featured list failed", slog.String("campaign_id", cid), slog.Any("error", err))
+		}
 	}
-	all, _, _ := h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 60, Sort: "name"})
+	all, _, err := h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 60, Sort: "name"})
+	if err != nil {
+		slog.Warn("npc section: list failed", slog.String("campaign_id", cid), slog.Any("error", err))
+	}
 
 	return NPCSectionComponent(cc, featured, all, csrfToken)
 }
