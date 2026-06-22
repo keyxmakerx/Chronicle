@@ -338,6 +338,7 @@ GET	/relations-graph/page	internal/widgets/relations/routes.go
 GET	/relations/types	internal/plugins/syncapi/routes.go
 GET	/reset-password	internal/plugins/auth/routes.go
 GET	/rsvp/:token	internal/plugins/sessions/routes.go
+GET	/rules-glossary	internal/systems/routes.go
 GET	/saved-filters	internal/plugins/entities/routes.go
 GET	/search	internal/plugins/bestiary/routes.go
 GET	/search	internal/plugins/entities/routes.go
