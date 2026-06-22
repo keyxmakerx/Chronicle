@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -87,6 +88,41 @@ type TemplateBlock struct {
 	ID     string         `json:"id"`
 	Type   string         `json:"type"`
 	Config map[string]any `json:"config,omitempty"`
+}
+
+// CharacterLayout is the default page layout for player-character types: the
+// dynamic character-sheet surface (the "big widget") full-width, with the
+// permissions block beneath it for per-player sharing. Owners can customize it
+// in the layout editor like any other layout — the surface is a normal block.
+func CharacterLayout() EntityTypeLayout {
+	return EntityTypeLayout{
+		Rows: []TemplateRow{
+			{
+				ID: "row-surface",
+				Columns: []TemplateColumn{
+					{
+						ID:    "col-surface",
+						Width: 12,
+						Blocks: []TemplateBlock{
+							{ID: "blk-character-surface", Type: "character_surface"},
+						},
+					},
+				},
+			},
+			{
+				ID: "row-perm",
+				Columns: []TemplateColumn{
+					{
+						ID:    "col-perm",
+						Width: 12,
+						Blocks: []TemplateBlock{
+							{ID: "blk-perm", Type: "permissions"},
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 // DefaultLayout returns the standard two-column layout used for new entity types.
@@ -542,6 +578,28 @@ type ClaimRoster struct {
 	Characters []Entity                   // All characters of the category, by name.
 	Members    []campaigns.CampaignMember // Campaign members assignable as owners.
 	OwnerNames map[string]string          // owner_user_id -> display name.
+}
+
+// CastMember is one card on the Characters ("Cast") page: an entity plus the
+// display flags the card needs. OwnerName is the resolved display name of a
+// player character's owner (empty for NPCs); IsViewer marks the card as
+// belonging to the viewing user so it can be highlighted and sorted first.
+type CastMember struct {
+	Entity    Entity
+	OwnerName string
+	IsViewer  bool
+}
+
+// CastView is the Characters page view-model. The page has two addon-gated
+// sections: the Party (player characters — shown when ShowPlayers, i.e. the
+// player-character-claiming addon is on) and the NPCs/Monsters section
+// (NPCSection — a templ component contributed by the npcs plugin when its addon
+// is on, nil otherwise). The page itself is only served when at least one of the
+// two is enabled.
+type CastView struct {
+	Party       []CastMember
+	ShowPlayers bool
+	NPCSection  templ.Component
 }
 
 // --- Slug Generation ---

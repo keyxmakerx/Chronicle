@@ -63,6 +63,10 @@ type EntityService interface {
 	SetEntityPermissions(ctx context.Context, entityID string, input SetPermissionsInput) error
 	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error)
 	CreateEntityType(ctx context.Context, campaignID string, input CreateEntityTypeInput) (*EntityType, error)
+	// EnsurePlayerCharacterType idempotently premakes the campaign's claimable
+	// "Player Character" type (with the dynamic character-surface layout). Called
+	// when the Player Character Claiming addon is enabled.
+	EnsurePlayerCharacterType(ctx context.Context, campaignID string) error
 	UpdateEntityType(ctx context.Context, id int, input UpdateEntityTypeInput) (*EntityType, error)
 	DeleteEntityType(ctx context.Context, id int) error
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
@@ -97,6 +101,11 @@ type EntityService interface {
 	// ("My Characters") at GET /campaigns/:id/me. No visibility filter:
 	// owning the entity implies the player can see it.
 	ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
+
+	// ListClaimed returns every claimed entity in a campaign (the whole party),
+	// visibility-filtered for the viewer. Powers the "party" band of the
+	// Characters page at GET /campaigns/:id/characters.
+	ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error)
 
 	// ClaimEntity assigns the calling user as owner of an entity. Idempotent
 	// when the caller already owns it; returns 409 Conflict when claimed by
@@ -869,6 +878,13 @@ func (s *entityService) ListByOwner(ctx context.Context, campaignID, ownerUserID
 	return s.entities.ListByOwner(ctx, campaignID, ownerUserID)
 }
 
+// ListClaimed returns every claimed entity in a campaign (the whole party),
+// visibility-filtered for the viewer. Powers the "party" band of the Characters
+// page. Trusts the caller (handler) has verified campaign membership.
+func (s *entityService) ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error) {
+	return s.entities.ListClaimed(ctx, campaignID, role, userID)
+}
+
 // Player Character Claiming (PC-CLAIM-2) constants.
 const (
 	// PresetCategoryPlayerCharacter marks an entity type as the player-claimable
@@ -888,6 +904,38 @@ const (
 // claimable=true default in CreateEntityType.
 func isPlayerCharacterType(presetCategory, slug string) bool {
 	return presetCategory == PresetCategoryPlayerCharacter || slug == SlugPlayerCharacter
+}
+
+// EnsurePlayerCharacterType idempotently premakes the campaign's claimable
+// "Player Character" type so enabling the Player Character Claiming addon gives
+// owners the type ready-to-go (with the dynamic character-surface layout via
+// CharacterLayout + claimable=true) instead of hand-creating it. It is a no-op
+// when any player-character type already exists (matched by preset category or
+// slug), so re-enabling never duplicates. The addon gate in CreateEntityType
+// passes here because the addon is already marked enabled (DB-direct check)
+// before this runs.
+func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignID string) error {
+	types, err := s.types.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing entity types: %w", err))
+	}
+	for _, t := range types {
+		preset := ""
+		if t.PresetCategory != nil {
+			preset = *t.PresetCategory
+		}
+		if isPlayerCharacterType(preset, t.Slug) {
+			return nil // already present — idempotent
+		}
+	}
+	_, err = s.CreateEntityType(ctx, campaignID, CreateEntityTypeInput{
+		Name:           "Player Character",
+		NamePlural:     "Player Characters",
+		Icon:           "fa-user-shield",
+		Color:          "#6366f1",
+		PresetCategory: PresetCategoryPlayerCharacter,
+	})
+	return err
 }
 
 // isClaimableType reports whether an entity_type is one a player can claim
@@ -1327,6 +1375,14 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		claimable = &defaultClaimable
 	}
 
+	// Player characters default to the dynamic character-sheet surface (the "big
+	// widget"); everything else gets the standard two-column layout. Owners can
+	// re-arrange either in the layout editor afterwards.
+	layout := DefaultLayout()
+	if pcType {
+		layout = CharacterLayout()
+	}
+
 	et := &EntityType{
 		CampaignID:     campaignID,
 		Slug:           slug,
@@ -1338,7 +1394,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		ParentTypeID:   input.ParentTypeID,
 		Claimable:      claimable,
 		Fields:         []FieldDefinition{},
-		Layout:         DefaultLayout(),
+		Layout:         layout,
 		SortOrder:      maxOrder + 1,
 		IsDefault:      false,
 		Enabled:        true,

@@ -606,6 +606,15 @@ type EntityRepository interface {
 	// filter.
 	ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
 
+	// ListClaimed returns every claimed entity (owner_user_id IS NOT NULL) in a
+	// campaign, ordered most-recently-updated first, with the standard
+	// visibility filter applied for the viewer. Backs the campaign-wide "party"
+	// band of the Characters page — where ListByOwner is scoped to one user,
+	// this is scoped to the whole campaign. The handler unions this with the
+	// viewer's own ListByOwner result so a player always sees their own
+	// character even if it was marked private.
+	ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error)
+
 	// UpdateOwner sets or clears entities.owner_user_id. Pass a nil
 	// pointer to clear (unassign). Service-level callers are responsible
 	// for verifying the new owner is a campaign member.
@@ -1180,6 +1189,39 @@ func (r *entityRepository) ListByOwner(ctx context.Context, campaignID, ownerUse
 	rows, err := r.db.QueryContext(ctx, query, campaignID, ownerUserID)
 	if err != nil {
 		return nil, fmt.Errorf("listing owned entities: %w", err)
+	}
+	defer rows.Close()
+
+	var entities []Entity
+	for rows.Next() {
+		e, err := r.scanEntityRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		entities = append(entities, *e)
+	}
+	return entities, rows.Err()
+}
+
+// ListClaimed returns every claimed entity in a campaign (owner_user_id set),
+// newest-first, with the standard visibility filter applied. See the interface
+// docstring for why it is unioned with the viewer's own ListByOwner upstream.
+func (r *entityRepository) ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error) {
+	where := "WHERE e.campaign_id = ? AND e.owner_user_id IS NOT NULL"
+	args := []any{campaignID}
+
+	visFilter, visArgs := visibilityFilter(role, userID)
+	where += visFilter
+	args = append(args, visArgs...)
+
+	query := `SELECT ` + entitySelectColumns + `
+	          FROM entities e
+	          INNER JOIN entity_types et ON et.id = e.entity_type_id
+	          ` + where + `
+	          ORDER BY e.updated_at DESC`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing claimed entities: %w", err)
 	}
 	defer rows.Close()
 

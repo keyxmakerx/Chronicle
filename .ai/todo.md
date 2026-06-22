@@ -25,6 +25,16 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 - [~] **Public-campaign read gaps**: aliases route not in pub group; player-notes block mounts for anonymous; map blocks blank for public viewers (cordinator#39 F3/F5/F4) — Agent 1, `C-SWEEP-FIXES-R1` PR 2. Fog/layers stay auth-only.
 - [~] **Topbar custom branding still masked** (cordinator#29) — header lacks a stacking context, so the z-index:-1 brand layer paints under `bg-surface`; fix = `isolate` on the header — Agent 2, `C-BACKLOG-BUGS-R1`.
 
+### Dynamic surface + Characters page — 2026-06-22
+
+- [x] **Dynamic-surface frame (Wave 1)** `Chronicle.surface` + admin surface demo at `/admin/design-lab` (Design Lab repurposed from the static showcase). See status.md.
+- [x] **Characters ("Cast") page** `GET /campaigns/:id/characters` — party (claimed PCs) + NPCs; mini→full launch = the frame's first production adopter. `service.ListClaimed` + pure `assembleCastParty` (tested) + `characters.js` (plugin embed.FS) + sidebar link. Later consolidated + addon-gated (see below). Cordinator `plans/2026-06-22-characters-cast-page-design.md`.
+- [x] **Player characters default to the big dynamic-surface widget** — `character_surface` layout block (registered, `Contexts:["template"]`, editable in the layout editor); `CharacterLayout()` is the default for PC sub-types; generic box renderers in `character_surface.js`; description box reuses the role-aware `editor` widget. Frame fix: `Provider.push` no longer clobbered by `load()`. See `entities/.ai.md` §`character_surface`.
+- [x] **Consolidated addon-gated Characters page** — Players section (player-character-claiming) + NPC section (npcs, via injected `NPCSectionProvider`: feature-tag portrait row + full revealed list + DM reveal/hide); page 404s if neither addon. Standalone `/npcs` gallery now redirects to `/characters`. Cleanup follow-ups: remove dead `npcs/gallery.templ`; de-dupe the legacy "NPCs" sidebar link (now redundant with "Characters").
+- [x] **Auto-premake the "Player Characters" sub-type on addon enable** — `addons.EnableForCampaign` now calls `PresetApplier.ApplyAddonEnableEffects`, which for `player-character-claiming` runs `entityService.EnsurePlayerCharacterType` (idempotent: skips if a PC type exists, else creates it with `CharacterLayout()` + claimable). Tested.
+- [ ] **Cast page — Draw Steel surface in the launch overlay** (depends on the Draw Steel sheet adopter): replace the `/preview` body with the real dynamic character sheet.
+- [ ] **Cast page — session/location-derived "active" NPCs** (Option C in the design): derive the Active band from where the party is, beyond the manual `cast` tag.
+
 ### Player Character Claiming (PC-CLAIM) — staged feature
 
 Goal: restrict claiming to a "Player Characters" sub-type via an Owner-toggleable

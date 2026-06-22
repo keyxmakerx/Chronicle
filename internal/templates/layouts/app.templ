@@ -255,9 +255,9 @@ templ Sidebar() {
 						if IsAddonEnabled(ctx, "notes") {
 							@sidebarAddonLink(ctx, SidebarItemView{Slug: "notes", Label: "Journal", Icon: "fa-book-open"})
 						}
-						if IsAddonEnabled(ctx, "npcs") {
-							@sidebarAddonLink(ctx, SidebarItemView{Slug: "npcs", Label: "NPCs", Icon: "fa-users"})
-						}
+						<!-- The NPCs link was retired: the npcs gallery folded into the
+						     unified "Characters" page (rendered in the categories zone
+						     below, gated on the npcs OR player-character-claiming addon). -->
 						// W5c: the calendar dashboard, like NPCs. Always-on when the
 						// calendar addon is enabled (a per-viewer "has visible calendar"
 						// check would add a DB read to the global layout injector — the
@@ -345,6 +345,12 @@ templ Sidebar() {
 									}
 								}
 							}
+						}
+						<!-- Characters (the Cast): Players section + NPCs/Monsters
+						     section, each gated by its addon. Shown when either is
+						     enabled; visible to every member. -->
+						if IsAddonEnabled(ctx, "player-character-claiming") || IsAddonEnabled(ctx, "npcs") {
+							@sidebarCharactersLink(ctx)
 						}
 						<!-- My Characters link (CH2). Visible to Players (the
 						     primary audience) and to Owner/Scribe when
@@ -834,6 +840,23 @@ templ sidebarMyCharactersLink(ctx context.Context) {
 			<i class="fa-solid fa-user-shield text-xs text-gray-400"></i>
 		</span>
 		<span class="flex-1">My Characters</span>
+	</a>
+}
+
+// sidebarCharactersLink is the campaign "Characters" (Cast) nav link — the
+// party + active NPCs. A core campaign view shown to every member, distinct
+// from the player-only "My Characters" landing page.
+templ sidebarCharactersLink(ctx context.Context) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx))) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx)))) }
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			<i class="fa-solid fa-masks-theater text-xs text-gray-400"></i>
+		</span>
+		<span class="flex-1">Characters</span>
 	</a>
 }
 

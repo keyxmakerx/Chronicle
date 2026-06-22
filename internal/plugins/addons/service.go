@@ -59,6 +59,10 @@ type AddonService interface {
 // to avoid circular imports with entities and systems packages.
 type PresetApplier interface {
 	ApplySystemPresets(ctx context.Context, campaignID, systemSlug string) (int, error)
+	// ApplyAddonEnableEffects runs entity-type side effects for a NON-system
+	// addon when it is enabled (e.g. premaking the "Player Characters" type when
+	// the claiming addon is enabled). No-op for addons without effects.
+	ApplyAddonEnableEffects(ctx context.Context, campaignID, addonSlug string) error
 }
 
 // SystemManifestInfo holds the minimal manifest data needed to auto-register
@@ -481,6 +485,19 @@ func (s *addonService) EnableForCampaign(ctx context.Context, campaignID string,
 				slog.String("campaign_id", campaignID),
 				slog.String("system_slug", addon.Slug),
 				slog.Int("types_created", count),
+			)
+		}
+	}
+
+	// Addon-specific enable effects for non-system addons (e.g. premaking the
+	// "Player Characters" type when the claiming addon is enabled). Best-effort:
+	// a failure is logged but the addon stays enabled.
+	if s.presetApplier != nil {
+		if err := s.presetApplier.ApplyAddonEnableEffects(ctx, campaignID, addon.Slug); err != nil {
+			slog.Warn("addon enable effects failed (addon still enabled)",
+				slog.String("campaign_id", campaignID),
+				slog.String("addon_slug", addon.Slug),
+				slog.Any("error", err),
 			)
 		}
 	}

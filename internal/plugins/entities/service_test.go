@@ -143,6 +143,7 @@ type mockEntityRepo struct {
 	setAliasesFn     func(ctx context.Context, entityID string, aliases []string) error
 	updatePrivateFn  func(ctx context.Context, entityID string, isPrivate bool) error
 	listByOwnerFn    func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
+	listClaimedFn    func(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error)
 	updateOwnerFn    func(ctx context.Context, entityID string, ownerUserID *string) error
 	updateMapIDFn    func(ctx context.Context, entityID string, mapID *string) error
 	listSiblingIDsFn func(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error)
@@ -340,6 +341,13 @@ func (m *mockEntityRepo) UpdateEntityType(_ context.Context, _ string, _ int) er
 func (m *mockEntityRepo) ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error) {
 	if m.listByOwnerFn != nil {
 		return m.listByOwnerFn(ctx, campaignID, ownerUserID)
+	}
+	return nil, nil
+}
+
+func (m *mockEntityRepo) ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error) {
+	if m.listClaimedFn != nil {
+		return m.listClaimedFn(ctx, campaignID, role, userID)
 	}
 	return nil, nil
 }

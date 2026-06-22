@@ -74,6 +74,11 @@ templ Base(title string) {
 		     Chronicle namespace exists. -->
 		<script src="/static/js/widgets/dynamic_surface.js" defer></script>
 
+		<!-- Generic character-sheet box renderers for the `character_surface`
+		     layout block. Loads after the frame so its box renderers are
+		     registered before boot.js auto-mounts the dynamic-surface widget. -->
+		<script src="/static/js/widgets/character_surface.js" defer></script>
+
 		<!-- Alpine.js: loaded AFTER boot.js so Chronicle.apiFetch/notify exist
 		     when Alpine initializes and evaluates x-data attributes. -->
 		<script src="/static/vendor/alpine-collapse.min.js" defer></script>

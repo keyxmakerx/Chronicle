@@ -1,0 +1,45 @@
+// npc_section.templ renders the NPCs/Monsters section embedded in the entities
+// "Characters" page (the standalone gallery folded into it). A featured portrait
+// row (entities bearing the feature tag) sits above the full revealed list; both
+// reuse NPCCardComponent, so the DM reveal/hide toggle comes along unchanged.
+package npcs
+
+import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+
+// NPCSectionComponent is the section body the npcs plugin contributes to the
+// Characters page via the injected provider. featured = feature-tagged NPCs
+// (portrait row); all = the full role-aware list (GM sees hidden ones too, with
+// a reveal toggle).
+templ NPCSectionComponent(cc *campaigns.CampaignContext, featured []NPCCard, all []NPCCard, csrfToken string) {
+	if len(featured) > 0 {
+		<div class="mb-5">
+			<h3 class="text-xs font-medium text-fg-muted mb-2">
+				<i class="fa-solid fa-star text-amber-400 mr-1" aria-hidden="true"></i>Featured
+			</h3>
+			<div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+				for i := range featured {
+					@NPCCardComponent(cc, &featured[i], csrfToken)
+				}
+			</div>
+		</div>
+	}
+	if len(all) == 0 {
+		<div class="rounded-lg border border-edge bg-surface p-6 text-center">
+			<div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-accent/10 text-accent mb-3">
+				<i class="fa-solid fa-masks-theater"></i>
+			</div>
+			<h3 class="text-sm font-semibold text-fg mb-1">No NPCs yet</h3>
+			if cc.MemberRole >= campaigns.RoleScribe {
+				<p class="text-xs text-fg-secondary max-w-sm mx-auto">Create character entities and reveal them to your players; tag one <code>cast</code> to feature it above.</p>
+			} else {
+				<p class="text-xs text-fg-secondary max-w-sm mx-auto">Your GM hasn't revealed any NPCs yet.</p>
+			}
+		</div>
+	} else {
+		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+			for i := range all {
+				@NPCCardComponent(cc, &all[i], csrfToken)
+			}
+		</div>
+	}
+}

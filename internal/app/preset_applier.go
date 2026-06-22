@@ -114,3 +114,14 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 
 	return created, nil
 }
+
+// ApplyAddonEnableEffects runs entity-type side effects for non-system addons on
+// enable. Today only the Player Character Claiming addon has one: premaking the
+// claimable "Player Characters" type (idempotent in the service).
+func (p *presetApplier) ApplyAddonEnableEffects(ctx context.Context, campaignID, addonSlug string) error {
+	switch addonSlug {
+	case entities.AddonPlayerCharacterClaiming:
+		return p.entityService.EnsurePlayerCharacterType(ctx, campaignID)
+	}
+	return nil
+}

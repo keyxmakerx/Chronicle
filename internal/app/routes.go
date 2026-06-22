@@ -1639,6 +1639,15 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
+	// Expose the entities plugin's embedded static assets at
+	// /static/plugins/entities/ (currently js/characters.js, the Characters
+	// page's mini→full launch enhancement). Per
+	// cordinator/decisions/2026-05-25-plugin-static-assets.md.
+	a.registerPlugin(PluginRegistration{
+		Slug:     entities.PluginSlug,
+		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
+	})
+
 	// Content template routes (entity content blueprints).
 	contentTemplateRepo := entities.NewContentTemplateRepository(a.DB)
 	contentTemplateService := entities.NewContentTemplateService(contentTemplateRepo, entityTypeRepo)
@@ -1816,7 +1825,8 @@ func (a *App) RegisterRoutes() {
 	settingsHandler := settings.NewHandler(settingsService)
 	settings.RegisterRoutes(adminGroup, settingsHandler)
 
-	// Design Lab: admin-only component showcase for previewing UI variants.
+	// Design Lab: admin-only page hosting the dynamic-surface demo (a live
+	// character sheet built by the Chronicle.surface frame).
 	designLabHandler := designlab.NewHandler()
 	designlab.RegisterRoutes(adminGroup, designLabHandler)
 
@@ -2267,6 +2277,10 @@ func (a *App) RegisterRoutes() {
 	npcHandler := npcs.NewHandler(npcSvc)
 	npcHandler.SetVisibilityToggler(&npcVisibilityTogglerAdapter{svc: entityService})
 	npcs.RegisterRoutes(e, npcHandler, campaignService, authService, addonService)
+	// The npcs plugin contributes the NPCs/Monsters section of the unified
+	// Characters page (the standalone NPC gallery folded in). npcHandler
+	// structurally satisfies entities.NPCSectionProvider.
+	entityHandler.SetNPCSectionProvider(npcHandler)
 
 	// Armory plugin: gallery/hub view for item-category entities.
 	armoryRepo := armory.NewArmoryRepository(a.DB)

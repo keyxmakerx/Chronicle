@@ -5,9 +5,11 @@ package npcs
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
-	"strconv"
 
+	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -38,47 +40,39 @@ func (h *Handler) SetVisibilityToggler(vt VisibilityToggler) {
 	h.visToggler = vt
 }
 
-// Index renders the NPC gallery page at GET /campaigns/:id/npcs.
-// Returns a full page or an HTMX fragment depending on the request header.
+// Index used to render the standalone NPC gallery; that page folded into the
+// unified entities Characters page (NPCs/Monsters section). The route now
+// redirects so existing links/bookmarks keep working.
 func (h *Handler) Index(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil {
 		return apperror.NewMissingContext()
 	}
+	return c.Redirect(http.StatusFound, fmt.Sprintf("/campaigns/%s/characters", cc.Campaign.ID))
+}
 
-	opts := DefaultNPCListOptions()
-	if p := c.QueryParam("page"); p != "" {
-		if n, err := strconv.Atoi(p); err == nil && n > 0 {
-			opts.Page = n
+// NPCSection renders the NPCs/Monsters section embedded in the Characters page:
+// a featured portrait row (entities bearing featureTag) above the full
+// role-aware list. It satisfies entities.NPCSectionProvider (injected there), so
+// the core entities plugin never imports this addon. Role matches the gallery's
+// (int(cc.MemberRole)) so reveal/hide visibility is unchanged.
+func (h *Handler) NPCSection(ctx context.Context, cc *campaigns.CampaignContext, userID, csrfToken, featureTag string) templ.Component {
+	cid := cc.Campaign.ID
+	role := int(cc.MemberRole)
+
+	var featured []NPCCard
+	if featureTag != "" {
+		var err error
+		if featured, _, err = h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 24, Sort: "name", Tag: featureTag}); err != nil {
+			slog.Warn("npc section: featured list failed", slog.String("campaign_id", cid), slog.Any("error", err))
 		}
 	}
-	if pp := c.QueryParam("per_page"); pp != "" {
-		if n, err := strconv.Atoi(pp); err == nil && n > 0 && n <= 100 {
-			opts.PerPage = n
-		}
-	}
-	if s := c.QueryParam("sort"); s != "" {
-		opts.Sort = s
-	}
-	if q := c.QueryParam("q"); q != "" {
-		opts.Search = q
-	}
-	if t := c.QueryParam("tag"); t != "" {
-		opts.Tag = t
-	}
-
-	userID := auth.GetUserID(c)
-	cards, total, err := h.svc.ListNPCs(c.Request().Context(), cc.Campaign.ID, int(cc.MemberRole), userID, opts)
+	all, _, err := h.svc.ListNPCs(ctx, cid, role, userID, NPCListOptions{Page: 1, PerPage: 60, Sort: "name"})
 	if err != nil {
-		return apperror.NewInternal(err)
+		slog.Warn("npc section: list failed", slog.String("campaign_id", cid), slog.Any("error", err))
 	}
 
-	csrfToken := middleware.GetCSRFToken(c)
-
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, NPCGalleryContent(cc, cards, total, opts, csrfToken))
-	}
-	return middleware.Render(c, http.StatusOK, NPCGalleryPage(cc, cards, total, opts, csrfToken))
+	return NPCSectionComponent(cc, featured, all, csrfToken)
 }
 
 // ToggleReveal handles POST /campaigns/:id/npcs/:eid/reveal.

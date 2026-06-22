@@ -33,7 +33,7 @@ templ NPCCardComponent(cc *campaigns.CampaignContext, card *NPCCard, csrfToken s
 
 			<!-- Card body -->
 			<div class="px-3 py-2.5">
-				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors">
+				<h3 class="text-sm font-semibold text-fg truncate group-hover:text-accent transition-colors" title={ card.Name }>
 					{ card.Name }
 				</h3>
 				if card.TypeLabel != nil && *card.TypeLabel != "" {
@@ -77,8 +77,9 @@ templ NPCCardComponent(cc *campaigns.CampaignContext, card *NPCCard, csrfToken s
 templ RevealBadge(entityID string, campaignID string, isPrivate bool, csrfToken string) {
 	if isPrivate {
 		<button
-			class="w-7 h-7 rounded-full flex items-center justify-center bg-black/50 text-white/70 hover:text-white hover:bg-red-600/80 transition-colors backdrop-blur-sm"
+			class="w-7 h-7 rounded-full flex items-center justify-center bg-black/50 text-white/70 hover:text-white hover:bg-red-600/80 transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
 			title="Hidden from players — click to reveal"
+			aria-label="Reveal this NPC to players"
 			hx-post={ fmt.Sprintf("/campaigns/%s/npcs/%s/reveal", campaignID, entityID) }
 			hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 			hx-target={ fmt.Sprintf("#reveal-%s", entityID) }
@@ -88,8 +89,9 @@ templ RevealBadge(entityID string, campaignID string, isPrivate bool, csrfToken 
 		</button>
 	} else {
 		<button
-			class="w-7 h-7 rounded-full flex items-center justify-center bg-black/50 text-emerald-400 hover:text-white hover:bg-emerald-600/80 transition-colors backdrop-blur-sm"
+			class="w-7 h-7 rounded-full flex items-center justify-center bg-black/50 text-emerald-400 hover:text-white hover:bg-emerald-600/80 transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
 			title="Visible to players — click to hide"
+			aria-label="Hide this NPC from players"
 			hx-post={ fmt.Sprintf("/campaigns/%s/npcs/%s/reveal", campaignID, entityID) }
 			hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
 			hx-target={ fmt.Sprintf("#reveal-%s", entityID) }
