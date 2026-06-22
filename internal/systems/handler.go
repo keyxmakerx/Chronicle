@@ -363,6 +363,46 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 	return c.Blob(http.StatusOK, "application/javascript", data)
 }
 
+// RulesGlossaryAPI serves a system's raw data/rules-glossary.json — the authored
+// [{slug,name,description,properties:{category}}] array a system's client-side
+// reference-renderer needs to resolve {@category term} tokens. It is served RAW
+// (not via the DataProvider, which normalizes into ReferenceItem and drops the
+// authored `slug`). Returns an empty array when the system ships no glossary so
+// the client degrades gracefully (references stay literal) rather than erroring.
+//
+// GET /campaigns/:id/systems/:mod/rules-glossary
+func (h *SystemHandler) RulesGlossaryAPI(c echo.Context) error {
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return apperror.NewNotFound("system not found")
+	}
+
+	sysDir := Dir(mod.Info().ID)
+	if sysDir == "" && h.campaignSystems != nil {
+		if cc := campaigns.GetCampaignContext(c); cc != nil {
+			sysDir = h.campaignSystems.Dir(cc.Campaign.ID)
+		}
+	}
+	if sysDir == "" {
+		return c.JSON(http.StatusOK, []any{})
+	}
+
+	// Fixed filename (no user input), but keep the within-dir guard for parity
+	// with WidgetScriptAPI.
+	p := filepath.Clean(filepath.Join(sysDir, "data", "rules-glossary.json"))
+	if !strings.HasPrefix(p, filepath.Clean(sysDir)+string(os.PathSeparator)) {
+		return apperror.NewBadRequest("invalid path")
+	}
+
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return c.JSON(http.StatusOK, []any{})
+	}
+
+	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	return c.Blob(http.StatusOK, "application/json", data)
+}
+
 // resolveEnabledSystem returns the System enabled for the given campaign,
 // checking both built-in addon systems and campaign custom systems.
 func (h *SystemHandler) resolveEnabledSystem(ctx context.Context, campaignID string) System {

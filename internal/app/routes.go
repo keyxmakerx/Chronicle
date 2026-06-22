@@ -1851,6 +1851,15 @@ func (a *App) RegisterRoutes() {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}
 	addonService.SetPresetApplier(newPresetApplier(entityService))
+	// One-time, idempotent startup backfill: premake the claimable "Player
+	// Character" type for campaigns that enabled the claiming addon before its
+	// enable-effect shipped. Safe to run every boot (no-op where present);
+	// best-effort so a failure can't block startup.
+	if n, err := backfillPlayerCharacterTypes(context.Background(), addonService, entityService); err != nil {
+		slog.Error("player-character-type backfill failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("player-character-type backfill complete", slog.Int("campaigns", n))
+	}
 	addonService.SetSystemFinder(&systemManifestFinderAdapter{})
 	addonHandler := addons.NewHandler(addonService)
 	addons.RegisterAdminRoutes(adminGroup, addonHandler)
