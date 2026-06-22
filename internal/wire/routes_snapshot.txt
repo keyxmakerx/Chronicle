@@ -180,6 +180,7 @@ GET	/campaigns/:id/accept-transfer	internal/plugins/campaigns/routes.go
 GET	/campaigns/import	internal/plugins/campaigns/routes.go
 GET	/campaigns/new	internal/plugins/campaigns/routes.go
 GET	/campaigns/picker	internal/plugins/campaigns/routes.go
+GET	/characters	internal/plugins/entities/routes.go
 GET	/content-templates	internal/plugins/entities/content_template_routes.go
 GET	/content-templates/:tid	internal/plugins/entities/content_template_routes.go
 GET	/creators/:userId	internal/plugins/bestiary/routes.go
