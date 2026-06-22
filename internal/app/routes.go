@@ -1816,7 +1816,8 @@ func (a *App) RegisterRoutes() {
 	settingsHandler := settings.NewHandler(settingsService)
 	settings.RegisterRoutes(adminGroup, settingsHandler)
 
-	// Design Lab: admin-only component showcase for previewing UI variants.
+	// Design Lab: admin-only page hosting the dynamic-surface demo (a live
+	// character sheet built by the Chronicle.surface frame).
 	designLabHandler := designlab.NewHandler()
 	designlab.RegisterRoutes(adminGroup, designLabHandler)
 

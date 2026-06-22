@@ -1,6 +1,9 @@
-// Package designlab provides an admin-only UI component showcase ("Design Lab")
-// for previewing button variants, cards, badges, alerts, form inputs, typography,
-// and other design system components without affecting the live site.
+// Package designlab provides the admin-only "Design Lab" page. It hosts the
+// dynamic-surface demo: a live character sheet assembled by the frame
+// (Chronicle.surface) from a declarative schema, used to exercise the
+// expand/collapse box, overlay, and mini->full launch primitives without
+// touching real campaign data. (It formerly hosted a static component
+// catalogue; the moving dynamic-surface engine is the demo now.)
 package designlab
 
 import (
@@ -18,7 +21,7 @@ func NewHandler() *Handler {
 	return &Handler{}
 }
 
-// DesignLab renders the component showcase page.
+// DesignLab renders the dynamic-surface demo page.
 func (h *Handler) DesignLab(c echo.Context) error {
-	return middleware.Render(c, http.StatusOK, DesignLabPage())
+	return middleware.Render(c, http.StatusOK, SurfaceDemoPage())
 }
