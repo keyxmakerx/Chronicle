@@ -31,6 +31,10 @@ type AddonRepository interface {
 	DisableForCampaign(ctx context.Context, campaignID string, addonID int) error
 	IsEnabledForCampaign(ctx context.Context, campaignID string, addonSlug string) (bool, error)
 	CountCampaignsUsingAddon(ctx context.Context, addonSlug string) (int, error)
+	// ListCampaignsUsingAddon returns the IDs of every campaign that has the
+	// addon enabled. Backs one-time startup backfills that must replay an
+	// addon's enable-effects across already-enabled campaigns.
+	ListCampaignsUsingAddon(ctx context.Context, addonSlug string) ([]string, error)
 	UpdateCampaignConfig(ctx context.Context, campaignID string, addonID int, config map[string]any) error
 }
 
@@ -332,6 +336,30 @@ func (r *addonRepository) CountCampaignsUsingAddon(ctx context.Context, addonSlu
 		return 0, fmt.Errorf("counting campaigns using addon %s: %w", addonSlug, err)
 	}
 	return count, nil
+}
+
+// ListCampaignsUsingAddon returns the IDs of every campaign that has the
+// specified addon enabled. Mirrors CountCampaignsUsingAddon but returns the IDs
+// so a caller can replay per-campaign side effects (e.g. a startup backfill).
+func (r *addonRepository) ListCampaignsUsingAddon(ctx context.Context, addonSlug string) ([]string, error) {
+	query := `SELECT ca.campaign_id FROM campaign_addons ca
+	          INNER JOIN addons a ON a.id = ca.addon_id
+	          WHERE a.slug = ? AND ca.enabled = 1`
+	rows, err := r.db.QueryContext(ctx, query, addonSlug)
+	if err != nil {
+		return nil, fmt.Errorf("listing campaigns using addon %s: %w", addonSlug, err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning campaign id for addon %s: %w", addonSlug, err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // UpdateCampaignConfig updates the addon-specific configuration for a campaign.
