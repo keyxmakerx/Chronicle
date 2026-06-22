@@ -89,6 +89,41 @@ type TemplateBlock struct {
 	Config map[string]any `json:"config,omitempty"`
 }
 
+// CharacterLayout is the default page layout for player-character types: the
+// dynamic character-sheet surface (the "big widget") full-width, with the
+// permissions block beneath it for per-player sharing. Owners can customize it
+// in the layout editor like any other layout — the surface is a normal block.
+func CharacterLayout() EntityTypeLayout {
+	return EntityTypeLayout{
+		Rows: []TemplateRow{
+			{
+				ID: "row-surface",
+				Columns: []TemplateColumn{
+					{
+						ID:    "col-surface",
+						Width: 12,
+						Blocks: []TemplateBlock{
+							{ID: "blk-character-surface", Type: "character_surface"},
+						},
+					},
+				},
+			},
+			{
+				ID: "row-perm",
+				Columns: []TemplateColumn{
+					{
+						ID:    "col-perm",
+						Width: 12,
+						Blocks: []TemplateBlock{
+							{ID: "blk-perm", Type: "permissions"},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // DefaultLayout returns the standard two-column layout used for new entity types.
 // Includes a full-width permissions block at the bottom so operators can
 // share entities per-player without hunting through edit forms.

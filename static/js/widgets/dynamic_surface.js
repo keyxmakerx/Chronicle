@@ -477,7 +477,10 @@
   };
   Provider.prototype.get = function () { return this.load(); };
   Provider.prototype.current = function () { return this.data; };
-  Provider.prototype.push = function (d) { this.data = d; this.loaded = true; this._emit(); };
+  // push adopts data (a seed or a live update) and marks the provider RESOLVED
+  // (_promise set) so a later load() — which mount() always calls — is a no-op
+  // and can't clobber the data with a fetcher-less null. refresh() re-arms it.
+  Provider.prototype.push = function (d) { this.data = d; this.loaded = true; this._promise = Promise.resolve(d); this._emit(); };
   Provider.prototype.refresh = function () { this._promise = null; this.error = null; return this.load(); };
   Provider.prototype.subscribe = function (fn) {
     if (typeof fn !== 'function') return function () {};

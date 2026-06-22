@@ -1339,6 +1339,14 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		claimable = &defaultClaimable
 	}
 
+	// Player characters default to the dynamic character-sheet surface (the "big
+	// widget"); everything else gets the standard two-column layout. Owners can
+	// re-arrange either in the layout editor afterwards.
+	layout := DefaultLayout()
+	if pcType {
+		layout = CharacterLayout()
+	}
+
 	et := &EntityType{
 		CampaignID:     campaignID,
 		Slug:           slug,
@@ -1350,7 +1358,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		ParentTypeID:   input.ParentTypeID,
 		Claimable:      claimable,
 		Fields:         []FieldDefinition{},
-		Layout:         DefaultLayout(),
+		Layout:         layout,
 		SortOrder:      maxOrder + 1,
 		IsDefault:      false,
 		Enabled:        true,

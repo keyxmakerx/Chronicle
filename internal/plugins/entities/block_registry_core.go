@@ -49,6 +49,15 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	})
 
 	r.Register(BlockMeta{
+		Type: "character_surface", Label: "Character Sheet", Icon: "fa-id-badge",
+		Description: "Dynamic character sheet — expandable boxes built from the entity's portrait, fields, and description. The default for player characters.",
+		Contexts:    []string{"template"},
+		Singleton:   true,
+	}, func(ctx BlockRenderContext) templ.Component {
+		return blockCharacterSurface(ctx.CC, ctx.Entity, ctx.EntityType, ctx.CSRFToken)
+	})
+
+	r.Register(BlockMeta{
 		Type: "details", Label: "Details", Icon: "fa-info-circle",
 		Description: "Metadata and dates",
 		Contexts:    []string{"template"},
