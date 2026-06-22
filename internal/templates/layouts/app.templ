@@ -346,6 +346,9 @@ templ Sidebar() {
 								}
 							}
 						}
+						<!-- Characters (the Cast): party + active NPCs. A core
+						     campaign view, visible to every member. -->
+						@sidebarCharactersLink(ctx)
 						<!-- My Characters link (CH2). Visible to Players (the
 						     primary audience) and to Owner/Scribe when
 						     "view as player" mode is on so the owner can
@@ -834,6 +837,23 @@ templ sidebarMyCharactersLink(ctx context.Context) {
 			<i class="fa-solid fa-user-shield text-xs text-gray-400"></i>
 		</span>
 		<span class="flex-1">My Characters</span>
+	</a>
+}
+
+// sidebarCharactersLink is the campaign "Characters" (Cast) nav link — the
+// party + active NPCs. A core campaign view shown to every member, distinct
+// from the player-only "My Characters" landing page.
+templ sidebarCharactersLink(ctx context.Context) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx))) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/characters", GetCampaignID(ctx)))) }
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			<i class="fa-solid fa-masks-theater text-xs text-gray-400"></i>
+		</span>
+		<span class="flex-1">Characters</span>
 	</a>
 }
 

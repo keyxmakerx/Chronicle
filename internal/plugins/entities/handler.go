@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -3154,6 +3155,112 @@ func (h *Handler) MyCharacters(c echo.Context) error {
 		return err
 	}
 	return middleware.Render(c, http.StatusOK, MyCharactersPage(cc, chars))
+}
+
+// CastTagSlug is the conventional tag a GM applies to an NPC to feature it on
+// the Characters page's "Active NPCs" band — zero-migration curation (see the
+// Cordinator 2026-06-22 characters-cast-page design plan).
+const CastTagSlug = "cast"
+
+// Characters renders the per-campaign Characters ("Cast") page: the party
+// (every claimed player character, the viewer's own highlighted and first) plus
+// the active NPCs the GM has tagged `cast`. Each card links to the entity's
+// page and, with the dynamic-surface frame present, launches a mini→full
+// preview (progressive enhancement — the plain link works without JS).
+//
+// Route: GET /campaigns/:id/characters  (Player+).
+func (h *Handler) Characters(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+	view := h.buildCastView(c.Request().Context(), cc, auth.GetUserID(c))
+
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK, CharactersContent(cc, view))
+	}
+	return middleware.Render(c, http.StatusOK, CharactersPage(cc, view))
+}
+
+// buildCastView assembles the Characters page view-model. The party is the
+// campaign-wide claimed set (ListClaimed, visibility-filtered) unioned with the
+// viewer's own characters (ListByOwner — unfiltered, so a player always sees
+// their own PC even if it was marked private), de-duplicated and sorted
+// viewer-first. The active NPCs are the `cast`-tagged entities that are NOT
+// claimed (a claimed character is a PC and belongs in the party). Owner names
+// are resolved best-effort; the page must never fail on a roster lookup.
+func (h *Handler) buildCastView(ctx context.Context, cc *campaigns.CampaignContext, userID string) CastView {
+	campaignID := cc.Campaign.ID
+	role := cc.VisibilityRole()
+
+	ownerNames := map[string]string{}
+	if h.memberLister != nil {
+		if members, err := h.memberLister.ListMembers(ctx, campaignID); err == nil {
+			ownerNames = ownerDisplayNames(members)
+		}
+	}
+
+	var claimed, mine, tagged []Entity
+	if c, err := h.service.ListClaimed(ctx, campaignID, role, userID); err == nil {
+		claimed = c
+	} else {
+		slog.Warn("cast page: claimed list failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+	}
+	if userID != "" {
+		if m, err := h.service.ListByOwner(ctx, campaignID, userID); err == nil {
+			mine = m
+		}
+	}
+	npcOpts := ListOptions{Page: 1, PerPage: 100, Sort: "name", TagSlugs: []string{CastTagSlug}}
+	if t, _, err := h.service.List(ctx, campaignID, 0, role, userID, npcOpts); err == nil {
+		tagged = t
+	} else {
+		slog.Warn("cast page: npc list failed", slog.String("campaign_id", campaignID), slog.Any("error", err))
+	}
+
+	return assembleCastView(claimed, mine, tagged, ownerNames, userID, cc.MemberRole >= campaigns.RoleScribe)
+}
+
+// assembleCastView is the pure assembly step (no IO) behind the Characters page,
+// split out so the ordering/dedup/exclusion rules are unit-testable. The party
+// is the claimed set unioned with the viewer's own characters, de-duplicated by
+// ID and sorted so the viewer's own come first (the rest keep input order). The
+// active NPCs are the `cast`-tagged entities that are NOT claimed (a claimed,
+// tagged character is a player character and already shows in the party).
+func assembleCastView(claimed, mine, tagged []Entity, ownerNames map[string]string, userID string, canCurate bool) CastView {
+	party := []CastMember{}
+	seen := map[string]bool{}
+	addParty := func(e Entity) {
+		if seen[e.ID] {
+			return
+		}
+		seen[e.ID] = true
+		isViewer := userID != "" && e.OwnerUserID != nil && *e.OwnerUserID == userID
+		name := ""
+		if e.OwnerUserID != nil {
+			name = ownerNames[*e.OwnerUserID]
+		}
+		party = append(party, CastMember{Entity: e, OwnerName: name, IsViewer: isViewer})
+	}
+	for _, e := range claimed {
+		addParty(e)
+	}
+	for _, e := range mine {
+		addParty(e)
+	}
+	sort.SliceStable(party, func(i, j int) bool {
+		return party[i].IsViewer && !party[j].IsViewer
+	})
+
+	activeNPCs := []CastMember{}
+	for _, e := range tagged {
+		if e.OwnerUserID != nil {
+			continue
+		}
+		activeNPCs = append(activeNPCs, CastMember{Entity: e})
+	}
+
+	return CastView{Party: party, ActiveNPCs: activeNPCs, CanCurate: canCurate}
 }
 
 // ClaimEntity assigns the calling user as the owner of an entity. Idempotent

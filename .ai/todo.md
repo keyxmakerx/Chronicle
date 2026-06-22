@@ -25,6 +25,13 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 - [~] **Public-campaign read gaps**: aliases route not in pub group; player-notes block mounts for anonymous; map blocks blank for public viewers (cordinator#39 F3/F5/F4) — Agent 1, `C-SWEEP-FIXES-R1` PR 2. Fog/layers stay auth-only.
 - [~] **Topbar custom branding still masked** (cordinator#29) — header lacks a stacking context, so the z-index:-1 brand layer paints under `bg-surface`; fix = `isolate` on the header — Agent 2, `C-BACKLOG-BUGS-R1`.
 
+### Dynamic surface + Characters page — 2026-06-22
+
+- [x] **Dynamic-surface frame (Wave 1)** `Chronicle.surface` + admin surface demo at `/admin/design-lab` (Design Lab repurposed from the static showcase). See status.md.
+- [x] **Characters ("Cast") page** `GET /campaigns/:id/characters` — party (claimed PCs) + active NPCs (`cast` tag); mini→full launch = the frame's first production adopter. `service.ListClaimed` + `assembleCastView` (tested) + `characters.js` (plugin embed.FS) + sidebar link. Cordinator `plans/2026-06-22-characters-cast-page-design.md`.
+- [ ] **Cast page — Draw Steel surface in the launch overlay** (depends on the Draw Steel sheet adopter): replace the `/preview` body with the real dynamic character sheet.
+- [ ] **Cast page — session/location-derived "active" NPCs** (Option C in the design): derive the Active band from where the party is, beyond the manual `cast` tag.
+
 ### Player Character Claiming (PC-CLAIM) — staged feature
 
 Goal: restrict claiming to a "Player Characters" sub-type via an Owner-toggleable

@@ -1639,6 +1639,15 @@ func (a *App) RegisterRoutes() {
 	entityHandler.SetSavedFilterRepo(entities.NewSavedFilterRepository(a.DB))
 	entities.RegisterRoutes(e, entityHandler, campaignService, authService)
 
+	// Expose the entities plugin's embedded static assets at
+	// /static/plugins/entities/ (currently js/characters.js, the Characters
+	// page's mini→full launch enhancement). Per
+	// cordinator/decisions/2026-05-25-plugin-static-assets.md.
+	a.registerPlugin(PluginRegistration{
+		Slug:     entities.PluginSlug,
+		StaticFS: echo.MustSubFS(entities.StaticAssetsFS, "static"),
+	})
+
 	// Content template routes (entity content blueprints).
 	contentTemplateRepo := entities.NewContentTemplateRepository(a.DB)
 	contentTemplateService := entities.NewContentTemplateService(contentTemplateRepo, entityTypeRepo)

@@ -544,6 +544,26 @@ type ClaimRoster struct {
 	OwnerNames map[string]string          // owner_user_id -> display name.
 }
 
+// CastMember is one card on the Characters ("Cast") page: an entity plus the
+// display flags the card needs. OwnerName is the resolved display name of a
+// player character's owner (empty for NPCs); IsViewer marks the card as
+// belonging to the viewing user so it can be highlighted and sorted first.
+type CastMember struct {
+	Entity    Entity
+	OwnerName string
+	IsViewer  bool
+}
+
+// CastView is the Characters page view-model: the party (every claimed player
+// character, viewer-first) and the active NPCs (GM-curated via the `cast` tag),
+// already ordered and flagged for rendering. CanCurate is true for Scribe+
+// viewers, who get the "tag NPCs as cast" hint when the NPC band is empty.
+type CastView struct {
+	Party      []CastMember
+	ActiveNPCs []CastMember
+	CanCurate  bool
+}
+
 // --- Slug Generation ---
 
 // slugPattern matches one or more non-alphanumeric characters for replacement.

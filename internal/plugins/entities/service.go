@@ -98,6 +98,11 @@ type EntityService interface {
 	// owning the entity implies the player can see it.
 	ListByOwner(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
 
+	// ListClaimed returns every claimed entity in a campaign (the whole party),
+	// visibility-filtered for the viewer. Powers the "party" band of the
+	// Characters page at GET /campaigns/:id/characters.
+	ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error)
+
 	// ClaimEntity assigns the calling user as owner of an entity. Idempotent
 	// when the caller already owns it; returns 409 Conflict when claimed by
 	// a different user (the user must ask the GM to reassign). Refuses to
@@ -867,6 +872,13 @@ func (s *entityService) ListByOwner(ctx context.Context, campaignID, ownerUserID
 		return nil, apperror.NewBadRequest("owner user id is required")
 	}
 	return s.entities.ListByOwner(ctx, campaignID, ownerUserID)
+}
+
+// ListClaimed returns every claimed entity in a campaign (the whole party),
+// visibility-filtered for the viewer. Powers the "party" band of the Characters
+// page. Trusts the caller (handler) has verified campaign membership.
+func (s *entityService) ListClaimed(ctx context.Context, campaignID string, role int, userID string) ([]Entity, error) {
+	return s.entities.ListClaimed(ctx, campaignID, role, userID)
 }
 
 // Player Character Claiming (PC-CLAIM-2) constants.

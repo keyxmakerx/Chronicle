@@ -1,0 +1,150 @@
+// characters.templ — per-campaign Characters ("Cast") page. Two bands: the
+// Party (every claimed player character, the viewer's own highlighted and
+// first) and the Active NPCs (entities the GM tagged `cast`). Each card is a
+// real link to the entity page and carries the data attributes characters.js
+// uses to launch a mini→full preview via the dynamic-surface frame. The card
+// visual language mirrors myCharacterCard so the two pages feel like siblings.
+
+package entities
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// CharactersPage renders the full Characters page for a campaign. Loads the
+// per-plugin enhancement script and wraps the content fragment in the App shell.
+templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
+	@layouts.App("Characters - " + cc.Campaign.Name) {
+		<script src="/static/plugins/entities/js/characters.js" defer></script>
+		<div class="max-w-6xl mx-auto px-4 py-6" id="characters-root">
+			@CharactersContent(cc, view)
+		</div>
+	}
+}
+
+// CharactersContent is the HTMX-swappable body (the two bands). Returned alone
+// for boosted/fragment requests; wrapped by CharactersPage for full loads.
+templ CharactersContent(cc *campaigns.CampaignContext, view CastView) {
+	<div class="mb-6 flex items-baseline justify-between gap-4">
+		<div>
+			<h1 class="text-2xl font-bold text-fg">Characters</h1>
+			<p class="mt-1 text-sm text-fg-secondary">The party and the active cast of { cc.Campaign.Name }.</p>
+		</div>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/me", cc.Campaign.ID)) }
+			class="text-sm text-fg-secondary hover:text-fg whitespace-nowrap"
+		>
+			My characters →
+		</a>
+	</div>
+
+	<section class="mb-8">
+		<h2 class="section-header mb-3">The Party</h2>
+		if len(view.Party) == 0 {
+			@castEmpty("fa-users", "No player characters yet", "Claimed characters appear here. Players can claim a character from its page.")
+		} else {
+			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+				for _, m := range view.Party {
+					@castCard(cc.Campaign.ID, m)
+				}
+			</div>
+		}
+	</section>
+
+	<section>
+		<h2 class="section-header mb-3">Active NPCs</h2>
+		if len(view.ActiveNPCs) == 0 {
+			if view.CanCurate {
+				@castEmpty("fa-masks-theater", "No active NPCs", "Tag any NPC with the \"cast\" tag to feature it here for your players.")
+			} else {
+				@castEmpty("fa-masks-theater", "No active NPCs", "Your GM hasn't featured any NPCs yet.")
+			}
+		} else {
+			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+				for _, m := range view.ActiveNPCs {
+					@castCard(cc.Campaign.ID, m)
+				}
+			</div>
+		}
+	</section>
+}
+
+// castCard is one mini profile card. The whole card links to the entity page
+// (works with no JS); the corner "quick look" button is upgraded by
+// characters.js into a mini→full launch. The viewer's own characters get a
+// "You" ribbon and an accent ring.
+templ castCard(campaignID string, m CastMember) {
+	<div
+		class={ "group relative rounded-lg bg-surface overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5",
+			templ.KV("border border-accent ring-1 ring-accent/40", m.IsViewer),
+			templ.KV("border border-edge hover:border-accent", !m.IsViewer) }
+		data-cast-card="true"
+		data-entity-name={ m.Entity.Name }
+		data-preview-url={ fmt.Sprintf("/campaigns/%s/entities/%s/preview", campaignID, m.Entity.ID) }
+	>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities/%s", campaignID, m.Entity.ID)) }
+			data-cast-link="true"
+			class="block"
+		>
+			<div class="aspect-[3/2] bg-surface-alt relative overflow-hidden">
+				if m.Entity.CoverImagePath != nil && *m.Entity.CoverImagePath != "" {
+					<img src={ layouts.MediaURL(ctx, *m.Entity.CoverImagePath) } alt="" class="w-full h-full object-cover transition-transform group-hover:scale-105" loading="lazy"/>
+				} else if m.Entity.ImagePath != nil && *m.Entity.ImagePath != "" {
+					<img src={ layouts.MediaURL(ctx, *m.Entity.ImagePath) } alt="" class="w-full h-full object-cover transition-transform group-hover:scale-105" loading="lazy"/>
+				} else {
+					<div class="w-full h-full flex items-center justify-center text-fg-muted">
+						if m.Entity.TypeIcon != "" {
+							<i class={ "fa-solid " + m.Entity.TypeIcon, "text-3xl" } style={ fmt.Sprintf("color: %s", m.Entity.TypeColor) }></i>
+						} else {
+							<i class="fa-solid fa-user text-3xl"></i>
+						}
+					</div>
+				}
+				if m.IsViewer {
+					<span class="absolute top-2 left-2 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent text-white shadow-sm">You</span>
+				}
+			</div>
+			<div class="p-3">
+				<h3 class="font-semibold text-fg truncate group-hover:text-accent transition-colors">{ m.Entity.Name }</h3>
+				<p class="text-xs text-fg-muted mt-0.5 truncate">
+					if m.Entity.TypeName != "" {
+						{ m.Entity.TypeName }
+					}
+					if m.Entity.TypeLabel != nil && *m.Entity.TypeLabel != "" {
+						<span class="mx-1">·</span>
+						{ *m.Entity.TypeLabel }
+					}
+				</p>
+				if m.OwnerName != "" {
+					<p class="text-[11px] text-fg-secondary mt-1 truncate">
+						<i class="fa-solid fa-user-tag mr-1 opacity-60"></i>{ m.OwnerName }
+					</p>
+				}
+			</div>
+		</a>
+		<button
+			type="button"
+			data-cast-peek="true"
+			title="Quick look"
+			aria-label={ "Quick look at " + m.Entity.Name }
+			class="absolute top-2 right-2 z-10 inline-flex items-center justify-center w-7 h-7 rounded-md bg-surface/90 border border-edge text-fg-muted opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-accent hover:border-accent transition-all"
+		>
+			<i class="fa-solid fa-expand text-xs"></i>
+		</button>
+	</div>
+}
+
+// castEmpty is the friendly empty-state panel for a band with no members.
+templ castEmpty(icon, title, desc string) {
+	<div class="rounded-lg border border-edge bg-surface p-6 text-center">
+		<div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-accent/10 text-accent mb-3">
+			<i class={ "fa-solid " + icon }></i>
+		</div>
+		<h3 class="text-sm font-semibold text-fg mb-1">{ title }</h3>
+		<p class="text-xs text-fg-secondary max-w-sm mx-auto">{ desc }</p>
+	</div>
+}

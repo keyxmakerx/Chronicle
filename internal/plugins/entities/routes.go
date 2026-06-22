@@ -83,6 +83,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// Player Character Experience (CH2 + CH3).
 	// /me — per-campaign player landing page listing the caller's characters.
 	cg.GET("/me", h.MyCharacters, campaigns.RequireRole(campaigns.RolePlayer))
+	// /characters — the campaign Cast: party (claimed PCs) + active NPCs.
+	cg.GET("/characters", h.Characters, campaigns.RequireRole(campaigns.RolePlayer))
 	// Claim flow: any campaign member can claim an unclaimed character.
 	// Type-shape gate (only character-shaped entity_types) lives in the
 	// service so the route surface stays uniform.
