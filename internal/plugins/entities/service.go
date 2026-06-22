@@ -63,6 +63,10 @@ type EntityService interface {
 	SetEntityPermissions(ctx context.Context, entityID string, input SetPermissionsInput) error
 	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error)
 	CreateEntityType(ctx context.Context, campaignID string, input CreateEntityTypeInput) (*EntityType, error)
+	// EnsurePlayerCharacterType idempotently premakes the campaign's claimable
+	// "Player Character" type (with the dynamic character-surface layout). Called
+	// when the Player Character Claiming addon is enabled.
+	EnsurePlayerCharacterType(ctx context.Context, campaignID string) error
 	UpdateEntityType(ctx context.Context, id int, input UpdateEntityTypeInput) (*EntityType, error)
 	DeleteEntityType(ctx context.Context, id int) error
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
@@ -900,6 +904,38 @@ const (
 // claimable=true default in CreateEntityType.
 func isPlayerCharacterType(presetCategory, slug string) bool {
 	return presetCategory == PresetCategoryPlayerCharacter || slug == SlugPlayerCharacter
+}
+
+// EnsurePlayerCharacterType idempotently premakes the campaign's claimable
+// "Player Character" type so enabling the Player Character Claiming addon gives
+// owners the type ready-to-go (with the dynamic character-surface layout via
+// CharacterLayout + claimable=true) instead of hand-creating it. It is a no-op
+// when any player-character type already exists (matched by preset category or
+// slug), so re-enabling never duplicates. The addon gate in CreateEntityType
+// passes here because the addon is already marked enabled (DB-direct check)
+// before this runs.
+func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignID string) error {
+	types, err := s.types.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("listing entity types: %w", err))
+	}
+	for _, t := range types {
+		preset := ""
+		if t.PresetCategory != nil {
+			preset = *t.PresetCategory
+		}
+		if isPlayerCharacterType(preset, t.Slug) {
+			return nil // already present — idempotent
+		}
+	}
+	_, err = s.CreateEntityType(ctx, campaignID, CreateEntityTypeInput{
+		Name:           "Player Character",
+		NamePlural:     "Player Characters",
+		Icon:           "fa-user-shield",
+		Color:          "#6366f1",
+		PresetCategory: PresetCategoryPlayerCharacter,
+	})
+	return err
 }
 
 // isClaimableType reports whether an entity_type is one a player can claim
