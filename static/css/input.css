@@ -4,9 +4,9 @@
  * Canonical source for Chronicle's CSS. The standalone Tailwind CLI processes
  * this and generates static/css/app.css (gitignored; only file served).
  *
- * The subdirectories under static/css/ (base/, components/, utilities/) are
- * legacy orphans NOT loaded by the build — see cordinator/plans/BACKLOG.md
- * "Orphan CSS subdir cleanup".
+ * (The former base/, components/, utilities/ orphan subdirs — never loaded by
+ * the build — were deleted in the 2026-06-22 audit cleanup. This file is now
+ * the single CSS source; add component styles here.)
  *
  * Run: make tailwind        (one-time build)
  * Run: make tailwind-watch  (watch mode for development)
@@ -20,9 +20,8 @@
    wrap into its sub-layer (e.g. `@layer plugins.foundry-vtt { ... }`).
 
    (A demo-only cascade layer reserved during the V2 demo arc was removed
-   2026-06-01 when that arc was scrapped for the static no-JS showcase at
-   /demo/showcase, whose static/css/showcase.css is fully self-contained,
-   uses a unique .showcase-* prefix, and declares no cascade layer.) */
+   2026-06-01; the static /demo/showcase brochure it was scrapped for has since
+   been retired too, and its showcase.css deleted in the 2026-06-22 cleanup.) */
 @layer reset, base, components, plugins, utilities;
 @layer plugins {
   @layer foundry-vtt, calendar, maps, packages, settings;
