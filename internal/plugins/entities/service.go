@@ -1460,6 +1460,26 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		return nil, apperror.NewBadRequest(
 			`enable the "Player Character Claiming" addon for this campaign before creating a Player Character type`)
 	}
+	// Single-owner guard: the "Player Characters" sub-category is owned and
+	// premade by the addon — reject a manual attempt to create a SECOND one (the
+	// premake only runs when none exists, so it is unaffected). Generic across
+	// systems; no system names.
+	if pcType {
+		existing, lerr := s.types.ListByCampaign(ctx, campaignID)
+		if lerr != nil {
+			return nil, apperror.NewInternal(fmt.Errorf("listing entity types: %w", lerr))
+		}
+		for i := range existing {
+			ep := ""
+			if existing[i].PresetCategory != nil {
+				ep = *existing[i].PresetCategory
+			}
+			if isPlayerCharacterType(ep, existing[i].Slug) {
+				return nil, apperror.NewConflict(
+					`a "Player Characters" category already exists — it is provided by the Player Character addon; you don't need to create another`)
+			}
+		}
+	}
 	claimable := input.Claimable
 	if pcType && claimable == nil {
 		defaultClaimable := true

@@ -230,3 +230,24 @@ func TestEnsurePlayerCharacterType(t *testing.T) {
 		}
 	})
 }
+
+// TestCreateEntityType_RejectsDuplicatePlayerCharacter verifies the single-owner
+// guard: with the addon on and a Player Character type already present, a manual
+// attempt to create a second one is rejected (409 Conflict).
+func TestCreateEntityType_RejectsDuplicatePlayerCharacter(t *testing.T) {
+	pcPreset := PresetCategoryPlayerCharacter
+	typeRepo := &mockEntityTypeRepo{
+		listByCampaignFn: func(_ context.Context, _ string) ([]EntityType, error) {
+			return []EntityType{{ID: 1, Slug: SlugPlayerCharacter, PresetCategory: &pcPreset}}, nil
+		},
+	}
+	svc := newTestService(&mockEntityRepo{}, typeRepo)
+	svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+
+	_, err := svc.CreateEntityType(context.Background(), "camp-1", CreateEntityTypeInput{
+		Name:           "Player Character",
+		PresetCategory: PresetCategoryPlayerCharacter,
+		Color:          "#6366f1",
+	})
+	assertAppError(t, err, 409)
+}
