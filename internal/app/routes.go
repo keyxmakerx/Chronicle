@@ -3243,12 +3243,23 @@ func (a *App) RegisterRoutes() {
 			// Enabled addons for conditional widget rendering.
 			if campaignAddons, err := addonService.ListForCampaign(reqCtx, cc.Campaign.ID); err == nil {
 				enabledSlugs := make(map[string]bool)
+				var enabledSystem layouts.EnabledSystem
 				for _, ca := range campaignAddons {
-					if ca.Enabled {
-						enabledSlugs[ca.AddonSlug] = true
+					if !ca.Enabled {
+						continue
+					}
+					enabledSlugs[ca.AddonSlug] = true
+					// The enabled game system backs the campaign's rulebook
+					// (reference) nav link. Systems are mutually exclusive, so the
+					// first enabled one wins.
+					if ca.AddonCategory == addons.CategorySystem && enabledSystem.Slug == "" {
+						enabledSystem = layouts.EnabledSystem{Slug: ca.AddonSlug, Name: ca.AddonName, Icon: ca.AddonIcon}
 					}
 				}
 				ctx = layouts.SetEnabledAddons(ctx, enabledSlugs)
+				if enabledSystem.Slug != "" {
+					ctx = layouts.SetEnabledSystem(ctx, enabledSystem)
+				}
 			}
 
 			// Extension widget scripts for campaign pages.

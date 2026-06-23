@@ -267,6 +267,18 @@ templ Sidebar() {
 							@sidebarAddonLink(ctx, SidebarItemView{Slug: "calendar", Label: "Calendar", Icon: "fa-calendar-days"})
 						}
 					}
+					<!-- Characters (the Cast): top-level nav beside Dashboard/Calendar
+					     (not in the categories zone). Shown when the
+					     player-character-claiming OR npcs addon is enabled; visible to
+					     every member. -->
+					if IsAddonEnabled(ctx, "player-character-claiming") || IsAddonEnabled(ctx, "npcs") {
+						@sidebarCharactersLink(ctx)
+					}
+					<!-- Rulebook: the enabled game system's reference index, labeled
+					     with the system's name. Shown only when a system is enabled. -->
+					if sys, ok := GetEnabledSystem(ctx); ok {
+						@sidebarSystemReferenceLink(ctx, sys)
+					}
 				</div>
 
 				<!-- Categories drill-down zone -->
@@ -345,12 +357,6 @@ templ Sidebar() {
 									}
 								}
 							}
-						}
-						<!-- Characters (the Cast): Players section + NPCs/Monsters
-						     section, each gated by its addon. Shown when either is
-						     enabled; visible to every member. -->
-						if IsAddonEnabled(ctx, "player-character-claiming") || IsAddonEnabled(ctx, "npcs") {
-							@sidebarCharactersLink(ctx)
 						}
 						<!-- My Characters link (CH2). Visible to Players (the
 						     primary audience) and to Owner/Scribe when
@@ -857,6 +863,32 @@ templ sidebarCharactersLink(ctx context.Context) {
 			<i class="fa-solid fa-masks-theater text-xs text-gray-400"></i>
 		</span>
 		<span class="flex-1">Characters</span>
+	</a>
+}
+
+// sidebarSystemReferenceLink renders the campaign "Rulebook" nav link — the
+// enabled game system's reference index — labeled with the system's name.
+templ sidebarSystemReferenceLink(ctx context.Context, sys EnabledSystem) {
+	<a
+		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/systems/%s", GetCampaignID(ctx), sys.Slug)) }
+		class={ sidebarNavLink,
+			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/systems/%s", GetCampaignID(ctx), sys.Slug))),
+			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/systems/%s", GetCampaignID(ctx), sys.Slug))) }
+	>
+		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
+			if sys.Icon != "" {
+				<i class={ "fa-solid " + sys.Icon + " text-xs text-gray-400" }></i>
+			} else {
+				<i class="fa-solid fa-book text-xs text-gray-400"></i>
+			}
+		</span>
+		<span class="flex-1">
+			if sys.Name != "" {
+				{ sys.Name }
+			} else {
+				Rulebook
+			}
+		</span>
 	</a>
 }
 

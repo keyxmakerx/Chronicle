@@ -909,23 +909,30 @@ func isPlayerCharacterType(presetCategory, slug string) bool {
 // EnsurePlayerCharacterType idempotently premakes the campaign's claimable
 // "Player Character" type so enabling the Player Character Claiming addon gives
 // owners the type ready-to-go (with the dynamic character-surface layout via
-// CharacterLayout + claimable=true) instead of hand-creating it. It is a no-op
-// when any player-character type already exists (matched by preset category or
-// slug), so re-enabling never duplicates. The addon gate in CreateEntityType
-// passes here because the addon is already marked enabled (DB-direct check)
-// before this runs.
+// CharacterLayout + claimable=true) instead of hand-creating it.
+//
+// It is a no-op when the campaign already has a claimable / character-shaped
+// type — including a system pack's character type (e.g. drawsteel-character) —
+// or the canonical premade PC type, so it never duplicates an existing
+// character category (this mirrors the heuristic ClaimEntity uses to decide
+// what is claimable). The addon gate in CreateEntityType passes here because
+// the addon is already marked enabled (DB-direct check) before this runs.
 func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignID string) error {
 	types, err := s.types.ListByCampaign(ctx, campaignID)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("listing entity types: %w", err))
 	}
-	for _, t := range types {
+	for i := range types {
 		preset := ""
-		if t.PresetCategory != nil {
-			preset = *t.PresetCategory
+		if types[i].PresetCategory != nil {
+			preset = *types[i].PresetCategory
 		}
-		if isPlayerCharacterType(preset, t.Slug) {
-			return nil // already present — idempotent
+		// Skip if a system/owner character type already serves as the claimable
+		// character (e.g. drawsteel-character, or any owner-claimable character),
+		// or the canonical premade PC type already exists — premaking on top
+		// would duplicate the category.
+		if isClaimableType(&types[i]) || isPlayerCharacterType(preset, types[i].Slug) {
+			return nil // already covered — idempotent
 		}
 	}
 	_, err = s.CreateEntityType(ctx, campaignID, CreateEntityTypeInput{
