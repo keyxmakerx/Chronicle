@@ -149,6 +149,66 @@ func TestEnsurePlayerCharacterType(t *testing.T) {
 		}
 	})
 
+	t.Run("nests BOTH a stray PC type and the system char type when both exist", func(t *testing.T) {
+		// The operator's live scenario: a stray generic player-character AND a
+		// system drawsteel-character both exist. The fix nests BOTH under
+		// Characters (an early return previously left the system type unnested).
+		pcPreset := PresetCategoryPlayerCharacter
+		charPreset := "character"
+		charType := EntityType{ID: 1, CampaignID: "camp-1", Name: "Character", NamePlural: "Characters", Slug: DefaultCharacterTypeSlug}
+		strayPC := EntityType{ID: 2, CampaignID: "camp-1", Name: "Player Character", NamePlural: "Player Characters", Slug: SlugPlayerCharacter, Color: "#6366f1", PresetCategory: &pcPreset}
+		dsType := EntityType{ID: 3, CampaignID: "camp-1", Name: "Hero", NamePlural: "Heroes", Slug: "drawsteel-character", Color: "#7c3aed", PresetCategory: &charPreset}
+
+		var updatedIDs []int
+		createCalled := false
+		typeRepo := &mockEntityTypeRepo{
+			listByCampaignFn: func(_ context.Context, _ string) ([]EntityType, error) {
+				return []EntityType{charType, strayPC, dsType}, nil
+			},
+			findByIDFn: func(_ context.Context, id int) (*EntityType, error) {
+				switch id {
+				case 1:
+					c := charType
+					return &c, nil
+				case 2:
+					p := strayPC
+					return &p, nil
+				case 3:
+					d := dsType
+					return &d, nil
+				}
+				return nil, apperror.NewNotFound("entity type not found")
+			},
+			updateFn: func(_ context.Context, et *EntityType) error {
+				updatedIDs = append(updatedIDs, et.ID)
+				if et.ParentTypeID == nil || *et.ParentTypeID != 1 {
+					t.Errorf("type %d should be nested under Characters (parent 1), got %v", et.ID, et.ParentTypeID)
+				}
+				return nil
+			},
+			createFn: func(_ context.Context, _ *EntityType) error { createCalled = true; return nil },
+		}
+		svc := newTestService(&mockEntityRepo{}, typeRepo)
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+
+		if err := svc.EnsurePlayerCharacterType(context.Background(), "camp-1"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createCalled {
+			t.Error("must not create a generic type when both already exist")
+		}
+		got := map[int]bool{}
+		for _, id := range updatedIDs {
+			got[id] = true
+		}
+		if !got[2] {
+			t.Errorf("the stray PC type (2) should have been nested; updated: %v", updatedIDs)
+		}
+		if !got[3] {
+			t.Errorf("the system char type (3) should have been nested; updated: %v", updatedIDs)
+		}
+	})
+
 	t.Run("migrates a stray top-level PC type under the default Characters category", func(t *testing.T) {
 		// Prod shape: the default "Characters" category (top-level) plus a stray
 		// top-level "Player Character" type an earlier build premade. The fix must

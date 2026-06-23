@@ -929,8 +929,11 @@ func isPlayerCharacterType(presetCategory, slug string) bool {
 //     the claimable PC. Nest it under "Characters" (so it reads as the PC
 //     sub-category) WITHOUT renaming — the system's terminology is preserved
 //     (modularity). Don't premake a generic type.
-//  3. Otherwise create the claimable "Player Character" sub-type (CharacterLayout
-//     + claimable=true), nested under the default "Characters" category when one
+//
+// Cases 1 and 2 are independent (a campaign may have BOTH a stray PC type and a
+// system type — each is nested). Only when NEITHER exists do we
+//  3. premake the claimable "Player Character" sub-type (CharacterLayout +
+//     claimable=true), nested under the default "Characters" category when one
 //     exists (else top-level, as a graceful fallback).
 //
 // The addon gate in CreateEntityType passes here because the addon is already
@@ -962,71 +965,73 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 		}
 	}
 
-	// Case 1 — migrate an existing top-level PC type under "Characters".
-	if pcType != nil {
-		switch {
-		case pcType.ParentTypeID == nil && charParentID != nil && *charParentID != pcType.ID:
-			if _, err := s.UpdateEntityType(ctx, pcType.ID, UpdateEntityTypeInput{
-				Name:         pcType.Name,
-				NamePlural:   pcType.NamePlural,
-				Icon:         pcType.Icon,
-				Color:        pcType.Color,
-				ParentTypeID: charParentID,
-			}); err != nil {
-				return err
-			}
-			slog.Info("re-parented player-character type under the Characters category",
-				slog.Int("entity_type_id", pcType.ID),
-				slog.Int("parent_type_id", *charParentID),
-				slog.String("campaign_id", campaignID),
-			)
-		case pcType.ParentTypeID == nil && charParentID == nil:
-			// Top-level PC type but no default "Characters" category to nest it
-			// under (deleted/renamed). Leave it; surface a signal for the operator.
-			slog.Warn("player-character type is top-level but no default \"Characters\" category was found to nest it under",
-				slog.Int("entity_type_id", pcType.ID),
-				slog.String("campaign_id", campaignID),
-			)
+	// nest re-parents a character type under the default "Characters" category —
+	// idempotent (only when it's top-level and a Characters parent exists that
+	// isn't the type itself). It does NOT rename (the system's terminology
+	// stands). Used for BOTH a stray top-level generic PC type AND a system's own
+	// character type: when a campaign has both, each is nested independently
+	// (de-duplicating a pre-existing stray is a separate, deliberate migration —
+	// the ensure path never deletes).
+	nest := func(t *EntityType, which string) error {
+		if t == nil {
+			return nil
 		}
-		return nil // nested, or nothing to do — idempotent
-	}
-
-	// Case 2 — a system's own character type (e.g. drawsteel-character) already
-	// serves as the claimable PC. Nest it under "Characters" so it reads as the
-	// player-character sub-category; the system's widget + fields already render
-	// it, and it is claimable via the heuristic. We do NOT rename it — the
-	// system's terminology is preserved (modularity: Chronicle core owns no
-	// system specifics). Don't premake a redundant generic type.
-	if systemCharType != nil {
-		if systemCharType.ParentTypeID == nil && charParentID != nil && *charParentID != systemCharType.ID {
-			if _, err := s.UpdateEntityType(ctx, systemCharType.ID, UpdateEntityTypeInput{
-				Name:         systemCharType.Name,
-				NamePlural:   systemCharType.NamePlural,
-				Icon:         systemCharType.Icon,
-				Color:        systemCharType.Color,
-				ParentTypeID: charParentID,
-			}); err != nil {
-				return err
-			}
-			slog.Info("nested system character type under the Characters category",
-				slog.Int("entity_type_id", systemCharType.ID),
-				slog.Int("parent_type_id", *charParentID),
+		if t.ParentTypeID != nil || (charParentID != nil && *charParentID == t.ID) {
+			return nil // already nested, or it IS the Characters parent
+		}
+		if charParentID == nil {
+			// Top-level but no default "Characters" category to nest under
+			// (deleted/renamed). Leave it; surface a signal for the operator.
+			slog.Warn("character type is top-level but no default \"Characters\" category was found to nest it under",
+				slog.String("which", which),
+				slog.Int("entity_type_id", t.ID),
 				slog.String("campaign_id", campaignID),
 			)
+			return nil
 		}
+		if _, err := s.UpdateEntityType(ctx, t.ID, UpdateEntityTypeInput{
+			Name:         t.Name,
+			NamePlural:   t.NamePlural,
+			Icon:         t.Icon,
+			Color:        t.Color,
+			ParentTypeID: charParentID,
+		}); err != nil {
+			return err
+		}
+		slog.Info("nested character type under the Characters category",
+			slog.String("which", which),
+			slog.Int("entity_type_id", t.ID),
+			slog.Int("parent_type_id", *charParentID),
+			slog.String("campaign_id", campaignID),
+		)
 		return nil
 	}
 
-	// Case 3 — premake the PC sub-type, nested under "Characters" when present.
-	_, err = s.CreateEntityType(ctx, campaignID, CreateEntityTypeInput{
-		Name:           "Player Character",
-		NamePlural:     "Player Characters",
-		Icon:           "fa-user-shield",
-		Color:          "#6366f1",
-		PresetCategory: PresetCategoryPlayerCharacter,
-		ParentTypeID:   charParentID,
-	})
-	return err
+	// Migrate a stray top-level generic PC type, and (independently) nest a
+	// system's own character type — either or both may be present. Both run; an
+	// early return here is what previously left the system type unnested when a
+	// stray also existed (the operator's live both-types campaign).
+	if err := nest(pcType, "player-character"); err != nil {
+		return err
+	}
+	if err := nest(systemCharType, "system-character"); err != nil {
+		return err
+	}
+
+	// Premake the generic "Player Characters" sub-type ONLY when neither a generic
+	// PC type nor a system character type already serves as the claimable PC.
+	if pcType == nil && systemCharType == nil {
+		_, err = s.CreateEntityType(ctx, campaignID, CreateEntityTypeInput{
+			Name:           "Player Character",
+			NamePlural:     "Player Characters",
+			Icon:           "fa-user-shield",
+			Color:          "#6366f1",
+			PresetCategory: PresetCategoryPlayerCharacter,
+			ParentTypeID:   charParentID,
+		})
+		return err
+	}
+	return nil
 }
 
 // isClaimableType reports whether an entity_type is one a player can claim
