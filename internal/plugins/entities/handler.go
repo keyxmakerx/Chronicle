@@ -2592,36 +2592,6 @@ func (h *Handler) DeleteEntityType(c echo.Context) error {
 
 // --- Template Editor ---
 
-// Block-palette identifiers used to de-duplicate the character sheet: when a
-// game system contributes a widget with the conventional character-sheet slug,
-// the generic core character_surface block is dropped from the palette so the
-// layout editor offers exactly one character sheet — the system's.
-const (
-	blockTypeCharacterSurface      = "character_surface"
-	systemCharacterSheetWidgetSlug = "character-sheet"
-)
-
-// hasWidgetSlug reports whether any block in the list carries the given widget slug.
-func hasWidgetSlug(blocks []BlockMeta, slug string) bool {
-	for i := range blocks {
-		if blocks[i].WidgetSlug == slug {
-			return true
-		}
-	}
-	return false
-}
-
-// filterOutBlockType returns the blocks whose Type is not excludeType, preserving order.
-func filterOutBlockType(blocks []BlockMeta, excludeType string) []BlockMeta {
-	out := make([]BlockMeta, 0, len(blocks))
-	for i := range blocks {
-		if blocks[i].Type != excludeType {
-			out = append(out, blocks[i])
-		}
-	}
-	return out
-}
-
 // BlockTypesAPI returns the available block types for the layout editor,
 // filtered by which addons are enabled for the current campaign and
 // optionally by editor context (?context=dashboard|template).
@@ -2643,15 +2613,9 @@ func (h *Handler) BlockTypesAPI(c echo.Context) error {
 	if h.widgetBlockLister != nil && (editorCtx == "" || editorCtx == "template") {
 		extWidgets := h.widgetBlockLister.GetWidgetBlockMetas(c.Request().Context(), cc.Campaign.ID)
 		types = append(types, extWidgets...)
-
-		// A game system that ships its own character-sheet widget supersedes the
-		// generic core "Character Sheet" (character_surface) block: its slug
-		// renderer already owns the page for the system's character type, so the
-		// editor should list exactly one character sheet — the system's. Drop the
-		// core block from the palette when such a widget is present.
-		if hasWidgetSlug(extWidgets, systemCharacterSheetWidgetSlug) {
-			types = filterOutBlockType(types, blockTypeCharacterSurface)
-		}
+		// A system's character-sheet WIDGET is already excluded from the palette
+		// at its source (GetSystemWidgetBlockMetas drops renderer-bound widgets),
+		// so no character-sheet de-dup is needed here.
 	}
 
 	return c.JSON(http.StatusOK, types)
