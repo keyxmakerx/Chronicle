@@ -3,13 +3,17 @@ package entities
 import (
 	"context"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
-// TestEnsurePlayerCharacterType verifies the addon-enable premake: it creates a
-// claimable Player Character type with the character-surface layout when none
-// exists, and is a no-op (idempotent) when one already does.
+// TestEnsurePlayerCharacterType verifies the addon-enable premake / migration:
+// it creates a claimable Player Character type (character-surface layout) nested
+// under the default "Characters" category, re-parents a stray top-level PC type
+// an earlier build premade (preserving its entities), skips when a system
+// character type already serves as the claimable one, and is otherwise a no-op.
 func TestEnsurePlayerCharacterType(t *testing.T) {
-	t.Run("creates the PC type when none exists", func(t *testing.T) {
+	t.Run("creates the PC type (top-level) when no Characters category exists", func(t *testing.T) {
 		var captured *EntityType
 		typeRepo := &mockEntityTypeRepo{
 			listByCampaignFn: func(_ context.Context, _ string) ([]EntityType, error) {
@@ -37,6 +41,9 @@ func TestEnsurePlayerCharacterType(t *testing.T) {
 			len(captured.Layout.Rows[0].Columns[0].Blocks) == 0 ||
 			captured.Layout.Rows[0].Columns[0].Blocks[0].Type != "character_surface" {
 			t.Errorf("created PC type should use CharacterLayout (character_surface block first)")
+		}
+		if captured.ParentTypeID != nil {
+			t.Errorf("with no Characters category present, the PC type should fall back to top-level (nil parent), got %v", captured.ParentTypeID)
 		}
 	})
 
@@ -86,6 +93,87 @@ func TestEnsurePlayerCharacterType(t *testing.T) {
 		}
 		if createCalled {
 			t.Error("should be a no-op when a system character type (drawsteel-character) already exists")
+		}
+	})
+
+	t.Run("migrates a stray top-level PC type under the default Characters category", func(t *testing.T) {
+		// Prod shape: the default "Characters" category (top-level) plus a stray
+		// top-level "Player Character" type an earlier build premade. The fix must
+		// re-parent the stray (not create or delete), preserving its entities.
+		pcPreset := PresetCategoryPlayerCharacter
+		charType := EntityType{ID: 1, CampaignID: "camp-1", Name: "Character", NamePlural: "Characters", Slug: DefaultCharacterTypeSlug, Icon: "fa-user", Color: "#3b82f6"}
+		pcType := EntityType{ID: 2, CampaignID: "camp-1", Name: "Player Character", NamePlural: "Player Characters", Slug: SlugPlayerCharacter, Icon: "fa-user-shield", Color: "#6366f1", PresetCategory: &pcPreset}
+
+		var updated *EntityType
+		createCalled := false
+		typeRepo := &mockEntityTypeRepo{
+			listByCampaignFn: func(_ context.Context, _ string) ([]EntityType, error) {
+				return []EntityType{charType, pcType}, nil
+			},
+			findByIDFn: func(_ context.Context, id int) (*EntityType, error) {
+				switch id {
+				case 1:
+					c := charType
+					return &c, nil
+				case 2:
+					p := pcType
+					return &p, nil
+				}
+				return nil, apperror.NewNotFound("entity type not found")
+			},
+			updateFn: func(_ context.Context, et *EntityType) error { updated = et; return nil },
+			createFn: func(_ context.Context, _ *EntityType) error { createCalled = true; return nil },
+		}
+		svc := newTestService(&mockEntityRepo{}, typeRepo)
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+
+		if err := svc.EnsurePlayerCharacterType(context.Background(), "camp-1"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createCalled {
+			t.Error("migration must re-parent the existing type, not create a new one")
+		}
+		if updated == nil {
+			t.Fatal("expected the stray PC type to be re-parented (Update called)")
+		}
+		if updated.ID != 2 {
+			t.Errorf("re-parented the wrong type: id = %d, want 2", updated.ID)
+		}
+		if updated.ParentTypeID == nil || *updated.ParentTypeID != 1 {
+			t.Errorf("PC type should be nested under the Characters category (parent id 1), got %v", updated.ParentTypeID)
+		}
+	})
+
+	t.Run("creates the PC type nested under the default Characters category", func(t *testing.T) {
+		charType := EntityType{ID: 1, CampaignID: "camp-1", Name: "Character", NamePlural: "Characters", Slug: DefaultCharacterTypeSlug}
+		var captured *EntityType
+		typeRepo := &mockEntityTypeRepo{
+			listByCampaignFn: func(_ context.Context, _ string) ([]EntityType, error) {
+				return []EntityType{charType}, nil // default Characters present, no PC type yet
+			},
+			findByIDFn: func(_ context.Context, id int) (*EntityType, error) {
+				if id == 1 {
+					c := charType
+					return &c, nil
+				}
+				return nil, apperror.NewNotFound("entity type not found")
+			},
+			createFn: func(_ context.Context, et *EntityType) error { captured = et; et.ID = 9; return nil },
+		}
+		svc := newTestService(&mockEntityRepo{}, typeRepo)
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+
+		if err := svc.EnsurePlayerCharacterType(context.Background(), "camp-1"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if captured == nil {
+			t.Fatal("expected the PC type to be created")
+		}
+		if captured.ParentTypeID == nil || *captured.ParentTypeID != 1 {
+			t.Errorf("created PC type should be nested under the Characters category (parent id 1), got %v", captured.ParentTypeID)
+		}
+		if captured.Slug != SlugPlayerCharacter {
+			t.Errorf("created slug = %q, want %q", captured.Slug, SlugPlayerCharacter)
 		}
 	})
 }
