@@ -896,6 +896,10 @@ const (
 	// AddonPlayerCharacterClaiming is the addon slug that must be enabled for
 	// a campaign before player-character sub-types can be created.
 	AddonPlayerCharacterClaiming = "player-character-claiming"
+	// DefaultCharacterTypeSlug is the slug of the default "Characters" category
+	// seeded into every campaign (see repository.go defaultEntityTypes). The
+	// premade "Player Character" sub-type nests under it.
+	DefaultCharacterTypeSlug = "character"
 )
 
 // isPlayerCharacterType reports whether a to-be-created entity type is the
@@ -906,41 +910,100 @@ func isPlayerCharacterType(presetCategory, slug string) bool {
 	return presetCategory == PresetCategoryPlayerCharacter || slug == SlugPlayerCharacter
 }
 
-// EnsurePlayerCharacterType idempotently premakes the campaign's claimable
-// "Player Character" type so enabling the Player Character Claiming addon gives
-// owners the type ready-to-go (with the dynamic character-surface layout via
-// CharacterLayout + claimable=true) instead of hand-creating it.
+// EnsurePlayerCharacterType idempotently ensures the campaign's claimable
+// "Player Character" sub-type exists AND is nested under the default
+// "Characters" category — the shape the Player Character Claiming design always
+// intended (a PC sub-type under Characters via ParentTypeID, see ADR-039 /
+// cordinator 2026-06-19-pc-claim-design §3).
 //
-// It is a no-op when the campaign already has a claimable / character-shaped
-// type — including a system pack's character type (e.g. drawsteel-character) —
-// or the canonical premade PC type, so it never duplicates an existing
-// character category (this mirrors the heuristic ClaimEntity uses to decide
-// what is claimable). The addon gate in CreateEntityType passes here because
-// the addon is already marked enabled (DB-direct check) before this runs.
+// It handles three cases, all idempotent and safe to run on every boot (the
+// startup backfill replays it across campaigns that enabled the addon before
+// this shipped — so deploying this heals production in place):
+//
+//  1. MIGRATION — a premade PC type already exists at the TOP LEVEL (earlier
+//     builds created it there). Re-parent it under the default "Characters"
+//     category. UpdateEntityType only flips the parent pointer, so every claimed
+//     character under the type is preserved (and its layout, which Update never
+//     touches). No-ops once nested.
+//  2. A system/owner character type already serves as the claimable character
+//     (e.g. drawsteel-character). Do nothing — a generic PC type would duplicate
+//     the category.
+//  3. Otherwise create the claimable "Player Character" sub-type (CharacterLayout
+//     + claimable=true), nested under the default "Characters" category when one
+//     exists (else top-level, as a graceful fallback).
+//
+// The addon gate in CreateEntityType passes here because the addon is already
+// marked enabled (DB-direct check) before this runs.
 func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignID string) error {
 	types, err := s.types.ListByCampaign(ctx, campaignID)
 	if err != nil {
 		return apperror.NewInternal(fmt.Errorf("listing entity types: %w", err))
 	}
+
+	var charParentID *int    // the default top-level "Characters" category, if present
+	var pcType *EntityType   // an existing premade / claimable PC sub-type, if present
+	systemClaimable := false // a non-PC claimable character type (e.g. drawsteel-character)
+
 	for i := range types {
+		t := &types[i]
 		preset := ""
-		if types[i].PresetCategory != nil {
-			preset = *types[i].PresetCategory
+		if t.PresetCategory != nil {
+			preset = *t.PresetCategory
 		}
-		// Skip if a system/owner character type already serves as the claimable
-		// character (e.g. drawsteel-character, or any owner-claimable character),
-		// or the canonical premade PC type already exists — premaking on top
-		// would duplicate the category.
-		if isClaimableType(&types[i]) || isPlayerCharacterType(preset, types[i].Slug) {
-			return nil // already covered — idempotent
+		switch {
+		case t.ParentTypeID == nil && t.Slug == DefaultCharacterTypeSlug:
+			id := t.ID
+			charParentID = &id
+		case isPlayerCharacterType(preset, t.Slug):
+			pcType = t
+		case isClaimableType(t):
+			systemClaimable = true
 		}
 	}
+
+	// Case 1 — migrate an existing top-level PC type under "Characters".
+	if pcType != nil {
+		switch {
+		case pcType.ParentTypeID == nil && charParentID != nil && *charParentID != pcType.ID:
+			if _, err := s.UpdateEntityType(ctx, pcType.ID, UpdateEntityTypeInput{
+				Name:         pcType.Name,
+				NamePlural:   pcType.NamePlural,
+				Icon:         pcType.Icon,
+				Color:        pcType.Color,
+				ParentTypeID: charParentID,
+			}); err != nil {
+				return err
+			}
+			slog.Info("re-parented player-character type under the Characters category",
+				slog.Int("entity_type_id", pcType.ID),
+				slog.Int("parent_type_id", *charParentID),
+				slog.String("campaign_id", campaignID),
+			)
+		case pcType.ParentTypeID == nil && charParentID == nil:
+			// Top-level PC type but no default "Characters" category to nest it
+			// under (deleted/renamed). Leave it; surface a signal for the operator.
+			slog.Warn("player-character type is top-level but no default \"Characters\" category was found to nest it under",
+				slog.Int("entity_type_id", pcType.ID),
+				slog.String("campaign_id", campaignID),
+			)
+		}
+		return nil // nested, or nothing to do — idempotent
+	}
+
+	// Case 2 — a system/owner character type already serves as the claimable
+	// character; don't premake a redundant generic one.
+	if systemClaimable {
+		return nil
+	}
+
+	// Case 3 — premake the PC sub-type, nested under "Characters" when present.
 	_, err = s.CreateEntityType(ctx, campaignID, CreateEntityTypeInput{
 		Name:           "Player Character",
 		NamePlural:     "Player Characters",
 		Icon:           "fa-user-shield",
 		Color:          "#6366f1",
 		PresetCategory: PresetCategoryPlayerCharacter,
+		ParentTypeID:   charParentID,
 	})
 	return err
 }
