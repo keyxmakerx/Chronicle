@@ -174,8 +174,8 @@ type EntityEventPublisher interface {
 // NoopEntityEventPublisher is a no-op implementation for tests.
 type NoopEntityEventPublisher struct{}
 
-func (NoopEntityEventPublisher) PublishEntityEvent(string, string, string, *Entity)  {}
-func (NoopEntityEventPublisher) PublishEntityTypeEvent(string, string, *EntityType)  {}
+func (NoopEntityEventPublisher) PublishEntityEvent(string, string, string, *Entity) {}
+func (NoopEntityEventPublisher) PublishEntityTypeEvent(string, string, *EntityType) {}
 
 // SidebarAutoAdder auto-adds new entity types to the campaign's sidebar config.
 // Implemented by a campaigns-backed adapter in routes.go. Prevents the
@@ -925,9 +925,10 @@ func isPlayerCharacterType(presetCategory, slug string) bool {
 //     category. UpdateEntityType only flips the parent pointer, so every claimed
 //     character under the type is preserved (and its layout, which Update never
 //     touches). No-ops once nested.
-//  2. A system/owner character type already serves as the claimable character
-//     (e.g. drawsteel-character). Do nothing — a generic PC type would duplicate
-//     the category.
+//  2. A system's own character type (e.g. drawsteel-character) already serves as
+//     the claimable PC. Nest it under "Characters" (so it reads as the PC
+//     sub-category) WITHOUT renaming — the system's terminology is preserved
+//     (modularity). Don't premake a generic type.
 //  3. Otherwise create the claimable "Player Character" sub-type (CharacterLayout
 //     + claimable=true), nested under the default "Characters" category when one
 //     exists (else top-level, as a graceful fallback).
@@ -940,9 +941,9 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 		return apperror.NewInternal(fmt.Errorf("listing entity types: %w", err))
 	}
 
-	var charParentID *int    // the default top-level "Characters" category, if present
-	var pcType *EntityType   // an existing premade / claimable PC sub-type, if present
-	systemClaimable := false // a non-PC claimable character type (e.g. drawsteel-character)
+	var charParentID *int          // the default top-level "Characters" category, if present
+	var pcType *EntityType         // an existing premade / claimable PC sub-type, if present
+	var systemCharType *EntityType // a system's own character type (e.g. drawsteel-character)
 
 	for i := range types {
 		t := &types[i]
@@ -957,7 +958,7 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 		case isPlayerCharacterType(preset, t.Slug):
 			pcType = t
 		case isClaimableType(t):
-			systemClaimable = true
+			systemCharType = t
 		}
 	}
 
@@ -990,9 +991,29 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 		return nil // nested, or nothing to do — idempotent
 	}
 
-	// Case 2 — a system/owner character type already serves as the claimable
-	// character; don't premake a redundant generic one.
-	if systemClaimable {
+	// Case 2 — a system's own character type (e.g. drawsteel-character) already
+	// serves as the claimable PC. Nest it under "Characters" so it reads as the
+	// player-character sub-category; the system's widget + fields already render
+	// it, and it is claimable via the heuristic. We do NOT rename it — the
+	// system's terminology is preserved (modularity: Chronicle core owns no
+	// system specifics). Don't premake a redundant generic type.
+	if systemCharType != nil {
+		if systemCharType.ParentTypeID == nil && charParentID != nil && *charParentID != systemCharType.ID {
+			if _, err := s.UpdateEntityType(ctx, systemCharType.ID, UpdateEntityTypeInput{
+				Name:         systemCharType.Name,
+				NamePlural:   systemCharType.NamePlural,
+				Icon:         systemCharType.Icon,
+				Color:        systemCharType.Color,
+				ParentTypeID: charParentID,
+			}); err != nil {
+				return err
+			}
+			slog.Info("nested system character type under the Characters category",
+				slog.Int("entity_type_id", systemCharType.ID),
+				slog.Int("parent_type_id", *charParentID),
+				slog.String("campaign_id", campaignID),
+			)
+		}
 		return nil
 	}
 
@@ -1659,10 +1680,10 @@ func (s *entityService) generateEntityTypeSlug(ctx context.Context, campaignID, 
 
 // Layout validation limits.
 const (
-	maxLayoutRows       = 20
-	maxLayoutCols       = 4
-	maxLayoutBlocks     = 10
-	gridWidth           = 12
+	maxLayoutRows   = 20
+	maxLayoutCols   = 4
+	maxLayoutBlocks = 10
+	gridWidth       = 12
 )
 
 // isValidBlockType checks the block registry for allowed block types.
@@ -2251,7 +2272,9 @@ func autoPluralize(name string) string {
 // are logged but don't block boot.
 //
 // Conservative match: only renames rows where
-//   LOWER(name) ends in 's' AND LOWER(name_plural) = LOWER(name) || 's'
+//
+//	LOWER(name) ends in 's' AND LOWER(name_plural) = LOWER(name) || 's'
+//
 // so a legitimate "Bus" → "Buses" stays put (the plural isn't just
 // name + s) and a user-set "Mapss" stays put if it doesn't match
 // the bad-default pattern.
