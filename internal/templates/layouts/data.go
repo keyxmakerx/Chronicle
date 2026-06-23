@@ -32,6 +32,7 @@ const (
 	keyEntityTypes   ctxKey = "layout_entity_types"
 	keyEntityCounts  ctxKey = "layout_entity_counts"
 	keyEnabledAddons     ctxKey = "layout_enabled_addons"
+	keyEnabledSystem     ctxKey = "layout_enabled_system"
 	keyCustomSections    ctxKey = "layout_custom_sections"
 	keyCustomLinks       ctxKey = "layout_custom_links"
 	keyViewingAsPlayer   ctxKey = "layout_viewing_as_player"
@@ -342,6 +343,27 @@ func SetEnabledAddons(ctx context.Context, slugs map[string]bool) context.Contex
 func IsAddonEnabled(ctx context.Context, slug string) bool {
 	addons, _ := ctx.Value(keyEnabledAddons).(map[string]bool)
 	return addons[slug]
+}
+
+// EnabledSystem identifies the game system enabled for the current campaign,
+// used to render its rulebook (reference) nav link. Slug is the system's
+// module ID (the `:mod` path segment, e.g. "drawsteel").
+type EnabledSystem struct {
+	Slug string
+	Name string
+	Icon string
+}
+
+// SetEnabledSystem stores the campaign's enabled game system (if any).
+func SetEnabledSystem(ctx context.Context, sys EnabledSystem) context.Context {
+	return context.WithValue(ctx, keyEnabledSystem, sys)
+}
+
+// GetEnabledSystem returns the campaign's enabled game system. ok is false when
+// no system is enabled (or no Slug resolved), so the rulebook link is omitted.
+func GetEnabledSystem(ctx context.Context) (EnabledSystem, bool) {
+	sys, _ := ctx.Value(keyEnabledSystem).(EnabledSystem)
+	return sys, sys.Slug != ""
 }
 
 // --- Custom Sidebar Navigation (sections + links) ---
