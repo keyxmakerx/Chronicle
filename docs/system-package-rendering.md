@@ -252,13 +252,15 @@ A manifest with an invalid `renderers` block is rejected during
 package install — the package never lands on disk and never reaches
 the renderer registry. Every entry must satisfy:
 
-- `slug` matches one of this manifest's `entity_presets[].slug`.
-  Cross-manifest references are forbidden — a manifest can only
-  register renderers for entity types it owns.
+- **Exactly one** of `slug` or `preset_category` is set (see "Binding a
+  renderer by preset category" below). `slug` matches one of this manifest's
+  `entity_presets[].slug`; `preset_category` matches one of this manifest's
+  `entity_presets[].category`. Cross-manifest references are forbidden — a
+  manifest can only register renderers for entity types/categories it owns.
 - `widget` matches one of this manifest's `widgets[].slug`. Same
   rule — a renderer must mount a widget the same package ships.
-- `slug` and `widget` are valid slugs (lowercase letters, numbers,
-  hyphens, underscores).
+- `slug`/`preset_category` and `widget` are valid slugs (lowercase letters,
+  numbers, hyphens, underscores).
 - A manifest declares no more than 10 renderers.
 
 ### Lifecycle and overrides
@@ -276,6 +278,74 @@ packages are installed, so this collision case is rare in practice;
 if you need a deterministic override, use the Go-side `Register`
 path and order the registration calls explicitly in
 `internal/app/routes.go`.
+
+### Binding a renderer by preset category (system-agnostic)
+
+A renderer entry binds by **either `slug` or `preset_category`** — exactly
+one (the manifest validator enforces this). `slug` binds your widget to a
+specific entity type your package owns. `preset_category` binds it to a
+*category* instead, matching one of your `entity_presets[].category` values:
+
+```json
+"renderers": [
+  { "preset_category": "character", "widget": "character-sheet" }
+]
+```
+
+The widget then renders **any** entity type carrying that preset category —
+not just one bespoke slug. At render time the host resolves **slug first**
+(most specific), then falls back to the entity type's `preset_category`, so a
+preset binding never shadows another package's slug-bound type. This is the
+system-agnostic seam that lets a package fill a category Chronicle core owns
+(see "Player-character sheet" below). No DB change — it's manifest JSON only.
+
+### Player-character sheet
+
+Chronicle's **Player Character Claiming** addon owns a player-character
+*category* (Chronicle owns the category; the system fills the rendering). To
+fill it, a system package ships:
+
+1. **An entity preset with `category: "character"`** plus its `fields` — the
+   field schema your sheet reads:
+
+   ```json
+   "entity_presets": [
+     { "slug": "drawsteel-character", "name": "Hero",
+       "category": "character",
+       "fields": [ { "key": "stamina", "label": "Stamina", "type": "number" } ] }
+   ]
+   ```
+
+2. **A renderer for your sheet widget** — either form works:
+
+   ```json
+   "renderers": [
+     { "slug": "drawsteel-character",  "widget": "character-sheet" },
+     { "preset_category": "character", "widget": "character-sheet" }
+   ]
+   ```
+
+   The **slug** form binds the sheet to your own character type — that type
+   already renders via it, which is why a package that owns its type's slug
+   needs nothing more. The **`preset_category`** form is the modularity
+   capability: it renders any `character`-category type, including a generic
+   Chronicle-owned "Player Characters" type, without your package owning its
+   slug. Ship one or both.
+
+When the addon is enabled in a campaign that has your system, it **nests your
+character type under "Characters"** as the player-character sub-category —
+without renaming it (your terminology is preserved) and without copying fields
+(your type already carries them and renders via your own renderer). A
+system-less campaign gets a generic "Player Characters" type instead.
+
+**Modularity — this is the whole point.** A new system (e.g. D&D 5e) gets the
+**identical** behavior with **zero Chronicle core changes**: ship a manifest
+with a `category: "character"` preset (its fields) and a `character-sheet`
+renderer, and the same nesting, the same claiming, and the same sheet rendering
+apply. Chronicle core detects "a system character type" generically (by preset
+category / claimability) and never references any system by name — every system
+specific (fields, widget, renderer, the type's name) lives in the package's
+manifest.
 
 ### When to use the Go path instead
 
