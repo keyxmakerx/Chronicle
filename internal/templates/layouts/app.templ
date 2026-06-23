@@ -267,6 +267,13 @@ templ Sidebar() {
 							@sidebarAddonLink(ctx, SidebarItemView{Slug: "calendar", Label: "Calendar", Icon: "fa-calendar-days"})
 						}
 					}
+					<!-- Characters (the Cast): top-level nav beside Dashboard/Calendar
+					     (not in the categories zone). Shown when the
+					     player-character-claiming OR npcs addon is enabled; visible to
+					     every member. -->
+					if IsAddonEnabled(ctx, "player-character-claiming") || IsAddonEnabled(ctx, "npcs") {
+						@sidebarCharactersLink(ctx)
+					}
 				</div>
 
 				<!-- Categories drill-down zone -->
@@ -345,12 +352,6 @@ templ Sidebar() {
 									}
 								}
 							}
-						}
-						<!-- Characters (the Cast): Players section + NPCs/Monsters
-						     section, each gated by its addon. Shown when either is
-						     enabled; visible to every member. -->
-						if IsAddonEnabled(ctx, "player-character-claiming") || IsAddonEnabled(ctx, "npcs") {
-							@sidebarCharactersLink(ctx)
 						}
 						<!-- My Characters link (CH2). Visible to Players (the
 						     primary audience) and to Owner/Scribe when
