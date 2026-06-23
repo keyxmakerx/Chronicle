@@ -61,4 +61,31 @@ func TestEnsurePlayerCharacterType(t *testing.T) {
 			t.Error("should be a no-op when a player-character type already exists")
 		}
 	})
+
+	t.Run("no-op when a system character type already exists (no duplicate category)", func(t *testing.T) {
+		// Regression: a Draw Steel campaign already ships a drawsteel-character
+		// type (preset "character"). The premake must recognize it as the
+		// claimable character and NOT create a redundant generic "Player
+		// Characters" type — which previously surfaced as a duplicate category
+		// and a second sheet to customize.
+		createCalled := false
+		charPreset := "character"
+		typeRepo := &mockEntityTypeRepo{
+			listByCampaignFn: func(_ context.Context, _ string) ([]EntityType, error) {
+				return []EntityType{
+					{ID: 1, Name: "Character", Slug: "drawsteel-character", PresetCategory: &charPreset},
+				}, nil
+			},
+			createFn: func(_ context.Context, _ *EntityType) error { createCalled = true; return nil },
+		}
+		svc := newTestService(&mockEntityRepo{}, typeRepo)
+		svc.SetAddonChecker(&mockAddonChecker{enabled: map[string]bool{AddonPlayerCharacterClaiming: true}})
+
+		if err := svc.EnsurePlayerCharacterType(context.Background(), "camp-1"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createCalled {
+			t.Error("should be a no-op when a system character type (drawsteel-character) already exists")
+		}
+	})
 }
