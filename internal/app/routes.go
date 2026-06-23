@@ -1477,7 +1477,15 @@ func registerManifestRenderers(showRegistry *entities.EntityShowRendererRegistry
 			continue
 		}
 		for _, r := range manifest.Renderers {
-			showRegistry.Register(r.Slug, entities.MakeWidgetMountRenderer(r.Widget))
+			renderer := entities.MakeWidgetMountRenderer(r.Widget)
+			// A renderer binds by slug (a system's own type) or by preset_category
+			// (the system-agnostic seam — fills a Chronicle-owned category). The
+			// manifest validator guarantees exactly one is set.
+			if r.Slug != "" {
+				showRegistry.Register(r.Slug, renderer)
+			} else if r.PresetCategory != "" {
+				showRegistry.RegisterByPresetCategory(r.PresetCategory, renderer)
+			}
 		}
 	}
 }
