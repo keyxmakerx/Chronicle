@@ -448,8 +448,21 @@ func (h *SystemHandler) GetSystemWidgetBlockMetas(ctx context.Context, campaignI
 		return nil
 	}
 
+	// A widget the system registers as a page RENDERER (manifest.renderers[].widget)
+	// owns a whole entity page — it is NOT a placeable layout block. Exclude those
+	// from the palette so they can't be dropped into a layout, where they'd mount
+	// without their page context and render empty (the "bare name" trap). Generic
+	// across systems — keyed on the manifest, not any system name.
+	rendererWidgets := make(map[string]struct{}, len(manifest.Renderers))
+	for _, r := range manifest.Renderers {
+		rendererWidgets[r.Widget] = struct{}{}
+	}
+
 	metas := make([]entities.BlockMeta, 0, len(manifest.Widgets))
 	for _, w := range manifest.Widgets {
+		if _, isRenderer := rendererWidgets[w.Slug]; isRenderer {
+			continue
+		}
 		icon := w.Icon
 		if icon == "" {
 			icon = "fa-puzzle-piece"

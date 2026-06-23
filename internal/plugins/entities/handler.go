@@ -2158,11 +2158,11 @@ func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
 
 // permissionsResponse is the JSON response for the GET permissions endpoint.
 type permissionsResponse struct {
-	Visibility  VisibilityMode       `json:"visibility"`
-	IsPrivate   bool                 `json:"is_private"`
-	Members     []permissionsMember  `json:"members"`
-	Groups      []permissionsGroup   `json:"groups"`
-	Permissions []EntityPermission   `json:"permissions"`
+	Visibility  VisibilityMode      `json:"visibility"`
+	IsPrivate   bool                `json:"is_private"`
+	Members     []permissionsMember `json:"members"`
+	Groups      []permissionsGroup  `json:"groups"`
+	Permissions []EntityPermission  `json:"permissions"`
 	// TagGrants are the tag-derived visibility grants on this entity
 	// (C-PERM-W1-TAG-GRANTS). Additive field — pre-existing consumers ignore it.
 	// Feeds the inline editor's effective-visibility summary.
@@ -2613,6 +2613,9 @@ func (h *Handler) BlockTypesAPI(c echo.Context) error {
 	if h.widgetBlockLister != nil && (editorCtx == "" || editorCtx == "template") {
 		extWidgets := h.widgetBlockLister.GetWidgetBlockMetas(c.Request().Context(), cc.Campaign.ID)
 		types = append(types, extWidgets...)
+		// A system's character-sheet WIDGET is already excluded from the palette
+		// at its source (GetSystemWidgetBlockMetas drops renderer-bound widgets),
+		// so no character-sheet de-dup is needed here.
 	}
 
 	return c.JSON(http.StatusOK, types)

@@ -47,16 +47,6 @@ templ SystemIndexContent(cc *campaigns.CampaignContext, manifest *SystemManifest
 			}
 		</div>
 
-		<!-- Interactive rulebook: the rules-glossary browser. The widget renders
-		     itself only when the system ships a data/rules-glossary.json; with no
-		     glossary the mount stays empty, leaving the category grid below. -->
-		<div
-			data-widget="rulebook"
-			data-campaign-id={ cc.Campaign.ID }
-			data-mod={ manifest.ID }
-			class="mb-8"
-		></div>
-
 		<!-- Category cards grid -->
 		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 			for _, cat := range cats {

@@ -92,8 +92,16 @@ type SystemManifest struct {
 type RendererDef struct {
 	// Slug is the entity_type slug whose show page this renderer takes
 	// over. Must equal one of the entity_presets[].slug values declared
-	// in the same manifest.
-	Slug string `json:"slug"`
+	// in the same manifest. Exactly one of Slug or PresetCategory is set.
+	Slug string `json:"slug,omitempty"`
+
+	// PresetCategory binds this renderer by entity-type preset_category
+	// instead of by slug — the system-agnostic seam. The widget then renders
+	// ANY type carrying that preset (e.g. the player-character addon's category,
+	// whose slug Chronicle owns), not just one bespoke slug. Must equal one of
+	// the entity_presets[].category values in this manifest. Exactly one of
+	// Slug or PresetCategory is set.
+	PresetCategory string `json:"preset_category,omitempty"`
 
 	// Widget is the slug of the JS widget that should mount when an
 	// entity of the matching type is rendered. Must equal one of the
@@ -267,6 +275,19 @@ type RelationFieldSchema struct {
 func (m *SystemManifest) CharacterPreset() *EntityPresetDef {
 	for i := range m.EntityPresets {
 		if strings.HasSuffix(m.EntityPresets[i].Slug, "-character") {
+			return &m.EntityPresets[i]
+		}
+	}
+	return nil
+}
+
+// CharacterPresetByCategory returns the first entity preset with category
+// "character", or nil. Preferred over CharacterPreset (slug-suffix heuristic)
+// for player-character field adoption: category is the explicit marker a system
+// declares, mirroring ItemPreset.
+func (m *SystemManifest) CharacterPresetByCategory() *EntityPresetDef {
+	for i := range m.EntityPresets {
+		if m.EntityPresets[i].Category == "character" {
 			return &m.EntityPresets[i]
 		}
 	}
@@ -666,31 +687,46 @@ func ValidateManifest(m *SystemManifest) error {
 	}
 	if len(m.Renderers) > 0 {
 		presetSlugs := make(map[string]struct{}, len(m.EntityPresets))
+		presetCategories := make(map[string]struct{}, len(m.EntityPresets))
 		for _, p := range m.EntityPresets {
 			presetSlugs[p.Slug] = struct{}{}
+			if p.Category != "" {
+				presetCategories[p.Category] = struct{}{}
+			}
 		}
 		widgetSlugs := make(map[string]struct{}, len(m.Widgets))
 		for _, w := range m.Widgets {
 			widgetSlugs[w.Slug] = struct{}{}
 		}
 		for i, r := range m.Renderers {
-			if r.Slug == "" {
-				return fmt.Errorf("renderer %d: slug is required", i)
-			}
-			if !slugPattern.MatchString(r.Slug) {
-				return fmt.Errorf("renderer %d: slug %q must contain only lowercase letters, numbers, hyphens, and underscores", i, r.Slug)
+			// Exactly one of slug or preset_category binds the renderer.
+			if (r.Slug == "") == (r.PresetCategory == "") {
+				return fmt.Errorf("renderer %d: exactly one of slug or preset_category must be set", i)
 			}
 			if r.Widget == "" {
-				return fmt.Errorf("renderer %d (%s): widget is required", i, r.Slug)
+				return fmt.Errorf("renderer %d: widget is required", i)
 			}
 			if !slugPattern.MatchString(r.Widget) {
-				return fmt.Errorf("renderer %d (%s): widget %q must contain only lowercase letters, numbers, hyphens, and underscores", i, r.Slug, r.Widget)
-			}
-			if _, ok := presetSlugs[r.Slug]; !ok {
-				return fmt.Errorf("renderer %d (%s): slug must match an entity_presets[].slug declared in this manifest", i, r.Slug)
+				return fmt.Errorf("renderer %d: widget %q must contain only lowercase letters, numbers, hyphens, and underscores", i, r.Widget)
 			}
 			if _, ok := widgetSlugs[r.Widget]; !ok {
-				return fmt.Errorf("renderer %d (%s): widget %q must match a widgets[].slug declared in this manifest", i, r.Slug, r.Widget)
+				return fmt.Errorf("renderer %d: widget %q must match a widgets[].slug declared in this manifest", i, r.Widget)
+			}
+			if r.Slug != "" {
+				if !slugPattern.MatchString(r.Slug) {
+					return fmt.Errorf("renderer %d: slug %q must contain only lowercase letters, numbers, hyphens, and underscores", i, r.Slug)
+				}
+				if _, ok := presetSlugs[r.Slug]; !ok {
+					return fmt.Errorf("renderer %d (%s): slug must match an entity_presets[].slug declared in this manifest", i, r.Slug)
+				}
+				continue
+			}
+			// preset_category binding.
+			if !slugPattern.MatchString(r.PresetCategory) {
+				return fmt.Errorf("renderer %d: preset_category %q must contain only lowercase letters, numbers, hyphens, and underscores", i, r.PresetCategory)
+			}
+			if _, ok := presetCategories[r.PresetCategory]; !ok {
+				return fmt.Errorf("renderer %d (preset %s): preset_category must match an entity_presets[].category declared in this manifest", i, r.PresetCategory)
 			}
 		}
 	}

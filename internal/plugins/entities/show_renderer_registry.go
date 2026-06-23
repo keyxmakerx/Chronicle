@@ -69,13 +69,19 @@ type EntityShowRenderer func(ctx EntityShowRenderContext) templ.Component
 type EntityShowRendererRegistry struct {
 	mu        sync.RWMutex
 	renderers map[string]EntityShowRenderer
+	// presetRenderers binds by entity-type preset_category (e.g. "character") —
+	// the system-agnostic seam. A system maps its widget to a PRESET so it
+	// renders any type carrying that preset (e.g. the addon's Player Characters
+	// category), not just one bespoke slug. Slug wins over preset at lookup.
+	presetRenderers map[string]EntityShowRenderer
 }
 
 // NewEntityShowRendererRegistry returns an empty registry ready for
 // startup-time registration calls.
 func NewEntityShowRendererRegistry() *EntityShowRendererRegistry {
 	return &EntityShowRendererRegistry{
-		renderers: map[string]EntityShowRenderer{},
+		renderers:       map[string]EntityShowRenderer{},
+		presetRenderers: map[string]EntityShowRenderer{},
 	}
 }
 
@@ -102,6 +108,28 @@ func (r *EntityShowRendererRegistry) Lookup(slug string) (EntityShowRenderer, bo
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	rend, ok := r.renderers[slug]
+	return rend, ok
+}
+
+// RegisterByPresetCategory adds a renderer bound to an entity-type
+// preset_category. Last registration wins (mirrors Register); empty category is
+// a no-op. This is how a system fills a Chronicle-owned category (e.g. the
+// addon's player-character type) without owning its slug.
+func (r *EntityShowRendererRegistry) RegisterByPresetCategory(category string, renderer EntityShowRenderer) {
+	if category == "" || renderer == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.presetRenderers[category] = renderer
+}
+
+// LookupByPresetCategory returns the renderer registered for a preset_category,
+// or (nil, false). Consulted only after a slug miss — slug is more specific.
+func (r *EntityShowRendererRegistry) LookupByPresetCategory(category string) (EntityShowRenderer, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	rend, ok := r.presetRenderers[category]
 	return rend, ok
 }
 
@@ -197,7 +225,13 @@ func lookupEntityShowRenderer(ctx EntityShowRenderContext) templ.Component {
 	if reg == nil {
 		return nil
 	}
+	// Slug binding wins (most specific — a system's own bespoke type); fall back
+	// to a preset_category binding (the system-agnostic seam) so a system's
+	// widget can render the addon's Player Characters category.
 	rend, ok := reg.Lookup(ctx.EntityType.Slug)
+	if !ok && ctx.EntityType.PresetCategory != nil {
+		rend, ok = reg.LookupByPresetCategory(*ctx.EntityType.PresetCategory)
+	}
 	if !ok {
 		return nil
 	}
