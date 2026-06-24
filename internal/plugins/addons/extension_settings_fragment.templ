@@ -1,0 +1,213 @@
+package addons
+
+// extension_settings_fragment.templ — the reusable body of every extension's
+// settings page. Renders the provider's checks + a questions form, or a
+// "nothing to set up" panel when the addon has no provider. Used both inside
+// the modal overlay and the full page; an Apply swaps this fragment in place
+// (hx-target="#extension-settings-body").
+
+import "fmt"
+
+// setupSeverityIconClass returns the full Font Awesome + colour class string for
+// a check's severity icon.
+func setupSeverityIconClass(s SetupSeverity) string {
+	icon := "fa-circle-info"
+	colour := "text-accent"
+	switch s {
+	case SeverityError:
+		icon, colour = "fa-circle-xmark", "text-rose-500"
+	case SeverityWarning:
+		icon, colour = "fa-triangle-exclamation", "text-amber-500"
+	case SeveritySuggestion:
+		icon, colour = "fa-lightbulb", "text-amber-400"
+	}
+	return "fa-solid " + icon + " " + colour + " mt-0.5"
+}
+
+// setupAddonIcon returns the addon's icon class, falling back to a default.
+func setupAddonIcon(icon string) string {
+	if icon == "" {
+		return "fa-puzzle-piece"
+	}
+	return icon
+}
+
+// setupApplyURL / setupDismissURL build the form action URLs.
+func setupApplyURL(campaignID, slug string) string {
+	return fmt.Sprintf("/campaigns/%s/extensions/%s/settings/apply", campaignID, slug)
+}
+
+func setupDismissURL(campaignID, slug string) string {
+	return fmt.Sprintf("/campaigns/%s/extensions/%s/settings/dismiss", campaignID, slug)
+}
+
+// setupCSRFHeaders builds the HTMX header JSON carrying the CSRF token.
+func setupCSRFHeaders(csrfToken string) string {
+	return fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken)
+}
+
+// setupAnswerValue resolves the current value for a question: the owner's prior
+// answer if present, else the question's default.
+func setupAnswerValue(v ExtensionSettingsView, q SetupQuestion) string {
+	if v.State.Answers != nil {
+		if val, ok := v.State.Answers[q.ID]; ok {
+			return val
+		}
+	}
+	return q.Default
+}
+
+// setupOptionChecked reports whether a choice option is the current answer.
+func setupOptionChecked(v ExtensionSettingsView, q SetupQuestion, optValue string) bool {
+	return setupAnswerValue(v, q) == optValue
+}
+
+// setupBoolChecked reports whether a bool question is currently "true".
+func setupBoolChecked(v ExtensionSettingsView, q SetupQuestion) bool {
+	return setupAnswerValue(v, q) == "true"
+}
+
+// ExtensionSettingsFormFragment renders the checks + questions body.
+templ ExtensionSettingsFormFragment(v ExtensionSettingsView) {
+	<div class="space-y-6">
+		if v.ErrMsg != "" {
+			<div class="alert-error" role="alert">{ v.ErrMsg }</div>
+		}
+		if len(v.SuccessMsgs) > 0 {
+			<div class="alert-success" role="status">
+				<ul class="list-disc list-inside space-y-0.5">
+					for _, m := range v.SuccessMsgs {
+						<li>{ m }</li>
+					}
+				</ul>
+			</div>
+		}
+		if !v.HasProvider {
+			<div class="flex items-center gap-3 text-sm text-fg-secondary p-3 rounded-lg bg-surface-alt border border-edge">
+				<i class="fa-solid fa-circle-check text-emerald-500"></i>
+				<span>This extension has no settings to configure — you're all set.</span>
+			</div>
+		} else {
+			if len(v.Checks) > 0 {
+				<div class="space-y-2">
+					<h3 class="text-sm font-semibold text-fg-secondary uppercase tracking-wide">Status checks</h3>
+					for _, ck := range v.Checks {
+						<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-alt border border-edge">
+							<i class={ setupSeverityIconClass(ck.Severity) }></i>
+							<div class="min-w-0">
+								<div class="text-sm font-medium text-fg">{ ck.Title }</div>
+								if ck.Detail != "" {
+									<div class="text-xs text-fg-secondary mt-0.5">{ ck.Detail }</div>
+								}
+								if ck.ActionLabel != "" {
+									<div class="text-xs text-accent mt-1"><i class="fa-solid fa-arrow-right mr-1"></i>{ ck.ActionLabel }</div>
+								}
+							</div>
+						</div>
+					}
+				</div>
+			}
+			if len(v.Questions) > 0 {
+				<form
+					hx-post={ setupApplyURL(v.CampaignID, v.Slug) }
+					hx-target="#extension-settings-body"
+					hx-swap="innerHTML"
+					hx-headers={ setupCSRFHeaders(v.CSRFToken) }
+					class="space-y-5"
+				>
+					<input type="hidden" name="csrf_token" value={ v.CSRFToken }/>
+					for _, q := range v.Questions {
+						@extensionSettingsQuestion(v, q)
+					}
+					<div class="flex items-center gap-4 pt-2">
+						<button type="submit" class="btn-primary">
+							<i class="fa-solid fa-check mr-1"></i> Apply
+						</button>
+						<button
+							type="button"
+							hx-post={ setupDismissURL(v.CampaignID, v.Slug) }
+							hx-headers={ setupCSRFHeaders(v.CSRFToken) }
+							@click="open = false"
+							class="text-sm text-fg-muted hover:text-fg transition-colors"
+						>
+							Skip for now
+						</button>
+					</div>
+				</form>
+			} else {
+				<div class="pt-2">
+					<button
+						type="button"
+						hx-post={ setupDismissURL(v.CampaignID, v.Slug) }
+						hx-headers={ setupCSRFHeaders(v.CSRFToken) }
+						@click="open = false"
+						class="btn-primary text-sm"
+					>
+						Done
+					</button>
+				</div>
+			}
+		}
+	</div>
+}
+
+// extensionSettingsQuestion renders one question control by kind.
+templ extensionSettingsQuestion(v ExtensionSettingsView, q SetupQuestion) {
+	switch q.Kind {
+		case QuestionBool:
+			<label class="flex items-start gap-2 cursor-pointer select-none">
+				<input
+					type="checkbox"
+					name={ q.ID }
+					value="true"
+					checked?={ setupBoolChecked(v, q) }
+					class="mt-1"
+				/>
+				<span class="text-sm text-fg">
+					{ q.Title }
+					if q.Help != "" {
+						<span class="block text-xs text-fg-secondary">{ q.Help }</span>
+					}
+				</span>
+			</label>
+		case QuestionChoice:
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">{ q.Title }</label>
+				if q.Help != "" {
+					<p class="text-xs text-fg-secondary mb-2">{ q.Help }</p>
+				}
+				<div class="space-y-2" role="radiogroup" aria-label={ q.Title }>
+					for _, opt := range q.Options {
+						<label class="flex items-start gap-2 cursor-pointer select-none">
+							<input
+								type="radio"
+								name={ q.ID }
+								value={ opt.Value }
+								checked?={ setupOptionChecked(v, q, opt.Value) }
+								class="mt-1"
+							/>
+							<span class="text-sm text-fg">
+								{ opt.Label }
+								if opt.Hint != "" {
+									<span class="block text-xs text-fg-secondary">{ opt.Hint }</span>
+								}
+							</span>
+						</label>
+					}
+				</div>
+			</div>
+		default:
+			<div>
+				<label class="block text-sm font-medium text-fg-body mb-1">{ q.Title }</label>
+				if q.Help != "" {
+					<p class="text-xs text-fg-secondary mb-2">{ q.Help }</p>
+				}
+				<input
+					type="text"
+					name={ q.ID }
+					value={ setupAnswerValue(v, q) }
+					class="input w-full"
+				/>
+			</div>
+	}
+}

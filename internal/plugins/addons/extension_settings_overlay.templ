@@ -1,0 +1,41 @@
+package addons
+
+// extension_settings_overlay.templ — the modal shell for an extension's settings
+// page, returned for HTMX requests so the Extensions hub can inject it into its
+// #extension-setup-modal container. Reuses the AIExportModal shape (Alpine
+// show/hide, click-outside, escape-to-close). The body is #extension-settings-body
+// so an Apply (which targets that id) swaps inside the open modal.
+
+templ ExtensionSettingsOverlay(v ExtensionSettingsView) {
+	<div
+		role="dialog"
+		aria-labelledby="ext-setup-title"
+		x-data="{ open: true }"
+		x-show="open"
+		@keydown.escape.window="open = false"
+		class="fixed inset-0 z-[9999] flex items-start justify-center p-4 pt-12 bg-black/50 overflow-y-auto"
+	>
+		<div
+			@click.outside="open = false"
+			class="bg-surface border border-edge rounded-lg shadow-xl max-w-2xl w-full flex flex-col max-h-[85vh]"
+		>
+			<div class="flex items-center justify-between px-5 py-3 border-b border-edge shrink-0">
+				<h3 id="ext-setup-title" class="text-lg font-semibold text-fg">
+					<i class={ "fa-solid mr-2 text-accent " + setupAddonIcon(v.AddonIcon) }></i>
+					{ v.AddonName } — Setup
+				</h3>
+				<button
+					type="button"
+					@click="open = false"
+					aria-label="Close"
+					class="text-fg-muted hover:text-fg p-1 rounded transition-colors"
+				>
+					<i class="fa-solid fa-xmark"></i>
+				</button>
+			</div>
+			<div id="extension-settings-body" class="px-5 py-4 overflow-auto flex-1 min-h-0">
+				@ExtensionSettingsFormFragment(v)
+			</div>
+		</div>
+	</div>
+}

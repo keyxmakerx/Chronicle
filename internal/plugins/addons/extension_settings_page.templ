@@ -1,0 +1,27 @@
+package addons
+
+// extension_settings_page.templ — the full-page wrapper for an extension's
+// settings page (deep-link / no-JS fallback). HTMX requests get the overlay
+// instead. The body is the same #extension-settings-body so an Apply swaps in
+// place exactly as it does inside the modal.
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+templ ExtensionSettingsPage(v ExtensionSettingsView) {
+	@layouts.App(v.AddonName + " — Setup") {
+		<div class="max-w-2xl mx-auto space-y-6 py-6">
+			<div class="flex items-center gap-3">
+				<span class="w-10 h-10 rounded-lg bg-surface-alt flex items-center justify-center">
+					<i class={ "fa-solid text-accent " + setupAddonIcon(v.AddonIcon) }></i>
+				</span>
+				<div>
+					<h1 class="text-2xl font-bold text-fg">{ v.AddonName } — Setup</h1>
+					<p class="text-sm text-fg-secondary">Review the checks and configure this extension for your campaign.</p>
+				</div>
+			</div>
+			<div id="extension-settings-body" class="card">
+				@ExtensionSettingsFormFragment(v)
+			</div>
+		</div>
+	}
+}

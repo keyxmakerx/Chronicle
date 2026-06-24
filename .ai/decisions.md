@@ -1681,3 +1681,82 @@ section to a core page this way. The standalone `/npcs` gallery page redirected 
 **References.** `entities/handler.go` (NPCSectionProvider, Characters), `npcs/handler.go`
 (NPCSection), `npcs/npc_section.templ`, `app/routes.go` (SetNPCSectionProvider).
 
+---
+
+## ADR-043: Extension Settings / Onboarding framework (`SetupProvider`)
+
+**Status.** Accepted (2026-06-24).
+
+**Context.** Enabling an addon (or a game system, which auto-registers as one per ADR-031)
+fired SILENT lifecycle hooks (`ApplySystemPresets`, `ApplyAddonEnableEffects`). That hid
+real decisions inside boot automation and produced the duplicate-player-character-category
+artifact (see ADR-044). The owner wanted each extension to own a visible settings/onboarding
+page — renderable as an integrated overlay — driven by a reusable framework, with a nudge on
+enable.
+
+**Decision.** A Go `SetupProvider` interface + slug-keyed registry lives in the `addons`
+plugin (it already owns the toggle, the per-campaign list, and `config_json` persistence).
+A provider supplies `RunChecks` (health/QOL findings with a severity), `Questions`
+(onboarding inputs), and `Apply` (idempotent). A generic handler + three Templ components
+(`extension_settings_page` / `_overlay` / `_fragment`) render ANY provider as a full page or
+a modal overlay — so every extension gets a consistent settings surface for free. Concrete
+providers live in the **app layer** (like `PresetApplier`) and are wired via
+`addonService.RegisterSetupProvider(...)` in `app/routes.go`, so `addons` never imports
+`entities`/`systems`. Per-campaign setup state (`{completed, dismissed, answers}`) persists
+under **`campaign_addons.config_json["setup"]`** — no new table or migration. The Extensions
+hub card carries a `NeedsSetup` flag (computed per-campaign in `addonListerAdapter`) that
+shows a "Setup" badge + an "Open setup" button (`hx-get` the overlay into a page-level modal
+container). On enable, the toggle handler co-emits a `chronicle:notify` toast alongside the
+existing `extensions-hub-refresh` HX-Trigger.
+
+**Alternatives considered.** (a) A declarative manifest-driven schema for checks — rejected
+for now because the first provider's checks must inspect live campaign data (Go logic);
+manifest-defined QOL notes can come later for external packs. (b) A new top-level settings
+nav — rejected; the Extensions hub (ADR-029) is the established surface. (c) A new
+`extension_setup` table — rejected; `config_json` already exists with `UpdateCampaignConfig`.
+
+**Consequences.** Enabling stays safe (the idempotent `EnsurePlayerCharacterType` still runs)
+while destructive/ambiguous choices move into the owner-driven wizard. New providers (e.g.
+calendar, maps) register with zero template changes.
+
+**References.** `addons/setup_provider.go` (interface + registry + state),
+`addons/setup_handler.go` + `addons/routes.go` (3 owner-gated routes),
+`addons/extension_settings_*.templ`, `campaigns/handler.go` (`PluginHubAddon.NeedsSetup/HasSetup`),
+`app/routes.go` (`addonListerAdapter`, `RegisterSetupProvider`), `app/setup_pc.go`.
+
+---
+
+## ADR-044: PC duplicate reconciliation moves from boot migration → owner-triggered Apply
+
+**Status.** Accepted (2026-06-24, supersedes the 2026-06-24 migration `000030`).
+
+**Context.** A campaign could end up with BOTH a generic "Player Characters" type (holding the
+claimed character entities) and a game system's own character type (e.g. Draw Steel's empty
+"Heroes") — an enable-ordering artifact the non-destructive boot path nests but never merges.
+The first fix was a one-time, silent boot migration
+(`000030_consolidate_player_character_duplicate`) that auto-merged on deploy.
+
+**Decision.** Remove migration `000030` (and its integration test) and re-home the merge into
+an owner-triggered, single-campaign service method `entities.MergeDuplicatePlayerCharacterType`
+(+ repo `MoveEntitiesAndDeleteType`, one transaction), surfaced as a check on the
+player-character extension settings page (ADR-043). The service classifies the unambiguous
+(generic → system) pair by `preset_category`/`slug`/`is_default` only (no system names), moves
+the generic's entities onto the system type (claims follow via `entities(id)`), and deletes
+the emptied generic. Ambiguity (more than one of either) returns a human-readable `apperror`
+(this also closes the deferred PC-DUP-GUARD-2). "Heroes wins": the system's own type survives
+so its terminology + sheet renderer stand. The owner additionally chooses the system name vs a
+custom name in the same wizard.
+
+**Migration safety.** `000030` was the HIGHEST core migration and the health-check floor
+(`ExpectedMigrationVersion`) was never bumped past 29, so deleting it leaves a contiguous
+1..29 — no gap. An env already at recorded `version=30` is benign under `m.Up()` (`ErrNoChange`;
+`30 < 29` is false). A fresh DB simply never runs the silent merge — exactly the intent.
+
+**Consequences.** The duplicate is reconciled when the owner opens the settings page and
+clicks Apply, with full visibility, instead of silently on the next deploy. The merge is
+idempotent (once the generic is gone, a re-run is a no-op success).
+
+**References.** `entities/service.go` (`MergeDuplicatePlayerCharacterType`,
+`PlayerCharacterSetupSnapshot`), `entities/repository.go` (`MoveEntitiesAndDeleteType`),
+`app/setup_pc.go` (the provider), ADR-043, ADR-039 (PC claiming).
+

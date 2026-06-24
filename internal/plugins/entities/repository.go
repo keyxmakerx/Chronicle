@@ -26,6 +26,13 @@ type EntityTypeRepository interface {
 	ListByPresetCategory(ctx context.Context, campaignID, category string) ([]EntityType, error)
 	Update(ctx context.Context, et *EntityType) error
 	Delete(ctx context.Context, id int) error
+	// MoveEntitiesAndDeleteType reassigns every entity of fromTypeID to toTypeID
+	// within one campaign, then deletes the now-empty fromType — in a single
+	// transaction. The DELETE is guarded by NOT EXISTS over entities so a
+	// non-empty source is never dropped (defense in depth; the UPDATE just
+	// emptied it). Returns the number of entities moved. The service picks the
+	// exact (from, to) pair, so this carries no preset-string matching.
+	MoveEntitiesAndDeleteType(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
 	UpdateColor(ctx context.Context, id int, color string) error
 	UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
@@ -417,6 +424,47 @@ func (r *entityTypeRepository) Delete(ctx context.Context, id int) error {
 		return apperror.NewNotFound("entity type not found")
 	}
 	return nil
+}
+
+// MoveEntitiesAndDeleteType reassigns every entity of fromTypeID to toTypeID in
+// one campaign, then deletes the emptied fromType, atomically. Claims follow the
+// entities (they reference entities(id), not the type). uq_entities_campaign_slug
+// cannot trip — only entity_type_id changes. The DELETE's subquery selects FROM
+// entities (not entity_types), so there is no MariaDB ER_UPDATE_TABLE_USED (1093)
+// self-reference issue that the old whole-table migration had to work around.
+func (r *entityTypeRepository) MoveEntitiesAndDeleteType(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE entities SET entity_type_id = ? WHERE entity_type_id = ? AND campaign_id = ?`,
+		toTypeID, fromTypeID, campaignID)
+	if err != nil {
+		return 0, fmt.Errorf("reassigning entities: %w", err)
+	}
+	moved, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("checking rows affected: %w", err)
+	}
+
+	// Delete the now-empty source type. NOT EXISTS is belt-and-suspenders: the
+	// UPDATE above emptied it, but the guard means a still-populated type (e.g. a
+	// concurrent insert) is never dropped.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM entity_types
+		   WHERE id = ? AND campaign_id = ?
+		     AND NOT EXISTS (SELECT 1 FROM entities e WHERE e.entity_type_id = entity_types.id)`,
+		fromTypeID, campaignID); err != nil {
+		return 0, fmt.Errorf("deleting emptied type: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit move-and-delete: %w", err)
+	}
+	return moved, nil
 }
 
 // SlugExists returns true if an entity type with the given slug exists in the campaign.

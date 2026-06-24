@@ -109,6 +109,12 @@ type PluginHubAddon struct {
 	Installed      bool // Whether backing code exists (for showing Coming Soon vs toggle).
 	HasDashboard   bool
 	HasEntitySetup bool
+	// HasSetup is true when the addon has a registered SetupProvider (an
+	// extension settings/onboarding page). NeedsSetup is true when that page has
+	// outstanding, actionable checks for this campaign — the card shows a "Setup"
+	// nudge until the owner completes or dismisses it.
+	HasSetup  bool
+	NeedsSetup bool
 }
 
 // AddonLister lists addons for the plugin hub page. Avoids importing the addons

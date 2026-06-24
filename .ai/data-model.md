@@ -271,7 +271,7 @@ User --< CampaignMember >-- Campaign
 | campaign_id | CHAR(36) | FK -> campaigns.id ON DELETE CASCADE | |
 | addon_id | INT | FK -> addons.id ON DELETE CASCADE | |
 | enabled | BOOLEAN | DEFAULT true | |
-| config_json | JSON | NULL | Per-campaign addon config |
+| config_json | JSON | NULL | Per-campaign addon config. The `"setup"` key holds the extension-settings state `{completed, dismissed, answers}` (ADR-043) — no schema change; read-merge-written via `UpdateCampaignConfig`. |
 | enabled_at | TIMESTAMP | DEFAULT NOW() | |
 | enabled_by | CHAR(36) | NULL | User who enabled it |
 | UNIQUE(campaign_id, addon_id) | | | |

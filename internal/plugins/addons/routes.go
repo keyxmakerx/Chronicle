@@ -32,4 +32,12 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 
 	// Toggle addon on/off for campaign.
 	cg.PUT("/addons/:addonID/toggle", h.ToggleCampaignAddon, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Per-extension settings / onboarding pages (see setup_handler.go). These
+	// are NEW leaves under the /extensions/:slug prefix on this (addons) group;
+	// the campaigns plugin owns /extensions, /extensions/fragment and
+	// /extensions/:slug/dashboard — distinct full paths, so Echo allows both.
+	cg.GET("/extensions/:slug/settings", h.ExtensionSettings, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/extensions/:slug/settings/apply", h.ApplyExtensionSettings, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/extensions/:slug/settings/dismiss", h.DismissExtensionSetup, campaigns.RequireRole(campaigns.RoleOwner))
 }

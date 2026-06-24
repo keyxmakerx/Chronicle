@@ -566,6 +566,35 @@ type UpdateEntityTypeInput struct {
 	Claimable    *bool // New player-claim flag (nil = no change).
 }
 
+// PCSetupSnapshot is a read-only summary of a campaign's player-character
+// category state, assembled by PlayerCharacterSetupSnapshot for the
+// player-character extension settings page. Owner-facing — entity counts
+// include all entities regardless of visibility.
+type PCSetupSnapshot struct {
+	// DefaultCharsParentID is the default top-level "Characters" category id, if present.
+	DefaultCharsParentID *int
+	// GenericPCTypes are generic premade player_character types (preset_category
+	// "player_character" or slug "player-character"). Normally 0 or 1; >1 = ambiguous.
+	GenericPCTypes []EntityType
+	// SystemCharTypes are a game system's own claimable character types
+	// (e.g. drawsteel-character). Normally 0 or 1; >1 = ambiguous.
+	SystemCharTypes []EntityType
+	// GenericPCCount / SystemCharCount are total entity counts across those types.
+	GenericPCCount  int
+	SystemCharCount int
+	// SubCategoryCount is the number of sub-categories nested under "Characters".
+	SubCategoryCount int
+}
+
+// MergeResult reports the outcome of MergeDuplicatePlayerCharacterType.
+type MergeResult struct {
+	Moved         int    // entities reassigned from the generic onto the system type
+	RemovedTypeID int    // the deleted generic type's id (0 if nothing removed)
+	TargetTypeID  int    // the surviving system character type's id (0 if no merge)
+	TargetName    string // the surviving type's display name (e.g. "Heroes")
+	NoOp          bool   // true when there was nothing to reconcile
+}
+
 // ClaimRoster carries the GM owner-overview data for a claimable category
 // dashboard (PC-CLAIM-3). It is assembled by the Index handler ONLY for a
 // Scribe+ viewer of a claimable entity type with the Player Character Claiming

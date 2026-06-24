@@ -67,6 +67,17 @@ type EntityService interface {
 	// "Player Character" type (with the dynamic character-surface layout). Called
 	// when the Player Character Claiming addon is enabled.
 	EnsurePlayerCharacterType(ctx context.Context, campaignID string) error
+	// PlayerCharacterSetupSnapshot returns a read-only summary of the campaign's
+	// player-character category state (generic vs system character types, entity
+	// counts, sub-categories) for the player-character extension settings page.
+	PlayerCharacterSetupSnapshot(ctx context.Context, campaignID string) (PCSetupSnapshot, error)
+	// MergeDuplicatePlayerCharacterType reconciles the duplicate-category case
+	// (a generic "Player Characters" alongside a system character type) on demand:
+	// it moves the generic type's entities onto the system type and removes the
+	// emptied generic. Owner-triggered from the settings page (replaces the old
+	// silent boot migration). Idempotent; returns a human-readable conflict when
+	// the campaign has more than one of either category.
+	MergeDuplicatePlayerCharacterType(ctx context.Context, campaignID string) (MergeResult, error)
 	UpdateEntityType(ctx context.Context, id int, input UpdateEntityTypeInput) (*EntityType, error)
 	DeleteEntityType(ctx context.Context, id int) error
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
@@ -1032,6 +1043,107 @@ func (s *entityService) EnsurePlayerCharacterType(ctx context.Context, campaignI
 		return err
 	}
 	return nil
+}
+
+// PlayerCharacterSetupSnapshot returns a read-only summary of the campaign's
+// player-character category state. It classifies entity types with the SAME
+// predicates EnsurePlayerCharacterType uses (so the snapshot agrees with the
+// ensure path) and counts entities at Owner visibility (so private/dm-only
+// characters are included in the owner-facing wizard). No writes.
+func (s *entityService) PlayerCharacterSetupSnapshot(ctx context.Context, campaignID string) (PCSetupSnapshot, error) {
+	types, err := s.types.ListByCampaign(ctx, campaignID)
+	if err != nil {
+		return PCSetupSnapshot{}, apperror.NewInternal(fmt.Errorf("listing entity types: %w", err))
+	}
+	// Owner role (3), empty user → counts include all entities regardless of
+	// visibility (mirrors DeleteEntityType's count-all approach).
+	counts, err := s.entities.CountByType(ctx, campaignID, 3, "")
+	if err != nil {
+		return PCSetupSnapshot{}, apperror.NewInternal(fmt.Errorf("counting entities by type: %w", err))
+	}
+
+	var snap PCSetupSnapshot
+	for i := range types {
+		t := &types[i]
+		preset := ""
+		if t.PresetCategory != nil {
+			preset = *t.PresetCategory
+		}
+		// Same ordering as EnsurePlayerCharacterType: the default "Characters"
+		// parent first, then generic PC types, then a system's own character type.
+		switch {
+		case t.ParentTypeID == nil && t.Slug == DefaultCharacterTypeSlug:
+			id := t.ID
+			snap.DefaultCharsParentID = &id
+		case isPlayerCharacterType(preset, t.Slug):
+			snap.GenericPCTypes = append(snap.GenericPCTypes, *t)
+			snap.GenericPCCount += counts[t.ID]
+		case isClaimableType(t):
+			snap.SystemCharTypes = append(snap.SystemCharTypes, *t)
+			snap.SystemCharCount += counts[t.ID]
+		}
+	}
+	// Count sub-categories nested under the default "Characters" category.
+	if snap.DefaultCharsParentID != nil {
+		for i := range types {
+			if types[i].ParentTypeID != nil && *types[i].ParentTypeID == *snap.DefaultCharsParentID {
+				snap.SubCategoryCount++
+			}
+		}
+	}
+	return snap, nil
+}
+
+// MergeDuplicatePlayerCharacterType reconciles a duplicate player-character
+// category on demand (the owner-triggered replacement for the removed boot
+// migration 000030). It requires an UNAMBIGUOUS pair — exactly one generic
+// player_character type and exactly one system character type — and moves the
+// generic's entities onto the system type, then removes the emptied generic.
+// "Heroes wins": the system's own type survives so its terminology + sheet
+// renderer stand. Claims follow because they reference entities(id), not the
+// type. Idempotent: once the generic is gone, a re-run is a no-op success.
+func (s *entityService) MergeDuplicatePlayerCharacterType(ctx context.Context, campaignID string) (MergeResult, error) {
+	snap, err := s.PlayerCharacterSetupSnapshot(ctx, campaignID)
+	if err != nil {
+		return MergeResult{}, err
+	}
+
+	// Nothing to merge: no generic stray (already reconciled, or never existed).
+	if len(snap.GenericPCTypes) == 0 {
+		return MergeResult{NoOp: true}, nil
+	}
+	// Ambiguous: more than one of either category — the service can't safely pick
+	// the (from, to) pair. Surface a human-readable conflict (this also satisfies
+	// the deferred PC-DUP-GUARD-2 "human-readable error" ask).
+	if len(snap.GenericPCTypes) > 1 || len(snap.SystemCharTypes) > 1 {
+		return MergeResult{}, apperror.NewConflict(
+			"Couldn't merge automatically — this campaign has more than one player-character or system character category. " +
+				"Please consolidate them so exactly one of each remains, then try again.")
+	}
+	// No system character type to merge into — the generic already IS the single
+	// player-character category. Nothing to reconcile.
+	if len(snap.SystemCharTypes) == 0 {
+		return MergeResult{NoOp: true}, nil
+	}
+
+	generic := snap.GenericPCTypes[0]
+	system := snap.SystemCharTypes[0]
+
+	moved, err := s.types.MoveEntitiesAndDeleteType(ctx, campaignID, generic.ID, system.ID)
+	if err != nil {
+		return MergeResult{}, err
+	}
+
+	// Notify live consumers (sidebar/nav) that the generic type is gone.
+	removed := generic
+	s.events.PublishEntityTypeEvent("deleted", campaignID, &removed)
+
+	return MergeResult{
+		Moved:         int(moved),
+		RemovedTypeID: generic.ID,
+		TargetTypeID:  system.ID,
+		TargetName:    system.Name,
+	}, nil
 }
 
 // isClaimableType reports whether an entity_type is one a player can claim

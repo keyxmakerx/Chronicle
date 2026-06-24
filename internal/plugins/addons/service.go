@@ -55,6 +55,20 @@ type AddonService interface {
 	// SetSystemFinder injects the system manifest finder for self-healing
 	// addon registration. Optional — if nil, missing addons return an error.
 	SetSystemFinder(finder SystemManifestFinder)
+
+	// Extension settings / onboarding framework (see setup_provider.go).
+	// RegisterSetupProvider registers a per-addon SetupProvider at startup.
+	RegisterSetupProvider(p SetupProvider)
+	// SetupProviderFor returns the provider for an addon slug, if registered.
+	SetupProviderFor(slug string) (SetupProvider, bool)
+	// NeedsSetup reports whether the owner should be nudged to open this addon's
+	// settings page (provider exists, enabled, not done/dismissed, has an
+	// actionable check). Used for the Features-card "Setup" badge.
+	NeedsSetup(ctx context.Context, campaignID, addonSlug string) (bool, error)
+	// GetSetupState / SaveSetupState read and persist per-campaign setup state
+	// under campaign_addons.config_json["setup"].
+	GetSetupState(ctx context.Context, campaignID, addonSlug string) (SetupState, error)
+	SaveSetupState(ctx context.Context, campaignID, addonSlug string, state SetupState) error
 }
 
 // PresetApplier creates entity types from system presets when a game system
@@ -90,6 +104,7 @@ type addonService struct {
 	repo           AddonRepository
 	presetApplier  PresetApplier
 	systemFinder   SystemManifestFinder
+	setupProviders map[string]SetupProvider // addon slug -> settings/onboarding provider
 }
 
 // NewAddonService creates a new addon service.
