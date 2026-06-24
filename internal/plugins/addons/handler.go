@@ -177,6 +177,18 @@ func (h *Handler) ToggleCampaignAddon(c echo.Context) error {
 	// single source of truth for per-campaign toggle state.
 	if c.FormValue("redirect_to") == "extensions-hub" {
 		if middleware.IsHTMX(c) {
+			// On enable, if the addon exposes a settings page with outstanding
+			// setup, nudge the owner with a toast in the SAME response that
+			// refreshes the hub (so the new "Setup" badge appears alongside it).
+			if action == "enable" {
+				if addon, err := h.service.GetByID(ctx, addonID); err == nil && addon != nil {
+					if needs, _ := h.service.NeedsSetup(ctx, cc.Campaign.ID, addon.Slug); needs {
+						setSetupHXTrigger(c, "extensions-hub-refresh",
+							addon.Name+" needs setup — open it from the card.", "info")
+						return c.NoContent(http.StatusNoContent)
+					}
+				}
+			}
 			c.Response().Header().Set("HX-Trigger", "extensions-hub-refresh")
 			return c.NoContent(http.StatusNoContent)
 		}

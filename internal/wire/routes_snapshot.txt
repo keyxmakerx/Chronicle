@@ -244,6 +244,7 @@ GET	/export	internal/plugins/campaigns/routes.go
 GET	/extensions	internal/plugins/campaigns/routes.go
 GET	/extensions/:extID/assets/*	internal/extensions/routes.go
 GET	/extensions/:slug/dashboard	internal/plugins/campaigns/routes.go
+GET	/extensions/:slug/settings	internal/plugins/addons/routes.go
 GET	/extensions/fragment	internal/plugins/campaigns/routes.go
 GET	/favorite-ids	internal/plugins/entities/routes.go
 GET	/favorites	internal/plugins/bestiary/routes.go
@@ -470,6 +471,8 @@ POST	/entities/quick-create	internal/plugins/entities/routes.go
 POST	/entity-types	internal/plugins/entities/routes.go
 POST	/entity-types	internal/plugins/syncapi/routes.go
 POST	/events	internal/plugins/calendar/api_routes.go
+POST	/extensions/:slug/settings/apply	internal/plugins/addons/routes.go
+POST	/extensions/:slug/settings/dismiss	internal/plugins/addons/routes.go
 POST	/forgot-password	internal/plugins/auth/routes.go
 POST	/foundry-vtt/token/rotate	internal/plugins/foundry_vtt/routes.go
 POST	/groups	internal/plugins/campaigns/routes.go

@@ -302,6 +302,15 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 	}
 	result := make([]campaigns.PluginHubAddon, len(addonList))
 	for i, ca := range addonList {
+		// HasSetup: the registry is the single source of truth for which
+		// addons expose a settings/onboarding page. NeedsSetup: a per-campaign
+		// read (provider exists, enabled, not done/dismissed, actionable check)
+		// — best-effort for the badge, so a read error just leaves it false.
+		_, hasSetup := a.svc.SetupProviderFor(ca.AddonSlug)
+		needsSetup := false
+		if hasSetup {
+			needsSetup, _ = a.svc.NeedsSetup(ctx, campaignID, ca.AddonSlug)
+		}
 		result[i] = campaigns.PluginHubAddon{
 			AddonID:        ca.AddonID,
 			Slug:           ca.AddonSlug,
@@ -312,6 +321,8 @@ func (a *addonListerAdapter) ListForPluginHub(ctx context.Context, campaignID st
 			Installed:      ca.Installed,
 			HasDashboard:   campaigns.HasExtensionDashboard(ca.AddonSlug),
 			HasEntitySetup: campaigns.HasExtensionEntitySetup(ca.AddonSlug),
+			HasSetup:       hasSetup,
+			NeedsSetup:     needsSetup,
 		}
 	}
 	return result, nil
@@ -1859,6 +1870,12 @@ func (a *App) RegisterRoutes() {
 		slog.Error("failed to seed built-in addons", slog.String("error", err.Error()))
 	}
 	addonService.SetPresetApplier(newPresetApplier(entityService))
+	// Register per-extension settings/onboarding providers (the SetupProvider
+	// framework). The player-character provider drives the claiming addon's
+	// settings page: detect existing PCs / sub-categories / the duplicate-category
+	// artifact, choose the system vs a custom name, and merge the duplicate on
+	// demand (replacing the old silent boot migration).
+	addonService.RegisterSetupProvider(newPCSetupProvider(entityService))
 	// One-time, idempotent startup backfill: premake the claimable "Player
 	// Character" type for campaigns that enabled the claiming addon before its
 	// enable-effect shipped. Safe to run every boot (no-op where present);

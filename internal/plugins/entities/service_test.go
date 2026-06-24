@@ -22,6 +22,8 @@ type mockEntityTypeRepo struct {
 	deleteFn         func(ctx context.Context, id int) error
 	slugExistsFn     func(ctx context.Context, campaignID, slug string) (bool, error)
 	maxSortOrderFn   func(ctx context.Context, campaignID string) (int, error)
+
+	moveEntitiesAndDeleteTypeFn func(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 }
 
 func (m *mockEntityTypeRepo) Create(ctx context.Context, et *EntityType) error {
@@ -106,6 +108,13 @@ func (m *mockEntityTypeRepo) Delete(ctx context.Context, id int) error {
 		return m.deleteFn(ctx, id)
 	}
 	return nil
+}
+
+func (m *mockEntityTypeRepo) MoveEntitiesAndDeleteType(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error) {
+	if m.moveEntitiesAndDeleteTypeFn != nil {
+		return m.moveEntitiesAndDeleteTypeFn(ctx, campaignID, fromTypeID, toTypeID)
+	}
+	return 0, nil
 }
 
 func (m *mockEntityTypeRepo) SlugExists(ctx context.Context, campaignID, slug string) (bool, error) {
