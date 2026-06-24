@@ -193,6 +193,7 @@ GET	/dashboard-layout	internal/plugins/campaigns/routes.go
 GET	/data-hygiene	internal/plugins/admin/routes.go
 GET	/database	internal/plugins/admin/routes.go
 GET	/database/schema	internal/plugins/admin/routes.go
+GET	/database/status	internal/plugins/admin/routes.go
 GET	/demo/calendar	internal/app/routes.go
 GET	/demo/calendar/almanac	internal/app/routes.go
 GET	/demo/timeline/ledger	internal/app/routes.go

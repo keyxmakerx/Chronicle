@@ -58,6 +58,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// Database explorer.
 	admin.GET("/database", h.Database)
 	admin.GET("/database/schema", h.DatabaseSchemaAPI)
+	admin.GET("/database/status", h.DatabaseStatusAPI)
 	admin.POST("/database/migrations/apply", h.ApplyMigrationsAPI)
 
 	// SMTP settings (delegates to SMTP plugin handler).
