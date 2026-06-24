@@ -46,6 +46,28 @@ func migrationsDir(t *testing.T) string {
 	return dir
 }
 
+// TestExpectedCoreMigrationVersion_MatchesMax pins the health-check floor
+// (ExpectedCoreMigrationVersion, used in cmd/server/main.go) to the highest
+// on-disk core migration. It guards the drift that the 000030 incident exposed:
+// the constant was 29 while the newest migration was 30. If the constant lags
+// the real max, a deploy missing the newest migration passes a floor check it
+// should fail; if it leads, every normal boot fails the floor check. Reuses the
+// production HighestSourceVersion so the parse logic can't diverge.
+func TestExpectedCoreMigrationVersion_MatchesMax(t *testing.T) {
+	max, err := HighestSourceVersion(migrationsDir(t))
+	if err != nil {
+		t.Fatalf("scanning migrations: %v", err)
+	}
+	if max == 0 {
+		t.Fatal("no migrations found in db/migrations")
+	}
+	if ExpectedCoreMigrationVersion != max {
+		t.Fatalf("ExpectedCoreMigrationVersion = %d, but the highest db/migrations file is %d — "+
+			"update the constant in internal/database/migrate_state.go to match",
+			ExpectedCoreMigrationVersion, max)
+	}
+}
+
 // TestMigrations_AddonCategoryValues scans all .up.sql migration files for
 // INSERT or UPDATE statements that reference the addons table and validates
 // that any category values used are valid ENUM members. This prevents the

@@ -60,14 +60,16 @@ func main() {
 	// migrations are skipped. This eliminates the need to run migrate
 	// manually after deployment.
 
-	// Pre-migration backup: capture DB + media + Redis before applying any
-	// schema changes. When BACKUP_REQUIRED=1 the boot aborts on any
-	// capture failure; otherwise (legacy default) the failure is logged
-	// and migrations proceed. See ADR-035/ADR-036/ADR-037 in
-	// .ai/decisions.md for the policy.
+	// Pending-gated migration + pre-migration backup. MigrateWithBackup backs up
+	// ONLY when a migration is actually pending (no more backup-on-every-restart
+	// storm), and tolerates a database that is AHEAD of this build (a downgrade /
+	// rollback, or an accidentally-deleted-but-applied migration) by logging and
+	// starting anyway instead of crash-looping. When BACKUP_REQUIRED=1 a backup
+	// failure on the pending path aborts the boot. See ADR-035/036/037/044 +
+	// internal/database/migrate_state.go.
 	backupRequired := strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "1") ||
 		strings.EqualFold(getEnvDefault("BACKUP_REQUIRED", ""), "true")
-	preMigrateErr := database.PreMigrationBackup(db, database.HealthCheckConfig{
+	if err := database.MigrateWithBackup(db, cfg.Database.DSN(), "db/migrations", database.HealthCheckConfig{
 		BackupDir:      cfg.BackupDir,
 		BackupRequired: backupRequired,
 		MediaPath:      cfg.Upload.MediaPath,
@@ -76,29 +78,15 @@ func main() {
 		DBHost:         cfg.Database.Host,
 		DBUser:         cfg.Database.User,
 		DBPassword:     cfg.Database.Password,
-	})
-	if preMigrateErr != nil {
-		if backupRequired {
-			slog.Error("pre-migration backup failed and BACKUP_REQUIRED=1; refusing to apply migrations",
-				slog.Any("error", preMigrateErr),
-			)
-			os.Exit(1)
-		}
-		slog.Warn("pre-migration backup failed (non-fatal in default mode); migrations will still apply",
-			slog.Any("error", preMigrateErr),
-		)
-	}
-
-	if err := database.RunMigrations(db, cfg.Database.DSN(), "db/migrations"); err != nil {
-		slog.Error("failed to run migrations", slog.Any("error", err))
-		os.Exit(1)
+	}); err != nil {
+		fatalBoot("failed to run migrations", err)
 	}
 
 	// --- Startup Health Checks ---
 	// Validates migration version, schema columns, DB health, and security.
 	// Server refuses to start if any fatal check fails.
 	if err := database.RunStartupHealthChecks(db, database.HealthCheckConfig{
-		ExpectedMigrationVersion: 29,
+		ExpectedMigrationVersion: database.ExpectedCoreMigrationVersion,
 		CriticalColumns: map[string][]string{
 			"campaigns":        {"id", "name", "slug", "archived_at", "join_code", "settings", "sidebar_config"},
 			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility", "owner_user_id", "map_id"},
@@ -134,8 +122,7 @@ func main() {
 			campaigns.ScanSmokeTest(),
 		},
 	}); err != nil {
-		slog.Error("startup health checks failed", slog.Any("error", err))
-		os.Exit(1)
+		fatalBoot("startup health checks failed", err)
 	}
 
 	// --- Run Plugin Migrations ---
@@ -248,6 +235,35 @@ func getEnvDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// fatalBoot logs an unrecoverable boot error and exits — but first sleeps a
+// backoff (BOOT_FAIL_BACKOFF, default 45s) so that a `restart: unless-stopped`
+// container retries at ~1/min instead of hot-looping ~60/min (which floods logs
+// and disk — the 000030 incident produced ~6 pre-migration backups per minute
+// this way). Use ONLY for errors that won't fix themselves on a fast retry
+// (bad migration/schema state, failed health checks, misconfiguration).
+// Transient dependency waits (e.g. DB not ready yet) intentionally keep exiting
+// fast so the orchestrator can retry quickly.
+func fatalBoot(msg string, err error) {
+	slog.Error(msg, slog.Any("error", err))
+	backoff := 45 * time.Second
+	if raw := getEnvDefault("BOOT_FAIL_BACKOFF", ""); raw != "" {
+		if d, perr := time.ParseDuration(raw); perr == nil {
+			backoff = d
+		} else {
+			slog.Warn("invalid BOOT_FAIL_BACKOFF; using default",
+				slog.String("value", raw), slog.Duration("default", backoff))
+		}
+	}
+	if backoff > 0 {
+		slog.Error("unrecoverable boot error — sleeping before exit to avoid a restart hot-loop",
+			slog.Duration("backoff", backoff),
+			slog.String("hint", "fix the underlying issue or roll back the image; see docs/deployment.md"),
+		)
+		time.Sleep(backoff)
+	}
+	os.Exit(1)
 }
 
 // via Go's embed package, ensuring they're available in the compiled binary
