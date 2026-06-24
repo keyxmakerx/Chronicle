@@ -24,6 +24,11 @@ type DatabaseExplorer interface {
 	// GetMigrationStatus returns the migration status for each plugin.
 	GetMigrationStatus(ctx context.Context) ([]PluginMigrationStatus, error)
 
+	// GetCoreMigrationStatus returns the core schema_migrations state relative to
+	// what this build ships (current version, dirty flag, pending count, and
+	// whether the DB is AHEAD of the build — a downgrade/rollback).
+	GetCoreMigrationStatus(ctx context.Context) (CoreMigrationStatus, error)
+
 	// ApplyPendingMigrations runs all pending plugin migrations and returns results.
 	ApplyPendingMigrations(ctx context.Context) ([]database.PluginMigrationResult, error)
 }
@@ -76,6 +81,48 @@ type PluginMigrationStatus struct {
 type MigrationHistory struct {
 	Version   int    `json:"version"`
 	AppliedAt string `json:"appliedAt"` // RFC3339
+}
+
+// CoreMigrationStatus describes the core (db/migrations) schema_migrations state
+// relative to what this build ships. Surfaced on the admin Database page and the
+// /admin/database/status JSON endpoint so an admin sees migration state without
+// reading boot logs.
+type CoreMigrationStatus struct {
+	Version  uint `json:"version"`  // current schema_migrations version (0 = fresh)
+	Dirty    bool `json:"dirty"`    // a migration failed partway
+	Highest  uint `json:"highest"`  // highest migration this build ships
+	Expected uint `json:"expected"` // the startup health-check floor
+	Pending  int  `json:"pending"`  // Highest - Version when behind, else 0
+	Ahead    bool `json:"ahead"`    // DB version > Highest (downgrade/rollback)
+}
+
+// GetCoreMigrationStatus reads the core schema_migrations state and compares it
+// to the highest migration shipped in this build. Reuses the same
+// database.DBMigrationVersion / database.HighestSourceVersion helpers the boot
+// path uses, so the admin view can never disagree with what the runner did.
+func (e *databaseExplorer) GetCoreMigrationStatus(_ context.Context) (CoreMigrationStatus, error) {
+	ver, dirty, verErr := database.DBMigrationVersion(e.db)
+	if verErr != nil {
+		// schema_migrations may not exist yet (fresh DB) — treat as version 0.
+		ver, dirty = 0, false
+	}
+	highest, err := database.HighestSourceVersion("db/migrations")
+	if err != nil {
+		return CoreMigrationStatus{}, fmt.Errorf("scanning core migrations: %w", err)
+	}
+	st := CoreMigrationStatus{
+		Version:  ver,
+		Dirty:    dirty,
+		Highest:  highest,
+		Expected: database.ExpectedCoreMigrationVersion,
+	}
+	switch {
+	case ver > highest:
+		st.Ahead = true
+	case highest > ver:
+		st.Pending = int(highest - ver)
+	}
+	return st, nil
 }
 
 // databaseExplorer implements DatabaseExplorer with direct DB access.

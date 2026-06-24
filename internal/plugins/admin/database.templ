@@ -9,7 +9,7 @@ import (
 )
 
 // AdminDatabasePage renders the database explorer with migration status and schema visualization.
-templ AdminDatabasePage(statuses []PluginMigrationStatus, tableCount int, csrfToken string) {
+templ AdminDatabasePage(core CoreMigrationStatus, statuses []PluginMigrationStatus, tableCount int, csrfToken string) {
 	@layouts.App("Database - Admin") {
 		<div class="max-w-7xl mx-auto space-y-6">
 			<div class="flex items-center justify-between">
@@ -22,6 +22,43 @@ templ AdminDatabasePage(statuses []PluginMigrationStatus, tableCount int, csrfTo
 				<a href="/admin" class="text-sm text-fg-muted hover:text-accent">
 					<i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard
 				</a>
+			</div>
+
+			<!-- Core schema status -->
+			<div class="card p-4">
+				<div class="flex items-center justify-between">
+					<div>
+						<h2 class="section-header">Core schema</h2>
+						<p class="text-sm text-fg-secondary mt-1">
+							Version <span class="font-mono font-semibold text-fg">{ fmt.Sprintf("%d", core.Version) }</span>
+							of <span class="font-mono">{ fmt.Sprintf("%d", core.Highest) }</span> shipped in this build.
+							if core.Dirty {
+								<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>dirty</span>
+							}
+						</p>
+					</div>
+					<div>
+						if core.Ahead {
+							<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"><i class="fa-solid fa-rotate-left mr-1"></i>DB ahead of build</span>
+						} else if core.Pending > 0 {
+							<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">{ fmt.Sprintf("%d pending", core.Pending) }</span>
+						} else {
+							<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><i class="fa-solid fa-check mr-1"></i>up to date</span>
+						}
+					</div>
+				</div>
+				if core.Ahead {
+					<div class="mt-3 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 rounded-md p-3">
+						<i class="fa-solid fa-circle-info mr-1"></i>
+						This database is at version { fmt.Sprintf("%d", core.Version) } but this build only ships migrations up to { fmt.Sprintf("%d", core.Highest) } — you are likely running an <strong>older image than the one that last wrote this database</strong> (a downgrade/rollback). Chronicle started anyway because migrations are additive; features added after version { fmt.Sprintf("%d", core.Highest) } are unavailable until you deploy a newer build.
+					</div>
+				}
+				if core.Dirty {
+					<div class="mt-3 text-sm bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 rounded-md p-3">
+						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+						A migration failed partway and the schema is marked <strong>dirty</strong>. Restore the most recent pre-migration backup or repair manually before the next deploy (see docs/deployment.md §Rollback).
+					</div>
+				}
 			</div>
 
 			<!-- Migration Status -->

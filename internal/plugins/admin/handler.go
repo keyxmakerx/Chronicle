@@ -692,12 +692,20 @@ func (h *Handler) Database(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	var statuses []PluginMigrationStatus
+	var core CoreMigrationStatus
 	var tableCount int
 	if h.databaseExplorer != nil {
 		var err error
 		statuses, err = h.databaseExplorer.GetMigrationStatus(ctx)
 		if err != nil {
 			slog.Warn("failed to get migration status", slog.Any("error", err))
+		}
+
+		// Core schema_migrations state (version, dirty, pending, DB-ahead).
+		if cs, cerr := h.databaseExplorer.GetCoreMigrationStatus(ctx); cerr != nil {
+			slog.Warn("failed to get core migration status", slog.Any("error", cerr))
+		} else {
+			core = cs
 		}
 
 		// Quick table count for the page header.
@@ -710,7 +718,29 @@ func (h *Handler) Database(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, AdminDatabasePage(statuses, tableCount, csrfToken))
+	return middleware.Render(c, http.StatusOK, AdminDatabasePage(core, statuses, tableCount, csrfToken))
+}
+
+// DatabaseStatusAPI returns core + plugin migration status as JSON
+// (GET /admin/database/status). Usable by external monitoring/alerting as well
+// as the admin page.
+func (h *Handler) DatabaseStatusAPI(c echo.Context) error {
+	if h.databaseExplorer == nil {
+		return apperror.NewInternal(fmt.Errorf("database explorer not configured"))
+	}
+	ctx := c.Request().Context()
+	core, err := h.databaseExplorer.GetCoreMigrationStatus(ctx)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("core migration status: %w", err))
+	}
+	plugins, err := h.databaseExplorer.GetMigrationStatus(ctx)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("plugin migration status: %w", err))
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"core":    core,
+		"plugins": plugins,
+	})
 }
 
 // DatabaseSchemaAPI returns the full schema as JSON (GET /admin/database/schema).
