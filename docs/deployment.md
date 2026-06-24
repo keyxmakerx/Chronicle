@@ -190,6 +190,35 @@ about.
 Three scenarios. All use the existing health-check gate plus the
 pre-migration backup. **No new server code is ever needed for a rollback.**
 
+### Downgrade / rollback behavior (ADR-045)
+
+As of the migration-robustness work, an **image downgrade no longer crash-loops**.
+When you pull an OLDER image whose migration set is behind the database's recorded
+version, the boot runner (`MigrateWithBackup`) detects "DB ahead of build", logs a
+loud warning (`database is AHEAD of this build — skipping migrations and starting
+anyway`), and **starts normally**. Migrations are additive, so the older binary runs
+fine on the newer schema; features added after the build's highest migration are
+simply unavailable until you redeploy a newer image. You can confirm the state in the
+admin UI at **`/admin/database`** (the "Core schema" card shows a "DB ahead of build"
+banner) or via `GET /admin/database/status`.
+
+You only need a **DB rollback** (restore a pre-migration backup) if the newer version
+had *dropped or renamed* a column the older build reads — in that case the startup
+health checks fail fast with a precise "critical column" error rather than serving a
+broken app.
+
+Two related boot behaviors:
+
+- **Dirty database** (a migration failed partway): the runner now **fails fast** with
+  restore guidance instead of auto-forcing-and-retrying (which could loop forever on a
+  non-idempotent migration). Restore the most recent pre-migration backup or repair
+  `schema_migrations` manually, then redeploy.
+- **Boot-failure backoff** (`BOOT_FAIL_BACKOFF`, default `45s`): on any unrecoverable
+  boot error the process sleeps before `os.Exit(1)`, so a `restart: unless-stopped`
+  container retries ~1/min instead of hot-looping ~60/min (which floods logs/disk —
+  the `000030` incident produced ~6 pre-migration backups per minute this way). Set it
+  lower in dev (e.g. `BOOT_FAIL_BACKOFF=2s`).
+
 ### Scenario A — server failed health checks at boot (most common)
 
 The chronicle container `os.Exit(1)`'d cleanly without serving any

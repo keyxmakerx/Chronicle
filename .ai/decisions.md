@@ -1770,3 +1770,60 @@ gone, a re-run is a no-op success).
 `PlayerCharacterSetupSnapshot`), `entities/repository.go` (`MoveEntitiesAndDeleteType`),
 `app/setup_pc.go` (the provider), ADR-043, ADR-039 (PC claiming).
 
+---
+
+## ADR-045: Migration robustness — fail-safe boot, append-only guards, schema-only policy
+
+**Status.** Accepted (2026-06-24). The durable fix for the `000030` incident (ADR-044).
+
+**Context.** Deleting an applied migration crash-looped production. Root cause was THREE
+things: (1) golang-migrate's `Up()` hard-errors when the DB version exceeds the on-disk
+source's highest version — this fires on a deleted migration AND on a normal image rollback;
+(2) `restart: unless-stopped` turns any fatal boot into a ~1/sec loop; (3) the pre-migration
+backup ran unconditionally before every boot, so each loop iteration wrote a full dump (the
+"6 backups/min" symptom). Audit also found a live `ExpectedMigrationVersion` drift (29 vs the
+real max 30) and 15 historical migrations using non-idempotent `ADD COLUMN`.
+
+**Decision — three layers.**
+
+1. **Runtime (boot fails safe, never crash-loops).** `database.MigrateWithBackup`
+   (`internal/database/migrate_state.go`) replaces the unconditional backup-then-migrate
+   sequence. It reads the DB version + highest on-disk migration ONCE, then:
+   - **DB ahead of the build** → log an actionable warning and **start anyway** (skip `Up()`).
+     Migrations are additive, so an older binary runs fine on a newer schema; the startup
+     health checks backstop a destructive rollback. Fixes the deletion case AND ordinary
+     image rollbacks.
+   - **up to date** → skip BOTH backup and `Up()` (ends the backup-on-every-restart storm).
+   - **pending** → back up, then migrate.
+   A **dirty** database now FAILS FAST with restore guidance (the old `Force(v-1)` auto-retry
+   looped forever on non-idempotent migrations). `fatalBoot` (`cmd/server/main.go`) sleeps
+   `BOOT_FAIL_BACKOFF` (default 45s) before exit so unrecoverable errors retry ~1/min.
+
+2. **CI guards (prevent the mistake).** `tools/check-migration-immutability.sh` (CI step)
+   fails any PR that deletes or edits a migration already on the base branch.
+   `internal/database/migrate_test.go` gains: version-pin (`ExpectedCoreMigrationVersion ==
+   max(core migration)`), idempotent-DDL lint (grandfathering the immutable historical files),
+   gapless numbering, and plugin up/down-pair coverage.
+
+3. **Visibility (admins see + act).** `/admin/database` surfaces the core migration version,
+   dirty flag, pending count, and a DB-ahead/downgrade banner; `GET /admin/database/status`
+   exposes the same as JSON for monitoring.
+
+**Policy — migrations are APPEND-ONLY and SCHEMA-ONLY.** Never delete, edit, or renumber a
+migration that any live DB may have applied (the immutability guard enforces this). New DDL
+must be idempotent (`IF [NOT] EXISTS`). One-time DATA corrections do NOT go in migrations —
+use an idempotent reconciler (an `EnsureX`/`MergeX` service method run from a boot backfill,
+an addon-enable hook, or an owner-triggered `SetupProvider`), as in `app/setup_pc.go` +
+`entities.MergeDuplicatePlayerCharacterType`. Reconcilers are idempotent, handle cases that
+arise later, and surface ambiguity to a human — none of which a one-shot data migration can do.
+
+**Consequences.** Upgrades and rollbacks "just work" or fail with a clear message; the incident
+class (delete/edit/renumber/gap/non-idempotent/version-drift) is blocked at PR time; admins
+manage migration state from a page. The historical `000030` stays (it's applied; the
+immutability guard enforces it can't be removed again).
+
+**References.** `internal/database/migrate_state.go`, `internal/database/migrate.go` (dirty
+fail-fast), `cmd/server/main.go` (`fatalBoot`), `internal/database/migrate_test.go` (guards),
+`tools/check-migration-immutability.sh`, `internal/plugins/admin/{database_service,handler,database.templ}`,
+ADR-044, ADR-028/030 (plugin migrations), ADR-037 (pre-migration backup).
+

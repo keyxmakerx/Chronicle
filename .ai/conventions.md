@@ -325,10 +325,32 @@ CREATE TABLE IF NOT EXISTS calendars ( ... );
    `maps`, `calendars`, etc.) crashes on a fresh DB. If a single data fix needs
    to span both layers, split it: the core part stays in `db/migrations/`, the
    plugin part moves to that plugin's `migrations/` directory.
-8. **`ALTER TABLE ADD COLUMN` must use `IF NOT EXISTS`**: bare `ADD COLUMN`
-   fails with "Error 1060: Duplicate column" if the dirty-state recovery path
-   re-runs the migration. Always write `ALTER TABLE t ADD COLUMN IF NOT EXISTS c ...`
-   so the migration is idempotent and auto-recovery is unconditionally safe.
+8. **Idempotent DDL (enforced)**: every `ADD COLUMN` / `CREATE TABLE` uses
+   `IF NOT EXISTS`; every `DROP COLUMN`/`DROP TABLE`/`DROP INDEX` uses `IF EXISTS`.
+   Bare DDL fails with "Error 1060: Duplicate column" (etc.) if a partially-applied
+   migration is ever re-run. `TestMigrations_IdempotentDDL` enforces this on new
+   migrations (historical offenders are grandfathered — they're immutable per #9).
+9. **Append-only / immutability**: NEVER delete, edit, or renumber a migration that
+   any live database may have applied. golang-migrate's `file://` source must contain
+   a file for EVERY version up to the DB's recorded version; removing one crash-loops
+   boot ("no migration found for version N" — the 000030 incident, ADR-044/045).
+   `tools/check-migration-immutability.sh` (a CI step) fails any PR that deletes or
+   edits an existing migration file.
+10. **Schema-only — data fixes are reconcilers, not migrations**: migrations are for
+    DDL. A one-time DATA correction (fixing/merging existing rows) belongs in an
+    IDEMPOTENT reconciler — an `EnsureX`/`MergeX` service method run from a boot
+    backfill, an addon-enable hook, or an owner-triggered `SetupProvider` (see
+    `app/setup_pc.go` + `entities.MergeDuplicatePlayerCharacterType`). A reconciler is
+    idempotent, handles cases that arise later, and surfaces ambiguity to a human; a
+    one-shot data migration does none of these (and is the kind most likely to be
+    "fixed" later by the edit/delete #9 forbids).
+11. **Boot runtime contract** (`database.MigrateWithBackup`, ADR-045): the pre-migration
+    backup runs ONLY when a migration is pending; a DB AHEAD of the build (downgrade /
+    rollback) logs a warning and boots anyway (migrations are additive); a DIRTY DB
+    fails fast with restore guidance; `fatalBoot` backs off (`BOOT_FAIL_BACKOFF`, 45s)
+    so unrecoverable boots don't hot-loop. Keep `ExpectedCoreMigrationVersion` (in
+    `migrate_state.go`) equal to the highest migration — `TestExpectedCoreMigrationVersion_MatchesMax`
+    enforces it.
 
 ### Permission Model
 
