@@ -1728,33 +1728,43 @@ calendar, maps) register with zero template changes.
 
 ## ADR-044: PC duplicate reconciliation moves from boot migration → owner-triggered Apply
 
-**Status.** Accepted (2026-06-24, supersedes the 2026-06-24 migration `000030`).
+**Status.** Accepted (2026-06-24). **Amended same day after a production incident** — the
+original draft proposed DELETING migration `000030`; that crash-looped prod and was reverted
+(`9990134`). The migration is RETAINED; the owner-driven path is additive.
 
 **Context.** A campaign could end up with BOTH a generic "Player Characters" type (holding the
 claimed character entities) and a game system's own character type (e.g. Draw Steel's empty
 "Heroes") — an enable-ordering artifact the non-destructive boot path nests but never merges.
-The first fix was a one-time, silent boot migration
-(`000030_consolidate_player_character_duplicate`) that auto-merged on deploy.
+The one-time, guarded boot migration `000030_consolidate_player_character_duplicate` auto-merges
+the unambiguous case (exactly one of each) on deploy.
 
-**Decision.** Remove migration `000030` (and its integration test) and re-home the merge into
-an owner-triggered, single-campaign service method `entities.MergeDuplicatePlayerCharacterType`
-(+ repo `MoveEntitiesAndDeleteType`, one transaction), surfaced as a check on the
-player-character extension settings page (ADR-043). The service classifies the unambiguous
-(generic → system) pair by `preset_category`/`slug`/`is_default` only (no system names), moves
-the generic's entities onto the system type (claims follow via `entities(id)`), and deletes
-the emptied generic. Ambiguity (more than one of either) returns a human-readable `apperror`
-(this also closes the deferred PC-DUP-GUARD-2). "Heroes wins": the system's own type survives
-so its terminology + sheet renderer stand. The owner additionally chooses the system name vs a
-custom name in the same wizard.
+**Decision.** KEEP migration `000030` permanently (it is applied in production DBs and is
+idempotent/guarded). ADDITIONALLY provide an owner-triggered, single-campaign service method
+`entities.MergeDuplicatePlayerCharacterType` (+ repo `MoveEntitiesAndDeleteType`, one
+transaction), surfaced as a check on the player-character extension settings page (ADR-043),
+for cases the one-time migration does NOT cover: ambiguous campaigns (more than one of either
+category → a human-readable `apperror`, closing the deferred PC-DUP-GUARD-2) and duplicates
+that arise AFTER the migration ran. It classifies the unambiguous (generic → system) pair by
+`preset_category`/`slug`/`is_default` only (no system names), moves the generic's entities onto
+the system type (claims follow via `entities(id)`), and deletes the emptied generic. "Heroes
+wins": the system's own type survives. The owner additionally chooses the system name vs a
+custom name in the same wizard. The two mechanisms are complementary, not exclusive.
 
-**Migration safety.** `000030` was the HIGHEST core migration and the health-check floor
-(`ExpectedMigrationVersion`) was never bumped past 29, so deleting it leaves a contiguous
-1..29 — no gap. An env already at recorded `version=30` is benign under `m.Up()` (`ErrNoChange`;
-`30 < 29` is false). A fresh DB simply never runs the silent merge — exactly the intent.
+**Migration safety (the lesson — a real incident).** The original draft proposed DELETING
+`000030`. That is UNSAFE and crash-looped production: golang-migrate's `file://` source
+(`internal/database/migrate.go`, `m.Up()`) must contain a migration file for EVERY version up
+to the DB's current recorded version. A prod DB already at `version=30` with no `000030` file
+on disk fails with `no migration found for version 30: read down for version 30: file does not
+exist` — an unrecoverable boot loop (the runner only auto-recovers `ErrDirty`, not a
+missing-version source; the health-floor check never even runs). **RULE: never delete or
+renumber a migration that any live database has applied — keep it forever, even when later
+superseded.** (Matches CLAUDE.md "Never edit an applied migration" — extend it to "never
+delete" one.)
 
-**Consequences.** The duplicate is reconciled when the owner opens the settings page and
-clicks Apply, with full visibility, instead of silently on the next deploy. The merge is
-idempotent (once the generic is gone, a re-run is a no-op success).
+**Consequences.** Existing prod duplicates are healed automatically by `000030` on deploy
+(unambiguous case) AND can be reconciled by the owner from the settings page (any case, full
+visibility). No migration is ever removed. The owner-merge is idempotent (once the generic is
+gone, a re-run is a no-op success).
 
 **References.** `entities/service.go` (`MergeDuplicatePlayerCharacterType`,
 `PlayerCharacterSetupSnapshot`), `entities/repository.go` (`MoveEntitiesAndDeleteType`),

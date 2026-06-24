@@ -74,6 +74,15 @@ jobs:
         # Needs full git history for the diff; fetch-depth: 0 above.
         run: ./tools/check-plugin-isolation.sh
 
+      - name: Migration immutability guard
+        # Per ADR-044 + the 2026-06-24 `000030` incident: migrations are
+        # APPEND-ONLY. Fails the PR if it DELETES or MODIFIES a migration file
+        # that already exists on the base branch (a live DB may have applied it;
+        # golang-migrate's file:// source must contain every version up to the
+        # DB's recorded version, or boot crash-loops). New migrations are fine.
+        # Diff-scoped; needs full git history (fetch-depth: 0 above).
+        run: ./tools/check-migration-immutability.sh
+
       - name: Templ drift guard (M-O3.1 family)
         # Per C-CI-GUARDS-PHASE-2 + cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md §0.5 D6.
         # Re-runs `templ generate` and fails if the working tree diverges
