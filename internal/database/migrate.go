@@ -52,34 +52,24 @@ func RunMigrations(appDB *sql.DB, dsn string, migrationsPath string) error {
 
 	err = m.Up()
 
-	// Handle dirty database state: a previous migration failed partway through.
-	// golang-migrate marks the version dirty and stops. We force the version
-	// back to the last clean state (dirty_version - 1) and retry, which
-	// re-runs the failed migration from the start.
-	//
-	// NOTE: This recovery is NOT automatically safe for all migrations. It is
-	// safe only when the failed migration is fully idempotent — i.e. every
-	// DDL statement uses IF NOT EXISTS / IF EXISTS / MODIFY rather than a
-	// bare CREATE or ALTER that would error on a second run. Migrations 28 and
-	// 29 (ALTER TABLE ADD COLUMN without IF NOT EXISTS) are NOT idempotent: a
-	// partial run followed by this retry path would fail with
-	// "Error 1060: Duplicate column". For new migrations, use
-	// ALTER TABLE ADD COLUMN IF NOT EXISTS (see .ai/conventions.md §Migration
-	// Safety Rules) to make dirty-state recovery unconditionally safe.
+	// Dirty database state: a previous migration failed partway and golang-migrate
+	// marked the version dirty. We FAIL FAST — we do NOT auto-force-and-retry.
+	// Many historical migrations use bare `ALTER ... ADD COLUMN` (non-idempotent),
+	// so re-running a partially-applied one dies on "Duplicate column" (Error 1060)
+	// and re-marks the version dirty — a permanent crash-loop. New migrations are
+	// idempotent (enforced by TestMigrations_IdempotentDDL), so the risk shrinks
+	// over time, but recovery from a dirty state is an explicit operator action:
+	// restore the most recent pre-migration backup, or repair schema_migrations
+	// manually (docs/deployment.md §Rollback), then redeploy. fatalBoot's backoff
+	// keeps this from hot-looping while the operator intervenes.
 	if err != nil {
 		var dirtyErr migrate.ErrDirty
 		if errors.As(err, &dirtyErr) {
-			slog.Warn("dirty migration state detected, forcing version and retrying",
-				slog.Int("dirty_version", dirtyErr.Version),
-			)
-			// Force to the previous clean version (dirty version - 1).
-			// If dirty_version is 1, force to -1 (no version / clean slate).
-			forceVersion := dirtyErr.Version - 1
-			if forceErr := m.Force(forceVersion); forceErr != nil {
-				return fmt.Errorf("forcing migration version %d: %w", forceVersion, forceErr)
-			}
-			// Retry migrations from the forced version.
-			err = m.Up()
+			return fmt.Errorf("database migration %d is DIRTY (a previous migration failed "+
+				"partway); automatic recovery is disabled because re-running a partially-applied "+
+				"migration can be unsafe. Restore the most recent pre-migration backup in "+
+				"BACKUP_DIR, or repair manually per docs/deployment.md §Rollback, then redeploy: %w",
+				dirtyErr.Version, err)
 		}
 	}
 
