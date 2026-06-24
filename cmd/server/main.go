@@ -19,7 +19,6 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/plugins/bestiary"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
-	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/foundry_vtt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
@@ -85,43 +84,9 @@ func main() {
 	// --- Startup Health Checks ---
 	// Validates migration version, schema columns, DB health, and security.
 	// Server refuses to start if any fatal check fails.
-	if err := database.RunStartupHealthChecks(db, database.HealthCheckConfig{
-		ExpectedMigrationVersion: database.ExpectedCoreMigrationVersion,
-		CriticalColumns: map[string][]string{
-			"campaigns":        {"id", "name", "slug", "archived_at", "join_code", "settings", "sidebar_config"},
-			"entities":         {"id", "campaign_id", "name", "slug", "entry", "entry_html", "fields_data", "visibility", "owner_user_id", "map_id"},
-			"users":            {"id", "email", "display_name", "password_hash"},
-			"campaign_members": {"campaign_id", "user_id", "role"},
-			// entity_notes was added by migration 23. Listing it here makes
-			// the boot fail fast if a deploy somehow lands without the
-			// migration applied — better than the widget rendering, the
-			// list query 500-ing, and the operator chasing a "delete is
-			// broken" bug report when the table just isn't there.
-			"entity_notes": {"id", "entity_id", "campaign_id", "author_user_id", "audience", "shared_with", "pinned"},
-			// content_hash (migration 26) powers per-campaign upload dedup;
-			// pinning it here means a deploy without the migration fails
-			// fast instead of every upload silently bypassing dedup and
-			// duplicating storage.
-			"media_files": {"id", "campaign_id", "uploaded_by", "filename", "mime_type", "file_size", "content_hash"},
-			// tag_permissions (migration 27) carries tag-based visibility
-			// grants; missing the table means ALL tag-grant paths 500.
-			"tag_permissions": {"id", "tag_id", "subject_type", "subject_id", "created_by", "created_at"},
-			// claimable (migration 29) is required by the PC-CLAIM ownership
-			// flow; a deploy without it means entity-type pages 500 on any
-			// claim-eligibility check.
-			"entity_types": {"id", "campaign_id", "name", "slug", "claimable"},
-		},
-		Env:        cfg.Env,
-		BaseURL:    cfg.BaseURL,
-		DBTLSMode:  cfg.Database.TLSMode,
-		DBPassword: cfg.Database.Password,
-		DBHost:     cfg.Database.Host,
-		DBUser:     cfg.Database.User,
-		DBName:     cfg.Database.Name,
-		SmokeTests: []database.SmokeTest{
-			campaigns.ScanSmokeTest(),
-		},
-	}); err != nil {
+	// The health-check config is shared with the admin Database > Health tab via
+	// app.StartupHealthCheckConfig, so the two surfaces never disagree.
+	if err := database.RunStartupHealthChecks(db, app.StartupHealthCheckConfig(cfg)); err != nil {
 		fatalBoot("startup health checks failed", err)
 	}
 

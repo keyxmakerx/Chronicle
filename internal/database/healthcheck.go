@@ -103,29 +103,26 @@ type CheckOutcome struct {
 	Message string
 }
 
+// RunHealthChecks executes all validation checks and returns the structured
+// result WITHOUT logging a summary or exiting. Used both by the boot wrapper
+// (RunStartupHealthChecks) and by the admin Database > Health tab to display the
+// same checks on demand.
+func RunHealthChecks(db *sql.DB, cfg HealthCheckConfig) *HealthCheckResult {
+	result := &HealthCheckResult{}
+	checkMigrationVersion(db, cfg, result)       // 1. Migration version.
+	checkCriticalColumns(db, cfg, result)        // 2. Critical schema columns.
+	checkDBHealth(db, result)                    // 3. Connectivity + performance.
+	checkSecurity(db, cfg, result)               // 4. Security audit.
+	checkSmokeTests(db, cfg, result)             // 5. SELECT+Scan smoke tests.
+	checkDataHygiene(db, result)                 // 6. Data-shape hygiene.
+	return result
+}
+
 // RunStartupHealthChecks executes all startup validation checks.
 // Returns an error if any fatal check fails (the server should not start).
 func RunStartupHealthChecks(db *sql.DB, cfg HealthCheckConfig) error {
 	slog.Info("running startup health checks...")
-	result := &HealthCheckResult{}
-
-	// 1. Migration version validation.
-	checkMigrationVersion(db, cfg, result)
-
-	// 2. Critical schema validation — verify expected columns exist.
-	checkCriticalColumns(db, cfg, result)
-
-	// 3. Database connectivity and performance.
-	checkDBHealth(db, result)
-
-	// 4. Security audit.
-	checkSecurity(db, cfg, result)
-
-	// 5. Smoke-test queries — verify critical SELECT+Scan patterns work.
-	checkSmokeTests(db, cfg, result)
-
-	// 6. Data-shape hygiene — invariants the FK schema can't enforce.
-	checkDataHygiene(db, result)
+	result := RunHealthChecks(db, cfg)
 
 	// Log summary.
 	for _, c := range result.Checks {

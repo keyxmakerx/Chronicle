@@ -59,6 +59,8 @@ type Handler struct {
 	securityService  SecurityService
 	hygieneScanner   DataHygieneScanner
 	databaseExplorer DatabaseExplorer
+	healthChecker    HealthChecker
+	backupLister     BackupLister
 	pendingCounter    PendingCounter
 	addonUsageCounter AddonUsageCounter
 	baseURL           string
@@ -126,6 +128,18 @@ func (h *Handler) SetHygieneScanner(scanner DataHygieneScanner) {
 // SetDatabaseExplorer wires the database explorer for the schema visualization page.
 func (h *Handler) SetDatabaseExplorer(explorer DatabaseExplorer) {
 	h.databaseExplorer = explorer
+}
+
+// SetHealthChecker injects the on-demand health-check runner for the Database >
+// Health tab. Optional — when nil the Health tab shows "unavailable".
+func (h *Handler) SetHealthChecker(checker HealthChecker) {
+	h.healthChecker = checker
+}
+
+// SetBackupLister injects the backup/restore data source for the Database >
+// Backups tab. Optional — when nil the Backups tab shows "unavailable".
+func (h *Handler) SetBackupLister(lister BackupLister) {
+	h.backupLister = lister
 }
 
 // SetBaseURL sets the public-facing base URL for the Foundry module admin page.
@@ -717,8 +731,22 @@ func (h *Handler) Database(c echo.Context) error {
 		}
 	}
 
+	var health *HealthResult
+	if h.healthChecker != nil {
+		health = h.healthChecker.RunChecks()
+	}
+
+	var backups BackupInfo
+	if h.backupLister != nil {
+		if bi, err := h.backupLister.BackupInfo(ctx); err != nil {
+			slog.Warn("failed to list backups", slog.Any("error", err))
+		} else {
+			backups = bi
+		}
+	}
+
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, AdminDatabasePage(core, statuses, tableCount, csrfToken))
+	return middleware.Render(c, http.StatusOK, AdminDatabasePage(core, statuses, health, backups, tableCount, csrfToken))
 }
 
 // DatabaseStatusAPI returns core + plugin migration status as JSON

@@ -1,142 +1,482 @@
-// database.templ renders the admin database explorer page with migration
-// status cards, an interactive D3.js schema diagram, and a table detail panel.
+// database.templ renders the admin Database page: a single, tabbed control
+// surface for everything an operator needs to reason about the database —
+// Migrations (core + plugin schema state, with a downgrade/dirty banner),
+// Health (the same checks boot runs, live), Backups (artifacts + restorable
+// snapshots, with create/download/restore actions), and Schema (the D3 graph).
+//
+// The four surfaces used to be scattered across boot logs, /admin/backup,
+// /admin/restore, and a schema-only page; this unifies them so an admin
+// recovers from a page, not from crash logs (ADR-045).
 
 package admin
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// AdminDatabasePage renders the database explorer with migration status and schema visualization.
-templ AdminDatabasePage(core CoreMigrationStatus, statuses []PluginMigrationStatus, tableCount int, csrfToken string) {
+// AdminDatabasePage renders the tabbed Database control surface.
+templ AdminDatabasePage(core CoreMigrationStatus, statuses []PluginMigrationStatus, health *HealthResult, backups BackupInfo, tableCount int, csrfToken string) {
 	@layouts.App("Database - Admin") {
-		<div class="max-w-7xl mx-auto space-y-6">
-			<div class="flex items-center justify-between">
+		<div class="max-w-7xl mx-auto space-y-5" x-data="{ tab: 'migrations' }">
+			<!-- Header -->
+			<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
 				<div>
-					<h1 class="text-2xl font-bold text-fg">Database Explorer</h1>
-					<p class="text-sm text-fg-secondary mt-1">
-						{ fmt.Sprintf("%d", tableCount) } tables &middot; Schema visualization and migration management.
+					<h1 class="text-xl font-bold text-fg">
+						<i class="fa-solid fa-database mr-2 text-indigo-500"></i>Database
+					</h1>
+					<p class="text-sm text-fg-secondary mt-0.5">
+						Core schema <span class="font-mono font-semibold text-fg">v{ fmt.Sprintf("%d", core.Version) }</span>
+						&middot; { fmt.Sprintf("%d", tableCount) } tables &middot; migrations, health, backups &amp; schema in one place.
 					</p>
 				</div>
-				<a href="/admin" class="text-sm text-fg-muted hover:text-accent">
+				<a href="/admin" class="text-sm text-fg-muted hover:text-accent shrink-0">
 					<i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard
 				</a>
 			</div>
 
-			<!-- Core schema status -->
-			<div class="card p-4">
-				<div class="flex items-center justify-between">
-					<div>
-						<h2 class="section-header">Core schema</h2>
-						<p class="text-sm text-fg-secondary mt-1">
-							Version <span class="font-mono font-semibold text-fg">{ fmt.Sprintf("%d", core.Version) }</span>
-							of <span class="font-mono">{ fmt.Sprintf("%d", core.Highest) }</span> shipped in this build.
-							if core.Dirty {
-								<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>dirty</span>
-							}
-						</p>
-					</div>
-					<div>
+			<!-- At-a-glance status strip -->
+			@dbStatusStrip(core, health, backups)
+
+			<!-- Tabs -->
+			<div class="border-b border-edge">
+				<nav class="flex gap-6 overflow-x-auto">
+					<button
+						@click="tab='migrations'"
+						:class="tab==='migrations' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
+						class="pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+					>
+						<i class="fa-solid fa-layer-group mr-1"></i> Migrations
 						if core.Ahead {
-							<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"><i class="fa-solid fa-rotate-left mr-1"></i>DB ahead of build</span>
-						} else if core.Pending > 0 {
-							<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">{ fmt.Sprintf("%d pending", core.Pending) }</span>
-						} else {
-							<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><i class="fa-solid fa-check mr-1"></i>up to date</span>
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">ahead</span>
+						} else if core.Dirty {
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">dirty</span>
+						} else if totalPending(core, statuses) > 0 {
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">{ fmt.Sprintf("%d", totalPending(core, statuses)) }</span>
 						}
-					</div>
-				</div>
-				if core.Ahead {
-					<div class="mt-3 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 rounded-md p-3">
-						<i class="fa-solid fa-circle-info mr-1"></i>
-						This database is at version { fmt.Sprintf("%d", core.Version) } but this build only ships migrations up to { fmt.Sprintf("%d", core.Highest) } — you are likely running an <strong>older image than the one that last wrote this database</strong> (a downgrade/rollback). Chronicle started anyway because migrations are additive; features added after version { fmt.Sprintf("%d", core.Highest) } are unavailable until you deploy a newer build.
-					</div>
-				}
-				if core.Dirty {
-					<div class="mt-3 text-sm bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 rounded-md p-3">
-						<i class="fa-solid fa-triangle-exclamation mr-1"></i>
-						A migration failed partway and the schema is marked <strong>dirty</strong>. Restore the most recent pre-migration backup or repair manually before the next deploy (see docs/deployment.md §Rollback).
-					</div>
-				}
+					</button>
+					<button
+						@click="tab='health'"
+						:class="tab==='health' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
+						class="pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+					>
+						<i class="fa-solid fa-heart-pulse mr-1"></i> Health
+						if health != nil && health.Errors > 0 {
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{ fmt.Sprintf("%d", health.Errors) }</span>
+						} else if health != nil && health.Warns > 0 {
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{ fmt.Sprintf("%d", health.Warns) }</span>
+						} else if health != nil {
+							<i class="fa-solid fa-check ml-1 text-[10px] text-emerald-500"></i>
+						}
+					</button>
+					<button
+						@click="tab='backups'"
+						:class="tab==='backups' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
+						class="pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+					>
+						<i class="fa-solid fa-box-archive mr-1"></i> Backups
+						if !backups.Enabled {
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-muted">off</span>
+						} else if len(backups.Artifacts) > 0 {
+							<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-secondary">{ fmt.Sprintf("%d", len(backups.Artifacts)) }</span>
+						}
+					</button>
+					<button
+						@click="tab='schema'; $nextTick(() => { var el = $refs.schemaMount; if (el && !el.getAttribute('data-widget') && window.Chronicle) { el.setAttribute('data-widget','db-explorer'); Chronicle.mountWidget(el); } })"
+						:class="tab==='schema' ? 'border-accent text-accent' : 'border-transparent text-fg-secondary hover:text-fg-body'"
+						class="pb-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+					>
+						<i class="fa-solid fa-diagram-project mr-1"></i> Schema
+						<span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-alt text-fg-secondary">{ fmt.Sprintf("%d", tableCount) }</span>
+					</button>
+				</nav>
 			</div>
 
-			<!-- Migration Status -->
-			if len(statuses) > 0 {
+			<!-- Panels -->
+			<div x-show="tab==='migrations'" x-cloak>
+				@dbMigrationsTab(core, statuses, csrfToken)
+			</div>
+			<div x-show="tab==='health'" x-cloak>
+				@dbHealthTab(health)
+			</div>
+			<div x-show="tab==='backups'" x-cloak>
+				@dbBackupsTab(backups, csrfToken)
+			</div>
+			<div x-show="tab==='schema'" x-cloak>
+				@dbSchemaTab()
+			</div>
+		</div>
+	}
+}
+
+// dbStatusStrip renders three at-a-glance cards (Migrations / Health / Backups)
+// so the most important state is visible before the operator picks a tab.
+templ dbStatusStrip(core CoreMigrationStatus, health *HealthResult, backups BackupInfo) {
+	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+		<!-- Migrations summary -->
+		<div class={ "card p-4 border-l-4", coreBorderClass(core) }>
+			<div class="flex items-center justify-between">
+				<span class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Migrations</span>
+				<i class={ "fa-solid", coreIcon(core), coreAccentText(core) }></i>
+			</div>
+			<p class="text-lg font-bold text-fg mt-1">
+				v{ fmt.Sprintf("%d", core.Version) }
+				<span class="text-sm font-normal text-fg-muted">/ { fmt.Sprintf("%d", core.Highest) }</span>
+			</p>
+			<p class="text-xs text-fg-secondary mt-0.5">{ coreSummary(core) }</p>
+		</div>
+
+		<!-- Health summary -->
+		<div class={ "card p-4 border-l-4", healthBorderClass(health) }>
+			<div class="flex items-center justify-between">
+				<span class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Health</span>
+				<i class={ "fa-solid", healthSummaryIcon(health), healthSummaryText(health) }></i>
+			</div>
+			if health != nil {
+				<p class="text-lg font-bold text-fg mt-1">
+					{ fmt.Sprintf("%d", health.Passed) } <span class="text-sm font-normal text-fg-muted">passed</span>
+				</p>
+				<p class="text-xs text-fg-secondary mt-0.5">
+					{ fmt.Sprintf("%d warnings · %d failures", health.Warns, health.Errors) }
+				</p>
+			} else {
+				<p class="text-lg font-bold text-fg-muted mt-1">—</p>
+				<p class="text-xs text-fg-secondary mt-0.5">Health checks unavailable.</p>
+			}
+		</div>
+
+		<!-- Backups summary -->
+		<div class="card p-4 border-l-4 border-l-slate-300 dark:border-l-slate-600">
+			<div class="flex items-center justify-between">
+				<span class="text-xs font-semibold text-fg-muted uppercase tracking-wider">Backups</span>
+				<i class="fa-solid fa-box-archive text-fg-muted"></i>
+			</div>
+			if !backups.Enabled {
+				<p class="text-lg font-bold text-fg-muted mt-1">Off</p>
+				<p class="text-xs text-fg-secondary mt-0.5">No backup directory configured.</p>
+			} else if backups.LastPreMigrate != nil {
+				<p class="text-lg font-bold text-fg mt-1">{ dbTimeAgo(backups.LastPreMigrate.ModTime) }</p>
+				<p class="text-xs text-fg-secondary mt-0.5">Last automatic pre-migration backup.</p>
+			} else if len(backups.Artifacts) > 0 {
+				<p class="text-lg font-bold text-fg mt-1">{ dbTimeAgo(backups.Artifacts[0].ModTime) }</p>
+				<p class="text-xs text-fg-secondary mt-0.5">Most recent backup artifact.</p>
+			} else {
+				<p class="text-lg font-bold text-fg-muted mt-1">None yet</p>
+				<p class="text-xs text-fg-secondary mt-0.5">No backups have run.</p>
+			}
+		</div>
+	</div>
+}
+
+// dbMigrationsTab renders core schema status, the per-plugin migration grid,
+// and the migration history timeline.
+templ dbMigrationsTab(core CoreMigrationStatus, statuses []PluginMigrationStatus, csrfToken string) {
+	<div class="space-y-5">
+		<!-- Core schema status -->
+		<div class="card p-4">
+			<div class="flex items-center justify-between">
 				<div>
-					<div class="flex items-center justify-between mb-3">
-						<h2 class="section-header">Plugin Migrations</h2>
-						if hasPendingMigrations(statuses) {
-							<button
-								hx-post="/admin/database/migrations/apply"
-								hx-confirm="Apply all pending plugin migrations? This will create new database tables."
-								hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
-								class="btn btn-sm btn-primary"
-							>
-								<i class="fa-solid fa-play mr-1"></i> Apply Pending Migrations
-							</button>
+					<h2 class="section-header">Core schema</h2>
+					<p class="text-sm text-fg-secondary mt-1">
+						Version <span class="font-mono font-semibold text-fg">{ fmt.Sprintf("%d", core.Version) }</span>
+						of <span class="font-mono">{ fmt.Sprintf("%d", core.Highest) }</span> shipped in this build.
+						if core.Dirty {
+							<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>dirty</span>
 						}
-					</div>
-					<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-						for _, s := range statuses {
-							@migrationStatusCard(s)
-						}
-					</div>
+					</p>
+				</div>
+				<div>
+					if core.Ahead {
+						<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"><i class="fa-solid fa-rotate-left mr-1"></i>DB ahead of build</span>
+					} else if core.Pending > 0 {
+						<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">{ fmt.Sprintf("%d pending", core.Pending) }</span>
+					} else {
+						<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><i class="fa-solid fa-check mr-1"></i>up to date</span>
+					}
+				</div>
+			</div>
+			if core.Ahead {
+				<div class="mt-3 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 rounded-md p-3">
+					<i class="fa-solid fa-circle-info mr-1"></i>
+					This database is at version { fmt.Sprintf("%d", core.Version) } but this build only ships migrations up to { fmt.Sprintf("%d", core.Highest) } — you are likely running an <strong>older image than the one that last wrote this database</strong> (a downgrade/rollback). Chronicle started anyway because migrations are additive; features added after version { fmt.Sprintf("%d", core.Highest) } are unavailable until you deploy a newer build.
 				</div>
 			}
+			if core.Dirty {
+				<div class="mt-3 text-sm bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 rounded-md p-3">
+					<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+					A migration failed partway and the schema is marked <strong>dirty</strong>. Restore the most recent pre-migration backup or repair manually before the next deploy (see docs/deployment.md §Rollback).
+				</div>
+			}
+		</div>
 
-			<!-- Migration History Timeline -->
-			if hasMigrationHistory(statuses) {
-				<details class="group">
-					<summary class="text-xs text-fg-muted cursor-pointer hover:text-fg-secondary">
-						<i class="fa-solid fa-clock-rotate-left mr-1"></i>
-						Migration History
-						<i class="fa-solid fa-chevron-down text-[10px] ml-1 transition-transform group-open:rotate-180"></i>
-					</summary>
-					<div class="mt-3 card p-0 overflow-hidden">
-						<table class="w-full text-xs">
+		<!-- Plugin migrations -->
+		if len(statuses) > 0 {
+			<div>
+				<div class="flex items-center justify-between mb-3">
+					<h2 class="section-header">Plugin migrations</h2>
+					if hasPendingMigrations(statuses) {
+						<button
+							hx-post="/admin/database/migrations/apply"
+							hx-confirm="Apply all pending plugin migrations? This will create new database tables."
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+							class="btn btn-sm btn-primary"
+						>
+							<i class="fa-solid fa-play mr-1"></i> Apply Pending Migrations
+						</button>
+					}
+				</div>
+				<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+					for _, s := range statuses {
+						@migrationStatusCard(s)
+					}
+				</div>
+			</div>
+		}
+
+		<!-- Migration history timeline -->
+		if hasMigrationHistory(statuses) {
+			<details class="group">
+				<summary class="text-xs text-fg-muted cursor-pointer hover:text-fg-secondary">
+					<i class="fa-solid fa-clock-rotate-left mr-1"></i>
+					Migration history
+					<i class="fa-solid fa-chevron-down text-[10px] ml-1 transition-transform group-open:rotate-180"></i>
+				</summary>
+				<div class="mt-3 card p-0 overflow-hidden">
+					<table class="w-full text-xs">
+						<thead>
+							<tr class="border-b border-edge text-left text-fg-muted bg-surface-alt/50">
+								<th class="px-4 py-2">Plugin</th>
+								<th class="px-4 py-2">Version</th>
+								<th class="px-4 py-2">Applied At</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, s := range statuses {
+								for _, h := range s.History {
+									<tr class="border-b border-edge last:border-b-0">
+										<td class="px-4 py-1.5 font-medium text-fg capitalize">{ s.Slug }</td>
+										<td class="px-4 py-1.5 text-fg-secondary">v{ fmt.Sprintf("%d", h.Version) }</td>
+										<td class="px-4 py-1.5 text-fg-muted font-mono">{ h.AppliedAt }</td>
+									</tr>
+								}
+							}
+						</tbody>
+					</table>
+				</div>
+			</details>
+		}
+	</div>
+}
+
+// dbHealthTab renders the startup health checks as a live read — the same
+// checks the boot path runs, surfaced so an admin can confirm schema/security
+// state without reading container logs.
+templ dbHealthTab(health *HealthResult) {
+	if health == nil {
+		<div class="card text-center py-10">
+			<i class="fa-solid fa-heart-crack text-3xl text-fg-muted mb-2"></i>
+			<p class="text-sm text-fg-muted">Health checks are not available on this instance.</p>
+		</div>
+	} else {
+		<div class="space-y-4">
+			<!-- Summary row -->
+			<div class="flex flex-wrap items-center gap-3">
+				<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+					<i class="fa-solid fa-circle-check"></i> { fmt.Sprintf("%d passed", health.Passed) }
+				</div>
+				<div class={ "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium", warnChipClass(health.Warns) }>
+					<i class="fa-solid fa-triangle-exclamation"></i> { fmt.Sprintf("%d warnings", health.Warns) }
+				</div>
+				<div class={ "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium", failChipClass(health.Errors) }>
+					<i class="fa-solid fa-circle-xmark"></i> { fmt.Sprintf("%d failures", health.Errors) }
+				</div>
+				<div class="ml-auto flex items-center gap-3 text-xs text-fg-muted">
+					<a href="/admin/database/status" target="_blank" class="hover:text-accent"><i class="fa-solid fa-code mr-1"></i>JSON</a>
+					<a href="/admin/database" class="hover:text-accent"><i class="fa-solid fa-rotate mr-1"></i>Re-run</a>
+				</div>
+			</div>
+
+			<!-- Check list -->
+			if len(health.Checks) == 0 {
+				<div class="card text-center py-8">
+					<p class="text-sm text-fg-muted">No checks were run.</p>
+				</div>
+			} else {
+				<div class="card p-0 overflow-hidden divide-y divide-edge">
+					for _, ck := range health.Checks {
+						<div class={ "flex items-start gap-3 px-4 py-3 border-l-4", healthDotClass(ck.Status) }>
+							<i class={ "fa-solid mt-0.5", healthIcon(ck.Status), healthText(ck.Status) }></i>
+							<div class="min-w-0 flex-1">
+								<div class="flex items-center gap-2">
+									<span class="text-sm font-medium text-fg-body">{ ck.Name }</span>
+									<span class={ "inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", healthPillClass(ck.Status) }>{ ck.Status }</span>
+								</div>
+								if ck.Message != "" {
+									<p class="text-xs text-fg-secondary mt-0.5">{ ck.Message }</p>
+								}
+							</div>
+						</div>
+					}
+				</div>
+			}
+			<p class="text-xs text-fg-muted">
+				<i class="fa-solid fa-circle-info mr-1"></i>
+				These are the same checks the server runs at startup; a <strong>failure</strong> would prevent boot. They are evaluated live on each page load.
+			</p>
+		</div>
+	}
+}
+
+// dbBackupsTab renders backup artifacts and restorable snapshots, with create,
+// download, and restore actions. It surfaces the existing backup/restore plugin
+// flows (no new engine) — including the Auto vs Manual distinction.
+templ dbBackupsTab(backups BackupInfo, csrfToken string) {
+	if !backups.Enabled {
+		<div class="card text-center py-10">
+			<i class="fa-solid fa-box-open text-3xl text-fg-muted mb-2"></i>
+			<p class="text-sm text-fg-body font-medium">Backups are not configured.</p>
+			<p class="text-xs text-fg-muted mt-1">Set <code class="font-mono">BACKUP_DIR</code> to enable automatic pre-migration backups and on-demand snapshots. See docs/deployment.md §Backups.</p>
+		</div>
+	} else {
+		<div class="space-y-4">
+			<!-- Action bar -->
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<div class="text-sm text-fg-secondary">
+					if backups.LastPreMigrate != nil {
+						Last automatic pre-migration backup
+						<span class="font-medium text-fg-body">{ dbTimeAgo(backups.LastPreMigrate.ModTime) }</span>
+						(<span class="font-mono text-xs">{ backups.LastPreMigrate.Name }</span>).
+					} else {
+						No automatic pre-migration backup has run yet — the next pending migration will create one.
+					}
+				</div>
+				<div class="flex items-center gap-2 shrink-0">
+					<a href="/admin/backup" class="btn btn-sm btn-secondary"><i class="fa-solid fa-gear mr-1"></i> Backup settings</a>
+					<form method="POST" action="/admin/backup/run" hx-post="/admin/backup/run" hx-confirm="Start a backup now? This holds the request open until the backup finishes (up to 20 minutes)." class="inline">
+						<input type="hidden" name="csrf_token" value={ csrfToken }/>
+						<button type="submit" class="btn btn-sm btn-primary"><i class="fa-solid fa-plus mr-1"></i> Create backup</button>
+					</form>
+				</div>
+			</div>
+
+			<!-- Restorable snapshots -->
+			<div>
+				<div class="flex items-center justify-between mb-2">
+					<h2 class="section-header">Restorable snapshots</h2>
+					<a href="/admin/restore" class="text-xs text-accent hover:text-accent-hover"><i class="fa-solid fa-rotate-left mr-1"></i>Restore…</a>
+				</div>
+				if len(backups.Manifests) == 0 {
+					<div class="card text-center py-6">
+						<p class="text-sm text-fg-muted">No restorable snapshots found.</p>
+					</div>
+				} else {
+					<div class="card p-0 overflow-hidden">
+						<table class="w-full text-sm">
 							<thead>
-								<tr class="border-b border-edge text-left text-fg-muted bg-surface-alt/50">
-									<th class="px-4 py-2">Plugin</th>
-									<th class="px-4 py-2">Version</th>
-									<th class="px-4 py-2">Applied At</th>
+								<tr class="bg-surface-alt border-b border-edge text-left text-xs font-semibold text-fg-secondary uppercase tracking-wider">
+									<th class="px-4 py-2.5">Snapshot</th>
+									<th class="px-4 py-2.5 hidden sm:table-cell">Chronicle</th>
+									<th class="px-4 py-2.5 hidden sm:table-cell">Schema</th>
+									<th class="px-4 py-2.5">Created</th>
 								</tr>
 							</thead>
-							<tbody>
-								for _, s := range statuses {
-									for _, h := range s.History {
-										<tr class="border-b border-edge last:border-b-0">
-											<td class="px-4 py-1.5 font-medium text-fg capitalize">{ s.Slug }</td>
-											<td class="px-4 py-1.5 text-fg-secondary">v{ fmt.Sprintf("%d", h.Version) }</td>
-											<td class="px-4 py-1.5 text-fg-muted font-mono">{ h.AppliedAt }</td>
-										</tr>
-									}
+							<tbody class="divide-y divide-edge">
+								for _, m := range backups.Manifests {
+									<tr class="hover:bg-surface-alt transition-colors">
+										<td class="px-4 py-2.5">
+											<span class="font-mono text-xs text-fg-body">{ m.Name }</span>
+											if m.ParseError != "" {
+												<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" title={ m.ParseError }>unreadable</span>
+											}
+										</td>
+										<td class="px-4 py-2.5 hidden sm:table-cell text-fg-secondary">{ orDash(m.ChronicleVersion) }</td>
+										<td class="px-4 py-2.5 hidden sm:table-cell font-mono text-xs text-fg-secondary">{ orDash(m.MigrationVersion) }</td>
+										<td class="px-4 py-2.5 text-fg-muted" title={ m.ModTime.Format(time.RFC3339) }>{ dbTimeAgo(m.ModTime) }</td>
+									</tr>
 								}
 							</tbody>
 						</table>
 					</div>
-				</details>
-			}
-
-			<!-- Schema Diagram -->
-			<div class="card p-0 overflow-hidden">
-				<div class="px-5 py-3 border-b border-edge flex items-center justify-between">
-					<h2 class="text-sm font-semibold text-fg">Schema Diagram</h2>
-					<span class="text-xs text-fg-muted">Scroll to zoom &middot; Drag to pan &middot; Click a table for details</span>
-				</div>
-				<div
-					data-widget="db-explorer"
-					data-api-url="/admin/database/schema"
-					style="min-height: 600px;"
-				></div>
+				}
 			</div>
 
-			<!-- Table Detail Panel (populated by JS on node click) -->
-			<div id="table-detail" class="card hidden">
-				<p class="text-sm text-fg-muted p-6">Click a table in the diagram above to see its details.</p>
+			<!-- Backup artifacts -->
+			<div>
+				<h2 class="section-header mb-2">Backup files</h2>
+				if len(backups.Artifacts) == 0 {
+					<div class="card text-center py-6">
+						<p class="text-sm text-fg-muted">No backup files yet.</p>
+					</div>
+				} else {
+					<div class="card p-0 overflow-hidden">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="bg-surface-alt border-b border-edge text-left text-xs font-semibold text-fg-secondary uppercase tracking-wider">
+									<th class="px-4 py-2.5">File</th>
+									<th class="px-4 py-2.5 hidden sm:table-cell">Kind</th>
+									<th class="px-4 py-2.5">Size</th>
+									<th class="px-4 py-2.5 hidden md:table-cell">Created</th>
+									<th class="px-4 py-2.5 text-right">Actions</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-edge">
+								for _, a := range backups.Artifacts {
+									<tr class="hover:bg-surface-alt transition-colors">
+										<td class="px-4 py-2.5">
+											<div class="flex items-center gap-2">
+												<span class="font-mono text-xs text-fg-body truncate max-w-[260px]" title={ a.Name }>{ a.Name }</span>
+												if a.PreMigrate {
+													<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"><i class="fa-solid fa-robot text-[8px]"></i>Auto</span>
+												} else {
+													<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300"><i class="fa-solid fa-hand text-[8px]"></i>Manual</span>
+												}
+											</div>
+										</td>
+										<td class="px-4 py-2.5 hidden sm:table-cell">
+											<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-fg-secondary">{ a.Kind }</span>
+										</td>
+										<td class="px-4 py-2.5 text-fg-secondary">{ formatBytes(a.SizeBytes) }</td>
+										<td class="px-4 py-2.5 text-fg-muted hidden md:table-cell" title={ a.ModTime.Format(time.RFC3339) }>{ dbTimeAgo(a.ModTime) }</td>
+										<td class="px-4 py-2.5 text-right">
+											<a href={ templ.SafeURL(fmt.Sprintf("/admin/backup/files/%s", a.Name)) } class="text-accent hover:text-accent-hover text-sm">
+												<i class="fa-solid fa-download mr-1"></i>Download
+											</a>
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
 			</div>
 		</div>
 	}
+}
+
+// dbSchemaTab renders the interactive D3 schema diagram. The widget element is
+// lazily mounted on first activation (see the Schema tab button) so D3 reads a
+// real container width instead of the zero-width hidden-tab fallback.
+templ dbSchemaTab() {
+	<div class="space-y-4">
+		<div class="card p-0 overflow-hidden">
+			<div class="px-5 py-3 border-b border-edge flex items-center justify-between">
+				<h2 class="text-sm font-semibold text-fg">Schema diagram</h2>
+				<span class="text-xs text-fg-muted">Scroll to zoom &middot; Drag to pan &middot; Click a table for details</span>
+			</div>
+			<div
+				x-ref="schemaMount"
+				data-api-url="/admin/database/schema"
+				style="min-height: 600px;"
+			></div>
+		</div>
+
+		<!-- Table detail panel (populated by JS on node click) -->
+		<div id="table-detail" class="card hidden">
+			<p class="text-sm text-fg-muted p-6">Click a table in the diagram above to see its details.</p>
+		</div>
+	</div>
 }
 
 // migrationStatusCard renders a card for a single plugin's migration status.
@@ -167,6 +507,8 @@ templ migrationStatusCard(s PluginMigrationStatus) {
 	</div>
 }
 
+// --- helpers ---
+
 // hasPendingMigrations returns true if any plugin has pending migrations.
 func hasPendingMigrations(statuses []PluginMigrationStatus) bool {
 	for _, s := range statuses {
@@ -185,4 +527,212 @@ func hasMigrationHistory(statuses []PluginMigrationStatus) bool {
 		}
 	}
 	return false
+}
+
+// totalPending sums pending core + plugin migrations for the tab badge.
+func totalPending(core CoreMigrationStatus, statuses []PluginMigrationStatus) int {
+	total := core.Pending
+	for _, s := range statuses {
+		if s.Pending > 0 {
+			total += s.Pending
+		}
+	}
+	return total
+}
+
+// orDash returns the string, or an em-dash placeholder when empty.
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+// dbTimeAgo renders a compact relative time ("3h ago"), or "never" for a zero time.
+func dbTimeAgo(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	d := time.Since(t)
+	switch {
+	case d < 0:
+		return t.Format("Jan 2")
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	default:
+		return t.Format("Jan 2, 2006")
+	}
+}
+
+// coreBorderClass returns the left-border accent for the migrations summary card.
+func coreBorderClass(core CoreMigrationStatus) string {
+	switch {
+	case core.Dirty:
+		return "border-l-rose-400 dark:border-l-rose-500"
+	case core.Ahead:
+		return "border-l-amber-400 dark:border-l-amber-500"
+	case core.Pending > 0:
+		return "border-l-indigo-400 dark:border-l-indigo-500"
+	default:
+		return "border-l-emerald-400 dark:border-l-emerald-500"
+	}
+}
+
+// coreIcon / coreAccentText / coreSummary describe the migrations summary state.
+func coreIcon(core CoreMigrationStatus) string {
+	switch {
+	case core.Dirty:
+		return "fa-triangle-exclamation"
+	case core.Ahead:
+		return "fa-rotate-left"
+	case core.Pending > 0:
+		return "fa-arrow-up"
+	default:
+		return "fa-circle-check"
+	}
+}
+
+func coreAccentText(core CoreMigrationStatus) string {
+	switch {
+	case core.Dirty:
+		return "text-rose-500"
+	case core.Ahead:
+		return "text-amber-500"
+	case core.Pending > 0:
+		return "text-indigo-500"
+	default:
+		return "text-emerald-500"
+	}
+}
+
+func coreSummary(core CoreMigrationStatus) string {
+	switch {
+	case core.Dirty:
+		return "Schema is dirty — needs repair."
+	case core.Ahead:
+		return "DB is ahead of this build (rollback)."
+	case core.Pending == 1:
+		return "1 migration pending."
+	case core.Pending > 1:
+		return fmt.Sprintf("%d migrations pending.", core.Pending)
+	default:
+		return "Up to date."
+	}
+}
+
+// healthBorderClass / healthSummaryIcon / healthSummaryText style the health
+// summary card by worst severity.
+func healthBorderClass(h *HealthResult) string {
+	switch {
+	case h == nil:
+		return "border-l-slate-300 dark:border-l-slate-600"
+	case h.Errors > 0:
+		return "border-l-rose-400 dark:border-l-rose-500"
+	case h.Warns > 0:
+		return "border-l-amber-400 dark:border-l-amber-500"
+	default:
+		return "border-l-emerald-400 dark:border-l-emerald-500"
+	}
+}
+
+func healthSummaryIcon(h *HealthResult) string {
+	switch {
+	case h == nil:
+		return "fa-circle-question"
+	case h.Errors > 0:
+		return "fa-circle-xmark"
+	case h.Warns > 0:
+		return "fa-triangle-exclamation"
+	default:
+		return "fa-circle-check"
+	}
+}
+
+func healthSummaryText(h *HealthResult) string {
+	switch {
+	case h == nil:
+		return "text-fg-muted"
+	case h.Errors > 0:
+		return "text-rose-500"
+	case h.Warns > 0:
+		return "text-amber-500"
+	default:
+		return "text-emerald-500"
+	}
+}
+
+// warnChipClass / failChipClass dim the warning/failure chips to neutral when
+// their count is zero so a clean run reads as calm.
+func warnChipClass(n int) string {
+	if n > 0 {
+		return "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
+	}
+	return "bg-surface-alt text-fg-muted"
+}
+
+func failChipClass(n int) string {
+	if n > 0 {
+		return "bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300"
+	}
+	return "bg-surface-alt text-fg-muted"
+}
+
+// healthPillClass / healthIcon / healthText / healthDotClass style a single
+// check row by its pass/warn/fail status.
+func healthPillClass(status string) string {
+	switch status {
+	case "pass":
+		return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+	case "warn":
+		return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+	case "fail":
+		return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+	default:
+		return "bg-surface-alt text-fg-secondary"
+	}
+}
+
+func healthIcon(status string) string {
+	switch status {
+	case "pass":
+		return "fa-circle-check"
+	case "warn":
+		return "fa-triangle-exclamation"
+	case "fail":
+		return "fa-circle-xmark"
+	default:
+		return "fa-circle-question"
+	}
+}
+
+func healthText(status string) string {
+	switch status {
+	case "pass":
+		return "text-emerald-500"
+	case "warn":
+		return "text-amber-500"
+	case "fail":
+		return "text-rose-500"
+	default:
+		return "text-fg-muted"
+	}
+}
+
+func healthDotClass(status string) string {
+	switch status {
+	case "pass":
+		return "border-l-emerald-400 dark:border-l-emerald-500"
+	case "warn":
+		return "border-l-amber-400 dark:border-l-amber-500"
+	case "fail":
+		return "border-l-rose-400 dark:border-l-rose-500"
+	default:
+		return "border-l-edge"
+	}
 }
