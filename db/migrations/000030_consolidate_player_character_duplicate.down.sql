@@ -1,0 +1,6 @@
+-- Irreversible by design: 000030 is a one-time data reconciliation that MERGED a
+-- duplicate generic "Player Characters" type's entities into the system character
+-- type and DELETED the empty generic type. The original split (which entities
+-- belonged to the generic type, and that type's generated layout) is not
+-- recorded, so it cannot be reconstructed. This down migration is intentionally
+-- a no-op; restore from the pre-migration backup if you need the prior state.

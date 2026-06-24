@@ -51,6 +51,24 @@ Goal: restrict claiming to a "Player Characters" sub-type via an Owner-toggleabl
 addon; make claims visible (who claimed what); keep Foundry auto-claim working
 for player-owned PC actors.
 
+**Deferred follow-ups (from the 2026-06-24 duplicate consolidation):**
+- [ ] **Widen the duplicate guard → human-readable error (PC-DUP-GUARD-2)**: the
+  operator's "applicable error state that's human readable later". Today the
+  `CreateEntityType` guard only blocks a second `player_character`-preset type, so
+  when a SYSTEM character type (e.g. "Heroes", preset `character`) already serves as
+  the PC sub-category, a manual "Player Characters" can still be created → a second
+  category. Detect an existing claimable character sub-category (nested under
+  "Characters") generically and reject with a clear message. Keep it from blocking
+  the legit premake path. (Verified gap, 2026-06-24 agent.)
+- [ ] **`ApplySystemPresets` drops `preset.Fields` (PC-PRESET-FIELDS)**: enabling a
+  system creates its character type with an EMPTY `fields` schema (the attributes
+  EDIT form then shows no system fields). Add `Fields []FieldDefinition` to
+  `CreateEntityTypeInput`, persist in `CreateEntityType`, pass `preset.Fields` in
+  `preset_applier.go`. Then a non-destructive backfill to fill EXISTING system
+  types' `fields` (type schema only — never entity data). NOT a rendering issue (the
+  widget reads `custom_fields`, not the type schema), so this was deferred out of the
+  prod consolidation. Modular (reads whatever the enabled system ships).
+
 - [x] **Stage 1 — claim visibility (PC-CLAIM-1)**: distinct `entity.claimed` /
   `entity.owner_changed` audit actions (audit/model.go) + activity-feed labels &
   colors (audit/activity.templ); `ClaimEntity` records the real character name
