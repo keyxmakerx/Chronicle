@@ -1761,6 +1761,17 @@ renumber a migration that any live database has applied — keep it forever, eve
 superseded.** (Matches CLAUDE.md "Never edit an applied migration" — extend it to "never
 delete" one.)
 
+**Incident-response lesson (the fix that didn't land).** The `000030` restore was committed to
+the feature branch *after* PR #498 had already been **merged and closed** at the pre-restore
+commit (`e71706f`). The fix therefore sat on the branch, **never reaching `main`** — and the
+follow-up "correction" only edited the *already-merged* PR's body, which changes nothing in the
+tree. `main` stayed broken (missing `000030`, no robustness) until a **fresh** hotfix PR (#499)
+carried the restore in. **RULES:** (1) a post-merge fix needs a NEW PR — editing a merged PR is
+inert; (2) after shipping any incident fix, VERIFY it is actually on `main`
+(`git ls-tree origin/main -- db/migrations/` / check the merged SHA), don't assume the branch
+state equals `main`; (3) prefer **squash-merge** so a "deleted-then-restored within the branch"
+sequence can't merge at an intermediate broken commit.
+
 **Consequences.** Existing prod duplicates are healed automatically by `000030` on deploy
 (unambiguous case) AND can be reconciled by the owner from the settings page (any case, full
 visibility). No migration is ever removed. The owner-merge is idempotent (once the generic is
@@ -1805,9 +1816,28 @@ real max 30) and 15 historical migrations using non-idempotent `ADD COLUMN`.
    max(core migration)`), idempotent-DDL lint (grandfathering the immutable historical files),
    gapless numbering, and plugin up/down-pair coverage.
 
-3. **Visibility (admins see + act).** `/admin/database` surfaces the core migration version,
-   dirty flag, pending count, and a DB-ahead/downgrade banner; `GET /admin/database/status`
-   exposes the same as JSON for monitoring.
+3. **Visibility (admins see + act) — the unified Database page.** `/admin/database` is one
+   tabbed control surface (Alpine `x-data` tabs, the `storage.templ` pattern) so an operator
+   reasons about — and recovers from — the database from a page, not from crash logs:
+   - **Migrations** — core schema version + dirty flag + pending count + a DB-ahead/downgrade
+     banner (the runtime A3 state, made visible), plus the existing per-plugin grid + "Apply
+     Pending" + history.
+   - **Health** — the SAME `RunStartupHealthChecks` the boot path runs, rendered live with
+     pass/warn/fail pills. The runner was split: `database.RunHealthChecks` returns a structured
+     `HealthCheckResult` with no logging/exit, and `RunStartupHealthChecks` wraps it for boot.
+     The check config was extracted to `app.StartupHealthCheckConfig(cfg)` so **boot and the
+     admin tab share one definition and can never disagree.** `GET /admin/database/status`
+     exposes core+plugin status as JSON for external monitoring.
+   - **Backups** — the existing `backup`/`restore` plugins surfaced (no new engine): artifacts
+     with an **Auto** (pre-migration) vs **Manual** badge, restorable snapshots with their
+     Chronicle/schema versions, last-auto-backup recency, and create/download/restore actions.
+   - **Schema** — the D3 diagram, lazily mounted on first tab activation so it reads a real
+     container width instead of the hidden-tab zero-width fallback.
+
+   **Cross-plugin wiring stays decoupled** (the established `DatabaseExplorer` / ADR-042
+   `NPCSectionProvider` pattern): `admin` defines `HealthChecker` / `BackupLister` interfaces
+   (`database_health.go`); the app layer injects adapters (`internal/app/admin_db_adapters.go`)
+   over the boot health config and the backup/restore services, so `admin` imports neither.
 
 **Policy — migrations are APPEND-ONLY and SCHEMA-ONLY.** Never delete, edit, or renumber a
 migration that any live DB may have applied (the immutability guard enforces this). New DDL
@@ -1823,7 +1853,10 @@ manage migration state from a page. The historical `000030` stays (it's applied;
 immutability guard enforces it can't be removed again).
 
 **References.** `internal/database/migrate_state.go`, `internal/database/migrate.go` (dirty
-fail-fast), `cmd/server/main.go` (`fatalBoot`), `internal/database/migrate_test.go` (guards),
-`tools/check-migration-immutability.sh`, `internal/plugins/admin/{database_service,handler,database.templ}`,
-ADR-044, ADR-028/030 (plugin migrations), ADR-037 (pre-migration backup).
+fail-fast), `internal/database/healthcheck.go` (`RunHealthChecks` split), `cmd/server/main.go`
+(`fatalBoot`), `internal/database/migrate_test.go` (guards), `tools/check-migration-immutability.sh`,
+`internal/app/{health_config,admin_db_adapters}.go` (shared config + tab adapters),
+`internal/plugins/admin/{database_service,database_health,handler,database.templ}`,
+ADR-044, ADR-028/030 (plugin migrations), ADR-037 (pre-migration backup), ADR-042 (cross-plugin
+injection pattern).
 
