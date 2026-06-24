@@ -12,6 +12,7 @@ package admin
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -293,7 +294,7 @@ templ dbHealthTab(health *HealthResult) {
 					<i class="fa-solid fa-circle-xmark"></i> { fmt.Sprintf("%d failures", health.Errors) }
 				</div>
 				<div class="ml-auto flex items-center gap-3 text-xs text-fg-muted">
-					<a href="/admin/database/status" target="_blank" class="hover:text-accent"><i class="fa-solid fa-code mr-1"></i>JSON</a>
+					<a href="/admin/database/status" target="_blank" rel="noopener noreferrer" class="hover:text-accent"><i class="fa-solid fa-code mr-1"></i>JSON</a>
 					<a href="/admin/database" class="hover:text-accent"><i class="fa-solid fa-rotate mr-1"></i>Re-run</a>
 				</div>
 			</div>
@@ -440,7 +441,7 @@ templ dbBackupsTab(backups BackupInfo, csrfToken string) {
 										<td class="px-4 py-2.5 text-fg-secondary">{ formatBytes(a.SizeBytes) }</td>
 										<td class="px-4 py-2.5 text-fg-muted hidden md:table-cell" title={ a.ModTime.Format(time.RFC3339) }>{ dbTimeAgo(a.ModTime) }</td>
 										<td class="px-4 py-2.5 text-right">
-											<a href={ templ.SafeURL(fmt.Sprintf("/admin/backup/files/%s", a.Name)) } class="text-accent hover:text-accent-hover text-sm">
+											<a href={ templ.SafeURL(fmt.Sprintf("/admin/backup/files/%s", url.PathEscape(a.Name))) } class="text-accent hover:text-accent-hover text-sm">
 												<i class="fa-solid fa-download mr-1"></i>Download
 											</a>
 										</td>

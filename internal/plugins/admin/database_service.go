@@ -106,9 +106,14 @@ func (e *databaseExplorer) GetCoreMigrationStatus(_ context.Context) (CoreMigrat
 		// schema_migrations may not exist yet (fresh DB) — treat as version 0.
 		ver, dirty = 0, false
 	}
+	// Prefer the real on-disk max (what the boot runner compares against), but fall
+	// back to the compiled-in pinned version if the migrations dir isn't readable
+	// from the process cwd. A CI test pins ExpectedCoreMigrationVersion == max(on-disk
+	// migration), so the fallback is accurate — and it means a /admin/database view
+	// (this runs on every GET) never 500s or shows "v0/0" over a cwd/volume quirk.
 	highest, err := database.HighestSourceVersion("db/migrations")
-	if err != nil {
-		return CoreMigrationStatus{}, fmt.Errorf("scanning core migrations: %w", err)
+	if err != nil || highest == 0 {
+		highest = database.ExpectedCoreMigrationVersion
 	}
 	st := CoreMigrationStatus{
 		Version:  ver,
