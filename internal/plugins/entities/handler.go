@@ -2618,7 +2618,42 @@ func (h *Handler) BlockTypesAPI(c echo.Context) error {
 		// so no character-sheet de-dup is needed here.
 	}
 
+	// When a game system owns the character sheet — it registers a page renderer
+	// bound to the "character" preset_category, which takes over every character
+	// entity's show page — the generic core "character_surface" block is
+	// redundant, so drop it from the palette. The renderer registry is global
+	// (lookupEntityShowRenderer is not campaign-scoped), so once such a renderer
+	// is registered the generic block is overridden everywhere; hiding it here
+	// stays consistent with that. System-agnostic campaigns (no character
+	// renderer registered) keep the block.
+	systemOwnsCharacterSheet := false
+	if reg := globalEntityShowRendererRegistry; reg != nil {
+		_, systemOwnsCharacterSheet = reg.LookupByPresetCategory("character")
+	}
+	types = hideRedundantCharacterSurface(types, systemOwnsCharacterSheet)
+
 	return c.JSON(http.StatusOK, types)
+}
+
+// hideRedundantCharacterSurface drops the generic core "character_surface"
+// block from a palette block list when a game system already owns the character
+// sheet (systemOwnsCharacterSheet), so the editor doesn't offer a redundant
+// generic sheet next to the system's renderer. When no system character
+// renderer is registered it returns the list unchanged — the block stays
+// available for system-agnostic campaigns. Pure (no receiver) so it is unit
+// testable without an HTTP context.
+func hideRedundantCharacterSurface(types []BlockMeta, systemOwnsCharacterSheet bool) []BlockMeta {
+	if !systemOwnsCharacterSheet {
+		return types
+	}
+	kept := make([]BlockMeta, 0, len(types))
+	for _, t := range types {
+		if t.Type == "character_surface" {
+			continue
+		}
+		kept = append(kept, t)
+	}
+	return kept
 }
 
 // TemplateEditor renders the visual template editor for an entity type.
