@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 // Status represents the implementation status of a module.
@@ -87,10 +89,17 @@ func ScanPackageDir(dir string) {
 		if err != nil {
 			continue
 		}
+		// Pick the highest SEMVER version directory. os.ReadDir returns names
+		// sorted as strings, where "0.10.0" sorts BEFORE "0.0.9" — so taking the
+		// last alphabetical name silently loads the wrong (older) package once a
+		// double-digit component appears. Compare numerically instead.
 		var latestVersion string
 		for _, vDir := range versionDirs {
-			if vDir.IsDir() {
-				latestVersion = vDir.Name() // Last alphabetical = latest semver.
+			if !vDir.IsDir() {
+				continue
+			}
+			if latestVersion == "" || versionLess(latestVersion, vDir.Name()) {
+				latestVersion = vDir.Name()
 			}
 		}
 		if latestVersion == "" {
@@ -118,6 +127,33 @@ func ScanPackageDir(dir string) {
 	)
 }
 
+// versionLess reports whether version a is lower than version b, comparing
+// dot-separated numeric components so "0.0.9" < "0.10.0" (a plain string sort
+// gets this backwards). Components that aren't integers compare as 0; on an
+// otherwise exact tie it falls back to string comparison so selection stays
+// deterministic. Tolerant of arbitrary component counts ("1.2" vs "1.2.3").
+func versionLess(a, b string) bool {
+	pa := strings.Split(a, ".")
+	pb := strings.Split(b, ".")
+	n := len(pa)
+	if len(pb) > n {
+		n = len(pb)
+	}
+	for i := 0; i < n; i++ {
+		var ai, bi int
+		if i < len(pa) {
+			ai, _ = strconv.Atoi(pa[i])
+		}
+		if i < len(pb) {
+			bi, _ = strconv.Atoi(pb[i])
+		}
+		if ai != bi {
+			return ai < bi
+		}
+	}
+	return a < b
+}
+
 // Registry returns all discovered module manifests, sorted by name.
 // Returns nil if Init() has not been called.
 func Registry() []*SystemManifest {
@@ -139,7 +175,7 @@ func Find(id string) *SystemManifest {
 // FindSystem returns the live System instance for a given module ID,
 // or nil if not found or not yet instantiated. Only modules with
 // status "available" have live instances.
-func FindSystem(id string) System { 
+func FindSystem(id string) System {
 	if globalLoader == nil {
 		return nil
 	}
