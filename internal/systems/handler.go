@@ -47,6 +47,20 @@ func (h *SystemHandler) SetAddonService(svc addonChecker) {
 	h.addonSvc = svc
 }
 
+// ExtensionsHealthAPI returns read-only deployment health for every LOADED
+// system — the version + on-disk directory the loader actually serves from, plus
+// a content fingerprint (size + sha256 + mtime) of each widget/manifest file.
+// Admin-gated (registered on the admin route group). It exists to diagnose the
+// "Admin▸Packages says 0.13.0 but the old file renders" class of bug from the UI:
+// if loaded_version disagrees with the installed version, the in-memory registry
+// never picked up the install; if it agrees but a file hash is the old content,
+// the extraction is wrong. GET /admin/extensions/health
+func (h *SystemHandler) ExtensionsHealthAPI(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"systems": LoadedHealth(),
+	})
+}
+
 // resolveSystem extracts the :mod param and looks up the live system.
 // Checks global registry first, then campaign-specific custom systems.
 func (h *SystemHandler) resolveSystem(c echo.Context) System {

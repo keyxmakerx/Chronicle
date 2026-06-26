@@ -2964,6 +2964,11 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetAddonService(addonService)
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
 
+	// Admin-only deployment-health diagnostic: read-only fingerprints of the
+	// version + files each system loader is ACTUALLY serving, to catch the
+	// "Packages says X but the old file renders" mismatch from the UI.
+	adminGroup.GET("/extensions/health", systemHandler.ExtensionsHealthAPI)
+
 	// Wire system widgets into the template editor palette (deferred from
 	// block registry setup because systemHandler is created after entityHandler).
 	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler, sysHandler: systemHandler})
