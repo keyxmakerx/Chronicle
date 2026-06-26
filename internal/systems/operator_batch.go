@@ -243,8 +243,8 @@ func ParseBatch(raw string) (*BatchPlan, error) {
 	seen := make(map[string]bool, len(req.Calls)) // dedup identical (name,arg) work
 	for _, c := range req.Calls {
 		pc := PlannedCall{Name: strings.TrimSpace(c.Name), Arg: strings.TrimSpace(c.Arg)}
-		switch {
-		case pc.Name == "":
+		switch pc.Name {
+		case "":
 			pc.Status = PlanMissingName
 			pc.Note = "every call needs a \"name\""
 		default:
