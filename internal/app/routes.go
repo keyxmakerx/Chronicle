@@ -1938,6 +1938,15 @@ func (a *App) RegisterRoutes() {
 		if err := addonService.SeedInstalledAddons(context.Background()); err != nil {
 			slog.Error("failed to re-seed addons after system install", slog.Any("error", err))
 		}
+		// Rebuild + republish the entity-show-renderer registry so a newly
+		// installed/updated system's page renderers (e.g. a character sheet)
+		// take effect WITHOUT a server restart. Build fully, then publish — no
+		// observable half-built state for in-flight requests. (Bug 5a: previously
+		// registerManifestRenderers ran only at boot, so a package update's
+		// renderer binding required a restart.)
+		freshRegistry := entities.NewEntityShowRendererRegistry()
+		registerManifestRenderers(freshRegistry)
+		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	pkgHandler := packages.NewHandler(pkgService)

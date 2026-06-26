@@ -110,9 +110,9 @@ func TestEntityShowRendererRegistry_EmptyArgsAreNoops(t *testing.T) {
 // must return nil so show.templ falls through to block dispatch
 // instead of panicking.
 func TestLookupEntityShowRenderer_NilRegistry(t *testing.T) {
-	prev := globalEntityShowRendererRegistry
-	globalEntityShowRendererRegistry = nil
-	t.Cleanup(func() { globalEntityShowRendererRegistry = prev })
+	prev := globalEntityShowRendererRegistry.Load()
+	globalEntityShowRendererRegistry.Store(nil)
+	t.Cleanup(func() { globalEntityShowRendererRegistry.Store(prev) })
 
 	got := lookupEntityShowRenderer(EntityShowRenderContext{
 		EntityType: &EntityType{Slug: "anything"},
@@ -126,9 +126,9 @@ func TestLookupEntityShowRenderer_NilRegistry(t *testing.T) {
 // against handler bugs that pass a nil EntityType (shouldn't happen,
 // but a panic in dispatch would 500 the entire entity show page).
 func TestLookupEntityShowRenderer_NilEntityType(t *testing.T) {
-	prev := globalEntityShowRendererRegistry
-	globalEntityShowRendererRegistry = NewEntityShowRendererRegistry()
-	t.Cleanup(func() { globalEntityShowRendererRegistry = prev })
+	prev := globalEntityShowRendererRegistry.Load()
+	globalEntityShowRendererRegistry.Store(NewEntityShowRendererRegistry())
+	t.Cleanup(func() { globalEntityShowRendererRegistry.Store(prev) })
 
 	got := lookupEntityShowRenderer(EntityShowRenderContext{EntityType: nil})
 	if got != nil {
@@ -140,11 +140,11 @@ func TestLookupEntityShowRenderer_NilEntityType(t *testing.T) {
 // happy path: registry installed, EntityType present with slug, a
 // matching renderer registered → the helper returns its component.
 func TestLookupEntityShowRenderer_SlugDispatch(t *testing.T) {
-	prev := globalEntityShowRendererRegistry
+	prev := globalEntityShowRendererRegistry.Load()
 	reg := NewEntityShowRendererRegistry()
 	reg.Register("drawsteel-character", newMarkerRenderer("rendered!"))
-	globalEntityShowRendererRegistry = reg
-	t.Cleanup(func() { globalEntityShowRendererRegistry = prev })
+	globalEntityShowRendererRegistry.Store(reg)
+	t.Cleanup(func() { globalEntityShowRendererRegistry.Store(prev) })
 
 	got := lookupEntityShowRenderer(EntityShowRenderContext{
 		EntityType: &EntityType{Slug: "drawsteel-character"},

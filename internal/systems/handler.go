@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,7 +49,7 @@ func (h *SystemHandler) SetAddonService(svc addonChecker) {
 
 // resolveSystem extracts the :mod param and looks up the live system.
 // Checks global registry first, then campaign-specific custom systems.
-func (h *SystemHandler) resolveSystem(c echo.Context) System { 
+func (h *SystemHandler) resolveSystem(c echo.Context) System {
 	sysID := c.Param("mod")
 
 	// Check global built-in systems first.
@@ -359,7 +360,15 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 	}
 
 	c.Response().Header().Set("Content-Type", "application/javascript; charset=utf-8")
-	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	// A version-stamped request (?v=<pkg version>, emitted by
+	// GetSystemWidgetScriptURLs) is safe to cache hard + immutable: the URL itself
+	// changes whenever the package version changes, so a stale copy can never
+	// outlive an update. Unversioned/direct requests keep the conservative TTL.
+	if c.QueryParam("v") != "" {
+		c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	}
 	return c.Blob(http.StatusOK, "application/javascript", data)
 }
 
@@ -495,12 +504,19 @@ func (h *SystemHandler) GetSystemWidgetScriptURLs(ctx context.Context, campaignI
 	}
 
 	urls := make([]string, 0, total)
+	// Version-stamp every asset URL with the loaded package version so a package
+	// update changes the URL and the browser fetches fresh JS automatically — no
+	// hard-refresh, no incognito. Paired with an immutable cache on the serve side
+	// (WidgetScriptAPI). manifest.Version is set at install time (rewritten to the
+	// release tag, defaulting to "0.0.0"). Without this, the version-less URL +
+	// long cache served stale widget code after every update.
+	ver := url.QueryEscape(manifest.Version)
 	// Text renderers first — they define globals that widgets depend on.
 	for _, tr := range manifest.TextRenderers {
-		urls = append(urls, fmt.Sprintf("/campaigns/%s/systems/%s/widgets/%s.js", campaignID, manifest.ID, tr.Slug))
+		urls = append(urls, fmt.Sprintf("/campaigns/%s/systems/%s/widgets/%s.js?v=%s", campaignID, manifest.ID, tr.Slug, ver))
 	}
 	for _, w := range manifest.Widgets {
-		urls = append(urls, fmt.Sprintf("/campaigns/%s/systems/%s/widgets/%s.js", campaignID, manifest.ID, w.Slug))
+		urls = append(urls, fmt.Sprintf("/campaigns/%s/systems/%s/widgets/%s.js?v=%s", campaignID, manifest.ID, w.Slug, ver))
 	}
 	return urls
 }
