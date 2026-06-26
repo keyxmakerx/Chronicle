@@ -51,11 +51,12 @@ func SetInstalledPackagesProvider(fn func() []InstalledPackage) { installedPacka
 // ("modular and templated"). Run returns markdown; Arg is "" for no-argument
 // diagnostics.
 type Diagnostic struct {
-	Name    string                  // dotted id the assistant requests, e.g. "system.files"
-	Title   string                  // human title
-	Desc    string                  // one-line "what you get / when to use"
-	ArgHint string                  // "" when the diagnostic takes no argument
-	Run     func(arg string) string // produces the (pre-redaction) markdown result
+	Name     string                  // dotted id the assistant requests, e.g. "system.files"
+	Title    string                  // human title
+	Desc     string                  // one-line "what you get / when to use"
+	ArgHint  string                  // "" when the diagnostic takes no argument
+	FullDump bool                    // true = heavy/verbose; a batch must set full_dump:true to authorize it
+	Run      func(arg string) string // produces the (pre-redaction) markdown result
 }
 
 // diagnosticCatalog is the registry. Ordered cheapest/most-common first.
@@ -116,9 +117,10 @@ func diagnosticCatalog() []Diagnostic {
 			},
 		},
 		{
-			Name:  "system.health",
-			Title: "FULL systems health (all systems + all file hashes)",
-			Desc:  "The complete served-reality dump. Larger — request only when a targeted diagnostic isn't enough.",
+			Name:     "system.health",
+			Title:    "FULL systems health (all systems + all file hashes)",
+			Desc:     "The complete served-reality dump. Larger — request only when a targeted diagnostic isn't enough.",
+			FullDump: true,
 			Run: func(string) string {
 				var b strings.Builder
 				renderSystemsSection(&b, LoadedHealth())

@@ -55,6 +55,14 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 	// System diagnostics.
 	admin.GET("/systems", h.Systems)
 
+	// Operator AI workspace for diagnostics: copyable functions list +
+	// paste-an-AI-request → human-approve → run read-only. The bare
+	// /admin/diagnostics markdown/named-run endpoint is wired separately in
+	// app/routes.go on the systems handler; these are the in-chrome UI routes.
+	admin.GET("/diagnostics/workspace", h.DiagnosticsWorkspace)
+	admin.POST("/diagnostics/workspace/parse", h.DiagnosticsWorkspaceParse)
+	admin.POST("/diagnostics/workspace/run", h.DiagnosticsWorkspaceRun)
+
 	// Database explorer.
 	admin.GET("/database", h.Database)
 	admin.GET("/database/schema", h.DatabaseSchemaAPI)
