@@ -892,10 +892,27 @@ func (h *Handler) DiagnosticsWorkspaceRun(c echo.Context) error {
 			Raw: raw, Err: err.Error(), CSRFToken: middleware.GetCSRFToken(c),
 		}))
 	}
-	slog.Info("admin ran diagnostics batch", slog.Int("runnable", plan.RunnableN), slog.Int("calls", len(plan.Calls)))
-	return middleware.Render(c, http.StatusOK, DiagnosticsBatchResult(DiagnosticsResultData{
-		Result: systems.RunBatch(plan),
-	}))
+	result := systems.RunBatch(plan)
+
+	// Audit: site-admin diagnostics runs are logged to the security/activity
+	// feed with actor identity, IP, and UA. Counts + byte size only — never the
+	// diagnostic payload (mirrors ai_workspace's counts-only discipline).
+	if h.securityService != nil {
+		_ = h.securityService.LogEvent(c.Request().Context(), EventDiagnosticsBatchRun,
+			"", auth.GetUserID(c), c.RealIP(), c.Request().UserAgent(),
+			map[string]any{
+				"runnable":  plan.RunnableN,
+				"calls":     len(plan.Calls),
+				"full_dump": plan.Request.FullDump,
+				"bytes":     len(result),
+			})
+	}
+	slog.Info("admin ran diagnostics batch",
+		slog.Int("runnable", plan.RunnableN),
+		slog.Int("calls", len(plan.Calls)),
+		slog.Bool("full_dump", plan.Request.FullDump))
+
+	return middleware.Render(c, http.StatusOK, DiagnosticsBatchResult(DiagnosticsResultData{Result: result}))
 }
 
 // SecurityPageData holds all data needed for the security dashboard page.

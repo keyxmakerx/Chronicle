@@ -174,8 +174,78 @@ func TestRunBatch_ManifestAndFooter(t *testing.T) {
 	if !strings.Contains(out, "ran 1 function") {
 		t.Errorf("footer wrong: %q", lastLine(out))
 	}
-	if !strings.Contains(out, "bytes_") {
-		t.Error("footer missing byte count")
+	if !strings.Contains(out, "bytes ·") || !strings.Contains(out, "tokens_") {
+		t.Errorf("footer missing byte/token estimate: %q", lastLine(out))
+	}
+}
+
+// TestParseBatch_Dedup collapses identical (name,arg) calls so the batch runs
+// the work once (the MED output/CPU finding).
+func TestParseBatch_Dedup(t *testing.T) {
+	plan, err := ParseBatch(`{"calls":[
+	  {"name":"system.files","arg":"drawsteel"},
+	  {"name":"system.files","arg":"drawsteel"},
+	  {"name":"system.files","arg":"dnd5e"}
+	]}`)
+	if err != nil {
+		t.Fatalf("ParseBatch: %v", err)
+	}
+	if plan.RunnableN != 2 {
+		t.Errorf("RunnableN = %d, want 2 (one duplicate collapsed)", plan.RunnableN)
+	}
+	if plan.Calls[1].Status != PlanDuplicate {
+		t.Errorf("second identical call status = %q, want %q", plan.Calls[1].Status, PlanDuplicate)
+	}
+	// A different arg is NOT a duplicate.
+	if plan.Calls[2].Status != PlanOK {
+		t.Errorf("differing-arg call status = %q, want ok", plan.Calls[2].Status)
+	}
+}
+
+// TestRunBatch_Dedup proves a duplicate is reported in the manifest and not run twice.
+func TestRunBatch_Dedup(t *testing.T) {
+	plan, err := ParseBatch(`{"calls":[{"name":"system.versions"},{"name":"system.versions"}]}`)
+	if err != nil {
+		t.Fatalf("ParseBatch: %v", err)
+	}
+	out := RunBatch(plan)
+	if !strings.Contains(out, "duplicate") {
+		t.Error("manifest should mark the duplicate call")
+	}
+	if !strings.Contains(out, "ran 1 function") {
+		t.Errorf("duplicate should not run twice: %q", lastLine(out))
+	}
+}
+
+// TestParseBatch_ByteCap rejects an oversized paste before decoding.
+func TestParseBatch_ByteCap(t *testing.T) {
+	huge := `{"note":"` + strings.Repeat("A", maxBatchBytes) + `","calls":[{"name":"system.versions"}]}`
+	if _, err := ParseBatch(huge); err == nil {
+		t.Error("expected error for oversized request")
+	}
+}
+
+// TestSanitizeInline strips newlines and backticks and caps length.
+func TestSanitizeInline(t *testing.T) {
+	got := sanitizeInline("a`b\nc\rd")
+	if strings.ContainsAny(got, "`\n\r") {
+		t.Errorf("sanitizeInline left a control/backtick char: %q", got)
+	}
+	long := sanitizeInline(strings.Repeat("x", 500))
+	if len([]rune(long)) > 201 { // 200 + ellipsis
+		t.Errorf("sanitizeInline did not cap length: %d runes", len([]rune(long)))
+	}
+}
+
+// TestRunBatch_NoteSanitized ensures a crafted note can't corrupt the manifest
+// the AI reads (a newline must not split the "_Investigating:_" line).
+func TestRunBatch_NoteSanitized(t *testing.T) {
+	plan, err := ParseBatch("{\"note\":\"line1\\nline2`x\",\"calls\":[{\"name\":\"system.versions\"}]}")
+	if err != nil {
+		t.Fatalf("ParseBatch: %v", err)
+	}
+	if strings.ContainsAny(plan.Request.Note, "\n`") {
+		t.Errorf("note not sanitized at parse: %q", plan.Request.Note)
 	}
 }
 

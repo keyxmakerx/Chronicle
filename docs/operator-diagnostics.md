@@ -427,14 +427,27 @@ The loop has four steps, all on one page:
 
 - **Bounded toolset.** Only names in the live catalog run; unknown names surface
   as skipped rows (not an error). Unknown *top-level* keys are rejected so a
-  typo can't silently drop a field.
+  typo can't silently drop a field. Caps: 50 calls per batch, 64 KB per paste.
 - **Re-validated on run.** The approve step re-parses the original pasted text
-  server-side and re-derives runnability from the live catalog — it never trusts
-  a client-built plan, so a forged plan can't smuggle a gated call through.
+  server-side and re-derives runnability *and* deduplication from the live
+  catalog — it never trusts a client-built plan, so a forged plan can't smuggle
+  a gated call through.
+- **Deduplicated.** Identical `(name, arg)` calls run once (the second+ show as
+  `duplicate` in the manifest), so a batch can't amplify into repeated expensive
+  file-hash sweeps.
+- **Output-capped.** The assembled result is capped (~256 KB) with a truncation
+  notice, so even an authorized full dump on a large install stays compact; the
+  footer reports byte size and a rough token estimate for context budgeting.
 - **Read-only + redacted + admin-gated**, exactly as the underlying catalog
-  (every result still passes through `redactSecrets`).
+  (every result still passes through `redactSecrets`; `note`/`name`/`arg` echoed
+  into the result are sanitized so a crafted value can't corrupt the manifest).
 - **Full dump is opt-in twice:** the AI must set `full_dump: true` *and* you must
   approve the plan that contains it.
+- **Audited.** Every run is logged to the admin security/activity feed
+  (`admin.diagnostics_batch_run`) with actor, IP, and counts (never the payload).
+
+> Not yet implemented: per-route **rate-limiting** (spec §C2). Lower priority
+> given the admin gate + bounded/deduped/capped toolset; a reasonable follow-up.
 
 Routes (admin-gated, in `internal/plugins/admin/routes.go`): `GET
 /admin/diagnostics/workspace` (page), `POST /admin/diagnostics/workspace/parse`

@@ -36,6 +36,20 @@ func Catalog() []Diagnostic { return diagnosticCatalog() }
 // breaking change to the request shape; ParseBatch accepts a missing/zero v as 1.
 const batchSpecVersion = 1
 
+const (
+	// maxBatchCalls caps how many calls one request may name (bounded toolset).
+	maxBatchCalls = 50
+	// maxBatchBytes caps the pasted request — a batch object is tiny, so a
+	// multi-MB paste is hostile; reject before decoding (cheap DoS guard,
+	// mirrors ai_workspace's import body cap).
+	maxBatchBytes = 64 * 1024
+	// maxBatchOutputBytes caps the assembled result document so "compact by
+	// default" can't silently degrade into a multi-MB dump (e.g. an authorized
+	// full dump on a large install). Past the cap, output is truncated with a
+	// notice rather than streamed unbounded.
+	maxBatchOutputBytes = 256 * 1024
+)
+
 // FunctionSpec is one entry in the machine-readable functions list the AI reads.
 // JSON tags are terse on purpose — this is the "less context heavy" payload.
 type FunctionSpec struct {
@@ -80,7 +94,32 @@ const (
 	PlanUnknown     PlanStatus = "unknown"          // no such diagnostic name
 	PlanNeedsFull   PlanStatus = "blocked-fulldump" // full-dump diagnostic but full_dump:false
 	PlanMissingName PlanStatus = "missing-name"     // empty name in the request
+	PlanDuplicate   PlanStatus = "duplicate"        // identical (name,arg) already runs earlier
 )
+
+// callKey identifies a call for deduplication: two calls with the same name and
+// arg do identical work, so the batch runs them once.
+func callKey(name, arg string) string { return name + "\x00" + arg }
+
+// sanitizeInline collapses a value to a single safe line for the result
+// markdown's manifest: newlines and backticks (which would split the bullet or
+// close the inline-code span the AI reads) become spaces, and it is
+// length-capped. Defends the integrity of the document the operator pastes back
+// (LOW-severity finding) — purely cosmetic, but keeps a crafted note/name from
+// corrupting the manifest.
+func sanitizeInline(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == '`' {
+			return ' '
+		}
+		return r
+	}, s)
+	s = strings.TrimSpace(s)
+	if len(s) > 200 {
+		s = s[:200] + "…"
+	}
+	return s
+}
 
 // PlannedCall is one row the operator reviews before approving. It carries the
 // resolved title/desc so the review screen is self-explanatory.
@@ -175,6 +214,9 @@ func stripCodeFence(s string) string {
 // or gated call NAMES are not errors; they surface as non-OK plan rows so the
 // operator sees the whole picture before approving.
 func ParseBatch(raw string) (*BatchPlan, error) {
+	if len(raw) > maxBatchBytes {
+		return nil, fmt.Errorf("request too large (%d bytes) — cap is %d; a batch object should be small", len(raw), maxBatchBytes)
+	}
 	body := stripCodeFence(raw)
 	if body == "" {
 		return nil, fmt.Errorf("empty request — paste the AI's batch object")
@@ -191,13 +233,14 @@ func ParseBatch(raw string) (*BatchPlan, error) {
 	if len(req.Calls) == 0 {
 		return nil, fmt.Errorf("request has no calls")
 	}
-	const maxCalls = 50 // generous cap; the toolset is bounded (prompt-injection containment)
-	if len(req.Calls) > maxCalls {
-		return nil, fmt.Errorf("too many calls (%d) — cap is %d", len(req.Calls), maxCalls)
+	if len(req.Calls) > maxBatchCalls {
+		return nil, fmt.Errorf("too many calls (%d) — cap is %d", len(req.Calls), maxBatchCalls)
 	}
+	req.Note = sanitizeInline(req.Note) // clean once so review + result agree
 
 	cat := diagnosticCatalog()
 	plan := &BatchPlan{Request: req}
+	seen := make(map[string]bool, len(req.Calls)) // dedup identical (name,arg) work
 	for _, c := range req.Calls {
 		pc := PlannedCall{Name: strings.TrimSpace(c.Name), Arg: strings.TrimSpace(c.Arg)}
 		switch {
@@ -211,7 +254,11 @@ func ParseBatch(raw string) (*BatchPlan, error) {
 				case d.FullDump && !req.FullDump:
 					pc.Status = PlanNeedsFull
 					pc.Note = "heavy full-dump — add \"full_dump\": true to authorize"
+				case seen[callKey(pc.Name, pc.Arg)]:
+					pc.Status = PlanDuplicate
+					pc.Note = "identical to an earlier call — runs once"
 				default:
+					seen[callKey(pc.Name, pc.Arg)] = true
 					pc.Status = PlanOK
 					plan.RunnableN++
 				}
@@ -237,44 +284,76 @@ func RunBatch(plan *BatchPlan) string {
 		return "_no plan_"
 	}
 	cat := diagnosticCatalog()
-	var b strings.Builder
 
-	b.WriteString("# Chronicle diagnostics — batch result\n\n")
-	if note := strings.TrimSpace(plan.Request.Note); note != "" {
-		fmt.Fprintf(&b, "_Investigating:_ %s\n\n", note)
+	// One authoritative classification pass, independent of the plan's stored
+	// flags: re-derive runnability from the live catalog AND dedup identical
+	// (name,arg) work, so the manifest and the payload can never disagree and a
+	// duplicate call can't re-run an expensive sweep (the MED finding).
+	type item struct {
+		name, arg string
+		run       bool
+		reason    string
+	}
+	seen := make(map[string]bool, len(plan.Calls))
+	items := make([]item, 0, len(plan.Calls))
+	for _, c := range plan.Calls {
+		it := item{name: c.Name, arg: c.Arg}
+		d := findDiagnostic(cat, c.Name)
+		switch {
+		case c.Name == "":
+			it.reason = "missing name"
+		case d == nil:
+			it.reason = "unknown function"
+		case d.FullDump && !plan.Request.FullDump:
+			it.reason = "full dump not authorized"
+		case seen[callKey(c.Name, c.Arg)]:
+			it.reason = "duplicate"
+		default:
+			seen[callKey(c.Name, c.Arg)] = true
+			it.run = true
+		}
+		items = append(items, it)
 	}
 
-	// Manifest: one line per requested call so skips are visible.
+	var b strings.Builder
+	b.WriteString("# Chronicle diagnostics — batch result\n\n")
+	if note := plan.Request.Note; note != "" {
+		fmt.Fprintf(&b, "_Investigating:_ %s\n\n", note) // already sanitized in ParseBatch
+	}
+
+	// Manifest: one line per requested call so skips are visible. name/arg are
+	// sanitized so a crafted value can't corrupt the manifest the AI reads.
 	b.WriteString("**Manifest:**\n")
 	var skipped []string
-	for _, c := range plan.Calls {
-		d := findDiagnostic(cat, c.Name)
-		runnable := d != nil && (!d.FullDump || plan.Request.FullDump) && c.Name != ""
-		arg := ""
-		if c.Arg != "" {
-			arg = " " + c.Arg
+	for _, it := range items {
+		label := sanitizeInline(it.name)
+		if label == "" {
+			label = "(unnamed)"
 		}
-		if runnable {
-			fmt.Fprintf(&b, "- ✓ `%s%s`\n", c.Name, arg)
+		if it.arg != "" {
+			label += " " + sanitizeInline(it.arg)
+		}
+		if it.run {
+			fmt.Fprintf(&b, "- ✓ `%s`\n", label)
 		} else {
-			reason := c.Note
-			if reason == "" {
-				reason = "skipped"
-			}
-			fmt.Fprintf(&b, "- ✗ `%s%s` — %s\n", c.Name, arg, reason)
-			skipped = append(skipped, c.Name)
+			fmt.Fprintf(&b, "- ✗ `%s` — %s\n", label, it.reason)
+			skipped = append(skipped, label)
 		}
 	}
 	b.WriteString("\n---\n\n")
 
 	// Payload: only the runnable calls, each already redacted by RunDiagnostic.
-	ran := 0
-	for _, c := range plan.Calls {
-		d := findDiagnostic(cat, c.Name)
-		if d == nil || (d.FullDump && !plan.Request.FullDump) || c.Name == "" {
+	// Capped so an authorized full dump on a large install can't run away.
+	ran, truncated := 0, false
+	for _, it := range items {
+		if !it.run {
 			continue
 		}
-		out, ok := RunDiagnostic(cat, c.Name, c.Arg)
+		if b.Len() >= maxBatchOutputBytes {
+			truncated = true
+			break
+		}
+		out, ok := RunDiagnostic(cat, it.name, it.arg)
 		if !ok {
 			continue
 		}
@@ -282,17 +361,19 @@ func RunBatch(plan *BatchPlan) string {
 		b.WriteString("\n\n---\n\n")
 		ran++
 	}
+	if truncated {
+		fmt.Fprintf(&b, "_…output truncated at ~%d KB — narrow the batch and re-run for the rest._\n\n---\n\n", maxBatchOutputBytes/1024)
+	}
 
 	// Footer: size + counts so the AI can reason about context budget.
-	doc := b.String()
-	doc = redactSecrets(doc) // belt-and-suspenders: RunDiagnostic already redacts each part
+	doc := redactSecrets(b.String()) // belt-and-suspenders: RunDiagnostic already redacts each part
 	var f strings.Builder
 	fmt.Fprintf(&f, "_ran %d function(s)", ran)
 	if len(skipped) > 0 {
 		sort.Strings(skipped)
 		fmt.Fprintf(&f, ", skipped %d (%s)", len(skipped), strings.Join(skipped, ", "))
 	}
-	fmt.Fprintf(&f, " · %d bytes_\n", len(doc))
+	fmt.Fprintf(&f, " · %d bytes · ~%d tokens_\n", len(doc), len(doc)/4)
 	return doc + f.String()
 }
 
