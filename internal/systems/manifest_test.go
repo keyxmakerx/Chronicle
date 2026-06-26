@@ -352,6 +352,37 @@ func TestSystemManifest_CharacterFieldsForAPI(t *testing.T) {
 	}
 }
 
+// Collection annotations — including the single-item collapse flag — must reach
+// the Foundry module's generic adapter through the character-fields API.
+func TestSystemManifest_CharacterFieldsForAPI_CollectionAnnotations(t *testing.T) {
+	m := &SystemManifest{
+		ID: "drawsteel",
+		EntityPresets: []EntityPresetDef{{
+			Slug: "drawsteel-character",
+			Name: "Hero",
+			Fields: []FieldDef{
+				{Key: "abilities_json", Label: "Abilities", Type: "string",
+					FoundryCollection: "items", FoundryItemType: []string{"ability"}},
+				{Key: "class", Label: "Class", Type: "string",
+					FoundryCollection: "items", FoundryItemType: []string{"class"}, FoundryItemSingle: true},
+			},
+		}},
+	}
+	resp := m.CharacterFieldsForAPI()
+	if resp == nil || len(resp.Fields) != 2 {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if resp.Fields[0].FoundryCollection != "items" || resp.Fields[0].FoundryItemType[0] != "ability" {
+		t.Errorf("abilities collection not carried: %+v", resp.Fields[0])
+	}
+	if resp.Fields[0].FoundryItemSingle {
+		t.Error("abilities should not be single")
+	}
+	if !resp.Fields[1].FoundryItemSingle {
+		t.Error("class FoundryItemSingle not carried through the API")
+	}
+}
+
 func TestSystemManifest_CharacterFieldsForAPI_NoPreset(t *testing.T) {
 	m := &SystemManifest{
 		ID:            "custom",

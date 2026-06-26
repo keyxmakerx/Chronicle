@@ -1949,6 +1949,24 @@ func (a *App) RegisterRoutes() {
 		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
+
+	// Wire installed-package state into the operator diagnostics (dependency
+	// inversion: systems can't import packages) so packages.installed-vs-loaded /
+	// on-disk-versions can compare the DB's installed version to the live loader.
+	systems.SetInstalledPackagesProvider(func() []systems.InstalledPackage {
+		pkgs, err := pkgService.ListPackages(context.Background())
+		if err != nil {
+			return nil
+		}
+		out := make([]systems.InstalledPackage, 0, len(pkgs))
+		for _, p := range pkgs {
+			if p.Type == packages.PackageTypeSystem {
+				out = append(out, systems.InstalledPackage{Slug: p.Slug, Version: p.InstalledVersion, InstallPath: p.InstallPath})
+			}
+		}
+		return out
+	})
+
 	pkgHandler := packages.NewHandler(pkgService)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
 	// Public package file serving — always available so Foundry VTT can
@@ -2963,6 +2981,15 @@ func (a *App) RegisterRoutes() {
 	systemHandler.SetCampaignSystems(campaignSystemMgr)
 	systemHandler.SetAddonService(addonService)
 	systems.RegisterRoutes(e, systemHandler, addonService, authService, campaignService)
+
+	// Admin-only deployment-health diagnostic: read-only fingerprints of the
+	// version + files each system loader is ACTUALLY serving, to catch the
+	// "Packages says X but the old file renders" mismatch from the UI.
+	adminGroup.GET("/extensions/health", systemHandler.ExtensionsHealthAPI)
+
+	// Operator AI-diagnostics report (copy-paste to the AI assistant): the
+	// served-reality systems table + a modular run-and-paste-back probe library.
+	adminGroup.GET("/diagnostics", systemHandler.OperatorDiagnosticsAPI)
 
 	// Wire system widgets into the template editor palette (deferred from
 	// block registry setup because systemHandler is created after entityHandler).

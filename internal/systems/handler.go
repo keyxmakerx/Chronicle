@@ -47,6 +47,42 @@ func (h *SystemHandler) SetAddonService(svc addonChecker) {
 	h.addonSvc = svc
 }
 
+// OperatorDiagnosticsAPI is the operator-facing analogue of the campaign
+// AI-Export: a CATALOG of named, read-only, secret-redacted diagnostics the
+// assistant requests one at a time, so the operator only ever pastes back the
+// small, targeted result it asked for (no garbage context). Per the debug-cockpit
+// capability spec §B/§C2. Admin-gated.
+//
+//	GET /admin/diagnostics                      → the catalog (tiny menu, no payload)
+//	GET /admin/diagnostics?name=system.versions → run one named diagnostic
+//	GET /admin/diagnostics?name=system.files&arg=drawsteel
+func (h *SystemHandler) OperatorDiagnosticsAPI(c echo.Context) error {
+	cat := diagnosticCatalog()
+	name := c.QueryParam("name")
+	if name == "" {
+		return c.Blob(http.StatusOK, "text/markdown; charset=utf-8", []byte(renderCatalog(cat)))
+	}
+	out, ok := RunDiagnostic(cat, name, c.QueryParam("arg"))
+	if !ok {
+		return apperror.NewNotFound(fmt.Sprintf("unknown diagnostic %q — GET /admin/diagnostics for the catalog", name))
+	}
+	return c.Blob(http.StatusOK, "text/markdown; charset=utf-8", []byte(out))
+}
+
+// ExtensionsHealthAPI returns read-only deployment health for every LOADED
+// system — the version + on-disk directory the loader actually serves from, plus
+// a content fingerprint (size + sha256 + mtime) of each widget/manifest file.
+// Admin-gated (registered on the admin route group). It exists to diagnose the
+// "Admin▸Packages says 0.13.0 but the old file renders" class of bug from the UI:
+// if loaded_version disagrees with the installed version, the in-memory registry
+// never picked up the install; if it agrees but a file hash is the old content,
+// the extraction is wrong. GET /admin/extensions/health
+func (h *SystemHandler) ExtensionsHealthAPI(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"systems": LoadedHealth(),
+	})
+}
+
 // resolveSystem extracts the :mod param and looks up the live system.
 // Checks global registry first, then campaign-specific custom systems.
 func (h *SystemHandler) resolveSystem(c echo.Context) System {

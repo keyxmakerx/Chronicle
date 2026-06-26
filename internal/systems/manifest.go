@@ -218,6 +218,13 @@ type FieldDef struct {
 	// outKey -> dot-path on the item (e.g. {"name":"name","keywords":"system.keywords"}).
 	// Omit for a default {id,name,type} projection.
 	FoundryItemFields map[string]string `json:"foundry_item_fields,omitempty"`
+
+	// FoundryItemSingle, when true, collapses a collection mapping to the FIRST
+	// matching item's name (a scalar string) instead of a JSON array — for the
+	// "exactly one X item" shape (e.g. a hero's class/ancestry/kit, which live as
+	// embedded items rather than a system.* path). Ignored unless
+	// FoundryCollection is set.
+	FoundryItemSingle bool `json:"foundry_item_single,omitempty"`
 }
 
 // IsFoundryWritable returns whether this field should be written back to
@@ -342,6 +349,7 @@ func (m *SystemManifest) ItemFieldsForAPI() *CharacterFieldsResponse {
 			FoundryCollection: f.FoundryCollection,
 			FoundryItemType:   f.FoundryItemType,
 			FoundryItemFields: f.FoundryItemFields,
+			FoundryItemSingle: f.FoundryItemSingle,
 		}
 	}
 
@@ -377,6 +385,7 @@ type CharacterFieldExport struct {
 	FoundryCollection string            `json:"foundry_collection,omitempty"`
 	FoundryItemType   []string          `json:"foundry_item_type,omitempty"`
 	FoundryItemFields map[string]string `json:"foundry_item_fields,omitempty"`
+	FoundryItemSingle bool              `json:"foundry_item_single,omitempty"`
 }
 
 // CharacterFieldsForAPI builds the API response for character preset fields.
@@ -398,6 +407,7 @@ func (m *SystemManifest) CharacterFieldsForAPI() *CharacterFieldsResponse {
 			FoundryCollection: f.FoundryCollection,
 			FoundryItemType:   f.FoundryItemType,
 			FoundryItemFields: f.FoundryItemFields,
+			FoundryItemSingle: f.FoundryItemSingle,
 		}
 	}
 
