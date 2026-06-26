@@ -41,7 +41,7 @@ type EntityType struct {
 	SortOrder       int               `json:"sort_order"`
 	IsDefault       bool              `json:"is_default"`
 	Enabled         bool              `json:"enabled"`
-	ParentTypeName  *string           `json:"parent_type_name,omitempty"`  // Joined field: parent type's name (not stored).
+	ParentTypeName  *string           `json:"parent_type_name,omitempty"` // Joined field: parent type's name (not stored).
 }
 
 // ParseCategoryDashboardLayout parses the entity type's dashboard_layout JSON
@@ -275,49 +275,49 @@ type FieldDefinition struct {
 // Entity represents a single worldbuilding object — a character, location,
 // item, or any other type defined in the campaign's entity types.
 type Entity struct {
-	ID             string          `json:"id"`
-	CampaignID     string          `json:"campaign_id"`
-	EntityTypeID   int             `json:"entity_type_id"`
-	Name           string          `json:"name"`
-	Slug           string          `json:"slug"`
-	Entry            *string         `json:"entry,omitempty"`              // TipTap/ProseMirror JSON document.
-	EntryHTML        *string         `json:"entry_html,omitempty"`         // Pre-rendered HTML from entry.
-	PlayerNotes      *string         `json:"player_notes,omitempty"`       // Player-facing ProseMirror JSON (synced as a player-visible Foundry page).
-	PlayerNotesHTML  *string         `json:"player_notes_html,omitempty"`  // Pre-rendered HTML from player_notes.
-	ImagePath        *string         `json:"image_path,omitempty"`
-	CoverImagePath *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
-	ParentID       *string         `json:"parent_id,omitempty"`       // Parent entity ID (hierarchy). Mutually exclusive with ParentNodeID.
-	ParentNodeID   *string         `json:"parent_node_id,omitempty"` // Parent sidebar folder node ID. Mutually exclusive with ParentID.
-	SortOrder      int             `json:"sort_order"`            // Manual ordering within parent/category (0 = default).
-	TypeLabel      *string         `json:"type_label,omitempty"` // Freeform subtype (e.g., "City" for a Location).
-	IsPrivate      bool            `json:"is_private"`
-	Visibility     VisibilityMode  `json:"visibility"`
-	IsTemplate     bool            `json:"is_template"`
-	FieldsData     map[string]any  `json:"fields_data"`
-	FieldOverrides *FieldOverrides `json:"field_overrides,omitempty"` // Per-entity field customizations.
-	PopupConfig    *PopupConfig    `json:"popup_config,omitempty"`    // Controls hover tooltip content.
-	CreatedBy      string          `json:"created_by"`
+	ID              string          `json:"id"`
+	CampaignID      string          `json:"campaign_id"`
+	EntityTypeID    int             `json:"entity_type_id"`
+	Name            string          `json:"name"`
+	Slug            string          `json:"slug"`
+	Entry           *string         `json:"entry,omitempty"`             // TipTap/ProseMirror JSON document.
+	EntryHTML       *string         `json:"entry_html,omitempty"`        // Pre-rendered HTML from entry.
+	PlayerNotes     *string         `json:"player_notes,omitempty"`      // Player-facing ProseMirror JSON (synced as a player-visible Foundry page).
+	PlayerNotesHTML *string         `json:"player_notes_html,omitempty"` // Pre-rendered HTML from player_notes.
+	ImagePath       *string         `json:"image_path,omitempty"`
+	CoverImagePath  *string         `json:"cover_image_path,omitempty"` // Full-width banner image.
+	ParentID        *string         `json:"parent_id,omitempty"`        // Parent entity ID (hierarchy). Mutually exclusive with ParentNodeID.
+	ParentNodeID    *string         `json:"parent_node_id,omitempty"`   // Parent sidebar folder node ID. Mutually exclusive with ParentID.
+	SortOrder       int             `json:"sort_order"`                 // Manual ordering within parent/category (0 = default).
+	TypeLabel       *string         `json:"type_label,omitempty"`       // Freeform subtype (e.g., "City" for a Location).
+	IsPrivate       bool            `json:"is_private"`
+	Visibility      VisibilityMode  `json:"visibility"`
+	IsTemplate      bool            `json:"is_template"`
+	FieldsData      map[string]any  `json:"fields_data"`
+	FieldOverrides  *FieldOverrides `json:"field_overrides,omitempty"` // Per-entity field customizations.
+	PopupConfig     *PopupConfig    `json:"popup_config,omitempty"`    // Controls hover tooltip content.
+	CreatedBy       string          `json:"created_by"`
 	// OwnerUserID claims an entity for a player. Nullable: most entities
 	// (locations, factions, lore) are not owned. Character-shaped entities
 	// surface on the owner's "My Characters" landing page. Set by Foundry
 	// sync (when the actor's owner maps to a chronicle user) or by the
 	// player claim flow on entity show.
-	OwnerUserID    *string         `json:"owner_user_id,omitempty"`
+	OwnerUserID *string `json:"owner_user_id,omitempty"`
 	// MapID points the entity at one of the campaign's maps and powers
 	// the per-entity Map Editor block. Nullable — most entities aren't
 	// "a map." FK enforces same-campaign integrity (added by the maps
 	// plugin migration 005); ON DELETE SET NULL handles map deletion
 	// gracefully (entity falls back to the picker / empty state).
-	MapID          *string         `json:"map_id,omitempty"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	MapID     *string   `json:"map_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// Joined fields from entity_types (populated by repository queries).
-	TypeName        string `json:"type_name,omitempty"`
-	TypeNamePlural  string `json:"type_name_plural,omitempty"` // Joined entity_types.name_plural — used by breadcrumbs and category links.
-	TypeIcon        string `json:"type_icon,omitempty"`
-	TypeColor       string `json:"type_color,omitempty"`
-	TypeSlug        string `json:"type_slug,omitempty"`
+	TypeName       string `json:"type_name,omitempty"`
+	TypeNamePlural string `json:"type_name_plural,omitempty"` // Joined entity_types.name_plural — used by breadcrumbs and category links.
+	TypeIcon       string `json:"type_icon,omitempty"`
+	TypeColor      string `json:"type_color,omitempty"`
+	TypeSlug       string `json:"type_slug,omitempty"`
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
@@ -536,8 +536,8 @@ type UpdateEntityTypeRequest struct {
 	Icon         string            `json:"icon" form:"icon"`
 	Color        string            `json:"color" form:"color"`
 	Fields       []FieldDefinition `json:"fields"`
-	ParentTypeID *int              `json:"parent_type_id"`              // New parent (nil = no change).
-	ClearParent  bool              `json:"clear_parent"`                // Explicitly remove parent (make top-level).
+	ParentTypeID *int              `json:"parent_type_id"`                       // New parent (nil = no change).
+	ClearParent  bool              `json:"clear_parent"`                         // Explicitly remove parent (make top-level).
 	Claimable    *bool             `json:"claimable,omitempty" form:"claimable"` // nil = no change; true/false = set the player-claim flag.
 }
 
@@ -549,9 +549,10 @@ type CreateEntityTypeInput struct {
 	NamePlural     string
 	Icon           string
 	Color          string
-	PresetCategory string // Optional system preset category (e.g., "item", "character").
-	ParentTypeID   *int   // Optional parent type for sub-type hierarchy.
-	Claimable      *bool  // Optional explicit player-claim flag. nil = unset (service may default it for PC types).
+	PresetCategory string            // Optional system preset category (e.g., "item", "character").
+	ParentTypeID   *int              // Optional parent type for sub-type hierarchy.
+	Claimable      *bool             // Optional explicit player-claim flag. nil = unset (service may default it for PC types).
+	Fields         []FieldDefinition // Optional initial field schema (e.g. from a system preset). nil = none.
 }
 
 // UpdateEntityTypeInput is the validated input for updating an entity type.
@@ -703,9 +704,9 @@ type EffectivePermission struct {
 // SetPermissionsInput is the validated input for setting entity permissions.
 // Replaces all existing grants for the entity.
 type SetPermissionsInput struct {
-	Visibility  VisibilityMode     `json:"visibility"`
-	IsPrivate   bool               `json:"is_private"`   // Used when visibility=default.
-	Permissions []PermissionGrant  `json:"permissions"`   // Used when visibility=custom.
+	Visibility  VisibilityMode    `json:"visibility"`
+	IsPrivate   bool              `json:"is_private"`  // Used when visibility=default.
+	Permissions []PermissionGrant `json:"permissions"` // Used when visibility=custom.
 }
 
 // PermissionGrant is a single grant in a SetPermissionsInput request.

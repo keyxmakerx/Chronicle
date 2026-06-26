@@ -913,6 +913,16 @@ const (
 	DefaultCharacterTypeSlug = "character"
 )
 
+// normalizeTypeFields returns a non-nil field slice for storage (the repository
+// and JSON serialization prefer [] over null), passing through any provided schema
+// (e.g. fields applied from a system preset on create).
+func normalizeTypeFields(fields []FieldDefinition) []FieldDefinition {
+	if len(fields) == 0 {
+		return []FieldDefinition{}
+	}
+	return fields
+}
+
 // isPlayerCharacterType reports whether a to-be-created entity type is the
 // player-claimable "Player Character" sub-type, by either its preset category
 // or its (already-generated) slug. Drives both the addon gate and the
@@ -1621,7 +1631,7 @@ func (s *entityService) CreateEntityType(ctx context.Context, campaignID string,
 		PresetCategory: presetCategory,
 		ParentTypeID:   input.ParentTypeID,
 		Claimable:      claimable,
-		Fields:         []FieldDefinition{},
+		Fields:         normalizeTypeFields(input.Fields),
 		Layout:         layout,
 		SortOrder:      maxOrder + 1,
 		IsDefault:      false,

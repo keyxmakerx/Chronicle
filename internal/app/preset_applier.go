@@ -91,6 +91,7 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 			Icon:           preset.Icon,
 			Color:          preset.Color,
 			PresetCategory: preset.Category,
+			Fields:         mapPresetFields(preset.Fields),
 		}
 
 		et, err := p.entityService.CreateEntityType(ctx, campaignID, input)
@@ -124,4 +125,46 @@ func (p *presetApplier) ApplyAddonEnableEffects(ctx context.Context, campaignID,
 		return p.entityService.EnsurePlayerCharacterType(ctx, campaignID)
 	}
 	return nil
+}
+
+// mapPresetFields converts a system manifest's preset field definitions into the
+// entity-type field schema Chronicle stores. The manifest's Foundry-sync
+// annotations (foundry_path, foundry_collection, …) are intentionally NOT copied
+// here — those are served separately to the Foundry module via the character-fields
+// API; the entity type only needs the display schema. Returns nil for no fields
+// (the service normalizes nil → []).
+func mapPresetFields(fields []systems.FieldDef) []entities.FieldDefinition {
+	if len(fields) == 0 {
+		return nil
+	}
+	out := make([]entities.FieldDefinition, 0, len(fields))
+	for _, f := range fields {
+		out = append(out, entities.FieldDefinition{
+			Key:   f.Key,
+			Label: f.Label,
+			Type:  mapPresetFieldType(f.Type),
+		})
+	}
+	return out
+}
+
+// mapPresetFieldType maps a manifest field type ("string", "number", "boolean",
+// "list", "markdown", "enum", "url") onto the entity-form input types Chronicle
+// renders ("text", "number", "checkbox", "textarea", "select", "url"). Unknown
+// types fall back to "text".
+func mapPresetFieldType(t string) string {
+	switch t {
+	case "number":
+		return "number"
+	case "boolean":
+		return "checkbox"
+	case "enum":
+		return "select"
+	case "markdown", "list":
+		return "textarea"
+	case "url":
+		return "url"
+	default: // "string" and anything unrecognized
+		return "text"
+	}
 }
