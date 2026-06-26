@@ -41,6 +41,31 @@ func TestFingerprintFiles(t *testing.T) {
 	}
 }
 
+func TestFingerprintFiles_PathTraversalClamped(t *testing.T) {
+	dir := t.TempDir()
+	// A secret file OUTSIDE the system dir.
+	secret := filepath.Join(filepath.Dir(dir), "outside-secret.txt")
+	if err := os.WriteFile(secret, []byte("TOPSECRET"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A hostile manifest-style relative path that tries to escape the dir.
+	got := fingerprintFiles(dir, []string{"../outside-secret.txt"})
+	if got[0].Exists || got[0].SHA256 != "" {
+		t.Errorf("path traversal not clamped — read a file outside the system dir: %+v", got[0])
+	}
+}
+
+func TestFingerprintFiles_SizeCapped(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "big.js"), make([]byte, maxFingerprintBytes+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := fingerprintFiles(dir, []string{"big.js"})
+	if !got[0].Exists || got[0].SHA256 != "too-large" {
+		t.Errorf("oversized file should be flagged too-large (not hashed), got %+v", got[0])
+	}
+}
+
 func TestFingerprintFiles_ContentSensitive(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, "a.js"), []byte("old"), 0o644)

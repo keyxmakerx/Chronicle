@@ -6,12 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 )
 
 // SystemLoader discovers and loads system manifests from a directory tree.
 // Each subdirectory containing a manifest.json is treated as a system.
 // Invalid manifests are logged as warnings but do not prevent startup.
 type SystemLoader struct {
+	// mu guards modules + systemInstances. Reads (Get/Dir/All/Health/…) take
+	// RLock; the only writers are register + RegisterSystem (Lock). Package
+	// installs re-scan the registry at runtime (ScanPackageDir → register),
+	// concurrent with HTTP read handlers, so the maps must be synchronized.
+	mu              sync.RWMutex
 	systemsDir      string
 	modules         map[string]*loadedSystem
 	systemInstances map[string]System
@@ -54,6 +60,8 @@ func (l *SystemLoader) preferCandidate(existing *loadedSystem, candidate *System
 // caller must NOT instantiate (which would re-introduce the last-wins bug via
 // systemInstances).
 func (l *SystemLoader) register(manifest *SystemManifest, dir, source string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	existing := l.modules[manifest.ID]
 	if !l.preferCandidate(existing, manifest, source) {
 		slog.Warn("ignoring duplicate system — a preferred copy is already loaded",
@@ -328,6 +336,8 @@ func (l *SystemLoader) loadSingleSystem(sysDir string) error {
 
 // Get returns the manifest for a system by ID, or nil if not found.
 func (l *SystemLoader) Get(id string) *SystemManifest {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	if lm, ok := l.modules[id]; ok {
 		return lm.manifest
 	}
@@ -336,6 +346,8 @@ func (l *SystemLoader) Get(id string) *SystemManifest {
 
 // All returns all discovered system manifests, sorted alphabetically by name.
 func (l *SystemLoader) All() []*SystemManifest {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	result := make([]*SystemManifest, 0, len(l.modules))
 	for _, lm := range l.modules {
 		result = append(result, lm.manifest)
@@ -348,6 +360,8 @@ func (l *SystemLoader) All() []*SystemManifest {
 
 // Dir returns the absolute directory path for a system by ID, or empty string.
 func (l *SystemLoader) Dir(id string) string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	if lm, ok := l.modules[id]; ok {
 		return lm.dir
 	}
@@ -356,23 +370,31 @@ func (l *SystemLoader) Dir(id string) string {
 
 // Count returns the number of discovered systems.
 func (l *SystemLoader) Count() int {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	return len(l.modules)
 }
 
 // RegisterSystem registers a live System instance. Called during
 // discovery for systems with status "available" that have data loaded.
 func (l *SystemLoader) RegisterSystem(mod System) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.systemInstances[mod.Info().ID] = mod
 }
 
 // GetSystem returns the live System instance by ID, or nil if not
 // found or not instantiated.
 func (l *SystemLoader) GetSystem(id string) System {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	return l.systemInstances[id]
 }
 
 // AllSystems returns all live System instances.
 func (l *SystemLoader) AllSystems() []System {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	result := make([]System, 0, len(l.systemInstances))
 	for _, m := range l.systemInstances {
 		result = append(result, m)

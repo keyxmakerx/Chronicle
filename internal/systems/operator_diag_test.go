@@ -71,6 +71,7 @@ func TestRedactSecrets(t *testing.T) {
 		{"DB_PASSWORD=hunter2", true},
 		{"api_key: sk-abcdef123456", true},
 		{"Authorization: Bearer eyJhbGciOi", true},
+		{"Bearer abc.def.ghi", true}, // space-separated bearer (no [:=] separator)
 		{"private-key = MIIEvA", true},
 		// must NOT redact legitimate diagnostic data (no secret keyword):
 		{"sha256: deadbeefcafe1234", false},

@@ -15,8 +15,15 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
+
+// maxFingerprintBytes caps the file read in fingerprintFiles. Widget/manifest
+// files are a few KB; the cap stops a hostile manifest that points a widget path
+// at a huge file from OOMing the health endpoint (it's reported as too-large
+// rather than hashed).
+const maxFingerprintBytes = 8 << 20 // 8 MiB
 
 // FileFingerprint identifies a single served file by size + content hash, so two
 // installs can be compared without reading the whole file. A missing file
@@ -48,17 +55,28 @@ type SystemHealth struct {
 // yields Exists=false rather than failing the whole report.
 func fingerprintFiles(dir string, relPaths []string) []FileFingerprint {
 	out := make([]FileFingerprint, 0, len(relPaths))
+	cleanDir := filepath.Clean(dir)
 	for _, rel := range relPaths {
 		fp := FileFingerprint{Path: rel}
 		if dir != "" && rel != "" {
-			full := filepath.Join(dir, rel)
-			if info, err := os.Stat(full); err == nil && !info.IsDir() {
-				fp.Exists = true
-				fp.Size = info.Size()
-				fp.ModTime = info.ModTime().UTC().Format(time.RFC3339)
-				if data, err := os.ReadFile(full); err == nil {
-					sum := sha256.Sum256(data)
-					fp.SHA256 = hex.EncodeToString(sum[:])[:16]
+			full := filepath.Clean(filepath.Join(cleanDir, rel))
+			// Clamp to the system dir. A hostile manifest could declare a widget
+			// path like "../../../etc/passwd"; never stat/read outside dir. (Mirrors
+			// the WidgetScriptAPI traversal guard.) Out-of-bounds → Exists=false.
+			inDir := full == cleanDir || strings.HasPrefix(full, cleanDir+string(os.PathSeparator))
+			if inDir {
+				if info, err := os.Stat(full); err == nil && !info.IsDir() {
+					fp.Exists = true
+					fp.Size = info.Size()
+					fp.ModTime = info.ModTime().UTC().Format(time.RFC3339)
+					if info.Size() <= maxFingerprintBytes {
+						if data, err := os.ReadFile(full); err == nil {
+							sum := sha256.Sum256(data)
+							fp.SHA256 = hex.EncodeToString(sum[:])[:16]
+						}
+					} else {
+						fp.SHA256 = "too-large"
+					}
 				}
 			}
 		}
@@ -91,20 +109,36 @@ func healthFilePaths(m *SystemManifest) []string {
 }
 
 // Health returns the served reality for every loaded system, sorted by ID for
-// stable output.
+// stable output. The loader maps are snapshotted under the read lock; the
+// per-file disk I/O then runs UNLOCKED so a slow stat/read can't block package
+// installs (which take the write lock). Manifests are immutable after load, so
+// reading their widget lists outside the lock is safe.
 func (l *SystemLoader) Health() []SystemHealth {
-	out := make([]SystemHealth, 0, len(l.modules))
+	type snap struct {
+		id       string
+		manifest *SystemManifest
+		source   string
+		dir      string
+	}
+	l.mu.RLock()
+	snaps := make([]snap, 0, len(l.modules))
 	for id, ls := range l.modules {
 		if ls == nil || ls.manifest == nil {
 			continue
 		}
+		snaps = append(snaps, snap{id: id, manifest: ls.manifest, source: ls.source, dir: ls.dir})
+	}
+	l.mu.RUnlock()
+
+	out := make([]SystemHealth, 0, len(snaps))
+	for _, s := range snaps {
 		out = append(out, SystemHealth{
-			ID:      id,
-			Name:    ls.manifest.Name,
-			Version: ls.manifest.Version,
-			Source:  ls.source,
-			Dir:     ls.dir,
-			Files:   fingerprintFiles(ls.dir, healthFilePaths(ls.manifest)),
+			ID:      s.id,
+			Name:    s.manifest.Name,
+			Version: s.manifest.Version,
+			Source:  s.source,
+			Dir:     s.dir,
+			Files:   fingerprintFiles(s.dir, healthFilePaths(s.manifest)),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })

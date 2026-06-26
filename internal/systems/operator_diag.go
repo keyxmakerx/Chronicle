@@ -150,11 +150,18 @@ func RunDiagnostic(cat []Diagnostic, name, arg string) (string, bool) {
 // to end-of-line so a token after "Authorization:" goes too.
 var secretLine = regexp.MustCompile(`(?i)([\w-]*(?:password|passwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|authorization|bearer))\b\s*[:=]\s*\S.*`)
 
+// bearerToken catches the space-separated form ("Bearer <token>") that secretLine
+// misses because it has no [:=] separator.
+var bearerToken = regexp.MustCompile(`(?i)\bbearer\s+\S+`)
+
 // redactSecrets scrubs obvious credential-bearing substrings from diagnostic
 // output (defense-in-depth; the systems diagnostics are secret-free by
-// construction, but future ones may not be).
+// construction, but future ones may not be). Line-oriented — a secret split
+// across lines is not caught, which is acceptable for this safety net.
 func redactSecrets(s string) string {
-	return secretLine.ReplaceAllString(s, "$1=[REDACTED]")
+	s = secretLine.ReplaceAllString(s, "$1=[REDACTED]")
+	s = bearerToken.ReplaceAllString(s, "bearer [REDACTED]")
+	return s
 }
 
 // --- shared renderers (also used by the full bundle) -----------------------
