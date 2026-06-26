@@ -199,6 +199,7 @@ GET	/demo/calendar/almanac	internal/app/routes.go
 GET	/demo/timeline/ledger	internal/app/routes.go
 GET	/demo/timeline/tuner	internal/app/routes.go
 GET	/design-lab	internal/plugins/designlab/routes.go
+GET	/diagnostics	internal/app/routes.go
 GET	/dm-grants	internal/plugins/campaigns/routes.go
 GET	/edit	internal/plugins/campaigns/routes.go
 GET	/entities	internal/plugins/entities/routes.go
@@ -247,6 +248,7 @@ GET	/extensions/:extID/assets/*	internal/extensions/routes.go
 GET	/extensions/:slug/dashboard	internal/plugins/campaigns/routes.go
 GET	/extensions/:slug/settings	internal/plugins/addons/routes.go
 GET	/extensions/fragment	internal/plugins/campaigns/routes.go
+GET	/extensions/health	internal/app/routes.go
 GET	/favorite-ids	internal/plugins/entities/routes.go
 GET	/favorites	internal/plugins/bestiary/routes.go
 GET	/favorites	internal/plugins/entities/routes.go
