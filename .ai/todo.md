@@ -59,14 +59,17 @@ for player-owned PC actors.
   health check, and `MergeDuplicatePlayerCharacterType` returns a human-readable
   `apperror` when the (generic → system) pair is ambiguous. Owner reconciles on
   demand from the extension settings page instead of a silent migration.
-- [ ] **`ApplySystemPresets` drops `preset.Fields` (PC-PRESET-FIELDS)**: enabling a
-  system creates its character type with an EMPTY `fields` schema (the attributes
-  EDIT form then shows no system fields). Add `Fields []FieldDefinition` to
-  `CreateEntityTypeInput`, persist in `CreateEntityType`, pass `preset.Fields` in
-  `preset_applier.go`. Then a non-destructive backfill to fill EXISTING system
-  types' `fields` (type schema only — never entity data). NOT a rendering issue (the
-  widget reads `custom_fields`, not the type schema), so this was deferred out of the
-  prod consolidation. Modular (reads whatever the enabled system ships).
+- [x] **`ApplySystemPresets` drops `preset.Fields` (PC-PRESET-FIELDS)**: DONE in two
+  parts. **Create path** (commit `cf3a7c6`): `CreateEntityTypeInput.Fields` +
+  `mapPresetFields`/`mapPresetFieldType` (`preset_applier.go`) — a new system type is
+  created WITH its declared schema. **Reconcile path / non-destructive backfill of
+  EXISTING types** (WS-5): `entities.ReconcileEntityTypeFields(typeID, declared)` +
+  the pure `mergeNewFields` helper — additively appends any declared field whose Key
+  is absent, never removes/reorders/overwrites (idempotent). `ApplySystemPresets` now,
+  instead of skip-if-exists, indexes existing types by preset-category then name and
+  **upgrades the match in place** (else creates). So enabling/updating a system fills
+  EXISTING heroes' type schema (Tyne/Orrin/Saatraaol) without recreating it. Type
+  schema only — never entity data. Tests: `reconcile_fields_test.go`.
 
 - [x] **Stage 1 — claim visibility (PC-CLAIM-1)**: distinct `entity.claimed` /
   `entity.owner_changed` audit actions (audit/model.go) + activity-feed labels &

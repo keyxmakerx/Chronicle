@@ -79,6 +79,11 @@ type EntityService interface {
 	// the campaign has more than one of either category.
 	MergeDuplicatePlayerCharacterType(ctx context.Context, campaignID string) (MergeResult, error)
 	UpdateEntityType(ctx context.Context, id int, input UpdateEntityTypeInput) (*EntityType, error)
+	// ReconcileEntityTypeFields additively merges newly-declared schema fields
+	// into an existing entity type. Used when a system package gains fields after
+	// the type was first created (WS-5): existing heroes' type picks up the new
+	// fields without recreating it. Additive and idempotent — see the impl.
+	ReconcileEntityTypeFields(ctx context.Context, typeID int, declared []FieldDefinition) (int, error)
 	DeleteEntityType(ctx context.Context, id int) error
 	UpdateEntityTypeLayout(ctx context.Context, id int, layout EntityTypeLayout) error
 	UpdateEntityTypeColor(ctx context.Context, id int, color string) error
@@ -923,6 +928,31 @@ func normalizeTypeFields(fields []FieldDefinition) []FieldDefinition {
 	return fields
 }
 
+// mergeNewFields additively merges declared schema fields into an existing set:
+// any declared field whose Key is not already present (and is non-empty) is
+// appended, in declared order, after the existing fields. Existing fields — and
+// their order, labels, types, and any user edits — are left untouched, and
+// nothing is ever removed. This makes it idempotent: a second merge of the same
+// declared set adds nothing. Returns the merged slice and the fields that were
+// added (empty when nothing changed). Pure — no I/O — so it is unit-tested
+// directly. WS-5.
+func mergeNewFields(existing, declared []FieldDefinition) (merged, added []FieldDefinition) {
+	present := make(map[string]bool, len(existing))
+	for _, f := range existing {
+		present[f.Key] = true
+	}
+	merged = append(merged, existing...)
+	for _, f := range declared {
+		if f.Key == "" || present[f.Key] {
+			continue
+		}
+		present[f.Key] = true
+		merged = append(merged, f)
+		added = append(added, f)
+	}
+	return merged, added
+}
+
 // isPlayerCharacterType reports whether a to-be-created entity type is the
 // player-claimable "Player Character" sub-type, by either its preset category
 // or its (already-generated) slug. Drives both the addon gate and the
@@ -1765,6 +1795,54 @@ func (s *entityService) UpdateEntityType(ctx context.Context, id int, input Upda
 
 	s.events.PublishEntityTypeEvent("updated", et.CampaignID, et)
 	return et, nil
+}
+
+// ReconcileEntityTypeFields additively merges newly-declared schema fields into
+// an existing entity type and persists the result. It exists for WS-5: a system
+// package can gain character fields (e.g. backstory, abilities) after a campaign
+// already created the type, and those existing types — the heroes already in
+// play — must pick up the new fields without being recreated (which would orphan
+// every entity under them).
+//
+// Additive and idempotent by construction (see mergeNewFields): only declared
+// fields whose Key is absent are appended; existing fields and their order are
+// never touched, and nothing is removed. So this is safe to run on every system
+// enable/update. A no-op (no missing fields) returns 0 without writing. Returns
+// the number of fields added.
+func (s *entityService) ReconcileEntityTypeFields(ctx context.Context, typeID int, declared []FieldDefinition) (int, error) {
+	if len(declared) == 0 {
+		return 0, nil
+	}
+
+	et, err := s.types.FindByID(ctx, typeID)
+	if err != nil {
+		return 0, err
+	}
+
+	merged, added := mergeNewFields(et.Fields, declared)
+	if len(added) == 0 {
+		return 0, nil // already up to date — no write.
+	}
+
+	// Reuse UpdateEntityType so validation, slug stability, and the "updated"
+	// event all stay in one place. Passing the type's current name/icon/etc.
+	// leaves everything but Fields unchanged (name unchanged → slug unchanged).
+	if _, err := s.UpdateEntityType(ctx, typeID, UpdateEntityTypeInput{
+		Name:       et.Name,
+		NamePlural: et.NamePlural,
+		Icon:       et.Icon,
+		Color:      et.Color,
+		Fields:     merged,
+		Claimable:  et.Claimable, // nil preserves stored value; non-nil re-sets the same.
+	}); err != nil {
+		return 0, err
+	}
+
+	slog.Info("entity type fields reconciled from system preset",
+		slog.Int("entity_type_id", typeID),
+		slog.Int("fields_added", len(added)),
+	)
+	return len(added), nil
 }
 
 // DeleteEntityType removes an entity type if no entities reference it.
