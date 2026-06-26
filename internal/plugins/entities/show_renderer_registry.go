@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/a-h/templ"
 
@@ -134,15 +135,17 @@ func (r *EntityShowRendererRegistry) LookupByPresetCategory(category string) (En
 }
 
 // globalEntityShowRendererRegistry is the singleton consumed by
-// show.templ via lookupEntityShowRenderer. Set during RegisterRoutes
-// before HTTP serves; nil before that.
-var globalEntityShowRendererRegistry *EntityShowRendererRegistry
+// show.templ via lookupEntityShowRenderer. Installed at boot AND hot-swapped on
+// package install (so a newly-installed system's renderers take effect without a
+// restart), which means it is read by request goroutines while a writer swaps it
+// — an atomic.Pointer makes that race-free. Nil before the first install.
+var globalEntityShowRendererRegistry atomic.Pointer[EntityShowRendererRegistry]
 
-// SetGlobalEntityShowRendererRegistry installs the registry that
-// show.templ will consult at request time. Called from
-// internal/app/routes.go alongside SetGlobalBlockRegistry.
+// SetGlobalEntityShowRendererRegistry installs (or hot-swaps) the registry that
+// show.templ consults at request time. Called from internal/app/routes.go at boot
+// and from the package-install hook. Atomic — safe to call while requests read.
 func SetGlobalEntityShowRendererRegistry(r *EntityShowRendererRegistry) {
-	globalEntityShowRendererRegistry = r
+	globalEntityShowRendererRegistry.Store(r)
 }
 
 // GetGlobalEntityShowRendererRegistry returns the installed registry.
@@ -150,7 +153,7 @@ func SetGlobalEntityShowRendererRegistry(r *EntityShowRendererRegistry) {
 // yet (only possible during boot, before user requests can reach
 // rendering code). All read-time callers must nil-check.
 func GetGlobalEntityShowRendererRegistry() *EntityShowRendererRegistry {
-	return globalEntityShowRendererRegistry
+	return globalEntityShowRendererRegistry.Load()
 }
 
 // MakeWidgetMountRenderer returns an EntityShowRenderer that emits a single
@@ -221,7 +224,7 @@ func lookupEntityShowRenderer(ctx EntityShowRenderContext) templ.Component {
 	if ctx.EntityType == nil {
 		return nil
 	}
-	reg := globalEntityShowRendererRegistry
+	reg := globalEntityShowRendererRegistry.Load()
 	if reg == nil {
 		return nil
 	}

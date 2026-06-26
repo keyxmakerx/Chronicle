@@ -2627,7 +2627,7 @@ func (h *Handler) BlockTypesAPI(c echo.Context) error {
 	// stays consistent with that. System-agnostic campaigns (no character
 	// renderer registered) keep the block.
 	systemOwnsCharacterSheet := false
-	if reg := globalEntityShowRendererRegistry; reg != nil {
+	if reg := globalEntityShowRendererRegistry.Load(); reg != nil {
 		_, systemOwnsCharacterSheet = reg.LookupByPresetCategory("character")
 	}
 	types = hideRedundantCharacterSurface(types, systemOwnsCharacterSheet)
