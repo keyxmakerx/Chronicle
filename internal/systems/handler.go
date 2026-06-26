@@ -47,6 +47,17 @@ func (h *SystemHandler) SetAddonService(svc addonChecker) {
 	h.addonSvc = svc
 }
 
+// OperatorDiagnosticsAPI serves the operator diagnostics report as plain-text
+// markdown: the served-reality systems table (from LoadedHealth) plus the
+// run-and-paste-back probe library. The admin opens it, selects-all, and pastes
+// the whole thing to the AI assistant — the operator-facing analogue of the
+// campaign AI-Export. Read-only and secret-free by construction. Admin-gated.
+// GET /admin/diagnostics
+func (h *SystemHandler) OperatorDiagnosticsAPI(c echo.Context) error {
+	report := BuildOperatorReport(LoadedHealth(), defaultProbes())
+	return c.Blob(http.StatusOK, "text/markdown; charset=utf-8", []byte(report))
+}
+
 // ExtensionsHealthAPI returns read-only deployment health for every LOADED
 // system — the version + on-disk directory the loader actually serves from, plus
 // a content fingerprint (size + sha256 + mtime) of each widget/manifest file.

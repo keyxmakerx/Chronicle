@@ -2969,6 +2969,10 @@ func (a *App) RegisterRoutes() {
 	// "Packages says X but the old file renders" mismatch from the UI.
 	adminGroup.GET("/extensions/health", systemHandler.ExtensionsHealthAPI)
 
+	// Operator AI-diagnostics report (copy-paste to the AI assistant): the
+	// served-reality systems table + a modular run-and-paste-back probe library.
+	adminGroup.GET("/diagnostics", systemHandler.OperatorDiagnosticsAPI)
+
 	// Wire system widgets into the template editor palette (deferred from
 	// block registry setup because systemHandler is created after entityHandler).
 	entityHandler.SetWidgetBlockLister(&widgetBlockListerAdapter{extHandler: extHandler, sysHandler: systemHandler})
