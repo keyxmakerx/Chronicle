@@ -18,6 +18,7 @@ package systems
 
 import (
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -170,6 +171,74 @@ func renderCatalog(cat []Diagnostic) string {
 	}
 	b.WriteString("\nThe assistant should request the cheapest diagnostic that answers its question; `system.health` (full dump) only when a targeted one won't do.\n")
 	return b.String()
+}
+
+// RenderDiagnosticsHTML builds a self-contained interactive admin page (no Templ
+// dependency): a Run button per catalog diagnostic, an arg box for the ones that
+// take one, a result pane, and a Copy button. It fetches the SAME endpoint with
+// ?name=… (which returns markdown) — so the human clicks instead of typing URLs,
+// then copies the small result to the assistant. Browsers reach this via content
+// negotiation on the bare /admin/diagnostics path.
+func RenderDiagnosticsHTML(cat []Diagnostic) string {
+	var rows strings.Builder
+	for _, d := range cat {
+		arg := ""
+		if d.ArgHint != "" {
+			arg = fmt.Sprintf(`<input class="arg" data-for="%s" placeholder="%s" size="18">`,
+				html.EscapeString(d.Name), html.EscapeString(d.ArgHint))
+		}
+		fmt.Fprintf(&rows, `<div class="diag"><div class="row"><button class="run" data-name="%s">Run</button> <b>%s</b> %s</div><div class="desc">%s</div></div>`,
+			html.EscapeString(d.Name), html.EscapeString(d.Name), arg, html.EscapeString(d.Desc))
+	}
+	// The JS fetches /admin/diagnostics?name=…&arg=… (markdown), shows it, and
+	// copies it. Output is set via textContent (never innerHTML) — no injection.
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operator Diagnostics — Chronicle</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;max-width:920px;margin:24px auto;padding:0 16px;background:#0f172a;color:#e2e8f0;line-height:1.5}
+h1{font-size:20px;margin:0 0 4px} p.lead{color:#94a3b8;margin:0 0 16px;font-size:14px}
+a{color:#60a5fa}
+.diag{border:1px solid #334155;border-radius:8px;padding:10px 12px;margin:8px 0;background:#1e293b}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.diag b{font-family:ui-monospace,monospace;font-size:13px}
+.desc{color:#94a3b8;font-size:13px;margin-top:6px}
+button{background:#2563eb;color:#fff;border:0;border-radius:6px;padding:5px 12px;cursor:pointer;font:inherit}
+button:hover{background:#1d4ed8}
+input.arg{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px 8px;font:inherit}
+#bar{display:flex;gap:8px;align-items:center;margin:16px 0 6px}
+#status{color:#94a3b8;font-size:13px}
+pre{white-space:pre-wrap;word-break:break-word;background:#0b1220;border:1px solid #334155;border-radius:8px;padding:12px;max-height:60vh;overflow:auto;font-size:12.5px}
+</style></head><body>
+<h1>Operator Diagnostics</h1>
+<p class="lead">Read-only &amp; secret-redacted. The assistant names a check; run it here and paste the result back. (Probes that need a shell/console are listed by the <b>probes</b> check.)</p>
+` + rows.String() + `
+<div id="bar"><button id="copy">Copy result</button><span id="status"></span></div>
+<pre id="out">— run a check above —</pre>
+<script>
+(function(){
+  var out=document.getElementById('out'), status=document.getElementById('status');
+  function argFor(name){var el=document.querySelector('input.arg[data-for="'+CSS.escape(name)+'"]');return el?el.value.trim():'';}
+  document.querySelectorAll('button.run').forEach(function(b){
+    b.addEventListener('click',function(){
+      var name=b.getAttribute('data-name');
+      var url='/admin/diagnostics?name='+encodeURIComponent(name);
+      var a=argFor(name); if(a) url+='&arg='+encodeURIComponent(a);
+      status.textContent='running '+name+'…'; out.textContent='';
+      fetch(url,{headers:{'Accept':'text/markdown'}}).then(function(r){return r.text();})
+        .then(function(t){out.textContent=t; status.textContent=name;})
+        .catch(function(e){out.textContent='error: '+e; status.textContent='';});
+    });
+  });
+  document.getElementById('copy').addEventListener('click',function(){
+    var t=out.textContent||'';
+    (navigator.clipboard&&navigator.clipboard.writeText(t)||Promise.reject()).then(function(){status.textContent='copied';},function(){
+      var r=document.createRange();r.selectNode(out);var s=getSelection();s.removeAllRanges();s.addRange(r);
+      try{document.execCommand('copy');status.textContent='copied';}catch(e){status.textContent='select + copy manually';}
+    });
+  });
+})();
+</script></body></html>`
 }
 
 // RunDiagnostic looks up a named diagnostic and returns its REDACTED markdown, or
