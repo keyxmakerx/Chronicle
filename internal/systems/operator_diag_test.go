@@ -5,13 +5,54 @@ import (
 	"testing"
 )
 
-func TestDefaultProbes_WellFormed(t *testing.T) {
-	probes := defaultProbes()
-	if len(probes) == 0 {
-		t.Fatal("expected a non-empty probe library")
+func TestDiagnosticCatalog_WellFormed(t *testing.T) {
+	cat := diagnosticCatalog()
+	if len(cat) == 0 {
+		t.Fatal("expected a non-empty diagnostic catalog")
 	}
 	seen := map[string]bool{}
-	for _, p := range probes {
+	for _, d := range cat {
+		if d.Name == "" || d.Title == "" || d.Desc == "" || d.Run == nil {
+			t.Errorf("diagnostic %q has an empty field: %+v", d.Name, d)
+		}
+		if seen[d.Name] {
+			t.Errorf("duplicate diagnostic name %q", d.Name)
+		}
+		seen[d.Name] = true
+	}
+	// The catalog the assistant reads must name every diagnostic but carry no
+	// payload data (no garbage context).
+	menu := renderCatalog(cat)
+	for _, d := range cat {
+		if !strings.Contains(menu, d.Name) {
+			t.Errorf("catalog menu missing %q", d.Name)
+		}
+	}
+}
+
+func TestRunDiagnostic_DispatchAndUnknown(t *testing.T) {
+	cat := diagnosticCatalog()
+	if _, ok := RunDiagnostic(cat, "does.not.exist", ""); ok {
+		t.Error("unknown diagnostic should return ok=false")
+	}
+	out, ok := RunDiagnostic(cat, "probes", "")
+	if !ok {
+		t.Fatal("probes diagnostic should dispatch")
+	}
+	// Probes diagnostic carries the run-and-paste-back library.
+	if !strings.Contains(out, "PASTE OUTPUT BELOW") {
+		t.Error("probes output should include paste-back markers")
+	}
+	for _, p := range defaultProbes() {
+		if !strings.Contains(out, p.Command) {
+			t.Errorf("probes output missing command for %q", p.ID)
+		}
+	}
+}
+
+func TestProbes_WellFormedAndUnique(t *testing.T) {
+	seen := map[string]bool{}
+	for _, p := range defaultProbes() {
 		if p.ID == "" || p.Title == "" || p.Command == "" || p.Why == "" || p.Where == "" {
 			t.Errorf("probe %q has an empty field: %+v", p.ID, p)
 		}
@@ -22,60 +63,40 @@ func TestDefaultProbes_WellFormed(t *testing.T) {
 	}
 }
 
-func TestBuildOperatorReport_EmbedsServedRealityAndProbes(t *testing.T) {
-	systems := []SystemHealth{{
-		ID: "drawsteel", Name: "Draw Steel", Version: "0.13.0", Source: "package",
-		Dir: "/app/media/packages/systems/drawsteel/0.13.0",
-		Files: []FileFingerprint{
-			{Path: "widgets/character-sheet.js", Exists: true, Size: 41000, SHA256: "deadbeefcafe1234", ModTime: "2026-06-26T20:06:00Z"},
-			{Path: "missing.js", Exists: false},
-		},
+func TestRedactSecrets(t *testing.T) {
+	cases := []struct {
+		in       string
+		redacted bool
+	}{
+		{"DB_PASSWORD=hunter2", true},
+		{"api_key: sk-abcdef123456", true},
+		{"Authorization: Bearer eyJhbGciOi", true},
+		{"private-key = MIIEvA", true},
+		// must NOT redact legitimate diagnostic data (no secret keyword):
+		{"sha256: deadbeefcafe1234", false},
+		{"loaded_version: 0.13.0", false},
+		{"dir: /app/media/packages/systems/drawsteel/0.13.0", false},
+	}
+	for _, c := range cases {
+		got := redactSecrets(c.in)
+		didRedact := strings.Contains(got, "[REDACTED]")
+		if didRedact != c.redacted {
+			t.Errorf("redactSecrets(%q) redacted=%v, want %v (got %q)", c.in, didRedact, c.redacted, got)
+		}
+	}
+}
+
+func TestRunDiagnostic_OutputIsRedacted(t *testing.T) {
+	// A diagnostic whose raw output contains a credential must come back redacted.
+	cat := []Diagnostic{{
+		Name: "leaky", Title: "t", Desc: "d",
+		Run: func(string) string { return "config: DB_PASSWORD=hunter2\n" },
 	}}
-	report := BuildOperatorReport(systems, defaultProbes())
-
-	// Served reality must be present and specific (version, dir, hash, MISSING).
-	for _, want := range []string{
-		"Chronicle Operator Diagnostics",
-		"no secrets included",
-		"loaded_version: **0.13.0**",
-		"/app/media/packages/systems/drawsteel/0.13.0",
-		"deadbeefcafe1234",
-		"**MISSING**",
-	} {
-		if !strings.Contains(report, want) {
-			t.Errorf("report missing %q", want)
-		}
+	out, ok := RunDiagnostic(cat, "leaky", "")
+	if !ok {
+		t.Fatal("expected dispatch")
 	}
-
-	// Every probe's command + a paste-back marker must appear.
-	for _, p := range defaultProbes() {
-		if !strings.Contains(report, p.Command) {
-			t.Errorf("report missing probe command for %q", p.ID)
-		}
-	}
-	if strings.Count(report, "PASTE OUTPUT BELOW") != len(defaultProbes()) {
-		t.Errorf("expected one paste-back marker per probe (%d)", len(defaultProbes()))
-	}
-}
-
-func TestBuildOperatorReport_EmptySystemsIsGraceful(t *testing.T) {
-	report := BuildOperatorReport(nil, defaultProbes())
-	if !strings.Contains(report, "No systems loaded") {
-		t.Error("expected a graceful empty-systems note")
-	}
-	// Probes still render so the operator can gather state even with an empty registry.
-	if !strings.Contains(report, "Probes — run each") {
-		t.Error("probes section should render even with no systems")
-	}
-}
-
-// Guard: the report must never carry obvious secret-bearing tokens. The probe
-// library uses <placeholders> the operator fills locally and never pastes back.
-func TestBuildOperatorReport_NoSecretsByConstruction(t *testing.T) {
-	report := strings.ToLower(BuildOperatorReport(nil, defaultProbes()))
-	for _, banned := range []string{"password=", "secret=", "api_key=", "bearer ", "token="} {
-		if strings.Contains(report, banned) {
-			t.Errorf("report unexpectedly contains a secret-bearing token: %q", banned)
-		}
+	if strings.Contains(out, "hunter2") || !strings.Contains(out, "[REDACTED]") {
+		t.Errorf("expected redacted output, got %q", out)
 	}
 }

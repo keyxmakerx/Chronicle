@@ -47,15 +47,26 @@ func (h *SystemHandler) SetAddonService(svc addonChecker) {
 	h.addonSvc = svc
 }
 
-// OperatorDiagnosticsAPI serves the operator diagnostics report as plain-text
-// markdown: the served-reality systems table (from LoadedHealth) plus the
-// run-and-paste-back probe library. The admin opens it, selects-all, and pastes
-// the whole thing to the AI assistant — the operator-facing analogue of the
-// campaign AI-Export. Read-only and secret-free by construction. Admin-gated.
-// GET /admin/diagnostics
+// OperatorDiagnosticsAPI is the operator-facing analogue of the campaign
+// AI-Export: a CATALOG of named, read-only, secret-redacted diagnostics the
+// assistant requests one at a time, so the operator only ever pastes back the
+// small, targeted result it asked for (no garbage context). Per the debug-cockpit
+// capability spec §B/§C2. Admin-gated.
+//
+//	GET /admin/diagnostics                      → the catalog (tiny menu, no payload)
+//	GET /admin/diagnostics?name=system.versions → run one named diagnostic
+//	GET /admin/diagnostics?name=system.files&arg=drawsteel
 func (h *SystemHandler) OperatorDiagnosticsAPI(c echo.Context) error {
-	report := BuildOperatorReport(LoadedHealth(), defaultProbes())
-	return c.Blob(http.StatusOK, "text/markdown; charset=utf-8", []byte(report))
+	cat := diagnosticCatalog()
+	name := c.QueryParam("name")
+	if name == "" {
+		return c.Blob(http.StatusOK, "text/markdown; charset=utf-8", []byte(renderCatalog(cat)))
+	}
+	out, ok := RunDiagnostic(cat, name, c.QueryParam("arg"))
+	if !ok {
+		return apperror.NewNotFound(fmt.Sprintf("unknown diagnostic %q — GET /admin/diagnostics for the catalog", name))
+	}
+	return c.Blob(http.StatusOK, "text/markdown; charset=utf-8", []byte(out))
 }
 
 // ExtensionsHealthAPI returns read-only deployment health for every LOADED
