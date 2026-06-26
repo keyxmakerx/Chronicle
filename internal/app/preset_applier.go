@@ -47,51 +47,68 @@ func (p *presetApplier) ApplySystemPresets(ctx context.Context, campaignID, syst
 		return 0, fmt.Errorf("listing existing types: %w", err)
 	}
 
-	// Build set of existing preset categories to skip duplicates.
-	existingCategories := make(map[string]bool, len(existingTypes))
-	for _, et := range existingTypes {
-		if et.PresetCategory != nil {
-			existingCategories[*et.PresetCategory] = true
+	// Index existing types by preset category and by (lowercased) name so each
+	// preset can find its already-created type — either to upgrade it in place
+	// (WS-5) or to know it must create a new one. Name indexing catches types
+	// created before preset_category existed, or made manually by the user.
+	existingByCategory := make(map[string]*entities.EntityType)
+	existingByName := make(map[string]*entities.EntityType, len(existingTypes))
+	for i := range existingTypes {
+		et := &existingTypes[i]
+		if et.PresetCategory != nil && *et.PresetCategory != "" {
+			existingByCategory[*et.PresetCategory] = et
 		}
-	}
-
-	// Build set of existing names to catch entity types created before
-	// preset_category was introduced or created manually by the user.
-	existingNames := make(map[string]bool, len(existingTypes))
-	for _, et := range existingTypes {
-		existingNames[strings.ToLower(et.Name)] = true
+		existingByName[strings.ToLower(et.Name)] = et
 	}
 
 	created := 0
 	for _, preset := range manifest.EntityPresets {
-		// Skip if this category already has an entity type.
-		if preset.Category != "" && existingCategories[preset.Category] {
-			slog.Debug("skipping preset (category already exists)",
-				slog.String("campaign_id", campaignID),
-				slog.String("preset", preset.Slug),
-				slog.String("category", preset.Category),
-			)
+		declared := mapPresetFields(preset.Fields)
+
+		// Does a type for this preset already exist? Prefer a preset-category
+		// match (stable across renames); fall back to a name match.
+		var match *entities.EntityType
+		if preset.Category != "" {
+			match = existingByCategory[preset.Category]
+		}
+		if match == nil {
+			match = existingByName[strings.ToLower(preset.Name)]
+		}
+
+		// Upgrade path (WS-5): the type exists, so don't recreate it — just add
+		// any newly-declared fields it's missing. Idempotent: no-ops once the
+		// type already carries every declared field.
+		if match != nil {
+			added, err := p.entityService.ReconcileEntityTypeFields(ctx, match.ID, declared)
+			if err != nil {
+				slog.Warn("failed to reconcile entity type fields from preset",
+					slog.String("campaign_id", campaignID),
+					slog.String("preset", preset.Slug),
+					slog.Int("entity_type_id", match.ID),
+					slog.Any("error", err),
+				)
+				continue // Graceful degradation — try the other presets.
+			}
+			if added > 0 {
+				slog.Info("entity type fields upgraded from system preset",
+					slog.String("campaign_id", campaignID),
+					slog.Int("entity_type_id", match.ID),
+					slog.String("preset", preset.Slug),
+					slog.String("system", systemSlug),
+					slog.Int("fields_added", added),
+				)
+			}
 			continue
 		}
 
-		// Skip if an entity type with the same name already exists (catches
-		// types created before preset_category was added or manually created).
-		if existingNames[strings.ToLower(preset.Name)] {
-			slog.Debug("skipping preset (name already exists)",
-				slog.String("campaign_id", campaignID),
-				slog.String("preset", preset.Slug),
-				slog.String("name", preset.Name),
-			)
-			continue
-		}
-
+		// Create path: no matching type yet — make a new one with its fields.
 		input := entities.CreateEntityTypeInput{
 			Name:           preset.Name,
 			NamePlural:     preset.NamePlural,
 			Icon:           preset.Icon,
 			Color:          preset.Color,
 			PresetCategory: preset.Category,
-			Fields:         mapPresetFields(preset.Fields),
+			Fields:         declared,
 		}
 
 		et, err := p.entityService.CreateEntityType(ctx, campaignID, input)

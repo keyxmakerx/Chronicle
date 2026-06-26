@@ -21,6 +21,71 @@ type SystemLoader struct {
 type loadedSystem struct {
 	manifest *SystemManifest
 	dir      string
+	source   string // "bundled" or "package" — drives the duplicate-resolution tie-break.
+}
+
+// preferCandidate reports whether a newly-discovered manifest should replace the
+// currently-loaded system with the same ID. Policy (WS-6 — "never silently
+// downgrade"): the highest version wins; on an exact-version tie a
+// package-installed copy overlays a bundled one (the intended package-manager
+// override); anything else keeps what's already loaded. This stops a stale
+// duplicate directory (e.g. a leftover "<slug>-1") from shadowing the current
+// system purely because it sorts later in the scan.
+func (l *SystemLoader) preferCandidate(existing *loadedSystem, candidate *SystemManifest, source string) bool {
+	if existing == nil {
+		return true
+	}
+	ev, cv := existing.manifest.Version, candidate.Version
+	if versionLess(ev, cv) {
+		return true // candidate strictly newer → wins
+	}
+	if versionLess(cv, ev) {
+		return false // candidate older → never clobbers the newer load
+	}
+	// Equal version: let a package overlay a bundled one; otherwise keep first.
+	return source == "package" && existing.source == "bundled"
+}
+
+// register records a discovered manifest under its ID, applying the
+// duplicate-resolution policy (preferCandidate). It returns true when the
+// candidate was accepted (the caller should then instantiate it) and false when
+// a preferred copy is already loaded — in which case it logs and records an
+// EventSkipped so the ignored duplicate is visible in admin diagnostics, and the
+// caller must NOT instantiate (which would re-introduce the last-wins bug via
+// systemInstances).
+func (l *SystemLoader) register(manifest *SystemManifest, dir, source string) bool {
+	existing := l.modules[manifest.ID]
+	if !l.preferCandidate(existing, manifest, source) {
+		slog.Warn("ignoring duplicate system — a preferred copy is already loaded",
+			slog.String("id", manifest.ID),
+			slog.String("ignored_dir", dir),
+			slog.String("ignored_version", manifest.Version),
+			slog.String("kept_dir", existing.dir),
+			slog.String("kept_version", existing.manifest.Version),
+		)
+		RecordEvent(LoadEvent{
+			SystemID: manifest.ID,
+			Name:     manifest.Name,
+			Kind:     EventSkipped,
+			Source:   source,
+			Error: fmt.Sprintf("duplicate ignored: version %q not preferred over loaded %q (%s)",
+				manifest.Version, existing.manifest.Version, existing.dir),
+			Dir: dir,
+		})
+		return false
+	}
+	if existing != nil {
+		slog.Info("replacing system with preferred copy",
+			slog.String("id", manifest.ID),
+			slog.String("old_dir", existing.dir),
+			slog.String("old_version", existing.manifest.Version),
+			slog.String("new_dir", dir),
+			slog.String("new_version", manifest.Version),
+			slog.String("source", source),
+		)
+	}
+	l.modules[manifest.ID] = &loadedSystem{manifest: manifest, dir: dir, source: source}
+	return true
 }
 
 // NewSystemLoader creates a loader that will scan the given directory
@@ -76,9 +141,10 @@ func (l *SystemLoader) DiscoverAll() error {
 		}
 
 		sysDir := filepath.Join(l.systemsDir, entry.Name())
-		l.modules[manifest.ID] = &loadedSystem{
-			manifest: manifest,
-			dir:      sysDir,
+		// Resolve duplicates by version (WS-6) — skip a stale/older copy so it
+		// can't shadow the current one by scan order.
+		if !l.register(manifest, sysDir, "bundled") {
+			continue
 		}
 
 		RecordEvent(LoadEvent{
@@ -153,9 +219,12 @@ func (l *SystemLoader) DiscoverAll() error {
 	return nil
 }
 
-// DiscoverDir scans a single directory for a manifest.json file and loads it
-// as a system. If a system with the same ID already exists, it is replaced.
-// This is used to overlay package-manager-installed systems on top of bundled ones.
+// DiscoverDir scans a single directory for a manifest.json file and loads it as
+// a system. Used to overlay package-manager-installed systems on top of bundled
+// ones. Whether an existing same-ID system is replaced is decided by the
+// version-aware policy in register/preferCandidate (WS-6): a package copy
+// overlays a bundled one at equal version, a newer version always wins, and an
+// older/stale duplicate is skipped rather than silently downgrading the load.
 func (l *SystemLoader) DiscoverDir(dir string) error {
 	manifestPath := filepath.Join(dir, "manifest.json")
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
@@ -193,9 +262,11 @@ func (l *SystemLoader) loadSingleSystem(sysDir string) error {
 		return fmt.Errorf("invalid manifest in %s: %w", sysDir, err)
 	}
 
-	l.modules[manifest.ID] = &loadedSystem{
-		manifest: manifest,
-		dir:      sysDir,
+	// Resolve duplicates by version (WS-6). A package overlay of equal version
+	// wins over bundled; an older/duplicate package copy is skipped (not an
+	// error — the preferred copy is already loaded).
+	if !l.register(manifest, sysDir, "package") {
+		return nil
 	}
 
 	slog.Info("loaded package system",
@@ -296,7 +367,7 @@ func (l *SystemLoader) RegisterSystem(mod System) {
 
 // GetSystem returns the live System instance by ID, or nil if not
 // found or not instantiated.
-func (l *SystemLoader) GetSystem(id string) System { 
+func (l *SystemLoader) GetSystem(id string) System {
 	return l.systemInstances[id]
 }
 
