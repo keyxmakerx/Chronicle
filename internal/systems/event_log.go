@@ -21,6 +21,12 @@ const (
 
 	// EventFailed means the system failed to load or instantiate.
 	EventFailed LoadEventKind = "failed"
+
+	// EventSkipped means a duplicate manifest (same system ID) was ignored
+	// because an already-loaded copy was preferred — a newer version, or the
+	// owning package overlay. Distinct from EventFailed: nothing went wrong,
+	// the loader deliberately kept the better copy (WS-6).
+	EventSkipped LoadEventKind = "skipped"
 )
 
 // LoadEvent records a single system loading event.
