@@ -18,9 +18,32 @@ package systems
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
+
+// InstalledPackage is the package-manager's view of one installed system,
+// injected from the packages plugin via SetInstalledPackagesProvider (dependency
+// inversion — systems must not import packages). Powers the installed-vs-loaded
+// and on-disk-versions diagnostics.
+type InstalledPackage struct {
+	Slug        string
+	Version     string // the DB's installed_version
+	InstallPath string // the version dir the last install wrote
+}
+
+// installedPackagesFn returns the installed system packages, or nil if the
+// packages plugin hasn't wired it (in which case the relevant diagnostics say so
+// rather than failing).
+var installedPackagesFn func() []InstalledPackage
+
+// SetInstalledPackagesProvider wires the packages plugin's installed-system list
+// so the cross-layer diagnostics can compare DB state to the live loader. Called
+// once at startup from the app wiring.
+func SetInstalledPackagesProvider(fn func() []InstalledPackage) { installedPackagesFn = fn }
 
 // Diagnostic is one named, read-only check in the catalog. Adding a diagnostic =
 // appending one of these — the renderer, route, and redaction are unchanged
@@ -100,6 +123,24 @@ func diagnosticCatalog() []Diagnostic {
 				renderSystemsSection(&b, LoadedHealth())
 				return b.String()
 			},
+		},
+		{
+			Name:  "packages.installed-vs-loaded",
+			Title: "Installed (DB) vs loaded (registry) per system package",
+			Desc:  "THE check for 'Admin▸Packages says X but the old file renders': compares each installed system package's version to what the loader actually serves (matched by install path). Flags 'installed but NOT loaded' and version mismatches.",
+			Run:   func(string) string { return renderInstalledVsLoaded() },
+		},
+		{
+			Name:  "packages.on-disk-versions",
+			Title: "All on-disk version folders per package (find shadowing leftovers)",
+			Desc:  "Lists every installed version folder for each system package, tagging which is the DB-installed one and which the loader actually serves — surfaces a stale folder shadowing the newest.",
+			Run:   func(string) string { return renderOnDiskVersions() },
+		},
+		{
+			Name:  "systems.load-events",
+			Title: "System loader event log (discovered / skipped / failed)",
+			Desc:  "The loader's in-memory events: what loaded, which duplicate copy was SKIPPED (and why), and load failures. Answers 'did the new version load, and if a copy was ignored, why?'.",
+			Run:   func(string) string { return renderLoadEvents(DiagnosticEvents()) },
 		},
 		{
 			Name:  "probes",
@@ -205,6 +246,135 @@ func renderProbesSection(b *strings.Builder, probes []Probe) {
 	}
 }
 
+// loadedUnderPath returns the loaded system whose served dir is at or under
+// installPath (authoritative match — sidesteps slug-vs-manifest-id differences),
+// or nil if none. The package DB's InstallPath always points at the NEWEST
+// install; if no live system sits under it, the loader never picked it up.
+func loadedUnderPath(loaded []SystemHealth, installPath string) *SystemHealth {
+	if installPath == "" {
+		return nil
+	}
+	for i := range loaded {
+		d := loaded[i].Dir
+		if d == installPath || strings.HasPrefix(d, installPath+string(os.PathSeparator)) {
+			return &loaded[i]
+		}
+	}
+	return nil
+}
+
+// renderInstalledVsLoaded compares each installed system package (DB) to the live
+// loader — the smoking gun for stale-serve bugs.
+func renderInstalledVsLoaded() string {
+	var b strings.Builder
+	b.WriteString("## packages.installed-vs-loaded\n\n")
+	if installedPackagesFn == nil {
+		b.WriteString("_Provider not wired (packages plugin not injected at startup)._\n")
+		return b.String()
+	}
+	installed := installedPackagesFn()
+	if len(installed) == 0 {
+		b.WriteString("_No system packages installed via the package manager._\n")
+		return b.String()
+	}
+	loaded := LoadedHealth()
+	for _, p := range installed {
+		m := loadedUnderPath(loaded, p.InstallPath)
+		if m == nil {
+			fmt.Fprintf(&b, "- `%s` installed **%s** — ⚠️ **NOT loaded**: no live system under `%s` (the registry never picked up this install; a restart or reinstall is needed).\n", p.Slug, p.Version, p.InstallPath)
+			continue
+		}
+		flag := "OK"
+		if m.Version != p.Version {
+			flag = "⚠️ **MISMATCH**"
+		}
+		fmt.Fprintf(&b, "- `%s` installed **%s** · loaded **%s** (serves `%s`) — %s\n", p.Slug, p.Version, m.Version, m.Dir, flag)
+	}
+	return b.String()
+}
+
+// renderOnDiskVersions lists every version folder on disk per package, tagging the
+// DB-installed one and the one the loader serves — so a shadowing leftover shows.
+func renderOnDiskVersions() string {
+	var b strings.Builder
+	b.WriteString("## packages.on-disk-versions\n\n")
+	if installedPackagesFn == nil {
+		b.WriteString("_Provider not wired._\n")
+		return b.String()
+	}
+	loaded := LoadedHealth()
+	for _, p := range installedPackagesFn() {
+		fmt.Fprintf(&b, "### `%s` — DB-installed %s\n", p.Slug, p.Version)
+		slugDir := filepath.Dir(p.InstallPath) // …/packages/systems/<slug>
+		entries, err := os.ReadDir(slugDir)
+		if err != nil {
+			fmt.Fprintf(&b, "- _cannot read `%s`: %v_\n", slugDir, err)
+			continue
+		}
+		servedDir := ""
+		if m := loadedUnderPath(loaded, p.InstallPath); m != nil {
+			servedDir = m.Dir
+		} else if m := loadedUnderPathAny(loaded, slugDir); m != nil {
+			servedDir = m.Dir // loader serves SOME version under this slug, just not the installed one
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			ver := e.Name()
+			full := filepath.Join(slugDir, ver)
+			tags := ""
+			if ver == p.Version {
+				tags += " `[installed-db]`"
+			}
+			if servedDir != "" && (servedDir == full || strings.HasPrefix(servedDir, full+string(os.PathSeparator))) {
+				tags += " `[LOADED]`"
+			}
+			fmt.Fprintf(&b, "- `%s`%s\n", ver, tags)
+		}
+	}
+	return b.String()
+}
+
+// loadedUnderPathAny returns any loaded system served from under slugDir (any
+// version), used to surface the case where the loader serves an OLD version.
+func loadedUnderPathAny(loaded []SystemHealth, slugDir string) *SystemHealth {
+	for i := range loaded {
+		if strings.HasPrefix(loaded[i].Dir, slugDir+string(os.PathSeparator)) {
+			return &loaded[i]
+		}
+	}
+	return nil
+}
+
+// renderLoadEvents renders the loader event log, newest first, capped.
+func renderLoadEvents(events []LoadEvent) string {
+	var b strings.Builder
+	b.WriteString("## systems.load-events\n\n")
+	if len(events) == 0 {
+		b.WriteString("_No load events recorded._\n")
+		return b.String()
+	}
+	const cap = 60
+	start := 0
+	if len(events) > cap {
+		start = len(events) - cap
+	}
+	for i := len(events) - 1; i >= start; i-- {
+		e := events[i]
+		ts := e.Timestamp.UTC().Format(time.RFC3339)
+		fmt.Fprintf(&b, "- `%s` **%s** `%s` (%s)", ts, e.Kind, e.SystemID, e.Source)
+		if e.Error != "" {
+			b.WriteString(" — " + e.Error)
+		}
+		if e.Dir != "" {
+			fmt.Fprintf(&b, "  ·  `%s`", e.Dir)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 // ProbeWhere names where a probe command is run.
 type ProbeWhere string
 
@@ -269,6 +439,27 @@ func defaultProbes() []Probe {
 			Where:   ProbeDocker,
 			Command: `docker inspect --format '{{.Image}} {{.Config.Image}}' <chronicle>`,
 			Why:     "Confirms the backend is on the expected image — a stale image explains merged backend changes not being live.",
+		},
+		{
+			ID:      "packages-db-state",
+			Title:   "Package manager's DB view of installed system versions",
+			Where:   ProbeSQL,
+			Command: `docker exec <db> mariadb -u root -p<password> chronicle -e "SELECT slug, installed_version, pinned_version, install_path, last_installed_at FROM packages WHERE type='system' ORDER BY slug;"`,
+			Why:     "The DB's record of what's installed/pinned, to compare against the loader (cross-check with packages.installed-vs-loaded).",
+		},
+		{
+			ID:      "entity-type-tree",
+			Title:   "Entity types + entity counts for a campaign",
+			Where:   ProbeSQL,
+			Command: `docker exec <db> mariadb -u root -p<password> chronicle -e "SELECT id, name, slug, preset_category, parent_type_id, (SELECT COUNT(*) FROM entities WHERE entity_type_id=et.id) AS n FROM entity_types et WHERE campaign_id='<campaignId>' ORDER BY parent_type_id, name;"`,
+			Why:     "Surfaces duplicate preset categories (e.g. two 'character' types) and how many entities each holds — guides a merge/reconcile.",
+		},
+		{
+			ID:      "sync-mapping-orphans",
+			Title:   "Sync mappings pointing at missing entities",
+			Where:   ProbeSQL,
+			Command: `docker exec <db> mariadb -u root -p<password> chronicle -e "SELECT sm.id, sm.external_id, sm.chronicle_id FROM sync_mappings sm LEFT JOIN entities e ON e.id=sm.chronicle_id WHERE sm.campaign_id='<campaignId>' AND e.id IS NULL;"`,
+			Why:     "Broken sync links that will fail on the next sync — orphaned after an entity was deleted.",
 		},
 	}
 }

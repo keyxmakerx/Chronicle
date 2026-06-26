@@ -168,6 +168,9 @@ These are the named diagnostics in the catalog today (from
 | `system.versions` | —             | One compact line per loaded system: id, served version, source, served dir. **The first thing to check for "is the new version live?"** |
 | `system.files`    | `<system-id>` | `size · sha256[:16] · mtime` of each widget/manifest file for one system. Proves which build the loader serves. Files that are gone render as `MISSING`. With no arg it lists the loaded ids. |
 | `system.health`   | —             | The full served-reality dump (all systems + all file fingerprints). Larger — request only when a targeted diagnostic isn't enough. |
+| `packages.installed-vs-loaded` | — | **THE check for "Admin▸Packages says X but the old file renders":** compares each installed system package's DB version to what the loader actually serves (matched by install path). Flags `NOT loaded` (the registry never picked up the install) and version `MISMATCH`. Requires the packages provider (wired at startup). |
+| `packages.on-disk-versions` | — | Lists every on-disk version folder per package, tagging `[installed-db]` (the DB's version) and `[LOADED]` (what the loader serves) — surfaces a stale folder shadowing the newest. |
+| `systems.load-events` | —          | The loader's in-memory event log (newest first): `discovered` / `skipped` (a duplicate ignored, with the reason) / `failed`. Answers "did the new version load, and if a copy was skipped, why?" |
 | `probes`          | —             | The run-and-paste-back probe library (below). |
 
 ### Current probes
@@ -194,6 +197,9 @@ The probes today (from `defaultProbes()`):
 | `package-file-marker`   | docker | `grep -rl` for a new-build marker across the install dirs — pinpoints which on-disk version folder actually contains the new code. |
 | `chronicle-logs`        | docker | Recent Chronicle logs: package install, "replacing system with preferred copy", "ignoring duplicate system", and boot rescan lines — what the loader did with the new version. |
 | `image-digest`          | docker | Which Chronicle image the container runs — a stale image explains merged backend changes not being live. |
+| `packages-db-state`     | sql | The `packages` table's view of installed/pinned system versions + install paths — cross-check against `packages.installed-vs-loaded`. |
+| `entity-type-tree`      | sql | Entity types + per-type entity counts for a campaign — surfaces duplicate preset categories and guides a merge/reconcile. |
+| `sync-mapping-orphans`  | sql | Sync mappings pointing at deleted entities — broken links that fail on the next sync. |
 
 ---
 

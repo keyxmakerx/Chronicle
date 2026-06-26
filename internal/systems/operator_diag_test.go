@@ -3,7 +3,76 @@ package systems
 import (
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestCatalogHasNewDiagnostics(t *testing.T) {
+	names := map[string]bool{}
+	for _, d := range diagnosticCatalog() {
+		names[d.Name] = true
+	}
+	for _, want := range []string{"packages.installed-vs-loaded", "packages.on-disk-versions", "systems.load-events"} {
+		if !names[want] {
+			t.Errorf("catalog missing %q", want)
+		}
+	}
+}
+
+func TestRenderLoadEvents(t *testing.T) {
+	if !strings.Contains(renderLoadEvents(nil), "No load events") {
+		t.Error("empty events should render the no-events note")
+	}
+	evs := []LoadEvent{
+		{Timestamp: time.Unix(1000, 0), SystemID: "drawsteel", Kind: EventSkipped, Source: "package", Error: "dup ignored", Dir: "/p/drawsteel/0.12.3"},
+		{Timestamp: time.Unix(2000, 0), SystemID: "drawsteel", Kind: EventDiscovered, Source: "package", Dir: "/p/drawsteel/0.13.0"},
+	}
+	out := renderLoadEvents(evs)
+	if !strings.Contains(out, "skipped") || !strings.Contains(out, "dup ignored") {
+		t.Errorf("expected the skipped event + its reason, got:\n%s", out)
+	}
+}
+
+func TestInstalledVsLoaded(t *testing.T) {
+	prev := installedPackagesFn
+	defer func() { installedPackagesFn = prev }()
+
+	installedPackagesFn = nil
+	if !strings.Contains(renderInstalledVsLoaded(), "Provider not wired") {
+		t.Error("nil provider should be reported, not crash")
+	}
+
+	// Installed 0.13.0 but the loader serves the 0.12.3 dir → "NOT loaded".
+	stale := map[string]*loadedSystem{
+		"drawsteel": {manifest: &SystemManifest{ID: "drawsteel", Name: "Draw Steel", Version: "0.12.3"}, dir: "/p/drawsteel/0.12.3", source: "package"},
+	}
+	withLoadedSystems(t, stale, func() {
+		installedPackagesFn = func() []InstalledPackage {
+			return []InstalledPackage{{Slug: "Chronicle-Draw-Steel", Version: "0.13.0", InstallPath: "/p/drawsteel/0.13.0"}}
+		}
+		out := renderInstalledVsLoaded()
+		if !strings.Contains(out, "NOT loaded") {
+			t.Errorf("stale loader should report NOT loaded, got:\n%s", out)
+		}
+	})
+
+	// One matched-and-equal (OK), one matched-but-different-version (MISMATCH).
+	mods := map[string]*loadedSystem{
+		"a": {manifest: &SystemManifest{ID: "a", Version: "0.13.0"}, dir: "/p/a/0.13.0", source: "package"},
+		"b": {manifest: &SystemManifest{ID: "b", Version: "0.12.0"}, dir: "/p/b/0.13.0", source: "package"},
+	}
+	withLoadedSystems(t, mods, func() {
+		installedPackagesFn = func() []InstalledPackage {
+			return []InstalledPackage{
+				{Slug: "a", Version: "0.13.0", InstallPath: "/p/a/0.13.0"},
+				{Slug: "b", Version: "0.13.0", InstallPath: "/p/b/0.13.0"},
+			}
+		}
+		out := renderInstalledVsLoaded()
+		if !strings.Contains(out, "MISMATCH") {
+			t.Errorf("b (loaded 0.12.0 vs installed 0.13.0) should be MISMATCH, got:\n%s", out)
+		}
+	})
+}
 
 func TestDiagnosticCatalog_WellFormed(t *testing.T) {
 	cat := diagnosticCatalog()

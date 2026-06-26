@@ -1949,6 +1949,24 @@ func (a *App) RegisterRoutes() {
 		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
+
+	// Wire installed-package state into the operator diagnostics (dependency
+	// inversion: systems can't import packages) so packages.installed-vs-loaded /
+	// on-disk-versions can compare the DB's installed version to the live loader.
+	systems.SetInstalledPackagesProvider(func() []systems.InstalledPackage {
+		pkgs, err := pkgService.ListPackages(context.Background())
+		if err != nil {
+			return nil
+		}
+		out := make([]systems.InstalledPackage, 0, len(pkgs))
+		for _, p := range pkgs {
+			if p.Type == packages.PackageTypeSystem {
+				out = append(out, systems.InstalledPackage{Slug: p.Slug, Version: p.InstalledVersion, InstallPath: p.InstallPath})
+			}
+		}
+		return out
+	})
+
 	pkgHandler := packages.NewHandler(pkgService)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
 	// Public package file serving — always available so Foundry VTT can
