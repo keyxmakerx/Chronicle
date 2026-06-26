@@ -200,6 +200,24 @@ type FieldDef struct {
 	// Fields that are derived/calculated in Foundry (e.g., PF2e ability mods)
 	// should set this to false. Defaults to true when FoundryPath is set.
 	FoundryWritable *bool `json:"foundry_writable,omitempty"`
+
+	// --- Collection mapping (abilities/inventory/features that live in an
+	// embedded actor collection like actor.items[], which a dot-path cannot
+	// reach). When FoundryCollection is set the generic adapter extracts &
+	// serializes the collection instead of reading FoundryPath. Read-only today
+	// (pull); write-back is a future tier. See generic-adapter.mjs. ---
+
+	// FoundryCollection names the actor collection to read ("items", "effects").
+	FoundryCollection string `json:"foundry_collection,omitempty"`
+
+	// FoundryItemType optionally filters the collection by Foundry item type(s)
+	// (e.g. ["ability"], ["equipment","consumable"]).
+	FoundryItemType []string `json:"foundry_item_type,omitempty"`
+
+	// FoundryItemFields projects each collection entry to a Chronicle-side shape:
+	// outKey -> dot-path on the item (e.g. {"name":"name","keywords":"system.keywords"}).
+	// Omit for a default {id,name,type} projection.
+	FoundryItemFields map[string]string `json:"foundry_item_fields,omitempty"`
 }
 
 // IsFoundryWritable returns whether this field should be written back to
@@ -316,11 +334,14 @@ func (m *SystemManifest) ItemFieldsForAPI() *CharacterFieldsResponse {
 	fields := make([]CharacterFieldExport, len(preset.Fields))
 	for i, f := range preset.Fields {
 		fields[i] = CharacterFieldExport{
-			Key:             f.Key,
-			Label:           f.Label,
-			Type:            f.Type,
-			FoundryPath:     f.FoundryPath,
-			FoundryWritable: f.FoundryPath != "" && f.IsFoundryWritable(),
+			Key:               f.Key,
+			Label:             f.Label,
+			Type:              f.Type,
+			FoundryPath:       f.FoundryPath,
+			FoundryWritable:   f.FoundryPath != "" && f.IsFoundryWritable(),
+			FoundryCollection: f.FoundryCollection,
+			FoundryItemType:   f.FoundryItemType,
+			FoundryItemFields: f.FoundryItemFields,
 		}
 	}
 
@@ -348,11 +369,14 @@ type CharacterFieldsResponse struct {
 // CharacterFieldExport is a single field definition exported for the
 // Foundry module's generic adapter.
 type CharacterFieldExport struct {
-	Key            string `json:"key"`
-	Label          string `json:"label"`
-	Type           string `json:"type"`
-	FoundryPath    string `json:"foundry_path,omitempty"`
-	FoundryWritable bool  `json:"foundry_writable"`
+	Key               string            `json:"key"`
+	Label             string            `json:"label"`
+	Type              string            `json:"type"`
+	FoundryPath       string            `json:"foundry_path,omitempty"`
+	FoundryWritable   bool              `json:"foundry_writable"`
+	FoundryCollection string            `json:"foundry_collection,omitempty"`
+	FoundryItemType   []string          `json:"foundry_item_type,omitempty"`
+	FoundryItemFields map[string]string `json:"foundry_item_fields,omitempty"`
 }
 
 // CharacterFieldsForAPI builds the API response for character preset fields.
@@ -366,11 +390,14 @@ func (m *SystemManifest) CharacterFieldsForAPI() *CharacterFieldsResponse {
 	fields := make([]CharacterFieldExport, len(preset.Fields))
 	for i, f := range preset.Fields {
 		fields[i] = CharacterFieldExport{
-			Key:             f.Key,
-			Label:           f.Label,
-			Type:            f.Type,
-			FoundryPath:     f.FoundryPath,
-			FoundryWritable: f.FoundryPath != "" && f.IsFoundryWritable(),
+			Key:               f.Key,
+			Label:             f.Label,
+			Type:              f.Type,
+			FoundryPath:       f.FoundryPath,
+			FoundryWritable:   f.FoundryPath != "" && f.IsFoundryWritable(),
+			FoundryCollection: f.FoundryCollection,
+			FoundryItemType:   f.FoundryItemType,
+			FoundryItemFields: f.FoundryItemFields,
 		}
 	}
 
@@ -528,14 +555,14 @@ var ValidFieldTypes = map[string]bool{
 
 // Manifest content limits to prevent resource exhaustion.
 const (
-	maxCategories         = 20
-	maxFieldsPerCategory  = 100
-	maxFieldsPerPreset    = 50
-	maxEntityPresets      = 10
-	maxRelationPresets    = 20
-	maxWidgets            = 10
-	maxTextRenderers      = 5
-	maxRenderers          = 10
+	maxCategories        = 20
+	maxFieldsPerCategory = 100
+	maxFieldsPerPreset   = 50
+	maxEntityPresets     = 10
+	maxRelationPresets   = 20
+	maxWidgets           = 10
+	maxTextRenderers     = 5
+	maxRenderers         = 10
 )
 
 // slugPattern matches valid manifest IDs and preset slugs.
