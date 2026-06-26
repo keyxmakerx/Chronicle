@@ -60,6 +60,11 @@ func (h *SystemHandler) OperatorDiagnosticsAPI(c echo.Context) error {
 	cat := diagnosticCatalog()
 	name := c.QueryParam("name")
 	if name == "" {
+		// A browser (clicking the admin card) gets the interactive HTML page;
+		// programmatic/AI clients get the markdown catalog.
+		if strings.Contains(c.Request().Header.Get("Accept"), "text/html") {
+			return c.HTML(http.StatusOK, RenderDiagnosticsHTML(cat))
+		}
 		return c.Blob(http.StatusOK, "text/markdown; charset=utf-8", []byte(renderCatalog(cat)))
 	}
 	out, ok := RunDiagnostic(cat, name, c.QueryParam("arg"))
