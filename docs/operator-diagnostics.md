@@ -181,7 +181,14 @@ These are the named diagnostics in the catalog today (from
 | `packages.installed-vs-loaded` | — | **THE check for "Admin▸Packages says X but the old file renders":** compares each installed system package's DB version to what the loader actually serves (matched by install path). Flags `NOT loaded` (the registry never picked up the install) and version `MISMATCH`. Requires the packages provider (wired at startup). |
 | `packages.on-disk-versions` | — | Lists every on-disk version folder per package, tagging `[installed-db]` (the DB's version) and `[LOADED]` (what the loader serves) — surfaces a stale folder shadowing the newest. |
 | `systems.load-events` | —          | The loader's in-memory event log (newest first): `discovered` / `skipped` (a duplicate ignored, with the reason) / `failed`. Answers "did the new version load, and if a copy was skipped, why?" |
+| `system.file-contains` | `<system-id>:<relpath>:<marker[,marker2]>` | Reads a served file (clamped to its system dir) and reports whether each marker string is present — confirms the live build's **content**, not just its hash. (E.g. `drawsteel:widgets/character-sheet.js:playEntrance`.) |
+| `entity.fields`   | `<campaignId>:<entityIdOrSlug>` | Dumps one entity's stored field key→value map (redacted, value-capped). **THE check for "is this hero's data actually populated?"** Empty `fields_data` is the "renders blank" signature. Requires the entity provider (wired at startup). |
+| `entity.field-coverage` | `<campaignId>:<typeIdOrName>` | For one entity type, how many of its declared fields are non-empty across its entities (emptiest first, with %). Surfaces "declared but never populated" — the backfill/sync smell. |
+| `sync.inbound`    | `<entityId>`  | The most recent **inbound** sync payloads an external client (e.g. the Foundry module) sent for this entity. Compare against `entity.fields`: arriving-but-not-stored → a storage bug; not arriving → a Foundry mapping gap. In-memory ring (no DB; rolls over on restart). |
+| `sync.recent`     | —             | The last several inbound payloads across **all** entities — a quick "is anything syncing at all?" check. |
 | `probes`          | —             | The run-and-paste-back probe library (below). |
+
+> **Three-way data trace.** `sync.inbound` (Foundry **sent**) → `entity.fields` (Chronicle **stored**) → `entity.field-coverage` (schema **declared**) pinpoints exactly where a value dies: arrived-but-unstored = a Chronicle storage bug; never-arrived = a Foundry/adapter mapping gap; stored-but-sheet-blank = a rendering problem.
 
 ### Current probes
 

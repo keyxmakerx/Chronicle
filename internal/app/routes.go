@@ -1967,6 +1967,24 @@ func (a *App) RegisterRoutes() {
 		return out
 	})
 
+	// Wire a read-only entity-data window into the operator diagnostics so
+	// entity.fields / entity.field-coverage can inspect stored hero data (the
+	// "renders blank — is the data even there?" check). Dependency inversion:
+	// systems can't import entities, so the adapter lives in the app layer.
+	systems.SetEntityDiagProvider(entityDiagAdapter{entities: entityService})
+
+	// Wire the inbound-sync ring buffer (what external clients SENT) into the
+	// operator diagnostics so sync.inbound / sync.recent can show the Foundry→
+	// Chronicle payloads — the missing probe point between "sent" and "stored".
+	systems.SetSyncInboundProvider(func(entityID string, limit int) []systems.InboundSyncRecord {
+		recs := syncapi.RecentInbound(entityID, limit)
+		out := make([]systems.InboundSyncRecord, 0, len(recs))
+		for _, r := range recs {
+			out = append(out, systems.InboundSyncRecord{EntityID: r.EntityID, At: r.At, Source: r.Source, Fields: r.Fields})
+		}
+		return out
+	})
+
 	pkgHandler := packages.NewHandler(pkgService)
 	pkgOwnerHandler := packages.NewOwnerHandler(pkgService)
 	// Public package file serving — always available so Foundry VTT can

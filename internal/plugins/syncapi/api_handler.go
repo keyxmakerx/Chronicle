@@ -519,6 +519,11 @@ func (h *APIHandler) UpdateEntityFields(c echo.Context) error {
 		return err
 	}
 
+	// Capture what was sent (read-only diagnostics ring buffer; no DB) so the
+	// operator's sync.inbound diagnostic can show "what Foundry sent" for this
+	// entity and compare it against the stored fields.
+	recordInbound(entityID, "fields", req.FieldsData, time.Now())
+
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
