@@ -2163,6 +2163,29 @@ func (a *App) RegisterRoutes() {
 	syncMappingRepoEarly := syncapi.NewSyncMappingRepository(a.DB)
 	syncMappingSvcEarly := syncapi.NewSyncMappingService(syncMappingRepoEarly)
 	syncHandler.SetSyncMappingService(syncMappingSvcEarly)
+
+	// Wire the sync-mapping reader into the operator diagnostics so
+	// entity.sync-mappings can answer "is this entity linked to a Foundry actor?"
+	// — the root-cause check for a permanently-blank hero.
+	systems.SetSyncMappingProvider(func(ctx context.Context, campaignID, entityID string) ([]systems.SyncMappingInfo, error) {
+		ms, _, err := syncMappingSvcEarly.ListMappings(ctx, campaignID, 1000, 0)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]systems.SyncMappingInfo, 0)
+		for _, m := range ms {
+			if m.ChronicleType == "entity" && m.ChronicleID == entityID {
+				out = append(out, systems.SyncMappingInfo{
+					ExternalSystem: m.ExternalSystem,
+					ExternalID:     m.ExternalID,
+					ChronicleType:  m.ChronicleType,
+					ChronicleID:    m.ChronicleID,
+					LastSync:       m.LastSyncedAt.UTC().Format("2006-01-02T15:04:05Z"),
+				})
+			}
+		}
+		return out, nil
+	})
 	syncHandler.SetCORSOriginLister(settingsService)
 	syncHandler.SetBaseURL(a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("syncapi") {

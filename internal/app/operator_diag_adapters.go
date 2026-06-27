@@ -102,6 +102,25 @@ func (a entityDiagAdapter) EntityTypes(ctx context.Context, campaignID string) (
 	return out, nil
 }
 
+// FindEntities searches a campaign's entities by name/slug for the entity.find
+// discovery diagnostic. role 3 (owner) so it can see all entities.
+func (a entityDiagAdapter) FindEntities(ctx context.Context, campaignID, query string) ([]systems.EntityHit, error) {
+	list, _, err := a.entities.Search(ctx, campaignID, query, 0, 3, "", entities.ListOptions{Page: 1, PerPage: 25, Sort: "name"})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]systems.EntityHit, 0, len(list))
+	for i := range list {
+		out = append(out, systems.EntityHit{
+			ID:       list[i].ID,
+			Name:     list[i].Name,
+			Slug:     list[i].Slug,
+			TypeName: list[i].TypeName,
+		})
+	}
+	return out, nil
+}
+
 // resolveType accepts a numeric type id, a slug, or a (case-insensitive) name.
 func (a entityDiagAdapter) resolveType(ctx context.Context, campaignID, ref string) (*entities.EntityType, error) {
 	if id, err := strconv.Atoi(ref); err == nil {
