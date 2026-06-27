@@ -136,11 +136,21 @@ type FieldCoverage struct {
 	Declared    []FieldCoverageRow
 }
 
+// EntityTypeInfo is one entity type for the entity.types discovery diagnostic.
+type EntityTypeInfo struct {
+	ID             int
+	Name           string
+	Slug           string
+	PresetCategory string
+	Count          int
+}
+
 // EntityDiagProvider is the injected read-only window into campaign entity data.
 // Implemented by the app layer against the entities service (dependency inversion).
 type EntityDiagProvider interface {
 	EntityFields(ctx context.Context, campaignID, idOrSlug string) (EntityFieldDump, error)
 	TypeFieldCoverage(ctx context.Context, campaignID, typeIDOrName string) (FieldCoverage, error)
+	EntityTypes(ctx context.Context, campaignID string) ([]EntityTypeInfo, error)
 }
 
 var entityDiagProvider EntityDiagProvider
@@ -167,7 +177,7 @@ func renderEntityFields(arg string) string {
 		return b.String()
 	}
 	if !dump.Found {
-		fmt.Fprintf(&b, "_No entity `%s` in campaign `%s`._\n", ref, campaignID)
+		fmt.Fprintf(&b, "_No entity `%s` in campaign `%s`._ Run `campaigns.list` to confirm the campaign id, then `entity.types <id>` to find the hero.\n", ref, campaignID)
 		return b.String()
 	}
 	fmt.Fprintf(&b, "**%s** (`%s`, type: %s)\n\n", dump.Name, dump.ID, fallback(dump.TypeName, "?"))
@@ -225,6 +235,81 @@ func renderFieldCoverage(arg string) string {
 			mark = "✗"
 		}
 		fmt.Fprintf(&b, "- %s `%s` — %d/%d (%d%%)\n", mark, fallback(r.Label, r.Key), r.NonEmpty, cov.EntityCount, pct)
+	}
+	return b.String()
+}
+
+// renderEntityTypes lists a campaign's entity types (id, slug, preset, count) so
+// the operator can discover the right type ref for entity.field-coverage without
+// knowing IDs. Arg: "<campaignId>".
+func renderEntityTypes(arg string) string {
+	var b strings.Builder
+	b.WriteString("## entity.types\n\n")
+	campaignID := strings.TrimSpace(arg)
+	if campaignID == "" {
+		b.WriteString("_Usage: `<campaignId>` (run `campaigns.list` first to find it)._\n")
+		return b.String()
+	}
+	if entityDiagProvider == nil {
+		b.WriteString("_Entity provider not wired (entities plugin not injected at startup)._\n")
+		return b.String()
+	}
+	types, err := entityDiagProvider.EntityTypes(context.Background(), campaignID)
+	if err != nil {
+		fmt.Fprintf(&b, "- Error: %v\n", err)
+		return b.String()
+	}
+	if len(types) == 0 {
+		fmt.Fprintf(&b, "_No entity types in campaign `%s` (check the id with `campaigns.list`)._\n", campaignID)
+		return b.String()
+	}
+	for _, t := range types {
+		preset := ""
+		if t.PresetCategory != "" {
+			preset = " [preset:" + t.PresetCategory + "]"
+		}
+		fmt.Fprintf(&b, "- `%d` **%s** (%s)%s — %d entit(y/ies)\n", t.ID, t.Name, t.Slug, preset, t.Count)
+	}
+	return b.String()
+}
+
+// ── campaigns.list: discover campaign ids ───────────────────────────────────
+
+// CampaignInfo is one campaign for the campaigns.list discovery diagnostic.
+type CampaignInfo struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+var campaignListFn func(ctx context.Context) ([]CampaignInfo, error)
+
+// SetCampaignListProvider wires the campaigns service for the campaigns.list
+// diagnostic (so the operator can resolve a campaign id by name).
+func SetCampaignListProvider(fn func(ctx context.Context) ([]CampaignInfo, error)) {
+	campaignListFn = fn
+}
+
+// renderCampaignList lists all campaigns (id, name, slug) — the entry point for
+// the entity.* diagnostics, which need a campaign id.
+func renderCampaignList(string) string {
+	var b strings.Builder
+	b.WriteString("## campaigns.list\n\n")
+	if campaignListFn == nil {
+		b.WriteString("_Campaigns provider not wired._\n")
+		return b.String()
+	}
+	cs, err := campaignListFn(context.Background())
+	if err != nil {
+		fmt.Fprintf(&b, "- Error: %v\n", err)
+		return b.String()
+	}
+	if len(cs) == 0 {
+		b.WriteString("_No campaigns._\n")
+		return b.String()
+	}
+	for _, c := range cs {
+		fmt.Fprintf(&b, "- `%s` — **%s** (%s)\n", c.ID, c.Name, c.Slug)
 	}
 	return b.String()
 }

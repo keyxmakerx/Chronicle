@@ -73,6 +73,35 @@ func (a entityDiagAdapter) TypeFieldCoverage(ctx context.Context, campaignID, ty
 	return systems.FieldCoverage{Found: true, TypeName: et.Name, EntityCount: len(list), Declared: rows}, nil
 }
 
+// EntityTypes lists a campaign's entity types with per-type entity counts, for
+// the entity.types discovery diagnostic.
+func (a entityDiagAdapter) EntityTypes(ctx context.Context, campaignID string) ([]systems.EntityTypeInfo, error) {
+	types, err := a.entities.GetEntityTypes(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	// role 3 (owner) so counts include all entities.
+	counts, err := a.entities.CountByType(ctx, campaignID, 3, "")
+	if err != nil {
+		counts = map[int]int{} // counts are best-effort; still list the types
+	}
+	out := make([]systems.EntityTypeInfo, 0, len(types))
+	for i := range types {
+		preset := ""
+		if types[i].PresetCategory != nil {
+			preset = *types[i].PresetCategory
+		}
+		out = append(out, systems.EntityTypeInfo{
+			ID:             types[i].ID,
+			Name:           types[i].Name,
+			Slug:           types[i].Slug,
+			PresetCategory: preset,
+			Count:          counts[types[i].ID],
+		})
+	}
+	return out, nil
+}
+
 // resolveType accepts a numeric type id, a slug, or a (case-insensitive) name.
 func (a entityDiagAdapter) resolveType(ctx context.Context, campaignID, ref string) (*entities.EntityType, error) {
 	if id, err := strconv.Atoi(ref); err == nil {
