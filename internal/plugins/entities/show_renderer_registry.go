@@ -176,14 +176,22 @@ func GetGlobalEntityShowRendererRegistry() *EntityShowRendererRegistry {
 func MakeWidgetMountRenderer(widget string) EntityShowRenderer {
 	return func(ctx EntityShowRenderContext) templ.Component {
 		entityID := ""
+		visibility := ""
 		if ctx.Entity != nil {
 			entityID = ctx.Entity.ID
+			visibility = string(ctx.Entity.Visibility)
 		}
 		campaignID := ""
-		if ctx.CC != nil && ctx.CC.Campaign != nil {
-			campaignID = ctx.CC.Campaign.ID
+		isGM := false
+		if ctx.CC != nil {
+			if ctx.CC.Campaign != nil {
+				campaignID = ctx.CC.Campaign.ID
+			}
+			// GM == can see dm_only content (Owner or a DM-grantee). Gates GM-only
+			// widget UI (e.g. the Draw Steel sheet's GM Lore box) safely server-side.
+			isGM = ctx.CC.VisibilityRole() >= int(campaigns.RoleOwner)
 		}
-		return widgetMount{widget: widget, entityID: entityID, campaignID: campaignID}
+		return widgetMount{widget: widget, entityID: entityID, campaignID: campaignID, isGM: isGM, visibility: visibility}
 	}
 }
 
@@ -197,15 +205,23 @@ type widgetMount struct {
 	widget     string
 	entityID   string
 	campaignID string
+	isGM       bool   // viewer can see dm_only content (gates GM-only widget UI)
+	visibility string // entity visibility mode (drives a header pill)
 }
 
 func (w widgetMount) Render(_ context.Context, out io.Writer) error {
+	isGM := "false"
+	if w.isGM {
+		isGM = "true"
+	}
 	_, err := fmt.Fprintf(
 		out,
-		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s"></div>`,
+		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s" data-is-gm="%s" data-visibility="%s"></div>`,
 		templ.EscapeString(w.widget),
 		templ.EscapeString(w.entityID),
 		templ.EscapeString(w.campaignID),
+		isGM,
+		templ.EscapeString(w.visibility),
 	)
 	return err
 }
