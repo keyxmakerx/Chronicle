@@ -10,9 +10,10 @@ import (
 )
 
 type stubEntityProvider struct {
-	dump EntityFieldDump
-	cov  FieldCoverage
-	err  error
+	dump  EntityFieldDump
+	cov   FieldCoverage
+	types []EntityTypeInfo
+	err   error
 }
 
 func (s stubEntityProvider) EntityFields(context.Context, string, string) (EntityFieldDump, error) {
@@ -20,6 +21,9 @@ func (s stubEntityProvider) EntityFields(context.Context, string, string) (Entit
 }
 func (s stubEntityProvider) TypeFieldCoverage(context.Context, string, string) (FieldCoverage, error) {
 	return s.cov, s.err
+}
+func (s stubEntityProvider) EntityTypes(context.Context, string) ([]EntityTypeInfo, error) {
+	return s.types, s.err
 }
 
 func TestRenderEntityFields(t *testing.T) {
@@ -76,6 +80,59 @@ func TestRenderFieldCoverage(t *testing.T) {
 	}
 	if strings.Index(out, "Backstory") > strings.Index(out, "Might") {
 		t.Error("emptiest field should sort first")
+	}
+}
+
+func TestRenderEntityTypes(t *testing.T) {
+	old := entityDiagProvider
+	defer func() { entityDiagProvider = old }()
+
+	entityDiagProvider = nil
+	if !strings.Contains(renderEntityTypes("c"), "not wired") {
+		t.Error("nil provider should say not wired")
+	}
+	if !strings.Contains(renderEntityTypes(""), "Usage") {
+		t.Error("empty arg should show usage")
+	}
+
+	entityDiagProvider = stubEntityProvider{types: []EntityTypeInfo{
+		{ID: 7, Name: "Heroes", Slug: "heroes", PresetCategory: "character", Count: 3},
+	}}
+	out := renderEntityTypes("camp")
+	for _, w := range []string{"`7`", "Heroes", "heroes", "preset:character", "3 entit"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("missing %q in:\n%s", w, out)
+		}
+	}
+
+	entityDiagProvider = stubEntityProvider{types: nil}
+	if !strings.Contains(renderEntityTypes("camp"), "No entity types") {
+		t.Error("empty should say so")
+	}
+}
+
+func TestRenderCampaignList(t *testing.T) {
+	old := campaignListFn
+	defer func() { campaignListFn = old }()
+
+	campaignListFn = nil
+	if !strings.Contains(renderCampaignList(""), "not wired") {
+		t.Error("nil provider should say not wired")
+	}
+
+	campaignListFn = func(context.Context) ([]CampaignInfo, error) {
+		return []CampaignInfo{{ID: "c1", Name: "Mistale", Slug: "mistale"}}, nil
+	}
+	out := renderCampaignList("")
+	for _, w := range []string{"c1", "Mistale", "mistale"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("missing %q in:\n%s", w, out)
+		}
+	}
+
+	campaignListFn = func(context.Context) ([]CampaignInfo, error) { return nil, nil }
+	if !strings.Contains(renderCampaignList(""), "No campaigns") {
+		t.Error("empty should say so")
 	}
 }
 

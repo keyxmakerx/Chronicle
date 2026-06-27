@@ -1973,6 +1973,20 @@ func (a *App) RegisterRoutes() {
 	// systems can't import entities, so the adapter lives in the app layer.
 	systems.SetEntityDiagProvider(entityDiagAdapter{entities: entityService})
 
+	// Wire the campaigns list (admin-only ListAll) so campaigns.list can resolve a
+	// campaign id by name — the entry point for the entity.* diagnostics.
+	systems.SetCampaignListProvider(func(ctx context.Context) ([]systems.CampaignInfo, error) {
+		cs, _, err := campaignService.ListAll(ctx, campaigns.ListOptions{Page: 1, PerPage: 500})
+		if err != nil {
+			return nil, err
+		}
+		out := make([]systems.CampaignInfo, 0, len(cs))
+		for _, c := range cs {
+			out = append(out, systems.CampaignInfo{ID: c.ID, Name: c.Name, Slug: c.Slug})
+		}
+		return out, nil
+	})
+
 	// Wire the inbound-sync ring buffer (what external clients SENT) into the
 	// operator diagnostics so sync.inbound / sync.recent can show the Foundry→
 	// Chronicle payloads — the missing probe point between "sent" and "stored".

@@ -153,6 +153,19 @@ func diagnosticCatalog() []Diagnostic {
 			Run:     renderFileContains,
 		},
 		{
+			Name:  "campaigns.list",
+			Title: "List campaigns (id, name, slug)",
+			Desc:  "All campaigns with their ids — the entry point for the entity.* diagnostics, which need a campaign id. Run this first if you don't know the id.",
+			Run:   renderCampaignList,
+		},
+		{
+			Name:    "entity.types",
+			Title:   "List a campaign's entity types (id, slug, preset, count)",
+			Desc:    "Discover the entity types in a campaign so you can pass the right type to entity.field-coverage — no need to know ids.",
+			ArgHint: "<campaignId>",
+			Run:     renderEntityTypes,
+		},
+		{
 			Name:    "entity.fields",
 			Title:   "Stored field values for ONE entity",
 			Desc:    "Dumps an entity's stored field key→value map (redacted). THE check for 'is this hero's data actually populated?' when a sheet renders blank.",
