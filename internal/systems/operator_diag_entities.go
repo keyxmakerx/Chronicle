@@ -385,6 +385,85 @@ func renderInboundRecords(b *strings.Builder, recs []InboundSyncRecord, scope st
 	return b.String()
 }
 
+// ── campaign-slot substitution (for the review-step campaign picker) ─────────
+//
+// Some diagnostics take a campaign id as the first colon-part of their arg (or as
+// the whole arg). When the AI leaves that as a placeholder, the workspace review
+// step offers a campaign dropdown; the operator's pick is substituted here before
+// the batch runs. Keeping the arg shapes in systems (where the diagnostics live)
+// means the admin UI doesn't have to know them.
+
+// campaignSlot returns the campaign portion of a campaign-scoped diagnostic's arg.
+// scoped=false for diagnostics that take no campaign. whole=true when the entire
+// arg IS the campaign (entity.types); otherwise the campaign is parts[0] and rest
+// is everything after the first colon.
+func campaignSlot(name, arg string) (slot, rest string, whole, scoped bool) {
+	switch name {
+	case "entity.types":
+		return strings.TrimSpace(arg), "", true, true
+	case "entity.fields", "entity.field-coverage":
+		parts := strings.SplitN(arg, ":", 2)
+		if len(parts) == 2 {
+			return strings.TrimSpace(parts[0]), parts[1], false, true
+		}
+		return strings.TrimSpace(arg), "", false, true // malformed: treat whole as the slot
+	}
+	return "", "", false, false
+}
+
+// CampaignSlotIsAmbiguous reports whether a call is campaign-scoped but left its
+// campaign as a placeholder (`<...>`) or empty — i.e. the review step should ask
+// the operator to pick one.
+func CampaignSlotIsAmbiguous(name, arg string) bool {
+	slot, _, _, scoped := campaignSlot(name, arg)
+	if !scoped {
+		return false
+	}
+	return slot == "" || (strings.HasPrefix(slot, "<") && strings.HasSuffix(slot, ">"))
+}
+
+// WithCampaign returns arg with its campaign slot replaced by campaignID (no-op
+// for non-campaign-scoped diagnostics).
+func WithCampaign(name, arg, campaignID string) string {
+	_, rest, whole, scoped := campaignSlot(name, arg)
+	if !scoped {
+		return arg
+	}
+	if whole {
+		return campaignID
+	}
+	return campaignID + ":" + rest
+}
+
+// ApplyCampaignPick substitutes the operator-chosen campaign into every call whose
+// campaign slot was left ambiguous. Called by the run handler when the review
+// dropdown was used. The id comes from the server-rendered campaign list and all
+// calls are read-only + campaign-scoped, so substitution is safe.
+func ApplyCampaignPick(plan *BatchPlan, campaignID string) {
+	if plan == nil || strings.TrimSpace(campaignID) == "" {
+		return
+	}
+	for i := range plan.Calls {
+		if CampaignSlotIsAmbiguous(plan.Calls[i].Name, plan.Calls[i].Arg) {
+			plan.Calls[i].Arg = WithCampaign(plan.Calls[i].Name, plan.Calls[i].Arg, campaignID)
+		}
+	}
+}
+
+// PlanNeedsCampaign reports whether any call in the plan left its campaign slot
+// ambiguous (so the review step should show the campaign picker).
+func PlanNeedsCampaign(plan *BatchPlan) bool {
+	if plan == nil {
+		return false
+	}
+	for _, c := range plan.Calls {
+		if CampaignSlotIsAmbiguous(c.Name, c.Arg) {
+			return true
+		}
+	}
+	return false
+}
+
 // ── small shared helpers ────────────────────────────────────────────────────
 
 // splitArg2 parses "<a>:<b>" into trimmed non-empty parts.

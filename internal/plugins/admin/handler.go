@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -853,12 +854,27 @@ func (h *Handler) Systems(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, AdminSystemsPage(entries, events))
 }
 
+// diagnosticsCampaigns loads the campaign list for the workspace reference panel
+// and the review-step picker. Best-effort: a load error just yields no options.
+func (h *Handler) diagnosticsCampaigns(ctx context.Context) []CampaignOption {
+	cs, _, err := h.campaignService.ListAll(ctx, campaigns.ListOptions{Page: 1, PerPage: 500})
+	if err != nil {
+		return nil
+	}
+	out := make([]CampaignOption, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, CampaignOption{ID: c.ID, Name: c.Name, Slug: c.Slug})
+	}
+	return out
+}
+
 // DiagnosticsWorkspace renders the in-app operator AI workspace: the copyable
 // functions list + a paste box for the AI's batch request. Read-only.
 func (h *Handler) DiagnosticsWorkspace(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, DiagnosticsWorkspacePage(DiagnosticsWorkspaceData{
 		FunctionsJSON: systems.FunctionsSpecJSON(),
 		CSRFToken:     middleware.GetCSRFToken(c),
+		Campaigns:     h.diagnosticsCampaigns(c.Request().Context()),
 	}))
 }
 
@@ -874,6 +890,12 @@ func (h *Handler) DiagnosticsWorkspaceParse(c echo.Context) error {
 		data.Err = err.Error()
 	} else {
 		data.Plan = plan
+		// If any call left its campaign as a placeholder, offer a picker at the
+		// review step instead of failing the run with "not found".
+		if systems.PlanNeedsCampaign(plan) {
+			data.NeedsCampaign = true
+			data.Campaigns = h.diagnosticsCampaigns(c.Request().Context())
+		}
 	}
 	return middleware.Render(c, http.StatusOK, DiagnosticsBatchReview(data))
 }
@@ -891,6 +913,11 @@ func (h *Handler) DiagnosticsWorkspaceRun(c echo.Context) error {
 		return middleware.Render(c, http.StatusOK, DiagnosticsBatchReview(DiagnosticsReviewData{
 			Raw: raw, Err: err.Error(), CSRFToken: middleware.GetCSRFToken(c),
 		}))
+	}
+	// If the operator picked a campaign at the review step, substitute it into
+	// any call that left its campaign slot as a placeholder.
+	if pick := strings.TrimSpace(c.FormValue("campaign_pick")); pick != "" {
+		systems.ApplyCampaignPick(plan, pick)
 	}
 	result := systems.RunBatch(plan)
 

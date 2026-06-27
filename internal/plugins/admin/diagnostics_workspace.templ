@@ -21,21 +21,33 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// DiagnosticsWorkspaceData backs the landing page: the functions spec to copy
-// and the CSRF token for the HTMX parse/run posts.
+// CampaignOption is one selectable campaign for the review-step picker and the
+// page's campaign reference panel.
+type CampaignOption struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// DiagnosticsWorkspaceData backs the landing page: the functions spec to copy,
+// the CSRF token, and the campaign reference list (so the operator can hand ids
+// to the AI without URL-spelunking).
 type DiagnosticsWorkspaceData struct {
 	FunctionsJSON string
 	CSRFToken     string
+	Campaigns     []CampaignOption
 }
 
 // DiagnosticsReviewData backs the review fragment: the validated plan plus the
 // original pasted text (re-embedded so the run step re-parses + re-validates
 // server-side rather than trusting a client-built plan).
 type DiagnosticsReviewData struct {
-	Raw       string
-	Plan      *systems.BatchPlan
-	Err       string
-	CSRFToken string
+	Raw           string
+	Plan          *systems.BatchPlan
+	Err           string
+	CSRFToken     string
+	NeedsCampaign bool             // a call left its campaign slot as a placeholder
+	Campaigns     []CampaignOption // options for the picker
 }
 
 // DiagnosticsResultData backs the result fragment: the compact redacted output.
@@ -89,6 +101,24 @@ templ DiagnosticsWorkspacePage(data DiagnosticsWorkspaceData) {
 					class="select-all whitespace-pre-wrap break-words text-xs font-mono text-fg leading-relaxed bg-surface-alt p-4 rounded border border-edge max-h-72 overflow-auto"
 				>{ data.FunctionsJSON }</pre>
 			</div>
+
+			<!-- Campaign reference: ids the entity.* diagnostics need -->
+			if len(data.Campaigns) > 0 {
+				<details class="card">
+					<summary class="text-sm font-medium text-fg-secondary cursor-pointer">
+						<i class="fa-solid fa-book-open mr-1 text-accent"></i> Campaign ids ({ fmt.Sprintf("%d", len(data.Campaigns)) }) — for <code>entity.*</code> calls
+					</summary>
+					<p class="text-xs text-fg-muted mt-2">The entity diagnostics need a campaign id. Copy one here, or just paste a placeholder like <code>&lt;campaignId&gt;</code> and pick it at the review step.</p>
+					<ul class="mt-2 space-y-1">
+						for _, c := range data.Campaigns {
+							<li class="text-xs font-mono flex items-center gap-2">
+								<span class="select-all text-fg">{ c.ID }</span>
+								<span class="text-fg-muted">{ c.Name }</span>
+							</li>
+						}
+					</ul>
+				</details>
+			}
 
 			<!-- Step 2: paste the AI's request object -->
 			<div class="card space-y-3">
@@ -179,6 +209,26 @@ templ DiagnosticsBatchReview(data DiagnosticsReviewData) {
 					</li>
 				}
 			</ul>
+			if data.NeedsCampaign && len(data.Campaigns) > 0 {
+				// A call left its campaign as a placeholder — let the operator pick one
+				// here; the run step substitutes it into every ambiguous call's arg.
+				<div class="pt-2 border-t border-edge">
+					<label for="dw-campaign-pick" class="text-xs font-medium text-fg-secondary">
+						<i class="fa-solid fa-circle-question mr-1 text-amber-500"></i>
+						Campaign (some calls left it as a placeholder)
+					</label>
+					<select
+						id="dw-campaign-pick"
+						name="campaign_pick"
+						class="mt-1 w-full text-sm bg-surface-alt border border-edge rounded p-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent/40"
+					>
+						<option value="">— choose a campaign —</option>
+						for _, c := range data.Campaigns {
+							<option value={ c.ID }>{ c.Name } ({ c.Slug })</option>
+						}
+					</select>
+				</div>
+			}
 			if data.Plan.RunnableN > 0 {
 				<div class="flex items-center gap-3 pt-2 border-t border-edge">
 					// Re-embed the original text so the run step re-parses + re-validates
@@ -188,7 +238,7 @@ templ DiagnosticsBatchReview(data DiagnosticsReviewData) {
 						type="button"
 						class="btn-primary text-sm px-4 py-2"
 						hx-post="/admin/diagnostics/workspace/run"
-						hx-include="#dw-approved-batch"
+						hx-include="#dw-approved-batch, #dw-campaign-pick"
 						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
 						hx-target="#dw-review"
 						hx-swap="innerHTML"

@@ -204,3 +204,46 @@ func TestPreviewValue(t *testing.T) {
 		t.Errorf("newline not collapsed: %q", got)
 	}
 }
+
+func TestCampaignSlotSubstitution(t *testing.T) {
+	// ambiguity detection
+	if !CampaignSlotIsAmbiguous("entity.fields", "<campaignId>:tyne") {
+		t.Error("placeholder campaign should be ambiguous")
+	}
+	if !CampaignSlotIsAmbiguous("entity.types", "") {
+		t.Error("empty campaign should be ambiguous")
+	}
+	if CampaignSlotIsAmbiguous("entity.fields", "real-id:tyne") {
+		t.Error("real campaign id should not be ambiguous")
+	}
+	if CampaignSlotIsAmbiguous("system.versions", "") {
+		t.Error("non-campaign-scoped diagnostic should never be ambiguous")
+	}
+	// substitution preserves the rest of the arg
+	if got := WithCampaign("entity.fields", "<campaignId>:tyne", "c9"); got != "c9:tyne" {
+		t.Errorf("WithCampaign = %q, want c9:tyne", got)
+	}
+	if got := WithCampaign("entity.types", "<campaignId>", "c9"); got != "c9" {
+		t.Errorf("WithCampaign whole = %q, want c9", got)
+	}
+	// ApplyCampaignPick only touches ambiguous, campaign-scoped calls
+	plan := &BatchPlan{Calls: []PlannedCall{
+		{Name: "entity.fields", Arg: "<campaignId>:tyne"},
+		{Name: "entity.fields", Arg: "real:orrin"},
+		{Name: "sync.inbound", Arg: "<tyneId>"},
+	}}
+	ApplyCampaignPick(plan, "c9")
+	if plan.Calls[0].Arg != "c9:tyne" {
+		t.Errorf("call0 = %q", plan.Calls[0].Arg)
+	}
+	if plan.Calls[1].Arg != "real:orrin" {
+		t.Errorf("call1 should be untouched, got %q", plan.Calls[1].Arg)
+	}
+	if plan.Calls[2].Arg != "<tyneId>" {
+		t.Errorf("sync.inbound (not campaign-scoped) should be untouched, got %q", plan.Calls[2].Arg)
+	}
+	// After substitution nothing should still need a campaign (call2 isn't scoped).
+	if PlanNeedsCampaign(plan) {
+		t.Error("after substitution no call should still need a campaign")
+	}
+}
