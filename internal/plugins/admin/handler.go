@@ -853,6 +853,68 @@ func (h *Handler) Systems(c echo.Context) error {
 	return middleware.Render(c, http.StatusOK, AdminSystemsPage(entries, events))
 }
 
+// DiagnosticsWorkspace renders the in-app operator AI workspace: the copyable
+// functions list + a paste box for the AI's batch request. Read-only.
+func (h *Handler) DiagnosticsWorkspace(c echo.Context) error {
+	return middleware.Render(c, http.StatusOK, DiagnosticsWorkspacePage(DiagnosticsWorkspaceData{
+		FunctionsJSON: systems.FunctionsSpecJSON(),
+		CSRFToken:     middleware.GetCSRFToken(c),
+	}))
+}
+
+// DiagnosticsWorkspaceParse validates a pasted batch request against the
+// diagnostic catalog and returns the review fragment (the human-approval gate).
+// A malformed request is not an error response — it renders an inline message so
+// the operator can fix the paste. POST /admin/diagnostics/workspace/parse.
+func (h *Handler) DiagnosticsWorkspaceParse(c echo.Context) error {
+	raw := c.FormValue("batch")
+	data := DiagnosticsReviewData{Raw: raw, CSRFToken: middleware.GetCSRFToken(c)}
+	plan, err := systems.ParseBatch(raw)
+	if err != nil {
+		data.Err = err.Error()
+	} else {
+		data.Plan = plan
+	}
+	return middleware.Render(c, http.StatusOK, DiagnosticsBatchReview(data))
+}
+
+// DiagnosticsWorkspaceRun re-parses the approved request (never trusting a
+// client-built plan), executes the runnable read-only diagnostics, and returns
+// the compact, secret-redacted result fragment.
+// POST /admin/diagnostics/workspace/run.
+func (h *Handler) DiagnosticsWorkspaceRun(c echo.Context) error {
+	raw := c.FormValue("batch")
+	plan, err := systems.ParseBatch(raw)
+	if err != nil {
+		// Shouldn't happen (parse succeeded to reach the approve button), but if
+		// the re-parse fails, surface it in the review fragment rather than 500.
+		return middleware.Render(c, http.StatusOK, DiagnosticsBatchReview(DiagnosticsReviewData{
+			Raw: raw, Err: err.Error(), CSRFToken: middleware.GetCSRFToken(c),
+		}))
+	}
+	result := systems.RunBatch(plan)
+
+	// Audit: site-admin diagnostics runs are logged to the security/activity
+	// feed with actor identity, IP, and UA. Counts + byte size only — never the
+	// diagnostic payload (mirrors ai_workspace's counts-only discipline).
+	if h.securityService != nil {
+		_ = h.securityService.LogEvent(c.Request().Context(), EventDiagnosticsBatchRun,
+			"", auth.GetUserID(c), c.RealIP(), c.Request().UserAgent(),
+			map[string]any{
+				"runnable":  plan.RunnableN,
+				"calls":     len(plan.Calls),
+				"full_dump": plan.Request.FullDump,
+				"bytes":     len(result),
+			})
+	}
+	slog.Info("admin ran diagnostics batch",
+		slog.Int("runnable", plan.RunnableN),
+		slog.Int("calls", len(plan.Calls)),
+		slog.Bool("full_dump", plan.Request.FullDump))
+
+	return middleware.Render(c, http.StatusOK, DiagnosticsBatchResult(DiagnosticsResultData{Result: result}))
+}
+
 // SecurityPageData holds all data needed for the security dashboard page.
 type SecurityPageData struct {
 	Stats       *SecurityStats

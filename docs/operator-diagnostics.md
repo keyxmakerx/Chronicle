@@ -17,8 +17,18 @@ assistant**, so the assistant gets exactly the small slice of state it asked for
 rather than a giant dump. (The vision is captured in the debug-cockpit & AI-assist
 capability spec, §B.)
 
+For interactive use there is also an **in-app AI Workspace**
+(`/admin/diagnostics/workspace`) that turns the catalog into a single
+copy-paste round-trip: you copy a machine-readable *functions list* to your AI,
+paste back the one request object it composes, **review and approve** what it
+wants to run, and get one compact, redacted result to paste back. See
+[The in-app AI Workspace](#the-in-app-ai-workspace-batch) below.
+
 Source: `internal/systems/health.go`, `internal/systems/operator_diag.go`,
-routes in `internal/app/routes.go` (registered on the admin route group).
+`internal/systems/operator_batch.go`, the workspace UI in
+`internal/plugins/admin/diagnostics_workspace.templ` (+ handler/routes in the
+admin plugin), and the markdown/JSON endpoints in `internal/app/routes.go` (all
+on the admin route group).
 
 ---
 
@@ -360,3 +370,87 @@ Reading the result, in short:
 
 Paste only the step that surprised you back to the assistant — that's the whole
 point of the catalog.
+
+---
+
+## The in-app AI Workspace (batch)
+
+The two endpoints above are the raw machine surface. The **AI Workspace** at
+`GET /admin/diagnostics/workspace` is the human-friendly front end, modeled on
+the campaign **AI Workspace** import flow (export → paste → review → commit). It
+collapses "request a diagnostic, run it, paste it back" into a single batch
+round-trip with a **human-approval gate**, so the AI can ask for a dozen checks
+at once without you running each by hand — and without the AI ever touching the
+server directly.
+
+The loop has four steps, all on one page:
+
+1. **Copy the functions list.** The page renders a compact, machine-readable
+   JSON *functions spec* (every read-only diagnostic + the exact request shape).
+   You copy it and hand it to your external AI.
+2. **Paste the AI's request.** The AI replies with **one** batch object naming
+   the functions it wants. You paste it into the box (a fenced ` ```json ` block
+   is accepted).
+3. **Review & approve.** *Parse & review* validates the object against the
+   catalog and shows exactly what will run — one row per call, with unknown
+   names and heavy *full-dump* requests flagged. **Nothing runs until you click
+   *Approve & run*.** This is the prompt-injection containment boundary: a human
+   reads the toolset before it executes.
+4. **Copy the result.** On approval the runnable, read-only diagnostics execute
+   server-side and you get **one** compact, secret-redacted document (a manifest
+   of what ran/was skipped, each result, and a byte-count footer) to copy back
+   to the AI.
+
+### Request format (what the AI composes)
+
+```json
+{
+  "v": 1,
+  "note": "why does Draw Steel serve the old sheet?",
+  "full_dump": false,
+  "calls": [
+    { "name": "system.versions" },
+    { "name": "system.files", "arg": "drawsteel" },
+    { "name": "packages.installed-vs-loaded" }
+  ]
+}
+```
+
+| Field       | Meaning |
+|-------------|---------|
+| `v`         | Spec version (currently `1`; omittable). A mismatch is rejected. |
+| `note`      | Optional free text — what the AI is investigating. Echoed into the result for audit. |
+| `full_dump` | **The security gate for heavy diagnostics.** A function marked `full_dump` in the spec (e.g. `system.health`) will not run unless this is `true`. It defaults to `false`, so a stray full dump can't flood your context. |
+| `calls[]`   | The diagnostics to run, each `{ "name", "arg"? }`. Cap: 50 per batch. |
+
+### Validation & safety
+
+- **Bounded toolset.** Only names in the live catalog run; unknown names surface
+  as skipped rows (not an error). Unknown *top-level* keys are rejected so a
+  typo can't silently drop a field. Caps: 50 calls per batch, 64 KB per paste.
+- **Re-validated on run.** The approve step re-parses the original pasted text
+  server-side and re-derives runnability *and* deduplication from the live
+  catalog — it never trusts a client-built plan, so a forged plan can't smuggle
+  a gated call through.
+- **Deduplicated.** Identical `(name, arg)` calls run once (the second+ show as
+  `duplicate` in the manifest), so a batch can't amplify into repeated expensive
+  file-hash sweeps.
+- **Output-capped.** The assembled result is capped (~256 KB) with a truncation
+  notice, so even an authorized full dump on a large install stays compact; the
+  footer reports byte size and a rough token estimate for context budgeting.
+- **Read-only + redacted + admin-gated**, exactly as the underlying catalog
+  (every result still passes through `redactSecrets`; `note`/`name`/`arg` echoed
+  into the result are sanitized so a crafted value can't corrupt the manifest).
+- **Full dump is opt-in twice:** the AI must set `full_dump: true` *and* you must
+  approve the plan that contains it.
+- **Audited.** Every run is logged to the admin security/activity feed
+  (`admin.diagnostics_batch_run`) with actor, IP, and counts (never the payload).
+
+> Not yet implemented: per-route **rate-limiting** (spec §C2). Lower priority
+> given the admin gate + bounded/deduped/capped toolset; a reasonable follow-up.
+
+Routes (admin-gated, in `internal/plugins/admin/routes.go`): `GET
+/admin/diagnostics/workspace` (page), `POST /admin/diagnostics/workspace/parse`
+(review fragment), `POST /admin/diagnostics/workspace/run` (result fragment).
+The batch logic lives in `internal/systems/operator_batch.go`
+(`FunctionsSpecJSON`, `ParseBatch`, `RunBatch`).

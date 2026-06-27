@@ -15,6 +15,7 @@ const (
 	EventUserEnabled            = "admin.user_enabled"
 	EventSessionTerminated      = "admin.session_terminated"
 	EventForceLogout            = "admin.force_logout"
+	EventDiagnosticsBatchRun    = "admin.diagnostics_batch_run"
 	EventMediaUploaded          = "media.uploaded"
 	EventMediaDeleted           = "media.deleted"
 	EventMediaQuotaExceeded     = "media.quota_exceeded"
@@ -61,6 +62,7 @@ func EventTypeLabel(eventType string) string {
 		EventUserEnabled:            "User Enabled",
 		EventSessionTerminated:      "Session Terminated",
 		EventForceLogout:            "Force Logout",
+		EventDiagnosticsBatchRun:    "Diagnostics Batch Run",
 		EventMediaUploaded:          "Media Uploaded",
 		EventMediaDeleted:           "Media Deleted",
 		EventMediaQuotaExceeded:     "Media Quota Exceeded",
@@ -84,6 +86,7 @@ func EventTypeIcon(eventType string) string {
 		EventUserEnabled:            "fa-solid fa-user-check text-emerald-500",
 		EventSessionTerminated:      "fa-solid fa-plug-circle-xmark text-orange-500",
 		EventForceLogout:            "fa-solid fa-power-off text-red-500",
+		EventDiagnosticsBatchRun:    "fa-solid fa-stethoscope text-slate-500",
 		EventMediaUploaded:          "fa-solid fa-cloud-arrow-up text-blue-500",
 		EventMediaDeleted:           "fa-solid fa-trash text-red-400",
 		EventMediaQuotaExceeded:     "fa-solid fa-hard-drive text-amber-500",

@@ -200,6 +200,7 @@ GET	/demo/timeline/ledger	internal/app/routes.go
 GET	/demo/timeline/tuner	internal/app/routes.go
 GET	/design-lab	internal/plugins/designlab/routes.go
 GET	/diagnostics	internal/app/routes.go
+GET	/diagnostics/workspace	internal/plugins/admin/routes.go
 GET	/dm-grants	internal/plugins/campaigns/routes.go
 GET	/edit	internal/plugins/campaigns/routes.go
 GET	/entities	internal/plugins/entities/routes.go
@@ -453,6 +454,8 @@ POST	/campaigns/import	internal/plugins/campaigns/routes.go
 POST	/cancel-transfer	internal/plugins/campaigns/routes.go
 POST	/content-templates	internal/plugins/entities/content_template_routes.go
 POST	/database/migrations/apply	internal/plugins/admin/routes.go
+POST	/diagnostics/workspace/parse	internal/plugins/admin/routes.go
+POST	/diagnostics/workspace/run	internal/plugins/admin/routes.go
 POST	/entities	internal/plugins/entities/routes.go
 POST	/entities	internal/plugins/syncapi/routes.go
 POST	/entities/:eid/claim	internal/plugins/entities/routes.go

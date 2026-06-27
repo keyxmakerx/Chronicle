@@ -1,0 +1,251 @@
+// diagnostics_workspace.templ — the in-app "Operator AI Workspace" for
+// diagnostics. Modeled on the campaign ai_workspace plugin's
+// export→parse→review→commit loop, but admin-scoped and for READ-ONLY
+// diagnostics:
+//
+//  1. Functions list (copyable JSON) — the operator feeds it to an external AI.
+//  2. The AI composes ONE batch-request object; the operator pastes it here.
+//  3. "Parse & review" validates it against the catalog and shows exactly what
+//     will run (prompt-injection containment: a human approves before execution;
+//     unknown names and heavy full-dump requests are flagged).
+//  4. "Approve & run" executes the read-only diagnostics server-side and returns
+//     ONE compact, secret-redacted result the operator copies back to the AI.
+//
+// This supersedes the standalone content-negotiated HTML console (the page now
+// lives in proper site chrome via @layouts.App).
+package admin
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/systems"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// DiagnosticsWorkspaceData backs the landing page: the functions spec to copy
+// and the CSRF token for the HTMX parse/run posts.
+type DiagnosticsWorkspaceData struct {
+	FunctionsJSON string
+	CSRFToken     string
+}
+
+// DiagnosticsReviewData backs the review fragment: the validated plan plus the
+// original pasted text (re-embedded so the run step re-parses + re-validates
+// server-side rather than trusting a client-built plan).
+type DiagnosticsReviewData struct {
+	Raw       string
+	Plan      *systems.BatchPlan
+	Err       string
+	CSRFToken string
+}
+
+// DiagnosticsResultData backs the result fragment: the compact redacted output.
+type DiagnosticsResultData struct {
+	Result string
+}
+
+// DiagnosticsWorkspacePage is the full admin page.
+templ DiagnosticsWorkspacePage(data DiagnosticsWorkspaceData) {
+	@layouts.App("Diagnostics AI Workspace") {
+		<div class="max-w-5xl mx-auto space-y-6">
+			<div class="flex items-center justify-between">
+				<h1 class="text-2xl font-bold text-fg">
+					<i class="fa-solid fa-stethoscope mr-2 text-accent"></i> Diagnostics AI Workspace
+				</h1>
+				<a href="/admin" class="text-sm text-fg-muted hover:text-accent">
+					<i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard
+				</a>
+			</div>
+			<p class="text-sm text-fg-secondary">
+				Read-only, secret-redacted operator diagnostics with a human-approval gate.
+				Copy the functions list to your AI, paste back the single request object it
+				composes, review what it wants to run, then approve. Results come back compact —
+				the full dump is gated behind an explicit opt-in.
+			</p>
+
+			<!-- Step 1: functions list to feed the AI -->
+			<div class="card space-y-3" data-widget="ai-export">
+				<div class="flex items-center justify-between">
+					<h2 class="text-lg font-semibold text-fg">
+						<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/10 text-accent text-xs font-bold mr-2">1</span>
+						Functions list
+					</h2>
+					<button
+						type="button"
+						class="btn-primary text-xs px-3 py-1.5"
+						data-ai-export-copy
+						x-data="{ copied: false }"
+						@click="copied = true; setTimeout(() => copied = false, 2000)"
+					>
+						<span x-show="!copied"><i class="fa-solid fa-copy mr-1"></i> Copy functions list</span>
+						<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1"></i> Copied</span>
+					</button>
+				</div>
+				<p class="text-xs text-fg-muted">
+					Hand this to your AI. It describes every read-only diagnostic and the exact
+					request shape to reply with.
+				</p>
+				<pre
+					data-ai-export-body
+					class="select-all whitespace-pre-wrap break-words text-xs font-mono text-fg leading-relaxed bg-surface-alt p-4 rounded border border-edge max-h-72 overflow-auto"
+				>{ data.FunctionsJSON }</pre>
+			</div>
+
+			<!-- Step 2: paste the AI's request object -->
+			<div class="card space-y-3">
+				<h2 class="text-lg font-semibold text-fg">
+					<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/10 text-accent text-xs font-bold mr-2">2</span>
+					Paste the AI's request
+				</h2>
+				<p class="text-xs text-fg-muted">
+					Paste the single batch object the AI composed (a fenced <code>```json</code> block is fine).
+				</p>
+				<textarea
+					id="dw-batch-input"
+					name="batch"
+					rows="8"
+					placeholder={ "{\n  \"v\": 1,\n  \"note\": \"why does the old sheet render\",\n  \"calls\": [ {\"name\": \"system.versions\"}, {\"name\": \"packages.installed-vs-loaded\"} ]\n}" }
+					class="w-full font-mono text-xs bg-surface-alt border border-edge rounded p-3 text-fg focus:outline-none focus:ring-2 focus:ring-accent/40"
+				></textarea>
+				<div class="flex items-center gap-3">
+					<button
+						type="button"
+						class="btn-primary text-sm px-4 py-2"
+						hx-post="/admin/diagnostics/workspace/parse"
+						hx-include="#dw-batch-input"
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+						hx-target="#dw-review"
+						hx-swap="innerHTML"
+					>
+						<i class="fa-solid fa-list-check mr-1"></i> Parse &amp; review
+					</button>
+					<a href="/admin/diagnostics" target="_blank" class="text-xs text-fg-muted hover:text-accent">
+						<i class="fa-solid fa-code mr-1"></i> Raw catalog (markdown) <i class="fa-solid fa-arrow-up-right-from-square text-[8px]"></i>
+					</a>
+				</div>
+			</div>
+
+			<!-- Step 3: review + result get swapped in here -->
+			<div id="dw-review"></div>
+		</div>
+	}
+}
+
+// DiagnosticsBatchReview is the HTMX fragment returned by the parse handler. It
+// shows the validated plan for human approval, or a parse error.
+templ DiagnosticsBatchReview(data DiagnosticsReviewData) {
+	if data.Err != "" {
+		<div class="card border-rose-300 dark:border-rose-800 space-y-2">
+			<h3 class="text-sm font-semibold text-rose-700 dark:text-rose-300">
+				<i class="fa-solid fa-triangle-exclamation mr-1"></i> Couldn't read that request
+			</h3>
+			<p class="text-sm text-fg-secondary">{ data.Err }</p>
+			<p class="text-xs text-fg-muted">Ask the AI to re-emit the object using the functions list above.</p>
+		</div>
+	} else {
+		<div class="card space-y-4">
+			<div class="flex items-center justify-between">
+				<h2 class="text-lg font-semibold text-fg">
+					<span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/10 text-accent text-xs font-bold mr-2">3</span>
+					Review &amp; approve
+				</h2>
+				<span class="text-xs text-fg-muted">
+					{ fmt.Sprintf("%d of %d call(s) will run", data.Plan.RunnableN, len(data.Plan.Calls)) }
+				</span>
+			</div>
+			if note := data.Plan.Request.Note; note != "" {
+				<p class="text-xs text-fg-secondary"><span class="text-fg-muted">Investigating:</span> { note }</p>
+			}
+			<ul class="space-y-2">
+				for _, c := range data.Plan.Calls {
+					<li class="flex items-start gap-3 text-sm">
+						@planBadge(c.Status)
+						<div class="min-w-0">
+							<div class="font-mono text-xs text-fg">
+								{ c.Name }
+								if c.Arg != "" {
+									<span class="text-fg-muted">{ " " + c.Arg }</span>
+								}
+								if c.FullDump {
+									<span class="ml-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">full dump</span>
+								}
+							</div>
+							if c.Title != "" {
+								<div class="text-xs text-fg-muted">{ c.Title }</div>
+							}
+							if c.Note != "" {
+								<div class="text-xs text-amber-700 dark:text-amber-400">{ c.Note }</div>
+							}
+						</div>
+					</li>
+				}
+			</ul>
+			if data.Plan.RunnableN > 0 {
+				<div class="flex items-center gap-3 pt-2 border-t border-edge">
+					// Re-embed the original text so the run step re-parses + re-validates
+					// server-side (never trust a client-built plan).
+					<input type="hidden" id="dw-approved-batch" name="batch" value={ data.Raw }/>
+					<button
+						type="button"
+						class="btn-primary text-sm px-4 py-2"
+						hx-post="/admin/diagnostics/workspace/run"
+						hx-include="#dw-approved-batch"
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
+						hx-target="#dw-review"
+						hx-swap="innerHTML"
+						hx-indicator="#dw-running"
+					>
+						<i class="fa-solid fa-play mr-1"></i> Approve &amp; run { fmt.Sprintf("%d", data.Plan.RunnableN) } call(s)
+					</button>
+					<span id="dw-running" class="htmx-indicator text-xs text-fg-muted">
+						<i class="fa-solid fa-spinner fa-spin mr-1"></i> running…
+					</span>
+				</div>
+			} else {
+				<p class="text-xs text-fg-muted pt-2 border-t border-edge">
+					Nothing runnable. Fix the names (or add <code>"full_dump": true</code> to authorize a full dump) and parse again.
+				</p>
+			}
+		</div>
+	}
+}
+
+// DiagnosticsBatchResult is the HTMX fragment returned by the run handler: the
+// compact redacted output in a copy-to-clipboard pane.
+templ DiagnosticsBatchResult(data DiagnosticsResultData) {
+	<div class="card space-y-3" data-widget="ai-export">
+		<div class="flex items-center justify-between">
+			<h2 class="text-lg font-semibold text-fg">
+				<i class="fa-solid fa-circle-check mr-2 text-emerald-500"></i> Result
+			</h2>
+			<button
+				type="button"
+				class="btn-primary text-xs px-3 py-1.5"
+				data-ai-export-copy
+				x-data="{ copied: false }"
+				@click="copied = true; setTimeout(() => copied = false, 2000)"
+			>
+				<span x-show="!copied"><i class="fa-solid fa-copy mr-1"></i> Copy result</span>
+				<span x-show="copied" x-cloak><i class="fa-solid fa-check mr-1"></i> Copied</span>
+			</button>
+		</div>
+		<p class="text-xs text-fg-muted">Paste this back to your AI. Read-only and secret-redacted.</p>
+		<pre
+			data-ai-export-body
+			class="select-all whitespace-pre-wrap break-words text-xs font-mono text-fg leading-relaxed bg-surface-alt p-4 rounded border border-edge max-h-[60vh] overflow-auto"
+		>{ data.Result }</pre>
+	</div>
+}
+
+// planBadge renders a small status pill for one planned call.
+templ planBadge(status systems.PlanStatus) {
+	switch status {
+		case systems.PlanOK:
+			<span class="shrink-0 mt-0.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" title="will run">
+				<i class="fa-solid fa-check text-[10px]"></i>
+			</span>
+		default:
+			<span class="shrink-0 mt-0.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" title="skipped">
+				<i class="fa-solid fa-xmark text-[10px]"></i>
+			</span>
+	}
+}
