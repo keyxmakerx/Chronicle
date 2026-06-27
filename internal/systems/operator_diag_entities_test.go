@@ -222,6 +222,35 @@ func TestRenderEntitySyncMappings(t *testing.T) {
 	}
 }
 
+// TestPickersSilentWhenProvided is the regression guard for the rule: the review
+// step must only ask for a campaign/entity when a call is scoped to it AND the
+// value was left blank or a <placeholder>. Real ids/slugs must never prompt.
+func TestPickersSilentWhenProvided(t *testing.T) {
+	raw := `{"v":1,"calls":[
+	 {"name":"entity.find","arg":"6a60b643-1153-4f1d-9b51-a3bcbb384140:tyne"},
+	 {"name":"entity.sync-mappings","arg":"6a60b643-1153-4f1d-9b51-a3bcbb384140:tyne"},
+	 {"name":"entity.fields","arg":"6a60b643-1153-4f1d-9b51-a3bcbb384140:tyne"},
+	 {"name":"sync.inbound","arg":"6a60b643-1153-4f1d-9b51-a3bcbb384140:tyne"}]}`
+	plan, err := ParseBatch(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if PlanNeedsCampaign(plan) {
+		t.Error("must NOT prompt for a campaign when real ids were provided")
+	}
+	if PlanNeedsEntity(plan) {
+		t.Error("must NOT prompt for an entity when a real slug was provided")
+	}
+	// And the inverse: a placeholder DOES prompt (only for the scoped slot).
+	p2, _ := ParseBatch(`{"v":1,"calls":[{"name":"entity.fields","arg":"<campaignId>:tyne"}]}`)
+	if !PlanNeedsCampaign(p2) {
+		t.Error("a <placeholder> campaign should prompt")
+	}
+	if PlanNeedsEntity(p2) {
+		t.Error("a real entity slug should not prompt even when the campaign is a placeholder")
+	}
+}
+
 func TestEntitySlotSubstitution(t *testing.T) {
 	if !EntitySlotIsAmbiguous("entity.fields", "camp:<tyneId>") {
 		t.Error("placeholder entity should be ambiguous")
