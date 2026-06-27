@@ -145,12 +145,40 @@ type EntityTypeInfo struct {
 	Count          int
 }
 
+// EntityHit is one search result for the entity.find discovery diagnostic.
+type EntityHit struct {
+	ID       string
+	Name     string
+	Slug     string
+	TypeName string
+}
+
 // EntityDiagProvider is the injected read-only window into campaign entity data.
 // Implemented by the app layer against the entities service (dependency inversion).
 type EntityDiagProvider interface {
 	EntityFields(ctx context.Context, campaignID, idOrSlug string) (EntityFieldDump, error)
 	TypeFieldCoverage(ctx context.Context, campaignID, typeIDOrName string) (FieldCoverage, error)
 	EntityTypes(ctx context.Context, campaignID string) ([]EntityTypeInfo, error)
+	FindEntities(ctx context.Context, campaignID, query string) ([]EntityHit, error)
+}
+
+// SyncMappingInfo is one Foundry↔Chronicle sync link for the entity.sync-mappings
+// diagnostic.
+type SyncMappingInfo struct {
+	ExternalSystem string
+	ExternalID     string
+	ChronicleType  string
+	ChronicleID    string
+	LastSync       string
+}
+
+// syncMappingFn returns the sync mappings for one entity (resolved id), or nil if
+// the provider isn't wired. Injected from the app layer (syncapi + entity resolve).
+var syncMappingFn func(ctx context.Context, campaignID, entityID string) ([]SyncMappingInfo, error)
+
+// SetSyncMappingProvider wires the sync-mapping reader for entity.sync-mappings.
+func SetSyncMappingProvider(fn func(ctx context.Context, campaignID, entityID string) ([]SyncMappingInfo, error)) {
+	syncMappingFn = fn
 }
 
 var entityDiagProvider EntityDiagProvider
@@ -273,6 +301,83 @@ func renderEntityTypes(arg string) string {
 	return b.String()
 }
 
+// renderEntityFind searches a campaign's entities by name/slug so the operator can
+// discover an entity id without the URL. Arg: "<campaignId>:<nameQuery>".
+func renderEntityFind(arg string) string {
+	var b strings.Builder
+	b.WriteString("## entity.find\n\n")
+	campaignID, query, ok := splitArg2(arg)
+	if !ok {
+		b.WriteString("_Usage: `<campaignId>:<nameQuery>`_\n")
+		return b.String()
+	}
+	if entityDiagProvider == nil {
+		b.WriteString("_Entity provider not wired._\n")
+		return b.String()
+	}
+	hits, err := entityDiagProvider.FindEntities(context.Background(), campaignID, query)
+	if err != nil {
+		fmt.Fprintf(&b, "- Error: %v\n", err)
+		return b.String()
+	}
+	if len(hits) == 0 {
+		fmt.Fprintf(&b, "_No entities matching `%s` in campaign `%s`._\n", query, campaignID)
+		return b.String()
+	}
+	for _, h := range hits {
+		fmt.Fprintf(&b, "- `%s` — **%s** (%s) [%s]\n", h.ID, h.Name, h.Slug, fallback(h.TypeName, "?"))
+	}
+	return b.String()
+}
+
+// renderEntitySyncMappings shows whether an entity is linked to an external actor.
+// Arg: "<campaignId>:<entityIdOrSlug>". No mappings = nothing will ever sync to it.
+func renderEntitySyncMappings(arg string) string {
+	var b strings.Builder
+	b.WriteString("## entity.sync-mappings\n\n")
+	campaignID, ref, ok := splitArg2(arg)
+	if !ok {
+		b.WriteString("_Usage: `<campaignId>:<entityIdOrSlug>`_\n")
+		return b.String()
+	}
+	if syncMappingFn == nil {
+		b.WriteString("_Sync-mapping provider not wired._\n")
+		return b.String()
+	}
+	entityID, label := resolveEntityID(campaignID, ref)
+	if entityID == "" {
+		fmt.Fprintf(&b, "_Couldn't resolve entity `%s` in campaign `%s` (try `entity.find`)._\n", ref, campaignID)
+		return b.String()
+	}
+	maps, err := syncMappingFn(context.Background(), campaignID, entityID)
+	if err != nil {
+		fmt.Fprintf(&b, "- Error: %v\n", err)
+		return b.String()
+	}
+	if len(maps) == 0 {
+		fmt.Fprintf(&b, "%s — **no sync mappings**: not linked to any external actor, so nothing will sync to it.\n", label)
+		return b.String()
+	}
+	fmt.Fprintf(&b, "%s — %d mapping(s):\n", label, len(maps))
+	for _, m := range maps {
+		fmt.Fprintf(&b, "- %s `%s` ↔ %s `%s` — last sync %s\n", fallback(m.ExternalSystem, "?"), m.ExternalID, fallback(m.ChronicleType, "entity"), m.ChronicleID, fallback(m.LastSync, "never"))
+	}
+	return b.String()
+}
+
+// resolveEntityID resolves an id-or-slug to a chronicle entity id via the entity
+// provider. Returns ("","") if unresolved. label is a human string for output.
+func resolveEntityID(campaignID, ref string) (id, label string) {
+	if entityDiagProvider == nil {
+		return ref, "entity `" + ref + "`" // no resolver: assume ref is already an id
+	}
+	dump, err := entityDiagProvider.EntityFields(context.Background(), campaignID, ref)
+	if err != nil || !dump.Found {
+		return "", ""
+	}
+	return dump.ID, fmt.Sprintf("**%s** (`%s`)", dump.Name, dump.ID)
+}
+
 // ── campaigns.list: discover campaign ids ───────────────────────────────────
 
 // CampaignInfo is one campaign for the campaigns.list discovery diagnostic.
@@ -334,20 +439,26 @@ func SetSyncInboundProvider(fn func(entityID string, limit int) []InboundSyncRec
 	syncInboundFn = fn
 }
 
-// renderSyncInbound shows the recent inbound payloads for one entity. Arg: "<entityId>".
+// renderSyncInbound shows the recent inbound payloads for one entity.
+// Arg: "<campaignId>:<entityIdOrSlug>" (the slug is resolved to an id).
 func renderSyncInbound(arg string) string {
 	var b strings.Builder
 	b.WriteString("## sync.inbound\n\n")
-	id := strings.TrimSpace(arg)
-	if id == "" {
-		b.WriteString("_Usage: `<entityId>` (or run `sync.recent` for the last few across all entities)._\n")
+	campaignID, ref, ok := splitArg2(arg)
+	if !ok {
+		b.WriteString("_Usage: `<campaignId>:<entityIdOrSlug>` (or `sync.recent` for the last few across all entities)._\n")
 		return b.String()
 	}
 	if syncInboundFn == nil {
 		b.WriteString("_Sync provider not wired (syncapi not injected at startup)._\n")
 		return b.String()
 	}
-	return renderInboundRecords(&b, syncInboundFn(id, 10), "entity "+id)
+	entityID, label := resolveEntityID(campaignID, ref)
+	if entityID == "" {
+		fmt.Fprintf(&b, "_Couldn't resolve entity `%s` in campaign `%s` (try `entity.find`)._\n", ref, campaignID)
+		return b.String()
+	}
+	return renderInboundRecords(&b, syncInboundFn(entityID, 10), label)
 }
 
 // renderSyncRecent shows the last few inbound payloads across all entities.
@@ -401,7 +512,7 @@ func campaignSlot(name, arg string) (slot, rest string, whole, scoped bool) {
 	switch name {
 	case "entity.types":
 		return strings.TrimSpace(arg), "", true, true
-	case "entity.fields", "entity.field-coverage":
+	case "entity.fields", "entity.field-coverage", "entity.find", "sync.inbound", "entity.sync-mappings":
 		parts := strings.SplitN(arg, ":", 2)
 		if len(parts) == 2 {
 			return strings.TrimSpace(parts[0]), parts[1], false, true
@@ -409,6 +520,71 @@ func campaignSlot(name, arg string) (slot, rest string, whole, scoped bool) {
 		return strings.TrimSpace(arg), "", false, true // malformed: treat whole as the slot
 	}
 	return "", "", false, false
+}
+
+// entitySlot returns the entity portion (parts[1]) of an entity-targeted
+// diagnostic's arg. scoped=false for diagnostics that take no entity ref (the
+// 2nd part of entity.find is a query and entity.field-coverage is a type, so
+// neither is substitutable here).
+func entitySlot(name, arg string) (slot string, scoped bool) {
+	switch name {
+	case "entity.fields", "sync.inbound", "entity.sync-mappings":
+		parts := strings.SplitN(arg, ":", 2)
+		if len(parts) == 2 {
+			return strings.TrimSpace(parts[1]), true
+		}
+		return "", true
+	}
+	return "", false
+}
+
+// EntitySlotIsAmbiguous reports whether an entity-targeted call left its entity
+// ref as a placeholder or empty — the review step should offer an entity field.
+func EntitySlotIsAmbiguous(name, arg string) bool {
+	slot, scoped := entitySlot(name, arg)
+	if !scoped {
+		return false
+	}
+	return slot == "" || (strings.HasPrefix(slot, "<") && strings.HasSuffix(slot, ">"))
+}
+
+// WithEntity returns arg with its entity slot replaced by entityRef, preserving
+// the campaign part.
+func WithEntity(name, arg, entityRef string) string {
+	if _, scoped := entitySlot(name, arg); !scoped {
+		return arg
+	}
+	camp := ""
+	if parts := strings.SplitN(arg, ":", 2); len(parts) >= 1 {
+		camp = parts[0]
+	}
+	return camp + ":" + entityRef
+}
+
+// ApplyEntityPick substitutes the operator-supplied entity ref into every call
+// whose entity slot was left ambiguous.
+func ApplyEntityPick(plan *BatchPlan, entityRef string) {
+	if plan == nil || strings.TrimSpace(entityRef) == "" {
+		return
+	}
+	for i := range plan.Calls {
+		if EntitySlotIsAmbiguous(plan.Calls[i].Name, plan.Calls[i].Arg) {
+			plan.Calls[i].Arg = WithEntity(plan.Calls[i].Name, plan.Calls[i].Arg, entityRef)
+		}
+	}
+}
+
+// PlanNeedsEntity reports whether any call left its entity slot ambiguous.
+func PlanNeedsEntity(plan *BatchPlan) bool {
+	if plan == nil {
+		return false
+	}
+	for _, c := range plan.Calls {
+		if EntitySlotIsAmbiguous(c.Name, c.Arg) {
+			return true
+		}
+	}
+	return false
 }
 
 // CampaignSlotIsAmbiguous reports whether a call is campaign-scoped but left its

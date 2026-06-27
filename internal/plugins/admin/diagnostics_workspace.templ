@@ -47,7 +47,8 @@ type DiagnosticsReviewData struct {
 	Err           string
 	CSRFToken     string
 	NeedsCampaign bool             // a call left its campaign slot as a placeholder
-	Campaigns     []CampaignOption // options for the picker
+	NeedsEntity   bool             // a call left its entity slot as a placeholder
+	Campaigns     []CampaignOption // options for the campaign picker
 }
 
 // DiagnosticsResultData backs the result fragment: the compact redacted output.
@@ -229,6 +230,24 @@ templ DiagnosticsBatchReview(data DiagnosticsReviewData) {
 					</select>
 				</div>
 			}
+			if data.NeedsEntity {
+				// A call targets an entity but left it as a placeholder — fill in a
+				// name, slug, or id. Run `entity.find ‹campaignId›:‹name›` first if you
+				// don't know it. The run step substitutes this into every such call.
+				<div class="pt-2">
+					<label for="dw-entity-pick" class="text-xs font-medium text-fg-secondary">
+						<i class="fa-solid fa-user mr-1 text-amber-500"></i>
+						Entity (some calls left it as a placeholder)
+					</label>
+					<input
+						id="dw-entity-pick"
+						name="entity_pick"
+						type="text"
+						placeholder="name, slug, or id — e.g. tyne"
+						class="mt-1 w-full text-sm font-mono bg-surface-alt border border-edge rounded p-2 text-fg focus:outline-none focus:ring-2 focus:ring-accent/40"
+					/>
+				</div>
+			}
 			if data.Plan.RunnableN > 0 {
 				<div class="flex items-center gap-3 pt-2 border-t border-edge">
 					// Re-embed the original text so the run step re-parses + re-validates
@@ -238,7 +257,7 @@ templ DiagnosticsBatchReview(data DiagnosticsReviewData) {
 						type="button"
 						class="btn-primary text-sm px-4 py-2"
 						hx-post="/admin/diagnostics/workspace/run"
-						hx-include="#dw-approved-batch, #dw-campaign-pick"
+						hx-include="#dw-approved-batch, #dw-campaign-pick, #dw-entity-pick"
 						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, data.CSRFToken) }
 						hx-target="#dw-review"
 						hx-swap="innerHTML"

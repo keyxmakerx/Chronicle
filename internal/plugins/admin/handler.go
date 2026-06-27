@@ -890,12 +890,13 @@ func (h *Handler) DiagnosticsWorkspaceParse(c echo.Context) error {
 		data.Err = err.Error()
 	} else {
 		data.Plan = plan
-		// If any call left its campaign as a placeholder, offer a picker at the
-		// review step instead of failing the run with "not found".
+		// If any call left its campaign/entity slot as a placeholder, offer pickers
+		// at the review step instead of failing the run with "not found".
 		if systems.PlanNeedsCampaign(plan) {
 			data.NeedsCampaign = true
 			data.Campaigns = h.diagnosticsCampaigns(c.Request().Context())
 		}
+		data.NeedsEntity = systems.PlanNeedsEntity(plan)
 	}
 	return middleware.Render(c, http.StatusOK, DiagnosticsBatchReview(data))
 }
@@ -918,6 +919,9 @@ func (h *Handler) DiagnosticsWorkspaceRun(c echo.Context) error {
 	// any call that left its campaign slot as a placeholder.
 	if pick := strings.TrimSpace(c.FormValue("campaign_pick")); pick != "" {
 		systems.ApplyCampaignPick(plan, pick)
+	}
+	if pick := strings.TrimSpace(c.FormValue("entity_pick")); pick != "" {
+		systems.ApplyEntityPick(plan, pick)
 	}
 	result := systems.RunBatch(plan)
 

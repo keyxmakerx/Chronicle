@@ -166,11 +166,25 @@ func diagnosticCatalog() []Diagnostic {
 			Run:     renderEntityTypes,
 		},
 		{
+			Name:    "entity.find",
+			Title:   "Search a campaign's entities by name",
+			Desc:    "Find an entity (and its id) by a name/slug substring — so you can target entity.fields / sync.inbound without knowing the id.",
+			ArgHint: "<campaignId>:<nameQuery>",
+			Run:     renderEntityFind,
+		},
+		{
 			Name:    "entity.fields",
 			Title:   "Stored field values for ONE entity",
 			Desc:    "Dumps an entity's stored field key→value map (redacted). THE check for 'is this hero's data actually populated?' when a sheet renders blank.",
 			ArgHint: "<campaignId>:<entityIdOrSlug>",
 			Run:     renderEntityFields,
+		},
+		{
+			Name:    "entity.sync-mappings",
+			Title:   "Is this entity linked to an external (Foundry) actor?",
+			Desc:    "Shows the sync mappings for an entity (external system/id ↔ chronicle id, last sync). No mappings = nothing will ever sync to it — the root cause of a permanently-blank hero.",
+			ArgHint: "<campaignId>:<entityIdOrSlug>",
+			Run:     renderEntitySyncMappings,
 		},
 		{
 			Name:    "entity.field-coverage",
@@ -183,7 +197,7 @@ func diagnosticCatalog() []Diagnostic {
 			Name:    "sync.inbound",
 			Title:   "Recent inbound sync payloads for ONE entity (what Foundry SENT)",
 			Desc:    "The most recent field payloads an external client (e.g. the Foundry module) sent for this entity. Compare against entity.fields to see if data is arriving but not stored.",
-			ArgHint: "<entityId>",
+			ArgHint: "<campaignId>:<entityIdOrSlug>",
 			Run:     renderSyncInbound,
 		},
 		{

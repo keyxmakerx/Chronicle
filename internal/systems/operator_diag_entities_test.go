@@ -13,6 +13,7 @@ type stubEntityProvider struct {
 	dump  EntityFieldDump
 	cov   FieldCoverage
 	types []EntityTypeInfo
+	hits  []EntityHit
 	err   error
 }
 
@@ -24,6 +25,9 @@ func (s stubEntityProvider) TypeFieldCoverage(context.Context, string, string) (
 }
 func (s stubEntityProvider) EntityTypes(context.Context, string) ([]EntityTypeInfo, error) {
 	return s.types, s.err
+}
+func (s stubEntityProvider) FindEntities(context.Context, string, string) ([]EntityHit, error) {
+	return s.hits, s.err
 }
 
 func TestRenderEntityFields(t *testing.T) {
@@ -137,21 +141,25 @@ func TestRenderCampaignList(t *testing.T) {
 }
 
 func TestRenderSyncInbound(t *testing.T) {
-	old := syncInboundFn
-	defer func() { syncInboundFn = old }()
+	oldSync, oldEnt := syncInboundFn, entityDiagProvider
+	defer func() { syncInboundFn, entityDiagProvider = oldSync, oldEnt }()
+	entityDiagProvider = nil // nil resolver: the ref is treated as the id directly
 
 	syncInboundFn = nil
-	if !strings.Contains(renderSyncInbound("e1"), "not wired") {
+	if !strings.Contains(renderSyncInbound("camp:e1"), "not wired") {
 		t.Error("nil provider should say not wired")
 	}
-	if !strings.Contains(renderSyncInbound(""), "Usage") {
-		t.Error("empty arg should show usage")
+	if !strings.Contains(renderSyncInbound("e1"), "Usage") {
+		t.Error("single-part arg should show usage (now campaign:entity)")
 	}
 
-	syncInboundFn = func(string, int) []InboundSyncRecord {
+	syncInboundFn = func(id string, _ int) []InboundSyncRecord {
+		if id != "e1" {
+			t.Errorf("expected resolved id e1, got %q", id)
+		}
 		return []InboundSyncRecord{{EntityID: "e1", At: time.Unix(1000, 0), Source: "fields", Fields: map[string]any{"might": 2}}}
 	}
-	out := renderSyncInbound("e1")
+	out := renderSyncInbound("camp:e1")
 	for _, w := range []string{"e1", "fields", "might"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("missing %q in:\n%s", w, out)
@@ -159,8 +167,84 @@ func TestRenderSyncInbound(t *testing.T) {
 	}
 
 	syncInboundFn = func(string, int) []InboundSyncRecord { return nil }
-	if !strings.Contains(renderSyncInbound("e1"), "No inbound") {
+	if !strings.Contains(renderSyncInbound("camp:e1"), "No inbound") {
 		t.Error("no records should say so")
+	}
+}
+
+func TestRenderEntityFind(t *testing.T) {
+	old := entityDiagProvider
+	defer func() { entityDiagProvider = old }()
+
+	entityDiagProvider = nil
+	if !strings.Contains(renderEntityFind("c:q"), "not wired") {
+		t.Error("nil provider should say not wired")
+	}
+	if !strings.Contains(renderEntityFind("oops"), "Usage") {
+		t.Error("bad arg should show usage")
+	}
+	entityDiagProvider = stubEntityProvider{hits: []EntityHit{{ID: "e9", Name: "Tyne", Slug: "tyne", TypeName: "Hero"}}}
+	out := renderEntityFind("camp:tyn")
+	for _, w := range []string{"`e9`", "Tyne", "tyne", "Hero"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("missing %q in:\n%s", w, out)
+		}
+	}
+	entityDiagProvider = stubEntityProvider{hits: nil}
+	if !strings.Contains(renderEntityFind("camp:zzz"), "No entities matching") {
+		t.Error("no hits should say so")
+	}
+}
+
+func TestRenderEntitySyncMappings(t *testing.T) {
+	oldMap, oldEnt := syncMappingFn, entityDiagProvider
+	defer func() { syncMappingFn, entityDiagProvider = oldMap, oldEnt }()
+	entityDiagProvider = nil // ref treated as id
+
+	syncMappingFn = nil
+	if !strings.Contains(renderEntitySyncMappings("c:e"), "not wired") {
+		t.Error("nil provider should say not wired")
+	}
+	// no mappings => the "nothing will sync" signature
+	syncMappingFn = func(context.Context, string, string) ([]SyncMappingInfo, error) { return nil, nil }
+	if !strings.Contains(renderEntitySyncMappings("camp:e1"), "no sync mappings") {
+		t.Error("no mappings should flag the unlinked signature")
+	}
+	// a mapping
+	syncMappingFn = func(context.Context, string, string) ([]SyncMappingInfo, error) {
+		return []SyncMappingInfo{{ExternalSystem: "foundry", ExternalID: "abc", ChronicleType: "entity", ChronicleID: "e1", LastSync: "2026-06-27T00:00:00Z"}}, nil
+	}
+	out := renderEntitySyncMappings("camp:e1")
+	for _, w := range []string{"foundry", "abc", "2026-06-27"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("missing %q in:\n%s", w, out)
+		}
+	}
+}
+
+func TestEntitySlotSubstitution(t *testing.T) {
+	if !EntitySlotIsAmbiguous("entity.fields", "camp:<tyneId>") {
+		t.Error("placeholder entity should be ambiguous")
+	}
+	if EntitySlotIsAmbiguous("entity.fields", "camp:tyne") {
+		t.Error("a real slug should not be ambiguous")
+	}
+	if EntitySlotIsAmbiguous("entity.field-coverage", "camp:<x>") {
+		t.Error("field-coverage 2nd part is a TYPE, not an entity slot")
+	}
+	if got := WithEntity("sync.inbound", "camp:<tyneId>", "tyne"); got != "camp:tyne" {
+		t.Errorf("WithEntity = %q, want camp:tyne", got)
+	}
+	plan := &BatchPlan{Calls: []PlannedCall{
+		{Name: "sync.inbound", Arg: "camp:<tyneId>"},
+		{Name: "entity.field-coverage", Arg: "camp:Heroes"},
+	}}
+	ApplyEntityPick(plan, "tyne")
+	if plan.Calls[0].Arg != "camp:tyne" {
+		t.Errorf("entity call not substituted: %q", plan.Calls[0].Arg)
+	}
+	if plan.Calls[1].Arg != "camp:Heroes" {
+		t.Errorf("non-entity call should be untouched: %q", plan.Calls[1].Arg)
 	}
 }
 
@@ -230,7 +314,7 @@ func TestCampaignSlotSubstitution(t *testing.T) {
 	plan := &BatchPlan{Calls: []PlannedCall{
 		{Name: "entity.fields", Arg: "<campaignId>:tyne"},
 		{Name: "entity.fields", Arg: "real:orrin"},
-		{Name: "sync.inbound", Arg: "<tyneId>"},
+		{Name: "system.versions", Arg: ""}, // not campaign-scoped
 	}}
 	ApplyCampaignPick(plan, "c9")
 	if plan.Calls[0].Arg != "c9:tyne" {
@@ -239,8 +323,8 @@ func TestCampaignSlotSubstitution(t *testing.T) {
 	if plan.Calls[1].Arg != "real:orrin" {
 		t.Errorf("call1 should be untouched, got %q", plan.Calls[1].Arg)
 	}
-	if plan.Calls[2].Arg != "<tyneId>" {
-		t.Errorf("sync.inbound (not campaign-scoped) should be untouched, got %q", plan.Calls[2].Arg)
+	if plan.Calls[2].Arg != "" {
+		t.Errorf("non-campaign-scoped call should be untouched, got %q", plan.Calls[2].Arg)
 	}
 	// After substitution nothing should still need a campaign (call2 isn't scoped).
 	if PlanNeedsCampaign(plan) {
