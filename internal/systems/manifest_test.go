@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -220,6 +221,52 @@ func TestValidateManifest(t *testing.T) {
 			err := ValidateManifest(&tt.m)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateManifest() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidateManifest_PresetFieldCap pins the per-preset field cap
+// (maxFieldsPerPreset). A data-rich preset at the cap must validate; one field
+// over must be rejected. This guards the boundary that previously rejected a
+// 58-field Draw Steel hero preset back when the cap was 50.
+func TestValidateManifest_PresetFieldCap(t *testing.T) {
+	mkPreset := func(n int) EntityPresetDef {
+		fields := make([]FieldDef, n)
+		for i := range fields {
+			fields[i] = FieldDef{
+				Key:   fmt.Sprintf("f%d", i),
+				Label: fmt.Sprintf("Field %d", i),
+				Type:  "string",
+			}
+		}
+		return EntityPresetDef{Slug: "big-character", Name: "Big", Fields: fields}
+	}
+	base := func(p EntityPresetDef) SystemManifest {
+		return SystemManifest{
+			ID:            "test",
+			Name:          "Test",
+			Version:       "1.0.0",
+			APIVersion:    "1",
+			EntityPresets: []EntityPresetDef{p},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		fields  int
+		wantErr bool
+	}{
+		{"58 fields (Draw Steel hero) is accepted", 58, false},
+		{"at cap is accepted", maxFieldsPerPreset, false},
+		{"one over cap is rejected", maxFieldsPerPreset + 1, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := base(mkPreset(tt.fields))
+			err := ValidateManifest(&m)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidateManifest() with %d fields error = %v, wantErr = %v", tt.fields, err, tt.wantErr)
 			}
 		})
 	}

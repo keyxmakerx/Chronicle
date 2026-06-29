@@ -113,7 +113,7 @@ Each category has a corresponding `data/<slug>.json` file:
 - Property keys in data items must match category field definitions
 - Entity preset slugs must be unique
 - Character preset slug must end with "-character"
-- Max 20 categories, 100 fields per category, 10 entity presets, 50 fields per preset
+- Max 20 categories, 100 fields per category, 10 entity presets, 100 fields per preset
 
 ## 3. Installation & Loading Flow
 

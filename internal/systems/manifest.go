@@ -567,12 +567,17 @@ var ValidFieldTypes = map[string]bool{
 const (
 	maxCategories        = 20
 	maxFieldsPerCategory = 100
-	maxFieldsPerPreset   = 50
-	maxEntityPresets     = 10
-	maxRelationPresets   = 20
-	maxWidgets           = 10
-	maxTextRenderers     = 5
-	maxRenderers         = 10
+	// maxFieldsPerPreset bounds the field count of a single entity preset.
+	// It matches maxFieldsPerCategory (100): both are abuse/resource-exhaustion
+	// guards on third-party manifests, and there is no structural reason a
+	// preset should tolerate fewer fields than a category. A data-rich game
+	// system (e.g. a Draw Steel hero sheet) can legitimately approach this.
+	maxFieldsPerPreset = 100
+	maxEntityPresets   = 10
+	maxRelationPresets = 20
+	maxWidgets         = 10
+	maxTextRenderers   = 5
+	maxRenderers       = 10
 )
 
 // slugPattern matches valid manifest IDs and preset slugs.
