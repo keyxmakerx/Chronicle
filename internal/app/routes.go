@@ -1949,6 +1949,15 @@ func (a *App) RegisterRoutes() {
 		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
+	// Fail-loud installs: run the FULL loader-grade manifest validation at
+	// install time for system packages, so a manifest the boot scan would
+	// reject (content caps, slugs, renderer bindings…) fails the install
+	// with the real error instead of installing "green" and shadow-failing
+	// at load while the old version keeps serving.
+	packages.SetManifestValidator(pkgService, func(manifestPath string) error {
+		_, err := systems.LoadManifest(manifestPath)
+		return err
+	})
 
 	// Wire installed-package state into the operator diagnostics (dependency
 	// inversion: systems can't import packages) so packages.installed-vs-loaded /

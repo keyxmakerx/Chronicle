@@ -36,10 +36,13 @@ type fakeRepo struct {
 	mu       sync.Mutex
 	packages map[string]*Package
 	created  []*Package
+	// versions, when populated (keyed "pkgID@version"), backs GetVersion
+	// so install-pipeline tests can drive InstallVersion end-to-end.
+	versions map[string]*PackageVersion
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{packages: map[string]*Package{}}
+	return &fakeRepo{packages: map[string]*Package{}, versions: map[string]*PackageVersion{}}
 }
 
 func (r *fakeRepo) ListPackages(_ context.Context) ([]Package, error) {
@@ -88,7 +91,13 @@ func (r *fakeRepo) ListVersions(_ context.Context, _ string) ([]PackageVersion, 
 	return nil, nil
 }
 
-func (r *fakeRepo) GetVersion(_ context.Context, _, _ string) (*PackageVersion, error) {
+func (r *fakeRepo) GetVersion(_ context.Context, pkgID, version string) (*PackageVersion, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if v, ok := r.versions[pkgID+"@"+version]; ok {
+		cp := *v
+		return &cp, nil
+	}
 	return nil, nil
 }
 

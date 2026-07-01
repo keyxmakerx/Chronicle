@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -123,10 +124,11 @@ type PackageService interface {
 // version field in the on-disk module.json so served manifests
 // reflect the installed version (not the upstream GitHub tag).
 //
-// The hook list is iterated AFTER the zip is extracted, validated,
-// and the DB row updated. Hook errors fail the install loudly —
-// no silent warn-and-continue. Operators see immediate failures
-// instead of stale-on-disk state lasting hours.
+// The hook list is iterated after the zip is extracted and validated
+// but BEFORE the DB row is updated, so a hook failure aborts the
+// install with the catalog untouched. Hook errors fail the install
+// loudly — no silent warn-and-continue. Operators see immediate
+// failures instead of stale-on-disk state lasting hours.
 //
 // Defined here in C-FMC-5a; first caller wires in C-FMC-5b.
 type PostInstallHook interface {
@@ -135,21 +137,25 @@ type PostInstallHook interface {
 	// the installed package's type. No matching type → no-op.
 	PackageType() PackageType
 
-	// AfterInstall runs after the install has otherwise completed.
+	// AfterInstall runs after extraction + validation but BEFORE the
+	// package row is committed to the DB (fail-loud contract: a hook
+	// failure must leave the catalog pointing at the old version, never
+	// at a directory the failure path just deleted).
 	//
 	// Parameters:
-	//   - pkg: the package row with the NEW version already applied
-	//     (Package.InstalledVersion == version).
-	//   - version: the version string that was just installed.
+	//   - pkg: the package row as loaded — pkg.InstalledVersion still
+	//     holds the PREVIOUS version at hook time; the new version is
+	//     the `version` parameter. (Changed when hooks moved ahead of
+	//     the DB write; both existing hooks ignore pkg.)
+	//   - version: the version string being installed.
 	//   - previousVersion: the version that was installed before this
 	//     call. Empty string on a first-ever install (no prior state).
 	//     Added in C-FMC-6 so foundry_vtt's auto-pin hook knows which
-	//     version to preserve for auto-tracking campaigns.
+	//     version to preserve for preserve-mode campaigns.
 	//   - destDir: the extracted package's on-disk directory.
 	//
-	// Returning an error fails the install and the caller is
-	// responsible for any rollback they want (packages.InstallVersion
-	// removes destDir).
+	// Returning an error fails the install (packages.InstallVersion
+	// removes destDir; the DB row is never written).
 	AfterInstall(ctx context.Context, pkg *Package, version, previousVersion, destDir string) error
 }
 
@@ -159,13 +165,13 @@ type packageService struct {
 	github         *GitHubClient
 	settings       SettingsReader
 	settingsWriter SettingsWriter
-	mediaDir        string // Root media directory (e.g., ./media).
+	mediaDir       string // Root media directory (e.g., ./media).
 	// baseURL is the chronicle host's external URL (BASE_URL config). Used
 	// to rewrite the in-zip Foundry module manifest at install time so
 	// Foundry's on-disk module.json polls chronicle, not the upstream
 	// GitHub repo. Always trimmed of trailing slash.
-	baseURL string
-	onSystemInstall func() // Called after a system package is installed.
+	baseURL           string
+	onSystemInstall   func() // Called after a system package is installed.
 	onServeInvalidate func() // Called after install/remove to invalidate serve cache.
 
 	// postInstallHooks are the type-specific extension hooks. Slice
@@ -173,6 +179,20 @@ type packageService struct {
 	// per type are allowed. Sub-plugins call RegisterPostInstallHook
 	// at boot to attach themselves.
 	postInstallHooks []PostInstallHook
+
+	// manifestValidator, when set, runs the FULL system-manifest validation
+	// (the same rules the loader enforces at boot) on an extracted system
+	// package before the install is committed. Injected from the app layer
+	// (packages must not import systems) — see SetManifestValidator. Nil
+	// skips the check, preserving the pre-hook behavior for tests. This
+	// closes the "installed green but rejected at load" shadow-failure
+	// class (the Draw Steel 0.13.4 field-cap incident).
+	manifestValidator func(manifestPath string) error
+
+	// installLocks serializes InstallVersion per package ID. Without it a
+	// double-click, or the auto-update worker racing an admin, can share
+	// destDir mid-extract and corrupt the install.
+	installLocks sync.Map // packageID → *sync.Mutex
 }
 
 // NewPackageService creates a new package service with the given dependencies.
@@ -201,6 +221,18 @@ func SetOnSystemInstall(svc PackageService, fn func()) {
 func SetOnServeInvalidate(svc PackageService, fn func()) {
 	if s, ok := svc.(*packageService); ok {
 		s.onServeInvalidate = fn
+	}
+}
+
+// SetManifestValidator wires full system-manifest validation into the
+// install pipeline (dependency inversion — packages must not import
+// systems). The app layer passes systems.LoadManifest so a manifest the
+// loader would reject at boot is rejected at INSTALL time instead, with
+// the real validation message surfaced to the admin, and no DB/disk
+// state change.
+func SetManifestValidator(svc PackageService, fn func(manifestPath string) error) {
+	if s, ok := svc.(*packageService); ok {
+		s.manifestValidator = fn
 	}
 }
 
@@ -431,7 +463,34 @@ func (s *packageService) ListVersions(ctx context.Context, packageID string) ([]
 }
 
 // InstallVersion downloads and extracts a specific version of a package.
+// It serializes per package (a double-click or the auto-update worker
+// racing an admin would otherwise share destDir mid-extract) and is the
+// single durable log point for install failures — the admin handler maps
+// errors to a 400 toast which the global error handler does NOT log, so
+// without this line a failed install leaves no server-side record.
 func (s *packageService) InstallVersion(ctx context.Context, packageID, version string) error {
+	lockAny, _ := s.installLocks.LoadOrStore(packageID, &sync.Mutex{})
+	mu := lockAny.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+
+	err := s.installVersion(ctx, packageID, version)
+	if err != nil {
+		slog.Error("package install failed",
+			slog.String("package_id", packageID),
+			slog.String("version", version),
+			slog.Any("error", err),
+		)
+	}
+	return err
+}
+
+// installVersion is the unsynchronized install pipeline body. Ordering
+// contract (fail-loud): every validation and every post-install hook runs
+// BEFORE the DB row update, so any failure leaves the catalog pointing at
+// the old version with the old install dir intact — never a DB row that
+// references a missing or unloadable directory.
+func (s *packageService) installVersion(ctx context.Context, packageID, version string) error {
 	pkg, err := s.repo.GetPackage(ctx, packageID)
 	if err != nil {
 		return fmt.Errorf("fetching package: %w", err)
@@ -506,32 +565,39 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 			_ = os.RemoveAll(destDir)
 			return fmt.Errorf("rewriting system manifest.json version: %w", err)
 		}
+
+		// Full manifest validation — the SAME rules the system loader
+		// enforces at boot (content caps, slugs, field types, renderer
+		// bindings…), injected from the app layer. Without this, a
+		// manifest the loader will reject installs "green" and then
+		// shadow-fails at load while the old version keeps serving
+		// (the Draw Steel 0.13.4 field-cap incident). Runs after the
+		// version rewrite so it validates exactly the bytes that will
+		// be served.
+		if s.manifestValidator != nil {
+			if err := s.manifestValidator(filepath.Join(destDir, "manifest.json")); err != nil {
+				_ = os.RemoveAll(destDir)
+				return fmt.Errorf("manifest validation failed for %s: %w", version, err)
+			}
+		}
 	}
 
 	// Capture the previous installed version BEFORE updating the
 	// package row, so the post-install hook receives both the new
 	// and the previous version. foundry_vtt's auto-pin hook
 	// (C-FMC-6) needs this to know which version campaigns were
-	// effectively running so it can pin them there before the new
-	// version takes over. Empty string on first-ever install — the
+	// effectively running. Empty string on first-ever install — the
 	// hook treats that as "no auto-pin needed" since there's no
 	// prior state to preserve.
 	previousVersion := pkg.InstalledVersion
 
-	now := time.Now()
-	pkg.InstalledVersion = version
-	pkg.InstallPath = destDir
-	pkg.LastInstalledAt = &now
-	if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
-		return fmt.Errorf("updating package record: %w", err)
-	}
-
-	// Run any registered PostInstallHook whose PackageType matches.
-	// Sub-plugins (e.g. foundry_vtt in C-FMC-5b) hook here to attach
-	// type-specific behavior. The slice is empty in C-FMC-5a so this
-	// loop is a no-op until a sub-plugin registers. Errors fail the
-	// install and clean up destDir so retries start fresh — matches
-	// the warn-to-fatal promotion above. Order is registration order.
+	// Run any registered PostInstallHook whose PackageType matches —
+	// BEFORE the DB row update. A hook failure removes destDir and
+	// aborts with the catalog untouched; previously the row was
+	// updated first, so a failing hook (e.g. foundry_vtt's module.json
+	// rewrite) deleted the install dir while the DB kept pointing at
+	// it — latest-tracking campaigns then resolved to a missing dir.
+	// Order is registration order.
 	for _, hook := range s.postInstallHooks {
 		if hook.PackageType() != pkg.Type {
 			continue
@@ -540,6 +606,18 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 			_ = os.RemoveAll(destDir)
 			return fmt.Errorf("post-install hook for %q: %w", pkg.Type, err)
 		}
+	}
+
+	now := time.Now()
+	pkg.InstalledVersion = version
+	pkg.InstallPath = destDir
+	pkg.LastInstalledAt = &now
+	if err := s.repo.UpdatePackage(ctx, pkg); err != nil {
+		// Keep disk consistent with the DB: leaving the new dir behind
+		// would make the next boot's highest-version scan serve a
+		// version the catalog doesn't record.
+		_ = os.RemoveAll(destDir)
+		return fmt.Errorf("updating package record: %w", err)
 	}
 
 	slog.Info("package version installed",
