@@ -169,6 +169,45 @@ func TestInstallVersion_HookFailureLeavesDBUntouched(t *testing.T) {
 	}
 }
 
+// TestInstallVersion_LastErrorLifecycle pins the durable-failure record:
+// a failed install writes last_error; a later successful install clears
+// it; a post-install verifier miss re-sets it (installed-but-not-serving).
+func TestInstallVersion_LastErrorLifecycle(t *testing.T) {
+	svc, repo, _ := installTestEnv(t, buildZip(t, map[string]string{"manifest.json": validManifest}))
+
+	// 1. Failing validator → install fails → last_error persisted.
+	SetManifestValidator(svc, func(string) error { return errors.New("too many fields") })
+	if err := svc.InstallVersion(context.Background(), "pkg-1", "0.2.0"); err == nil {
+		t.Fatal("expected failure")
+	}
+	stored, _ := repo.GetPackage(context.Background(), "pkg-1")
+	if stored.LastError == "" {
+		t.Error("failed install must persist last_error")
+	}
+
+	// 2. Validator passes, verifier passes → success clears last_error.
+	SetManifestValidator(svc, func(string) error { return nil })
+	SetPostInstallVerifier(svc, func(string, string) error { return nil })
+	if err := svc.InstallVersion(context.Background(), "pkg-1", "0.2.0"); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+	stored, _ = repo.GetPackage(context.Background(), "pkg-1")
+	if stored.LastError != "" {
+		t.Errorf("verified success must clear last_error, got %q", stored.LastError)
+	}
+
+	// 3. Verifier reports the loader did not pick it up → install still
+	// succeeds but last_error records installed-but-not-serving.
+	SetPostInstallVerifier(svc, func(string, string) error { return errors.New("loader kept 0.1.0") })
+	if err := svc.InstallVersion(context.Background(), "pkg-1", "0.2.0"); err != nil {
+		t.Fatalf("verification failure must not fail the install: %v", err)
+	}
+	stored, _ = repo.GetPackage(context.Background(), "pkg-1")
+	if stored.LastError == "" || !bytes.Contains([]byte(stored.LastError), []byte("not being served")) {
+		t.Errorf("verifier miss must persist installed-but-not-serving, got %q", stored.LastError)
+	}
+}
+
 // TestInstallVersion_NilValidatorSkips preserves the no-validator behavior
 // (tests / degraded boot): installs proceed without the full check.
 func TestInstallVersion_NilValidatorSkips(t *testing.T) {

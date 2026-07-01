@@ -1958,6 +1958,25 @@ func (a *App) RegisterRoutes() {
 		_, err := systems.LoadManifest(manifestPath)
 		return err
 	})
+	// Verified installs: after the rescan, confirm the loader actually
+	// serves the just-installed dir+version. On miss, pull the real
+	// rejection reason from the load-event log so the persisted
+	// last_error tells the admin WHY (e.g. a validation failure on a
+	// pre-validator install, or a stale registry).
+	packages.SetPostInstallVerifier(pkgService, func(installPath, version string) error {
+		for _, sh := range systems.LoadedHealth() {
+			if sh.Dir == installPath && sh.Version == version {
+				return nil
+			}
+		}
+		events := systems.DiagnosticEvents()
+		for i := len(events) - 1; i >= 0; i-- {
+			if events[i].Dir == installPath && events[i].Kind == systems.EventFailed {
+				return fmt.Errorf("loader rejected it: %s", events[i].Error)
+			}
+		}
+		return fmt.Errorf("loader did not register %s (an older version may still be serving)", installPath)
+	})
 
 	// Wire installed-package state into the operator diagnostics (dependency
 	// inversion: systems can't import packages) so packages.installed-vs-loaded /

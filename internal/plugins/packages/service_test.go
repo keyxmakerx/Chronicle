@@ -129,6 +129,15 @@ func (r *fakeRepo) ClearDeprecated(_ context.Context, _ string) error { return n
 
 func (r *fakeRepo) UpdateRepoURL(_ context.Context, _, _ string) error { return nil }
 
+func (r *fakeRepo) SetLastError(_ context.Context, id, msg string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if p, ok := r.packages[id]; ok {
+		p.LastError = msg
+	}
+	return nil
+}
+
 // fakeSettings is an in-memory SettingsReader/Writer for driving the
 // security-settings paths. Keys map directly to GetSecuritySettings keys.
 type fakeSettings struct {

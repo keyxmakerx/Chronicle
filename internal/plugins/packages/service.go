@@ -193,6 +193,16 @@ type packageService struct {
 	// double-click, or the auto-update worker racing an admin, can share
 	// destDir mid-extract and corrupt the install.
 	installLocks sync.Map // packageID → *sync.Mutex
+
+	// postInstallVerifier, when set, checks AFTER a system install (and
+	// the registry rescan) that the loader is actually SERVING the newly
+	// installed dir+version. Injected from the app layer over
+	// systems.LoadedHealth/DiagnosticEvents. A verification failure does
+	// NOT fail the install (files+DB are consistent); it is persisted as
+	// the package's last_error so the admin UI surfaces "installed X but
+	// serving Y" durably — install success must mean serving, not just
+	// "DB row written".
+	postInstallVerifier func(installPath, version string) error
 }
 
 // NewPackageService creates a new package service with the given dependencies.
@@ -233,6 +243,16 @@ func SetOnServeInvalidate(svc PackageService, fn func()) {
 func SetManifestValidator(svc PackageService, fn func(manifestPath string) error) {
 	if s, ok := svc.(*packageService); ok {
 		s.manifestValidator = fn
+	}
+}
+
+// SetPostInstallVerifier wires the loaded-state check that runs after a
+// system install's registry rescan (dependency inversion — packages must
+// not import systems). The app layer passes a closure over
+// systems.LoadedHealth + DiagnosticEvents.
+func SetPostInstallVerifier(svc PackageService, fn func(installPath, version string) error) {
+	if s, ok := svc.(*packageService); ok {
+		s.postInstallVerifier = fn
 	}
 }
 
@@ -481,6 +501,9 @@ func (s *packageService) InstallVersion(ctx context.Context, packageID, version 
 			slog.String("version", version),
 			slog.Any("error", err),
 		)
+		// Durable failure record → /admin/packages badge + banner. Best
+		// effort: a bookkeeping failure must not mask the install error.
+		_ = s.repo.SetLastError(ctx, packageID, fmt.Sprintf("install %s failed: %v", version, err))
 	}
 	return err
 }
@@ -634,6 +657,28 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	// Invalidate serve cache so the new install path is picked up.
 	if s.onServeInvalidate != nil {
 		s.onServeInvalidate()
+	}
+
+	// Success clears any prior failure record; the verifier below may
+	// immediately re-set it if the loader did NOT pick up this install.
+	_ = s.repo.SetLastError(ctx, pkg.ID, "")
+
+	// Verify the loader is actually serving what we just installed
+	// ("success" must mean serving, not "DB row written" — the Draw
+	// Steel 0.13.4 incident had a green check while the loader kept the
+	// old version). Verification failure does not fail the install: the
+	// files and DB are consistent; the mismatch is persisted for the
+	// admin badge/banner instead.
+	if pkg.Type != PackageTypeFoundryModule && s.postInstallVerifier != nil {
+		if verr := s.postInstallVerifier(destDir, version); verr != nil {
+			msg := fmt.Sprintf("installed %s but it is not being served: %v", version, verr)
+			slog.Error("post-install verification failed",
+				slog.String("package", pkg.Slug),
+				slog.String("version", version),
+				slog.Any("error", verr),
+			)
+			_ = s.repo.SetLastError(ctx, pkg.ID, msg)
+		}
 	}
 
 	return nil
@@ -809,6 +854,9 @@ func (s *packageService) RunAutoUpdates(ctx context.Context) error {
 				slog.String("package", pkg.Slug),
 				slog.Any("error", err),
 			)
+			// Persist so a rate-limited / renamed / private repo shows up
+			// on /admin/packages instead of only in the logs.
+			_ = s.repo.SetLastError(ctx, pkg.ID, fmt.Sprintf("update check failed: %v", err))
 			continue
 		}
 
