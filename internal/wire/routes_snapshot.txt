@@ -64,6 +64,7 @@ DELETE	/notes/:nid/attachments/:aid	internal/widgets/notes/routes.go
 DELETE	/notes/:noteID	internal/plugins/syncapi/routes.go
 DELETE	/notes/:noteId	internal/widgets/notes/routes.go
 DELETE	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
+DELETE	/prune	internal/plugins/packages/routes.go
 DELETE	/relations/:relationId	internal/plugins/syncapi/routes.go
 DELETE	/saved-filters/:fid	internal/plugins/entities/routes.go
 DELETE	/security/sessions/:hash	internal/plugins/admin/routes.go
@@ -191,6 +192,7 @@ GET	/dashboard	internal/app/routes.go
 GET	/dashboard	internal/plugins/campaigns/routes.go
 GET	/dashboard-layout	internal/plugins/campaigns/routes.go
 GET	/data-hygiene	internal/plugins/admin/routes.go
+GET	/data/:file	internal/systems/routes.go
 GET	/database	internal/plugins/admin/routes.go
 GET	/database/schema	internal/plugins/admin/routes.go
 GET	/database/status	internal/plugins/admin/routes.go
@@ -336,6 +338,7 @@ GET	/plugins	internal/extensions/routes.go
 GET	/plugins	internal/plugins/campaigns/routes.go
 GET	/plugins/:extID/:slug	internal/extensions/routes.go
 GET	/plugins/fragment	internal/plugins/campaigns/routes.go
+GET	/prune	internal/plugins/packages/routes.go
 GET	/register	internal/plugins/auth/routes.go
 GET	/relation-types	internal/widgets/relations/routes.go
 GET	/relations-graph	internal/widgets/relations/routes.go

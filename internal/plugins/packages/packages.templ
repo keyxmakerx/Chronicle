@@ -51,6 +51,36 @@ templ PackagesPage(packages []Package, csrfToken string) {
 				hx-swap="innerHTML"
 			></div>
 
+			<!-- Durable failure banners: one per package with a persisted
+			     last_error (failed install, failed update check, or
+			     installed-but-not-serving from the post-install verifier).
+			     Rendered server-side from the DB so background failures
+			     survive restarts and page reloads until resolved — a toast
+			     is transient, this is not. Resolves on the next verified
+			     successful install/check (last_error cleared). -->
+			for _, pkg := range packages {
+				if pkg.LastError != "" {
+					<div class="card p-4 border border-red-500/40 bg-red-500/5">
+						<div class="flex items-start gap-3">
+							<i class="fa-solid fa-triangle-exclamation text-red-500 mt-0.5"></i>
+							<div class="min-w-0">
+								<p class="text-sm font-semibold text-fg">{ pkg.Name }: needs attention</p>
+								<p class="text-sm text-fg-secondary break-words">{ pkg.LastError }</p>
+							</div>
+						</div>
+					</div>
+				}
+			}
+
+			<!-- Stale-version cleanup wizard. Lazy fragment so the disk walk
+			     (per-version folder sizes) never slows the page load; the
+			     handler renders nothing when there is nothing to reclaim. -->
+			<div
+				hx-get="/admin/packages/prune"
+				hx-trigger="load"
+				hx-swap="innerHTML"
+			></div>
+
 			<!-- External package repositories (game systems + Foundry modules). -->
 			<div class="card p-5">
 				<h2 class="text-lg font-semibold text-fg mb-3">Add Package Repository</h2>
@@ -116,6 +146,15 @@ templ packageCard(pkg Package, csrfToken string) {
 						<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-600">
 							<i class="fa-solid fa-thumbtack mr-1"></i>
 							Pinned: { pkg.PinnedVersion }
+						</span>
+					}
+					if pkg.LastError != "" {
+						<span
+							class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-600"
+							title={ pkg.LastError }
+						>
+							<i class="fa-solid fa-triangle-exclamation mr-1"></i>
+							Needs attention
 						</span>
 					}
 				</div>
@@ -635,4 +674,56 @@ templ UsageTable(pkg *Package, usage []PackageUsage) {
 			</table>
 		}
 	</div>
+}
+
+// PruneCard is the stale-version cleanup wizard: a dry-run table of the
+// old version folders that are safe to reclaim (everything except the
+// newest, the DB-installed, and any currently-served version), with sizes
+// and a single confirmed destructive action. The execute path re-derives
+// the deletion set server-side — the confirm authorizes the operation,
+// never a client list. Renders nothing when there is nothing to reclaim.
+templ PruneCard(res *PruneResult, csrfToken string) {
+	if len(res.Reclaimable) > 0 {
+		<div class="card p-5">
+			<div class="flex items-start justify-between gap-4 mb-3">
+				<div>
+					<h2 class="text-lg font-semibold text-fg">
+						<i class="fa-solid fa-broom mr-2 text-fg-muted"></i>
+						Stale Version Cleanup
+					</h2>
+					<p class="text-sm text-fg-secondary mt-1">
+						{ fmt.Sprintf("%d old version folder(s) can be reclaimed — %s. The newest, installed, and currently-served versions are always kept.", len(res.Reclaimable), prettyBytes(pruneTotal(res))) }
+					</p>
+				</div>
+				<button
+					type="button"
+					class="btn-danger text-sm whitespace-nowrap"
+					hx-delete="/admin/packages/prune"
+					hx-confirm={ fmt.Sprintf("Delete %d stale version folder(s), reclaiming %s? The newest, installed, and currently-served versions are kept. This cannot be undone.", len(res.Reclaimable), prettyBytes(pruneTotal(res))) }
+					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+				>
+					<i class="fa-solid fa-trash-can mr-1"></i>
+					Clean up
+				</button>
+			</div>
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="text-left text-fg-muted border-b border-border">
+						<th class="py-1.5 pr-4">Package</th>
+						<th class="py-1.5 pr-4">Version</th>
+						<th class="py-1.5 text-right">Size</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, s := range res.Reclaimable {
+						<tr class="border-b border-border/50">
+							<td class="py-1.5 pr-4 font-mono text-xs">{ s.Slug }</td>
+							<td class="py-1.5 pr-4 font-mono text-xs">{ s.Version }</td>
+							<td class="py-1.5 text-right text-fg-secondary">{ prettyBytes(s.Size) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
 }

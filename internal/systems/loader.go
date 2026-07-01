@@ -262,8 +262,49 @@ func (l *SystemLoader) DiscoverDir(dir string) error {
 	return l.loadSingleSystem(dir)
 }
 
-// loadSingleSystem loads a system from a directory containing manifest.json.
+// forceRegister replaces any loaded copy of manifest.ID unconditionally,
+// bypassing the WS-6 preferCandidate version policy. Reserved for the
+// explicit-install path: when the admin installs a SPECIFIC version —
+// possibly OLDER than what's loaded (a deliberate rollback) — the
+// highest-version policy would silently keep the newer copy, making the
+// rollback a no-op. An explicit install is operator intent; it wins.
+func (l *SystemLoader) forceRegister(manifest *SystemManifest, dir, source string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if existing := l.modules[manifest.ID]; existing != nil && existing.dir != dir {
+		slog.Info("force-replacing system (explicit install)",
+			slog.String("id", manifest.ID),
+			slog.String("old_dir", existing.dir),
+			slog.String("old_version", existing.manifest.Version),
+			slog.String("new_dir", dir),
+			slog.String("new_version", manifest.Version),
+		)
+	}
+	l.modules[manifest.ID] = &loadedSystem{manifest: manifest, dir: dir, source: source}
+}
+
+// ForceLoadDir loads the system at dir and replaces any loaded copy of the
+// same system ID regardless of version comparison. Called by the app layer
+// after a package install so the loader serves exactly what the admin
+// installed — including deliberate rollbacks to an older version, which
+// the regular rescan ("highest version wins") would silently ignore.
+func ForceLoadDir(dir string) error {
+	if globalLoader == nil {
+		return fmt.Errorf("system loader not initialized")
+	}
+	return globalLoader.loadSingleSystemOpts(dir, true)
+}
+
+// loadSingleSystem loads a system from a directory containing manifest.json,
+// applying the WS-6 duplicate-resolution policy.
 func (l *SystemLoader) loadSingleSystem(sysDir string) error {
+	return l.loadSingleSystemOpts(sysDir, false)
+}
+
+// loadSingleSystemOpts is loadSingleSystem with an explicit force switch:
+// force=true replaces any loaded same-ID copy unconditionally (explicit
+// installs / rollbacks); force=false applies preferCandidate as usual.
+func (l *SystemLoader) loadSingleSystemOpts(sysDir string, force bool) error {
 	manifestPath := filepath.Join(sysDir, "manifest.json")
 	manifest, err := LoadManifest(manifestPath)
 	if err != nil {
@@ -272,8 +313,11 @@ func (l *SystemLoader) loadSingleSystem(sysDir string) error {
 
 	// Resolve duplicates by version (WS-6). A package overlay of equal version
 	// wins over bundled; an older/duplicate package copy is skipped (not an
-	// error — the preferred copy is already loaded).
-	if !l.register(manifest, sysDir, "package") {
+	// error — the preferred copy is already loaded). force bypasses the
+	// policy entirely (explicit operator intent).
+	if force {
+		l.forceRegister(manifest, sysDir, "package")
+	} else if !l.register(manifest, sysDir, "package") {
 		return nil
 	}
 

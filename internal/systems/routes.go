@@ -29,6 +29,10 @@ func RegisterRoutes(e *echo.Echo, h *SystemHandler, addonSvc addons.AddonService
 	// Raw glossary for client reference-renderers (must precede /:cat so it
 	// isn't shadowed by the category route).
 	mg.GET("/rules-glossary", h.RulesGlossaryAPI)
+	// Raw bundled data files (data/<file>.json), served verbatim like the
+	// glossary so widgets get the authored slug/properties. Static "data"
+	// segment, so it does not collide with the /:cat param route below.
+	mg.GET("/data/:file", h.SystemDataAPI)
 	mg.GET("/:cat", h.CategoryList)
 	mg.GET("/:cat/:item", h.ItemDetail)
 	mg.GET("/:cat/:item/tooltip", h.TooltipAPI)
