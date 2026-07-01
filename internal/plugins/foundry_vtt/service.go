@@ -987,16 +987,26 @@ func (s *service) GetBannerStatus(ctx context.Context, campaignID string) (Banne
 // AutoPinOnInstall is the install-time auto-pin path. previousVersion
 // is the foundry-module version installed BEFORE the current install
 // (captured by packages.InstallVersion and passed through the
-// PostInstallHook). Auto-tracking campaigns get explicit-pinned to
-// previousVersion so they stay on the version they were effectively
-// running — the admin sees the version spread in the C-FMC-5c
-// "Campaigns Using v0.X" expandable UI and decides per-campaign
-// whether to bump.
+// PostInstallHook).
+//
+// Behavior is per-campaign, driven by each auto-tracking campaign's
+// foundry_module_pin_mode (C-FMC audit "Chunk 2" — previously this hook
+// ignored pin_mode and unconditionally froze every campaign, which made
+// "force update" appear to do nothing and the owner auto-mode a no-op):
+//   - "preserve": explicit-pin to previousVersion so the campaign stays
+//     on the version it was effectively running. The admin bumps it
+//     manually from the C-FMC-5c "Campaigns Using v0.X" UI.
+//   - "promote" (and the empty/unset DEFAULT, per audit D1): leave the
+//     pin empty so the campaign keeps auto-tracking the newest installed
+//     version — i.e. it follows this install forward automatically.
+//
+// A mode read error is treated as the promote default (leave alone),
+// never as a silent freeze.
 //
 // Empty previousVersion (first-ever install) is a no-op — there's no
 // prior state to preserve.
 //
-// Logs one EventModuleAutoPinOnInstall per affected campaign + a
+// Logs one EventModuleAutoPinOnInstall per preserved campaign + a
 // single EventModuleAutoPinInstallSummary that drives the admin
 // notification surface. Partial failures don't abort the fan-out;
 // each campaign is independent.
@@ -1020,6 +1030,14 @@ func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVers
 
 	affected := 0
 	for _, c := range campaigns {
+		// Only "preserve" mode freezes the campaign at previousVersion.
+		// "promote" and the empty/unset default leave the pin empty so the
+		// campaign keeps auto-tracking the newest installed version. A mode
+		// read error defaults to promote (do nothing) rather than freezing.
+		mode, modeErr := s.settings.GetFoundryModulePinMode(ctx, c.CampaignID)
+		if modeErr != nil || mode != PinModePreserve {
+			continue
+		}
 		if err := s.settings.SetFoundryModulePin(ctx, c.CampaignID, previousVersion); err != nil {
 			// Skip and continue — one campaign's failure shouldn't
 			// abort the rest. The summary event records the
@@ -1035,7 +1053,7 @@ func (s *service) AutoPinOnInstall(ctx context.Context, previousVersion, newVers
 					"from":          "auto-latest",
 					"to_pin":        previousVersion,
 					"new_installed": newVersion,
-					"reason":        "preserve state on admin install",
+					"reason":        "preserve mode: froze at prior version on admin install",
 				})
 		}
 		affected++
