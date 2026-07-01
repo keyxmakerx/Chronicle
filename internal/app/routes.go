@@ -1975,6 +1975,17 @@ func (a *App) RegisterRoutes() {
 	// rejection reason from the load-event log so the persisted
 	// last_error tells the admin WHY (e.g. a validation failure on a
 	// pre-validator install, or a stale registry).
+	// Stale-version cleanup safety: the prune wizard must never delete a
+	// dir the loader is live-serving, even an OLD one (stale registry).
+	packages.SetLoadedDirsProvider(pkgService, func() map[string]bool {
+		out := map[string]bool{}
+		for _, sh := range systems.LoadedHealth() {
+			if sh.Dir != "" {
+				out[sh.Dir] = true
+			}
+		}
+		return out
+	})
 	packages.SetPostInstallVerifier(pkgService, func(installPath, version string) error {
 		for _, sh := range systems.LoadedHealth() {
 			if sh.Dir == installPath && sh.Version == version {

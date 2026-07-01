@@ -98,6 +98,12 @@ type PackageService interface {
 	// no corresponding DB record (e.g. after a database wipe).
 	ReconcileOrphanedInstalls(ctx context.Context) ([]OrphanedInstall, error)
 
+	// PruneStaleVersions reclaims old on-disk version dirs of installed
+	// SYSTEM packages (never foundry-module — those are pin-served).
+	// Always keeps the top keepNewest versions, the DB-installed version,
+	// and any currently-loaded dir. dryRun previews without deleting.
+	PruneStaleVersions(ctx context.Context, keepNewest int, dryRun bool) (*PruneResult, error)
+
 	// InstalledPackagePath returns the on-disk install path for the active
 	// (installed + approved) package matching the given type and slug.
 	// Returns empty string if no matching package is installed.
@@ -197,6 +203,11 @@ type packageService struct {
 	// double-click, or the auto-update worker racing an admin, can share
 	// destDir mid-extract and corrupt the install.
 	installLocks sync.Map // packageID → *sync.Mutex
+
+	// loadedDirsFn returns the set of on-disk dirs the systems loader is
+	// currently serving; injected via SetLoadedDirsProvider (packages
+	// must not import systems). PruneStaleVersions FAILS CLOSED when nil.
+	loadedDirsFn func() map[string]bool
 
 	// postInstallVerifier, when set, checks AFTER a system install (and
 	// the registry rescan) that the loader is actually SERVING the newly
