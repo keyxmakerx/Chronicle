@@ -34,21 +34,33 @@ templ AutoPinBanner(summary AutoPinSummary) {
 		<i class="fa-solid fa-circle-info text-blue-600 dark:text-blue-400 mt-0.5"></i>
 		<div class="flex-1 min-w-0">
 			<p class="text-sm font-medium text-fg">
-				{ autoPinBannerHeadline(summary) }
+				if summary.Affected > 0 {
+					{ autoPinBannerHeadline(summary) }
+				} else {
+					Foundry module updated to { summary.NewVersion }
+				}
 			</p>
-			<p class="text-xs text-fg-secondary mt-1">
-				Affected campaigns were pinned to <span class="font-mono">{ summary.PreviousVersion }</span> to preserve their state. Use the action button to jump to the Force-update / Notify controls, or dismiss if no action needed right now.
-			</p>
+			if summary.Affected > 0 {
+				<p class="text-xs text-fg-secondary mt-1">
+					Affected campaigns were pinned to <span class="font-mono">{ summary.PreviousVersion }</span> to preserve their state. Use the action button to jump to the Force-update / Notify controls, or dismiss if no action needed right now.
+				</p>
+			} else {
+				<p class="text-xs text-fg-secondary mt-1">
+					All auto-tracking campaigns now follow <span class="font-mono">{ summary.NewVersion }</span> automatically. No campaigns were pinned back.
+				</p>
+			}
 		</div>
 		<div class="flex items-center gap-2 shrink-0">
-			<button
-				type="button"
-				onclick={ showAffectedCampaignsOnClick(summary.PreviousVersion) }
-				class="text-xs px-3 py-1.5 rounded border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
-				title="Scroll to and expand the campaigns-using-version block"
-			>
-				<i class="fa-solid fa-arrow-right mr-1"></i> Show affected campaigns
-			</button>
+			if summary.Affected > 0 {
+				<button
+					type="button"
+					onclick={ showAffectedCampaignsOnClick(summary.PreviousVersion) }
+					class="text-xs px-3 py-1.5 rounded border border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 whitespace-nowrap"
+					title="Scroll to and expand the campaigns-using-version block"
+				>
+					<i class="fa-solid fa-arrow-right mr-1"></i> Show affected campaigns
+				</button>
+			}
 			<button
 				type="button"
 				onclick={ dismissAutoPinBannerOnClick() }

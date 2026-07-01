@@ -1927,8 +1927,20 @@ func (a *App) RegisterRoutes() {
 	// Rescan system registry and re-register addons when a system package
 	// is installed or updated, so it appears in the campaign Settings >
 	// Game System dropdown immediately without requiring a server restart.
-	packages.SetOnSystemInstall(pkgService, func() {
+	packages.SetOnSystemInstall(pkgService, func(installPath string) {
 		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
+		// Force-load the exact dir that was just installed. The rescan
+		// above applies "highest version wins", which silently ignores a
+		// deliberate rollback to an OLDER version; an explicit install is
+		// operator intent and must be what the loader serves. Failure is
+		// logged only — the post-install verifier persists it as the
+		// package's last_error for the admin UI.
+		if installPath != "" {
+			if err := systems.ForceLoadDir(installPath); err != nil {
+				slog.Error("force-load of installed system dir failed",
+					slog.String("dir", installPath), slog.Any("error", err))
+			}
+		}
 		// Re-register discovered systems as addons (idempotent — updates
 		// existing entries, adds new ones) and upsert to DB so campaign
 		// addon associations are preserved.

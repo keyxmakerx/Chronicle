@@ -128,9 +128,12 @@ func (h *Handler) AdminAutoPinBannerHandler(c echo.Context) error {
 		// an empty body.
 		return c.NoContent(http.StatusOK)
 	}
-	if summary == nil || summary.Affected == 0 {
-		// No unread summary, or the install affected zero campaigns
-		// (nothing meaningful to surface). Empty body.
+	if summary == nil {
+		// No unread summary. Empty body. (Affected == 0 is NOT skipped:
+		// under the promote default it is the COMMON success case — the
+		// admin still needs positive confirmation that the update landed
+		// and campaigns are auto-tracking it, otherwise a successful
+		// module update shows nothing at all.)
 		return c.NoContent(http.StatusOK)
 	}
 	return middleware.Render(c, http.StatusOK, AutoPinBanner(*summary))

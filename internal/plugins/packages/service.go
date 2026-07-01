@@ -170,8 +170,12 @@ type packageService struct {
 	// to rewrite the in-zip Foundry module manifest at install time so
 	// Foundry's on-disk module.json polls chronicle, not the upstream
 	// GitHub repo. Always trimmed of trailing slash.
-	baseURL           string
-	onSystemInstall   func() // Called after a system package is installed.
+	baseURL string
+	// onSystemInstall is called after a system package install with the
+	// just-installed dir, so the app layer can rescan AND force-load that
+	// exact dir (a deliberate rollback would otherwise lose to the
+	// rescan's highest-version policy). Empty string = plain rescan.
+	onSystemInstall   func(installPath string)
 	onServeInvalidate func() // Called after install/remove to invalidate serve cache.
 
 	// postInstallHooks are the type-specific extension hooks. Slice
@@ -218,9 +222,11 @@ func NewPackageService(repo PackageRepository, github *GitHubClient, mediaDir, b
 	}
 }
 
-// SetOnSystemInstall wires a callback invoked after a system package is installed.
-// Used to rescan the system registry so newly installed systems appear immediately.
-func SetOnSystemInstall(svc PackageService, fn func()) {
+// SetOnSystemInstall wires a callback invoked after a system package is
+// installed, receiving the installed dir. Used to rescan the system
+// registry AND force-load the exact installed dir so explicit installs
+// (including rollbacks to an older version) always take effect.
+func SetOnSystemInstall(svc PackageService, fn func(installPath string)) {
 	if s, ok := svc.(*packageService); ok {
 		s.onSystemInstall = fn
 	}
@@ -649,9 +655,11 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 		slog.String("path", destDir),
 	)
 
-	// Notify system registry to rescan after a system package install.
+	// Notify system registry to rescan after a system package install,
+	// passing the installed dir so the app layer can force-load it
+	// (rollbacks must beat the rescan's highest-version policy).
 	if pkg.Type != PackageTypeFoundryModule && s.onSystemInstall != nil {
-		s.onSystemInstall()
+		s.onSystemInstall(destDir)
 	}
 
 	// Invalidate serve cache so the new install path is picked up.
