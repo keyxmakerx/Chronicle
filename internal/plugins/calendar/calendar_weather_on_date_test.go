@@ -14,7 +14,18 @@ func TestSetWorldState_WeatherDate(t *testing.T) {
 	var gotY, gotMo, gotD int
 	newSvc := func() CalendarService {
 		repo := &mockCalendarRepo{
-			getByIDFn: func(_ context.Context, _ string) (*Calendar, error) { c := *cal; return &c, nil },
+			// Mirror the PRODUCTION repo shape: GetByID scans only the
+			// calendars row (Months always empty); months come from the
+			// separate GetMonths read. A fully-populated GetByID here
+			// masked the live bug where SetWorldState validated
+			// weatherDate against the never-loaded cal.Months and
+			// rejected every dated write.
+			getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
+				c := *cal
+				c.Months = nil
+				return &c, nil
+			},
+			getMonthsFn: func(_ context.Context, _ string) ([]Month, error) { return cal.Months, nil },
 			setDayWeatherFn: func(_ context.Context, _ string, year, month, day int, _ string) error {
 				gotY, gotMo, gotD = year, month, day
 				return nil
@@ -72,5 +83,32 @@ func TestSetWorldState_WeatherDate(t *testing.T) {
 	}
 	if gotY != -32 || gotMo != 12 || gotD != 30 {
 		t.Errorf("edge weatherDate wrote %d-%d-%d; want -32-12-30", gotY, gotMo, gotD)
+	}
+
+	// A calendar with no months configured skips the upper-bound check (the
+	// Time-branch tolerance) — the write proceeds; below-range stays rejected.
+	gotY, gotMo, gotD = 0, 0, 0
+	noMonths := &mockCalendarRepo{
+		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
+			c := *cal
+			c.Months = nil
+			return &c, nil
+		},
+		getMonthsFn: func(_ context.Context, _ string) ([]Month, error) { return nil, nil },
+		setDayWeatherFn: func(_ context.Context, _ string, year, month, day int, _ string) error {
+			gotY, gotMo, gotD = year, month, day
+			return nil
+		},
+	}
+	if err := NewCalendarService(noMonths).SetWorldState(context.Background(), "cal-1",
+		WorldStateUpdateInput{Weather: &rain, WeatherDate: &WorldStateWeatherDate{Year: 1500, Month: 2, Day: 3}}); err != nil {
+		t.Fatalf("SetWorldState (no months configured): %v", err)
+	}
+	if gotY != 1500 || gotMo != 2 || gotD != 3 {
+		t.Errorf("no-months weatherDate wrote %d-%d-%d; want 1500-2-3", gotY, gotMo, gotD)
+	}
+	if err := NewCalendarService(noMonths).SetWorldState(context.Background(), "cal-1",
+		WorldStateUpdateInput{Weather: &rain, WeatherDate: &WorldStateWeatherDate{Year: 1500, Month: 0, Day: 3}}); err == nil {
+		t.Error("no-months weatherDate month 0: want validation error, got nil")
 	}
 }

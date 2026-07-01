@@ -95,7 +95,23 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 			// unconstrained: fantasy calendars may use year 0 or negative
 			// era years. Keeps a hand-crafted PUT from upserting weather
 			// onto a nonexistent date no read path would ever surface.
-			if wm < 1 || wm > len(cal.Months) || wd < 1 || wd > cal.MonthDays(wm-1, wy) {
+			//
+			// The months MUST be loaded explicitly: the bare GetByID above
+			// scans only the calendars row, so cal.Months is always empty
+			// here — validating against it rejected every dated write (the
+			// shipped #463 check was dead-on-arrival in production). Mirrors
+			// the Time/Advance branches below; like the Time branch, a
+			// calendar with no months configured skips the upper-bound
+			// check rather than rejecting (pre-#463 behavior).
+			if wm < 1 || wd < 1 {
+				return apperror.NewValidation("weatherDate is not a date on this calendar")
+			}
+			months, merr := s.repo.GetMonths(ctx, calendarID)
+			if merr != nil {
+				return fmt.Errorf("get months: %w", merr)
+			}
+			cal.Months = months
+			if len(months) > 0 && (wm > len(cal.Months) || wd > cal.MonthDays(wm-1, wy)) {
 				return apperror.NewValidation("weatherDate is not a date on this calendar")
 			}
 		}
