@@ -10,6 +10,10 @@ func RegisterRoutes(admin *echo.Group, h *Handler) {
 	// Package CRUD.
 	g.GET("", h.ListPackages)
 	g.POST("", h.AddPackage)
+	// Stale-version cleanup wizard (static segment — registered before the
+	// param routes conceptually; echo matches static over :id regardless).
+	g.GET("/prune", h.PrunePreview)
+	g.DELETE("/prune", h.PruneExecute)
 	g.DELETE("/:id", h.RemovePackage)
 
 	// Version management.

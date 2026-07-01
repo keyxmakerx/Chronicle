@@ -56,6 +56,33 @@ func (h *Handler) AddPackage(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/admin/packages")
 }
 
+// PrunePreview renders the stale-version cleanup card as a lazy HTMX
+// fragment (GET /admin/packages/prune). Dry-run only — nothing deleted.
+// Errors (incl. the fail-closed unwired-provider case) degrade to an
+// empty fragment rather than breaking the packages page.
+func (h *Handler) PrunePreview(c echo.Context) error {
+	res, err := h.service.PruneStaleVersions(c.Request().Context(), 1, true)
+	if err != nil || res == nil {
+		return c.NoContent(http.StatusOK)
+	}
+	return middleware.Render(c, http.StatusOK, PruneCard(res, middleware.GetCSRFToken(c)))
+}
+
+// PruneExecute deletes stale version folders (DELETE /admin/packages/prune).
+// The service re-derives the deletion set server-side — the confirm click
+// authorizes the OPERATION, never a client-supplied list.
+func (h *Handler) PruneExecute(c echo.Context) error {
+	res, err := h.service.PruneStaleVersions(c.Request().Context(), 1, false)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	slog.Info("stale package versions pruned via admin",
+		slog.Int("removed", len(res.Removed)),
+		slog.Int64("bytes_freed", res.BytesFreed),
+	)
+	return middleware.HTMXRedirect(c, "/admin/packages")
+}
+
 // RemovePackage deletes a package (DELETE /admin/packages/:id).
 func (h *Handler) RemovePackage(c echo.Context) error {
 	ctx := c.Request().Context()

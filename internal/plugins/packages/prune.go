@@ -131,6 +131,29 @@ func (s *packageService) PruneStaleVersions(ctx context.Context, keepNewest int,
 	return res, nil
 }
 
+// prettyBytes renders a byte count for the cleanup card ("312.4 MB").
+func prettyBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// pruneTotal sums the reclaimable bytes for the wizard's headline/confirm.
+func pruneTotal(res *PruneResult) int64 {
+	var t int64
+	for _, s := range res.Reclaimable {
+		t += s.Size
+	}
+	return t
+}
+
 // pruneVersionLess is a numeric-aware semver comparator (local copy of the
 // systems loader's versionLess — packages must not import systems; keep in
 // sync with internal/systems/registry.go). Non-numeric segments compare
