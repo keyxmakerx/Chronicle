@@ -1171,19 +1171,18 @@ func (s *calendarService) SetWeather(ctx context.Context, calendarID string, inp
 		return fmt.Errorf("set day weather: %w", err)
 	}
 
-	// Only touch the active-zone pointer when the input actually carried
-	// zone fields — an ordinary weather write must not churn zone state.
-	if input.ZoneID != nil || input.ZoneName != nil {
-		zid, zname := "", ""
-		if merged.ZoneID != nil {
-			zid = *merged.ZoneID
-		}
-		if merged.ZoneName != nil {
-			zname = *merged.ZoneName
-		}
-		if err := s.repo.SetActiveWeatherZone(ctx, calendarID, zid, zname); err != nil {
-			return fmt.Errorf("set active weather zone: %w", err)
-		}
+	// Mirror the merged state back onto the legacy calendar_weather row so
+	// the read seam's fallback stays a ROLLING last-known snapshot. Without
+	// this the fallback is frozen at its pre-seam state (or nil on fresh
+	// installs), and the FIRST sparse write of each new day — no day row
+	// yet — would merge against stale data or nothing, blanking the preset/
+	// rich fields (review finding on the original seam commit). The mirror
+	// also carries the zone pointer (repo.SetWeather writes zone_id/zone_name
+	// from the merged state), so no separate SetActiveWeatherZone call is
+	// needed here; merged zone fields are the grafted current values unless
+	// the input changed them.
+	if err := s.repo.SetWeather(ctx, calendarID, merged); err != nil {
+		return fmt.Errorf("mirror weather snapshot: %w", err)
 	}
 
 	// Publish weather change event — payload reflects the merged state so

@@ -186,14 +186,10 @@ func (h *Handler) CreateSession(c echo.Context) error {
 		}
 	}
 
-	// If created from the calendar context, trigger a refresh instead of redirect.
-	if middleware.IsHTMX(c) && c.FormValue("from") == "calendar" {
-		c.Response().Header().Set("HX-Trigger", "sessions-refresh")
-		c.Response().Header().Set("HX-Retarget", "#sessions-modal-content")
-		c.Response().Header().Set("HX-Reswap", "innerHTML")
-		return c.NoContent(http.StatusNoContent)
-	}
-
+	// The former from=calendar branch (HX-Retarget #sessions-modal-content)
+	// was removed with the V1 calendar sessions modal — its only producer
+	// and both consumers lived in the retired V1 view layer
+	// (C-CAL-CLOSEOUT PR C); nothing live sends from=calendar.
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/sessions/"+session.ID)
 }
 

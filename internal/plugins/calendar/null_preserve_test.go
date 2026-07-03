@@ -290,7 +290,7 @@ func TestSetWeather_PartialUpdatePreservesUnsentFields(t *testing.T) {
 	var written WeatherInput
 	var wroteType string
 	var wroteY, wroteMo, wroteD int
-	zoneTouched := false
+	var mirrored *WeatherInput
 	repo := &mockCalendarRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
 			return &Calendar{ID: "cal-1", CampaignID: "camp-1", CurrentYear: 1492, CurrentMonth: 6, CurrentDay: 15}, nil
@@ -303,8 +303,9 @@ func TestSetWeather_PartialUpdatePreservesUnsentFields(t *testing.T) {
 			wroteY, wroteMo, wroteD = year, month, day
 			return nil
 		},
-		setActiveWeatherZoneFn: func(_ context.Context, _, _, _ string) error {
-			zoneTouched = true
+		setWeatherFn: func(_ context.Context, _ string, in WeatherInput) error {
+			cp := in
+			mirrored = &cp
 			return nil
 		},
 	}
@@ -330,9 +331,16 @@ func TestSetWeather_PartialUpdatePreservesUnsentFields(t *testing.T) {
 	if wroteY != 1492 || wroteMo != 6 || wroteD != 15 {
 		t.Errorf("day-weather write targeted %d-%d-%d; want current 1492-6-15", wroteY, wroteMo, wroteD)
 	}
-	// No zone fields on the input → the active-zone pointer is untouched.
-	if zoneTouched {
-		t.Error("SetActiveWeatherZone called for a zone-less input; zone pointer must not churn")
+	// The merged state mirrors onto calendar_weather (the rolling fallback
+	// snapshot), zone pointer included — preserved, not churned.
+	if mirrored == nil {
+		t.Fatal("merged state was not mirrored to calendar_weather")
+	}
+	if mirrored.PresetID == nil || *mirrored.PresetID != "new-preset" {
+		t.Errorf("mirror PresetID = %v, want new-preset", mirrored.PresetID)
+	}
+	if mirrored.ZoneID == nil || *mirrored.ZoneID != "temperate" {
+		t.Errorf("mirror ZoneID = %v, want preserved temperate", mirrored.ZoneID)
 	}
 	// Untouched fields preserved from existing.
 	if written.TemperatureCelsius == nil || *written.TemperatureCelsius != 18.0 {

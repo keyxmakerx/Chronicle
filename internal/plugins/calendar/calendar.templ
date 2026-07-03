@@ -244,26 +244,24 @@ templ calendarGrid(cc *campaigns.CampaignContext, data CalendarViewData) {
 }
 
 // dayCell renders a single day in the calendar grid. Shows season color
-// as a subtle left border, moon phases on hover, and event chips.
+// as a subtle left border and event/session chips.
+//
+// READ-ONLY by design: its sole live consumer is the dashboard/standalone
+// embed (EmbedCalendar → CalendarEmbedFragment → calendarGrid). The V1
+// page's click/drag/add affordances were retired with the V1 view layer —
+// their window-global handlers (dayCellClick/openEventModal/…) lived in
+// the deleted eventModal script, so the attributes would have been dead
+// markup here (the embed never loaded that script even pre-retire).
+// Authoring happens on the V2 shell.
 templ dayCell(data CalendarViewData, day int) {
 	<div
 		class={
 			"bg-surface min-h-[80px] p-1.5 relative group",
 			templ.KV("ring-2 ring-inset ring-accent/40", data.IsToday(day)),
-			templ.KV("cursor-pointer hover:bg-surface-alt/50 transition-colors", data.IsScribe),
 		}
 		style={ seasonBorderStyle(data.CurrentSeason(day)) }
-		if data.IsScribe {
-			onclick={ templ.ComponentScript{Call: fmt.Sprintf("dayCellClick(event, %d, %d, %d)", data.Year, data.MonthIndex, day)} }
-			data-drop-year={ strconv.Itoa(data.Year) }
-			data-drop-month={ strconv.Itoa(data.MonthIndex) }
-			data-drop-day={ strconv.Itoa(day) }
-			ondragover="handleDragOver(event)"
-			ondragleave="handleDragLeave(event)"
-			ondrop="handleDrop(event)"
-		}
 	>
-		<!-- Day number + add button -->
+		<!-- Day number -->
 		<div class="flex items-center justify-between mb-1">
 			<span class={
 				"text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full",
@@ -272,48 +270,17 @@ templ dayCell(data CalendarViewData, day int) {
 			}>
 				{ strconv.Itoa(day) }
 			</span>
-			<!-- Quick add button visible on hover (Scribe+) -->
-			if data.IsScribe {
-				<button
-					class="hidden group-hover:flex w-5 h-5 items-center justify-center rounded text-[10px] text-fg-muted hover:text-accent hover:bg-accent/10 transition-colors"
-					onclick={ templ.ComponentScript{Call: fmt.Sprintf("openEventModal(%d, %d, %d)", data.Year, data.MonthIndex, day)} }
-					title="Add event"
-				>
-					<i class="fa-solid fa-plus"></i>
-				</button>
-			}
 		</div>
 		<!-- Events for this day -->
 		for _, evt := range data.EventsForDay(day) {
-			<button
+			<div
 				class={
-					"w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-accent/30",
+					"w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5",
 					templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
 					templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
 				}
 				title={ eventTooltip(evt) }
 				data-event-id={ evt.ID }
-				data-event-name={ evt.Name }
-				data-event-description={ derefStr(evt.Description) }
-				data-event-description-html={ derefStr(evt.DescriptionHTML) }
-				data-event-year={ strconv.Itoa(evt.Year) }
-				data-event-month={ strconv.Itoa(evt.Month) }
-				data-event-day={ strconv.Itoa(evt.Day) }
-				data-event-start-hour={ derefInt(evt.StartHour) }
-				data-event-start-minute={ derefInt(evt.StartMinute) }
-				data-event-end-hour={ derefInt(evt.EndHour) }
-				data-event-end-minute={ derefInt(evt.EndMinute) }
-				data-event-visibility={ evt.Visibility }
-				data-event-visibility-rules={ derefStr(evt.VisibilityRules) }
-				data-event-category={ derefStr(evt.Category) }
-				data-event-recurring={ strconv.FormatBool(evt.IsRecurring) }
-				data-event-entity-id={ derefStr(evt.EntityID) }
-				if data.IsScribe {
-					draggable="true"
-					ondragstart="handleDragStart(event)"
-					ondragend="handleDragEnd(event)"
-				}
-				onclick="openViewEventModal(this)"
 			>
 				if evt.HasTime() {
 					<span class="opacity-60">{ evt.FormatTime() }</span>
@@ -327,18 +294,17 @@ templ dayCell(data CalendarViewData, day int) {
 					{ " " }
 				}
 				{ evt.Name }
-			</button>
+			</div>
 		}
 		<!-- Sessions for this day (real-life calendar mode) -->
 		for _, sess := range data.SessionsForDay(day) {
-			<button
-				class="w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-purple-400/30 bg-purple-500/15 text-purple-400"
+			<div
+				class="w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 bg-purple-500/15 text-purple-400"
 				title={ sess.Name + " — " + fmt.Sprintf("%d/%d attending", sess.AcceptedCount, sess.TotalCount) }
-				onclick="toggleSessionsModal()"
 			>
 				<i class="fa-solid fa-dice-d20 mr-0.5 text-[8px]"></i>
 				{ sess.Name }
-			</button>
+			</div>
 		}
 	</div>
 }
@@ -393,27 +359,6 @@ func trailingCells(d CalendarViewData) int {
 	return wl - remainder
 }
 
-// moonPhaseIcon returns a unicode moon phase character based on phase value (0-1).
-func moonPhaseIcon(phase float64) string {
-	switch {
-	case phase < 0.125:
-		return "\U0001F311" // New moon
-	case phase < 0.25:
-		return "\U0001F312" // Waxing crescent
-	case phase < 0.375:
-		return "\U0001F313" // First quarter
-	case phase < 0.5:
-		return "\U0001F314" // Waxing gibbous
-	case phase < 0.625:
-		return "\U0001F315" // Full moon
-	case phase < 0.75:
-		return "\U0001F316" // Waning gibbous
-	case phase < 0.875:
-		return "\U0001F317" // Last quarter
-	default:
-		return "\U0001F318" // Waning crescent
-	}
-}
 
 // seasonBorderStyle returns a CSS style for the season color left border.
 func seasonBorderStyle(s *Season) string {
@@ -701,21 +646,6 @@ templ timelineEvent(cc *campaigns.CampaignContext, cal *Calendar, evt Event) {
 	</div>
 }
 
-// derefStr safely dereferences a *string, returning "" for nil.
-func derefStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
-// derefInt safely dereferences a *int, returning "" for nil.
-func derefInt(i *int) string {
-	if i == nil {
-		return ""
-	}
-	return strconv.Itoa(*i)
-}
 
 // formatCurrentDate returns a formatted string of the calendar's current date.
 func formatCurrentDate(cal *Calendar) string {

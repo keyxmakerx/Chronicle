@@ -126,14 +126,14 @@ func TestSetWeather_MergesFromDayRow(t *testing.T) {
 }
 
 // TestSetWeather_ZoneInputUpdatesPointer: zone fields on the input land on
-// the calendar_weather active-zone pointer (zones stay legacy-rowed until
-// W2), not on the day row.
+// the calendar_weather row (the active-zone pointer, carried by the rolling
+// mirror upsert — zones stay legacy-rowed until W2), not on the day row.
 func TestSetWeather_ZoneInputUpdatesPointer(t *testing.T) {
-	var zid, zname string
+	var mirrored WeatherInput
 	repo := &mockCalendarRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) { return seamCal(), nil },
-		setActiveWeatherZoneFn: func(_ context.Context, _ string, zoneID, zoneName string) error {
-			zid, zname = zoneID, zoneName
+		setWeatherFn: func(_ context.Context, _ string, in WeatherInput) error {
+			mirrored = in
 			return nil
 		},
 	}
@@ -141,8 +141,49 @@ func TestSetWeather_ZoneInputUpdatesPointer(t *testing.T) {
 		WeatherInput{ZoneID: strPtr("arctic"), ZoneName: strPtr("Arctic")}); err != nil {
 		t.Fatalf("SetWeather: %v", err)
 	}
-	if zid != "arctic" || zname != "Arctic" {
-		t.Errorf("active zone = (%q,%q), want (arctic,Arctic)", zid, zname)
+	if mirrored.ZoneID == nil || *mirrored.ZoneID != "arctic" || mirrored.ZoneName == nil || *mirrored.ZoneName != "Arctic" {
+		t.Errorf("mirror zone = (%v,%v), want (arctic,Arctic)", mirrored.ZoneID, mirrored.ZoneName)
+	}
+}
+
+// TestSetWeather_DayBoundaryContinuity: the ROLLING mirror is the merge base
+// on a fresh day (no day row yet) — the previous day's merged state carries
+// forward instead of blanking (the seam review's P1: a frozen/nil fallback
+// made the first sparse write of each new day lose the preset/rich fields).
+func TestSetWeather_DayBoundaryContinuity(t *testing.T) {
+	// Rolling snapshot left by yesterday's write.
+	rolling := &Weather{
+		PresetID:           strPtr("rain"),
+		PresetLabel:        strPtr("Rain"),
+		TemperatureCelsius: floatPtr(5),
+	}
+	var written WeatherInput
+	var wroteType string
+	repo := &mockCalendarRepo{
+		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
+			c := seamCal()
+			c.CurrentDay = 16 // a NEW day; getDayWeatherFn default returns nil
+			return c, nil
+		},
+		getWeatherFn: func(_ context.Context, _ string) (*Weather, error) { return rolling, nil },
+		setDayWeatherRichFn: func(_ context.Context, _ string, _, _, _ int, weatherType string, in WeatherInput) error {
+			written, wroteType = in, weatherType
+			return nil
+		},
+	}
+	temp := 8.0
+	if err := newTestCalendarService(repo).SetWeather(context.Background(), "cal-1",
+		WeatherInput{TemperatureCelsius: &temp}); err != nil {
+		t.Fatalf("SetWeather: %v", err)
+	}
+	if written.PresetID == nil || *written.PresetID != "rain" || wroteType != "rain" {
+		t.Errorf("fresh-day sparse write lost the preset: got %v/%q, want rain", written.PresetID, wroteType)
+	}
+	if written.TemperatureCelsius == nil || *written.TemperatureCelsius != 8 {
+		t.Errorf("input temperature = %v, want 8", written.TemperatureCelsius)
+	}
+	if written.PresetLabel == nil || *written.PresetLabel != "Rain" {
+		t.Errorf("fresh-day sparse write lost the label: got %v", written.PresetLabel)
 	}
 }
 
