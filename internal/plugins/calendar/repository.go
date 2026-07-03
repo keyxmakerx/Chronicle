@@ -152,6 +152,11 @@ type CalendarRepository interface {
 	// worldstate_repository.go.
 	GetDayWeather(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error)
 	SetDayWeather(ctx context.Context, calendarID string, year, month, day int, weatherType string) error
+	// SetDayWeatherRich upserts the full per-day weather state (weather_type
+	// + the migration-012 rich Calendaria-shaped columns; cordinator#53
+	// unification seam). Zone fields on the input are ignored — the
+	// active-zone pointer stays on calendar_weather until W2.
+	SetDayWeatherRich(ctx context.Context, calendarID string, year, month, day int, weatherType string, in WeatherInput) error
 	GetCelestialEvents(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error)
 	AddCelestialEvent(ctx context.Context, ce CelestialEvent) error
 	// ClearCelestialEvents removes every celestial event on a calendar's given

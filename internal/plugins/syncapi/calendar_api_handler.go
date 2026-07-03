@@ -12,6 +12,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
 // CalendarAPIHandler serves calendar-related REST API endpoints for external
@@ -19,6 +20,10 @@ import (
 type CalendarAPIHandler struct {
 	syncSvc     SyncAPIService
 	calendarSvc calendar.CalendarService
+	// campaignSvc resolves a session-authed caller's live role for the
+	// role-filtered world-state seed. Optional (SetCampaignService); when
+	// absent, session callers fail closed to no-role filtering.
+	campaignSvc campaigns.CampaignService
 }
 
 // NewCalendarAPIHandler creates a new calendar API handler.
@@ -27,6 +32,12 @@ func NewCalendarAPIHandler(syncSvc SyncAPIService, calendarSvc calendar.Calendar
 		syncSvc:     syncSvc,
 		calendarSvc: calendarSvc,
 	}
+}
+
+// SetCampaignService injects the campaign service used by resolveSeedRole
+// (wired in app/routes.go like the APIHandler's optional collaborators).
+func (h *CalendarAPIHandler) SetCampaignService(svc campaigns.CampaignService) {
+	h.campaignSvc = svc
 }
 
 // --- Calendar Read ---
@@ -243,6 +254,63 @@ func (h *CalendarAPIHandler) GetWeather(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, weather)
+}
+
+// GetWorldState returns the Part-8 world-state seed (weather + celestial
+// events + moons + mood + time-of-day) for the campaign's calendar — the
+// token-auth variant of the session GET /campaigns/:id/calendar/world-state
+// that the worldstate dispatch reserved for the Foundry push (Phase 5b /
+// cordinator#34 W5 bridge). ADDITIVE wire surface: nothing existing changes.
+//
+// Date defaults to the calendar's current date; an explicit ?year&month&day
+// pins another day (the bridge's day-change lazy sync uses this).
+// GET /api/v1/campaigns/:id/calendar/world-state
+func (h *CalendarAPIHandler) GetWorldState(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	// Unparseable/absent params land on 0 = "use the current date"
+	// (mirrors the session handler's atoiOr(…, 0) behavior).
+	year, _ := strconv.Atoi(c.QueryParam("year"))
+	month, _ := strconv.Atoi(c.QueryParam("month"))
+	day, _ := strconv.Atoi(c.QueryParam("day"))
+
+	role, userID := h.resolveSeedRole(c)
+	seed, err := h.calendarSvc.BuildWorldStateSeed(ctx, cal.ID, year, month, day, role, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("failed to build world state"))
+	}
+	return c.JSON(http.StatusOK, seed)
+}
+
+// resolveSeedRole resolves the caller's effective role for dm_only filtering
+// in the world-state seed, mirroring APIHandler.resolveRole (T-B1): a stored
+// Bearer key gets Owner-level sync visibility (keys are Owner-minted; the WS
+// path already grants Owner via AuthenticateKeyForWS), while a session-authed
+// caller (synthetic key) keeps their LIVE campaign role so a Player session
+// can't read dm_only celestial events through the API that the web GET
+// filters. Missing key/service fails closed to RoleNone.
+func (h *CalendarAPIHandler) resolveSeedRole(c echo.Context) (int, string) {
+	key := GetAPIKey(c)
+	if key == nil {
+		return int(campaigns.RoleNone), ""
+	}
+	if key.ID == synthKeySessionID {
+		if h.campaignSvc == nil {
+			return int(campaigns.RoleNone), key.UserID
+		}
+		member, err := h.campaignSvc.GetMember(c.Request().Context(), key.CampaignID, key.UserID)
+		if err != nil || member == nil {
+			return int(campaigns.RoleNone), key.UserID
+		}
+		return int(member.Role), key.UserID
+	}
+	return int(campaigns.RoleOwner), key.UserID
 }
 
 // GetCycles returns all cycle definitions.

@@ -16,6 +16,7 @@ package calendar
 
 import (
 	"math"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
@@ -24,12 +25,33 @@ import (
 
 // DayWeather is a per-date authored weather row (calendar_day_weather).
 // At most one exists per (calendar, date).
+//
+// The rich fields (migration 012 / cordinator#53 unification seam) carry the
+// Calendaria-shaped state the legacy single-row calendar_weather held; nil
+// means "unset". WeatherType doubles as the Calendaria preset id — the W1
+// vocabulary-parity wave (chronicle#479) made the two id sets 1:1, so no
+// separate preset_id field exists. The sky band renders WeatherType only;
+// the /calendar/weather sync surface round-trips the full shape.
 type DayWeather struct {
+	ID          int    `json:"id"`
 	CalendarID  string `json:"calendar_id"`
 	Year        int    `json:"year"`
 	Month       int    `json:"month"`
 	Day         int    `json:"day"`
 	WeatherType string `json:"weather_type"`
+
+	PresetLabel            *string   `json:"preset_label,omitempty"`
+	Icon                   *string   `json:"icon,omitempty"`
+	Color                  *string   `json:"color,omitempty"`
+	TemperatureCelsius     *float64  `json:"temperature_celsius,omitempty"`
+	WindSpeedKPH           *float64  `json:"wind_speed_kph,omitempty"`
+	WindSpeedTier          *string   `json:"wind_speed_tier,omitempty"`
+	WindDirection          *string   `json:"wind_direction,omitempty"`
+	WindDirectionDegrees   *int      `json:"wind_direction_degrees,omitempty"`
+	PrecipitationType      *string   `json:"precipitation_type,omitempty"`
+	PrecipitationIntensity *float64  `json:"precipitation_intensity,omitempty"`
+	Description            *string   `json:"description,omitempty"`
+	UpdatedAt              time.Time `json:"updated_at,omitempty"`
 }
 
 // CelestialEvent is a date-specific sky event (meteor shower, eclipse,

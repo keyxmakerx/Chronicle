@@ -283,16 +283,28 @@ func TestSetWeather_PartialUpdatePreservesUnsentFields(t *testing.T) {
 		ZoneID:      strPtr("temperate"),
 		Description: strPtr("Steady rain"),
 	}
+	// Post-seam (cordinator#53) the merged state lands on the CURRENT
+	// day's calendar_day_weather row via SetDayWeatherRich; the legacy
+	// single-row write is no longer the persistence path. The merge
+	// semantics under test are unchanged.
 	var written WeatherInput
+	var wroteType string
+	var wroteY, wroteMo, wroteD int
+	zoneTouched := false
 	repo := &mockCalendarRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
-			return &Calendar{ID: "cal-1", CampaignID: "camp-1"}, nil
+			return &Calendar{ID: "cal-1", CampaignID: "camp-1", CurrentYear: 1492, CurrentMonth: 6, CurrentDay: 15}, nil
 		},
 		getWeatherFn: func(_ context.Context, _ string) (*Weather, error) {
 			return existing, nil
 		},
-		setWeatherFn: func(_ context.Context, _ string, in WeatherInput) error {
-			written = in
+		setDayWeatherRichFn: func(_ context.Context, _ string, year, month, day int, weatherType string, in WeatherInput) error {
+			written, wroteType = in, weatherType
+			wroteY, wroteMo, wroteD = year, month, day
+			return nil
+		},
+		setActiveWeatherZoneFn: func(_ context.Context, _, _, _ string) error {
+			zoneTouched = true
 			return nil
 		},
 	}
@@ -307,9 +319,20 @@ func TestSetWeather_PartialUpdatePreservesUnsentFields(t *testing.T) {
 		t.Fatalf("SetWeather: %v", err)
 	}
 
-	// New field landed.
+	// New field landed — and weather_type carries the preset id.
 	if written.PresetID == nil || *written.PresetID != "new-preset" {
 		t.Errorf("PresetID not updated; got %v", written.PresetID)
+	}
+	if wroteType != "new-preset" {
+		t.Errorf("weather_type = %q, want new-preset", wroteType)
+	}
+	// The write targets the calendar's current date.
+	if wroteY != 1492 || wroteMo != 6 || wroteD != 15 {
+		t.Errorf("day-weather write targeted %d-%d-%d; want current 1492-6-15", wroteY, wroteMo, wroteD)
+	}
+	// No zone fields on the input → the active-zone pointer is untouched.
+	if zoneTouched {
+		t.Error("SetActiveWeatherZone called for a zone-less input; zone pointer must not churn")
 	}
 	// Untouched fields preserved from existing.
 	if written.TemperatureCelsius == nil || *written.TemperatureCelsius != 18.0 {
@@ -339,12 +362,12 @@ func TestSetWeather_FirstWriteSeedsRow(t *testing.T) {
 	var written WeatherInput
 	repo := &mockCalendarRepo{
 		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
-			return &Calendar{ID: "cal-1", CampaignID: "camp-1"}, nil
+			return &Calendar{ID: "cal-1", CampaignID: "camp-1", CurrentYear: 1492, CurrentMonth: 6, CurrentDay: 15}, nil
 		},
 		getWeatherFn: func(_ context.Context, _ string) (*Weather, error) {
 			return nil, nil
 		},
-		setWeatherFn: func(_ context.Context, _ string, in WeatherInput) error {
+		setDayWeatherRichFn: func(_ context.Context, _ string, _, _, _ int, _ string, in WeatherInput) error {
 			written = in
 			return nil
 		},

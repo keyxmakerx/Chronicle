@@ -157,6 +157,7 @@ GET	/calendar/v2/:calId/:view	internal/plugins/calendar/routes.go
 GET	/calendar/v2/:calId/settings/:resource	internal/plugins/calendar/routes.go
 GET	/calendar/weather	internal/plugins/syncapi/routes.go
 GET	/calendar/world-state	internal/plugins/calendar/routes.go
+GET	/calendar/world-state	internal/plugins/syncapi/routes.go
 GET	/calendars	internal/plugins/calendar/routes.go
 GET	/calendars	internal/plugins/syncapi/routes.go
 GET	/calendars/:calId	internal/plugins/calendar/routes.go

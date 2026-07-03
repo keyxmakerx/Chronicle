@@ -39,6 +39,13 @@ func (m *mockCalendarRepo) SetDayWeather(ctx context.Context, calendarID string,
 	return nil
 }
 
+func (m *mockCalendarRepo) SetDayWeatherRich(ctx context.Context, calendarID string, year, month, day int, weatherType string, in WeatherInput) error {
+	if m.setDayWeatherRichFn != nil {
+		return m.setDayWeatherRichFn(ctx, calendarID, year, month, day, weatherType, in)
+	}
+	return nil
+}
+
 func (m *mockCalendarRepo) GetCelestialEvents(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error) {
 	if m.getCelestialEventsFn != nil {
 		return m.getCelestialEventsFn(ctx, calendarID, year, month, day)

@@ -10,15 +10,23 @@ import (
 )
 
 // GetDayWeather returns the per-date authored weather row, or nil when none
-// exists (the common case — most days carry no bespoke weather).
+// exists (the common case — most days carry no bespoke weather). Includes
+// the migration-012 rich columns (cordinator#53 seam); the seed path only
+// reads WeatherType, the /calendar/weather surface round-trips everything.
 func (r *calendarRepo) GetDayWeather(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error) {
 	var dw DayWeather
 	err := r.db.QueryRowContext(ctx,
-		`SELECT calendar_id, year, month, day, weather_type
+		`SELECT id, calendar_id, year, month, day, weather_type,
+		        preset_label, icon, color, temperature_celsius,
+		        wind_speed_kph, wind_speed_tier, wind_direction, wind_direction_degrees,
+		        precipitation_type, precipitation_intensity, description, updated_at
 		 FROM calendar_day_weather
 		 WHERE calendar_id = ? AND year = ? AND month = ? AND day = ?`,
 		calendarID, year, month, day,
-	).Scan(&dw.CalendarID, &dw.Year, &dw.Month, &dw.Day, &dw.WeatherType)
+	).Scan(&dw.ID, &dw.CalendarID, &dw.Year, &dw.Month, &dw.Day, &dw.WeatherType,
+		&dw.PresetLabel, &dw.Icon, &dw.Color, &dw.TemperatureCelsius,
+		&dw.WindSpeedKPH, &dw.WindSpeedTier, &dw.WindDirection, &dw.WindDirectionDegrees,
+		&dw.PrecipitationType, &dw.PrecipitationIntensity, &dw.Description, &dw.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -29,13 +37,51 @@ func (r *calendarRepo) GetDayWeather(ctx context.Context, calendarID string, yea
 }
 
 // SetDayWeather upserts the per-date authored weather (one row per date via
-// the unique key). Used by the world-state PUT.
+// the unique key). Used by the world-state PUT — the GM panel's type-only
+// write. Deliberately updates ONLY weather_type on conflict so a GM
+// condition change never blanks the rich sync-authored fields (null-preserve
+// house rule; see SetDayWeatherRich for the full-shape write).
 func (r *calendarRepo) SetDayWeather(ctx context.Context, calendarID string, year, month, day int, weatherType string) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO calendar_day_weather (calendar_id, year, month, day, weather_type)
 		 VALUES (?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE weather_type = VALUES(weather_type)`,
 		calendarID, year, month, day, weatherType,
+	)
+	return err
+}
+
+// SetDayWeatherRich upserts the FULL per-date weather state — weather_type
+// plus the migration-012 rich fields (cordinator#53 unification seam). The
+// /calendar/weather write surface funnels here after the service-layer
+// null-preserve merge, so every value is the final merged state (VALUES()
+// overwrite on conflict is correct — no column-level preserve needed).
+// The input's zone fields are intentionally ignored: the active-zone
+// pointer stays on calendar_weather until W2 (per the W0 audit refinement).
+func (r *calendarRepo) SetDayWeatherRich(ctx context.Context, calendarID string, year, month, day int, weatherType string, in WeatherInput) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_day_weather
+		   (calendar_id, year, month, day, weather_type, preset_label, icon, color,
+		    temperature_celsius, wind_speed_kph, wind_speed_tier, wind_direction,
+		    wind_direction_degrees, precipitation_type, precipitation_intensity, description)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   weather_type = VALUES(weather_type),
+		   preset_label = VALUES(preset_label),
+		   icon = VALUES(icon),
+		   color = VALUES(color),
+		   temperature_celsius = VALUES(temperature_celsius),
+		   wind_speed_kph = VALUES(wind_speed_kph),
+		   wind_speed_tier = VALUES(wind_speed_tier),
+		   wind_direction = VALUES(wind_direction),
+		   wind_direction_degrees = VALUES(wind_direction_degrees),
+		   precipitation_type = VALUES(precipitation_type),
+		   precipitation_intensity = VALUES(precipitation_intensity),
+		   description = VALUES(description)`,
+		calendarID, year, month, day, weatherType,
+		in.PresetLabel, in.Icon, in.Color,
+		in.TemperatureCelsius, in.WindSpeedKPH, in.WindSpeedTier, in.WindDirection,
+		in.WindDirectionDeg, in.PrecipitationType, in.PrecipitationIntensity, in.Description,
 	)
 	return err
 }

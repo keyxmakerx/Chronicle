@@ -75,6 +75,7 @@ type mockCalendarRepo struct {
 	// C-CAL-WORLDSTATE-SERVER-MODEL: migration-008 table injection.
 	getDayWeatherFn              func(ctx context.Context, calendarID string, year, month, day int) (*DayWeather, error)
 	setDayWeatherFn              func(ctx context.Context, calendarID string, year, month, day int, weatherType string) error
+	setDayWeatherRichFn          func(ctx context.Context, calendarID string, year, month, day int, weatherType string, in WeatherInput) error
 	getCelestialEventsFn         func(ctx context.Context, calendarID string, year, month, day int) ([]CelestialEvent, error)
 	addCelestialEventFn          func(ctx context.Context, ce CelestialEvent) error
 	clearCelestialEventsFn       func(ctx context.Context, calendarID string, year, month, day int) error

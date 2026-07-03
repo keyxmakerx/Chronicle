@@ -517,9 +517,10 @@ func (s *calendarService) eagerLoad(ctx context.Context, cal *Calendar) (*Calend
 		return nil, fmt.Errorf("get festivals: %w", err)
 	}
 	// Weather is best-effort: a missing row is a normal "no weather
-	// set yet" state, not a load failure. Repo returns nil + nil err
-	// in that case.
-	if cal.Weather, err = s.repo.GetWeather(ctx, cal.ID); err != nil {
+	// set yet" state, not a load failure. Goes through the seam read
+	// (day-row-first, legacy fallback — cordinator#53) so the settings
+	// form shows the same state the sync surface serves.
+	if cal.Weather, err = s.currentWeather(ctx, cal); err != nil {
 		return nil, fmt.Errorf("get weather: %w", err)
 	}
 	return cal, nil
@@ -1039,8 +1040,86 @@ func (s *calendarService) GetEventCategories(ctx context.Context, calendarID str
 }
 
 // GetWeather returns the current weather state for a calendar.
+//
+// Unification seam (cordinator#53 / C-CAL-PARITY): the canonical store is
+// the per-day calendar_day_weather row for the calendar's CURRENT date —
+// the same row the sky band renders and the GM panel writes — so weather
+// set from Foundry and weather set in the GM console finally see each
+// other. When no day row exists the legacy single-row calendar_weather
+// state keeps serving (read-through fallback = the pre-seam data path, so
+// no data migration is needed). The active-zone pointer stays on
+// calendar_weather (zones are W2 scope) and is grafted onto the response
+// either way. Wire shape is byte-identical to pre-seam.
 func (s *calendarService) GetWeather(ctx context.Context, calendarID string) (*Weather, error) {
-	return s.repo.GetWeather(ctx, calendarID)
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return nil, fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return s.currentWeather(ctx, cal)
+}
+
+// currentWeather implements the day-row-first / legacy-fallback read; see
+// GetWeather. Takes an already-loaded calendar so eager-load callers don't
+// re-query it.
+func (s *calendarService) currentWeather(ctx context.Context, cal *Calendar) (*Weather, error) {
+	day, err := s.repo.GetDayWeather(ctx, cal.ID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
+	if err != nil {
+		return nil, fmt.Errorf("get day weather: %w", err)
+	}
+	legacy, err := s.repo.GetWeather(ctx, cal.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get weather: %w", err)
+	}
+	if day == nil {
+		return legacy, nil
+	}
+	w := dayWeatherToWeather(day)
+	if legacy != nil {
+		// Zone pointer lives on calendar_weather until the W2 climate wave.
+		w.ZoneID, w.ZoneName = legacy.ZoneID, legacy.ZoneName
+	}
+	return w, nil
+}
+
+// dayWeatherToWeather projects a canonical per-day row into the Weather
+// wire shape (byte-stable for the Foundry /calendar/weather contract).
+// weather_type doubles as the Calendaria preset id (W1 made the
+// vocabularies 1:1); an empty type maps to a nil preset. Wind/Precipitation
+// sub-structs are built under the same presence rules as the legacy
+// calendar_weather scan so both read paths emit identical JSON.
+func dayWeatherToWeather(dw *DayWeather) *Weather {
+	w := &Weather{
+		ID:                 dw.ID,
+		CalendarID:         dw.CalendarID,
+		PresetLabel:        dw.PresetLabel,
+		Icon:               dw.Icon,
+		Color:              dw.Color,
+		TemperatureCelsius: dw.TemperatureCelsius,
+		Description:        dw.Description,
+		UpdatedAt:          dw.UpdatedAt,
+	}
+	if dw.WeatherType != "" {
+		t := dw.WeatherType
+		w.PresetID = &t
+	}
+	if dw.WindSpeedKPH != nil || dw.WindDirection != nil {
+		w.Wind = &Wind{
+			SpeedKPH:         dw.WindSpeedKPH,
+			SpeedTier:        dw.WindSpeedTier,
+			Direction:        dw.WindDirection,
+			DirectionDegrees: dw.WindDirectionDegrees,
+		}
+	}
+	if dw.PrecipitationType != nil {
+		w.Precipitation = &Precipitation{
+			Type:      dw.PrecipitationType,
+			Intensity: dw.PrecipitationIntensity,
+		}
+	}
+	return w
 }
 
 // SetWeather sets the current weather state for a calendar.
@@ -1059,20 +1138,69 @@ func (s *calendarService) GetWeather(ctx context.Context, calendarID string) (*W
 // A future caller that wants explicit replace-all semantics should hit a
 // DELETE endpoint first; "send all-nil" no longer round-trips as "blank
 // everything" through this path.
+// Unification seam (cordinator#53): the merged state is written to the
+// CURRENT day's calendar_day_weather row — the canonical store the sky
+// band renders and the GM panel writes — instead of the legacy single-row
+// calendar_weather. The merge base is the seam READ (day-row-first, legacy
+// fallback), so null-preserve continuity carries across the transition and
+// across day boundaries (a fresh day inherits the last-known rich state on
+// its first write). Zone fields still land on calendar_weather (the
+// active-zone pointer; zones are W2 scope).
 func (s *calendarService) SetWeather(ctx context.Context, calendarID string, input WeatherInput) error {
-	existing, err := s.repo.GetWeather(ctx, calendarID)
+	cal, err := s.repo.GetByID(ctx, calendarID)
+	if err != nil {
+		return fmt.Errorf("get calendar: %w", err)
+	}
+	if cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+	existing, err := s.currentWeather(ctx, cal)
 	if err != nil {
 		return fmt.Errorf("load weather for merge: %w", err)
 	}
 	merged := mergeWeatherInput(existing, input)
-	if err := s.repo.SetWeather(ctx, calendarID, merged); err != nil {
-		return fmt.Errorf("set weather: %w", err)
+
+	// weather_type carries the preset id (W1 made them 1:1); an all-nil
+	// preset (e.g. a temperature-only write with no preset ever set) stores
+	// "" — the seed reads that as "clear", matching the no-row default.
+	wt := ""
+	if merged.PresetID != nil {
+		wt = *merged.PresetID
 	}
+	if err := s.repo.SetDayWeatherRich(ctx, calendarID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay, wt, merged); err != nil {
+		return fmt.Errorf("set day weather: %w", err)
+	}
+
+	// Only touch the active-zone pointer when the input actually carried
+	// zone fields — an ordinary weather write must not churn zone state.
+	if input.ZoneID != nil || input.ZoneName != nil {
+		zid, zname := "", ""
+		if merged.ZoneID != nil {
+			zid = *merged.ZoneID
+		}
+		if merged.ZoneName != nil {
+			zname = *merged.ZoneName
+		}
+		if err := s.repo.SetActiveWeatherZone(ctx, calendarID, zid, zname); err != nil {
+			return fmt.Errorf("set active weather zone: %w", err)
+		}
+	}
+
 	// Publish weather change event — payload reflects the merged state so
 	// subscribers see the final value, not the sparse input.
-	if cal, err := s.repo.GetByID(ctx, calendarID); err == nil && cal != nil {
-		s.events.PublishCalendarEvent("calendar.weather.changed", cal.CampaignID, calendarID, merged)
-	}
+	s.events.PublishCalendarEvent("calendar.weather.changed", cal.CampaignID, calendarID, merged)
+	// The write now lands on the rendered day store, so nudge live
+	// worldstate consumers (web band re-render, Foundry W5 bridge) with the
+	// same minimal payload SetWorldState emits — clients re-GET the seed
+	// with their own role, so no GM-only data rides the signal.
+	s.events.PublishCalendarEvent("calendar.worldstate.changed", cal.CampaignID, calendarID, map[string]any{
+		"date": map[string]int{
+			"year":  cal.CurrentYear,
+			"month": cal.CurrentMonth,
+			"day":   cal.CurrentDay,
+		},
+		"moodTint": moodTintSeed(cal),
+	})
 	return nil
 }
 

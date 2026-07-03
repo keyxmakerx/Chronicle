@@ -25,6 +25,9 @@ type stubCalendarSvc struct {
 	// atomic-rollback path so tests can assert DeleteCalendar was
 	// called when ApplyImport fails.
 	onDelete func(context.Context, string) error
+	// W5 bridge: seed hook so GetWorldState tests can assert the role the
+	// handler resolved and the date it requested.
+	onSeed func(ctx context.Context, calendarID string, year, month, day, role int, userID string) (*calendar.WorldStateSeed, error)
 }
 
 // --- methods we actually use in tests ---
@@ -211,9 +214,12 @@ func (s *stubCalendarSvc) CreateEntityFromEvent(context.Context, calendar.Entity
 	return "", nil
 }
 
-// C-CAL-WORLDSTATE-SERVER-MODEL added these to CalendarService; syncapi
-// doesn't use them. Zero-value returns are fine for these tests.
-func (s *stubCalendarSvc) BuildWorldStateSeed(context.Context, string, int, int, int, int, string) (*calendar.WorldStateSeed, error) {
+// BuildWorldStateSeed backs the token-surface GetWorldState endpoint (W5
+// bridge); hookable so tests can assert the resolved role/date.
+func (s *stubCalendarSvc) BuildWorldStateSeed(ctx context.Context, calendarID string, year, month, day, role int, userID string) (*calendar.WorldStateSeed, error) {
+	if s.onSeed != nil {
+		return s.onSeed(ctx, calendarID, year, month, day, role, userID)
+	}
 	return nil, nil
 }
 func (s *stubCalendarSvc) SetWorldState(context.Context, string, calendar.WorldStateUpdateInput) error {

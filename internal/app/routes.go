@@ -2367,6 +2367,9 @@ func (a *App) RegisterRoutes() {
 	syncAPIHandler.SetTagGrantLister(tagFetcherAdapter)
 	syncAPIHandler.SetSystemEnabler(addonService)
 	calendarAPIHandler := syncapi.NewCalendarAPIHandler(syncService, calendarService)
+	// Live-role resolution for the role-filtered world-state seed GET
+	// (session callers keep their membership role; Bearer keys are Owner).
+	calendarAPIHandler.SetCampaignService(campaignService)
 	mediaAPIHandler := syncapi.NewMediaAPIHandler(syncService, mediaService)
 	if urlSigner != nil {
 		mediaAPIHandler.SetURLSigner(urlSigner)

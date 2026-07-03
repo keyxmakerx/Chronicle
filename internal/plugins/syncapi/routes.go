@@ -159,6 +159,10 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	calGroup.GET("/calendar/event-categories", calAPI.GetEventCategories, RequirePermission(PermRead))
 	calGroup.GET("/calendar/structure", calAPI.GetStructure, RequirePermission(PermRead))
 	calGroup.GET("/calendar/weather", calAPI.GetWeather, RequirePermission(PermRead))
+	// World-state seed for the Foundry W5 bridge (cordinator#34): the
+	// token-auth variant of the session world-state GET. Additive route;
+	// role-filtered via resolveSeedRole (Bearer=Owner, session=live role).
+	calGroup.GET("/calendar/world-state", calAPI.GetWorldState, RequirePermission(PermRead))
 	calGroup.GET("/calendar/cycles", calAPI.GetCycles, RequirePermission(PermRead))
 	calGroup.GET("/calendar/festivals", calAPI.GetFestivals, RequirePermission(PermRead))
 	calGroup.GET("/calendar/events", calAPI.ListEvents, RequirePermission(PermRead))
