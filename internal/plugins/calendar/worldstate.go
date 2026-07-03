@@ -165,11 +165,18 @@ type WorldStateWeather struct {
 // WorldStateEvent mirrors one celestial event in the showcase events[]
 // array. Field names (start_time/duration) match what celestialFor() emits
 // so the Phase-2 renderer wires straight through.
+//
+// Visibility is an ADDITIVE field for the Foundry W5 bridge (cordinator#34):
+// the module's celestial-note projection maps dm_only → Calendaria's
+// 'secret' note visibility. Player-role seeds never contain dm_only events
+// at all (celestialSeeds strips them), so the field leaks nothing; the web
+// engine ignores unknown keys.
 type WorldStateEvent struct {
-	Type      string `json:"type"`
-	Name      string `json:"name"`
-	StartTime int    `json:"start_time"`
-	Duration  int    `json:"duration"`
+	Type       string `json:"type"`
+	Name       string `json:"name"`
+	StartTime  int    `json:"start_time"`
+	Duration   int    `json:"duration"`
+	Visibility string `json:"visibility,omitempty"`
 }
 
 // WorldStateMoodTint is the player mood overlay. Color is null when no mood
@@ -410,10 +417,11 @@ func celestialSeeds(celestials []CelestialEvent, role int) []WorldStateEvent {
 			continue
 		}
 		out = append(out, WorldStateEvent{
-			Type:      ce.Type,
-			Name:      ce.Name,
-			StartTime: ce.StartHour,
-			Duration:  ce.DurationHours,
+			Type:       ce.Type,
+			Name:       ce.Name,
+			StartTime:  ce.StartHour,
+			Duration:   ce.DurationHours,
+			Visibility: ce.Visibility,
 		})
 	}
 	return out
