@@ -166,7 +166,6 @@ GET	/calendars/:calId/embed	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/event-categories	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/events/:eid/entities	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/export	internal/plugins/calendar/routes.go
-GET	/calendars/:calId/sessions-fragment	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/settings	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/timeline	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/upcoming	internal/plugins/calendar/routes.go

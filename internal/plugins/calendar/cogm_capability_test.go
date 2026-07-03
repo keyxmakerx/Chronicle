@@ -1,7 +1,8 @@
 // cogm_capability_test.go — C-CAL-COGM-CAPABILITY (Phase 3) calendar side:
-// a co-DM (DM-grantee) can author dm_only events, a plain Scribe is
-// downgraded, and the "DM Only" UI option only renders when the viewer can
-// actually author it (the UI-lie fix).
+// a co-DM (DM-grantee) can author dm_only events and a plain Scribe is
+// downgraded. (The V1 eventModal UI-gate test was retired with the V1 view
+// layer in C-CAL-CLOSEOUT PR C; the V2 drawer's gating is covered by the
+// calendar_v2_* tests.)
 package calendar
 
 import (
@@ -61,27 +62,5 @@ func TestCoDM_CanAuthorDmOnly(t *testing.T) {
 	// A plain Player is downgraded too.
 	if got := createEventVisibility(t, campaigns.RolePlayer, false); got != "everyone" {
 		t.Errorf("plain player dm_only should downgrade to everyone, got %q", got)
-	}
-}
-
-// TestEventModal_DmOnlyOptionGated: the "DM Only" visibility option only
-// renders for someone who can author it (the Scribe UI-lie fix).
-func TestEventModal_DmOnlyOptionGated(t *testing.T) {
-	cal := &Calendar{ID: "cal-1", Name: "Harptos"}
-
-	render := func(canAuthor bool) string {
-		var sb strings.Builder
-		data := CalendarViewData{Calendar: cal, CanAuthorDmOnly: canAuthor}
-		if err := eventModal(data).Render(context.Background(), &sb); err != nil {
-			t.Fatalf("render eventModal: %v", err)
-		}
-		return sb.String()
-	}
-
-	if html := render(true); !strings.Contains(html, `value="dm_only"`) {
-		t.Errorf("co-DM/owner should see the DM Only option")
-	}
-	if html := render(false); strings.Contains(html, `value="dm_only"`) {
-		t.Errorf("a non-author (Scribe) must NOT see the DM Only option (the UI-lie)")
 	}
 }

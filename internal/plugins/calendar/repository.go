@@ -461,6 +461,17 @@ func (r *calendarRepo) GetWeekdays(ctx context.Context, calendarID string) ([]We
 }
 
 // SetMoons replaces all moons for a calendar.
+// SetMoons replaces a calendar's moons DIFF-WISE rather than by the old
+// DELETE+INSERT: inputs matching an existing moon by name UPDATE that row in
+// place, new names INSERT, and unmatched existing moons DELETE. This closes
+// the long-flagged footgun where every settings-tab moon edit (a) reset the
+// migration-008 render-prop columns (base_design/tint/phase_source/size/
+// orbit_speed) to defaults and (b) cascaded away calendar_moon_phases vocab
+// rows through the FK. Matched moons keep their id, render props, and named
+// phases. Caveat: a RENAME still reads as delete+add (MoonInput carries no
+// id), so a renamed moon's props reset — acceptable for the settings form's
+// edit patterns; revisit if the wire ever grows ids. The match/plan logic is
+// the pure planMoonReplace (unit-tested without a DB).
 func (r *calendarRepo) SetMoons(ctx context.Context, calendarID string, moons []MoonInput) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -468,10 +479,36 @@ func (r *calendarRepo) SetMoons(ctx context.Context, calendarID string, moons []
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM calendar_moons WHERE calendar_id = ?`, calendarID); err != nil {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, name FROM calendar_moons WHERE calendar_id = ?`, calendarID)
+	if err != nil {
 		return err
 	}
-	for _, m := range moons {
+	var existing []moonRef
+	for rows.Next() {
+		var ref moonRef
+		if err := rows.Scan(&ref.ID, &ref.Name); err != nil {
+			rows.Close()
+			return err
+		}
+		existing = append(existing, ref)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	plan := planMoonReplace(existing, moons)
+	for _, u := range plan.Updates {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE calendar_moons SET name = ?, cycle_days = ?, phase_offset = ?, color = ?
+			 WHERE id = ? AND calendar_id = ?`,
+			u.Input.Name, u.Input.CycleDays, u.Input.PhaseOffset, u.Input.Color, u.ID, calendarID,
+		); err != nil {
+			return err
+		}
+	}
+	for _, m := range plan.Inserts {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO calendar_moons (calendar_id, name, cycle_days, phase_offset, color)
 			 VALUES (?, ?, ?, ?, ?)`,
@@ -480,7 +517,63 @@ func (r *calendarRepo) SetMoons(ctx context.Context, calendarID string, moons []
 			return err
 		}
 	}
+	for _, id := range plan.DeleteIDs {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM calendar_moons WHERE id = ? AND calendar_id = ?`, id, calendarID,
+		); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
+}
+
+// moonRef is the (id, name) pair planMoonReplace matches on.
+type moonRef struct {
+	ID   int
+	Name string
+}
+
+// moonUpdate pairs an existing moon id with the input that updates it.
+type moonUpdate struct {
+	ID    int
+	Input MoonInput
+}
+
+// moonReplacePlan is planMoonReplace's output: the minimal UPDATE/INSERT/
+// DELETE set that realizes the requested moon list while preserving matched
+// rows' identity (and therefore their render props + named-phase vocab).
+type moonReplacePlan struct {
+	Updates   []moonUpdate
+	Inserts   []MoonInput
+	DeleteIDs []int
+}
+
+// planMoonReplace matches inputs to existing moons by name (first unconsumed
+// match wins, so duplicate names pair off one-to-one in order). Pure — unit
+// tested without a DB.
+func planMoonReplace(existing []moonRef, inputs []MoonInput) moonReplacePlan {
+	var plan moonReplacePlan
+	consumed := make([]bool, len(existing))
+	for _, in := range inputs {
+		matched := false
+		for i, ex := range existing {
+			if !consumed[i] && ex.Name == in.Name {
+				consumed[i] = true
+				plan.Updates = append(plan.Updates, moonUpdate{ID: ex.ID, Input: in})
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			plan.Inserts = append(plan.Inserts, in)
+		}
+	}
+	for i, ex := range existing {
+		if !consumed[i] {
+			plan.DeleteIDs = append(plan.DeleteIDs, ex.ID)
+		}
+	}
+	return plan
 }
 
 // GetMoons returns all moons for a calendar, including the moon-library

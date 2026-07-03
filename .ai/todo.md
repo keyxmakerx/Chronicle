@@ -471,7 +471,7 @@ Items identified during the 2026-03-09 codebase audit. Not urgent — document f
 ### Handler File Sizes
 Large handler files that could benefit from splitting if they grow further:
 - [ ] `entities/handler.go` (1,983 lines) — consider splitting entity type CRUD into separate handler
-- [ ] `calendar/handler.go` (1,687 lines) — consider splitting event vs calendar CRUD
+- [ ] `calendar/handler.go` — event-vs-calendar CRUD split still an option, but the pressure dropped: the V1 dead-view retire (C-CAL-CLOSEOUT PR C, calendar-fixes session 2026-07-01) cut it 2,136 → 1,570 lines
 - [ ] `campaigns/handler.go` (1,245 lines) — consider splitting members/settings into separate handler
 
 ### Service Interface Sizes
