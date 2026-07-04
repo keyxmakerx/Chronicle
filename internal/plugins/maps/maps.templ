@@ -342,6 +342,20 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			}
 			map.fitBounds(bounds);
 
+			// Re-measure once layout settles. This inline IIFE runs during
+			// parse, before the flex-sized container (dedicated page) or a
+			// freshly-shown embed has its final height — so Leaflet reads the
+			// wrong size at construction: the image overlay paints into the
+			// wrong box (the container's bg-surface-alt shows through as a
+			// pale rectangle) and markers land at wrong pixels (piling near
+			// the top-left, under the toolbar). invalidateSize + a re-fit fix
+			// both — the same guard the dashboard map widget already uses
+			// (map_widget.js). Harmless when the size was already correct.
+			setTimeout(function () {
+				map.invalidateSize();
+				map.fitBounds(bounds);
+			}, 100);
+
 			// Track placed Leaflet markers by ID for removal/update.
 			var leafletMarkers = {};
 			var placingMode = false;
