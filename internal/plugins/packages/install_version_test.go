@@ -169,6 +169,55 @@ func TestInstallVersion_HookFailureLeavesDBUntouched(t *testing.T) {
 	}
 }
 
+// recordingHook captures the DB-visible InstalledVersion at the instant
+// the post-install hook fires. Pointer receivers so the observation
+// survives back to the test after InstallVersion returns.
+type recordingHook struct {
+	typ         PackageType
+	repo        PackageRepository
+	pkgID       string
+	ran         bool
+	seenVersion string
+}
+
+func (h *recordingHook) PackageType() PackageType { return h.typ }
+func (h *recordingHook) AfterInstall(ctx context.Context, _ *Package, _, _, _ string) error {
+	h.ran = true
+	if p, err := h.repo.GetPackage(ctx, h.pkgID); err == nil && p != nil {
+		h.seenVersion = p.InstalledVersion
+	}
+	return nil
+}
+
+// TestInstallVersion_HookRunsBeforeDBUpdate pins the success-path half of
+// the fail-loud ordering contract (the failure half is covered by
+// TestInstallVersion_HookFailureLeavesDBUntouched): the PostInstallHook
+// dispatch loop runs BEFORE UpdatePackage, so a hook that reads the catalog
+// still observes the previous installed version. This is the behavior the
+// comment above installVersion's system branch documents — pinning it keeps
+// that comment from silently going stale again.
+func TestInstallVersion_HookRunsBeforeDBUpdate(t *testing.T) {
+	svc, repo, _ := installTestEnv(t, buildZip(t, map[string]string{"manifest.json": validManifest}))
+	SetManifestValidator(svc, func(string) error { return nil })
+	h := &recordingHook{typ: PackageTypeSystem, repo: repo, pkgID: "pkg-1"}
+	RegisterPostInstallHook(svc, h)
+
+	if err := svc.InstallVersion(context.Background(), "pkg-1", "0.2.0"); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+	if !h.ran {
+		t.Fatal("post-install hook never ran")
+	}
+	if h.seenVersion != "0.1.0" {
+		t.Errorf("hook must observe the pre-update version 0.1.0 (proving it runs before UpdatePackage), saw %q", h.seenVersion)
+	}
+	// Sanity: the row DID advance once the loop and UpdatePackage completed.
+	stored, _ := repo.GetPackage(context.Background(), "pkg-1")
+	if stored.InstalledVersion != "0.2.0" {
+		t.Errorf("post-install DB row = %q, want 0.2.0", stored.InstalledVersion)
+	}
+}
+
 // TestInstallVersion_LastErrorLifecycle pins the durable-failure record:
 // a failed install writes last_error; a later successful install clears
 // it; a post-install verifier miss re-sets it (installed-but-not-serving).

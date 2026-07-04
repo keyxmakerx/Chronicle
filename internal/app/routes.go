@@ -1608,6 +1608,23 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
+	// One-shot backfill: insert a player-notes (entity_notes) block into
+	// every entity type layout that doesn't already have one. Player Notes
+	// was only wired into new default layouts, so custom sub-categories
+	// created earlier never showed the block even with the addon enabled
+	// (cordinator#7). Idempotent; failures per row are logged and skipped,
+	// the goroutine never blocks boot.
+	go func() {
+		n, err := entityService.EnsureEntityNotesBlockInDefaults(context.Background())
+		if err != nil {
+			slog.Warn("entity_types: player-notes block backfill failed", slog.Any("error", err))
+			return
+		}
+		if n > 0 {
+			slog.Info("entity_types: player-notes block backfill added to layouts", slog.Int("rows", n))
+		}
+	}()
+
 	// Campaigns plugin: CRUD, membership, ownership transfer.
 	// EntityService is passed as EntityTypeSeeder to seed defaults on campaign creation.
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)

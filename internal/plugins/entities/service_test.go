@@ -15,6 +15,7 @@ type mockEntityTypeRepo struct {
 	findByIDFn       func(ctx context.Context, id int) (*EntityType, error)
 	findBySlugFn     func(ctx context.Context, campaignID, slug string) (*EntityType, error)
 	listByCampaignFn func(ctx context.Context, campaignID string) ([]EntityType, error)
+	listAllFn        func(ctx context.Context) ([]EntityType, error)
 	updateLayoutFn   func(ctx context.Context, id int, layoutJSON string) error
 	seedDefaultsFn   func(ctx context.Context, campaignID string) error
 	createFn         func(ctx context.Context, et *EntityType) error
@@ -58,7 +59,10 @@ func (m *mockEntityTypeRepo) ListChildTypes(_ context.Context, _ int) ([]EntityT
 	return nil, nil
 }
 
-func (m *mockEntityTypeRepo) ListAll(_ context.Context) ([]EntityType, error) {
+func (m *mockEntityTypeRepo) ListAll(ctx context.Context) ([]EntityType, error) {
+	if m.listAllFn != nil {
+		return m.listAllFn(ctx)
+	}
 	return nil, nil
 }
 
@@ -379,11 +383,11 @@ func (m *mockEntityRepo) UpdateMapID(ctx context.Context, entityID string, mapID
 
 // mockPermissionRepo implements EntityPermissionRepository for testing.
 type mockPermissionRepo struct {
-	listByEntityFn         func(ctx context.Context, entityID string) ([]EntityPermission, error)
-	setPermissionsFn       func(ctx context.Context, entityID string, grants []PermissionGrant) error
-	deleteByEntityFn       func(ctx context.Context, entityID string) error
-	getEffectivePermFn     func(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error)
-	updateVisibilityFn     func(ctx context.Context, entityID string, visibility VisibilityMode) error
+	listByEntityFn     func(ctx context.Context, entityID string) ([]EntityPermission, error)
+	setPermissionsFn   func(ctx context.Context, entityID string, grants []PermissionGrant) error
+	deleteByEntityFn   func(ctx context.Context, entityID string) error
+	getEffectivePermFn func(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error)
+	updateVisibilityFn func(ctx context.Context, entityID string, visibility VisibilityMode) error
 }
 
 func (m *mockPermissionRepo) ListByEntity(ctx context.Context, entityID string) ([]EntityPermission, error) {
