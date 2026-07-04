@@ -120,6 +120,10 @@ func scanPublication(scanner interface{ Scan(...any) error }) (*Publication, err
 	if tags != nil {
 		p.Tags = json.RawMessage(tags)
 	}
+	// Read-side scrub: rows published before the write-side sanitizer
+	// shipped are still served clean (DS-SEC-AUDIT-R1 CRITICAL). Idempotent
+	// with a zero-allocation fast path for clean rows; see sanitize.go.
+	sanitizePublicationInPlace(p)
 	return p, nil
 }
 
