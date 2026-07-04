@@ -104,8 +104,11 @@ func TestPrune_KeepNewestNAndFoundrySkipped(t *testing.T) {
 	svc.loadedDirsFn = func() map[string]bool { return nil }
 
 	// Foundry package with on-disk version dirs — must be ignored.
+	// Derive the on-disk fragment from the PackageTypeFoundryModule enum
+	// rather than a bare slug literal so this cross-plugin reference passes
+	// through the PackageType constant (M-B2.1 plugin-isolation guard, T-B2).
 	repo := svc.repo.(*fakeRepo)
-	fDir := filepath.Join(svc.packagesDir(), "foundry-module", "0.1.0")
+	fDir := filepath.Join(svc.packagesDir(), string(PackageTypeFoundryModule), "0.1.0")
 	if err := os.MkdirAll(fDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
