@@ -590,8 +590,11 @@ func (s *packageService) installVersion(ctx context.Context, packageID, version 
 	// C-FMC-5c: the Foundry-module-specific install branch is removed
 	// from this generic plugin. foundry_vtt's PostInstallHook (registered
 	// in routes.go) now performs the module.json version rewrite for
-	// foundry-module typed installs. The hook runs AFTER the DB update
-	// below (see C-FMC-5a's hook dispatch loop further down).
+	// foundry-module typed installs. The hook runs BEFORE the DB update
+	// below — the fail-loud reorder moved the PostInstallHook dispatch
+	// loop ahead of UpdatePackage so a failing hook leaves the catalog
+	// pointing at the old (still-intact) install dir (see the hook
+	// dispatch loop further down).
 	//
 	// For system packages, rewrite manifest.json version to match the release
 	// tag. The manifest embedded in the GitHub release may have a stale version.
