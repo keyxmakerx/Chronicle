@@ -58,6 +58,16 @@ Chronicle.register('notes', {
     // Track mini TipTap editor instances per note ID for cleanup.
     var miniEditors = {};
 
+    // Debounced autosave for the note currently in edit mode. Mirrors
+    // journal.js: an edit schedules a save ~1.5s after typing stops, and a
+    // blur / SPA-navigation / page-unload flushes immediately. notesDirty
+    // gates every save so blur, the timer, and the explicit Done button all
+    // "save only if there are unsaved changes" — which is what keeps Done
+    // from writing the note a second time after a blur already flushed it.
+    var AUTOSAVE_DELAY = 1500; // ms
+    var autosaveTimer = null;
+    var notesDirty = false;
+
     // --- DOM Construction ---
 
     // Floating button (minimized state).
@@ -1103,7 +1113,10 @@ Chronicle.register('notes', {
           e.stopPropagation();
           var card = btn.closest('.note-card');
           var noteId = card.getAttribute('data-id');
-          saveEditingNote(card, noteId);
+          // Flush instead of an unconditional save: clicking Done blurs the
+          // editor first (which already flushed if dirty), so a bare
+          // saveEditingNote here would write the note a second time.
+          flushAutosave();
           state.editingId = null;
           // Release lock if we hold one for this note.
           if (state.lockedNoteId === noteId) {
@@ -1111,6 +1124,13 @@ Chronicle.register('notes', {
           }
           renderNotes();
         });
+      });
+
+      // Autosave: mark dirty + debounce on edits to the title and checklist
+      // text inputs. The TipTap editor is wired separately via onUpdate in
+      // initMiniEditors.
+      notesList.querySelectorAll('.note-title-input, .note-check-text-input').forEach(function (inp) {
+        inp.addEventListener('input', markNoteDirty);
       });
 
       // Pin button.
@@ -1433,6 +1453,45 @@ Chronicle.register('notes', {
     }
 
     /**
+     * Mark the in-progress edit dirty and (re)arm the debounced autosave.
+     * Called from every edit surface: the TipTap editor, the title input,
+     * and the checklist text inputs.
+     */
+    function markNoteDirty() {
+      notesDirty = true;
+      if (autosaveTimer) clearTimeout(autosaveTimer);
+      autosaveTimer = setTimeout(flushAutosave, AUTOSAVE_DELAY);
+    }
+
+    /**
+     * Persist the note currently being edited if it has unsaved changes,
+     * then clear the dirty flag and any pending timer. Safe to call from
+     * blur, navigation, page-unload, and the Done button — a no-op when
+     * nothing is being edited or nothing changed, so it never double-saves.
+     */
+    function flushAutosave() {
+      if (autosaveTimer) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+      }
+      if (!notesDirty || !state.editingId) return;
+      var card = notesList.querySelector('.note-card[data-id="' + state.editingId + '"]');
+      if (card) {
+        saveEditingNote(card, state.editingId);
+        notesDirty = false;
+      }
+    }
+
+    /** Drop any pending autosave without saving (fresh edit session). */
+    function resetAutosave() {
+      if (autosaveTimer) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = null;
+      }
+      notesDirty = false;
+    }
+
+    /**
      * Initialize mini TipTap editors for notes currently in edit mode.
      * Called after DOM rendering. Creates a TipTap instance in each
      * .note-tiptap-mount element, populated with the note's entry content
@@ -1484,10 +1543,18 @@ Chronicle.register('notes', {
           attributes: {
             class: 'prose prose-sm max-w-none focus:outline-none min-h-[60px] p-2 text-fg-body'
           }
-        }
+        },
+        // Autosave: debounce on content changes, flush when the editor
+        // loses focus (e.g. the user clicks elsewhere before the timer).
+        onUpdate: function () { markNoteDirty(); },
+        onBlur: function () { flushAutosave(); }
       });
 
       miniEditors[state.editingId] = editor;
+      // New edit session: start clean so a stale flag from a prior note
+      // can't trigger a spurious save. Runs once per session — initMiniEditors
+      // returns early when the editor already exists.
+      resetAutosave();
     }
 
     /** Destroy a mini TipTap editor instance for a note. */
@@ -1571,6 +1638,8 @@ Chronicle.register('notes', {
     // boosted navigations. Detect entity context changes and re-mount
     // with the correct entity ID when the URL changes.
     function onNavigated() {
+      // SPA navigation tears the widget down; flush any unsaved edit first.
+      flushAutosave();
       var newEntityId = extractEntityIdFromUrl();
       if (newEntityId !== entityId) {
         // Update the data attribute so re-mount picks up the new entity.
@@ -1600,12 +1669,18 @@ Chronicle.register('notes', {
 
     window.addEventListener('chronicle:navigated', onNavigated);
 
+    // Best-effort save if the tab is closed / reloaded mid-edit. The PUT
+    // may not complete during unload (same caveat as the lock release
+    // below), but it costs nothing and rescues the common case.
+    window.addEventListener('beforeunload', flushAutosave);
+
     // Store references for cleanup.
     el._notesState = state;
     el._notesFab = fab;
     el._notesPanel = panel;
     el._notesMiniEditors = miniEditors;
     el._notesNavHandler = onNavigated;
+    el._notesBeforeUnload = flushAutosave;
     el._notesOnCreated = _onNoteCreated;
     el._notesOnOpenNote = _onOpenNote;
   },
@@ -1615,6 +1690,12 @@ Chronicle.register('notes', {
    * @param {HTMLElement} el - Mount point element.
    */
   destroy: function (el) {
+    // Flush any unsaved edit, then drop the page-unload autosave listener.
+    if (el._notesBeforeUnload) {
+      el._notesBeforeUnload();
+      window.removeEventListener('beforeunload', el._notesBeforeUnload);
+      delete el._notesBeforeUnload;
+    }
     // Remove hx-boost navigation handler.
     if (el._notesNavHandler) {
       window.removeEventListener('chronicle:navigated', el._notesNavHandler);
