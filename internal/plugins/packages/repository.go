@@ -33,6 +33,12 @@ type PackageRepository interface {
 	SetDeprecated(ctx context.Context, id string, msg string) error
 	ClearDeprecated(ctx context.Context, id string) error
 	UpdateRepoURL(ctx context.Context, id, newURL string) error
+
+	// SetLastError records the most recent install/check/load failure for
+	// a package; msg=="" clears it. Kept out of UpdatePackage so failure
+	// bookkeeping can't clobber unrelated fields and works even on paths
+	// where the full row wasn't loaded.
+	SetLastError(ctx context.Context, id, msg string) error
 }
 
 // packageRepository is the MariaDB implementation.
@@ -52,6 +58,7 @@ const packageColumns = `id, type, slug, name, repo_url, COALESCE(description,'')
 	COALESCE(install_path,''), COALESCE(submitted_by,''), status,
 	COALESCE(reviewed_by,''), reviewed_at, COALESCE(review_note,''),
 	deprecated_at, COALESCE(deprecation_msg,''),
+	COALESCE(last_error,''), last_error_at,
 	created_at, updated_at`
 
 // scanPackage scans a row into a Package struct. Column order must match packageColumns.
@@ -64,6 +71,7 @@ func scanPackage(scanner interface{ Scan(dest ...any) error }) (*Package, error)
 		&p.InstallPath, &p.SubmittedBy, &p.Status,
 		&p.ReviewedBy, &p.ReviewedAt, &p.ReviewNote,
 		&p.DeprecatedAt, &p.DeprecationMsg,
+		&p.LastError, &p.LastErrorAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -164,6 +172,22 @@ func (r *packageRepository) UpdatePackage(ctx context.Context, pkg *Package) err
 		pkg.InstallPath, pkg.ID)
 	if err != nil {
 		return fmt.Errorf("updating package %s: %w", pkg.ID, err)
+	}
+	return nil
+}
+
+// SetLastError records (or with msg=="" clears) a package's durable
+// failure state. The timestamp is stamped server-side; clearing NULLs
+// both columns.
+func (r *packageRepository) SetLastError(ctx context.Context, id, msg string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE packages
+		   SET last_error = NULLIF(?,''),
+		       last_error_at = IF(? = '', NULL, NOW())
+		 WHERE id = ?`,
+		msg, msg, id)
+	if err != nil {
+		return fmt.Errorf("setting last_error for package %s: %w", id, err)
 	}
 	return nil
 }

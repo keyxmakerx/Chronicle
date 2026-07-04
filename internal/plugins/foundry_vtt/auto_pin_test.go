@@ -55,6 +55,10 @@ type recordingSettings struct {
 	mu    sync.Mutex
 	calls []recordedPin
 	err   error // returned by SetFoundryModulePin if non-nil
+	// modes maps campaignID → pin_mode. A missing entry (or a nil map)
+	// returns "" — the promote default — so tests can exercise preserve
+	// vs promote per campaign.
+	modes map[string]string
 }
 
 type recordedPin struct {
@@ -81,7 +85,10 @@ func (s *recordingSettings) SetFoundryModulePin(_ context.Context, campaignID, v
 // pin_mode yet. New Chunk 1 tests (pin_mode_test.go) exercise the
 // settings adapter contract via a dedicated stub instead of reusing
 // this one.
-func (s *recordingSettings) GetFoundryModulePinMode(_ context.Context, _ string) (string, error) {
+func (s *recordingSettings) GetFoundryModulePinMode(_ context.Context, campaignID string) (string, error) {
+	if s.modes != nil {
+		return s.modes[campaignID], nil
+	}
 	return "", nil
 }
 func (s *recordingSettings) SetFoundryModulePinMode(_ context.Context, _, _ string) error {
@@ -149,17 +156,21 @@ func TestAutoPinOnInstall_NoopOnSameVersion(t *testing.T) {
 	}
 }
 
-// TestAutoPinOnInstall_PinsAutoTrackingCampaigns — the happy path.
-// previousVersion=v0.1.10, newVersion=v0.1.11, 3 auto-tracking
+// TestAutoPinOnInstall_PreserveModeFreezes — campaigns explicitly in
+// "preserve" mode are pinned to the previous version on install.
+// previousVersion=v0.1.10, newVersion=v0.1.11, 3 preserve-mode
 // campaigns. All three get pinned to v0.1.10; per-campaign events
 // fire + one summary event.
-func TestAutoPinOnInstall_PinsAutoTrackingCampaigns(t *testing.T) {
+func TestAutoPinOnInstall_PreserveModeFreezes(t *testing.T) {
 	campaigns := []CampaignUsage{
 		{CampaignID: "camp-1", CampaignName: "Imix"},
 		{CampaignID: "camp-2", CampaignName: "Test"},
 		{CampaignID: "camp-3", CampaignName: "Third"},
 	}
 	svc, settings, events := newAutoPinTestService(t, campaigns)
+	settings.modes = map[string]string{
+		"camp-1": PinModePreserve, "camp-2": PinModePreserve, "camp-3": PinModePreserve,
+	}
 	n, err := svc.AutoPinOnInstall(context.Background(), "v0.1.10", "v0.1.11", "admin-1", "1.2.3.4", "test-ua")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -195,6 +206,68 @@ func TestAutoPinOnInstall_PinsAutoTrackingCampaigns(t *testing.T) {
 	}
 }
 
+// TestAutoPinOnInstall_PromoteDefaultLeavesEmpty — the NEW default.
+// Campaigns with no pin_mode set (empty = promote per audit D1) are
+// left alone so they keep auto-tracking the newest installed version.
+// No pins written, no per-campaign events; the summary still fires.
+func TestAutoPinOnInstall_PromoteDefaultLeavesEmpty(t *testing.T) {
+	svc, settings, events := newAutoPinTestService(t, []CampaignUsage{
+		{CampaignID: "camp-1", CampaignName: "Imix"},
+		{CampaignID: "camp-2", CampaignName: "Test"},
+	})
+	// No modes set → "" → promote default.
+	n, err := svc.AutoPinOnInstall(context.Background(), "v0.1.10", "v0.1.11", "admin-1", "1.2.3.4", "test-ua")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("promote default should pin nobody, got %d affected", n)
+	}
+	if len(settings.calls) != 0 {
+		t.Errorf("promote default should write no pins, got %d", len(settings.calls))
+	}
+	var perCampaign, summary int
+	for _, e := range events.events {
+		switch e.eventType {
+		case EventModuleAutoPinOnInstall:
+			perCampaign++
+		case EventModuleAutoPinInstallSummary:
+			summary++
+		}
+	}
+	if perCampaign != 0 {
+		t.Errorf("expected 0 per-campaign events under promote default, got %d", perCampaign)
+	}
+	if summary != 1 {
+		t.Errorf("expected 1 summary event, got %d", summary)
+	}
+}
+
+// TestAutoPinOnInstall_MixedModes — only preserve-mode campaigns freeze;
+// promote-mode (and unset) campaigns are left auto-tracking.
+func TestAutoPinOnInstall_MixedModes(t *testing.T) {
+	svc, settings, _ := newAutoPinTestService(t, []CampaignUsage{
+		{CampaignID: "camp-preserve"},
+		{CampaignID: "camp-promote"},
+		{CampaignID: "camp-unset"},
+	})
+	settings.modes = map[string]string{
+		"camp-preserve": PinModePreserve,
+		"camp-promote":  PinModePromote,
+		// camp-unset intentionally absent → "" → promote default.
+	}
+	n, err := svc.AutoPinOnInstall(context.Background(), "v0.1.10", "v0.1.11", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected only the preserve-mode campaign pinned, got %d affected", n)
+	}
+	if len(settings.calls) != 1 || settings.calls[0].campaignID != "camp-preserve" {
+		t.Fatalf("expected exactly one pin for camp-preserve, got %+v", settings.calls)
+	}
+}
+
 // TestAutoPinOnInstall_PartialFailure — one campaign's pin write
 // fails; the fan-out continues. The summary count reflects only
 // successes.
@@ -202,6 +275,8 @@ func TestAutoPinOnInstall_PartialFailure(t *testing.T) {
 	svc, settings, events := newAutoPinTestService(t, []CampaignUsage{
 		{CampaignID: "camp-1"}, {CampaignID: "camp-2"},
 	})
+	// preserve mode so both reach the (failing) pin write.
+	settings.modes = map[string]string{"camp-1": PinModePreserve, "camp-2": PinModePreserve}
 	settings.err = errors.New("simulated partial failure")
 	n, err := svc.AutoPinOnInstall(context.Background(), "v0.1.10", "v0.1.11", "", "", "")
 	if err != nil {

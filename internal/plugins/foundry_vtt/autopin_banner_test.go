@@ -45,10 +45,13 @@ func newBannerTestService(t *testing.T) (*service, *fakeKVStore, *recordingSetti
 // fires with a real version transition, the summary lands in the
 // settings KV. The banner handler reads from there.
 func TestAutoPinOnInstall_PersistsSummaryToKV(t *testing.T) {
-	svc, kv, _, _ := newBannerTestService(t)
+	svc, kv, settings, _ := newBannerTestService(t)
 	svc.repo = &fakeRepoForAutoPin{emptyPinCampaigns: []CampaignUsage{
 		{CampaignID: "camp-1", CampaignName: "C1"},
 	}}
+	// preserve mode so the campaign is actually pinned (affected == 1);
+	// the promote default would leave it auto-tracking (affected == 0).
+	settings.modes = map[string]string{"camp-1": PinModePreserve}
 
 	if _, err := svc.AutoPinOnInstall(context.Background(),
 		"v0.1.10", "v0.1.11", "", "", ""); err != nil {

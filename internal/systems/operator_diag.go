@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -138,6 +139,12 @@ func diagnosticCatalog() []Diagnostic {
 			Title: "All on-disk version folders per package (find shadowing leftovers)",
 			Desc:  "Lists every installed version folder for each system package, tagging which is the DB-installed one and which the loader actually serves — surfaces a stale folder shadowing the newest.",
 			Run:   func(string) string { return renderOnDiskVersions() },
+		},
+		{
+			Name:  "packages.prune-preview",
+			Title: "Stale version folders that cleanup would reclaim (dry-run)",
+			Desc:  "Read-only: lists old on-disk version folders per package that are safe to delete — everything EXCEPT the newest, the DB-installed, and any currently-loaded version — with sizes and a reclaimable total. Nothing is deleted.",
+			Run:   func(string) string { return renderPrunePreview() },
 		},
 		{
 			Name:  "systems.load-events",
@@ -466,6 +473,139 @@ func renderOnDiskVersions() string {
 		}
 	}
 	return b.String()
+}
+
+// staleVersion is one on-disk version folder the cleanup preview flags as
+// safe to reclaim (not the newest, DB-installed, or currently-loaded version).
+type staleVersion struct {
+	Slug    string
+	Version string
+	Path    string
+	Size    int64
+}
+
+// computeStaleVersions walks each installed package's slug dir and returns the
+// version folders that are safe to reclaim: everything EXCEPT the top keepNewest
+// versions (which always includes the newest), the DB-installed version, and any
+// currently-loaded dir. It reads the filesystem but is deterministic for a given
+// on-disk + loaded state, so it is unit-testable with temp dirs. keepNewest < 1
+// is treated as 1. The loadedDirs set is the authoritative "do not delete — a
+// running server is serving this" guard, protecting even an old version the
+// loader is (perhaps wrongly) still serving.
+func computeStaleVersions(installed []InstalledPackage, loadedDirs map[string]bool, keepNewest int) []staleVersion {
+	if keepNewest < 1 {
+		keepNewest = 1
+	}
+	var out []staleVersion
+	for _, p := range installed {
+		if p.InstallPath == "" {
+			continue
+		}
+		slugDir := filepath.Dir(p.InstallPath) // …/packages/systems/<slug>
+		entries, err := os.ReadDir(slugDir)
+		if err != nil {
+			continue
+		}
+		var vers []string
+		for _, e := range entries {
+			if e.IsDir() {
+				vers = append(vers, e.Name())
+			}
+		}
+		if len(vers) <= keepNewest {
+			continue // nothing beyond the versions we always keep
+		}
+		// Sort newest-first via the loader's own semver comparator.
+		sort.Slice(vers, func(i, j int) bool { return versionLess(vers[j], vers[i]) })
+
+		protected := make(map[string]bool, keepNewest+1)
+		for i := 0; i < keepNewest && i < len(vers); i++ {
+			protected[vers[i]] = true // top keepNewest (includes the newest)
+		}
+		protected[p.Version] = true // the DB-installed version
+
+		for _, v := range vers {
+			full := filepath.Join(slugDir, v)
+			if protected[v] || loadedDirs[full] {
+				continue
+			}
+			out = append(out, staleVersion{Slug: p.Slug, Version: v, Path: full, Size: dirSizeBytes(full)})
+		}
+	}
+	return out
+}
+
+// renderPrunePreview is the read-only markdown for the packages.prune-preview
+// diagnostic: what stale-version cleanup WOULD reclaim, grouped by package with
+// sizes and a total. Nothing is deleted.
+func renderPrunePreview() string {
+	var b strings.Builder
+	b.WriteString("## packages.prune-preview\n\n")
+	b.WriteString("_Dry-run — nothing is deleted. Lists old version folders safe to reclaim (everything except the newest, the DB-installed, and any currently-loaded version)._\n\n")
+	if installedPackagesFn == nil {
+		b.WriteString("_Provider not wired._\n")
+		return b.String()
+	}
+	loadedDirs := map[string]bool{}
+	for _, sh := range LoadedHealth() {
+		if sh.Dir != "" {
+			loadedDirs[sh.Dir] = true
+		}
+	}
+	stale := computeStaleVersions(installedPackagesFn(), loadedDirs, 1)
+	if len(stale) == 0 {
+		b.WriteString("_No stale version folders — only protected versions on disk._\n")
+		return b.String()
+	}
+
+	bySlug := map[string][]staleVersion{}
+	var order []string
+	for _, s := range stale {
+		if _, ok := bySlug[s.Slug]; !ok {
+			order = append(order, s.Slug)
+		}
+		bySlug[s.Slug] = append(bySlug[s.Slug], s)
+	}
+	var grand int64
+	for _, slug := range order {
+		fmt.Fprintf(&b, "### `%s`\n", slug)
+		var sub int64
+		for _, s := range bySlug[slug] {
+			fmt.Fprintf(&b, "- `%s` (%s)\n", s.Version, humanBytes(s.Size))
+			sub += s.Size
+		}
+		fmt.Fprintf(&b, "- **%d folder(s), %s**\n\n", len(bySlug[slug]), humanBytes(sub))
+		grand += sub
+	}
+	fmt.Fprintf(&b, "**Total reclaimable: %s across %d folder(s)** (keep-newest=1; loaded / DB-installed / newest always kept)\n", humanBytes(grand), len(stale))
+	return b.String()
+}
+
+// dirSizeBytes returns the total size of the regular files under path. Best
+// effort — unreadable entries are skipped rather than failing the whole walk.
+func dirSizeBytes(path string) int64 {
+	var total int64
+	_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && info != nil && !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+// humanBytes formats a byte count as a short human-readable string (B/KB/MB…).
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 // loadedUnderPathAny returns any loaded system served from under slugDir (any

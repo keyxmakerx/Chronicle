@@ -79,8 +79,15 @@ type Package struct {
 	ReviewNote       string // Reason for rejection or review comment.
 	DeprecatedAt     *time.Time
 	DeprecationMsg   string // Message shown to users about EOL.
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// LastError is the most recent install/check/load failure for this
+	// package ("" = healthy). Written by the install pipeline and the
+	// post-install verifier, cleared on verified success. Durable (DB
+	// column) so background failures survive restarts — the /admin/packages
+	// badge + banner render straight from this field.
+	LastError   string
+	LastErrorAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // PackageVersion represents a single release from GitHub.
@@ -165,7 +172,7 @@ type UpdateRepoURLInput struct {
 type PackageSecuritySettings struct {
 	RepoPolicy        string // "github_only", "any_git", or "allow_all".
 	RequireApproval   bool
-	MaxFileSize       int64  // Bytes.
+	MaxFileSize       int64 // Bytes.
 	ValidateManifest  bool
 	ScanContent       bool
 	OwnerUploadPolicy string // "auto_approve", "require_approval", or "disabled".

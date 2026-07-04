@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -447,6 +448,59 @@ func (h *SystemHandler) RulesGlossaryAPI(c echo.Context) error {
 	data, err := os.ReadFile(p)
 	if err != nil {
 		return c.JSON(http.StatusOK, []any{})
+	}
+
+	c.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	return c.Blob(http.StatusOK, "application/json", data)
+}
+
+// systemDataFilePattern restricts SystemDataAPI to a plain JSON basename in a
+// system's data/ dir: no path separators, no leading dot, no traversal. The
+// within-dir clamp in the handler is a second backstop.
+var systemDataFilePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*\.json$`)
+
+// SystemDataAPI serves a system's raw data/<file>.json verbatim, for client
+// widgets that need an authored reference file with its `slug`/`properties`
+// intact — the generic form of RulesGlossaryAPI. The category route (CategoryList)
+// runs files through the DataProvider, which normalizes into ReferenceItem and
+// drops the authored `slug`; widgets that key on slug (e.g. the Draw Steel skill
+// catalog read by the character sheet) must read the raw file instead. The
+// filename is validated to a safe JSON basename and the resolved path is clamped
+// within the system's data dir. Returns 404 for an absent/unknown file so the
+// client degrades gracefully (the feature using it stays empty) rather than
+// erroring.
+//
+// GET /campaigns/:id/systems/:mod/data/:file
+func (h *SystemHandler) SystemDataAPI(c echo.Context) error {
+	mod := h.resolveSystem(c)
+	if mod == nil {
+		return apperror.NewNotFound("system not found")
+	}
+
+	file := c.Param("file")
+	if !systemDataFilePattern.MatchString(file) {
+		return apperror.NewBadRequest("invalid data file")
+	}
+
+	sysDir := Dir(mod.Info().ID)
+	if sysDir == "" && h.campaignSystems != nil {
+		if cc := campaigns.GetCampaignContext(c); cc != nil {
+			sysDir = h.campaignSystems.Dir(cc.Campaign.ID)
+		}
+	}
+	if sysDir == "" {
+		return apperror.NewNotFound("data file not found")
+	}
+
+	dataDir := filepath.Clean(filepath.Join(sysDir, "data"))
+	p := filepath.Clean(filepath.Join(dataDir, file))
+	if !strings.HasPrefix(p, dataDir+string(os.PathSeparator)) {
+		return apperror.NewBadRequest("invalid path")
+	}
+
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return apperror.NewNotFound("data file not found")
 	}
 
 	c.Response().Header().Set("Cache-Control", "public, max-age=3600")

@@ -1927,8 +1927,20 @@ func (a *App) RegisterRoutes() {
 	// Rescan system registry and re-register addons when a system package
 	// is installed or updated, so it appears in the campaign Settings >
 	// Game System dropdown immediately without requiring a server restart.
-	packages.SetOnSystemInstall(pkgService, func() {
+	packages.SetOnSystemInstall(pkgService, func(installPath string) {
 		systems.ScanPackageDir(filepath.Join(a.Config.Upload.MediaPath, "packages", "systems"))
+		// Force-load the exact dir that was just installed. The rescan
+		// above applies "highest version wins", which silently ignores a
+		// deliberate rollback to an OLDER version; an explicit install is
+		// operator intent and must be what the loader serves. Failure is
+		// logged only — the post-install verifier persists it as the
+		// package's last_error for the admin UI.
+		if installPath != "" {
+			if err := systems.ForceLoadDir(installPath); err != nil {
+				slog.Error("force-load of installed system dir failed",
+					slog.String("dir", installPath), slog.Any("error", err))
+			}
+		}
 		// Re-register discovered systems as addons (idempotent — updates
 		// existing entries, adds new ones) and upsert to DB so campaign
 		// addon associations are preserved.
@@ -1949,6 +1961,45 @@ func (a *App) RegisterRoutes() {
 		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
+	// Fail-loud installs: run the FULL loader-grade manifest validation at
+	// install time for system packages, so a manifest the boot scan would
+	// reject (content caps, slugs, renderer bindings…) fails the install
+	// with the real error instead of installing "green" and shadow-failing
+	// at load while the old version keeps serving.
+	packages.SetManifestValidator(pkgService, func(manifestPath string) error {
+		_, err := systems.LoadManifest(manifestPath)
+		return err
+	})
+	// Verified installs: after the rescan, confirm the loader actually
+	// serves the just-installed dir+version. On miss, pull the real
+	// rejection reason from the load-event log so the persisted
+	// last_error tells the admin WHY (e.g. a validation failure on a
+	// pre-validator install, or a stale registry).
+	// Stale-version cleanup safety: the prune wizard must never delete a
+	// dir the loader is live-serving, even an OLD one (stale registry).
+	packages.SetLoadedDirsProvider(pkgService, func() map[string]bool {
+		out := map[string]bool{}
+		for _, sh := range systems.LoadedHealth() {
+			if sh.Dir != "" {
+				out[sh.Dir] = true
+			}
+		}
+		return out
+	})
+	packages.SetPostInstallVerifier(pkgService, func(installPath, version string) error {
+		for _, sh := range systems.LoadedHealth() {
+			if sh.Dir == installPath && sh.Version == version {
+				return nil
+			}
+		}
+		events := systems.DiagnosticEvents()
+		for i := len(events) - 1; i >= 0; i-- {
+			if events[i].Dir == installPath && events[i].Kind == systems.EventFailed {
+				return fmt.Errorf("loader rejected it: %s", events[i].Error)
+			}
+		}
+		return fmt.Errorf("loader did not register %s (an older version may still be serving)", installPath)
+	})
 
 	// Wire installed-package state into the operator diagnostics (dependency
 	// inversion: systems can't import packages) so packages.installed-vs-loaded /
