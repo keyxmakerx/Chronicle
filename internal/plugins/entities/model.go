@@ -91,9 +91,10 @@ type TemplateBlock struct {
 }
 
 // CharacterLayout is the default page layout for player-character types: the
-// dynamic character-sheet surface (the "big widget") full-width, with the
-// permissions block beneath it for per-player sharing. Owners can customize it
-// in the layout editor like any other layout — the surface is a normal block.
+// dynamic character-sheet surface (the "big widget") full-width, then the
+// player-notes block, with the permissions block beneath it for per-player
+// sharing. Owners can customize it in the layout editor like any other layout
+// — every block is a normal block.
 func CharacterLayout() EntityTypeLayout {
 	return EntityTypeLayout{
 		Rows: []TemplateRow{
@@ -109,6 +110,7 @@ func CharacterLayout() EntityTypeLayout {
 					},
 				},
 			},
+			entityNotesRow("row-notes", "col-notes", "blk-notes"),
 			{
 				ID: "row-perm",
 				Columns: []TemplateColumn{
@@ -126,8 +128,10 @@ func CharacterLayout() EntityTypeLayout {
 }
 
 // DefaultLayout returns the standard two-column layout used for new entity types.
-// Includes a full-width permissions block at the bottom so operators can
-// share entities per-player without hunting through edit forms.
+// Includes a full-width player-notes block and a permissions block at the
+// bottom so operators get per-player notes and per-player sharing on every
+// new type without hunting through edit forms. Both are addon/identity-gated
+// at render time, so they cost nothing on types where they don't apply.
 func DefaultLayout() EntityTypeLayout {
 	return EntityTypeLayout{
 		Rows: []TemplateRow{
@@ -153,6 +157,7 @@ func DefaultLayout() EntityTypeLayout {
 					},
 				},
 			},
+			entityNotesRow("row-notes", "col-notes", "blk-notes"),
 			{
 				ID: "row-perm",
 				Columns: []TemplateColumn{
@@ -163,6 +168,26 @@ func DefaultLayout() EntityTypeLayout {
 							{ID: "blk-perm", Type: "permissions"},
 						},
 					},
+				},
+			},
+		},
+	}
+}
+
+// entityNotesRow builds a full-width row holding the player-notes
+// (entity_notes) block. Shared by CharacterLayout and DefaultLayout so the
+// block's placement stays identical across the built-in layouts. The block
+// is gated by the "player-notes" addon at render time, so it renders nothing
+// when the addon is off — safe to include on every default layout.
+func entityNotesRow(rowID, colID, blockID string) TemplateRow {
+	return TemplateRow{
+		ID: rowID,
+		Columns: []TemplateColumn{
+			{
+				ID:    colID,
+				Width: 12,
+				Blocks: []TemplateBlock{
+					{ID: blockID, Type: "entity_notes"},
 				},
 			},
 		},
