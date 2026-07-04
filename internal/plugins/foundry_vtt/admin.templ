@@ -55,7 +55,7 @@ import "fmt"
 // re-render would be jarring). Empty-pinned-list case skips
 // rendering the details entirely so the admin doesn't see a
 // pointless expander for versions no one is using.
-templ AdminVersionCampaignsBlock(version string, usage []CampaignUsage, csrfToken string) {
+templ AdminVersionCampaignsBlock(version string, usage []CampaignUsage, autoTracking []CampaignUsage, csrfToken string) {
 	<div class="border-t border-edge mt-2 pt-3 px-3 pb-3 bg-surface-alt/30 rounded-b-md space-y-3">
 		if len(usage) > 0 {
 			<div class="card p-3 rounded-md border-amber-500/20 bg-amber-500/5 flex items-center gap-3">
@@ -63,6 +63,18 @@ templ AdminVersionCampaignsBlock(version string, usage []CampaignUsage, csrfToke
 				<p class="text-xs text-fg flex-1">
 					<span class="font-medium">{ fmt.Sprintf("%d campaign(s) pinned to %s", len(usage), version) }</span>
 					— act per-campaign below, or use the version-level batch actions to update all older-than-{ version } campaigns at once.
+				</p>
+			</div>
+		}
+		// Auto-tracking campaigns follow whatever version is newest, so they
+		// never appear in the exact-pin list — surface their count here so an
+		// empty pinned list doesn't read as "no campaign uses this module".
+		if len(autoTracking) > 0 {
+			<div class="card p-3 rounded-md border-sky-500/20 bg-sky-500/5 flex items-start gap-3">
+				<i class="fa-solid fa-satellite-dish text-sky-600 dark:text-sky-400 mt-0.5"></i>
+				<p class="text-xs text-fg flex-1">
+					<span class="font-medium">{ fmt.Sprintf("%d campaign(s) auto-tracking latest", len(autoTracking)) }</span>
+					— no explicit pin, so they follow whichever module version is newest on install. They aren't frozen to { version } (or any specific version); leave them be unless an owner deliberately pins one.
 				</p>
 			</div>
 		}
@@ -87,7 +99,7 @@ templ campaignUsageList(version string, usage []CampaignUsage, csrfToken string)
 		</p>
 		if len(usage) == 0 {
 			<p class="text-xs text-fg-muted italic">
-				No campaigns are currently pinned to this version. If you want a campaign on this version, the campaign owner can pin it from campaign settings → VTT Setup Guides → Foundry VTT.
+				No campaigns are pinned to this exact version — which is normal. Most campaigns auto-track the latest installed version (see the count above) rather than pinning a specific one. To freeze a campaign on this version, its owner can pin it from campaign settings → VTT Setup Guides → Foundry VTT.
 			</p>
 		} else {
 			<div class="space-y-2">

@@ -201,6 +201,12 @@ type Service interface {
 	// "Campaigns Using v0.1.5" card lists these.
 	CampaignsUsingVersion(ctx context.Context, version string) ([]CampaignUsage, error)
 
+	// AutoTrackingCampaigns returns the campaigns with no explicit
+	// foundry_module_pin — they auto-follow whichever module version is
+	// newest. The admin's per-version card shows their count so an empty
+	// exact-pin list doesn't read as "no campaign uses this module".
+	AutoTrackingCampaigns(ctx context.Context) ([]CampaignUsage, error)
+
 	// ForcePinCampaign mutates a campaign's FoundryModulePin directly,
 	// bypassing the owner-side flow. Used by the admin "Force-update
 	// this campaign" action. Validates the target version exists on
@@ -812,6 +818,20 @@ func (s *service) CampaignsUsingVersion(ctx context.Context, version string) ([]
 	usage, err := s.repo.CampaignsUsingVersion(ctx, version)
 	if err != nil {
 		return nil, ErrInternal("campaigns_using_version", err)
+	}
+	return usage, nil
+}
+
+// AutoTrackingCampaigns lists campaigns with an empty foundry_module_pin —
+// the ones that auto-follow the newest installed module version rather than
+// being frozen to a specific one. Surfaced on the admin's per-version card
+// so a version whose exact-pin list is empty still shows how many campaigns
+// track latest (the common case under the promote default), instead of the
+// card reading as "nobody uses this module".
+func (s *service) AutoTrackingCampaigns(ctx context.Context) ([]CampaignUsage, error) {
+	usage, err := s.repo.CampaignsWithEmptyPin(ctx)
+	if err != nil {
+		return nil, ErrInternal("auto_tracking_campaigns", err)
 	}
 	return usage, nil
 }

@@ -18,16 +18,24 @@ import (
 // GET /admin/foundry-vtt/version/:version/campaigns
 //
 // Returns the campaignUsageList + version action row (Force-update
-// older / Notify older). No empty-state error — an empty pinned list
-// is the normal case for newly-installed versions.
+// older / Notify older) plus an "auto-tracking latest (N)" summary. No
+// empty-state error — an empty exact-pin list is the normal case since
+// most campaigns auto-track the newest version rather than pinning one.
 func (h *Handler) AdminVersionCampaignsHandler(c echo.Context) error {
 	version := c.Param("version")
 	usage, err := h.svc.CampaignsUsingVersion(c.Request().Context(), version)
 	if err != nil {
 		return h.respondError(c, err)
 	}
+	// Auto-tracking campaigns (no explicit pin) don't show up in the
+	// exact-pin list above, which made the card read as always-empty.
+	// Fetch their count so the card can report them.
+	autoTracking, err := h.svc.AutoTrackingCampaigns(c.Request().Context())
+	if err != nil {
+		return h.respondError(c, err)
+	}
 	return middleware.Render(c, http.StatusOK,
-		AdminVersionCampaignsBlock(version, usage, middleware.GetCSRFToken(c)))
+		AdminVersionCampaignsBlock(version, usage, autoTracking, middleware.GetCSRFToken(c)))
 }
 
 // AdminNotifyCampaignHandler logs the audit event + fires the SMTP
