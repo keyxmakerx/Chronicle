@@ -499,6 +499,15 @@ func (s *packageService) ListVersions(ctx context.Context, packageID string) ([]
 	return s.repo.ListVersions(ctx, packageID)
 }
 
+// lockForPackage returns the per-package install mutex, creating it on
+// first use. Shared by InstallVersion and PruneStaleVersions so a reclaim
+// can never RemoveAll a version dir an install is mid-extract into (and
+// vice-versa) for the same package. Different packages don't contend.
+func (s *packageService) lockForPackage(packageID string) *sync.Mutex {
+	lockAny, _ := s.installLocks.LoadOrStore(packageID, &sync.Mutex{})
+	return lockAny.(*sync.Mutex)
+}
+
 // InstallVersion downloads and extracts a specific version of a package.
 // It serializes per package (a double-click or the auto-update worker
 // racing an admin would otherwise share destDir mid-extract) and is the
@@ -506,8 +515,7 @@ func (s *packageService) ListVersions(ctx context.Context, packageID string) ([]
 // errors to a 400 toast which the global error handler does NOT log, so
 // without this line a failed install leaves no server-side record.
 func (s *packageService) InstallVersion(ctx context.Context, packageID, version string) error {
-	lockAny, _ := s.installLocks.LoadOrStore(packageID, &sync.Mutex{})
-	mu := lockAny.(*sync.Mutex)
+	mu := s.lockForPackage(packageID)
 	mu.Lock()
 	defer mu.Unlock()
 

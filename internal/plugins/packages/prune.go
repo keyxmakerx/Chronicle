@@ -75,60 +75,76 @@ func (s *packageService) PruneStaleVersions(ctx context.Context, keepNewest int,
 		if pkg.Type == PackageTypeFoundryModule || pkg.InstalledVersion == "" {
 			continue // foundry dirs are pin-served; uninstalled packages have nothing to keep safe
 		}
-		slugDir := filepath.Join(s.packagesDir(), "systems", pkg.Slug)
-		entries, err := os.ReadDir(slugDir)
-		if err != nil {
-			continue // no dir / unreadable → nothing to reclaim
-		}
-		var vers []string
-		for _, e := range entries {
-			if e.IsDir() {
-				vers = append(vers, e.Name())
-			}
-		}
-		if len(vers) <= keepNewest {
-			continue
-		}
-		sort.Slice(vers, func(a, b int) bool { return pruneVersionLess(vers[b], vers[a]) })
-
-		protected := make(map[string]bool, keepNewest+2)
-		for j := 0; j < keepNewest && j < len(vers); j++ {
-			protected[vers[j]] = true
-		}
-		protected[pkg.InstalledVersion] = true
-
-		for _, v := range vers {
-			full := filepath.Join(slugDir, v)
-			if protected[v] || loaded[full] {
-				continue
-			}
-			sv := StaleVersion{Slug: pkg.Slug, Version: v, Path: full, Size: dirSize(full)}
-			res.Reclaimable = append(res.Reclaimable, sv)
-			if dryRun {
-				continue
-			}
-			// Re-assert protection immediately before deletion (defense in
-			// depth against a concurrent install changing the picture).
-			if protected[v] || s.loadedDirsFn()[full] {
-				continue
-			}
-			if err := os.RemoveAll(full); err != nil {
-				slog.Warn("prune: failed to remove stale version dir",
-					slog.String("dir", full), slog.Any("error", err))
-				continue
-			}
-			slog.Info("prune: removed stale package version",
-				slog.String("package", pkg.Slug), slog.String("version", v),
-				slog.Int64("bytes", sv.Size))
-			res.Removed = append(res.Removed, sv)
-			res.BytesFreed += sv.Size
-		}
+		s.pruneOnePackage(pkg, keepNewest, dryRun, loaded, res)
 	}
 
 	if !dryRun && len(res.Removed) > 0 && s.onServeInvalidate != nil {
 		s.onServeInvalidate()
 	}
 	return res, nil
+}
+
+// pruneOnePackage scans and (unless dryRun) reclaims one system package's
+// stale version folders, appending to res. It holds that package's install
+// mutex for the whole scan+delete so a concurrent InstallVersion (rollback,
+// auto-update worker, admin double-click) can never RemoveAll a dir the
+// install is mid-extract into — and a version still being installed is
+// either fully committed (then protected as InstalledVersion) or not yet on
+// disk before we ReadDir. Different packages don't contend; the lock is
+// released (deferred) before the caller moves to the next package.
+func (s *packageService) pruneOnePackage(pkg *Package, keepNewest int, dryRun bool, loaded map[string]bool, res *PruneResult) {
+	mu := s.lockForPackage(pkg.ID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	slugDir := filepath.Join(s.packagesDir(), "systems", pkg.Slug)
+	entries, err := os.ReadDir(slugDir)
+	if err != nil {
+		return // no dir / unreadable → nothing to reclaim
+	}
+	var vers []string
+	for _, e := range entries {
+		if e.IsDir() {
+			vers = append(vers, e.Name())
+		}
+	}
+	if len(vers) <= keepNewest {
+		return
+	}
+	sort.Slice(vers, func(a, b int) bool { return pruneVersionLess(vers[b], vers[a]) })
+
+	protected := make(map[string]bool, keepNewest+2)
+	for j := 0; j < keepNewest && j < len(vers); j++ {
+		protected[vers[j]] = true
+	}
+	protected[pkg.InstalledVersion] = true
+
+	for _, v := range vers {
+		full := filepath.Join(slugDir, v)
+		if protected[v] || loaded[full] {
+			continue
+		}
+		sv := StaleVersion{Slug: pkg.Slug, Version: v, Path: full, Size: dirSize(full)}
+		res.Reclaimable = append(res.Reclaimable, sv)
+		if dryRun {
+			continue
+		}
+		// Re-assert protection immediately before deletion (defense in
+		// depth against a concurrent install changing the picture).
+		if protected[v] || s.loadedDirsFn()[full] {
+			continue
+		}
+		if err := os.RemoveAll(full); err != nil {
+			slog.Warn("prune: failed to remove stale version dir",
+				slog.String("dir", full), slog.Any("error", err))
+			continue
+		}
+		slog.Info("prune: removed stale package version",
+			slog.String("package", pkg.Slug), slog.String("version", v),
+			slog.Int64("bytes", sv.Size))
+		res.Removed = append(res.Removed, sv)
+		res.BytesFreed += sv.Size
+	}
 }
 
 // prettyBytes renders a byte count for the cleanup card ("312.4 MB").

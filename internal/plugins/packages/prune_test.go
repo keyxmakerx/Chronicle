@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // prunePkgEnv builds a packageService over a temp media dir with one
@@ -131,4 +132,46 @@ func TestPrune_KeepNewestNAndFoundrySkipped(t *testing.T) {
 		}
 	}
 	_ = slugDir
+}
+
+// TestPrune_TakesPerPackageInstallLock pins the concurrency fix: prune must
+// hold the same per-package installLocks mutex InstallVersion takes, so a
+// reclaim can't RemoveAll a version dir an install is mid-extract into.
+// While the lock is held (as an in-flight install would), prune must block
+// and touch nothing; once released it proceeds and reclaims the stale dir.
+func TestPrune_TakesPerPackageInstallLock(t *testing.T) {
+	svc, slugDir := prunePkgEnv(t, "0.13.0", []string{"0.0.7", "0.13.0"})
+	svc.loadedDirsFn = func() map[string]bool { return nil }
+
+	// Hold the package's install lock, standing in for a running InstallVersion.
+	mu := svc.lockForPackage("p1")
+	mu.Lock()
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = svc.PruneStaleVersions(context.Background(), 1, false)
+		close(done)
+	}()
+
+	// Prune must NOT finish while the lock is held. (If it did, it never
+	// took the lock — the bug this test guards against.)
+	select {
+	case <-done:
+		t.Fatal("prune completed while the install lock was held — it did not take the lock")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if _, err := os.Stat(filepath.Join(slugDir, "0.0.7")); err != nil {
+		t.Fatalf("stale dir removed while install lock held: %v", err)
+	}
+
+	// Release the lock; prune should now run to completion and reclaim 0.0.7.
+	mu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("prune did not complete after the install lock was released")
+	}
+	if _, err := os.Stat(filepath.Join(slugDir, "0.0.7")); !os.IsNotExist(err) {
+		t.Errorf("prune should have reclaimed 0.0.7 after lock release, stat err = %v", err)
+	}
 }
