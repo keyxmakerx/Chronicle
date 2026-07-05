@@ -34,6 +34,9 @@ type EntityTypeRepository interface {
 	// exact (from, to) pair, so this carries no preset-string matching.
 	MoveEntitiesAndDeleteType(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 	UpdateLayout(ctx context.Context, id int, layoutJSON string) error
+	// UpdateFieldsSchema updates only the fields JSON column (field-metadata
+	// reconciler), never layout_json.
+	UpdateFieldsSchema(ctx context.Context, id int, fieldsJSON string) error
 	UpdateColor(ctx context.Context, id int, color string) error
 	UpdateDashboard(ctx context.Context, id int, description *string, pinnedIDs []string) error
 	UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error
@@ -256,6 +259,28 @@ func (r *entityTypeRepository) UpdateLayout(ctx context.Context, id int, layoutJ
 	)
 	if err != nil {
 		return fmt.Errorf("updating entity type layout: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return apperror.NewNotFound("entity type not found")
+	}
+	return nil
+}
+
+// UpdateFieldsSchema updates ONLY the fields JSON column for an entity type.
+// Used by the field-metadata reconciler (gm_only sync) so it never rewrites
+// layout_json — keeping it from ever racing the layout backfill reconcilers,
+// which touch a different column.
+func (r *entityTypeRepository) UpdateFieldsSchema(ctx context.Context, id int, fieldsJSON string) error {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE entity_types SET fields = ? WHERE id = ?`,
+		fieldsJSON, id,
+	)
+	if err != nil {
+		return fmt.Errorf("updating entity type fields: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {

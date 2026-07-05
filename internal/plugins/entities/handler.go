@@ -1795,9 +1795,16 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 		overrides = &FieldOverrides{}
 	}
 
+	// Strip GM-only field VALUES for non-GM viewers (audit M-1). The field
+	// DEFINITIONS stay so the attributes widget can render its schema (and
+	// hide the box); only the secret values are withheld. Gate on the full
+	// type schema (et.Fields), not effectiveFields, so a per-entity "hidden"
+	// override can't leave a gm_only value un-stripped. Scribe+ (co-GM) and
+	// Foundry Bearer callers keep full data — same bar as inline secrets.
+	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
 	response := map[string]any{
 		"fields":          effectiveFields,
-		"fields_data":     entity.FieldsData,
+		"fields_data":     FilterGMOnlyFields(entity.FieldsData, et.Fields, canSeeGM),
 		"field_overrides": overrides,
 		"type_fields":     et.Fields,
 	}
@@ -2033,8 +2040,11 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	attributes := make([]map[string]string, 0)
 	if cfg.ShowAttributes && entityType != nil {
 		effectiveFields := MergeFields(entityType.Fields, entity.FieldOverrides)
+		// Strip GM-only field values for non-GM viewers (audit M-1) — this
+		// preview/tooltip is player-reachable via the public campaign route.
+		fieldsData := FilterGMOnlyFields(entity.FieldsData, entityType.Fields, cc.MemberRole >= campaigns.RoleScribe)
 		for _, fd := range effectiveFields {
-			val, ok := entity.FieldsData[fd.Key]
+			val, ok := fieldsData[fd.Key]
 			if !ok || val == nil || fmt.Sprintf("%v", val) == "" {
 				continue
 			}

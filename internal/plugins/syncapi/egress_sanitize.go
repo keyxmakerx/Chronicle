@@ -136,6 +136,35 @@ func stripEntitiesSecretsForEgress(es []entities.Entity, role int) {
 	}
 }
 
+// stripEntityGMFieldsForEgress removes GM-only field VALUES from a single
+// entity's FieldsData for a non-GM caller (audit M-1). Unlike the inline
+// secret strip above (which only touches the HTML/JSON prose fields), this
+// scrubs the custom-field map, where a system marks fields gm_only (e.g.
+// Draw Steel's director gm_notes). resolveFields returns the entity type's
+// declared field defs — the source of the gm_only markers. No-op for
+// GM/owner/Bearer callers (role >= Scribe), so the Foundry lossless-sync
+// contract is preserved by the caller-privilege check, not by skipping the
+// egress. FilterGMOnlyFields never mutates the input map (nil-safe).
+func stripEntityGMFieldsForEgress(e *entities.Entity, role int, resolveFields func(typeID int) []entities.FieldDefinition) {
+	if e == nil || role >= int(campaigns.RoleScribe) {
+		return
+	}
+	e.FieldsData = entities.FilterGMOnlyFields(e.FieldsData, resolveFields(e.EntityTypeID), false)
+}
+
+// stripEntitiesGMFieldsForEgress applies stripEntityGMFieldsForEgress across
+// a fresh slice (ListEntities). The caller passes a resolveFields backed by
+// a single batched type load (map[typeID][]FieldDefinition) so this is not
+// an N+1 query.
+func stripEntitiesGMFieldsForEgress(es []entities.Entity, role int, resolveFields func(typeID int) []entities.FieldDefinition) {
+	if role >= int(campaigns.RoleScribe) {
+		return
+	}
+	for i := range es {
+		stripEntityGMFieldsForEgress(&es[i], role, resolveFields)
+	}
+}
+
 // stripSecretsHTMLPtr is the nullable-pointer companion to
 // sanitize.StripSecretsHTML: nil in, nil out; otherwise a fresh pointer
 // to the stripped HTML. The original referent is not mutated.

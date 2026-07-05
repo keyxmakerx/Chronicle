@@ -324,6 +324,24 @@ func (h *APIHandler) ListEntities(c echo.Context) error {
 	// See C-SYNCAPI-PRELAUNCH-HARDENING.
 	stripEntitiesSecretsForEgress(items, role)
 
+	// Strip GM-only field VALUES at list scope (audit M-1). Load the
+	// campaign's entity types ONCE (not per-entity) to resolve gm_only
+	// keys. Fail closed on a load error rather than leak.
+	if role < int(campaigns.RoleScribe) && len(items) > 0 {
+		types, terr := h.entitySvc.GetEntityTypes(c.Request().Context(), campaignID)
+		if terr != nil {
+			slog.Error("api: gm-field strip could not load entity types", slog.Any("error", terr))
+			return apperror.NewInternal(fmt.Errorf("failed to list entities"))
+		}
+		fieldsByType := make(map[int][]entities.FieldDefinition, len(types))
+		for i := range types {
+			fieldsByType[types[i].ID] = types[i].Fields
+		}
+		stripEntitiesGMFieldsForEgress(items, role, func(typeID int) []entities.FieldDefinition {
+			return fieldsByType[typeID]
+		})
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"data":     items,
 		"total":    total,
@@ -366,6 +384,22 @@ func (h *APIHandler) GetEntity(c echo.Context) error {
 	// ship. Owner/Scribe (>= RoleScribe) responses are unchanged.
 	// See C-SYNCAPI-PRELAUNCH-HARDENING.
 	stripEntitySecretsForEgress(entity, role)
+
+	// Strip GM-only field VALUES from fields_data for non-GM callers
+	// (audit M-1). The CanView gate above lets a player read this entity,
+	// but gm_only fields (e.g. Draw Steel's gm_notes) must not ship.
+	// Bearer/Owner/Scribe keep full data. Fail closed: if the type can't
+	// load we cannot know which fields are gm_only, so error rather than
+	// leak (mirrors the entities-plugin GetFieldsAPI).
+	if role < int(campaigns.RoleScribe) {
+		et, terr := h.entitySvc.GetEntityTypeByID(ctx, entity.EntityTypeID)
+		if terr != nil || et == nil {
+			slog.Error("api: gm-field strip could not load entity type",
+				slog.Int("entity_type_id", entity.EntityTypeID), slog.Any("error", terr))
+			return apperror.NewInternal(fmt.Errorf("failed to load entity"))
+		}
+		entity.FieldsData = entities.FilterGMOnlyFields(entity.FieldsData, et.Fields, false)
+	}
 
 	return c.JSON(http.StatusOK, entity)
 }
@@ -821,8 +855,8 @@ func (h *APIHandler) ListEntityRelations(c echo.Context) error {
 
 // permissionsAPIResponse is the JSON response for entity permission queries.
 type permissionsAPIResponse struct {
-	Visibility  entities.VisibilityMode    `json:"visibility"`
-	IsPrivate   bool                       `json:"is_private"`
+	Visibility  entities.VisibilityMode     `json:"visibility"`
+	IsPrivate   bool                        `json:"is_private"`
 	Permissions []entities.EntityPermission `json:"permissions"`
 	// TagGrants exposes tag-derived visibility grants ADDITIVELY
 	// (C-PERM-W1-TAG-GRANTS). A separate array (not folded into Permissions) so

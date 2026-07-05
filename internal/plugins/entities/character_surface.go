@@ -52,7 +52,11 @@ type characterSurfaceSeed struct {
 // "{}" on marshal failure so the block degrades to an empty surface rather than
 // breaking the page. json.Marshal HTML-escapes the output, so it is safe to
 // embed inside a <script type="application/json"> tag.
-func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaignID, csrfToken string, canEdit bool) string {
+//
+// canSeeGM gates the GM-only field filter: when false (a player viewing the
+// sheet), fields the system marks gm_only are omitted from the seed so their
+// values never reach the browser (audit M-1). Server is the authority.
+func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaignID, csrfToken string, canEdit, canSeeGM bool) string {
 	if entity == nil {
 		return "{}"
 	}
@@ -79,10 +83,15 @@ func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaign
 	// first-seen section order so the sheet reads like the type designed it.
 	if entityType != nil {
 		fields := MergeFields(entityType.Fields, entity.FieldOverrides)
+		// Strip GM-only field values for non-GM viewers (audit M-1). Gate on
+		// the full type schema so a "hidden" override can't leave a value un-
+		// stripped; non-mutating, so other blocks rendering this entity see
+		// the original data.
+		fieldsData := FilterGMOnlyFields(entity.FieldsData, entityType.Fields, canSeeGM)
 		order := []string{}
 		bySection := map[string]*characterSurfaceSection{}
 		for _, f := range fields {
-			raw, ok := entity.FieldsData[f.Key]
+			raw, ok := fieldsData[f.Key]
 			if !ok || raw == nil {
 				continue
 			}

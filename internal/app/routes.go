@@ -1592,37 +1592,40 @@ func (a *App) RegisterRoutes() {
 		}
 	}()
 
-	// One-shot backfill: append a permissions block to every entity
-	// type layout that doesn't already have one. Means existing
-	// campaigns get the per-entity permissions UI without operators
-	// hand-editing layouts. Idempotent; failures per row are logged
-	// and skipped, the goroutine never blocks boot.
+	// One-shot boot reconcilers for entity_types, run SERIALLY in a single
+	// goroutine. The permissions and player-notes backfills both read a full
+	// pre-backfill snapshot and then rewrite the whole layout_json per row, so
+	// running them as two uncoordinated goroutines let the second clobber the
+	// first's block on a type missing BOTH — a type would end up with only one
+	// of {permissions, entity_notes} until the next boot (#514 backfill
+	// lost-update race, coordinator verification). Chaining them serializes
+	// the writes: permissions completes before player-notes reads. The
+	// gm_only field-flag sync runs last; it touches a different column
+	// (fields, not layout_json) so it can't clobber the layout backfills, but
+	// keeping all entity_types reconcilers in one ordered goroutine is the
+	// simplest guarantee. Each step is idempotent; a failure is logged and the
+	// chain continues so one bad step can't strand the others.
 	go func() {
-		n, err := entityService.EnsurePermissionsBlockInDefaults(context.Background())
-		if err != nil {
+		ctx := context.Background()
+		if n, err := entityService.EnsurePermissionsBlockInDefaults(ctx); err != nil {
 			slog.Warn("entity_types: permissions block backfill failed", slog.Any("error", err))
-			return
-		}
-		if n > 0 {
+		} else if n > 0 {
 			slog.Info("entity_types: permissions block backfill added to layouts", slog.Int("rows", n))
 		}
-	}()
 
-	// One-shot backfill: insert a player-notes (entity_notes) block into
-	// every entity type layout that doesn't already have one. Player Notes
-	// was only wired into new default layouts, so custom sub-categories
-	// created earlier never showed the block even with the addon enabled
-	// (cordinator#7). Idempotent; failures per row are logged and skipped,
-	// the goroutine never blocks boot.
-	go func() {
-		n, err := entityService.EnsureEntityNotesBlockInDefaults(context.Background())
-		if err != nil {
+		// Player Notes was only wired into new default layouts, so custom
+		// sub-categories created earlier never showed the block even with the
+		// addon enabled (cordinator#7).
+		if n, err := entityService.EnsureEntityNotesBlockInDefaults(ctx); err != nil {
 			slog.Warn("entity_types: player-notes block backfill failed", slog.Any("error", err))
-			return
-		}
-		if n > 0 {
+		} else if n > 0 {
 			slog.Info("entity_types: player-notes block backfill added to layouts", slog.Int("rows", n))
 		}
+
+		// Converge gm_only field flags from installed system manifests onto
+		// existing types so the GM-field egress filter (audit M-1) covers
+		// characters created before the manifest carried gm_only.
+		reconcileFieldGMFlags(ctx, entityService)
 	}()
 
 	// Campaigns plugin: CRUD, membership, ownership transfer.
@@ -1976,6 +1979,12 @@ func (a *App) RegisterRoutes() {
 		freshRegistry := entities.NewEntityShowRendererRegistry()
 		registerManifestRenderers(freshRegistry)
 		entities.SetGlobalEntityShowRendererRegistry(freshRegistry)
+
+		// Converge gm_only field flags now that the freshly installed/updated
+		// manifest is in the registry, so an updated system that newly marks a
+		// field gm_only (audit M-1) takes effect on existing types without a
+		// restart — mirrors the boot-time reconcile.
+		reconcileFieldGMFlags(context.Background(), entityService)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	// Fail-loud installs: run the FULL loader-grade manifest validation at

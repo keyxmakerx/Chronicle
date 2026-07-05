@@ -12,17 +12,18 @@ import (
 
 // mockEntityTypeRepo implements EntityTypeRepository for testing.
 type mockEntityTypeRepo struct {
-	findByIDFn       func(ctx context.Context, id int) (*EntityType, error)
-	findBySlugFn     func(ctx context.Context, campaignID, slug string) (*EntityType, error)
-	listByCampaignFn func(ctx context.Context, campaignID string) ([]EntityType, error)
-	listAllFn        func(ctx context.Context) ([]EntityType, error)
-	updateLayoutFn   func(ctx context.Context, id int, layoutJSON string) error
-	seedDefaultsFn   func(ctx context.Context, campaignID string) error
-	createFn         func(ctx context.Context, et *EntityType) error
-	updateFn         func(ctx context.Context, et *EntityType) error
-	deleteFn         func(ctx context.Context, id int) error
-	slugExistsFn     func(ctx context.Context, campaignID, slug string) (bool, error)
-	maxSortOrderFn   func(ctx context.Context, campaignID string) (int, error)
+	findByIDFn           func(ctx context.Context, id int) (*EntityType, error)
+	findBySlugFn         func(ctx context.Context, campaignID, slug string) (*EntityType, error)
+	listByCampaignFn     func(ctx context.Context, campaignID string) ([]EntityType, error)
+	listAllFn            func(ctx context.Context) ([]EntityType, error)
+	updateLayoutFn       func(ctx context.Context, id int, layoutJSON string) error
+	updateFieldsSchemaFn func(ctx context.Context, id int, fieldsJSON string) error
+	seedDefaultsFn       func(ctx context.Context, campaignID string) error
+	createFn             func(ctx context.Context, et *EntityType) error
+	updateFn             func(ctx context.Context, et *EntityType) error
+	deleteFn             func(ctx context.Context, id int) error
+	slugExistsFn         func(ctx context.Context, campaignID, slug string) (bool, error)
+	maxSortOrderFn       func(ctx context.Context, campaignID string) (int, error)
 
 	moveEntitiesAndDeleteTypeFn func(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 }
@@ -73,6 +74,13 @@ func (m *mockEntityTypeRepo) ListByPresetCategory(ctx context.Context, campaignI
 func (m *mockEntityTypeRepo) UpdateLayout(ctx context.Context, id int, layoutJSON string) error {
 	if m.updateLayoutFn != nil {
 		return m.updateLayoutFn(ctx, id, layoutJSON)
+	}
+	return nil
+}
+
+func (m *mockEntityTypeRepo) UpdateFieldsSchema(ctx context.Context, id int, fieldsJSON string) error {
+	if m.updateFieldsSchemaFn != nil {
+		return m.updateFieldsSchemaFn(ctx, id, fieldsJSON)
 	}
 	return nil
 }
