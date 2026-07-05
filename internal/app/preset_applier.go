@@ -160,6 +160,10 @@ func mapPresetFields(fields []systems.FieldDef) []entities.FieldDefinition {
 			Key:   f.Key,
 			Label: f.Label,
 			Type:  mapPresetFieldType(f.Type),
+			// Carry the GM-only marker onto the stored field def so the
+			// egress filter can strip GM secrets for non-GM callers
+			// (C-FIELDS-GM-FILTER / M-1).
+			GMOnly: f.GMOnly,
 		})
 	}
 	return out
@@ -183,5 +187,56 @@ func mapPresetFieldType(t string) string {
 		return "url"
 	default: // "string" and anything unrecognized
 		return "text"
+	}
+}
+
+// buildGMFlagsByCategory reads every installed system manifest and returns a
+// (preset-category → field-key → gm_only) map of the declared GM-only field
+// flags. Every declared field key is recorded (including gm_only=false) so
+// the reconciler converges in BOTH directions — a manifest can newly mark a
+// field gm_only, or un-mark one. On the rare key collision across two systems
+// sharing a preset category, the last manifest wins (keys are normally
+// system-specific). Nil-safe.
+func buildGMFlagsByCategory() map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	for _, m := range systems.Registry() {
+		if m == nil {
+			continue
+		}
+		for _, preset := range m.EntityPresets {
+			cat := preset.Category
+			if cat == "" {
+				continue
+			}
+			for _, f := range preset.Fields {
+				if out[cat] == nil {
+					out[cat] = map[string]bool{}
+				}
+				out[cat][f.Key] = f.GMOnly
+			}
+		}
+	}
+	return out
+}
+
+// reconcileFieldGMFlags stamps the gm_only field flags declared by installed
+// system manifests onto existing entity types (audit M-1 convergence). This
+// is what makes the GM-field egress filter effective for characters created
+// BEFORE the system's manifest carried gm_only — the flag isn't on their
+// stored field defs until this runs. Idempotent; safe at boot and after a
+// system package install/update. Best-effort: logs and returns on error so a
+// reconcile hiccup never blocks boot or an install.
+func reconcileFieldGMFlags(ctx context.Context, entityService entities.EntityService) {
+	flags := buildGMFlagsByCategory()
+	if len(flags) == 0 {
+		return
+	}
+	n, err := entityService.SyncFieldGMFlags(ctx, flags)
+	if err != nil {
+		slog.Warn("entity_types: gm-flag field sync failed", slog.Any("error", err))
+		return
+	}
+	if n > 0 {
+		slog.Info("entity_types: gm-flag field sync updated types", slog.Int("rows", n))
 	}
 }

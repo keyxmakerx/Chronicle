@@ -295,6 +295,14 @@ type FieldDefinition struct {
 	Type    string   `json:"type"`    // Input type: text, number, select, textarea, checkbox, url.
 	Section string   `json:"section"` // Grouping for display (e.g., "Basics", "Appearance").
 	Options []string `json:"options"` // Valid values for select fields. Empty for other types.
+	// GMOnly marks the field's VALUE as GM-only: it is stripped from
+	// fields_data in entity API responses to non-GM (player / public)
+	// callers, so GM secrets never reach a player's browser (server is the
+	// authority; a client-side hide is not a fix). Absent/false =
+	// player-visible. Populated from a system manifest's gm_only annotation
+	// via preset application + EnsureFieldMetadataFromManifests. See
+	// C-FIELDS-GM-FILTER / audit M-1.
+	GMOnly bool `json:"gm_only,omitempty"`
 }
 
 // Entity represents a single worldbuilding object — a character, location,

@@ -25,7 +25,7 @@ func TestCharacterSurfaceSchemaJSON(t *testing.T) {
 		FieldsData: map[string]any{"might": 2, "agility": 1, "bond": "The company", "blank": ""},
 	}
 
-	out := CharacterSurfaceSchemaJSON(ent, et, "c1", "csrf-tok", true)
+	out := CharacterSurfaceSchemaJSON(ent, et, "c1", "csrf-tok", true, true)
 
 	var schema map[string]any
 	if err := json.Unmarshal([]byte(out), &schema); err != nil {
@@ -70,15 +70,43 @@ func TestCharacterSurfaceSchemaJSON(t *testing.T) {
 // a <script> tag — json.Marshal escapes '<', so no literal </script> survives.
 func TestCharacterSurfaceSchemaJSON_ScriptSafe(t *testing.T) {
 	ent := &Entity{ID: "e1", Name: "</script><script>alert(1)</script>", FieldsData: map[string]any{}}
-	out := CharacterSurfaceSchemaJSON(ent, &EntityType{}, "c1", "", false)
+	out := CharacterSurfaceSchemaJSON(ent, &EntityType{}, "c1", "", false, false)
 	if strings.Contains(out, "</script>") {
 		t.Fatalf("schema must not contain a literal </script>; got: %s", out)
 	}
 }
 
+// TestCharacterSurfaceSchemaJSON_StripsGMFieldsForNonGM pins that the
+// server-rendered character sheet omits gm_only field values for a non-GM
+// viewer (audit M-1) and keeps them for a GM.
+func TestCharacterSurfaceSchemaJSON_StripsGMFieldsForNonGM(t *testing.T) {
+	et := &EntityType{Fields: []FieldDefinition{
+		{Key: "might", Label: "Might", Section: "Stats"},
+		{Key: "gm_notes", Label: "GM Notes", Section: "Director", GMOnly: true},
+	}}
+	ent := &Entity{ID: "e1", Name: "Hero", FieldsData: map[string]any{
+		"might": 3, "gm_notes": "the-villain-is-his-father",
+	}}
+
+	// Player (canSeeGM=false): the gm_only field and its value must be absent.
+	player := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false)
+	if strings.Contains(player, "the-villain-is-his-father") || strings.Contains(player, "GM Notes") {
+		t.Errorf("player seed must omit the gm_only field + value; got %s", player)
+	}
+	if !strings.Contains(player, "Might") {
+		t.Errorf("player seed must still include normal fields; got %s", player)
+	}
+
+	// GM (canSeeGM=true): the gm_only value is present.
+	gm := CharacterSurfaceSchemaJSON(ent, et, "c1", "", true, true)
+	if !strings.Contains(gm, "the-villain-is-his-father") {
+		t.Errorf("GM seed must include the gm_only value; got %s", gm)
+	}
+}
+
 // TestCharacterSurfaceSchemaJSON_NilEntity degrades to an empty object.
 func TestCharacterSurfaceSchemaJSON_NilEntity(t *testing.T) {
-	if got := CharacterSurfaceSchemaJSON(nil, nil, "c1", "", false); got != "{}" {
+	if got := CharacterSurfaceSchemaJSON(nil, nil, "c1", "", false, false); got != "{}" {
 		t.Errorf("nil entity = %q, want {}", got)
 	}
 }

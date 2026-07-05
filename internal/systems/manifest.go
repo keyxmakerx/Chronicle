@@ -189,6 +189,15 @@ type FieldDef struct {
 	// Type is the field data type: "string", "number", "list", "markdown".
 	Type string `json:"type"`
 
+	// GMOnly marks a field as GM-only: its VALUE is stripped from entity
+	// API responses served to non-GM (player / public) callers, so GM
+	// secrets like a statblock's director notes never reach a player's
+	// browser. Absent/false = player-visible (backward-compatible default).
+	// The systems tier only DECLARES this; core enforces it at egress
+	// (C-FIELDS-GM-FILTER / audit M-1). It flows to the entity type's stored
+	// field defs via preset application + the field-metadata reconciler.
+	GMOnly bool `json:"gm_only,omitempty"`
+
 	// FoundryPath is the dot-notation path to the corresponding field in
 	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
 	// Used by the generic Foundry adapter to auto-generate field mappings.

@@ -172,6 +172,16 @@ type EntityService interface {
 	// count of types updated. Idempotent; safe to call on every boot.
 	EnsureEntityNotesBlockInDefaults(ctx context.Context) (int, error)
 
+	// SyncFieldGMFlags re-stamps the GMOnly flag on stored entity-type field
+	// definitions from a caller-supplied (preset-category → field-key →
+	// gm_only) map, so a system manifest that newly marks a field gm_only
+	// propagates onto already-created types (audit M-1 convergence).
+	// System-agnostic: the app layer builds the map from installed manifests;
+	// core just applies it. Touches only the fields column (never layout), so
+	// it can't race the layout backfills. Idempotent; safe at boot and after
+	// package install. Returns the count of types updated.
+	SyncFieldGMFlags(ctx context.Context, gmByCategory map[string]map[string]bool) (int, error)
+
 	// BulkUpdateType changes the entity type for multiple entities at once.
 	// Returns the count of successfully updated entities. Validates that the
 	// target type belongs to the campaign and each entity is campaign-scoped.
@@ -2624,6 +2634,61 @@ func (s *entityService) EnsureEntityNotesBlockInDefaults(ctx context.Context) (i
 				slog.Int("entity_type_id", et.ID),
 				slog.Any("error", uErr),
 			)
+			continue
+		}
+		updated++
+	}
+	return updated, nil
+}
+
+// SyncFieldGMFlags re-stamps FieldDefinition.GMOnly on stored entity types
+// from a (preset-category → field-key → gm_only) map. This is the M-1
+// convergence step: when a system manifest newly marks a field gm_only (e.g.
+// Draw Steel's gm_notes), preset application only stamps NEW types, so this
+// walks every existing type whose preset category is in the map and flips
+// the flag on any field whose key the manifest marks. Core stays
+// system-agnostic — it applies whatever flags the app-built map carries, no
+// system-specific keys here. Only the fields column is written (never
+// layout_json), so this never races the layout backfills. Idempotent — a
+// type is written only when a flag actually changes. Best-effort per row.
+func (s *entityService) SyncFieldGMFlags(ctx context.Context, gmByCategory map[string]map[string]bool) (int, error) {
+	if s.types == nil || len(gmByCategory) == 0 {
+		return 0, nil
+	}
+	types, err := s.types.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("listing entity types for gm-flag sync: %w", err)
+	}
+
+	updated := 0
+	for i := range types {
+		et := &types[i]
+		if et.PresetCategory == nil || *et.PresetCategory == "" {
+			continue
+		}
+		keyGM, ok := gmByCategory[*et.PresetCategory]
+		if !ok {
+			continue
+		}
+		changed := false
+		for j := range et.Fields {
+			if want, has := keyGM[et.Fields[j].Key]; has && et.Fields[j].GMOnly != want {
+				et.Fields[j].GMOnly = want
+				changed = true
+			}
+		}
+		if !changed {
+			continue
+		}
+		fieldsJSON, mErr := json.Marshal(et.Fields)
+		if mErr != nil {
+			slog.Warn("gm-flag sync: failed to marshal fields",
+				slog.Int("entity_type_id", et.ID), slog.Any("error", mErr))
+			continue
+		}
+		if uErr := s.types.UpdateFieldsSchema(ctx, et.ID, string(fieldsJSON)); uErr != nil {
+			slog.Warn("gm-flag sync: failed to update fields",
+				slog.Int("entity_type_id", et.ID), slog.Any("error", uErr))
 			continue
 		}
 		updated++
