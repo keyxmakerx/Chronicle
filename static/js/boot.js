@@ -255,9 +255,45 @@
   // Active/inactive CSS classes on sidebar links must be updated client-side
   // after the URL changes. Uses longest-prefix-match to highlight the most
   // specific matching link.
+  //
+  // The active-only / inactive-only class tokens are read from #sidebar's
+  // data-nav-active-classes / data-nav-inactive-classes attributes, which the
+  // server populates from the SAME Go string constants used to build every nav
+  // link's class list (sidebarNavActive / sidebarNavInactive in
+  // layouts/app.templ) -- the single source of truth. A past nav redesign
+  // changed those server classes without updating a hardcoded copy that used
+  // to live here, so a boosted nav re-applied a class vocabulary the server no
+  // longer used: the just-left link kept its stale "active" classes (never
+  // removed, since they weren't in the old INACTIVE_CLASSES list either) while
+  // the newly-active link only got a partial set (missing the actual
+  // border/glow classes) -- the "wrong / doubled active nav item" bug
+  // (C-NAV-ACTIVE-FIX). FALLBACK_* below only covers a #sidebar missing the
+  // data attributes (e.g. very old cached HTML mid-deploy) and must be kept in
+  // sync by hand if that path is ever actually exercised.
+  var FALLBACK_ACTIVE_CLASSES = ['sidebar-nav-active', 'text-sidebar-active', 'border-accent'];
+  var FALLBACK_INACTIVE_CLASSES = ['text-sidebar-text', 'hover:text-sidebar-active'];
 
-  var ACTIVE_CLASSES = ['bg-sidebar-hover', 'text-sidebar-active'];
-  var INACTIVE_CLASSES = ['text-sidebar-text', 'hover:bg-sidebar-hover', 'hover:text-sidebar-active'];
+  var _navActiveClasses = null;
+  var _navInactiveClasses = null;
+
+  /**
+   * Resolve (and cache) the active-only / inactive-only nav link class lists
+   * from #sidebar's data attributes. Cached after first resolution since the
+   * attributes never change for the life of the page (the sidebar itself is
+   * never re-rendered by a boosted nav).
+   *
+   * @param {Element} sidebar - The #sidebar element.
+   * @returns {{active: string[], inactive: string[]}}
+   */
+  function getNavClassVocabulary(sidebar) {
+    if (!_navActiveClasses || !_navInactiveClasses) {
+      var activeAttr = sidebar.getAttribute('data-nav-active-classes');
+      var inactiveAttr = sidebar.getAttribute('data-nav-inactive-classes');
+      _navActiveClasses = activeAttr ? activeAttr.split(/\s+/).filter(Boolean) : FALLBACK_ACTIVE_CLASSES;
+      _navInactiveClasses = inactiveAttr ? inactiveAttr.split(/\s+/).filter(Boolean) : FALLBACK_INACTIVE_CLASSES;
+    }
+    return { active: _navActiveClasses, inactive: _navInactiveClasses };
+  }
 
   /**
    * Update sidebar navigation link active/inactive CSS classes
@@ -267,6 +303,10 @@
     var path = window.location.pathname;
     var sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
+
+    var navClasses = getNavClassVocabulary(sidebar);
+    var ACTIVE_CLASSES = navClasses.active;
+    var INACTIVE_CLASSES = navClasses.inactive;
 
     // Collect all nav links (skip category drill-down links).
     var links = sidebar.querySelectorAll('a');
