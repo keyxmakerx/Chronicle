@@ -165,7 +165,9 @@ func TestLedgerRows_RecurringExpandsAcrossYear(t *testing.T) {
 
 // TestLedgerRows_MultiDaySpillFromPriorYear: a span that started in a prior
 // year but reaches into the displayed year surfaces anchored on the year's
-// first day (no cross-year rendering; that's W2).
+// first day. NOTE: this exercises ledgerRows directly — with W1's data layer
+// the repo never returns non-recurring prior-year rows, so this branch is
+// defensive until W2's multi-year query (see ledgerMultiDayAnchor's comment).
 func TestLedgerRows_MultiDaySpillFromPriorYear(t *testing.T) {
 	events := []Event{
 		{
@@ -359,5 +361,38 @@ func TestLedgerView_YearNav(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("ledger nav missing %q", want)
 		}
+	}
+}
+
+// TestLedgerYearWindowEnd_LeapAware pins the handler's one-year SQL window
+// boundary (the coordinator-review defect): a calendar whose LAST month gains
+// LeapYearDays must extend the window end on leap years, or events stored on
+// the trailing leap days silently vanish from the Ledger while ledgerRows
+// still iterates those days.
+func TestLedgerYearWindowEnd_LeapAware(t *testing.T) {
+	cal := ledgerTestCalendar()
+	last := len(cal.Months) - 1
+	cal.Months[last].LeapYearDays = 2
+	cal.LeapYearEvery = 4
+	cal.LeapYearOffset = 0
+
+	// Non-leap year: base days only.
+	m, d := ledgerYearWindowEnd(cal, 1491)
+	if m != len(cal.Months) || d != cal.Months[last].Days {
+		t.Fatalf("non-leap: expected (%d,%d); got (%d,%d)", len(cal.Months), cal.Months[last].Days, m, d)
+	}
+
+	// Leap year: the trailing leap days are inside the window.
+	m, d = ledgerYearWindowEnd(cal, 1492)
+	want := cal.Months[last].Days + 2
+	if m != len(cal.Months) || d != want {
+		t.Fatalf("leap: expected (%d,%d); got (%d,%d)", len(cal.Months), want, m, d)
+	}
+
+	// Degenerate: no months.
+	empty := &Calendar{}
+	m, d = ledgerYearWindowEnd(empty, 1491)
+	if m != 0 || d != 1 {
+		t.Fatalf("empty calendar: expected (0,1); got (%d,%d)", m, d)
 	}
 }
