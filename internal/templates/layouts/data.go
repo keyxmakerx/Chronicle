@@ -589,6 +589,42 @@ func SetAccentColor(ctx context.Context, color string) context.Context {
 	return context.WithValue(ctx, keyAccentColor, color)
 }
 
+// keyAccentSurface1/2 hold the campaign's surface-pair accents (C-ACCENT-TRIO
+// rev 2, cordinator design D14 rev): slot 1 stays the chrome accent above;
+// these two are consumed by themed content surfaces as primary/secondary via
+// --color-accent-surface-1/2 tokens. Unset = surfaces fall back to the chrome
+// accent through var(..., var(--color-accent)) chains at the consumer.
+const (
+	keyAccentSurface1 ctxKey = "layout_accent_surface_1"
+	keyAccentSurface2 ctxKey = "layout_accent_surface_2"
+)
+
+// SetAccentSurface stores a surface-pair accent (slot 1 or 2) in the context.
+// Any other slot value is ignored — the trio is a fixed vocabulary, not a list.
+func SetAccentSurface(ctx context.Context, slot int, color string) context.Context {
+	switch slot {
+	case 1:
+		return context.WithValue(ctx, keyAccentSurface1, color)
+	case 2:
+		return context.WithValue(ctx, keyAccentSurface2, color)
+	}
+	return ctx
+}
+
+// GetAccentSurface returns the surface-pair accent for slot 1 or 2, or empty
+// string when unset (consumers then inherit the chrome accent via CSS fallback).
+func GetAccentSurface(ctx context.Context, slot int) string {
+	switch slot {
+	case 1:
+		color, _ := ctx.Value(keyAccentSurface1).(string)
+		return color
+	case 2:
+		color, _ := ctx.Value(keyAccentSurface2).(string)
+		return color
+	}
+	return ""
+}
+
 // GetAccentColor returns the campaign's custom accent color, or empty string for default.
 func GetAccentColor(ctx context.Context) string {
 	color, _ := ctx.Value(keyAccentColor).(string)
@@ -599,23 +635,39 @@ func GetAccentColor(ctx context.Context) string {
 // properties. It computes hover (darker) and light (lighter) variants from the
 // base hex color. Returns empty string if no accent is set.
 func AccentColorCSS(ctx context.Context) string {
-	base := GetAccentColor(ctx)
+	// Chrome slot (slot 1). Its emission is byte-identical to the pre-trio
+	// implementation — campaigns that never touch the surface pair must render
+	// EXACTLY the CSS they rendered before (pinned by TestAccentColorCSS_*).
+	css := accentSlotCSS("--color-accent", GetAccentColor(ctx))
+	// Surface pair (slots 2+3, C-ACCENT-TRIO rev 2). Unset slots emit nothing —
+	// consumers inherit chrome via var(--color-accent-surface-N, var(--color-accent)).
+	css += accentSlotCSS("--color-accent-surface-1", GetAccentSurface(ctx, 1))
+	css += accentSlotCSS("--color-accent-surface-2", GetAccentSurface(ctx, 2))
+	return css
+}
+
+// accentSlotCSS renders one accent slot's :root block: the base color plus
+// derived hover (12% darken) and light (60% white-blend) variants and their
+// RGB triples. The derivation is shared by all three slots so they can never
+// drift (C-ACCENT-TRIO stop-and-flag: one derivation, no forks). Empty base
+// emits nothing; a non-#RRGGBB base passes through without variants (legacy
+// behavior for hand-entered values the picker never produces).
+func accentSlotCSS(varName, base string) string {
 	if base == "" {
 		return ""
 	}
 	r, g, b, ok := parseHex(base)
 	if !ok {
-		return fmt.Sprintf(":root{--color-accent:%s;}", base)
+		return fmt.Sprintf(":root{%s:%s;}", varName, base)
 	}
 	// Hover: darken by ~12%
 	hr, hg, hb := clampByte(int(float64(r)*0.88)), clampByte(int(float64(g)*0.88)), clampByte(int(float64(b)*0.88))
 	// Light: blend toward white by ~60%
 	lr, lg, lb := clampByte(int(float64(r)+float64(255-r)*0.6)), clampByte(int(float64(g)+float64(255-g)*0.6)), clampByte(int(float64(b)+float64(255-b)*0.6))
 	return fmt.Sprintf(
-		":root{--color-accent:%s;--color-accent-hover:#%02x%02x%02x;--color-accent-light:#%02x%02x%02x;"+
-			"--color-accent-rgb:%d %d %d;--color-accent-hover-rgb:%d %d %d;--color-accent-light-rgb:%d %d %d;}",
-		base, hr, hg, hb, lr, lg, lb,
-		r, g, b, hr, hg, hb, lr, lg, lb,
+		":root{%[1]s:%[2]s;%[1]s-hover:#%02[3]x%02[4]x%02[5]x;%[1]s-light:#%02[6]x%02[7]x%02[8]x;"+
+			"%[1]s-rgb:%[9]d %[10]d %[11]d;%[1]s-hover-rgb:%[3]d %[4]d %[5]d;%[1]s-light-rgb:%[6]d %[7]d %[8]d;}",
+		varName, base, hr, hg, hb, lr, lg, lb, r, g, b,
 	)
 }
 

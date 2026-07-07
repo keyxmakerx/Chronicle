@@ -464,8 +464,12 @@ templ calendarV2ViewSwitcher(cc *campaigns.CampaignContext, data CalendarV2ViewD
 
 templ calendarV2ViewPill(data CalendarV2ViewData, view, label string) {
 	if data.View == view {
+		// Active pill reads the surface-pair primary (C-ACCENT-TRIO rev 2 —
+		// first content-surface consumer); the var() fallback chain keeps
+		// campaigns without surface accents rendering exactly as before.
 		<span
-			class="px-3 py-1 text-xs font-medium bg-accent text-white"
+			class="px-3 py-1 text-xs font-medium text-white"
+			style="background: var(--color-accent-surface-1, var(--color-accent, #6366f1));"
 			role="tab"
 			aria-selected="true"
 		>{ label }</span>

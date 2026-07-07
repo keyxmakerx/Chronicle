@@ -563,7 +563,9 @@ func (c *Campaign) ParseOwnerDashboardLayout() *DashboardLayout {
 // CampaignSettings holds campaign-level configuration stored as JSON in
 // the campaigns.settings column. Accent color, display preferences, etc.
 type CampaignSettings struct {
-	AccentColor       string       `json:"accent_color,omitempty"`        // Hex color, e.g. "#6366f1".
+	AccentColor       string       `json:"accent_color,omitempty"`        // Hex color, e.g. "#6366f1". Slot 1 "Chrome": header + nav + global interactive (C-ACCENT-TRIO rev 2).
+	AccentSurface1    string       `json:"accent_surface_1,omitempty"`    // Surface-pair accent A (primary) for themed content surfaces. Empty = inherit AccentColor (cordinator design D14 rev).
+	AccentSurface2    string       `json:"accent_surface_2,omitempty"`    // Surface-pair accent B (secondary). Empty = inherit AccentColor.
 	DmGrantIDs        []string     `json:"dm_grant_ids,omitempty"`        // User IDs granted dm_only visibility.
 	BrandName         string       `json:"brand_name,omitempty"`          // Custom sidebar brand name (replaces campaign name).
 	BrandLogo         string       `json:"brand_logo,omitempty"`          // Media path for brand logo image.
