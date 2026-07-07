@@ -162,7 +162,7 @@
                 open();
                 return;
             }
-            // Navigation shortcuts: t / j / k / m / w / d / n / /
+            // Navigation shortcuts: t / j / k / m / w / d / l / n / /
             // Map to existing UI affordances.
             var calendarID = root.dataset.calV2CalendarId;
             var campaignID = root.dataset.calV2CampaignId;
@@ -178,12 +178,14 @@
                     break;
                 case 'j':
                 case 'ArrowLeft':
-                    clickByLabel('Previous month', 'Previous week', 'Previous day');
+                    // 'Previous year' covers the Timeline (Ledger) view, which
+                    // steps by year (C-CAL-TIMELINE-V2-W1).
+                    clickByLabel('Previous month', 'Previous week', 'Previous day', 'Previous year');
                     if (e.key === 'j') e.preventDefault();
                     break;
                 case 'k':
                 case 'ArrowRight':
-                    clickByLabel('Next month', 'Next week', 'Next day');
+                    clickByLabel('Next month', 'Next week', 'Next day', 'Next year');
                     if (e.key === 'k') e.preventDefault();
                     break;
                 case 'm':
@@ -194,6 +196,12 @@
                     break;
                 case 'd':
                     window.location.href = path + '/day';
+                    break;
+                case 'l':
+                    // 'l' → Timeline (Ledger) view. Route segment is 'ledger'
+                    // (the design name) to avoid the timeline-plugin slug
+                    // collision (C-CAL-TIMELINE-V2-W1).
+                    window.location.href = path + '/ledger';
                     break;
                 case 'n':
                     var firstCellAdd = document.querySelector('[data-cell-add-event]');

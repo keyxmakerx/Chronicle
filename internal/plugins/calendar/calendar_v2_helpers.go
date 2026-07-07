@@ -81,6 +81,15 @@ func v2ViewNavHref(data CalendarV2ViewData, delta int) templ.SafeURL {
 func v2Step(data CalendarV2ViewData, dir int) (int, int, int) {
 	year, month, day := data.Year, data.Month, data.Day
 	switch data.View {
+	case "ledger":
+		// The Ledger (Timeline V2's 4th view) shows a whole displayed year, so
+		// prev/next step by YEAR. The month/day cursor is preserved so switching
+		// back to Month/Week/Day lands where you were. The route segment is
+		// "ledger" (the design name) rather than the arc name so it doesn't
+		// collide with the timeline plugin's slug under the plugin-isolation
+		// guard (§T-B2).
+		year += dir
+		return year, month, day
 	case "month":
 		month += dir
 		if month < 1 {

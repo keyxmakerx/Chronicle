@@ -226,6 +226,8 @@ templ shortcutsModalV2() {
 				<dd class="text-fg-secondary">Week view</dd>
 				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">d</kbd></dt>
 				<dd class="text-fg-secondary">Day view</dd>
+				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">l</kbd></dt>
+				<dd class="text-fg-secondary">Timeline view</dd>
 				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">n</kbd></dt>
 				<dd class="text-fg-secondary">New event</dd>
 				<dt><kbd class="px-1.5 py-0.5 rounded border border-edge bg-surface-2 text-xs">/</kbd></dt>
@@ -327,6 +329,8 @@ templ calendarV2View(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 				@weekViewPlaceholder(data)
 			case "day":
 				@dayViewPlaceholder(data)
+			case "ledger":
+				@ledgerView(data)
 			default:
 				@monthViewPlaceholder(data)
 		}
@@ -440,9 +444,11 @@ templ calendarV2Switcher(cc *campaigns.CampaignContext, data CalendarV2ViewData)
 	}
 }
 
-// calendarV2ViewSwitcher renders the Month/Week/Day pill group. Year
-// view is intentionally absent per Q-V2-8 ratification (anti-pattern
-// per V2 audit §2). Each pill links to the corresponding view route.
+// calendarV2ViewSwitcher renders the Month/Week/Day/Timeline pill group.
+// A calendar-grid "Year" view is intentionally absent per Q-V2-8
+// ratification (anti-pattern per V2 audit §2); the Timeline pill is the
+// Ledger chronology (C-CAL-TIMELINE-V2-W1), not a year grid. Each pill
+// links to the corresponding view route.
 templ calendarV2ViewSwitcher(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 	if data.ActiveCalendar == nil {
 		// No calendar = no view switcher.
@@ -451,6 +457,7 @@ templ calendarV2ViewSwitcher(cc *campaigns.CampaignContext, data CalendarV2ViewD
 			@calendarV2ViewPill(data, "month", "Month")
 			@calendarV2ViewPill(data, "week", "Week")
 			@calendarV2ViewPill(data, "day", "Day")
+			@calendarV2ViewPill(data, "ledger", "Timeline")
 		</div>
 	}
 }
@@ -697,6 +704,107 @@ templ weekViewPlaceholder(data CalendarV2ViewData) {
 				}
 			</div>
 		</div>
+	</div>
+}
+
+// ledgerView renders the Timeline Ledger — the calendar's 4th V2 view
+// (C-CAL-TIMELINE-V2-W1). It's the displayed year as the world's own
+// chronicle: an era header band → a year gutter → dense, scannable event
+// rows. Server-rendered on Tailwind tokens (the demo's isolated OKLCH CSS is
+// NOT reused); rows carry data-event-card/data-event-id so a click opens the
+// SAME event drawer the month grid uses (event_grid.js), no new endpoint.
+//
+// The row set comes from the same pre-filtered events the month grid receives
+// (filterEventsByUser runs in the service) — dm_only rows never reach players,
+// so the lock annotation only ever renders for GMs. Prev/next step by YEAR
+// (v2Step "ledger"). Weather glyphs + the worldstate band are W2+ and absent.
+templ ledgerView(data CalendarV2ViewData) {
+	<div class="card card-elev-static p-4" data-ledger-view="true">
+		<div class="flex items-center justify-between mb-3">
+			<h2 class="text-lg font-semibold text-fg">{ ledgerHeading(data) }</h2>
+			<div class="flex items-center gap-1">
+				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous year">
+					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+				</a>
+				<a href={ v2ViewNavHref(data, 0) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro">Today</a>
+				<a href={ v2ViewNavHref(data, 1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Next year">
+					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+				</a>
+			</div>
+		</div>
+		{{ eras := ledgerEraGroups(data) }}
+		if ledgerIsEmpty(eras) {
+			<div class="text-center py-12 text-fg-secondary">
+				<i class="fa-solid fa-book text-3xl mb-2 opacity-50" aria-hidden="true"></i>
+				<p class="text-sm">No recorded events in { ledgerYearLabel(data) }.</p>
+			</div>
+		} else {
+			<div class="rounded-lg border border-edge overflow-hidden">
+				for _, era := range eras {
+					if era.Name != "" {
+						<div
+							class="flex items-center gap-2 px-4 py-2 border-t border-edge first:border-t-0 text-sm font-semibold text-fg"
+							style={ ledgerEraBandStyle(era.Color) }
+						>
+							<span class="truncate">{ era.Name }</span>
+							if era.Span != "" {
+								<span class="text-xs font-normal text-fg-secondary font-mono">{ era.Span }</span>
+							}
+						</div>
+					}
+					for _, yr := range era.Years {
+						<div class="flex border-t border-edge first:border-t-0">
+							<div class="flex-none w-24 px-4 py-2.5 text-xs font-semibold font-mono text-accent">{ yr.Label }</div>
+							<div class="flex-1 min-w-0 border-l border-edge">
+								if len(yr.Rows) == 0 {
+									<div class="px-4 py-2.5 text-xs text-fg-secondary italic">No events</div>
+								}
+								for _, r := range yr.Rows {
+									@ledgerRow(r)
+								}
+							</div>
+						</div>
+					}
+				}
+			</div>
+		}
+	</div>
+}
+
+// ledgerRow renders one event occurrence as a Ledger row: date · category dot
+// · tier-weighted title · optional span bar · category chip · entity tie ·
+// dm_only lock. The whole row is a data-event-card so event_grid.js opens the
+// existing drawer on click (Scribe) / read view — no Ledger-specific JS.
+templ ledgerRow(r ledgerRowData) {
+	<div
+		class="flex items-center gap-2.5 px-4 py-1.5 border-t border-edge/60 first:border-t-0 cursor-pointer hover:bg-surface-2 transition-colors duration-micro"
+		data-event-card="ledger"
+		data-event-id={ r.EventID }
+		role="button"
+		tabindex="0"
+		aria-label={ "Event: " + r.Title }
+	>
+		<span class="flex-none w-20 text-[11px] font-mono text-fg-secondary">{ r.DateLabel }</span>
+		if r.CatColor != "" {
+			<span class="flex-none w-2 h-2 rounded-full" style={ ledgerDotStyle(r.CatColor) } aria-hidden="true"></span>
+		} else {
+			<span class="flex-none w-2 h-2 rounded-full bg-fg-secondary/40" aria-hidden="true"></span>
+		}
+		<span class={ ledgerTitleClasses(r.Tier) }>{ r.Title }</span>
+		if r.Span {
+			<span class="flex-none w-12 h-1.5 rounded-full bg-accent/70" aria-hidden="true" title="Multi-day event"></span>
+		}
+		if r.CatName != "" {
+			<span class="flex-none text-[10px] px-2 py-0.5 rounded-full bg-surface-2 text-fg-secondary whitespace-nowrap">{ r.CatName }</span>
+		}
+		if r.EntityName != "" {
+			<span class="flex-none text-[10px] text-accent whitespace-nowrap truncate max-w-[10rem]">{ "@" + r.EntityName }</span>
+		}
+		if r.DMOnly {
+			<span class="flex-none text-[10px] text-fg-secondary" title="DM only" aria-label="DM only">
+				<i class="fa-solid fa-lock" aria-hidden="true"></i>
+			</span>
+		}
 	</div>
 }
 
