@@ -52,6 +52,9 @@ type CampaignService interface {
 	// Backdrop and branding
 	UpdateBackdropPath(ctx context.Context, campaignID string, path *string) error
 	UpdateAccentColor(ctx context.Context, campaignID string, color string) error
+	// UpdateAccentSurface sets a surface-pair accent (slot 1 or 2, C-ACCENT-TRIO
+	// rev 2); empty color resets the slot to inherit the chrome accent.
+	UpdateAccentSurface(ctx context.Context, campaignID string, slot int, color string) error
 	// UpdateBranding sets the campaign's custom brand name and logo path.
 	UpdateBranding(ctx context.Context, campaignID, brandName, brandLogo string) error
 	// UpdateTopbarStyle sets the campaign's topbar visual customization.
@@ -741,6 +744,35 @@ func (s *campaignService) UpdateAccentColor(ctx context.Context, campaignID stri
 
 	settings := campaign.ParseSettings()
 	settings.AccentColor = color
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// UpdateAccentSurface sets one of the campaign's surface-pair accents
+// (C-ACCENT-TRIO rev 2, slot 1 or 2). Same contract as UpdateAccentColor:
+// hex color string or empty to reset (the surface then inherits the chrome
+// accent via CSS fallback at consumers). Load-merge-write on settings JSON.
+func (s *campaignService) UpdateAccentSurface(ctx context.Context, campaignID string, slot int, color string) error {
+	if slot != 1 && slot != 2 {
+		return apperror.NewBadRequest("invalid accent surface slot")
+	}
+
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	if slot == 1 {
+		settings.AccentSurface1 = color
+	} else {
+		settings.AccentSurface2 = color
+	}
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {

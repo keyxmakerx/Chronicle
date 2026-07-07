@@ -619,11 +619,29 @@ func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
 	}
 
-	if err := h.service.UpdateAccentColor(c.Request().Context(), cc.Campaign.ID, color); err != nil {
-		return err
+	// Optional slot selects a surface-pair accent (C-ACCENT-TRIO rev 2):
+	// "" = the chrome accent (legacy behavior, unchanged), "1"/"2" = the
+	// surface pair. Extending this endpoint instead of adding a route keeps
+	// routes_snapshot.txt untouched.
+	slot := c.FormValue("slot")
+	switch slot {
+	case "":
+		if err := h.service.UpdateAccentColor(c.Request().Context(), cc.Campaign.ID, color); err != nil {
+			return err
+		}
+	case "1", "2":
+		slotNum := 1
+		if slot == "2" {
+			slotNum = 2
+		}
+		if err := h.service.UpdateAccentSurface(c.Request().Context(), cc.Campaign.ID, slotNum, color); err != nil {
+			return err
+		}
+	default:
+		return apperror.NewBadRequest("invalid accent slot, expected 1 or 2")
 	}
 
-	h.logAudit(c, cc.Campaign.ID, "campaign.accent_color.updated", map[string]any{"color": color})
+	h.logAudit(c, cc.Campaign.ID, "campaign.accent_color.updated", map[string]any{"color": color, "slot": slot})
 
 	// HTMX and API (Accept: application/json) callers get a direct response;
 	// plain browser navigation gets a redirect back to settings.

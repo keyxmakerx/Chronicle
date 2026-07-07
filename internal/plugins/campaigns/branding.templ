@@ -133,6 +133,62 @@ templ AccentColorPicker(campaignID string, currentColor string, csrfToken string
 	</div>
 }
 
+// surfaceAccentRow renders one surface-accent slot row (C-ACCENT-TRIO rev 2):
+// the shared preset circles, a reset, and a custom picker. Buttons carry
+// data-surface-slot/-color and are wired by the script in the parent card —
+// clicks save immediately (direct-PUT precedent) AND live-preview locally.
+templ surfaceAccentRow(slot int, label string, current string) {
+	<div class="flex flex-wrap items-center gap-2 mb-2">
+		<span class="text-[11px] text-fg-secondary w-32 shrink-0">{ label }</span>
+		for _, preset := range accentColorPresets {
+			if current == preset.Color {
+				<button
+					type="button"
+					data-surface-slot={ fmt.Sprintf("%d", slot) }
+					data-surface-color={ preset.Color }
+					class="w-6 h-6 rounded-full border-2 border-white ring-2 ring-offset-1 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
+					style={ fmt.Sprintf("background-color: %s", preset.Color) }
+					title={ preset.Name }
+				></button>
+			} else {
+				<button
+					type="button"
+					data-surface-slot={ fmt.Sprintf("%d", slot) }
+					data-surface-color={ preset.Color }
+					class="w-6 h-6 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
+					style={ fmt.Sprintf("background-color: %s", preset.Color) }
+					title={ preset.Name }
+				></button>
+			}
+		}
+		<button
+			type="button"
+			data-surface-slot={ fmt.Sprintf("%d", slot) }
+			data-surface-color=""
+			class="w-6 h-6 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
+			title="Follow Accent Color"
+		>
+			<i class="fa-solid fa-xmark text-[9px] text-fg-muted"></i>
+		</button>
+		<input
+			type="color"
+			data-surface-custom={ fmt.Sprintf("%d", slot) }
+			class="w-6 h-6 rounded-full border border-edge cursor-pointer shrink-0"
+			if current != "" {
+				value={ current }
+			} else {
+				value="#6366f1"
+			}
+			title="Pick a custom color"
+		/>
+		if current != "" {
+			<span class="text-[10px] text-fg-muted">{ current }</span>
+		} else {
+			<span class="text-[10px] text-fg-muted">follows Accent Color</span>
+		}
+	</div>
+}
+
 // appearanceTab renders the visual customization editor in the Customization Hub.
 // Contains: faux site outline, brand name/logo, accent color, topbar styling,
 // and backdrop image. Changes preview locally; a Save button persists them.
@@ -397,6 +453,70 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 					}
 				</p>
 			</div>
+		</div>
+
+		<!-- Surface accents (C-ACCENT-TRIO rev 2 / design D14 rev): two extra
+		     accent slots consumed by themed CONTENT surfaces (character page
+		     first) as primary/secondary. Unlike the main accent above these
+		     save immediately per click (the AccentColorPicker direct-PUT
+		     precedent) — they are additive slots, not part of the staged
+		     Save-bar flow. Unset slots inherit Accent 1 via CSS fallback. -->
+		<div class="card p-4 mb-4" id="appearance-surface-accents" data-csrf={ csrfToken } data-campaign-id={ cc.Campaign.ID }>
+			<h3 class="text-sm font-semibold text-fg mb-2">
+				<i class="fa-solid fa-palette text-xs mr-1.5 text-fg-muted"></i> Surface Accents
+			</h3>
+			<p class="text-xs text-fg-secondary mb-3">Two extra colors used by content pages (like character sheets) as primary and secondary. Leave unset to follow the Accent Color above.</p>
+			@surfaceAccentRow(1, "Surface A · primary", cc.Campaign.ParseSettings().AccentSurface1)
+			@surfaceAccentRow(2, "Surface B · secondary", cc.Campaign.ParseSettings().AccentSurface2)
+			<!-- D19 live sample: a mini content-surface card driven by the
+			     surface tokens so owners see the pair applied, not a swatch. -->
+			<div class="mt-3 rounded-lg border border-edge overflow-hidden">
+				<div class="px-3 py-2 flex items-center justify-between" style="background: var(--color-accent-surface-1, var(--color-accent, #6366f1)); color: #fff;">
+					<span class="text-xs font-semibold">Sera Windrose</span>
+					<span class="text-[10px] px-2 py-0.5 rounded-full" style="background: var(--color-accent-surface-2, var(--color-accent-light, rgba(255,255,255,.25))); color: #1c2130;">Level 6 · Ranger</span>
+				</div>
+				<div class="px-3 py-2 bg-surface-alt flex items-center gap-2">
+					<span class="text-[10px] text-fg-muted">Sample character header —</span>
+					<span class="text-[10px] font-medium" style="color: var(--color-accent-surface-1, var(--color-accent, #6366f1));">primary</span>
+					<span class="text-[10px] font-medium" style="color: var(--color-accent-surface-2, var(--color-accent-hover, #6366f1));">secondary</span>
+				</div>
+			</div>
+			<script>
+				(function () {
+					var root = document.getElementById('appearance-surface-accents');
+					if (!root || root.dataset.surfaceWired) return;
+					root.dataset.surfaceWired = '1';
+					var csrf = root.dataset.csrf;
+					var url = '/campaigns/' + root.dataset.campaignId + '/accent-color';
+					function apply(slot, color) {
+						// Local preview first (D19: the sample card recolors instantly),
+						// then persist through the existing accent endpoint with slot.
+						var prop = '--color-accent-surface-' + slot;
+						if (color) {
+							document.documentElement.style.setProperty(prop, color);
+						} else {
+							document.documentElement.style.removeProperty(prop);
+						}
+						if (window.htmx) {
+							window.htmx.ajax('PUT', url, {
+								values: { accent_color: color, slot: String(slot) },
+								headers: { 'X-CSRF-Token': csrf },
+								swap: 'none'
+							});
+						}
+					}
+					root.addEventListener('click', function (e) {
+						var btn = e.target.closest('[data-surface-slot]');
+						if (!btn) return;
+						apply(btn.dataset.surfaceSlot, btn.dataset.surfaceColor || '');
+					});
+					root.addEventListener('change', function (e) {
+						var input = e.target.closest('[data-surface-custom]');
+						if (!input) return;
+						apply(input.dataset.surfaceCustom, input.value);
+					});
+				})();
+			</script>
 		</div>
 
 		<!-- Topbar style -->
