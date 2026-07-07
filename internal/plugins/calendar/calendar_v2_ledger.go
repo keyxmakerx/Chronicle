@@ -111,12 +111,29 @@ func ledgerRows(data CalendarV2ViewData) []ledgerRowData {
 	return rows
 }
 
+// ledgerYearWindowEnd returns the (month, day) of the displayed year's final
+// day for the Ledger's one-year event window. It MUST be leap-aware
+// (MonthDays, not Months[i].Days): a calendar whose last month gains
+// LeapYearDays would otherwise exclude events stored on the trailing leap
+// days from the SQL window even though ledgerRows iterates those days.
+func ledgerYearWindowEnd(cal *Calendar, year int) (lastMonth, lastDay int) {
+	lastMonth = len(cal.Months)
+	lastDay = 1
+	if lastMonth >= 1 {
+		lastDay = cal.MonthDays(lastMonth-1, year)
+	}
+	return lastMonth, lastDay
+}
+
 // ledgerMultiDayAnchor returns the (month, day) inside the displayed year at
 // which a multi-day event's row should render, and whether it renders at all.
-// A span whose start falls in the year anchors on its start day; a span that
+// A span whose start falls in the year anchors on its start day. A span that
 // began in a prior year but reaches into this one anchors on the year's first
-// day so it still surfaces (without W2's cross-year rendering). A span wholly
-// before/after the year is skipped.
+// day — NOTE: with W1's data layer this branch is defensive only. The repo
+// SQL behind ListEventsForDateRange returns rows based in the displayed year
+// (plus recurring candidates), so a non-recurring prior-year span never
+// reaches the handler pipeline today; W2's multi-year query makes this branch
+// real. A span wholly before/after the year is skipped.
 func ledgerMultiDayAnchor(e Event, year int, cal *Calendar) (month, day int, ok bool) {
 	if e.Year == year {
 		return e.Month, e.Day, true

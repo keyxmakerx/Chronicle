@@ -168,11 +168,7 @@ func (h *Handler) ShowV2(c echo.Context) error {
 			// recurrence via Event.OccursOn across the window, per the
 			// C-CAL-TIMELINE-V2-W1 data-layer ruling. filterEventsByUser runs
 			// inside the service, so dm_only rows are absent for players.
-			lastMonth := len(active.Months)
-			lastDay := 1
-			if lastMonth >= 1 {
-				lastDay = active.Months[lastMonth-1].Days
-			}
+			lastMonth, lastDay := ledgerYearWindowEnd(active, data.Year)
 			if events, err := h.svc.ListEventsForDateRange(ctx, active.ID, data.Year, 1, 1, lastMonth, lastDay, role, userID); err == nil {
 				data.Events = events
 			}
