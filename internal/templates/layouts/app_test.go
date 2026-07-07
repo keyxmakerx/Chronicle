@@ -13,6 +13,18 @@ func ctxWithTopbarStyle(s *TopbarStyleData) context.Context {
 	return SetTopbarStyle(context.Background(), s)
 }
 
+// ctxForNotes builds a context for the notesWidgetVisible / notes-button render
+// tests: an authenticated user in campaign campaignID, at request path
+// activePath, with the "notes" addon enabled or not.
+func ctxForNotes(authed bool, campaignID string, notesEnabled bool, activePath string) context.Context {
+	ctx := context.Background()
+	ctx = SetIsAuthenticated(ctx, authed)
+	ctx = SetCampaignID(ctx, campaignID)
+	ctx = SetEnabledAddons(ctx, map[string]bool{"notes": notesEnabled})
+	ctx = SetActivePath(ctx, activePath)
+	return ctx
+}
+
 // TestTopbarInlineStyle pins the contract that the helper emits the correct
 // background CSS for each mode — in particular that gradient mode produces a
 // linear-gradient and image mode produces a background-image url(), the two
@@ -137,4 +149,99 @@ func TestTopbarHeaderIsolate(t *testing.T) {
 		}
 	}
 	t.Fatalf("<header> classes %q must include \"isolate\" — without it z-index:-1 brand layers escape the stacking context and paint behind the header surface", classVal)
+}
+
+// TestNotesWidgetVisible pins the notesWidgetVisible predicate that gates both
+// the floating notes panel's mount point and its topbar trigger button (single
+// source of truth — see C-NAV-ACTIVE-FIX). Before this fix the topbar button
+// used its own, looser condition that omitted the journal exclusion, so it
+// rendered a dead button on the journal page (Chronicle.toggleNotes is only
+// ever defined once the floating widget's init() runs, which the journal
+// exclusion prevents).
+func TestNotesWidgetVisible(t *testing.T) {
+	tests := []struct {
+		name         string
+		authed       bool
+		campaignID   string
+		notesEnabled bool
+		activePath   string
+		want         bool
+	}{
+		{
+			name: "authed, in campaign, addon on, dashboard page", authed: true,
+			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp1/dashboard",
+			want: true,
+		},
+		{
+			name: "authed, in campaign, addon on, journal page itself", authed: true,
+			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp1/journal",
+			want: false,
+		},
+		{
+			name: "authed, in campaign, addon on, journal sub-path", authed: true,
+			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp1/journal/entry/5",
+			want: false,
+		},
+		{
+			name: "addon disabled", authed: true,
+			campaignID: "camp1", notesEnabled: false, activePath: "/campaigns/camp1/dashboard",
+			want: false,
+		},
+		{
+			name: "not authenticated", authed: false,
+			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp1/dashboard",
+			want: false,
+		},
+		{
+			name: "not in a campaign", authed: true,
+			campaignID: "", notesEnabled: true, activePath: "/campaigns",
+			want: false,
+		},
+		{
+			// A different campaign's journal path must not falsely exclude this one.
+			name: "in campaign, active path is ANOTHER campaign's journal", authed: true,
+			campaignID: "camp1", notesEnabled: true, activePath: "/campaigns/camp2/journal",
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := notesWidgetVisible(ctxForNotes(tt.authed, tt.campaignID, tt.notesEnabled, tt.activePath))
+			if got != tt.want {
+				t.Fatalf("notesWidgetVisible() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestNotesButtonRenderGate is the render-level regression pin for the same
+// bug: the topbar's #topbar-notes-trigger button must be present exactly when
+// notesWidgetVisible is true, and absent on the journal page even when the
+// notes addon is enabled and the user is authenticated. A render-level test
+// (not just a predicate-function test) guards against the template's two call
+// sites drifting apart again in a future edit.
+func TestNotesButtonRenderGate(t *testing.T) {
+	tests := []struct {
+		name       string
+		activePath string
+		wantButton bool
+	}{
+		{name: "present on a non-journal page", activePath: "/campaigns/camp1/dashboard", wantButton: true},
+		{name: "absent on the journal page", activePath: "/campaigns/camp1/journal", wantButton: false},
+		{name: "absent on a journal sub-path", activePath: "/campaigns/camp1/journal/entry/5", wantButton: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := ctxForNotes(true, "camp1", true, tt.activePath)
+			var buf bytes.Buffer
+			if err := Topbar().Render(ctx, &buf); err != nil {
+				t.Fatalf("render Topbar: %v", err)
+			}
+			html := buf.String()
+			hasButton := strings.Contains(html, `id="topbar-notes-trigger"`)
+			if hasButton != tt.wantButton {
+				t.Fatalf("topbar-notes-trigger present=%v, want %v (path %q)", hasButton, tt.wantButton, tt.activePath)
+			}
+		})
+	}
 }

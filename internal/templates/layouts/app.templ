@@ -78,7 +78,7 @@ templ App(title string) {
 		<!-- Notes widget mount point (floating panel, bottom-right).
 		     Gated behind the "notes" addon — off by default.
 		     Hidden on the full-page journal to avoid sync conflicts. -->
-		if InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") && !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx))) {
+		if notesWidgetVisible(ctx) {
 			@NotesWidget()
 		}
 	}
@@ -101,8 +101,15 @@ var sidebarNavInactive = "text-sidebar-text hover:text-sidebar-active"
 // into distinct zones so that global nav, manage, and admin sections remain
 // static while only the categories area participates in the drill-down.
 templ Sidebar() {
+	<!-- data-nav-active-classes / data-nav-inactive-classes expose the SAME class
+	     tokens used to render every nav link below (sidebarNavActive /
+	     sidebarNavInactive) so boot.js's boosted-nav active-link highlighter can
+	     read the live vocabulary instead of hardcoding a copy that can go stale
+	     the next time this changes (see C-NAV-ACTIVE-FIX). -->
 	<aside
 		id="sidebar"
+		data-nav-active-classes={ sidebarNavActive }
+		data-nav-inactive-classes={ sidebarNavInactive }
 		x-data="{ pinned: localStorage.getItem('chronicle-sidebar-pinned') !== 'false', hovered: false }"
 		x-init="$nextTick(() => { if (!pinned) hovered = false })"
 		@mouseenter="hovered = true"
@@ -1362,8 +1369,14 @@ templ Topbar() {
 					</svg>
 				</button>
 
-				if IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") {
-					<!-- Notes trigger (replaces floating FAB) -->
+				if notesWidgetVisible(ctx) {
+					<!-- Notes trigger (replaces floating FAB). Gated on the SAME
+					     condition as the floating panel's mount point above —
+					     they previously drifted (this button had no journal
+					     exclusion), so it rendered on the journal page with
+					     nothing to call: Chronicle.toggleNotes is only defined
+					     once NotesWidget's init() runs, which never happened
+					     there (C-NAV-ACTIVE-FIX). -->
 					<button
 						id="topbar-notes-trigger"
 						class="btn-ghost btn-icon"
@@ -1497,6 +1510,20 @@ func isExactPath(ctx context.Context, path string) bool {
 func isPathPrefix(ctx context.Context, prefix string) bool {
 	active := GetActivePath(ctx)
 	return active == prefix || strings.HasPrefix(active, prefix+"/")
+}
+
+// notesWidgetVisible reports whether the floating notes panel (mounted by
+// NotesWidget) and its topbar trigger button should render for the current
+// request: authenticated, in a campaign, with the "notes" addon enabled, and
+// not on the full-page journal (suppressed there to avoid autosave/sync
+// conflicts between the floating panel and the journal's own editor).
+// Single source of truth for both call sites (the mount point and the topbar
+// button) — they previously used two independently-written conditions that
+// drifted apart, leaving the button clickable-but-dead on the journal page
+// (C-NAV-ACTIVE-FIX).
+func notesWidgetVisible(ctx context.Context) bool {
+	return InCampaign(ctx) && IsAuthenticated(ctx) && IsAddonEnabled(ctx, "notes") &&
+		!isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/journal", GetCampaignID(ctx)))
 }
 
 // isExternalURL returns true if the URL starts with http:// or https://,
