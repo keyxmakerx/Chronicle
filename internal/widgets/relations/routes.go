@@ -30,8 +30,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 	)
-	pub.GET("/entities/:eid/relations", h.ListRelations, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/relation-types", h.GetCommonTypes, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/relations-graph", h.GraphAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/relations-graph/page", h.GraphPage, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/entities/:eid/relations", h.ListRelations, campaigns.RequireViewAccess())
+	pub.GET("/relation-types", h.GetCommonTypes, campaigns.RequireViewAccess())
+	pub.GET("/relations-graph", h.GraphAPI, campaigns.RequireViewAccess())
+	pub.GET("/relations-graph/page", h.GraphPage, campaigns.RequireViewAccess())
 }

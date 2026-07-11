@@ -39,6 +39,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 	)
-	pub.GET("/tags", h.ListTags, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/entities/:eid/tags", h.GetEntityTags, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/tags", h.ListTags, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid/tags", h.GetEntityTags, campaigns.RequireViewAccess())
 }

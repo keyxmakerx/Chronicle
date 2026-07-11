@@ -68,9 +68,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "timeline"),
 	)
-	pub.GET("/timelines", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/timelines/:tid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/timelines/:tid/data", h.TimelineDataAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/timelines/preview", h.PreviewAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/timelines/embed", h.EmbedTimeline, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/timelines", h.Index, campaigns.RequireViewAccess())
+	pub.GET("/timelines/:tid", h.Show, campaigns.RequireViewAccess())
+	pub.GET("/timelines/:tid/data", h.TimelineDataAPI, campaigns.RequireViewAccess())
+	pub.GET("/timelines/preview", h.PreviewAPI, campaigns.RequireViewAccess())
+	pub.GET("/timelines/embed", h.EmbedTimeline, campaigns.RequireViewAccess())
 }

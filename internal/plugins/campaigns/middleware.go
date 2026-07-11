@@ -178,6 +178,45 @@ func RequireRole(minRole Role) echo.MiddlewareFunc {
 	}
 }
 
+// RequireViewAccess gates a public-capable VIEW route on view eligibility rather
+// than a role threshold: it passes when the requester is a real campaign member,
+// a site admin, or the campaign is public. This is the correct gate for routes
+// mounted under AllowPublicCampaignAccess.
+//
+// WHY this exists (C-PUBLIC-VIEW-FIX): PR #478 (C-PERM-ANON-IDENTITY, 8631aad)
+// demoted anonymous visitors AND authenticated non-members from RolePlayer to
+// RoleNone so Player-only content can never leak to the public. But the pub
+// routes still carried RequireRole(RolePlayer), so the composition rejected
+// every RoleNone requester (`0 < 1`) — 403-ing all anonymous and non-member
+// access to PUBLIC campaigns, taking every public surface dark. Restoring
+// anon -> RolePlayer would reopen the #478 leak, so instead we gate on view
+// eligibility explicitly and keep RoleNone: the visibility filter still strips
+// Player-only content for these viewers, so they see only public/everyone data.
+//
+// Must be applied AFTER AllowPublicCampaignAccess (which populates the context;
+// for a PRIVATE campaign it already rejects anon -> 302 /login and authenticated
+// non-members -> 403 before this runs, so IsPublic is only ever reached for
+// genuinely public campaigns). Mutating or Player-only routes must keep
+// RequireRole.
+func RequireViewAccess() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			cc := GetCampaignContext(c)
+			if cc == nil {
+				return apperror.NewInternal(
+					fmt.Errorf("RequireViewAccess used without AllowPublicCampaignAccess"),
+				)
+			}
+
+			if cc.IsMember || cc.IsSiteAdmin || cc.Campaign.IsPublic {
+				return next(c)
+			}
+
+			return apperror.NewForbidden("insufficient permissions")
+		}
+	}
+}
+
 // RequireCapability gates a route on a CampaignContext capability predicate
 // (e.g. (*CampaignContext).CanControlWorldState) rather than a flat MemberRole
 // threshold — so a co-DM grantee passes where RequireRole(RoleOwner) would
