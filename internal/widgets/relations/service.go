@@ -20,8 +20,9 @@ type RelationService interface {
 	Create(ctx context.Context, campaignID, sourceEntityID, targetEntityID, relationType, reverseRelationType, createdBy string, metadata json.RawMessage, dmOnly ...bool) (*Relation, error)
 
 	// ListByEntity returns all relations originating from the given entity,
-	// enriched with target entity display data.
-	ListByEntity(ctx context.Context, entityID string) ([]Relation, error)
+	// enriched with target entity display data. campaignID scopes the query
+	// (defense-in-depth against cross-campaign reads).
+	ListByEntity(ctx context.Context, campaignID, entityID string) ([]Relation, error)
 
 	// Delete removes a relation and its reverse direction. Both directions
 	// are removed to maintain bi-directional consistency.
@@ -44,19 +45,26 @@ type RelationService interface {
 	GetGraphData(ctx context.Context, campaignID string, includeDmOnly bool) (*GraphData, error)
 
 	// GetFilteredGraphData returns graph data with filtering, mention edges,
-	// local graph (BFS), and orphan detection support.
-	GetFilteredGraphData(ctx context.Context, campaignID string, filter GraphFilter, includeDmOnly bool, userID string) (*GraphData, error)
+	// local graph (BFS), and orphan detection support. viewerRole + userID drive
+	// the per-viewer entity-visibility filter: nodes the viewer cannot see (and
+	// their edges) are dropped unless includeDmOnly (owner/DM) is set.
+	GetFilteredGraphData(ctx context.Context, campaignID string, filter GraphFilter, includeDmOnly bool, viewerRole int, userID string) (*GraphData, error)
 
 	// SetMentionLinkProvider injects the mention link provider for graph
 	// visualization. Called during app wiring.
 	SetMentionLinkProvider(p MentionLinkProvider)
+
+	// SetEntityViewFilter injects the entity-visibility filter used to hide
+	// private-entity nodes from the graph. Called during app wiring.
+	SetEntityViewFilter(f EntityViewFilter)
 }
 
 // relationService implements RelationService with validation and
 // bi-directional relation management.
 type relationService struct {
-	repo            RelationRepository
-	mentionProvider MentionLinkProvider
+	repo             RelationRepository
+	mentionProvider  MentionLinkProvider
+	entityViewFilter EntityViewFilter
 }
 
 // NewRelationService creates a new RelationService backed by the given
@@ -149,8 +157,8 @@ func (s *relationService) Create(ctx context.Context, campaignID, sourceEntityID
 }
 
 // ListByEntity returns all relations originating from the given entity.
-func (s *relationService) ListByEntity(ctx context.Context, entityID string) ([]Relation, error) {
-	return s.repo.ListByEntity(ctx, entityID)
+func (s *relationService) ListByEntity(ctx context.Context, campaignID, entityID string) ([]Relation, error) {
+	return s.repo.ListByEntity(ctx, campaignID, entityID)
 }
 
 // Delete removes a relation and its reverse direction to maintain
@@ -263,9 +271,15 @@ func (s *relationService) SetMentionLinkProvider(p MentionLinkProvider) {
 	s.mentionProvider = p
 }
 
+// SetEntityViewFilter injects the entity-visibility filter used to hide
+// private-entity nodes/edges from viewers who cannot see them.
+func (s *relationService) SetEntityViewFilter(f EntityViewFilter) {
+	s.entityViewFilter = f
+}
+
 // GetFilteredGraphData builds graph data with optional mention edges, type/search
 // filtering, BFS local graph, and orphan detection.
-func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID string, filter GraphFilter, includeDmOnly bool, userID string) (*GraphData, error) {
+func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID string, filter GraphFilter, includeDmOnly bool, viewerRole int, userID string) (*GraphData, error) {
 	// Start with the base relation graph data.
 	data, err := s.GetGraphData(ctx, campaignID, includeDmOnly)
 	if err != nil {
@@ -331,6 +345,27 @@ func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID s
 		data.Nodes = make([]GraphNode, 0, len(nodeMap))
 		for _, n := range nodeMap {
 			data.Nodes = append(data.Nodes, n)
+		}
+	}
+
+	// Entity-visibility filter (C-PUBLIC-VIEW-FIX-R2): drop nodes the viewer
+	// cannot see — and every edge touching them — so private entities don't leak
+	// as named nodes to anonymous / non-privileged viewers. The relation-graph
+	// query (ListByCampaign) applies no per-viewer filter, so this is the only
+	// gate on relation-derived nodes. (Mention-derived edges are already viewer-
+	// filtered on the source side by the mention provider; this additionally
+	// drops any private mention *target* that surfaced as an ID-only node.)
+	// Owner / site-admin / DM-granted viewers (includeDmOnly) keep the full
+	// picture — no behavior change for them.
+	if !includeDmOnly {
+		// Fail closed: without the visibility filter a non-privileged viewer
+		// would receive private-entity nodes. A nil filter is a wiring bug, not
+		// a licence to serve the unfiltered graph.
+		if s.entityViewFilter == nil {
+			return nil, fmt.Errorf("relations: entity view filter not configured")
+		}
+		if err := s.filterGraphByVisibility(ctx, data, campaignID, viewerRole, userID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -401,6 +436,42 @@ func (s *relationService) GetFilteredGraphData(ctx context.Context, campaignID s
 	}
 
 	return data, nil
+}
+
+// filterGraphByVisibility mutates data in place, removing every node the viewer
+// (viewerRole + userID) cannot see and every edge that touches a removed node.
+// Uses one batched visibility query for all node IDs (no per-node N+1).
+func (s *relationService) filterGraphByVisibility(ctx context.Context, data *GraphData, campaignID string, viewerRole int, userID string) error {
+	if len(data.Nodes) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(data.Nodes))
+	for _, n := range data.Nodes {
+		ids = append(ids, n.ID)
+	}
+
+	viewable, err := s.entityViewFilter.FilterViewableEntityIDs(ctx, campaignID, ids, viewerRole, userID)
+	if err != nil {
+		return fmt.Errorf("filtering graph nodes by visibility: %w", err)
+	}
+
+	filteredNodes := make([]GraphNode, 0, len(data.Nodes))
+	for _, n := range data.Nodes {
+		if viewable[n.ID] {
+			filteredNodes = append(filteredNodes, n)
+		}
+	}
+	data.Nodes = filteredNodes
+
+	filteredEdges := make([]GraphEdge, 0, len(data.Edges))
+	for _, e := range data.Edges {
+		if viewable[e.Source] && viewable[e.Target] {
+			filteredEdges = append(filteredEdges, e)
+		}
+	}
+	data.Edges = filteredEdges
+	return nil
 }
 
 // bfsSubgraph returns the subgraph reachable within maxHops from the focus

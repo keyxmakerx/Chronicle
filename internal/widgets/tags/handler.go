@@ -1,7 +1,9 @@
 package tags
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -14,17 +16,37 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// EntityGate is the narrow cross-plugin seam the tags widget uses to honor entity
+// visibility + campaign binding on the public per-entity tag read, without
+// importing the entities repo (plugin-isolation). Implemented by an adapter over
+// the entity service (wired in app/routes.go). Introduced by
+// cordinator/dispatches/chronicle/C-PUBLIC-VIEW-FIX-R2.md (extra hole found in
+// Step-0: GetEntityTags leaked private-entity tag names + was cross-campaign).
+type EntityGate interface {
+	// ResolveViewableEntity returns the entity's owning campaign ID and whether
+	// the viewer (role, userID) may view it. Missing entity → not-found error.
+	ResolveViewableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView bool, err error)
+}
+
 // Handler handles HTTP requests for tag operations. Handlers are thin:
 // bind request, call service, render response. No business logic lives here.
 type Handler struct {
-	service  TagService
-	grantSvc TagGrantService
-	auditSvc audit.AuditService
+	service    TagService
+	grantSvc   TagGrantService
+	auditSvc   audit.AuditService
+	entityGate EntityGate
 }
 
 // NewHandler creates a new tag handler backed by the given service.
 func NewHandler(service TagService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetEntityGate injects the entity-visibility gate. Called during app wiring.
+// When set, the public per-entity tag read enforces entity privacy + campaign
+// binding.
+func (h *Handler) SetEntityGate(gate EntityGate) {
+	h.entityGate = gate
 }
 
 // SetAuditService sets the audit service for recording tag mutations.
@@ -229,6 +251,24 @@ func (h *Handler) GetEntityTags(c echo.Context) error {
 	entityID := c.Param("eid")
 	if entityID == "" {
 		return apperror.NewBadRequest("entity ID is required")
+	}
+
+	// Entity-privacy gate (mirrors the entity Show page): resolve the entity,
+	// require it to belong to the URL campaign (kills the cross-campaign IDOR),
+	// and require the caller's view access. Without this an anonymous visitor
+	// could read the (often spoilery) tag names of a private entity, or of any
+	// entity in another campaign given its ID.
+	if h.entityGate == nil {
+		// Fail closed: a missing gate must never serve ungated entity tags.
+		return apperror.NewInternal(errors.New("tags: entity gate not configured"))
+	}
+	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
+		c.Request().Context(), entityID, int(cc.MemberRole), auth.GetUserID(c))
+	if err != nil {
+		return err // NotFound for a missing entity; propagates real errors.
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
 	}
 
 	tags, err := h.service.GetEntityTags(c.Request().Context(), entityID, canSeeDmOnly(cc))

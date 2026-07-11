@@ -532,21 +532,29 @@ templ AttendeeList(cc *campaigns.CampaignContext, sessionID string, attendees []
 	if len(attendees) == 0 {
 		<p class="text-sm text-fg-muted">No attendees invited yet.</p>
 	} else {
-		<div class="space-y-2">
-			for _, a := range attendees {
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-2">
-						<div class="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
-							<span class="text-[10px] font-medium text-accent">
-								{ string([]rune(a.DisplayName)[0:1]) }
-							</span>
+		if cc.IsMember || cc.IsSiteAdmin {
+			<div class="space-y-2">
+				for _, a := range attendees {
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-2">
+							<div class="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
+								<span class="text-[10px] font-medium text-accent">
+									{ string([]rune(a.DisplayName)[0:1]) }
+								</span>
+							</div>
+							<span class="text-sm text-fg">{ a.DisplayName }</span>
 						</div>
-						<span class="text-sm text-fg">{ a.DisplayName }</span>
+						@rsvpBadge(a.Status)
 					</div>
-					@rsvpBadge(a.Status)
-				</div>
-			}
-		</div>
+				}
+			</div>
+		} else {
+			<!-- Public (anon / non-member) visitors see aggregate counts, not
+			     attendee names — RC-9 / C-PUBLIC-VIEW-FIX-R2. -->
+			<p class="text-sm text-fg-muted">
+				{ fmt.Sprintf("%d going · %d invited", countAccepted(attendees), len(attendees)) }
+			</p>
+		}
 		<!-- Current user RSVP controls -->
 		for _, a := range attendees {
 			if a.UserID == currentUserID {

@@ -14,7 +14,7 @@ import (
 type mockPostRepo struct {
 	createFn    func(ctx context.Context, post *Post) error
 	findByIDFn  func(ctx context.Context, id string) (*Post, error)
-	listFn      func(ctx context.Context, entityID string, includeDMOnly bool) ([]Post, error)
+	listFn      func(ctx context.Context, campaignID, entityID string, includeDMOnly bool) ([]Post, error)
 	updateFn    func(ctx context.Context, post *Post) error
 	deleteFn    func(ctx context.Context, id string) error
 	reorderFn   func(ctx context.Context, entityID string, postIDs []string) error
@@ -34,9 +34,9 @@ func (m *mockPostRepo) FindByID(ctx context.Context, id string) (*Post, error) {
 	return &Post{ID: id, CampaignID: "camp-1", EntityID: "ent-1", Name: "Test Post"}, nil
 }
 
-func (m *mockPostRepo) ListByEntity(ctx context.Context, entityID string, includeDMOnly bool) ([]Post, error) {
+func (m *mockPostRepo) ListByEntity(ctx context.Context, campaignID, entityID string, includeDMOnly bool) ([]Post, error) {
 	if m.listFn != nil {
-		return m.listFn(ctx, entityID, includeDMOnly)
+		return m.listFn(ctx, campaignID, entityID, includeDMOnly)
 	}
 	return nil, nil
 }
@@ -130,7 +130,7 @@ func TestCreate_LongName(t *testing.T) {
 
 func TestCreate_SetsNextSortOrder(t *testing.T) {
 	repo := &mockPostRepo{
-		listFn: func(_ context.Context, _ string, _ bool) ([]Post, error) {
+		listFn: func(_ context.Context, _, _ string, _ bool) ([]Post, error) {
 			return []Post{{ID: "p-1"}, {ID: "p-2"}}, nil
 		},
 	}

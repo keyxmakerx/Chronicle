@@ -79,7 +79,7 @@ type stubRelationLister struct {
 	byEntity map[string][]relations.Relation
 }
 
-func (s *stubRelationLister) ListByEntity(_ context.Context, entityID string) ([]relations.Relation, error) {
+func (s *stubRelationLister) ListByEntity(_ context.Context, _, entityID string) ([]relations.Relation, error) {
 	return s.byEntity[entityID], nil
 }
 

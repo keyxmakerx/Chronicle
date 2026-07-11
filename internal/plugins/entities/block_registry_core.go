@@ -112,10 +112,11 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 	}, func(ctx BlockRenderContext) templ.Component {
 		// Player Notes are per-user and EVERY entity_notes route is RequireAuth,
 		// so the block is meaningless (and 401s) for a viewer with no identity.
-		// On a public campaign an anonymous visitor is GRANTED RolePlayer for
-		// visibility, so MemberRole is NOT a reliable signal — gate on a real
-		// authenticated identity (ctx.UserID, = layouts.GetUserID) instead.
-		// cordinator#39 finding 5.
+		// Since #478 an anonymous public-campaign visitor is RoleNone (NOT
+		// RolePlayer), but identity — not role — is the real prerequisite here:
+		// gate on a real authenticated identity (ctx.UserID, = layouts.GetUserID)
+		// so both anon and authenticated non-members are handled uniformly.
+		// cordinator#39 finding 5; comment corrected in C-PUBLIC-VIEW-FIX-R2.
 		if ctx.UserID == "" {
 			return templ.NopComponent
 		}

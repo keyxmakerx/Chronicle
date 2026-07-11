@@ -21,8 +21,10 @@ type RelationRepository interface {
 	FindByID(ctx context.Context, id int) (*Relation, error)
 
 	// ListByEntity returns all relations where the given entity is the source,
-	// joined with target entity details (name, icon, color, slug, type).
-	ListByEntity(ctx context.Context, entityID string) ([]Relation, error)
+	// joined with target entity details (name, icon, color, slug, type). The
+	// campaignID predicate is defense-in-depth against cross-campaign reads (the
+	// handler is the primary IDOR gate).
+	ListByEntity(ctx context.Context, campaignID, entityID string) ([]Relation, error)
 
 	// Delete removes a relation by ID.
 	Delete(ctx context.Context, id int) error
@@ -104,7 +106,7 @@ func (r *relationRepository) FindByID(ctx context.Context, id int) (*Relation, e
 // ListByEntity returns all relations originating from the given entity, joined
 // with target entity details for display. Ordered by relation type, then by
 // target entity name for consistent grouping in the UI.
-func (r *relationRepository) ListByEntity(ctx context.Context, entityID string) ([]Relation, error) {
+func (r *relationRepository) ListByEntity(ctx context.Context, campaignID, entityID string) ([]Relation, error) {
 	query := `SELECT er.id, er.campaign_id, er.source_entity_id, er.target_entity_id,
 	                  er.relation_type, er.reverse_relation_type, er.metadata, er.dm_only,
 	                  er.created_at, er.created_by,
@@ -113,10 +115,10 @@ func (r *relationRepository) ListByEntity(ctx context.Context, entityID string) 
 	           FROM entity_relations er
 	           INNER JOIN entities e ON e.id = er.target_entity_id
 	           LEFT JOIN entity_types et ON et.id = e.entity_type_id
-	           WHERE er.source_entity_id = ?
+	           WHERE er.source_entity_id = ? AND er.campaign_id = ?
 	           ORDER BY er.relation_type ASC, e.name ASC`
 
-	rows, err := r.db.QueryContext(ctx, query, entityID)
+	rows, err := r.db.QueryContext(ctx, query, entityID, campaignID)
 	if err != nil {
 		return nil, fmt.Errorf("listing relations by entity: %w", err)
 	}

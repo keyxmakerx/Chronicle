@@ -1292,6 +1292,41 @@ func (a *entityTypeListerForGraphAdapter) ListEntityTypesForGraph(ctx context.Co
 	return result, nil
 }
 
+// entityAccessAdapter wraps entities.EntityService to implement the entity-access
+// seams the post / relation / tag widgets consume (posts.EntityGate,
+// tags.EntityGate, relations.EntityGate / relations.EntityViewFilter). It lets
+// those widgets honor entity visibility + campaign binding without importing the
+// entities repo directly (plugin-isolation, rule 8). Introduced by
+// cordinator/dispatches/chronicle/C-PUBLIC-VIEW-FIX-R2.md to close the anon
+// private-entity leaks + cross-campaign IDOR. Cites: 2026-05-21-core-tenets §T-B1,
+// §T-B2.
+type entityAccessAdapter struct {
+	svc entities.EntityService
+}
+
+// ResolveViewableEntity returns the entity's owning campaign ID and whether the
+// viewer (role, userID) may view it. Mirrors the entity Show page gate
+// (entities/handler.go Show): GetByID for the campaign binding + CheckEntityAccess
+// for visibility. A missing entity surfaces as the GetByID error (NotFound), which
+// the caller renders as 404.
+func (a *entityAccessAdapter) ResolveViewableEntity(ctx context.Context, entityID string, role int, userID string) (string, bool, error) {
+	ent, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		return "", false, err
+	}
+	access, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
+	if err != nil {
+		return "", false, err
+	}
+	return ent.CampaignID, access.CanView, nil
+}
+
+// FilterViewableEntityIDs returns the subset of entityIDs the viewer may view,
+// batched (no N+1). Used to hide private-entity relation targets + graph nodes.
+func (a *entityAccessAdapter) FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error) {
+	return a.svc.FilterViewableEntityIDs(ctx, campaignID, entityIDs, role, userID)
+}
+
 // npcEntityTypeFinderAdapter wraps entities.EntityService to implement the
 // npcs.EntityTypeFinder interface. Resolves the "characters" entity type ID
 // for the NPC gallery without creating a circular import.
@@ -2392,14 +2427,22 @@ func (a *App) RegisterRoutes() {
 	relRepo := relations.NewRelationRepository(a.DB)
 	relService := relations.NewRelationService(relRepo)
 	relService.SetMentionLinkProvider(&mentionLinkAdapter{svc: entityService})
+	// Entity-privacy gate (C-PUBLIC-VIEW-FIX-R2): hide private-entity nodes from
+	// the graph, and enforce entity privacy + campaign binding on the list.
+	relEntityGate := &entityAccessAdapter{svc: entityService}
+	relService.SetEntityViewFilter(relEntityGate)
 	relHandler := relations.NewHandler(relService)
 	relHandler.SetEntityTypeLister(&entityTypeListerForGraphAdapter{svc: entityService})
+	relHandler.SetEntityGate(relEntityGate)
 	relations.RegisterRoutes(e, relHandler, campaignService, authService)
 
 	// Posts widget: entity sub-notes with rich text, visibility, and reorder.
 	postRepo := posts.NewPostRepository(a.DB)
 	postService := posts.NewPostService(postRepo)
 	postHandler := posts.NewHandler(postService)
+	// Entity-privacy gate (C-PUBLIC-VIEW-FIX-R2): the public posts list must
+	// respect entity visibility + campaign binding, like the entity page.
+	postHandler.SetEntityGate(&entityAccessAdapter{svc: entityService})
 	posts.RegisterRoutes(e, postHandler, campaignService, authService)
 
 	// Player Notes (entity_notes) widget: per-user, per-entity notes
@@ -2423,6 +2466,9 @@ func (a *App) RegisterRoutes() {
 	tagRepo := tags.NewTagRepository(a.DB)
 	tagService := tags.NewTagService(tagRepo)
 	tagHandler := tags.NewHandler(tagService)
+	// Entity-privacy gate (C-PUBLIC-VIEW-FIX-R2): the public per-entity tag read
+	// must respect entity visibility + campaign binding, like the entity page.
+	tagHandler.SetEntityGate(&entityAccessAdapter{svc: entityService})
 	// Tag visibility grants (C-PERM-W1-TAG-GRANTS): Owner-gated CRUD plus the
 	// effective-visibility glance source. The grant service validates grant
 	// subjects against the campaign (member/group lookups) and resolves their

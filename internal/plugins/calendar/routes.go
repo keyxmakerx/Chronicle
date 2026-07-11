@@ -130,7 +130,11 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// calendar is now the registry-driven `entity_calendar` block.)
 
 	// Backward-compat routes: redirect old /calendar paths to /calendars.
-	pub.GET("/calendar", h.legacyRedirect)
+	// Carries RequireViewAccess() for uniformity with every other route on this
+	// public group (C-PUBLIC-VIEW-FIX-R2). It is redirect-only and leaks nothing,
+	// but the route-gate sweep test requires every public-group route to declare
+	// its view gate explicitly rather than relying on the group middleware.
+	pub.GET("/calendar", h.legacyRedirect, campaigns.RequireViewAccess())
 
 	// C-CAL-V1-V2-CUTOVER FIX (cordinator#30): the V2 calendar shell is now the
 	// ONLY live calendar view — every V1 view route above 301s here, so this is

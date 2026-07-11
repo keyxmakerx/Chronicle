@@ -14,9 +14,10 @@ import (
 type mockRelationRepo struct {
 	createFn      func(ctx context.Context, rel *Relation) error
 	findByIDFn    func(ctx context.Context, id int) (*Relation, error)
-	listByEntityFn func(ctx context.Context, entityID string) ([]Relation, error)
+	listByEntityFn func(ctx context.Context, campaignID, entityID string) ([]Relation, error)
 	deleteFn      func(ctx context.Context, id int) error
 	findReverseFn func(ctx context.Context, sourceEntityID, targetEntityID, relationType string) (*Relation, error)
+	listByCampaignFn func(campaignID string) ([]GraphRelation, error)
 }
 
 func (m *mockRelationRepo) Create(ctx context.Context, rel *Relation) error {
@@ -41,9 +42,9 @@ func (m *mockRelationRepo) FindByID(ctx context.Context, id int) (*Relation, err
 	}, nil
 }
 
-func (m *mockRelationRepo) ListByEntity(ctx context.Context, entityID string) ([]Relation, error) {
+func (m *mockRelationRepo) ListByEntity(ctx context.Context, campaignID, entityID string) ([]Relation, error) {
 	if m.listByEntityFn != nil {
-		return m.listByEntityFn(ctx, entityID)
+		return m.listByEntityFn(ctx, campaignID, entityID)
 	}
 	return nil, nil
 }
@@ -66,11 +67,29 @@ func (m *mockRelationRepo) UpdateMetadata(_ context.Context, _ int, _ json.RawMe
 	return nil
 }
 
-func (m *mockRelationRepo) ListByCampaign(_ context.Context, _ string) ([]GraphRelation, error) {
+func (m *mockRelationRepo) ListByCampaign(_ context.Context, campaignID string) ([]GraphRelation, error) {
+	if m.listByCampaignFn != nil {
+		return m.listByCampaignFn(campaignID)
+	}
 	return nil, nil
 }
 
 // --- Test Helpers ---
+
+// stubViewFilter reports which entity IDs are viewable. Absent = not viewable.
+type stubViewFilter struct {
+	viewable map[string]bool
+}
+
+func (s stubViewFilter) FilterViewableEntityIDs(_ context.Context, _ string, ids []string, _ int, _ string) (map[string]bool, error) {
+	out := make(map[string]bool)
+	for _, id := range ids {
+		if s.viewable[id] {
+			out[id] = true
+		}
+	}
+	return out, nil
+}
 
 func newTestService(repo *mockRelationRepo) RelationService {
 	return NewRelationService(repo)
@@ -343,16 +362,19 @@ func TestListByEntity_Success(t *testing.T) {
 		{ID: 2, RelationType: "allied with"},
 	}
 	repo := &mockRelationRepo{
-		listByEntityFn: func(_ context.Context, entityID string) ([]Relation, error) {
+		listByEntityFn: func(_ context.Context, campaignID, entityID string) ([]Relation, error) {
 			if entityID != "entity-a" {
 				t.Errorf("expected entityID 'entity-a', got %q", entityID)
+			}
+			if campaignID != "camp-1" {
+				t.Errorf("expected campaignID 'camp-1', got %q", campaignID)
 			}
 			return expected, nil
 		},
 	}
 	svc := newTestService(repo)
 
-	result, err := svc.ListByEntity(context.Background(), "entity-a")
+	result, err := svc.ListByEntity(context.Background(), "camp-1", "entity-a")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -363,13 +385,13 @@ func TestListByEntity_Success(t *testing.T) {
 
 func TestListByEntity_Empty(t *testing.T) {
 	repo := &mockRelationRepo{
-		listByEntityFn: func(_ context.Context, _ string) ([]Relation, error) {
+		listByEntityFn: func(_ context.Context, _, _ string) ([]Relation, error) {
 			return nil, nil
 		},
 	}
 	svc := newTestService(repo)
 
-	result, err := svc.ListByEntity(context.Background(), "entity-a")
+	result, err := svc.ListByEntity(context.Background(), "camp-1", "entity-a")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -380,13 +402,13 @@ func TestListByEntity_Empty(t *testing.T) {
 
 func TestListByEntity_RepoError(t *testing.T) {
 	repo := &mockRelationRepo{
-		listByEntityFn: func(_ context.Context, _ string) ([]Relation, error) {
+		listByEntityFn: func(_ context.Context, _, _ string) ([]Relation, error) {
 			return nil, errors.New("db error")
 		},
 	}
 	svc := newTestService(repo)
 
-	_, err := svc.ListByEntity(context.Background(), "entity-a")
+	_, err := svc.ListByEntity(context.Background(), "camp-1", "entity-a")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -608,5 +630,76 @@ func TestGetCommonTypes_AllPairsHaveBothLabels(t *testing.T) {
 		if tp.Reverse == "" {
 			t.Error("found common type pair with empty reverse label")
 		}
+	}
+}
+
+// --- Graph visibility filtering (C-PUBLIC-VIEW-FIX-R2) ---
+
+// graphFixture: a public entity linked to a private entity. Both endpoints and
+// the edge are visible today (leak); after filtering, the private node + edge
+// must disappear for a non-privileged viewer.
+func graphFixture() []GraphRelation {
+	return []GraphRelation{
+		{SourceEntityID: "pub-a", SourceEntityName: "Public A", TargetEntityID: "priv-b", TargetEntityName: "Private B", RelationType: "knows"},
+		{SourceEntityID: "pub-a", SourceEntityName: "Public A", TargetEntityID: "pub-c", TargetEntityName: "Public C", RelationType: "allied with"},
+	}
+}
+
+func nodeNames(d *GraphData) map[string]bool {
+	m := make(map[string]bool)
+	for _, n := range d.Nodes {
+		m[n.ID] = true
+	}
+	return m
+}
+
+func TestGetFilteredGraphData_HidesPrivateNodesFromNonPrivileged(t *testing.T) {
+	repo := &mockRelationRepo{listByCampaignFn: func(string) ([]GraphRelation, error) { return graphFixture(), nil }}
+	svc := NewRelationService(repo)
+	// pub-a and pub-c are viewable; priv-b is NOT.
+	svc.SetEntityViewFilter(stubViewFilter{viewable: map[string]bool{"pub-a": true, "pub-c": true}})
+
+	// Non-privileged viewer (includeDmOnly=false): private node dropped.
+	data, err := svc.GetFilteredGraphData(context.Background(), "camp-1", GraphFilter{}, false, 1, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	names := nodeNames(data)
+	if names["priv-b"] {
+		t.Error("private entity node priv-b leaked to non-privileged viewer")
+	}
+	if !names["pub-a"] || !names["pub-c"] {
+		t.Errorf("public nodes wrongly dropped: %+v", data.Nodes)
+	}
+	// The edge to the hidden node must be gone; the public↔public edge stays.
+	for _, e := range data.Edges {
+		if e.Source == "priv-b" || e.Target == "priv-b" {
+			t.Errorf("edge touching hidden node priv-b survived: %+v", e)
+		}
+	}
+	foundPublicEdge := false
+	for _, e := range data.Edges {
+		if (e.Source == "pub-a" && e.Target == "pub-c") || (e.Source == "pub-c" && e.Target == "pub-a") {
+			foundPublicEdge = true
+		}
+	}
+	if !foundPublicEdge {
+		t.Errorf("public↔public edge wrongly dropped: %+v", data.Edges)
+	}
+}
+
+func TestGetFilteredGraphData_PrivilegedViewerKeepsFullPicture(t *testing.T) {
+	repo := &mockRelationRepo{listByCampaignFn: func(string) ([]GraphRelation, error) { return graphFixture(), nil }}
+	svc := NewRelationService(repo)
+	// The filter would hide priv-b, but a privileged viewer (includeDmOnly=true)
+	// must bypass filtering entirely — no behavior change for DMs.
+	svc.SetEntityViewFilter(stubViewFilter{viewable: map[string]bool{"pub-a": true, "pub-c": true}})
+
+	data, err := svc.GetFilteredGraphData(context.Background(), "camp-1", GraphFilter{}, true, 3, "dm-user")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !nodeNames(data)["priv-b"] {
+		t.Error("privileged viewer must still see the private node priv-b (over-filtering)")
 	}
 }
