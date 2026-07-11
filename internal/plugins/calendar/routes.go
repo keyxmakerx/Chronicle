@@ -113,17 +113,17 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// backend). PRESERVED (no V2 equivalent yet): the TIMELINE (Timeline V2 is a
 	// deferred arc) and the standalone EMBED page — both kept until their V2
 	// surfaces exist.
-	pub.GET("/calendars", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId", h.RedirectShowV2, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireRole(campaigns.RolePlayer)) // PRESERVE: no V2 embed
-	pub.GET("/calendars/:calId/timeline", h.ShowTimeline, campaigns.RequireRole(campaigns.RolePlayer)) // PRESERVE: Timeline V2 deferred
-	pub.GET("/calendars/:calId/week", h.RedirectWeekV2, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId/day", h.RedirectDayV2, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/:calId/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer)) // PRESERVE: fragment loader
+	pub.GET("/calendars", h.Index, campaigns.RequireViewAccess())
+	pub.GET("/calendars/:calId", h.RedirectShowV2, campaigns.RequireViewAccess())
+	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireViewAccess()) // PRESERVE: no V2 embed
+	pub.GET("/calendars/:calId/timeline", h.ShowTimeline, campaigns.RequireViewAccess()) // PRESERVE: Timeline V2 deferred
+	pub.GET("/calendars/:calId/week", h.RedirectWeekV2, campaigns.RequireViewAccess())
+	pub.GET("/calendars/:calId/day", h.RedirectDayV2, campaigns.RequireViewAccess())
+	pub.GET("/calendars/:calId/upcoming", h.UpcomingEventsFragment, campaigns.RequireViewAccess()) // PRESERVE: fragment loader
 
 	// Dashboard block routes: no calId, handlers fall back to default calendar.
-	pub.GET("/calendars/embed", h.EmbedCalendar, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendars/upcoming", h.UpcomingEventsFragment, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendars/embed", h.EmbedCalendar, campaigns.RequireViewAccess())
+	pub.GET("/calendars/upcoming", h.UpcomingEventsFragment, campaigns.RequireViewAccess())
 
 	// (The /calendars/entity-events/:eid fragment + its EntityEventsFragment
 	// handler were retired in C-CAL-EMBED-CONVERGE-POLISH — the per-entity
@@ -143,9 +143,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	//   GET /campaigns/:id/calendar/v2              — active cal, default view = month
 	//   GET /campaigns/:id/calendar/v2/:calId       — explicit cal, default view = month
 	//   GET /campaigns/:id/calendar/v2/:calId/:view — explicit cal + view (month|week|day)
-	pub.GET("/calendar/v2", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendar/v2/:calId", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/calendar/v2/:calId/:view", h.ShowV2, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/v2", h.ShowV2, campaigns.RequireViewAccess())
+	pub.GET("/calendar/v2/:calId", h.ShowV2, campaigns.RequireViewAccess())
+	pub.GET("/calendar/v2/:calId/:view", h.ShowV2, campaigns.RequireViewAccess())
 
 	// World-state seed GET (C-CAL-WORLDSTATE-SERVER-MODEL). Player+ READ — the
 	// worldstate band lazy-loads this on the public calendar + entity-embed
@@ -153,7 +153,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// for non-DM viewers in the seed builder). No calId: the handler resolves
 	// the active calendar (or ?calendarId=). The PUT (set mood / advance time)
 	// stays Owner/co-DM in cg below.
-	pub.GET("/calendar/world-state", h.GetWorldState, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/calendar/world-state", h.GetWorldState, campaigns.RequireViewAccess())
 
 	// World-state seed PUT (set live mood + advance/set time). Co-DM capability
 	// (C-CAL-COGM-CAPABILITY / D6): control is Owner OR DM-grantee, not

@@ -142,22 +142,22 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 	)
-	pub.GET("/entities", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/entities/search", h.SearchAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/search", h.SearchPageHandler, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/entities/:eid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/entities/:eid/backlinks", h.BacklinksFragment, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/entities", h.Index, campaigns.RequireViewAccess())
+	pub.GET("/entities/search", h.SearchAPI, campaigns.RequireViewAccess())
+	pub.GET("/search", h.SearchPageHandler, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid", h.Show, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid/preview", h.PreviewAPI, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid/backlinks", h.BacklinksFragment, campaigns.RequireViewAccess())
 
 	// Widget data endpoints (read-only) — needed so public campaign visitors
 	// can load editor content, attribute fields, etc. Handlers already enforce
 	// entity-level privacy checks (private entities require Scribe+).
-	pub.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/entities/:eid/entry", h.GetEntry, campaigns.RequireViewAccess())
+	pub.GET("/entities/:eid/fields", h.GetFieldsAPI, campaigns.RequireViewAccess())
 	// Aliases display data (cordinator#39 finding 3) — the aliases widget mounts
 	// for every viewer, so its read must be public-capable like entry/fields.
 	// GetAliasesAPI now enforces the same IDOR + entity-privacy gate.
-	pub.GET("/entities/:eid/aliases", h.GetAliasesAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/entities/:eid/aliases", h.GetAliasesAPI, campaigns.RequireViewAccess())
 
 	// Dynamic category route: resolves any entity type slug to a category
 	// dashboard. Echo's router gives static segments (entities, settings, etc.)
@@ -165,5 +165,5 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	pub.GET("/:typeSlug", func(c echo.Context) error {
 		c.Set("entity_type_slug", c.Param("typeSlug"))
 		return h.Index(c)
-	}, campaigns.RequireRole(campaigns.RolePlayer))
+	}, campaigns.RequireViewAccess())
 }

@@ -42,16 +42,16 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "maps"),
 	)
-	pub.GET("/maps", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/maps/:mid", h.Show, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/maps", h.Index, campaigns.RequireViewAccess())
+	pub.GET("/maps/:mid", h.Show, campaigns.RequireViewAccess())
 	// Read-only map data for the embeddable map-widget / entity-map blocks on
 	// public campaigns (cordinator#39 finding 4). meta = image + dimensions +
 	// visibility-filtered markers; markers also exposed standalone. Both reuse
 	// the existing role/visibility filtering and are empty-userID safe.
 	// Drawings/tokens get their own pub group in RegisterDrawingRoutes; fog and
 	// layers stay cg-only (GM tools).
-	pub.GET("/maps/:mid/meta", h.GetMapMetaAPI, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/maps/:mid/markers", h.ListMarkersAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/maps/:mid/meta", h.GetMapMetaAPI, campaigns.RequireViewAccess())
+	pub.GET("/maps/:mid/markers", h.ListMarkersAPI, campaigns.RequireViewAccess())
 }
 
 // RegisterDrawingRoutes sets up API routes for drawings, tokens, layers, and fog.
@@ -103,6 +103,6 @@ func RegisterDrawingRoutes(e *echo.Echo, dh *DrawingHandler, campaignSvc campaig
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "maps"),
 	)
-	pub.GET("/maps/:mid/drawings", dh.ListDrawings, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/maps/:mid/tokens", dh.ListTokens, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/maps/:mid/drawings", dh.ListDrawings, campaigns.RequireViewAccess())
+	pub.GET("/maps/:mid/tokens", dh.ListTokens, campaigns.RequireViewAccess())
 }

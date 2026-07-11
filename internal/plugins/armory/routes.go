@@ -22,8 +22,8 @@ func RegisterRoutes(e *echo.Echo, h *Handler, th *TransactionHandler, ih *Instan
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "armory"),
 	)
-	pub.GET("/armory", h.Index, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/armory/count", h.CountAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/armory", h.Index, campaigns.RequireViewAccess())
+	pub.GET("/armory/count", h.CountAPI, campaigns.RequireViewAccess())
 
 	// Authenticated routes for instances and transactions.
 	cg := e.Group("/campaigns/:id",

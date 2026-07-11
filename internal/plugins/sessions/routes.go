@@ -33,10 +33,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 		addons.RequireAddon(addonSvc, "calendar"),
 	)
-	pub.GET("/sessions", h.ListSessions, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/sessions/:sid", h.ShowSession, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/sidebar/sessions-rsvp", h.SidebarRSVP, campaigns.RequireRole(campaigns.RolePlayer))
-	pub.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/sessions", h.ListSessions, campaigns.RequireViewAccess())
+	pub.GET("/sessions/:sid", h.ShowSession, campaigns.RequireViewAccess())
+	pub.GET("/sidebar/sessions-rsvp", h.SidebarRSVP, campaigns.RequireViewAccess())
+	pub.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireViewAccess())
 
 	// RSVP token redemption — public endpoint, no auth required.
 	// Token itself is the credential (emailed to the user).

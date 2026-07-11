@@ -29,5 +29,5 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 		auth.OptionalAuth(authSvc),
 		campaigns.AllowPublicCampaignAccess(campaignSvc),
 	)
-	pub.GET("/entities/:eid/posts", h.ListPosts, campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/entities/:eid/posts", h.ListPosts, campaigns.RequireViewAccess())
 }

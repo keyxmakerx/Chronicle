@@ -32,9 +32,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler, svc CampaignService, authSvc auth.
 		auth.OptionalAuth(authSvc),
 		AllowPublicCampaignAccess(svc),
 	)
-	pub.GET("", h.Show, RequireRole(RolePlayer))
+	pub.GET("", h.Show, RequireViewAccess())
 	// Sidebar drill-down for public visitors (clicking categories in sidebar).
-	pub.GET("/sidebar/drill/:slug", h.SidebarDrill, RequireRole(RolePlayer))
+	pub.GET("/sidebar/drill/:slug", h.SidebarDrill, RequireViewAccess())
 
 	// Authenticated campaign-scoped routes require membership.
 	cg := e.Group("/campaigns/:id",
