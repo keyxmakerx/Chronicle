@@ -62,6 +62,10 @@ type EntityService interface {
 	GetEntityPermissions(ctx context.Context, entityID string) ([]EntityPermission, error)
 	SetEntityPermissions(ctx context.Context, entityID string, input SetPermissionsInput) error
 	CheckEntityAccess(ctx context.Context, entityID string, role int, userID string) (*EffectivePermission, error)
+	// FilterViewableEntityIDs returns the subset of entityIDs (scoped to
+	// campaignID) that a viewer with the given role + userID may view. Batched
+	// building block for widgets that must hide private-entity nodes/targets.
+	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
 	CreateEntityType(ctx context.Context, campaignID string, input CreateEntityTypeInput) (*EntityType, error)
 	// EnsurePlayerCharacterType idempotently premakes the campaign's claimable
 	// "Player Character" type (with the dynamic character-surface layout). Called
@@ -2265,6 +2269,15 @@ func (s *entityService) CheckEntityAccess(ctx context.Context, entityID string, 
 		}
 	}
 	return ep, nil
+}
+
+// FilterViewableEntityIDs returns the subset of entityIDs (scoped to campaignID)
+// that a viewer with the given role + userID may view, applying the canonical
+// visibility policy. Batched — one query, no N+1. Exposed for the entity widgets
+// (relation lists, relations graph) so they can hide private-entity targets/nodes
+// without touching the entities repo directly (plugin-isolation).
+func (s *entityService) FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error) {
+	return s.entities.FilterViewableEntityIDs(ctx, campaignID, entityIDs, role, userID)
 }
 
 // --- Seeder ---

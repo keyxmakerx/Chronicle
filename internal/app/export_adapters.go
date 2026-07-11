@@ -203,7 +203,7 @@ func (a *entityExportAdapter) ExportEntities(ctx context.Context, campaignID str
 	// Relations are per-entity, so we collect from all entities and deduplicate.
 	seenRelations := make(map[string]bool)
 	for entityID := range entityIDToSlug {
-		rels, err := a.relationSvc.ListByEntity(ctx, entityID)
+		rels, err := a.relationSvc.ListByEntity(ctx, campaignID, entityID)
 		if err != nil {
 			continue
 		}
@@ -1542,7 +1542,7 @@ func (a *postExportAdapter) ExportPosts(ctx context.Context, campaignID string, 
 		}
 
 		for _, e := range ents {
-			entityPosts, err := a.postSvc.ListByEntity(ctx, e.ID, true)
+			entityPosts, err := a.postSvc.ListByEntity(ctx, e.CampaignID, e.ID, true)
 			if err != nil {
 				continue
 			}

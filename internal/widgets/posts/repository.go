@@ -12,9 +12,11 @@ type PostRepository interface {
 	Create(ctx context.Context, post *Post) error
 	// FindByID returns a single post by its ID.
 	FindByID(ctx context.Context, id string) (*Post, error)
-	// ListByEntity returns all posts for an entity, ordered by sort_order.
-	// When includeDMOnly is false, DM-only posts are filtered out.
-	ListByEntity(ctx context.Context, entityID string, includeDMOnly bool) ([]Post, error)
+	// ListByEntity returns all posts for an entity within a campaign, ordered by
+	// sort_order. The campaign_id predicate is defense-in-depth against
+	// cross-campaign reads (the handler is the primary IDOR gate). When
+	// includeDMOnly is false, DM-only posts are filtered out.
+	ListByEntity(ctx context.Context, campaignID, entityID string, includeDMOnly bool) ([]Post, error)
 	// Update modifies an existing post.
 	Update(ctx context.Context, post *Post) error
 	// Delete removes a post by its ID.
@@ -55,15 +57,15 @@ func (r *postRepository) FindByID(ctx context.Context, id string) (*Post, error)
 	return scanPost(row)
 }
 
-func (r *postRepository) ListByEntity(ctx context.Context, entityID string, includeDMOnly bool) ([]Post, error) {
+func (r *postRepository) ListByEntity(ctx context.Context, campaignID, entityID string, includeDMOnly bool) ([]Post, error) {
 	query := `SELECT id, entity_id, campaign_id, name, entry, entry_html, is_private, sort_order, created_by, created_at, updated_at
-		 FROM entity_posts WHERE entity_id = ?`
+		 FROM entity_posts WHERE entity_id = ? AND campaign_id = ?`
 	if !includeDMOnly {
 		query += ` AND is_private = FALSE`
 	}
 	query += ` ORDER BY sort_order ASC, created_at ASC`
 
-	rows, err := r.db.QueryContext(ctx, query, entityID)
+	rows, err := r.db.QueryContext(ctx, query, entityID, campaignID)
 	if err != nil {
 		return nil, err
 	}

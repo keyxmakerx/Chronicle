@@ -745,6 +745,11 @@ type EntityRepository interface {
 	// by name length DESC so longer names match first (prevents partial matches).
 	ListNames(ctx context.Context, campaignID string, role int, userID string) ([]EntityNameEntry, error)
 
+	// FilterViewableEntityIDs returns the subset of entityIDs (scoped to
+	// campaignID) that a viewer with the given role + userID may view, applying
+	// the canonical visibility policy. Batched — one query, no N+1.
+	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
+
 	// ListAliases returns all aliases for a given entity.
 	ListAliases(ctx context.Context, entityID string) ([]EntityAlias, error)
 
@@ -1167,6 +1172,57 @@ func visibilityFilter(role int, userID string) (string, []any) {
 		)
 	)`
 	return filter, []any{role, role, userID, userID, role, userID, userID}
+}
+
+// FilterViewableEntityIDs returns the subset of entityIDs (scoped to campaignID)
+// that a viewer with the given role + userID may view, applying the canonical
+// per-viewer visibility policy (visibilityFilter — the same predicate List /
+// Search / the mention-graph use). Batched: one query, no per-row N+1.
+//
+// WHY this exists: the entity widgets (relation lists, relations graph) must hide
+// private-entity targets/nodes from viewers who cannot see them, but widgets may
+// not touch the entities repo directly (plugin-isolation, rule 8). This method is
+// the batched building block the entity service exposes for that. Cross-campaign
+// IDs are excluded for free by the `campaign_id = ?` scope. Cites: cordinator/
+// dispatches/chronicle/C-PUBLIC-VIEW-FIX-R2.md; 2026-05-21-core-tenets §T-B1.
+func (r *entityRepository) FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error) {
+	viewable := make(map[string]bool, len(entityIDs))
+	if len(entityIDs) == 0 {
+		return viewable, nil
+	}
+
+	// Build the IN (?, ?, ...) placeholder list; campaign scope goes first.
+	placeholders := make([]string, len(entityIDs))
+	args := make([]any, 0, len(entityIDs)+8)
+	args = append(args, campaignID)
+	for i, id := range entityIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	query := `SELECT e.id FROM entities e WHERE e.campaign_id = ? AND e.id IN (` +
+		strings.Join(placeholders, ", ") + `)`
+
+	// Apply the canonical per-viewer visibility policy. Owners bypass (empty
+	// fragment), so they see every in-campaign id passed in.
+	visFilter, visArgs := visibilityFilter(role, userID)
+	query += visFilter
+	args = append(args, visArgs...)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("filtering viewable entity ids: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning viewable entity id: %w", err)
+		}
+		viewable[id] = true
+	}
+	return viewable, rows.Err()
 }
 
 // entityTypeInClause builds " AND e.entity_type_id [= ? | IN (?, ...)]" plus

@@ -838,7 +838,7 @@ func (h *APIHandler) ListEntityRelations(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID required")
 	}
 
-	rels, err := h.relationSvc.ListByEntity(c.Request().Context(), entityID)
+	rels, err := h.relationSvc.ListByEntity(c.Request().Context(), c.Param("id"), entityID)
 	if err != nil {
 		slog.Error("listing entity relations", slog.String("entity_id", entityID), slog.String("error", err.Error()))
 		return apperror.NewInternal(fmt.Errorf("failed to list relations"))

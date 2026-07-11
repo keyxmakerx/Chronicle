@@ -121,7 +121,7 @@ func (s *Service) renderCategory(
 		relByEntity := map[string][]relations.Relation{}
 		if s.Relations != nil {
 			for _, e := range ents {
-				rels, err := s.Relations.ListByEntity(ctx, e.ID)
+				rels, err := s.Relations.ListByEntity(ctx, e.CampaignID, e.ID)
 				if err != nil {
 					return "", fmt.Errorf("entity %q relations: %w", e.Name, err)
 				}

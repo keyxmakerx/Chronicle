@@ -174,6 +174,28 @@ type EntityTypeListerForGraph interface {
 	ListEntityTypesForGraph(ctx context.Context, campaignID string) ([]EntityTypeSummary, error)
 }
 
+// EntityViewFilter reports which of a set of entity IDs a viewer may see,
+// applying the canonical entity-visibility policy. Implemented by an adapter over
+// the entity service (app wiring). Used by the graph service to drop private
+// entities' nodes/edges from viewers who cannot see them. Defined here to avoid
+// importing the entities package. See cordinator/dispatches/chronicle/
+// C-PUBLIC-VIEW-FIX-R2.md.
+type EntityViewFilter interface {
+	FilterViewableEntityIDs(ctx context.Context, campaignID string, entityIDs []string, role int, userID string) (map[string]bool, error)
+}
+
+// EntityGate is the narrow seam the relations handler uses to honor entity
+// visibility + campaign binding on the per-entity relation list. It extends
+// EntityViewFilter with a single-entity resolver for the source-entity gate
+// (mirrors the entity Show page). Implemented by the same adapter.
+type EntityGate interface {
+	EntityViewFilter
+	// ResolveViewableEntity returns the entity's owning campaign ID and whether
+	// the viewer (role, userID) may view it. A missing entity returns a
+	// not-found error.
+	ResolveViewableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView bool, err error)
+}
+
 // GraphData is the JSON response for the relations graph API.
 type GraphData struct {
 	Nodes []GraphNode `json:"nodes"`

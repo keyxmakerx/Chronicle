@@ -1,7 +1,9 @@
 package relations
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,6 +22,7 @@ import (
 type Handler struct {
 	service    RelationService
 	typeLister EntityTypeListerForGraph
+	entityGate EntityGate
 }
 
 // NewHandler creates a new relation handler backed by the given service.
@@ -30,6 +33,13 @@ func NewHandler(service RelationService) *Handler {
 // SetEntityTypeLister injects the entity type lister for the graph page.
 func (h *Handler) SetEntityTypeLister(lister EntityTypeListerForGraph) {
 	h.typeLister = lister
+}
+
+// SetEntityGate injects the entity-visibility gate. Called during app wiring.
+// When set, the public relations list enforces entity privacy + campaign
+// binding on the source entity and filters private relation targets.
+func (h *Handler) SetEntityGate(gate EntityGate) {
+	h.entityGate = gate
 }
 
 // ListRelations returns all relations for an entity as JSON
@@ -45,13 +55,35 @@ func (h *Handler) ListRelations(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
-	relations, err := h.service.ListByEntity(c.Request().Context(), entityID)
+	// Source-entity gate (mirrors the entity Show page): resolve the entity,
+	// require it to belong to the URL campaign (kills the cross-campaign IDOR),
+	// and require the caller's view access (anon = RoleNone). Without this an
+	// anonymous visitor could read the relation list — including private target
+	// names/slugs — of a private entity, or of any entity in another campaign.
+	if h.entityGate == nil {
+		// Fail closed: a missing gate must never serve ungated relations.
+		return apperror.NewInternal(errors.New("relations: entity gate not configured"))
+	}
+	userID := auth.GetUserID(c)
+	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
+		c.Request().Context(), entityID, int(cc.MemberRole), userID)
+	if err != nil {
+		return err // NotFound for a missing entity; propagates real errors.
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	relations, err := h.service.ListByEntity(c.Request().Context(), cc.Campaign.ID, entityID)
 	if err != nil {
 		return err
 	}
 
-	// Filter dm_only relations for non-DM users.
-	if cc.MemberRole != campaigns.RoleOwner && !cc.IsSiteAdmin && !cc.IsDmGranted {
+	// Owner / site-admin / DM-granted viewers keep the full picture (dm_only
+	// relations + private targets). Everyone else is filtered.
+	privileged := cc.MemberRole == campaigns.RoleOwner || cc.IsSiteAdmin || cc.IsDmGranted
+	if !privileged {
+		// Drop dm_only relations.
 		filtered := make([]Relation, 0, len(relations))
 		for _, r := range relations {
 			if !r.DmOnly {
@@ -59,6 +91,13 @@ func (h *Handler) ListRelations(c echo.Context) error {
 			}
 		}
 		relations = filtered
+
+		// Drop relations whose TARGET entity the viewer cannot see — the target
+		// name/slug/type are the leak. Batched visibility check (no N+1).
+		relations, err = h.filterByTargetVisibility(c.Request().Context(), cc.Campaign.ID, relations, int(cc.MemberRole), userID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Return empty array instead of null when no relations exist.
@@ -67,6 +106,38 @@ func (h *Handler) ListRelations(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, relations)
+}
+
+// filterByTargetVisibility drops relations whose target entity the viewer cannot
+// see, using one batched visibility query for all distinct targets (no per-row
+// N+1). Callers must have already confirmed h.entityGate is non-nil.
+func (h *Handler) filterByTargetVisibility(ctx context.Context, campaignID string, rels []Relation, role int, userID string) ([]Relation, error) {
+	if len(rels) == 0 {
+		return rels, nil
+	}
+
+	// Collect distinct target IDs.
+	ids := make([]string, 0, len(rels))
+	seen := make(map[string]bool, len(rels))
+	for _, r := range rels {
+		if !seen[r.TargetEntityID] {
+			seen[r.TargetEntityID] = true
+			ids = append(ids, r.TargetEntityID)
+		}
+	}
+
+	viewable, err := h.entityGate.FilterViewableEntityIDs(ctx, campaignID, ids, role, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]Relation, 0, len(rels))
+	for _, r := range rels {
+		if viewable[r.TargetEntityID] {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 // CreateRelation creates a new bi-directional relation between two entities
@@ -231,10 +302,12 @@ func (h *Handler) GraphAPI(c echo.Context) error {
 		filter.Hops = 2
 	}
 
-	// Determine user ID for visibility filtering of mention links.
+	// Determine user ID + role for visibility filtering. viewerRole drives the
+	// per-viewer entity-visibility filter that hides private-entity nodes from
+	// non-privileged viewers (includeDmOnly viewers keep the full picture).
 	userID := auth.GetUserID(c)
 
-	data, err := h.service.GetFilteredGraphData(c.Request().Context(), cc.Campaign.ID, filter, includeDmOnly, userID)
+	data, err := h.service.GetFilteredGraphData(c.Request().Context(), cc.Campaign.ID, filter, includeDmOnly, int(cc.MemberRole), userID)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}

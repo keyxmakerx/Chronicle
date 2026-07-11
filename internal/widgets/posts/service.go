@@ -16,8 +16,9 @@ type PostService interface {
 	Create(ctx context.Context, campaignID, entityID, userID, name string, req CreatePostRequest) (*Post, error)
 	// GetByID returns a post by ID.
 	GetByID(ctx context.Context, id string) (*Post, error)
-	// ListByEntity returns all posts for an entity, filtering DM-only based on role.
-	ListByEntity(ctx context.Context, entityID string, includeDMOnly bool) ([]Post, error)
+	// ListByEntity returns all posts for an entity within a campaign, filtering
+	// DM-only based on role. campaignID scopes the query (defense-in-depth).
+	ListByEntity(ctx context.Context, campaignID, entityID string, includeDMOnly bool) ([]Post, error)
 	// Update modifies a post's name, content, or visibility.
 	Update(ctx context.Context, id string, req UpdatePostRequest) (*Post, error)
 	// Delete removes a post.
@@ -45,7 +46,7 @@ func (s *postService) Create(ctx context.Context, campaignID, entityID, userID, 
 	}
 
 	// Determine next sort order by counting existing posts.
-	existing, err := s.repo.ListByEntity(ctx, entityID, true)
+	existing, err := s.repo.ListByEntity(ctx, campaignID, entityID, true)
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}
@@ -78,8 +79,8 @@ func (s *postService) GetByID(ctx context.Context, id string) (*Post, error) {
 	return post, nil
 }
 
-func (s *postService) ListByEntity(ctx context.Context, entityID string, includeDMOnly bool) ([]Post, error) {
-	posts, err := s.repo.ListByEntity(ctx, entityID, includeDMOnly)
+func (s *postService) ListByEntity(ctx context.Context, campaignID, entityID string, includeDMOnly bool) ([]Post, error) {
+	posts, err := s.repo.ListByEntity(ctx, campaignID, entityID, includeDMOnly)
 	if err != nil {
 		return nil, apperror.NewInternal(err)
 	}

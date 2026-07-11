@@ -169,6 +169,7 @@ type mockEntityRepo struct {
 	updateMapIDFn    func(ctx context.Context, entityID string, mapID *string) error
 	listSiblingIDsFn func(ctx context.Context, campaignID string, entityTypeID int, parentID, parentNodeID *string) ([]string, error)
 	resequenceFn     func(ctx context.Context, campaignID string, orderedIDs []string) error
+	filterViewableFn func(entityIDs []string) (map[string]bool, error)
 }
 
 func (m *mockEntityRepo) Create(ctx context.Context, entity *Entity) error {
@@ -183,6 +184,18 @@ func (m *mockEntityRepo) FindByID(ctx context.Context, id string) (*Entity, erro
 		return m.findByIDFn(ctx, id)
 	}
 	return nil, apperror.NewNotFound("entity not found")
+}
+
+func (m *mockEntityRepo) FilterViewableEntityIDs(_ context.Context, _ string, entityIDs []string, _ int, _ string) (map[string]bool, error) {
+	if m.filterViewableFn != nil {
+		return m.filterViewableFn(entityIDs)
+	}
+	// Default: every id is viewable (tests that care override filterViewableFn).
+	out := make(map[string]bool, len(entityIDs))
+	for _, id := range entityIDs {
+		out[id] = true
+	}
+	return out, nil
 }
 
 func (m *mockEntityRepo) FindBySlug(ctx context.Context, campaignID, slug string) (*Entity, error) {

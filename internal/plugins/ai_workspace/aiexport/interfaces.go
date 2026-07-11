@@ -66,7 +66,7 @@ type TimelineLister interface {
 // the relation listed) means we query per-entity rather than per-pair;
 // the duplication is documented and accepted.
 type RelationLister interface {
-	ListByEntity(ctx context.Context, entityID string) ([]relations.Relation, error)
+	ListByEntity(ctx context.Context, campaignID, entityID string) ([]relations.Relation, error)
 }
 
 // TagLister batch-fetches tags for the entity list. Entity rows

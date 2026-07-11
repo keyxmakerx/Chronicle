@@ -1,7 +1,9 @@
 package posts
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -11,15 +13,33 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
+// EntityGate is the narrow cross-plugin seam the posts widget uses to honor
+// entity visibility + campaign binding without importing the entities repo
+// (plugin-isolation). Implemented by an adapter over the entity service, wired
+// in app/routes.go. See cordinator/dispatches/chronicle/C-PUBLIC-VIEW-FIX-R2.md.
+type EntityGate interface {
+	// ResolveViewableEntity returns the entity's owning campaign ID and whether
+	// the viewer (role, userID) may view it. A missing entity returns a
+	// not-found error. Mirrors the entity Show page gate.
+	ResolveViewableEntity(ctx context.Context, entityID string, role int, userID string) (campaignID string, canView bool, err error)
+}
+
 // Handler handles HTTP requests for entity post operations. Handlers are
 // thin: bind request, call service, render response. No business logic.
 type Handler struct {
-	service PostService
+	service    PostService
+	entityGate EntityGate
 }
 
 // NewHandler creates a new post handler backed by the given service.
 func NewHandler(service PostService) *Handler {
 	return &Handler{service: service}
+}
+
+// SetEntityGate injects the entity-visibility gate. Called during app wiring.
+// When set, the public list endpoint enforces entity privacy + campaign binding.
+func (h *Handler) SetEntityGate(gate EntityGate) {
+	h.entityGate = gate
 }
 
 // ListPosts returns all posts for an entity as JSON.
@@ -35,10 +55,28 @@ func (h *Handler) ListPosts(c echo.Context) error {
 		return apperror.NewBadRequest("entity ID is required")
 	}
 
+	// Entity-privacy gate (mirrors the entity Show page): resolve the entity,
+	// require it to belong to the URL campaign (kills the cross-campaign IDOR),
+	// and require the caller's view access (anon = RoleNone). Without this an
+	// anonymous visitor to a public campaign could read the posts of a private
+	// entity, or of any entity in another campaign given its ID.
+	if h.entityGate == nil {
+		// Fail closed: a missing gate must never serve ungated posts.
+		return apperror.NewInternal(errors.New("posts: entity gate not configured"))
+	}
+	campaignID, canView, err := h.entityGate.ResolveViewableEntity(
+		c.Request().Context(), entityID, int(cc.MemberRole), auth.GetUserID(c))
+	if err != nil {
+		return err // NotFound for a missing entity; propagates real errors.
+	}
+	if campaignID != cc.Campaign.ID || !canView {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	// Scribes and above see DM-only posts; DM-granted users also see them.
 	includeDMOnly := cc.MemberRole >= campaigns.RoleScribe || cc.IsDmGranted
 
-	posts, err := h.service.ListByEntity(c.Request().Context(), entityID, includeDMOnly)
+	posts, err := h.service.ListByEntity(c.Request().Context(), cc.Campaign.ID, entityID, includeDMOnly)
 	if err != nil {
 		return err
 	}
