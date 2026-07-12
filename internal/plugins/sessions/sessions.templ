@@ -30,15 +30,24 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 			<h1 class="text-2xl font-bold text-fg">Sessions</h1>
 			<p class="text-sm text-fg-secondary mt-1">Game session schedule and history.</p>
 		</div>
-		if isScribe {
-			<button
-				type="button"
-				class="btn-primary text-sm"
-				onclick="document.getElementById('create-session-modal').showModal()"
+		<div class="flex items-center gap-2">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID)) }
+				class="btn-secondary text-sm"
+				title="Record your weekly availability and see the group heatmap"
 			>
-				<i class="fa-solid fa-plus mr-1"></i> New Session
-			</button>
-		}
+				<i class="fa-solid fa-calendar-check mr-1"></i> Availability
+			</a>
+			if isScribe {
+				<button
+					type="button"
+					class="btn-primary text-sm"
+					onclick="document.getElementById('create-session-modal').showModal()"
+				>
+					<i class="fa-solid fa-plus mr-1"></i> New Session
+				</button>
+			}
+		</div>
 	</div>
 	if len(sessions) == 0 {
 		<div class="card p-12 text-center">

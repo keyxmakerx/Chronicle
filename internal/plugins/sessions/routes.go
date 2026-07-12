@@ -27,6 +27,28 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.POST("/sessions/:sid/entities", h.LinkEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/sessions/:sid/entities/:eid", h.UnlinkEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// Availability scheduler (C-SCHED-P1). Member-only data — every route rides
+	// the AUTHED cg group (RequireAuth + RequireCampaignAccess +
+	// RequireAddon("calendar")), NEVER the public pub group below. Any member
+	// (Player+) may record their own availability and read the anonymous
+	// aggregate heatmap; per-member detail on the overlay is gated to the
+	// owner / DM-granted inside the handler by role, not by route (design §5).
+	//
+	// Step-0 (coordinator anchor correction): the relay said "there is NO
+	// RequireAddon() middleware". That is not accurate — addons.RequireAddon
+	// (internal/plugins/addons/middleware.go:21) exists and is already used by
+	// both sessions and calendar (routes.go); availability mirrors that battle-
+	// tested pattern via the shared cg group, and gates on the "calendar" addon
+	// like the rest of the sessions plugin.
+	h.SetUserDirectory(authSvc)
+	cg.GET("/availability", h.ShowAvailability, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/availability/mine", h.GetMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/availability/mine", h.SaveMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/availability/overlay", h.GetOverlayAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/availability/exceptions", h.ListMyExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/availability/exceptions", h.AddExceptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.DELETE("/availability/exceptions/:eid", h.DeleteExceptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// Public-capable view routes.
 	pub := e.Group("/campaigns/:id",
 		auth.OptionalAuth(authSvc),

@@ -1,0 +1,84 @@
+// availability.templ renders the availability scheduler shell (C-SCHED-P1):
+// a player "paint grid" for recording a recurring weekly pattern, and the DM
+// "team heatmap" overlay. The interactive grid + heatmap are rendered client-
+// side by /static/js/availability.js from the JSON APIs, matching the signed
+// mockup encoding (density underlay, count gutter, ★ full-house, slim opaque
+// player lanes, DM-zone label, WCAG-AA).
+
+package sessions
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// boolAttr renders a Go bool as the string "true"/"false" for a data attribute.
+func boolAttr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+// AvailabilityPage renders the full availability scheduler page. canSeeDetail is
+// true for the owner / DM-granted, gating the per-member overlay detail.
+templ AvailabilityPage(cc *campaigns.CampaignContext, csrfToken string, canSeeDetail bool, userID, storedTZ string) {
+	@layouts.App(cc.Campaign.Name + " - Availability") {
+		<div
+			class="max-w-5xl mx-auto"
+			data-availability-root
+			data-campaign-id={ cc.Campaign.ID }
+			data-csrf={ csrfToken }
+			data-user-id={ userID }
+			data-can-detail={ boolAttr(canSeeDetail) }
+			data-tz={ storedTZ }
+		>
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Availability"},
+			})
+
+			<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+				<div>
+					<h1 class="text-2xl font-bold text-fg">Availability</h1>
+					<p class="text-sm text-fg-secondary mt-1">
+						Paint the hours you can play — it repeats every week. The DM sees everyone stacked as a heatmap to find the best slots.
+					</p>
+				</div>
+				<span
+					class="inline-flex items-center gap-2 text-xs font-semibold text-fg-secondary bg-surface-alt border border-edge rounded-full px-3 py-1.5"
+					data-tz-label
+					title="Times shown in this timezone"
+				>
+					<i class="fa-solid fa-globe" aria-hidden="true"></i>
+					<span data-tz-label-text>{ storedTZ }</span>
+				</span>
+			</div>
+
+			<!-- Segmented control: my grid vs the team heatmap -->
+			<div class="inline-flex bg-surface-alt border border-edge rounded-lg p-0.5 mb-5" role="tablist" aria-label="Availability view">
+				<button type="button" class="px-4 py-1.5 rounded-md text-sm font-semibold" role="tab" data-avail-tab="mine" aria-selected="true">
+					<i class="fa-solid fa-user-pen mr-1" aria-hidden="true"></i> My availability
+				</button>
+				<button type="button" class="px-4 py-1.5 rounded-md text-sm font-semibold" role="tab" data-avail-tab="overlay" aria-selected="false">
+					<i class="fa-solid fa-layer-group mr-1" aria-hidden="true"></i>
+					if canSeeDetail {
+						Team heatmap
+					} else {
+						Group availability
+					}
+				</button>
+			</div>
+
+			<!-- Panels rendered client-side -->
+			<section data-avail-panel="mine" aria-label="My weekly availability"></section>
+			<section data-avail-panel="overlay" hidden aria-label="Group availability heatmap"></section>
+
+			<!-- ARIA live region for grid + heatmap announcements -->
+			<div class="sr-only" aria-live="polite" data-avail-live></div>
+		</div>
+		<script src="/static/js/availability.js" defer></script>
+	}
+}

@@ -36,6 +36,17 @@ type SessionRepository interface {
 	CreateRSVPToken(ctx context.Context, token *RSVPToken) error
 	FindRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
 	MarkRSVPTokenUsed(ctx context.Context, tokenStr string) error
+
+	// Availability scheduler (C-SCHED-P1). Recurring per-member blocks +
+	// per-date exceptions live in their own tables (member_availability,
+	// availability_exceptions) — see availability_repository.go.
+	ListUserAvailability(ctx context.Context, campaignID, userID string) ([]AvailabilityBlock, error)
+	ListCampaignAvailability(ctx context.Context, campaignID string) ([]AvailabilityBlock, error)
+	ReplaceUserAvailability(ctx context.Context, campaignID, userID string, blocks []AvailabilityBlock) error
+	ListUserExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
+	ListCampaignExceptionsInRange(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
+	AddException(ctx context.Context, e *AvailabilityException) error
+	DeleteException(ctx context.Context, campaignID, userID, exceptionID string) error
 }
 
 // sessionRepository implements SessionRepository with MariaDB queries.

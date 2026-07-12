@@ -13,6 +13,7 @@ DELETE	/api/ip-blocks/:blockID	internal/plugins/syncapi/routes.go
 DELETE	/api/keys/:keyID	internal/plugins/syncapi/routes.go
 DELETE	/armory/instances/:iid	internal/plugins/armory/routes.go
 DELETE	/armory/instances/:iid/items/:eid	internal/plugins/armory/routes.go
+DELETE	/availability/exceptions/:eid	internal/plugins/sessions/routes.go
 DELETE	/backdrop	internal/plugins/campaigns/routes.go
 DELETE	/bindings	internal/plugins/widgetbindings/routes.go
 DELETE	/calendar/events/:eventID	internal/plugins/syncapi/routes.go
@@ -137,6 +138,10 @@ GET	/armory/instances/manage	internal/plugins/armory/routes.go
 GET	/armory/shops/:eid/transactions	internal/plugins/armory/routes.go
 GET	/armory/transactions	internal/plugins/armory/routes.go
 GET	/autopin-banner	internal/plugins/foundry_vtt/routes.go
+GET	/availability	internal/plugins/sessions/routes.go
+GET	/availability/exceptions	internal/plugins/sessions/routes.go
+GET	/availability/mine	internal/plugins/sessions/routes.go
+GET	/availability/overlay	internal/plugins/sessions/routes.go
 GET	/bindings/picker	internal/plugins/widgetbindings/routes.go
 GET	/browse	internal/plugins/packages/routes.go
 GET	/calendar	internal/plugins/calendar/routes.go
@@ -431,6 +436,7 @@ POST	/armory/instances/:iid/items	internal/plugins/armory/routes.go
 POST	/armory/purchase	internal/plugins/armory/routes.go
 POST	/armory/transactions	internal/plugins/armory/routes.go
 POST	/autopin-banner/dismiss	internal/plugins/foundry_vtt/routes.go
+POST	/availability/exceptions	internal/plugins/sessions/routes.go
 POST	/backdrop	internal/plugins/campaigns/routes.go
 POST	/bindings	internal/plugins/widgetbindings/routes.go
 POST	/bindings/create	internal/plugins/widgetbindings/routes.go
@@ -578,6 +584,7 @@ PUT	/api-keys/:keyID/toggle	internal/plugins/syncapi/routes.go
 PUT	/api/keys/:keyID/toggle	internal/plugins/syncapi/routes.go
 PUT	/api/security/:eventID/resolve	internal/plugins/syncapi/routes.go
 PUT	/armory/instances/:iid	internal/plugins/armory/routes.go
+PUT	/availability/mine	internal/plugins/sessions/routes.go
 PUT	/branding	internal/plugins/campaigns/routes.go
 PUT	/calendar/cycles	internal/plugins/syncapi/routes.go
 PUT	/calendar/date	internal/plugins/syncapi/routes.go
