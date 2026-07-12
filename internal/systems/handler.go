@@ -417,9 +417,11 @@ func (h *SystemHandler) WidgetScriptAPI(c echo.Context) error {
 // RulesGlossaryAPI serves a system's raw data/rules-glossary.json — the authored
 // [{slug,name,description,properties:{category}}] array a system's client-side
 // reference-renderer needs to resolve {@category term} tokens. It is served RAW
-// (not via the DataProvider, which normalizes into ReferenceItem and drops the
-// authored `slug`). Returns an empty array when the system ships no glossary so
-// the client degrades gracefully (references stay literal) rather than erroring.
+// (not via the DataProvider, which renders HTML rather than JSON, requires the
+// file's stem to be a manifest-declared category, and may skip items that fail
+// load-time id normalization — no id/slug, or a duplicate normalized id).
+// Returns an empty array when the system ships no glossary so the client
+// degrades gracefully (references stay literal) rather than erroring.
 //
 // GET /campaigns/:id/systems/:mod/rules-glossary
 func (h *SystemHandler) RulesGlossaryAPI(c echo.Context) error {
@@ -460,15 +462,17 @@ func (h *SystemHandler) RulesGlossaryAPI(c echo.Context) error {
 var systemDataFilePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*\.json$`)
 
 // SystemDataAPI serves a system's raw data/<file>.json verbatim, for client
-// widgets that need an authored reference file with its `slug`/`properties`
-// intact — the generic form of RulesGlossaryAPI. The category route (CategoryList)
-// runs files through the DataProvider, which normalizes into ReferenceItem and
-// drops the authored `slug`; widgets that key on slug (e.g. the Draw Steel skill
-// catalog read by the character sheet) must read the raw file instead. The
-// filename is validated to a safe JSON basename and the resolved path is clamped
-// within the system's data dir. Returns 404 for an absent/unknown file so the
-// client degrades gracefully (the feature using it stays empty) rather than
-// erroring.
+// widgets that need an authored reference file as raw JSON — the generic form
+// of RulesGlossaryAPI. The category route (CategoryList) runs files through
+// the DataProvider and renders HTML rather than JSON, requires the file's
+// stem to be a manifest-declared category, and may skip items that fail
+// load-time id normalization (no id/slug, or a duplicate normalized id);
+// widgets that need the complete authored file as JSON (e.g. the Draw Steel
+// skill catalog read by the character sheet) must read the raw file instead.
+// The filename is validated to a safe JSON basename and the resolved path is
+// clamped within the system's data dir. Returns 404 for an absent/unknown
+// file so the client degrades gracefully (the feature using it stays empty)
+// rather than erroring.
 //
 // GET /campaigns/:id/systems/:mod/data/:file
 func (h *SystemHandler) SystemDataAPI(c echo.Context) error {

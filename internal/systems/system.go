@@ -64,10 +64,11 @@ type ReferenceItem struct {
 	ID string `json:"id"`
 
 	// Slug is the source data's unique-identifier field for data contracts
-	// that key by "slug" instead of "id" (e.g. the Draw Steel / DnD-5.5e
-	// package data files). JSONProvider normalizes ID from this at load time
-	// when ID is empty; read sites should never need to consult Slug
-	// directly. (C-SYSTEMS-REF-SLUG-FIX)
+	// that key by "slug" instead of "id" (e.g. the Draw Steel package data
+	// files — DnD-5.5e's package data is 100% id-keyed and never sets this).
+	// JSONProvider normalizes ID from this at load time when ID is empty;
+	// read sites should never need to consult Slug directly.
+	// (C-SYSTEMS-REF-SLUG-FIX)
 	Slug string `json:"slug"`
 
 	// Category is the content type slug (e.g., "spells", "monsters", "items").
