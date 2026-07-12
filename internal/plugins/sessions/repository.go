@@ -46,7 +46,32 @@ type SessionRepository interface {
 	ListUserExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	ListCampaignExceptionsInRange(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
 	AddException(ctx context.Context, e *AvailabilityException) error
+	CountUserExceptions(ctx context.Context, campaignID, userID string) (int, error)
+	ReplaceDayExceptions(ctx context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error
 	DeleteException(ctx context.Context, campaignID, userID, exceptionID string) error
+
+	// Slot proposals + responses + tokens (C-SCHED-P2). Own tables
+	// (slot_proposals, slot_proposal_options, slot_proposal_responses,
+	// slot_proposal_tokens) — never session_attendees — see
+	// proposals_repository.go.
+	CreateProposal(ctx context.Context, p *SlotProposal, options []SlotProposalOption) error
+	GetProposal(ctx context.Context, campaignID, proposalID string) (*SlotProposal, []SlotProposalOption, error)
+	ListProposals(ctx context.Context, campaignID string) ([]SlotProposal, error)
+	ListProposalOptions(ctx context.Context, proposalID string) ([]SlotProposalOption, error)
+	FindOption(ctx context.Context, optionID string) (*SlotProposalOption, error)
+	UpsertProposalResponse(ctx context.Context, r *SlotProposalResponse) error
+	ListProposalResponses(ctx context.Context, proposalID string) ([]SlotProposalResponse, error)
+	CreateProposalToken(ctx context.Context, token *SlotProposalToken) error
+	FindProposalToken(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
+	MarkProposalTokenUsed(ctx context.Context, tokenStr string) error
+
+	// Scheduler-scoped notifications (C-SCHED-P2). Own table (notifications);
+	// see notifications_repository.go.
+	CreateNotification(ctx context.Context, n *Notification) error
+	ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
+	CountUnreadNotifications(ctx context.Context, userID string) (int, error)
+	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
+	MarkAllNotificationsRead(ctx context.Context, userID string) error
 }
 
 // sessionRepository implements SessionRepository with MariaDB queries.

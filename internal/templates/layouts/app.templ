@@ -1361,6 +1361,39 @@ templ Topbar() {
 			}
 
 			if IsAuthenticated(ctx) {
+				<!-- Notification bell (C-SCHED-P2). Server-rendered button + badge;
+				     the badge count refreshes via an HTMX poll, the dropdown is
+				     driven by the notification-bell widget. Scheduler-scoped this
+				     slice. -->
+				<div class="relative" data-widget="notification-bell" data-csrf={ GetCSRFToken(ctx) }>
+					<button
+						type="button"
+						class="btn-ghost btn-icon relative"
+						data-notif-toggle
+						title="Notifications"
+						aria-label="Notifications"
+						hx-get="/notifications/badge"
+						hx-trigger="load, every 60s"
+						hx-target="find [data-notif-badge]"
+						hx-swap="innerHTML"
+					>
+						<i class="fa-solid fa-bell text-sm"></i>
+						<span data-notif-badge></span>
+					</button>
+					<div
+						data-notif-panel
+						hidden
+						class="absolute right-0 top-full mt-1 w-80 max-h-[70vh] overflow-y-auto bg-surface rounded-lg shadow-lg border border-edge z-50"
+					>
+						<div class="flex items-center justify-between px-3 py-2 border-b border-edge">
+							<span class="text-sm font-semibold text-fg">Notifications</span>
+							<button type="button" class="text-xs text-accent hover:underline" data-notif-markall>Mark all read</button>
+						</div>
+						<div data-notif-list class="py-0"></div>
+					</div>
+				</div>
+			}
+			if IsAuthenticated(ctx) {
 				<!-- User dropdown (avatar + account/logout) -->
 				<div x-data="{ open: false }" class="relative">
 					<button

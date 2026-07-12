@@ -31,13 +31,26 @@ templ SessionListFragment(cc *campaigns.CampaignContext, sessions []Session, csr
 			<p class="text-sm text-fg-secondary mt-1">Game session schedule and history.</p>
 		</div>
 		<div class="flex items-center gap-2">
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID)) }
-				class="btn-secondary text-sm"
-				title="Record your weekly availability and see the group heatmap"
-			>
-				<i class="fa-solid fa-calendar-check mr-1"></i> Availability
-			</a>
+			if cc.IsMember {
+				<!-- Availability is member-only data; its target route rides the
+				     authed member group. Gate the link on membership so anonymous
+				     viewers on a public sessions list aren't shown a dead end
+				     (C-SCHED-P2 0e). -->
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/availability", cc.Campaign.ID)) }
+					class="btn-secondary text-sm"
+					title="Record your weekly availability and see the group heatmap"
+				>
+					<i class="fa-solid fa-calendar-check mr-1"></i> Availability
+				</a>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/proposals", cc.Campaign.ID)) }
+					class="btn-secondary text-sm"
+					title="Vote on candidate session times"
+				>
+					<i class="fa-solid fa-calendar-day mr-1"></i> Proposals
+				</a>
+			}
 			if isScribe {
 				<button
 					type="button"

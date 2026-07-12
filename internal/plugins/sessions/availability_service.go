@@ -14,6 +14,34 @@ import (
 // an unbounded number of rows.
 const maxAvailabilityBlocks = 7 * 48
 
+// Exception caps (C-SCHED-P2 0d). maxExceptionsPerUser bounds the total override
+// rows one member can hold in a campaign; maxExceptionBlocksPerDay bounds a
+// single day's composed set (48 half-hour slots). exceptionDateWindowDays bounds
+// how far from today an exception may be dated, so on_date can't be used to
+// stuff far-future/far-past rows past the cap's practical reach.
+const (
+	maxExceptionsPerUser     = 500
+	maxExceptionBlocksPerDay = 48
+	exceptionDateWindowDays  = 366
+)
+
+// validateExceptionDate parses on_date and rejects dates outside today ±1 year
+// (C-SCHED-P2 0d). Mirrors the recurring-save validation style: a fixed, sane
+// bound rather than an open-ended date field.
+func validateExceptionDate(onDate string) (time.Time, error) {
+	d, err := time.Parse("2006-01-02", onDate)
+	if err != nil {
+		return time.Time{}, apperror.NewBadRequest("onDate must be YYYY-MM-DD")
+	}
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	lo := today.AddDate(0, 0, -exceptionDateWindowDays)
+	hi := today.AddDate(0, 0, exceptionDateWindowDays)
+	if d.Before(lo) || d.After(hi) {
+		return time.Time{}, apperror.NewBadRequest("onDate must be within one year of today")
+	}
+	return d, nil
+}
+
 // GetMyAvailability returns the current user's own recurring pattern for the
 // campaign, ready to seed the paint grid.
 func (s *sessionService) GetMyAvailability(ctx context.Context, campaignID, userID string) (*MyAvailabilityResponse, error) {
@@ -88,8 +116,8 @@ func (s *sessionService) ListMyExceptions(ctx context.Context, campaignID, userI
 
 // AddMyException validates and stores a per-date override for the current user.
 func (s *sessionService) AddMyException(ctx context.Context, campaignID, userID string, req AddExceptionRequest) error {
-	if _, err := time.Parse("2006-01-02", req.OnDate); err != nil {
-		return apperror.NewBadRequest("onDate must be YYYY-MM-DD")
+	if _, err := validateExceptionDate(req.OnDate); err != nil {
+		return err
 	}
 	if !timeutil.IsValidLocation(req.TZ) {
 		return apperror.NewBadRequest("a valid IANA timezone is required")
@@ -99,6 +127,16 @@ func (s *sessionService) AddMyException(ctx context.Context, campaignID, userID 
 	}
 	if _, err := validateExceptionState(req.State); err != nil {
 		return err
+	}
+	// Per-user cap (0d): reject once the member is already at the ceiling. The
+	// underlying add upserts on the unique block key, so a repaint of an
+	// existing block doesn't grow the count — only genuinely new rows do.
+	count, err := s.repo.CountUserExceptions(ctx, campaignID, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("counting exceptions: %w", err))
+	}
+	if count >= maxExceptionsPerUser {
+		return apperror.NewBadRequest("too many availability exceptions; delete some before adding more")
 	}
 	exc := &AvailabilityException{
 		ID:          generateUUID(),
@@ -122,6 +160,67 @@ func (s *sessionService) DeleteMyException(ctx context.Context, campaignID, user
 	return s.repo.DeleteException(ctx, campaignID, userID, exceptionID)
 }
 
+// ReplaceMyDayExceptions atomically replaces the current user's overrides for
+// one date with a composed set (C-SCHED-P2 0c). Validation mirrors the
+// recurring-save path: a valid zone, a bounded date (today ±1 year, 0d), a
+// per-day block cap, and a per-user total cap so the compose flow can't be used
+// to blow past 0d's ceiling. An empty Blocks clears the day.
+func (s *sessionService) ReplaceMyDayExceptions(ctx context.Context, campaignID, userID string, req ReplaceDayExceptionsRequest) error {
+	if _, err := validateExceptionDate(req.OnDate); err != nil {
+		return err
+	}
+	if !timeutil.IsValidLocation(req.TZ) {
+		return apperror.NewBadRequest("a valid IANA timezone is required")
+	}
+	if len(req.Blocks) > maxExceptionBlocksPerDay {
+		return apperror.NewBadRequest("too many blocks for one day")
+	}
+
+	excs := make([]AvailabilityException, 0, len(req.Blocks))
+	for _, b := range req.Blocks {
+		if err := validateMinuteRange(b.StartMinute, b.EndMinute); err != nil {
+			return err
+		}
+		st, err := validateExceptionState(b.State)
+		if err != nil {
+			return err
+		}
+		excs = append(excs, AvailabilityException{
+			StartMinute: b.StartMinute,
+			EndMinute:   b.EndMinute,
+			State:       st,
+			TZ:          req.TZ,
+		})
+	}
+
+	// Per-user cap (0d): count rows on OTHER dates and ensure the new day's set
+	// keeps the member under the ceiling. Counting excludes this date because a
+	// day-replace overwrites it — only the delta on other dates plus this day's
+	// new rows counts toward the total.
+	existing, err := s.repo.CountUserExceptions(ctx, campaignID, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("counting exceptions: %w", err))
+	}
+	dayExisting, err := s.repo.ListUserExceptions(ctx, campaignID, userID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading exceptions: %w", err))
+	}
+	onThisDate := 0
+	for _, e := range dayExisting {
+		if e.OnDate == req.OnDate {
+			onThisDate++
+		}
+	}
+	if existing-onThisDate+len(excs) > maxExceptionsPerUser {
+		return apperror.NewBadRequest("too many availability exceptions; delete some before adding more")
+	}
+
+	if err := s.repo.ReplaceDayExceptions(ctx, campaignID, userID, req.OnDate, excs); err != nil {
+		return apperror.NewInternal(fmt.Errorf("replacing day exceptions: %w", err))
+	}
+	return nil
+}
+
 // BuildOverlay loads the whole campaign's availability and projects it onto the
 // week starting at weekStart (snapped to Monday), rendered in viewerTZ. The
 // members roster (render order + display) is supplied by the handler; per-member
@@ -137,11 +236,14 @@ func (s *sessionService) BuildOverlay(ctx context.Context, campaignID string, me
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("loading campaign availability: %w", err))
 	}
-	// Exceptions can spill into the window from the day before/after (zone
-	// crossing), so fetch the extended [start-1, start+7] range the projection
-	// iterates over.
+	// Exceptions can spill into the window from up to two days before/after
+	// (a 26h zone crossing, UTC+14 vs UTC-12), so fetch the extended
+	// [start-2, start+8] range the projection iterates over. This MUST stay in
+	// lockstep with the offset loop in buildWeekOverlay (availability_overlay.go)
+	// or an exception whose block projects into the visible week from the far
+	// edge would be dropped.
 	excs, err := s.repo.ListCampaignExceptionsInRange(ctx, campaignID,
-		start.AddDays(-1).String(), start.AddDays(7).String())
+		start.AddDays(-2).String(), start.AddDays(8).String())
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("loading campaign exceptions: %w", err))
 	}

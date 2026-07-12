@@ -152,6 +152,57 @@ func (r *sessionRepository) AddException(ctx context.Context, e *AvailabilityExc
 	return nil
 }
 
+// CountUserExceptions returns how many exception rows a member currently has in
+// a campaign — the input to the per-user cap that keeps a malformed or hostile
+// client from inserting an unbounded number of override rows (C-SCHED-P2 0d).
+func (r *sessionRepository) CountUserExceptions(ctx context.Context, campaignID, userID string) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM availability_exceptions WHERE campaign_id = ? AND user_id = ?`,
+		campaignID, userID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("counting user exceptions: %w", err)
+	}
+	return n, nil
+}
+
+// ReplaceDayExceptions atomically replaces ALL of a member's exception rows for
+// one date (delete-all-for-date then insert). This is the storage side of the
+// "compose the day" UI (C-SCHED-P2 0c): the editor pre-fills from the recurring
+// pattern and re-sends the whole day, so replace-day semantics are preserved
+// while a one-hour busy mark no longer erases the rest of the day. An empty
+// blocks slice clears the day's overrides (reverting it to the recurring pattern).
+func (r *sessionRepository) ReplaceDayExceptions(ctx context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin exception day tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }() // no-op after Commit
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM availability_exceptions WHERE campaign_id = ? AND user_id = ? AND on_date = ?`,
+		campaignID, userID, onDate); err != nil {
+		return fmt.Errorf("clearing day exceptions: %w", err)
+	}
+
+	const ins = `INSERT INTO availability_exceptions
+		(id, campaign_id, user_id, on_date, start_minute, end_minute, state, tz, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	now := time.Now().UTC()
+	for _, e := range excs {
+		if _, err := tx.ExecContext(ctx, ins,
+			generateUUID(), campaignID, userID, onDate,
+			e.StartMinute, e.EndMinute, e.State, e.TZ, now); err != nil {
+			return fmt.Errorf("inserting day exception: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit exception day tx: %w", err)
+	}
+	return nil
+}
+
 // DeleteException removes one of a member's own exceptions. Scoping the delete
 // to (campaign_id, user_id) as well as id prevents an IDOR delete of another
 // member's exception.

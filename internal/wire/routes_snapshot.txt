@@ -333,6 +333,8 @@ GET	/notes/:noteID	internal/plugins/syncapi/routes.go
 GET	/notes/:noteId/versions	internal/widgets/notes/routes.go
 GET	/notes/:noteId/versions/:vid	internal/widgets/notes/routes.go
 GET	/notes/members	internal/widgets/notes/routes.go
+GET	/notifications	internal/plugins/sessions/routes.go
+GET	/notifications/badge	internal/plugins/sessions/routes.go
 GET	/npcs	internal/plugins/npcs/routes.go
 GET	/npcs/count	internal/plugins/npcs/routes.go
 GET	/owner-dashboard-layout	internal/plugins/campaigns/routes.go
@@ -343,6 +345,9 @@ GET	/plugins	internal/extensions/routes.go
 GET	/plugins	internal/plugins/campaigns/routes.go
 GET	/plugins/:extID/:slug	internal/extensions/routes.go
 GET	/plugins/fragment	internal/plugins/campaigns/routes.go
+GET	/proposals	internal/plugins/sessions/routes.go
+GET	/proposals/:pid	internal/plugins/sessions/routes.go
+GET	/proposals/respond/:token	internal/plugins/sessions/routes.go
 GET	/prune	internal/plugins/packages/routes.go
 GET	/register	internal/plugins/auth/routes.go
 GET	/relation-types	internal/widgets/relations/routes.go
@@ -522,10 +527,14 @@ POST	/notes/:noteId/lock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/toggle	internal/widgets/notes/routes.go
 POST	/notes/:noteId/unlock	internal/widgets/notes/routes.go
 POST	/notes/:noteId/versions/:vid/restore	internal/widgets/notes/routes.go
+POST	/notifications/:nid/read	internal/plugins/sessions/routes.go
+POST	/notifications/read-all	internal/plugins/sessions/routes.go
 POST	/npcs/:eid/reveal	internal/plugins/npcs/routes.go
 POST	/plugins/:extID/:slug/reload	internal/extensions/routes.go
 POST	/plugins/:extID/:slug/stop	internal/extensions/routes.go
 POST	/preview	internal/systems/routes.go
+POST	/proposals	internal/plugins/sessions/routes.go
+POST	/proposals/:pid/options/:oid/respond	internal/plugins/sessions/routes.go
 POST	/register	internal/plugins/auth/routes.go
 POST	/rescan	internal/extensions/routes.go
 POST	/reset-password	internal/plugins/auth/routes.go
@@ -584,6 +593,7 @@ PUT	/api-keys/:keyID/toggle	internal/plugins/syncapi/routes.go
 PUT	/api/keys/:keyID/toggle	internal/plugins/syncapi/routes.go
 PUT	/api/security/:eventID/resolve	internal/plugins/syncapi/routes.go
 PUT	/armory/instances/:iid	internal/plugins/armory/routes.go
+PUT	/availability/exceptions	internal/plugins/sessions/routes.go
 PUT	/availability/mine	internal/plugins/sessions/routes.go
 PUT	/branding	internal/plugins/campaigns/routes.go
 PUT	/calendar/cycles	internal/plugins/syncapi/routes.go
