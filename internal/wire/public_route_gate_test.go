@@ -22,9 +22,21 @@
 // authenticated `cg` group and a public `pub` group (or reuses the name `pub`
 // across two functions, as maps/routes.go does) is handled correctly.
 //
+// C-ENTITY-VIS-PARITY (ride-along 4a) hardens the sweep against three evasions the
+// per-route scan above could not see:
+//   - a RequireRole passed as GROUP-LEVEL middleware to e.Group(...) alongside
+//     AllowPublicCampaignAccess (applies to every route in the group, yet each
+//     route's own args look clean);
+//   - a RequireRole added to a public group via a later <group>.Use(...) call;
+//   - a route registered through a NON-Ident receiver rooted at a public group
+//     (e.g. a chained sub-group `pub.Group("/x").GET(...)`), whose view gate the
+//     static per-route scan silently skipped. Such a registration now fails: its
+//     gate cannot be statically verified, so it must fail closed here.
+//
 // Cites: cordinator/decisions/2026-05-21-core-tenets.md §T-B1 (security-first;
 // auth-surface drift is a P0), §T-O2 (wire-contract integrity);
-// cordinator/reports/coordinator/2026-07-11-r13-post-merge-review.md §2.
+// cordinator/reports/coordinator/2026-07-11-r13-post-merge-review.md §2 +
+// merge-gate addendum; cordinator/dispatches/chronicle/C-ENTITY-VIS-PARITY.md §4a.
 package wire
 
 import (
@@ -93,7 +105,8 @@ func TestPublicRoutesCarryViewAccess(t *testing.T) {
 			if !ok || fn.Body == nil {
 				continue
 			}
-			publicGroups := collectPublicGroupVars(fn)
+			publicGroups, groupViolations := collectPublicGroupVars(fset, fn, relPath)
+			violations = append(violations, groupViolations...)
 			if len(publicGroups) == 0 {
 				continue
 			}
@@ -131,12 +144,93 @@ func TestPublicRoutesCarryViewAccess(t *testing.T) {
 	}
 }
 
+// TestPublicRouteGate_CatchesEvasions proves the 4a extensions have teeth: it
+// feeds a synthetic routes file — one func per evasion plus a clean control —
+// through the SAME collectPublicGroupVars + checkRoutesOnGroups pipeline the real
+// sweep uses, and asserts each evasion is flagged and the clean group is not.
+// Without this, the extension could silently pass vacuously (the real codebase
+// has none of these patterns today, so the sweep alone can't demonstrate it
+// catches them).
+func TestPublicRouteGate_CatchesEvasions(t *testing.T) {
+	// Referenced identifiers need not resolve — ParseFile does no type-checking.
+	const src = `package routes
+func GroupLevelRole(e *echo.Echo) {
+	pub := e.Group("/campaigns/:id", auth.OptionalAuth(s), campaigns.AllowPublicCampaignAccess(s), campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/x", h.X, campaigns.RequireViewAccess())
+}
+func UseRole(e *echo.Echo) {
+	pub := e.Group("/campaigns/:id", campaigns.AllowPublicCampaignAccess(s))
+	pub.Use(campaigns.RequireRole(campaigns.RolePlayer))
+	pub.GET("/y", h.Y, campaigns.RequireViewAccess())
+}
+func SubGroupReceiver(e *echo.Echo) {
+	pub := e.Group("/campaigns/:id", campaigns.AllowPublicCampaignAccess(s))
+	pub.Group("/sub").GET("/z", h.Z, campaigns.RequireViewAccess())
+}
+func Clean(e *echo.Echo) {
+	pub := e.Group("/campaigns/:id", campaigns.AllowPublicCampaignAccess(s))
+	pub.GET("/ok", h.OK, campaigns.RequireViewAccess())
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "synthetic_routes.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse synthetic source: %v", err)
+	}
+
+	byFunc := make(map[string][]publicRouteViolation)
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		groups, groupViolations := collectPublicGroupVars(fset, fn, "synthetic_routes.go")
+		vs := append([]publicRouteViolation(nil), groupViolations...)
+		if len(groups) > 0 {
+			_, routeViolations := checkRoutesOnGroups(fset, fn, groups, "synthetic_routes.go")
+			vs = append(vs, routeViolations...)
+		}
+		byFunc[fn.Name.Name] = vs
+	}
+
+	// Each evasion func must produce exactly one violation of the expected shape.
+	cases := []struct {
+		fn           string
+		wantMethod   string
+		reasonSubstr string
+	}{
+		{"GroupLevelRole", "Group", "group-level middleware"},
+		{"UseRole", "Use", ".Use(...)"},
+		{"SubGroupReceiver", "GET", "non-Ident receiver"},
+	}
+	for _, tc := range cases {
+		vs := byFunc[tc.fn]
+		if len(vs) != 1 {
+			t.Errorf("%s: got %d violations, want 1: %+v", tc.fn, len(vs), vs)
+			continue
+		}
+		if vs[0].Method != tc.wantMethod || !strings.Contains(vs[0].Reason, tc.reasonSubstr) {
+			t.Errorf("%s: violation = {Method:%q Reason:%q}, want Method %q containing %q",
+				tc.fn, vs[0].Method, vs[0].Reason, tc.wantMethod, tc.reasonSubstr)
+		}
+	}
+
+	// The clean control must produce no violation — no over-flagging.
+	if vs := byFunc["Clean"]; len(vs) != 0 {
+		t.Errorf("Clean public group over-flagged: %+v", vs)
+	}
+}
+
 // collectPublicGroupVars returns the set of local variable names in fn that are
 // assigned an e.Group(...) whose middleware arguments include a call to
 // AllowPublicCampaignAccess. Handles both `pub := e.Group(...)` (define) and
-// `pub = e.Group(...)` (assign).
-func collectPublicGroupVars(fn *ast.FuncDecl) map[string]bool {
+// `pub = e.Group(...)` (assign). It also returns a violation for any public
+// group whose e.Group(...) constructor ALSO carries a RequireRole middleware arg
+// — a group-level RequireRole 403s anon on every route in the group while each
+// route's own args look clean, so the per-route scan cannot see it (4a).
+func collectPublicGroupVars(fset *token.FileSet, fn *ast.FuncDecl, relPath string) (map[string]bool, []publicRouteViolation) {
 	groups := make(map[string]bool)
+	var violations []publicRouteViolation
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		var lhs []ast.Expr
 		var rhs []ast.Expr
@@ -161,25 +255,44 @@ func collectPublicGroupVars(fn *ast.FuncDecl) map[string]bool {
 		if !ok || sel.Sel.Name != "Group" {
 			return true
 		}
-		// Is one of the group's middleware args AllowPublicCampaignAccess(...)?
+		// Scan the group's middleware args for the public marker and for a
+		// group-level RequireRole (both in the same e.Group(...) call).
+		isPublic := false
+		hasRole := false
 		for _, arg := range call.Args {
 			argCall, ok := arg.(*ast.CallExpr)
 			if !ok {
 				continue
 			}
-			if strings.HasSuffix(exprText(argCall.Fun), publicGroupMarker) {
-				groups[ident.Name] = true
-				break
+			name := exprText(argCall.Fun)
+			if strings.HasSuffix(name, publicGroupMarker) {
+				isPublic = true
+			}
+			if strings.HasSuffix(name, requireRoleMarker) {
+				hasRole = true
+			}
+		}
+		if isPublic {
+			groups[ident.Name] = true
+			if hasRole {
+				violations = append(violations, publicRouteViolation{
+					File: relPath, Line: fset.Position(call.Pos()).Line, Method: "Group", Path: ident.Name,
+					Reason: "public group constructed with " + requireRoleMarker +
+						" group-level middleware (403s anon on every route in the group)",
+				})
 			}
 		}
 		return true
 	})
-	return groups
+	return groups, violations
 }
 
 // checkRoutesOnGroups walks fn for route registrations (`<group>.METHOD(...)`)
 // whose receiver is one of the public groups, and returns the count plus any
-// invariant violations.
+// invariant violations. Beyond the per-route arg scan, it also flags (4a): a
+// RequireRole added to a public group via `<group>.Use(...)`, and any route
+// registered through a non-Ident receiver rooted at a public group (e.g. a
+// chained sub-group), whose gate cannot be statically verified.
 func checkRoutesOnGroups(fset *token.FileSet, fn *ast.FuncDecl, publicGroups map[string]bool, relPath string) (int, []publicRouteViolation) {
 	var count int
 	var violations []publicRouteViolation
@@ -190,11 +303,52 @@ func checkRoutesOnGroups(fset *token.FileSet, fn *ast.FuncDecl, publicGroups map
 			return true
 		}
 		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || !httpVerbs[sel.Sel.Name] {
+		if !ok {
 			return true
 		}
-		recv, ok := sel.X.(*ast.Ident)
-		if !ok || !publicGroups[recv.Name] {
+
+		// Group-level middleware injected after construction: a public group's
+		// own .Use(RequireRole(...)) 403s anon on every route it carries.
+		if sel.Sel.Name == "Use" {
+			if recv, ok := sel.X.(*ast.Ident); ok && publicGroups[recv.Name] {
+				for _, arg := range call.Args {
+					argCall, ok := arg.(*ast.CallExpr)
+					if !ok {
+						continue
+					}
+					if strings.HasSuffix(exprText(argCall.Fun), requireRoleMarker) {
+						violations = append(violations, publicRouteViolation{
+							File: relPath, Line: fset.Position(call.Pos()).Line, Method: "Use", Path: recv.Name,
+							Reason: "public group gains " + requireRoleMarker + " via .Use(...) (403s anon on every route in the group)",
+						})
+					}
+				}
+			}
+			return true
+		}
+
+		if !httpVerbs[sel.Sel.Name] {
+			return true
+		}
+
+		// A route whose receiver is NOT a bare ident but is rooted at a public
+		// group (e.g. `pub.Group("/x").GET(...)`) escaped the per-route scan
+		// below. Its view gate cannot be statically verified — fail closed.
+		if _, isIdent := sel.X.(*ast.Ident); !isIdent {
+			if root := rootIdent(sel.X); root != nil && publicGroups[root.Name] {
+				count++
+				violations = append(violations, publicRouteViolation{
+					File: relPath, Line: fset.Position(call.Pos()).Line, Method: sel.Sel.Name, Path: "<non-ident receiver>",
+					Reason: "route registered through a non-Ident receiver rooted at public group " + root.Name +
+						" (e.g. a chained sub-group); its " + viewAccessMarker +
+						" gate cannot be statically verified — register directly on the group var",
+				})
+			}
+			return true
+		}
+
+		recv := sel.X.(*ast.Ident)
+		if !publicGroups[recv.Name] {
 			return true
 		}
 		if len(call.Args) == 0 {
@@ -243,4 +397,26 @@ func checkRoutesOnGroups(fset *token.FileSet, fn *ast.FuncDecl, publicGroups map
 	})
 
 	return count, violations
+}
+
+// rootIdent walks a receiver expression down through selector and call chains to
+// its leftmost identifier (e.g. `pub.Group("/x").GET`'s receiver `pub.Group("/x")`
+// roots at `pub`). Returns nil when the chain does not bottom out in an ident.
+func rootIdent(e ast.Expr) *ast.Ident {
+	for {
+		switch x := e.(type) {
+		case *ast.Ident:
+			return x
+		case *ast.SelectorExpr:
+			e = x.X
+		case *ast.CallExpr:
+			e = x.Fun
+		case *ast.IndexExpr:
+			e = x.X
+		case *ast.ParenExpr:
+			e = x.X
+		default:
+			return nil
+		}
+	}
 }

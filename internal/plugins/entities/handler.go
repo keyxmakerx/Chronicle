@@ -1636,8 +1636,11 @@ func (h *Handler) GetEntry(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	// Privacy check.
-	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+	// Visibility gate: canonical CheckEntityAccess honors custom (grant-based)
+	// visibility, not just legacy is_private — matches Show. (C-ENTITY-VIS-PARITY)
+	userID := auth.GetUserID(c)
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
+	if err != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
 
@@ -1776,7 +1779,11 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
 	}
-	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+	// Visibility gate: canonical CheckEntityAccess honors custom (grant-based)
+	// visibility, not just legacy is_private — matches Show. (C-ENTITY-VIS-PARITY)
+	userID := auth.GetUserID(c)
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
+	if err != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
 
@@ -1999,8 +2006,11 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
-	// Privacy check: private entities return 404 for Players.
-	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+	// Visibility gate: canonical CheckEntityAccess honors custom (grant-based)
+	// visibility, not just legacy is_private — matches Show. (C-ENTITY-VIS-PARITY)
+	userID := auth.GetUserID(c)
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
+	if err != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
 
@@ -3066,7 +3076,11 @@ func (h *Handler) GetAliasesAPI(c echo.Context) error {
 	if entity.CampaignID != cc.Campaign.ID {
 		return apperror.NewNotFound("entity not found")
 	}
-	if entity.IsPrivate && cc.MemberRole < campaigns.RoleScribe {
+	// Visibility gate: canonical CheckEntityAccess honors custom (grant-based)
+	// visibility, not just legacy is_private — matches Show. (C-ENTITY-VIS-PARITY)
+	userID := auth.GetUserID(c)
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
+	if err != nil || !access.CanView {
 		return apperror.NewNotFound("entity not found")
 	}
 

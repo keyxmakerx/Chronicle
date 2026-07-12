@@ -34,6 +34,13 @@ func (s *stubSvcForFields) GetEntityTypeByID(_ context.Context, _ int) (*EntityT
 	return s.etype, nil
 }
 
+// CheckEntityAccess: this fixture's entity is a normal viewable (default,
+// non-private) entity — the test exercises GM-field VALUE stripping for
+// viewers who can see the entity, so the canonical view gate always admits.
+func (s *stubSvcForFields) CheckEntityAccess(_ context.Context, _ string, _ int, _ string) (*EffectivePermission, error) {
+	return &EffectivePermission{CanView: true}, nil
+}
+
 // TestGetFieldsAPI_StripsGMFieldsForNonGM pins the r4 second egress path: the
 // entities-plugin GetFieldsAPI (consumed by the core attributes widget) must
 // omit gm_only field VALUES for a non-GM session and keep them for a GM.
