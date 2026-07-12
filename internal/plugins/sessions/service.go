@@ -46,6 +46,14 @@ type SessionService interface {
 	LinkEntity(ctx context.Context, sessionID, entityID, role, campaignID string) error
 	UnlinkEntity(ctx context.Context, sessionID, entityID string) error
 	ListSessionEntities(ctx context.Context, sessionID string) ([]SessionEntity, error)
+
+	// Availability scheduler (C-SCHED-P1). See availability_service.go.
+	GetMyAvailability(ctx context.Context, campaignID, userID string) (*MyAvailabilityResponse, error)
+	SaveMyAvailability(ctx context.Context, campaignID, userID string, req SaveAvailabilityRequest) error
+	ListMyExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
+	AddMyException(ctx context.Context, campaignID, userID string, req AddExceptionRequest) error
+	DeleteMyException(ctx context.Context, campaignID, userID, exceptionID string) error
+	BuildOverlay(ctx context.Context, campaignID string, members []overlayMemberInput, weekStart, viewerTZ string, includeDetail bool) (*WeekOverlay, error)
 }
 
 // sessionService implements SessionService.

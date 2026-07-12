@@ -34,6 +34,14 @@ type mockSessionRepo struct {
 	createRSVPTokenFn     func(ctx context.Context, token *RSVPToken) error
 	findRSVPTokenFn       func(ctx context.Context, tokenStr string) (*RSVPToken, error)
 	markRSVPTokenUsedFn   func(ctx context.Context, tokenStr string) error
+	// Availability (C-SCHED-P1).
+	listUserAvailabilityFn          func(ctx context.Context, campaignID, userID string) ([]AvailabilityBlock, error)
+	listCampaignAvailabilityFn      func(ctx context.Context, campaignID string) ([]AvailabilityBlock, error)
+	replaceUserAvailabilityFn       func(ctx context.Context, campaignID, userID string, blocks []AvailabilityBlock) error
+	listUserExceptionsFn            func(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
+	listCampaignExceptionsRangeFn   func(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
+	addExceptionFn                  func(ctx context.Context, e *AvailabilityException) error
+	deleteExceptionFn               func(ctx context.Context, campaignID, userID, exceptionID string) error
 }
 
 func (m *mockSessionRepo) Create(ctx context.Context, campaignID string, s *Session) error {
@@ -158,6 +166,57 @@ func (m *mockSessionRepo) FindRSVPToken(ctx context.Context, tokenStr string) (*
 func (m *mockSessionRepo) MarkRSVPTokenUsed(ctx context.Context, tokenStr string) error {
 	if m.markRSVPTokenUsedFn != nil {
 		return m.markRSVPTokenUsedFn(ctx, tokenStr)
+	}
+	return nil
+}
+
+// --- Availability (C-SCHED-P1) ---
+
+func (m *mockSessionRepo) ListUserAvailability(ctx context.Context, campaignID, userID string) ([]AvailabilityBlock, error) {
+	if m.listUserAvailabilityFn != nil {
+		return m.listUserAvailabilityFn(ctx, campaignID, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) ListCampaignAvailability(ctx context.Context, campaignID string) ([]AvailabilityBlock, error) {
+	if m.listCampaignAvailabilityFn != nil {
+		return m.listCampaignAvailabilityFn(ctx, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) ReplaceUserAvailability(ctx context.Context, campaignID, userID string, blocks []AvailabilityBlock) error {
+	if m.replaceUserAvailabilityFn != nil {
+		return m.replaceUserAvailabilityFn(ctx, campaignID, userID, blocks)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) ListUserExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error) {
+	if m.listUserExceptionsFn != nil {
+		return m.listUserExceptionsFn(ctx, campaignID, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) ListCampaignExceptionsInRange(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error) {
+	if m.listCampaignExceptionsRangeFn != nil {
+		return m.listCampaignExceptionsRangeFn(ctx, campaignID, startDate, endDate)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) AddException(ctx context.Context, e *AvailabilityException) error {
+	if m.addExceptionFn != nil {
+		return m.addExceptionFn(ctx, e)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) DeleteException(ctx context.Context, campaignID, userID, exceptionID string) error {
+	if m.deleteExceptionFn != nil {
+		return m.deleteExceptionFn(ctx, campaignID, userID, exceptionID)
 	}
 	return nil
 }

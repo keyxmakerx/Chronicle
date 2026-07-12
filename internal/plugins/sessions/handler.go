@@ -28,6 +28,7 @@ type Handler struct {
 	memberLister campaigns.MemberLister
 	mailer       MailSender
 	baseURL      string // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
+	userDir      UserDirectory // Resolves a user's stored IANA timezone for the availability overlay.
 }
 
 // NewHandler creates a new sessions Handler.
