@@ -74,7 +74,12 @@
           color: saved.topbarStyle.color || '',
           gradient_from: saved.topbarStyle.gradient_from || '',
           gradient_to: saved.topbarStyle.gradient_to || '',
-          gradient_dir: saved.topbarStyle.gradient_dir || 'to-r'
+          gradient_dir: saved.topbarStyle.gradient_dir || 'to-r',
+          // Carry image_path through the draft so the preview can show the saved
+          // topbar image and so a Save that includes topbar-style does not blank
+          // it out (C-CUSTOMIZE-RESCUE — previously omitted here, which made the
+          // preview never show the image and risked wiping image_path on save).
+          image_path: saved.topbarStyle.image_path || ''
         },
         topbarContent: {
           mode: saved.topbarContent.mode || 'none',
@@ -93,73 +98,14 @@
       var gradientPanel = el.querySelector('#appearance-topbar-gradient');
       var imagePanel = el.querySelector('#appearance-topbar-image');
 
-      // Dynamically add "Image" button and upload panel if not in template.
-      if (modeContainer && !modeContainer.querySelector('[data-mode="image"]')) {
-        var imgBtn = document.createElement('button');
-        imgBtn.type = 'button';
-        imgBtn.className = 'btn-secondary text-xs px-3 py-1.5';
-        imgBtn.setAttribute('data-mode', 'image');
-        imgBtn.textContent = 'Image';
-        modeContainer.appendChild(imgBtn);
-      }
-      if (!imagePanel && modeContainer) {
-        imagePanel = document.createElement('div');
-        imagePanel.id = 'appearance-topbar-image';
-        imagePanel.className = 'hidden space-y-2';
-        imagePanel.innerHTML =
-          '<p class="text-xs text-fg-secondary">Upload a background image for the topbar.</p>' +
-          '<div class="flex items-center gap-3">' +
-          '  <label class="btn-secondary text-xs cursor-pointer">' +
-          '    <i class="fa-solid fa-upload mr-1.5"></i>Choose Image' +
-          '    <input type="file" accept="image/*" class="hidden" id="topbar-image-input"/>' +
-          '  </label>' +
-          '  <button type="button" id="topbar-image-remove" class="text-xs text-fg-muted hover:text-rose-400 transition-colors">' +
-          '    <i class="fa-solid fa-trash mr-1"></i>Remove' +
-          '  </button>' +
-          '</div>';
-        // Insert after gradient panel.
-        if (gradientPanel) {
-          gradientPanel.parentNode.insertBefore(imagePanel, gradientPanel.nextSibling);
-        }
-
-        // Wire upload handler.
-        var imgInput = imagePanel.querySelector('#topbar-image-input');
-        if (imgInput) {
-          imgInput.addEventListener('change', function () {
-            var file = imgInput.files[0];
-            if (!file) return;
-            var form = new FormData();
-            form.append('file', file);
-            fetch('/campaigns/' + config.campaignId + '/topbar-image', {
-              method: 'POST', body: form, credentials: 'same-origin',
-              headers: { 'X-CSRF-Token': Chronicle.getCsrf() }
-            }).then(function (res) {
-              if (res.ok) {
-                Chronicle.notify('Topbar image uploaded — reloading...', 'success');
-                setTimeout(function () { window.location.reload(); }, 600);
-              } else {
-                Chronicle.notify('Failed to upload image', 'error');
-              }
-            });
-          });
-        }
-        var imgRemove = imagePanel.querySelector('#topbar-image-remove');
-        if (imgRemove) {
-          imgRemove.addEventListener('click', function () {
-            Chronicle.apiFetch('/campaigns/' + config.campaignId + '/topbar-image', { method: 'DELETE' })
-              .then(function (res) {
-                if (res.ok) {
-                  draft.topbarStyle.mode = '';
-                  draft.topbarStyle.image_path = '';
-                  setActiveMode('');
-                  updateTopbarPreview();
-                  Chronicle.notify('Topbar image removed', 'success');
-                  setTimeout(function () { window.location.reload(); }, 600);
-                }
-              });
-          });
-        }
-      }
+      // The "Image" mode button and its upload panel are now first-class parts
+      // of the templ (branding.templ Top Bar Style card + TopbarImageSection) —
+      // they used to be injected here at runtime and saved via a full-page
+      // reload (audit §8.2 "weird block thing"; core-tenets §T-B3). Upload and
+      // remove are HTMX-driven (hx-post/hx-delete swapping
+      // #appearance-topbar-image-section in place). The only wiring left in JS
+      // is syncing the editor's draft/saved image state after each swap — see
+      // the htmx:afterSwap listener further down.
       var solidColorInput = el.querySelector('#appearance-topbar-color');
       var gradFromInput = el.querySelector('#appearance-topbar-gradient-from');
       var gradToInput = el.querySelector('#appearance-topbar-gradient-to');
@@ -217,6 +163,7 @@
       updateAccentPreview(draft.accentColor);
       updateFontPreview(draft.fontFamily);
       initBackdropPreview();
+      initTopbarImageSync();
 
       // --- Dirty tracking ---
 
@@ -229,6 +176,7 @@
                draft.topbarStyle.gradient_from !== (saved.topbarStyle.gradient_from || '') ||
                draft.topbarStyle.gradient_to !== (saved.topbarStyle.gradient_to || '') ||
                draft.topbarStyle.gradient_dir !== (saved.topbarStyle.gradient_dir || 'to-r') ||
+               draft.topbarStyle.image_path !== (saved.topbarStyle.image_path || '') ||
                draft.topbarContent.mode !== (saved.topbarContent.mode || 'none') ||
                draft.topbarContent.quote !== (saved.topbarContent.quote || '') ||
                JSON.stringify(draft.topbarContent.links) !== JSON.stringify(saved.topbarContent.links || []);
@@ -529,7 +477,8 @@
                   color: draft.topbarStyle.color,
                   gradient_from: draft.topbarStyle.gradient_from,
                   gradient_to: draft.topbarStyle.gradient_to,
-                  gradient_dir: draft.topbarStyle.gradient_dir
+                  gradient_dir: draft.topbarStyle.gradient_dir,
+                  image_path: draft.topbarStyle.image_path
                 };
                 saved.topbarContent = {
                   mode: draft.topbarContent.mode,
@@ -598,7 +547,8 @@
                               draft.topbarStyle.color !== (saved.topbarStyle.color || '') ||
                               draft.topbarStyle.gradient_from !== (saved.topbarStyle.gradient_from || '') ||
                               draft.topbarStyle.gradient_to !== (saved.topbarStyle.gradient_to || '') ||
-                              draft.topbarStyle.gradient_dir !== (saved.topbarStyle.gradient_dir || 'to-r');
+                              draft.topbarStyle.gradient_dir !== (saved.topbarStyle.gradient_dir || 'to-r') ||
+                              draft.topbarStyle.image_path !== (saved.topbarStyle.image_path || '');
           if (topbarChanged) {
             pending++;
             Chronicle.apiFetch('/campaigns/' + campaignId + '/topbar-style', {
@@ -608,7 +558,10 @@
                 color: draft.topbarStyle.color || '',
                 gradient_from: draft.topbarStyle.gradient_from || '',
                 gradient_to: draft.topbarStyle.gradient_to || '',
-                gradient_dir: draft.topbarStyle.gradient_dir || ''
+                gradient_dir: draft.topbarStyle.gradient_dir || '',
+                // Preserve the uploaded image path so switching a non-image
+                // topbar field and saving never blanks an image-mode topbar.
+                image_path: draft.topbarStyle.image_path || ''
               },
               csrfToken: csrfToken
             }).then(function (res) {
@@ -774,6 +727,44 @@
               previewBackdrop.style.display = 'none';
             }
           }
+        });
+      }
+
+      /**
+       * Keep the editor's draft/saved topbar-image state in sync with the
+       * first-class TopbarImageSection fragment. Upload/remove are HTMX POST/
+       * DELETE that swap #appearance-topbar-image-section in place (no reload);
+       * the swapped fragment carries data-topbar-image-path. Because the server
+       * persists the mode + path atomically on upload/remove, we mirror that
+       * into BOTH draft and saved so (a) the Save bar doesn't show a phantom
+       * "unsaved changes", and (b) a later Save won't re-send stale topbar data.
+       */
+      function initTopbarImageSync() {
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+          if (!evt.detail || !evt.detail.target) return;
+          var target = evt.detail.target;
+          // outerHTML swaps can fire afterSwap on the replaced node OR its
+          // parent, so resolve the section either way; ignore swaps outside
+          // this widget (e.g. the backdrop section).
+          var section = null;
+          if (target.id === 'appearance-topbar-image-section') {
+            section = target;
+          } else if (target.querySelector) {
+            section = target.querySelector('#appearance-topbar-image-section');
+          }
+          if (!section || !el.contains(section)) return;
+          var path = section.getAttribute('data-topbar-image-path') || '';
+          var mode = path ? 'image' : '';
+          draft.topbarStyle.image_path = path;
+          draft.topbarStyle.mode = mode;
+          saved.topbarStyle.image_path = path;
+          saved.topbarStyle.mode = mode;
+          // Re-fetch the (re-rendered) panel node so setActiveMode toggles the
+          // correct element after the swap replaced the old one.
+          imagePanel = el.querySelector('#appearance-topbar-image');
+          setActiveMode(mode);
+          updateTopbarPreview();
+          updateSaveBar();
         });
       }
 

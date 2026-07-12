@@ -74,6 +74,90 @@ templ BackdropUploadSection(campaignID string, backdropPath *string, csrfToken s
 	</div>
 }
 
+// topbarImagePath returns the campaign's current topbar background-image path,
+// or empty string when no image is set. Nil-safe against a missing TopbarStyle.
+func topbarImagePath(cc *CampaignContext) string {
+	s := cc.Campaign.ParseSettings().TopbarStyle
+	if s == nil {
+		return ""
+	}
+	return s.ImagePath
+}
+
+// TopbarImageSection renders the topbar background-image upload/remove UI as a
+// first-class HTMX fragment — the swap target for POST/DELETE
+// /campaigns/:id/topbar-image. Before C-CUSTOMIZE-RESCUE this control did not
+// exist in the templ at all: appearance_editor.js injected the Image button and
+// upload panel into the DOM at runtime and reloaded the whole page on save
+// (audit §8.2 "weird block thing" + the setTimeout(reload) smell, core-tenets
+// §T-B3). Making it a real fragment — mirroring BackdropUploadSection — lets the
+// upload swap in place with no reload, so the operator keeps their scroll
+// position and their place on the Appearance tab.
+templ TopbarImageSection(campaignID string, imagePath string, csrfToken string) {
+	<div id="appearance-topbar-image-section" data-topbar-image-path={ imagePath }>
+		if imagePath != "" {
+			// Show current image with replace/remove controls.
+			<div class="relative rounded-lg overflow-hidden border border-edge">
+				<img
+					src={ "/media/" + imagePath }
+					alt="Topbar background"
+					class="w-full h-16 object-cover"
+				/>
+				<div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+				<div class="absolute bottom-2 right-2 flex gap-2">
+					<label class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-white/90 text-gray-700 hover:bg-white cursor-pointer transition-colors">
+						<i class="fa-solid fa-arrows-rotate text-[10px]"></i>
+						Replace
+						<input
+							type="file"
+							name="file"
+							accept="image/jpeg,image/png,image/webp"
+							class="hidden"
+							hx-post={ fmt.Sprintf("/campaigns/%s/topbar-image", campaignID) }
+							hx-encoding="multipart/form-data"
+							hx-target="#appearance-topbar-image-section"
+							hx-swap="outerHTML"
+							hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+						/>
+					</label>
+					<button
+						type="button"
+						hx-delete={ fmt.Sprintf("/campaigns/%s/topbar-image", campaignID) }
+						hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+						hx-target="#appearance-topbar-image-section"
+						hx-swap="outerHTML"
+						hx-confirm="Remove the topbar image?"
+						class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-red-500/90 text-white hover:bg-red-600 transition-colors"
+					>
+						<i class="fa-solid fa-trash text-[10px]"></i>
+						Remove
+					</button>
+				</div>
+			</div>
+		} else {
+			// Show upload prompt.
+			<label class="flex items-center justify-center h-20 rounded-lg border-2 border-dashed border-edge hover:border-accent/50 bg-surface-alt cursor-pointer transition-colors group">
+				<div class="text-center">
+					<i class="fa-solid fa-image text-lg text-fg-muted group-hover:text-accent transition-colors mb-1"></i>
+					<p class="text-xs text-fg-muted group-hover:text-fg-secondary transition-colors">Click to upload a topbar background image</p>
+					<p class="text-[10px] text-fg-muted mt-0.5">JPEG, PNG, or WebP. Wide images work best.</p>
+				</div>
+				<input
+					type="file"
+					name="file"
+					accept="image/jpeg,image/png,image/webp"
+					class="hidden"
+					hx-post={ fmt.Sprintf("/campaigns/%s/topbar-image", campaignID) }
+					hx-encoding="multipart/form-data"
+					hx-target="#appearance-topbar-image-section"
+					hx-swap="outerHTML"
+					hx-headers={ fmt.Sprintf(`{"X-CSRF-Token":"%s"}`, csrfToken) }
+				/>
+			</label>
+		}
+	</div>
+}
+
 // accentColorPresets returns the preset color options for the accent color picker.
 var accentColorPresets = []struct {
 	Name  string
@@ -525,10 +609,11 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 				<i class="fa-solid fa-paintbrush text-xs mr-1.5 text-fg-muted"></i> Top Bar Style
 			</h3>
 			<p class="text-xs text-fg-secondary mb-3">Customize the top navigation bar appearance.</p>
-			<div class="flex gap-2 mb-3" id="appearance-topbar-mode">
+			<div class="flex flex-wrap gap-2 mb-3" id="appearance-topbar-mode">
 				<button type="button" data-mode="" class="btn-secondary text-xs px-3 py-1.5">Default</button>
 				<button type="button" data-mode="solid" class="btn-secondary text-xs px-3 py-1.5">Solid Color</button>
 				<button type="button" data-mode="gradient" class="btn-secondary text-xs px-3 py-1.5">Gradient</button>
+				<button type="button" data-mode="image" class="btn-secondary text-xs px-3 py-1.5">Image</button>
 			</div>
 			<!-- Solid color options -->
 			<div id="appearance-topbar-solid" class="hidden space-y-2">
@@ -555,6 +640,11 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 						</select>
 					</div>
 				</div>
+			</div>
+			<!-- Image options (first-class fragment; swaps in place on upload/remove
+			     with no page reload — see TopbarImageSection). -->
+			<div id="appearance-topbar-image" class="hidden space-y-2">
+				@TopbarImageSection(cc.Campaign.ID, topbarImagePath(cc), csrfToken)
 			</div>
 		</div>
 

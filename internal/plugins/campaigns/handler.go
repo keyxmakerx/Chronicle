@@ -578,6 +578,15 @@ func (h *Handler) UploadTopbarImage(c echo.Context) error {
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_image.uploaded", nil)
+
+	// HTMX callers (the appearance editor) get the swapped fragment so the
+	// upload applies in place with no page reload (C-CUSTOMIZE-RESCUE, mirrors
+	// the backdrop upload flow). The HX-Trigger lets the editor JS sync its
+	// draft/saved state and mode buttons from the new path.
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Trigger", "topbar-image-updated")
+		return middleware.Render(c, http.StatusOK, TopbarImageSection(cc.Campaign.ID, filename, middleware.GetCSRFToken(c)))
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok", "image_path": filename})
 }
 
@@ -598,6 +607,11 @@ func (h *Handler) RemoveTopbarImage(c echo.Context) error {
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.topbar_image.removed", nil)
+
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Trigger", "topbar-image-updated")
+		return middleware.Render(c, http.StatusOK, TopbarImageSection(cc.Campaign.ID, "", middleware.GetCSRFToken(c)))
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 

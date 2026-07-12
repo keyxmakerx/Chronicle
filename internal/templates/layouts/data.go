@@ -742,6 +742,23 @@ func GetBrandName(ctx context.Context) string {
 	return name
 }
 
+// GetDisplayName returns the name to show for the current campaign in chrome
+// (topbar + sidebar): the custom brand name when the owner has set one, else
+// the campaign's real name. This is the single source of truth for the
+// brand-name-override fallback — before C-CUSTOMIZE-RESCUE the sidebar honored
+// the brand name but the two topbar sites read GetCampaignName directly, so a
+// custom brand appeared in the sidebar and silently reverted to the campaign
+// name in the header (the operator-reported "header customization is broken",
+// audit §8.1). Callers already inside an in-campaign guard can use this
+// directly; GetBrandName is empty whenever no brand is set (or off-campaign),
+// so the fallback is always correct.
+func GetDisplayName(ctx context.Context) string {
+	if name := GetBrandName(ctx); name != "" {
+		return name
+	}
+	return GetCampaignName(ctx)
+}
+
 // SetBrandLogo stores the campaign's brand logo media path in the context.
 func SetBrandLogo(ctx context.Context, path string) context.Context {
 	return context.WithValue(ctx, keyBrandLogo, path)
