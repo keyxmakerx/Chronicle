@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
@@ -562,6 +563,30 @@ func changesStoredDate(cal *Calendar, input UpdateCalendarInput) bool {
 		input.CurrentMinute != cal.CurrentMinute
 }
 
+// validateRealTimeEnable enforces the preconditions for turning ON real-time
+// tracking (C-REAL-CALENDAR-P2 / RC-1, RC-2). Real-time is a flag on reallife
+// mode — never fantasy; the anchor zone is REQUIRED (no silent default) and must
+// be a real IANA zone loadable by the stdlib (same tzdb check as
+// auth.UpdateTimezone); and a real-time day must be a 24-hour wall-clock day, so
+// the time system has to be 24 hours/day. All failures are validation errors so
+// the settings PUT surfaces them as 4xx, not 500.
+func (s *calendarService) validateRealTimeEnable(cal *Calendar, input UpdateCalendarInput) error {
+	if cal.Mode != ModeRealLife {
+		return apperror.NewValidation("real-time tracking can only be enabled on a real-life calendar")
+	}
+	if input.RealTimeZone == nil || strings.TrimSpace(*input.RealTimeZone) == "" {
+		return apperror.NewValidation("a time zone is required to enable real-time tracking")
+	}
+	zone := strings.TrimSpace(*input.RealTimeZone)
+	if _, err := time.LoadLocation(zone); err != nil {
+		return apperror.NewValidation("invalid time zone: " + zone)
+	}
+	if input.HoursPerDay != 24 {
+		return apperror.NewValidation("real-time tracking requires a 24-hour day (24 hours per day)")
+	}
+	return nil
+}
+
 // GetCalendar returns the full calendar for a campaign with all sub-resources.
 func (s *calendarService) GetCalendar(ctx context.Context, campaignID string) (*Calendar, error) {
 	cal, err := s.repo.GetByCampaignID(ctx, campaignID)
@@ -641,6 +666,39 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	if cal == nil {
 		return apperror.NewNotFound("calendar not found")
 	}
+
+	// Resolve the real-time settings (C-REAL-CALENDAR-P2). SetRealTime is nil for
+	// every caller that does not manage the flag (PutDate, worldstate advance/time,
+	// seed/create) — leave the stored TracksRealTime/RealTimeZone untouched so those
+	// callers never clobber them. Only the settings form sets it, to enable/disable.
+	if input.SetRealTime != nil {
+		if *input.SetRealTime {
+			if err := s.validateRealTimeEnable(cal, input); err != nil {
+				return err
+			}
+			zone := strings.TrimSpace(*input.RealTimeZone) // non-nil & non-blank guaranteed by validate
+			cal.TracksRealTime = true
+			cal.RealTimeZone = &zone
+		} else {
+			// Disabling reverts to a stored-date manual calendar and clears the
+			// now-meaningless anchor zone.
+			cal.TracksRealTime = false
+			cal.RealTimeZone = nil
+		}
+	}
+
+	// A settings-form save (the only caller that manages the RT flag) never edits a
+	// real-time calendar's date — it is computed from the wall clock. Preserve the
+	// stored Current* so the W6 guard below can't false-trip. This kills the
+	// name-only-save footgun: the settings page loads through a seam-covered loader,
+	// so its date fields hold the LIVE value and posting them back would look like a
+	// manual change. A date-PUSH (PutDate) leaves SetRealTime nil, so its explicit
+	// date change still reaches the guard and is rejected.
+	if input.SetRealTime != nil && cal.UsesRealTime() {
+		input.CurrentYear, input.CurrentMonth, input.CurrentDay = cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay
+		input.CurrentHour, input.CurrentMinute = cal.CurrentHour, cal.CurrentMinute
+	}
+
 	// W6: on a real-time calendar, reject a settings save that CHANGES the date
 	// (input Current* differs from the stored value); non-date settings edits
 	// round-trip the stored date unchanged and stay editable. This also
@@ -768,6 +826,16 @@ func (s *calendarService) ListCalendars(ctx context.Context, campaignID string) 
 	if err != nil {
 		return nil, fmt.Errorf("list calendars: %w", err)
 	}
+	// Real-time seam (F1, C-REAL-CALENDAR-P2): this is the SIXTH loader and the
+	// base for every list surface — the syncapi list endpoint, the owner
+	// dashboard, and the timeline all read it directly (not via
+	// ListVisibleCalendars). Seam per element here so each of those surfaces
+	// serves a real-time calendar's live wall-clock date instead of the stale
+	// stored Current*. Indexed loop mutates the backing array, not a range copy;
+	// no-op for every non-real-time calendar (applyRealTime guards internally).
+	for i := range cals {
+		s.applyRealTime(&cals[i])
+	}
 	return cals, nil
 }
 
@@ -779,14 +847,10 @@ func (s *calendarService) ListVisibleCalendars(ctx context.Context, campaignID s
 	if err != nil {
 		return nil, err
 	}
-	visible := filterCalendarsByUser(cals, role, userID)
-	// Real-time seam per element (the dashboard + the V2 calendar switcher
-	// render each calendar's own current date). Indexed loop so we mutate the
-	// slice's backing array, not a range copy.
-	for i := range visible {
-		s.applyRealTime(&visible[i])
-	}
-	return visible, nil
+	// The base loader ListCalendars already applied the real-time seam per
+	// element (C-REAL-CALENDAR-P2 F1); filterCalendarsByUser reuses those same
+	// structs, so no re-seam is needed here.
+	return filterCalendarsByUser(cals, role, userID), nil
 }
 
 // dashboardAgendaCap bounds the per-calendar agenda the dashboard widget shows.
@@ -2092,6 +2156,16 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 	}
 	if cal == nil {
 		return apperror.NewNotFound("calendar not found")
+	}
+	// W8 (F3, C-REAL-CALENDAR-P2): ApplyImport unconditionally rewrites the stored
+	// date (CurrentYear from settings, CurrentMonth/Day forced to 1, below) — it is
+	// definitionally a date-writer with no "structure-only, leave the date" path.
+	// On a real-time calendar the date is wall-clock authoritative (B-R10/RC-1), so
+	// an import that stomped it would freeze the calendar at a wrong day exactly
+	// like the manual writers W1–W7 would. Reject the whole import; there is no
+	// meaningful "import a fantasy structure onto a live Gregorian calendar" case.
+	if err := guardManualDateChange(cal); err != nil {
+		return err
 	}
 
 	// Validate sub-resource inputs upfront. Reuse the same rules each

@@ -30,6 +30,11 @@ type ExportCalendar struct {
 	SecondsPerMinute int               `json:"seconds_per_minute"`
 	LeapYearEvery    int               `json:"leap_year_every"`
 	LeapYearOffset   int               `json:"leap_year_offset"`
+	// Real-time tracking (C-REAL-CALENDAR-P2). Carried so a round-trip export/
+	// re-import preserves whether the calendar is wall-clock authoritative and
+	// which IANA zone anchors it. RealTimeZone is omitted when unset (manual).
+	TracksRealTime   bool              `json:"tracks_real_time"`
+	RealTimeZone     *string           `json:"real_time_zone,omitempty"`
 	Months           []ExportMonth     `json:"months"`
 	Weekdays         []ExportWeekday   `json:"weekdays"`
 	Moons            []ExportMoon      `json:"moons,omitempty"`
@@ -165,6 +170,8 @@ func BuildExport(cal *Calendar, events []Event, includeEvents bool) *ChronicleEx
 			SecondsPerMinute: cal.SecondsPerMinute,
 			LeapYearEvery:    cal.LeapYearEvery,
 			LeapYearOffset:   cal.LeapYearOffset,
+			TracksRealTime:   cal.TracksRealTime,
+			RealTimeZone:     cal.RealTimeZone,
 		},
 	}
 

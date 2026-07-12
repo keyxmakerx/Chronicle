@@ -236,6 +236,32 @@ templ generalSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 						correct local time display.
 					</p>
 				</div>
+				<!-- Real-time tracking (C-REAL-CALENDAR-P2). Flag on real-life mode: when
+				     on, the current date/time follow the real-world clock in the anchor
+				     zone and manual date edits are rejected server-side. -->
+				<div class="space-y-2 pt-2 border-t border-edge">
+					<label class="flex items-center gap-2 cursor-pointer">
+						<input type="checkbox" x-model="trackRealTime" class="rounded"/>
+						<span class="text-sm font-medium text-fg-body">Track real-world time</span>
+					</label>
+					<p class="text-xs text-fg-muted">
+						When enabled, this calendar's current date and time follow the real-world
+						clock in the anchor time zone below. Manual date changes are disabled.
+					</p>
+					<div x-show="trackRealTime" x-transition class="space-y-1 pt-1">
+						<label class="block text-sm font-medium text-fg-body">Anchor Time Zone</label>
+						<select x-model="realTimeZone" class="input w-full">
+							<option value="">— Select a time zone —</option>
+							for _, tz := range commonTimeZones() {
+								<option value={ tz }>{ tz }</option>
+							}
+						</select>
+						<p class="text-xs text-fg-muted">
+							Required. The wall-clock zone the live date is read in (daylight-saving
+							transitions are handled automatically).
+						</p>
+					</div>
+				</div>
 			}
 			<div class="flex items-center justify-end gap-2 pt-2 border-t border-edge">
 				<span x-show="saved" x-transition class="text-xs text-green-500">Saved</span>
@@ -246,17 +272,26 @@ templ generalSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 					:disabled="saving"
 					@click={ fmt.Sprintf(`
 						saving = true; saved = false; error = '';
-						Chronicle.apiFetch('/campaigns/%s/calendars/%s/settings', {
-							method: 'PUT',
-							body: {
-								name: name, epoch_name: epochName || null, description: null,
-								current_year: currentYear, current_month: currentMonth, current_day: currentDay,
-								current_hour: currentHour, current_minute: currentMinute,
-								hours_per_day: hoursPerDay, minutes_per_hour: minutesPerHour,
-								seconds_per_minute: secondsPerMinute,
-								leap_year_every: leapYearEvery, leap_year_offset: leapYearOffset
-							}
-						}).then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
+						if (isRealLife && trackRealTime && !realTimeZone) { error = 'Select a time zone to enable real-time tracking.'; saving = false; return; }
+						var body = {
+							name: name, epoch_name: epochName || null, description: null,
+							hours_per_day: hoursPerDay, minutes_per_hour: minutesPerHour,
+							seconds_per_minute: secondsPerMinute,
+							leap_year_every: leapYearEvery, leap_year_offset: leapYearOffset
+						};
+						if (isRealLife) {
+							body.tracks_real_time = trackRealTime;
+							body.real_time_zone = trackRealTime ? realTimeZone : null;
+						}
+						// A real-time calendar's date is computed from the clock, so don't post
+						// the (live) date fields back — that would look like a manual change and
+						// be rejected. Manual/fantasy calendars still send them for date editing.
+						if (!(isRealLife && trackRealTime)) {
+							body.current_year = currentYear; body.current_month = currentMonth; body.current_day = currentDay;
+							body.current_hour = currentHour; body.current_minute = currentMinute;
+						}
+						Chronicle.apiFetch('/campaigns/%s/calendars/%s/settings', { method: 'PUT', body: body })
+						.then(r => { if (!r.ok) throw new Error('Save failed'); saved = true; setTimeout(() => saved = false, 3000); })
 						.catch(e => { error = e.message; })
 						.finally(() => { saving = false; })
 					`, cc.Campaign.ID, cal.ID) }
@@ -688,19 +723,25 @@ func generalSettingsData(cal *Calendar) string {
 	if cal.EpochName != nil {
 		epoch = *cal.EpochName
 	}
+	zone := ""
+	if cal.RealTimeZone != nil {
+		zone = *cal.RealTimeZone
+	}
 	return fmt.Sprintf(`{
 		saving: false, saved: false, error: '',
 		name: %s, epochName: %s,
 		currentYear: %d, currentMonth: %d, currentDay: %d,
 		currentHour: %d, currentMinute: %d,
 		hoursPerDay: %d, minutesPerHour: %d, secondsPerMinute: %d,
-		leapYearEvery: %d, leapYearOffset: %d
+		leapYearEvery: %d, leapYearOffset: %d,
+		isRealLife: %t, trackRealTime: %t, realTimeZone: %s
 	}`,
 		jsStr(cal.Name), jsStr(epoch),
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
 		cal.CurrentHour, cal.CurrentMinute,
 		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
 		cal.LeapYearEvery, cal.LeapYearOffset,
+		cal.IsRealLife(), cal.TracksRealTime, jsStr(zone),
 	)
 }
 

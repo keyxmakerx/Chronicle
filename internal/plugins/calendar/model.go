@@ -689,6 +689,15 @@ type UpdateCalendarInput struct {
 	SecondsPerMinute int
 	LeapYearEvery    int
 	LeapYearOffset   int
+	// Real-time settings (C-REAL-CALENDAR-P2). SetRealTime is nil for every caller
+	// that does not manage the flag (PutDate, worldstate advance/time, seed/create)
+	// so their update preserves the stored TracksRealTime/RealTimeZone — a *bool so
+	// "absent" (leave unchanged) is distinct from "false" (disable), mirroring the
+	// Description/EpochName null-preserve pattern above. The settings form sets it to
+	// enable or disable. RealTimeZone is the IANA anchor, REQUIRED and validated when
+	// enabling (RC-2); ignored and cleared when disabling.
+	SetRealTime  *bool
+	RealTimeZone *string
 }
 
 // CreateEventInput is the validated input for creating a calendar event.
