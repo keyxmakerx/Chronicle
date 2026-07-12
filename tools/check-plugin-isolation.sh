@@ -147,9 +147,22 @@ check_one() {
     esac
   done
 
-  if echo "${added}" | grep -qE "\"${tok_re}\""; then
+  # Strip whole-line `//` comments before scanning: a full-line comment that
+  # quotes a plugin slug is documentation, not a cross-plugin code reference, and
+  # shouldn't trip the guard (RC-15.2 — it flagged doc comments in #530). ONLY
+  # lines that START with `//` (after the diff `+` and indentation) are dropped —
+  # the entire line is then a comment, so no code can hide behind the skip.
+  # Block comments (`/* */`), block-comment continuations (` * `), inline/trailing
+  # comments, and CSS `#id` / `*{}` / `* x` selectors are deliberately NOT skipped:
+  # dropping a line that merely BEGINS with a comment token would delete the real
+  # code after it and open a bypass (e.g. `/* x */ f("calendar")`).
+  local code_added
+  code_added=$(echo "${added}" | grep -vE '^\+[[:space:]]*//' || true)
+  [[ -z "${code_added}" ]] && return 0
+
+  if echo "${code_added}" | grep -qE "\"${tok_re}\""; then
     echo "${file}:"
-    echo "${added}" | grep -nE "\"${tok_re}\"" || true
+    echo "${code_added}" | grep -nE "\"${tok_re}\"" || true
     echo ""
   fi
 }

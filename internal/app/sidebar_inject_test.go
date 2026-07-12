@@ -6,6 +6,7 @@ package app
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -55,15 +56,23 @@ func TestInjectDefaultSidebarItems_EmptyRendersFullDefault(t *testing.T) {
 			t.Errorf("sub-category type 30 must not be a sidebar item")
 		}
 	}
-	// Addon shortcuts are notes + calendar.
-	slugs := map[string]bool{}
+	// Addon shortcuts match the injector's own registration list (the source of
+	// truth), derived here rather than hardcoding plugin slugs: internal/app is
+	// not the owning plugin directory, so literal plugin names in this test would
+	// leak across the plugin boundary and trip check-plugin-isolation.sh
+	// (0e / T-B2). defaultSidebarAddons lives in the allowlisted app wiring.
+	wantAddons := map[string]bool{}
+	for _, a := range defaultSidebarAddons {
+		wantAddons[a.Slug] = true
+	}
+	gotAddons := map[string]bool{}
 	for _, it := range got {
 		if it.Type == "addon" {
-			slugs[it.Slug] = true
+			gotAddons[it.Slug] = true
 		}
 	}
-	if !slugs["notes"] || !slugs["calendar"] {
-		t.Errorf("default addons = %v, want notes+calendar", slugs)
+	if !reflect.DeepEqual(gotAddons, wantAddons) {
+		t.Errorf("default addons = %v, want %v (from defaultSidebarAddons)", gotAddons, wantAddons)
 	}
 }
 

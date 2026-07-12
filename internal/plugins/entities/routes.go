@@ -101,9 +101,12 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/sidebar-nodes/:nid/reorder", h.ReorderSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/sidebar-nodes/:nid", h.DeleteSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Sub-category type reorder (Scribe+): dense re-sequence of a sub-type among
-	// its parent's children — the previously-frozen sub-category ordering.
-	cg.PUT("/entity-types/:etid/reorder", h.ReorderEntityTypeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	// Sub-category type reorder (Owner only): dense re-sequence of a sub-type
+	// among its parent's children — the previously-frozen sub-category ordering.
+	// Owner-gated to match every other entity-type mutation below and the
+	// sidebar-config PUT: reordering the type taxonomy is structural campaign
+	// configuration, not per-page content a Scribe edits (0c / RC-15.4).
+	cg.PUT("/entity-types/:etid/reorder", h.ReorderEntityTypeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Owner routes.
 	cg.DELETE("/entities/:eid", h.Delete, campaigns.RequireRole(campaigns.RoleOwner))

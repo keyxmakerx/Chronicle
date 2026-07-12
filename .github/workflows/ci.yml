@@ -98,6 +98,20 @@ jobs:
         # cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
         run: go test ./... -v -short
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: JS tests
+        # B-R8 (cordinator/decisions/2026-07-10-beta-transition-rulings.md):
+        # gate the node --test JS suite (sidebar tree/reorder, boosted-nav
+        # highlight, calendar/world-state widgets, …) so red JS tests can no
+        # longer linger on main unnoticed. Uses Node's built-in test runner
+        # (no deps). The two dead sidebar_reorg tests that failed on main were
+        # removed in this same change, so the suite gates green.
+        run: make test-js
+
       - name: Decision-citations lint (M-O3.1, WARN-only)
         # Per C-CI-GUARDS-PHASE-2 + cordinator/reports/coordinator/2026-05-21-c-meta-audit.md
         # Phase 2 deliverable. Surfaces orphan cordinator/decisions/*.md docs.
