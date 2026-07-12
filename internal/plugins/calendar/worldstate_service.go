@@ -63,6 +63,16 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 	if cal == nil {
 		return apperror.NewNotFound("calendar not found")
 	}
+	// Real-time seam (F2, C-REAL-CALENDAR-P2): every content-authoring branch
+	// below (mood/weather/celestial add + clear) keys on cal.Current* as "today".
+	// On a real-time calendar the raw GetByID row carries the STALE stored date,
+	// so without this the GM's "weather for today" would land on the wrong day.
+	// Apply the seam primitive directly (rather than swap to the heavier
+	// eager-loading GetCalendarByID) so this hot write path stays cheap; it is a
+	// no-op for every non-real-time calendar. RC-5 keeps this content authoring
+	// enabled for real-time calendars — only the date-MOVING Advance/Time branches
+	// (W4/W5, below) are guarded.
+	s.applyRealTime(cal)
 
 	if input.Mood != nil {
 		var intensity *float64

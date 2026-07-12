@@ -662,6 +662,13 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 		SecondsPerMinute int     `json:"seconds_per_minute"`
 		LeapYearEvery    int     `json:"leap_year_every"`
 		LeapYearOffset   int     `json:"leap_year_offset"`
+		// Real-time settings (C-REAL-CALENDAR-P2). TracksRealTime is a *bool so an
+		// omitted field leaves the stored flag unchanged (a client that never sends
+		// it can't accidentally disable real-time); the settings form always sends
+		// it. RealTimeZone is the IANA anchor, required+validated by the service on
+		// enable (RC-2).
+		TracksRealTime *bool   `json:"tracks_real_time"`
+		RealTimeZone   *string `json:"real_time_zone"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -681,14 +688,24 @@ func (h *Handler) UpdateCalendarAPI(c echo.Context) error {
 		SecondsPerMinute: req.SecondsPerMinute,
 		LeapYearEvery:    req.LeapYearEvery,
 		LeapYearOffset:   req.LeapYearOffset,
+		SetRealTime:      req.TracksRealTime,
+		RealTimeZone:     req.RealTimeZone,
 	}); err != nil {
 		return err
 	}
-	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarUpdated, "calendar", cal.ID, req.Name,
-		map[string]any{
-			"current_year": req.CurrentYear, "current_month": req.CurrentMonth, "current_day": req.CurrentDay,
-			"hours_per_day": req.HoursPerDay, "minutes_per_hour": req.MinutesPerHour,
-		})
+	auditMeta := map[string]any{
+		"current_year": req.CurrentYear, "current_month": req.CurrentMonth, "current_day": req.CurrentDay,
+		"hours_per_day": req.HoursPerDay, "minutes_per_hour": req.MinutesPerHour,
+	}
+	// Enabling/disabling real-time tracking changes the calendar's date authority,
+	// so record the toggle (and the anchor zone when enabling) in the audit trail.
+	if req.TracksRealTime != nil {
+		auditMeta["tracks_real_time"] = *req.TracksRealTime
+		if *req.TracksRealTime && req.RealTimeZone != nil {
+			auditMeta["real_time_zone"] = *req.RealTimeZone
+		}
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarUpdated, "calendar", cal.ID, req.Name, auditMeta)
 	return nil
 }
 

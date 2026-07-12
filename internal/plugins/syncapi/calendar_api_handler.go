@@ -86,6 +86,13 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 		"day":    cal.CurrentDay,
 		"hour":   cal.CurrentHour,
 		"minute": cal.CurrentMinute,
+		// Real-time date signal (RC-4, C-REAL-CALENDAR-P2): tells the Foundry module
+		// this calendar's date is wall-clock authoritative so it treats dates as
+		// read-only and pauses its date-push (pull still fine). GetCalendar already
+		// applied the seam above, so year/month/day/hour/minute are the LIVE values.
+		// Emit the effective predicate (mode==reallife AND flag) rather than the raw
+		// flag so the wire signal can never disagree with the seam/guard behavior.
+		"tracks_real_time": cal.UsesRealTime(),
 	}
 
 	// Computed: current season.

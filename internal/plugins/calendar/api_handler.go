@@ -395,7 +395,7 @@ func (h *APIHandler) PutDate(c echo.Context) error {
 		LeapYearEvery:    cal.LeapYearEvery,
 		LeapYearOffset:   cal.LeapYearOffset,
 	}); err != nil {
-		if isAppErrorType(err, "validation") {
+		if isAppErrorType(err, "validation_error") {
 			return h.respondError(c, APIErrValidation(err.Error()))
 		}
 		return h.respondError(c, APIErrInternal("update_calendar_date", err))
@@ -469,7 +469,7 @@ func (h *APIHandler) CreateEvent(c echo.Context) error {
 		AllDay:      true, // Calendaria notes are day-resolution; the wire body has no hour/minute fields.
 	})
 	if err != nil {
-		if isAppErrorType(err, "validation") {
+		if isAppErrorType(err, "validation_error") {
 			return h.respondError(c, APIErrValidation(err.Error()))
 		}
 		return h.respondError(c, APIErrInternal("create_event", err))
@@ -537,7 +537,7 @@ func (h *APIHandler) UpdateEvent(c echo.Context) error {
 		Visibility:  storageVis,
 		AllDay:      true,
 	}); err != nil {
-		if isAppErrorType(err, "validation") {
+		if isAppErrorType(err, "validation_error") {
 			return h.respondError(c, APIErrValidation(err.Error()))
 		}
 		if isAppErrorType(err, "not_found") {
