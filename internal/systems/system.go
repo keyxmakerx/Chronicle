@@ -55,8 +55,20 @@ type TooltipRenderer interface {
 // It provides a uniform shape regardless of game system, with
 // system-specific details in the Properties map.
 type ReferenceItem struct {
-	// ID is the unique identifier within this category (typically a slug).
+	// ID is the unique identifier within this category. Some data sources key
+	// items by "id" directly; others (the documented data contract — see
+	// Chronicle-Draw-Steel docs/DATA-SCHEMA.md) key by "slug" and never set
+	// this field in the source JSON. Call sites must use the normalized ID —
+	// see Slug and JSONProvider's load-time normalization — not this field
+	// as read directly off disk.
 	ID string `json:"id"`
+
+	// Slug is the source data's unique-identifier field for data contracts
+	// that key by "slug" instead of "id" (e.g. the Draw Steel / DnD-5.5e
+	// package data files). JSONProvider normalizes ID from this at load time
+	// when ID is empty; read sites should never need to consult Slug
+	// directly. (C-SYSTEMS-REF-SLUG-FIX)
+	Slug string `json:"slug"`
 
 	// Category is the content type slug (e.g., "spells", "monsters", "items").
 	Category string `json:"category"`

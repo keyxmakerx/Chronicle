@@ -71,11 +71,42 @@ func NewJSONProvider(moduleID, dataDir string) (*JSONProvider, error) {
 			continue
 		}
 
-		// Stamp each item with the module ID and category.
+		// Stamp each item with the module ID and category, and normalize ID:
+		// prefer the source's own "id" when set, else fall back to "slug" (the
+		// documented data contract — see Chronicle-Draw-Steel
+		// docs/DATA-SCHEMA.md — keys reference items by slug and never sets
+		// "id"). This is the single normalization point; Get() and every
+		// other read site consume the normalized ID only. An item with
+		// neither is unaddressable (Get() could never find it), so it's
+		// skipped rather than loaded with a blank ID that would silently
+		// collide with every other blank-ID item. (C-SYSTEMS-REF-SLUG-FIX)
+		normalized := items[:0]
 		for i := range items {
 			items[i].SystemID = moduleID
 			items[i].Category = category
+			if items[i].ID == "" {
+				items[i].ID = items[i].Slug
+			}
+			if items[i].ID == "" {
+				slog.Warn("skipping reference item with neither id nor slug",
+					slog.String("file", filePath),
+					slog.String("module", moduleID),
+					slog.String("category", category),
+					slog.String("name", items[i].Name),
+				)
+				RecordEvent(LoadEvent{
+					SystemID: moduleID,
+					Name:     items[i].Name,
+					Kind:     EventSkipped,
+					Source:   "data-item",
+					Error:    fmt.Sprintf("category %q: item has neither id nor slug", category),
+					Dir:      filePath,
+				})
+				continue
+			}
+			normalized = append(normalized, items[i])
 		}
+		items = normalized
 
 		p.items[category] = items
 	}
