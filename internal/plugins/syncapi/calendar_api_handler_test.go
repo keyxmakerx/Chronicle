@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -25,6 +26,9 @@ type stubCalendarSvc struct {
 	// atomic-rollback path so tests can assert DeleteCalendar was
 	// called when ApplyImport fails.
 	onDelete func(context.Context, string) error
+	// C-REAL-CALENDAR-P3 0b: capture the forwarded settings input + drive the
+	// endpoint's error surface for the mode-walk vector test.
+	onUpdate func(context.Context, string, calendar.UpdateCalendarInput) error
 }
 
 // --- methods we actually use in tests ---
@@ -55,7 +59,10 @@ func (s *stubCalendarSvc) ApplyImport(ctx context.Context, calendarID string, re
 func (s *stubCalendarSvc) GetCalendarByID(context.Context, string) (*calendar.Calendar, error) {
 	return nil, nil
 }
-func (s *stubCalendarSvc) UpdateCalendar(context.Context, string, calendar.UpdateCalendarInput) error {
+func (s *stubCalendarSvc) UpdateCalendar(ctx context.Context, calID string, in calendar.UpdateCalendarInput) error {
+	if s.onUpdate != nil {
+		return s.onUpdate(ctx, calID, in)
+	}
 	return nil
 }
 func (s *stubCalendarSvc) DeleteCalendar(ctx context.Context, calendarID string) error {
@@ -341,5 +348,61 @@ func TestImportCalendar_UsesExistingCalendar(t *testing.T) {
 	}
 	if got, _ := body["auto_created"].(bool); got {
 		t.Errorf("expected auto_created=false in response, got body=%v", body)
+	}
+}
+
+// TestUpdateCalendarSettings_ModeWalkForwardedAndRejected pins the syncapi half
+// of C-REAL-CALENDAR-P3 0b. The settings PUT binds `mode` while never managing
+// the real-time flag (it forwards SetRealTime nil) — that is the exact vector
+// that could strand TracksRealTime=true on a non-reallife calendar. This asserts
+// (1) the endpoint forwards the mode change with SetRealTime nil (the vector) and
+// (2) when the service rejects the resulting state as a validation error — which
+// the real calendarService.UpdateCalendar invariant does, pinned in the calendar
+// package's realtime_p3_test.go — the endpoint surfaces it as a 422. (The concrete
+// service is unexported here, so the stub mirrors that separately-pinned
+// rejection to exercise the endpoint's status mapping end-to-end.)
+func TestUpdateCalendarSettings_ModeWalkForwardedAndRejected(t *testing.T) {
+	rt := &calendar.Calendar{
+		ID: "cal-rt", CampaignID: "camp-1", Mode: calendar.ModeRealLife,
+		TracksRealTime: true, HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
+	}
+	var got calendar.UpdateCalendarInput
+	forwarded := false
+	svc := &stubCalendarSvc{
+		onGet: func(context.Context, string) (*calendar.Calendar, error) { return rt, nil },
+		onUpdate: func(_ context.Context, _ string, in calendar.UpdateCalendarInput) error {
+			got, forwarded = in, true
+			// The real service rejects this (result still tracks real time but is
+			// no longer reallife); mirror that so the endpoint's mapping is exercised.
+			return apperror.NewValidation("real-time tracking requires a real-life calendar")
+		},
+	}
+	h := NewCalendarAPIHandler(nil, svc)
+
+	body := `{"name":"S","mode":"fantasy","current_year":2000,"current_month":1,"current_day":1,` +
+		`"current_hour":0,"current_minute":0,"hours_per_day":24,"minutes_per_hour":60,"seconds_per_minute":60}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/campaigns/camp-1/calendar/settings", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e := echo.New()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("camp-1")
+
+	err := h.UpdateCalendarSettings(c)
+
+	if !forwarded {
+		t.Fatal("expected the settings PUT to forward to UpdateCalendar")
+	}
+	// Vector: mode change forwarded, real-time flag left unmanaged.
+	if got.Mode != calendar.ModeFantasy {
+		t.Errorf("forwarded mode = %q, want fantasy (the mode-walk vector)", got.Mode)
+	}
+	if got.SetRealTime != nil {
+		t.Errorf("syncapi PUT must leave SetRealTime nil (it does not manage the flag); got %v", *got.SetRealTime)
+	}
+	// Outcome: the validation rejection surfaces as 422, not a 500-class error.
+	if code := apperror.SafeCode(err); code != http.StatusUnprocessableEntity {
+		t.Errorf("mode-walk rejection status = %d, want 422", code)
 	}
 }

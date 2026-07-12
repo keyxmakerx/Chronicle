@@ -433,13 +433,123 @@
         }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
+    // --- Real-time wall-clock (C-REAL-CALENDAR-P3) --------------
+    //
+    // For UsesRealTime() calendars the server marks each clock element with
+    // [data-cal-rt-clock] + data-rt-zone (the IANA anchor zone) and renders a
+    // no-JS fallback time inside [data-rt-anchor]. Here we re-render the live
+    // time in that zone via Intl at MINUTE granularity (no per-second work), and
+    // — when the viewer's browser zone differs from the anchor — a second "Your
+    // time" line computed client-side from the SAME instant (the server never
+    // sees the browser zone). prefers-reduced-motion → paint once, no live tick
+    // (static). Scans the whole document (header clock + dashboard cards) with a
+    // per-node guard so it is safe on load AND htmx settle without double-wiring,
+    // and works on pages with no [data-cal-v2-root] (the dashboard).
+    var rtClockTimers = [];
+
+    function wireRealTimeClocks() {
+        // Reap timers whose clock node was swapped out by an htmx nav, so a long
+        // session never accumulates no-op minute intervals on detached nodes.
+        rtClockTimers = rtClockTimers.filter(function (t) {
+            if (!document.contains(t.node)) {
+                clearTimeout(t.timeoutId);
+                clearInterval(t.intervalId);
+                return false;
+            }
+            return true;
+        });
+
+        var clocks = document.querySelectorAll('[data-cal-rt-clock]');
+        if (!clocks.length) return;
+
+        var reduce = false;
+        try {
+            reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        } catch (e) {}
+        var browserZone = '';
+        try {
+            browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        } catch (e) {}
+
+        function fmtTime(zone, date) {
+            try {
+                return new Intl.DateTimeFormat('en-US', {
+                    timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: false
+                }).format(date);
+            } catch (e) { return ''; }
+        }
+        function shortZone(zone, date) {
+            try {
+                var parts = new Intl.DateTimeFormat('en-US', {
+                    timeZone: zone, timeZoneName: 'short'
+                }).formatToParts(date);
+                for (var i = 0; i < parts.length; i++) {
+                    if (parts[i].type === 'timeZoneName') return parts[i].value;
+                }
+            } catch (e) {}
+            return '';
+        }
+        function paint(clock) {
+            var zone = clock.getAttribute('data-rt-zone');
+            if (!zone) return;
+            var now = new Date();
+            var anchor = clock.querySelector('[data-rt-anchor]');
+            if (anchor) {
+                var t = fmtTime(zone, now);
+                if (t) {
+                    var z = shortZone(zone, now);
+                    anchor.textContent = z ? t + ' ' + z : t;
+                }
+            }
+            var local = clock.querySelector('[data-rt-local]');
+            if (local) {
+                // Dual line only when the viewer's zone differs from the anchor.
+                if (browserZone && browserZone !== zone) {
+                    var lt = fmtTime(browserZone, now);
+                    var lz = shortZone(browserZone, now);
+                    local.textContent = 'Your time: ' + lt + (lz ? ' ' + lz : '');
+                    local.classList.remove('hidden');
+                } else {
+                    local.classList.add('hidden');
+                }
+            }
+        }
+
+        for (var i = 0; i < clocks.length; i++) {
+            var clock = clocks[i];
+            if (clock.__rtClockInited) continue;
+            clock.__rtClockInited = true;
+            paint(clock); // correct at load (also the static value under reduced-motion)
+            if (reduce) continue; // reduced-motion → no live tick
+            (function (c) {
+                // Align the first tick to the next minute boundary, then tick each
+                // minute. Registry entry lets the reaper clear it once c detaches.
+                var rec = { node: c, timeoutId: 0, intervalId: 0 };
+                var msToMinute = (60 - new Date().getSeconds()) * 1000;
+                rec.timeoutId = setTimeout(function () {
+                    paint(c);
+                    rec.intervalId = setInterval(function () { paint(c); }, 60000);
+                }, msToMinute);
+                rtClockTimers.push(rec);
+            })(clock);
+        }
+    }
+
+    // boot wires the root-gated shell PLUS the document-wide real-time clocks.
+    // The clocks run even on pages without a [data-cal-v2-root] shell (the
+    // campaign dashboard), which is why they are outside init()'s root guard.
+    function boot() {
         init();
+        wireRealTimeClocks();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
     }
     try {
-        document.addEventListener('htmx:afterSettle', init);
-        document.addEventListener('htmx:load', init);
+        document.addEventListener('htmx:afterSettle', boot);
+        document.addEventListener('htmx:load', boot);
     } catch (e) {}
 })();
