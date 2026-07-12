@@ -101,6 +101,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/sidebar-nodes/:nid/reorder", h.ReorderSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.DELETE("/sidebar-nodes/:nid", h.DeleteSidebarNodeAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// Sub-category type reorder (Scribe+): dense re-sequence of a sub-type among
+	// its parent's children — the previously-frozen sub-category ordering.
+	cg.PUT("/entity-types/:etid/reorder", h.ReorderEntityTypeAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Owner routes.
 	cg.DELETE("/entities/:eid", h.Delete, campaigns.RequireRole(campaigns.RoleOwner))
 

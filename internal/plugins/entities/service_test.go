@@ -12,18 +12,20 @@ import (
 
 // mockEntityTypeRepo implements EntityTypeRepository for testing.
 type mockEntityTypeRepo struct {
-	findByIDFn           func(ctx context.Context, id int) (*EntityType, error)
-	findBySlugFn         func(ctx context.Context, campaignID, slug string) (*EntityType, error)
-	listByCampaignFn     func(ctx context.Context, campaignID string) ([]EntityType, error)
-	listAllFn            func(ctx context.Context) ([]EntityType, error)
-	updateLayoutFn       func(ctx context.Context, id int, layoutJSON string) error
-	updateFieldsSchemaFn func(ctx context.Context, id int, fieldsJSON string) error
-	seedDefaultsFn       func(ctx context.Context, campaignID string) error
-	createFn             func(ctx context.Context, et *EntityType) error
-	updateFn             func(ctx context.Context, et *EntityType) error
-	deleteFn             func(ctx context.Context, id int) error
-	slugExistsFn         func(ctx context.Context, campaignID, slug string) (bool, error)
-	maxSortOrderFn       func(ctx context.Context, campaignID string) (int, error)
+	findByIDFn             func(ctx context.Context, id int) (*EntityType, error)
+	findBySlugFn           func(ctx context.Context, campaignID, slug string) (*EntityType, error)
+	listByCampaignFn       func(ctx context.Context, campaignID string) ([]EntityType, error)
+	listAllFn              func(ctx context.Context) ([]EntityType, error)
+	updateLayoutFn         func(ctx context.Context, id int, layoutJSON string) error
+	updateFieldsSchemaFn   func(ctx context.Context, id int, fieldsJSON string) error
+	seedDefaultsFn         func(ctx context.Context, campaignID string) error
+	createFn               func(ctx context.Context, et *EntityType) error
+	updateFn               func(ctx context.Context, et *EntityType) error
+	deleteFn               func(ctx context.Context, id int) error
+	slugExistsFn           func(ctx context.Context, campaignID, slug string) (bool, error)
+	maxSortOrderFn         func(ctx context.Context, campaignID string) (int, error)
+	listChildTypesFn       func(ctx context.Context, parentID int) ([]EntityType, error)
+	resequenceChildTypesFn func(ctx context.Context, campaignID string, orderedIDs []int) error
 
 	moveEntitiesAndDeleteTypeFn func(ctx context.Context, campaignID string, fromTypeID, toTypeID int) (int64, error)
 }
@@ -56,8 +58,18 @@ func (m *mockEntityTypeRepo) ListByCampaign(ctx context.Context, campaignID stri
 	return nil, nil
 }
 
-func (m *mockEntityTypeRepo) ListChildTypes(_ context.Context, _ int) ([]EntityType, error) {
+func (m *mockEntityTypeRepo) ListChildTypes(ctx context.Context, parentID int) ([]EntityType, error) {
+	if m.listChildTypesFn != nil {
+		return m.listChildTypesFn(ctx, parentID)
+	}
 	return nil, nil
+}
+
+func (m *mockEntityTypeRepo) ResequenceChildTypes(ctx context.Context, campaignID string, orderedIDs []int) error {
+	if m.resequenceChildTypesFn != nil {
+		return m.resequenceChildTypesFn(ctx, campaignID, orderedIDs)
+	}
+	return nil
 }
 
 func (m *mockEntityTypeRepo) ListAll(ctx context.Context) ([]EntityType, error) {
@@ -302,10 +314,6 @@ func (m *mockEntityRepo) UpdateParent(ctx context.Context, entityID, campaignID 
 }
 
 func (m *mockEntityRepo) UpdateParentNode(ctx context.Context, entityID, campaignID string, parentNodeID *string) error {
-	return nil
-}
-
-func (m *mockEntityRepo) UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error {
 	return nil
 }
 

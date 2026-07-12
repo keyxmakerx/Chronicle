@@ -52,30 +52,23 @@ func TestUpdateSidebarConfig_RejectsDangerousURLs(t *testing.T) {
 			updateSidebarConfigFn: func(_ context.Context, _, cfg string) error { *saved = cfg; return nil },
 		}}
 	}
-	// Both the legacy CustomLinks and the newer Items[type=link] are guarded.
-	// (Request form per the #473 merge semantics: pointer fields.)
+	// Sidebar link items (Items[type=link]) are guarded — the single unified
+	// model after C-NAV-V3 retired the legacy CustomLinks field.
 	for _, u := range dangerousURLs {
 		var saved string
-		links := []NavLink{{Label: "Evil", URL: u}}
-		if err := newSvc(&saved).UpdateSidebarConfig(context.Background(), "camp-1",
-			UpdateSidebarConfigRequest{CustomLinks: &links}); err == nil {
-			t.Errorf("CustomLinks should reject %q", u)
-		} else if saved != "" {
-			t.Errorf("rejected CustomLink %q must short-circuit before write", u)
-		}
-
-		saved = ""
 		items := []SidebarItem{{Type: "link", Label: "Evil", URL: u}}
 		if err := newSvc(&saved).UpdateSidebarConfig(context.Background(), "camp-1",
 			UpdateSidebarConfigRequest{Items: &items}); err == nil {
 			t.Errorf("Items[link] should reject %q", u)
+		} else if saved != "" {
+			t.Errorf("rejected link %q must short-circuit before write", u)
 		}
 	}
 	// Valid links persist.
 	var saved string
-	okLinks := []NavLink{{Label: "OK", URL: "/campaigns/x"}}
+	okItems := []SidebarItem{{Type: "link", Label: "OK", URL: "/campaigns/x", Visible: true}}
 	if err := newSvc(&saved).UpdateSidebarConfig(context.Background(), "camp-1",
-		UpdateSidebarConfigRequest{CustomLinks: &okLinks}); err != nil {
+		UpdateSidebarConfigRequest{Items: &okItems}); err != nil {
 		t.Errorf("valid sidebar link should be accepted: %v", err)
 	}
 	if saved == "" {

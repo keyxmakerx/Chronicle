@@ -430,21 +430,24 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 
 	// Apply campaign settings if present.
 	if len(data.Campaign.SidebarConfig) > 0 {
-		var sidebarCfg SidebarConfig
-		if err := json.Unmarshal(data.Campaign.SidebarConfig, &sidebarCfg); err == nil {
-			// Import sets all fields explicitly, so wrap in a full request.
-			sidebarReq := UpdateSidebarConfigRequest{
-				Items:           &sidebarCfg.Items,
-				EntityTypeOrder: &sidebarCfg.EntityTypeOrder,
-				HiddenTypeIDs:   &sidebarCfg.HiddenTypeIDs,
-				HiddenEntityIDs: &sidebarCfg.HiddenEntityIDs,
-				HiddenNodeIDs:   &sidebarCfg.HiddenNodeIDs,
-				CustomSections:  &sidebarCfg.CustomSections,
-				CustomLinks:     &sidebarCfg.CustomLinks,
+		// A pre-C-NAV-V3 export carries the legacy sidebar fields; convert it to
+		// the unified items model on the way in. A modern export is already on
+		// items and unmarshals directly. Either way we write only the unified
+		// fields (Items + hidden sets).
+		cfg, converted := convertLegacySidebarConfig(string(data.Campaign.SidebarConfig))
+		if !converted {
+			var parsed SidebarConfig
+			if err := json.Unmarshal(data.Campaign.SidebarConfig, &parsed); err == nil {
+				cfg = parsed
 			}
-			if err := s.campaigns.UpdateSidebarConfig(ctx, campaignID, sidebarReq); err != nil {
-				slog.Warn("import sidebar config failed", slog.Any("error", err))
-			}
+		}
+		sidebarReq := UpdateSidebarConfigRequest{
+			Items:           &cfg.Items,
+			HiddenEntityIDs: &cfg.HiddenEntityIDs,
+			HiddenNodeIDs:   &cfg.HiddenNodeIDs,
+		}
+		if err := s.campaigns.UpdateSidebarConfig(ctx, campaignID, sidebarReq); err != nil {
+			slog.Warn("import sidebar config failed", slog.Any("error", err))
 		}
 	}
 	if len(data.Campaign.DashboardLayout) > 0 {

@@ -231,43 +231,27 @@ templ Sidebar() {
 					if GetCampaignRole(ctx) >= 3 {
 						<div data-sidebar-entity-types={ EntityTypesJSON(ctx) } data-campaign-id={ GetCampaignID(ctx) } class="hidden"></div>
 					}
-					if len(GetSidebarItems(ctx)) > 0 {
-						<!-- Unified sidebar: render items in owner-defined order -->
-						for _, item := range GetSidebarItems(ctx) {
-							if item.Type == "dashboard" {
-								@sidebarDashboardLink(ctx)
-							}
-							if item.Type == "addon" && IsAddonEnabled(ctx, item.Slug) {
-								@sidebarAddonLink(ctx, item)
-							}
-							if item.Type == "all_pages" {
-								@sidebarAllPagesLink(ctx)
-							}
-							if item.Type == "section" {
-								<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
-									{ item.Label }
-								</div>
-							}
-							if item.Type == "link" {
-								@customNavLink(SidebarLink{ID: item.ID, Label: item.Label, URL: item.URL, Icon: item.Icon})
-							}
+					<!-- Unified sidebar: render top-nav items in owner-defined order.
+					     The injector always provides at least the default scaffold
+					     (Dashboard + enabled addon shortcuts + All Pages), so there is
+					     no legacy fallback branch. -->
+					for _, item := range GetSidebarItems(ctx) {
+						if item.Type == "dashboard" {
+							@sidebarDashboardLink(ctx)
 						}
-					} else {
-						<!-- Legacy sidebar: hardcoded order -->
-						@sidebarDashboardLink(ctx)
-						if IsAddonEnabled(ctx, "notes") {
-							@sidebarAddonLink(ctx, SidebarItemView{Slug: "notes", Label: "Journal", Icon: "fa-book-open"})
+						if item.Type == "addon" && IsAddonEnabled(ctx, item.Slug) {
+							@sidebarAddonLink(ctx, item)
 						}
-						<!-- The NPCs link was retired: the npcs gallery folded into the
-						     unified "Characters" page (rendered in the categories zone
-						     below, gated on the npcs OR player-character-claiming addon). -->
-						// W5c: the calendar dashboard, like NPCs. Always-on when the
-						// calendar addon is enabled (a per-viewer "has visible calendar"
-						// check would add a DB read to the global layout injector — the
-						// design's approved fallback is always-on + a role-aware
-						// empty-state on the dashboard for players with none shared).
-						if IsAddonEnabled(ctx, "calendar") {
-							@sidebarAddonLink(ctx, SidebarItemView{Slug: "calendar", Label: "Calendar", Icon: "fa-calendar-days"})
+						if item.Type == "all_pages" {
+							@sidebarAllPagesLink(ctx)
+						}
+						if item.Type == "section" {
+							<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
+								{ item.Label }
+							</div>
+						}
+						if item.Type == "link" {
+							@customNavLink(SidebarLink{ID: item.ID, Label: item.Label, URL: item.URL, Icon: item.Icon})
 						}
 					}
 					<!-- Characters (the Cast): top-level nav beside Dashboard/Calendar
@@ -312,53 +296,16 @@ templ Sidebar() {
 						if GetCampaignRole(ctx) >= 3 {
 							@sidebarCreateCategory(ctx)
 						}
-						if len(GetSidebarItems(ctx)) > 0 {
-							<!-- Unified: render top-level categories in config order. Sub-category
-							     entity_types (ParentTypeID != nil) are template variants of their
-							     parent and are filtered out upstream in the LayoutInjector, so the
-							     ParentTypeID == nil check here is defensive. -->
-							for _, item := range GetSidebarItems(ctx) {
-								if item.Type == "category" && item.ParentTypeID == nil {
-									@entityTypeLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
-								}
-							}
-						} else {
-							<!-- Legacy: render top-level entity types only. Sub-category variants
-							     surface through the +New picker on the parent, not as their own
-							     nav items. -->
-							for _, et := range GetEntityTypes(ctx) {
-								if et.ParentTypeID == nil {
-									@entityTypeLink(et.Slug, et.NamePlural, et.Color, et.Icon, GetEntityCount(ctx, et.ID), et.ID)
-								}
-							}
-							<a
-								href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
-								class={ sidebarNavLink,
-									templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
-									templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
-							>
-								<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
-									<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>
-								</span>
-								<span class="flex-1">All Pages</span>
-							</a>
-							<!-- Custom sidebar sections and links (legacy) -->
-							if len(GetCustomSections(ctx)) > 0 || len(GetCustomLinks(ctx)) > 0 {
-								for _, link := range GetCustomLinks(ctx) {
-									if link.Section == "" {
-										@customNavLink(link)
-									}
-								}
-								for _, section := range GetCustomSections(ctx) {
-									<div class="mt-3 px-4 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 sidebar-cat-list-label">
-										{ section.Label }
-									</div>
-									for _, link := range GetCustomLinks(ctx) {
-										if link.Section == section.ID {
-											@customNavLink(link)
-										}
-									}
-								}
+						<!-- Unified: render top-level categories in config order. Sub-category
+						     entity_types (ParentTypeID != nil) are template variants of their
+						     parent and are filtered out upstream in the LayoutInjector, so the
+						     ParentTypeID == nil check here is defensive. The injector always
+						     supplies the default categories when the config is empty, so there
+						     is no legacy fallback branch; "All Pages" is an all_pages item
+						     rendered in the top nav above. -->
+						for _, item := range GetSidebarItems(ctx) {
+							if item.Type == "category" && item.ParentTypeID == nil {
+								@entityTypeLink(getEntityTypeSlug(ctx, item.TypeID), item.Label, item.Color, item.Icon, GetEntityCount(ctx, item.TypeID), item.TypeID)
 							}
 						}
 						<!-- My Characters link (CH2). Visible to Players (the

@@ -642,6 +642,7 @@ PUT	/entity-types/:etid/color	internal/plugins/entities/routes.go
 PUT	/entity-types/:etid/dashboard	internal/plugins/entities/routes.go
 PUT	/entity-types/:etid/dashboard-layout	internal/plugins/entities/routes.go
 PUT	/entity-types/:etid/layout	internal/plugins/entities/routes.go
+PUT	/entity-types/:etid/reorder	internal/plugins/entities/routes.go
 PUT	/entity-types/:typeID	internal/plugins/syncapi/routes.go
 PUT	/event-tier-definitions	internal/plugins/campaigns/routes.go
 PUT	/events/:eventId	internal/plugins/calendar/api_routes.go

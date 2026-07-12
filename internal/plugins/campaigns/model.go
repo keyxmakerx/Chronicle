@@ -120,12 +120,15 @@ func (c *Campaign) IsArchived() bool {
 }
 
 // SidebarConfig holds campaign-level sidebar customization settings.
-// Stored as JSON in campaigns.sidebar_config. Controls entity type ordering,
-// visibility, and custom navigation elements in the sidebar.
+// Stored as JSON in campaigns.sidebar_config. Controls the ordered list of
+// sidebar items plus the sets of individually-hidden entities and folder nodes.
 //
-// The Items array is the new unified sidebar model — when present, the
-// sidebar renders items in this exact order. When absent or empty, the
-// legacy fields (EntityTypeOrder, HiddenTypeIDs, etc.) are used instead.
+// This is the single, unified sidebar model. The pre-2026-07 legacy model
+// (entity_type_order / hidden_type_ids / custom_sections / custom_links) was
+// removed by C-NAV-V3; the EnsureSidebarItems boot reconciler converts any
+// straggler campaign onto Items (see sidebar_reconcile.go). An empty Items
+// array is valid — it renders the default sidebar, synthesized by the render
+// injector.
 type SidebarConfig struct {
 	// Items is the unified, ordered list of all sidebar items. Each item
 	// has a type (dashboard, addon, category, section, link, all_pages)
@@ -139,13 +142,6 @@ type SidebarConfig struct {
 	// HiddenNodeIDs is a set of sidebar folder node IDs that should be
 	// hidden from the sidebar for non-owner roles.
 	HiddenNodeIDs []string `json:"hidden_node_ids,omitempty"`
-
-	// --- Legacy fields (used when Items is empty) ---
-
-	EntityTypeOrder []int        `json:"entity_type_order,omitempty"`
-	HiddenTypeIDs   []int        `json:"hidden_type_ids,omitempty"`
-	CustomSections  []NavSection `json:"custom_sections,omitempty"`
-	CustomLinks     []NavLink    `json:"custom_links,omitempty"`
 }
 
 // SidebarItem represents a single item in the unified sidebar navigation.
@@ -166,29 +162,6 @@ type SidebarItem struct {
 	Label   string `json:"label,omitempty"`   // Display label (for sections/links).
 	URL     string `json:"url,omitempty"`     // Link URL (for type=link).
 	Icon    string `json:"icon,omitempty"`    // FontAwesome icon (for type=link).
-}
-
-// HasUnifiedItems returns true if the sidebar uses the unified items model.
-func (c SidebarConfig) HasUnifiedItems() bool {
-	return len(c.Items) > 0
-}
-
-// NavSection represents a labeled divider in the sidebar navigation.
-// Renders as a section header between entity type groups.
-type NavSection struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	After string `json:"after"` // Entity type ID this appears after ("" = top).
-}
-
-// NavLink represents a custom link in the sidebar navigation.
-type NavLink struct {
-	ID       string `json:"id"`
-	Label    string `json:"label"`
-	URL      string `json:"url"`
-	Icon     string `json:"icon"`    // FontAwesome icon class (e.g. "fa-globe").
-	Section  string `json:"section"` // NavSection ID this belongs to ("" = top level).
-	Position int    `json:"position"`
 }
 
 // ParseSidebarConfig parses the campaign's sidebar_config JSON into a
@@ -804,12 +777,8 @@ type TransferOwnershipRequest struct {
 // stored value, even an explicitly-empty slice clears the field).
 type UpdateSidebarConfigRequest struct {
 	Items           *[]SidebarItem `json:"items"`
-	EntityTypeOrder *[]int         `json:"entity_type_order"`
-	HiddenTypeIDs   *[]int         `json:"hidden_type_ids"`
 	HiddenEntityIDs *[]string      `json:"hidden_entity_ids"`
 	HiddenNodeIDs   *[]string      `json:"hidden_node_ids"`
-	CustomSections  *[]NavSection  `json:"custom_sections"`
-	CustomLinks     *[]NavLink     `json:"custom_links"`
 }
 
 // --- Service Input DTOs ---

@@ -42,6 +42,13 @@ type EntityTypeRepository interface {
 	UpdateDashboardLayout(ctx context.Context, id int, layoutJSON *string) error
 	SlugExists(ctx context.Context, campaignID, slug string) (bool, error)
 	MaxSortOrder(ctx context.Context, campaignID string) (int, error)
+	// ResequenceChildTypes renumbers entity_types.sort_order = position (0..N-1)
+	// for the given ordered type IDs in one transaction, scoped to the campaign.
+	// This is the DB-sibling-row dense re-sequence (an entity_types analog of
+	// ResequenceSiblings) that makes sub-category type order editable and
+	// tie-safe — the ordering surfaced in the parent's +New variant picker and
+	// aggregated listing, which both read ORDER BY sort_order, name.
+	ResequenceChildTypes(ctx context.Context, campaignID string, orderedIDs []int) error
 	SeedDefaults(ctx context.Context, campaignID string) error
 	SeedFromTypes(ctx context.Context, campaignID string, types []EntityType) error
 }
@@ -522,6 +529,42 @@ func (r *entityTypeRepository) MaxSortOrder(ctx context.Context, campaignID stri
 	return int(maxOrder.Int64), nil
 }
 
+// ResequenceChildTypes writes sort_order = position for each entity_type id
+// (0..N-1) in a single transaction, scoped to the campaign — the dense
+// re-sequence for sub-category types, mirroring ResequenceSiblings for entity
+// rows. Either the whole ordered set is renumbered or none is, so a partial
+// failure can't leave sub-types with colliding sort_orders that the
+// (sort_order, name) tiebreak would silently revert.
+func (r *entityTypeRepository) ResequenceChildTypes(ctx context.Context, campaignID string, orderedIDs []int) error {
+	if len(orderedIDs) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin child-type resequence tx: %w", err)
+	}
+	// Rollback is a no-op once Commit succeeds; safe to always defer.
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.PrepareContext(ctx, `UPDATE entity_types SET sort_order = ? WHERE id = ? AND campaign_id = ?`)
+	if err != nil {
+		return fmt.Errorf("preparing child-type resequence update: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for position, id := range orderedIDs {
+		if _, err := stmt.ExecContext(ctx, position, id, campaignID); err != nil {
+			return fmt.Errorf("resequencing entity type %d: %w", id, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing child-type resequence: %w", err)
+	}
+	return nil
+}
+
 // defaultEntityTypes defines the entity types seeded when a campaign is created.
 var defaultEntityTypes = []EntityType{
 	{Slug: "character", Name: "Character", NamePlural: "Characters", Icon: "fa-user", Color: "#3b82f6", SortOrder: 1, IsDefault: true, Enabled: true,
@@ -712,10 +755,6 @@ type EntityRepository interface {
 	// UpdateParent sets or clears an entity's parent_id. Scoped to campaign for safety.
 	UpdateParent(ctx context.Context, entityID, campaignID string, parentID *string) error
 	UpdateParentNode(ctx context.Context, entityID, campaignID string, parentNodeID *string) error // Set sidebar folder node parent.
-
-	// UpdateSortOrder sets an entity's manual sort order within its parent/category.
-	// Scoped to campaign for safety.
-	UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error
 
 	// ListSiblingIDsOrdered returns the IDs of all entities sharing a scope
 	// (campaign + entity type + parent), ordered by (sort_order, name) — exactly
@@ -1642,20 +1681,6 @@ func (r *entityRepository) UpdateParentNode(ctx context.Context, entityID, campa
 	_, err := r.db.ExecContext(ctx, query, parentNodeID, entityID, campaignID)
 	if err != nil {
 		return fmt.Errorf("updating entity parent node: %w", err)
-	}
-	return nil
-}
-
-// UpdateSortOrder sets an entity's manual sort order within its parent/category.
-// Scoped to campaign for safety.
-// Note: does not check RowsAffected because MySQL returns 0 when the new value
-// matches the existing value within the same second (updated_at unchanged).
-// This commonly happens during reorder when calculateSortOrder returns the same value.
-func (r *entityRepository) UpdateSortOrder(ctx context.Context, entityID, campaignID string, sortOrder int) error {
-	query := `UPDATE entities SET sort_order = ?, updated_at = NOW() WHERE id = ? AND campaign_id = ?`
-	_, err := r.db.ExecContext(ctx, query, sortOrder, entityID, campaignID)
-	if err != nil {
-		return fmt.Errorf("updating entity sort order: %w", err)
 	}
 	return nil
 }

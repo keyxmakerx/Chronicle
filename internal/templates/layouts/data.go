@@ -33,8 +33,6 @@ const (
 	keyEntityCounts  ctxKey = "layout_entity_counts"
 	keyEnabledAddons     ctxKey = "layout_enabled_addons"
 	keyEnabledSystem     ctxKey = "layout_enabled_system"
-	keyCustomSections    ctxKey = "layout_custom_sections"
-	keyCustomLinks       ctxKey = "layout_custom_links"
 	keyViewingAsPlayer   ctxKey = "layout_viewing_as_player"
 	keyIsOwner           ctxKey = "layout_is_owner"
 	keyMediaURLFunc      ctxKey = "layout_media_url_func"
@@ -70,56 +68,6 @@ type SidebarEntityType struct {
 	Color        string
 	SortOrder    int
 	ParentTypeID *int // Parent entity type ID for sub-type hierarchy.
-}
-
-// SortSidebarTypes reorders entity types according to a sidebar config
-// ordering and filters out hidden types. Types not in the order list appear
-// at the end in their original sort_order.
-func SortSidebarTypes(types []SidebarEntityType, order []int, hidden []int) []SidebarEntityType {
-	// Build hidden set.
-	hiddenSet := make(map[int]bool, len(hidden))
-	for _, id := range hidden {
-		hiddenSet[id] = true
-	}
-
-	// If no custom order, just filter hidden.
-	if len(order) == 0 {
-		result := make([]SidebarEntityType, 0, len(types))
-		for _, t := range types {
-			if !hiddenSet[t.ID] {
-				result = append(result, t)
-			}
-		}
-		return result
-	}
-
-	// Build a map for quick lookup.
-	typeMap := make(map[int]SidebarEntityType, len(types))
-	for _, t := range types {
-		typeMap[t.ID] = t
-	}
-
-	// Ordered types first.
-	seen := make(map[int]bool, len(order))
-	result := make([]SidebarEntityType, 0, len(types))
-	for _, id := range order {
-		if hiddenSet[id] {
-			continue
-		}
-		if t, ok := typeMap[id]; ok {
-			result = append(result, t)
-			seen[id] = true
-		}
-	}
-
-	// Remaining types not in the order list (preserving original sort_order).
-	for _, t := range types {
-		if !seen[t.ID] && !hiddenSet[t.ID] {
-			result = append(result, t)
-		}
-	}
-
-	return result
 }
 
 // --- Setters (called by the layout injector in app/routes.go) ---
@@ -366,45 +314,15 @@ func GetEnabledSystem(ctx context.Context) (EnabledSystem, bool) {
 	return sys, sys.Slug != ""
 }
 
-// --- Custom Sidebar Navigation (sections + links) ---
+// --- Custom Sidebar Navigation (link items) ---
 
-// SidebarSection represents a custom section header/divider in the sidebar.
-// Defined here to avoid importing the campaigns package.
-type SidebarSection struct {
+// SidebarLink represents a custom link item in the unified sidebar navigation
+// (rendered by customNavLink from a SidebarItemView of type "link").
+type SidebarLink struct {
 	ID    string
 	Label string
-	After string // Entity type ID (as string) this appears after; "" = top.
-}
-
-// SidebarLink represents a custom link in the sidebar navigation.
-type SidebarLink struct {
-	ID      string
-	Label   string
-	URL     string
-	Icon    string // FontAwesome icon class (e.g. "fa-globe").
-	Section string // SidebarSection ID this belongs to; "" = top level.
-}
-
-// SetCustomSections stores custom sidebar sections in context.
-func SetCustomSections(ctx context.Context, sections []SidebarSection) context.Context {
-	return context.WithValue(ctx, keyCustomSections, sections)
-}
-
-// GetCustomSections returns custom sidebar sections from context.
-func GetCustomSections(ctx context.Context) []SidebarSection {
-	sections, _ := ctx.Value(keyCustomSections).([]SidebarSection)
-	return sections
-}
-
-// SetCustomLinks stores custom sidebar links in context.
-func SetCustomLinks(ctx context.Context, links []SidebarLink) context.Context {
-	return context.WithValue(ctx, keyCustomLinks, links)
-}
-
-// GetCustomLinks returns custom sidebar links from context.
-func GetCustomLinks(ctx context.Context) []SidebarLink {
-	links, _ := ctx.Value(keyCustomLinks).([]SidebarLink)
-	return links
+	URL   string
+	Icon  string // FontAwesome icon class (e.g. "fa-globe").
 }
 
 // --- Unified Sidebar Items ---
