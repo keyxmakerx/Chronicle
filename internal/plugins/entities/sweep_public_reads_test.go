@@ -43,6 +43,16 @@ func (guardEntitySvc) GetAliases(_ context.Context, _ string) ([]EntityAlias, er
 	return []EntityAlias{}, nil
 }
 
+// CheckEntityAccess mirrors default-visibility semantics for this fixture so the
+// aliases handler's canonical gate resolves the same as the removed bare check:
+// a private entity needs Scribe+, a public entity is viewable by all.
+func (m guardEntitySvc) CheckEntityAccess(_ context.Context, _ string, role int, _ string) (*EffectivePermission, error) {
+	if m.private && role < int(campaigns.RoleScribe) {
+		return &EffectivePermission{CanView: false}, nil
+	}
+	return &EffectivePermission{CanView: true}, nil
+}
+
 func isLoginRedirect(rec *httptest.ResponseRecorder) bool {
 	switch rec.Code {
 	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther,

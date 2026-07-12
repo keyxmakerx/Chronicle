@@ -130,3 +130,17 @@ func TestListRelations_AnonTargetFiltering(t *testing.T) {
 		t.Errorf("private-target relation name leaked to anon: %q", body)
 	}
 }
+
+// TestListRelations_NilGateFailsClosed pins the fail-closed contract (currently
+// unexercised): a handler wired WITHOUT its EntityGate must never serve
+// relations. The missing-gate guard returns apperror.NewInternal → 5xx, not a
+// 200 leak, so a wiring mistake fails loud instead of silently exposing every
+// entity's relation graph. (C-ENTITY-VIS-PARITY 4b)
+func TestListRelations_NilGateFailsClosed(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/entities/any-ent/relations", nil)
+	newRelationsRouter(nil, nil).ServeHTTP(rec, req)
+	if rec.Code < 500 {
+		t.Errorf("relations handler with no EntityGate wired must fail closed (5xx), got %d: %q", rec.Code, rec.Body.String())
+	}
+}
