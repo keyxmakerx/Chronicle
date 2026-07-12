@@ -272,11 +272,27 @@ type calendarService struct {
 	repo           CalendarRepository
 	events         CalendarEventPublisher
 	bindingCleaner BindingCleaner
+	// now is the injectable wall clock (C-REAL-CALENDAR-P1). Defaults to
+	// time.Now via NewCalendarService; tests substitute a fixed instant to
+	// pin real-time behavior deterministically (DST edges, Feb-29 vs Feb-2100,
+	// minute rollover). Read through clockNow so a directly-constructed service
+	// (test fixtures that skip the constructor) still gets a real clock.
+	now func() time.Time
+}
+
+// clockNow returns the current wall-clock time via the injected clock, falling
+// back to time.Now when none was set (defensive against struct-literal
+// construction in tests).
+func (s *calendarService) clockNow() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
 }
 
 // NewCalendarService creates a CalendarService backed by the given repository.
 func NewCalendarService(repo CalendarRepository) CalendarService {
-	return &calendarService{repo: repo, events: NoopCalendarEventPublisher{}}
+	return &calendarService{repo: repo, events: NoopCalendarEventPublisher{}, now: time.Now}
 }
 
 // SetBindingCleaner injects the widget-binding cleanup hook (wired at app
@@ -317,7 +333,7 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 
 	// For real-life mode, override defaults with Gregorian settings.
 	if input.Mode == ModeRealLife {
-		now := time.Now().UTC()
+		now := s.clockNow().UTC()
 		input.CurrentYear = now.Year()
 		input.HoursPerDay = 24
 		input.MinutesPerHour = 60
@@ -414,7 +430,7 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 			return err
 		}
 		// Sync current date/time from wall clock.
-		now := time.Now().UTC()
+		now := s.clockNow().UTC()
 		return s.UpdateCalendar(ctx, cal.ID, UpdateCalendarInput{
 			Name:             cal.Name,
 			Description:      cal.Description,
@@ -465,6 +481,87 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 	return s.SetEventCategories(ctx, cal.ID, DefaultEventCategories())
 }
 
+// --- Real-time seam (C-REAL-CALENDAR-P1) ---
+
+// applyRealTime overwrites a calendar's Current* fields with the live wall-clock
+// date in its anchor zone, but only for a flagged real-time calendar
+// (UsesRealTime). This is the read seam: every loader calls it, so the header
+// date, the "Today" cell, the day-view default, the syncapi snapshot, and the
+// dashboard all go live with zero per-reader changes. It NEVER persists — the
+// stored Current* is untouched; only the in-memory struct handed to callers
+// changes.
+//
+// It is a no-op for a nil calendar and for any non-real-time calendar
+// (fantasy OR reallife-but-manual), so it is safe to sprinkle across every
+// loader and to call more than once on the same struct (idempotent to the
+// minute). A missing/blank/invalid RealTimeZone falls back to the STORED date
+// and logs — never a 500, never a silent UTC substitution (dispatch scope
+// item 6).
+func (s *calendarService) applyRealTime(cal *Calendar) {
+	if cal == nil || !cal.UsesRealTime() {
+		return
+	}
+	loc, err := s.realTimeLocation(cal)
+	if err != nil {
+		slog.Warn("calendar: real-time zone load failed; serving stored date",
+			slog.String("calendar_id", cal.ID),
+			slog.String("zone", derefZone(cal.RealTimeZone)),
+			slog.Any("error", err))
+		return
+	}
+	n := s.clockNow().In(loc)
+	cal.CurrentYear = n.Year()
+	cal.CurrentMonth = int(n.Month())
+	cal.CurrentDay = n.Day()
+	cal.CurrentHour = n.Hour()
+	cal.CurrentMinute = n.Minute()
+}
+
+// realTimeLocation resolves the calendar's IANA anchor zone. A nil/blank zone
+// is an error — real-time was enabled without a zone. P2's enable flow makes
+// the zone REQUIRED (RC-2), but the loader stays defensive so a hand-edited or
+// half-migrated row degrades gracefully instead of crashing a read.
+func (s *calendarService) realTimeLocation(cal *Calendar) (*time.Location, error) {
+	if cal.RealTimeZone == nil || *cal.RealTimeZone == "" {
+		return nil, fmt.Errorf("real-time calendar %s has no anchor zone set", cal.ID)
+	}
+	return time.LoadLocation(*cal.RealTimeZone)
+}
+
+// derefZone renders an optional zone for logging (nil → "<unset>").
+func derefZone(z *string) string {
+	if z == nil {
+		return "<unset>"
+	}
+	return *z
+}
+
+// guardManualDateChange returns a clear validation error when a manual date
+// write targets a real-time calendar. Chronicle's wall clock is authoritative
+// for these calendars (B-R10 / RC-1): advancing or setting the date would only
+// freeze it at a wrong value (exactly how an external date-push stuck a live
+// calendar at a stale day). Every date-writer (W1–W7) calls this. Non-date
+// settings (name, visibility, zone) never call it, so they stay editable.
+func guardManualDateChange(cal *Calendar) error {
+	if cal != nil && cal.UsesRealTime() {
+		return apperror.NewValidation("this calendar tracks real-world time; its date can't be advanced or set manually")
+	}
+	return nil
+}
+
+// changesStoredDate reports whether an UpdateCalendarInput would move any of the
+// stored Current* date/time fields. Used by UpdateCalendar (W6) so a real-time
+// calendar rejects a DATE change while still accepting non-date settings edits
+// (name, description, epoch, structure) that round-trip the stored date
+// unchanged.
+func changesStoredDate(cal *Calendar, input UpdateCalendarInput) bool {
+	return input.CurrentYear != cal.CurrentYear ||
+		input.CurrentMonth != cal.CurrentMonth ||
+		input.CurrentDay != cal.CurrentDay ||
+		input.CurrentHour != cal.CurrentHour ||
+		input.CurrentMinute != cal.CurrentMinute
+}
+
 // GetCalendar returns the full calendar for a campaign with all sub-resources.
 func (s *calendarService) GetCalendar(ctx context.Context, campaignID string) (*Calendar, error) {
 	cal, err := s.repo.GetByCampaignID(ctx, campaignID)
@@ -474,7 +571,12 @@ func (s *calendarService) GetCalendar(ctx context.Context, campaignID string) (*
 	if cal == nil {
 		return nil, nil
 	}
-	return s.eagerLoad(ctx, cal)
+	cal, err = s.eagerLoad(ctx, cal)
+	if err != nil {
+		return nil, err
+	}
+	s.applyRealTime(cal)
+	return cal, nil
 }
 
 // GetCalendarByID returns a calendar by ID with all sub-resources loaded.
@@ -486,7 +588,12 @@ func (s *calendarService) GetCalendarByID(ctx context.Context, calendarID string
 	if cal == nil {
 		return nil, nil
 	}
-	return s.eagerLoad(ctx, cal)
+	cal, err = s.eagerLoad(ctx, cal)
+	if err != nil {
+		return nil, err
+	}
+	s.applyRealTime(cal)
+	return cal, nil
 }
 
 // eagerLoad populates all sub-resources on a calendar.
@@ -533,6 +640,18 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	}
 	if cal == nil {
 		return apperror.NewNotFound("calendar not found")
+	}
+	// W6: on a real-time calendar, reject a settings save that CHANGES the date
+	// (input Current* differs from the stored value); non-date settings edits
+	// round-trip the stored date unchanged and stay editable. This also
+	// fail-closes the calendar plugin's own PutDate handler (api_handler.go),
+	// which pushes external dates through UpdateCalendar, and — because the
+	// worldstate Advance/Time branches write through this method — is the
+	// backstop behind their explicit W4/W5 guards (C-REAL-CALENDAR-P1).
+	if changesStoredDate(cal, input) {
+		if err := guardManualDateChange(cal); err != nil {
+			return err
+		}
 	}
 
 	// Validate time system values to prevent division by zero and invalid state.
@@ -660,7 +779,14 @@ func (s *calendarService) ListVisibleCalendars(ctx context.Context, campaignID s
 	if err != nil {
 		return nil, err
 	}
-	return filterCalendarsByUser(cals, role, userID), nil
+	visible := filterCalendarsByUser(cals, role, userID)
+	// Real-time seam per element (the dashboard + the V2 calendar switcher
+	// render each calendar's own current date). Indexed loop so we mutate the
+	// slice's backing array, not a range copy.
+	for i := range visible {
+		s.applyRealTime(&visible[i])
+	}
+	return visible, nil
 }
 
 // dashboardAgendaCap bounds the per-calendar agenda the dashboard widget shows.
@@ -764,6 +890,20 @@ func (s *calendarService) SetDefaultCalendar(ctx context.Context, campaignID, ca
 // race conditions or post-failed-delete states a pointer may briefly
 // point at a wrong-campaign calendar — defensively re-verify).
 func (s *calendarService) GetActiveCalendar(ctx context.Context, userID, campaignID string) (*Calendar, error) {
+	cal, err := s.resolveActiveCalendar(ctx, userID, campaignID)
+	if err != nil || cal == nil {
+		return cal, err
+	}
+	// Real-time seam applied once at the single exit, covering all three
+	// resolution branches (pointer / default / first-by-sort).
+	s.applyRealTime(cal)
+	return cal, nil
+}
+
+// resolveActiveCalendar is the raw active-calendar resolution (no real-time
+// seam). Split out so GetActiveCalendar applies applyRealTime exactly once for
+// every resolution branch.
+func (s *calendarService) resolveActiveCalendar(ctx context.Context, userID, campaignID string) (*Calendar, error) {
 	if userID != "" {
 		ptrID, err := s.repo.GetActiveCalendarID(ctx, userID, campaignID)
 		if err != nil {
@@ -802,6 +942,10 @@ func (s *calendarService) GetActiveCalendar(ctx context.Context, userID, campaig
 // calendar is hidden from them, it falls back to the first calendar they can
 // see. Owner/co-DM are unaffected (calendarVisibleTo passes for them).
 func (s *calendarService) GetActiveVisibleCalendar(ctx context.Context, campaignID string, role int, userID string) (*Calendar, error) {
+	// Real-time seam coverage (C-REAL-CALENDAR-P1): this loader returns ONLY
+	// calendars produced by GetActiveCalendar or ListVisibleCalendars below,
+	// both of which already apply applyRealTime. So every return path here is
+	// seamed with no redundant recompute — no direct applyRealTime call needed.
 	cal, err := s.GetActiveCalendar(ctx, userID, campaignID)
 	if err != nil {
 		return nil, err
@@ -1729,6 +1873,11 @@ func (s *calendarService) AdvanceDate(ctx context.Context, calendarID string, da
 	if cal == nil {
 		return apperror.NewNotFound("calendar not found")
 	}
+	// W1: a real-time calendar's date is wall-clock authoritative — reject a
+	// manual advance (C-REAL-CALENDAR-P1).
+	if err := guardManualDateChange(cal); err != nil {
+		return err
+	}
 
 	months, err := s.repo.GetMonths(ctx, calendarID)
 	if err != nil {
@@ -1786,6 +1935,10 @@ func (s *calendarService) AdvanceTime(ctx context.Context, calendarID string, ho
 	}
 	if cal == nil {
 		return apperror.NewNotFound("calendar not found")
+	}
+	// W2: real-time calendars reject manual time advances (C-REAL-CALENDAR-P1).
+	if err := guardManualDateChange(cal); err != nil {
+		return err
 	}
 
 	months, err := s.repo.GetMonths(ctx, calendarID)
@@ -1853,6 +2006,15 @@ func (s *calendarService) SetDate(ctx context.Context, calendarID string, year, 
 	}
 	if cal == nil {
 		return apperror.NewNotFound("calendar not found")
+	}
+	// W3: reject an absolute date-set on a real-time calendar. This is the
+	// external-sync writer (Foundry/Calendaria date-push via the syncapi
+	// handler) — the guard returns a validation apperror the handler surfaces
+	// as a clean wire error, so a push can no longer freeze a live calendar
+	// (C-REAL-CALENDAR-P1; the P1 SetDate guard, distinct from the P2 wire
+	// signal).
+	if err := guardManualDateChange(cal); err != nil {
+		return err
 	}
 
 	if month < 1 {

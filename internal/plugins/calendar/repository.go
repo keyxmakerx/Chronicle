@@ -184,7 +184,8 @@ const calendarCols = `id, campaign_id, mode, name, description, epoch_name, curr
         current_month, current_day, hours_per_day, minutes_per_hour, seconds_per_minute,
         current_hour, current_minute, leap_year_every, leap_year_offset,
         sort_order, is_default, created_at, updated_at,
-        mood_tint_color, mood_tint_intensity, visibility, visibility_rules`
+        mood_tint_color, mood_tint_intensity, visibility, visibility_rules,
+        tracks_real_time, real_time_zone`
 
 // scanCalendar reads a row into a Calendar struct.
 func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
@@ -198,7 +199,8 @@ func scanCalendar(scanner interface{ Scan(...any) error }) (*Calendar, error) {
 		&cal.SortOrder, &cal.IsDefault,
 		&cal.CreatedAt, &cal.UpdatedAt,
 		&cal.MoodTintColor, &cal.MoodTintIntensity,
-		&cal.Visibility, &cal.VisibilityRules)
+		&cal.Visibility, &cal.VisibilityRules,
+		&cal.TracksRealTime, &cal.RealTimeZone)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -213,14 +215,16 @@ func (r *calendarRepo) Create(ctx context.Context, cal *Calendar) error {
 		        hours_per_day, minutes_per_hour, seconds_per_minute,
 		        current_hour, current_minute,
 		        leap_year_every, leap_year_offset,
-		        sort_order, is_default)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        sort_order, is_default,
+		        tracks_real_time, real_time_zone)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cal.ID, cal.CampaignID, cal.Mode, cal.Name, cal.Description, cal.EpochName,
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
 		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
 		cal.CurrentHour, cal.CurrentMinute,
 		cal.LeapYearEvery, cal.LeapYearOffset,
 		cal.SortOrder, cal.IsDefault,
+		cal.TracksRealTime, cal.RealTimeZone,
 	)
 	return err
 }
@@ -350,13 +354,15 @@ func (r *calendarRepo) Update(ctx context.Context, cal *Calendar) error {
 		        current_year = ?, current_month = ?, current_day = ?,
 		        hours_per_day = ?, minutes_per_hour = ?, seconds_per_minute = ?,
 		        current_hour = ?, current_minute = ?,
-		        leap_year_every = ?, leap_year_offset = ?
+		        leap_year_every = ?, leap_year_offset = ?,
+		        tracks_real_time = ?, real_time_zone = ?
 		 WHERE id = ?`,
 		cal.Name, cal.Description, cal.EpochName,
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
 		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
 		cal.CurrentHour, cal.CurrentMinute,
-		cal.LeapYearEvery, cal.LeapYearOffset, cal.ID,
+		cal.LeapYearEvery, cal.LeapYearOffset,
+		cal.TracksRealTime, cal.RealTimeZone, cal.ID,
 	)
 	return err
 }

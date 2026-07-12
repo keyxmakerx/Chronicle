@@ -92,6 +92,16 @@ type Calendar struct {
 	// unaffected). Resolved by canUserView / filterCalendarsByUser.
 	Visibility      string  `json:"visibility"`
 	VisibilityRules *string `json:"visibility_rules,omitempty"`
+	// Real-time (wall-clock) mode (C-REAL-CALENDAR-P1, migration 012). A flag
+	// on `reallife` mode, NOT a new mode (RC-1): TracksRealTime=1 makes the
+	// loader compute Current* from the wall clock in RealTimeZone and the
+	// date-writers reject manual changes; =0 is today's stored-not-computed
+	// behavior. RealTimeZone is the IANA anchor (nil = not set; REQUIRED at
+	// enable per RC-2, enforced by P2's enable flow). Tagged json:"-" so P1
+	// adds zero wire exposure — the deliberate `tracks_real_time` sync signal
+	// is P2 (RC-4). Read/written by the repository; consumed server-side only.
+	TracksRealTime bool    `json:"-"`
+	RealTimeZone   *string `json:"-"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 
@@ -119,6 +129,19 @@ func (c *Calendar) GetCampaignID() string {
 // IsRealLife returns true if this calendar syncs to real-world time.
 func (c *Calendar) IsRealLife() bool {
 	return c.Mode == ModeRealLife
+}
+
+// UsesRealTime reports whether this calendar computes its current date from the
+// wall clock (and rejects manual date changes). It is the single predicate that
+// gates the real-time seam, the manual-date-write guard, AND the stdlib month
+// geometry, so all three agree. Keyed on the FLAG (not just the mode): a
+// `reallife`-but-manual calendar (TracksRealTime=0) is byte-for-byte unchanged,
+// which is what makes migration 012 a provably zero-change upgrade for existing
+// calendars (C-REAL-CALENDAR-P1 stop-and-flag #2). RealTimeZone still governs
+// WHICH zone the clock reads; a nil/blank zone is handled by the loader's
+// fail-safe (serve the stored date, never 500).
+func (c *Calendar) UsesRealTime() bool {
+	return c.Mode == ModeRealLife && c.TracksRealTime
 }
 
 // IsLeapYear returns true if the given year is a leap year according to
@@ -156,9 +179,20 @@ func (c *Calendar) YearLengthForYear(year int) int {
 
 // MonthDays returns the number of days in a month for a given year,
 // accounting for leap year extra days.
+//
+// Real-time calendars (UsesRealTime) derive month length from the proleptic
+// Gregorian stdlib (daysInGregorianMonth — correct 4/100/400 leap rule) instead
+// of the configurable LeapYearEvery/IsLeapYear fields, which cannot express
+// Gregorian (with LeapYearEvery=4 they render Feb 2100 as 29). Only flagged
+// real-time calendars take this branch — fantasy AND reallife-but-manual
+// calendars keep their configured geometry unchanged (C-REAL-CALENDAR-P1 scope
+// item 5 + stop-and-flag #2). daysInGregorianMonth takes a 1-indexed month.
 func (c *Calendar) MonthDays(monthIdx int, year int) int {
 	if monthIdx < 0 || monthIdx >= len(c.Months) {
 		return 0
+	}
+	if c.UsesRealTime() {
+		return daysInGregorianMonth(year, monthIdx+1)
 	}
 	days := c.Months[monthIdx].Days
 	if c.IsLeapYear(year) {
