@@ -39,6 +39,9 @@ type EntityService interface {
 	GetChildren(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
 	GetAncestors(ctx context.Context, entityID string) ([]Entity, error)
 	ReorderEntity(ctx context.Context, campaignID, entityID string, parentID *string, parentNodeID *string, sortOrder int) error
+	// ReorderEntityType densely re-sequences a sub-category type's position
+	// among its parent's children. sortOrder is a desired 0-based index.
+	ReorderEntityType(ctx context.Context, campaignID string, typeID int, sortOrder int) error
 
 	// Backlinks
 	GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
@@ -710,6 +713,52 @@ func (s *entityService) ReorderEntity(ctx context.Context, campaignID, entityID 
 
 	if err := s.entities.ResequenceSiblings(ctx, campaignID, ordered); err != nil {
 		return apperror.NewInternal(fmt.Errorf("re-sequencing siblings: %w", err))
+	}
+	return nil
+}
+
+// ReorderEntityType densely re-sequences a SUB-CATEGORY entity type's position
+// among its parent's children — the order surfaced in the parent's +New variant
+// picker and its aggregated entity listing (both read ORDER BY sort_order, name).
+// sortOrder is a desired 0-based index among the final siblings, NOT a raw
+// sort_order value; the whole sibling set is renumbered 0..N-1 so the
+// (sort_order, name) tiebreak can't snap a moved type back. This is the
+// sub-type analog of ReorderEntity and closes the gap that made sub-category
+// order frozen at creation (it was written once, campaign-wide, and never
+// updated by any endpoint).
+//
+// Only sub-category types (parent_type_id != nil) are reorderable this way:
+// top-level category order lives positionally in the campaign's sidebar_config
+// Items, not in entity_types.sort_order, so reordering a top-level type here
+// would have no sidebar effect and is rejected.
+func (s *entityService) ReorderEntityType(ctx context.Context, campaignID string, typeID int, sortOrder int) error {
+	et, err := s.types.FindByID(ctx, typeID)
+	if err != nil {
+		return apperror.NewNotFound("entity type not found")
+	}
+	if et.CampaignID != campaignID {
+		return apperror.NewNotFound("entity type not found")
+	}
+	if et.ParentTypeID == nil {
+		return apperror.NewBadRequest("only sub-category types can be reordered; top-level category order is set in the sidebar layout")
+	}
+
+	// Load the parent's children in their current (sort_order, name) order, then
+	// reinsert the moved type at the desired index and renumber the set densely.
+	// ListChildTypes is inherently campaign-scoped (a parent belongs to one
+	// campaign), and ResequenceChildTypes re-checks campaign_id on every write.
+	children, err := s.types.ListChildTypes(ctx, *et.ParentTypeID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading sub-category siblings: %w", err))
+	}
+	siblingIDs := make([]int, 0, len(children))
+	for _, c := range children {
+		siblingIDs = append(siblingIDs, c.ID)
+	}
+	ordered := reindexForReorder(siblingIDs, typeID, sortOrder)
+
+	if err := s.types.ResequenceChildTypes(ctx, campaignID, ordered); err != nil {
+		return apperror.NewInternal(fmt.Errorf("re-sequencing sub-category types: %w", err))
 	}
 	return nil
 }

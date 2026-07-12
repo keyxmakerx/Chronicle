@@ -1577,12 +1577,61 @@ func (h *Handler) ReorderSidebarNodeAPI(c echo.Context) error {
 	if err := h.sidebarNodeRepo.UpdateParent(c.Request().Context(), nodeID, cc.Campaign.ID, req.ParentID); err != nil {
 		return apperror.NewInternal(fmt.Errorf("updating node parent: %w", err))
 	}
+
+	// Dense re-sequence the moved node's new sibling set (same campaign, entity
+	// type, and parent). req.SortOrder is a desired 0-based index among the final
+	// siblings — NOT a raw sort_order value — so renumbering the set 0..N-1 makes
+	// orders dense and unique, closing the (sort_order, name) silent-revert
+	// tiebreak the old raw single-row write left open for folder nodes (the same
+	// bug #477 fixed for entity rows). ListByType returns nodes ordered by
+	// (sort_order, name) and, because UpdateParent ran just above, already
+	// includes the moved node in its new sibling set.
 	if req.SortOrder != nil {
-		if err := h.sidebarNodeRepo.UpdateSortOrder(c.Request().Context(), nodeID, cc.Campaign.ID, *req.SortOrder); err != nil {
-			return apperror.NewInternal(fmt.Errorf("updating node sort order: %w", err))
+		siblings, err := h.sidebarNodeRepo.ListByType(c.Request().Context(), cc.Campaign.ID, node.EntityTypeID)
+		if err != nil {
+			return apperror.NewInternal(fmt.Errorf("loading sibling nodes for reorder: %w", err))
+		}
+		siblingIDs := make([]string, 0, len(siblings))
+		for _, n := range siblings {
+			if sameParent(n.ParentID, req.ParentID) {
+				siblingIDs = append(siblingIDs, n.ID)
+			}
+		}
+		ordered := reindexForReorder(siblingIDs, nodeID, *req.SortOrder)
+		if err := h.sidebarNodeRepo.ResequenceNodes(c.Request().Context(), cc.Campaign.ID, ordered); err != nil {
+			return apperror.NewInternal(fmt.Errorf("re-sequencing sibling nodes: %w", err))
 		}
 	}
 
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// ReorderEntityTypeAPI re-sequences a sub-category type among its parent's
+// children, making sub-category order editable (persisted, survives reload) —
+// the order shown in the parent's +New variant picker and aggregated listing.
+// PUT /campaigns/:id/entity-types/:etid/reorder
+// Body: {"sort_order": <desired 0-based index among the parent's children>}.
+func (h *Handler) ReorderEntityTypeAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewMissingContext()
+	}
+
+	typeID, err := strconv.Atoi(c.Param("etid"))
+	if err != nil {
+		return apperror.NewBadRequest("invalid entity type id")
+	}
+
+	var req struct {
+		SortOrder int `json:"sort_order"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+
+	if err := h.service.ReorderEntityType(c.Request().Context(), cc.Campaign.ID, typeID, req.SortOrder); err != nil {
+		return err
+	}
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 

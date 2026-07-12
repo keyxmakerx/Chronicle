@@ -757,10 +757,18 @@ func (a *entityEventPublisherAdapter) PublishEntityTypeEvent(eventType, campaign
 	a.bus.Publish(ws.NewMessage(msgType, campaignID, fmt.Sprintf("%d", entityType.ID), entityType))
 }
 
+// sidebarConfigStore is the narrow slice of the campaign service the sidebar
+// auto-adder needs: read the current config and write back the items. Narrowing
+// it (from the full CampaignService) keeps the auto-add behavior unit-testable.
+type sidebarConfigStore interface {
+	GetSidebarConfig(ctx context.Context, campaignID string) (*campaigns.SidebarConfig, error)
+	UpdateSidebarConfig(ctx context.Context, campaignID string, req campaigns.UpdateSidebarConfigRequest) error
+}
+
 // sidebarAutoAdderAdapter implements entities.SidebarAutoAdder by appending
 // new entity types to the campaign's unified sidebar config.
 type sidebarAutoAdderAdapter struct {
-	campaignService campaigns.CampaignService
+	campaignService sidebarConfigStore
 }
 
 func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, campaignID string, typeID int) error {
@@ -769,9 +777,16 @@ func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, ca
 		return fmt.Errorf("get sidebar config: %w", err)
 	}
 
-	// Only auto-add to unified sidebar. Legacy sidebars use entity_type_order
-	// which is rebuilt from the entity types list on each render.
-	if !cfg.HasUnifiedItems() {
+	// Only persist an auto-add when the campaign has an explicit, customized
+	// items order. A campaign with empty Items renders the DEFAULT sidebar,
+	// which the render injector (injectDefaultSidebarItems) already completes
+	// with every top-level type — including this new one, in its natural
+	// sort_order position. Persisting a lone category item here would instead
+	// make the new type the only explicit entry and snap it to the FRONT of the
+	// list, so we leave empty configs to the injector. Converted campaigns (the
+	// reconciler put them on a non-empty Items array) fall through and correctly
+	// auto-gain the new type appended in their customized order.
+	if len(cfg.Items) == 0 {
 		return nil
 	}
 
@@ -807,6 +822,65 @@ func (a *sidebarAutoAdderAdapter) AddEntityTypeToSidebar(ctx context.Context, ca
 	// are preserved server-side.
 	return a.campaignService.UpdateSidebarConfig(ctx, campaignID,
 		campaigns.UpdateSidebarConfigRequest{Items: &cfg.Items})
+}
+
+// defaultSidebarAddons are the addon shortcuts the default sidebar shows in its
+// top nav (each rendered only when its addon is enabled). They mirror the
+// pre-C-NAV-V3 legacy hardcoded links (Journal + Calendar) so a never-customized
+// campaign renders the same top nav after the legacy fallback path was removed.
+var defaultSidebarAddons = []campaigns.SidebarItem{
+	{Type: "addon", Slug: "notes", Label: "Journal", Icon: "fa-book-open", Visible: true},
+	{Type: "addon", Slug: "calendar", Label: "Calendar", Icon: "fa-calendar-days", Visible: true},
+}
+
+// injectDefaultSidebarItems completes a sidebar items array with the standard
+// scaffold — Dashboard, the default addon shortcuts, every top-level entity
+// type, and All Pages — adding only what is missing and preserving the caller's
+// order for everything already present. It is the server mirror of
+// injectMissing()/generateDefaults() in sidebar_editor.js and the reason an
+// empty Items array (a never-customized or reconciler-skipped campaign) still
+// renders the full default sidebar now that the legacy fallback path is gone.
+// Non-persistent: it shapes one render only.
+//
+// Sub-category entity_types (parent_type_id != nil) are template variants of
+// their parent and are never added as sidebar items.
+func injectDefaultSidebarItems(items []campaigns.SidebarItem, types []layouts.SidebarEntityType) []campaigns.SidebarItem {
+	hasDashboard, hasAllPages := false, false
+	presentAddons := make(map[string]bool)
+	presentCats := make(map[int]bool)
+	for _, it := range items {
+		switch it.Type {
+		case "dashboard":
+			hasDashboard = true
+		case "all_pages":
+			hasAllPages = true
+		case "addon":
+			presentAddons[it.Slug] = true
+		case "category":
+			presentCats[it.TypeID] = true
+		}
+	}
+
+	if !hasDashboard {
+		items = append([]campaigns.SidebarItem{{Type: "dashboard", Visible: true}}, items...)
+	}
+	for _, addon := range defaultSidebarAddons {
+		if !presentAddons[addon.Slug] {
+			items = append(items, addon)
+		}
+	}
+	for _, et := range types {
+		if et.ParentTypeID != nil {
+			continue
+		}
+		if !presentCats[et.ID] {
+			items = append(items, campaigns.SidebarItem{Type: "category", TypeID: et.ID, Visible: true})
+		}
+	}
+	if !hasAllPages {
+		items = append(items, campaigns.SidebarItem{Type: "all_pages", Visible: true})
+	}
+	return items
 }
 
 // noteEventPublisherAdapter bridges the websocket.EventBus to the
@@ -1668,6 +1742,18 @@ func (a *App) RegisterRoutes() {
 	userFinder := campaigns.NewUserFinderAdapter(authRepo)
 	campaignRepo := campaigns.NewCampaignRepository(a.DB)
 	campaignService := campaigns.NewCampaignService(campaignRepo, userFinder, smtpService, entityService, a.Config.BaseURL)
+
+	// One-time, idempotent boot reconciler: convert any campaign still on the
+	// legacy sidebar model onto the unified items model (C-NAV-V3). Runs
+	// synchronously before serving so a straggler never renders the default
+	// sidebar in place of its saved order. Safe on every boot (no-op once
+	// converted); best-effort so a failure can't block startup.
+	if n, err := campaignService.EnsureSidebarItems(context.Background()); err != nil {
+		slog.Error("sidebar items reconcile failed", slog.String("error", err.Error()))
+	} else if n > 0 {
+		slog.Info("sidebar items reconcile: converted legacy campaigns", slog.Int("campaigns", n))
+	}
+
 	campaignHandler := campaigns.NewHandler(campaignService)
 	campaignHandler.SetBaseURL(a.Config.BaseURL)
 	campaignHandler.SetEntityLister(&entityTypeListerAdapter{svc: entityService})
@@ -3355,126 +3441,77 @@ func (a *App) RegisterRoutes() {
 					}
 				}
 
-				// Apply sidebar config ordering/hiding if configured.
+				// Build the sidebar from the single unified items model. Sidebar
+				// config carries only Items now (C-NAV-V3 retired the legacy
+				// entity_type_order / hidden_type_ids / custom_sections /
+				// custom_links model + its fallback render path). An empty Items
+				// array is valid: injectDefaultSidebarItems synthesizes the full
+				// default sidebar, so a never-customized (or reconciler-skipped)
+				// campaign renders exactly as it did under the old legacy default.
 				sidebarCfg := cc.Campaign.ParseSidebarConfig()
 
-				if sidebarCfg.HasUnifiedItems() {
-					// New unified sidebar model — build SidebarItemViews.
-					// Entity types indexed by ID for quick lookup.
-					typeMap := make(map[int]layouts.SidebarEntityType)
-					for _, et := range sidebarTypes {
-						typeMap[et.ID] = et
-					}
+				// Entity types indexed by ID for quick lookup.
+				typeMap := make(map[int]layouts.SidebarEntityType)
+				for _, et := range sidebarTypes {
+					typeMap[et.ID] = et
+				}
 
-					// Inject entity types missing from the config (e.g., sub-types
-					// created before auto-add, or types from preset application).
-					// Mirrors injectMissing() in sidebar_editor.js.
-					presentIDs := make(map[int]bool)
-					allPagesIdx := -1
-					for i, item := range sidebarCfg.Items {
-						if item.Type == "category" {
-							presentIDs[item.TypeID] = true
-						}
-						if item.Type == "all_pages" {
-							allPagesIdx = i
-						}
-					}
-					for _, et := range sidebarTypes {
-						// Skip sub-category entity_types: they are template
-						// variants of their parent, not navigable collections,
-						// so they never get a sidebar entry.
-						if et.ParentTypeID != nil {
-							continue
-						}
-						if !presentIDs[et.ID] {
-							newItem := campaigns.SidebarItem{
-								Type:    "category",
-								TypeID:  et.ID,
-								Visible: true,
-							}
-							if allPagesIdx >= 0 {
-								// Insert before "all_pages".
-								sidebarCfg.Items = append(sidebarCfg.Items[:allPagesIdx+1], sidebarCfg.Items[allPagesIdx:]...)
-								sidebarCfg.Items[allPagesIdx] = newItem
-								allPagesIdx++ // Shift all_pages index forward.
-							} else {
-								sidebarCfg.Items = append(sidebarCfg.Items, newItem)
-							}
-						}
-					}
+				// Complete the items with the standard scaffold + any missing
+				// entity types. Non-persistent: shapes this render only.
+				items := injectDefaultSidebarItems(sidebarCfg.Items, sidebarTypes)
 
-					var sidebarItems []layouts.SidebarItemView
-					for _, item := range sidebarCfg.Items {
-						if !item.Visible {
-							continue
-						}
-						switch item.Type {
-						case "dashboard":
-							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-								Type: "dashboard", Label: "Dashboard",
-								Icon: "fa-home",
-							})
-						case "addon":
-							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-								Type: "addon", Slug: item.Slug, Label: item.Label,
-								Icon: item.Icon,
-							})
-						case "category":
-							if et, ok := typeMap[item.TypeID]; ok {
-								// Sub-category entity_types (ParentTypeID != nil) are
-								// template variants of their parent, not navigable
-								// collections. They must not appear in the sidebar —
-								// they surface through the +New picker on the parent
-								// instead. Skip them at build time; any persisted
-								// sub-category SidebarItem rows are silently ignored.
-								if et.ParentTypeID != nil {
-									continue
-								}
-								sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-									Type: "category", TypeID: et.ID,
-									Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
-									ParentTypeID: et.ParentTypeID,
-								})
+				var sidebarItems []layouts.SidebarItemView
+				for _, item := range items {
+					if !item.Visible {
+						continue
+					}
+					switch item.Type {
+					case "dashboard":
+						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+							Type: "dashboard", Label: "Dashboard",
+							Icon: "fa-home",
+						})
+					case "addon":
+						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+							Type: "addon", Slug: item.Slug, Label: item.Label,
+							Icon: item.Icon,
+						})
+					case "category":
+						if et, ok := typeMap[item.TypeID]; ok {
+							// Sub-category entity_types (ParentTypeID != nil) are
+							// template variants of their parent, not navigable
+							// collections. They must not appear in the sidebar —
+							// they surface through the +New picker on the parent
+							// instead. Skip them at build time; any persisted
+							// sub-category SidebarItem rows are silently ignored.
+							if et.ParentTypeID != nil {
+								continue
 							}
-						case "all_pages":
 							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-								Type: "all_pages", Label: "All Pages",
-								Icon: "fa-layer-group",
-							})
-						case "section":
-							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-								Type: "section", ID: item.ID, Label: item.Label,
-							})
-						case "link":
-							sidebarItems = append(sidebarItems, layouts.SidebarItemView{
-								Type: "link", ID: item.ID, Label: item.Label,
-								URL: item.URL, Icon: item.Icon,
+								Type: "category", TypeID: et.ID,
+								Label: et.NamePlural, Icon: et.Icon, Color: et.Color,
+								ParentTypeID: et.ParentTypeID,
 							})
 						}
-					}
-					ctx = layouts.SetSidebarItems(ctx, sidebarItems)
-					// Still set entity types for the drill panel.
-					ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
-				} else {
-					// Legacy sidebar model — use entity type order + custom sections/links.
-					sidebarTypes = layouts.SortSidebarTypes(sidebarTypes, sidebarCfg.EntityTypeOrder, sidebarCfg.HiddenTypeIDs)
-					ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
-
-					if len(sidebarCfg.CustomSections) > 0 {
-						secs := make([]layouts.SidebarSection, len(sidebarCfg.CustomSections))
-						for i, s := range sidebarCfg.CustomSections {
-							secs[i] = layouts.SidebarSection{ID: s.ID, Label: s.Label, After: s.After}
-						}
-						ctx = layouts.SetCustomSections(ctx, secs)
-					}
-					if len(sidebarCfg.CustomLinks) > 0 {
-						lnks := make([]layouts.SidebarLink, len(sidebarCfg.CustomLinks))
-						for i, l := range sidebarCfg.CustomLinks {
-							lnks[i] = layouts.SidebarLink{ID: l.ID, Label: l.Label, URL: l.URL, Icon: l.Icon, Section: l.Section}
-						}
-						ctx = layouts.SetCustomLinks(ctx, lnks)
+					case "all_pages":
+						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+							Type: "all_pages", Label: "All Pages",
+							Icon: "fa-layer-group",
+						})
+					case "section":
+						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+							Type: "section", ID: item.ID, Label: item.Label,
+						})
+					case "link":
+						sidebarItems = append(sidebarItems, layouts.SidebarItemView{
+							Type: "link", ID: item.ID, Label: item.Label,
+							URL: item.URL, Icon: item.Icon,
+						})
 					}
 				}
+				ctx = layouts.SetSidebarItems(ctx, sidebarItems)
+				// Still set entity types for the drill panel.
+				ctx = layouts.SetEntityTypes(ctx, sidebarTypes)
 			}
 
 			// Entity counts per type for sidebar badges (use effectiveRole so

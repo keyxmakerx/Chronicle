@@ -42,7 +42,11 @@ type SidebarNodeRepository interface {
 	Update(ctx context.Context, node *SidebarNode) error
 	Delete(ctx context.Context, id string) error
 	UpdateParent(ctx context.Context, id, campaignID string, parentID *string) error
-	UpdateSortOrder(ctx context.Context, id, campaignID string, sortOrder int) error
+	// ResequenceNodes renumbers sort_order = position (0..N-1) for the given
+	// ordered node IDs in one transaction — the dense re-sequence mechanic
+	// (mirrors entities' ResequenceSiblings). Replaces the old raw single-row
+	// UpdateSortOrder so folder-node reorder shares the tie-safe mechanic.
+	ResequenceNodes(ctx context.Context, campaignID string, orderedIDs []string) error
 }
 
 // sidebarNodeRepository implements SidebarNodeRepository with MariaDB.
@@ -163,12 +167,37 @@ func (r *sidebarNodeRepository) UpdateParent(ctx context.Context, id, campaignID
 	return nil
 }
 
-// UpdateSortOrder sets a sidebar node's sort position.
-func (r *sidebarNodeRepository) UpdateSortOrder(ctx context.Context, id, campaignID string, sortOrder int) error {
-	query := `UPDATE sidebar_nodes SET sort_order = ? WHERE id = ? AND campaign_id = ?`
-	_, err := r.db.ExecContext(ctx, query, sortOrder, id, campaignID)
+// ResequenceNodes writes sort_order = position for each id (0..N-1) in a single
+// transaction, mirroring the entities' ResequenceSiblings. Either every node in
+// the ordered set is renumbered or none is, so a partial failure can't leave the
+// sibling set with colliding orders that the (sort_order, name) render tiebreak
+// would silently revert (the #477 bug class, now closed for folder nodes too).
+func (r *sidebarNodeRepository) ResequenceNodes(ctx context.Context, campaignID string, orderedIDs []string) error {
+	if len(orderedIDs) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("updating node sort order: %w", err)
+		return fmt.Errorf("begin node resequence tx: %w", err)
+	}
+	// Rollback is a no-op once Commit succeeds; safe to always defer.
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.PrepareContext(ctx, `UPDATE sidebar_nodes SET sort_order = ? WHERE id = ? AND campaign_id = ?`)
+	if err != nil {
+		return fmt.Errorf("preparing node resequence update: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for position, id := range orderedIDs {
+		if _, err := stmt.ExecContext(ctx, position, id, campaignID); err != nil {
+			return fmt.Errorf("resequencing node %s: %w", id, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing node resequence: %w", err)
 	}
 	return nil
 }

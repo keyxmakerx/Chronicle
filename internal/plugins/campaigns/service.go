@@ -107,6 +107,10 @@ type CampaignService interface {
 	// Sidebar configuration
 	UpdateSidebarConfig(ctx context.Context, campaignID string, req UpdateSidebarConfigRequest) error
 	GetSidebarConfig(ctx context.Context, campaignID string) (*SidebarConfig, error)
+	// EnsureSidebarItems is the one-time, idempotent boot reconciler that
+	// converts campaigns still on the legacy sidebar model onto the unified
+	// items model. Returns the number of campaigns converted.
+	EnsureSidebarItems(ctx context.Context) (int, error)
 
 	// Dashboard layout
 	UpdateDashboardLayout(ctx context.Context, campaignID string, layout *DashboardLayout) error
@@ -1258,28 +1262,14 @@ func (s *campaignService) UpdateDefaultVisibility(ctx context.Context, campaignI
 // slices) replace the stored value. This prevents Writers A and B from
 // clobbering each other's model when they only touch a subset of fields.
 func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID string, req UpdateSidebarConfigRequest) error {
-	if req.EntityTypeOrder != nil && len(*req.EntityTypeOrder) > maxSidebarConfigEntries {
-		return apperror.NewBadRequest("entity type order list is too long")
-	}
-	if req.HiddenTypeIDs != nil && len(*req.HiddenTypeIDs) > maxSidebarConfigEntries {
-		return apperror.NewBadRequest("hidden type list is too long")
+	if req.Items != nil && len(*req.Items) > maxSidebarConfigEntries {
+		return apperror.NewBadRequest("sidebar items list is too long")
 	}
 	// Stored-XSS / open-redirect guard (audit-R2 Finding 1): owner-supplied link
 	// URLs are rendered to every campaign visitor (incl. anonymous on public
 	// campaigns) via templ.SafeURL, so reject any non-http(s)/non-relative URL.
-	// Validates the REQUEST's incoming values (merge semantics: nil = field
-	// absent, nothing new to validate; stored values were validated on their
-	// way in and the render-time guard re-checks regardless).
-	if req.CustomLinks != nil {
-		for _, l := range *req.CustomLinks {
-			if l.URL == "" {
-				continue
-			}
-			if err := validateNavLinkURL(l.Label, l.URL); err != nil {
-				return err
-			}
-		}
-	}
+	// Validates the REQUEST's incoming link items (merge semantics: nil = field
+	// absent, nothing new to validate; the render-time guard re-checks regardless).
 	if req.Items != nil {
 		for _, it := range *req.Items {
 			if it.Type != "link" || it.URL == "" {
@@ -1302,23 +1292,11 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 	if req.Items != nil {
 		config.Items = *req.Items
 	}
-	if req.EntityTypeOrder != nil {
-		config.EntityTypeOrder = *req.EntityTypeOrder
-	}
-	if req.HiddenTypeIDs != nil {
-		config.HiddenTypeIDs = *req.HiddenTypeIDs
-	}
 	if req.HiddenEntityIDs != nil {
 		config.HiddenEntityIDs = *req.HiddenEntityIDs
 	}
 	if req.HiddenNodeIDs != nil {
 		config.HiddenNodeIDs = *req.HiddenNodeIDs
-	}
-	if req.CustomSections != nil {
-		config.CustomSections = *req.CustomSections
-	}
-	if req.CustomLinks != nil {
-		config.CustomLinks = *req.CustomLinks
 	}
 
 	configJSON, err := json.Marshal(config)
