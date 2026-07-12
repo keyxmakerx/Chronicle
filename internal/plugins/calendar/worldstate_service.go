@@ -148,6 +148,13 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 	}
 
 	if input.Advance != nil {
+		// W4 (C-REAL-CALENDAR-P1): a real-time calendar's date is wall-clock
+		// authoritative — reject the GM panel's advance verb. RC-5 keeps
+		// worldstate CONTENT authoring (weather/celestial/mood, above) editable;
+		// only the date-moving Advance/Time branches are guarded.
+		if err := guardManualDateChange(cal); err != nil {
+			return err
+		}
 		// C-CAL-GM-PANEL-REWORK D (deferred audit finding): clamp the relative
 		// advance. The V1 advance endpoints bound their input; this PUT path did
 		// not, so a huge days/hours/minutes spun advanceClock's day loop — an
@@ -189,6 +196,12 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 	}
 
 	if input.Time != nil {
+		// W5 (C-REAL-CALENDAR-P1): reject the GM panel's absolute set-time on a
+		// real-time calendar (its clock is authoritative). Content authoring
+		// stays editable per RC-5.
+		if err := guardManualDateChange(cal); err != nil {
+			return err
+		}
 		// Route the date/time write through UpdateCalendar so leap-year and
 		// hour/minute invariants apply uniformly across every surface. Nil
 		// sub-fields preserve the stored value (partial set).
