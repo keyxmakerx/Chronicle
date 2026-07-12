@@ -213,11 +213,7 @@ templ Sidebar() {
 							href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", GetCampaignID(ctx))) }
 							class="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors truncate flex-1"
 						>
-							if GetBrandName(ctx) != "" {
-								{ GetBrandName(ctx) }
-							} else {
-								{ GetCampaignName(ctx) }
-							}
+							{ GetDisplayName(ctx) }
 						</a>
 						if GetCampaignRole(ctx) >= 3 {
 							<button
@@ -1218,7 +1214,7 @@ templ Topbar() {
 							@click.outside="open = false"
 							class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold text-fg hover:bg-surface-alt transition-colors"
 						>
-							<span class="truncate max-w-[160px]">{ GetCampaignName(ctx) }</span>
+							<span class="truncate max-w-[160px]">{ GetDisplayName(ctx) }</span>
 							<svg class="w-3.5 h-3.5 text-fg-muted shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
 							</svg>
@@ -1321,7 +1317,7 @@ templ Topbar() {
 				}
 			} else if InCampaign(ctx) {
 				<span class="px-2.5 py-1.5 text-sm font-semibold text-fg">
-					{ GetCampaignName(ctx) }
+					{ GetDisplayName(ctx) }
 				</span>
 			}
 		</div>
