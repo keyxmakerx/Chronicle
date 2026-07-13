@@ -342,12 +342,7 @@ func v2WeekdayIndexFor(cal *Calendar, year, month, day int) int {
 	if cal.UsesRealTime() {
 		return realTimeWeekdayIndex(cal, year, month, day, wl)
 	}
-	abs := year * cal.YearLength()
-	for i := 0; i < month-1 && i < len(cal.Months); i++ {
-		abs += cal.Months[i].Days
-	}
-	abs += day
-	idx := abs % wl
+	idx := cal.constLenDayIndex(year, month, day) % wl
 	if idx < 0 {
 		idx += wl
 	}
@@ -374,13 +369,10 @@ var realTimeWeekdayEpoch = struct{ year, month, day int }{2026, 1, 1}
 // wl is 7 and JDN%wl is the Gregorian weekday; a non-7 wl still yields a stable,
 // non-drifting index.
 func realTimeWeekdayIndex(cal *Calendar, year, month, day, wl int) int {
-	// Old-formula index at the epoch (the value the non-RT path would return).
-	epochAbs := realTimeWeekdayEpoch.year * cal.YearLength()
-	for i := 0; i < realTimeWeekdayEpoch.month-1 && i < len(cal.Months); i++ {
-		epochAbs += cal.Months[i].Days
-	}
-	epochAbs += realTimeWeekdayEpoch.day
-	epochOld := ((epochAbs % wl) + wl) % wl
+	// Old-formula index at the epoch (the value the non-RT path would return) —
+	// the same constant-length counter recurrence's non-RT branch uses, shared
+	// via constLenDayIndex so the calibration reference can't drift from it.
+	epochOld := ((cal.constLenDayIndex(realTimeWeekdayEpoch.year, realTimeWeekdayEpoch.month, realTimeWeekdayEpoch.day) % wl) + wl) % wl
 	// JDN index at the epoch, same modulus.
 	epochJDN := ((gregorianJDN(realTimeWeekdayEpoch.year, realTimeWeekdayEpoch.month, realTimeWeekdayEpoch.day) % wl) + wl) % wl
 	offset := (((epochOld-epochJDN)%wl)+wl)%wl

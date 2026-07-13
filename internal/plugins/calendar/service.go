@@ -574,14 +574,27 @@ func (s *calendarService) validateRealTimeEnable(cal *Calendar, input UpdateCale
 	if cal.Mode != ModeRealLife {
 		return apperror.NewValidation("real-time tracking can only be enabled on a real-life calendar")
 	}
-	if input.RealTimeZone == nil || strings.TrimSpace(*input.RealTimeZone) == "" {
-		return apperror.NewValidation("a time zone is required to enable real-time tracking")
+	return validateRealTimeZoneAndDay(input.RealTimeZone, input.HoursPerDay)
+}
+
+// validateRealTimeZoneAndDay is the shared field-level real-time precondition
+// check: a real-time calendar must carry a non-empty, stdlib-loadable IANA
+// anchor zone (RC-2) and a 24-hour wall-clock day. Both the enable-time gate
+// (validateRealTimeEnable, reading the incoming input) and the resolved-state
+// invariant (validateRealTimeInvariant, reading the post-write calendar) call
+// it, so the two can never drift on what "valid RT geometry" means. The mode
+// check (RC-1) stays at each call site because its message differs by context
+// (enable vs mode-walk). All failures are validation errors so the write
+// surfaces as a 4xx, never a 500.
+func validateRealTimeZoneAndDay(zone *string, hoursPerDay int) error {
+	if zone == nil || strings.TrimSpace(*zone) == "" {
+		return apperror.NewValidation("a time zone is required for real-time tracking")
 	}
-	zone := strings.TrimSpace(*input.RealTimeZone)
-	if _, err := time.LoadLocation(zone); err != nil {
-		return apperror.NewValidation("invalid time zone: " + zone)
+	z := strings.TrimSpace(*zone)
+	if _, err := time.LoadLocation(z); err != nil {
+		return apperror.NewValidation("invalid time zone: " + z)
 	}
-	if input.HoursPerDay != 24 {
+	if hoursPerDay != 24 {
 		return apperror.NewValidation("real-time tracking requires a 24-hour day (24 hours per day)")
 	}
 	return nil
@@ -609,16 +622,7 @@ func validateRealTimeInvariant(cal *Calendar) error {
 	if cal.Mode != ModeRealLife {
 		return apperror.NewValidation("real-time tracking requires a real-life calendar; disable real-time before changing the mode")
 	}
-	if cal.RealTimeZone == nil || strings.TrimSpace(*cal.RealTimeZone) == "" {
-		return apperror.NewValidation("a time zone is required for real-time tracking")
-	}
-	if _, err := time.LoadLocation(strings.TrimSpace(*cal.RealTimeZone)); err != nil {
-		return apperror.NewValidation("invalid time zone: " + strings.TrimSpace(*cal.RealTimeZone))
-	}
-	if cal.HoursPerDay != 24 {
-		return apperror.NewValidation("real-time tracking requires a 24-hour day (24 hours per day)")
-	}
-	return nil
+	return validateRealTimeZoneAndDay(cal.RealTimeZone, cal.HoursPerDay)
 }
 
 // GetCalendar returns the full calendar for a campaign with all sub-resources.
