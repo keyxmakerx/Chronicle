@@ -47,6 +47,8 @@ type mockSessionRepo struct {
 	// Proposals + notifications (C-SCHED-P2).
 	createProposalFn          func(ctx context.Context, p *SlotProposal, options []SlotProposalOption) error
 	getProposalFn             func(ctx context.Context, campaignID, proposalID string) (*SlotProposal, []SlotProposalOption, error)
+	findProposalByIDFn        func(ctx context.Context, proposalID string) (*SlotProposal, error)
+	setProposalWinnerAndCloseFn func(ctx context.Context, proposalID, winningOptionID string) error
 	listProposalsFn           func(ctx context.Context, campaignID string) ([]SlotProposal, error)
 	listProposalOptionsFn     func(ctx context.Context, proposalID string) ([]SlotProposalOption, error)
 	findOptionFn              func(ctx context.Context, optionID string) (*SlotProposalOption, error)
@@ -267,6 +269,20 @@ func (m *mockSessionRepo) GetProposal(ctx context.Context, campaignID, proposalI
 		return m.getProposalFn(ctx, campaignID, proposalID)
 	}
 	return nil, nil, nil
+}
+
+func (m *mockSessionRepo) FindProposalByID(ctx context.Context, proposalID string) (*SlotProposal, error) {
+	if m.findProposalByIDFn != nil {
+		return m.findProposalByIDFn(ctx, proposalID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) SetProposalWinnerAndClose(ctx context.Context, proposalID, winningOptionID string) error {
+	if m.setProposalWinnerAndCloseFn != nil {
+		return m.setProposalWinnerAndCloseFn(ctx, proposalID, winningOptionID)
+	}
+	return nil
 }
 
 func (m *mockSessionRepo) ListProposals(ctx context.Context, campaignID string) ([]SlotProposal, error) {
@@ -1576,7 +1592,7 @@ func TestRedeemRSVPToken_Success(t *testing.T) {
 	}
 	svc := newTestSessionService(repo)
 
-	token, err := svc.RedeemRSVPToken(context.Background(), "valid-token")
+	token, err := svc.ApplyRSVPToken(context.Background(), "valid-token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1595,7 +1611,7 @@ func TestRedeemRSVPToken_NotFound(t *testing.T) {
 		},
 	}
 	svc := newTestSessionService(repo)
-	_, err := svc.RedeemRSVPToken(context.Background(), "bad-token")
+	_, err := svc.ApplyRSVPToken(context.Background(), "bad-token")
 	assertAppError(t, err, 404)
 }
 
@@ -1614,7 +1630,7 @@ func TestRedeemRSVPToken_AlreadyUsed(t *testing.T) {
 		},
 	}
 	svc := newTestSessionService(repo)
-	_, err := svc.RedeemRSVPToken(context.Background(), "used-token")
+	_, err := svc.ApplyRSVPToken(context.Background(), "used-token")
 	assertAppError(t, err, 400)
 }
 
@@ -1632,7 +1648,7 @@ func TestRedeemRSVPToken_Expired(t *testing.T) {
 		},
 	}
 	svc := newTestSessionService(repo)
-	_, err := svc.RedeemRSVPToken(context.Background(), "expired-token")
+	_, err := svc.ApplyRSVPToken(context.Background(), "expired-token")
 	assertAppError(t, err, 400)
 }
 
@@ -1653,7 +1669,7 @@ func TestRedeemRSVPToken_UpdateAttendeeError(t *testing.T) {
 		},
 	}
 	svc := newTestSessionService(repo)
-	_, err := svc.RedeemRSVPToken(context.Background(), "valid-token")
+	_, err := svc.ApplyRSVPToken(context.Background(), "valid-token")
 	assertAppError(t, err, 404)
 }
 
@@ -1677,7 +1693,7 @@ func TestRedeemRSVPToken_MarkUsedError(t *testing.T) {
 		},
 	}
 	svc := newTestSessionService(repo)
-	_, err := svc.RedeemRSVPToken(context.Background(), "valid-token")
+	_, err := svc.ApplyRSVPToken(context.Background(), "valid-token")
 	assertAppError(t, err, 500)
 }
 

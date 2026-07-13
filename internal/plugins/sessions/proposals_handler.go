@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 
@@ -131,19 +132,139 @@ func (h *Handler) RespondOptionAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// RedeemProposalToken applies a one-click email response and consumes the token.
-// GET /proposals/respond/:token — no auth required, the token is the credential.
+// RedeemProposalToken renders the confirm interstitial for a one-click response
+// token. GET /proposals/respond/:token — no auth, the token is the credential.
+// GET is a pure READ (0b): it validates the token, rechecks the proposal is still
+// open (0a, in the service) + the user is still a member (0a, below), then shows a
+// POST form. ApplyProposalToken records the response, so a mail prefetcher's GET
+// never writes.
 func (h *Handler) RedeemProposalToken(c echo.Context) error {
 	tokenStr := c.Param("token")
 	if tokenStr == "" {
 		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This response link is invalid.", false))
 	}
-	if _, err := h.svc.RedeemProposalToken(c.Request().Context(), tokenStr); err != nil {
+	tc, err := h.svc.ValidateProposalToken(c.Request().Context(), tokenStr)
+	if err != nil {
+		msg := apperror.UserMessage(err, "This response link is invalid or has expired.")
+		return c.HTML(http.StatusOK, rsvpResultHTML("Response Failed", msg, false))
+	}
+	// 0a: the token's user must still belong to the proposal's campaign. Derived
+	// from the proposal (the token, not a URL, is the credential); fail-closed.
+	if !h.isCampaignMember(c.Request().Context(), tc.Proposal.CampaignID, tc.Token.UserID) {
+		return c.HTML(http.StatusOK, rsvpResultHTML("Response Failed",
+			"You're no longer a member of this campaign, so this link can't be used.", false))
+	}
+	respLabel := proposalResponseLabel(tc.Token.Response)
+	local := renderLocalSlotForTZ(*tc.Option, h.tokenUserTZ(c.Request().Context(), tc.Token.UserID))
+	msg := fmt.Sprintf("Mark %q for %s (%s) on %q. Tap below to confirm.",
+		respLabel, local.DateLabel, local.TimeLabel, tc.Proposal.Title)
+	return c.HTML(http.StatusOK, tokenConfirmHTML("Confirm Your Response", msg,
+		fmt.Sprintf("/proposals/respond/%s", tokenStr), "Confirm — "+respLabel, middleware.GetCSRFToken(c)))
+}
+
+// ApplyProposalToken records a one-click response and consumes the token.
+// POST /proposals/respond/:token — the state-changing half (0b). Re-runs the
+// open-proposal (service) + current-membership (0a) checks before applying.
+func (h *Handler) ApplyProposalToken(c echo.Context) error {
+	tokenStr := c.Param("token")
+	if tokenStr == "" {
+		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This response link is invalid.", false))
+	}
+	tc, err := h.svc.ValidateProposalToken(c.Request().Context(), tokenStr)
+	if err != nil {
+		msg := apperror.UserMessage(err, "This response link is invalid or has expired.")
+		return c.HTML(http.StatusOK, rsvpResultHTML("Response Failed", msg, false))
+	}
+	if !h.isCampaignMember(c.Request().Context(), tc.Proposal.CampaignID, tc.Token.UserID) {
+		return c.HTML(http.StatusOK, rsvpResultHTML("Response Failed",
+			"You're no longer a member of this campaign, so this link can't be used.", false))
+	}
+	if _, err := h.svc.ApplyProposalToken(c.Request().Context(), tokenStr); err != nil {
 		msg := apperror.UserMessage(err, "This response link is invalid or has expired.")
 		return c.HTML(http.StatusOK, rsvpResultHTML("Response Failed", msg, false))
 	}
 	return c.HTML(http.StatusOK, rsvpResultHTML("Response Recorded",
 		"Thanks — your availability has been recorded. You can close this page.", true))
+}
+
+// ConfirmProposalAPI is the DM/Scribe confirm-winner action: pick a winning
+// option, which closes the proposal and creates a planned session from that
+// slot's UTC instant (C-SCHED-P3). Members are auto-invited to the new session
+// and every responder is notified — both off the request path, mirroring create.
+// POST /campaigns/:id/proposals/:pid/confirm
+func (h *Handler) ConfirmProposalAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	userID := auth.GetUserID(c)
+	proposalID := c.Param("pid")
+	var req struct {
+		OptionID string `json:"optionId" form:"optionId"`
+	}
+	// Bind from JSON (API) or form (the HTMX confirm button's hx-vals).
+	if err := c.Bind(&req); err != nil || req.OptionID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "an option to confirm is required"})
+	}
+	confirmerTZ := h.resolveViewerTZ(c, userID)
+	session, err := h.svc.ConfirmProposalWinner(c.Request().Context(), cc.Campaign.ID, proposalID, req.OptionID, userID, confirmerTZ)
+	if err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+
+	// Auto-invite members + send RSVP email (parity with manual CreateSession) and
+	// notify everyone who responded — all best-effort, off the request path.
+	if h.memberLister != nil {
+		if members, mErr := h.memberLister.ListMembers(c.Request().Context(), cc.Campaign.ID); mErr == nil {
+			userIDs := make([]string, 0, len(members))
+			for _, m := range members {
+				userIDs = append(userIDs, m.UserID)
+			}
+			_ = h.svc.InviteAll(c.Request().Context(), session.ID, userIDs)
+			if h.mailer != nil && h.mailer.IsConfigured(c.Request().Context()) {
+				go h.sendRSVPEmails(context.Background(), session, cc.Campaign.Name, members)
+			}
+		}
+	}
+	go func() {
+		if err := h.svc.NotifyProposalConfirmed(context.Background(), cc.Campaign.ID, proposalID, session.ID); err != nil {
+			slog.Warn("failed to write confirm notifications", slog.Any("error", err))
+		}
+	}()
+
+	link := fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, session.ID)
+	// The HTMX confirm button just needs to land on the new session; a client-side
+	// redirect keeps the handler thin (no fragment to render).
+	if middleware.IsHTMX(c) {
+		c.Response().Header().Set("HX-Redirect", link)
+		return c.NoContent(http.StatusNoContent)
+	}
+	return c.JSON(http.StatusOK, map[string]string{
+		"status":    "ok",
+		"sessionId": session.ID,
+		"link":      link,
+	})
+}
+
+// proposalResponseLabel renders a response value for the confirm interstitial.
+func proposalResponseLabel(response string) string {
+	switch response {
+	case ResponseNo:
+		return "No"
+	case ResponseMaybe:
+		return "Maybe"
+	default:
+		return "Yes"
+	}
+}
+
+// tokenUserTZ resolves a token user's stored zone (default UTC) so the confirm
+// interstitial labels the slot in the same zone the email used.
+func (h *Handler) tokenUserTZ(ctx context.Context, userID string) string {
+	if h.userDir == nil {
+		return "UTC"
+	}
+	if u, err := h.userDir.GetUser(ctx, userID); err == nil && u != nil && u.Timezone != nil && *u.Timezone != "" {
+		return *u.Timezone
+	}
+	return "UTC"
 }
 
 // --- helpers ---
@@ -260,8 +381,13 @@ func (h *Handler) sendProposalEmail(ctx context.Context, campaignID, campaignNam
 	}
 
 	subject := fmt.Sprintf("When can you play? — %s", campaignName)
+	// Plain-text body: no markup, so the raw values are safe as-is.
 	plainBody := fmt.Sprintf("You've been asked to weigh in on session times for %s.\n\nProposal: %s\nTimes shown in %s.\n\n%sThese links expire in 7 days.\n",
 		campaignName, proposal.Title, memberTZ, optionsText)
+	// HTML body: escape every interpolated data value (campaign name + operator-
+	// authored proposal title + zone) so a title like `<img onerror=…>` can't
+	// inject markup into the email (C-SCHED-P3 0c). optionsHTML is our own
+	// server-built markup (date/time labels + token URLs), so it is NOT escaped.
 	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;padding:20px;color:#333">
 <div style="text-align:center;margin-bottom:20px"><div style="font-size:32px;margin-bottom:8px">📅</div>
 <h1 style="font-size:20px;margin:0">When can you play?</h1>
@@ -269,7 +395,7 @@ func (h *Handler) sendProposalEmail(ctx context.Context, campaignID, campaignNam
 <h2 style="font-size:16px;margin:0 0 12px">%s</h2>
 %s
 <p style="text-align:center;color:#999;font-size:12px;margin-top:20px">These links expire in 7 days.</p>
-</body></html>`, campaignName, memberTZ, proposal.Title, optionsHTML)
+</body></html>`, html.EscapeString(campaignName), html.EscapeString(memberTZ), html.EscapeString(proposal.Title), optionsHTML)
 
 	if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plainBody, htmlBody); err != nil {
 		slog.Warn("failed to send proposal email", slog.Any("error", err), slog.String("to", m.Email))

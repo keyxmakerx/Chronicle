@@ -456,6 +456,12 @@ func (a *sessionExportAdapter) ExportSessions(ctx context.Context, campaignID st
 			Recap:              sess.Recap,
 			RecapHTML:          sess.RecapHTML,
 			ScheduledDate:      sess.ScheduledDate,
+			// STOP-AND-FLAG (C-SCHED-P3): carrying sess.ScheduledTime through export
+			// needs a matching `ScheduledTime *string` field on
+			// campaigns.ExportSession (export.go) — outside this dispatch's
+			// export-plumbing scope ("field plumbing ONLY in export_adapters.go, flag
+			// anything more"). Booked as a follow-up; until then a campaign export/
+			// clone drops the confirmed session's time (the date still round-trips).
 			CalendarYear:       sess.CalendarYear,
 			CalendarMonth:      sess.CalendarMonth,
 			CalendarDay:        sess.CalendarDay,
@@ -1123,6 +1129,8 @@ func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, u
 		newSession, err := a.svc.CreateSession(ctx, campaignID, sessions.CreateSessionInput{
 			Name:                sess.Name,
 			ScheduledDate:       sess.ScheduledDate,
+			// STOP-AND-FLAG (C-SCHED-P3): ScheduledTime import is blocked on the same
+			// missing campaigns.ExportSession field noted in ExportSessions above.
 			CalendarYear:        sess.CalendarYear,
 			CalendarMonth:       sess.CalendarMonth,
 			CalendarDay:         sess.CalendarDay,

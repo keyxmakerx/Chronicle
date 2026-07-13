@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -100,6 +101,7 @@ func (h *Handler) CreateSession(c echo.Context) error {
 	name := c.FormValue("name")
 	summary := c.FormValue("summary")
 	scheduledDate := c.FormValue("scheduled_date")
+	scheduledTime := c.FormValue("scheduled_time") // "HH:MM" from the modal's time input (C-SCHED-P3).
 
 	// Validate field lengths.
 	if err := apperror.ValidateRequired("name", name); err != nil {
@@ -116,6 +118,10 @@ func (h *Handler) CreateSession(c echo.Context) error {
 	var datePtr *string
 	if scheduledDate != "" {
 		datePtr = &scheduledDate
+	}
+	var timePtr *string
+	if scheduledTime != "" {
+		timePtr = &scheduledTime
 	}
 
 	// Parse optional calendar date fields.
@@ -154,6 +160,7 @@ func (h *Handler) CreateSession(c echo.Context) error {
 		Name:               name,
 		Summary:            summaryPtr,
 		ScheduledDate:      datePtr,
+		ScheduledTime:      timePtr,
 		CalendarYear:       calYear,
 		CalendarMonth:      calMonth,
 		CalendarDay:        calDay,
@@ -212,6 +219,7 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		Name                string  `json:"name"`
 		Summary             *string `json:"summary"`
 		ScheduledDate       *string `json:"scheduled_date"`
+		ScheduledTime       *string `json:"scheduled_time"`
 		CalendarYear        *int    `json:"calendar_year"`
 		CalendarMonth       *int    `json:"calendar_month"`
 		CalendarDay         *int    `json:"calendar_day"`
@@ -230,6 +238,7 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		Name:                req.Name,
 		Summary:             req.Summary,
 		ScheduledDate:       req.ScheduledDate,
+		ScheduledTime:       req.ScheduledTime,
 		CalendarYear:        req.CalendarYear,
 		CalendarMonth:       req.CalendarMonth,
 		CalendarDay:         req.CalendarDay,
@@ -451,7 +460,11 @@ These links expire in 7 days.
 </div>
 <p style="text-align:center;color:#999;font-size:12px">These links expire in 7 days.</p>
 </body></html>`,
-			session.Name, campaignName, dateStr, acceptURL, declineURL)
+			// Escape the operator-authored session name + campaign name so they
+			// can't inject markup into the email (C-SCHED-P3 0c, same sweep as the
+			// proposal invite). dateStr is our own formatted label; URLs are hex
+			// tokens — both safe.
+			html.EscapeString(session.Name), html.EscapeString(campaignName), dateStr, acceptURL, declineURL)
 
 		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plainBody, htmlBody); err != nil {
 			slog.Warn("failed to send rsvp email",
@@ -465,20 +478,38 @@ These links expire in 7 days.
 
 // --- RSVP Token Redemption ---
 
-// RedeemRSVPToken handles one-click email RSVP via token.
-// GET /rsvp/:token — no auth required, token is the credential.
+// RedeemRSVPToken renders the confirm interstitial for a one-click RSVP token.
+// GET /rsvp/:token — no auth required, token is the credential. GET is a pure
+// read (0b): it validates the token and shows a POST form; ApplyRSVPToken records
+// the RSVP, so a mail scanner prefetching the link can't auto-RSVP.
 func (h *Handler) RedeemRSVPToken(c echo.Context) error {
 	tokenStr := c.Param("token")
 	if tokenStr == "" {
 		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This RSVP link is invalid.", false))
 	}
-
-	token, err := h.svc.RedeemRSVPToken(c.Request().Context(), tokenStr)
+	token, err := h.svc.ValidateRSVPToken(c.Request().Context(), tokenStr)
 	if err != nil {
 		msg := apperror.UserMessage(err, "This RSVP link is invalid or has expired.")
 		return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Failed", msg, false))
 	}
+	label := rsvpActionLabel(token.Action)
+	return c.HTML(http.StatusOK, tokenConfirmHTML("Confirm Your RSVP",
+		fmt.Sprintf("You're responding %q. Tap below to confirm.", label),
+		fmt.Sprintf("/rsvp/%s", tokenStr), "Confirm — "+label, middleware.GetCSRFToken(c)))
+}
 
+// ApplyRSVPToken applies a one-click RSVP and consumes the token.
+// POST /rsvp/:token — the state-changing half of the token flow (0b).
+func (h *Handler) ApplyRSVPToken(c echo.Context) error {
+	tokenStr := c.Param("token")
+	if tokenStr == "" {
+		return c.HTML(http.StatusBadRequest, rsvpResultHTML("Invalid Link", "This RSVP link is invalid.", false))
+	}
+	token, err := h.svc.ApplyRSVPToken(c.Request().Context(), tokenStr)
+	if err != nil {
+		msg := apperror.UserMessage(err, "This RSVP link is invalid or has expired.")
+		return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Failed", msg, false))
+	}
 	var action string
 	switch token.Action {
 	case RSVPDeclined:
@@ -488,12 +519,44 @@ func (h *Handler) RedeemRSVPToken(c echo.Context) error {
 	default:
 		action = "accepted"
 	}
-
 	return c.HTML(http.StatusOK, rsvpResultHTML("RSVP Recorded",
 		"Your response has been "+action+". You can close this page.", true))
 }
 
+// rsvpActionLabel renders an RSVP action for the confirm interstitial.
+func rsvpActionLabel(action string) string {
+	switch action {
+	case RSVPDeclined:
+		return "Can't Make It"
+	case RSVPTentative:
+		return "Maybe"
+	default:
+		return "Going"
+	}
+}
+
+// isCampaignMember reports whether userID is currently a member of campaignID.
+// FAIL-CLOSED: a nil lister or a lookup error denies (used by the public token
+// routes to enforce current membership before applying — C-SCHED-P3 0a).
+func (h *Handler) isCampaignMember(ctx context.Context, campaignID, userID string) bool {
+	if h.memberLister == nil {
+		return false
+	}
+	members, err := h.memberLister.ListMembers(ctx, campaignID)
+	if err != nil {
+		return false
+	}
+	for _, m := range members {
+		if m.UserID == userID {
+			return true
+		}
+	}
+	return false
+}
+
 // rsvpResultHTML returns a simple standalone HTML page for RSVP token results.
+// title + message are escaped (C-SCHED-P3 0c sweep) so any interpolated
+// user/data value (e.g. a session name in a confirm message) is inert.
 func rsvpResultHTML(title, message string, success bool) string {
 	icon := "fa-circle-xmark"
 	color := "red"
@@ -502,14 +565,40 @@ func rsvpResultHTML(title, message string, success bool) string {
 		color = "green"
 	}
 	return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>` + title + ` - Chronicle</title>
+<title>` + html.EscapeString(title) + ` - Chronicle</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f8f9fa}
 .card{text-align:center;padding:3rem;border-radius:12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.08);max-width:400px}
 .icon{font-size:3rem;color:` + color + `;margin-bottom:1rem}h1{font-size:1.25rem;margin:0 0 .5rem}
 p{color:#666;margin:0;font-size:.9rem}</style></head><body>
 <div class="card"><div class="icon"><i class="fa-solid ` + icon + `"></i></div>
-<h1>` + title + `</h1><p>` + message + `</p></div></body></html>`
+<h1>` + html.EscapeString(title) + `</h1><p>` + html.EscapeString(message) + `</p></div></body></html>`
+}
+
+// tokenConfirmHTML renders the GET interstitial for a one-click token: a POST
+// form the user must submit to apply (C-SCHED-P3 0b). Because a mail scanner /
+// link prefetcher issues a GET, not a POST, this page defeats the "state-changing
+// GET" hazard for both the RSVP and proposal token routes. All interpolated
+// values are escaped; actionURL is a same-origin token path.
+//
+// csrfToken is threaded into a hidden field because these POST routes ride the
+// global CSRF middleware (they are not under the exempt /api/ or /ws prefixes):
+// the GET already ran through the middleware and minted the cookie, so
+// double-submit matches on the POST. Without it the confirm click would 403 and
+// the apply would never run.
+func tokenConfirmHTML(title, message, actionURL, confirmLabel, csrfToken string) string {
+	return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>` + html.EscapeString(title) + ` - Chronicle</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f8f9fa}
+.card{text-align:center;padding:3rem;border-radius:12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.08);max-width:400px}
+.icon{font-size:3rem;color:#6366f1;margin-bottom:1rem}h1{font-size:1.25rem;margin:0 0 .5rem}
+p{color:#666;margin:0 0 1.5rem;font-size:.9rem}
+button{font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius:8px;background:#6366f1;color:#fff;cursor:pointer}</style></head><body>
+<div class="card"><div class="icon"><i class="fa-solid fa-circle-question"></i></div>
+<h1>` + html.EscapeString(title) + `</h1><p>` + html.EscapeString(message) + `</p>
+<form method="POST" action="` + html.EscapeString(actionURL) + `"><input type="hidden" name="csrf_token" value="` + html.EscapeString(csrfToken) + `"><button type="submit">` + html.EscapeString(confirmLabel) + `</button></form>
+</div></body></html>`
 }
 
 // SidebarRSVP returns an HTMX fragment showing planned sessions with RSVP statuses.

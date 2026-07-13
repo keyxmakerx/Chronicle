@@ -534,10 +534,13 @@ POST	/plugins/:extID/:slug/reload	internal/extensions/routes.go
 POST	/plugins/:extID/:slug/stop	internal/extensions/routes.go
 POST	/preview	internal/systems/routes.go
 POST	/proposals	internal/plugins/sessions/routes.go
+POST	/proposals/:pid/confirm	internal/plugins/sessions/routes.go
 POST	/proposals/:pid/options/:oid/respond	internal/plugins/sessions/routes.go
+POST	/proposals/respond/:token	internal/plugins/sessions/routes.go
 POST	/register	internal/plugins/auth/routes.go
 POST	/rescan	internal/extensions/routes.go
 POST	/reset-password	internal/plugins/auth/routes.go
+POST	/rsvp/:token	internal/plugins/sessions/routes.go
 POST	/run	internal/plugins/backup/routes.go
 POST	/run	internal/plugins/restore/routes.go
 POST	/saved-filters	internal/plugins/entities/routes.go

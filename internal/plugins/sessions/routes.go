@@ -53,6 +53,9 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.POST("/proposals", h.CreateProposalAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.GET("/proposals/:pid", h.ShowProposal, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/proposals/:pid/options/:oid/respond", h.RespondOptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	// Confirm-winner (C-SCHED-P3): Scribe+ picks the winning option, which closes
+	// the proposal and mints a planned session from that slot.
+	cg.POST("/proposals/:pid/confirm", h.ConfirmProposalAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Public-capable view routes.
 	pub := e.Group("/campaigns/:id",
@@ -65,15 +68,19 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	pub.GET("/sidebar/sessions-rsvp", h.SidebarRSVP, campaigns.RequireViewAccess())
 	pub.GET("/sessions/embed", h.EmbedSessions, campaigns.RequireViewAccess())
 
-	// RSVP token redemption — public endpoint, no auth required.
-	// Token itself is the credential (emailed to the user).
+	// RSVP token redemption — public endpoint, no auth required (token is the
+	// credential, emailed to the user). GET renders a confirm interstitial; POST
+	// applies. Splitting them stops mail scanners / link prefetchers from
+	// auto-RSVPing via a background GET (C-SCHED-P3 0b).
 	e.GET("/rsvp/:token", h.RedeemRSVPToken)
+	e.POST("/rsvp/:token", h.ApplyRSVPToken)
 
-	// Proposal one-click response redemption — public endpoint, mirrors the
-	// RSVP token route's placement and hygiene (the token is the credential,
-	// emailed to the user; OptionalAuth is unnecessary — the token carries
-	// option + user + response).
+	// Proposal one-click response redemption — public, mirrors the RSVP token
+	// route's placement + hygiene. Same GET-confirm / POST-apply split (0b), and
+	// the redeem additionally rechecks the proposal is still open + the user is
+	// still a member (0a).
 	e.GET("/proposals/respond/:token", h.RedeemProposalToken)
+	e.POST("/proposals/respond/:token", h.ApplyProposalToken)
 
 	// Scheduler notifications (C-SCHED-P2). User-scoped, not campaign-scoped —
 	// the topbar bell is global — so these ride a plain authenticated group, not

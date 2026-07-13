@@ -3,11 +3,17 @@ package sessions
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
+
+// errProposalAlreadyClosed signals that a concurrent confirm already closed the
+// proposal — the conditional close matched zero rows. The service maps it to a
+// clean "already confirmed" and, crucially, does NOT create a duplicate session.
+var errProposalAlreadyClosed = errors.New("proposal already closed")
 
 // Slot-proposal persistence on the existing sessionRepository (C-SCHED-P2).
 // Proposals/options/responses/tokens live in their OWN tables — never
@@ -67,6 +73,64 @@ func (r *sessionRepository) GetProposal(ctx context.Context, campaignID, proposa
 		return nil, nil, err
 	}
 	return &p, opts, nil
+}
+
+// FindProposalByID loads a proposal by id ALONE — no campaign scope. Used by the
+// emailed-token path (C-SCHED-P3 0a), where the campaign is DERIVED from the
+// proposal (the token, not a URL campaign id, is the credential) so the redeem
+// can recheck the proposal is still open + the user still a member.
+func (r *sessionRepository) FindProposalByID(ctx context.Context, proposalID string) (*SlotProposal, error) {
+	var p SlotProposal
+	var note sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, campaign_id, created_by, title, note, status, created_at, updated_at
+		 FROM slot_proposals WHERE id = ?`, proposalID).
+		Scan(&p.ID, &p.CampaignID, &p.CreatedBy, &p.Title, &note, &p.Status, &p.CreatedAt, &p.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, apperror.NewNotFound("proposal not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("finding proposal by id: %w", err)
+	}
+	if note.Valid {
+		p.Note = &note.String
+	}
+	return &p, nil
+}
+
+// SetProposalWinnerAndClose marks one option the winner (clearing any other) and
+// closes the proposal, atomically (C-SCHED-P3 confirm-winner). The CONDITIONAL
+// close (`WHERE status = 'open'`) runs FIRST and is the serialization point:
+// exactly one confirm can flip open→closed, so a concurrent double-confirm has
+// the loser match zero rows and return errProposalAlreadyClosed (rolled back) —
+// the service then skips session creation, so a proposal never mints two
+// sessions. `is_winner = (id = ?)` sets 1 on the winner and 0 on every sibling in
+// one UPDATE.
+func (r *sessionRepository) SetProposalWinnerAndClose(ctx context.Context, proposalID, winningOptionID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin confirm tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }() // no-op after Commit
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE slot_proposals SET status = ?, updated_at = ? WHERE id = ? AND status = ?`,
+		ProposalClosed, time.Now().UTC(), proposalID, ProposalOpen)
+	if err != nil {
+		return fmt.Errorf("closing proposal: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errProposalAlreadyClosed // already closed (concurrent confirm) — no duplicate session
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE slot_proposal_options SET is_winner = (id = ?) WHERE proposal_id = ?`,
+		winningOptionID, proposalID); err != nil {
+		return fmt.Errorf("setting winner: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit confirm tx: %w", err)
+	}
+	return nil
 }
 
 // ListProposals returns a campaign's proposals, newest first.
