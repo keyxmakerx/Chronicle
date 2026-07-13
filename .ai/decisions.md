@@ -299,7 +299,7 @@ are "fields", "entry", or "posts". Client-side two-column drag-and-drop widget.
 - Layout config read with entity type, no additional query.
 - Sections validated server-side (valid types, valid columns, unique keys).
 - Default layout auto-generated from field definitions when empty.
-- Entity show page must read layout_json to render the profile (not yet wired).
+- Entity show page reads layout_json to render the profile — wired via `BlockRegistry` + `DefaultLayout()`/`CharacterLayout()`, consumed by `show.templ`.
 
 ---
 
@@ -623,7 +623,9 @@ cannot import subpackages without creating circular imports.
 ## ADR-021: Layered Third-Party Extension Strategy
 
 **Date:** 2026-03-06
-**Status:** Proposed
+**Status:** Accepted — Layer 1 (declarative content packs) and Layer 3 (WASM logic
+extensions) are both implemented in `internal/extensions/` (manifest/applier +
+`wasm_host.go` on Extism/wazero, pinned in `go.mod`).
 
 **Context:** Chronicle's three-tier architecture (Plugins, Modules, Widgets) is
 currently internal-only — all extensions ship with the Go binary. Users and the

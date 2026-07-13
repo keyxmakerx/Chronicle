@@ -21,9 +21,9 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
 ### In flight — 2026-06-11 sweep round (agents dispatched; coordinator-verified findings)
 
-- [~] **Document-listener leaks** in `entity_posts.js` + `relation_graph.js` (cordinator#39 F1/F2) — Agent 1, `C-SWEEP-FIXES-R1` PR 1.
-- [~] **Public-campaign read gaps**: aliases route not in pub group; player-notes block mounts for anonymous; map blocks blank for public viewers (cordinator#39 F3/F5/F4) — Agent 1, `C-SWEEP-FIXES-R1` PR 2. Fog/layers stay auth-only.
-- [~] **Topbar custom branding still masked** (cordinator#29) — header lacks a stacking context, so the z-index:-1 brand layer paints under `bg-surface`; fix = `isolate` on the header — Agent 2, `C-BACKLOG-BUGS-R1`.
+- [x] **Document-listener leaks** in `entity_posts.js` + `relation_graph.js` (cordinator#39 F1/F2) — Agent 1, `C-SWEEP-FIXES-R1` PR 1. Shipped (PR #462).
+- [x] **Public-campaign read gaps**: aliases route not in pub group; player-notes block mounts for anonymous; map blocks blank for public viewers (cordinator#39 F3/F5/F4) — Agent 1, `C-SWEEP-FIXES-R1` PR 2. Fog/layers stay auth-only. Shipped (PR #462).
+- [x] **Topbar custom branding still masked** (cordinator#29) — header lacks a stacking context, so the z-index:-1 brand layer paints under `bg-surface`; fix = `isolate` on the header — Agent 2, `C-BACKLOG-BUGS-R1`. Shipped (PR #464).
 
 ### Dynamic surface + Characters page — 2026-06-22
 
@@ -124,7 +124,7 @@ for player-owned PC actors.
   player-owned PC-type actors → the PC sub-type and auto-claims them (NPCs/monsters
   excluded by actor type + GM ownership); surface "enable Player Character Claiming
   in Chronicle" when the addon is off. — MERGED FM #64
-- [~] **May bugs verify-then-fix** — editor dark-on-dark (#8), customizer no-change save + scroll (#10), mobile notepad z-index (#11) — Agent 3, `C-BACKLOG-BUGS-R1`.
+- [x] **May bugs verify-then-fix** — editor dark-on-dark (#8, shipped PR #465), mobile notepad z-index (#11, shipped PR #466) — Agent 3, `C-BACKLOG-BUGS-R1`. Customizer no-change save + scroll (#10) status not independently reconfirmed this pass; the Customization Hub had a full rescue since (#524, C-CUSTOMIZE-RESCUE) so it is very likely also resolved — verify before relying on this if it resurfaces.
 
 ### High
 
@@ -160,36 +160,38 @@ Synced world-state animation system — ONE `worldState` drives BOTH the Almanac
 sky-band AND the hourglass time-piece. Mock-data only, `/demo/calendar/almanac`.
 Spec: `docs/design/world-state-effects/` (README + BUILD-PLAN + CATALOG + prototypes).
 
-- [~] **Wave 2 — MUST effects** (CATALOG §12):
+- [x] **Wave 2 — MUST effects** (CATALOG §12):
   - [x] **2a Weather + celestial bundle** (10): clear/cloudy/rain/thunderstorm/snow/fog/
     tornado/ashfall + meteor-shower/aurora — `EFFECTS` renderers on the shared frame
     hook, hgSand sync. **Shipped (PR #391).**
   - [x] **2b Moon library** (~28): vendored Noto/Twemoji lunar sets + 12 procedural
     SVGs; `MOON_DESIGNS` registry; emoji + css-clip phase paths; named-phase popover;
     demo design picker + Randomize + Add. **Shipped (PR #394).**
-  - [~] **2c Mood-tint wash** (CATALOG Part 5) — global `overlay`-blend wash over both
+  - [x] **2c Mood-tint wash** (CATALOG Part 5) — global `overlay`-blend wash over both
     surfaces as resolution step 6 (sky-band div + hourglass canvas composite over
     sand); 8 presets + custom + intensity + clear; static (no rAF), reduced-motion-safe.
     **Shipped (PR #395)** — closed the Wave 2 MUST set.
-- [~] **Wave 3 — Time-control verb layer** (CATALOG Part 6, D&D narrative-chunk model):
+- [x] **Wave 3 — Time-control verb layer** (CATALOG Part 6, D&D narrative-chunk model):
   +1hr / +1day / long-rest / custom (smooth ~600ms time tween) / set-time / step-back
   (single-undo + ~400ms reverse-sand) / atmosphere-pause; `timepieceFill` 0–0.33 caps →
   reuse the dawn/dusk flip + reset; verbs tween on the shared rAF (`engine.addTick`),
   reduced-motion → instant snaps. Mechanics in `window.__calTimeControl` (reusable by
-  the future GM Live Control Panel). NOT VCR playback. **In review (this PR).**
+  the future GM Live Control Panel). NOT VCR playback. **Shipped** (`window.__calTimeControl`
+  live on `main`, wired into the worldstate layer order).
 - [ ] **Wave 4 — SHOULD effects** · [ ] **Wave 5 — NICE/EXOTIC long tail** (on demand).
 
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
 ### Timeline Showcase: FM Tuner (C-TIMELINE-V2-DESIGN-1-TUNER)
 
-Lead of two candidate timeline designs (Ledger is the alternate, not yet built).
-Mock-data only, `/demo/timeline/tuner`, page-separated (own CSS+JS). Raw SVG + CSS
-transforms, NO D3 (audit §7). Spec: `cordinator/dispatches/chronicle/C-TIMELINE-V2-DESIGN-1-TUNER.md`.
+Two candidate timeline designs were built: the Tuner (this section) and the Ledger
+(shipped as the alternate, see below). Mock-data only, `/demo/timeline/tuner`,
+page-separated (own CSS+JS). Raw SVG + CSS transforms, NO D3 (audit §7). Spec:
+`cordinator/dispatches/chronicle/C-TIMELINE-V2-DESIGN-1-TUNER.md`.
 
 - [x] **Ledger timeline (alternate design)** — shipped as `/demo/timeline/ledger` (chronicle#460,
-  2026-06-11); `/demo/calendar` is the consolidated hub. ⚠️ Operator design pick (Ledger vs Tuner,
-  cordinator#36 Q1) still open — the winner drives Timeline V2 W1.
+  2026-06-11); `/demo/calendar` is the consolidated hub. Operator design pick decided 2026-07-03
+  = **Ledger** — it drove Timeline V2 W1 (the calendar's 4th V2 view, PR #519/#520).
 
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
@@ -330,7 +332,7 @@ _Lower-priority items to pick up during related sprints or as standalone tasks._
 - [x] **Recurring calendar events (beyond yearly)** — shipped (chronicle#461, 2026-06-11): weekly/biweekly/monthly/custom share the sessions vocabulary; single `Event.OccursOn` expansion predicate; leap-aware monthly; migration 011. Multi-day-span recurrence + recurrence end-date UI controls remain future polish.
 
 **Documentation:**
-- [ ] **Posts widget missing .ai.md** — Only Go widget without documentation file.
+- [ ] **`calendar_v2` widget missing .ai.md** — the only Go widget without a documentation file (posts/.ai.md already exists).
 - [ ] **12 JS widgets missing .ai.md** — calendar_widget, map_widget, relation_graph, entity_type_config, entity_type_editor, groups, permissions, shop_inventory, timeline_widget, entity_posts, notifications, shortcuts_help. (sidebar_tree, sidebar_reorg, sidebar_tag_filter, sidebar_layout_editor now have .ai.md files.)
 
 **Player & DM Experience Gaps:**
@@ -407,7 +409,7 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
 ### Needs Discussion (Deferred)
 
-- [ ] **Sessions** — Need to discuss session management direction, relationship with calendar, player RSVP flow.
+- [x] **Sessions** — direction settled and shipped: RSVP flow (email tokens, `/rsvp/:token`), then the availability scheduler (C-SCHED-P1/P2, PR #530/#534 — recurring per-member availability, DM heatmap, slot proposals, per-option responses, notifications, month view). See `internal/plugins/sessions/.ai.md`. Remaining: P3 (confirm-winner → session creation) is in flight now.
 - [ ] **Journals** — Need to discuss journal direction — "Obsidian built into the site" vision, personal vs shared notes, folder structure, linking.
 
 ### Deferred to Phase S+ (or community contributions)

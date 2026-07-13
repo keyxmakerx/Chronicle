@@ -130,12 +130,12 @@ Color-coded by folder/tag. Filter by tags. Click to navigate.
 ## Implementation Roadmap
 
 ### Phase 1: Quick Wins (LOW effort, HIGH value)
-1. **Quick Capture Modal** (Ctrl+Shift+N) - Creates a note instantly
-2. **Backlinks Panel** - Show "Referenced By" on entity pages
+1. **Quick Capture Modal** (Ctrl+Shift+N) - ✅ Shipped (`static/js/quick_capture.js`)
+2. **Backlinks Panel** - ✅ Shipped (`GetBacklinks`/`blockBacklinks`)
 3. **Add player notes to quick search** results
 
 ### Phase 2: Enhanced Notes (MEDIUM effort, MEDIUM-HIGH value)
-4. **Content Templates** - Pre-fill editor with structured content
+4. **Content Templates** - ✅ Shipped (`static/js/template_picker.js`)
 5. **Enhanced Graph** - Include @mentions, local graph, type filtering
 6. **Full-page Notes** - Make player notes feel more like first-class pages
    with their own URL, breadcrumbs, and full-width editor

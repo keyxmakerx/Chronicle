@@ -25,7 +25,7 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 | Rich text (WYSIWYG) | ✅ (TipTap) | 🟡 (BBCode) | ✅ (block editor) | 🟡 (Summernote) | ✅ (markdown) |
 | @mentions / linking | ✅ | ✅ | ✅ (auto-detect) | ✅ | ✅ ([[wikilinks]]) |
 | Auto-linking (name detection) | ✅ | ❌ | ✅ (best-in-class) | ❌ | ❌ |
-| Slash commands (/) | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Slash commands (/) | ✅ | ❌ | ✅ | ❌ | ✅ |
 | Tables | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Code blocks w/ syntax highlight | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Find & replace | ✅ | ❌ | ❌ | ❌ | ✅ |
@@ -38,7 +38,7 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 | Map layers | ✅ | ✅ | ✅ (zoom-dynamic) | ✅ | ❌ |
 | Map regions / territories | ❌ | ❌ | ✅ (polygons, fills) | ❌ | ❌ |
 | Map paths / roads | ❌ | ❌ | ✅ (labeled, measured) | ❌ | ❌ |
-| Map drawing tools | 🟡 (backend only) | ❌ | ✅ | ❌ | ❌ |
+| Map drawing tools | ✅ (`map_drawing_tools.js`) | ❌ | ✅ | ❌ | ❌ |
 | Map measurement / distance | ❌ | ❌ | ✅ (calibration) | ❌ | ❌ |
 | Map fog of war | 🟡 (Foundry sync) | ❌ | ❌ | ❌ | ❌ |
 | Nested maps (world→city→dungeon) | ❌ | ✅ (linked maps) | ✅ (nested) | ✅ | ❌ |
@@ -72,7 +72,7 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 | Quick search (Ctrl+K) | ✅ | ✅ | ✅ | ✅ | ✅ (Cmd+O) |
 | Tags | ✅ | ✅ | ✅ (tag index blocks) | ✅ (best: nested tags) | ✅ |
 | Relations / connections | ✅ (graph viz) | ✅ (family trees, diplomacy) | 🟡 (boards arrows) | ✅ | ✅ (Dataview) |
-| Backlinks / "Referenced By" | ❌ | ❌ | ✅ (+ aliases) | ❌ | ✅ (core feature) |
+| Backlinks / "Referenced By" | ✅ (+ aliases) | ❌ | ✅ (+ aliases) | ❌ | ✅ (core feature) |
 | Graph view | ✅ (relations) | 🟡 (diplomacy webs) | ❌ | 🟡 (premium relations) | ✅ (best: core) |
 | Entity hierarchy (parent/child) | ✅ | ✅ | ✅ (nesting) | ✅ | ✅ (folders) |
 | Saved filters / views | ❌ | ❌ | ❌ | ❌ | ✅ (Dataview) |
@@ -113,7 +113,7 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 | Mobile responsive | ✅ | ✅ | ✅ | ✅ | 🟡 (mobile app) |
 | Keyboard shortcuts | ✅ (Ctrl+K/N/E/S) | ❌ | ✅ (Adobe-style) | ❌ | ✅ (extensive) |
 | Meter / tracker blocks | ❌ | ❌ | ✅ (6 styles) | ❌ | ❌ |
-| Cover images on pages | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Cover images on pages | ✅ (`cover_image` block) | ✅ | ✅ | ❌ | ❌ |
 
 ---
 
@@ -123,7 +123,7 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 
 1. **Backlinks / "Referenced By" panel** — LegendKeeper and Obsidian's killer feature.
    Chronicle already has @mention data in `entry_html`. Just needs a reverse index query.
-   → **Sprint V-2** (already planned)
+   → **✅ Shipped** (Sprint V-2 — `GetBacklinks`/`blockBacklinks`)
 
 2. **Secrets / DM-only content blocks in editor** — World Anvil and LegendKeeper let you
    embed hidden content inline within articles. Chronicle has entity-level visibility and
@@ -132,11 +132,11 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 
 3. **Slash commands in editor** — LegendKeeper's `/secret`, `/layout`, `/help` pattern.
    TipTap supports this natively. Huge DX improvement.
-   → **New: Sprint V-1 addition or standalone**
+   → **✅ Shipped** (`static/js/widgets/editor_slash.js`)
 
 4. **Quick capture / session journal** — No competitor has this well. Obsidian's daily notes
    are the closest. This is a differentiator.
-   → **Sprint V-1** (already planned)
+   → **✅ Shipped** (Sprint V-1 — `static/js/quick_capture.js`)
 
 5. **Markdown import/export** — LegendKeeper supports it, Obsidian is native markdown.
    Critical for users migrating from Obsidian vaults.
@@ -146,8 +146,8 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 
 6. **Map regions / territory outlines** — LegendKeeper's biggest differentiator. Polygon
    drawing on maps with fills, strokes, labels. Chronicle has the `map_drawings` table
-   backend but no native drawing UI.
-   → **Sprint W-2** (already planned, expand scope)
+   backend and now a native drawing UI (`static/js/map_drawing_tools.js`).
+   → **✅ Shipped** (Sprint W-2)
 
 7. **Map measurement / distance tool** — LegendKeeper has map calibration + distance calc.
    Leaflet supports this via plugins.
@@ -163,7 +163,7 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 
 10. **Content templates / page templates** — LegendKeeper has community templates, Obsidian
     has Templater. Chronicle has layout templates but not content pre-fill templates.
-    → **Sprint V-3** (already planned)
+    → **✅ Shipped** (Sprint V-3 — `static/js/template_picker.js`)
 
 11. **Family tree / genealogy view** — World Anvil has dedicated family trees, Kanka has a
     families module. Chronicle has relations but no genealogy visualization.
@@ -171,7 +171,7 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
 
 12. **Cover images on entity pages** — World Anvil and LegendKeeper show hero/banner images.
     Chronicle shows entity image as avatar only.
-    → **New: Quick win, layout block type**
+    → **✅ Shipped** (`cover_image` layout block, migration `000004`)
 
 13. **Whiteboards / canvas** — LegendKeeper (boards), World Anvil (whiteboards), Obsidian
     (canvas). Useful for relationship mapping, session prep, DM screens.
@@ -188,8 +188,8 @@ Legend: ✅ = Has it | 🟡 = Partial | ❌ = Missing | N/A = Not applicable
     → **New: Sprint W-6 or layout block**
 
 16. **Entity aliases** — LegendKeeper lets entities have multiple canonical names for auto-
-    linking and search. Chronicle auto-link uses exact names only.
-    → **New: Sprint V-2 addition**
+    linking and search.
+    → **✅ Shipped** (Sprint V-2 — `EntityAlias`/`SetAliasesInput`)
 
 17. **Moons / seasons / weather** — World Anvil and Kanka calendars support moons and
     weather effects. Chronicle calendars don't.

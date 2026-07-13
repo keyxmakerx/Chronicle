@@ -1,6 +1,6 @@
 # WASM Plugin System Design: Extism + wazero Integration
 
-**Status:** Design Document (not yet implemented)
+**Status:** Implemented — `internal/extensions/wasm_host.go` + `wasm_manager.go`/`wasm_hooks.go`/`wasm_kvstore.go` on Extism go-sdk + wazero (see `go.mod`)
 **Date:** 2026-03-06
 **Scope:** Adding sandboxed WebAssembly plugin execution to Chronicle via Extism Go SDK
 

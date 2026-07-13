@@ -1,7 +1,7 @@
 # Content Extension System (Layer 1) — Design Document
 
 **Date:** 2026-03-06
-**Status:** Proposed
+**Status:** Implemented — `internal/extensions/` (manifest parser + applier + migration runner)
 **Scope:** Declarative content packs — no code execution
 
 ---

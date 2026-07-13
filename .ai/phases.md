@@ -37,13 +37,13 @@
 | T (partial) | Game System Modules — D&D 5e + PF2e (T-0 through T-2) | 2026-03-08 |
 | V | Obsidian-Style Notes & Discovery (V-1 through V-5) | 2026-03-11 |
 | F (foundry) | Foundry Sync — Journals, Maps, Calendar, Actors (F-1 through F-4) | 2026-03-12 |
-| W (partial) | Nav Reorg Mode (W-0) + Visual Customization (W-0.5, in progress) | 2026-03-12 |
+| W (partial) | Nav Reorg Mode (W-0) + Visual Customization (W-0.5) | 2026-03-12 |
 
 ---
 
 ## Upcoming Phases — Priority Order
 
-### Phase 1: Foundry Completion & QoL ← START HERE
+### Phase 1: Foundry Completion & QoL (shipped — anchor deliverables incl. the generic system adapter are done; see `.ai/status.md` for what's active now)
 
 _Finish Foundry VTT sync so it's fully useful end-to-end. Generic system adapter
 is the key unlock — without it, only D&D 5e and PF2e get character sync. QoL
@@ -340,7 +340,7 @@ in `todo.md` under "Backlog" sections.
 **UI Consistency:** Alert styling, admin pagination, modal standardization, rate
 limiting on mutations, recurring calendar events (beyond yearly).
 
-**Documentation:** Posts widget .ai.md, 16 JS widgets missing .ai.md.
+**Documentation:** `calendar_v2` widget .ai.md (posts/.ai.md already exists), remaining JS widgets missing .ai.md.
 
 **Player & DM Experience Gaps:** Entity tag/field filtering, print/PDF export,
 share links, soft delete/archive, fog of war native UI, initiative tracker,

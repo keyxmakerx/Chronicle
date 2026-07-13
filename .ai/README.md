@@ -41,6 +41,7 @@ This directory contains all context files for AI coding assistants working on Ch
 | `competitive-gap-analysis.md` | Semi-static | Feature gaps vs competitors | Planning feature parity |
 | `security-hardening-plan.md` | Semi-static | Security roadmap | Security review work |
 | `designs/wasm-plugin-system.md` | Semi-static | WASM runtime extensibility design | Deep WASM work |
+| `security-audit-2026-06-19-pc-claiming.md` | Static | Player Character Claiming security review | Reviewing PC-claim auth/visibility |
 
 ## Category definitions
 
@@ -58,7 +59,7 @@ The `.ai/` tree is AI-process-facing (this index, status, conventions, decisions
 - **`docs/`** — operator-facing deployment + system docs (deployment.md, api/, bestiary/, system-package-rendering.md, system-plugin-marketplace.md).
 - **`internal/plugins/<X>/.ai.md`** — per-plugin context (purpose, key files, routes, footguns, recent work). Each plugin owns its own `.ai.md`; 24 plugins covered.
 - **`internal/widgets/<X>/.ai.md`** — per-widget context. 9 of 10 widgets covered (one still lacks its `.ai.md` — see backlog).
-- **`internal/systems/<X>/.ai.md`** — per-system content-pack docs.
+- **`internal/systems/.ai.md`** — the systems-plugin docs. Systems themselves are no longer in-repo per-system dirs; a game-system content pack is an external package installed via Admin > Packages, so there is one systems-infra `.ai.md`, not one per system.
 - **`tools/`** — CI guard scripts (plugin-isolation, templ-drift, decision-citations, wire-contract test).
 - **Root `README.md`** — human-facing project overview.
 - **Root `CLAUDE.md`** — the AI bootstrap entrypoint (this file is one level deeper; `CLAUDE.md` points here).
@@ -70,7 +71,9 @@ The `.ai/` tree is AI-process-facing (this index, status, conventions, decisions
 - `status-2026-04-25-pre-shrink.md` — the 1198-line chronological session log that lived at `.ai/status.md` until 2026-05-23 (Chunk E moved it here; new `status.md` is a thin index per `cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md §0.5 D2=(c)`)
 - `phase-d-plan.md` — Phase D sprint plan (Phase D shipped)
 - `security-audit-2026-03-06.md` — the original security audit (superseded by `cordinator/reports/chronicle/2026-05-22-c-security-audit.md`)
-- `plan.md` — Draw Steel system implementation plan (work shipped)
+- `plan.md` — Sprint V-2 (backlinks panel + entity aliases) implementation plan (work shipped)
+- `plan-drawsteel-2026-03.md` — Draw Steel system module implementation plan (work shipped; moved here from a stray, unindexed repo-root `plan.md` by C-DOC-DRIFT-REFRESH-R2 — its path references predate the systems-are-external-packages architecture and are historical only)
+- `todo-completed-2026-06-10.md` — completed-todo archive (moved 2026-06-10)
 
 ## Templates
 
@@ -81,4 +84,4 @@ The `templates/` subdirectory contains templates for creating new documentation:
 
 ## Extension-level documentation
 
-Each plugin (`internal/plugins/<name>/`), system (`internal/systems/<name>/`), and widget (`internal/widgets/<name>/`) contains an `.ai.md` file describing its purpose, internal structure, dependencies, routes, business rules, and recent work. Per the plugin-isolation audit, this reached uniform coverage in NW-2.2 Chunk E (2026-05-25, then 22/22 + 9/9). Current: **24/24 plugins**, **9/10 widgets** (one widget still lacks its `.ai.md`).
+Each plugin (`internal/plugins/<name>/`) and widget (`internal/widgets/<name>/`) contains an `.ai.md` file describing its purpose, internal structure, dependencies, routes, business rules, and recent work (systems are external packages — see above, not an in-repo per-system tier). Per the plugin-isolation audit, this reached uniform coverage in NW-2.2 Chunk E (2026-05-25, then 22/22 + 9/9). Current: **24/24 plugins**, **9/10 widgets** (`calendar_v2` still lacks its `.ai.md`).
