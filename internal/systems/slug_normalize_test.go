@@ -8,6 +8,7 @@ package systems
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -80,16 +81,19 @@ func TestJSONProvider_IDNormalization(t *testing.T) {
 
 	// The skip must be visible in admin diagnostics (skip + log, not skip +
 	// silence), matching the existing EventSkipped pattern loader.go uses for
-	// duplicate systems.
+	// duplicate systems. Skips are aggregated to one event per file with a
+	// count (C-SYSTEMS-REF-SLUG-FIX-R2), not one event per skipped item.
 	events := DiagnosticEvents()
 	found := false
 	for _, e := range events {
-		if e.Kind == EventSkipped && e.SystemID == "test-mod" && e.Name == "Neither" {
+		if e.Kind == EventSkipped && e.SystemID == "test-mod" &&
+			strings.Contains(e.Error, `category "creatures"`) &&
+			strings.Contains(e.Error, "1 missing id/slug") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected an EventSkipped diagnostic for the neither-set item, got %+v", events)
+		t.Errorf("expected an aggregated EventSkipped diagnostic for the neither-set item, got %+v", events)
 	}
 }
 
@@ -165,5 +169,65 @@ func TestJSONProvider_DnD55eMonsterFixture(t *testing.T) {
 	}
 	if item.ID != "goblin" || item.Slug != "" {
 		t.Errorf("id-keyed item: ID = %q, Slug = %q — want ID from source id, Slug empty (no fallback needed)", item.ID, item.Slug)
+	}
+}
+
+// TestJSONProvider_DuplicateNormalizedID pins C-SYSTEMS-REF-SLUG-FIX-R2's
+// duplicate-ID guard: an explicit "id" and another item's "slug" can
+// normalize to the identical ID within one category. Pre-R2 both items
+// loaded into the slice, but Get() is first-match-wins, so the second
+// item's own ID silently resolved to the FIRST item's content — a
+// user-visibly wrong answer with zero diagnostic. The second (shadowing)
+// occurrence must now be dropped at load time and flagged.
+func TestJSONProvider_DuplicateNormalizedID(t *testing.T) {
+	dir := t.TempDir()
+	writeRawTestData(t, dir, "creatures", `[
+		{"id": "goblin", "name": "Goblin (explicit id)", "summary": "the real goblin"},
+		{"slug": "goblin", "name": "Goblin (slug fallback)", "summary": "a shadowing duplicate"}
+	]`)
+
+	globalEventLog = NewEventLog(10)
+	p, err := NewJSONProvider("test-mod", dir)
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	items, err := p.List("creatures")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1 (the shadowing duplicate must be skipped): %+v", len(items), items)
+	}
+	if items[0].Name != "Goblin (explicit id)" {
+		t.Errorf("surviving item = %q, want the first-loaded item to win", items[0].Name)
+	}
+
+	// Get() must resolve to the first item's content — never the dropped
+	// duplicate's, and never a mix of the two.
+	item, err := p.Get("creatures", "goblin")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if item == nil {
+		t.Fatal("Get(\"goblin\") returned nil — the surviving item must still be addressable")
+	}
+	if item.Name != "Goblin (explicit id)" {
+		t.Errorf("Get(\"goblin\").Name = %q, want %q", item.Name, "Goblin (explicit id)")
+	}
+
+	// The duplicate must be visible in admin diagnostics, not silently
+	// dropped.
+	events := DiagnosticEvents()
+	found := false
+	for _, e := range events {
+		if e.Kind == EventSkipped && e.SystemID == "test-mod" &&
+			strings.Contains(e.Error, `category "creatures"`) &&
+			strings.Contains(e.Error, "1 duplicate id") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected an EventSkipped diagnostic for the duplicate id, got %+v", events)
 	}
 }

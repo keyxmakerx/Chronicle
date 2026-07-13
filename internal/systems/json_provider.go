@@ -25,6 +25,15 @@ type JSONProvider struct {
 // category slug (e.g., "spells.json" → "spells"). Returns an error
 // if the directory cannot be read or a JSON file is malformed.
 func NewJSONProvider(moduleID, dataDir string) (*JSONProvider, error) {
+	return newJSONProvider(moduleID, dataDir, RecordEvent)
+}
+
+// newJSONProvider is the shared constructor behind NewJSONProvider. sink
+// receives one aggregated diagnostic per skipped-item file (see
+// normalizeReferenceItems); pass nil to suppress diagnostics entirely, as
+// preview/dry-run paths must not mutate the global admin-diagnostics ring
+// as a side effect of inspecting a package (C-SYSTEMS-REF-SLUG-FIX-R2).
+func newJSONProvider(moduleID, dataDir string, sink func(LoadEvent)) (*JSONProvider, error) {
 	p := &JSONProvider{
 		moduleID: moduleID,
 		dataDir:  dataDir,
@@ -71,47 +80,82 @@ func NewJSONProvider(moduleID, dataDir string) (*JSONProvider, error) {
 			continue
 		}
 
-		// Stamp each item with the module ID and category, and normalize ID:
-		// prefer the source's own "id" when set, else fall back to "slug" (the
-		// documented data contract — see Chronicle-Draw-Steel
-		// docs/DATA-SCHEMA.md — keys reference items by slug and never sets
-		// "id"). This is the single normalization point; Get() and every
-		// other read site consume the normalized ID only. An item with
-		// neither is unaddressable (Get() could never find it), so it's
-		// skipped rather than loaded with a blank ID that would silently
-		// collide with every other blank-ID item. (C-SYSTEMS-REF-SLUG-FIX)
-		normalized := items[:0]
-		for i := range items {
-			items[i].SystemID = moduleID
-			items[i].Category = category
-			if items[i].ID == "" {
-				items[i].ID = items[i].Slug
-			}
-			if items[i].ID == "" {
-				slog.Warn("skipping reference item with neither id nor slug",
-					slog.String("file", filePath),
-					slog.String("module", moduleID),
-					slog.String("category", category),
-					slog.String("name", items[i].Name),
-				)
-				RecordEvent(LoadEvent{
-					SystemID: moduleID,
-					Name:     items[i].Name,
-					Kind:     EventSkipped,
-					Source:   "data-item",
-					Error:    fmt.Sprintf("category %q: item has neither id nor slug", category),
-					Dir:      filePath,
-				})
-				continue
-			}
-			normalized = append(normalized, items[i])
-		}
-		items = normalized
+		items = normalizeReferenceItems(items, moduleID, category, filePath, sink)
 
 		p.items[category] = items
 	}
 
 	return p, nil
+}
+
+// normalizeReferenceItems stamps each item with moduleID/category and
+// normalizes ID: prefer the source's own "id" when set, else fall back to
+// "slug" (the documented data contract — see Chronicle-Draw-Steel
+// docs/DATA-SCHEMA.md — keys reference items by slug and never sets "id").
+// This is the single normalization point shared by the on-disk loader
+// (NewJSONProvider) and ZIP preview (readItemsFromZipFile); Get() and every
+// other read site consume the normalized ID only. (C-SYSTEMS-REF-SLUG-FIX)
+//
+// Two classes of item are dropped rather than kept:
+//   - An item with neither id nor slug is unaddressable (Get() could never
+//     find it), so it's skipped rather than loaded with a blank ID that
+//     would silently collide with every other blank-ID item.
+//   - An item whose normalized ID was already seen in this category is
+//     skipped too: Get() is first-match-wins, so a later duplicate is
+//     already unreachable under its own ID — silently keeping it around
+//     would mean any link authored for it instead resolves to the FIRST
+//     item's content, with no indication anything went wrong.
+//     (C-SYSTEMS-REF-SLUG-FIX-R2)
+//
+// Skips are aggregated into a single sink call per invocation (one file, one
+// ZIP entry) with a count, rather than one call per skipped item — a single
+// badly-authored file could otherwise evict the entire fixed-capacity global
+// diagnostics ring. sink may be nil to suppress diagnostics entirely (used
+// by preview/dry-run paths, which must not mutate global state).
+func normalizeReferenceItems(items []ReferenceItem, moduleID, category, source string, sink func(LoadEvent)) []ReferenceItem {
+	seen := make(map[string]bool, len(items))
+	var missing, duplicate int
+
+	normalized := items[:0]
+	for i := range items {
+		items[i].SystemID = moduleID
+		items[i].Category = category
+		if items[i].ID == "" {
+			items[i].ID = items[i].Slug
+		}
+		if items[i].ID == "" {
+			missing++
+			continue
+		}
+		if seen[items[i].ID] {
+			duplicate++
+			continue
+		}
+		seen[items[i].ID] = true
+		normalized = append(normalized, items[i])
+	}
+
+	if missing > 0 || duplicate > 0 {
+		slog.Warn("skipped reference items during normalization",
+			slog.String("source", source),
+			slog.String("module", moduleID),
+			slog.String("category", category),
+			slog.Int("missing_id_and_slug", missing),
+			slog.Int("duplicate_id", duplicate),
+		)
+		if sink != nil {
+			sink(LoadEvent{
+				SystemID: moduleID,
+				Kind:     EventSkipped,
+				Source:   "data-item",
+				Error: fmt.Sprintf("category %q: skipped %d item(s) (%d missing id/slug, %d duplicate id)",
+					category, missing+duplicate, missing, duplicate),
+				Dir: source,
+			})
+		}
+	}
+
+	return normalized
 }
 
 // List returns all reference items in the given category.

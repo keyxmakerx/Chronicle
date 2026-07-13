@@ -162,7 +162,7 @@ func PreviewFromZIP(zipData []byte) (*PreviewResult, error) {
 
 		dataKey := "data/" + cat.Slug + ".json"
 		if f, ok := dataFiles[dataKey]; ok {
-			items, err := readItemsFromZipFile(f)
+			items, err := readItemsFromZipFile(f, manifest.ID, cat.Slug)
 			if err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("Category %q: %v", cat.Slug, err))
 			} else {
@@ -221,9 +221,12 @@ func PreviewFromPackage(installPath string) (*PreviewResult, error) {
 	}
 	result.Warnings = append(result.Warnings, result.Report.Warnings...)
 
-	// Load data provider to count items.
+	// Load data provider to count items. A nil sink keeps this dry-run
+	// preview from mutating the global admin-diagnostics ring — a bad data
+	// file in a package an admin is merely inspecting shouldn't evict real
+	// load history. (C-SYSTEMS-REF-SLUG-FIX-R2)
 	dataDir := installPath + "/data"
-	provider, err := NewJSONProvider(manifest.ID, dataDir)
+	provider, err := newJSONProvider(manifest.ID, dataDir, nil)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Could not load data: %v", err))
 	}
@@ -420,8 +423,14 @@ func readManifestFromZipFile(f *zip.File) (*SystemManifest, error) {
 	return &manifest, nil
 }
 
-// readItemsFromZipFile reads reference items from a data file in the ZIP.
-func readItemsFromZipFile(f *zip.File) ([]ReferenceItem, error) {
+// readItemsFromZipFile reads reference items from a data file in the ZIP and
+// runs them through the same stamp/normalize logic NewJSONProvider applies
+// to installed data, so preview counts and samples match what installing
+// the package would actually produce (id/slug fallback, missing-id and
+// duplicate-id items dropped). Diagnostics are suppressed (nil sink): a
+// preview is a dry run and must not mutate the global diagnostics ring.
+// (C-SYSTEMS-REF-SLUG-FIX-R2)
+func readItemsFromZipFile(f *zip.File, moduleID, category string) ([]ReferenceItem, error) {
 	rc, err := f.Open()
 	if err != nil {
 		return nil, err
@@ -438,5 +447,5 @@ func readItemsFromZipFile(f *zip.File) ([]ReferenceItem, error) {
 		return nil, fmt.Errorf("not a valid ReferenceItem array: %w", err)
 	}
 
-	return items, nil
+	return normalizeReferenceItems(items, moduleID, category, f.Name, nil), nil
 }
