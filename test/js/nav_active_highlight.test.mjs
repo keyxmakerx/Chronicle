@@ -192,6 +192,28 @@ test('longest-prefix match wins between two candidates sharing a prefix', () => 
   for (const c of SERVER_INACTIVE) assert.ok(dashboardEl.classList.contains(c));
 });
 
+test('nav links are identified by the parsed vocabulary, not a hardcoded marker token (r2-1)', () => {
+  // `border-accent` is in the active vocabulary but is NOT one of the old
+  // hardcoded identification literals (text-sidebar-text / text-sidebar-active).
+  // The pre-r2-1 code identified nav links by those two literals only, so a link
+  // styled with any OTHER vocabulary class was skipped entirely; deriving the
+  // marker set from the parsed vocabulary recognizes it.
+  const target = { href: '/campaigns/camp1/foo', classes: [...SHARED_BASE, 'border-accent'] };
+  const other = { href: '/campaigns/camp1/bar', classes: [...SHARED_BASE, ...SERVER_INACTIVE] };
+  const { linkEls, navigateTo } = boot({ links: [target, other] });
+  const [targetEl] = linkEls;
+
+  navigateTo('/campaigns/camp1/foo');
+
+  // It gained the primary active marker it started WITHOUT — which only happens
+  // if the highlighter identified and processed it.
+  assert.ok(targetEl.classList.contains('text-sidebar-active'),
+    'a nav link is identified by any vocabulary class, not just the old marker literals');
+  for (const c of SERVER_ACTIVE) {
+    assert.ok(targetEl.classList.contains(c), `target should gain active class "${c}"`);
+  }
+});
+
 test('falls back to the hardcoded vocabulary when #sidebar has no data attributes', () => {
   const dashboard = { href: '/campaigns/camp1/dashboard', classes: [...SHARED_BASE, ...SERVER_ACTIVE] };
   const members = { href: '/campaigns/camp1/members', classes: [...SHARED_BASE, ...SERVER_INACTIVE] };

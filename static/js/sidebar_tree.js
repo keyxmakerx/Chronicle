@@ -1040,8 +1040,12 @@
   function createGroupFolder(campaignId, droppedId, targetNode, folderName, isPureFolder) {
     var targetId = targetNode.getAttribute('data-entity-id') || targetNode.getAttribute('data-node-id');
     var targetParentId = targetNode.getAttribute('data-parent-node-id') || targetNode.getAttribute('data-parent-id') || null;
-    var targetItem = targetNode.querySelector('.sidebar-tree-item');
-    var targetSortOrder = parseInt(targetItem ? targetItem.getAttribute('data-sort-order') : '0', 10) || 0;
+    // The reorder API resequences the sibling set densely and treats sort_order
+    // in the body as a 0-based sibling INDEX, not a raw stored sort_order (#477
+    // contract). Compute the target's current sibling index so the new folder
+    // lands exactly where the target was — sending the stored data-sort-order
+    // could misplace the folder on the first post-upgrade drag (0d).
+    var targetIndex = calculateTargetIndex(targetNode, 'before', null);
 
     // Read entity type from the tree container.
     var tree = document.getElementById('sidebar-entity-tree');
@@ -1068,7 +1072,7 @@
         : '/campaigns/' + campaignId + '/entities/' + folder.id + '/reorder';
       return Chronicle.apiFetch(posUrl, {
         method: 'PUT',
-        body: { parent_id: targetParentId, sort_order: targetSortOrder }
+        body: { parent_id: targetParentId, sort_order: targetIndex }
       }).then(function (res) {
         if (!res.ok) throw new Error('Failed to position folder');
         return folder;
@@ -1427,7 +1431,8 @@
       calculateTargetIndex: calculateTargetIndex,
       folderChildCount: folderChildCount,
       reorderEntity: reorderEntity,
-      updateDraggable: updateDraggable
+      updateDraggable: updateDraggable,
+      createGroupFolder: createGroupFolder
     };
   }
 })();

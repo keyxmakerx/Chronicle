@@ -245,3 +245,52 @@ func TestNotesButtonRenderGate(t *testing.T) {
 		})
 	}
 }
+
+// TestSidebarEmitsNavClassVocabulary pins that #sidebar exposes
+// data-nav-active-classes / data-nav-inactive-classes carrying the SAME class
+// vocabulary the server renders on every nav link. boot.js's boosted-nav
+// highlighter reads these as its single source of truth; nothing else pinned
+// them, so dropping the attribute pair would silently fall production back to
+// boot.js's hardcoded FALLBACK_* literals (the exact drift C-NAV-ACTIVE-FIX
+// removed). r2-2.
+func TestSidebarEmitsNavClassVocabulary(t *testing.T) {
+	// The attributes render at the top of Sidebar(), before any context getter;
+	// a background context is enough (the getters return safe zero values).
+	var buf bytes.Buffer
+	if err := Sidebar().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render Sidebar: %v", err)
+	}
+	html := buf.String()
+
+	for _, want := range []string{
+		`data-nav-active-classes="` + sidebarNavActive + `"`,
+		`data-nav-inactive-classes="` + sidebarNavInactive + `"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("#sidebar must emit %q — boot.js reads it as the nav vocabulary source of truth;"+
+				" without it the boosted-nav highlighter falls back to stale hardcoded literals", want)
+		}
+	}
+}
+
+// TestAllPagesLinkHighlightsOnEntitySubpath pins r2-3: the Entities/"All Pages"
+// link uses longest-prefix (isPathPrefix), so an entity detail page highlights
+// it on a hard server load, matching boot.js. It must stay inactive on an
+// unrelated page — the prefix must not over-highlight.
+func TestAllPagesLinkHighlightsOnEntitySubpath(t *testing.T) {
+	render := func(activePath string) string {
+		ctx := SetCampaignID(context.Background(), "camp1")
+		ctx = SetActivePath(ctx, activePath)
+		var buf bytes.Buffer
+		if err := sidebarAllPagesLink(ctx).Render(ctx, &buf); err != nil {
+			t.Fatalf("render All Pages link: %v", err)
+		}
+		return buf.String()
+	}
+	if got := render("/campaigns/camp1/entities/42"); !strings.Contains(got, sidebarNavActive) {
+		t.Errorf("All Pages link must be active on an entity detail sub-path (r2-3); got %q", got)
+	}
+	if got := render("/campaigns/camp1/members"); strings.Contains(got, sidebarNavActive) {
+		t.Errorf("All Pages link must be inactive off the entities tree; got %q", got)
+	}
+}

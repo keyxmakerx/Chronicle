@@ -766,13 +766,17 @@ templ sidebarAddonLink(ctx context.Context, item SidebarItemView) {
 	</a>
 }
 
-// sidebarAllPagesLink renders the "All Pages" link in the sidebar.
+// sidebarAllPagesLink renders the "All Pages" (Entities) link in the sidebar.
+// Uses longest-prefix (isPathPrefix), not exact match, so an entity detail page
+// (/campaigns/:id/entities/42) highlights this link on a hard server load too —
+// matching boot.js's boosted-nav highlighter (r2-3). Sibling links stay exact
+// (Dashboard is /campaigns/:id), so this prefix never over-highlights them.
 templ sidebarAllPagesLink(ctx context.Context) {
 	<a
 		href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx))) }
 		class={ sidebarNavLink,
-			templ.KV(sidebarNavActive, isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
-			templ.KV(sidebarNavInactive, !isExactPath(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
+			templ.KV(sidebarNavActive, isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))),
+			templ.KV(sidebarNavInactive, !isPathPrefix(ctx, fmt.Sprintf("/campaigns/%s/entities", GetCampaignID(ctx)))) }
 	>
 		<span class="w-4 h-4 mr-3 shrink-0 flex items-center justify-center">
 			<i class="fa-solid fa-layer-group text-xs text-gray-400"></i>

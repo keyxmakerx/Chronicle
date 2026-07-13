@@ -296,6 +296,22 @@
   }
 
   /**
+   * True if the element carries any class from the given vocabulary list. Used
+   * to identify sidebar nav links from the parsed active/inactive vocabulary
+   * rather than a hardcoded copy of the marker tokens (r2-1).
+   *
+   * @param {Element} el
+   * @param {string[]} classes
+   * @returns {boolean}
+   */
+  function hasAnyClass(el, classes) {
+    for (var i = 0; i < classes.length; i++) {
+      if (el.classList.contains(classes[i])) return true;
+    }
+    return false;
+  }
+
+  /**
    * Update sidebar navigation link active/inactive CSS classes
    * based on the current URL path.
    */
@@ -316,9 +332,11 @@
       var link = links[i];
       var href = link.getAttribute('href');
       if (!href) continue;
-      // Only process styled nav links (those with active or inactive classes).
-      if (!link.classList.contains('text-sidebar-text') &&
-          !link.classList.contains('text-sidebar-active')) continue;
+      // Only process styled nav links — those carrying the active OR inactive
+      // vocabulary. Derived from the SAME parsed #sidebar vocabulary the
+      // highlighter applies below, not a hardcoded copy of the marker tokens
+      // that silently drifts when the server classes change (r2-1).
+      if (!hasAnyClass(link, ACTIVE_CLASSES) && !hasAnyClass(link, INACTIVE_CLASSES)) continue;
       // Skip category drill-down links (handled by sidebar_drill.js).
       if (link.classList.contains('sidebar-category-link')) continue;
 

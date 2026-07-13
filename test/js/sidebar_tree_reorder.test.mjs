@@ -49,7 +49,11 @@ function load({ fetchCalls = [], notifyCalls = [], ok = true } = {}) {
   const Chronicle = {
     apiFetch: (url, opts) => {
       fetchCalls.push({ url, opts: opts || {} });
-      return Promise.resolve({ ok, text: () => Promise.resolve(ok ? '' : 'boom') });
+      return Promise.resolve({
+        ok,
+        text: () => Promise.resolve(ok ? '' : 'boom'),
+        json: () => Promise.resolve({ id: 'folder-1' }),
+      });
     },
     notify: (msg, level) => { notifyCalls.push({ msg, level }); },
   };
@@ -196,4 +200,44 @@ test('updateDraggable adds a capture click handler on activate and removes it on
   mod.updateDraggable(container, false);
   assert.ok(!click.live, 'capture-phase click handler removed on deactivate');
   assert.equal(item._reorgClickInert, null, 'handler ref cleared on deactivate');
+});
+
+/**
+ * Build a target row sitting at index `idx` among `total` siblings sharing one
+ * parentNode — enough for createGroupFolder to compute its sibling index. The
+ * row also carries a STALE stored data-sort-order that the new code must ignore.
+ */
+function makeGroupTarget(idx, total, attrs) {
+  const siblings = [];
+  const parentNode = {
+    querySelectorAll(sel) {
+      assert.equal(sel, ':scope > .sidebar-tree-node');
+      return siblings;
+    },
+  };
+  for (let i = 0; i < total; i++) {
+    siblings.push({ parentNode, getAttribute: () => null });
+  }
+  const target = {
+    parentNode,
+    getAttribute: (k) => (k in attrs ? attrs[k] : null),
+    querySelector: () => ({ getAttribute: () => '99' }), // stale sort_order — must be ignored
+  };
+  siblings[idx] = target;
+  return target;
+}
+
+test('createGroupFolder positions the new folder at the target sibling INDEX, not the stored sort_order (0d)', async () => {
+  const { mod, fetchCalls } = load();
+  const target = makeGroupTarget(2, 4, { 'data-entity-id': 'target-1' });
+
+  mod.createGroupFolder('camp-1', 'dragged-1', target, 'New Page', false);
+  // Flush the pre-resolved promise chain (create → position → reparent×2 → refresh).
+  await new Promise((r) => setTimeout(r, 0));
+
+  const posPut = fetchCalls.find(
+    (c) => /\/entities\/folder-1\/reorder$/.test(c.url) && c.opts.method === 'PUT');
+  assert.ok(posPut, 'the new folder is positioned via a PUT to its /reorder');
+  assert.equal(posPut.opts.body.sort_order, 2,
+    'folder lands at the target sibling index (2), not the stale stored data-sort-order (99)');
 });

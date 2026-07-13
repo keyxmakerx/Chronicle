@@ -50,7 +50,9 @@ type legacyNavLink struct {
 // The synthesized Items reproduce the legacy customization: category items in
 // EntityTypeOrder order (hidden types carried as Visible:false so the render's
 // inject-missing pass can't re-add them visible), then any hidden type not in
-// the order, then the custom sections and links. The standard scaffold
+// the order, then the custom sections and links reproduced in the RETIRED
+// app.templ render order — top-level links first, then each section followed by
+// ITS own links (grouped by legacyNavLink.Section). The standard scaffold
 // (dashboard, addon links, the remaining categories, All Pages) is added by the
 // render injector, exactly as it is for a campaign customized through the editor.
 func convertLegacySidebarConfig(raw string) (SidebarConfig, bool) {
@@ -98,14 +100,38 @@ func convertLegacySidebarConfig(raw string) (SidebarConfig, bool) {
 		emitted[id] = true
 		items = append(items, SidebarItem{Type: "category", TypeID: id, Visible: false})
 	}
-	// Custom sections and links: the data is preserved as section/link items.
-	// (They rendered in the categories zone under the legacy model; under the
-	// one unified template, section/link items render in the top nav.)
-	for _, s := range lc.CustomSections {
-		items = append(items, SidebarItem{Type: "section", ID: s.ID, Label: s.Label, Visible: true})
-	}
+	// Custom sections and links, reproducing the retired app.templ custom-nav
+	// loop's order EXACTLY: top-level links (Section == "") first, then each
+	// section followed by ITS links (Section == section.ID). The earlier
+	// conversion flattened this — all sections, then all links, dropping the
+	// legacyNavLink.Section grouping — so the boot reconciler back-wrote a
+	// scrambled order permanently (RC-15.3). Position/After were vestigial in
+	// that render (never applied: the loop ranged the stored slices), so stored
+	// order within each group is the faithful reproduction of what shipped.
 	for _, l := range lc.CustomLinks {
-		items = append(items, SidebarItem{Type: "link", ID: l.ID, Label: l.Label, URL: l.URL, Icon: l.Icon, Visible: true})
+		if l.Section == "" {
+			items = append(items, legacyLinkItem(l))
+		}
+	}
+	sectionIDs := make(map[string]bool, len(lc.CustomSections))
+	for _, s := range lc.CustomSections {
+		sectionIDs[s.ID] = true
+		items = append(items, SidebarItem{Type: "section", ID: s.ID, Label: s.Label, Visible: true})
+		for _, l := range lc.CustomLinks {
+			if l.Section == s.ID {
+				items = append(items, legacyLinkItem(l))
+			}
+		}
+	}
+	// Orphaned links (Section set but no matching section) never rendered under
+	// the legacy model. Preserve them at the end as visible top-level links
+	// rather than silently discard the operator's data on this permanent
+	// back-write; a dangling section ref is a recoverable straggler, not a
+	// reason to lose the link.
+	for _, l := range lc.CustomLinks {
+		if l.Section != "" && !sectionIDs[l.Section] {
+			items = append(items, legacyLinkItem(l))
+		}
 	}
 
 	return SidebarConfig{
@@ -113,6 +139,12 @@ func convertLegacySidebarConfig(raw string) (SidebarConfig, bool) {
 		HiddenEntityIDs: lc.HiddenEntityIDs,
 		HiddenNodeIDs:   lc.HiddenNodeIDs,
 	}, true
+}
+
+// legacyLinkItem maps a retired custom nav link onto its unified link item.
+// Legacy links are always visible (the legacy model had no per-link hide).
+func legacyLinkItem(l legacyNavLink) SidebarItem {
+	return SidebarItem{Type: "link", ID: l.ID, Label: l.Label, URL: l.URL, Icon: l.Icon, Visible: true}
 }
 
 // EnsureSidebarItems is a one-time, idempotent boot reconciler that converts

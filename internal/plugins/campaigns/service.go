@@ -1288,6 +1288,19 @@ func (s *campaignService) UpdateSidebarConfig(ctx context.Context, campaignID st
 	}
 	config := campaign.ParseSidebarConfig()
 
+	// If this campaign is still on the legacy model — the boot reconciler hasn't
+	// converged it yet, or EnsureSidebarItems failed for this row — converting
+	// here first closes a data-loss window: the canonical SidebarConfig struct no
+	// longer carries the legacy fields, so the Marshal below would drop them and
+	// permanently destroy the operator's saved customization on the very first
+	// write. Converting lazily on write self-heals the straggler onto items,
+	// exactly as the reconciler would, before the merge applies. (0b / RC-15.3)
+	if len(config.Items) == 0 {
+		if converted, ok := convertLegacySidebarConfig(campaign.SidebarConfig); ok {
+			config = converted
+		}
+	}
+
 	// Merge only the fields present in the request.
 	if req.Items != nil {
 		config.Items = *req.Items
