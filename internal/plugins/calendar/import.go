@@ -59,6 +59,15 @@ type ImportedSettings struct {
 	SecondsPerMinute int     `json:"seconds_per_minute"`
 	LeapYearEvery    int     `json:"leap_year_every"`
 	LeapYearOffset   int     `json:"leap_year_offset"`
+	// Real-time tracking (C-REAL-CALENDAR-P3 0c). Only the Chronicle native
+	// format carries these — external formats (Simple Calendar / Calendaria /
+	// Fantasy-Calendar) are all fantasy calendars and leave TracksRealTime=false
+	// with a nil zone. ApplyImport applies them through the SAME validation as
+	// the enable flow (reallife + loadable zone + 24h), so a bad payload is a
+	// named validation error rather than a silently-stranded flag. This is what
+	// makes the export.go round-trip claim actually true.
+	TracksRealTime bool    `json:"tracks_real_time,omitempty"`
+	RealTimeZone   *string `json:"real_time_zone,omitempty"`
 }
 
 // DetectAndParse auto-detects the format of raw JSON bytes and parses into
@@ -155,6 +164,10 @@ func parseChronicle(data []byte) (*ImportResult, error) {
 			SecondsPerMinute: export.Calendar.SecondsPerMinute,
 			LeapYearEvery:    export.Calendar.LeapYearEvery,
 			LeapYearOffset:   export.Calendar.LeapYearOffset,
+			// Real-time round-trip (0c): carry the flag + anchor zone so a
+			// re-import restores wall-clock authority instead of dropping it.
+			TracksRealTime: export.Calendar.TracksRealTime,
+			RealTimeZone:   export.Calendar.RealTimeZone,
 		},
 	}
 

@@ -371,10 +371,38 @@ templ calendarV2Header(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 			<i class="fa-solid fa-calendar-days text-accent text-lg" aria-hidden="true"></i>
 			@calendarV2Switcher(cc, data)
 		</div>
+		// Live wall-clock for real-time calendars only (C-REAL-CALENDAR-P3);
+		// renders nothing otherwise, so a fantasy header is byte-for-byte unchanged.
+		@realTimeClock(data.ActiveCalendar)
 		<div class="flex items-center gap-2">
 			@calendarV2ViewSwitcher(cc, data)
 		</div>
 	</div>
+}
+
+// realTimeClock renders the live wall-clock time for a real-time (UsesRealTime)
+// calendar: HH:MM + a short zone label, ticking to the minute via
+// calendar_v2_shell.js (wireRealTimeClocks). The server renders the seamed
+// current time as a no-JS fallback in [data-rt-anchor]; JS re-renders from the
+// anchor instant each minute and fills [data-rt-local] with a "Your time" dual
+// line when the viewer's browser zone differs from the anchor zone (reduced
+// motion → static, no live tick). Renders nothing for non-real-time calendars,
+// so it is safe to drop into any header/card unconditionally.
+templ realTimeClock(cal *Calendar) {
+	if cal != nil && cal.UsesRealTime() {
+		<div
+			class="flex flex-col leading-tight"
+			data-cal-rt-clock
+			data-rt-zone={ rtZoneName(cal) }
+			aria-label="Live real-world time"
+		>
+			<span class="inline-flex items-center gap-1.5 text-sm font-semibold text-fg tabular-nums">
+				<i class="fa-solid fa-clock text-accent text-xs" aria-hidden="true"></i>
+				<span data-rt-anchor>{ rtClockAnchorLabel(cal) }</span>
+			</span>
+			<span class="text-[11px] text-fg-muted tabular-nums hidden" data-rt-local></span>
+		</div>
+	}
 }
 
 // calendarV2Switcher renders the active-calendar label and (when

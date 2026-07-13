@@ -30,9 +30,12 @@ type ExportCalendar struct {
 	SecondsPerMinute int               `json:"seconds_per_minute"`
 	LeapYearEvery    int               `json:"leap_year_every"`
 	LeapYearOffset   int               `json:"leap_year_offset"`
-	// Real-time tracking (C-REAL-CALENDAR-P2). Carried so a round-trip export/
-	// re-import preserves whether the calendar is wall-clock authoritative and
-	// which IANA zone anchors it. RealTimeZone is omitted when unset (manual).
+	// Real-time tracking (C-REAL-CALENDAR-P2 export; P3 0c import). Carried so a
+	// round-trip export/re-import preserves whether the calendar is wall-clock
+	// authoritative and which IANA zone anchors it. The Chronicle-native importer
+	// (import.go parseChronicle → service ApplyImport) now consumes both fields
+	// through the enable-flow validation, so this round-trip is real, not just a
+	// serialized-but-dropped claim. RealTimeZone is omitted when unset (manual).
 	TracksRealTime   bool              `json:"tracks_real_time"`
 	RealTimeZone     *string           `json:"real_time_zone,omitempty"`
 	Months           []ExportMonth     `json:"months"`

@@ -349,15 +349,23 @@ func (r *calendarRepo) SetActiveCalendar(ctx context.Context, userID, campaignID
 
 // Update modifies an existing calendar's settings and current date/time.
 func (r *calendarRepo) Update(ctx context.Context, cal *Calendar) error {
+	// `mode` is written (C-REAL-CALENDAR-P3): the service's UpdateCalendar resolves
+	// the mode (`cal.Mode = input.Mode` when non-empty) but the prior UPDATE omitted
+	// the column, so a mode change routed through it (only the syncapi settings PUT
+	// binds `mode`) was silently dropped on reload. Persisting it here also makes the
+	// P3 0b real-time invariant load-bearing: a mode-walk on an RT calendar now would
+	// persist, so validateRealTimeInvariant rejecting it is what actually prevents the
+	// stranded flag. Every other caller forwards the loaded cal.Mode (or leaves it
+	// unchanged), so this is a no-op write-back for them.
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE calendars SET name = ?, description = ?, epoch_name = ?,
+		`UPDATE calendars SET name = ?, description = ?, epoch_name = ?, mode = ?,
 		        current_year = ?, current_month = ?, current_day = ?,
 		        hours_per_day = ?, minutes_per_hour = ?, seconds_per_minute = ?,
 		        current_hour = ?, current_minute = ?,
 		        leap_year_every = ?, leap_year_offset = ?,
 		        tracks_real_time = ?, real_time_zone = ?
 		 WHERE id = ?`,
-		cal.Name, cal.Description, cal.EpochName,
+		cal.Name, cal.Description, cal.EpochName, cal.Mode,
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
 		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
 		cal.CurrentHour, cal.CurrentMinute,
@@ -715,19 +723,25 @@ func (r *calendarRepo) ApplyImport(ctx context.Context, cal *Calendar, result *I
 	}
 	defer tx.Rollback()
 
-	// 1. Calendar fields (UPDATE).
+	// 1. Calendar fields (UPDATE). Includes mode + real-time columns so a
+	// Chronicle-native import that enables real-time tracking (C-REAL-CALENDAR-P3
+	// 0c) actually persists reallife mode + the anchor zone; for every other
+	// import these write back the target's unchanged mode with tracks_real_time
+	// cleared (a no-op — the service already validated the result).
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE calendars SET name = ?, description = ?, epoch_name = ?,
+		`UPDATE calendars SET name = ?, description = ?, epoch_name = ?, mode = ?,
 		        current_year = ?, current_month = ?, current_day = ?,
 		        hours_per_day = ?, minutes_per_hour = ?, seconds_per_minute = ?,
 		        current_hour = ?, current_minute = ?,
-		        leap_year_every = ?, leap_year_offset = ?
+		        leap_year_every = ?, leap_year_offset = ?,
+		        tracks_real_time = ?, real_time_zone = ?
 		 WHERE id = ?`,
-		cal.Name, cal.Description, cal.EpochName,
+		cal.Name, cal.Description, cal.EpochName, cal.Mode,
 		cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay,
 		cal.HoursPerDay, cal.MinutesPerHour, cal.SecondsPerMinute,
 		cal.CurrentHour, cal.CurrentMinute,
-		cal.LeapYearEvery, cal.LeapYearOffset, cal.ID,
+		cal.LeapYearEvery, cal.LeapYearOffset,
+		cal.TracksRealTime, cal.RealTimeZone, cal.ID,
 	); err != nil {
 		return fmt.Errorf("update calendar: %w", err)
 	}

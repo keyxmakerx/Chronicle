@@ -23,6 +23,13 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 		<div class="sm:max-w-5xl mx-auto py-6 px-2 sm:px-4" data-cal-dashboard>
 			// W5d: container-query stylesheet for the adaptive calendar widget.
 			<link rel="stylesheet" href="/static/css/calendar-adaptive.css"/>
+			// C-REAL-CALENDAR-P3: the live-clock tick for real-time calendars reuses
+			// calendar_v2_shell.js (wireRealTimeClocks scans document-wide, so it runs
+			// here even though the dashboard has no [data-cal-v2-root] shell). Loaded
+			// only when a real-time calendar is present.
+			if dashboardHasRealTime(data) {
+				<script src="/static/plugins/calendar/js/calendar_v2_shell.js" defer></script>
+			}
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
 				{Label: "Apps", Href: fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)},
@@ -142,6 +149,14 @@ templ calendarAppDashboardCard(data CalendarAppDashboardData, cal Calendar) {
 					class="text-sm font-semibold text-fg hover:text-accent transition-colors truncate block"
 				>{ cal.Name }</a>
 				<div class="text-[11px] text-fg-muted mt-0.5">{ calDateLabel(cal) }</div>
+				// Dashboard tick (C-REAL-CALENDAR-P3): live wall-clock for real-time
+				// calendars only — the whole block (wrapper included) is gated on
+				// UsesRealTime() so a non-real-time card is byte-for-byte unchanged.
+				if cal.UsesRealTime() {
+					<div class="mt-0.5">
+						@realTimeClock(&cal)
+					</div>
+				}
 			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-1.5">

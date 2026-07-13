@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/a-h/templ"
 
@@ -327,6 +328,20 @@ func v2WeekdayIndexFor(cal *Calendar, year, month, day int) int {
 	if wl == 0 {
 		return 0
 	}
+	// Real-time (wall-clock) calendars branch to a proleptic-Gregorian Julian Day
+	// Number path (C-REAL-CALENDAR-P3 0a / RC-13.6, the P1 weekday-drift flag).
+	// The constant-length formula below counts absolute days as
+	// year*YearLength() + prior-month days + day, but YearLength() is a FIXED sum
+	// of month lengths (365 for Gregorian), so it misses one day per elapsed
+	// Gregorian leap year: correct in 2026 but drifting +1 weekday column from
+	// 2028 (2028-02-29 is the first missed leap day). JDN is a true day counter,
+	// so JDN%7 never drifts. Only FLAGGED real-time calendars take this path;
+	// fantasy AND reallife-but-manual calendars keep the constant-length geometry
+	// byte-for-byte (stop-and-flag: provably zero-change when UsesRealTime()=false
+	// — this branch is simply not entered for them).
+	if cal.UsesRealTime() {
+		return realTimeWeekdayIndex(cal, year, month, day, wl)
+	}
 	abs := year * cal.YearLength()
 	for i := 0; i < month-1 && i < len(cal.Months); i++ {
 		abs += cal.Months[i].Days
@@ -337,6 +352,39 @@ func v2WeekdayIndexFor(cal *Calendar, year, month, day int) int {
 		idx += wl
 	}
 	return idx
+}
+
+// realTimeWeekdayEpoch is the reference date the JDN weekday path calibrates to.
+// 2026 is pre-drift: the constant-YearLength() formula is exact there (pinned by
+// the #428 month-grid align-fix), so anchoring the JDN counter to the old
+// formula's 2026 output reproduces the 2026 weekday columns byte-for-byte while
+// JDN keeps every later year correct. Kept as a package var (not an inline
+// literal) so the calibration reference is named and testable.
+var realTimeWeekdayEpoch = struct{ year, month, day int }{2026, 1, 1}
+
+// realTimeWeekdayIndex returns the 0-based weekday column for a real-time
+// calendar from a proleptic-Gregorian JDN (no leap drift). It derives the
+// alignment OFFSET at run time by comparing, at realTimeWeekdayEpoch, the
+// constant-length formula (known-correct in 2026) against JDN%wl. Because both
+// are true day-counters mod wl that agree in 2026, the offset makes the RT and
+// non-RT paths identical there and diverge ONLY where a Gregorian leap day has
+// since elapsed — i.e. exactly where the constant-length count is wrong. This
+// also means the calibration holds for ANY weekday ordering the seed uses; it
+// never assumes Sunday-first. Real-time calendars always seed a 7-day week, so
+// wl is 7 and JDN%wl is the Gregorian weekday; a non-7 wl still yields a stable,
+// non-drifting index.
+func realTimeWeekdayIndex(cal *Calendar, year, month, day, wl int) int {
+	// Old-formula index at the epoch (the value the non-RT path would return).
+	epochAbs := realTimeWeekdayEpoch.year * cal.YearLength()
+	for i := 0; i < realTimeWeekdayEpoch.month-1 && i < len(cal.Months); i++ {
+		epochAbs += cal.Months[i].Days
+	}
+	epochAbs += realTimeWeekdayEpoch.day
+	epochOld := ((epochAbs % wl) + wl) % wl
+	// JDN index at the epoch, same modulus.
+	epochJDN := ((gregorianJDN(realTimeWeekdayEpoch.year, realTimeWeekdayEpoch.month, realTimeWeekdayEpoch.day) % wl) + wl) % wl
+	offset := (((epochOld-epochJDN)%wl)+wl)%wl
+	return (((gregorianJDN(year, month, day)%wl)+offset)%wl + wl) % wl
 }
 
 // v2MonthLeadOffset is the number of leading blank cells before day 1 of the
@@ -1511,4 +1559,57 @@ func miniMonthDayHref(data CalendarV2ViewData, d miniMonthDay) templ.SafeURL {
 // fantasy-calendar year (not Gregorian).
 func miniMonthDataAttr(data CalendarV2ViewData, d miniMonthDay) string {
 	return fmt.Sprintf("%d-%02d-%02d", data.Year, data.Month, d.Day)
+}
+
+// --- Real-time live clock (C-REAL-CALENDAR-P3) ---
+
+// rtZoneName returns a real-time calendar's IANA anchor zone (empty when unset).
+// Emitted as data-rt-zone so calendar_v2_shell.js formats the live clock in that
+// zone via Intl.
+func rtZoneName(cal *Calendar) string {
+	if cal == nil || cal.RealTimeZone == nil {
+		return ""
+	}
+	return *cal.RealTimeZone
+}
+
+// rtZoneShortName is the human-friendly short label for the anchor zone: the last
+// path segment of the IANA name with underscores as spaces (e.g. "New York" for
+// "America/New_York"). Deterministic (no time.Now(), so it never surprises a
+// snapshot test); calendar_v2_shell.js upgrades it to the DST-aware abbreviation
+// ("EST"/"EDT") on load. Empty when the zone is unset.
+func rtZoneShortName(cal *Calendar) string {
+	zone := rtZoneName(cal)
+	if zone == "" {
+		return ""
+	}
+	parts := strings.Split(zone, "/")
+	return strings.ReplaceAll(parts[len(parts)-1], "_", " ")
+}
+
+// rtClockAnchorLabel is the server-rendered no-JS fallback for the live clock:
+// the seamed current time (the loader already set Current* from the wall clock in
+// the anchor zone) plus the zone's short label. calendar_v2_shell.js replaces it
+// with a minute-ticking value on load.
+func rtClockAnchorLabel(cal *Calendar) string {
+	if cal == nil {
+		return ""
+	}
+	if name := rtZoneShortName(cal); name != "" {
+		return cal.FormatCurrentTime() + " " + name
+	}
+	return cal.FormatCurrentTime()
+}
+
+// dashboardHasRealTime reports whether any calendar on the dashboard tracks real
+// time, so the page only pulls calendar_v2_shell.js (for the live-clock tick)
+// when there is at least one clock to tick — non-real-time dashboards fetch no
+// extra script.
+func dashboardHasRealTime(data CalendarAppDashboardData) bool {
+	for i := range data.Calendars {
+		if data.Calendars[i].UsesRealTime() {
+			return true
+		}
+	}
+	return false
 }

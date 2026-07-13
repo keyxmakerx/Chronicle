@@ -587,6 +587,40 @@ func (s *calendarService) validateRealTimeEnable(cal *Calendar, input UpdateCale
 	return nil
 }
 
+// validateRealTimeInvariant enforces the real-time preconditions on the RESOLVED
+// calendar — any write whose result still tracks real time must be reallife mode
+// (RC-1), carry a loadable IANA anchor zone (RC-2), and use a 24-hour day. It is
+// the fix-forward for the #529 mode-walk bypass (C-REAL-CALENDAR-P3 0b): the
+// enable-time check (validateRealTimeEnable) only runs when the caller manages
+// the flag (SetRealTime != nil), but the syncapi settings PUT binds `mode`
+// (calendar_api_handler.go) with SetRealTime nil — walking an RT calendar to
+// mode=fantasy while leaving TracksRealTime=true would strand the flag
+// (UsesRealTime()=false, every guard silently off), and a non-24h geometry write
+// would break the wall-clock day. Checking the invariant on the RESULT (not just
+// at enable) closes both the calendar plugin's own settings form AND the syncapi
+// PUT, since both funnel through UpdateCalendar. A clean disable
+// (SetRealTime=false → TracksRealTime cleared) returns nil immediately, so
+// disabling RT alongside a mode change still works. All failures are validation
+// errors so the write surfaces as a 4xx (422), never a 500.
+func validateRealTimeInvariant(cal *Calendar) error {
+	if !cal.TracksRealTime {
+		return nil
+	}
+	if cal.Mode != ModeRealLife {
+		return apperror.NewValidation("real-time tracking requires a real-life calendar; disable real-time before changing the mode")
+	}
+	if cal.RealTimeZone == nil || strings.TrimSpace(*cal.RealTimeZone) == "" {
+		return apperror.NewValidation("a time zone is required for real-time tracking")
+	}
+	if _, err := time.LoadLocation(strings.TrimSpace(*cal.RealTimeZone)); err != nil {
+		return apperror.NewValidation("invalid time zone: " + strings.TrimSpace(*cal.RealTimeZone))
+	}
+	if cal.HoursPerDay != 24 {
+		return apperror.NewValidation("real-time tracking requires a 24-hour day (24 hours per day)")
+	}
+	return nil
+}
+
 // GetCalendar returns the full calendar for a campaign with all sub-resources.
 func (s *calendarService) GetCalendar(ctx context.Context, campaignID string) (*Calendar, error) {
 	cal, err := s.repo.GetByCampaignID(ctx, campaignID)
@@ -772,6 +806,14 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	cal.SecondsPerMinute = input.SecondsPerMinute
 	cal.LeapYearEvery = input.LeapYearEvery
 	cal.LeapYearOffset = input.LeapYearOffset
+
+	// 0b: enforce the real-time invariant on the RESOLVED calendar (mode + zone +
+	// 24h) so no write can strand TracksRealTime=true on a non-reallife/non-24h
+	// calendar via the syncapi mode-walk. Runs after every field is applied so it
+	// sees the final state; a no-op for non-RT results.
+	if err := validateRealTimeInvariant(cal); err != nil {
+		return err
+	}
 
 	if err := s.repo.Update(ctx, cal); err != nil {
 		return fmt.Errorf("update calendar: %w", err)
@@ -2225,6 +2267,32 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 	cal.SecondsPerMinute = result.Settings.SecondsPerMinute
 	cal.LeapYearEvery = result.Settings.LeapYearEvery
 	cal.LeapYearOffset = result.Settings.LeapYearOffset
+
+	// Real-time round-trip (C-REAL-CALENDAR-P3 0c). The Chronicle native export
+	// carries tracks_real_time + real_time_zone (export.go); consume them here so
+	// an export → re-import actually preserves wall-clock authority instead of
+	// silently dropping it. W8 above already rejected import ONTO a live RT
+	// calendar, so this only runs when the TARGET is not RT. Real-time is a flag
+	// on reallife mode (RC-1), so enabling it forces the mode; the result is then
+	// validated through the SAME preconditions as the enable flow — an invalid or
+	// missing zone (or a non-24h day) is a named validation error, never a
+	// stranded flag. A non-RT import clears the fields (a no-op on a fresh/manual
+	// target, correct if a prior partial state left them set).
+	if result.Settings.TracksRealTime {
+		cal.Mode = ModeRealLife
+		if err := s.validateRealTimeEnable(cal, UpdateCalendarInput{
+			RealTimeZone: result.Settings.RealTimeZone,
+			HoursPerDay:  cal.HoursPerDay,
+		}); err != nil {
+			return err
+		}
+		zone := strings.TrimSpace(*result.Settings.RealTimeZone) // non-nil & non-blank guaranteed by validate
+		cal.TracksRealTime = true
+		cal.RealTimeZone = &zone
+	} else {
+		cal.TracksRealTime = false
+		cal.RealTimeZone = nil
+	}
 
 	if err := s.repo.ApplyImport(ctx, cal, result); err != nil {
 		return fmt.Errorf("apply import: %w", err)
