@@ -52,8 +52,27 @@ type SessionService interface {
 	SaveMyAvailability(ctx context.Context, campaignID, userID string, req SaveAvailabilityRequest) error
 	ListMyExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	AddMyException(ctx context.Context, campaignID, userID string, req AddExceptionRequest) error
+	ReplaceMyDayExceptions(ctx context.Context, campaignID, userID string, req ReplaceDayExceptionsRequest) error
 	DeleteMyException(ctx context.Context, campaignID, userID, exceptionID string) error
 	BuildOverlay(ctx context.Context, campaignID string, members []overlayMemberInput, weekStart, viewerTZ string, includeDetail bool) (*WeekOverlay, error)
+
+	// Slot proposals + responses (C-SCHED-P2). See proposals_service.go.
+	CreateProposal(ctx context.Context, campaignID, createdBy string, req CreateProposalRequest) (*SlotProposal, error)
+	GetProposalView(ctx context.Context, campaignID, proposalID, viewerID, viewerTZ string, includeDetail bool) (*ProposalView, error)
+	ListProposalSummaries(ctx context.Context, campaignID, viewerID string) ([]ProposalSummary, error)
+	RespondToOption(ctx context.Context, campaignID, proposalID, optionID, userID, response string) error
+	CreateProposalTokens(ctx context.Context, optionID, userID string) (map[string]string, error)
+	RedeemProposalToken(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
+
+	// Scheduler-scoped notifications (C-SCHED-P2). Writes are driven by the
+	// handler (which enumerates members / resolves names); the service owns the
+	// payload/link/message construction. See notifications_service.go.
+	NotifyProposalCreated(ctx context.Context, campaignID, proposalID, title string, recipientIDs []string) error
+	NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderName, response string) error
+	ListMyNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
+	CountMyUnreadNotifications(ctx context.Context, userID string) (int, error)
+	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
+	MarkAllNotificationsRead(ctx context.Context, userID string) error
 }
 
 // sessionService implements SessionService.

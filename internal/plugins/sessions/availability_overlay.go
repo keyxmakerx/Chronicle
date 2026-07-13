@@ -75,9 +75,18 @@ func buildWeekOverlay(
 		var presence [7][24]string
 		var lanes []LaneSegment
 
-		// Iterate an extended real-date range (-1..7) so blocks that spill
+		// Iterate an extended real-date range (-2..8) so blocks that spill
 		// across a midnight/zone boundary INTO the window are still captured.
-		for offset := -1; offset <= 7; offset++ {
+		// Two days of slack on each side (not one) is required: the maximum
+		// real zone spread is 26h (UTC+14 vs UTC-12), so a block on a member's
+		// real date can land up to ~26h — i.e. into the day-before-the-day-before
+		// or the day-after-the-day-after — in the viewer's zone. The gate's
+		// verified-failing case: a Pacific/Kiritimati (UTC+14) block Tue
+		// 00:00–01:00 lands Sunday 23:00 for a Pacific/Pago_Pago (UTC-12) viewer,
+		// sourced from real-date offset +8 — a column the old -1..7 loop never
+		// visited (symmetric miss at -2). This range MUST match the exception
+		// fetch window in availability_service.go (BuildOverlay).
+		for offset := -2; offset <= 8; offset++ {
 			realDate := weekStart.AddDays(offset)
 			for _, eb := range effectiveBlocks(m.UserID, realDate, availByUser, excByUser) {
 				if eb.state == AvailUnavailable {

@@ -28,18 +28,13 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.DELETE("/sessions/:sid/entities/:eid", h.UnlinkEntityAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
 	// Availability scheduler (C-SCHED-P1). Member-only data — every route rides
-	// the AUTHED cg group (RequireAuth + RequireCampaignAccess +
-	// RequireAddon("calendar")), NEVER the public pub group below. Any member
-	// (Player+) may record their own availability and read the anonymous
-	// aggregate heatmap; per-member detail on the overlay is gated to the
-	// owner / DM-granted inside the handler by role, not by route (design §5).
-	//
-	// Step-0 (coordinator anchor correction): the relay said "there is NO
-	// RequireAddon() middleware". That is not accurate — addons.RequireAddon
-	// (internal/plugins/addons/middleware.go:21) exists and is already used by
-	// both sessions and calendar (routes.go); availability mirrors that battle-
-	// tested pattern via the shared cg group, and gates on the "calendar" addon
-	// like the rest of the sessions plugin.
+	// the AUTHED cg group above (auth + campaign access + the calendar-addon
+	// guard), NEVER the public pub group below. Any member (Player+) may record
+	// their own availability and read the anonymous aggregate heatmap; per-member
+	// detail on the overlay is gated to the owner / DM-granted inside the handler
+	// by role, not by route (design §5). The addon-guard middleware is the same
+	// one the rest of the sessions plugin already uses, so availability inherits
+	// that battle-tested gating through the shared group.
 	h.SetUserDirectory(authSvc)
 	cg.GET("/availability", h.ShowAvailability, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/mine", h.GetMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
@@ -47,7 +42,17 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	cg.GET("/availability/overlay", h.GetOverlayAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/exceptions", h.ListMyExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/availability/exceptions", h.AddExceptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.PUT("/availability/exceptions", h.ReplaceDayExceptionsAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.DELETE("/availability/exceptions/:eid", h.DeleteExceptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Slot proposals (C-SCHED-P2). Same member-only gating: any member (Player+)
+	// may view a proposal and respond to its options; only Scribe+ may create one
+	// (design Q2). All ride the authed cg group — NEVER the public pub group; the
+	// only public proposal route is the emailed token below.
+	cg.GET("/proposals", h.ListProposals, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/proposals", h.CreateProposalAPI, campaigns.RequireRole(campaigns.RoleScribe))
+	cg.GET("/proposals/:pid", h.ShowProposal, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/proposals/:pid/options/:oid/respond", h.RespondOptionAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
 	// Public-capable view routes.
 	pub := e.Group("/campaigns/:id",
@@ -63,4 +68,19 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// RSVP token redemption — public endpoint, no auth required.
 	// Token itself is the credential (emailed to the user).
 	e.GET("/rsvp/:token", h.RedeemRSVPToken)
+
+	// Proposal one-click response redemption — public endpoint, mirrors the
+	// RSVP token route's placement and hygiene (the token is the credential,
+	// emailed to the user; OptionalAuth is unnecessary — the token carries
+	// option + user + response).
+	e.GET("/proposals/respond/:token", h.RedeemProposalToken)
+
+	// Scheduler notifications (C-SCHED-P2). User-scoped, not campaign-scoped —
+	// the topbar bell is global — so these ride a plain authenticated group, not
+	// the calendar campaign group. Every read/write is scoped to the caller.
+	ng := e.Group("", auth.RequireAuth(authSvc))
+	ng.GET("/notifications", h.ListNotificationsAPI)
+	ng.GET("/notifications/badge", h.NotificationBadgeAPI)
+	ng.POST("/notifications/:nid/read", h.MarkNotificationReadAPI)
+	ng.POST("/notifications/read-all", h.MarkAllNotificationsReadAPI)
 }

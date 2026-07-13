@@ -85,6 +85,31 @@ func TestBuildWeekOverlay_CrossZone(t *testing.T) {
 	}
 }
 
+// C-SCHED-P2 0a pin — the widened projection window (-2..+8) must capture a
+// block from a >24h zone spread. Reproducer from the #530 gate: a
+// Pacific/Kiritimati (UTC+14) member's recurring Tuesday 00:00–01:00 block,
+// viewed from Pacific/Pago_Pago (UTC-11), lands on the visible week's SUNDAY
+// 23:00 — sourced from real-date offset +8 (2026-07-21, a Tuesday), a column
+// the old -1..+7 loop never visited. This test fails on the old window.
+func TestBuildWeekOverlay_WideZoneSpread_Kiritimati_PagoPago(t *testing.T) {
+	pago := mustLoc(t, "Pacific/Pago_Pago")
+	members := []overlayMemberInput{{UserID: "kir", Name: "Teuru"}}
+	avail := map[string][]AvailabilityBlock{
+		"kir": {block(2 /*Tue*/, 0, 60, AvailAvailable, "Pacific/Kiritimati")},
+	}
+	ov := buildWeekOverlay(members, avail, nil, testWeekStart(), pago, "Pacific/Pago_Pago", true)
+
+	sun := ov.Days[6] // Sunday 2026-07-19 (last column)
+	if sun.Date != "2026-07-19" {
+		t.Fatalf("Days[6] = %s, want 2026-07-19 (Sunday)", sun.Date)
+	}
+	// Tue 07-21 00:00 Kiritimati (UTC+14) == 07-20 10:00 UTC == 07-19 23:00
+	// Pago_Pago (UTC-11). Without the widened window this cell is dropped.
+	if sun.Hours[23].Free != 1 {
+		t.Errorf("Sun Pago_Pago hour 23 Free = %d, want 1 (wide zone spread must be captured)", sun.Hours[23].Free)
+	}
+}
+
 // An exception fully replaces the recurring pattern for its date: an
 // "unavailable" override punches the member out of that day's overlay.
 func TestBuildWeekOverlay_ExceptionOverridesRecurring(t *testing.T) {

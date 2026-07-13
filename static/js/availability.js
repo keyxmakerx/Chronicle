@@ -55,6 +55,8 @@
     return addDays(d, -off);
   }
   function todayUTC() { var n = new Date(); return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())); }
+  function firstOfMonth(d) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)); }
+  var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   // Steep perceptual ramp (signed mockup densityBg): near-nothing for 1 free,
   // unmistakable for a full house — the best windows must jump out.
@@ -102,7 +104,28 @@
       '.avail-chip[aria-pressed="false"]{opacity:.5;text-decoration:line-through}' +
       '.avail-chip .dot{width:9px;height:9px;border-radius:999px}' +
       '.avail-legend{display:inline-flex;align-items:center;gap:6px 12px;font:600 11.5px/1 inherit;color:var(--color-text-secondary,#6b7280);flex-wrap:wrap}' +
-      '.avail-note{font-size:12.5px;color:var(--color-text-secondary,#6b7280);margin:10px 2px 0}';
+      '.avail-note{font-size:12.5px;color:var(--color-text-secondary,#6b7280);margin:10px 2px 0}' +
+      // month↔week morph stage (signed concept mockup encoding)
+      '.ov-stage{position:relative}' +
+      '.ov-view{transition:opacity .34s ease, transform .34s cubic-bezier(.32,.72,.33,1);transform-origin:top center}' +
+      '.ov-view.hidden{display:none}' +
+      '.ov-view.leave{opacity:0;transform:scale(.975)}' +
+      '.ov-view.enter{opacity:0;transform:scaleY(.55);transform-origin:var(--ox,50%) top}' +
+      '@media (prefers-reduced-motion:reduce){.ov-view{transition:none}}' +
+      '.ov-month{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;border:1px solid var(--color-border,#e5e7eb);border-radius:12px;overflow:hidden;background:var(--color-border,#e5e7eb)}' +
+      '.ov-mhead{background:var(--color-bg-secondary,#fff);text-align:center;padding:7px 2px;font:700 11px/1 inherit;color:var(--color-text-secondary,#6b7280)}' +
+      '.ov-mday{background:var(--color-bg-secondary,#fff);min-height:82px;padding:5px 6px 6px;cursor:pointer;border:0;display:flex;flex-direction:column;gap:4px;text-align:left}' +
+      '.ov-mday:hover{background:var(--color-bg-tertiary,#f3f4f6)}' +
+      '.ov-mday.out{opacity:.4}' +
+      '.ov-mday .dn{font:700 11px/1 inherit;color:var(--color-text-body,#374151);display:flex;justify-content:space-between;align-items:center}' +
+      '.ov-mday .pk{font:600 9px/1 inherit;color:var(--color-text-muted,#9ca3af)}' +
+      '.ov-mini{display:flex;flex-direction:column;gap:1px;flex:1;min-height:38px;border-radius:3px;overflow:hidden}' +
+      '.ov-mini i{flex:1;background:var(--color-bg-tertiary,#f3f4f6)}' +
+      // slot builder
+      '.ov-daycol.building{cursor:crosshair}' +
+      '.ov-sel{position:absolute;left:1px;right:1px;background:rgba(99,102,241,.28);border:1.5px solid var(--color-accent,#6366f1);border-radius:4px;pointer-events:none}' +
+      '.ov-slotchip{display:inline-flex;align-items:center;gap:8px;background:var(--color-bg-secondary,#fff);border:1px solid var(--color-border,#e5e7eb);border-radius:8px;padding:5px 10px;font:600 12px/1 inherit}' +
+      '.ov-slotchip button{border:0;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;font-size:13px}';
     var st = el('style'); st.id = 'avail-styles'; st.textContent = css;
     document.head.appendChild(st);
   }
@@ -123,6 +146,12 @@
     this.weekStart = mondayOf(todayUTC());
     this.overlayData = null;
     this.excluded = {};
+    // Month↔week + slot builder (C-SCHED-P2).
+    this.scale = 'week';                       // 'week' | 'month'
+    this.monthAnchor = firstOfMonth(todayUTC());
+    this.weekCache = {};                       // weekStartISO -> overlay payload
+    this.building = false;                     // DM slot-builder active
+    this.selectedSlots = [];                   // [{date, startMinute, endMinute}]
   }
 
   AvailabilityApp.prototype.announce = function (msg) {
@@ -137,6 +166,9 @@
     this.bindTabs();
     this.renderMine();
     this.announce('Availability editor ready');
+    // Deep-link: /availability?tab=overlay jumps straight to the group view
+    // (the "New proposal" entry point).
+    if (/[?&]tab=overlay/.test(window.location.search)) this.showTab('overlay');
   };
 
   AvailabilityApp.prototype.bindTabs = function () {
@@ -237,6 +269,10 @@
     note.textContent = 'Click or drag to paint the hours you can play. This repeats every week. Times are in your timezone.';
     panel.appendChild(note);
 
+    // One-off exceptions (C-SCHED-P2 0c) live below the recurring grid.
+    var excHost = el('div'); excHost.setAttribute('data-exc-host', ''); excHost.style.marginTop = '18px';
+    panel.appendChild(excHost);
+
     this.loadMine(status);
   };
 
@@ -282,6 +318,7 @@
           }
         });
         status.textContent = '';
+        self.renderExceptions();
       })
       .catch(function () { status.textContent = 'Could not load your availability.'; });
   };
@@ -323,29 +360,107 @@
     panel.innerHTML = '';
 
     var bar = el('div', 'avail-toolbar');
+
+    // Month/Week scale toggle (signed concept: month grid ↔ week heatmap).
+    var scale = el('div', 'avail-seg'); scale.setAttribute('role', 'group'); scale.setAttribute('aria-label', 'Calendar scale');
+    [['month', 'Month'], ['week', 'Week']].forEach(function (opt) {
+      var b = el('button'); b.type = 'button'; b.textContent = opt[1]; b.setAttribute('data-ov-scale', opt[0]);
+      b.setAttribute('aria-pressed', opt[0] === self.scale ? 'true' : 'false');
+      b.addEventListener('click', function () { self.setScale(opt[0]); });
+      scale.appendChild(b);
+    });
+    bar.appendChild(scale);
+
     var prev = el('button', 'avail-chip'); prev.type = 'button'; prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
-    prev.setAttribute('aria-label', 'Previous week');
-    prev.addEventListener('click', function () { self.weekStart = addDays(self.weekStart, -7); self.loadOverlay(); });
+    prev.setAttribute('aria-label', 'Previous');
+    prev.addEventListener('click', function () { self.step(-1); });
     var next = el('button', 'avail-chip'); next.type = 'button'; next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
-    next.setAttribute('aria-label', 'Next week');
-    next.addEventListener('click', function () { self.weekStart = addDays(self.weekStart, 7); self.loadOverlay(); });
+    next.setAttribute('aria-label', 'Next');
+    next.addEventListener('click', function () { self.step(1); });
     var wlabel = el('span', 'text-sm font-semibold text-fg'); wlabel.setAttribute('data-week-label', '');
     bar.appendChild(prev); bar.appendChild(wlabel); bar.appendChild(next);
+
+    // DM slot builder toggle (owner detail only).
+    if (this.canDetail) {
+      var build = el('button', 'btn-secondary text-sm'); build.type = 'button'; build.setAttribute('data-ov-build-toggle', '');
+      build.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Propose times';
+      build.addEventListener('click', function () { self.toggleBuilder(); });
+      bar.appendChild(build);
+    }
 
     var legend = el('span', 'avail-legend ml-auto');
     legend.innerHTML = '<span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:rgba(34,163,90,.5);border:1px solid var(--color-border,#e5e7eb)"></span> greener = more free</span><span>★ = everyone free &amp; keen</span>';
     bar.appendChild(legend);
     panel.appendChild(bar);
 
+    // Slot-builder tray (DM): selected slots + create button.
+    if (this.canDetail) {
+      var tray = el('div'); tray.setAttribute('data-ov-builder', ''); tray.hidden = true;
+      tray.style.cssText = 'margin-bottom:12px;padding:10px 12px;border:1px dashed var(--color-accent,#6366f1);border-radius:10px';
+      panel.appendChild(tray);
+    }
+
     var chips = el('div', 'avail-toolbar'); chips.setAttribute('data-ov-chips', ''); panel.appendChild(chips);
-    var host = el('div'); host.setAttribute('data-ov-grid', ''); panel.appendChild(host);
+
+    // Stage holds both views for the morph.
+    var stage = el('div', 'ov-stage');
+    var monthView = el('section', 'ov-view hidden'); monthView.setAttribute('data-ov-monthview', '');
+    var monthHost = el('div'); monthHost.setAttribute('data-ov-month', ''); monthView.appendChild(monthHost);
+    var weekView = el('section', 'ov-view'); weekView.setAttribute('data-ov-weekview', '');
+    var host = el('div'); host.setAttribute('data-ov-grid', ''); weekView.appendChild(host);
+    stage.appendChild(monthView); stage.appendChild(weekView);
+    panel.appendChild(stage);
+
     var note = el('p', 'avail-note');
     note.textContent = this.canDetail
-      ? 'The deepest green is the best window. Each slim lane is one player (solid = prefers), shown in your timezone.'
+      ? 'The deepest green is the best window. Each slim lane is one player (solid = prefers), shown in your timezone. Switch to Month for the big picture, or Propose times to build a poll.'
       : 'Deeper green means more of the group can play then. Times are in your timezone.';
     panel.appendChild(note);
 
-    this.loadOverlay();
+    if (this.scale === 'month') { monthView.classList.remove('hidden'); weekView.classList.add('hidden'); this.renderMonth(); }
+    else { this.loadOverlay(); }
+  };
+
+  // setScale switches month↔week with the signed zoom-and-unfold morph, honoring
+  // reduced-motion. Week keeps its current weekStart; month uses monthAnchor.
+  AvailabilityApp.prototype.setScale = function (which, originWd) {
+    if (which === this.scale) return;
+    var self = this;
+    this.scale = which;
+    Array.prototype.forEach.call(this.root.querySelectorAll('[data-ov-scale]'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-ov-scale') === which ? 'true' : 'false');
+    });
+    var monthView = $('[data-ov-monthview]', this.root), weekView = $('[data-ov-weekview]', this.root);
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (which === 'week') {
+      this.loadOverlay();
+      var ox = (originWd != null) ? Math.round(((originWd + 0.5) / 7) * 100) : 50;
+      weekView.style.setProperty('--ox', ox + '%');
+      if (reduce) { monthView.classList.add('hidden'); weekView.classList.remove('hidden'); this.announce('Week view'); return; }
+      weekView.classList.remove('hidden'); weekView.classList.add('enter'); void weekView.offsetWidth;
+      monthView.classList.add('leave'); weekView.classList.remove('enter');
+      setTimeout(function () { monthView.classList.add('hidden'); monthView.classList.remove('leave'); }, 340);
+      this.announce('Week view');
+    } else {
+      this.renderMonth();
+      if (reduce) { weekView.classList.add('hidden'); monthView.classList.remove('hidden'); this.announce('Month view'); return; }
+      monthView.classList.remove('hidden'); monthView.classList.add('leave'); void monthView.offsetWidth; monthView.classList.remove('leave');
+      weekView.classList.add('leave');
+      setTimeout(function () { weekView.classList.add('hidden'); weekView.classList.remove('leave'); }, 340);
+      this.announce('Month view');
+    }
+  };
+
+  // step advances the visible range by one unit of the current scale.
+  AvailabilityApp.prototype.step = function (dir) {
+    if (this.scale === 'month') {
+      this.monthAnchor = new Date(Date.UTC(this.monthAnchor.getUTCFullYear(), this.monthAnchor.getUTCMonth() + dir, 1));
+      this.renderMonth();
+    } else {
+      this.weekStart = addDays(this.weekStart, dir * 7);
+      this.loadOverlay();
+    }
   };
 
   AvailabilityApp.prototype.loadOverlay = function () {
@@ -357,6 +472,7 @@
     Chronicle.apiFetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
       if (!data) { host.innerHTML = '<p class="text-sm text-fg-muted p-4">Could not load the group overlay.</p>'; return; }
       self.overlayData = data;
+      self.weekCache[isoOf(self.weekStart)] = data;
       self.tz = data.viewerTz || self.tz;
       self.renderChips();
       self.renderOverlay();
@@ -485,7 +601,406 @@
 
     host.innerHTML = '';
     host.appendChild(grid);
+    if (this.building) this.attachBuilder(grid);
     this.announce('Group availability for week of ' + first.date);
+  };
+
+  // ---------------- MONTH VIEW ----------------
+  // loadWeekData fetches (and caches) one week's overlay payload, then calls cb.
+  AvailabilityApp.prototype.loadWeekData = function (weekStartISO, cb) {
+    var self = this;
+    if (this.weekCache[weekStartISO]) { cb(this.weekCache[weekStartISO]); return; }
+    var url = '/campaigns/' + this.campaignID + '/availability/overlay?week=' +
+      encodeURIComponent(weekStartISO) + '&tz=' + encodeURIComponent(this.tz);
+    Chronicle.apiFetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+      if (data) self.weekCache[weekStartISO] = data;
+      cb(data);
+    }).catch(function () { cb(null); });
+  };
+
+  AvailabilityApp.prototype.renderMonth = function () {
+    var self = this;
+    var host = $('[data-ov-month]', this.root);
+    if (!host) return;
+    var wlabel = $('[data-week-label]', this.root);
+    var y = this.monthAnchor.getUTCFullYear(), mo = this.monthAnchor.getUTCMonth();
+    if (wlabel) wlabel.textContent = MONTH_NAMES[mo] + ' ' + y;
+
+    // Monday-first weeks spanning the month.
+    var first = new Date(Date.UTC(y, mo, 1));
+    var gridStart = mondayOf(first);
+    var last = new Date(Date.UTC(y, mo + 1, 0));
+    var weeks = [];
+    for (var w = gridStart; w <= mondayOf(last); w = addDays(w, 7)) weeks.push(new Date(w.getTime()));
+
+    host.innerHTML = '<p class="text-sm text-fg-muted p-4">Loading…</p>';
+
+    // Fetch every visible week, then build a date -> hour-counts map.
+    var pending = weeks.length, byDate = {}, total = this.overlayData ? this.overlayData.totalMembers : 0;
+    weeks.forEach(function (wk) {
+      self.loadWeekData(isoOf(wk), function (data) {
+        if (data) {
+          total = total || data.totalMembers;
+          (data.days || []).forEach(function (d) {
+            byDate[d.date] = d.hours.map(function (h) { return h.free; });
+          });
+        }
+        if (--pending === 0) self.buildMonthGrid(host, y, mo, gridStart, weeks.length, byDate, total || 1);
+      });
+    });
+  };
+
+  AvailabilityApp.prototype.buildMonthGrid = function (host, y, mo, gridStart, weekCount, byDate, total) {
+    var self = this;
+    var grid = el('div', 'ov-month');
+    DISPLAY_DAYS.forEach(function (dn) { var h = el('div', 'ov-mhead'); h.textContent = dn; grid.appendChild(h); });
+    for (var i = 0; i < weekCount * 7; i++) {
+      (function (idx) {
+        var date = addDays(gridStart, idx);
+        var iso = isoOf(date);
+        var inMonth = date.getUTCMonth() === mo;
+        var counts = byDate[iso] || [];
+        var peak = counts.length ? Math.max.apply(null, counts) : 0;
+        var cell = el('button', 'ov-mday' + (inMonth ? '' : ' out')); cell.type = 'button';
+        cell.setAttribute('aria-label', iso + ' — up to ' + peak + ' of ' + total + ' free');
+        var dn = el('div', 'dn');
+        dn.innerHTML = '<span>' + date.getUTCDate() + '</span>' + (peak ? '<span class="pk">' + peak + ' free</span>' : '');
+        cell.appendChild(dn);
+        var mini = el('div', 'ov-mini'); mini.setAttribute('aria-hidden', 'true');
+        for (var h = 0; h < HOURS; h++) {
+          var seg = el('i'); var n = counts[h] || 0;
+          if (n > 0) seg.style.background = heatRGBA(n, total);
+          mini.appendChild(seg);
+        }
+        cell.appendChild(mini);
+        cell.addEventListener('click', function () {
+          self.weekStart = mondayOf(date);
+          self.setScale('week', (date.getUTCDay() + 6) % 7);
+        });
+        grid.appendChild(cell);
+      })(i);
+    }
+    host.innerHTML = '';
+    host.appendChild(grid);
+    this.announce('Month view ' + MONTH_NAMES[mo] + ' ' + y);
+  };
+
+  // ---------------- DM SLOT BUILDER ----------------
+  // Click/drag on the week grid's day columns to select 1–5 candidate slots,
+  // then create a proposal. Slots are viewer-zone wall-clocks (date + minutes);
+  // the server resolves them to UTC instants (DST-correct).
+  AvailabilityApp.prototype.toggleBuilder = function () {
+    this.building = !this.building;
+    var btn = $('[data-ov-build-toggle]', this.root);
+    if (btn) btn.classList.toggle('!bg-accent', this.building);
+    var tray = $('[data-ov-builder]', this.root);
+    if (tray) tray.hidden = !this.building;
+    if (this.building && this.scale !== 'week') { this.setScale('week'); }
+    this.renderBuilderTray();
+    if (this.overlayData) this.renderOverlay();
+    this.announce(this.building ? 'Proposal builder on — drag to pick candidate slots' : 'Proposal builder off');
+  };
+
+  AvailabilityApp.prototype.attachBuilder = function (grid) {
+    var self = this;
+    var cols = grid.querySelectorAll('.ov-daycol');
+    var hpx = 26;
+    Array.prototype.forEach.call(cols, function (col, di) {
+      col.classList.add('building');
+      var day = self.overlayData.days[di];
+      var drag = null, selEl = null;
+      function minuteAt(e) {
+        var rect = col.getBoundingClientRect();
+        var yy = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+        return Math.round(yy / hpx) * 60; // snap to the hour
+      }
+      col.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        drag = { start: minuteAt(e) };
+        selEl = el('div', 'ov-sel'); col.appendChild(selEl);
+      });
+      col.addEventListener('mousemove', function (e) {
+        if (!drag || !selEl) return;
+        var cur = minuteAt(e);
+        var a = Math.min(drag.start, cur), b = Math.max(drag.start, cur);
+        selEl.style.top = (a / 60 * hpx) + 'px';
+        selEl.style.height = Math.max((b - a) / 60 * hpx, hpx) + 'px';
+      });
+      col.addEventListener('mouseup', function (e) {
+        if (!drag) return;
+        var cur = minuteAt(e);
+        var a = Math.min(drag.start, cur), b = Math.max(drag.start, cur);
+        if (b <= a) b = a + 60;
+        if (b > 1440) b = 1440;
+        if (selEl && selEl.parentNode) selEl.parentNode.removeChild(selEl);
+        drag = null; selEl = null;
+        self.addSlot(day.date, a, b);
+      });
+    });
+  };
+
+  AvailabilityApp.prototype.addSlot = function (date, startMinute, endMinute) {
+    if (this.selectedSlots.length >= 5) { this.announce('Up to 5 slots'); return; }
+    this.selectedSlots.push({ date: date, startMinute: startMinute, endMinute: endMinute });
+    this.renderBuilderTray();
+    this.announce('Added slot ' + date + ' ' + hourLabel(startMinute / 60) + '–' + hourLabel(endMinute / 60));
+  };
+
+  AvailabilityApp.prototype.renderBuilderTray = function () {
+    var self = this;
+    var tray = $('[data-ov-builder]', this.root);
+    if (!tray) return;
+    tray.innerHTML = '';
+    var head = el('div', 'flex items-center gap-2 mb-2');
+    head.innerHTML = '<span class="text-sm font-semibold text-fg"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Build a proposal</span><span class="text-xs text-fg-muted">Drag on a day to pick up to 5 candidate slots.</span>';
+    tray.appendChild(head);
+
+    var chips = el('div', 'flex flex-wrap items-center gap-2 mb-2');
+    if (!this.selectedSlots.length) {
+      var none = el('span', 'text-xs text-fg-muted'); none.textContent = 'No slots picked yet.'; chips.appendChild(none);
+    }
+    this.selectedSlots.forEach(function (s, i) {
+      var chip = el('span', 'ov-slotchip');
+      var lbl = el('span'); lbl.textContent = s.date + ' · ' + hourLabel(s.startMinute / 60) + '–' + hourLabel(s.endMinute / 60);
+      chip.appendChild(lbl);
+      var x = el('button'); x.type = 'button'; x.innerHTML = '<i class="fa-solid fa-xmark"></i>'; x.setAttribute('aria-label', 'Remove slot');
+      x.addEventListener('click', function () { self.selectedSlots.splice(i, 1); self.renderBuilderTray(); });
+      chip.appendChild(x); chips.appendChild(chip);
+    });
+    tray.appendChild(chips);
+
+    var row = el('div', 'flex flex-wrap items-center gap-2');
+    var title = el('input'); title.type = 'text'; title.placeholder = 'Proposal title (e.g. Next session)';
+    title.className = 'text-sm border border-edge rounded-md px-2 py-1 bg-surface flex-1'; title.setAttribute('data-ov-proptitle', '');
+    var create = el('button', 'btn-primary text-sm'); create.type = 'button'; create.innerHTML = '<i class="fa-solid fa-paper-plane mr-1"></i> Send proposal';
+    create.disabled = this.selectedSlots.length < 1;
+    create.addEventListener('click', function () { self.submitProposal(create); });
+    var st = el('span', 'text-xs text-fg-muted'); st.setAttribute('data-ov-propstatus', '');
+    row.appendChild(title); row.appendChild(create); row.appendChild(st);
+    tray.appendChild(row);
+  };
+
+  AvailabilityApp.prototype.submitProposal = function (btn) {
+    var self = this;
+    var titleEl = $('[data-ov-proptitle]', this.root);
+    var st = $('[data-ov-propstatus]', this.root);
+    var title = titleEl ? titleEl.value.trim() : '';
+    if (!title) { if (st) st.textContent = 'Add a title.'; return; }
+    if (!this.selectedSlots.length) { if (st) st.textContent = 'Pick at least one slot.'; return; }
+    btn.disabled = true; if (st) st.textContent = 'Sending…';
+    Chronicle.apiFetch('/campaigns/' + this.campaignID + '/proposals', {
+      method: 'POST',
+      body: { title: title, tz: this.tz, options: this.selectedSlots }
+    }).then(function (r) {
+      return r.ok ? r.json() : r.json().then(function (j) { throw new Error((j && j.error) || 'Failed'); });
+    }).then(function (res) {
+      self.selectedSlots = [];
+      self.building = false;
+      var tray = $('[data-ov-builder]', self.root); if (tray) tray.hidden = true;
+      if (self.overlayData) self.renderOverlay();
+      if (window.Chronicle && Chronicle.notify) Chronicle.notify('Proposal sent — players notified', 'success');
+      if (res && res.link) window.location.href = res.link;
+    }).catch(function (e) {
+      btn.disabled = false;
+      if (st) st.textContent = (e && e.message) || 'Failed to send.';
+    });
+  };
+
+  // ---------------- EXCEPTIONS (one-off, compose-the-day) ----------------
+  // C-SCHED-P2 0c: exceptions REPLACE the whole day in storage, so the editor
+  // COMPOSES the day — it pre-fills from the recurring pattern, so marking one
+  // hour busy re-sends the rest instead of erasing it.
+
+  // recurringDayState returns the recurring grid state for a real date's weekday
+  // as a 24-entry array ('' | available | preferred).
+  AvailabilityApp.prototype.recurringDayState = function (dateISO) {
+    var d = parseISO(dateISO);
+    var col = DISPLAY_DOW.indexOf(d.getUTCDay()); // storage dow -> display column
+    var out = [];
+    for (var h = 0; h < HOURS; h++) out[h] = (col >= 0 && this.grid[col]) ? (this.grid[col][h] || '') : '';
+    return out;
+  };
+
+  AvailabilityApp.prototype.renderExceptions = function () {
+    var self = this;
+    var host = $('[data-exc-host]', this.root);
+    if (!host) return;
+    host.innerHTML = '';
+
+    var head = el('div', 'flex flex-wrap items-center justify-between gap-2 mb-2');
+    var h3 = el('h2', 'text-sm font-semibold text-fg');
+    h3.innerHTML = '<i class="fa-solid fa-calendar-day mr-1"></i> One-off changes';
+    head.appendChild(h3);
+    var picker = el('div', 'flex items-center gap-2');
+    var date = el('input'); date.type = 'date'; date.className = 'text-sm border border-edge rounded-md px-2 py-1 bg-surface';
+    date.value = isoOf(todayUTC());
+    var editBtn = el('button', 'btn-secondary text-sm'); editBtn.type = 'button';
+    editBtn.innerHTML = '<i class="fa-solid fa-pen mr-1"></i> Edit this date';
+    editBtn.addEventListener('click', function () { if (date.value) self.openDayEditor(date.value); });
+    picker.appendChild(date); picker.appendChild(editBtn);
+    head.appendChild(picker);
+    host.appendChild(head);
+
+    var help = el('p', 'avail-note'); help.style.marginTop = '0';
+    help.textContent = 'Override a specific date without touching your weekly pattern. The editor starts from your usual week for that day, so trimming one hour keeps the rest.';
+    host.appendChild(help);
+
+    var list = el('div'); list.setAttribute('data-exc-list', ''); list.style.marginTop = '10px';
+    host.appendChild(list);
+
+    var editor = el('div'); editor.setAttribute('data-exc-editor', ''); editor.style.marginTop = '10px';
+    host.appendChild(editor);
+
+    this.loadExceptions();
+  };
+
+  AvailabilityApp.prototype.loadExceptions = function () {
+    var self = this;
+    var list = $('[data-exc-list]', this.root);
+    if (!list) return;
+    Chronicle.apiFetch('/campaigns/' + this.campaignID + '/availability/exceptions')
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (excs) {
+        // Group exceptions by date so the day is shown as one editable entry.
+        var byDate = {};
+        (excs || []).forEach(function (e) { (byDate[e.onDate] = byDate[e.onDate] || []).push(e); });
+        var dates = Object.keys(byDate).sort();
+        list.innerHTML = '';
+        if (!dates.length) { return; }
+        dates.forEach(function (dt) {
+          var row = el('div', 'flex items-center justify-between gap-2 text-sm bg-surface-alt border border-edge rounded-md px-3 py-1.5 mb-1.5');
+          var lbl = el('span', 'text-fg-secondary'); lbl.textContent = dt + ' — customized (' + byDate[dt].length + ' block' + (byDate[dt].length !== 1 ? 's' : '') + ')';
+          row.appendChild(lbl);
+          var actions = el('span', 'flex items-center gap-2');
+          var edit = el('button', 'text-accent text-xs font-semibold'); edit.type = 'button'; edit.textContent = 'Edit';
+          edit.addEventListener('click', function () { self.openDayEditor(dt); });
+          var clr = el('button', 'text-fg-muted text-xs font-semibold'); clr.type = 'button'; clr.textContent = 'Revert to weekly';
+          clr.addEventListener('click', function () { self.saveDayException(dt, [], clr); });
+          actions.appendChild(edit); actions.appendChild(clr);
+          row.appendChild(actions);
+          list.appendChild(row);
+        });
+      })
+      .catch(function () { /* non-fatal */ });
+  };
+
+  // openDayEditor builds a single-day, 24-hour compose editor pre-filled with the
+  // day's EFFECTIVE availability (existing exception rows if any, else the
+  // recurring pattern), so saving re-sends the whole day.
+  AvailabilityApp.prototype.openDayEditor = function (dateISO) {
+    var self = this;
+    var editor = $('[data-exc-editor]', this.root);
+    if (!editor) return;
+    editor.innerHTML = '<p class="text-sm text-fg-muted">Loading…</p>';
+
+    // Fetch existing exception blocks for the date; fall back to recurring.
+    Chronicle.apiFetch('/campaigns/' + this.campaignID + '/availability/exceptions')
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (excs) {
+        var day = self.recurringDayState(dateISO);
+        var forDate = (excs || []).filter(function (e) { return e.onDate === dateISO; });
+        if (forDate.length) {
+          // Compose from the stored exception set (unavailable punches holes).
+          for (var h = 0; h < HOURS; h++) day[h] = '';
+          forDate.forEach(function (e) {
+            if (e.state === 'unavailable') return; // hole
+            for (var h = Math.floor(e.startMinute / 60); h < Math.ceil(e.endMinute / 60) && h < HOURS; h++) day[h] = e.state;
+          });
+        }
+        self.buildDayEditor(editor, dateISO, day);
+      })
+      .catch(function () { self.buildDayEditor(editor, dateISO, self.recurringDayState(dateISO)); });
+  };
+
+  AvailabilityApp.prototype.buildDayEditor = function (editor, dateISO, dayState) {
+    var self = this;
+    editor.innerHTML = '';
+    var card = el('div', 'bg-surface border border-edge rounded-lg p-3');
+    var title = el('div', 'flex items-center justify-between mb-2');
+    var t = el('span', 'text-sm font-semibold text-fg'); t.textContent = 'Editing ' + dateISO;
+    title.appendChild(t);
+    var close = el('button', 'text-fg-muted text-xs'); close.type = 'button'; close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    close.addEventListener('click', function () { editor.innerHTML = ''; });
+    title.appendChild(close);
+    card.appendChild(title);
+
+    var seg = el('div', 'avail-seg'); seg.style.marginBottom = '8px'; var tool = { v: STATE_AVAIL };
+    [[STATE_AVAIL, 'Available'], [STATE_PREFER, 'Preferred'], ['', 'Busy']].forEach(function (opt) {
+      var b = el('button'); b.type = 'button'; b.textContent = opt[1];
+      b.setAttribute('aria-pressed', opt[0] === tool.v ? 'true' : 'false');
+      b.addEventListener('click', function () {
+        tool.v = opt[0];
+        Array.prototype.forEach.call(seg.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', 'false'); });
+        b.setAttribute('aria-pressed', 'true');
+      });
+      seg.appendChild(b);
+    });
+    card.appendChild(seg);
+
+    // 24 hour cells in a compact single-day strip.
+    var strip = el('div'); strip.style.display = 'grid'; strip.style.gridTemplateColumns = 'repeat(12,1fr)'; strip.style.gap = '3px';
+    var cells = [];
+    var painting = { on: false, val: '' };
+    for (var h = 0; h < HOURS; h++) {
+      (function (hour) {
+        var c = el('button', 'avail-cell'); c.type = 'button'; c.style.height = '30px'; c.style.borderRadius = '4px';
+        c.title = hourLabel(hour);
+        c.setAttribute('aria-label', hourLabel(hour) + ', ' + (dayState[hour] || 'busy'));
+        if (dayState[hour]) c.setAttribute('data-state', dayState[hour]);
+        var lab = el('span'); lab.style.cssText = 'position:absolute;bottom:1px;left:2px;font-size:8px;color:var(--color-text-muted,#9ca3af)'; lab.textContent = hour;
+        c.appendChild(lab);
+        function setC(v) { dayState[hour] = v; if (v) c.setAttribute('data-state', v); else c.removeAttribute('data-state'); c.setAttribute('aria-label', hourLabel(hour) + ', ' + (v || 'busy')); }
+        c.addEventListener('mousedown', function (e) { e.preventDefault(); painting.on = true; painting.val = (dayState[hour] === tool.v) ? '' : tool.v; setC(painting.val); });
+        c.addEventListener('mouseenter', function () { if (painting.on) setC(painting.val); });
+        c.addEventListener('click', function () { if (!painting.on) setC(dayState[hour] === tool.v ? '' : tool.v); });
+        cells.push(c); strip.appendChild(c);
+      })(h);
+    }
+    document.addEventListener('mouseup', function () { painting.on = false; });
+    card.appendChild(strip);
+
+    var actions = el('div', 'flex items-center gap-2 mt-3');
+    var save = el('button', 'btn-primary text-sm'); save.type = 'button'; save.innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i> Save this date';
+    save.addEventListener('click', function () { self.saveDayException(dateISO, self.dayStateToBlocks(dayState), save); });
+    var st = el('span', 'text-xs text-fg-muted'); st.setAttribute('data-exc-editor-status', '');
+    actions.appendChild(save); actions.appendChild(st);
+    card.appendChild(actions);
+
+    editor.appendChild(card);
+  };
+
+  // dayStateToBlocks merges a 24-entry day into contiguous blocks for the save.
+  AvailabilityApp.prototype.dayStateToBlocks = function (dayState) {
+    var blocks = [], run = null;
+    for (var h = 0; h <= HOURS; h++) {
+      var st = h < HOURS ? (dayState[h] || '') : '';
+      if (run && run.state === st) { run.end = h + 1; continue; }
+      if (run) blocks.push({ startMinute: run.start * 60, endMinute: run.end * 60, state: run.state });
+      run = st ? { state: st, start: h, end: h + 1 } : null;
+    }
+    return blocks;
+  };
+
+  AvailabilityApp.prototype.saveDayException = function (dateISO, blocks, btn) {
+    var self = this;
+    if (btn) btn.disabled = true;
+    var st = $('[data-exc-editor-status]', this.root);
+    if (st) st.textContent = 'Saving…';
+    Chronicle.apiFetch('/campaigns/' + this.campaignID + '/availability/exceptions', {
+      method: 'PUT',
+      body: { onDate: dateISO, tz: this.tz, blocks: blocks }
+    }).then(function (r) {
+      if (btn) btn.disabled = false;
+      if (r.ok) {
+        if (st) st.textContent = 'Saved.';
+        self.announce('Saved changes for ' + dateISO);
+        self.overlayData = null;
+        var editor = $('[data-exc-editor]', self.root); if (editor) editor.innerHTML = '';
+        self.loadExceptions();
+      } else {
+        r.json().then(function (j) { if (st) st.textContent = (j && j.error) || 'Save failed.'; }).catch(function () { if (st) st.textContent = 'Save failed.'; });
+      }
+    }).catch(function () { if (btn) btn.disabled = false; if (st) st.textContent = 'Save failed.'; });
   };
 
   // ================= boot =================

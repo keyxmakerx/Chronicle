@@ -1,0 +1,186 @@
+// proposals.templ renders the slot-proposal UI (C-SCHED-P2): the proposals list
+// and one proposal's detail with per-option accept/decline/tentative controls,
+// live tallies, and (owner-only) the per-responder breakdown. Times are rendered
+// in the viewer's own zone (the service projects the UTC instants).
+
+package sessions
+
+import (
+	"fmt"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// pluralOptions renders an option count with a pluralized noun.
+func pluralOptions(n int) string {
+	if n == 1 {
+		return "1 option"
+	}
+	return fmt.Sprintf("%d options", n)
+}
+
+// ProposalListPage renders the full proposals list page.
+templ ProposalListPage(cc *campaigns.CampaignContext, summaries []ProposalSummary, viewerTZ string, canManage bool) {
+	@layouts.App(cc.Campaign.Name + " - Proposals") {
+		<div class="max-w-4xl mx-auto">
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Sessions", Href: fmt.Sprintf("/campaigns/%s/sessions", cc.Campaign.ID)},
+				{Label: "Proposals"},
+			})
+			@ProposalListFragment(cc, summaries, viewerTZ, canManage)
+		</div>
+	}
+}
+
+// ProposalListFragment renders the proposals list (header + cards).
+templ ProposalListFragment(cc *campaigns.CampaignContext, summaries []ProposalSummary, viewerTZ string, canManage bool) {
+	<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+		<div>
+			<h1 class="text-2xl font-bold text-fg">Session proposals</h1>
+			<p class="text-sm text-fg-secondary mt-1">Vote on candidate game times. Slots shown in { viewerTZ }.</p>
+		</div>
+		if canManage {
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/availability?tab=overlay", cc.Campaign.ID)) }
+				class="btn-primary text-sm"
+				title="Build a proposal from the availability heatmap"
+			>
+				<i class="fa-solid fa-plus mr-1"></i> New proposal
+			</a>
+		}
+	</div>
+	if len(summaries) == 0 {
+		<div class="card p-12 text-center">
+			<i class="fa-solid fa-calendar-day text-4xl text-fg-muted mb-3"></i>
+			<p class="text-fg-secondary mb-1">No proposals yet.</p>
+			if canManage {
+				<p class="text-sm text-fg-muted">Open the availability heatmap and pick 1–5 candidate slots to propose.</p>
+			}
+		</div>
+	} else {
+		<div class="space-y-3">
+			for _, s := range summaries {
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/proposals/%s", cc.Campaign.ID, s.Proposal.ID)) }
+					class="block bg-surface border border-edge rounded-lg p-4 hover:bg-surface-alt transition-colors"
+				>
+					<div class="flex items-center justify-between gap-3">
+						<div class="min-w-0">
+							<div class="flex items-center gap-2">
+								<h2 class="font-semibold text-fg truncate">{ s.Proposal.Title }</h2>
+								if s.Proposal.Status == ProposalClosed {
+									<span class="text-[10px] font-bold uppercase tracking-wide text-fg-muted bg-surface-alt border border-edge rounded px-1.5 py-0.5">Closed</span>
+								}
+							</div>
+							<p class="text-xs text-fg-secondary mt-1">
+								{ pluralOptions(s.OptionCount) } · { fmt.Sprintf("%d responded", s.ResponderN) }
+							</p>
+						</div>
+						if s.MyResponded {
+							<span class="text-xs font-semibold text-green-500 shrink-0"><i class="fa-solid fa-circle-check mr-1"></i>Voted</span>
+						} else {
+							<span class="text-xs font-semibold text-accent shrink-0">Respond<i class="fa-solid fa-arrow-right ml-1"></i></span>
+						}
+					</div>
+				</a>
+			}
+		</div>
+	}
+}
+
+// ProposalDetailPage renders the full proposal detail page.
+templ ProposalDetailPage(cc *campaigns.CampaignContext, view *ProposalView, csrfToken, userID string) {
+	@layouts.App(cc.Campaign.Name + " - " + view.Proposal.Title) {
+		<div class="max-w-3xl mx-auto">
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Proposals", Href: fmt.Sprintf("/campaigns/%s/proposals", cc.Campaign.ID)},
+				{Label: view.Proposal.Title},
+			})
+			@ProposalDetailFragment(cc, view, csrfToken, userID)
+		</div>
+	}
+}
+
+// ProposalDetailFragment renders one proposal's options with response controls
+// and tallies. Its root carries data-proposal-root so a response POST can swap
+// the whole card in place (outerHTML) with refreshed tallies.
+templ ProposalDetailFragment(cc *campaigns.CampaignContext, view *ProposalView, csrfToken, userID string) {
+	<div data-proposal-root>
+		<div class="flex flex-wrap items-start justify-between gap-3 mb-5">
+			<div>
+				<h1 class="text-2xl font-bold text-fg">{ view.Proposal.Title }</h1>
+				if view.Proposal.Note != nil {
+					<p class="text-sm text-fg-secondary mt-1">{ *view.Proposal.Note }</p>
+				}
+			</div>
+			<span class="inline-flex items-center gap-2 text-xs font-semibold text-fg-secondary bg-surface-alt border border-edge rounded-full px-3 py-1.5" title="Times shown in this timezone">
+				<i class="fa-solid fa-globe" aria-hidden="true"></i> { view.ViewerTZ }
+			</span>
+		</div>
+		<div class="space-y-3">
+			for _, ov := range view.Options {
+				@proposalOption(cc, view, ov, csrfToken)
+			}
+		</div>
+		if view.IncludeDetail {
+			<p class="text-xs text-fg-muted mt-4"><i class="fa-solid fa-user-shield mr-1"></i>You can see who responded because you're the DM. Players see only the counts and their own choice.</p>
+		}
+	</div>
+}
+
+// proposalOption renders one candidate slot: the local time, the tally, the
+// viewer's response controls, and (owner only) the per-responder list.
+templ proposalOption(cc *campaigns.CampaignContext, view *ProposalView, ov ProposalOptionView, csrfToken string) {
+	<div class="bg-surface border border-edge rounded-lg p-4">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div>
+				<div class="font-semibold text-fg">{ ov.Local.DateLabel }</div>
+				<div class="text-sm text-fg-secondary">{ ov.Local.TimeLabel }</div>
+			</div>
+			<div class="flex items-center gap-3 text-xs font-semibold">
+				<span class="text-green-500" title="Yes"><i class="fa-solid fa-check mr-1"></i>{ fmt.Sprintf("%d", ov.YesCount) }</span>
+				<span class="text-amber-500" title="Maybe"><i class="fa-solid fa-question mr-1"></i>{ fmt.Sprintf("%d", ov.MaybeCount) }</span>
+				<span class="text-fg-muted" title="No"><i class="fa-solid fa-xmark mr-1"></i>{ fmt.Sprintf("%d", ov.NoCount) }</span>
+			</div>
+		</div>
+		if view.Proposal.Status != ProposalClosed {
+			<div class="flex items-center gap-2 mt-3" role="group" aria-label="Your response">
+				@respondButton(cc, view.Proposal.ID, ov.Option.ID, ResponseYes, "Yes", "fa-check", ov.MyResponse, csrfToken)
+				@respondButton(cc, view.Proposal.ID, ov.Option.ID, ResponseMaybe, "Maybe", "fa-question", ov.MyResponse, csrfToken)
+				@respondButton(cc, view.Proposal.ID, ov.Option.ID, ResponseNo, "No", "fa-xmark", ov.MyResponse, csrfToken)
+			</div>
+		}
+		if view.IncludeDetail && len(ov.Responders) > 0 {
+			<div class="mt-3 pt-3 border-t border-edge flex flex-wrap gap-2">
+				for _, r := range ov.Responders {
+					<span class="text-xs bg-surface-alt border border-edge rounded-full px-2 py-0.5 text-fg-secondary">
+						{ r.Name } · { r.Response }
+					</span>
+				}
+			</div>
+		}
+	</div>
+}
+
+// respondButton renders one response choice, highlighted when it is the viewer's
+// current choice. Posts via HTMX and swaps the whole proposal card (outerHTML)
+// so tallies refresh in place.
+templ respondButton(cc *campaigns.CampaignContext, proposalID, optionID, value, label, icon, myResponse, csrfToken string) {
+	<button
+		type="button"
+		hx-post={ fmt.Sprintf("/campaigns/%s/proposals/%s/options/%s/respond", cc.Campaign.ID, proposalID, optionID) }
+		hx-vals={ fmt.Sprintf(`{"response":"%s"}`, value) }
+		hx-headers={ `{"X-CSRF-Token":"` + csrfToken + `"}` }
+		hx-target="closest [data-proposal-root]"
+		hx-swap="outerHTML"
+		class={ "text-sm font-semibold px-3 py-1.5 rounded-md border transition-colors",
+			templ.KV("bg-accent text-white border-accent", myResponse == value),
+			templ.KV("bg-surface-alt text-fg-secondary border-edge hover:bg-surface-raised", myResponse != value) }
+		aria-pressed={ boolAttr(myResponse == value) }
+	>
+		<i class={ "fa-solid mr-1", icon }></i> { label }
+	</button>
+}

@@ -136,6 +136,23 @@ func (h *Handler) AddExceptionAPI(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// ReplaceDayExceptionsAPI atomically replaces the current user's overrides for
+// one date with a composed set — the backend for the "compose the day" editor
+// (C-SCHED-P2 0c). An empty blocks array clears the day.
+// PUT /campaigns/:id/availability/exceptions
+func (h *Handler) ReplaceDayExceptionsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	userID := auth.GetUserID(c)
+	var req ReplaceDayExceptionsRequest
+	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+	}
+	if err := h.svc.ReplaceMyDayExceptions(c.Request().Context(), cc.Campaign.ID, userID, req); err != nil {
+		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // DeleteExceptionAPI removes one of the current user's own exceptions.
 // DELETE /campaigns/:id/availability/exceptions/:eid
 func (h *Handler) DeleteExceptionAPI(c echo.Context) error {

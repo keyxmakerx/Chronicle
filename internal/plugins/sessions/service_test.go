@@ -41,7 +41,25 @@ type mockSessionRepo struct {
 	listUserExceptionsFn            func(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	listCampaignExceptionsRangeFn   func(ctx context.Context, campaignID, startDate, endDate string) ([]AvailabilityException, error)
 	addExceptionFn                  func(ctx context.Context, e *AvailabilityException) error
+	countUserExceptionsFn           func(ctx context.Context, campaignID, userID string) (int, error)
+	replaceDayExceptionsFn          func(ctx context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error
 	deleteExceptionFn               func(ctx context.Context, campaignID, userID, exceptionID string) error
+	// Proposals + notifications (C-SCHED-P2).
+	createProposalFn          func(ctx context.Context, p *SlotProposal, options []SlotProposalOption) error
+	getProposalFn             func(ctx context.Context, campaignID, proposalID string) (*SlotProposal, []SlotProposalOption, error)
+	listProposalsFn           func(ctx context.Context, campaignID string) ([]SlotProposal, error)
+	listProposalOptionsFn     func(ctx context.Context, proposalID string) ([]SlotProposalOption, error)
+	findOptionFn              func(ctx context.Context, optionID string) (*SlotProposalOption, error)
+	upsertProposalResponseFn  func(ctx context.Context, r *SlotProposalResponse) error
+	listProposalResponsesFn   func(ctx context.Context, proposalID string) ([]SlotProposalResponse, error)
+	createProposalTokenFn     func(ctx context.Context, token *SlotProposalToken) error
+	findProposalTokenFn       func(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
+	markProposalTokenUsedFn   func(ctx context.Context, tokenStr string) error
+	createNotificationFn      func(ctx context.Context, n *Notification) error
+	listNotificationsFn       func(ctx context.Context, userID string, limit int) ([]Notification, error)
+	countUnreadNotificationsFn func(ctx context.Context, userID string) (int, error)
+	markNotificationReadFn    func(ctx context.Context, userID, notificationID string) error
+	markAllNotificationsReadFn func(ctx context.Context, userID string) error
 }
 
 func (m *mockSessionRepo) Create(ctx context.Context, campaignID string, s *Session) error {
@@ -217,6 +235,127 @@ func (m *mockSessionRepo) AddException(ctx context.Context, e *AvailabilityExcep
 func (m *mockSessionRepo) DeleteException(ctx context.Context, campaignID, userID, exceptionID string) error {
 	if m.deleteExceptionFn != nil {
 		return m.deleteExceptionFn(ctx, campaignID, userID, exceptionID)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) CountUserExceptions(ctx context.Context, campaignID, userID string) (int, error) {
+	if m.countUserExceptionsFn != nil {
+		return m.countUserExceptionsFn(ctx, campaignID, userID)
+	}
+	return 0, nil
+}
+
+func (m *mockSessionRepo) ReplaceDayExceptions(ctx context.Context, campaignID, userID, onDate string, excs []AvailabilityException) error {
+	if m.replaceDayExceptionsFn != nil {
+		return m.replaceDayExceptionsFn(ctx, campaignID, userID, onDate, excs)
+	}
+	return nil
+}
+
+// --- Proposal + notification mock stubs (C-SCHED-P2). ---
+
+func (m *mockSessionRepo) CreateProposal(ctx context.Context, p *SlotProposal, options []SlotProposalOption) error {
+	if m.createProposalFn != nil {
+		return m.createProposalFn(ctx, p, options)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) GetProposal(ctx context.Context, campaignID, proposalID string) (*SlotProposal, []SlotProposalOption, error) {
+	if m.getProposalFn != nil {
+		return m.getProposalFn(ctx, campaignID, proposalID)
+	}
+	return nil, nil, nil
+}
+
+func (m *mockSessionRepo) ListProposals(ctx context.Context, campaignID string) ([]SlotProposal, error) {
+	if m.listProposalsFn != nil {
+		return m.listProposalsFn(ctx, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) ListProposalOptions(ctx context.Context, proposalID string) ([]SlotProposalOption, error) {
+	if m.listProposalOptionsFn != nil {
+		return m.listProposalOptionsFn(ctx, proposalID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) FindOption(ctx context.Context, optionID string) (*SlotProposalOption, error) {
+	if m.findOptionFn != nil {
+		return m.findOptionFn(ctx, optionID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) UpsertProposalResponse(ctx context.Context, r *SlotProposalResponse) error {
+	if m.upsertProposalResponseFn != nil {
+		return m.upsertProposalResponseFn(ctx, r)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) ListProposalResponses(ctx context.Context, proposalID string) ([]SlotProposalResponse, error) {
+	if m.listProposalResponsesFn != nil {
+		return m.listProposalResponsesFn(ctx, proposalID)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) CreateProposalToken(ctx context.Context, token *SlotProposalToken) error {
+	if m.createProposalTokenFn != nil {
+		return m.createProposalTokenFn(ctx, token)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) FindProposalToken(ctx context.Context, tokenStr string) (*SlotProposalToken, error) {
+	if m.findProposalTokenFn != nil {
+		return m.findProposalTokenFn(ctx, tokenStr)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) MarkProposalTokenUsed(ctx context.Context, tokenStr string) error {
+	if m.markProposalTokenUsedFn != nil {
+		return m.markProposalTokenUsedFn(ctx, tokenStr)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) CreateNotification(ctx context.Context, n *Notification) error {
+	if m.createNotificationFn != nil {
+		return m.createNotificationFn(ctx, n)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error) {
+	if m.listNotificationsFn != nil {
+		return m.listNotificationsFn(ctx, userID, limit)
+	}
+	return nil, nil
+}
+
+func (m *mockSessionRepo) CountUnreadNotifications(ctx context.Context, userID string) (int, error) {
+	if m.countUnreadNotificationsFn != nil {
+		return m.countUnreadNotificationsFn(ctx, userID)
+	}
+	return 0, nil
+}
+
+func (m *mockSessionRepo) MarkNotificationRead(ctx context.Context, userID, notificationID string) error {
+	if m.markNotificationReadFn != nil {
+		return m.markNotificationReadFn(ctx, userID, notificationID)
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) MarkAllNotificationsRead(ctx context.Context, userID string) error {
+	if m.markAllNotificationsReadFn != nil {
+		return m.markAllNotificationsReadFn(ctx, userID)
 	}
 	return nil
 }

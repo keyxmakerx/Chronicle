@@ -78,6 +78,25 @@ type AddExceptionRequest struct {
 	TZ          string `json:"tz"`
 }
 
+// ReplaceDayExceptionsRequest replaces ALL of a member's overrides for one date
+// in a single atomic call — the storage side of the "compose the day" editor
+// (C-SCHED-P2 0c). The client pre-fills the editor with the effective day
+// (recurring pattern) and sends the whole composed set back, so marking one
+// hour busy re-sends the rest rather than erasing it. An empty Blocks reverts
+// the day to the recurring pattern.
+type ReplaceDayExceptionsRequest struct {
+	OnDate string                    `json:"onDate"` // YYYY-MM-DD
+	TZ     string                    `json:"tz"`
+	Blocks []ExceptionBlockDTO       `json:"blocks"`
+}
+
+// ExceptionBlockDTO is one composed block within a day-replace request.
+type ExceptionBlockDTO struct {
+	StartMinute int    `json:"startMinute"`
+	EndMinute   int    `json:"endMinute"`
+	State       string `json:"state"` // available | preferred | unavailable
+}
+
 // --- Overlay result types (the DM heatmap payload, projected to viewer zone) ---
 
 // WeekOverlay is the heatmap payload for one week, already projected into the
