@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,8 +21,42 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 )
 
-// sessionCookieName is the HTTP cookie used to store the session token.
+// sanitizeRedirect returns raw only if it is a safe same-site path (starts with
+// a single "/", not "//" or "/\" which are protocol-relative open-redirect
+// vectors). Anything else becomes "" so the caller falls back to a default.
+func sanitizeRedirect(raw string) string {
+	if raw == "" || !strings.HasPrefix(raw, "/") {
+		return ""
+	}
+	if strings.HasPrefix(raw, "//") || strings.HasPrefix(raw, "/\\") {
+		return ""
+	}
+	return raw
+}
+
+// extractInviteToken pulls a campaign invite token out of a post-register
+// redirect that targets the invite-accept page. Returns "" for any other
+// destination, so only genuine invite-flow registrations carry a token into the
+// gate.
+func extractInviteToken(redirect string) string {
+	if redirect == "" {
+		return ""
+	}
+	u, err := url.Parse(redirect)
+	if err != nil || u.Path != "/invites/accept" {
+		return ""
+	}
+	return u.Query().Get("token")
+}
+
+// sessionCookieName is the bare session cookie name, used over plain HTTP (dev).
 const sessionCookieName = "chronicle_session"
+
+// sessionCookieSecureName is the __Host--prefixed name used over HTTPS. The
+// prefix is a browser-enforced guarantee that the cookie was set Secure, with
+// Path=/ and no Domain — so no subdomain can inject or overwrite the session
+// (mirrors the CSRF cookie, middleware/csrf.go).
+const sessionCookieSecureName = "__Host-chronicle_session"
 
 // SecurityEventLogger records security events for the admin security dashboard.
 // Implemented by the admin security service; wired after both are initialized.
@@ -133,7 +169,18 @@ func (h *Handler) RegisterForm(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, nil, ""))
+	redirect := sanitizeRedirect(c.QueryParam("redirect"))
+	inviteToken := extractInviteToken(redirect)
+
+	// Render the friendly gated panel instead of the form when the site
+	// registration mode blocks this visitor (invite-only without a valid invite,
+	// or closed). The first-user bootstrap is reported allowed, so a fresh
+	// install always shows the form.
+	mode, allowed, err := h.service.RegistrationStatus(c.Request().Context(), inviteToken)
+	if err != nil {
+		return err
+	}
+	return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, nil, "", redirect, !allowed, mode))
 }
 
 // Register processes the registration form submission (POST /register).
@@ -143,30 +190,47 @@ func (h *Handler) Register(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
+	// Post-register destination (carried as a hidden form field) + any invite
+	// token it embeds, which the service uses to satisfy invite-only mode.
+	redirect := sanitizeRedirect(c.FormValue("redirect"))
+	inviteToken := extractInviteToken(redirect)
+
 	// Basic server-side validation.
 	if validationErr := validateRegisterRequest(&req); validationErr != "" {
 		csrfToken := middleware.GetCSRFToken(c)
 		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, RegisterFormComponent(csrfToken, &req, validationErr))
+			return middleware.Render(c, http.StatusOK, RegisterFormComponent(csrfToken, &req, validationErr, redirect))
 		}
-		return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, validationErr))
+		return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, validationErr, redirect, false, ""))
 	}
 
 	input := RegisterInput{
 		Email:       req.Email,
 		DisplayName: req.DisplayName,
 		Password:    req.Password,
+		InviteToken: inviteToken,
 	}
 
 	_, err := h.service.Register(c.Request().Context(), input)
 	if err != nil {
 		csrfToken := middleware.GetCSRFToken(c)
-		errMsg := apperror.UserMessage(err, "registration failed")
 
-		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, RegisterFormComponent(csrfToken, &req, errMsg))
+		// A blocked registration gate (403) renders the friendly gated panel, not
+		// a form-level error — the visitor can't fix it by editing the form.
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == http.StatusForbidden {
+			mode, _, _ := h.service.RegistrationStatus(c.Request().Context(), inviteToken)
+			if middleware.IsHTMX(c) {
+				return middleware.Render(c, http.StatusOK, registrationGatedPanel(mode, redirect))
+			}
+			return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, "", redirect, true, mode))
 		}
-		return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, errMsg))
+
+		errMsg := apperror.UserMessage(err, "registration failed")
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK, RegisterFormComponent(csrfToken, &req, errMsg, redirect))
+		}
+		return middleware.Render(c, http.StatusOK, RegisterPage(csrfToken, &req, errMsg, redirect, false, ""))
 	}
 
 	// Auto-login after successful registration.
@@ -185,10 +249,12 @@ func (h *Handler) Register(c echo.Context) error {
 
 	setSessionCookie(c, token, h.sessionTTL)
 
-	// Redirect to the requested page (e.g., invite accept), or dashboard.
+	// Redirect to the requested page (e.g., invite accept, so the invite is
+	// consumed right after signup), or dashboard. Uses the sanitized hidden-field
+	// redirect — the query param is not present on the HTMX form POST.
 	redirectTo := "/dashboard"
-	if redir := c.QueryParam("redirect"); redir != "" && strings.HasPrefix(redir, "/") {
-		redirectTo = redir
+	if redirect != "" {
+		redirectTo = redirect
 	}
 
 	return middleware.HTMXRedirect(c, redirectTo)
@@ -562,39 +628,92 @@ func commonTimezones() []string {
 
 // --- Cookie helpers ---
 
-// getSessionToken reads the session token from the cookie.
-func getSessionToken(c echo.Context) string {
-	cookie, err := c.Cookie(sessionCookieName)
-	if err != nil || cookie.Value == "" {
-		return ""
+// sessionCookieNameFor returns the cookie name appropriate for the request's
+// scheme: the __Host--prefixed name over HTTPS (the browser then guarantees the
+// cookie was set Secure, with Path=/ and no Domain — no subdomain can forge or
+// overwrite it), the bare name over plain HTTP so local dev over http:// still
+// works. Mirrors the CSRF cookie's scheme detection (one shared implementation).
+func sessionCookieNameFor(req *http.Request) string {
+	if middleware.SchemeIsSecure(req) {
+		return sessionCookieSecureName
 	}
-	return cookie.Value
+	return sessionCookieName
+}
+
+// getSessionToken reads the session token, preferring the __Host- cookie over
+// HTTPS and falling back to the bare name only when no __Host- cookie is present.
+// This mirrors the CSRF cookie's dual-read (middleware/csrf.go): behind a
+// TLS-terminating proxy the scheme this codebase derives can differ between the
+// request that SET the cookie and a later request that READS it (the documented
+// C-AUTH-LOGIN-CSRF-FIX root cause), so a single-name read would silently drop
+// the session on a scheme flip. Preferring __Host- keeps the anti-forgery
+// property for logged-in users (their __Host- cookie always wins over a
+// subdomain-injected bare cookie); the bare fallback only applies pre-login or
+// to a pre-upgrade session, and login always rotates the token, so it does not
+// enable session fixation. Over plain HTTP only the bare name is read.
+func getSessionToken(c echo.Context) string {
+	return readSessionToken(c.Request())
+}
+
+// readSessionToken is the raw-request form of getSessionToken, shared with
+// callers outside echo (the WebSocket handshake). Over HTTPS it tries the
+// __Host- name first, then the bare name; over HTTP only the bare name.
+func readSessionToken(req *http.Request) string {
+	names := []string{sessionCookieName}
+	if middleware.SchemeIsSecure(req) {
+		names = []string{sessionCookieSecureName, sessionCookieName}
+	}
+	for _, name := range names {
+		if cookie, err := req.Cookie(name); err == nil && cookie.Value != "" {
+			return cookie.Value
+		}
+	}
+	return ""
+}
+
+// ReadSessionToken reads the session token from an http.Request using the same
+// scheme-aware dual-read as the web handlers. For callers outside this package
+// (the WebSocket handshake) that don't have an echo.Context.
+func ReadSessionToken(req *http.Request) string {
+	return readSessionToken(req)
 }
 
 // setSessionCookie sets the session cookie on the response. The cookie is
-// HttpOnly (JS can't read it), Secure if behind TLS, and SameSite=Lax.
+// HttpOnly (JS can't read it), Secure + __Host--prefixed behind TLS, and
+// SameSite=Lax. The __Host- prefix requires Secure=true, Path=/, and no Domain.
 func setSessionCookie(c echo.Context, token string, ttl time.Duration) {
 	req := c.Request()
+	secure := middleware.SchemeIsSecure(req)
 	c.SetCookie(&http.Cookie{
-		Name:     sessionCookieName,
+		Name:     sessionCookieNameFor(req),
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   req.TLS != nil || req.Header.Get("X-Forwarded-Proto") == "https",
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(ttl.Seconds()),
 	})
 }
 
-// clearSessionCookie removes the session cookie by setting MaxAge to -1.
+// clearSessionCookie removes the session cookie by setting MaxAge to -1. It
+// clears BOTH the scheme-appropriate name AND the bare legacy name, so a stale
+// pre-upgrade cookie can't linger in the browser after logout.
 func clearSessionCookie(c echo.Context) {
-	c.SetCookie(&http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		MaxAge:   -1,
-	})
+	req := c.Request()
+	names := []string{sessionCookieNameFor(req)}
+	if n := sessionCookieName; names[0] != n {
+		names = append(names, n)
+	}
+	for _, name := range names {
+		c.SetCookie(&http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   name == sessionCookieSecureName,
+			MaxAge:   -1,
+		})
+	}
 }
 
 // --- Validation helpers ---

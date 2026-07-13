@@ -61,6 +61,14 @@ func schemeIsSecure(req *http.Request) bool {
 	return false
 }
 
+// SchemeIsSecure reports whether the original client connection was HTTPS,
+// tolerant of a TLS-terminating proxy (X-Forwarded-Proto). Exported so the auth
+// plugin can pick the same __Host--prefixed cookie name for the session cookie
+// as this package uses for the CSRF cookie — one detection, no drift.
+func SchemeIsSecure(req *http.Request) bool {
+	return schemeIsSecure(req)
+}
+
 // readExistingCSRF returns the value of whichever CSRF cookie the browser
 // actually sent, checking BOTH the __Host- (HTTPS) and bare (HTTP) names. This
 // is the load-bearing fix: behind a proxy the scheme we derive on the POST can

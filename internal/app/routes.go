@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/a-h/templ"
@@ -625,13 +626,15 @@ type wsSessionAuthAdapter struct {
 	svc auth.AuthService
 }
 
-// AuthenticateSessionForWS validates the chronicle_session cookie and returns the user ID.
+// AuthenticateSessionForWS validates the session cookie and returns the user ID.
+// Uses the scheme-appropriate cookie name (__Host- over HTTPS) so the WebSocket
+// handshake reads the same cookie the browser was issued.
 func (a *wsSessionAuthAdapter) AuthenticateSessionForWS(r *http.Request) (string, error) {
-	cookie, err := r.Cookie("chronicle_session")
-	if err != nil || cookie.Value == "" {
+	token := auth.ReadSessionToken(r)
+	if token == "" {
 		return "", fmt.Errorf("no session cookie")
 	}
-	session, err := a.svc.ValidateSession(r.Context(), cookie.Value)
+	session, err := a.svc.ValidateSession(r.Context(), token)
 	if err != nil {
 		return "", fmt.Errorf("invalid session: %w", err)
 	}
@@ -1215,6 +1218,36 @@ func (a *storageLimiterAdapter) GetEffectiveLimits(ctx context.Context, userID, 
 		return 0, 0, 0, err
 	}
 	return limits.MaxUploadSize, limits.MaxTotalStorage, limits.MaxFiles, nil
+}
+
+// registrationInviteCheckerAdapter wraps the campaigns invite service to satisfy
+// auth.RegistrationInviteChecker, so the auth plugin can validate invite-only
+// registrations without importing the campaigns plugin (T-B2).
+type registrationInviteCheckerAdapter struct {
+	invites campaigns.InviteService
+}
+
+// IsRegistrationInviteValid reports whether the token names a live invite that
+// can still be used to create an account: it exists, has not been accepted, has
+// not expired, and — when email is non-empty — was issued to that address.
+// Campaign invites are email-scoped, so binding the token to the registering
+// email makes an invite effectively single-use (a second registration for the
+// same address hits email-uniqueness; no other address can consume the invite).
+func (a *registrationInviteCheckerAdapter) IsRegistrationInviteValid(ctx context.Context, token, email string) bool {
+	if token == "" {
+		return false
+	}
+	inv, err := a.invites.GetInviteByToken(ctx, token)
+	if err != nil || inv == nil {
+		return false
+	}
+	if inv.AcceptedAt != nil || inv.IsExpired() {
+		return false
+	}
+	if email != "" && !strings.EqualFold(strings.TrimSpace(inv.Email), strings.TrimSpace(email)) {
+		return false
+	}
+	return true
 }
 
 // sessionListerAdapter wraps sessions.SessionService to implement the
@@ -1851,6 +1884,12 @@ func (a *App) RegisterRoutes() {
 	settingsRepo := settings.NewSettingsRepository(a.DB)
 	settingsService := settings.NewSettingsService(settingsRepo)
 	mediaService.SetStorageLimiter(&storageLimiterAdapter{svc: settingsService})
+
+	// Beta registration gate (B-R4): the auth service reads the site registration
+	// mode from settings and validates invite-only signups against live campaign
+	// invites. Both deps are optional at the auth layer (nil ⇒ open), wired here
+	// now that settings + invites exist.
+	auth.ConfigureRegistrationGate(authService, settingsService, &registrationInviteCheckerAdapter{invites: inviteService})
 
 	// Migration 26 added media_files.content_hash for per-campaign upload
 	// dedup. Existing rows from before the migration have NULL hashes —

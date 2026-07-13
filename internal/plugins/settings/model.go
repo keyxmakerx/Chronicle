@@ -133,4 +133,25 @@ const (
 	// KeyPackageScanContent controls whether downloaded packages are scanned
 	// for suspicious files (executables, symlinks). Values: "true" (default), "false".
 	KeyPackageScanContent = "packages.scan_content"
+
+	// --- Registration Gate (beta lockdown, B-R4) ---
+
+	// KeyRegistrationMode controls who may create an account via POST /register.
+	// Values: "open" (default), "invite", "closed". Enforced in the auth service;
+	// the first-user-admin bootstrap always works regardless of mode.
+	KeyRegistrationMode = "auth.registration_mode"
 )
+
+// Registration mode values for KeyRegistrationMode. Defined here as the canonical
+// source of truth for the site setting; the auth service compares against its own
+// matching local constants (it must not import this plugin).
+const (
+	RegistrationOpen   = "open"   // Anyone may register (default — zero behavior change).
+	RegistrationInvite = "invite" // Only holders of a valid campaign invite may register.
+	RegistrationClosed = "closed" // No new registrations (except the first-user bootstrap).
+)
+
+// IsValidRegistrationMode reports whether m is one of the three known modes.
+func IsValidRegistrationMode(m string) bool {
+	return m == RegistrationOpen || m == RegistrationInvite || m == RegistrationClosed
+}

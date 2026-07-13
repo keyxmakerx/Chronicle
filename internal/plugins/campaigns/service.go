@@ -741,6 +741,13 @@ func (s *campaignService) UpdateBackdropPath(ctx context.Context, campaignID str
 // UpdateAccentColor sets the campaign's accent color. Accepts a hex color
 // string (e.g. "#6366f1") or empty string to reset to default.
 func (s *campaignService) UpdateAccentColor(ctx context.Context, campaignID string, color string) error {
+	// Defense in depth: reject any non-#RRGGBB value (empty resets to default).
+	// The accent reaches a raw <style> block at render, so validate at the
+	// service too — not only the handler (audit-R2 / #521).
+	if color != "" && !isValidHexColor(color) {
+		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
+	}
+
 	campaign, err := s.repo.FindByID(ctx, campaignID)
 	if err != nil {
 		return err
@@ -764,6 +771,10 @@ func (s *campaignService) UpdateAccentColor(ctx context.Context, campaignID stri
 func (s *campaignService) UpdateAccentSurface(ctx context.Context, campaignID string, slot int, color string) error {
 	if slot != 1 && slot != 2 {
 		return apperror.NewBadRequest("invalid accent surface slot")
+	}
+	// Same strict #RRGGBB validation as the chrome accent (empty resets).
+	if color != "" && !isValidHexColor(color) {
+		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
 	}
 
 	campaign, err := s.repo.FindByID(ctx, campaignID)

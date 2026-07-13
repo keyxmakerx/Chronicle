@@ -50,6 +50,10 @@ type RegisterInput struct {
 	Email       string
 	DisplayName string
 	Password    string
+	// InviteToken carries a campaign invite token when the registration came
+	// through the invite-accept flow. In invite-only mode it is the only way a
+	// non-first user may register; ignored in open mode.
+	InviteToken string
 }
 
 // LoginInput is the validated input for authenticating a user.

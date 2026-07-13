@@ -74,6 +74,9 @@ templ AdminSecurityPage(data SecurityPageData) {
 				@securityStatsCards(data.Stats)
 			}
 
+			<!-- Registration gate (B-R4) -->
+			@registrationGateCard(data.RegistrationMode, data.CSRFToken)
+
 			<!-- Active Sessions -->
 			<div class="space-y-4">
 				<h2 class="text-lg font-semibold text-fg flex items-center gap-2">
@@ -115,6 +118,43 @@ templ AdminSecurityPage(data SecurityPageData) {
 			</div>
 		</div>
 	}
+}
+
+// registrationGateCard renders the site registration-mode control (B-R4):
+// open / invite-only / closed. Saving is reauth-gated on the server.
+templ registrationGateCard(mode, csrfToken string) {
+	<div class="card p-6 space-y-4">
+		<div class="flex items-center gap-2">
+			<i class="fa-solid fa-user-lock text-accent"></i>
+			<h2 class="text-lg font-semibold text-fg">Registration</h2>
+		</div>
+		<p class="text-sm text-fg-secondary">
+			Control who can create new accounts. The first account on a fresh
+			instance always becomes the admin, regardless of this setting.
+		</p>
+		<form
+			hx-post="/admin/security/registration"
+			hx-swap="none"
+			class="flex flex-wrap items-end gap-3"
+		>
+			<input type="hidden" name="csrf_token" value={ csrfToken }/>
+			<div>
+				<label for="registration_mode" class="block text-sm font-medium text-fg-body mb-1.5">
+					Mode
+				</label>
+				<select
+					id="registration_mode"
+					name="registration_mode"
+					class="text-sm rounded-lg border border-edge bg-surface px-3 py-2 text-fg"
+				>
+					<option value="open" selected?={ mode == "open" }>Open — anyone can register</option>
+					<option value="invite" selected?={ mode == "invite" }>Invite-only — requires a campaign invite</option>
+					<option value="closed" selected?={ mode == "closed" }>Closed — no new accounts</option>
+				</select>
+			</div>
+			<button type="submit" class="btn-primary py-2 px-4">Save</button>
+		</form>
+	</div>
 }
 
 // securityStatsCards renders the top-level security statistics.

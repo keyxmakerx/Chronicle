@@ -41,6 +41,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, authService auth.AuthService, smtp
 
 	// Security dashboard.
 	admin.GET("/security", h.Security)
+	admin.POST("/security/registration", h.UpdateRegistrationMode, reauth)
 	admin.DELETE("/security/sessions/:hash", h.TerminateSession)
 	admin.POST("/security/users/:id/force-logout", h.ForceLogoutUser, reauth)
 	admin.PUT("/security/users/:id/disable", h.DisableUser, reauth)

@@ -69,6 +69,13 @@ type SettingsService interface {
 	// UpdateCORSOrigins replaces the CORS origin whitelist with the given origins.
 	// Each origin must be a valid URL scheme+host (e.g., "http://localhost:30000").
 	UpdateCORSOrigins(ctx context.Context, origins []string) error
+
+	// GetRegistrationMode returns the site registration mode ("open", "invite",
+	// "closed"), defaulting to "open" when unset or invalid.
+	GetRegistrationMode(ctx context.Context) (string, error)
+
+	// UpdateRegistrationMode validates and persists the site registration mode.
+	UpdateRegistrationMode(ctx context.Context, mode string) error
 }
 
 // settingsService implements SettingsService.
@@ -334,6 +341,35 @@ func (s *settingsService) ClearCampaignBypass(ctx context.Context, campaignID st
 		return apperror.NewBadRequest("campaign ID is required")
 	}
 	return s.repo.ClearCampaignBypass(ctx, campaignID)
+}
+
+// --- Registration Gate ---
+
+// GetRegistrationMode returns the site registration mode ("open", "invite", or
+// "closed"). Defaults to "open" when the setting is unset or holds an
+// unrecognized value, so a fresh install (and any misconfiguration) fails open —
+// registration keeps working until an admin deliberately restricts it.
+func (s *settingsService) GetRegistrationMode(ctx context.Context) (string, error) {
+	raw, err := s.repo.Get(ctx, KeyRegistrationMode)
+	if err != nil {
+		var appErr *apperror.AppError
+		if errors.As(err, &appErr) && appErr.Code == 404 {
+			return RegistrationOpen, nil
+		}
+		return RegistrationOpen, err
+	}
+	if !IsValidRegistrationMode(raw) {
+		return RegistrationOpen, nil
+	}
+	return raw, nil
+}
+
+// UpdateRegistrationMode validates and persists the site registration mode.
+func (s *settingsService) UpdateRegistrationMode(ctx context.Context, mode string) error {
+	if !IsValidRegistrationMode(mode) {
+		return apperror.NewBadRequest("registration mode must be open, invite, or closed")
+	}
+	return s.repo.Set(ctx, KeyRegistrationMode, mode)
 }
 
 // --- CORS Origin Management ---
