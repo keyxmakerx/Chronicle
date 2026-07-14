@@ -217,11 +217,37 @@ const (
 	RecurrenceCustom   = "custom"   // every N weeks (RecurrenceInterval)
 )
 
-// absDayIndex returns a calendar-absolute day number for (year, month, day)
-// using the constant year length — identical to the weekday math in
-// v2WeekdayIndexFor, so week alignment stays consistent across the app. month
-// is 1-based.
+// absDayIndex returns a calendar-absolute day number for (year, month, day).
+// It is the SINGLE place the day-counter choice is made, and both recurrence
+// expansion (OccursOn) and the display weekday column (v2WeekdayIndexFor)
+// consume it, so a weekly event and the grid column it renders on can never
+// disagree. month is 1-based.
+//
+// Real-time (Gregorian) calendars use the proleptic-Gregorian Julian Day
+// Number — a true day counter that advances by exactly one across a leap day
+// (2028-02-29 → 2028-03-01) — instead of the constant-length sum, which counts
+// year*YearLength() and so misses one day per elapsed Gregorian leap year: the
+// constant-length count first drifts +1 at 2028-02-29 (the P1 weekday-drift
+// flag, RC-13.6) and would also collapse Feb 29 and Mar 1 onto the same index
+// (MonthDays reports the Gregorian 29 for February while YearLength()'s months
+// carry the configured 28), double-rendering a weekly event's column. JDN has
+// neither defect. Only FLAGGED real-time calendars branch; fantasy AND
+// reallife-but-manual calendars keep the constant-length geometry byte-for-byte
+// (UsesRealTime()=false → constLenDayIndex, provably unchanged).
 func (c *Calendar) absDayIndex(year, month, day int) int {
+	if c.UsesRealTime() {
+		return gregorianJDN(year, month, day)
+	}
+	return c.constLenDayIndex(year, month, day)
+}
+
+// constLenDayIndex is the fixed-geometry absolute-day counter:
+// year*YearLength() + prior configured month days + day (month 1-based). It is
+// the one home for the constant-length formula that absDayIndex (non-real-time
+// branch), the display weekday path (v2WeekdayIndexFor), and the real-time
+// display calibration's 2026 epoch anchor (realTimeWeekdayIndex) all share, so
+// the geometry can never drift between recurrence and display.
+func (c *Calendar) constLenDayIndex(year, month, day int) int {
 	abs := year * c.YearLength()
 	for i := 0; i < month-1 && i < len(c.Months); i++ {
 		abs += c.Months[i].Days

@@ -353,8 +353,11 @@ func gregorianMoonPhase(year, month, day int) float64 {
 }
 
 // gregorianJDN is the Julian Day Number for a proleptic-Gregorian date (the
-// standard Fliegel–Van Flandern integer formula). Local + exact; used only for
-// the real-Moon phase math.
+// standard Fliegel–Van Flandern integer formula). Local + exact. It is the
+// shared true-day counter for real-time calendars: the real-Moon phase math,
+// the display weekday column (realTimeWeekdayIndex), and recurrence expansion
+// (Calendar.absDayIndex) all count real-time days through it, so none of them
+// drifts across a Gregorian leap day.
 func gregorianJDN(y, m, d int) int {
 	a := (14 - m) / 12
 	yy := y + 4800 - a
