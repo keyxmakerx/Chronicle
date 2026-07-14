@@ -50,6 +50,11 @@ type Session struct {
 	Recap         *string    `json:"-"`         // ProseMirror JSON, visible to all members.
 	RecapHTML     *string    `json:"recap_html,omitempty"` // Pre-rendered HTML.
 	ScheduledDate *string    `json:"scheduled_date,omitempty"` // YYYY-MM-DD format.
+	// ScheduledTime is the wall-clock start time as "HH:MM" (24-hour), zone-less
+	// like ScheduledDate (C-SCHED-P3, migration 004). Set from a confirmed
+	// proposal's winning UTC instant (converted to the confirmer's zone) or the
+	// create/edit modal. nil = no time (all pre-P3 + time-less sessions).
+	ScheduledTime *string    `json:"scheduled_time,omitempty"`
 	CalendarYear  *int       `json:"calendar_year,omitempty"`
 	CalendarMonth *int       `json:"calendar_month,omitempty"`
 	CalendarDay   *int       `json:"calendar_day,omitempty"`
@@ -119,6 +124,7 @@ type CreateSessionInput struct {
 	Name                string
 	Summary             *string
 	ScheduledDate       *string
+	ScheduledTime       *string
 	CalendarYear        *int
 	CalendarMonth       *int
 	CalendarDay         *int
@@ -135,6 +141,7 @@ type UpdateSessionInput struct {
 	Name                string
 	Summary             *string
 	ScheduledDate       *string
+	ScheduledTime       *string
 	CalendarYear        *int
 	CalendarMonth       *int
 	CalendarDay         *int
@@ -153,7 +160,9 @@ type SessionListData struct {
 }
 
 // FormatScheduledDate returns a human-readable date string like "Sat, Mar 8, 2028"
-// from the YYYY-MM-DD scheduled_date field. Returns empty string if not set.
+// from the YYYY-MM-DD scheduled_date field, with the wall-clock time appended
+// ("Sat, Mar 8, 2028 · 7:00 PM") when scheduled_time is set (C-SCHED-P3). Returns
+// empty string if no date is set.
 func (s *Session) FormatScheduledDate() string {
 	if s.ScheduledDate == nil || *s.ScheduledDate == "" {
 		return ""
@@ -166,7 +175,25 @@ func (s *Session) FormatScheduledDate() string {
 			return *s.ScheduledDate
 		}
 	}
-	return t.Format("Mon, Jan 2, 2006")
+	out := t.Format("Mon, Jan 2, 2006")
+	if tl := s.FormatScheduledTime(); tl != "" {
+		out += " · " + tl
+	}
+	return out
+}
+
+// FormatScheduledTime renders the "HH:MM" (24-hour) scheduled_time as a friendly
+// 12-hour clock ("7:00 PM"), or "" if unset/unparseable. Zone-less, matching the
+// zone-less scheduled_date (the confirmed slot's wall-clock for the group).
+func (s *Session) FormatScheduledTime() string {
+	if s.ScheduledTime == nil || *s.ScheduledTime == "" {
+		return ""
+	}
+	t, err := time.Parse("15:04", *s.ScheduledTime)
+	if err != nil {
+		return *s.ScheduledTime
+	}
+	return t.Format("3:04 PM")
 }
 
 // RecurrenceLabel returns a human-readable label for the recurrence pattern.

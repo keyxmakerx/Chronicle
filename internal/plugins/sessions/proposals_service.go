@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -271,8 +272,24 @@ func (s *sessionService) CreateProposalTokens(ctx context.Context, optionID, use
 	return out, nil
 }
 
-// RedeemProposalToken applies a one-click email response and consumes the token.
-func (s *sessionService) RedeemProposalToken(ctx context.Context, tokenStr string) (*SlotProposalToken, error) {
+// ProposalTokenContext is the resolved state behind a one-click response token:
+// the token itself, its proposal (for the campaign + open/closed check + confirm
+// page), and the option (for the slot label). Returned by ValidateProposalToken.
+type ProposalTokenContext struct {
+	Token    *SlotProposalToken
+	Proposal *SlotProposal
+	Option   *SlotProposalOption
+}
+
+// ValidateProposalToken resolves + checks a one-click response token WITHOUT
+// applying anything (C-SCHED-P3 0a/0b). It enforces single-use, non-expiry, and —
+// the 0a gate finding — that the proposal is still OPEN over the 7-day TTL (the
+// old redeem skipped this, so a token could land a response after the winner was
+// already confirmed). It does NOT check membership: the service is campaigns-free
+// (member resolution lives in the handler, which gates on the returned
+// Proposal.CampaignID before applying). Used by BOTH the GET confirm page and the
+// POST apply, so a mail prefetcher's GET is a pure read.
+func (s *sessionService) ValidateProposalToken(ctx context.Context, tokenStr string) (*ProposalTokenContext, error) {
 	token, err := s.repo.FindProposalToken(ctx, tokenStr)
 	if err != nil {
 		return nil, err
@@ -283,11 +300,35 @@ func (s *sessionService) RedeemProposalToken(ctx context.Context, tokenStr strin
 	if time.Now().UTC().After(token.ExpiresAt) {
 		return nil, apperror.NewBadRequest("this response link has expired")
 	}
+	opt, err := s.repo.FindOption(ctx, token.OptionID)
+	if err != nil {
+		return nil, err
+	}
+	proposal, err := s.repo.FindProposalByID(ctx, opt.ProposalID)
+	if err != nil {
+		return nil, err
+	}
+	if proposal.Status == ProposalClosed {
+		return nil, apperror.NewBadRequest("this proposal is closed — the session time has already been decided")
+	}
+	return &ProposalTokenContext{Token: token, Proposal: proposal, Option: opt}, nil
+}
+
+// ApplyProposalToken records the token's response and consumes the token, after
+// re-validating (single-use / non-expiry / proposal-open) to close any TOCTOU
+// gap between the confirm page and the POST. The caller (handler) MUST have
+// re-checked current membership first (0a) — this is the state-changing half, so
+// it only runs from the POST route, never the prefetchable GET.
+func (s *sessionService) ApplyProposalToken(ctx context.Context, tokenStr string) (*ProposalTokenContext, error) {
+	tc, err := s.ValidateProposalToken(ctx, tokenStr)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.repo.UpsertProposalResponse(ctx, &SlotProposalResponse{
 		ID:        generateUUID(),
-		OptionID:  token.OptionID,
-		UserID:    token.UserID,
-		Response:  token.Response,
+		OptionID:  tc.Token.OptionID,
+		UserID:    tc.Token.UserID,
+		Response:  tc.Token.Response,
 		UpdatedAt: time.Now().UTC(),
 	}); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("applying response: %w", err))
@@ -295,5 +336,58 @@ func (s *sessionService) RedeemProposalToken(ctx context.Context, tokenStr strin
 	if err := s.repo.MarkProposalTokenUsed(ctx, tokenStr); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("marking token used: %w", err))
 	}
-	return token, nil
+	return tc, nil
+}
+
+// ConfirmProposalWinner is the C-SCHED-P3 confirm-winner flow (Scribe+): mark the
+// chosen option the winner + close the proposal (atomically), then create a
+// planned session from the winning UTC instant. The instant is materialized into
+// the confirmer's zone as the zone-less wall-clock date + "HH:MM" the group plays
+// at — mirroring the zone-less scheduled_date manual sessions already use. The
+// proposal is closed BEFORE the session is created so a retry can never mint a
+// duplicate session (a re-confirm hits the closed guard); on the rare
+// create-after-close failure the winner is still marked and the operator can add
+// the session manually. Returns the new session so the handler can invite members
+// + notify responders (both handler concerns — the service stays campaigns-free).
+func (s *sessionService) ConfirmProposalWinner(ctx context.Context, campaignID, proposalID, optionID, confirmedBy, confirmerTZ string) (*Session, error) {
+	p, opts, err := s.repo.GetProposal(ctx, campaignID, proposalID)
+	if err != nil {
+		return nil, err
+	}
+	if p.Status == ProposalClosed {
+		return nil, apperror.NewBadRequest("this proposal has already been confirmed")
+	}
+	var winner *SlotProposalOption
+	for i := range opts {
+		if opts[i].ID == optionID {
+			winner = &opts[i]
+			break
+		}
+	}
+	if winner == nil {
+		return nil, apperror.NewNotFound("option not found")
+	}
+
+	if err := s.repo.SetProposalWinnerAndClose(ctx, proposalID, optionID); err != nil {
+		// A concurrent confirm won the close — bail before creating a session so a
+		// proposal never mints two (the conditional close is the serialization point).
+		if errors.Is(err, errProposalAlreadyClosed) {
+			return nil, apperror.NewBadRequest("this proposal has already been confirmed")
+		}
+		return nil, apperror.NewInternal(fmt.Errorf("confirming winner: %w", err))
+	}
+
+	local := winner.StartsAtUTC.In(timeutil.LoadLocation(confirmerTZ))
+	date := local.Format("2006-01-02")
+	clock := local.Format("15:04")
+	session, err := s.CreateSession(ctx, campaignID, CreateSessionInput{
+		Name:          p.Title,
+		ScheduledDate: &date,
+		ScheduledTime: &clock,
+		CreatedBy:     confirmedBy,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
 }

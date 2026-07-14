@@ -180,12 +180,25 @@ func TestRedeemProposalToken(t *testing.T) {
 	past := time.Now().UTC().Add(-time.Hour)
 	used := time.Now().UTC().Add(-time.Minute)
 
+	// openProposalMock wires FindOption + FindProposalByID to an OPEN proposal so
+	// ValidateProposalToken's new option→proposal→open traversal (C-SCHED-P3 0a)
+	// can resolve.
+	openProposalMock := func(base *mockSessionRepo) *mockSessionRepo {
+		base.findOptionFn = func(_ context.Context, _ string) (*SlotProposalOption, error) {
+			return &SlotProposalOption{ID: "o1", ProposalID: "p1"}, nil
+		}
+		base.findProposalByIDFn = func(_ context.Context, _ string) (*SlotProposal, error) {
+			return &SlotProposal{ID: "p1", CampaignID: "c1", Status: ProposalOpen}, nil
+		}
+		return base
+	}
+
 	t.Run("expired rejected", func(t *testing.T) {
 		repo := &mockSessionRepo{findProposalTokenFn: func(_ context.Context, _ string) (*SlotProposalToken, error) {
 			return &SlotProposalToken{Token: "x", OptionID: "o1", UserID: "u1", Response: ResponseYes, ExpiresAt: past}, nil
 		}}
 		svc := NewSessionService(repo, nil)
-		if _, err := svc.RedeemProposalToken(context.Background(), "x"); err == nil {
+		if _, err := svc.ApplyProposalToken(context.Background(), "x"); err == nil {
 			t.Error("expected expiry rejection")
 		}
 	})
@@ -195,23 +208,43 @@ func TestRedeemProposalToken(t *testing.T) {
 			return &SlotProposalToken{Token: "x", OptionID: "o1", UserID: "u1", Response: ResponseYes, ExpiresAt: future, UsedAt: &used}, nil
 		}}
 		svc := NewSessionService(repo, nil)
-		if _, err := svc.RedeemProposalToken(context.Background(), "x"); err == nil {
+		if _, err := svc.ApplyProposalToken(context.Background(), "x"); err == nil {
 			t.Error("expected used-token rejection")
+		}
+	})
+
+	t.Run("closed proposal rejected (0a)", func(t *testing.T) {
+		applied := false
+		repo := openProposalMock(&mockSessionRepo{
+			findProposalTokenFn: func(_ context.Context, _ string) (*SlotProposalToken, error) {
+				return &SlotProposalToken{Token: "x", OptionID: "o1", UserID: "u1", Response: ResponseYes, ExpiresAt: future}, nil
+			},
+			upsertProposalResponseFn: func(_ context.Context, _ *SlotProposalResponse) error { applied = true; return nil },
+		})
+		repo.findProposalByIDFn = func(_ context.Context, _ string) (*SlotProposal, error) {
+			return &SlotProposal{ID: "p1", CampaignID: "c1", Status: ProposalClosed}, nil
+		}
+		svc := NewSessionService(repo, nil)
+		if _, err := svc.ApplyProposalToken(context.Background(), "x"); err == nil {
+			t.Error("expected closed-proposal rejection (7-day-TTL gate)")
+		}
+		if applied {
+			t.Error("a response on a closed proposal must not be applied")
 		}
 	})
 
 	t.Run("valid applies response and marks used", func(t *testing.T) {
 		var upserted *SlotProposalResponse
 		marked := ""
-		repo := &mockSessionRepo{
+		repo := openProposalMock(&mockSessionRepo{
 			findProposalTokenFn: func(_ context.Context, _ string) (*SlotProposalToken, error) {
 				return &SlotProposalToken{Token: "tok", OptionID: "o1", UserID: "u1", Response: ResponseNo, ExpiresAt: future}, nil
 			},
 			upsertProposalResponseFn: func(_ context.Context, r *SlotProposalResponse) error { upserted = r; return nil },
 			markProposalTokenUsedFn:  func(_ context.Context, tok string) error { marked = tok; return nil },
-		}
+		})
 		svc := NewSessionService(repo, nil)
-		if _, err := svc.RedeemProposalToken(context.Background(), "tok"); err != nil {
+		if _, err := svc.ApplyProposalToken(context.Background(), "tok"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if upserted == nil || upserted.Response != ResponseNo {

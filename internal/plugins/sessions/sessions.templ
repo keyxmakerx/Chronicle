@@ -171,10 +171,16 @@ templ createSessionModal(cc *campaigns.CampaignContext, csrfToken string) {
 					<label class="block text-sm font-medium text-fg-body mb-1">Session Name</label>
 					<input type="text" name="name" class="input w-full" required placeholder="e.g. Session 12: The Dragon's Lair"/>
 				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Scheduled Date</label>
-					<input type="date" name="scheduled_date" class="input w-full"/>
-					<p class="text-xs text-fg-muted mt-1">When does this session happen in real life?</p>
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Scheduled Date</label>
+						<input type="date" name="scheduled_date" class="input w-full"/>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Time <span class="text-fg-muted font-normal">(optional)</span></label>
+						<input type="time" name="scheduled_time" class="input w-full"/>
+					</div>
+					<p class="text-xs text-fg-muted mt-1 col-span-2">When does this session happen in real life?</p>
 				</div>
 				<div>
 					<label class="block text-sm font-medium text-fg-body mb-1">Summary</label>
@@ -424,9 +430,15 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 					<label class="block text-sm font-medium text-fg-body mb-1">Session Name</label>
 					<input type="text" id="edit-session-name" class="input w-full" required value={ session.Name }/>
 				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Scheduled Date</label>
-					<input type="date" id="edit-session-date" class="input w-full" value={ derefStr(session.ScheduledDate) }/>
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Scheduled Date</label>
+						<input type="date" id="edit-session-date" class="input w-full" value={ derefStr(session.ScheduledDate) }/>
+					</div>
+					<div>
+						<label class="block text-sm font-medium text-fg-body mb-1">Time <span class="text-fg-muted font-normal">(optional)</span></label>
+						<input type="time" id="edit-session-time" class="input w-full" value={ derefStr(session.ScheduledTime) }/>
+					</div>
 				</div>
 				<div>
 					<label class="block text-sm font-medium text-fg-body mb-1">Summary</label>
@@ -502,6 +514,8 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 					}
 					var summary = document.getElementById('edit-session-summary').value;
 					var date = document.getElementById('edit-session-date').value;
+					var timeEl = document.getElementById('edit-session-time');
+					var time = timeEl ? timeEl.value : '';
 					var status = document.getElementById('edit-session-status').value;
 					var recurring = document.getElementById('edit-session-recurring').checked;
 					var recType = document.getElementById('edit-session-recurrence-type');
@@ -512,6 +526,7 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 						name: name,
 						summary: summary || null,
 						scheduled_date: date || null,
+						scheduled_time: time || null,
 						status: status,
 						is_recurring: recurring
 					};

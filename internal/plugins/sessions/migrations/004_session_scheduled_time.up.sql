@@ -1,0 +1,12 @@
+-- Availability scheduler — Slice 3 (C-SCHED-P3): the confirmed session's
+-- wall-clock start time. This is the ONE sanctioned sessions-table change this
+-- slice. Chains after 003 (proposals). Idempotent (ADD COLUMN IF NOT EXISTS) per
+-- the migration-safety rules, so it is safe to re-run / recover a partial apply.
+--
+-- The confirm-winner flow converts the winning proposal option's UTC INSTANT
+-- into the confirming user's zone and stores the resulting "HH:MM" (24-hour)
+-- wall-clock here, alongside the existing zone-less scheduled_date (DATE). A
+-- manual session may also set it via the create/edit modal. Nullable — manual
+-- and pre-P3 sessions simply have no time. VARCHAR(5) mirrors the string handling
+-- scheduled_date already uses (scanned into a *string, formatted at render).
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scheduled_time VARCHAR(5) DEFAULT NULL AFTER scheduled_date;

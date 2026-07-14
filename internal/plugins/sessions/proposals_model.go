@@ -23,8 +23,9 @@ const (
 
 // Scheduler notification types (the only writers this slice).
 const (
-	NotifProposalCreated  = "proposal_created"
-	NotifProposalResponse = "proposal_response"
+	NotifProposalCreated   = "proposal_created"
+	NotifProposalResponse  = "proposal_response"
+	NotifProposalConfirmed = "proposal_confirmed" // C-SCHED-P3: winner picked → session created.
 )
 
 // maxProposalOptions caps a proposal at 5 candidate slots (design: 1..5).

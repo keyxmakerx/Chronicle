@@ -37,9 +37,12 @@ type SessionService interface {
 	UpdateRSVP(ctx context.Context, sessionID, userID, status string) error
 	ListAttendees(ctx context.Context, sessionID string) ([]Attendee, error)
 
-	// RSVP tokens for email-based responses.
+	// RSVP tokens for email-based responses. Redeem is split into a read-only
+	// validate (GET confirm page) + a state-changing apply (POST) so a mail
+	// prefetcher's GET never records an RSVP (C-SCHED-P3 0b).
 	CreateRSVPTokens(ctx context.Context, sessionID, userID string) (acceptToken, declineToken string, err error)
-	RedeemRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
+	ValidateRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
+	ApplyRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error)
 
 	// Entity linking. campaignID is used to verify the entity belongs to the
 	// same campaign as the session, preventing cross-campaign IDOR attacks.
@@ -62,13 +65,25 @@ type SessionService interface {
 	ListProposalSummaries(ctx context.Context, campaignID, viewerID string) ([]ProposalSummary, error)
 	RespondToOption(ctx context.Context, campaignID, proposalID, optionID, userID, response string) error
 	CreateProposalTokens(ctx context.Context, optionID, userID string) (map[string]string, error)
-	RedeemProposalToken(ctx context.Context, tokenStr string) (*SlotProposalToken, error)
+	// Emailed-token redeem is split into a read-only validate (used by the GET
+	// confirm page) and a state-changing apply (POST only), so a mail prefetcher's
+	// GET never records a response; validate also enforces the proposal is still
+	// open (C-SCHED-P3 0a/0b).
+	ValidateProposalToken(ctx context.Context, tokenStr string) (*ProposalTokenContext, error)
+	ApplyProposalToken(ctx context.Context, tokenStr string) (*ProposalTokenContext, error)
+	// ConfirmProposalWinner (Scribe+) marks the winning option, closes the
+	// proposal, and creates a planned session from the winning UTC instant
+	// (C-SCHED-P3).
+	ConfirmProposalWinner(ctx context.Context, campaignID, proposalID, optionID, confirmedBy, confirmerTZ string) (*Session, error)
 
 	// Scheduler-scoped notifications (C-SCHED-P2). Writes are driven by the
 	// handler (which enumerates members / resolves names); the service owns the
 	// payload/link/message construction. See notifications_service.go.
 	NotifyProposalCreated(ctx context.Context, campaignID, proposalID, title string, recipientIDs []string) error
 	NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderName, response string) error
+	// NotifyProposalConfirmed tells everyone who responded that the winning slot
+	// was picked, linking to the new session (C-SCHED-P3, reuses the P2 store).
+	NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error
 	ListMyNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
 	CountMyUnreadNotifications(ctx context.Context, userID string) (int, error)
 	MarkNotificationRead(ctx context.Context, userID, notificationID string) error
@@ -118,6 +133,7 @@ func (s *sessionService) CreateSession(ctx context.Context, campaignID string, i
 		Name:                input.Name,
 		Summary:             input.Summary,
 		ScheduledDate:       input.ScheduledDate,
+		ScheduledTime:       input.ScheduledTime,
 		CalendarYear:        input.CalendarYear,
 		CalendarMonth:       input.CalendarMonth,
 		CalendarDay:         input.CalendarDay,
@@ -230,6 +246,7 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	session.Name = input.Name
 	session.Summary = input.Summary
 	session.ScheduledDate = input.ScheduledDate
+	session.ScheduledTime = input.ScheduledTime
 	session.CalendarYear = input.CalendarYear
 	session.CalendarMonth = input.CalendarMonth
 	session.CalendarDay = input.CalendarDay
@@ -406,30 +423,37 @@ func (s *sessionService) CreateRSVPTokens(ctx context.Context, sessionID, userID
 	return acceptToken, declineToken, nil
 }
 
-// RedeemRSVPToken validates and applies an RSVP token, updating the user's attendance.
-func (s *sessionService) RedeemRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error) {
+// ValidateRSVPToken resolves + checks an RSVP token WITHOUT applying it
+// (C-SCHED-P3 0b). Used by the GET confirm page so a mail prefetcher's fetch is a
+// pure read; the POST (ApplyRSVPToken) is what records the RSVP.
+func (s *sessionService) ValidateRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error) {
 	token, err := s.repo.FindRSVPToken(ctx, tokenStr)
 	if err != nil {
 		return nil, err
 	}
-
 	if token.UsedAt != nil {
 		return nil, apperror.NewBadRequest("this RSVP link has already been used")
 	}
 	if time.Now().UTC().After(token.ExpiresAt) {
 		return nil, apperror.NewBadRequest("this RSVP link has expired")
 	}
+	return token, nil
+}
 
-	// Apply the RSVP.
+// ApplyRSVPToken validates then applies an RSVP token, updating the user's
+// attendance and consuming the token. State-changing, so it only runs from the
+// POST route (C-SCHED-P3 0b — no GET-driven auto-RSVP from link prefetchers).
+func (s *sessionService) ApplyRSVPToken(ctx context.Context, tokenStr string) (*RSVPToken, error) {
+	token, err := s.ValidateRSVPToken(ctx, tokenStr)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.repo.UpdateAttendeeStatus(ctx, token.SessionID, token.UserID, token.Action); err != nil {
 		return nil, err
 	}
-
-	// Mark token as used.
 	if err := s.repo.MarkRSVPTokenUsed(ctx, tokenStr); err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("marking token used: %w", err))
 	}
-
 	return token, nil
 }
 
@@ -460,6 +484,10 @@ func (s *sessionService) generateNextOccurrence(ctx context.Context, completed *
 		Name:                completed.Name,
 		Summary:             completed.Summary,
 		ScheduledDate:       &nextDate,
+		// Carry the wall-clock time forward so a recurring session keeps its slot
+		// (e.g. every Saturday at 7:00 PM) — recurrence parity for C-SCHED-P3; only
+		// the date advances.
+		ScheduledTime:       completed.ScheduledTime,
 		Status:              StatusPlanned,
 		IsRecurring:         true,
 		RecurrenceType:      completed.RecurrenceType,

@@ -92,6 +92,46 @@ func (s *sessionService) NotifyProposalResponse(ctx context.Context, campaignID,
 	return nil
 }
 
+// NotifyProposalConfirmed writes a "session confirmed" notification to every
+// distinct member who responded to the proposal, linking to the newly-created
+// session (C-SCHED-P3). Reuses the P2 notification store — no new infra, no
+// time-based reminder jobs (none exist; adding one would be a stop-and-flag).
+func (s *sessionService) NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error {
+	p, _, err := s.repo.GetProposal(ctx, campaignID, proposalID)
+	if err != nil {
+		return err
+	}
+	responses, err := s.repo.ListProposalResponses(ctx, proposalID)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("loading responders: %w", err))
+	}
+	link := fmt.Sprintf("/campaigns/%s/sessions/%s", campaignID, sessionID)
+	message := fmt.Sprintf("Session time confirmed for %q", p.Title)
+	payload := marshalPayload(message, NotifProposalConfirmed)
+	now := time.Now().UTC()
+	cid := campaignID
+	seen := make(map[string]bool)
+	for _, r := range responses {
+		if r.UserID == "" || seen[r.UserID] {
+			continue
+		}
+		seen[r.UserID] = true
+		n := &Notification{
+			ID:         generateUUID(),
+			UserID:     r.UserID,
+			CampaignID: &cid,
+			Type:       NotifProposalConfirmed,
+			Payload:    payload,
+			Link:       &link,
+			CreatedAt:  now,
+		}
+		if err := s.repo.CreateNotification(ctx, n); err != nil {
+			return apperror.NewInternal(fmt.Errorf("writing confirm notification: %w", err))
+		}
+	}
+	return nil
+}
+
 // ListMyNotifications returns the current user's notifications (newest first).
 func (s *sessionService) ListMyNotifications(ctx context.Context, userID string, limit int) ([]Notification, error) {
 	ns, err := s.repo.ListNotifications(ctx, userID, limit)
