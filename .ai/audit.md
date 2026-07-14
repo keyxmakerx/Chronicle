@@ -10,8 +10,10 @@
 
 ## 1. Test Coverage
 
-**23 test files, ~530 test functions. ALL service-layer mock-based tests.**
-No handler tests, no repository tests, no integration tests exist anywhere.
+**285 test files repo-wide as of 2026-07 (up from 23 service-layer-only at doc
+creation, 2026-03-05).** Coverage now spans service, handler, repository, and
+integration layers in many plugins — the table below is the original 2026-03-05
+snapshot and is historical; do not treat "0 tests" rows as current.
 
 ### Plugins
 
@@ -27,8 +29,8 @@ No handler tests, no repository tests, no integration tests exist anywhere.
 | audit | service_test | 12 | |
 | calendar | day_test, week_test | 10 | Domain-logic only; 23+ endpoints untested |
 | timeline | connection_test | 3 | Domain-logic only; 20+ endpoints untested |
-| **maps** | — | **0** | 27+ endpoints, HIGH priority |
-| **sessions** | — | **0** | 8+ endpoints, HIGH priority |
+| **maps** | (see note above) | **8** | 27+ endpoints; test-file count grew since this row was written |
+| **sessions** | (see note above) | **6** | availability scheduler P1/P2 added coverage since this row was written |
 | **admin** | — | **0** | 12+ endpoints, MEDIUM priority |
 | **smtp** | — | **0** | 3 endpoints, LOW priority |
 
@@ -196,7 +198,7 @@ sessions (partial), maps (full), addons, media manifest.
 ### Missing .ai.md files
 
 **Go widgets:**
-- [ ] `internal/widgets/posts/` — no `.ai.md`
+- [ ] `internal/widgets/calendar_v2/` — no `.ai.md` (`posts/.ai.md` now exists — this row was mislabeled)
 
 **JS widgets (16 files missing):**
 - [ ] `calendar_widget.js`
@@ -277,7 +279,11 @@ sessions (partial), maps (full), addons, media manifest.
 | drawsteel | ✓ | stub | empty | — | — | — |
 | pathfinder2e | ✓ | stub | empty | — | — | — |
 
-D&D 5e module completed in Sprint M-1. Draw Steel and Pathfinder 2e remain scaffold-only.
+D&D 5e module completed in Sprint M-1 (historical, 2026-03). **Current reality:** systems
+are no longer in-repo modules at all — `internal/systems/` is flat framework code (no
+per-system subdirectories); every game system (D&D 5e, Draw Steel, Pathfinder 2e, etc.)
+is an external package installed per-campaign via Admin > Packages. The table above is a
+point-in-time snapshot from before that architecture shipped.
 
 ---
 

@@ -27,12 +27,13 @@ three tiers.
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │  PLUGINS -- Feature Applications                      │    │
+│  │  PLUGINS -- Feature Applications (24)                  │    │
 │  │  auth/  campaigns/  entities/  calendar/  maps/        │    │
 │  │  admin/  addons/  syncapi/  media/  audit/             │    │
 │  │  settings/  timeline/  sessions/  packages/            │    │
 │  │  smtp/  armory/  bestiary/  designlab/  npcs/          │    │
-│  │  sessions/  extensions/  smtp/                         │    │
+│  │  ai_workspace/  backup/  foundry_vtt/  restore/        │    │
+│  │  widgetbindings/                                       │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────┐    │
@@ -243,21 +244,17 @@ internal/plugins/<name>/
 
 ## System (Game System) Internal Structure
 
-Systems are simpler than plugins -- primarily data serving. Most systems use the
-GenericModule auto-instantiation (zero Go code — just manifest + data files).
+Systems are **external packages**, not in-repo directories. `internal/systems/` is a
+flat Go package (loader, manifest parser, generic content-serving handler, registry) —
+there are no `internal/systems/<name>/` subdirectories. A game system content pack
+(D&D 5e, Draw Steel, Pathfinder 2e, etc.) is a manifest + data-files bundle installed
+per-campaign via Admin > Packages; its manifest declares categories/fields/metadata and
+its data lives under the installed package's own on-disk version directory, outside the
+Go source tree.
 
-```
-internal/systems/<name>/
-  .ai.md              # System-level AI documentation
-  manifest.json       # Categories, fields, metadata
-  data/               # Static reference data (JSON files)
-    spells.json
-    creatures.json
-    equipment.json
-```
-
-For custom tooltip formatting, add a Go file with `init()` that calls
-`systems.RegisterFactory()` (e.g., D&D 5e uses this for stat-block formatting).
+For custom tooltip formatting, a system package registers a Go file with `init()` that
+calls `systems.RegisterFactory()` (e.g., a stat-block formatter) — the registration
+mechanism is generic; no system gets a bespoke in-repo package.
 
 ## Widget Internal Structure
 

@@ -23,7 +23,7 @@ Before planning, here's what's already been resolved:
 | L-1 | Avatar trusts client Content-Type | **FIXED** — uses `http.DetectContentType()` |
 | L-7 | Dockerfile runs as root | **FIXED** — non-root `chronicle` user |
 
-**Remaining open items from audit:** M-2, L-2, L-3, L-4, L-5, L-6, L-8
+**Remaining open items from audit:** M-2, L-2, L-3, L-5, L-8 (L-4 and L-6 shipped — see §2.1/§2.4 below)
 
 ---
 
@@ -40,7 +40,7 @@ All four HTMX security configs are now set in `boot.js`:
 - `historyCacheSize = 0` (done in sprint 59)
 - `allowEval = false` (done in sprint 63 — this session)
 
-### 1.2 — Cross-Origin Security Headers
+### 1.2 — Cross-Origin Security Headers ✅ DONE
 **File:** `internal/middleware/security.go`
 **Effort:** 5 minutes
 
@@ -57,7 +57,7 @@ CORP would block those even with proper CORS headers. COOP alone is safe — it 
 isolates the browsing context, not resource loading. The CORS middleware already
 respects `BASE_URL` as the allowed origin for reverse proxy domain configuration.
 
-### 1.3 — Tighten CSP: Replace unpkg.com Wildcard with Specific URLs
+### 1.3 — Tighten CSP: Replace unpkg.com Wildcard with Specific URLs ✅ DONE (superseded — Leaflet is fully vendored, CSP has no `unpkg.com` reference at all)
 **File:** `internal/middleware/security.go`
 **Effort:** 15 minutes
 
@@ -73,7 +73,7 @@ img-src 'self' data: blob: https://unpkg.com/leaflet@1.9.4/;
 
 This prevents an attacker from loading arbitrary npm packages via an injection point.
 
-### 1.4 — Inline CSRF Cookie Parsing → Chronicle.getCsrf()
+### 1.4 — Inline CSRF Cookie Parsing → Chronicle.getCsrf() ✅ DONE
 **Files:** `calendar.templ`, `maps.templ`, `timeline.templ` (7 locations)
 **Effort:** 20 minutes
 
@@ -96,7 +96,7 @@ future changes (like `__Host-` prefix rename) a single-point update.
 
 Moderate-effort improvements to close remaining audit gaps.
 
-### 2.1 — `__Host-` CSRF Cookie Prefix (L-4)
+### 2.1 — `__Host-` CSRF Cookie Prefix (L-4) ✅ DONE
 **Files:** `internal/middleware/csrf.go`, `static/js/boot.js`, all `.templ` files
   referencing `chronicle_csrf` (should be zero after 1.4)
 **Effort:** 30 minutes
@@ -121,7 +121,7 @@ would lose CSRF protection. Add fallback: use `__Host-` prefix only when Secure=
 Redaction implemented in sprint 59. Sprint 63 added `api_key` to the sensitive params list.
 Current list: `token`, `key`, `password`, `secret`, `api_key`.
 
-### 2.4 — Default DB Password Fails in Production (L-6)
+### 2.4 — Default DB Password Fails in Production (L-6) ✅ DONE
 **File:** `internal/config/config.go`
 **Effort:** 10 minutes
 

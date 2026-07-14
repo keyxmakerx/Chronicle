@@ -78,7 +78,7 @@ the full index. Key files:
 | `.ai/decisions.md` | When questioning a design choice -- ADRs with rationale |
 | `.ai/data-model.md` | When writing queries or migrations |
 
-Each plugin/system/widget has its own `.ai.md` in its directory.
+Each plugin and widget has its own `.ai.md` in its directory (systems are external packages — see `.ai/README.md`).
 
 ## IMPORTANT RULES
 

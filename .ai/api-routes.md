@@ -112,7 +112,13 @@ All routes require `auth.RequireAuth` + `auth.RequireSiteAdmin`.
 | GET | `/campaigns/:id/notes` | Index (type=note) | List notes |
 | GET | `/campaigns/:id/events` | Index (type=event) | List events |
 
-## REST API (for external clients like Foundry VTT) -- planned
+## REST API (for external clients like Foundry VTT) -- implemented
+
+The `syncapi` plugin implements 70+ `/api/v1/*` routes spanning campaigns, entities,
+notes, tags, media, calendar, and maps (`internal/plugins/syncapi/*_handler.go`). The
+specific endpoint list below predates that implementation and may not match its real
+route/handler names one-for-one — treat this section as historical scaffolding, not
+the source of truth; read `syncapi/.ai.md` + `syncapi/routes.go` for the real contract.
 
 ### Authentication
 
@@ -161,12 +167,11 @@ Campaign-scoped HTMX fragments used by dashboard blocks via `hx-trigger="interse
 
 | Method | Path | Handler | Description |
 |--------|------|---------|-------------|
-| GET | `/campaigns/:cid/systems` | SystemIndex | List enabled game systems |
-| GET | `/campaigns/:cid/systems/:mid` | CategoryList | System category cards |
-| GET | `/campaigns/:cid/systems/:mid/:cat` | ItemList | Searchable item list |
-| GET | `/campaigns/:cid/systems/:mid/:cat/:id` | ItemDetail | Full reference page |
-| GET | `/campaigns/:cid/systems/:mid/search` | SearchAPI | JSON search results |
-| GET | `/campaigns/:cid/systems/:mid/tooltip` | TooltipAPI | HTML tooltip fragment |
-| POST | `/campaigns/:id/systems/upload` | UploadCustom | Upload custom system ZIP (Owner) |
-| DELETE | `/campaigns/:id/systems/custom` | DeleteCustom | Remove custom system (Owner) |
-| GET | `/campaigns/:id/systems/custom` | CustomStatus | Custom system status (Owner) |
+| GET | `/campaigns/:cid/systems/:mod` | Index | List enabled game systems |
+| GET | `/campaigns/:cid/systems/:mod/:cat` | CategoryList | Searchable item list |
+| GET | `/campaigns/:cid/systems/:mod/:cat/:id` | ItemDetail | Full reference page |
+| GET | `/campaigns/:cid/systems/:mod/search` | SearchAPI | JSON search results |
+| GET | `/campaigns/:cid/systems/:mod/:cat/:item/tooltip` | TooltipAPI | HTML tooltip fragment |
+| POST | `/campaigns/:id/systems/upload` | UploadSystem | Upload custom system ZIP (Owner) |
+| DELETE | `/campaigns/:id/systems/custom` | DeleteSystem | Remove custom system (Owner) |
+| GET | `/campaigns/:id/systems/custom` | GetCustomSystem | Custom system status (Owner) |

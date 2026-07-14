@@ -158,15 +158,15 @@ layout JSON per role. Natural extension of existing dashboard system.
 
 ### Built
 - **Module framework** -- manifest-driven with factory registry, JSON data provider, route registration
-- **dnd5e** -- SRD-legal reference data (spells 27, monsters 14, items 10, classes 12, races 9, conditions 15). Category-specific tooltip rendering. 9 tests. Browsable reference pages at `/modules/dnd5e/` (Sprint M-2 in progress)
+- **dnd5e** -- SRD-legal reference data (spells 27, monsters 14, items 10, classes 12, races 9, conditions 15). Category-specific tooltip rendering. 9 tests. Browsable reference pages, shipped, now served at `/campaigns/:id/systems/dnd5e` (systems are external packages, no longer under `/modules/`)
 - **pathfinder2e** -- Scaffold with manifest, no data populated
 - **drawsteel** -- Scaffold with manifest, no data populated
 
 ### Planned
 
-#### D&D 5e Reference Pages -- IN PROGRESS
-**What**: Browsable pages at `/modules/dnd5e/`. Category cards, searchable lists,
-formatted stat block detail pages. Quick-search integration.
+#### D&D 5e Reference Pages -- SHIPPED
+**What**: Browsable pages at `/campaigns/:id/systems/dnd5e`. Category cards,
+searchable lists, formatted stat block detail pages. Quick-search integration.
 
 #### Pathfinder 2e System
 **Location**: Installed via package manager (Admin > Packages)
@@ -343,9 +343,9 @@ sprint-by-sprint completion log. Key milestones:
 - **Phase M**: D&D 5e module (data + tooltips, Sprint M-1)
 - **Phase P-R**: Extension system (content packs, widget extensions, WASM runtime)
 
-### Current Focus
-- Sprint M-2: D&D 5e Reference Pages (browsable `/modules/dnd5e/`)
-- Obsidian-style notes (see `.ai/obsidian-notes-plan.md`)
+### Current Focus (historical — see `.ai/status.md` for the live current-focus state)
+- Sprint M-2: D&D 5e Reference Pages — shipped
+- Obsidian-style notes — shipped (see `.ai/obsidian-notes-plan.md`)
 - Quick wins from UX audit
 
 ### Future Phases
