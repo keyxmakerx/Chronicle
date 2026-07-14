@@ -70,3 +70,48 @@ func TestUpdateAccentSurface(t *testing.T) {
 		})
 	}
 }
+
+// TestAccentHexValidation pins the #521 hardening: both accent service methods
+// reject any non-#RRGGBB value and NEVER persist it (the value is emitted into a
+// raw <style> block via templ.Raw at render — the last CSS-injection path).
+// Empty is allowed (reset to default / inherit).
+func TestAccentHexValidation(t *testing.T) {
+	newSvc := func(wrote *bool) CampaignService {
+		return newTestCampaignService(&mockCampaignRepo{
+			findByIDFn: func(_ context.Context, id string) (*Campaign, error) {
+				return &Campaign{ID: id, Settings: `{}`}, nil
+			},
+			updateSettingsFn: func(context.Context, string, string) error { *wrote = true; return nil },
+		}, &mockUserFinder{})
+	}
+
+	bad := []string{"red", "6366f1", "#red;}", "#12345", "#1234567", "#GGGGGG", `#111"}</style><script>`}
+	for _, color := range bad {
+		t.Run("reject/"+color, func(t *testing.T) {
+			var wrote bool
+			svc := newSvc(&wrote)
+			if err := svc.UpdateAccentColor(context.Background(), "c1", color); err == nil {
+				t.Errorf("UpdateAccentColor accepted invalid %q", color)
+			}
+			if err := svc.UpdateAccentSurface(context.Background(), "c1", 1, color); err == nil {
+				t.Errorf("UpdateAccentSurface accepted invalid %q", color)
+			}
+			if wrote {
+				t.Errorf("invalid color %q must never reach the repo", color)
+			}
+		})
+	}
+
+	for _, color := range []string{"#6366f1", "#ABCDEF", ""} {
+		t.Run("accept/"+color, func(t *testing.T) {
+			var wrote bool
+			svc := newSvc(&wrote)
+			if err := svc.UpdateAccentColor(context.Background(), "c1", color); err != nil {
+				t.Errorf("UpdateAccentColor rejected valid %q: %v", color, err)
+			}
+			if err := svc.UpdateAccentSurface(context.Background(), "c1", 2, color); err != nil {
+				t.Errorf("UpdateAccentSurface rejected valid %q: %v", color, err)
+			}
+		})
+	}
+}

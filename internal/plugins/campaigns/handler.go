@@ -628,8 +628,10 @@ func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
 	}
 
 	color := c.FormValue("accent_color")
-	// Validate hex color format (allow empty to reset).
-	if color != "" && (len(color) != 7 || color[0] != '#') {
+	// Validate the hex color strictly (all digits must be hex; empty resets).
+	// The accent value is emitted into a raw <style> block via templ.Raw at
+	// render, so a loose len/prefix check was the last CSS-injection gap (#521).
+	if color != "" && !isValidHexColor(color) {
 		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
 	}
 

@@ -580,18 +580,43 @@ func (h *Handler) Security(c echo.Context) error {
 
 	csrfToken := middleware.GetCSRFToken(c)
 
+	// Current site registration mode (defaults to "open" when the settings
+	// service is absent or unset).
+	registrationMode := settings.RegistrationOpen
+	if h.settingsService != nil {
+		if m, err := h.settingsService.GetRegistrationMode(ctx); err == nil {
+			registrationMode = m
+		}
+	}
+
 	data := SecurityPageData{
-		Stats:       stats,
-		Events:      events,
-		TotalEvents: totalEvents,
-		EventFilter: eventType,
-		Page:        page,
-		PerPage:     securityPerPage,
-		Sessions:    sessions,
-		CSRFToken:   csrfToken,
+		Stats:            stats,
+		Events:           events,
+		TotalEvents:      totalEvents,
+		EventFilter:      eventType,
+		Page:             page,
+		PerPage:          securityPerPage,
+		Sessions:         sessions,
+		CSRFToken:        csrfToken,
+		RegistrationMode: registrationMode,
 	}
 
 	return middleware.Render(c, http.StatusOK, AdminSecurityPage(data))
+}
+
+// UpdateRegistrationMode persists the site registration gate (POST
+// /admin/security/registration). Reauth-gated as a security-sensitive change.
+func (h *Handler) UpdateRegistrationMode(c echo.Context) error {
+	if h.settingsService == nil {
+		return apperror.NewMissingContext()
+	}
+	mode := c.FormValue("registration_mode")
+	if err := h.settingsService.UpdateRegistrationMode(c.Request().Context(), mode); err != nil {
+		return err
+	}
+	slog.Info("registration mode updated", slog.String("mode", mode))
+	c.Response().Header().Set("HX-Redirect", "/admin/security")
+	return c.NoContent(http.StatusOK)
 }
 
 // TerminateSession destroys a specific session by its token hash
@@ -956,5 +981,8 @@ type SecurityPageData struct {
 	PerPage     int
 	Sessions    []auth.SessionInfo
 	CSRFToken   string
+	// RegistrationMode is the current site registration gate ("open", "invite",
+	// "closed"). Rendered as a select on the security page (B-R4).
+	RegistrationMode string
 }
 

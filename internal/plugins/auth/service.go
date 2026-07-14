@@ -65,6 +65,12 @@ type MailSender interface {
 // Handlers call these methods -- they never touch the repository directly.
 type AuthService interface {
 	Register(ctx context.Context, input RegisterInput) (*User, error)
+
+	// RegistrationStatus reports the current registration mode and whether a
+	// registration bearing inviteToken would be allowed right now (first-user
+	// bootstrap is always allowed). Used by the register page to choose between
+	// the form and a friendly gated state.
+	RegistrationStatus(ctx context.Context, inviteToken string) (mode string, allowed bool, err error)
 	Login(ctx context.Context, input LoginInput) (token string, user *User, err error)
 	ValidateSession(ctx context.Context, token string) (*Session, error)
 	DestroySession(ctx context.Context, token string) error
@@ -105,6 +111,47 @@ type authService struct {
 	mail       MailSender
 	baseURL    string
 	sessionTTL time.Duration
+
+	// Registration gate (beta lockdown, B-R4). Both are optional: when nil the
+	// service behaves exactly as before — registration is open — so a partial or
+	// absent wiring fails open rather than locking out an instance.
+	regPolicy     RegistrationPolicy
+	inviteChecker RegistrationInviteChecker
+}
+
+// Registration modes. These mirror the settings plugin's canonical constants;
+// duplicated here as local literals so auth does not import the settings plugin
+// (T-B2 plugin isolation).
+const (
+	registrationOpen   = "open"
+	registrationInvite = "invite"
+	registrationClosed = "closed"
+)
+
+// RegistrationPolicy reads the site registration mode. Satisfied by the settings
+// service; kept as a local interface so auth stays decoupled from that plugin.
+type RegistrationPolicy interface {
+	GetRegistrationMode(ctx context.Context) (string, error)
+}
+
+// RegistrationInviteChecker reports whether a campaign invite token currently
+// permits creating an account: the invite exists, is unaccepted and unexpired,
+// and — when email is non-empty — was issued to that email (campaign invites are
+// email-scoped). An empty email checks only token liveness (the register-page
+// pre-check). Satisfied by an adapter over the campaigns invite service, wired in
+// app/routes.go.
+type RegistrationInviteChecker interface {
+	IsRegistrationInviteValid(ctx context.Context, token, email string) bool
+}
+
+// ConfigureRegistrationGate wires the registration-mode policy and invite checker
+// into the auth service. Called from routes.go after the settings and invite
+// services exist. Mirrors ConfigureMailSender.
+func ConfigureRegistrationGate(svc AuthService, policy RegistrationPolicy, checker RegistrationInviteChecker) {
+	if s, ok := svc.(*authService); ok {
+		s.regPolicy = policy
+		s.inviteChecker = checker
+	}
 }
 
 // NewAuthService creates a new auth service with the given dependencies.
@@ -137,20 +184,28 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (*User,
 		return nil, apperror.NewConflict("registration failed — please try a different email or log in")
 	}
 
-	// Hash the password with argon2id (memory-hard, GPU-resistant).
-	hash, err := hashPassword(input.Password)
-	if err != nil {
-		return nil, apperror.NewInternal(fmt.Errorf("hashing password: %w", err))
-	}
-
-	// The very first user to register becomes the site admin automatically.
-	isAdmin := false
+	// The very first user to register becomes the site admin automatically —
+	// and that bootstrap must always work, so it is exempt from the gate. Count
+	// once and reuse for both decisions.
 	userCount, err := s.repo.CountUsers(ctx)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("counting users: %w", err))
 	}
-	if userCount == 0 {
-		isAdmin = true
+	isAdmin := userCount == 0
+
+	// Enforce the site registration gate for everyone after the first user
+	// (defense in depth — the register page also gates itself, but the service
+	// is the authoritative check). Runs before the expensive hash.
+	if userCount > 0 {
+		if err := s.checkRegistrationGate(ctx, input.InviteToken, input.Email); err != nil {
+			return nil, err
+		}
+	}
+
+	// Hash the password with argon2id (memory-hard, GPU-resistant).
+	hash, err := hashPassword(input.Password)
+	if err != nil {
+		return nil, apperror.NewInternal(fmt.Errorf("hashing password: %w", err))
 	}
 
 	user := &User{
@@ -173,6 +228,75 @@ func (s *authService) Register(ctx context.Context, input RegisterInput) (*User,
 	)
 
 	return user, nil
+}
+
+// registrationMode returns the configured mode, defaulting to "open" when no
+// policy is wired (nil ⇒ open, the no-config default). A non-nil error means the
+// settings read genuinely failed — the caller fails CLOSED on it, so a lockdown
+// control never silently reverts to open during a settings/DB outage.
+func (s *authService) registrationMode(ctx context.Context) (string, error) {
+	if s.regPolicy == nil {
+		return registrationOpen, nil
+	}
+	return s.regPolicy.GetRegistrationMode(ctx)
+}
+
+// gateAllows reports whether a (non-first) registration is permitted under the
+// given mode. Invite mode requires a token the checker accepts FOR THIS email —
+// campaign invites are email-scoped, so binding the token to the registering
+// address makes an invite single-use in practice (a second registration for the
+// same address is rejected by the email-uniqueness check, and no other address
+// can consume the invite). An empty email checks only token liveness (the
+// register-page pre-check, before the visitor has typed an email).
+func (s *authService) gateAllows(ctx context.Context, mode, inviteToken, email string) bool {
+	switch mode {
+	case registrationClosed:
+		return false
+	case registrationInvite:
+		return inviteToken != "" && s.inviteChecker != nil &&
+			s.inviteChecker.IsRegistrationInviteValid(ctx, inviteToken, email)
+	default: // open (and any unrecognized value — treat as open)
+		return true
+	}
+}
+
+// checkRegistrationGate returns a Forbidden error when the current mode blocks a
+// (non-first) registration bearing inviteToken for email. Caller must have
+// confirmed there is already at least one user (the first-user bootstrap bypasses
+// the gate). Fails CLOSED if the mode can't be read.
+func (s *authService) checkRegistrationGate(ctx context.Context, inviteToken, email string) error {
+	mode, err := s.registrationMode(ctx)
+	if err != nil {
+		return apperror.NewForbidden("registration is temporarily unavailable — please try again shortly")
+	}
+	if s.gateAllows(ctx, mode, inviteToken, email) {
+		return nil
+	}
+	if mode == registrationInvite {
+		return apperror.NewForbidden("registration is invite-only — open your invite link and register with the email it was sent to")
+	}
+	return apperror.NewForbidden("registration is currently closed")
+}
+
+// RegistrationStatus reports the mode and whether a registration bearing
+// inviteToken would be allowed right now. The first user (empty instance) is
+// always allowed regardless of mode. On a settings-read error for a non-first
+// user it reports the page as gated (fail closed). email is empty here — the
+// page pre-check validates only token liveness; the address is bound at POST.
+func (s *authService) RegistrationStatus(ctx context.Context, inviteToken string) (string, bool, error) {
+	count, err := s.repo.CountUsers(ctx)
+	if err != nil {
+		return registrationOpen, false, apperror.NewInternal(fmt.Errorf("counting users: %w", err))
+	}
+	mode, modeErr := s.registrationMode(ctx)
+	if count == 0 {
+		// Bootstrap: the first admin can always register, even mid settings outage.
+		return mode, true, nil
+	}
+	if modeErr != nil {
+		return registrationClosed, false, nil
+	}
+	return mode, s.gateAllows(ctx, mode, inviteToken, ""), nil
 }
 
 // loginThrottleMax is the maximum number of failed login attempts per email

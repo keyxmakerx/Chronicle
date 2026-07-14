@@ -541,6 +541,7 @@ POST	/reset-password	internal/plugins/auth/routes.go
 POST	/run	internal/plugins/backup/routes.go
 POST	/run	internal/plugins/restore/routes.go
 POST	/saved-filters	internal/plugins/entities/routes.go
+POST	/security/registration	internal/plugins/admin/routes.go
 POST	/security/users/:id/force-logout	internal/plugins/admin/routes.go
 POST	/sessions	internal/plugins/sessions/routes.go
 POST	/sessions/:sid/entities	internal/plugins/sessions/routes.go

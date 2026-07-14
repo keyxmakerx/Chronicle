@@ -43,7 +43,7 @@ func PluginRegistry() []PluginInfo {
 		{
 			ID:          "auth",
 			Name:        "Authentication",
-			Description: "User registration, login, logout, session management, and TOTP two-factor authentication.",
+			Description: "User registration, login, logout, and session management.",
 			Icon:        "fa-shield-halved",
 			Status:      PluginActive,
 			Category:    "Core",
