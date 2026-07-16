@@ -19,7 +19,7 @@ import (
 templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
 	@layouts.App("Characters - " + cc.Campaign.Name) {
 		<script src="/static/plugins/entities/js/characters.js" defer></script>
-		<div class="max-w-6xl mx-auto px-4 py-6" id="characters-root">
+		<div class="max-w-7xl mx-auto px-4 py-6" id="characters-root">
 			@CharactersContent(cc, view)
 		</div>
 	}

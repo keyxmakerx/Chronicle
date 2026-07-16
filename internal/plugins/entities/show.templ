@@ -19,7 +19,7 @@ import (
 // claim affordance); ownerName is the resolved display name of the current owner, if any.
 templ EntityShowPage(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, ancestors []Entity, children []Entity, showAttributes bool, showCalendar bool, claimingEnabled bool, ownerName string, csrfToken string) {
 	@layouts.App(entity.Name + " - " + cc.Campaign.Name) {
-		<div class="max-w-6xl mx-auto" data-entity-type-slug={ entityType.Slug }>
+		<div class="max-w-7xl mx-auto" data-entity-type-slug={ entityType.Slug }>
 			<!-- Breadcrumb with ancestor chain -->
 			<nav class="text-xs md:text-sm text-fg-secondary mb-4 overflow-x-auto whitespace-nowrap">
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/entities", cc.Campaign.ID)) } class="hover:text-fg-body">Pages</a>
