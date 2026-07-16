@@ -125,7 +125,21 @@
       '.ov-daycol.building{cursor:crosshair}' +
       '.ov-sel{position:absolute;left:1px;right:1px;background:rgba(99,102,241,.28);border:1.5px solid var(--color-accent,#6366f1);border-radius:4px;pointer-events:none}' +
       '.ov-slotchip{display:inline-flex;align-items:center;gap:8px;background:var(--color-bg-secondary,#fff);border:1px solid var(--color-border,#e5e7eb);border-radius:8px;padding:5px 10px;font:600 12px/1 inherit}' +
-      '.ov-slotchip button{border:0;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;font-size:13px}';
+      '.ov-slotchip button{border:0;background:none;color:var(--color-text-muted,#9ca3af);cursor:pointer;font-size:13px}' +
+      // Responsive (C-CAL-BETA-RESCUE #1): month + week grids stay usable at phone
+      // widths by scrolling horizontally INSIDE their own container (like
+      // calendar_v2.templ's bounded/overflow scroll) instead of crushing columns to
+      // an unreadable smear or forcing the whole page sideways. A min-width keeps the
+      // signed heatmap encoding legible; below it the grid scrolls. Encoding itself
+      // is untouched — this is layout/containment only.
+      '.avail-scroll{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}' +
+      '@media (max-width:640px){' +
+      '.avail-toolbar{gap:8px 10px}' +
+      '.avail-grid,.ov-weekgrid{min-width:544px}' +
+      '.ov-month{min-width:496px}' +
+      '.ov-mday{min-height:64px;padding:4px 5px 5px}' +
+      '.ov-mday .dn{font-size:10.5px}' +
+      '}';
     var st = el('style'); st.id = 'avail-styles'; st.textContent = css;
     document.head.appendChild(st);
   }
@@ -152,6 +166,7 @@
     this.weekCache = {};                       // weekStartISO -> overlay payload
     this.building = false;                     // DM slot-builder active
     this.selectedSlots = [];                   // [{date, startMinute, endMinute}]
+    this._morphTimer = null;                   // pending month↔week morph cleanup (C-CAL-BETA-RESCUE #2)
   }
 
   AvailabilityApp.prototype.announce = function (msg) {
@@ -263,7 +278,8 @@
       }
     }
     document.addEventListener('mouseup', function () { self.painting = false; });
-    panel.appendChild(grid);
+    var gridScroll = el('div', 'avail-scroll'); gridScroll.appendChild(grid);
+    panel.appendChild(gridScroll);
 
     var note = el('p', 'avail-note');
     note.textContent = 'Click or drag to paint the hours you can play. This repeats every week. Times are in your timezone.';
@@ -433,6 +449,18 @@
     var monthView = $('[data-ov-monthview]', this.root), weekView = $('[data-ov-weekview]', this.root);
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // Re-entrancy guard (C-CAL-BETA-RESCUE #2). Each morph schedules a 340ms
+    // cleanup timer that adds `hidden` to the OUTGOING view. Clicking a month-grid
+    // day fires setScale('week') while a prior month↔week morph's cleanup timer is
+    // still pending — and because the current week is cached the month grid renders
+    // instantly, so this window is hit routinely. That stale timer would then hide
+    // the view we're now showing, leaving a blank calendar. Cancel any pending
+    // cleanup and clear both views' transient transition classes so this transition
+    // starts from a clean baseline (incoming shown, only the outgoing hidden).
+    if (this._morphTimer) { clearTimeout(this._morphTimer); this._morphTimer = null; }
+    monthView.classList.remove('leave'); monthView.classList.remove('enter');
+    weekView.classList.remove('leave'); weekView.classList.remove('enter');
+
     if (which === 'week') {
       this.loadOverlay();
       var ox = (originWd != null) ? Math.round(((originWd + 0.5) / 7) * 100) : 50;
@@ -440,14 +468,14 @@
       if (reduce) { monthView.classList.add('hidden'); weekView.classList.remove('hidden'); this.announce('Week view'); return; }
       weekView.classList.remove('hidden'); weekView.classList.add('enter'); void weekView.offsetWidth;
       monthView.classList.add('leave'); weekView.classList.remove('enter');
-      setTimeout(function () { monthView.classList.add('hidden'); monthView.classList.remove('leave'); }, 340);
+      this._morphTimer = setTimeout(function () { monthView.classList.add('hidden'); monthView.classList.remove('leave'); self._morphTimer = null; }, 340);
       this.announce('Week view');
     } else {
       this.renderMonth();
       if (reduce) { weekView.classList.add('hidden'); monthView.classList.remove('hidden'); this.announce('Month view'); return; }
       monthView.classList.remove('hidden'); monthView.classList.add('leave'); void monthView.offsetWidth; monthView.classList.remove('leave');
       weekView.classList.add('leave');
-      setTimeout(function () { weekView.classList.add('hidden'); weekView.classList.remove('leave'); }, 340);
+      this._morphTimer = setTimeout(function () { weekView.classList.add('hidden'); weekView.classList.remove('leave'); self._morphTimer = null; }, 340);
       this.announce('Month view');
     }
   };
@@ -534,7 +562,7 @@
     if (total < 1) total = data.totalMembers || 1;
 
     var hpx = 26;
-    var grid = el('div');
+    var grid = el('div', 'ov-weekgrid'); // class drives the mobile min-width (C-CAL-BETA-RESCUE #1)
     grid.style.display = 'grid';
     grid.style.gridTemplateColumns = '56px repeat(7,1fr)';
     grid.style.border = '1px solid var(--color-border,#e5e7eb)';
@@ -600,7 +628,8 @@
     });
 
     host.innerHTML = '';
-    host.appendChild(grid);
+    var weekScroll = el('div', 'avail-scroll'); weekScroll.appendChild(grid);
+    host.appendChild(weekScroll);
     if (this.building) this.attachBuilder(grid);
     this.announce('Group availability for week of ' + first.date);
   };
@@ -681,7 +710,8 @@
       })(i);
     }
     host.innerHTML = '';
-    host.appendChild(grid);
+    var monthScroll = el('div', 'avail-scroll'); monthScroll.appendChild(grid);
+    host.appendChild(monthScroll);
     this.announce('Month view ' + MONTH_NAMES[mo] + ' ' + y);
   };
 
