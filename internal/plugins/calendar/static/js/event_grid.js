@@ -145,6 +145,7 @@
         var editingID = null; // null = create mode; string = edit mode
         var dirty = false;
         var currentEvent = null; // the stored event being edited (for the actions)
+        var _lastFocus = null;   // element focused before the drawer opened (a11y restore)
 
         function eventByID(id) {
             for (var i = 0; i < events.length; i++) {
@@ -168,9 +169,13 @@
             }
 
             dirty = false;
+            _lastFocus = (document.activeElement && typeof document.activeElement.focus === 'function')
+                ? document.activeElement : null;
             populateDrawer(prefill);
             drawer.classList.remove('hidden');
-            var first = drawer.querySelector('[data-field]');
+            // Focus-trap the dialog (C-CAL-LARGE-EDITOR: role=dialog, aria-modal).
+            drawer.addEventListener('keydown', onTrapKeydown);
+            var first = drawer.querySelector('[data-field="name"]') || drawer.querySelector('[data-field]');
             if (first && typeof first.focus === 'function') first.focus();
 
             drawer.querySelectorAll('[data-field]').forEach(function (el) {
@@ -190,15 +195,41 @@
 
         function markDirty() { dirty = true; }
 
+        // Focus trap (C-CAL-LARGE-EDITOR): keep Tab / Shift+Tab inside the open
+        // drawer, cycling first↔last of the currently-VISIBLE focusables (so the
+        // hidden time inputs / collapsed panels don't create dead tab stops).
+        function drawerFocusables() {
+            var sel = 'a[href], button:not([disabled]), input:not([disabled]), ' +
+                'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+            return Array.prototype.slice.call(drawer.querySelectorAll(sel)).filter(function (el) {
+                return el.offsetParent !== null; // visible (not display:none / hidden ancestor)
+            });
+        }
+        function onTrapKeydown(e) {
+            if (e.key !== 'Tab') return;
+            var els = drawerFocusables();
+            if (!els.length) return;
+            var first = els[0], last = els[els.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+
         function closeDrawer(force) {
             if (dirty && !force) {
                 if (!window.confirm('Discard unsaved changes?')) return;
             }
             drawer.classList.add('hidden');
+            drawer.removeEventListener('keydown', onTrapKeydown);
             var confirmEl = drawer.querySelector('[data-drawer-confirm]');
             if (confirmEl) confirmEl.classList.add('hidden');
+            clearDrawerError();
             editingID = null;
             dirty = false;
+            // Restore focus to the control that opened the drawer (a11y).
+            if (_lastFocus && typeof _lastFocus.focus === 'function') {
+                try { _lastFocus.focus(); } catch (e) { /* element gone after reload */ }
+            }
+            _lastFocus = null;
         }
 
         function populateDrawer(item) {
@@ -222,6 +253,162 @@
             // the toggle when an end date is present and differs from the start.
             syncMultiday(hasEndDate(item));
             syncRecurrenceCustom();
+            // C-CAL-LARGE-EDITOR: the redesigned drawer's own controls (chips,
+            // segment, time inputs, all-day, live hints) are not [data-field]s —
+            // populate them explicitly from the same item.
+            clearDrawerError();
+            syncTypeChips(item.category || '');
+            syncTierSeg(item.tier || '');
+            populateTimes(item);
+            updateRecurrenceSummary();
+            updateFantasyHint();
+        }
+
+        // --- C-CAL-LARGE-EDITOR redesigned controls -----------------------
+
+        // The inline validation region (data-drawer-error) surfaces the events
+        // endpoint's single {error,message} 422 next to the form, not as a
+        // full-page state (dispatch §3). clearDrawerError resets it each open.
+        function drawerError() { return drawer.querySelector('[data-drawer-error]'); }
+        function clearDrawerError() {
+            var e = drawerError();
+            if (e) { e.textContent = ''; e.classList.add('hidden'); }
+        }
+        function showDrawerError(msg) {
+            var e = drawerError();
+            if (!e) { window.Chronicle.notify(msg || 'Save failed', 'error'); return; }
+            e.textContent = msg || 'Save failed';
+            e.classList.remove('hidden');
+            var body = drawer.querySelector('.overflow-y-auto');
+            if (body && typeof body.scrollTo === 'function') body.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function fmt2(n) { return (n < 10 ? '0' : '') + n; }
+
+        // Type chips ↔ hidden category field. Clicking a chip selects it (or, if
+        // already active, clears back to "no category" — matching the former
+        // select's "— none —"). Active styling is driven inline from the chip's
+        // own category color so no compiled CSS class is needed.
+        function typeValueEl() { return drawer.querySelector('[data-type-value]'); }
+        function syncTypeChips(slug) {
+            var hidden = typeValueEl();
+            if (hidden) hidden.value = slug || '';
+            drawer.querySelectorAll('[data-type-chip]').forEach(function (chip) {
+                var on = chip.dataset.catSlug === slug && !!slug;
+                chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+                var color = chip.dataset.catColor || '';
+                if (on && color) {
+                    chip.style.borderColor = color;
+                    chip.style.backgroundColor = color + '22';
+                    chip.style.color = 'var(--color-text-primary)';
+                } else {
+                    chip.style.borderColor = '';
+                    chip.style.backgroundColor = '';
+                    chip.style.color = '';
+                }
+            });
+        }
+
+        // Tier segment ↔ hidden tier field. One active at a time; clicking the
+        // active chip clears to "" (platform default). Active styling toggles
+        // known-good utility classes (no new compiled CSS).
+        function tierValueEl() { return drawer.querySelector('[data-tier-value]'); }
+        function syncTierSeg(slug) {
+            var hidden = tierValueEl();
+            if (hidden) hidden.value = slug || '';
+            drawer.querySelectorAll('[data-tier-chip]').forEach(function (chip) {
+                var on = chip.dataset.tierSlug === slug && !!slug;
+                chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+                chip.classList.toggle('bg-surface-alt', on);
+                chip.classList.toggle('text-fg', on);
+                chip.classList.toggle('shadow-sm', on);
+                chip.classList.toggle('text-fg-secondary', !on);
+            });
+        }
+
+        // All-day toggle shows/hides the time inputs. An all-day event carries no
+        // clock time (StartHour==nil) — readDrawer omits the times + sends
+        // all_day:true so the service clears them (C-CAL-LARGE-EDITOR backend).
+        function alldayBtn() { return drawer.querySelector('[data-allday-toggle]'); }
+        function isAllday() {
+            var b = alldayBtn();
+            return !!(b && b.getAttribute('aria-checked') === 'true');
+        }
+        function syncAllday(on) {
+            var b = alldayBtn();
+            if (b) b.setAttribute('aria-checked', on ? 'true' : 'false');
+            var fields = drawer.querySelector('[data-time-fields]');
+            if (fields) fields.classList.toggle('hidden', !!on);
+        }
+
+        // populateTimes fills the two HH:MM inputs from the event's clock fields
+        // and sets the all-day state. In EDIT mode a stored event with no start
+        // hour IS all-day; a fresh CREATE defaults to timed (empty inputs).
+        function populateTimes(item) {
+            var startEl = drawer.querySelector('[data-time-start]');
+            var endEl = drawer.querySelector('[data-time-end]');
+            if (startEl) startEl.value = (item.start_hour == null) ? '' :
+                fmt2(item.start_hour) + ':' + fmt2(item.start_minute == null ? 0 : item.start_minute);
+            if (endEl) endEl.value = (item.end_hour == null) ? '' :
+                fmt2(item.end_hour) + ':' + fmt2(item.end_minute == null ? 0 : item.end_minute);
+            var allDay = item.all_day === true || (editingID && item.start_hour == null);
+            syncAllday(!!allDay);
+        }
+
+        // parseTimeInput turns an <input type="time"> "HH:MM" into {h,m}, or null.
+        function parseTimeInput(el) {
+            if (!el || !el.value) return null;
+            var m = /^(\d{1,2}):(\d{2})$/.exec(el.value.trim());
+            if (!m) return null;
+            var h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+            if (isNaN(h) || isNaN(mi) || h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+            return { h: h, m: mi };
+        }
+
+        // Fantasy-equivalence hint: the entered date rendered in the active
+        // calendar's own prose. Era name if the year falls in one, else the bare
+        // year + epoch suffix — both carried on the drawer as data attributes.
+        function drawerYearLabel(year) {
+            if (isNaN(year)) return '';
+            var eras = [];
+            try { eras = JSON.parse(drawer.dataset.calEras || '[]'); } catch (e) { eras = []; }
+            for (var i = 0; i < eras.length; i++) {
+                var er = eras[i];
+                if (year >= er.start && (er.end == null || year <= er.end)) return er.name;
+            }
+            var epoch = drawer.dataset.calEpoch || '';
+            return year + (epoch ? ' ' + epoch : '');
+        }
+        function updateFantasyHint() {
+            var hint = drawer.querySelector('[data-fantasy-hint]');
+            if (!hint) return;
+            var monthSel = drawer.querySelector('[data-field="month"]');
+            var dayEl = drawer.querySelector('[data-field="day"]');
+            var yearEl = drawer.querySelector('[data-field="year"]');
+            var monthName = (monthSel && monthSel.selectedIndex >= 0 && monthSel.options[monthSel.selectedIndex]) ?
+                monthSel.options[monthSel.selectedIndex].text : '';
+            var day = dayEl ? parseInt(dayEl.value, 10) : NaN;
+            var year = yearEl ? parseInt(yearEl.value, 10) : NaN;
+            if (!monthName || isNaN(day)) { hint.textContent = ''; return; }
+            var yl = drawerYearLabel(year);
+            hint.textContent = '= ' + monthName + ' ' + day + (yl ? ' · ' + yl : '') + ' — players see both dates.';
+        }
+
+        // Plain-language recurrence summary — restates the select choice.
+        function updateRecurrenceSummary() {
+            var sel = drawer.querySelector('[data-recurrence-type]');
+            var out = drawer.querySelector('[data-recurrence-summary]');
+            if (!sel || !out) return;
+            var v = sel.value, txt = '';
+            if (v === 'weekly') txt = 'Repeats weekly.';
+            else if (v === 'biweekly') txt = 'Repeats every 2 weeks.';
+            else if (v === 'monthly') txt = 'Repeats monthly, on the same day.';
+            else if (v === 'custom') {
+                var n = parseInt((drawer.querySelector('[data-field="recurrence_interval"]') || {}).value, 10);
+                txt = 'Repeats every ' + (isNaN(n) ? 'N' : n) + ' week' + (n === 1 ? '' : 's') + '.';
+            }
+            out.textContent = txt;
+            out.classList.toggle('hidden', !txt);
         }
 
         // --- Multi-day (end-date) toggle ---------------------------------
@@ -277,6 +464,30 @@
             if (!body.is_recurring) {
                 delete body.recurrence_interval;
             }
+            // C-CAL-LARGE-EDITOR: all-day + times. All-day → no clock time; drop
+            // any time fields and flag all_day so the service clears the stored
+            // clock (the drawer's all-day == StartHour==nil model). Otherwise pull
+            // HH:MM from the two time inputs into the clock fields.
+            if (isAllday()) {
+                body.all_day = true;
+                delete body.start_hour; delete body.start_minute;
+                delete body.end_hour; delete body.end_minute;
+            } else {
+                body.all_day = false;
+                var st = parseTimeInput(drawer.querySelector('[data-time-start]'));
+                var en = parseTimeInput(drawer.querySelector('[data-time-end]'));
+                if (st) { body.start_hour = st.h; body.start_minute = st.m; }
+                if (en) { body.end_hour = en.h; body.end_minute = en.m; }
+            }
+            // Coerce integer fields — month/end_month come from <select> (string
+            // value), and JSON must send real ints for the Go int bindings.
+            ['year', 'month', 'day', 'end_year', 'end_month', 'end_day',
+                'start_hour', 'start_minute', 'end_hour', 'end_minute', 'recurrence_interval']
+                .forEach(function (k) {
+                    if (body[k] === undefined || body[k] === null || body[k] === '') return;
+                    var n = parseInt(body[k], 10);
+                    if (isNaN(n)) delete body[k]; else body[k] = n;
+                });
             return body;
         }
 
@@ -418,9 +629,13 @@
         }
 
         function saveDrawer() {
+            clearDrawerError();
             var body = readDrawer();
             if (!body.name) {
-                window.Chronicle.notify('Name is required', 'error');
+                // Inline (dispatch §3) — no toast-only failures for validation.
+                showDrawerError('Name is required.');
+                var nameEl = drawer.querySelector('[data-field="name"]');
+                if (nameEl && typeof nameEl.focus === 'function') nameEl.focus();
                 return;
             }
             var url, method;
@@ -437,6 +652,9 @@
                 headers: { 'X-CSRF-Token': csrfToken },
             }).then(function (resp) {
                 if (!resp.ok) {
+                    // Surface the endpoint's {error,message} 422/400 inline next to
+                    // the form (the shapes from apperror.NewValidation), not a
+                    // full-page error state (C-CAL-LARGE-EDITOR §3).
                     return resp.json().catch(function () { return {}; }).then(function (b) {
                         throw new Error((b && b.message) || 'Save failed');
                     });
@@ -444,7 +662,7 @@
                 closeDrawer(true);
                 window.location.reload();
             }).catch(function (e) {
-                window.Chronicle.notify((e && e.message) || 'Save failed', 'error');
+                showDrawerError((e && e.message) || 'Save failed');
             });
         }
 
@@ -861,7 +1079,48 @@
         var mtoggle = drawer && drawer.querySelector('[data-multiday-toggle]');
         if (mtoggle) mtoggle.addEventListener('change', function () { syncMultiday(mtoggle.checked); });
         var rtypeSel = drawer && drawer.querySelector('[data-recurrence-type]');
-        if (rtypeSel) rtypeSel.addEventListener('change', syncRecurrenceCustom);
+        if (rtypeSel) rtypeSel.addEventListener('change', function () {
+            syncRecurrenceCustom();
+            updateRecurrenceSummary();
+        });
+        var rIntervalEl = drawer && drawer.querySelector('[data-field="recurrence_interval"]');
+        if (rIntervalEl) rIntervalEl.addEventListener('input', updateRecurrenceSummary);
+
+        // C-CAL-LARGE-EDITOR redesigned controls (wired ONCE — the scaffold is
+        // static; these persist across opens without leaking listeners).
+        // Type chips: select / toggle-off; mark dirty; sync the hidden category.
+        drawer.querySelectorAll('[data-type-chip]').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var cur = (typeValueEl() && typeValueEl().value) || '';
+                var slug = chip.dataset.catSlug || '';
+                syncTypeChips(cur === slug ? '' : slug);
+                markDirty();
+            });
+        });
+        // Tier segment: exclusive select; clicking the active chip clears to default.
+        drawer.querySelectorAll('[data-tier-chip]').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var cur = (tierValueEl() && tierValueEl().value) || '';
+                var slug = chip.dataset.tierSlug || '';
+                syncTierSeg(cur === slug ? '' : slug);
+                markDirty();
+            });
+        });
+        // All-day toggle: flip state, show/hide the time inputs, mark dirty.
+        var alldayEl = drawer.querySelector('[data-allday-toggle]');
+        if (alldayEl) alldayEl.addEventListener('click', function () {
+            syncAllday(!isAllday());
+            markDirty();
+        });
+        // Live fantasy-equivalence hint on any date change.
+        ['[data-field="month"]', '[data-field="day"]', '[data-field="year"]'].forEach(function (s) {
+            var el = drawer.querySelector(s);
+            if (el) {
+                el.addEventListener('input', updateFantasyHint);
+                el.addEventListener('change', updateFantasyHint);
+            }
+        });
+
         // Expose the live openDrawer to the document-level drag-create (wired
         // once so it never leaks listeners across boosted-nav re-inits).
         _openDrawer = openDrawer;

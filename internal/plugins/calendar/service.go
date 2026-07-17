@@ -1691,6 +1691,14 @@ func (s *calendarService) CreateEvent(ctx context.Context, calendarID string, in
 		AllDay:                   input.AllDay,
 		CreatedBy:                &input.CreatedBy,
 	}
+	// All-day events carry no clock time — keep the create path consistent with
+	// UpdateEvent + the grid's nil-StartHour all-day signal (C-CAL-LARGE-EDITOR).
+	if evt.AllDay {
+		evt.StartHour = nil
+		evt.StartMinute = nil
+		evt.EndHour = nil
+		evt.EndMinute = nil
+	}
 
 	if err := s.repo.CreateEvent(ctx, evt); err != nil {
 		return nil, fmt.Errorf("create event: %w", err)
@@ -1840,6 +1848,21 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 		evt.Icon = input.Icon
 	}
 	evt.AllDay = input.AllDay
+	// All-day means "no clock time" — the V2 grid/card treat a nil StartHour as
+	// the all-day signal (calendar_v2_helpers.go monthCellLines: allDay ==
+	// TimeLabel==""). Because the time fields above are nil-PRESERVE (a title-only
+	// edit must not blank an event's clock), toggling all-day ON in the editor
+	// drawer could not otherwise clear an existing start/end time. So when the
+	// caller explicitly marks the event all-day, drop the clock fields here — the
+	// one place that unambiguously means "make this all-day" (C-CAL-LARGE-EDITOR).
+	// Safe for the day-resolution module note path (APIHandler always sends
+	// AllDay=true with nil times, so this is a no-op there).
+	if evt.AllDay {
+		evt.StartHour = nil
+		evt.StartMinute = nil
+		evt.EndHour = nil
+		evt.EndMinute = nil
+	}
 
 	if err := s.repo.UpdateEvent(ctx, evt); err != nil {
 		return err

@@ -810,26 +810,35 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	}
 
 	var req struct {
-		Name            string  `json:"name"`
-		Description     *string `json:"description"`
-		DescriptionHTML *string `json:"description_html"`
-		EntityID        *string `json:"entity_id"`
-		Year            int     `json:"year"`
-		Month           int     `json:"month"`
-		Day             int     `json:"day"`
-		StartHour       *int    `json:"start_hour"`
-		StartMinute     *int    `json:"start_minute"`
-		EndYear         *int    `json:"end_year"`
-		EndMonth        *int    `json:"end_month"`
-		EndDay          *int    `json:"end_day"`
-		EndHour         *int    `json:"end_hour"`
-		EndMinute       *int    `json:"end_minute"`
+		Name               string  `json:"name"`
+		Description        *string `json:"description"`
+		DescriptionHTML    *string `json:"description_html"`
+		EntityID           *string `json:"entity_id"`
+		Year               int     `json:"year"`
+		Month              int     `json:"month"`
+		Day                int     `json:"day"`
+		StartHour          *int    `json:"start_hour"`
+		StartMinute        *int    `json:"start_minute"`
+		EndYear            *int    `json:"end_year"`
+		EndMonth           *int    `json:"end_month"`
+		EndDay             *int    `json:"end_day"`
+		EndHour            *int    `json:"end_hour"`
+		EndMinute          *int    `json:"end_minute"`
 		IsRecurring        bool    `json:"is_recurring"`
 		RecurrenceType     *string `json:"recurrence_type"`
 		RecurrenceInterval *int    `json:"recurrence_interval"`
-		Visibility      string  `json:"visibility"`
-		VisibilityRules *string `json:"visibility_rules"`
-		Category        *string `json:"category"`
+		Visibility         string  `json:"visibility"`
+		VisibilityRules    *string `json:"visibility_rules"`
+		Category           *string `json:"category"`
+		// Tier + AllDay: internal-UI-only binding completion (C-CAL-LARGE-EDITOR).
+		// The columns (calendar_events.tier / .all_day) and the service inputs
+		// already existed; only this handler's request struct was dropping them,
+		// so the editor drawer's tier segment + all-day toggle had no wire. No
+		// schema, no new endpoint, no external-module-API change (APIHandler is
+		// untouched). Tier is a campaign tier-definition slug ("" = platform
+		// default); AllDay pairs with the drawer's nil-times all-day model.
+		Tier   *string `json:"tier"`
+		AllDay bool    `json:"all_day"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -851,27 +860,29 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	}
 
 	evt, err := h.svc.CreateEvent(ctx, cal.ID, CreateEventInput{
-		Name:            req.Name,
-		Description:     req.Description,
-		DescriptionHTML: req.DescriptionHTML,
-		EntityID:        req.EntityID,
-		Year:            req.Year,
-		Month:           req.Month,
-		Day:             req.Day,
-		StartHour:       req.StartHour,
-		StartMinute:     req.StartMinute,
-		EndYear:         req.EndYear,
-		EndMonth:        req.EndMonth,
-		EndDay:          req.EndDay,
-		EndHour:         req.EndHour,
-		EndMinute:       req.EndMinute,
-		IsRecurring:     req.IsRecurring,
+		Name:               req.Name,
+		Description:        req.Description,
+		DescriptionHTML:    req.DescriptionHTML,
+		EntityID:           req.EntityID,
+		Year:               req.Year,
+		Month:              req.Month,
+		Day:                req.Day,
+		StartHour:          req.StartHour,
+		StartMinute:        req.StartMinute,
+		EndYear:            req.EndYear,
+		EndMonth:           req.EndMonth,
+		EndDay:             req.EndDay,
+		EndHour:            req.EndHour,
+		EndMinute:          req.EndMinute,
+		IsRecurring:        req.IsRecurring,
 		RecurrenceType:     req.RecurrenceType,
 		RecurrenceInterval: req.RecurrenceInterval,
-		Visibility:      visibility,
-		VisibilityRules: req.VisibilityRules,
-		Category:        req.Category,
-		CreatedBy:       userID,
+		Visibility:         visibility,
+		VisibilityRules:    req.VisibilityRules,
+		Category:           req.Category,
+		Tier:               req.Tier,
+		AllDay:             req.AllDay,
+		CreatedBy:          userID,
 	})
 	if err != nil {
 		return err
@@ -912,26 +923,31 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	}
 
 	var req struct {
-		Name            string  `json:"name"`
-		Description     *string `json:"description"`
-		DescriptionHTML *string `json:"description_html"`
-		EntityID        *string `json:"entity_id"`
-		Year            int     `json:"year"`
-		Month           int     `json:"month"`
-		Day             int     `json:"day"`
-		StartHour       *int    `json:"start_hour"`
-		StartMinute     *int    `json:"start_minute"`
-		EndYear         *int    `json:"end_year"`
-		EndMonth        *int    `json:"end_month"`
-		EndDay          *int    `json:"end_day"`
-		EndHour         *int    `json:"end_hour"`
-		EndMinute       *int    `json:"end_minute"`
+		Name               string  `json:"name"`
+		Description        *string `json:"description"`
+		DescriptionHTML    *string `json:"description_html"`
+		EntityID           *string `json:"entity_id"`
+		Year               int     `json:"year"`
+		Month              int     `json:"month"`
+		Day                int     `json:"day"`
+		StartHour          *int    `json:"start_hour"`
+		StartMinute        *int    `json:"start_minute"`
+		EndYear            *int    `json:"end_year"`
+		EndMonth           *int    `json:"end_month"`
+		EndDay             *int    `json:"end_day"`
+		EndHour            *int    `json:"end_hour"`
+		EndMinute          *int    `json:"end_minute"`
 		IsRecurring        bool    `json:"is_recurring"`
 		RecurrenceType     *string `json:"recurrence_type"`
 		RecurrenceInterval *int    `json:"recurrence_interval"`
-		Visibility      string  `json:"visibility"`
-		VisibilityRules *string `json:"visibility_rules"`
-		Category        *string `json:"category"`
+		Visibility         string  `json:"visibility"`
+		VisibilityRules    *string `json:"visibility_rules"`
+		Category           *string `json:"category"`
+		// Tier + AllDay: internal-UI-only binding completion (C-CAL-LARGE-EDITOR).
+		// See CreateEventAPI for the rationale — existing columns/inputs, no
+		// schema, no new endpoint, external module API untouched.
+		Tier   *string `json:"tier"`
+		AllDay bool    `json:"all_day"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -945,26 +961,28 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	}
 
 	if err := h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
-		Name:            req.Name,
-		Description:     req.Description,
-		DescriptionHTML: req.DescriptionHTML,
-		EntityID:        req.EntityID,
-		Year:            req.Year,
-		Month:           req.Month,
-		Day:             req.Day,
-		StartHour:       req.StartHour,
-		StartMinute:     req.StartMinute,
-		EndYear:         req.EndYear,
-		EndMonth:        req.EndMonth,
-		EndDay:          req.EndDay,
-		EndHour:         req.EndHour,
-		EndMinute:       req.EndMinute,
-		IsRecurring:     req.IsRecurring,
+		Name:               req.Name,
+		Description:        req.Description,
+		DescriptionHTML:    req.DescriptionHTML,
+		EntityID:           req.EntityID,
+		Year:               req.Year,
+		Month:              req.Month,
+		Day:                req.Day,
+		StartHour:          req.StartHour,
+		StartMinute:        req.StartMinute,
+		EndYear:            req.EndYear,
+		EndMonth:           req.EndMonth,
+		EndDay:             req.EndDay,
+		EndHour:            req.EndHour,
+		EndMinute:          req.EndMinute,
+		IsRecurring:        req.IsRecurring,
 		RecurrenceType:     req.RecurrenceType,
 		RecurrenceInterval: req.RecurrenceInterval,
-		Visibility:      visibility,
-		VisibilityRules: req.VisibilityRules,
-		Category:        req.Category,
+		Visibility:         visibility,
+		VisibilityRules:    req.VisibilityRules,
+		Category:           req.Category,
+		Tier:               req.Tier,
+		AllDay:             req.AllDay,
 	}); err != nil {
 		return err
 	}

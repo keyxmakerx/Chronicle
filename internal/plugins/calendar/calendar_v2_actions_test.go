@@ -36,11 +36,11 @@ func TestEventDrawerActions_ScribeWithTypes(t *testing.T) {
 		`data-drawer-actions class="hidden`, // view-mode gate: hidden until edit mode
 		"data-action-create-entity",         // 1. create entity from event
 		`value="5"`, "NPC",                  // the entity-type option in the picker
-		"data-event-ties-section",           // 2. connect existing (surfaced here)
-		"Linked entities",                   // the relabeled ties group
-		"data-action-duplicate", "data-dup-day", "data-duplicate-go", // 3. duplicate to date
-		"data-action-permalink", // 4. permalink
-		"data-drawer-delete",    // 5. delete, relocated into Actions
+		"data-event-ties-section",                                    // ties picker (now in the Details section)
+		"Linked entities",                                            // the relabeled ties group
+		"data-action-duplicate", "data-dup-day", "data-duplicate-go", // duplicate to date
+		"data-action-permalink", // permalink
+		"data-drawer-delete",    // delete (now in the footer, C-CAL-LARGE-EDITOR)
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("scribe drawer Actions section missing %q", want)
@@ -62,14 +62,19 @@ func TestEventDrawerActions_NoEntityTypesHidesCreate(t *testing.T) {
 	}
 }
 
-// TestEventDrawer_FooterHasNoDelete: the delete button moved INTO the Actions
-// section (destructive last) — the footer carries only Cancel + Save.
-func TestEventDrawer_FooterHasNoDelete(t *testing.T) {
+// TestEventDrawer_FooterOrder: the redesigned drawer (C-CAL-LARGE-EDITOR, signed
+// mockup) puts Delete… back in the FOOTER — order is Delete… (left) · Cancel ·
+// Save changes (right). Supersedes the pre-redesign "delete lives in Actions"
+// contract; the actions section keeps only the GM power-tools.
+func TestEventDrawer_FooterOrder(t *testing.T) {
 	html := renderEventDrawerActions(t, nil)
-	footerIdx := strings.LastIndex(html, "data-drawer-save")
+	saveIdx := strings.LastIndex(html, "data-drawer-save")
 	deleteIdx := strings.LastIndex(html, "data-drawer-delete")
-	if footerIdx >= 0 && deleteIdx > footerIdx {
-		t.Errorf("delete must sit in the Actions section (before the footer Save), not the footer")
+	if saveIdx < 0 || deleteIdx < 0 {
+		t.Fatal("footer must carry both delete and save")
+	}
+	if deleteIdx > saveIdx {
+		t.Errorf("footer order must be Delete… before Save changes (mockup)")
 	}
 }
 

@@ -925,12 +925,22 @@ templ ledgerRow(r ledgerRowData) {
 	</div>
 }
 
-// eventV2Drawer renders the right-slide event editor drawer. Hosts
-// the visibility editor widget (Q-V2-7 chip-row builder) + the
-// per-event form. JS in event_grid.js owns open/close state, dirty
-// tracking, and PUT/POST/DELETE wiring to existing V1 endpoints.
+// eventV2Drawer renders the right-slide FULL event editor drawer — tier 3 of
+// the peek → day-popover → quick-edit → drawer model (C-CAL-LARGE-EDITOR,
+// design slice 5 of 6; signed spec: cordinator/mockups/calendar-redesign-
+// concept.html + renders/cal-editor-{light,dark}.png). Sections map ONLY to
+// shipped model fields (title, category, tier, Y/M/D + start/end time, all-day
+// via nil StartHour, weekly recurrence, Everyone/GM-only visibility, location*,
+// description, linked entities). *Fields with no storage yet (location, RSVP,
+// sky-pin, availability best-window) render disabled with a flag note — no
+// migrations / no new endpoints authorized. JS in event_grid.js owns open/close,
+// focus-trap, dirty tracking, inline 422 errors, and PUT/POST/DELETE wiring.
 //
 // Scribe+ only — Players never receive the drawer DOM.
+//
+// Cites: cordinator/decisions/2026-05-21-core-tenets §T-B3 (production UI:
+// transitions, focus management, disabled states), §T-B1 (visibility gate),
+// §T-B2 (calendar-owned; no cross-plugin UI leak).
 templ eventV2Drawer(data CalendarV2ViewData) {
 	// z-50: the full editor must layer ABOVE the GM console (z-40 in the band
 	// region) — the console was hovering over the open drawer.
@@ -940,133 +950,269 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="event-v2-drawer-title"
+		data-cal-epoch={ eventDrawerEpoch(data) }
+		data-cal-eras={ eventDrawerErasJSON(data) }
 	>
 		<div
 			class="absolute inset-0 bg-black/40 transition-opacity duration-standard"
 			data-drawer-backdrop="true"
 		></div>
+		// Sky-panel slide-in motion (.drawer-slide-in — translateX; reduced-motion
+		// disables the animation in input.css). Full-height right panel on desktop;
+		// a full-width bottom-to-top sheet <768px (max-w-full + the mobile inset
+		// override below keeps it edge-to-edge, no border-left seam).
 		<div
-			class="drawer-slide-in absolute right-0 top-0 bottom-0 w-full max-w-lg card shadow-2xl flex flex-col"
+			class="drawer-slide-in absolute right-0 top-0 bottom-0 w-full max-w-full md:max-w-md card shadow-2xl flex flex-col"
 			data-drawer-panel="true"
 		>
-			<div class="px-4 py-3 border-b border-edge flex items-center justify-between">
-				<h2 id="event-v2-drawer-title" class="text-base font-semibold text-fg" data-drawer-title>
+			<div class="px-4 py-3 border-b border-edge flex items-center gap-3">
+				<h2 id="event-v2-drawer-title" class="text-base font-semibold text-fg flex-1 min-w-0" data-drawer-title>
 					Edit event
 				</h2>
+				<span class="text-[11px] text-fg-muted hidden sm:inline" aria-hidden="true">
+					Quick edit ⇢ <b class="text-fg-secondary font-semibold">Full editor</b>
+				</span>
 				<button
 					type="button"
-					class="text-fg-secondary hover:text-fg transition-colors duration-micro"
+					class="text-fg-secondary hover:text-fg transition-colors duration-micro p-1 -m-1"
 					data-drawer-close="true"
 					aria-label="Close drawer"
 				>
 					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 				</button>
 			</div>
-			<div class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-				<div>
-					<label class="block text-xs font-medium text-fg-secondary mb-1">Name</label>
-					<input type="text" class="input text-sm w-full" data-field="name" placeholder="Event name"/>
+			<div class="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+				// Inline validation region (C-CAL-LARGE-EDITOR): the events endpoint
+				// returns a single {error,message} 422 (apperror.NewValidation); the
+				// JS drops message text here instead of a full-page error state.
+				<div
+					class="hidden rounded-md border border-danger/40 bg-danger/10 text-danger text-xs px-3 py-2"
+					data-drawer-error
+					role="alert"
+					aria-live="assertive"
+				></div>
+				// ── Title + type chips ─────────────────────────────────────────
+				<div class="space-y-2">
+					<input
+						type="text"
+						class="input w-full text-base font-semibold"
+						data-field="name"
+						data-drawer-field="name"
+						placeholder="Event name"
+						aria-label="Event title"
+					/>
+					if len(data.ActiveCalendar.EventCategories) > 0 {
+						<div class="flex flex-wrap gap-1.5" role="group" aria-label="Event type" data-type-chips>
+							for _, cat := range data.ActiveCalendar.EventCategories {
+								<button
+									type="button"
+									class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-edge text-xs font-medium text-fg-body bg-surface hover:bg-surface-alt transition-colors duration-micro"
+									data-type-chip
+									data-cat-slug={ cat.Slug }
+									data-cat-color={ cat.Color }
+									aria-pressed="false"
+								>
+									<span class="w-2 h-2 rounded-sm" style={ typeChipPipStyle(cat.Color) } aria-hidden="true"></span>
+									{ cat.Name }
+								</button>
+							}
+						</div>
+						// The chips drive this hidden field; readDrawer serializes it as
+						// the event `category` slug (same wire as the former select).
+						<input type="hidden" data-field="category" data-type-value/>
+					}
 				</div>
-				<div class="grid grid-cols-3 gap-2">
-					<div>
-						<label class="block text-xs font-medium text-fg-secondary mb-1">Year</label>
-						<input type="number" class="input text-sm w-full" data-field="year"/>
-					</div>
-					<div>
-						<label class="block text-xs font-medium text-fg-secondary mb-1">Month</label>
-						<select class="input text-sm w-full" data-field="month">
+				// ── WHEN ───────────────────────────────────────────────────────
+				<div class="space-y-2">
+					<div class="text-[11px] font-semibold text-fg-muted uppercase tracking-wide">When</div>
+					<div class="grid grid-cols-[1.6fr_.8fr_1fr] gap-2">
+						<select class="input text-sm w-full" data-field="month" aria-label="Month">
 							for i, m := range data.ActiveCalendar.Months {
 								<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
 							}
 						</select>
+						<input type="number" min="1" class="input text-sm w-full" data-field="day" aria-label="Day" placeholder="Day"/>
+						<input type="number" class="input text-sm w-full" data-field="year" aria-label="Year" placeholder="Year"/>
 					</div>
+					// Fantasy-equivalence hint — the entered date rendered in the active
+					// calendar's own prose ("= Harvestwane 16 · Year of the Broken
+					// Lantern"). Computed client-side from the month name + day + the
+					// era/epoch the drawer carries in data-cal-eras / data-cal-epoch.
+					<p class="text-[11px] text-fg-muted leading-snug" data-fantasy-hint></p>
+					// Times — hidden when all-day. Two 24h inputs; the JS splits them
+					// into start_hour/start_minute + end_hour/end_minute on save.
+					<div class="flex items-center gap-2" data-time-fields>
+						<input type="time" class="input text-sm flex-1" data-time-start aria-label="Start time"/>
+						<span class="text-fg-muted text-xs">–</span>
+						<input type="time" class="input text-sm flex-1" data-time-end aria-label="End time"/>
+					</div>
+					// All-day toggle → clears the clock time (StartHour==nil is the
+					// grid's all-day signal). Persists on both create + edit now that
+					// the endpoint binds `all_day` (C-CAL-LARGE-EDITOR).
+					<div class="flex items-center gap-3 rounded-lg border border-edge bg-surface px-3 py-2">
+						<div class="flex-1 min-w-0">
+							<div class="text-xs font-semibold text-fg">All-day</div>
+							<div class="text-[10.5px] text-fg-muted">Hides times, pins to the day band</div>
+						</div>
+						<button type="button" class="toggle" role="switch" data-allday-toggle aria-checked="false" aria-label="All-day">
+							<span class="toggle-knob"></span>
+						</button>
+					</div>
+					// Multi-day span (C-CAL-INTERACTIONS): drag-across-cells on the
+					// month grid pre-fills this; a single-day event leaves it off. The
+					// toggle is NOT a body field (data-multiday-toggle only); the end
+					// inputs use data-field so readDrawer picks them up (toggle-gated).
 					<div>
-						<label class="block text-xs font-medium text-fg-secondary mb-1">Day</label>
-						<input type="number" min="1" class="input text-sm w-full" data-field="day"/>
-					</div>
-				</div>
-				// Multi-day span (C-CAL-INTERACTIONS): drag-across-cells on the
-				// month grid pre-fills this; a single-day event leaves it off.
-				// `data-field-multiday` (not data-field) so the toggle isn't sent
-				// as a body field; the end-date inputs use data-field so readDrawer
-				// picks them up (gated by the toggle).
-				<div>
-					<label class="flex items-center gap-2 text-xs text-fg-secondary cursor-pointer">
-						<input type="checkbox" data-field-multiday data-multiday-toggle/>
-						<span>Multi-day event</span>
-					</label>
-					<div class="grid grid-cols-3 gap-2 mt-2 hidden" data-multiday-fields>
-						<div>
-							<label class="block text-[10px] text-fg-secondary mb-1">End year</label>
-							<input type="number" class="input text-sm w-full" data-field="end_year"/>
-						</div>
-						<div>
-							<label class="block text-[10px] text-fg-secondary mb-1">End month</label>
-							<select class="input text-sm w-full" data-field="end_month">
-								for i, m := range data.ActiveCalendar.Months {
-									<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
-								}
-							</select>
-						</div>
-						<div>
-							<label class="block text-[10px] text-fg-secondary mb-1">End day</label>
-							<input type="number" min="1" class="input text-sm w-full" data-field="end_day"/>
+						<label class="flex items-center gap-2 text-xs text-fg-secondary cursor-pointer">
+							<input type="checkbox" data-multiday-toggle/>
+							<span>Multi-day event</span>
+						</label>
+						<div class="grid grid-cols-3 gap-2 mt-2 hidden" data-multiday-fields>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-1">End year</label>
+								<input type="number" class="input text-sm w-full" data-field="end_year"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-1">End month</label>
+								<select class="input text-sm w-full" data-field="end_month">
+									for i, m := range data.ActiveCalendar.Months {
+										<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
+									}
+								</select>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-secondary mb-1">End day</label>
+								<input type="number" min="1" class="input text-sm w-full" data-field="end_day"/>
+							</div>
 						</div>
 					</div>
+					// Recurrence (C-CAL-EDITOR-EXPANSION PR2). Weekly vocabulary mirrors
+					// the sessions plugin; is_recurring is derived client-side. The
+					// plain-language summary line restates the choice ("Repeats weekly").
+					<div>
+						<select class="input text-sm w-full" data-field="recurrence_type" data-recurrence-type>
+							<option value="">Does not repeat</option>
+							<option value="weekly">Repeats weekly</option>
+							<option value="biweekly">Repeats every 2 weeks</option>
+							<option value="monthly">Repeats monthly (same day)</option>
+							<option value="custom">Custom (every N weeks)</option>
+						</select>
+						<div class="hidden mt-2 flex items-center gap-2" data-recurrence-custom>
+							<span class="text-xs text-fg-secondary">Every</span>
+							<input type="number" min="1" value="1" class="input text-sm w-20" data-field="recurrence_interval" aria-label="Weeks between occurrences"/>
+							<span class="text-xs text-fg-secondary">weeks</span>
+						</div>
+						<p class="text-[11px] text-fg-muted mt-1.5 hidden" data-recurrence-summary></p>
+					</div>
 				</div>
-				// Recurrence (C-CAL-EDITOR-EXPANSION PR2). A create+edit property, so
-				// it lives in the form body — not the edit-only Actions section. The
-				// vocabulary mirrors the sessions plugin (weekly/biweekly/monthly/
-				// custom); is_recurring is derived client-side from this select.
-				<div>
-					<label class="block text-xs font-medium text-fg-secondary mb-1">Repeats</label>
-					<select class="input text-sm w-full" data-field="recurrence_type" data-recurrence-type>
-						<option value="">Does not repeat</option>
-						<option value="weekly">Weekly</option>
-						<option value="biweekly">Every 2 weeks</option>
-						<option value="monthly">Monthly (same day each month)</option>
-						<option value="custom">Custom (every N weeks)</option>
+				// ── WHO SEES IT ────────────────────────────────────────────────
+				<div class="space-y-2">
+					<div class="text-[11px] font-semibold text-fg-muted uppercase tracking-wide">Who sees it</div>
+					// Visibility (Everyone / GM-only + advanced per-person rules).
+					// dm_only authoring gate (Phase 4c): only co-DMs get the editor;
+					// otherwise readVisibilityEditor() defaults to public (server
+					// downgrade backstops it). Preserved as-is — this IS the mockup's
+					// Everyone/GM-only segment plus its advanced-rules disclosure.
+					if data.CanAuthorDmOnly {
+						@calwidget.VisibilityEditor(buildEventVisibilityEditor(data))
+					} else {
+						<p class="text-xs text-fg-secondary italic" data-event-visibility-locked>
+							<i class="fa-solid fa-globe mr-1" aria-hidden="true"></i>Visible to everyone
+						</p>
+					}
+					// Tier segment (prominence). Sourced from the campaign's tier
+					// vocabulary (or platform defaults); persists via the now-bound
+					// `tier` field. Clicking the active chip clears to platform default.
+					<div>
+						<div class="text-[10.5px] text-fg-secondary mb-1">Prominence</div>
+						<div class="inline-flex rounded-lg border border-edge bg-surface p-0.5 gap-0.5" role="group" aria-label="Prominence tier" data-tier-seg>
+							for _, t := range eventTierOptions(data) {
+								<button
+									type="button"
+									class="px-2.5 py-1 rounded-md text-xs font-medium text-fg-secondary transition-colors duration-micro"
+									data-tier-chip
+									data-tier-slug={ t.Slug }
+									aria-pressed="false"
+								>
+									{ t.Name }
+								</button>
+							}
+						</div>
+						<input type="hidden" data-field="tier" data-tier-value/>
+					</div>
+					// Collect RSVPs — DISABLED + flagged. Chronicle events are not
+					// sessions; there is no per-event RSVP/attendee storage (sessions
+					// are a separate plugin surfaced read-only on the grid). Enabling
+					// this needs an event↔session link (schema) — out of scope (no
+					// migrations). See PR "Stop-and-flag".
+					<div class="flex items-center gap-3 rounded-lg border border-edge bg-surface/60 px-3 py-2 opacity-70">
+						<div class="flex-1 min-w-0">
+							<div class="text-xs font-semibold text-fg-secondary">Collect RSVPs</div>
+							<div class="text-[10.5px] text-fg-muted">Ships with the sessions RSVP link — coming soon</div>
+						</div>
+						<button type="button" class="toggle" role="switch" aria-checked="false" aria-label="Collect RSVPs" disabled>
+							<span class="toggle-knob"></span>
+						</button>
+					</div>
+				</div>
+				// ── DETAILS ────────────────────────────────────────────────────
+				<div class="space-y-2">
+					<div class="text-[11px] font-semibold text-fg-muted uppercase tracking-wide">Details</div>
+					// Location — DISABLED + flagged. The Event model has no location
+					// column; adding one is a migration (out of scope). Rendered so the
+					// section matches the signed layout, disabled so it never lies.
+					<div>
+						<input
+							type="text"
+							class="input text-sm w-full"
+							placeholder="Location (coming with location storage)"
+							aria-label="Location"
+							disabled
+						/>
+					</div>
+					<textarea class="input text-sm w-full" data-field="description" rows="3" aria-label="Description" placeholder="Description…"></textarea>
+					// Linked entities — the real N:M entity_event_links ties (#402),
+					// the mockup's "@ …" chips. Reuses the ties machinery in
+					// event_grid.js; roles come from the Go enum (data-ties-roles) so
+					// the vocabulary never drifts. Attaches only after the event has an
+					// id, so a create-mode drawer shows the hint until first save.
+					<div data-event-ties-section data-ties-roles={ participationRolesCSV() }>
+						<label class="block text-[10.5px] text-fg-secondary mb-1">Linked entities</label>
+						<div class="flex flex-wrap gap-1 mb-2" data-ties-list aria-live="polite"></div>
+						<div data-ties-picker class="relative hidden">
+							<input
+								type="text"
+								class="input text-sm w-full"
+								data-ties-search
+								placeholder="Search entities to attach…"
+								autocomplete="off"
+							/>
+							<div class="absolute z-10 left-0 right-0 mt-1 card shadow-lg max-h-48 overflow-y-auto hidden" data-ties-results></div>
+						</div>
+						<p class="text-xs text-fg-secondary italic hidden" data-ties-hint>Save the event first to attach entities.</p>
+					</div>
+				</div>
+				// ── SKY ────────────────────────────────────────────────────────
+				// Pin-to-sky-event — DISABLED + flagged per the dispatch. There is no
+				// clean field to store a worldstate-event reference on an event; no
+				// schema invented (no migrations). Ships disabled with the coming-soon
+				// note so the section is present in the signed layout.
+				<div class="space-y-1.5">
+					<div class="text-[11px] font-semibold text-fg-muted uppercase tracking-wide">Sky</div>
+					<select class="input text-sm w-full" aria-label="Pin to sky event" disabled>
+						<option>Pin to sky event — coming with sky-pin storage</option>
 					</select>
-					<div class="hidden mt-2 flex items-center gap-2" data-recurrence-custom>
-						<span class="text-xs text-fg-secondary">Every</span>
-						<input type="number" min="1" value="1" class="input text-sm w-20" data-field="recurrence_interval" aria-label="Weeks between occurrences"/>
-						<span class="text-xs text-fg-secondary">weeks</span>
-					</div>
+					<p class="text-[11px] text-fg-muted">Pinned events would ride the sky strip and the skybox widget.</p>
 				</div>
-				<div>
-					<label class="block text-xs font-medium text-fg-secondary mb-1">Category</label>
-					<select class="input text-sm w-full" data-field="category">
-						<option value="">— none —</option>
-						for _, cat := range data.ActiveCalendar.EventCategories {
-							<option value={ cat.Slug }>{ cat.Name }</option>
-						}
-					</select>
-				</div>
-				<div>
-					<label class="block text-xs font-medium text-fg-secondary mb-1">Description</label>
-					<textarea class="input text-sm w-full" data-field="description" rows="3"></textarea>
-				</div>
-				// dm_only authoring gate (Phase 4c — the V2 half of the Phase-3
-				// fix): only co-DMs (CanAuthorDmOnly) get the restricted-
-				// visibility editor. When absent, readVisibilityEditor() defaults
-				// to public, so a Scribe can only create everyone-visible events
-				// (the server downgrade still backstops this).
-				if data.CanAuthorDmOnly {
-					@calwidget.VisibilityEditor(buildEventVisibilityEditor(data))
-				} else {
-					<p class="text-xs text-fg-secondary italic" data-event-visibility-locked>
-						<i class="fa-solid fa-globe mr-1" aria-hidden="true"></i>Visible to everyone
-					</p>
-				}
-				// Actions section (C-CAL-EDITOR-EXPANSION PR1). Shown only in EDIT
-				// mode — event_grid.js toggles data-drawer-actions on an existing
-				// event (a new event has no id to act on). The whole drawer is
-				// already server-gated to Scribe+, so these controls are too.
+				// ── More actions (edit-mode only) ──────────────────────────────
+				// Preserved GM/Scribe power-tools from C-CAL-EDITOR-EXPANSION so the
+				// drawer swap regresses nothing. event_grid.js toggles
+				// data-drawer-actions visible only on an existing event.
 				<div data-drawer-actions class="hidden border-t border-edge pt-3 space-y-3">
-					<div class="text-[11px] font-semibold text-fg-secondary uppercase tracking-wide">Actions</div>
+					<div class="text-[11px] font-semibold text-fg-muted uppercase tracking-wide">More actions</div>
 					if len(data.EntityTypes) > 0 {
-						// 1. Create entity from event → inline entity-type picker; the
-						// new entity is named after the event + linked to it.
+						// Create entity from event → inline entity-type picker; the new
+						// entity is named after the event + linked to it.
 						<div>
 							<button type="button" class="btn-secondary text-xs w-full justify-start" data-action-create-entity>
 								<i class="fa-solid fa-wand-magic-sparkles mr-1" aria-hidden="true"></i>Create entity from event
@@ -1081,28 +1227,8 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 							</div>
 						</div>
 					}
-					// 2. Connect existing entities — the existing ties picker
-					// (initEntityTies in event_grid.js), surfaced here as a labeled
-					// "Linked entities" group. Roles come from the Go enum
-					// (data-ties-roles) so the JS never duplicates the vocabulary.
-					<div data-event-ties-section data-ties-roles={ participationRolesCSV() }>
-						<label class="block text-xs font-medium text-fg-secondary mb-1">Linked entities</label>
-						<div class="flex flex-wrap gap-1 mb-2" data-ties-list aria-live="polite"></div>
-						<div data-ties-picker class="relative hidden">
-							<input
-								type="text"
-								class="input text-sm w-full"
-								data-ties-search
-								placeholder="Search entities to attach…"
-								autocomplete="off"
-							/>
-							<div class="absolute z-10 left-0 right-0 mt-1 card shadow-lg max-h-48 overflow-y-auto hidden" data-ties-results></div>
-						</div>
-						<p class="text-xs text-fg-secondary italic hidden" data-ties-hint>Save the event first to attach entities.</p>
-					</div>
-					// 3. Duplicate to date → day/month/year (prefilled +1 day). The
-					// client POSTs the event's full body with the new date (no server
-					// change) — the lossless pattern from saveQuickEdit.
+					// Duplicate to date → day/month/year (prefilled +1 day). The client
+					// POSTs the event's full body with the new date (no server change).
 					<div>
 						<button type="button" class="btn-secondary text-xs w-full justify-start" data-action-duplicate>
 							<i class="fa-solid fa-copy mr-1" aria-hidden="true"></i>Duplicate to date
@@ -1129,8 +1255,8 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 							<button type="button" class="btn-primary text-xs" data-duplicate-go>Duplicate</button>
 						</div>
 					</div>
-					// 4. Permalink → copy a focus URL to the clipboard; loading it
-					// opens this event's drawer (event_grid.js focus handler).
+					// Permalink → copy a focus URL to the clipboard; loading it opens
+					// this event's drawer (event_grid.js focus handler).
 					<div>
 						<button type="button" class="btn-secondary text-xs w-full justify-start" data-action-permalink>
 							<i class="fa-solid fa-link mr-1" aria-hidden="true"></i>Copy link to this event
@@ -1138,10 +1264,7 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 					</div>
 					if data.CanControlWorldState {
 						// Set weather for this day (C-CAL-EDITOR-EXPANSION PR2). A GM
-						// world tool, not a Scribe event tool — server-gated to
-						// CanControlWorldState (Owner / co-DM), like the GM console.
-						// Reuses the GM console's weather catalog (gmWeatherTypes) and
-						// PUTs the additive weatherDate so it lands on the event's day.
+						// world tool, server-gated to CanControlWorldState.
 						<div>
 							<button type="button" class="btn-secondary text-xs w-full justify-start" data-action-weather>
 								<i class="fa-solid fa-cloud-sun mr-1" aria-hidden="true"></i>Set weather for this day
@@ -1156,23 +1279,21 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 							</div>
 						</div>
 					}
-					// 5. Delete (Owner) — destructive, last. event_grid.js shows it
-					// only when editing AND owner; uses the existing confirm overlay.
-					<div class="pt-1">
-						<button
-							type="button"
-							class="text-xs text-danger hover:bg-danger/10 px-2 py-1 rounded transition-colors duration-micro hidden"
-							data-drawer-delete="true"
-						>
-							<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i>Delete
-						</button>
-					</div>
 				</div>
 			</div>
-			<div class="px-4 py-3 border-t border-edge flex items-center justify-end">
-				<div class="flex items-center gap-2">
+			// Footer — Delete… (Owner, edit-mode) · Cancel · Save (action accent
+			// via btn-primary → bg-action, the #541/C-ACCENT-SLOTS slot-2 token).
+			<div class="px-4 py-3 border-t border-edge flex items-center gap-2">
+				<button
+					type="button"
+					class="text-xs text-danger hover:bg-danger/10 px-2 py-1.5 rounded transition-colors duration-micro hidden"
+					data-drawer-delete="true"
+				>
+					<i class="fa-solid fa-trash mr-1" aria-hidden="true"></i>Delete…
+				</button>
+				<div class="flex items-center gap-2 ml-auto">
 					<button type="button" class="btn-secondary text-xs" data-drawer-close="true">Cancel</button>
-					<button type="button" class="btn-primary text-xs" data-drawer-save="true">Save</button>
+					<button type="button" class="btn-primary text-xs" data-drawer-save="true">Save changes</button>
 				</div>
 			</div>
 			<div
