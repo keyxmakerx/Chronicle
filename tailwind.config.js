@@ -39,10 +39,36 @@ module.exports = {
         },
         // Accent color for links, buttons, active states.
         // References CSS custom property so per-campaign overrides work.
+        // This IS the "Site accent" semantic slot (C-ACCENT-SLOTS slot 1) —
+        // unrenamed so existing `accent-*` utilities keep working untouched.
         accent: {
           DEFAULT: 'rgb(var(--color-accent-rgb, 99 102 241) / <alpha-value>)',
           hover: 'rgb(var(--color-accent-hover-rgb, 79 70 229) / <alpha-value>)',
           light: 'rgb(var(--color-accent-light-rgb, 165 180 252) / <alpha-value>)',
+        },
+
+        // ── C-ACCENT-SLOTS: the two NEW semantic accent slots ──
+        // Each nests its var() fallback chain through the slot(s) it
+        // "migrates from" per the dispatch's Step-0 mapping, so a campaign
+        // that has customized an earlier slot keeps seeing that color at
+        // these new utilities until it explicitly sets the new one — and a
+        // campaign that has customized NOTHING renders the same indigo
+        // default as `accent` above (the zero-change guarantee).
+
+        // Action highlight (slot 2): primary buttons, hover/press, FABs.
+        // No prior trio analog — falls straight back to the site accent.
+        action: {
+          DEFAULT: 'rgb(var(--color-accent-action-rgb, var(--color-accent-rgb, 99 102 241)) / <alpha-value>)',
+          hover: 'rgb(var(--color-accent-action-hover-rgb, var(--color-accent-hover-rgb, 79 70 229)) / <alpha-value>)',
+          light: 'rgb(var(--color-accent-action-light-rgb, var(--color-accent-light-rgb, 165 180 252)) / <alpha-value>)',
+        },
+        // App accent (slot 3): per-app identity — character pages, calendar
+        // app, other apps. Falls back through the legacy surface-pair
+        // primary (C-ACCENT-TRIO), then the site accent.
+        app: {
+          DEFAULT: 'rgb(var(--color-accent-app-rgb, var(--color-accent-surface-1-rgb, var(--color-accent-rgb, 99 102 241))) / <alpha-value>)',
+          hover: 'rgb(var(--color-accent-app-hover-rgb, var(--color-accent-surface-1-hover-rgb, var(--color-accent-hover-rgb, 79 70 229))) / <alpha-value>)',
+          light: 'rgb(var(--color-accent-app-light-rgb, var(--color-accent-surface-1-light-rgb, var(--color-accent-light-rgb, 165 180 252))) / <alpha-value>)',
         },
 
         // ── Semantic theme tokens ──────────────────────────────

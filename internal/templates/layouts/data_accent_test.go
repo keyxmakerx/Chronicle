@@ -128,3 +128,83 @@ func TestAccentColorCSS_SurfacePair(t *testing.T) {
 		}
 	})
 }
+
+// TestAccentColorCSS_SemanticSlots covers the C-ACCENT-SLOTS emission: the
+// two NEW semantic slots (Action highlight, App accent) emit a full derived
+// block under their own custom property when set, nothing when unset, and
+// never disturb the site/legacy-surface emission that precedes them
+// (pinned byte-identical by TestAccentColorCSS_ChromeByteIdentical).
+func TestAccentColorCSS_SemanticSlots(t *testing.T) {
+	t.Run("both new slots set emit derived blocks after site + legacy surface", func(t *testing.T) {
+		ctx := SetAccentColor(context.Background(), "#6366f1")
+		ctx = SetAccentAction(ctx, "#f59e0b")
+		ctx = SetAccentApp(ctx, "#0ea5e9")
+		got := AccentColorCSS(ctx)
+
+		if !strings.HasPrefix(got, legacyChromeCSS("#6366f1")) {
+			t.Fatalf("site block must lead and stay byte-identical, got: %q", got)
+		}
+		for _, want := range []string{
+			"--color-accent-action:#f59e0b;",
+			"--color-accent-action-hover:#",
+			"--color-accent-action-light:#",
+			"--color-accent-action-rgb:245 158 11;",
+			"--color-accent-app:#0ea5e9;",
+			"--color-accent-app-rgb:14 165 233;",
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("missing %q in %q", want, got)
+			}
+		}
+	})
+
+	t.Run("unset new slots emit nothing (zero-change guarantee)", func(t *testing.T) {
+		ctx := SetAccentColor(context.Background(), "#6366f1")
+		ctx = SetAccentSurface(ctx, 1, "#10b981")
+		got := AccentColorCSS(ctx)
+		if strings.Contains(got, "accent-action") || strings.Contains(got, "accent-app") {
+			t.Errorf("unset action/app slots must be absent, got: %q", got)
+		}
+		// And with genuinely everything unset, output is exactly the legacy
+		// chrome-only oracle — pins the zero-change guarantee end to end.
+		bare := AccentColorCSS(context.Background())
+		if bare != legacyChromeCSS("") {
+			t.Errorf("fully-unset output drifted from legacy: got %q want %q", bare, legacyChromeCSS(""))
+		}
+	})
+
+	t.Run("action/app emit without any other slot set", func(t *testing.T) {
+		got := AccentColorCSS(SetAccentAction(context.Background(), "#f59e0b"))
+		if !strings.Contains(got, "--color-accent-action:#f59e0b;") {
+			t.Errorf("action should emit without site/surface set, got: %q", got)
+		}
+		if strings.Contains(got, "--color-accent:") {
+			t.Errorf("site must not emit when unset, got: %q", got)
+		}
+	})
+
+	t.Run("new-slot derivation matches site derivation for same base", func(t *testing.T) {
+		// One derivation, no forks — same guarantee as the legacy surface pair.
+		siteOnly := AccentColorCSS(SetAccentColor(context.Background(), "#10b981"))
+		actionOnly := AccentColorCSS(SetAccentAction(context.Background(), "#10b981"))
+		wantAction := strings.ReplaceAll(siteOnly, "--color-accent", "--color-accent-action")
+		if actionOnly != wantAction {
+			t.Errorf("action derivation drifted from site derivation:\n got: %q\nwant: %q", actionOnly, wantAction)
+		}
+		appOnly := AccentColorCSS(SetAccentApp(context.Background(), "#10b981"))
+		wantApp := strings.ReplaceAll(siteOnly, "--color-accent", "--color-accent-app")
+		if appOnly != wantApp {
+			t.Errorf("app derivation drifted from site derivation:\n got: %q\nwant: %q", appOnly, wantApp)
+		}
+	})
+
+	t.Run("getters default empty", func(t *testing.T) {
+		ctx := context.Background()
+		if got := GetAccentAction(ctx); got != "" {
+			t.Errorf("GetAccentAction on empty context = %q, want empty", got)
+		}
+		if got := GetAccentApp(ctx); got != "" {
+			t.Errorf("GetAccentApp on empty context = %q, want empty", got)
+		}
+	})
+}

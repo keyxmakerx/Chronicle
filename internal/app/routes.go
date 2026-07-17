@@ -3430,6 +3430,12 @@ func (a *App) RegisterRoutes() {
 			if campaignSettings.AccentSurface2 != "" {
 				ctx = layouts.SetAccentSurface(ctx, 2, campaignSettings.AccentSurface2)
 			}
+			if campaignSettings.AccentAction != "" {
+				ctx = layouts.SetAccentAction(ctx, campaignSettings.AccentAction)
+			}
+			if campaignSettings.AccentApp != "" {
+				ctx = layouts.SetAccentApp(ctx, campaignSettings.AccentApp)
+			}
 			if campaignSettings.BrandName != "" {
 				ctx = layouts.SetBrandName(ctx, campaignSettings.BrandName)
 			}

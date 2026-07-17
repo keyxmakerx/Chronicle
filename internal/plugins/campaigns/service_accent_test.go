@@ -101,6 +101,30 @@ func TestAccentHexValidation(t *testing.T) {
 			}
 		})
 	}
+	// C-ACCENT-SLOTS: the two new semantic slots share the exact same
+	// validation gate as the legacy slots above.
+	for _, color := range bad {
+		t.Run("reject-action/"+color, func(t *testing.T) {
+			var wrote bool
+			svc := newSvc(&wrote)
+			if err := svc.UpdateAccentAction(context.Background(), "c1", color); err == nil {
+				t.Errorf("UpdateAccentAction accepted invalid %q", color)
+			}
+			if wrote {
+				t.Errorf("invalid color %q must never reach the repo (action)", color)
+			}
+		})
+		t.Run("reject-app/"+color, func(t *testing.T) {
+			var wrote bool
+			svc := newSvc(&wrote)
+			if err := svc.UpdateAccentApp(context.Background(), "c1", color); err == nil {
+				t.Errorf("UpdateAccentApp accepted invalid %q", color)
+			}
+			if wrote {
+				t.Errorf("invalid color %q must never reach the repo (app)", color)
+			}
+		})
+	}
 
 	for _, color := range []string{"#6366f1", "#ABCDEF", ""} {
 		t.Run("accept/"+color, func(t *testing.T) {
@@ -112,6 +136,85 @@ func TestAccentHexValidation(t *testing.T) {
 			if err := svc.UpdateAccentSurface(context.Background(), "c1", 2, color); err != nil {
 				t.Errorf("UpdateAccentSurface rejected valid %q: %v", color, err)
 			}
+			if err := svc.UpdateAccentAction(context.Background(), "c1", color); err != nil {
+				t.Errorf("UpdateAccentAction rejected valid %q: %v", color, err)
+			}
+			if err := svc.UpdateAccentApp(context.Background(), "c1", color); err != nil {
+				t.Errorf("UpdateAccentApp rejected valid %q: %v", color, err)
+			}
 		})
 	}
+}
+
+// TestUpdateAccentAction_And_UpdateAccentApp covers the C-ACCENT-SLOTS save
+// paths: load-merge-write on settings JSON, reset-to-inherit, and
+// preservation of unrelated settings (including the legacy trio fields).
+func TestUpdateAccentAction_And_UpdateAccentApp(t *testing.T) {
+	newRepo := func(savedJSON *string) *mockCampaignRepo {
+		return &mockCampaignRepo{
+			findByIDFn: func(ctx context.Context, id string) (*Campaign, error) {
+				// Existing settings carry a site accent + legacy surface slot
+				// that these writes must NOT clobber (load-merge-write).
+				return &Campaign{
+					ID:       id,
+					Settings: `{"accent_color":"#6366f1","accent_surface_1":"#10b981","brand_name":"Therin"}`,
+				}, nil
+			},
+			updateSettingsFn: func(ctx context.Context, campaignID, settingsJSON string) error {
+				*savedJSON = settingsJSON
+				return nil
+			},
+		}
+	}
+
+	t.Run("UpdateAccentAction sets the field and preserves the rest", func(t *testing.T) {
+		var savedJSON string
+		svc := newTestCampaignService(newRepo(&savedJSON), &mockUserFinder{})
+		if err := svc.UpdateAccentAction(context.Background(), "c1", "#f59e0b"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var saved CampaignSettings
+		if err := json.Unmarshal([]byte(savedJSON), &saved); err != nil {
+			t.Fatalf("saved settings not valid JSON: %v", err)
+		}
+		if saved.AccentAction != "#f59e0b" {
+			t.Errorf("AccentAction = %q, want #f59e0b", saved.AccentAction)
+		}
+		if saved.AccentColor != "#6366f1" || saved.AccentSurface1 != "#10b981" || saved.BrandName != "Therin" {
+			t.Errorf("unrelated settings clobbered: %+v", saved)
+		}
+	})
+
+	t.Run("UpdateAccentApp sets the field and preserves the rest", func(t *testing.T) {
+		var savedJSON string
+		svc := newTestCampaignService(newRepo(&savedJSON), &mockUserFinder{})
+		if err := svc.UpdateAccentApp(context.Background(), "c1", "#0ea5e9"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var saved CampaignSettings
+		if err := json.Unmarshal([]byte(savedJSON), &saved); err != nil {
+			t.Fatalf("saved settings not valid JSON: %v", err)
+		}
+		if saved.AccentApp != "#0ea5e9" {
+			t.Errorf("AccentApp = %q, want #0ea5e9", saved.AccentApp)
+		}
+		if saved.AccentColor != "#6366f1" || saved.AccentSurface1 != "#10b981" || saved.BrandName != "Therin" {
+			t.Errorf("unrelated settings clobbered: %+v", saved)
+		}
+	})
+
+	t.Run("reset to inherit", func(t *testing.T) {
+		var savedJSON string
+		svc := newTestCampaignService(newRepo(&savedJSON), &mockUserFinder{})
+		if err := svc.UpdateAccentAction(context.Background(), "c1", ""); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var saved CampaignSettings
+		if err := json.Unmarshal([]byte(savedJSON), &saved); err != nil {
+			t.Fatalf("saved settings not valid JSON: %v", err)
+		}
+		if saved.AccentAction != "" {
+			t.Errorf("AccentAction = %q, want empty (inherit)", saved.AccentAction)
+		}
+	})
 }

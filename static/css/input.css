@@ -231,9 +231,14 @@
     position: relative;
     overflow: visible;
   }
+  /* Action highlight (C-ACCENT-SLOTS slot 2): primary buttons are the
+   * exemplar adopter — bg-action/hover/focus/shadow fall back through
+   * bg-accent's own values when the action slot is unset (tailwind.config.js
+   * nests the var() chain), so this is a zero-visual-change swap until an
+   * owner customizes the Action highlight picker. */
   .btn-primary {
-    @apply btn bg-accent text-white hover:bg-accent-hover
-           focus:ring-accent shadow-sm hover:shadow-md hover:shadow-accent/20;
+    @apply btn bg-action text-white hover:bg-action-hover
+           focus:ring-action shadow-sm hover:shadow-md hover:shadow-action/20;
   }
   .btn-secondary {
     @apply btn bg-surface text-fg-body hover:bg-surface-alt
