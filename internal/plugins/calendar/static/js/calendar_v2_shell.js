@@ -20,6 +20,7 @@
         wireDayPopover(root);
         wireEventPeek(root);
         wireSidebarPin(root);
+        wireSkyStrip(root);
     }
 
     // --- Event quick-peek (C-CAL-CLOSEOUT PR A §1) --------------
@@ -123,6 +124,147 @@
             });
         });
     }
+
+    // --- Sky strip (C-CAL-SKY-STRIP) -----------------------------
+    //
+    // Collapse toggle (localStorage-persisted per campaign) + the Calendaria
+    // sync chip. The chip's data comes from a client-side fetch of the
+    // EXISTING member-accessible GET /campaigns/:id/foundry-presence
+    // (foundry_vtt/handler.go:81-97) — not a new endpoint (Step-0 finding,
+    // PR body: no trustworthy calendar-specific last-sync source exists;
+    // this presence signal is the cleanest real one available). The calendar
+    // plugin does not import foundry_vtt (T-B2 plugin isolation) — a plain
+    // HTTP fetch to the other plugin's own endpoint is the cross-plugin seam,
+    // same as any other widget-to-API call.
+
+    var SKY_STRIP_STALE_AFTER_MS = 15 * 60 * 1000; // a live Foundry session pings well inside this
+
+    // computeSyncChipState is a PURE function (no DOM/network/Date.now() of
+    // its own — the caller supplies "now") mapping a presence signal +
+    // (optional) a last-confirmed-Foundry-date comparison to the chip's
+    // display state. fmConfirmedDate/chronicleCurrentDate are always '' from
+    // wireSkyStrip below — no source persists a Foundry-confirmed date today
+    // (see the PR body) — so 'drift' is reachable by this function and its
+    // tests, but dormant in production until an FM-lane dispatch adds that
+    // signal. Exposed on window.__calSkyStripSync for node --test
+    // (test/js/calendar_v2_sky_strip.test.mjs), the same reuse-seam
+    // convention as window.__calMoonSim / window.__calSkyFxMeta.
+    function computeSyncChipState(neverSeen, lastSeenMs, nowMs, staleAfterMs, fmConfirmedDate, chronicleCurrentDate) {
+        if (neverSeen || lastSeenMs == null) {
+            return { status: 'never_synced', agoMs: null, date: '' };
+        }
+        var agoMs = Math.max(0, nowMs - lastSeenMs);
+        if (fmConfirmedDate && chronicleCurrentDate && fmConfirmedDate !== chronicleCurrentDate) {
+            return { status: 'drift', agoMs: agoMs, date: fmConfirmedDate };
+        }
+        return { status: agoMs > staleAfterMs ? 'stale' : 'in_sync', agoMs: agoMs, date: chronicleCurrentDate || '' };
+    }
+
+    function agoLabel(ms) {
+        if (ms == null) return '';
+        var mins = Math.round(ms / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return mins + ' min ago';
+        var hours = Math.round(mins / 60);
+        if (hours < 24) return hours + (hours === 1 ? ' hr ago' : ' hrs ago');
+        var days = Math.round(hours / 24);
+        return days + (days === 1 ? ' day ago' : ' days ago');
+    }
+
+    // skyChipCopy splits into `word` (always visible — the mobile-collapsed
+    // form, dispatch item 4) + `detail` (the "· Nm ago · date" context, sm+
+    // only). word + detail concatenated is the full desktop copy — no
+    // separate "full text" to keep in sync.
+    function skyChipCopy(state) {
+        switch (state.status) {
+            case 'never_synced':
+                return { word: 'No module', detail: ' connected', cls: 'neutral' };
+            case 'drift':
+                return { word: 'Drift', detail: ' · ' + agoLabel(state.agoMs) + (state.date ? ' · ' + state.date : ''), cls: 'warn' };
+            case 'stale':
+                return { word: 'Stale', detail: ' · last seen ' + agoLabel(state.agoMs), cls: 'warn' };
+            default:
+                return { word: 'In sync', detail: ' · ' + agoLabel(state.agoMs), cls: 'ok' };
+        }
+    }
+
+    var SKY_CHIP_CLASS = {
+        ok: { chip: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300/50 dark:border-green-700/50', dot: 'bg-green-500' },
+        warn: { chip: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300/50 dark:border-amber-700/50', dot: 'bg-amber-500' },
+        neutral: { chip: 'bg-surface-alt text-fg-secondary border-edge', dot: 'bg-fg-muted' },
+    };
+
+    function paintSkyChip(chip, state) {
+        var copy = skyChipCopy(state);
+        var cls = SKY_CHIP_CLASS[copy.cls] || SKY_CHIP_CLASS.neutral;
+        chip.className = 'flex-none inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full border ' + cls.chip;
+        var dot = chip.querySelector('[data-cal-sky-sync-dot]');
+        if (dot) dot.className = 'w-1.5 h-1.5 rounded-full flex-none ' + cls.dot;
+        var word = chip.querySelector('[data-cal-sky-sync-word]');
+        if (word) word.textContent = copy.word;
+        var detail = chip.querySelector('[data-cal-sky-sync-detail]');
+        if (detail) detail.textContent = copy.detail;
+        chip.title = copy.word + copy.detail;
+    }
+
+    function wireSkyStrip(root) {
+        var strip = document.querySelector('[data-cal-sky-strip]');
+        if (!strip || strip.__calSkyStripInited) return;
+        strip.__calSkyStripInited = true;
+
+        var campaignId = strip.dataset.campaignId || root.dataset.calV2CampaignId || '';
+        var storageKey = 'chronicle-cal-sky-strip-open-' + campaignId;
+        var toggle = strip.querySelector('[data-cal-sky-strip-toggle]');
+        var pane = strip.querySelector('[data-cal-sky-strip-pane]');
+        var chevron = strip.querySelector('[data-cal-sky-chevron]');
+
+        function setOpen(open) {
+            if (pane) pane.classList.toggle('hidden', !open);
+            if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', String(open));
+                toggle.setAttribute('aria-label', open ? 'Collapse sky panel' : 'Expand sky panel');
+            }
+            try { localStorage.setItem(storageKey, open ? '1' : '0'); } catch (e) { /* ignore */ }
+        }
+
+        var storedOpen = false;
+        try { storedOpen = localStorage.getItem(storageKey) === '1'; } catch (e) { /* ignore */ }
+        if (storedOpen) setOpen(true);
+        if (toggle) toggle.addEventListener('click', function () {
+            setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+        });
+
+        // Sync-now: copy-help only (dispatch: no module-triggerable push
+        // exists — do not build a new push pipeline).
+        var syncNowBtn = strip.querySelector('[data-cal-sky-sync-now]');
+        var syncHelp = strip.querySelector('[data-cal-sky-sync-help]');
+        if (syncNowBtn && syncHelp) {
+            syncNowBtn.addEventListener('click', function () {
+                var shown = syncNowBtn.getAttribute('aria-expanded') === 'true';
+                syncHelp.classList.toggle('hidden', shown);
+                syncNowBtn.setAttribute('aria-expanded', String(!shown));
+            });
+        }
+
+        var chip = strip.querySelector('[data-cal-sky-sync-chip]');
+        if (chip && campaignId && window.Chronicle && window.Chronicle.apiFetch) {
+            window.Chronicle.apiFetch('/campaigns/' + campaignId + '/foundry-presence')
+                .then(function (r) { if (!r.ok) throw new Error('presence ' + r.status); return r.json(); })
+                .then(function (presence) {
+                    var lastSeenMs = presence.last_seen ? new Date(presence.last_seen).getTime() : null;
+                    var state = computeSyncChipState(!!presence.never_seen, lastSeenMs, Date.now(), SKY_STRIP_STALE_AFTER_MS, '', '');
+                    paintSkyChip(chip, state);
+                })
+                .catch(function () {
+                    paintSkyChip(chip, { status: 'never_synced', agoMs: null, date: '' });
+                });
+        } else if (chip) {
+            paintSkyChip(chip, { status: 'never_synced', agoMs: null, date: '' });
+        }
+    }
+
+    window.__calSkyStripSync = { computeSyncChipState: computeSyncChipState, agoLabel: agoLabel };
 
     // --- Shortcuts modal ----------------------------------------
 

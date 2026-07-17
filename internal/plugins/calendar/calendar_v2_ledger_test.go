@@ -256,6 +256,22 @@ func TestViewSwitcher_TimelinePillActive(t *testing.T) {
 	}
 }
 
+// TestViewSwitcher_ActivePillReadsAppAccentChain pins the C-CAL-SKY-STRIP
+// rider (the #541 booked follow-up): the active view pill's background reads
+// the App-accent slot first, falling through the same surface-pair chain as
+// before so a campaign with no app accent set renders unchanged.
+func TestViewSwitcher_ActivePillReadsAppAccentChain(t *testing.T) {
+	var sb strings.Builder
+	data := CalendarV2ViewData{ActiveCalendar: ledgerTestCalendar(), View: "month", CampaignID: "camp-1", Year: 1492, Month: 1, Day: 1}
+	if err := calendarV2ViewSwitcher(nil, data).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render switcher: %v", err)
+	}
+	want := "background: var(--color-accent-app, var(--color-accent-surface-1, var(--color-accent, #6366f1)));"
+	if !strings.Contains(sb.String(), want) {
+		t.Errorf("active pill missing the App-accent fallback chain; got:\n%s", sb.String())
+	}
+}
+
 // TestViewSwitcher_TimelinePillInactiveLinks: from Month view the Timeline pill
 // is a link to the ledger route.
 func TestViewSwitcher_TimelinePillInactiveLinks(t *testing.T) {
