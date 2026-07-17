@@ -157,7 +157,7 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 // horizontal space; full responsive collapse is the deferred polish).
 templ miniMonthV2Sidebar(data CalendarV2ViewData) {
 	<aside
-		class="w-60 flex-shrink-0 border-r border-edge px-3 py-4 overflow-y-auto"
+		class={ mobileSidebarClasses(data) }
 		data-cal-v2-sidebar="true"
 		aria-label="Calendar sidebar"
 	>
@@ -550,17 +550,42 @@ templ calendarV2Switcher(cc *campaigns.CampaignContext, data CalendarV2ViewData)
 // ratification (anti-pattern per V2 audit §2); the Timeline pill is the
 // Ledger chronology (C-CAL-TIMELINE-V2-W1), not a year grid. Each pill
 // links to the corresponding view route.
+//
+// Phone reduction (C-CAL-MOBILE-AGENDA §4, the mockup's <768px command bar):
+// Week/Day/Timeline have no phone-optimized view yet (separate dispatch
+// slices), so at <768px they're hidden (the `hidden md:contents` wrapper —
+// `contents` at md+ keeps them direct children of the `inline-flex` row, so
+// the pill layout is byte-for-byte unchanged on desktop) and replaced by a
+// single "Agenda" pill.
 templ calendarV2ViewSwitcher(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 	if data.ActiveCalendar == nil {
 		// No calendar = no view switcher.
 	} else {
 		<div class="inline-flex rounded-md border border-edge overflow-hidden" role="tablist" aria-label="Calendar view">
 			@calendarV2ViewPill(data, "month", "Month")
-			@calendarV2ViewPill(data, "week", "Week")
-			@calendarV2ViewPill(data, "day", "Day")
-			@calendarV2ViewPill(data, "ledger", "Timeline")
+			@mobileAgendaPill(data)
+			<span class="hidden md:contents">
+				@calendarV2ViewPill(data, "week", "Week")
+				@calendarV2ViewPill(data, "day", "Day")
+				@calendarV2ViewPill(data, "ledger", "Timeline")
+			</span>
 		</div>
 	}
+}
+
+// mobileAgendaPill is the phone-only "Agenda" pill (C-CAL-MOBILE-AGENDA §4).
+// It links to the SAME month-view route as the "Month" pill: at <768px the
+// Month view already renders as the mini-month+agenda assembly
+// (mobileMonthAssembly) via the breakpoint swap in monthViewPlaceholder, so
+// "Agenda" is a correctly-labeled, working entry point into that assembly
+// rather than a second server-side view (none exists — "no new endpoints").
+templ mobileAgendaPill(data CalendarV2ViewData) {
+	<a
+		href={ v2ViewHref(data, "month") }
+		class="md:hidden px-3 py-1 text-xs font-medium text-fg-secondary hover:bg-surface-2 transition-colors duration-micro"
+		role="tab"
+		aria-selected="false"
+	>Agenda</a>
 }
 
 templ calendarV2ViewPill(data CalendarV2ViewData, view, label string) {
@@ -588,21 +613,144 @@ templ calendarV2ViewPill(data CalendarV2ViewData, view, label string) {
 // monthViewPlaceholder renders the Month grid. Period nav + the month label now
 // live in the sticky command bar (calendarV2Header, C-CAL-DESIGN-PASS-1 §1), so
 // this card is just the weekday header row + the uniform week-row grid.
+//
+// Breakpoint swap (C-CAL-MOBILE-AGENDA §1): at <768px the 7-column grid is
+// REPLACED, not squeezed — `hidden md:block` hides it and mobileMonthAssembly
+// (itself `md:hidden`) takes over; ≥768px is the reverse. Both branches
+// server-render (CSS-hidden, not omitted) rather than an HTMX fragment swap —
+// simpler, and the payload delta is one compact mini-month + agenda list
+// against the SAME data.Events the grid already carries, not a second event
+// fetch (flag-worthy only if that stops being true).
 templ monthViewPlaceholder(data CalendarV2ViewData) {
 	// C-CAL-VISUAL-POLISH-1 B: static elevation (no whole-grid hover-lift; that
 	// lift is for small cards).
 	<div class="card card-elev-static p-4" data-month-view="true">
-		<div class="grid gap-1" style={ monthGridStyle(data) }>
-			for _, w := range monthWeekdayHeaders(data) {
-				<div class="text-xs font-medium text-fg-secondary text-center py-1">{ w.Name }</div>
+		<div class="hidden md:block" data-month-desktop-grid="true">
+			<div class="grid gap-1" style={ monthGridStyle(data) }>
+				for _, w := range monthWeekdayHeaders(data) {
+					<div class="text-xs font-medium text-fg-secondary text-center py-1">{ w.Name }</div>
+				}
+			</div>
+			// PR 5 §A: Per-week-row rendering with era bands + ribbons + cells. Each
+			// week row is a stack: era band layer (z-0) under ribbon layer (z-10)
+			// under cell content (z-20). C-CAL-DESIGN-PASS-1 §3 wraps all rows in ONE
+			// grid whose rows are equal height.
+			@monthWeekRows(data)
+		</div>
+		@mobileMonthAssembly(data)
+	</div>
+}
+
+// mobileMonthAssembly is the phone-width Month view replacement
+// (C-CAL-MOBILE-AGENDA): a mini-month NAVIGATOR on top + a scrolling AGENDA
+// list below, per the signed mockup viewed <768px. `md:hidden` is the other
+// half of the breakpoint swap in monthViewPlaceholder.
+templ mobileMonthAssembly(data CalendarV2ViewData) {
+	<div class="md:hidden" data-mobile-month-assembly="true">
+		@mobileMiniMonth(data)
+		@mobileAgendaList(data)
+	</div>
+}
+
+// mobileMiniMonth renders the mobile mini-month navigator: the mockup's
+// `.mmd` pattern — every day NUMBER centered in a fixed h-10 (40px) grid
+// cell, event DOTS in a separate `absolute` layer beneath it. Because the
+// dots layer is taken out of normal flow, no dot count can ever resize or
+// shift the number (the operator's alignment rule, applied verbatim here as
+// the dispatch requires). Tapping a day is a plain boosted link
+// (miniMonthDayHref, the same URL shape the desktop sidebar already uses) —
+// the server re-renders with the new day cursor, which also re-grounds the
+// agenda list below at that day. No client JS needed for day-select.
+templ mobileMiniMonth(data CalendarV2ViewData) {
+	<div class="card card-elev-static p-3" data-mobile-mini-month="true">
+		<div class="grid text-[10px] font-semibold text-fg-secondary text-center mb-1" style={ monthGridStyle(data) }>
+			for _, w := range miniMonthWeekdayLabels(data) {
+				<div>{ w }</div>
 			}
 		</div>
-		// PR 5 §A: Per-week-row rendering with era bands + ribbons + cells. Each
-		// week row is a stack: era band layer (z-0) under ribbon layer (z-10)
-		// under cell content (z-20). C-CAL-DESIGN-PASS-1 §3 wraps all rows in ONE
-		// grid whose rows are equal height.
-		@monthWeekRows(data)
+		<div class="grid gap-y-0.5" style={ monthGridStyle(data) }>
+			for _, d := range mobileMiniMonthDays(data) {
+				if d.Day == 0 {
+					<div></div>
+				} else {
+					<a
+						href={ miniMonthDayHref(data, miniMonthDay{Day: d.Day}) }
+						class={ "relative h-10 grid place-items-center rounded-lg text-sm font-semibold", mobileMiniMonthDayClasses(d) }
+						aria-label={ "Jump to day " + fmt.Sprint(d.Day) }
+					>
+						<span>{ fmt.Sprint(d.Day) }</span>
+						if len(d.DotColors) > 0 {
+							<span class="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5" aria-hidden="true">
+								for _, c := range d.DotColors {
+									<i class="block w-1 h-1 rounded-full" style={ "background-color: " + mobileMiniMonthDotColor(c, d.IsSelected) }></i>
+								}
+							</span>
+						}
+					</a>
+				}
+			}
+		</div>
 	</div>
+}
+
+// mobileAgendaList renders the scrolling agenda: one header per day-with-
+// events (weekday + moon-phase glyph) followed by its event cards, grouped
+// from the selected/current day forward (mobileAgendaGroups).
+templ mobileAgendaList(data CalendarV2ViewData) {
+	{{ groups := mobileAgendaGroups(data) }}
+	<div class="mt-3 flex flex-col gap-3" data-mobile-agenda="true">
+		if len(groups) == 0 {
+			<div class="text-center py-8 text-fg-secondary text-sm" data-mobile-agenda-empty="true">
+				<i class="fa-solid fa-calendar-day text-2xl mb-2 opacity-50" aria-hidden="true"></i>
+				<p>No more events this month.</p>
+			</div>
+		}
+		for _, g := range groups {
+			<div class="flex items-baseline gap-2 px-0.5" data-agenda-day-header={ fmt.Sprint(g.Day) }>
+				<span class="text-sm font-extrabold text-fg">{ g.Header }</span>
+				if g.Moon != "" {
+					<span class="ml-auto text-sm" aria-hidden="true">{ g.Moon }</span>
+				}
+			</div>
+			for _, ev := range g.Events {
+				@mobileAgendaCard(ev)
+			}
+		}
+	</div>
+}
+
+// mobileAgendaCard is one agenda event card: pip-colored left bar, title,
+// time/category subtitle, and a discoverable chevron affordance that is
+// VISIBLE AT REST (no hover-only reveal) per the dispatch's pointer:coarse
+// requirement — unlike the Month grid's Scribe add-affordance
+// (cal-touch-reveal), this has no hidden state to reveal in the first place.
+// A single <button> (not a div wrapping a nested button) so the SAME
+// document-wide `[data-event-card]` click wiring (event_grid.js) that opens
+// the existing quick-edit card for every other event chip picks this up too
+// — no new JS.
+templ mobileAgendaCard(ev mobileAgendaEvent) {
+	<button
+		type="button"
+		class="w-full text-left card border-l-4 py-2.5 px-3 flex items-center gap-3"
+		style={ "border-left-color: " + mobileAgendaCardColor(ev.Color) }
+		data-event-id={ ev.EventID }
+		data-event-card="agenda"
+		aria-label={ "Event: " + ev.Title }
+	>
+		<div class="min-w-0 flex-1">
+			<div class="text-sm font-semibold text-fg truncate">{ ev.Title }</div>
+			<div class="text-xs text-fg-secondary truncate">
+				{ ev.TimeLabel }
+				if ev.Category != "" {
+					{ " · " + ev.Category }
+				}
+			</div>
+		</div>
+		if !ev.IsPublic {
+			<i class="fa-solid fa-lock text-fg-secondary text-xs flex-none" aria-hidden="true"></i>
+		}
+		<i class="fa-solid fa-chevron-right text-fg-secondary text-xs flex-none" aria-hidden="true"></i>
+	</button>
 }
 
 // monthWeekRows renders all visible week rows for the Month view, stacking era
