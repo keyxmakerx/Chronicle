@@ -142,6 +142,12 @@ class Element {
 // opts.reduced -> matchMedia reports prefers-reduced-motion.
 // opts.canDetail (default true) -> DM/owner detail view.
 // opts.overlay(weekISO) -> custom overlay payload factory.
+// opts.exceptions -> seed rows [{id, onDate, startMinute, endMinute, state}] for
+//   the stateful exceptions mock (C-SCHED-OUT-THIS-WEEK): GET reads the current
+//   store, PUT replaces one date's rows (replace-day semantics, mirrors the real
+//   ReplaceDayExceptions endpoint), DELETE removes one row by id (404 if absent —
+//   the real endpoint's "already gone" case). Defaults to an empty store, same
+//   externally-observable GET behavior as before this mock existed.
 export function boot(opts = {}) {
   const doc = new Element('#document');
   const head = new Element('head');
@@ -170,14 +176,47 @@ export function boot(opts = {}) {
   body.appendChild(root);
 
   const overlayFactory = opts.overlay || defaultOverlay;
+  let exceptionsStore = (opts.exceptions || []).map((e) => Object.assign({}, e));
+  let nextExcId = 1;
+  let putCount = 0;
+  const failPutAfter = opts.failPutAfter == null ? Infinity : opts.failPutAfter;
+  const resp = (ok, status, payload) => Promise.resolve({
+    ok, status, json: () => Promise.resolve(payload), text: () => Promise.resolve(''),
+  });
   const Chronicle = {
-    apiFetch(url) {
+    apiFetch(url, fopts = {}) {
+      const method = (fopts.method || 'GET').toUpperCase();
+      const excMatch = url.match(/availability\/exceptions(?:\/([^/?]+))?/);
+      if (excMatch) {
+        const eid = excMatch[1];
+        if (method === 'DELETE' && eid) {
+          const before = exceptionsStore.length;
+          exceptionsStore = exceptionsStore.filter((e) => e.id !== eid);
+          const found = exceptionsStore.length !== before;
+          return resp(found, found ? 200 : 404, found ? { status: 'ok' } : { error: 'not found' });
+        }
+        if (method === 'PUT') {
+          // opts.failPutAfter simulates the real per-user cap (C-SCHED-P2 0d)
+          // rejecting a write partway through a batch of sequential PUTs.
+          if (putCount >= failPutAfter) {
+            return resp(false, 400, { error: 'too many availability exceptions; delete some before adding more' });
+          }
+          putCount++;
+          const onDate = fopts.body.onDate;
+          exceptionsStore = exceptionsStore.filter((e) => e.onDate !== onDate);
+          (fopts.body.blocks || []).forEach((b) => {
+            exceptionsStore.push({ id: 'e' + (nextExcId++), onDate, startMinute: b.startMinute, endMinute: b.endMinute, state: b.state });
+          });
+          return resp(true, 200, { status: 'ok' });
+        }
+        // GET (bare or with an id suffix that isn't a real route in this app).
+        return resp(true, 200, exceptionsStore.slice());
+      }
       let payload = null;
       if (/availability\/mine/.test(url)) payload = { tz: 'America/New_York', blocks: [] };
-      else if (/availability\/exceptions/.test(url)) payload = [];
       else if (/availability\/overlay/.test(url)) { const m = url.match(/week=([0-9-]+)/); payload = overlayFactory(m ? m[1] : '2026-07-13'); }
       else if (/proposals/.test(url)) payload = { link: '/campaigns/camp1/proposals/p1' };
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(payload), text: () => Promise.resolve('') });
+      return resp(true, 200, payload);
     },
     escapeHtml: (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])),
     notify() {},
@@ -205,7 +244,29 @@ export function boot(opts = {}) {
   sandbox.global = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(SRC, sandbox, { filename: 'availability.js' });
-  return { doc, root, window: sandbox, live };
+  return { doc, root, window: sandbox, live, getExceptions: () => exceptionsStore.slice() };
+}
+
+// ---- date helpers mirroring availability.js's own UTC-anchored civil-date
+// math, exported so tests can compute "this real week" independently (the
+// feature under test is deliberately based on the actual current date, so
+// tests assert against the same live computation rather than a fixed date).
+export function isoOfUTC(d) {
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+export function todayUTC() {
+  const n = new Date();
+  return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
+}
+export function mondayOfUTC(d) {
+  const off = (d.getUTCDay() + 6) % 7; // days since Monday
+  return new Date(d.getTime() - off * 86400000);
+}
+export function thisWeekDates() {
+  const monday = mondayOfUTC(todayUTC());
+  const out = [];
+  for (let i = 0; i < 7; i++) out.push(isoOfUTC(new Date(monday.getTime() + i * 86400000)));
+  return out;
 }
 
 // A default overlay payload: hours 18:00–21:59 have both members free (19:00

@@ -55,6 +55,12 @@
     return addDays(d, -off);
   }
   function todayUTC() { var n = new Date(); return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())); }
+  // weekDatesFrom returns the 7 ISO dates Mon..Sun starting at a Monday date.
+  function weekDatesFrom(monday) {
+    var out = [];
+    for (var i = 0; i < 7; i++) out.push(isoOf(addDays(monday, i)));
+    return out;
+  }
   function firstOfMonth(d) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)); }
   var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -105,6 +111,21 @@
       '.avail-chip .dot{width:9px;height:9px;border-radius:999px}' +
       '.avail-legend{display:inline-flex;align-items:center;gap:6px 12px;font:600 11.5px/1 inherit;color:var(--color-text-secondary,#6b7280);flex-wrap:wrap}' +
       '.avail-note{font-size:12.5px;color:var(--color-text-secondary,#6b7280);margin:10px 2px 0}' +
+      // "Out this week" quick action (C-SCHED-OUT-THIS-WEEK): a one-click week
+      // mark-out + the 7-day strip that repaints to show it. Sits in the normal
+      // toolbar flow (always visible at rest, no hover-reveal) so it reads on
+      // touch the same as desktop.
+      '.owt-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:4px 0 14px}' +
+      '.owt-status{font-size:12.5px;color:var(--color-text-secondary,#6b7280)}' +
+      '.owt-strip{display:flex;gap:4px;flex-wrap:wrap}' +
+      '.owt-day{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;' +
+      'width:44px;height:44px;border-radius:8px;border:1px solid var(--color-border,#e5e7eb);' +
+      'background:var(--color-bg-secondary,#fff);font:600 10px/1.2 inherit;color:var(--color-text-secondary,#6b7280);' +
+      'cursor:pointer;transition:background-color .2s ease,border-color .2s ease,color .2s ease}' +
+      '.owt-day:hover{outline:2px solid var(--color-accent,#6366f1);outline-offset:-2px}' +
+      '.owt-day .dnum{font-weight:700;font-size:12px}' +
+      '.owt-day[data-owt-state="out"]{background:rgba(220,38,38,.14);border-color:rgba(220,38,38,.45);color:#b91c1c}' +
+      '.owt-day[data-owt-state="custom"]{background:var(--color-bg-tertiary,#f3f4f6);color:var(--color-text-body,#374151)}' +
       // month↔week morph stage (signed concept mockup encoding)
       '.ov-stage{position:relative}' +
       '.ov-view{transition:opacity .34s ease, transform .34s cubic-bezier(.32,.72,.33,1);transform-origin:top center}' +
@@ -167,6 +188,13 @@
     this.building = false;                     // DM slot-builder active
     this.selectedSlots = [];                   // [{date, startMinute, endMinute}]
     this._morphTimer = null;                   // pending month↔week morph cleanup (C-CAL-BETA-RESCUE #2)
+    // "Out this week" quick action (C-SCHED-OUT-THIS-WEEK). In-memory only —
+    // matches this file's existing non-persisted UI state (excluded/
+    // selectedSlots/building): a reload drops the one-click Undo affordance,
+    // but the underlying exceptions stay saved and remain editable via the
+    // per-date editor either way.
+    this.outWeek = null;                       // null | {weekStart, created:[{id,onDate}], skippedDates:[iso,...]}
+    this.outWeekBusy = false;
   }
 
   AvailabilityApp.prototype.announce = function (msg) {
@@ -871,6 +899,21 @@
     head.appendChild(picker);
     host.appendChild(head);
 
+    // "Out this week" quick action (C-SCHED-OUT-THIS-WEEK): one click marks
+    // every day of the current real week unavailable, skipping any date that
+    // already has a hand-authored exception. The strip repaints per-day state
+    // and the button becomes Undo once at least one day was actually written.
+    var owtRow = el('div', 'owt-row');
+    var owtBtn = el('button', 'btn-secondary text-sm'); owtBtn.type = 'button';
+    owtBtn.setAttribute('data-owt-btn', '');
+    owtBtn.addEventListener('click', function () { self.onOutWeekClick(owtBtn); });
+    var owtStrip = el('div', 'owt-strip'); owtStrip.setAttribute('data-owt-strip', '');
+    owtStrip.setAttribute('aria-label', 'This week at a glance');
+    var owtStatus = el('span', 'owt-status'); owtStatus.setAttribute('data-owt-status', '');
+    owtRow.appendChild(owtBtn); owtRow.appendChild(owtStrip); owtRow.appendChild(owtStatus);
+    host.appendChild(owtRow);
+    this.renderOutWeekButton();
+
     var help = el('p', 'avail-note'); help.style.marginTop = '0';
     help.textContent = 'Override a specific date without touching your weekly pattern. The editor starts from your usual week for that day, so trimming one hour keeps the rest.';
     host.appendChild(help);
@@ -891,6 +934,9 @@
     Chronicle.apiFetch('/campaigns/' + this.campaignID + '/availability/exceptions')
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (excs) {
+        self.reconcileOutWeek(excs);
+        self.renderOutWeekButton();
+        self.renderOutWeekStrip(excs);
         // Group exceptions by date so the day is shown as one editable entry.
         var byDate = {};
         (excs || []).forEach(function (e) { (byDate[e.onDate] = byDate[e.onDate] || []).push(e); });
@@ -1024,13 +1070,226 @@
       if (r.ok) {
         if (st) st.textContent = 'Saved.';
         self.announce('Saved changes for ' + dateISO);
-        self.overlayData = null;
+        self.overlayData = null; self.weekCache = {}; // month view's per-week cache would otherwise still show the pre-edit day
         var editor = $('[data-exc-editor]', self.root); if (editor) editor.innerHTML = '';
         self.loadExceptions();
       } else {
         r.json().then(function (j) { if (st) st.textContent = (j && j.error) || 'Save failed.'; }).catch(function () { if (st) st.textContent = 'Save failed.'; });
       }
     }).catch(function () { if (btn) btn.disabled = false; if (st) st.textContent = 'Save failed.'; });
+  };
+
+  // ---------------- OUT THIS WEEK (one-click quick action) ----------------
+  // C-SCHED-OUT-THIS-WEEK: writes the current real week's 7 dates as full-day
+  // 'unavailable' exceptions (one row per day, 0–1440), one PUT per day that
+  // does NOT already carry an exception. A date with ANY existing exception
+  // (hand-authored) is left untouched — the key pin. The action re-fetches
+  // after writing to learn the exact row IDs it created, so Undo can DELETE
+  // precisely those rows and nothing else, even if the player later hand-
+  // edits one of them through the existing per-date editor (reconcileOutWeek
+  // drops any tracked row that no longer matches what this action wrote).
+  //
+  // Wire choice (dispatch Step-0): loops the EXISTING per-date endpoints
+  // (GET/PUT/DELETE .../availability/exceptions) client-side rather than
+  // adding a batch route. Each PUT independently re-checks the per-user cap
+  // (C-SCHED-P2 0d) against the live count, so the cap holds across the week
+  // for free — no new caps logic needed. No routes_snapshot change.
+
+  AvailabilityApp.prototype.onOutWeekClick = function (btn) {
+    if (this.outWeekBusy) return;
+    if (this.outWeek && this.outWeek.created.length) this.undoOutWeek(btn);
+    else this.fireOutWeek(btn);
+  };
+
+  AvailabilityApp.prototype.renderOutWeekButton = function () {
+    var btn = $('[data-owt-btn]', this.root);
+    if (!btn) return;
+    var active = !!(this.outWeek && this.outWeek.created.length);
+    btn.innerHTML = active
+      ? '<i class="fa-solid fa-rotate-left mr-1"></i> Undo — you’re marked out'
+      : '<i class="fa-solid fa-plane mr-1"></i> Out this week';
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  };
+
+  AvailabilityApp.prototype.setOutWeekStatus = function (msg) {
+    var st = $('[data-owt-status]', this.root);
+    if (st) st.textContent = msg || '';
+  };
+
+  // reconcileOutWeek drops any tracked "created by this action" row that no
+  // longer exists, or no longer matches the full-day-unavailable signature,
+  // in the freshly loaded exceptions list — so a hand-edit or "revert to
+  // weekly" through the OTHER existing UI never leaves Undo pointing at stale
+  // or reassigned data.
+  AvailabilityApp.prototype.reconcileOutWeek = function (excs) {
+    if (!this.outWeek) return;
+    var byId = {};
+    (excs || []).forEach(function (e) { byId[e.id] = e; });
+    var kept = this.outWeek.created.filter(function (c) {
+      var e = byId[c.id];
+      return e && e.startMinute === 0 && e.endMinute === 1440 && e.state === 'unavailable';
+    });
+    this.outWeek = kept.length
+      ? { weekStart: this.outWeek.weekStart, created: kept, skippedDates: this.outWeek.skippedDates }
+      : null;
+  };
+
+  // renderOutWeekStrip paints the current real week's 7 dates: 'out' (this
+  // action's own still-live exception), 'custom' (any other exception, left
+  // alone), or open (no exception — the recurring pattern applies). Always
+  // derived from the freshly loaded server list, never a client-side guess.
+  AvailabilityApp.prototype.renderOutWeekStrip = function (excs) {
+    var self = this;
+    var strip = $('[data-owt-strip]', this.root);
+    if (!strip) return;
+    strip.innerHTML = '';
+    var monday = mondayOf(todayUTC());
+    var hasExc = {};
+    (excs || []).forEach(function (e) { hasExc[e.onDate] = true; });
+    var created = {};
+    if (this.outWeek) this.outWeek.created.forEach(function (c) { created[c.onDate] = true; });
+    for (var i = 0; i < 7; i++) {
+      (function (dayIdx) {
+        var d = addDays(monday, dayIdx);
+        var iso = isoOf(d);
+        var state = (created[iso] && hasExc[iso]) ? 'out' : (hasExc[iso] ? 'custom' : '');
+        var cell = el('button', 'owt-day'); cell.type = 'button';
+        if (state) cell.setAttribute('data-owt-state', state);
+        var label = state === 'out' ? 'marked out'
+          : (state === 'custom' ? 'has a custom exception' : 'no exception, follows your weekly pattern');
+        cell.setAttribute('aria-label', DISPLAY_DAYS[dayIdx] + ' ' + iso + ', ' + label);
+        cell.innerHTML = '<span>' + DISPLAY_DAYS[dayIdx] + '</span><span class="dnum">' + d.getUTCDate() + '</span>';
+        cell.addEventListener('click', function () { self.openDayEditor(iso); });
+        strip.appendChild(cell);
+      })(i);
+    }
+  };
+
+  AvailabilityApp.prototype.fireOutWeek = function (btn) {
+    var self = this;
+    if (this.outWeekBusy) return;
+    this.outWeekBusy = true;
+    btn.disabled = true; btn.classList.add('btn-loading');
+    var monday = mondayOf(todayUTC());
+    var weekStartISO = isoOf(monday);
+    var dates = weekDatesFrom(monday);
+    var exceptionsURL = '/campaigns/' + this.campaignID + '/availability/exceptions';
+
+    Chronicle.apiFetch(exceptionsURL)
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (excs) {
+        var existing = {};
+        (excs || []).forEach(function (e) { existing[e.onDate] = true; });
+        var toWrite = dates.filter(function (d) { return !existing[d]; });
+        var skipped = dates.filter(function (d) { return existing[d]; });
+
+        if (!toWrite.length) {
+          self.finishFire(btn, { weekStart: weekStartISO, created: [], skippedDates: skipped }, null);
+          return;
+        }
+
+        var written = [];
+        var i = 0;
+        function next() {
+          if (i >= toWrite.length) { afterWrites(null); return; }
+          var d = toWrite[i++];
+          Chronicle.apiFetch(exceptionsURL, {
+            method: 'PUT',
+            body: { onDate: d, tz: self.tz, blocks: [{ startMinute: 0, endMinute: 1440, state: 'unavailable' }] }
+          }).then(function (r) {
+            if (!r.ok) {
+              r.json().then(function (j) { afterWrites((j && j.error) || 'Save failed.'); })
+                .catch(function () { afterWrites('Save failed.'); });
+              return;
+            }
+            written.push(d);
+            next();
+          }).catch(function () { afterWrites('Save failed.'); });
+        }
+        // afterWrites re-fetches once writing stops (all done, or one day's
+        // write failed — e.g. the per-user cap) so Undo's target IDs always
+        // come from the server, never a client-side guess.
+        function afterWrites(errMsg) {
+          if (!written.length) { self.finishFire(btn, null, errMsg || 'Could not mark you out this week.'); return; }
+          Chronicle.apiFetch(exceptionsURL)
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (fresh) {
+              var wroteSet = {};
+              written.forEach(function (d) { wroteSet[d] = true; });
+              var createdRows = (fresh || []).filter(function (e) {
+                return wroteSet[e.onDate] && e.startMinute === 0 && e.endMinute === 1440 && e.state === 'unavailable';
+              }).map(function (e) { return { id: e.id, onDate: e.onDate }; });
+              self.finishFire(btn, { weekStart: weekStartISO, created: createdRows, skippedDates: skipped }, errMsg);
+            })
+            .catch(function () {
+              self.finishFire(btn, { weekStart: weekStartISO, created: [], skippedDates: skipped },
+                'Marked days out, but could not confirm — reload to check.');
+            });
+        }
+        next();
+      })
+      .catch(function () { self.finishFire(btn, null, 'Could not check your existing exceptions.'); });
+  };
+
+  AvailabilityApp.prototype.finishFire = function (btn, result, errMsg) {
+    this.outWeekBusy = false;
+    btn.disabled = false; btn.classList.remove('btn-loading');
+    this.outWeek = (result && result.created.length) ? result : null;
+    this.overlayData = null; this.weekCache = {}; // next overlay render (this session) reads fresh
+    var msg;
+    if (result && result.created.length) {
+      msg = 'Marked ' + result.created.length + ' of 7 days out for the week of ' + result.weekStart + '.';
+      if (result.skippedDates.length) {
+        msg += ' ' + result.skippedDates.length + (result.skippedDates.length === 1
+          ? ' day already had a custom exception and was left alone.'
+          : ' days already had custom exceptions and were left alone.');
+      }
+      if (errMsg) msg += ' (' + errMsg + ')';
+    } else if (result) {
+      msg = 'Every day this week already has a custom exception — nothing changed.';
+    } else {
+      msg = errMsg || 'Could not mark you out this week.';
+    }
+    this.setOutWeekStatus(msg);
+    this.announce(msg);
+    this.loadExceptions();
+  };
+
+  AvailabilityApp.prototype.undoOutWeek = function (btn) {
+    var self = this;
+    if (this.outWeekBusy || !this.outWeek) return;
+    var stillOut = this.outWeek;
+    var toDelete = stillOut.created.slice();
+    this.outWeekBusy = true;
+    btn.disabled = true; btn.classList.add('btn-loading');
+    var failedItems = [], i = 0;
+    function next() {
+      if (i >= toDelete.length) { done(); return; }
+      var item = toDelete[i++];
+      Chronicle.apiFetch('/campaigns/' + self.campaignID + '/availability/exceptions/' + item.id, { method: 'DELETE' })
+        .then(function (r) { if (!r.ok && r.status !== 404) failedItems.push(item); next(); })
+        .catch(function () { failedItems.push(item); next(); });
+    }
+    function done() {
+      self.outWeekBusy = false;
+      btn.disabled = false; btn.classList.remove('btn-loading');
+      self.overlayData = null; self.weekCache = {};
+      var removed = toDelete.length - failedItems.length;
+      var msg;
+      if (!failedItems.length) {
+        self.outWeek = null;
+        msg = 'Undo complete — your original week is restored.';
+      } else {
+        // Only the still-outstanding rows remain tracked, so a retry targets
+        // exactly those and nothing already-removed.
+        self.outWeek = { weekStart: stillOut.weekStart, created: failedItems, skippedDates: stillOut.skippedDates };
+        msg = 'Undo removed ' + removed + ' of ' + toDelete.length + ' — ' + failedItems.length + ' could not be removed, try again.';
+      }
+      self.setOutWeekStatus(msg);
+      self.announce(msg);
+      self.loadExceptions();
+    }
+    next();
   };
 
   // ================= boot =================

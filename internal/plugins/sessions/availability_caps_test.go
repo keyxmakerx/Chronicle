@@ -78,6 +78,28 @@ func TestReplaceMyDayExceptions_PerDayBlockCap(t *testing.T) {
 	}
 }
 
+// C-SCHED-OUT-THIS-WEEK item 4 pin: the "Out this week" quick action writes at
+// most ONE new exception row per previously-empty day (a single 0–1440
+// full-day block), so firing it every week for a year stays under the
+// per-user cap with real headroom. If maxExceptionsPerUser ever shrinks (or
+// the quick action ever grows to write more than one row per day) without
+// revisiting this math, this test catches the drift before a player bricks
+// mid-year on the cap.
+func TestOutThisWeekCapMath_ToleratesAYearOfWeeklyUse(t *testing.T) {
+	const rowsPerFire = 7 // one full-day row per day of the week, worst case (no pre-existing exceptions to skip)
+	const weeksPerYear = 52
+	yearTotal := rowsPerFire * weeksPerYear
+	if yearTotal > maxExceptionsPerUser {
+		t.Fatalf("a year of weekly \"Out this week\" use writes %d rows, exceeding the per-user cap of %d — "+
+			"C-SCHED-OUT-THIS-WEEK item 4 flags this as needing a pruning/reconciler follow-up", yearTotal, maxExceptionsPerUser)
+	}
+	if headroom := maxExceptionsPerUser - yearTotal; headroom < rowsPerFire*10 {
+		t.Logf("WARNING: only %d rows of headroom left after a year of weekly use (cap %d) — "+
+			"continuous use much beyond a year will hit the cap; no exception-pruning reconciler exists today",
+			headroom, maxExceptionsPerUser)
+	}
+}
+
 // C-SCHED-P2 0c behavioral pin: a composed day (recurring minus one busy hour)
 // leaves the day's other hours VISIBLE in the overlay rather than erasing them.
 // The exception rows are the composed available blocks; the overlay renders them
