@@ -25,8 +25,11 @@ const grid = readFileSync(join(base, 'event_grid.js'), 'utf8');
 function dayPopoverBlock() {
   const start = shell.indexOf('function wireDayPopover');
   assert.ok(start >= 0, 'wireDayPopover present');
-  // up to the next top-level function in the IIFE
-  const after = shell.indexOf('\n    if (document.readyState', start);
+  // up to the next top-level statement in the IIFE (the document-guard that
+  // wires boot() — C-CAL-UX-PAIR wrapped it in `typeof document !== 'undefined'`
+  // so calendar_v2_shell.js can load in a document-less vm sandbox for the
+  // window.__calRtHint pure-math tests).
+  const after = shell.indexOf('\n    if (typeof document', start);
   return shell.slice(start, after > start ? after : undefined);
 }
 

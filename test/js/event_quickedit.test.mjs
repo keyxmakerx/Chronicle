@@ -1,8 +1,12 @@
 // event_quickedit.test.mjs — the event quick-edit card's wiring contracts
-// (C-CAL-QUICKEDIT). Source-level seams on event_grid.js:
-//   1. An event-chip click opens the QUICK-EDIT card, not the drawer; the
-//      drawer stays reachable (Full editor → openDrawer; calV2OpenDrawerByID
-//      exposed for the day popover).
+// (C-CAL-QUICKEDIT, gate-split per C-CAL-UX-PAIR §Fix 1). Source-level seams
+// on event_grid.js:
+//   1. An event-chip click opens the QUICK-EDIT card, not the drawer, for
+//      EVERY calendar member (the card + its open/close wiring sit BEFORE the
+//      Scribe-only drawer gate). The drawer stays reachable for Scribes
+//      (Full editor → openDrawer; calV2OpenDrawerByID exposed for the day
+//      popover); a Scribe-less fallback (no scaffold/data) is guarded so it
+//      never calls the undefined-for-players openDrawer.
 //   2. The quick-save is LOSSLESS: it PUTs the stored event merged with the
 //      two edited fields to the existing events endpoint.
 //   3. Leak discipline (E4/E5 class): the outside-click closer binds to the
@@ -21,7 +25,8 @@ test('event-chip click opens the quick-edit card (drawer one tap away)', () => {
     'chip click must route to openQuickEdit');
   assert.match(src, /data-qe-expand[\s\S]*?openDrawer\(id\)/, 'Full editor must hand off to the drawer');
   assert.match(src, /window\.calV2OpenDrawerByID = openDrawer/, 'the popover drawer hook must be exposed');
-  assert.match(src, /if \(!qe \|\| !ev\) \{ openDrawer\(id\); return; \}/, 'missing scaffold/data must fall back to the drawer');
+  assert.match(src, /if \(!qe \|\| !ev\) \{ if \(isScribe\) openDrawer\(id\); return; \}/,
+    'missing scaffold/data must fall back to the drawer, but only for Scribes (openDrawer is undefined for players)');
 });
 
 test('quick-save is a lossless merge through the existing events PUT', () => {
@@ -32,8 +37,12 @@ test('quick-save is a lossless merge through the existing events PUT', () => {
 });
 
 test('outside-click closer is root-bound (no document listener leak)', () => {
-  const block = src.slice(src.indexOf('Quick-edit card'), src.indexOf('Drag-to-reschedule'));
-  assert.ok(block.length > 0, 'quick-edit block present before drag-reschedule');
+  // The quick-edit block now sits BEFORE the Scribe-only drawer gate
+  // (C-CAL-UX-PAIR §Fix 1), so its end boundary is the "Card click" comment
+  // that immediately follows it, not the drawer-side "Drag-to-reschedule"
+  // section (which is gated off and out of scope for this leak check).
+  const block = src.slice(src.indexOf('Quick-edit card'), src.indexOf('Card click → open the quick-edit card'));
+  assert.ok(block.length > 0, 'quick-edit block present before the card-click wiring');
   assert.match(block, /root\.addEventListener\('click'/, 'outside-click must bind to root');
   assert.doesNotMatch(block, /document\.addEventListener/, 'quick-edit must not add document listeners');
 });
