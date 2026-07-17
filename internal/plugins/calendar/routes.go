@@ -68,9 +68,6 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendars/:calId/import", h.ImportCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/:calId/import/preview", h.ImportPreviewAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
-	// Sessions fragment for the calendar sessions modal (Player+).
-	cg.GET("/calendars/:calId/sessions-fragment", h.SessionsFragment, campaigns.RequireRole(campaigns.RolePlayer))
-
 	// Events CRUD (Scribe+ can create/edit, Owner can delete/set visibility).
 	cg.POST("/calendars/:calId/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/calendars/:calId/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))

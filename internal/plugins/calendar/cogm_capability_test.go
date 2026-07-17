@@ -64,24 +64,10 @@ func TestCoDM_CanAuthorDmOnly(t *testing.T) {
 	}
 }
 
-// TestEventModal_DmOnlyOptionGated: the "DM Only" visibility option only
-// renders for someone who can author it (the Scribe UI-lie fix).
-func TestEventModal_DmOnlyOptionGated(t *testing.T) {
-	cal := &Calendar{ID: "cal-1", Name: "Harptos"}
-
-	render := func(canAuthor bool) string {
-		var sb strings.Builder
-		data := CalendarViewData{Calendar: cal, CanAuthorDmOnly: canAuthor}
-		if err := eventModal(data).Render(context.Background(), &sb); err != nil {
-			t.Fatalf("render eventModal: %v", err)
-		}
-		return sb.String()
-	}
-
-	if html := render(true); !strings.Contains(html, `value="dm_only"`) {
-		t.Errorf("co-DM/owner should see the DM Only option")
-	}
-	if html := render(false); strings.Contains(html, `value="dm_only"`) {
-		t.Errorf("a non-author (Scribe) must NOT see the DM Only option (the UI-lie)")
-	}
-}
+// NOTE: the V1 eventModal "DM Only" option-gating test (formerly
+// TestEventModal_DmOnlyOptionGated) was removed in C-CAL-V1-SUNSET along with
+// the dead eventModal component. The equivalent UI-gate assertion now lives in
+// the V2 drawer: calendar_v2_editor_drawer_test.go:TestEditorDrawer_VisibilityGate
+// pins that the restricted-visibility editor renders only when CanAuthorDmOnly
+// (and the locked "Visible to everyone" note otherwise). The server-side gate is
+// still covered by TestCoDM_CanAuthorDmOnly above.
