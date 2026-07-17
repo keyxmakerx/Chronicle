@@ -1250,59 +1250,6 @@ func (a *registrationInviteCheckerAdapter) IsRegistrationInviteValid(ctx context
 	return true
 }
 
-// sessionListerAdapter wraps sessions.SessionService to implement the
-// calendar.SessionLister interface for displaying sessions on the calendar grid.
-type sessionListerAdapter struct {
-	svc sessions.SessionService
-}
-
-// ListSessionsForDateRange returns sessions as lightweight CalendarSession structs.
-func (a *sessionListerAdapter) ListSessionsForDateRange(ctx context.Context, campaignID, startDate, endDate string) ([]calendar.CalendarSession, error) {
-	sess, err := a.svc.ListSessionsForDateRange(ctx, campaignID, startDate, endDate)
-	if err != nil {
-		return nil, err
-	}
-	return sessionsToCalendarSessions(sess, ""), nil
-}
-
-// ListAllSessions returns all planned sessions for the calendar sessions modal.
-func (a *sessionListerAdapter) ListAllSessions(ctx context.Context, campaignID, userID string) ([]calendar.CalendarSession, error) {
-	sess, err := a.svc.ListPlannedSessions(ctx, campaignID)
-	if err != nil {
-		return nil, err
-	}
-	return sessionsToCalendarSessions(sess, userID), nil
-}
-
-// sessionsToCalendarSessions converts session models to calendar display structs.
-func sessionsToCalendarSessions(sess []sessions.Session, userID string) []calendar.CalendarSession {
-	result := make([]calendar.CalendarSession, 0, len(sess))
-	for _, s := range sess {
-		cs := calendar.CalendarSession{
-			ID:              s.ID,
-			Name:            s.Name,
-			Status:          s.Status,
-			IsRecurring:     s.IsRecurring,
-			RecurrenceLabel: s.RecurrenceLabel(),
-		}
-		if s.ScheduledDate != nil {
-			cs.ScheduledDate = *s.ScheduledDate
-		}
-		for _, att := range s.Attendees {
-			cs.TotalCount++
-			if att.Status == "accepted" {
-				cs.AcceptedCount++
-			}
-			// Track current user's RSVP status.
-			if userID != "" && att.UserID == userID {
-				cs.UserRSVP = att.Status
-			}
-		}
-		result = append(result, cs)
-	}
-	return result
-}
-
 // widgetBlockListerAdapter bridges extensions.Handler and systems.SystemHandler
 // to entities.WidgetBlockLister. Converts widget metadata from both extension
 // widgets and system-provided widgets into entity block metadata.
@@ -2530,8 +2477,6 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
 	if a.PluginHealth.IsHealthy("sessions") {
 		sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService, addonService)
-		// Wire sessions into calendar for grid display (real-life mode).
-		calendarHandler.SetSessionLister(&sessionListerAdapter{svc: sessionsService})
 	} else {
 		slog.Warn("sessions plugin degraded — routes not registered")
 	}

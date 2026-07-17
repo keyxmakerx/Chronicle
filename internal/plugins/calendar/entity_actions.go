@@ -7,7 +7,7 @@
 // entities repo or writes its tables. It declares the narrow EntityCreator
 // interface it needs; the app wiring (internal/app/routes.go) supplies an
 // adapter over the entities service. This mirrors the bestiary plugin's
-// EntityCreator seam and calendar's own SessionLister/TimelineLister pattern.
+// EntityCreator seam and calendar's own TimelineLister pattern.
 package calendar
 
 import (

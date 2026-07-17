@@ -7,18 +7,17 @@
 // Wave 1 V1/V2 additive coexistence. V1 hard removal in dispatch
 // C-CAL-V1-SUNSET (to be authored post-Wave-1.6).
 //
-// Banner mounts at the top of every V1 calendar page (Month / Week /
-// Day / Timeline / Setup). V2 routes do NOT include this template —
-// V2 self-promotes via its own surface chrome.
-//
-// DORMANT as of 2026-05-29 (dispatch C-CAL-V1-BANNER-PULL): all five
-// mount sites in calendar.templ were removed because V2 calendar is not
-// yet reachable from campaign chrome, so the "Switch to V2" CTA pointed
-// at an unnavigable surface and the 2026-08-01 sunset clock is paused.
-// This component + v1BannerSwitchHref are intentionally kept intact so
-// reinstating the banner is a one-line `@V1DeprecationBanner(cc)` re-add
-// when C-CAL-V1-SUNSET lands (or so it can be folded into the future
-// generic banner system). Do not delete without coordinator sign-off.
+// REINSTATED 2026-07-17 (dispatch C-CAL-V1-SUNSET). The banner was pulled
+// dormant on 2026-05-29 (C-CAL-V1-BANNER-PULL) because V2 was not yet
+// reachable from campaign chrome. The V1→V2 cutover has since landed —
+// Index and the legacy /calendar path 301 to V2, which is the primary
+// calendar surface — so the "Switch to V2" CTA now resolves and the
+// blocking condition is gone. After the sunset only TWO V1 pages remain
+// live: the setup chooser (CalendarSetupPage, blocked on create-flow-V2)
+// and the per-calendar timeline (TimelinePage, preserved until Timeline
+// V2 ships). The banner mounts on both. The dead Month/Week/Day pages
+// that formerly carried it were deleted in the same PR. V2 routes do NOT
+// include this template — V2 self-promotes via its own surface chrome.
 
 package calendar
 
@@ -49,7 +48,7 @@ templ V1DeprecationBanner(cc *campaigns.CampaignContext) {
 			<i class="fa-solid fa-calendar-check text-accent" aria-hidden="true"></i>
 			<span class="text-fg">
 				<strong>Calendar V2 is now the recommended view.</strong>
-				V1 will be removed on <strong>August&nbsp;1, 2026</strong>.
+				V1 will be removed on <strong>September&nbsp;1, 2026</strong>.
 			</span>
 			<a
 				href={ v1BannerSwitchHref(cc) }
