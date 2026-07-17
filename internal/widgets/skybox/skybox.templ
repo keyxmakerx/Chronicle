@@ -1,0 +1,135 @@
+// skybox.templ — the Skybox widget (C-SKYBOX-WIDGET): the ambient sky-only
+// surface (starfield, sun, moons, weather + celestial particles) graduated
+// out of the calendar plugin's ad-hoc worldState band into a mountable
+// `data-widget="skybox"` widget, per the widget rule (#10: DOM events + API
+// endpoints, no direct plugin imports — see .ai.md).
+//
+// This package is intentionally plugin-agnostic (mirrors internal/widgets/
+// calendar_v2's EventCardData pattern): SkyboxData is a flat, source-agnostic
+// struct. The calendar plugin (internal/plugins/calendar) is the current
+// caller — it maps its own CalendarV2ViewData/WorldStateSeed into a
+// SkyboxData before calling Skybox() — but nothing here knows that plugin
+// exists. The sun's layered CSS-art body is NOT owned here: it already has
+// one canonical source (calendar.CalAlmanacSunBody, also reused by the /demo
+// showcase), so Skybox() takes it as a child component instead of
+// duplicating the markup.
+package skybox
+
+// SkyboxEvent is one active celestial-event chip shown in the sky band's
+// happening tray.
+type SkyboxEvent struct {
+	Name string
+}
+
+// SkyboxData is the widget's rendering payload. Every field is a
+// pre-computed display value — the caller does its own domain-specific
+// computation (weather label, gradient, date formatting, ...) and hands
+// Skybox() the result, exactly like calendar_v2.EventCardData.
+type SkyboxData struct {
+	// ElementID is the DOM id for the hidden worldstate-seed blob (the
+	// engine + the provider singleton read it by the [data-cal-worldstate]
+	// ATTRIBUTE, not this id — the id only needs to be unique per page when
+	// multiple Skybox/worldstate embeds coexist).
+	ElementID string
+	// CampaignID drives the widget's provider fetch (ChronicleWorldState.
+	// get(campaignId)) when no seed is embedded, or when a later live push
+	// updates the shared singleton.
+	CampaignID string
+	// SeedJSON is the CATALOG Part-8 worldState seed blob, embedded so the
+	// engine + the provider singleton get a zero-fetch first paint. Empty
+	// when the caller has no seed to embed — the provider then fetches.
+	SeedJSON string
+	// WeatherID is the weather-effect id the canvas CSS + engine key on
+	// ("clear"/"rain"/"snow"/...).
+	WeatherID string
+	// Gradient is the server-rendered base sky gradient (a CSS
+	// `background` value) for the first paint before the engine repaints it.
+	Gradient string
+	// DatePrimary/TimeLabel/SkyPhase/Season/WeatherLabel are the read-only
+	// first-paint labels; the engine repaints them live from the seed.
+	DatePrimary  string
+	TimeLabel    string
+	SkyPhase     string
+	Season       string
+	WeatherLabel string
+	// Events are the day's active celestial events (happening chips).
+	Events []SkyboxEvent
+}
+
+// Skybox renders the sky surface scaffold + a self-contained hidden
+// worldstate-seed blob, wrapped in the data-widget="skybox" mount boot.js
+// auto-mounts (static/js/widgets/skybox.js). The engine (cal-almanac.js)
+// paints the gradient, sun arc, moons, weather + celestial particles, and
+// mood wash from the seed on load; the fields on `data` are the read-only
+// first-paint. sunBody is the sun's layered CSS-art body — passed in rather
+// than owned here so calendar.CalAlmanacSunBody (also reused by /demo)
+// stays the one source (T-O4 single-source-of-truth).
+//
+// Callers own the <link>/<script> tags for cal-almanac-render.css,
+// worldstate_provider.js, skybox.js, and cal-almanac.js — script loading
+// order/dedup is a page-level concern, not a per-component one (a page that
+// also renders the hourglass shelf needs cal-almanac.js exactly once; see
+// .ai.md "Footguns").
+templ Skybox(data SkyboxData, sunBody templ.Component) {
+	// The seed blob is OPTIONAL (ElementID == "" skips it): the three
+	// existing almanac-page callers already render their own external seed
+	// blob with their own id-namespacing scheme (multiple embeds per page
+	// can't share one id) — Skybox() must not duplicate it there. A caller
+	// with no pre-existing blob (the new skybox dashboard block) sets
+	// ElementID to get a fully self-contained mount.
+	if data.ElementID != "" {
+		<div id={ data.ElementID } data-cal-worldstate={ data.SeedJSON } aria-hidden="true" hidden></div>
+	}
+	<div
+		class={ "cal-almanac-sky", "cal-almanac-sky--wfx-" + data.WeatherID }
+		data-widget="skybox"
+		data-campaign-id={ data.CampaignID }
+		data-cal-sky
+		data-cal-sky-weather={ data.WeatherID }
+		style={ "background: " + data.Gradient + ";position:absolute;inset:0" }
+	>
+		<div class="cal-almanac-sky__weather" data-cal-sky-weather-layer></div>
+		<div class="cal-almanac-sky__celestial" data-cal-sky-celestial-layer></div>
+		<canvas class="cal-almanac-sky__canvas" data-cal-sky-canvas aria-hidden="true"></canvas>
+		<div class="cal-almanac-sky__arc" data-cal-sky-arc>
+			// Passive sun — the engine positions + recolors it from time-of-day.
+			// (Moons are created by the engine, not rendered here.)
+			<div
+				class="cal-almanac-sun cal-almanac-sky__sun cal-almanac-sky__sun--passive"
+				data-cal-sky-sun
+				data-cal-sun-state="default"
+				aria-hidden="true"
+			>
+				@sunBody
+			</div>
+		</div>
+		// FRONT particle canvas — weather (cloud decks, precipitation, fog)
+		// paints HERE, over the sun/moons, so storms genuinely occlude the sun.
+		// Placed after the arc at the same z-index so it stacks above it.
+		<canvas class="cal-almanac-sky__canvas-front" data-cal-sky-canvas-front aria-hidden="true"></canvas>
+		<div class="cal-almanac-sky__overlay">
+			<div class="cal-almanac-sky__label">
+				<strong data-cal-sky-date>{ data.DatePrimary }</strong>
+				<span class="cal-almanac-sky__sub">
+					<span data-cal-sky-time-label>{ data.TimeLabel }</span>
+					<span data-cal-sky-sub-rest> · { data.SkyPhase } · { data.Season } · { data.WeatherLabel }</span>
+				</span>
+			</div>
+			<div class="cal-almanac-sky__happening" data-cal-sky-happening>
+				for _, ev := range data.Events {
+					<span class="cal-almanac-sky__happening-chip" title={ ev.Name }>
+						<span class="cal-almanac-sky__happening-icon" aria-hidden="true">✦</span>
+					</span>
+				}
+			</div>
+		</div>
+		// Friendly client-rendered error target (T-B3 — no silent failures):
+		// hidden until skybox.js flips it on a provider load failure. A no-op
+		// for the three existing callers (their seed is always pre-embedded,
+		// so the provider never actually fetches); relevant for a bare mount
+		// (the new skybox dashboard block) whose provider fetch can fail.
+		<div class="absolute inset-0 hidden flex-col items-center justify-center bg-surface text-center p-4" data-skybox-error>
+			<p class="text-sm text-fg-secondary">Couldn&#39;t load the world&#39;s current sky. Try reloading the page.</p>
+		</div>
+	</div>
+}
