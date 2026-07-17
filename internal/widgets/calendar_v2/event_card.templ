@@ -86,6 +86,11 @@ templ eventCardStandard(data EventCardData) {
 				}
 				if data.TimeLabel != "" {
 					<span>· { data.TimeLabel }</span>
+					// Viewer-zone hint (C-CAL-UX-PAIR §Fix 2) — filled client-side by
+					// calendar_v2_shell.js's wireEventTimeHints ([data-rt-hint] marker
+					// convention); stays hidden except on real-time calendars where the
+					// viewer's zone differs from the anchor.
+					<span class="hidden" data-rt-hint></span>
 				}
 				if data.CategoryName != "" {
 					<span class="ml-auto flex items-center gap-1">
@@ -137,6 +142,9 @@ templ eventCardDetailed(data EventCardData) {
 				<span class="inline-flex items-center gap-1">
 					<i class="fa-solid fa-clock" aria-hidden="true"></i>
 					{ data.TimeLabel }
+					// Viewer-zone hint (C-CAL-UX-PAIR §Fix 2) — see eventCardStandard's
+					// note above; same [data-rt-hint] marker convention.
+					<span class="hidden" data-rt-hint></span>
 				</span>
 			}
 			if data.CategoryName != "" {

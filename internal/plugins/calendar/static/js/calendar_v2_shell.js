@@ -554,7 +554,19 @@
                 row.type = 'button';
                 row.className = 'w-full text-left text-xs px-2 py-1 hover:bg-surface-2 rounded transition-colors duration-micro';
                 row.dataset.eventId = ev.id;
-                row.textContent = ev.name + (ev.visibility !== 'everyone' ? '  🔒' : '');
+                // Time prefix + (real-time calendars only) the viewer-zone hint
+                // (C-CAL-UX-PAIR §Fix 2) — same rtAnchorZone/rtEventHint pure math
+                // wireEventTimeHints uses below, called directly here since the
+                // popover list is plain JS-built (no [data-rt-hint] marker node).
+                var prefix = '';
+                if (!ev.all_day && ev.start_hour != null) {
+                    var p2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+                    prefix = p2(ev.start_hour) + ':' + p2(ev.start_minute == null ? 0 : ev.start_minute) + ' ';
+                    var zone = rtAnchorZone();
+                    var hint = zone ? rtEventHint(ev, zone) : '';
+                    if (hint) prefix += '· your time ' + hint + ' ';
+                }
+                row.textContent = prefix + ev.name + (ev.visibility !== 'everyone' ? '  🔒' : '');
                 row.addEventListener('click', function () {
                     dismiss();
                     var card = document.querySelector('[data-event-card][data-event-id="' + ev.id + '"]');
@@ -677,21 +689,165 @@
         }
     }
 
-    // boot wires the root-gated shell PLUS the document-wide real-time clocks.
-    // The clocks run even on pages without a [data-cal-v2-root] shell (the
-    // campaign dashboard), which is why they are outside init()'s root guard.
+    // --- Event-time viewer-zone hints (C-CAL-UX-PAIR §Fix 2) -----
+    //
+    // On a UsesRealTime() calendar, EVENT times (not "now") render in the
+    // anchor zone for every viewer — the server has no browser-zone signal.
+    // This paints a small "your time HH:MM" hint next to each rendered event
+    // time, reusing the SAME anchor zone the P3 live clock above already
+    // carries in the DOM ([data-cal-rt-clock][data-rt-zone] — wireRealTimeClocks
+    // is the reference dual-line pattern this generalizes from "now" to "this
+    // event's start time"). Hidden entirely when the viewer's browser zone
+    // matches the anchor, or when the page has no real-time calendar at all
+    // (no [data-cal-rt-clock] node) — a zero-change no-op everywhere else.
+    // Pure math is exposed on window.__calRtHint for node --test
+    // (test/js/calendar_v2_rt_hint.test.mjs) and for event_grid.js's drawer
+    // WHEN-section hint, the same reuse-seam convention as
+    // window.__calSkyStripSync / window.__calDayRange.
+
+    // rtAnchorZone reads the page's real-time anchor zone from the live-clock
+    // node — '' when the calendar isn't real-time, the suppression signal
+    // every caller below keys off.
+    function rtAnchorZone() {
+        if (typeof document === 'undefined') return '';
+        var clock = document.querySelector('[data-cal-rt-clock]');
+        return (clock && clock.getAttribute('data-rt-zone')) || '';
+    }
+
+    function rtBrowserZone() {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        } catch (e) { return ''; }
+    }
+
+    // rtZonedWallTimeToUTC converts a WALL-CLOCK date+time as displayed in
+    // `zone` to the UTC instant it represents: guess the instant assuming
+    // UTC, read back what that instant reads as in `zone` via Intl, then
+    // correct the guess by the delta. Exact outside the DST-transition hour
+    // itself (the ambiguous/skipped local time), an acceptable approximation
+    // for a display-only hint.
+    function rtZonedWallTimeToUTC(year, month, day, hour, minute, zone) {
+        var guess = Date.UTC(year, month - 1, day, hour, minute);
+        try {
+            var parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: zone, hourCycle: 'h23',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit',
+            }).formatToParts(new Date(guess));
+            var m = {};
+            for (var i = 0; i < parts.length; i++) m[parts[i].type] = parts[i].value;
+            var readHour = parseInt(m.hour, 10);
+            if (readHour === 24) readHour = 0; // some locales format midnight as 24:00
+            var asIfUTC = Date.UTC(
+                parseInt(m.year, 10), parseInt(m.month, 10) - 1, parseInt(m.day, 10),
+                readHour, parseInt(m.minute, 10));
+            return new Date(guess - (asIfUTC - guess));
+        } catch (e) {
+            return new Date(guess);
+        }
+    }
+
+    // rtFormatInZone formats a UTC instant as 24h "HH:MM" in the given zone.
+    function rtFormatInZone(date, zone) {
+        try {
+            return new Intl.DateTimeFormat('en-US', {
+                timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: false,
+            }).format(date);
+        } catch (e) { return ''; }
+    }
+
+    // rtEventHint returns '' (suppressed) or "HH:MM" — the viewer-browser-zone
+    // wall time for a timed event. Suppressed for: no anchor zone (non-RT
+    // calendar), all-day events, events with no start time, an unreadable
+    // browser zone, or a browser zone equal to the anchor (nothing to add).
+    function rtEventHint(ev, anchorZone) {
+        if (!anchorZone || !ev || ev.all_day || ev.start_hour == null) return '';
+        var browserZone = rtBrowserZone();
+        if (!browserZone || browserZone === anchorZone) return '';
+        var utc = rtZonedWallTimeToUTC(
+            ev.year, ev.month, ev.day, ev.start_hour,
+            ev.start_minute == null ? 0 : ev.start_minute, anchorZone);
+        return rtFormatInZone(utc, browserZone);
+    }
+
+    if (typeof window !== 'undefined') {
+        window.__calRtHint = {
+            anchorZone: rtAnchorZone,
+            browserZone: rtBrowserZone,
+            zonedWallTimeToUTC: rtZonedWallTimeToUTC,
+            formatInZone: rtFormatInZone,
+            eventHint: rtEventHint,
+        };
+    }
+
+    // wireEventTimeHints paints the hint onto every rendered event time it can
+    // reach: month pips get a tooltip + aria-label augmentation (the pip line
+    // is one truncated 11px row — no room for a visible suffix); every
+    // [data-rt-hint] marker (week/day event cards, the mobile agenda subtitle)
+    // gets a visible "· your time HH:MM" suffix instead — those surfaces have
+    // room, and the agenda card in particular is touch-first, where a
+    // hover-only tooltip would never be reachable. Per-node __rtHinted guards
+    // make repeat calls (every htmx settle/load, since view-slot swaps don't
+    // re-run init()'s once-per-root guard) safe and idempotent.
+    function wireEventTimeHints() {
+        var root = document.querySelector('[data-cal-v2-root]');
+        var zone = rtAnchorZone();
+        if (!root || !zone) return;
+
+        var events = {};
+        try {
+            (JSON.parse(root.dataset.calV2Events || '[]')).forEach(function (e) { events[e.id] = e; });
+        } catch (e) { /* ignore */ }
+
+        function hintFor(id) {
+            var ev = id && events[id];
+            return ev ? rtEventHint(ev, zone) : '';
+        }
+
+        document.querySelectorAll('[data-day-cell] [data-event-card="compact"][data-event-id]').forEach(function (el) {
+            if (el.__rtHinted) return;
+            var hint = hintFor(el.getAttribute('data-event-id'));
+            if (!hint) return;
+            el.__rtHinted = true;
+            el.title = 'Your time: ' + hint;
+            var label = el.getAttribute('aria-label') || '';
+            el.setAttribute('aria-label', label + (label ? ', ' : '') + 'your time ' + hint);
+        });
+
+        document.querySelectorAll('[data-rt-hint]').forEach(function (el) {
+            if (el.__rtHinted) return;
+            var card = el.closest('[data-event-id]');
+            var hint = card ? hintFor(card.getAttribute('data-event-id')) : '';
+            if (!hint) return;
+            el.__rtHinted = true;
+            el.textContent = '· your time ' + hint;
+            el.classList.remove('hidden');
+        });
+    }
+
+    // boot wires the root-gated shell PLUS the document-wide real-time clocks
+    // + event-time hints. The clocks/hints run even on pages without a
+    // [data-cal-v2-root] shell (the campaign dashboard) — wireEventTimeHints
+    // itself no-ops without a root — and, unlike init(), they re-scan on
+    // EVERY boot (their own per-node guards make that safe), which is what
+    // lets a Month→Week/Day view-slot swap (same root, so init()'s
+    // __calV2ShellInited guard skips it) still pick up newly-swapped-in event
+    // nodes.
     function boot() {
         init();
         wireRealTimeClocks();
+        wireEventTimeHints();
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
-    } else {
-        boot();
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', boot);
+        } else {
+            boot();
+        }
+        try {
+            document.addEventListener('htmx:afterSettle', boot);
+            document.addEventListener('htmx:load', boot);
+        } catch (e) {}
     }
-    try {
-        document.addEventListener('htmx:afterSettle', boot);
-        document.addEventListener('htmx:load', boot);
-    } catch (e) {}
 })();

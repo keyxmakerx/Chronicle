@@ -741,6 +741,12 @@ templ mobileAgendaCard(ev mobileAgendaEvent) {
 			<div class="text-sm font-semibold text-fg truncate">{ ev.Title }</div>
 			<div class="text-xs text-fg-secondary truncate">
 				{ ev.TimeLabel }
+				// Viewer-zone hint (C-CAL-UX-PAIR §Fix 2) — filled client-side by
+				// calendar_v2_shell.js's wireEventTimeHints via the [data-rt-hint]
+				// marker convention; stays hidden (real-time calendars where the
+				// viewer's zone differs from the anchor are the only case that
+				// unhides it).
+				<span class="hidden" data-rt-hint></span>
 				if ev.Category != "" {
 					{ " · " + ev.Category }
 				}
@@ -794,7 +800,11 @@ templ monthWeekRows(data CalendarV2ViewData) {
 								if !seg.IsPublic {
 									<i class="fa-solid fa-lock text-fg-secondary text-[10px] ml-1" aria-hidden="true"></i>
 								}
-								if !seg.OpenRight {
+								// Resize handle — Scribe+ only (write affordance; C-CAL-UX-PAIR
+								// gate-split). initRibbonResize (event_grid.js) is now gated the
+								// same way, but the handle is hidden from players' markup too so
+								// there's nothing to hover/grab in the first place.
+								if !seg.OpenRight && data.IsScribe {
 									<span
 										class="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize bg-accent/0 hover:bg-accent/40 transition-colors duration-micro"
 										data-ribbon-resize="right"
@@ -1204,6 +1214,13 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 						<span class="text-fg-muted text-xs">–</span>
 						<input type="time" class="input text-sm flex-1" data-time-end aria-label="End time"/>
 					</div>
+					// Viewer-zone time hint (C-CAL-UX-PAIR §Fix 2), real-time calendars
+					// only: "Your time: HH:MM" — the Scribe's OWN browser-zone reading of
+					// the entered start time, computed client-side from the anchor zone
+					// (event_grid.js updateRtTimeHint). Read-only, hidden by default;
+					// hidden entirely on non-real-time calendars or when the Scribe's
+					// zone matches the anchor.
+					<p class="text-[11px] text-fg-muted leading-snug hidden" data-rt-time-hint></p>
 					// All-day toggle → clears the clock time (StartHour==nil is the
 					// grid's all-day signal). Persists on both create + edit now that
 					// the endpoint binds `all_day` (C-CAL-LARGE-EDITOR).

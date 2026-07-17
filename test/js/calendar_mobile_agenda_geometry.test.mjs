@@ -79,6 +79,19 @@ test('agenda card: carries the [data-event-card] hook event_grid.js already wire
   );
 });
 
+test('agenda card inherits the C-CAL-UX-PAIR player gate-split: its click wiring runs BEFORE the Scribe-only drawer gate', () => {
+  // #544's cards use the same [data-event-card] click wiring as every other
+  // event chip, wired at the top of event_grid.js's init() so it runs for
+  // EVERY calendar member — the fix is generic to the selector, not agenda-
+  // specific, but this pins that the agenda card's own hooks (asserted
+  // above) actually sit inside that unconditional wiring's reach.
+  const cardWiring = eventGrid.indexOf("document.querySelectorAll('[data-event-card]').forEach(function (card) {");
+  const drawerGate = eventGrid.indexOf("document.getElementById('event-v2-drawer')");
+  assert.ok(cardWiring >= 0 && drawerGate >= 0, 'both markers present');
+  assert.ok(cardWiring < drawerGate,
+    'the [data-event-card] click wiring (which the agenda card rides) must run before the Scribe-only drawer gate, or players — including on the mobile agenda — lose tap-to-view');
+});
+
 test('agenda card actions are visible at rest — no hover-only/opacity-gated affordance (pointer:coarse)', () => {
   const fn = block(templ, 'templ mobileAgendaCard', '\ntempl ');
   assert.ok(!fn.includes('opacity-0'), 'agenda card must not hide its affordance behind opacity-0');
