@@ -1,0 +1,133 @@
+// calendar_v2_sky_strip.templ — the collapsible SKY strip (C-CAL-SKY-STRIP,
+// wave 7 slice 2). Sits between the command bar (calendarV2Header) and the
+// view grid (calendarV2View) in CalendarV2Page. Collapsed by default; the
+// row shows a compact glyph summary of data.WorldState (the same seed the
+// ambient band + skybox widget already consume — SSR here, no new fetch)
+// plus the Calendaria sync chip. The expanded pane mounts the #543 skybox
+// widget (data-widget="skybox") as a SECOND consumer, proving the widget's
+// reusability — see .ai.md "Footguns" for the one caveat this surfaced
+// (the shared engine binds its live canvas to the FIRST [data-cal-sky] on
+// the page; a second mount renders correctly SSR — gradient, labels, event
+// chips — but without live particle/moon animation until the engine itself
+// grows multi-instance support, which is out of this dispatch's scope).
+//
+// The Calendaria sync chip's data does NOT come from Go here (the calendar
+// plugin does not import foundry_vtt — T-B2 plugin isolation): the chip
+// renders a loading skeleton server-side and calendar_v2_shell.js fetches
+// the existing member-accessible GET /campaigns/:id/foundry-presence
+// (foundry_vtt/handler.go:81-97) client-side, computing display state via
+// the pure computeSyncChipState (same file, window.__calSkyStripSync test
+// seam) — no new endpoint needed (Step-0 finding, PR body).
+package calendar
+
+import "github.com/keyxmakerx/chronicle/internal/widgets/skybox"
+
+// calendarV2SkyStrip renders the strip. Nothing renders without an active
+// calendar (matching the header/view-switcher guard). Sub-sections degrade
+// independently: no worldstate seed → the glyph row shows "Clear skies"
+// instead of glyphs; the sync chip always starts as a loading skeleton the
+// client-side fetch replaces.
+templ calendarV2SkyStrip(data CalendarV2ViewData) {
+	if data.ActiveCalendar != nil {
+		<section
+			class="card card-elev-static mb-3 overflow-hidden"
+			data-cal-sky-strip
+			data-campaign-id={ data.CampaignID }
+		>
+			<div class="flex items-center gap-3 px-3 py-2">
+				<span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent flex-none">
+					<i class="fa-solid fa-moon" aria-hidden="true"></i>
+					Sky
+				</span>
+				<div class="flex items-center gap-3.5 overflow-x-auto flex-1 min-w-0" data-cal-sky-glyphs style="scrollbar-width:none">
+					@calendarV2SkyGlyphRow(data)
+				</div>
+				@calendarV2SyncChip(data)
+				<button
+					type="button"
+					class="flex-none text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-edge bg-surface text-fg-body hover:text-accent hover:border-accent/40 transition-colors duration-micro"
+					data-cal-sky-sync-now
+					aria-expanded="false"
+					aria-describedby="cal-sky-sync-help"
+				>
+					<i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+					<span class="hidden sm:inline ml-1">Sync now</span>
+				</button>
+				<button
+					type="button"
+					class="flex-none w-7 h-7 grid place-items-center rounded-lg text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors duration-micro"
+					data-cal-sky-strip-toggle
+					aria-expanded="false"
+					aria-controls="cal-sky-strip-pane"
+					aria-label="Expand sky panel"
+				>
+					<i class="fa-solid fa-chevron-down text-xs transition-transform duration-standard" data-cal-sky-chevron aria-hidden="true"></i>
+				</button>
+			</div>
+			<p id="cal-sky-sync-help" class="hidden px-3 pb-2 -mt-1 text-[11px] text-fg-muted" data-cal-sky-sync-help>
+				No module-triggerable push exists yet — run Sync in Foundry to push the latest date and events.
+			</p>
+			<div id="cal-sky-strip-pane" class="hidden border-t border-edge-light" data-cal-sky-strip-pane>
+				<div class="p-3">
+					<div class="relative w-full rounded-lg overflow-hidden" style="height:150px">
+						@skybox.Skybox(skyboxDataFor(data), CalAlmanacSunBody())
+					</div>
+					<div class="grid gap-2.5 mt-2.5" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+						for _, g := range skyStripAllGlyphs(data) {
+							@skyStripDetailCard(g)
+						}
+					</div>
+				</div>
+			</div>
+		</section>
+	}
+}
+
+// calendarV2SkyGlyphRow renders the collapsed row's glyph list, or a "Clear
+// skies" / "No sky data" fallback when nothing is active.
+templ calendarV2SkyGlyphRow(data CalendarV2ViewData) {
+	if !skyStripActive(data) {
+		<span class="text-xs text-fg-muted italic whitespace-nowrap" data-cal-sky-empty>No sky data</span>
+	} else if len(skyStripAllGlyphs(data)) == 0 {
+		<span class="text-xs text-fg-muted italic whitespace-nowrap" data-cal-sky-empty>Clear skies</span>
+	} else {
+		for _, g := range skyStripAllGlyphs(data) {
+			<span class="inline-flex items-center gap-1.5 text-xs font-semibold text-fg-body whitespace-nowrap">
+				<span class="text-sm" aria-hidden="true">{ g.Glyph }</span>
+				{ g.Label }
+				if g.Sub != "" {
+					<span class="text-[10.5px] font-medium text-fg-muted hidden md:inline">{ g.Sub }</span>
+				}
+			</span>
+		}
+	}
+}
+
+// skyStripDetailCard renders one card in the expanded pane's detail grid.
+templ skyStripDetailCard(g skyStripGlyph) {
+	<div class="border border-edge-light rounded-lg p-2.5 bg-surface">
+		<b class="flex items-center gap-1.5 text-xs font-bold">
+			<span aria-hidden="true">{ g.Glyph }</span>
+			{ g.Label }
+		</b>
+		if g.Sub != "" {
+			<p class="mt-1 text-[11px] text-fg-secondary">{ g.Sub }</p>
+		}
+	</div>
+}
+
+// calendarV2SyncChip renders the chip's loading skeleton. calendar_v2_shell.js
+// (wireSkyStrip) fetches GET /campaigns/:id/foundry-presence and replaces
+// this markup's text/color once the presence data resolves — see the
+// package doc comment above for why this is client-side, not server-side.
+templ calendarV2SyncChip(data CalendarV2ViewData) {
+	<span
+		class="flex-none inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full border border-edge bg-surface-alt text-fg-secondary animate-pulse"
+		data-cal-sky-sync-chip
+		aria-live="polite"
+	>
+		<span class="w-1.5 h-1.5 rounded-full bg-fg-muted flex-none" data-cal-sky-sync-dot aria-hidden="true"></span>
+		<span data-cal-sky-sync-word>Checking</span>
+		<span class="hidden sm:inline" data-cal-sky-sync-detail></span>
+	</span>
+}

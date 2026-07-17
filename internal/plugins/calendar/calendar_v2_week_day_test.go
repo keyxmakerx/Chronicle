@@ -7,6 +7,7 @@
 package calendar
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -295,6 +296,29 @@ func TestDayHourGridStyle_TwoColumnLayout(t *testing.T) {
 	got := dayHourGridStyle(data)
 	if !strings.Contains(got, "60px 1fr") {
 		t.Errorf("expected 2-column template; got %q", got)
+	}
+}
+
+// --- Item 0 regression: the operator's "all h's" bug ---
+
+// TestWeekView_NoStrayLoopVariableText pins C-CAL-SKY-STRIP item 0. The
+// background-hour-cell loop had a bare `_ = h` line (calendar_v2.templ,
+// present since #485) that was never wrapped in `{{ }}` — templ has no way
+// to read an un-delimited line as a no-op Go statement, so it emitted it as
+// literal HTML text once per hour cell (24 hours × 7 days = 168 times per
+// week render). A live headless-Chromium render of the real templ output
+// showed exactly this: a wall of repeated "_ = h" fragments squeezed into
+// the grid, reading as "all h's" — the operator's report. Reproduced,
+// fixed by deleting the line (h is already used by the div's own
+// attributes below it), and pinned here so the literal text can't recur.
+func TestWeekView_NoStrayLoopVariableText(t *testing.T) {
+	data := CalendarV2ViewData{ActiveCalendar: gregorian2026(), View: "week", Year: 2026, Month: 6, Day: 8}
+	var sb strings.Builder
+	if err := weekViewPlaceholder(data).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render week view: %v", err)
+	}
+	if strings.Contains(sb.String(), "_ = h") {
+		t.Errorf("week view output contains stray %q text — a loop-variable discard leaked as literal HTML (the \"all h's\" bug)", "_ = h")
 	}
 }
 

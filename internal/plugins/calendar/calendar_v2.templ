@@ -111,6 +111,16 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 					@gmControlPanelV2(data)
 				</div>
 				@calendarV2Header(cc, data)
+				// SKY strip (C-CAL-SKY-STRIP): between the command bar and the view
+				// grid, OUTSIDE #cal-v2-view-slot so it survives HTMX view swaps
+				// (month/week/day nav) instead of re-collapsing on every navigation.
+				// Same shared max-w-7xl gutter as the header + grid (the #539/#542
+				// precedent).
+				if data.ActiveCalendar != nil {
+					<div class="max-w-7xl mx-auto w-full px-4 md:px-6 pt-3">
+						@calendarV2SkyStrip(data)
+					</div>
+				}
 				<div id="cal-v2-view-slot" class="flex-1 overflow-y-auto">
 					@calendarV2View(cc, data)
 				</div>
@@ -555,12 +565,13 @@ templ calendarV2ViewSwitcher(cc *campaigns.CampaignContext, data CalendarV2ViewD
 
 templ calendarV2ViewPill(data CalendarV2ViewData, view, label string) {
 	if data.View == view {
-		// Active pill reads the surface-pair primary (C-ACCENT-TRIO rev 2 —
-		// first content-surface consumer); the var() fallback chain keeps
-		// campaigns without surface accents rendering exactly as before.
+		// Active pill reads the App-accent slot first (C-ACCENT-SLOTS #541
+		// booked follow-up — the calendar app rail is a slot-3 "App accent"
+		// consumer), falling through the same surface-pair chain as before
+		// so campaigns without an app accent set render exactly as before.
 		<span
 			class="px-3 py-1 text-xs font-medium text-white"
-			style="background: var(--color-accent-surface-1, var(--color-accent, #6366f1));"
+			style="background: var(--color-accent-app, var(--color-accent-surface-1, var(--color-accent, #6366f1)));"
 			role="tab"
 			aria-selected="true"
 		>{ label }</span>
@@ -806,7 +817,6 @@ templ weekViewPlaceholder(data CalendarV2ViewData) {
 					if wd.Day != 0 {
 						// Background hour cells for this column.
 						for _, h := range hourRows(data.ActiveCalendar) {
-							_ = h
 							<div
 								class={ "border-t border-edge/20 cell-drop-target", weekHourCellClasses(wd) }
 								style={ "grid-column: " + intStr(i+2) + "; grid-row: " + intStr(h+2) + ";" }
