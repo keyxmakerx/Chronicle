@@ -217,6 +217,88 @@ templ AccentColorPicker(campaignID string, currentColor string, csrfToken string
 	</div>
 }
 
+// semanticAccentPicker renders one of the two NEW C-ACCENT-SLOTS pickers
+// (Action highlight / App accent): the same preset-swatch + reset +
+// custom-picker layout as the Site accent card above, parameterized by slot
+// key so the two cards don't duplicate ~70 lines of markup. Buttons carry
+// data-slot-color (not a per-slot attribute name — the container's id
+// disambiguates which picker a click belongs to) and are wired by
+// appearance_editor.js's staged draft/save flow, NOT the legacy Surface
+// Accents card's direct-PUT-per-click pattern below.
+templ semanticAccentPicker(slotKey, label, hint, current string) {
+	<div class="card p-4 mb-4">
+		<h3 class="text-sm font-semibold text-fg mb-2">
+			<i class="fa-solid fa-palette text-xs mr-1.5 text-fg-muted"></i> { label }
+		</h3>
+		<p class="text-xs text-fg-secondary mb-3">{ hint }</p>
+		<div id={ "appearance-" + slotKey + "-colors" } class="space-y-3">
+			<div class="flex flex-wrap gap-2">
+				for _, preset := range accentColorPresets {
+					if current == preset.Color {
+						<button
+							type="button"
+							data-slot-color={ preset.Color }
+							class="w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0"
+							style={ fmt.Sprintf("background-color: %s", preset.Color) }
+							title={ preset.Name }
+						></button>
+					} else {
+						<button
+							type="button"
+							data-slot-color={ preset.Color }
+							class="w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0"
+							style={ fmt.Sprintf("background-color: %s", preset.Color) }
+							title={ preset.Name }
+						></button>
+					}
+				}
+				// Reset to default button.
+				if current == "" {
+					<button
+						type="button"
+						data-slot-color=""
+						class="w-8 h-8 rounded-full border-2 border-dashed border-fg ring-2 ring-offset-2 ring-offset-surface ring-fg flex items-center justify-center transition-colors shrink-0"
+						title="Reset to default"
+					>
+						<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
+					</button>
+				} else {
+					<button
+						type="button"
+						data-slot-color=""
+						class="w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0"
+						title="Reset to default"
+					>
+						<i class="fa-solid fa-xmark text-[10px] text-fg-muted"></i>
+					</button>
+				}
+				<!-- Custom color picker -->
+				<div class="flex items-center gap-2 ml-2 pl-2 border-l border-edge">
+					<input
+						type="color"
+						id={ "appearance-" + slotKey + "-custom" }
+						class="w-8 h-8 rounded-full border border-edge cursor-pointer"
+						if current != "" {
+							value={ current }
+						} else {
+							value="#6366f1"
+						}
+						title="Pick a custom color"
+					/>
+					<span class="text-[10px] text-fg-muted">Custom</span>
+				</div>
+			</div>
+			<p class="text-[10px] text-fg-muted" id={ "appearance-" + slotKey + "-label" }>
+				if current != "" {
+					Current: { current }
+				} else {
+					Using default theme color
+				}
+			</p>
+		</div>
+	</div>
+}
+
 // surfaceAccentRow renders one surface-accent slot row (C-ACCENT-TRIO rev 2):
 // the shared preset circles, a reset, and a custom picker. Buttons carry
 // data-surface-slot/-color and are wired by the script in the parent card —
@@ -297,6 +379,8 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 		data-brand-name={ cc.Campaign.ParseSettings().BrandName }
 		data-brand-logo={ cc.Campaign.ParseSettings().BrandLogo }
 		data-accent-color={ cc.Campaign.ParseSettings().AccentColor }
+		data-accent-action={ cc.Campaign.ParseSettings().AccentAction }
+		data-accent-app={ cc.Campaign.ParseSettings().AccentApp }
 		data-topbar-style={ topbarStyleJSON(cc.Campaign.ParseSettings().TopbarStyle) }
 		data-topbar-content={ topbarContentJSON(cc.Campaign.ParseSettings().TopbarContent) }
 		data-font-family={ cc.Campaign.ParseSettings().FontFamily }
@@ -466,12 +550,15 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 
-		<!-- Accent color (JS-driven, no server calls until Save) -->
+		<!-- Site accent (C-ACCENT-SLOTS semantic slot 1 — the operator's
+		     corrected mapping: "overall feel", unchanged mechanism/field from
+		     before this dispatch, relabeled). JS-driven, no server calls
+		     until Save. -->
 		<div class="card p-4 mb-4">
 			<h3 class="text-sm font-semibold text-fg mb-2">
-				<i class="fa-solid fa-droplet text-xs mr-1.5 text-fg-muted"></i> Accent Color
+				<i class="fa-solid fa-droplet text-xs mr-1.5 text-fg-muted"></i> Site accent — overall feel
 			</h3>
-			<p class="text-xs text-fg-secondary mb-3">Theme color used for buttons, links, and highlights.</p>
+			<p class="text-xs text-fg-secondary mb-3">Nav, links, selection, today ring — the theme color used across the whole campaign.</p>
 			<div id="appearance-accent-colors" class="space-y-3">
 				<div class="flex flex-wrap gap-2">
 					for _, preset := range accentColorPresets {
@@ -539,29 +626,49 @@ templ appearanceTab(cc *CampaignContext, csrfToken string) {
 			</div>
 		</div>
 
+		<!-- Action highlight + App accent (C-ACCENT-SLOTS semantic slots 2+3,
+		     operator-corrected mapping). Both ride this widget's staged
+		     draft/save flow (wired in appearance_editor.js), same as Site
+		     accent above — unlike the legacy Surface Accents card below. -->
+		@semanticAccentPicker("action", "Action highlight — buttons & presses", "Primary buttons, hover/press states, and FABs. Leave unset to follow the Site accent above.", cc.Campaign.ParseSettings().AccentAction)
+		@semanticAccentPicker("app", "App accent — character pages & apps", "Per-app identity color. Live on the character-header sample below; individual app pages adopt it over time. Leave unset to follow the Surface Accents pair below, then the Site accent.", cc.Campaign.ParseSettings().AccentApp)
+
 		<!-- Surface accents (C-ACCENT-TRIO rev 2 / design D14 rev): two extra
 		     accent slots consumed by themed CONTENT surfaces (character page
 		     first) as primary/secondary. Unlike the main accent above these
 		     save immediately per click (the AccentColorPicker direct-PUT
 		     precedent) — they are additive slots, not part of the staged
-		     Save-bar flow. Unset slots inherit Accent 1 via CSS fallback. -->
+		     Save-bar flow. Unset slots inherit Accent 1 via CSS fallback.
+		     C-ACCENT-SLOTS Step-0: kept exactly as-is (map, don't delete) —
+		     this is the legacy vocabulary the new App accent picker above
+		     falls back through (surface-1 = "the optional 4th slot" concept
+		     the dispatch defaults to slot 3 when an app has no second
+		     identity color). The D19 sample below now prefers the new App
+		     accent when set, so it also serves as C-ACCENT-SLOTS' one
+		     "character-sheet" exemplar surface. -->
 		<div class="card p-4 mb-4" id="appearance-surface-accents" data-csrf={ csrfToken } data-campaign-id={ cc.Campaign.ID }>
 			<h3 class="text-sm font-semibold text-fg mb-2">
 				<i class="fa-solid fa-palette text-xs mr-1.5 text-fg-muted"></i> Surface Accents
 			</h3>
-			<p class="text-xs text-fg-secondary mb-3">Two extra colors used by content pages (like character sheets) as primary and secondary. Leave unset to follow the Accent Color above.</p>
+			<p class="text-xs text-fg-secondary mb-3">Two extra colors used by content pages (like character sheets) as primary and secondary. Leave unset to follow the Site accent above (or the App accent above, once set).</p>
 			@surfaceAccentRow(1, "Surface A · primary", cc.Campaign.ParseSettings().AccentSurface1)
 			@surfaceAccentRow(2, "Surface B · secondary", cc.Campaign.ParseSettings().AccentSurface2)
 			<!-- D19 live sample: a mini content-surface card driven by the
-			     surface tokens so owners see the pair applied, not a swatch. -->
+			     surface tokens so owners see the pair applied, not a swatch.
+			     Primary swatch now prefers the app accent custom property
+			     first (the new slot), falling through to the legacy
+			     surface-1 then site accent — the same fallback chain as the
+			     App accent picker's Tailwind utility, kept consistent by
+			     hand since this sample uses inline style="" rather than a
+			     Tailwind class. -->
 			<div class="mt-3 rounded-lg border border-edge overflow-hidden">
-				<div class="px-3 py-2 flex items-center justify-between" style="background: var(--color-accent-surface-1, var(--color-accent, #6366f1)); color: #fff;">
+				<div class="px-3 py-2 flex items-center justify-between" style="background: var(--color-accent-app, var(--color-accent-surface-1, var(--color-accent, #6366f1))); color: #fff;">
 					<span class="text-xs font-semibold">Sera Windrose</span>
 					<span class="text-[10px] px-2 py-0.5 rounded-full" style="background: var(--color-accent-surface-2, var(--color-accent-light, rgba(255,255,255,.25))); color: #1c2130;">Level 6 · Ranger</span>
 				</div>
 				<div class="px-3 py-2 bg-surface-alt flex items-center gap-2">
 					<span class="text-[10px] text-fg-muted">Sample character header —</span>
-					<span class="text-[10px] font-medium" style="color: var(--color-accent-surface-1, var(--color-accent, #6366f1));">primary</span>
+					<span class="text-[10px] font-medium" style="color: var(--color-accent-app, var(--color-accent-surface-1, var(--color-accent, #6366f1)));">primary</span>
 					<span class="text-[10px] font-medium" style="color: var(--color-accent-surface-2, var(--color-accent-hover, #6366f1));">secondary</span>
 				</div>
 			</div>

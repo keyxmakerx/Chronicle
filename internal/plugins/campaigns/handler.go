@@ -635,9 +635,12 @@ func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
 	}
 
-	// Optional slot selects a surface-pair accent (C-ACCENT-TRIO rev 2):
-	// "" = the chrome accent (legacy behavior, unchanged), "1"/"2" = the
-	// surface pair. Extending this endpoint instead of adding a route keeps
+	// Optional slot selects which accent this write targets: "" = the site
+	// accent (legacy chrome, unchanged), "1"/"2" = the legacy surface pair
+	// (C-ACCENT-TRIO rev 2, kept for back-compat), "action"/"app" = the two
+	// new semantic slots (C-ACCENT-SLOTS). String keys for the new slots
+	// avoid colliding with the pre-existing numeric surface-pair values.
+	// Extending this endpoint instead of adding a route keeps
 	// routes_snapshot.txt untouched.
 	slot := c.FormValue("slot")
 	switch slot {
@@ -653,8 +656,16 @@ func (h *Handler) UpdateAccentColorAPI(c echo.Context) error {
 		if err := h.service.UpdateAccentSurface(c.Request().Context(), cc.Campaign.ID, slotNum, color); err != nil {
 			return err
 		}
+	case "action":
+		if err := h.service.UpdateAccentAction(c.Request().Context(), cc.Campaign.ID, color); err != nil {
+			return err
+		}
+	case "app":
+		if err := h.service.UpdateAccentApp(c.Request().Context(), cc.Campaign.ID, color); err != nil {
+			return err
+		}
 	default:
-		return apperror.NewBadRequest("invalid accent slot, expected 1 or 2")
+		return apperror.NewBadRequest("invalid accent slot, expected 1, 2, action, or app")
 	}
 
 	h.logAudit(c, cc.Campaign.ID, "campaign.accent_color.updated", map[string]any{"color": color, "slot": slot})

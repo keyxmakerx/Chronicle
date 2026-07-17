@@ -11,6 +11,10 @@
  *   data-brand-name   -- Current brand name (may be empty)
  *   data-brand-logo   -- Current brand logo path (may be empty)
  *   data-accent-color -- Current accent color hex (may be empty)
+ *   data-accent-action -- Current action-highlight accent hex (C-ACCENT-SLOTS
+ *                          slot 2 -- primary buttons, hover/press, FABs; may be empty)
+ *   data-accent-app    -- Current app-identity accent hex (C-ACCENT-SLOTS
+ *                          slot 3 -- character pages, calendar app; may be empty)
  *   data-topbar-style -- Current topbar style JSON (default "{}")
  */
 (function () {
@@ -39,6 +43,12 @@
       var saved = {
         brandName: config.brandName || '',
         accentColor: config.accentColor || '',
+        // C-ACCENT-SLOTS: the two new semantic slots (Action highlight,
+        // App accent). Read from the data-accent-action/-app attributes;
+        // config keys are the camelCase form of the dash-case data attrs
+        // (Chronicle.register's config parser convention, same as accentColor).
+        accentAction: config.accentAction || '',
+        accentApp: config.accentApp || '',
         fontFamily: config.fontFamily || '',
         topbarStyle: { mode: '', color: '', gradient_from: '', gradient_to: '', gradient_dir: 'to-r', image_path: '' },
         topbarContent: { mode: 'none', links: [], quote: '' }
@@ -68,6 +78,8 @@
       var draft = {
         brandName: saved.brandName,
         accentColor: saved.accentColor,
+        accentAction: saved.accentAction,
+        accentApp: saved.accentApp,
         fontFamily: saved.fontFamily,
         topbarStyle: {
           mode: saved.topbarStyle.mode || '',
@@ -114,6 +126,11 @@
       var accentLabel = el.querySelector('#appearance-accent-label');
 
       // Preview elements for live accent/font/backdrop updates.
+      // Adoption pass (C-ACCENT-SLOTS scope item 2): the preview's primary
+      // button follows the ACTION slot (mirrors the real .btn-primary CSS
+      // swap in input.css) and the "Characters" category chip follows the
+      // APP slot (the one exemplar "character page" surface in this preview)
+      // instead of both trailing the site accent like every other element.
       var previewBtnPrimary = el.querySelector('#appearance-preview-btn-primary');
       var previewLink = el.querySelector('#appearance-preview-link');
       var previewBadge = el.querySelector('#appearance-preview-badge');
@@ -170,6 +187,8 @@
       function isDirty() {
         return draft.brandName !== saved.brandName ||
                draft.accentColor !== saved.accentColor ||
+               draft.accentAction !== saved.accentAction ||
+               draft.accentApp !== saved.accentApp ||
                draft.fontFamily !== saved.fontFamily ||
                draft.topbarStyle.mode !== (saved.topbarStyle.mode || '') ||
                draft.topbarStyle.color !== (saved.topbarStyle.color || '') ||
@@ -276,6 +295,86 @@
           accentLabel.textContent = selectedColor ? 'Selected: ' + selectedColor : 'Using default theme color';
         }
       }
+
+      // --- Action highlight + App accent (C-ACCENT-SLOTS slots 2+3) ---
+      //
+      // Both pickers share this generic wiring (unlike the bespoke Site
+      // accent block above, which predates this dispatch and is left
+      // untouched) since their swatch/reset/custom-picker markup and click
+      // behavior are identical, just scoped to a different container id and
+      // draft field. Returns a highlight(color) function so callers can
+      // re-sync the swatch ring when the value changes from elsewhere (e.g.
+      // the reset happens through the custom color input).
+      function wireSemanticSlotPicker(containerId, customId, labelId, getDraft, setDraft, onChange) {
+        var container = el.querySelector('#' + containerId);
+        var custom = el.querySelector('#' + customId);
+        var label = el.querySelector('#' + labelId);
+
+        function highlight(selectedColor) {
+          if (!container) return;
+          var buttons = container.querySelectorAll('button[data-slot-color]');
+          for (var j = 0; j < buttons.length; j++) {
+            var btn = buttons[j];
+            var btnColor = btn.getAttribute('data-slot-color');
+            var isReset = btnColor === '';
+            if (btnColor === selectedColor) {
+              btn.className = isReset
+                ? 'w-8 h-8 rounded-full border-2 border-dashed border-fg ring-2 ring-offset-2 ring-offset-surface ring-fg flex items-center justify-center transition-colors shrink-0'
+                : 'w-8 h-8 rounded-full border-2 border-white ring-2 ring-offset-2 ring-offset-surface ring-fg transition-transform hover:scale-110 shrink-0';
+            } else {
+              btn.className = isReset
+                ? 'w-8 h-8 rounded-full border-2 border-dashed border-edge flex items-center justify-center hover:border-fg-muted transition-colors shrink-0'
+                : 'w-8 h-8 rounded-full border-2 border-transparent hover:border-white/50 transition-transform hover:scale-110 shrink-0';
+            }
+          }
+          if (label) {
+            label.textContent = selectedColor ? 'Current: ' + selectedColor : 'Using default theme color';
+          }
+        }
+
+        if (container) {
+          var buttons = container.querySelectorAll('button[data-slot-color]');
+          for (var i = 0; i < buttons.length; i++) {
+            buttons[i].addEventListener('click', function () {
+              var color = this.getAttribute('data-slot-color');
+              setDraft(color);
+              highlight(color);
+              // Keep the native color-input swatch in sync in both
+              // directions: a preset shows its own color, Reset shows the
+              // templ-rendered default rather than the last custom value
+              // (otherwise the swatch visually contradicts the "Using
+              // default theme color" label right below it).
+              if (custom) custom.value = color || '#6366f1';
+              onChange(color);
+              updateSaveBar();
+            });
+          }
+        }
+        if (custom) {
+          custom.addEventListener('input', function () {
+            setDraft(this.value);
+            highlight(this.value);
+            onChange(this.value);
+            updateSaveBar();
+          });
+        }
+
+        highlight(getDraft());
+        return highlight;
+      }
+
+      wireSemanticSlotPicker(
+        'appearance-action-colors', 'appearance-action-custom', 'appearance-action-label',
+        function () { return draft.accentAction; },
+        function (v) { draft.accentAction = v; },
+        function () { updateActionPreview(); }
+      );
+      wireSemanticSlotPicker(
+        'appearance-app-colors', 'appearance-app-custom', 'appearance-app-label',
+        function () { return draft.accentApp; },
+        function (v) { draft.accentApp = v; },
+        function () { updateAppPreview(); }
+      );
 
       // --- Font Family Buttons ---
 
@@ -471,6 +570,8 @@
                 // Update saved state to match draft.
                 saved.brandName = draft.brandName;
                 saved.accentColor = draft.accentColor;
+                saved.accentAction = draft.accentAction;
+                saved.accentApp = draft.accentApp;
                 saved.fontFamily = draft.fontFamily;
                 saved.topbarStyle = {
                   mode: draft.topbarStyle.mode,
@@ -486,8 +587,12 @@
                   quote: draft.topbarContent.quote
                 };
                 updateSaveBar();
-                // Apply accent color to page CSS custom properties live.
-                applyAccentToPage(draft.accentColor);
+                // Apply all three accent slots to page CSS custom properties
+                // live (no reload — T-B3), so the change is visible site-wide
+                // immediately, not just in this tab's preview.
+                applySlotToPage('--color-accent', draft.accentColor);
+                applySlotToPage('--color-accent-action', draft.accentAction);
+                applySlotToPage('--color-accent-app', draft.accentApp);
                 Chronicle.notify('Appearance saved', 'success');
               }
             }
@@ -515,6 +620,41 @@
             Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
               method: 'PUT',
               body: 'accent_color=' + encodeURIComponent(draft.accentColor),
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              csrfToken: csrfToken
+            }).then(function (res) {
+              if (!res.ok) { failed = true; }
+              onComplete();
+            }).catch(function () {
+              failed = true;
+              onComplete();
+            });
+          }
+
+          // Save action highlight if changed (C-ACCENT-SLOTS slot 2, same
+          // endpoint + form-encoded shape as the site accent, routed by slot).
+          if (draft.accentAction !== saved.accentAction) {
+            pending++;
+            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+              method: 'PUT',
+              body: 'accent_color=' + encodeURIComponent(draft.accentAction) + '&slot=action',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              csrfToken: csrfToken
+            }).then(function (res) {
+              if (!res.ok) { failed = true; }
+              onComplete();
+            }).catch(function () {
+              failed = true;
+              onComplete();
+            });
+          }
+
+          // Save app accent if changed (C-ACCENT-SLOTS slot 3).
+          if (draft.accentApp !== saved.accentApp) {
+            pending++;
+            Chronicle.apiFetch('/campaigns/' + campaignId + '/accent-color', {
+              method: 'PUT',
+              body: 'accent_color=' + encodeURIComponent(draft.accentApp) + '&slot=app',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
               csrfToken: csrfToken
             }).then(function (res) {
@@ -661,15 +801,17 @@
       }
 
       /**
-       * Update all accent-colored elements in the preview.
+       * Update all SITE-accent-colored elements in the preview (C-ACCENT-SLOTS
+       * slot 1). The primary button and "Characters" category chip are no
+       * longer driven here — they follow the Action and App slots
+       * respectively (see updateActionPreview/updateAppPreview below), which
+       * this function re-triggers at the end so their site-accent fallback
+       * stays in sync whenever the site accent itself changes.
        */
       function updateAccentPreview(color) {
         var accent = color || '#6366f1'; // fallback to default indigo
         var accentLight = accent + '20'; // 12% opacity for backgrounds
 
-        if (previewBtnPrimary) {
-          previewBtnPrimary.style.backgroundColor = accent;
-        }
         if (previewLink) {
           previewLink.style.color = accent;
         }
@@ -684,14 +826,42 @@
           previewSidebarActive.style.backgroundColor = '#2d2f3a';
           previewSidebarActive.style.borderLeft = '2px solid ' + accent;
         }
-        // Category icon circles.
-        var catEls = [previewCat1, previewCat2, previewCat3];
+        // Category icon circles (Characters/cat1 excluded — App accent owns it).
+        var catEls = [previewCat2, previewCat3];
         for (var i = 0; i < catEls.length; i++) {
           if (catEls[i]) {
             catEls[i].style.backgroundColor = accentLight;
             catEls[i].style.color = accent;
           }
         }
+
+        updateActionPreview();
+        updateAppPreview();
+      }
+
+      /**
+       * Update the preview's primary button — C-ACCENT-SLOTS slot 2 (Action
+       * highlight). Unset falls back to the draft site accent, mirroring the
+       * var(--color-accent-action, var(--color-accent, ...)) chain the real
+       * .btn-primary CSS uses (input.css).
+       */
+      function updateActionPreview() {
+        if (!previewBtnPrimary) return;
+        previewBtnPrimary.style.backgroundColor = draft.accentAction || draft.accentColor || '#6366f1';
+      }
+
+      /**
+       * Update the preview's "Characters" category chip — C-ACCENT-SLOTS
+       * slot 3 (App accent), the character-pages/calendar-app identity slot.
+       * Unset falls back to the draft site accent (a two-level simplification
+       * of the real fallback chain, which also passes through the legacy
+       * surface-1 accent — the preview has no wiring for that legacy value).
+       */
+      function updateAppPreview() {
+        if (!previewCat1) return;
+        var app = draft.accentApp || draft.accentColor || '#6366f1';
+        previewCat1.style.backgroundColor = app + '20';
+        previewCat1.style.color = app;
       }
 
       /**
@@ -769,19 +939,27 @@
       }
 
       /**
-       * Apply accent color to the page's CSS custom properties so the change
-       * is visible site-wide without a full page reload.
+       * Apply one accent slot's color to the page's CSS custom properties so
+       * the change is visible site-wide without a full page reload. varPrefix
+       * is the base custom property name (e.g. "--color-accent",
+       * "--color-accent-action", "--color-accent-app" — C-ACCENT-SLOTS
+       * generalized this from the single site-accent-only original so all
+       * three slots apply live on save the same way). An empty hex removes
+       * the inline override entirely — for the two new slots this correctly
+       * hands control back to their var() fallback chain (Tailwind config +
+       * inline style="" consumers), which is exactly the "unset = inherit"
+       * contract; there is no static input.css default to fall back to for
+       * these two, unlike the site slot.
        */
-      function applyAccentToPage(hex) {
+      function applySlotToPage(varPrefix, hex) {
         var root = document.documentElement;
         if (!hex) {
-          // Reset to defaults (indigo-500).
-          root.style.removeProperty('--color-accent');
-          root.style.removeProperty('--color-accent-hover');
-          root.style.removeProperty('--color-accent-light');
-          root.style.removeProperty('--color-accent-rgb');
-          root.style.removeProperty('--color-accent-hover-rgb');
-          root.style.removeProperty('--color-accent-light-rgb');
+          root.style.removeProperty(varPrefix);
+          root.style.removeProperty(varPrefix + '-hover');
+          root.style.removeProperty(varPrefix + '-light');
+          root.style.removeProperty(varPrefix + '-rgb');
+          root.style.removeProperty(varPrefix + '-hover-rgb');
+          root.style.removeProperty(varPrefix + '-light-rgb');
           return;
         }
         var r = parseInt(hex.slice(1, 3), 16);
@@ -789,21 +967,21 @@
         var b = parseInt(hex.slice(5, 7), 16);
         if (isNaN(r)) return;
         // Base color as RGB triplet for Tailwind.
-        root.style.setProperty('--color-accent', hex);
+        root.style.setProperty(varPrefix, hex);
         // Hover: darken by ~12%.
         var hr = Math.max(0, Math.min(255, Math.round(r * 0.88)));
         var hg = Math.max(0, Math.min(255, Math.round(g * 0.88)));
         var hb = Math.max(0, Math.min(255, Math.round(b * 0.88)));
-        root.style.setProperty('--color-accent-hover', '#' + toHex(hr) + toHex(hg) + toHex(hb));
+        root.style.setProperty(varPrefix + '-hover', '#' + toHex(hr) + toHex(hg) + toHex(hb));
         // Light: blend toward white by ~60%.
         var lr = Math.max(0, Math.min(255, Math.round(r + (255 - r) * 0.6)));
         var lg = Math.max(0, Math.min(255, Math.round(g + (255 - g) * 0.6)));
         var lb = Math.max(0, Math.min(255, Math.round(b + (255 - b) * 0.6)));
-        root.style.setProperty('--color-accent-light', '#' + toHex(lr) + toHex(lg) + toHex(lb));
-        // RGB triplets for Tailwind's color-accent utilities (bg-accent, text-accent, etc.)
-        root.style.setProperty('--color-accent-rgb', r + ' ' + g + ' ' + b);
-        root.style.setProperty('--color-accent-hover-rgb', hr + ' ' + hg + ' ' + hb);
-        root.style.setProperty('--color-accent-light-rgb', lr + ' ' + lg + ' ' + lb);
+        root.style.setProperty(varPrefix + '-light', '#' + toHex(lr) + toHex(lg) + toHex(lb));
+        // RGB triplets for Tailwind's color utilities (bg-accent, bg-action, bg-app, etc.)
+        root.style.setProperty(varPrefix + '-rgb', r + ' ' + g + ' ' + b);
+        root.style.setProperty(varPrefix + '-hover-rgb', hr + ' ' + hg + ' ' + hb);
+        root.style.setProperty(varPrefix + '-light-rgb', lr + ' ' + lg + ' ' + lb);
       }
 
       function toHex(n) {

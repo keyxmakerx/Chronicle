@@ -549,18 +549,61 @@ func GetAccentColor(ctx context.Context) string {
 	return color
 }
 
+// keyAccentAction/keyAccentApp hold the campaign's two NEW semantic accent
+// slots (C-ACCENT-SLOTS, operator-corrected mapping): slot 2 "Action
+// highlight" (primary buttons, hover/press, FABs — no prior trio analog) and
+// slot 3 "App accent" (per-app identity — character pages, calendar app).
+// Site accent (slot 1) is unchanged: it's the existing keyAccentColor above.
+const (
+	keyAccentAction ctxKey = "layout_accent_action"
+	keyAccentApp    ctxKey = "layout_accent_app"
+)
+
+// SetAccentAction stores the campaign's action-highlight accent in the context.
+func SetAccentAction(ctx context.Context, color string) context.Context {
+	return context.WithValue(ctx, keyAccentAction, color)
+}
+
+// GetAccentAction returns the campaign's action-highlight accent, or empty
+// string when unset (consumers then inherit the site accent via CSS fallback).
+func GetAccentAction(ctx context.Context) string {
+	color, _ := ctx.Value(keyAccentAction).(string)
+	return color
+}
+
+// SetAccentApp stores the campaign's app-identity accent in the context.
+func SetAccentApp(ctx context.Context, color string) context.Context {
+	return context.WithValue(ctx, keyAccentApp, color)
+}
+
+// GetAccentApp returns the campaign's app-identity accent, or empty string
+// when unset (consumers then inherit the legacy surface-1 accent, then the
+// site accent, via CSS fallback chains).
+func GetAccentApp(ctx context.Context) string {
+	color, _ := ctx.Value(keyAccentApp).(string)
+	return color
+}
+
 // AccentColorCSS returns a CSS block that overrides the accent color custom
 // properties. It computes hover (darker) and light (lighter) variants from the
 // base hex color. Returns empty string if no accent is set.
 func AccentColorCSS(ctx context.Context) string {
-	// Chrome slot (slot 1). Its emission is byte-identical to the pre-trio
-	// implementation — campaigns that never touch the surface pair must render
-	// EXACTLY the CSS they rendered before (pinned by TestAccentColorCSS_*).
+	// Site slot (semantic slot 1 — today's "chrome"). Its emission is
+	// byte-identical to the pre-trio implementation — campaigns that never
+	// touch the other slots must render EXACTLY the CSS they rendered before
+	// (pinned by TestAccentColorCSS_*).
 	css := accentSlotCSS("--color-accent", GetAccentColor(ctx))
-	// Surface pair (slots 2+3, C-ACCENT-TRIO rev 2). Unset slots emit nothing —
+	// Legacy surface pair (C-ACCENT-TRIO rev 2). Unset slots emit nothing —
 	// consumers inherit chrome via var(--color-accent-surface-N, var(--color-accent)).
+	// Kept as-is (C-ACCENT-SLOTS Step-0: map onto the new slots, don't delete).
 	css += accentSlotCSS("--color-accent-surface-1", GetAccentSurface(ctx, 1))
 	css += accentSlotCSS("--color-accent-surface-2", GetAccentSurface(ctx, 2))
+	// New semantic slots (C-ACCENT-SLOTS). Unset emits nothing; consumers'
+	// var() fallback chains (and the Tailwind action/app tokens) resolve
+	// through the legacy trio down to the site accent, so this is additive —
+	// it never changes the bytes emitted above.
+	css += accentSlotCSS("--color-accent-action", GetAccentAction(ctx))
+	css += accentSlotCSS("--color-accent-app", GetAccentApp(ctx))
 	return css
 }
 

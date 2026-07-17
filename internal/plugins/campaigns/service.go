@@ -55,6 +55,13 @@ type CampaignService interface {
 	// UpdateAccentSurface sets a surface-pair accent (slot 1 or 2, C-ACCENT-TRIO
 	// rev 2); empty color resets the slot to inherit the chrome accent.
 	UpdateAccentSurface(ctx context.Context, campaignID string, slot int, color string) error
+	// UpdateAccentAction sets the campaign's semantic slot 2 "Action highlight"
+	// accent (C-ACCENT-SLOTS); empty resets the slot to inherit the site accent.
+	UpdateAccentAction(ctx context.Context, campaignID string, color string) error
+	// UpdateAccentApp sets the campaign's semantic slot 3 "App accent"
+	// (C-ACCENT-SLOTS); empty resets the slot to inherit the legacy surface
+	// pair, then the site accent.
+	UpdateAccentApp(ctx context.Context, campaignID string, color string) error
 	// UpdateBranding sets the campaign's custom brand name and logo path.
 	UpdateBranding(ctx context.Context, campaignID, brandName, brandLogo string) error
 	// UpdateTopbarStyle sets the campaign's topbar visual customization.
@@ -788,6 +795,60 @@ func (s *campaignService) UpdateAccentSurface(ctx context.Context, campaignID st
 	} else {
 		settings.AccentSurface2 = color
 	}
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// UpdateAccentAction sets the campaign's semantic slot 2 "Action highlight"
+// accent (C-ACCENT-SLOTS): primary buttons, hover/press states, FABs. Same
+// contract as UpdateAccentColor: hex color string or empty to reset (the
+// action highlight then inherits the site accent via CSS fallback at
+// consumers). Load-merge-write on settings JSON.
+func (s *campaignService) UpdateAccentAction(ctx context.Context, campaignID string, color string) error {
+	// Same strict #RRGGBB validation as the other accent slots (empty resets).
+	if color != "" && !isValidHexColor(color) {
+		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
+	}
+
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	settings.AccentAction = color
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+
+	return s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON))
+}
+
+// UpdateAccentApp sets the campaign's semantic slot 3 "App accent"
+// (C-ACCENT-SLOTS): per-app identity for character pages, the calendar app,
+// and other apps. Same contract as UpdateAccentColor: hex color string or
+// empty to reset (the app accent then inherits the legacy surface-pair
+// primary, then the site accent, via CSS fallback at consumers).
+// Load-merge-write on settings JSON.
+func (s *campaignService) UpdateAccentApp(ctx context.Context, campaignID string, color string) error {
+	if color != "" && !isValidHexColor(color) {
+		return apperror.NewBadRequest("invalid color format, expected #RRGGBB")
+	}
+
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	settings := campaign.ParseSettings()
+	settings.AccentApp = color
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
