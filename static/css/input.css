@@ -47,6 +47,18 @@
 }
 /* ============================================================ */
 
+/* Touch affordance reveal — C-CAL-DESIGN-PASS-1 §4.
+   On coarse pointers (touch) there is no hover, so any month-surface control
+   that is only hover-revealed on desktop (today: the scribe add-affordance)
+   must be visible AT REST. Elements opt in with `.cal-touch-reveal`; the cell
+   tap itself already opens the day popover (data-day-cell in event-grid /
+   shell JS). Kept UNLAYERED so it beats the layered `opacity-50` utility
+   without needing !important (unlayered styles win over any @layer). */
+@media (pointer: coarse) {
+  .cal-touch-reveal { opacity: 1; }
+}
+/* ============================================================ */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

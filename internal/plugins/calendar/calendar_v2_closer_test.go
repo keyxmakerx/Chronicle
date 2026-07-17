@@ -195,14 +195,35 @@ func TestMonthGrid_WeekdayAlignment_June2026(t *testing.T) {
 // TestMonthDayClasses_TodayNotBlank (C-CAL-V2-MONTH-GRID-ALIGN-FIX #2): the
 // today cell must NOT carry `today-pulse` — that keyframe ends at opacity:0 with
 // fill-mode:both, which (applied to the cell) made the today cell render blank.
-// The static ring/tint marks today while keeping the number legible.
+//
+// C-CAL-DESIGN-PASS-1 §3: the strong today MARKER now lives on the day NUMBER
+// (an accent pill in a fixed 22px box, monthDayNumberClasses) rather than a
+// whole-cell ring; the cell keeps only a faint accent wash (a pure repaint,
+// no ring, no layout shift). Assert the number carries the marker and the cell
+// no longer rings.
 func TestMonthDayClasses_TodayNotBlank(t *testing.T) {
 	cls := monthDayClasses(CalendarV2ViewData{}, monthDay{Day: 8, IsToday: true})
 	if strings.Contains(cls, "today-pulse") {
 		t.Errorf("today cell must not use today-pulse (fades to opacity:0); got %q", cls)
 	}
-	if !strings.Contains(cls, "ring-accent") {
-		t.Errorf("today cell should still carry a visible marker; got %q", cls)
+	if !strings.Contains(cls, "bg-accent") {
+		t.Errorf("today cell should still carry a visible (repaint-only) marker; got %q", cls)
+	}
+	// The number box is the primary today signal — a fixed-height accent pill.
+	numToday := monthDayNumberClasses(monthDay{Day: 8, IsToday: true})
+	if !strings.Contains(numToday, "bg-accent") || !strings.Contains(numToday, "rounded-full") {
+		t.Errorf("today number should repaint into an accent pill; got %q", numToday)
+	}
+	// The pill must not change the fixed 22px line box — height is identical to a
+	// plain number, so today/plain switches can't resize or shift the number.
+	numPlain := monthDayNumberClasses(monthDay{Day: 8})
+	for _, want := range []string{"h-[22px]"} {
+		if !strings.Contains(numToday, want) || !strings.Contains(numPlain, want) {
+			t.Errorf("both today and plain number boxes must keep %q (fixed line box); today=%q plain=%q", want, numToday, numPlain)
+		}
+	}
+	if strings.Contains(numPlain, "bg-accent") {
+		t.Errorf("a plain (non-today) number must not carry the accent pill; got %q", numPlain)
 	}
 }
 
