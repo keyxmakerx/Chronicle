@@ -1,6 +1,7 @@
 package syncapi
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -69,6 +70,16 @@ func (h *CalendarAPIHandler) GetCalendar(c echo.Context) error {
 
 // GetCurrentDate returns the current in-game date with computed state
 // (current season, moon phases, era, weather).
+//
+// C-SYNC-DATE-BEACON: this is the endpoint the Foundry module polls (every
+// push per FM-REALTIME-DATE-SIGNAL, plus on sync), so a read here records
+// the served-date beacon that feeds the sky strip's sync chip's dormant
+// DRIFT state (chronicle#545). CRITICAL: this route accepts EITHER a
+// session cookie OR a Bearer API key (RequireAuthOrAPIKey) — only a REAL
+// Bearer key (key.ID != synthKeySessionID) represents the Foundry module;
+// a member browsing Chronicle's own calendar over the session-auth path
+// must NOT beacon. See recordCalendarDateBeaconIfModule.
+//
 // GET /api/v1/campaigns/:id/calendar/date
 func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 	campaignID := c.Param("id")
@@ -78,6 +89,8 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 	if err != nil || cal == nil {
 		return apperror.NewNotFound("calendar not found")
 	}
+
+	h.recordCalendarDateBeaconIfModule(c, campaignID, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 
 	result := map[string]any{
 		"mode":   cal.Mode,
@@ -1401,6 +1414,30 @@ func defaultIfZero(v, fallback int) int {
 }
 
 // --- Helpers ---
+
+// recordCalendarDateBeaconIfModule records the served-date beacon when the
+// caller is a real Bearer-authed API key — GetAPIKey returns a synthetic
+// key with ID == synthKeySessionID for session-cookie callers on this
+// dual-auth route (RequireAuthOrAPIKey), and that path must never beacon
+// (a member browsing Chronicle's own calendar isn't "the module reading a
+// date"). Fire-and-forget on a background context, matching the
+// UpdateKeyLastUsed / LogRequest convention in middleware.go — this keeps
+// the GET hot path from paying for the throttle SELECT + conditional
+// UPSERT synchronously.
+func (h *CalendarAPIHandler) recordCalendarDateBeaconIfModule(c echo.Context, campaignID string, year, month, day int) {
+	key := GetAPIKey(c)
+	if key == nil || key.ID == synthKeySessionID {
+		return
+	}
+	go func() {
+		if err := h.syncSvc.RecordCalendarDateBeacon(context.Background(), campaignID, year, month, day); err != nil {
+			slog.Warn("calendar date beacon record failed",
+				slog.String("campaign_id", campaignID),
+				slog.Any("error", err),
+			)
+		}
+	}()
+}
 
 // resolveRole returns the API key owner's role for privacy filtering.
 func (h *CalendarAPIHandler) resolveRole(c echo.Context) int {

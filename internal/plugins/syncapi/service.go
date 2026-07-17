@@ -63,6 +63,10 @@ type SyncAPIService interface {
 
 	// WebSocket authentication.
 	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, err error)
+
+	// Calendar date beacon (C-SYNC-DATE-BEACON).
+	RecordCalendarDateBeacon(ctx context.Context, campaignID string, year, month, day int) error
+	GetCalendarDateBeacon(ctx context.Context, campaignID string) (*CalendarDateBeacon, error)
 }
 
 // syncAPIService implements SyncAPIService.
@@ -458,4 +462,51 @@ func (s *syncAPIService) AuthenticateKeyForWS(ctx context.Context, rawKey string
 	}
 	// API keys are always created by the campaign owner, so default to owner role.
 	return key.CampaignID, key.UserID, 3, nil
+}
+
+// --- Calendar Date Beacon (C-SYNC-DATE-BEACON) ---
+
+// calendarDateBeaconThrottle is the minimum gap between beacon writes for
+// an unchanged date. GetCurrentDate is polled repeatedly (every push per
+// FM-REALTIME-DATE-SIGNAL, plus on sync); without throttling, a live
+// Foundry session would write this row on nearly every poll.
+const calendarDateBeaconThrottle = 60 * time.Second
+
+// RecordCalendarDateBeacon records the date a Bearer-authed module read via
+// GET /calendar/date. Write-throttled: skipped when the last beacon for
+// this campaign is under calendarDateBeaconThrottle old AND the date is
+// unchanged, so a live polling session doesn't hammer the table. A changed
+// date always writes immediately regardless of throttle age — the chip
+// needs the fresher date, not a stale throttled one.
+//
+// Callers MUST verify the caller is a real Bearer-authed module (API key
+// ID != synthKeySessionID) before calling this — see calendar_api_handler.go
+// GetCurrentDate. A member browsing Chronicle's own calendar over the
+// session-auth path on the same endpoint must never beacon.
+func (s *syncAPIService) RecordCalendarDateBeacon(ctx context.Context, campaignID string, year, month, day int) error {
+	existing, err := s.repo.GetCalendarDateBeacon(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if existing != nil &&
+		existing.Year == year && existing.Month == month && existing.Day == day &&
+		now.Sub(existing.ServedAt) < calendarDateBeaconThrottle {
+		return nil
+	}
+	return s.repo.UpsertCalendarDateBeacon(ctx, &CalendarDateBeacon{
+		CampaignID: campaignID,
+		Year:       year,
+		Month:      month,
+		Day:        day,
+		ServedAt:   now,
+	})
+}
+
+// GetCalendarDateBeacon returns the campaign's served-date beacon (nil, nil
+// if none recorded yet). Read side of the member-read beacon endpoint the
+// sky strip's sync chip polls — no auth restriction here beyond whatever
+// the caller's route already enforces (member-read, per the dispatch).
+func (s *syncAPIService) GetCalendarDateBeacon(ctx context.Context, campaignID string) (*CalendarDateBeacon, error) {
+	return s.repo.GetCalendarDateBeacon(ctx, campaignID)
 }

@@ -146,6 +146,7 @@ GET	/bindings/picker	internal/plugins/widgetbindings/routes.go
 GET	/browse	internal/plugins/packages/routes.go
 GET	/calendar	internal/plugins/calendar/routes.go
 GET	/calendar	internal/plugins/syncapi/routes.go
+GET	/calendar-sync-beacon	internal/plugins/syncapi/routes.go
 GET	/calendar/cycles	internal/plugins/syncapi/routes.go
 GET	/calendar/date	internal/plugins/syncapi/routes.go
 GET	/calendar/eras	internal/plugins/syncapi/routes.go

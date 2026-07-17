@@ -2,6 +2,7 @@ package syncapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -308,6 +309,54 @@ func (h *Handler) SyncMappingsFragment(c echo.Context) error {
 	}
 
 	return middleware.Render(c, http.StatusOK, SyncMappingsTableTempl(cc.Campaign.ID, rows, total, opts))
+}
+
+// --- Campaign Member: Calendar Sync Beacon (C-SYNC-DATE-BEACON) ---
+//
+// Unlike every other handler in this file, this one is NOT owner-gated —
+// see RegisterCampaignRoutes in routes.go, which mounts it directly on the
+// member-access `cg` group with no RequireRole. Mirrors foundry_vtt's
+// /foundry-presence: "what Foundry last SAW" is diagnostic sync info, not
+// sensitive state, so any campaign member may read it.
+
+// CalendarSyncBeaconResponse is the JSON shape returned by the
+// GET /campaigns/:id/calendar-sync-beacon member-read endpoint. Date is
+// omitted (empty string) when no beacon has been recorded yet for this
+// campaign — the sky strip's sync chip treats that the same as "no
+// Foundry-confirmed date" (computeSyncChipState's fmConfirmedDate == '').
+type CalendarSyncBeaconResponse struct {
+	Date     string     `json:"last_served_date,omitempty"`
+	ServedAt *time.Time `json:"last_served_at,omitempty"`
+}
+
+// GetCalendarSyncBeacon returns the served-date beacon: the date a
+// Bearer-authed Foundry module last SAW when it polled
+// GET /api/v1/campaigns/:id/calendar/date (calendar_api_handler.go
+// GetCurrentDate, which writes the beacon). The chip computes freshness
+// client-side from ServedAt (same convention as the presence signal's
+// last_seen), so this always returns the raw stored value rather than
+// pre-filtering by age here.
+//
+// GET /campaigns/:id/calendar-sync-beacon
+func (h *Handler) GetCalendarSyncBeacon(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return apperror.NewForbidden("campaign context required")
+	}
+
+	beacon, err := h.service.GetCalendarDateBeacon(c.Request().Context(), cc.Campaign.ID)
+	if err != nil {
+		return err
+	}
+	if beacon == nil {
+		return c.JSON(http.StatusOK, CalendarSyncBeaconResponse{})
+	}
+
+	servedAt := beacon.ServedAt
+	return c.JSON(http.StatusOK, CalendarSyncBeaconResponse{
+		Date:     fmt.Sprintf("%04d-%02d-%02d", beacon.Year, beacon.Month, beacon.Day),
+		ServedAt: &servedAt,
+	})
 }
 
 // --- Admin: API Monitoring Dashboard ---

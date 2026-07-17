@@ -277,3 +277,19 @@ type CampaignSyncStats struct {
 	LastActivity  *time.Time `json:"last_activity,omitempty"`
 	RecentErrors  int        `json:"recent_errors"`
 }
+
+// --- Calendar Date Beacon (C-SYNC-DATE-BEACON) ---
+
+// CalendarDateBeacon records the date Foundry last SAW when a Bearer-authed
+// module read GET /calendar/date. Deliberately named "served", not
+// "applied" or "synced": this is a diagnostic echo of what the module last
+// read, never a claim about what it did with it. One row per campaign — see
+// migrations/005_calendar_date_beacon.up.sql for why a new table was
+// needed (no existing syncapi row is per-campaign grain).
+type CalendarDateBeacon struct {
+	CampaignID string    `json:"campaign_id"`
+	Year       int       `json:"last_served_year"`
+	Month      int       `json:"last_served_month"`
+	Day        int       `json:"last_served_day"`
+	ServedAt   time.Time `json:"last_served_at"`
+}

@@ -186,6 +186,41 @@ func TestSkyStripAllGlyphs_MoonsBeforeEvents(t *testing.T) {
 	}
 }
 
+// --- Current-date attribute (C-SYNC-DATE-BEACON: feeds the chip's drift diff) ---
+
+// TestSkyStrip_CurrentDateAttribute_UsesCalendarCurrentDate pins that the
+// SSR'd data-cal-current-date attribute reflects ActiveCalendar's CURRENT
+// date (cal.CurrentYear/Month/Day — the same fields GetCurrentDate reads to
+// write the served-date beacon), not the navigated VIEW date (data.Year/
+// Month/Day, which changes as the user pages the grid). Using the view date
+// by mistake would make the chip's drift diff compare the beacon against
+// whatever month the user happens to be looking at instead of "today".
+func TestSkyStrip_CurrentDateAttribute_UsesCalendarCurrentDate(t *testing.T) {
+	data := skyStripTestData(true)
+	// gregorian2026()'s CurrentYear/Month/Day is 2026-06-08; page the view
+	// to a different month so a bug reading data.Year/Month/Day instead of
+	// cal.CurrentYear/Month/Day would surface as a wrong attribute value.
+	data.Year, data.Month, data.Day = 2026, 9, 20
+
+	html := renderSkyStrip(t, data)
+	if !strings.Contains(html, `data-cal-current-date="2026-06-08"`) {
+		t.Errorf("expected data-cal-current-date to reflect the calendar's CURRENT date (2026-06-08), not the viewed month; got:\n%s", html)
+	}
+}
+
+func TestSkyStripCurrentDateString_NilCalendar_ReturnsEmpty(t *testing.T) {
+	if got := skyStripCurrentDateString(CalendarV2ViewData{}); got != "" {
+		t.Errorf("expected empty string for a nil ActiveCalendar; got %q", got)
+	}
+}
+
+func TestSkyStripCurrentDateString_FormatsZeroPadded(t *testing.T) {
+	data := CalendarV2ViewData{ActiveCalendar: &Calendar{CurrentYear: 5, CurrentMonth: 3, CurrentDay: 7}}
+	if got := skyStripCurrentDateString(data); got != "0005-03-07" {
+		t.Errorf("skyStripCurrentDateString = %q, want 0005-03-07", got)
+	}
+}
+
 func TestSkyStripActive_MirrorsWsActive(t *testing.T) {
 	if skyStripActive(skyStripTestData(false)) {
 		t.Error("expected inactive without a worldstate seed")

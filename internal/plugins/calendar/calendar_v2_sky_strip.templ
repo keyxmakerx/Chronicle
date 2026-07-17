@@ -12,12 +12,17 @@
 // grows multi-instance support, which is out of this dispatch's scope).
 //
 // The Calendaria sync chip's data does NOT come from Go here (the calendar
-// plugin does not import foundry_vtt — T-B2 plugin isolation): the chip
-// renders a loading skeleton server-side and calendar_v2_shell.js fetches
-// the existing member-accessible GET /campaigns/:id/foundry-presence
-// (foundry_vtt/handler.go:81-97) client-side, computing display state via
-// the pure computeSyncChipState (same file, window.__calSkyStripSync test
-// seam) — no new endpoint needed (Step-0 finding, PR body).
+// plugin does not import foundry_vtt or syncapi — T-B2 plugin isolation):
+// the chip renders a loading skeleton server-side and calendar_v2_shell.js
+// fetches, client-side, the existing member-accessible
+// GET /campaigns/:id/foundry-presence (foundry_vtt/handler.go:81-97) for
+// connectivity plus GET /campaigns/:id/calendar-sync-beacon
+// (syncapi/handler.go GetCalendarSyncBeacon, C-SYNC-DATE-BEACON) for the
+// served-date signal, computing display state via the pure
+// computeSyncChipState (same file, window.__calSkyStripSync test seam).
+// The one thing that IS server-rendered is data-cal-current-date below —
+// Chronicle's own current date, needed to diff against the beacon; see
+// skyStripCurrentDateString in calendar_v2_sky_strip_helpers.go.
 package calendar
 
 import "github.com/keyxmakerx/chronicle/internal/widgets/skybox"
@@ -33,6 +38,7 @@ templ calendarV2SkyStrip(data CalendarV2ViewData) {
 			class="card card-elev-static mb-3 overflow-hidden"
 			data-cal-sky-strip
 			data-campaign-id={ data.CampaignID }
+			data-cal-current-date={ skyStripCurrentDateString(data) }
 		>
 			<div class="flex items-center gap-3 px-3 py-2">
 				<span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-accent flex-none">
@@ -117,9 +123,10 @@ templ skyStripDetailCard(g skyStripGlyph) {
 }
 
 // calendarV2SyncChip renders the chip's loading skeleton. calendar_v2_shell.js
-// (wireSkyStrip) fetches GET /campaigns/:id/foundry-presence and replaces
-// this markup's text/color once the presence data resolves — see the
-// package doc comment above for why this is client-side, not server-side.
+// (wireSkyStrip) fetches GET /campaigns/:id/foundry-presence + GET
+// /campaigns/:id/calendar-sync-beacon and replaces this markup's
+// text/color once both resolve — see the package doc comment above for why
+// this is client-side, not server-side.
 templ calendarV2SyncChip(data CalendarV2ViewData) {
 	<span
 		class="flex-none inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full border border-edge bg-surface-alt text-fg-secondary animate-pulse"

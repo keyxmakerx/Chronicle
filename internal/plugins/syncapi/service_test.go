@@ -40,6 +40,9 @@ type mockSyncAPIRepo struct {
 	isIPBlockedFn         func(ctx context.Context, ip string) (bool, error)
 	getStatsFn            func(ctx context.Context, since time.Time) (*APIStats, error)
 	getCampaignStatsFn    func(ctx context.Context, campaignID string, since time.Time) (*APIStats, error)
+	getBeaconFn           func(ctx context.Context, campaignID string) (*CalendarDateBeacon, error)
+	upsertBeaconFn        func(ctx context.Context, beacon *CalendarDateBeacon) error
+	upsertBeaconCalls     []CalendarDateBeacon
 }
 
 func (m *mockSyncAPIRepo) CreateKey(ctx context.Context, key *APIKey) error {
@@ -224,6 +227,21 @@ func (m *mockSyncAPIRepo) BindDevice(ctx context.Context, keyID int, fingerprint
 }
 
 func (m *mockSyncAPIRepo) UnbindDevice(ctx context.Context, keyID int) error {
+	return nil
+}
+
+func (m *mockSyncAPIRepo) GetCalendarDateBeacon(ctx context.Context, campaignID string) (*CalendarDateBeacon, error) {
+	if m.getBeaconFn != nil {
+		return m.getBeaconFn(ctx, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockSyncAPIRepo) UpsertCalendarDateBeacon(ctx context.Context, beacon *CalendarDateBeacon) error {
+	m.upsertBeaconCalls = append(m.upsertBeaconCalls, *beacon)
+	if m.upsertBeaconFn != nil {
+		return m.upsertBeaconFn(ctx, beacon)
+	}
 	return nil
 }
 
