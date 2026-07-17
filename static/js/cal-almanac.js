@@ -67,6 +67,7 @@
     PROD_OBSERVERS.length = 0;
     WS_SUBS.length = 0;
     try { if (window.CalParticleEngine && CalParticleEngine.resetTicks) CalParticleEngine.resetTicks(); } catch (e) {}
+    try { LAYER_CACHE = {}; } catch (e) {}
     if (cursorSyncHandler) {
       try { document.removeEventListener('cal:cursor-change', cursorSyncHandler); } catch (e) {}
       cursorSyncHandler = null;
@@ -1180,9 +1181,101 @@
       };
     };
   }
+  // Meteor pacing (C-SKYBOX-WIDGET, operator report: "during a shower ~one
+  // meteor then minutes of nothing"). Step-0 finding: spawn POSITION was
+  // never the cause — meteorSpawnPoint below already anchors to the canvas
+  // edges, and the canvas IS the visible band (.cal-almanac-sky has
+  // `overflow:hidden`, [data-cal-sky-canvas] fills it 100% — C-WIDGET-
+  // BINDING-QA2). The real cause was STATE CHURN: effectLayersFor() used to
+  // call every active SKY_FX factory fresh (`f()`) on EVERY refeedSky()/
+  // renderDayPipeline(), which fires on every setWorldState({timeOfDay})
+  // tick (tcAdvanceHours' ~600ms tween calls setWorldState on every rAF
+  // frame) and on any date/weather/event change. Each fresh call discarded
+  // the meteor closure's live streak list + spawn accumulator, so a shower
+  // only ever got the ONE streak the primed 0.85 accumulator fires almost
+  // immediately, then went dark until the next spawn interval — repeatedly
+  // reset before it could arrive. Fixed by LAYER_CACHE below (persists the
+  // closure across refeeds while the effect stays active). These three pure
+  // helpers add the dispatch's other asks — rate tied to shower intensity +
+  // a testable viewport-bound spawn point — and are exported for unit tests.
+
+  // meteorSpawnPoint(W, H, fromTop) — viewport-bound spawn origin (W×H is
+  // the actual rendered canvas size, i.e. the visible band). Anywhere along
+  // the top + the right-edge upper half, with a small (≤15% of W) edge
+  // overshoot so a streak enters already in motion instead of popping in —
+  // never far outside, and always inside for a `fromTop` spawn's Y.
+  function meteorSpawnPoint(W, H, fromTop) {
+    return fromTop
+      ? { x: Math.random() * W * 1.15, y: -H * 0.05 }
+      : { x: W + W * 0.02, y: Math.random() * H * 0.4 };
+  }
+  window.__calMeteorSpawnPoint = meteorSpawnPoint;
+
+  // meteorShowerProgress(win, timeOfDay, hoursPerDay) — 0..1+ fraction of the
+  // way through a {start_time,duration} window (hours; wraps past midnight).
+  // null when there's no usable window (no duration data) so callers can
+  // tell "no data, assume peak" apart from "computed, and it's outside the
+  // window" (> 1 or < 0 — handled by meteorShowerIntensity as silence).
+  function meteorShowerProgress(win, timeOfDay, hoursPerDay) {
+    if (!win || !win.duration) return null;
+    var hpd = hoursPerDay || 24;
+    var hour = (timeOfDay == null ? 0.5 : timeOfDay) * hpd;
+    var elapsed = hour - (win.start_time || 0);
+    if (elapsed < 0) elapsed += hpd;
+    return elapsed / win.duration;
+  }
+  window.__calMeteorShowerProgress = meteorShowerProgress;
+
+  // meteorShowerIntensity(progress) — pure, unit-tested peak/off-peak/none
+  // curve. null progress (no window data — most demo/legacy data has no
+  // start_time/duration) → 1, "peak", today's unconditional-always-on
+  // behavior, unchanged. A concrete progress outside [0,1] means the clock
+  // has moved past/before the shower's actual hours → 0, "none" (silent —
+  // already-alive streaks still finish naturally, nothing new spawns).
+  // Inside the window: ramp up the first quarter, hold peak the middle
+  // half, taper the last quarter, floored at 0.35 so "off-peak" reads as
+  // sparser, never fully dead mid-shower.
+  function meteorShowerIntensity(progress) {
+    if (progress == null) return 1;
+    if (progress < 0 || progress > 1) return 0;
+    if (progress < 0.25) return 0.35 + 0.65 * (progress / 0.25);
+    if (progress < 0.75) return 1;
+    return 1 - 0.65 * ((progress - 0.75) / 0.25);
+  }
+  window.__calMeteorShowerIntensity = meteorShowerIntensity;
+
+  // meteorSpawnRate(baseRate, intensity) — pure. sqrt curve keeps a
+  // low-but-nonzero intensity ("off-peak") visibly alive rather than
+  // reading as paused, while intensity 0 is genuinely silent and 1 leaves
+  // baseRate unmodified.
+  function meteorSpawnRate(baseRate, intensity) {
+    var i = intensity == null ? 1 : Math.max(0, Math.min(1, intensity));
+    return (baseRate || 0) * Math.sqrt(i);
+  }
+  window.__calMeteorSpawnRate = meteorSpawnRate;
+
+  // METEOR_WINDOWS — the currently-active {start_time,duration} per
+  // celestial-event type, rebuilt at the top of every effectLayersFor()
+  // call (cheap; that function already walks `events`). Read by
+  // currentMeteorIntensity() so a meteor closure — which persists across
+  // refeeds via LAYER_CACHE and therefore can't take fresh params each call
+  // — can still look up its OWN family's live intensity every frame.
+  var METEOR_WINDOWS = {};
+  function currentMeteorIntensity(family) {
+    if (!family) return 1;
+    var win = METEOR_WINDOWS[family];
+    if (!win) return 1;
+    var hpd = (DATA && DATA.calendar && DATA.calendar.hours_per_day) || 24;
+    var tod = (worldState && typeof worldState.timeOfDay === 'number') ? worldState.timeOfDay : 0.5;
+    return meteorShowerIntensity(meteorShowerProgress(win, tod, hpd));
+  }
+
   // Meteors: spawn across the WHOLE top span (not only the right edge) and
   // traverse at a band-relative diagonal, so a wide production band reads as
   // sky-wide streaks (the operator's "meteors only lower-right" fix).
+  // cfg.family (optional: 'meteor-shower' | 'meteor-storm') ties the spawn
+  // rate to that event's live intensity via currentMeteorIntensity();
+  // omitted (shooting-star / star-fall) keeps the historical always-peak rate.
   function mkMeteors(cfg) {
     cfg = cfg || {};
     return function () {
@@ -1190,7 +1283,25 @@
       // of the effect activating, instead of a full spawn period later.
       var ms = [], spawnAcc = 0.85;
       return function (ctx, W, H, dt) {
-        spawnAcc += dt * (cfg.rate || 0.5);
+        var intensity = currentMeteorIntensity(cfg.family);
+        // Reduced-motion single static paint (CalParticleEngine.drawStaticFrame
+        // calls every frame fn once with dt=0): the spawn accumulator can
+        // never cross 1 at dt=0, so today this silently painted NOTHING —
+        // invisible during a shower for reduced-motion users. Leave one fixed
+        // sparkle mark instead — "static starfield + a shower-active glyph",
+        // never the streak animation. Drawn procedurally (arcs, matching every
+        // other effect in this file) rather than fillText, which needs no font
+        // metrics and keeps a plain 2D-context mock sufficient for tests.
+        if (dt === 0) {
+          var gx = W * 0.08, gy = H * 0.08, gr = Math.max(2, H * 0.045);
+          ctx.fillStyle = 'rgba(255,245,225,.9)';
+          ctx.beginPath(); ctx.arc(gx, gy, gr, 0, 6.283); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,245,225,.55)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(gx - gr * 2, gy); ctx.lineTo(gx + gr * 2, gy); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(gx, gy - gr * 2); ctx.lineTo(gx, gy + gr * 2); ctx.stroke();
+          return;
+        }
+        spawnAcc += dt * meteorSpawnRate(cfg.rate || 0.5, intensity);
         var max = fxCap(cfg.max || 6);
         if (spawnAcc >= 1 && ms.length < max) {
           spawnAcc = 0;
@@ -1198,9 +1309,10 @@
           // shallow band-relative diagonal (crosses most of the width in
           // ~2.5–4s while descending roughly half the band height).
           var fromTop = Math.random() < 0.75;
+          var pt = meteorSpawnPoint(W, H, fromTop);
           ms.push({
-            x: fromTop ? Math.random() * W * 1.15 : W + W * 0.02,
-            y: fromTop ? -H * 0.05 : Math.random() * H * 0.4,
+            x: pt.x,
+            y: pt.y,
             vx: -W * (cfg.speed || 0.30) * (0.8 + Math.random() * 0.5),
             vy: H * (cfg.speed || 0.30) * 0.8 * (0.55 + Math.random() * 0.5),
             life: 0,
@@ -1540,8 +1652,8 @@
     SKY_FX['acid-rain'] = { back: [mkWash('rgb(80,120,40)', 0.08)], front: [mkCloudDeck({ coverage: 0.5, darkness: 0.14, alpha: 0.45 }), mkPrecip({ density: 0.2, speed: 3.0, len: 0.07, color: 'rgba(160,230,90,.55)' })] };
     SKY_FX['miasma'] = { back: [mkWash('rgb(70,110,60)', 0.08)], front: [mkHaze({ rgb: '120,170,90', alpha: 0.18, layers: 6, speed: 0.012 }), mkDrift({ density: 0.05, speed: 0.08, size: 1.6, rise: true, sway: 0.012, color: 'rgba(150,210,110,.5)' })] };
     // Celestial events
-    SKY_FX['meteor-shower'] = { back: [mkMeteors({ rate: 1.7, max: 12, speed: 0.34, tail: 11, head: 1.0, rgb: '230,238,255' }), mkMeteors({ rate: 0.35, max: 2, fiery: true, speed: 0.20, tail: 24, head: 3.0, rgb: '255,170,90' })], front: [] };
-    SKY_FX['meteor-storm'] = { back: [mkWash('rgb(255,200,120)', 0.05), mkMeteors({ rate: 3.2, max: 18, speed: 0.42, tail: 12, head: 1.1, rgb: '235,240,255' }), mkMeteors({ rate: 0.6, max: 4, fiery: true, speed: 0.26, tail: 26, head: 3.4, rgb: '255,160,80' })], front: [] };
+    SKY_FX['meteor-shower'] = { back: [mkMeteors({ rate: 1.7, max: 12, speed: 0.34, tail: 11, head: 1.0, rgb: '230,238,255', family: 'meteor-shower' }), mkMeteors({ rate: 0.35, max: 2, fiery: true, speed: 0.20, tail: 24, head: 3.0, rgb: '255,170,90', family: 'meteor-shower' })], front: [] };
+    SKY_FX['meteor-storm'] = { back: [mkWash('rgb(255,200,120)', 0.05), mkMeteors({ rate: 3.2, max: 18, speed: 0.42, tail: 12, head: 1.1, rgb: '235,240,255', family: 'meteor-storm' }), mkMeteors({ rate: 0.6, max: 4, fiery: true, speed: 0.26, tail: 26, head: 3.4, rgb: '255,160,80', family: 'meteor-storm' })], front: [] };
     SKY_FX['shooting-star'] = { back: [mkMeteors({ rate: 0.10, max: 1, tail: 16, head: 1.2, rgb: '235,240,255' })], front: [] };
     SKY_FX['star-fall'] = { back: [mkWash('rgb(255,225,160)', 0.05), mkMeteors({ rate: 2.6, max: 18, speed: 0.16, tail: 20, rgb: '255,230,170', head: 2.2 })], front: [] };
     SKY_FX['comet'] = { back: [mkComet()], front: [] };
@@ -1923,22 +2035,44 @@
   // (the sky's own drama) → weather (nearer atmosphere) — events STACK with
   // weather now instead of replacing it (rain + meteor shower co-render).
   // Returns { back: [factory], front: [factory] }. Exposed for tests.
+  // LAYER_CACHE persists SKY_FX layer instances (e.g. a meteor closure's
+  // live streak list + spawn accumulator) across effectLayersFor() calls,
+  // keyed by a stable "why this layer exists" id. Root-cause fix for the
+  // meteor pacing bug (see mkMeteors above): before this, every call built
+  // EVERY active layer fresh via `f()`, discarding in-flight state each
+  // time — and this function runs on every timeOfDay tick, not just real
+  // weather/event changes. Cleared on teardownProd() (band re-init).
+  var LAYER_CACHE = {};
+  function cachedLayer(key, factory) {
+    if (!LAYER_CACHE[key]) LAYER_CACHE[key] = factory();
+    return LAYER_CACHE[key];
+  }
   function effectLayersFor(effID, events) {
     var back = [mkStarfield()()], front = [];
     // De-dup: the same event type twice contributes once.
-    var seen = {};
+    var seen = {}, activeKeys = {};
+    METEOR_WINDOWS = {};
+    function collect(prefix, fx) {
+      fx.back.forEach(function (f, i) {
+        var k = prefix + ':back:' + i; activeKeys[k] = true; back.push(cachedLayer(k, f));
+      });
+      fx.front.forEach(function (f, i) {
+        var k = prefix + ':front:' + i; activeKeys[k] = true; front.push(cachedLayer(k, f));
+      });
+    }
     (events || []).forEach(function (c) {
       var fx = SKY_FX[c.type];
       if (!fx || seen[c.type]) return;
       seen[c.type] = true;
-      fx.back.forEach(function (f) { back.push(f()); });
-      fx.front.forEach(function (f) { front.push(f()); });
+      if (c.duration) METEOR_WINDOWS[c.type] = { start_time: c.start_time, duration: c.duration };
+      collect('event:' + c.type, fx);
     });
     var w = SKY_FX[effID];
-    if (w) {
-      w.back.forEach(function (f) { back.push(f()); });
-      w.front.forEach(function (f) { front.push(f()); });
-    }
+    if (w) collect('weather:' + effID, w);
+    // Drop cached state for anything no longer active, so a genuine
+    // weather/event change still clears its particles instead of leaking
+    // forever — only an UNCHANGED active set reuses its layer state.
+    Object.keys(LAYER_CACHE).forEach(function (k) { if (!activeKeys[k]) delete LAYER_CACHE[k]; });
     // The solar eclipse boosts darkness so the starfield emerges mid-day.
     SKY_ENV.darkBoost = seen['eclipse-solar'] ? 0.85 : 0;
     return { back: back, front: front };
@@ -1947,6 +2081,11 @@
     var L = effectLayersFor(effID, events);
     return { back: L.back.length, front: L.front.length };
   };
+  // Raw (uncounted) exposure for the LAYER_CACHE regression test — lets a
+  // test assert the SAME layer function identity comes back across two
+  // calls with an unchanged active set (the actual meteor-pacing fix),
+  // not just that the count stayed the same.
+  window.__calEffectLayersForRaw = effectLayersFor;
   function composeFrames(frames) {
     if (!frames.length) return null;
     return function (ctx, W, H, dt, t) {

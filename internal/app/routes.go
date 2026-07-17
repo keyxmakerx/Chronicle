@@ -2872,6 +2872,23 @@ func (a *App) RegisterRoutes() {
 		return renderBoundBlock(calendar.WidgetTypeWorldstate, rc, "")
 	})
 
+	// skybox — the ambient SKY-ONLY block (C-SKYBOX-WIDGET): no hourglass, no
+	// per-entity binding (always the campaign's default calendar — a "which
+	// calendar" choice isn't meaningful without an hourglass to bind it to).
+	// Campaign-level, so — like entity_worldstate — it works in both the
+	// entity page (template) and the campaign dashboard contexts.
+	blockRegistry.Register(entities.BlockMeta{
+		Type: "skybox", Label: "Sky", Icon: "fa-cloud-sun",
+		Description: "Ambient sky only — moons, stars, weather + celestial events for the current world date",
+		Addon:       "calendar", Contexts: []string{"template", "dashboard"}, Singleton: true,
+	}, func(rc entities.BlockRenderContext) templ.Component {
+		entityID := ""
+		if rc.Entity != nil {
+			entityID = rc.Entity.ID
+		}
+		return calendar.EntitySkyboxBlock(calendarService, rc.CC, entityID, rc.UserID)
+	})
+
 	// Timeline plugin blocks (requires "timeline" addon).
 	blockRegistry.Register(entities.BlockMeta{
 		Type: "timeline", Label: "Timeline", Icon: "fa-timeline",

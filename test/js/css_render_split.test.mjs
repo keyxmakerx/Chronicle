@@ -109,9 +109,17 @@ test('every widget surface links the render layer', () => {
 });
 
 test('the band markup carries both engine canvases (back + front)', () => {
+  // C-SKYBOX-WIDGET: the canvas markup now lives in the skybox widget
+  // package (internal/widgets/skybox/skybox.templ) — calendar_v2_worldstate
+  // .templ's worldStateSkyBandV2 delegates to it (skybox.Skybox) rather than
+  // inlining the scaffold, so the render-parity guard now points at the
+  // widget's own source, and separately confirms the calendar plugin still
+  // composes it.
+  const skyboxWidget = readFileSync(join(root, 'internal/widgets/skybox/skybox.templ'), 'utf8');
+  assert.ok(skyboxWidget.includes('data-cal-sky-canvas'), 'back canvas missing');
+  assert.ok(skyboxWidget.includes('data-cal-sky-canvas-front'), 'front canvas missing');
   const band = readFileSync(join(root, 'internal/plugins/calendar/calendar_v2_worldstate.templ'), 'utf8');
-  assert.ok(band.includes('data-cal-sky-canvas'), 'back canvas missing');
-  assert.ok(band.includes('data-cal-sky-canvas-front'), 'front canvas missing');
+  assert.ok(band.includes('skybox.Skybox('), 'the calendar plugin must still compose the skybox widget for its band');
   const demo = readFileSync(join(root, 'internal/templates/demo/calendar.templ'), 'utf8');
   assert.ok(demo.includes('data-cal-sky-canvas-front'), 'demo must carry the front canvas too (parity)');
 });

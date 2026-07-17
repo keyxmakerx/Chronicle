@@ -19,6 +19,8 @@
 
 package calendar
 
+import "github.com/keyxmakerx/chronicle/internal/widgets/skybox"
+
 // worldStateBandV2 renders the ambient SKY band above the full calendar page
 // (C-CAL-V2-WORLDSTATE-BAND-FINISHING Part C: SKY ONLY — the hourglass is the
 // compact "shelf" variant). Renders nothing without an active calendar / seed.
@@ -56,65 +58,57 @@ templ worldStateBandVariantV2(data CalendarV2ViewData, withHourglass bool) {
 		// rule the widget needs ships here, unscoped; demo-only chrome stays in
 		// cal-almanac.css, which production no longer loads.
 		<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
+		// worldstate_provider.js + skybox.js: worldStateSkyBandV2 above now
+		// mounts data-widget="skybox" (C-SKYBOX-WIDGET). The seed is already
+		// embedded on #cal-v2-worldstate, so the provider adopts it (zero
+		// fetch) — this is purely additive, the engine boot below is
+		// unchanged. Order matters: boot.js (loaded in <head>) must run
+		// first, which it always does (defer + document order).
+		<script src="/static/js/widgets/worldstate_provider.js" defer></script>
+		<script src="/static/js/widgets/skybox.js" defer></script>
 		<script src="/static/js/cal-almanac.js" defer></script>
 	}
 }
 
-// worldStateSkyBandV2 — the sky surface scaffold. The engine paints the
-// gradient, sun arc, moons, weather + celestial particles, and mood wash from
-// the seed on load; the labels below are the read-only first-paint.
+// worldStateSkyBandV2 — the sky surface scaffold. Delegates to the skybox
+// widget (internal/widgets/skybox, C-SKYBOX-WIDGET): this function now just
+// maps CalendarV2ViewData onto the widget's plugin-agnostic SkyboxData via
+// the existing ws* helpers, so the three existing callers (the full-page
+// band, entity_calendar_block, entity_worldstate_block) render byte-for-byte
+// the same sky markup as before, PLUS the data-widget="skybox" mount + a
+// live provider-driven refresh path. ElementID/SeedJSON stay empty here
+// (skybox.Skybox skips its own seed blob when ElementID == "") because all
+// three callers already render their own externally-namespaced seed blob —
+// see each caller's own `id="cal-v2-worldstate..."` div.
 templ worldStateSkyBandV2(data CalendarV2ViewData) {
-	<div
-		class={ "cal-almanac-sky", "cal-almanac-sky--wfx-" + wsWeatherID(data) }
-		data-cal-sky
-		data-cal-sky-weather={ wsWeatherID(data) }
-		style={ "background: " + SkybandGradient(wsSkyTimeFloat(data)) + ";position:absolute;inset:0" }
-	>
-		<div class="cal-almanac-sky__weather" data-cal-sky-weather-layer></div>
-		<div class="cal-almanac-sky__celestial" data-cal-sky-celestial-layer></div>
-		<canvas class="cal-almanac-sky__canvas" data-cal-sky-canvas aria-hidden="true"></canvas>
-		<div class="cal-almanac-sky__arc" data-cal-sky-arc>
-			// Passive sun — the engine positions + recolors it from time-of-day.
-			// (Moons are created by the engine, not rendered here.)
-			<div
-				class="cal-almanac-sun cal-almanac-sky__sun cal-almanac-sky__sun--passive"
-				data-cal-sky-sun
-				data-cal-sun-state="default"
-				aria-hidden="true"
-			>
-				@CalAlmanacSunBody()
-			</div>
-		</div>
-		// FRONT particle canvas — weather (cloud decks, precipitation, fog)
-		// paints HERE, over the sun/moons, so storms genuinely occlude the sun
-		// (Q1: the sun keeps a floor opacity, never fully vanishing). Placed
-		// after the arc at the same z-index so it stacks above it.
-		<canvas class="cal-almanac-sky__canvas-front" data-cal-sky-canvas-front aria-hidden="true"></canvas>
-		<div class="cal-almanac-sky__overlay">
-			<div class="cal-almanac-sky__label">
-				// READ-ONLY: 2a ships no date/time controls (2c / Phase 4 wire
-				// these into PUT /calendar/world-state). Plain text, not buttons.
-				<strong data-cal-sky-date>{ wsDatePrimary(data) }</strong>
-				<span class="cal-almanac-sky__sub">
-					<span data-cal-sky-time-label>{ wsClock(data) }</span>
-					<span data-cal-sky-sub-rest> · { wsSkyPhase(data) } · { wsSeason(data) } · { wsWeatherLabel(data) }</span>
-				</span>
-			</div>
-			<div class="cal-almanac-sky__happening" data-cal-sky-happening>
-				// R2 crash-guard: the entity embeds call worldStateSkyBandV2 directly
-				// (guarded only by cal != nil), so a transient BuildWorldStateSeed DB
-				// error leaves WorldState nil while the band still renders — ranging
-				// .Events would panic. The full-page band reaches here via wsActive.
-				if data.WorldState != nil {
-					for _, ev := range data.WorldState.Events {
-						<span class="cal-almanac-sky__happening-chip" title={ ev.Name }>
-							<span class="cal-almanac-sky__happening-icon" aria-hidden="true">✦</span>
-						</span>
-					}
-				}
-			</div>
-		</div>
-	</div>
+	@skybox.Skybox(skyboxDataFor(data), CalAlmanacSunBody())
+}
+
+// skyboxDataFor projects CalendarV2ViewData onto the skybox widget's
+// source-agnostic SkyboxData (widgets rule #10 — no plugin imports the
+// other direction). R2 crash-guard preserved: data.WorldState can be nil
+// (a transient BuildWorldStateSeed error) while the band still renders —
+// wsWeatherID/wsDatePrimary/etc. are already nil-safe, and Events is
+// guarded here the same way the old inline range guard was.
+func skyboxDataFor(data CalendarV2ViewData) skybox.SkyboxData {
+	var events []skybox.SkyboxEvent
+	if data.WorldState != nil {
+		events = make([]skybox.SkyboxEvent, len(data.WorldState.Events))
+		for i, ev := range data.WorldState.Events {
+			events[i] = skybox.SkyboxEvent{Name: ev.Name}
+		}
+	}
+	return skybox.SkyboxData{
+		CampaignID:   data.CampaignID,
+		WeatherID:    wsWeatherID(data),
+		Gradient:     SkybandGradient(wsSkyTimeFloat(data)),
+		DatePrimary:  wsDatePrimary(data),
+		TimeLabel:    wsClock(data),
+		SkyPhase:     wsSkyPhase(data),
+		Season:       wsSeason(data),
+		WeatherLabel: wsWeatherLabel(data),
+		Events:       events,
+	}
 }
 
 // CalAlmanacSunBody renders the sun's layered CSS-art body

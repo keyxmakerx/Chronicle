@@ -1,0 +1,68 @@
+// entity_skybox_block.templ — read-only view for the sky-only ambient
+// dashboard/template block (C-SKYBOX-WIDGET). Unlike worldStateSkyBandV2's
+// delegation (which leaves seed-blob ownership to its three pre-existing
+// external callers), this is a FRESH call site with no legacy convention to
+// preserve, so it hands skybox.Skybox a non-empty ElementID and gets a
+// fully self-contained widget mount (hidden seed blob + data-widget="skybox"
+// band, both from the one Skybox() call).
+
+package calendar
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/widgets/skybox"
+)
+
+// entitySkyboxBlockView renders the embed. No calendar → friendly "Create
+// calendar" CTA (never blank); otherwise the skybox widget mount.
+templ entitySkyboxBlockView(campaignID string, cal *Calendar, data CalendarV2ViewData, entityID string) {
+	<div class="card p-0 overflow-hidden" data-entity-skybox>
+		if cal == nil {
+			// EMPTY STATE: no calendar yet → friendly state + "Create calendar"
+			// CTA to the setup wizard (mirrors entity_worldstate item 3).
+			<div class="flex flex-col items-center justify-center py-10 px-4 text-center" data-entity-skybox-empty>
+				<i class="fa-solid fa-cloud-sun text-3xl text-fg-muted mb-3" aria-hidden="true"></i>
+				<p class="text-sm font-medium text-fg mb-1">No calendar yet</p>
+				<p class="text-xs text-fg-secondary mb-3">Create a calendar to show the world&#39;s sky here.</p>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) }
+					class="btn-primary text-sm"
+				>
+					<i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Create calendar
+				</a>
+			</div>
+		} else {
+			<div class="relative w-full overflow-hidden" style="height:200px" data-entity-skybox-band aria-label="Today's sky">
+				@skybox.Skybox(skyboxDataForBlock(campaignID, data, entityID), CalAlmanacSunBody())
+			</div>
+			<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
+			<script src="/static/js/widgets/worldstate_provider.js" defer></script>
+			<script src="/static/js/widgets/skybox.js" defer></script>
+			<script src="/static/js/cal-almanac.js" defer></script>
+		}
+	</div>
+}
+
+// entitySkyboxUnavailable is the friendly not-found / can't-render state:
+// shown instead of leaking a raw error when the embed has no
+// entity/campaign context to build from (mirrors entity_worldstate).
+templ entitySkyboxUnavailable() {
+	<div class="card p-4 text-sm text-fg-secondary" data-entity-skybox-unavailable>
+		<i class="fa-solid fa-circle-info mr-1.5" aria-hidden="true"></i>
+		This sky couldn&#39;t be loaded for this page — the page or its entity may have
+		moved or been removed. Try reloading; if it persists, re-open the entity from its list.
+	</div>
+}
+
+// skyboxDataForBlock reuses the plugin's own CalendarV2ViewData → SkyboxData
+// projection (skyboxDataFor, calendar_v2_worldstate.templ) and fills in the
+// two fields worldStateSkyBandV2's delegation deliberately leaves empty
+// (this call site owns its own seed blob, unlike the three pre-existing
+// callers — see skybox.templ's ElementID doc).
+func skyboxDataForBlock(campaignID string, data CalendarV2ViewData, entityID string) skybox.SkyboxData {
+	d := skyboxDataFor(data)
+	d.ElementID = "cal-v2-worldstate-skybox-" + entityID
+	d.CampaignID = campaignID
+	return d
+}
