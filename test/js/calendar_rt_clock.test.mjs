@@ -35,7 +35,7 @@ test('renders the live time in the anchor zone at minute granularity', () => {
   assert.match(block, /getAttribute\('data-rt-zone'\)/, 'reads the anchor zone from data-rt-zone');
   assert.match(block, /Intl\.DateTimeFormat/, 'formats via Intl (zone-aware)');
   assert.match(block, /hour:\s*'2-digit'[\s\S]*minute:\s*'2-digit'/, 'HH:MM fields');
-  assert.match(block, /hour12:\s*false/, '24-hour clock');
+  assert.match(block, /hourCycle:\s*'h23'/, '24-hour clock, pinned to h23 so midnight renders "00:00" not "24:00" (C-RT-HINT-H23-HOTFIX)');
   assert.match(block, /\[data-rt-anchor\]/, 'writes the anchor line');
   // Minute tick, no per-second work.
   assert.match(block, /setInterval\([^,]+,\s*60000\)/, 'ticks once per minute (60000ms)');

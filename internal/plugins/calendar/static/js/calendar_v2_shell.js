@@ -660,7 +660,7 @@
         function fmtTime(zone, date) {
             try {
                 return new Intl.DateTimeFormat('en-US', {
-                    timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: false
+                    timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
                 }).format(date);
             } catch (e) { return ''; }
         }
@@ -783,7 +783,7 @@
     function rtFormatInZone(date, zone) {
         try {
             return new Intl.DateTimeFormat('en-US', {
-                timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: false,
+                timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
             }).format(date);
         } catch (e) { return ''; }
     }

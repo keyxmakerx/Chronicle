@@ -63,6 +63,18 @@ test('zonedWallTimeToUTC + formatInZone round-trip a plain non-DST offset (New Y
   assert.equal(H.formatInZone(utc, 'UTC'), '00:00');
 });
 
+test('formatInZone renders exact UTC midnight as "00:00", not "24:00" (C-RT-HINT-H23-HOTFIX)', () => {
+  const H = load();
+  // Node >=24's ICU maps `hour12: false` to the h24 cycle, which formats
+  // midnight as "24:00" instead of "00:00" (readable on Node 20/22's h23
+  // cycle, invisible in that environment). rtFormatInZone must force
+  // `hourCycle: 'h23'` explicitly so midnight is always "00:00" regardless
+  // of which hour cycle `hour12: false` happens to resolve to on a given
+  // Node/ICU version.
+  const midnightUTC = new Date('2026-01-16T00:00:00.000Z');
+  assert.equal(H.formatInZone(midnightUTC, 'UTC'), '00:00');
+});
+
 test('zonedWallTimeToUTC handles the summer DST offset too (New York, EDT -04:00)', () => {
   const H = load();
   // 2026-07-15 19:00 America/New_York (EDT, UTC-4) is 2026-07-15 23:00 UTC.
