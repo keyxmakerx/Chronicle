@@ -85,6 +85,35 @@ func TestBuildWeekOverlay_CrossZone(t *testing.T) {
 	}
 }
 
+// C-SCHED-OUT-THIS-WEEK item 3 pin ("Overlay truth"): the quick action writes
+// a SINGLE exception row spanning the whole day (0–1440, unavailable) on a
+// date that otherwise has an available recurring block. effectiveBlocks
+// (availability_overlay.go) must treat that one row as the date's complete
+// effective set (replace-day semantics) and the AvailUnavailable branch must
+// punch a hole for the WHOLE day, not just the recurring block's own hours —
+// so the member reads as unavailable across every hour, exactly as "out this
+// week" promises the DM overlay will reflect.
+func TestBuildWeekOverlay_FullDayUnavailableExceptionHidesWholeDay(t *testing.T) {
+	ny := mustLoc(t, "America/New_York")
+	members := []overlayMemberInput{{UserID: "u1", Name: "Alex"}}
+	avail := map[string][]AvailabilityBlock{
+		"u1": {block(2 /*Tue*/, 9*60, 22*60, AvailAvailable, "America/New_York")},
+	}
+	exc := map[string][]AvailabilityException{
+		"u1": {{OnDate: "2026-07-14", StartMinute: 0, EndMinute: 1440, State: AvailUnavailable, TZ: "America/New_York"}},
+	}
+	ov := buildWeekOverlay(members, avail, exc, testWeekStart(), ny, "America/New_York", true)
+	tue := ov.Days[1]
+	for h := 0; h < 24; h++ {
+		if tue.Hours[h].Free != 0 {
+			t.Errorf("Tue hour %d Free = %d, want 0 (full-day exception must hide every hour)", h, tue.Hours[h].Free)
+		}
+	}
+	if len(ov.Members) != 1 || len(ov.Members[0].Lanes) != 0 {
+		t.Errorf("expected no lanes for the member on the out day, got %+v", ov.Members)
+	}
+}
+
 // C-SCHED-P2 0a pin — the widened projection window (-2..+8) must capture a
 // block from a >24h zone spread. Reproducer from the #530 gate: a
 // Pacific/Kiritimati (UTC+14) member's recurring Tuesday 00:00–01:00 block,
