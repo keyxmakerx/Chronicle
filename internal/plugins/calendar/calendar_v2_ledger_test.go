@@ -354,12 +354,21 @@ func TestLedgerView_EmptyState(t *testing.T) {
 }
 
 // TestLedgerView_YearNav: the Ledger's prev/next navigation is labelled by YEAR
-// (so the j/k shortcut's 'Previous year'/'Next year' hooks resolve).
+// (so the j/k shortcut's 'Previous year'/'Next year' hooks resolve). The nav
+// moved OUT of the ledger card and into the shared sticky command bar
+// (C-CAL-DESIGN-PASS-1 §1) — the aria-labels must render there, driven by the
+// active view ("ledger" → year).
 func TestLedgerView_YearNav(t *testing.T) {
-	html := renderLedger(t, ledgerTestData(1492, nil))
+	data := ledgerTestData(1492, nil)
+	data.ActiveCalendar = ledgerTestCalendar() // header nav renders only with an active calendar
+	var sb strings.Builder
+	if err := calendarV2Header(nil, data).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render command bar: %v", err)
+	}
+	html := sb.String()
 	for _, want := range []string{`aria-label="Previous year"`, `aria-label="Next year"`} {
 		if !strings.Contains(html, want) {
-			t.Errorf("ledger nav missing %q", want)
+			t.Errorf("command bar (ledger view) nav missing %q", want)
 		}
 	}
 }

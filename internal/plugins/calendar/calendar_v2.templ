@@ -111,7 +111,7 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 					@gmControlPanelV2(data)
 				</div>
 				@calendarV2Header(cc, data)
-				<div id="cal-v2-view-slot" class="flex-1 overflow-y-auto px-6 py-4">
+				<div id="cal-v2-view-slot" class="flex-1 overflow-y-auto">
 					@calendarV2View(cc, data)
 				</div>
 			</div>
@@ -321,20 +321,26 @@ templ CalendarV2ViewFragment(cc *campaigns.CampaignContext, data CalendarV2ViewD
 // dispatch §C empty-state requirement. PR 2-4 will replace each
 // placeholder with a card-based renderer.
 templ calendarV2View(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
-	if data.ActiveCalendar == nil {
-		@calendarV2EmptyState(cc, data)
-	} else {
-		switch data.View {
-			case "week":
-				@weekViewPlaceholder(data)
-			case "day":
-				@dayViewPlaceholder(data)
-			case "ledger":
-				@ledgerView(data)
-			default:
-				@monthViewPlaceholder(data)
+	// One shared page container (§5): the same max-w-7xl width + horizontal
+	// padding the command bar uses, so the grid and the bar align to one gutter
+	// instead of the old header-`mx-6` vs slot-`px-6` mismatch. Lives inside the
+	// fragment so it survives the HTMX view-swap (CalendarV2ViewFragment).
+	<div class="max-w-7xl mx-auto w-full px-4 md:px-6 py-4">
+		if data.ActiveCalendar == nil {
+			@calendarV2EmptyState(cc, data)
+		} else {
+			switch data.View {
+				case "week":
+					@weekViewPlaceholder(data)
+				case "day":
+					@dayViewPlaceholder(data)
+				case "ledger":
+					@ledgerView(data)
+				default:
+					@monthViewPlaceholder(data)
+			}
 		}
-	}
+	</div>
 }
 
 // calendarV2EmptyState renders the "no calendars yet" surface for
@@ -361,21 +367,78 @@ templ calendarV2EmptyState(cc *campaigns.CampaignContext, data CalendarV2ViewDat
 	</div>
 }
 
-// calendarV2Header renders the top chrome: campaign breadcrumb,
-// active-calendar switcher, view switcher (Month/Week/Day), and the
-// new-event affordance (Scribe+ only). Sized to fit on one line on
-// desktop; collapses gracefully on narrower viewports.
+// calendarV2Header renders the sticky command bar — the single home for period
+// navigation (prev / Today / next) + the active-view period label (+ a fantasy
+// era subline) + the Month/Week/Day/Timeline view pills + (real-time calendars
+// only) the live clock + the multi-calendar switcher. It absorbed the per-view
+// nav headers that used to live inside each view card (C-CAL-DESIGN-PASS-1 §1),
+// so the bar stays put while the view scrolls beneath it.
+//
+// Gutter (§5, the #539 precedent): the bar's inner container shares the SAME
+// max-w-7xl width + horizontal padding as the view content below
+// (calendarV2View), replacing the old mismatched `mx-6` floating-card inset.
+//
+// The nav aria-labels ("Previous <unit>" / "Next <unit>" / "Today") are
+// load-bearing: calendar_v2_shell.js's j/k/t keyboard shortcuts navigate by
+// clicking those labels (clickByLabel), so they must match v2NavPrevLabel /
+// v2NavNextLabel. The "Today" link carries an explicit aria-label so the `t`
+// shortcut lands on it rather than a stray href*=month match (a view pill).
+//
+// The Today link uses its OWN bordered-pill classes, deliberately distinct
+// from the today-CELL / today-NUMBER styling in the grid — the mockup's
+// `.today` button-vs-cell collision must not recur in production, where a
+// shared class would style both surfaces at once.
 templ calendarV2Header(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
-	<div class="card-elev card px-4 py-3 mb-3 mx-6 mt-2 flex items-center justify-between gap-3 flex-wrap">
-		<div class="flex items-center gap-3 min-w-0">
-			<i class="fa-solid fa-calendar-days text-accent text-lg" aria-hidden="true"></i>
-			@calendarV2Switcher(cc, data)
-		</div>
-		// Live wall-clock for real-time calendars only (C-REAL-CALENDAR-P3);
-		// renders nothing otherwise, so a fantasy header is byte-for-byte unchanged.
-		@realTimeClock(data.ActiveCalendar)
-		<div class="flex items-center gap-2">
-			@calendarV2ViewSwitcher(cc, data)
+	<div class="sticky top-0 z-30 bg-surface border-b border-edge">
+		<div class="max-w-7xl mx-auto w-full px-4 md:px-6 py-2.5 flex items-center gap-x-3 gap-y-2 flex-wrap">
+			if data.ActiveCalendar != nil {
+				// Period navigation — prev / Today / next. Links (not buttons) so a
+				// no-JS load and middle-click-to-open still navigate; hx-boost swaps
+				// them in place.
+				<div class="flex items-center gap-1 flex-none">
+					<a
+						href={ v2ViewNavHref(data, -1) }
+						class="w-8 h-8 grid place-items-center rounded-lg text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors duration-micro"
+						aria-label={ v2NavPrevLabel(data) }
+					>
+						<i class="fa-solid fa-chevron-left text-xs" aria-hidden="true"></i>
+					</a>
+					<a
+						href={ v2ViewNavHref(data, 0) }
+						class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-edge bg-surface text-fg-body hover:bg-surface-alt transition-colors duration-micro"
+						aria-label="Today"
+					>Today</a>
+					<a
+						href={ v2ViewNavHref(data, 1) }
+						class="w-8 h-8 grid place-items-center rounded-lg text-fg-secondary hover:bg-surface-alt hover:text-fg transition-colors duration-micro"
+						aria-label={ v2NavNextLabel(data) }
+					>
+						<i class="fa-solid fa-chevron-right text-xs" aria-hidden="true"></i>
+					</a>
+				</div>
+				// Period label + fantasy era subline. Both truncate so a long
+				// fantasy month/era name can't force the bar to wrap early.
+				{{ sub := v2PeriodSubLabel(data) }}
+				<div class="min-w-0 leading-tight">
+					<div class="text-base font-semibold text-fg truncate">{ v2PeriodHeading(data) }</div>
+					if sub != "" {
+						<div class="text-[11px] font-medium text-fg-muted truncate">{ sub }</div>
+					}
+				</div>
+			}
+			// View pills — start of the right cluster.
+			<div class="flex items-center gap-2 ml-auto flex-none">
+				@calendarV2ViewSwitcher(cc, data)
+			</div>
+			// Live wall-clock for real-time calendars only (C-REAL-CALENDAR-P3), kept
+			// exactly as-is; renders nothing otherwise, so a fantasy header is
+			// byte-for-byte unchanged.
+			@realTimeClock(data.ActiveCalendar)
+			// Active-calendar label / multi-cal switcher, collapsed into the right cluster.
+			<div class="flex items-center gap-2 flex-none min-w-0">
+				<i class="fa-solid fa-calendar-days text-accent text-sm" aria-hidden="true"></i>
+				@calendarV2Switcher(cc, data)
+			</div>
 		</div>
 	</div>
 }
@@ -511,143 +574,144 @@ templ calendarV2ViewPill(data CalendarV2ViewData, view, label string) {
 	}
 }
 
-// monthViewPlaceholder renders the Month grid scaffolding. PR 4
-// replaces the empty event slots with the event-card composite.
-// Today highlight + rest-day tint come for free via per-cell classes.
+// monthViewPlaceholder renders the Month grid. Period nav + the month label now
+// live in the sticky command bar (calendarV2Header, C-CAL-DESIGN-PASS-1 §1), so
+// this card is just the weekday header row + the uniform week-row grid.
 templ monthViewPlaceholder(data CalendarV2ViewData) {
 	// C-CAL-VISUAL-POLISH-1 B: static elevation (no whole-grid hover-lift; that
-	// lift is for small cards). Small popover/nav/switcher cards keep card-elev.
-	<div class="card card-elev-static p-4">
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-lg font-semibold text-fg">
-				{ monthHeading(data) }
-			</h2>
-			<div class="flex items-center gap-1">
-				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous month">
-					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
-				</a>
-				<a href={ v2ViewNavHref(data, 0) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro">Today</a>
-				<a href={ v2ViewNavHref(data, 1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Next month">
-					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-				</a>
-			</div>
-		</div>
+	// lift is for small cards).
+	<div class="card card-elev-static p-4" data-month-view="true">
 		<div class="grid gap-1" style={ monthGridStyle(data) }>
 			for _, w := range monthWeekdayHeaders(data) {
 				<div class="text-xs font-medium text-fg-secondary text-center py-1">{ w.Name }</div>
 			}
 		</div>
-		// PR 5 §A: Per-week-row rendering with era bands + ribbons +
-		// cells. Each week row is a stack: era band layer (z-0) under
-		// ribbon layer (z-10) under cell content (z-20). Click on
-		// ribbon segment opens drawer for the multi-day event;
-		// individual cells host single-day events as before.
+		// PR 5 §A: Per-week-row rendering with era bands + ribbons + cells. Each
+		// week row is a stack: era band layer (z-0) under ribbon layer (z-10)
+		// under cell content (z-20). C-CAL-DESIGN-PASS-1 §3 wraps all rows in ONE
+		// grid whose rows are equal height.
 		@monthWeekRows(data)
 	</div>
 }
 
-// monthWeekRows renders all visible week rows for the Month view,
-// stacking era bands + ribbons + cells per row. Per dispatch §A.1 /
-// §A.2 / §A.3 (PR 5).
+// monthWeekRows renders all visible week rows for the Month view, stacking era
+// bands + ribbons + cells per row. Grid uniformity (C-CAL-DESIGN-PASS-1 §3):
+// every week row lives in ONE grid with `grid-auto-rows: 1fr`, so the rows are
+// ALWAYS equal height (the tallest sets the height, the rest match) rather than
+// each row stretching to its own content. Each row is a flex column so its cell
+// layer fills the equalized height under whatever ribbon/era band it carries.
 templ monthWeekRows(data CalendarV2ViewData) {
 	{{ ribbonRows := monthRibbonRows(data) }}
 	{{ eraBands := monthEraBands(data) }}
-	for row := 0; row < monthWeekRowCount(data); row++ {
-		<div class="relative my-1">
-			// Era-band layer — atmospheric background; events render above.
-			if len(eraBandsForRow(eraBands, row)) > 0 {
-				<div class="grid gap-1 absolute inset-0 z-0" style={ monthGridStyle(data) } aria-hidden="true">
-					for _, band := range eraBandsForRow(eraBands, row) {
-						<div
-							class="rounded-sm border-l-2 border-edge/30"
-							style={ eraBandStyle(band) }
-							title={ band.Name }
-						></div>
-					}
-				</div>
-			}
-			// Ribbon layer — multi-day events.
-			if len(ribbonsForRow(ribbonRows, row)) > 0 {
-				<div class="grid gap-1 mb-1 z-10 relative" style={ monthGridStyle(data) }>
-					for _, seg := range ribbonsForRow(ribbonRows, row) {
-						<button
-							type="button"
-							class={ ribbonClasses(seg) }
-							style={ ribbonInlineStyle(seg) }
-							data-event-id={ seg.EventID }
-							data-event-card="ribbon"
-							draggable="true"
-							aria-label={ "Multi-day event: " + seg.Name }
-						>
-							<span class="truncate">{ seg.Name }</span>
-							if !seg.IsPublic {
-								<i class="fa-solid fa-lock text-fg-secondary text-[10px] ml-1" aria-hidden="true"></i>
-							}
-							if !seg.OpenRight {
-								<span
-									class="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize bg-accent/0 hover:bg-accent/40 transition-colors duration-micro"
-									data-ribbon-resize="right"
-									role="separator"
-									aria-orientation="vertical"
-									aria-label="Drag to resize event"
-								></span>
-							}
-						</button>
-					}
-				</div>
-			}
-			// Cell layer — single-day events go inside their cells.
-			<div class="grid gap-1 z-20 relative" style={ monthGridStyle(data) }>
-				for _, d := range daysInRow(data, row) {
-					if d == 0 {
-						<div class="border border-edge/30 rounded min-h-[80px] opacity-50"></div>
-					} else {
-						@monthDayCell(data, monthDayFor(data, d))
-					}
+	<div class="grid gap-1 mt-1" style="grid-auto-rows: 1fr;">
+		for row := 0; row < monthWeekRowCount(data); row++ {
+			<div class="relative flex flex-col min-h-0">
+				// Era-band layer — atmospheric background; events render above.
+				if len(eraBandsForRow(eraBands, row)) > 0 {
+					<div class="grid gap-1 absolute inset-0 z-0" style={ monthGridStyle(data) } aria-hidden="true">
+						for _, band := range eraBandsForRow(eraBands, row) {
+							<div
+								class="rounded-sm border-l-2 border-edge/30"
+								style={ eraBandStyle(band) }
+								title={ band.Name }
+							></div>
+						}
+					</div>
 				}
+				// Ribbon layer — multi-day events (auto height, above the cells).
+				if len(ribbonsForRow(ribbonRows, row)) > 0 {
+					<div class="grid gap-1 mb-1 z-10 relative" style={ monthGridStyle(data) }>
+						for _, seg := range ribbonsForRow(ribbonRows, row) {
+							<button
+								type="button"
+								class={ ribbonClasses(seg) }
+								style={ ribbonInlineStyle(seg) }
+								data-event-id={ seg.EventID }
+								data-event-card="ribbon"
+								draggable="true"
+								aria-label={ "Multi-day event: " + seg.Name }
+							>
+								<span class="truncate">{ seg.Name }</span>
+								if !seg.IsPublic {
+									<i class="fa-solid fa-lock text-fg-secondary text-[10px] ml-1" aria-hidden="true"></i>
+								}
+								if !seg.OpenRight {
+									<span
+										class="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize bg-accent/0 hover:bg-accent/40 transition-colors duration-micro"
+										data-ribbon-resize="right"
+										role="separator"
+										aria-orientation="vertical"
+										aria-label="Drag to resize event"
+									></span>
+								}
+							</button>
+						}
+					</div>
+				}
+				// Cell layer — single-day events go inside their cells. flex-1 +
+				// content-stretch so cells fill the equalized row height, keeping
+				// the grid lines continuous under any ribbon above.
+				<div class="grid gap-1 z-20 relative flex-1 content-stretch" style={ monthGridStyle(data) }>
+					for _, d := range daysInRow(data, row) {
+						if d == 0 {
+							// Out-of-month filler: a dimmed empty cell (opacity-40 does
+							// the dimming; surface tokens are plain vars, so an /opacity
+							// color modifier would be a no-op here).
+							<div class="rounded min-h-[96px] opacity-40 bg-surface-alt"></div>
+						} else {
+							@monthDayCell(data, monthDayFor(data, d))
+						}
+					}
+				</div>
 			</div>
-		</div>
-	}
+		}
+	</div>
 }
 
-// monthDayCell renders a single day cell with today highlight +
-// rest-day tint plus the day's single-day events as compact cards.
-// Multi-day events render via the ribbon layer (not in this cell).
-// "+N more" overflow surfaces when a day has more events than fit.
+// monthDayCell renders a single day cell: a FIXED-height day number, the day's
+// single-day events as pip/title lines (or all-day chips), and "+N more"
+// overflow. Multi-day events render via the ribbon layer (not in this cell).
+//
+// Alignment rule (C-CAL-DESIGN-PASS-1 §3): the day number sits in a fixed 22px
+// line box (monthDayNumberClasses) that today/hover only REPAINT — never resize
+// or shift. Indicators live in reserved layers that cannot nudge the number:
+// the scribe add-affordance is absolutely positioned (top-right), and the event
+// lines sit below the number in normal flow.
 templ monthDayCell(data CalendarV2ViewData, day monthDay) {
 	<div
-		class={ "group border border-edge rounded p-1 min-h-[80px] flex flex-col gap-1 cell-drop-target cursor-pointer", monthDayClasses(data, day) }
+		class={ "group relative border border-edge rounded p-1.5 min-h-[96px] flex flex-col gap-1 overflow-hidden cell-drop-target cursor-pointer", monthDayClasses(data, day) }
 		data-cell-year={ fmt.Sprintf("%d", data.Year) }
 		data-cell-month={ fmt.Sprintf("%d", data.Month) }
 		data-cell-day={ fmt.Sprintf("%d", day.Day) }
 		data-day-cell="true"
 	>
-		<div class="text-xs font-medium text-fg-secondary flex items-center justify-between">
-			<span>{ fmt.Sprint(day.Day) }</span>
-			if data.IsScribe && len(monthCellEvents(data, day.Day)) == 0 {
-				// Discoverable add affordance (C-CAL-V2-MONTH-GRID-ALIGN-FIX #3):
-				// base-visible (was opacity-0 with no `group` ancestor → never
-				// revealed), brighter on cell hover. The whole empty cell is also
-				// clickable to add (event_grid.js).
-				<button
-					type="button"
-					class="opacity-50 group-hover:opacity-100 text-fg-secondary hover:text-accent transition-opacity duration-micro text-[10px]"
-					data-cell-add-event="true"
-					aria-label="Create event on this day"
-				>
-					<i class="fa-solid fa-plus" aria-hidden="true"></i>
-				</button>
-			}
-		</div>
-		for i, e := range monthCellVisible(data, day.Day) {
-			if i < monthCellVisibleCap() {
-				@calwidget.EventCard(eventToCardDataWithTiers(e, data.ActiveCalendar, data.TierDefinitions), calwidget.DensityCompact)
-			}
+		<span class={ monthDayNumberClasses(day) }>{ fmt.Sprint(day.Day) }</span>
+		if data.IsScribe && len(monthCellEvents(data, day.Day)) == 0 {
+			// Discoverable add affordance in a RESERVED absolute layer (top-right)
+			// so it can never nudge the day number. Visible at rest, brighter on
+			// hover; forced fully visible on touch via the pointer:coarse rule
+			// (cal-touch-reveal, §4). The whole empty cell is also click-to-add
+			// (event_grid.js).
+			<button
+				type="button"
+				class="cal-touch-reveal absolute top-1 right-1 z-10 w-5 h-5 grid place-items-center rounded opacity-50 group-hover:opacity-100 text-fg-secondary hover:text-accent transition-opacity duration-micro text-[10px]"
+				data-cell-add-event="true"
+				aria-label="Create event on this day"
+			>
+				<i class="fa-solid fa-plus" aria-hidden="true"></i>
+			</button>
+		}
+		// Event lines: pip + one-line title (timed) or a tinted all-day chip,
+		// capped at monthCellVisibleCap(); the rest go to "+N more". Each line
+		// keeps the compact card's interaction hooks so click→quick-edit + drag
+		// (event_grid.js) and hover-peek (calendar_v2_shell.js) still work.
+		for _, ln := range monthCellLines(data, day.Day) {
+			@monthEventLine(ln)
 		}
 		if monthCellOverflow(data, day.Day) > 0 {
 			<button
 				type="button"
-				class="text-[10px] text-accent hover:underline text-left"
+				class="mt-auto text-[10px] font-semibold text-accent hover:underline text-left"
 				data-cell-overflow-toggle="true"
 				data-cell-overflow-day={ fmt.Sprintf("%d", day.Day) }
 			>
@@ -657,24 +721,55 @@ templ monthDayCell(data CalendarV2ViewData, day monthDay) {
 	</div>
 }
 
+// monthEventLine renders one Month-cell event line: a colored pip + one-line
+// title (timed events), or a tinted chip (all-day). It carries the SAME
+// interaction hooks the compact event card did (data-event-card="compact" /
+// data-event-id / draggable) so event_grid.js's click→quick-edit + drag and
+// calendar_v2_shell.js's hover-peek keep working. A <button>, so a tap opens
+// the editor (the day popover's triggerFor skips buttons) and keyboard focus
+// lands on the event, not the cell.
+templ monthEventLine(ln monthCellLine) {
+	if ln.AllDay {
+		<button
+			type="button"
+			class="flex items-center gap-1 w-full text-left text-[11px] font-semibold leading-tight px-1.5 py-0.5 rounded-sm truncate text-fg-body hover:opacity-80 transition-opacity duration-micro cursor-pointer"
+			style={ monthAllDayChipStyle(ln.Color) }
+			data-event-id={ ln.EventID }
+			data-event-card="compact"
+			draggable="true"
+			aria-label={ "Event: " + ln.Title }
+		>
+			<span class="truncate">{ ln.Title }</span>
+			if !ln.IsPublic {
+				<i class="fa-solid fa-lock text-fg-secondary text-[9px] ml-auto" aria-hidden="true"></i>
+			}
+		</button>
+	} else {
+		<button
+			type="button"
+			class="flex items-center gap-1.5 w-full text-left text-[11px] leading-tight px-1 py-0.5 rounded-sm truncate text-fg-body hover:bg-surface-alt transition-colors duration-micro cursor-pointer"
+			data-event-id={ ln.EventID }
+			data-event-card="compact"
+			draggable="true"
+			aria-label={ "Event: " + ln.Title }
+		>
+			<span class="w-1.5 h-1.5 rounded-sm flex-none" style={ monthLinePipStyle(ln.Color) } aria-hidden="true"></span>
+			<span class="truncate">{ ln.Title }</span>
+			if !ln.IsPublic {
+				<i class="fa-solid fa-lock text-fg-secondary text-[9px] ml-auto" aria-hidden="true"></i>
+			}
+		</button>
+	}
+}
+
 // weekViewPlaceholder renders the Week hour-grid view (Wave 1.5 §C).
 // Structure: top all-day strip + scrolling hour-grid below; columns
 // = calendar's weekday count; rows = hours-per-day. Timed events
 // position via CSS grid-row; all-day events fill the top strip.
 templ weekViewPlaceholder(data CalendarV2ViewData) {
 	<div class="card card-elev-static p-4" data-week-view="true">
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-lg font-semibold text-fg">{ weekHeading(data) }</h2>
-			<div class="flex items-center gap-1">
-				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous week">
-					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
-				</a>
-				<a href={ v2ViewNavHref(data, 0) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro">Today</a>
-				<a href={ v2ViewNavHref(data, 1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Next week">
-					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-				</a>
-			</div>
-		</div>
+		// Period nav + heading live in the sticky command bar (calendarV2Header,
+		// C-CAL-DESIGN-PASS-1 §1); this card renders only the week grid.
 		{{ days := weekDays(data) }}
 		<div class="grid gap-px" style={ weekColumnsStyle(len(days)) }>
 			// Spacer + day headers.
@@ -752,18 +847,8 @@ templ weekViewPlaceholder(data CalendarV2ViewData) {
 // (v2Step "ledger"). Weather glyphs + the worldstate band are W2+ and absent.
 templ ledgerView(data CalendarV2ViewData) {
 	<div class="card card-elev-static p-4" data-ledger-view="true">
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-lg font-semibold text-fg">{ ledgerHeading(data) }</h2>
-			<div class="flex items-center gap-1">
-				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous year">
-					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
-				</a>
-				<a href={ v2ViewNavHref(data, 0) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro">Today</a>
-				<a href={ v2ViewNavHref(data, 1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Next year">
-					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-				</a>
-			</div>
-		</div>
+		// Period nav + heading live in the sticky command bar (calendarV2Header,
+		// C-CAL-DESIGN-PASS-1 §1); this card renders only the ledger body.
 		{{ eras := ledgerEraGroups(data) }}
 		if ledgerIsEmpty(eras) {
 			<div class="text-center py-12 text-fg-secondary">
@@ -1119,18 +1204,8 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 // all-day events render in the top strip.
 templ dayViewPlaceholder(data CalendarV2ViewData) {
 	<div class="card card-elev-static p-4" data-day-view="true">
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-lg font-semibold text-fg">{ dayHeading(data) }</h2>
-			<div class="flex items-center gap-1">
-				<a href={ v2ViewNavHref(data, -1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Previous day">
-					<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
-				</a>
-				<a href={ v2ViewNavHref(data, 0) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro">Today</a>
-				<a href={ v2ViewNavHref(data, 1) } class="px-2 py-1 text-sm text-fg-secondary hover:bg-surface-2 rounded transition-colors duration-micro" aria-label="Next day">
-					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-				</a>
-			</div>
-		</div>
+		// Period nav + heading live in the sticky command bar (calendarV2Header,
+		// C-CAL-DESIGN-PASS-1 §1); this card renders only the day grid.
 		// All-day strip.
 		{{ allDay := allDayEventsForDay(data.ActiveCalendar, data.Events, data.Year, data.Month, data.Day) }}
 		if len(allDay) > 0 {

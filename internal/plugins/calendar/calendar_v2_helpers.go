@@ -144,6 +144,69 @@ func monthHeading(data CalendarV2ViewData) string {
 	return fmt.Sprintf("%s %d%s", name, data.Year, epoch)
 }
 
+// --- Command bar (C-CAL-DESIGN-PASS-1 §1) -----------------------------------
+//
+// The sticky command bar is the SINGLE home for period navigation across every
+// view: it absorbed the per-view nav headers that used to live inside each
+// view card (Month/Week/Day/Ledger each rendered their own prev/Today/next +
+// heading). These helpers let the shared header render the right label + the
+// right nav aria-labels for whichever view is active. The aria-labels are
+// load-bearing: calendar_v2_shell.js's j/k/t keyboard shortcuts navigate by
+// clicking `[aria-label="Previous <unit>"]` / `"Next <unit>"` / `"Today"`, so
+// the strings here must stay in lockstep with clickByLabel() in that file.
+
+// v2PeriodHeading is the command bar's primary period label for the active
+// view. Dispatches to the existing per-view heading builders so the label
+// tracks the view the bar is navigating.
+func v2PeriodHeading(data CalendarV2ViewData) string {
+	switch data.View {
+	case "week":
+		return weekHeading(data)
+	case "day":
+		return dayHeading(data)
+	case "ledger":
+		return ledgerHeading(data)
+	default:
+		return monthHeading(data)
+	}
+}
+
+// v2PeriodSubLabel is the command bar's secondary "fantasy year line": the era
+// that contains the displayed year (e.g. "Age of the Broken Lantern"), or ""
+// when the calendar defines no eras. Pure flavor — the primary label already
+// carries the machine-readable month + year.
+func v2PeriodSubLabel(data CalendarV2ViewData) string {
+	if data.ActiveCalendar == nil {
+		return ""
+	}
+	if era := data.ActiveCalendar.EraForYear(data.Year); era != nil {
+		return era.Name
+	}
+	return ""
+}
+
+// v2NavUnit is the per-view period noun ("month"/"week"/"day"/"year") used to
+// compose the nav aria-labels the keyboard shortcuts key on.
+func v2NavUnit(data CalendarV2ViewData) string {
+	switch data.View {
+	case "week":
+		return "week"
+	case "day":
+		return "day"
+	case "ledger":
+		// The Ledger steps by whole years (v2Step "ledger"); its shortcut hook
+		// is 'Previous year'/'Next year'.
+		return "year"
+	default:
+		return "month"
+	}
+}
+
+// v2NavPrevLabel / v2NavNextLabel compose the command bar's prev/next
+// aria-labels for the active view — the exact strings clickByLabel() searches.
+func v2NavPrevLabel(data CalendarV2ViewData) string { return "Previous " + v2NavUnit(data) }
+func v2NavNextLabel(data CalendarV2ViewData) string { return "Next " + v2NavUnit(data) }
+
 // monthGridStyle builds the CSS Grid template for the Month view's
 // weekday-column layout. Uses the calendar's per-week structure
 // (len(Weekdays)) so a fantasy 10-day week renders 10 columns.
@@ -220,15 +283,19 @@ func monthDays(data CalendarV2ViewData) []monthDay {
 func monthDayClasses(_ CalendarV2ViewData, day monthDay) string {
 	switch {
 	case day.IsToday:
-		// NOTE: `today-pulse` was removed here (C-CAL-V2-MONTH-GRID-ALIGN-FIX
-		// #2). It is a one-shot keyframe ending at `opacity: 0` with
-		// `animation-fill-mode: both`, and it was applied to the CELL itself —
-		// so today's cell faded to invisible and stayed blank. The static
-		// ring + tint is the persistent today marker; the legible day number
-		// stays visible.
-		return "bg-accent/10 ring-2 ring-accent"
+		// C-CAL-DESIGN-PASS-1 §3: today's strong marker moved to the NUMBER pill
+		// (monthDayNumberClasses) so it repaints in a fixed box instead of the
+		// old whole-cell `ring-2 ring-accent`, which visually competed with the
+		// number and read as a heavier cell. The cell keeps only a faint accent
+		// wash to help scanning — a pure repaint (no ring, no layout shift).
+		// (`today-pulse` stays banished — C-CAL-V2-MONTH-GRID-ALIGN-FIX #2: it
+		// faded the cell to opacity:0 and blanked the day.)
+		return "bg-accent/5"
 	case day.IsRestDay:
-		return "bg-surface-2"
+		// bg-surface-alt is the real hover/alt surface token; the former
+		// `bg-surface-2` was undefined in the Tailwind config → a no-op class
+		// that never tinted rest days.
+		return "bg-surface-alt"
 	case day.Filler:
 		return "opacity-50"
 	default:
@@ -427,6 +494,106 @@ func monthCellOverflow(data CalendarV2ViewData, day int) int {
 		return 0
 	}
 	return len(all) - monthCellVisibleCap()
+}
+
+// --- Month cell pip + title lines (C-CAL-DESIGN-PASS-1 §2) -------------------
+//
+// At month zoom, stacked event CARDS bury the day number and read as noise.
+// The redesign renders each single-day event as a colored PIP + one-line title
+// (timed events get a leading start-time), or — for all-day / untimed events —
+// a tinted CHIP. The pip / chip color comes from the SAME projection the
+// compact card used (eventToCardDataWithTiers → CategoryColor), so there is no
+// new color system. The visible cap (monthCellVisibleCap) and the "+N more"
+// overflow are unchanged, so drag-to-create and the overflow endpoint keep
+// working.
+
+// monthCellLine is one rendered event line in a Month cell.
+type monthCellLine struct {
+	EventID  string
+	Title    string // time-prefixed for timed events ("19:00 Session 12")
+	Color    string // hex/token for the pip or chip accent; "" → neutral
+	AllDay   bool   // true → tinted chip (no pip); false → pip + title
+	IsPublic bool   // false → a lock glyph trails the title
+}
+
+// monthCellLines projects the (already-capped) visible events for a Month cell
+// into render-ready pip/title lines. "All-day" mirrors the event-card's own
+// determination (no resolvable start time → TimeLabel == "") so a cell line and
+// its card agree on the same event.
+func monthCellLines(data CalendarV2ViewData, day int) []monthCellLine {
+	vis := monthCellVisible(data, day)
+	out := make([]monthCellLine, 0, len(vis))
+	for _, e := range vis {
+		cd := eventToCardDataWithTiers(e, data.ActiveCalendar, data.TierDefinitions)
+		allDay := cd.TimeLabel == ""
+		title := cd.Name
+		if !allDay {
+			// The cell is one line — show the START time only; the day popover /
+			// drawer carry the full range.
+			title = startTimeLabel(cd.TimeLabel) + " " + cd.Name
+		}
+		out = append(out, monthCellLine{
+			EventID:  cd.ID,
+			Title:    title,
+			Color:    cd.CategoryColor,
+			AllDay:   allDay,
+			IsPublic: cd.IsPublic,
+		})
+	}
+	return out
+}
+
+// startTimeLabel returns the start portion of an EventCardData.TimeLabel
+// ("HH:MM" from "HH:MM" or "HH:MM — HH:MM").
+func startTimeLabel(timeLabel string) string {
+	if i := strings.Index(timeLabel, " — "); i >= 0 {
+		return timeLabel[:i]
+	}
+	return timeLabel
+}
+
+// monthLinePipColor resolves the pip/chip color, falling back to a muted token
+// when an event carries no category color (so every line reserves the same pip
+// slot and stays aligned).
+func monthLinePipColor(color string) string {
+	if color == "" {
+		return "var(--color-text-muted)"
+	}
+	return color
+}
+
+// monthLinePipStyle is the inline style for a timed event's pip.
+func monthLinePipStyle(color string) string {
+	return "background-color: " + monthLinePipColor(color) + ";"
+}
+
+// monthAllDayChipStyle is the inline style for an all-day event's tinted chip:
+// a soft fill + a left accent bar in the event-type color (the mockup's
+// .evline.allday). Uses the same color-mix tint pattern as the multi-day
+// ribbon so the two all-day surfaces read as one family.
+func monthAllDayChipStyle(color string) string {
+	c := monthLinePipColor(color)
+	return "border-left: 3px solid " + c + "; background-color: color-mix(in srgb, " + c + " 14%, transparent);"
+}
+
+// monthDayNumberClasses returns the classes for a day-cell's number box.
+// EVERY number lives in the same fixed 22px line box (h-[22px]); today only
+// REPAINTS it into a filled accent pill (adding a fixed 22px width + centering
+// + accent fill) — height and baseline never change, so today/plain/hover
+// switches can't resize or shift the number (the operator's alignment rule,
+// C-CAL-DESIGN-PASS-1 §3; the mockup's `.mday .dn` + `.mday.today .dn`). These
+// classes are scoped to the cell number and are deliberately NOT the same as
+// the command bar's Today button, so the mockup's `.today` button-vs-cell
+// collision can't recur in production.
+func monthDayNumberClasses(day monthDay) string {
+	// self-start keeps the box at its natural width (and left origin) inside the
+	// flex-column cell, so the today pill is a 22px circle at the left instead of
+	// stretching across the cell.
+	base := "self-start h-[22px] inline-flex items-center text-xs font-semibold leading-none"
+	if day.IsToday {
+		return base + " w-[22px] justify-center rounded-full bg-accent text-white"
+	}
+	return base + " text-fg-secondary"
 }
 
 // --- Multi-day ribbon layout (Wave 1 PR 5 §A) ---
