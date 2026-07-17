@@ -51,6 +51,12 @@ func RegisterCampaignRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.Camp
 
 	// Integrations tab fragments (owner only — HTMX-loaded within Settings page).
 	cg.GET("/integrations/keys", h.IntegrationsKeysFragment, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// Calendar sync beacon (C-SYNC-DATE-BEACON): any campaign member may
+	// read — NO RequireRole, unlike every other route in this group. See
+	// the doc comment on Handler.GetCalendarSyncBeacon. Polled by the
+	// calendar sky strip's sync chip (calendar_v2_shell.js).
+	cg.GET("/calendar-sync-beacon", h.GetCalendarSyncBeacon)
 }
 
 // RegisterAPIRoutes adds the public REST API endpoints under /api/v1/.

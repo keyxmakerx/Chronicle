@@ -125,28 +125,38 @@
         });
     }
 
-    // --- Sky strip (C-CAL-SKY-STRIP) -----------------------------
+    // --- Sky strip (C-CAL-SKY-STRIP, drift wired by C-SYNC-DATE-BEACON) ---
     //
     // Collapse toggle (localStorage-persisted per campaign) + the Calendaria
-    // sync chip. The chip's data comes from a client-side fetch of the
-    // EXISTING member-accessible GET /campaigns/:id/foundry-presence
-    // (foundry_vtt/handler.go:81-97) — not a new endpoint (Step-0 finding,
-    // PR body: no trustworthy calendar-specific last-sync source exists;
-    // this presence signal is the cleanest real one available). The calendar
-    // plugin does not import foundry_vtt (T-B2 plugin isolation) — a plain
-    // HTTP fetch to the other plugin's own endpoint is the cross-plugin seam,
-    // same as any other widget-to-API call.
+    // sync chip. The chip's data comes from two client-side fetches of
+    // EXISTING member-accessible endpoints — not new ones for the presence
+    // half (Step-0 finding, PR #545 body):
+    //   - GET /campaigns/:id/foundry-presence (foundry_vtt/handler.go) —
+    //     connectivity: never_seen / last_seen.
+    //   - GET /campaigns/:id/calendar-sync-beacon (syncapi/handler.go
+    //     GetCalendarSyncBeacon, C-SYNC-DATE-BEACON) — the served-date
+    //     beacon: the date a Bearer-authed Foundry module last SAW when it
+    //     polled GET /calendar/date. This is the last-confirmed-date source
+    //     PR #545 flagged as missing; computeSyncChipState's drift path was
+    //     built and unit-tested there but unreachable until this beacon
+    //     existed.
+    // The calendar plugin does not import foundry_vtt or syncapi (T-B2
+    // plugin isolation) — plain HTTP fetches to the other plugins' own
+    // endpoints are the cross-plugin seam, same as any other widget-to-API
+    // call.
 
     var SKY_STRIP_STALE_AFTER_MS = 15 * 60 * 1000; // a live Foundry session pings well inside this
 
     // computeSyncChipState is a PURE function (no DOM/network/Date.now() of
     // its own — the caller supplies "now") mapping a presence signal +
     // (optional) a last-confirmed-Foundry-date comparison to the chip's
-    // display state. fmConfirmedDate/chronicleCurrentDate are always '' from
-    // wireSkyStrip below — no source persists a Foundry-confirmed date today
-    // (see the PR body) — so 'drift' is reachable by this function and its
-    // tests, but dormant in production until an FM-lane dispatch adds that
-    // signal. Exposed on window.__calSkyStripSync for node --test
+    // display state. wireSkyStrip below now populates fmConfirmedDate from
+    // the served-date beacon (gated to SKY_STRIP_STALE_AFTER_MS freshness —
+    // a beacon older than that can't be trusted to represent what Foundry
+    // currently sees, same bar as the presence staleness check) and
+    // chronicleCurrentDate from the SSR'd data-cal-current-date attribute,
+    // so 'drift' is now reachable in production, not just by tests.
+    // Exposed on window.__calSkyStripSync for node --test
     // (test/js/calendar_v2_sky_strip.test.mjs), the same reuse-seam
     // convention as window.__calMoonSim / window.__calSkyFxMeta.
     function computeSyncChipState(neverSeen, lastSeenMs, nowMs, staleAfterMs, fmConfirmedDate, chronicleCurrentDate) {
@@ -248,17 +258,39 @@
         }
 
         var chip = strip.querySelector('[data-cal-sky-sync-chip]');
+        var chronicleCurrentDate = strip.dataset.calCurrentDate || '';
         if (chip && campaignId && window.Chronicle && window.Chronicle.apiFetch) {
-            window.Chronicle.apiFetch('/campaigns/' + campaignId + '/foundry-presence')
-                .then(function (r) { if (!r.ok) throw new Error('presence ' + r.status); return r.json(); })
-                .then(function (presence) {
-                    var lastSeenMs = presence.last_seen ? new Date(presence.last_seen).getTime() : null;
-                    var state = computeSyncChipState(!!presence.never_seen, lastSeenMs, Date.now(), SKY_STRIP_STALE_AFTER_MS, '', '');
-                    paintSkyChip(chip, state);
-                })
-                .catch(function () {
-                    paintSkyChip(chip, { status: 'never_synced', agoMs: null, date: '' });
-                });
+            var presenceFetch = window.Chronicle.apiFetch('/campaigns/' + campaignId + '/foundry-presence')
+                .then(function (r) { if (!r.ok) throw new Error('presence ' + r.status); return r.json(); });
+            // Beacon fetch degrades independently: a failure here (network
+            // hiccup, older cached JS) shouldn't sink the whole chip when
+            // presence data is fine — fall back to "no confirmed date"
+            // (the same signal as no beacon ever recorded).
+            var beaconFetch = window.Chronicle.apiFetch('/campaigns/' + campaignId + '/calendar-sync-beacon')
+                .then(function (r) { if (!r.ok) throw new Error('beacon ' + r.status); return r.json(); })
+                .catch(function () { return {}; });
+
+            Promise.all([presenceFetch, beaconFetch]).then(function (results) {
+                var presence = results[0];
+                var beacon = results[1] || {};
+                var nowMs = Date.now();
+                var lastSeenMs = presence.last_seen ? new Date(presence.last_seen).getTime() : null;
+
+                // A beacon older than the freshness window can't be trusted
+                // to represent what Foundry currently sees (it may just be
+                // stale from a module that's been offline for days) — treat
+                // it the same as "no confirmed date" rather than risk a
+                // false drift/false in-sync read.
+                var beaconAgeMs = beacon.last_served_at ? nowMs - new Date(beacon.last_served_at).getTime() : null;
+                var fmConfirmedDate = (beacon.last_served_date && beaconAgeMs !== null && beaconAgeMs <= SKY_STRIP_STALE_AFTER_MS)
+                    ? beacon.last_served_date
+                    : '';
+
+                var state = computeSyncChipState(!!presence.never_seen, lastSeenMs, nowMs, SKY_STRIP_STALE_AFTER_MS, fmConfirmedDate, chronicleCurrentDate);
+                paintSkyChip(chip, state);
+            }).catch(function () {
+                paintSkyChip(chip, { status: 'never_synced', agoMs: null, date: '' });
+            });
         } else if (chip) {
             paintSkyChip(chip, { status: 'never_synced', agoMs: null, date: '' });
         }

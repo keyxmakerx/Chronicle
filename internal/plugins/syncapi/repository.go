@@ -49,6 +49,10 @@ type SyncAPIRepository interface {
 	// Statistics.
 	GetStats(ctx context.Context, since time.Time) (*APIStats, error)
 	GetCampaignStats(ctx context.Context, campaignID string, since time.Time) (*APIStats, error)
+
+	// Calendar date beacon (C-SYNC-DATE-BEACON).
+	GetCalendarDateBeacon(ctx context.Context, campaignID string) (*CalendarDateBeacon, error)
+	UpsertCalendarDateBeacon(ctx context.Context, beacon *CalendarDateBeacon) error
 }
 
 // syncAPIRepository implements SyncAPIRepository with MariaDB.
@@ -705,6 +709,46 @@ func buildLogFilter(f RequestLogFilter) (string, []any) {
 		}
 	}
 	return where, args
+}
+
+// --- Calendar Date Beacon (C-SYNC-DATE-BEACON) ---
+
+// GetCalendarDateBeacon returns the campaign's served-date beacon, or nil
+// (no error) if none has been recorded yet.
+func (r *syncAPIRepository) GetCalendarDateBeacon(ctx context.Context, campaignID string) (*CalendarDateBeacon, error) {
+	b := CalendarDateBeacon{CampaignID: campaignID}
+	err := r.db.QueryRowContext(ctx, `
+		SELECT last_served_year, last_served_month, last_served_day, last_served_at
+		FROM sync_calendar_date_beacons WHERE campaign_id = ?`, campaignID,
+	).Scan(&b.Year, &b.Month, &b.Day, &b.ServedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get calendar date beacon: %w", err)
+	}
+	return &b, nil
+}
+
+// UpsertCalendarDateBeacon writes (or replaces) the campaign's served-date
+// beacon. Callers (syncAPIService.RecordCalendarDateBeacon) are responsible
+// for the write-throttle decision — this method always writes.
+func (r *syncAPIRepository) UpsertCalendarDateBeacon(ctx context.Context, beacon *CalendarDateBeacon) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO sync_calendar_date_beacons
+			(campaign_id, last_served_year, last_served_month, last_served_day, last_served_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			last_served_year = VALUES(last_served_year),
+			last_served_month = VALUES(last_served_month),
+			last_served_day = VALUES(last_served_day),
+			last_served_at = VALUES(last_served_at)`,
+		beacon.CampaignID, beacon.Year, beacon.Month, beacon.Day, beacon.ServedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert calendar date beacon: %w", err)
+	}
+	return nil
 }
 
 // buildSecurityFilter constructs a WHERE clause for security event queries.

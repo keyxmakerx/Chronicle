@@ -112,3 +112,20 @@ func skyStripAllGlyphs(data CalendarV2ViewData) []skyStripGlyph {
 	out = append(out, events...)
 	return out
 }
+
+// skyStripCurrentDateString formats data.ActiveCalendar's CURRENT date
+// (not the navigated view date — data.Year/Month/Day change as the user
+// pages the grid) as "YYYY-MM-DD", matching the %04d-%02d-%02d convention
+// used elsewhere for date identifiers (e.g. handler.go's dateStr). SSR'd
+// into the strip's data-cal-current-date attribute so calendar_v2_shell.js
+// can diff it against the served-date beacon (C-SYNC-DATE-BEACON) without
+// a second fetch — ActiveCalendar already has the real-time seam applied
+// by the service layer (same source GetCurrentDate's cal.CurrentYear/
+// Month/Day reads), so both sides of the drift comparison agree.
+func skyStripCurrentDateString(data CalendarV2ViewData) string {
+	if data.ActiveCalendar == nil {
+		return ""
+	}
+	cal := data.ActiveCalendar
+	return fmt.Sprintf("%04d-%02d-%02d", cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
+}
