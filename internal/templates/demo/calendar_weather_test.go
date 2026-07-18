@@ -45,7 +45,7 @@ func TestCalAlmanac_WeatherBundle(t *testing.T) {
 func TestCalAlmanac_WeatherFrameWiring(t *testing.T) {
 	js := readCalAlmanacJS(t)
 	for _, m := range []string{
-		"SKY_SURFACE.setFrame(composeFrames(L.back))", // layered compositor (back canvas)
+		"band.surface.setFrame(composeFrames(L.back))", // layered compositor (back canvas, per-band since C-SKYBOX-MULTI-INSTANCE)
 		"EFFECTS[v2].hgSand.color", // hourglass sand syncs to the weather effect
 	} {
 		if !strings.Contains(js, m) {
