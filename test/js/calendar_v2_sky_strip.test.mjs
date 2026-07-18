@@ -110,6 +110,50 @@ test('negative clock skew (lastSeen "after" now) clamps agoMs to 0, never negati
   assert.equal(s.status, 'in_sync');
 });
 
+// --- fmAppliedDate preference (C-SYNC-APPLIED-BEACON) ---
+
+test('omitting fmAppliedDate entirely is byte-identical to pre-C-SYNC-APPLIED-BEACON behavior (drift from served alone)', () => {
+  const now = 1_000_000_000;
+  const lastSeen = now - 60 * 1000;
+  // No 7th arg at all — every pre-existing caller/test shape.
+  const s = computeSyncChipState(false, lastSeen, now, 15 * 60 * 1000, '12 Jul 2026', '14 Jul 2026');
+  assert.equal(s.status, 'drift');
+  assert.equal(s.date, '12 Jul 2026');
+});
+
+test('an empty-string fmAppliedDate (no confirm ever landed) falls back to the served date, same as omitting it', () => {
+  const now = 1_000_000_000;
+  const lastSeen = now - 60 * 1000;
+  const s = computeSyncChipState(false, lastSeen, now, 15 * 60 * 1000, '12 Jul 2026', '14 Jul 2026', '');
+  assert.equal(s.status, 'drift');
+  assert.equal(s.date, '12 Jul 2026');
+});
+
+test('a fresh applied date that matches Chronicle current overrides a differing served date — resolves to in_sync, not drift', () => {
+  const now = 1_000_000_000;
+  const lastSeen = now - 60 * 1000;
+  // served says 12 Jul (stale relative to what actually happened), but the
+  // module has since confirmed it applied 14 Jul — applied wins.
+  const s = computeSyncChipState(false, lastSeen, now, 15 * 60 * 1000, '12 Jul 2026', '14 Jul 2026', '14 Jul 2026');
+  assert.equal(s.status, 'in_sync');
+});
+
+test('a fresh applied date that DIFFERS from Chronicle current still reads drift, using the applied date not the served one', () => {
+  const now = 1_000_000_000;
+  const lastSeen = now - 60 * 1000;
+  const s = computeSyncChipState(false, lastSeen, now, 15 * 60 * 1000, '14 Jul 2026', '16 Jul 2026', '12 Jul 2026');
+  assert.equal(s.status, 'drift');
+  assert.equal(s.date, '12 Jul 2026');
+});
+
+test('applied date present but served date empty still drives drift (confirm-before-any-GET case)', () => {
+  const now = 1_000_000_000;
+  const lastSeen = now - 60 * 1000;
+  const s = computeSyncChipState(false, lastSeen, now, 15 * 60 * 1000, '', '14 Jul 2026', '12 Jul 2026');
+  assert.equal(s.status, 'drift');
+  assert.equal(s.date, '12 Jul 2026');
+});
+
 // --- wireSkyStrip integration (C-SYNC-DATE-BEACON: drift wired, not dormant) ---
 
 // makeEl builds a minimal DOM-element stub. `children` maps a querySelector
@@ -264,4 +308,56 @@ test('wireSkyStrip: a failed beacon fetch degrades independently — presence st
 test('wireSkyStrip: a failed presence fetch falls back to never_synced (whole-chip failure, unchanged from #545)', async () => {
   const { word } = await bootWithDom({ presence: new Error('network error'), beacon: {} }, '2026-07-14');
   assert.equal(word.textContent, 'No module');
+});
+
+// --- applied-date beacon (C-SYNC-APPLIED-BEACON) ---
+
+test('wireSkyStrip: a fresh applied date overrides a differing served date — reads in_sync when applied matches current', async () => {
+  const { word } = await bootWithDom({
+    presence: FRESH_PRESENCE,
+    beacon: {
+      last_served_date: '2026-07-12', last_served_at: new Date(Date.now() - 60 * 1000).toISOString(),
+      last_applied_date: '2026-07-14', last_applied_at: new Date(Date.now() - 60 * 1000).toISOString(),
+    },
+  }, '2026-07-14');
+
+  // Served alone would read drift (12th vs 14th); a fresh confirmed applied
+  // date of the 14th proves the module actually caught up — in_sync wins.
+  assert.equal(word.textContent, 'In sync');
+});
+
+test('wireSkyStrip: a fresh applied date drives drift using its own date, not the served date', async () => {
+  const { word, detail } = await bootWithDom({
+    presence: FRESH_PRESENCE,
+    beacon: {
+      last_served_date: '2026-07-14', last_served_at: new Date(Date.now() - 60 * 1000).toISOString(),
+      last_applied_date: '2026-07-10', last_applied_at: new Date(Date.now() - 60 * 1000).toISOString(),
+    },
+  }, '2026-07-14');
+
+  assert.equal(word.textContent, 'Drift');
+  assert.ok(detail.textContent.indexOf('2026-07-10') !== -1, 'detail shows the APPLIED date, not the served date');
+});
+
+test('wireSkyStrip: a STALE applied date (older than the freshness window) is ignored, falling back to the served date', async () => {
+  const staleAt = new Date(Date.now() - 20 * 60 * 1000).toISOString(); // 20 min > 15 min freshness window
+  const { word } = await bootWithDom({
+    presence: FRESH_PRESENCE,
+    beacon: {
+      last_served_date: '2026-07-14', last_served_at: new Date(Date.now() - 60 * 1000).toISOString(),
+      last_applied_date: '2026-07-01', last_applied_at: staleAt,
+    },
+  }, '2026-07-14');
+
+  // The stale applied date can't be trusted, so served (fresh, matching) wins.
+  assert.equal(word.textContent, 'In sync');
+});
+
+test('wireSkyStrip: graceful fallback — a beacon response with no applied fields at all (older module, never confirms) behaves byte-identical to pre-C-SYNC-APPLIED-BEACON', async () => {
+  const { word } = await bootWithDom({
+    presence: FRESH_PRESENCE,
+    beacon: { last_served_date: '2026-07-12', last_served_at: new Date(Date.now() - 60 * 1000).toISOString() },
+  }, '2026-07-14');
+
+  assert.equal(word.textContent, 'Drift');
 });

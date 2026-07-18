@@ -91,6 +91,82 @@ func TestGetCalendarSyncBeacon_NoneRecorded_ReturnsEmptyNotError(t *testing.T) {
 	}
 }
 
+// TestGetCalendarSyncBeacon_ExposesAppliedFields pins C-SYNC-APPLIED-BEACON:
+// the response gains the applied-date half alongside the pre-existing
+// served-date fields when a confirm has landed for this campaign.
+func TestGetCalendarSyncBeacon_ExposesAppliedFields(t *testing.T) {
+	served := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+	applied := time.Date(2026, 7, 18, 9, 30, 0, 0, time.UTC)
+	appliedYear, appliedMonth, appliedDay := 2026, 7, 18
+	repo := &mockSyncAPIRepo{
+		getBeaconFn: func(_ context.Context, _ string) (*CalendarDateBeacon, error) {
+			return &CalendarDateBeacon{
+				CampaignID: "camp-1", Year: 2026, Month: 7, Day: 17, ServedAt: served,
+				AppliedYear: &appliedYear, AppliedMonth: &appliedMonth, AppliedDay: &appliedDay, AppliedAt: &applied,
+			}, nil
+		},
+	}
+	h := NewHandler(NewSyncAPIService(repo))
+	c, rec := newCampaignMemberTestContext("camp-1")
+
+	if err := h.GetCalendarSyncBeacon(c); err != nil {
+		t.Fatalf("GetCalendarSyncBeacon: %v", err)
+	}
+
+	var body CalendarSyncBeaconResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid JSON body: %v (raw: %q)", err, rec.Body.String())
+	}
+	if body.Date != "2026-07-17" || body.ServedAt == nil || !body.ServedAt.Equal(served) {
+		t.Errorf("served fields = %q/%v, want 2026-07-17/%v", body.Date, body.ServedAt, served)
+	}
+	if body.AppliedDate != "2026-07-18" {
+		t.Errorf("AppliedDate = %q, want 2026-07-18", body.AppliedDate)
+	}
+	if body.AppliedAt == nil || !body.AppliedAt.Equal(applied) {
+		t.Errorf("AppliedAt = %v, want %v", body.AppliedAt, applied)
+	}
+}
+
+// TestGetCalendarSyncBeacon_ConfirmBeforeAnyGET_ServedFieldsOmitted pins the
+// create-on-confirm case (repository.go ConfirmCalendarDateBeacon): a
+// confirm can land before any served-date GET for this campaign, leaving a
+// beacon row whose served fields are the 0/0 "unset" sentinel. The response
+// MUST omit the served date rather than surfacing the fake "0000-00-00" —
+// only the applied half is real.
+func TestGetCalendarSyncBeacon_ConfirmBeforeAnyGET_ServedFieldsOmitted(t *testing.T) {
+	applied := time.Date(2026, 7, 18, 9, 30, 0, 0, time.UTC)
+	appliedYear, appliedMonth, appliedDay := 2026, 7, 18
+	repo := &mockSyncAPIRepo{
+		getBeaconFn: func(_ context.Context, _ string) (*CalendarDateBeacon, error) {
+			// Year/Month/Day/ServedAt as ConfirmCalendarDateBeacon's insert
+			// branch leaves them: 0/0/0 sentinel + appliedAt as a placeholder
+			// last_served_at (never a real served date).
+			return &CalendarDateBeacon{
+				CampaignID: "camp-1", Year: 0, Month: 0, Day: 0, ServedAt: applied,
+				AppliedYear: &appliedYear, AppliedMonth: &appliedMonth, AppliedDay: &appliedDay, AppliedAt: &applied,
+			}, nil
+		},
+	}
+	h := NewHandler(NewSyncAPIService(repo))
+	c, rec := newCampaignMemberTestContext("camp-1")
+
+	if err := h.GetCalendarSyncBeacon(c); err != nil {
+		t.Fatalf("GetCalendarSyncBeacon: %v", err)
+	}
+
+	var body CalendarSyncBeaconResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid JSON body: %v (raw: %q)", err, rec.Body.String())
+	}
+	if body.Date != "" || body.ServedAt != nil {
+		t.Errorf("expected served fields omitted (never-served sentinel), got Date=%q ServedAt=%v", body.Date, body.ServedAt)
+	}
+	if body.AppliedDate != "2026-07-18" || body.AppliedAt == nil {
+		t.Errorf("expected applied fields present, got AppliedDate=%q AppliedAt=%v", body.AppliedDate, body.AppliedAt)
+	}
+}
+
 func TestGetCalendarSyncBeacon_NoCampaignContext_Forbidden(t *testing.T) {
 	repo := &mockSyncAPIRepo{}
 	h := NewHandler(NewSyncAPIService(repo))

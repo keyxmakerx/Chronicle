@@ -286,10 +286,24 @@ type CampaignSyncStats struct {
 // read, never a claim about what it did with it. One row per campaign — see
 // migrations/005_calendar_date_beacon.up.sql for why a new table was
 // needed (no existing syncapi row is per-campaign grain).
+//
+// C-SYNC-APPLIED-BEACON (migrations/006_calendar_date_beacon_applied.up.sql)
+// extends the same row with the "applied" half: the date the module
+// actually applied to its own calendar after a confirm
+// (POST /calendar/date/confirm). Applied* fields are pointers because they
+// may be unset — either no confirm has ever landed for this campaign, or
+// (create-on-confirm case) a confirm arrived before any served-date GET,
+// so AppliedAt != nil is the "has this campaign ever confirmed" signal,
+// independent of whether Year/Month/Day (the served half) are populated.
 type CalendarDateBeacon struct {
 	CampaignID string    `json:"campaign_id"`
 	Year       int       `json:"last_served_year"`
 	Month      int       `json:"last_served_month"`
 	Day        int       `json:"last_served_day"`
 	ServedAt   time.Time `json:"last_served_at"`
+
+	AppliedYear  *int       `json:"applied_year,omitempty"`
+	AppliedMonth *int       `json:"applied_month,omitempty"`
+	AppliedDay   *int       `json:"applied_day,omitempty"`
+	AppliedAt    *time.Time `json:"applied_at,omitempty"`
 }

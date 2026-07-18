@@ -324,9 +324,19 @@ func (h *Handler) SyncMappingsFragment(c echo.Context) error {
 // omitted (empty string) when no beacon has been recorded yet for this
 // campaign — the sky strip's sync chip treats that the same as "no
 // Foundry-confirmed date" (computeSyncChipState's fmConfirmedDate == '').
+//
+// AppliedDate/AppliedAt (C-SYNC-APPLIED-BEACON) are the "applied" half:
+// the date the module reported via POST /calendar/date/confirm after
+// actually applying it, independent of whether a served-date GET has ever
+// landed for this campaign. Both omitted when no confirm has landed yet —
+// this is the exact-same-shape fallback the FM-side agent's older module
+// builds (that never call confirm) see, so the contract degrades cleanly.
 type CalendarSyncBeaconResponse struct {
 	Date     string     `json:"last_served_date,omitempty"`
 	ServedAt *time.Time `json:"last_served_at,omitempty"`
+
+	AppliedDate string     `json:"last_applied_date,omitempty"`
+	AppliedAt   *time.Time `json:"last_applied_at,omitempty"`
 }
 
 // GetCalendarSyncBeacon returns the served-date beacon: the date a
@@ -352,11 +362,21 @@ func (h *Handler) GetCalendarSyncBeacon(c echo.Context) error {
 		return c.JSON(http.StatusOK, CalendarSyncBeaconResponse{})
 	}
 
-	servedAt := beacon.ServedAt
-	return c.JSON(http.StatusOK, CalendarSyncBeaconResponse{
-		Date:     fmt.Sprintf("%04d-%02d-%02d", beacon.Year, beacon.Month, beacon.Day),
-		ServedAt: &servedAt,
-	})
+	resp := CalendarSyncBeaconResponse{}
+	// Month == 0 is the "never served" sentinel a confirm-created row can
+	// leave in place (repository.go ConfirmCalendarDateBeacon's insert
+	// branch) — a real served date's month is always 1-12, so this can
+	// never collide with a legitimate served value.
+	if beacon.Month != 0 {
+		servedAt := beacon.ServedAt
+		resp.Date = fmt.Sprintf("%04d-%02d-%02d", beacon.Year, beacon.Month, beacon.Day)
+		resp.ServedAt = &servedAt
+	}
+	if beacon.AppliedAt != nil {
+		resp.AppliedDate = fmt.Sprintf("%04d-%02d-%02d", *beacon.AppliedYear, *beacon.AppliedMonth, *beacon.AppliedDay)
+		resp.AppliedAt = beacon.AppliedAt
+	}
+	return c.JSON(http.StatusOK, resp)
 }
 
 // --- Admin: API Monitoring Dashboard ---

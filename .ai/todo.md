@@ -383,6 +383,8 @@ _Improve Foundry VTT sync fidelity. Add system-aware character sheet sync. Build
 
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
+- [x] **Sync chip beacon: "saw" → "applied" (C-SYNC-APPLIED-BEACON, 2026-07-18)** — `POST /calendar/date/confirm` (Bearer-only, real API keys) lets the Foundry module report back once it has actually applied a date, not just fetched one (closes the gap #548/C-SYNC-DATE-BEACON flagged as follow-up FM-SYNC-CONFIRMED-DATE). `computeSyncChipState` now prefers a fresh applied date over the served one; degrades byte-identical to today when an older module never calls confirm. Full design: status.md's 2026-07-18 entry + `syncapi/.ai.md` / `calendar/.ai.md`. **Foundry-module half ships separately** (FM-SYNC-CONFIRMED-DATE dispatch, contract in this dispatch's PR body) — until that lands, no module calls confirm and the chip behaves exactly as it does today.
+
 ### Phase X: System Modularity & Owner Experience
 
 _Validate the full owner pipeline: upload custom system → enable → get presets,

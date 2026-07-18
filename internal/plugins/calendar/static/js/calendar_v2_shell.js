@@ -125,7 +125,8 @@
         });
     }
 
-    // --- Sky strip (C-CAL-SKY-STRIP, drift wired by C-SYNC-DATE-BEACON) ---
+    // --- Sky strip (C-CAL-SKY-STRIP, drift wired by C-SYNC-DATE-BEACON,
+    //     "saw" upgraded to "applied" by C-SYNC-APPLIED-BEACON) ---
     //
     // Collapse toggle (localStorage-persisted per campaign) + the Calendaria
     // sync chip. The chip's data comes from two client-side fetches of
@@ -139,7 +140,11 @@
     //     polled GET /calendar/date. This is the last-confirmed-date source
     //     PR #545 flagged as missing; computeSyncChipState's drift path was
     //     built and unit-tested there but unreachable until this beacon
-    //     existed.
+    //     existed. C-SYNC-APPLIED-BEACON extends the SAME response with
+    //     last_applied_date/last_applied_at (POST /calendar/date/confirm,
+    //     written after the module actually applies a date, not just
+    //     fetches it) — no second fetch needed, both halves ride the one
+    //     beacon call.
     // The calendar plugin does not import foundry_vtt or syncapi (T-B2
     // plugin isolation) — plain HTTP fetches to the other plugins' own
     // endpoints are the cross-plugin seam, same as any other widget-to-API
@@ -156,16 +161,29 @@
     // currently sees, same bar as the presence staleness check) and
     // chronicleCurrentDate from the SSR'd data-cal-current-date attribute,
     // so 'drift' is now reachable in production, not just by tests.
+    //
+    // fmAppliedDate (C-SYNC-APPLIED-BEACON) is the optional 7th param: the
+    // date the module last reported as actually APPLIED (POST
+    // /calendar/date/confirm), freshness-gated the same way by the caller.
+    // "saw" (fmConfirmedDate) can be wrong — a fetch doesn't guarantee the
+    // module applied it — so when a fresh applied date is available it's
+    // the more trustworthy signal and wins for BOTH the drift comparison
+    // and the effective confirmed-date value; fmConfirmedDate is the
+    // fallback for older module builds that never call confirm. Omitting
+    // the argument entirely (every pre-existing caller/test) makes
+    // confirmedDate collapse to exactly fmConfirmedDate — byte-identical
+    // to this function's behavior before C-SYNC-APPLIED-BEACON.
     // Exposed on window.__calSkyStripSync for node --test
     // (test/js/calendar_v2_sky_strip.test.mjs), the same reuse-seam
     // convention as window.__calMoonSim / window.__calSkyFxMeta.
-    function computeSyncChipState(neverSeen, lastSeenMs, nowMs, staleAfterMs, fmConfirmedDate, chronicleCurrentDate) {
+    function computeSyncChipState(neverSeen, lastSeenMs, nowMs, staleAfterMs, fmConfirmedDate, chronicleCurrentDate, fmAppliedDate) {
         if (neverSeen || lastSeenMs == null) {
             return { status: 'never_synced', agoMs: null, date: '' };
         }
         var agoMs = Math.max(0, nowMs - lastSeenMs);
-        if (fmConfirmedDate && chronicleCurrentDate && fmConfirmedDate !== chronicleCurrentDate) {
-            return { status: 'drift', agoMs: agoMs, date: fmConfirmedDate };
+        var confirmedDate = fmAppliedDate || fmConfirmedDate;
+        if (confirmedDate && chronicleCurrentDate && confirmedDate !== chronicleCurrentDate) {
+            return { status: 'drift', agoMs: agoMs, date: confirmedDate };
         }
         return { status: agoMs > staleAfterMs ? 'stale' : 'in_sync', agoMs: agoMs, date: chronicleCurrentDate || '' };
     }
@@ -280,13 +298,23 @@
                 // to represent what Foundry currently sees (it may just be
                 // stale from a module that's been offline for days) — treat
                 // it the same as "no confirmed date" rather than risk a
-                // false drift/false in-sync read.
+                // false drift/false in-sync read. Same freshness bar and
+                // same fallback-to-'' shape applies to the applied-date half
+                // (C-SYNC-APPLIED-BEACON) — an older module that never
+                // calls POST /calendar/date/confirm simply never populates
+                // last_applied_date/at, so fmAppliedDate stays '' and
+                // computeSyncChipState's confirmedDate collapses to
+                // fmConfirmedDate exactly as before that beacon existed.
                 var beaconAgeMs = beacon.last_served_at ? nowMs - new Date(beacon.last_served_at).getTime() : null;
                 var fmConfirmedDate = (beacon.last_served_date && beaconAgeMs !== null && beaconAgeMs <= SKY_STRIP_STALE_AFTER_MS)
                     ? beacon.last_served_date
                     : '';
+                var appliedAgeMs = beacon.last_applied_at ? nowMs - new Date(beacon.last_applied_at).getTime() : null;
+                var fmAppliedDate = (beacon.last_applied_date && appliedAgeMs !== null && appliedAgeMs <= SKY_STRIP_STALE_AFTER_MS)
+                    ? beacon.last_applied_date
+                    : '';
 
-                var state = computeSyncChipState(!!presence.never_seen, lastSeenMs, nowMs, SKY_STRIP_STALE_AFTER_MS, fmConfirmedDate, chronicleCurrentDate);
+                var state = computeSyncChipState(!!presence.never_seen, lastSeenMs, nowMs, SKY_STRIP_STALE_AFTER_MS, fmConfirmedDate, chronicleCurrentDate, fmAppliedDate);
                 paintSkyChip(chip, state);
             }).catch(function () {
                 paintSkyChip(chip, { status: 'never_synced', agoMs: null, date: '' });
