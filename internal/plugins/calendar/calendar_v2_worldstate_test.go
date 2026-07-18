@@ -140,10 +140,21 @@ func TestWsDatePrimary_YearAwareWeekday(t *testing.T) {
 // (same pattern as TestEngineHasProductionSeams).
 func TestSkyBandAmbientInit_RunsTimePaint(t *testing.T) {
 	js := readEngineJS(t)
-	block := js
+	// Since C-SKYBOX-MULTI-INSTANCE the 'sky-band-ambient' init block delegates
+	// to paintSkyBands() (so the incremental multi-instance mount path can
+	// re-run the same paint). Pin the delegation, then pin the time paint
+	// inside paintSkyBands itself.
 	if i := strings.Index(js, "registerInitBlock('sky-band-ambient'"); i >= 0 {
 		end := strings.Index(js[i:], "});")
-		if end > 0 {
+		if end <= 0 || !strings.Contains(js[i:i+end], "paintSkyBands()") {
+			t.Errorf("sky-band-ambient init must delegate to paintSkyBands()")
+		}
+	} else {
+		t.Errorf("sky-band-ambient init block missing")
+	}
+	block := js
+	if i := strings.Index(js, "function paintSkyBands()"); i >= 0 {
+		if end := strings.Index(js[i:], "registerInitBlock('sky-band-ambient'"); end > 0 {
 			block = js[i : i+end]
 		}
 	}
@@ -153,7 +164,7 @@ func TestSkyBandAmbientInit_RunsTimePaint(t *testing.T) {
 		"refeedSky()",                       // recolor the sun-bloom emitter
 	} {
 		if !strings.Contains(block, want) {
-			t.Errorf("sky-band-ambient init must run the time paint: missing %q", want)
+			t.Errorf("paintSkyBands must run the time paint: missing %q", want)
 		}
 	}
 }
