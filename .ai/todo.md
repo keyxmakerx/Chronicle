@@ -486,6 +486,9 @@ Interfaces with 30+ methods that could be split into role-based sub-interfaces:
 Six widgets inject `<style>` elements dynamically. Working correctly (ID-based dedup) but could be moved to `input.css`:
 - [ ] `permissions.js`, `shop_inventory.js`, `tag_picker.js`, `entity_tooltip.js`, `relations.js`, `template_editor.js`
 
+### Duplicated curated timezone lists (found + fixed 2026-07-18)
+- [x] **Three hand-curated IANA timezone dropdown lists had drifted** (account settings, calendar real-time anchor, availability scheduler) — found + consolidated same session, not left as debt. See `.ai/status.md` 2026-07-18 entry (C-TZ-CONSOLIDATION) for the fix. Noted here so a future session that spots a fourth zone-picking surface knows to add it to `internal/timeutil.CommonZones()` rather than hand-rolling a new list.
+
 ---
 
 ## Completed Sprints

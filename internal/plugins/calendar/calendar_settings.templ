@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // CalendarSettingsPage renders the full settings page for calendar owners.
@@ -252,8 +253,8 @@ templ generalSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken
 						<label class="block text-sm font-medium text-fg-body">Anchor Time Zone</label>
 						<select x-model="realTimeZone" class="input w-full">
 							<option value="">— Select a time zone —</option>
-							for _, tz := range commonTimeZones() {
-								<option value={ tz }>{ tz }</option>
+							for _, tz := range timeutil.CommonZones() {
+								<option value={ tz.Value }>{ tz.Label }</option>
 							}
 						</select>
 						<p class="text-xs text-fg-muted">

@@ -19,6 +19,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/timeutil"
 )
 
 // sanitizeRedirect returns raw only if it is a safe same-site path (starts with
@@ -566,7 +567,7 @@ func (h *Handler) AccountPage(c echo.Context) error {
 	}
 
 	csrfToken := middleware.GetCSRFToken(c)
-	timezones := commonTimezones()
+	timezones := timeutil.CommonZones()
 
 	return middleware.Render(c, http.StatusOK, AccountPage(user, csrfToken, timezones))
 }
@@ -590,40 +591,6 @@ func (h *Handler) UpdateTimezoneAPI(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// commonTimezones returns a curated list of IANA timezones for the dropdown.
-// Covers all major regions without overwhelming the user with obscure entries.
-func commonTimezones() []string {
-	zones := []string{}
-	regions := []string{
-		"Africa/Cairo", "Africa/Johannesburg", "Africa/Lagos", "Africa/Nairobi",
-		"America/Anchorage", "America/Argentina/Buenos_Aires", "America/Bogota",
-		"America/Chicago", "America/Denver", "America/Halifax", "America/Los_Angeles",
-		"America/Mexico_City", "America/New_York", "America/Phoenix",
-		"America/Santiago", "America/Sao_Paulo", "America/St_Johns", "America/Toronto",
-		"America/Vancouver",
-		"Asia/Baghdad", "Asia/Bangkok", "Asia/Colombo", "Asia/Dubai", "Asia/Hong_Kong",
-		"Asia/Istanbul", "Asia/Jakarta", "Asia/Karachi", "Asia/Kolkata", "Asia/Manila",
-		"Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Asia/Taipei", "Asia/Tehran",
-		"Asia/Tokyo",
-		"Atlantic/Reykjavik",
-		"Australia/Adelaide", "Australia/Brisbane", "Australia/Melbourne",
-		"Australia/Perth", "Australia/Sydney",
-		"Europe/Amsterdam", "Europe/Athens", "Europe/Berlin", "Europe/Brussels",
-		"Europe/Dublin", "Europe/Helsinki", "Europe/Lisbon", "Europe/London",
-		"Europe/Madrid", "Europe/Moscow", "Europe/Oslo", "Europe/Paris",
-		"Europe/Prague", "Europe/Rome", "Europe/Stockholm", "Europe/Vienna",
-		"Europe/Warsaw", "Europe/Zurich",
-		"Pacific/Auckland", "Pacific/Fiji", "Pacific/Guam", "Pacific/Honolulu",
-	}
-	// Validate each timezone to ensure it's loadable.
-	for _, tz := range regions {
-		if _, err := time.LoadLocation(tz); err == nil {
-			zones = append(zones, tz)
-		}
-	}
-	return zones
 }
 
 // --- Cookie helpers ---
