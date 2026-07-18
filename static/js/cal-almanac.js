@@ -59,8 +59,11 @@
   var PROD_OBSERVERS = [];
   function trackObserver(ro) { if (ro) PROD_OBSERVERS.push(ro); return ro; }
   function teardownProd() {
-    try { if (SKY_SURFACE && SKY_SURFACE.destroy) SKY_SURFACE.destroy(); } catch (e) {}
-    try { if (SKY_FRONT && SKY_FRONT.destroy) SKY_FRONT.destroy(); } catch (e) {}
+    SKY_BANDS.forEach(function (band) {
+      try { if (band.surface && band.surface.destroy) band.surface.destroy(); } catch (e) {}
+      try { if (band.frontSurface && band.frontSurface.destroy) band.frontSurface.destroy(); } catch (e) {}
+    });
+    SKY_BANDS = [];
     try { if (GLASS_SURFACE && GLASS_SURFACE.destroy) GLASS_SURFACE.destroy(); } catch (e) {}
     SKY_SURFACE = null; SKY_FRONT = null; GLASS_SURFACE = null;
     for (var oi = 0; oi < PROD_OBSERVERS.length; oi++) { try { PROD_OBSERVERS[oi].disconnect(); } catch (e) {} }
@@ -76,19 +79,40 @@
   }
 
   function init() {
-    // PRODUCTION (live calendar_v2 + entity embeds): the band carries the seed
-    // on a [data-cal-worldstate] element (E7: read by ATTRIBUTE, not a fixed id
-    // — entity embeds namespace their id per band so multi-embed pages stay
-    // valid; the singleton engine binds the FIRST band). Re-init PER BAND NODE
-    // so a boosted-nav / P4b swap that injects a fresh band re-paints (the prior
-    // band is torn down first).
-    var band = (typeof document !== 'undefined' && document.querySelector)
-      ? document.querySelector('[data-cal-worldstate]') : null;
-    if (band) {
-      if (band.__calInited) return;   // this exact band node is already live
-      teardownProd();                 // clean up a previous band's engine state
+    // PRODUCTION (live calendar_v2 + entity embeds): each band carries the
+    // seed on its OWN [data-cal-worldstate] element (E7: read by ATTRIBUTE,
+    // not a fixed id — entity embeds namespace their id per band so
+    // multi-embed pages stay valid). C-SKYBOX-MULTI-INSTANCE: the engine
+    // used to bind ONLY the first such band on the page (`querySelector`
+    // picks one match, and `band.__calInited` made every later init() call a
+    // no-op) — so a second simultaneous skybox mount (dashboard block +
+    // calendar sky pane open at once) never got a canvas surface and sat
+    // static forever. Every currently-present band is considered here.
+    var bands = queryAllOrOne('[data-cal-worldstate]');
+    if (bands.length) {
+      var stillLive = bands.filter(function (b) { return b.__calInited; });
+      if (window.__calAlmanacInited && stillLive.length) {
+        // The engine is already booted and at least one previously-bound
+        // band is still on the page — either a no-op re-settle, or a NEW
+        // band mounted ALONGSIDE a still-live one (two skybox widgets open
+        // at once). Either way, keep the live worldState/engine alive —
+        // don't reset it out from under the survivor — and just bind +
+        // paint whatever wasn't bound yet.
+        bands.forEach(function (b) { b.__calInited = true; });
+        bindSkyBands();
+        paintSkyBands();
+        return;
+      }
+      // First boot, OR every previously-bound band is gone (a full
+      // boosted-nav swap replacing the one band on a single-band page) —
+      // (re)bootstrap the engine from scratch against the current set. A
+      // fresh boot with SEVERAL bands already present (the common
+      // multi-instance case: both mounted in the same initial render) binds
+      // every one of them in this single runAll() pass — bindSkyBands()
+      // below iterates every [data-cal-sky] root, not just the first.
+      teardownProd();
       window.__calAlmanacResults = runAll();
-      band.__calInited = true;
+      bands.forEach(function (b) { b.__calInited = true; });
       window.__calAlmanacInited = true;
       return;
     }
@@ -1911,17 +1935,56 @@
   // meteor/etc.) render on the canvas; the DOM layers keep only the
   // non-particle pieces (eclipse disc, lightning flash, cloud banks, TBD
   // glyphs). The server-rendered DOM particles are the no-JS fallback.
-  var SKY_SURFACE = null; // engine handle for the BACK sky canvas (behind sun/moons)
-  var SKY_FRONT = null;   // engine handle for the FRONT canvas (weather over the sun);
+  // C-SKYBOX-MULTI-INSTANCE: the engine used to bind exactly ONE sky band
+  // (SKY_SURFACE/SKY_FRONT singletons, found via a bare `document.querySelector`
+  // that always resolves to the FIRST match). SKY_BANDS replaces that with an
+  // array — one entry per LIVE [data-cal-sky] root — so N simultaneous skybox
+  // widgets each get their own canvas surfaces + their own LAYER_CACHE (a
+  // meteor closure's live streak list/spawn accumulator is per-canvas state;
+  // sharing one across two differently-sized canvases would desync it). All
+  // bands still share the ONE CalParticleEngine rAF loop (createSurface just
+  // registers into its existing `surfaces` array) and the ONE worldState —
+  // only the render TARGETS are per-instance, per the #543 doctrine (engine
+  // reuse, one loop, per-instance layer state). SKY_SURFACE/SKY_FRONT (+ their
+  // window.__calSkyEngine/__calSkyFrontEngine exposures) are kept pointing at
+  // the FIRST bound band for back-compat with existing single-band callers/tests.
+  var SKY_BANDS = [];
+  var SKY_SURFACE = null; // first-bound band's BACK canvas handle (back-compat)
+  var SKY_FRONT = null;   // first-bound band's FRONT canvas handle (back-compat);
                           // optional — older band markup without it composites
                           // every layer onto the back canvas.
+  // toArr/queryAllOrOne/skyRoots — resolve every currently-present match for a
+  // selector, falling back to a single `document.querySelector` result when
+  // `querySelectorAll` isn't available/populated for it (keeps every existing
+  // single-band caller — and every test's minimal DOM stub — working exactly
+  // as before on a page that genuinely has just one band).
+  function toArr(list) {
+    var a = [];
+    if (!list) return a;
+    for (var i = 0; i < list.length; i++) a.push(list[i]);
+    return a;
+  }
+  function queryAllOrOne(sel) {
+    var list = (typeof document !== 'undefined' && document.querySelectorAll) ? toArr(document.querySelectorAll(sel)) : [];
+    if (!list.length && typeof document !== 'undefined' && document.querySelector) {
+      var one = document.querySelector(sel);
+      if (one) list.push(one);
+    }
+    return list;
+  }
+  function skyRoots() { return queryAllOrOne('[data-cal-sky]'); }
+  function bandForRoot(sky) {
+    for (var i = 0; i < SKY_BANDS.length; i++) if (SKY_BANDS[i].root === sky) return SKY_BANDS[i];
+    return null;
+  }
   // renderDayPipeline — the base day render (weather + celestial layers +
-  // happening chips + label + canvas emitter feed). Wave 0: invoked by the
-  // sky-core subscriber on a day/weather/events change; the public
-  // renderSkyForDay() shim below routes callers through setWorldState.
+  // happening chips + label + canvas emitter feed), applied to EVERY live sky
+  // band. Wave 0: invoked by the sky-core subscriber on a day/weather/events
+  // change; the public renderSkyForDay() shim below routes callers through
+  // setWorldState.
   function renderDayPipeline(m, day) {
-    var sky = document.querySelector('[data-cal-sky]');
-    if (!sky) return;
+    var skies = skyRoots();
+    if (!skies.length) return;
     // worldState is the source of truth (Wave 0). It's kept in lockstep with
     // the authored DATA on every day-nav, so normal navigation renders
     // identically to v5; a synthetic setWorldState({weather|events}) now
@@ -1930,10 +1993,20 @@
     var wtypeID = dayWeatherTypeID(m, day);
     var effID = (worldState && worldState.weather && worldState.weather.type) ||
                 (wtypeID ? weatherEffectID(wtypeID) : 'clear');
+    var engineLive = !!SKY_BANDS.length;
+    var events = (worldState && worldState.events) ? worldState.events : celestialFor(m, day);
+    skies.forEach(function (sky) { renderDayPipelineForSky(sky, wtypeID, effID, engineLive, events); });
+    // Feed the canvas engine with this day's active particle specs — ONE call
+    // (not per-sky): feedSkyEngine iterates every bound band itself.
+    if (engineLive) feedSkyEngine(effID, events);
+    // WAVE 2: repaint moon designs/phases for the displayed day + the mood
+    // wash — ONE call each: both already iterate every live sky band.
+    if (typeof applyMoonDesigns === 'function') applyMoonDesigns();
+    if (typeof applyMoodTint === 'function') applyMoodTint();
+  }
+  function renderDayPipelineForSky(sky, wtypeID, effID, engineLive, events) {
     sky.setAttribute('data-cal-sky-weather', effID);
     sky.className = sky.className.replace(/cal-almanac-sky--wfx-\S+/g, '').trim() + ' cal-almanac-sky--wfx-' + effID;
-    var engineLive = !!SKY_SURFACE;
-    var events = (worldState && worldState.events) ? worldState.events : celestialFor(m, day);
     // Weather layer. When the canvas engine is live it owns EVERY weather
     // visual (incl. the storm deck + lightning, which used to be DOM); the
     // CSS-DOM renderFns are purely the no-JS / engine-dead fallback now.
@@ -1956,8 +2029,6 @@
         });
       }
     }
-    // Feed the canvas engine with this day's active particle specs.
-    if (engineLive) feedSkyEngine(effID, events);
     // Happening chips bottom-right.
     var hap = sky.querySelector('[data-cal-sky-happening]');
     if (hap) {
@@ -1989,9 +2060,6 @@
         rest.textContent = ' · ' + skyLabel(VIEW.timeFrac) + ' · ' + seasonName() + ' · ' + (wt ? wt.name : 'Clear');
       }
     }
-    // WAVE 2: repaint moon designs/phases for the displayed day + the mood wash.
-    if (typeof applyMoonDesigns === 'function') applyMoonDesigns();
-    if (typeof applyMoodTint === 'function') applyMoodTint();
   }
   // Public day-change entry point → unified world-state (Wave 0 shim).
   // Preserves every caller (sky-band-ambient init, weather-override,
@@ -2042,22 +2110,30 @@
   // EVERY active layer fresh via `f()`, discarding in-flight state each
   // time — and this function runs on every timeOfDay tick, not just real
   // weather/event changes. Cleared on teardownProd() (band re-init).
+  // C-SKYBOX-MULTI-INSTANCE: this module-level LAYER_CACHE is now the
+  // LEGACY/demo single-band cache — kept so effectLayersFor()'s public/
+  // test-facing signature (effID, events) is unchanged (skybox_meteor_pacing.
+  // test.mjs exercises it directly). The PROD multi-band render path
+  // (feedSkyEngine, below) calls effectLayersForCache() with each band's OWN
+  // SKY_BANDS[i].layerCache instead — every instance needs its own cached
+  // closures, or two differently-sized canvases would fight over one shared
+  // streak list/spawn accumulator.
   var LAYER_CACHE = {};
-  function cachedLayer(key, factory) {
-    if (!LAYER_CACHE[key]) LAYER_CACHE[key] = factory();
-    return LAYER_CACHE[key];
+  function cachedLayer(cache, key, factory) {
+    if (!cache[key]) cache[key] = factory();
+    return cache[key];
   }
-  function effectLayersFor(effID, events) {
+  function effectLayersForCache(cache, effID, events) {
     var back = [mkStarfield()()], front = [];
     // De-dup: the same event type twice contributes once.
     var seen = {}, activeKeys = {};
     METEOR_WINDOWS = {};
     function collect(prefix, fx) {
       fx.back.forEach(function (f, i) {
-        var k = prefix + ':back:' + i; activeKeys[k] = true; back.push(cachedLayer(k, f));
+        var k = prefix + ':back:' + i; activeKeys[k] = true; back.push(cachedLayer(cache, k, f));
       });
       fx.front.forEach(function (f, i) {
-        var k = prefix + ':front:' + i; activeKeys[k] = true; front.push(cachedLayer(k, f));
+        var k = prefix + ':front:' + i; activeKeys[k] = true; front.push(cachedLayer(cache, k, f));
       });
     }
     (events || []).forEach(function (c) {
@@ -2072,11 +2148,12 @@
     // Drop cached state for anything no longer active, so a genuine
     // weather/event change still clears its particles instead of leaking
     // forever — only an UNCHANGED active set reuses its layer state.
-    Object.keys(LAYER_CACHE).forEach(function (k) { if (!activeKeys[k]) delete LAYER_CACHE[k]; });
+    Object.keys(cache).forEach(function (k) { if (!activeKeys[k]) delete cache[k]; });
     // The solar eclipse boosts darkness so the starfield emerges mid-day.
     SKY_ENV.darkBoost = seen['eclipse-solar'] ? 0.85 : 0;
     return { back: back, front: front };
   }
+  function effectLayersFor(effID, events) { return effectLayersForCache(LAYER_CACHE, effID, events); }
   window.__calEffectLayersFor = function (effID, events) {
     var L = effectLayersFor(effID, events);
     return { back: L.back.length, front: L.front.length };
@@ -2094,15 +2171,22 @@
       }
     };
   }
+  // feedSkyEngine — feeds EVERY bound band its own composed frame/emitters,
+  // each computed against that band's own layerCache (see LAYER_CACHE comment
+  // above). effID/events are shared (one worldState drives every instance);
+  // only the per-band cached closures differ.
   function feedSkyEngine(effID, events) {
-    if (!SKY_SURFACE) return;
-    var L = effectLayersFor(effID, events);
-    if (SKY_FRONT) {
-      SKY_SURFACE.setFrame(composeFrames(L.back));
-      SKY_FRONT.setFrame(composeFrames(L.front));
+    SKY_BANDS.forEach(function (band) { feedSkyEngineForBand(band, effID, events); });
+  }
+  function feedSkyEngineForBand(band, effID, events) {
+    if (!band || !band.surface) return;
+    var L = effectLayersForCache(band.layerCache, effID, events);
+    if (band.frontSurface) {
+      band.surface.setFrame(composeFrames(L.back));
+      band.frontSurface.setFrame(composeFrames(L.front));
     } else {
       // Single-canvas markup (legacy embeds): composite everything back-to-front.
-      SKY_SURFACE.setFrame(composeFrames(L.back.concat(L.front)));
+      band.surface.setFrame(composeFrames(L.back.concat(L.front)));
     }
     var specs = [];
     if (ERA_HOVER_SPEC) specs.push(ERA_HOVER_SPEC);
@@ -2110,8 +2194,8 @@
     // its drifting gold dots read as "weird sprites coming off the sun" next
     // to the CSS ray wheel + corona, which are the sun's liveliness now.
     // (sunBloomSpec stays defined for the demo-controls panel/tests.)
-    SKY_SURFACE.setEmitters(specs);
-    if (SKY_FRONT) SKY_FRONT.setEmitters([]);
+    band.surface.setEmitters(specs);
+    if (band.frontSurface) band.frontSurface.setEmitters([]);
   }
   function refeedSky() {
     // Source from worldState so a synthetic weather/event survives a later
@@ -2122,46 +2206,82 @@
     feedSkyEngine(effID, events);
   }
 
-  // Derive the band-height-relative render vars (sun size) on the sky root.
-  // ONE sizing rule for every surface — the 200px prod band, the taller /demo
-  // canvas, and any embed all get a proportionate sun, killing the per-surface
-  // size-override drift (the "sun too big in prod" class).
+  // Derive the band-height-relative render vars (sun size) on EVERY live sky
+  // root. ONE sizing rule for every surface — the 200px prod band, the taller
+  // /demo canvas, and any embed all get a proportionate sun, killing the
+  // per-surface size-override drift (the "sun too big in prod" class).
   function setBandSizeVars() {
-    var sky = document.querySelector('[data-cal-sky]');
-    if (!sky || !sky.getBoundingClientRect) return;
-    var h = sky.getBoundingClientRect().height || 0;
-    if (h <= 0) return;
-    var sun = Math.round(Math.max(64, Math.min(150, h * 0.46)));
-    sky.style.setProperty('--cal-sun-size', sun + 'px');
+    skyRoots().forEach(function (sky) {
+      if (!sky.getBoundingClientRect) return;
+      var h = sky.getBoundingClientRect().height || 0;
+      if (h <= 0) return;
+      var sun = Math.round(Math.max(64, Math.min(150, h * 0.46)));
+      sky.style.setProperty('--cal-sun-size', sun + 'px');
+    });
   }
-  registerInitBlock('particle-engine', function () {
-    var canvas = document.querySelector('[data-cal-sky-canvas]');
-    if (!canvas || !window.CalParticleEngine) return;
-    SKY_SURFACE = CalParticleEngine.createSurface(canvas, {});
-    window.__calSkyEngine = SKY_SURFACE;
-    // FRONT canvas (weather in front of the sun) — optional markup; the feed
-    // composites everything onto the back canvas when it's absent.
-    var front = document.querySelector('[data-cal-sky-canvas-front]');
-    if (front) {
-      SKY_FRONT = CalParticleEngine.createSurface(front, {});
-      window.__calSkyFrontEngine = SKY_FRONT;
+  // bindSkyBands — binds a CalParticleEngine surface (+ optional front
+  // surface) to every [data-cal-sky] root that doesn't have one yet. Called
+  // from the 'particle-engine' init block (the first-boot pass, which sees
+  // every band already present in one shot) AND from init()'s incremental
+  // path (a band mounted alongside an already-live one — the multi-instance
+  // case). Pairs each sky root with its canvas by DOCUMENT ORDER: every
+  // Skybox() render emits exactly one [data-cal-sky-canvas] (+ optionally one
+  // [data-cal-sky-canvas-front]) as a fixed child of its own [data-cal-sky]
+  // root, so the Nth sky root's canvas is always the Nth canvas in document
+  // order — no `.closest()`/scoped-lookup needed, and it degrades safely for
+  // test harnesses whose DOM stub can't resolve [data-cal-sky] at all (see
+  // queryAllOrOne): a canvas found with no resolvable root binds "rootless",
+  // identical to the pre-multi-instance engine's single-band behavior.
+  function bindSkyBands() {
+    if (!window.CalParticleEngine) return;
+    var skies = skyRoots();
+    var canvases = queryAllOrOne('[data-cal-sky-canvas]');
+    var fronts = queryAllOrOne('[data-cal-sky-canvas-front]');
+    if (skies.length) {
+      skies.forEach(function (sky, i) {
+        if (bandForRoot(sky)) return; // already bound
+        var canvas = canvases[i];
+        if (!canvas) return;
+        bindOneSkyBand(sky, canvas, fronts[i] || null);
+      });
+    } else if (canvases.length && !SKY_BANDS.length) {
+      bindOneSkyBand(null, canvases[0], fronts[0] || null);
+    }
+  }
+  function bindOneSkyBand(sky, canvas, front) {
+    var surface = CalParticleEngine.createSurface(canvas, {});
+    var frontSurface = front ? CalParticleEngine.createSurface(front, {}) : null;
+    var band = { root: sky, canvas: canvas, front: front, surface: surface, frontSurface: frontSurface, layerCache: {} };
+    SKY_BANDS.push(band);
+    if (SKY_BANDS.length === 1) {
+      // Back-compat globals: existing callers/tests read the FIRST bound
+      // band's handles off these singular names.
+      SKY_SURFACE = surface; window.__calSkyEngine = surface;
+      SKY_FRONT = frontSurface; window.__calSkyFrontEngine = frontSurface;
     }
     setBandSizeVars();
-    // Keep the canvas backing stores sized to the sky-band as it resizes.
+    // Keep the canvas backing stores sized to its own sky-band as it resizes.
     try {
       if ('ResizeObserver' in window) {
         var ro = trackObserver(new ResizeObserver(function () {
-          SKY_SURFACE.resize();
-          if (SKY_FRONT) SKY_FRONT.resize();
+          surface.resize();
+          if (frontSurface) frontSurface.resize();
           setBandSizeVars();
           refeedSky();
         }));
         ro.observe(canvas);
       }
     } catch (e) {}
-  });
+    return band;
+  }
+  registerInitBlock('particle-engine', function () { bindSkyBands(); });
 
-  registerInitBlock('sky-band-ambient', function () {
+  // paintSkyBands — the initial (+ re-init) paint for every live sky band:
+  // day pipeline, time pipeline, sun state, engine feed. Factored out of the
+  // 'sky-band-ambient' block so init()'s incremental multi-instance path (a
+  // band mounted alongside an already-live one) can re-run the exact same
+  // paint without re-running the whole engine bootstrap.
+  function paintSkyBands() {
     // Re-render once on init so the JS-built layers match the registries
     // (the server pre-render is for no-JS; this keeps the source single)
     // and the canvas engine gets its first emitter set. Call the base
@@ -2181,7 +2301,8 @@
     renderTimePipeline(VIEW.timeFrac);
     applySunState(currentSunState());
     refeedSky();
-  });
+  }
+  registerInitBlock('sky-band-ambient', function () { paintSkyBands(); });
 
   // ============================================================
   // Block: sun-drag-scrub + gradient/clock recompute
@@ -2380,40 +2501,41 @@
   // Place a moon on its arc from worldState.timeOfDay + orbitOffset, with the
   // same horizon treatment as the time pipeline: fully hidden below the
   // horizon, edge-faded while low, never cropped above the band.
-  function moonArcPlace(el, moon) {
+  function moonArcPlace(el, moon, sky) {
     var t = (worldState && typeof worldState.timeOfDay === 'number') ? worldState.timeOfDay : VIEW.timeFrac;
     var mt = t - 0.5 + (moon.orbitOffset || 0); while (mt < 0) mt += 1; while (mt > 1) mt -= 1;
     var mp = arcPos(mt);
     var mwake = (mt - 0.25) / 0.5;
     if (mwake <= 0.02 || mwake >= 0.98) mp.opacity = 0;
     else mp.opacity *= arcEdgeFade(mwake);
-    var sky = document.querySelector('[data-cal-sky]');
     place(el, sky ? clampArcToBand(mp, sky, 40) : mp);
   }
-  // Reconcile the moon DOM with worldState.moons (the source of truth):
-  // create elements for new moons, repaint design/phase/tint, place them, and
-  // remove orphans. Lets the demo add / remove / randomize moons live.
+  // Reconcile the moon DOM with worldState.moons (the source of truth), for
+  // EVERY live sky band: create elements for new moons, repaint design/
+  // phase/tint, place them, and remove orphans. Lets the demo add / remove /
+  // randomize moons live.
   function applyMoonDesigns() {
-    var sky = document.querySelector('[data-cal-sky]');
-    var arc = sky && sky.querySelector('[data-cal-sky-arc]');
-    if (!sky || !arc) return;
-    var moons = (worldState && worldState.moons) || [], seen = {};
-    moons.forEach(function (moon) {
-      seen[moon.id] = true;
-      var el = sky.querySelector('[data-cal-sky-moon][data-moon-id="' + moon.id + '"]');
-      if (!el) {
-        el = document.createElement('span');
-        el.className = 'cal-almanac-sky__moon';
-        el.setAttribute('data-cal-sky-moon', '');
-        el.setAttribute('data-moon-id', String(moon.id));
-        arc.appendChild(el);
-      }
-      applyMoonDesign(el, moon);
-      moonArcPlace(el, moon);
-    });
-    sky.querySelectorAll('[data-cal-sky-moon]').forEach(function (el) {
-      var id = parseInt(el.getAttribute('data-moon-id'), 10);
-      if (!seen[id] && el.parentNode) el.parentNode.removeChild(el);
+    skyRoots().forEach(function (sky) {
+      var arc = sky.querySelector('[data-cal-sky-arc]');
+      if (!arc) return;
+      var moons = (worldState && worldState.moons) || [], seen = {};
+      moons.forEach(function (moon) {
+        seen[moon.id] = true;
+        var el = sky.querySelector('[data-cal-sky-moon][data-moon-id="' + moon.id + '"]');
+        if (!el) {
+          el = document.createElement('span');
+          el.className = 'cal-almanac-sky__moon';
+          el.setAttribute('data-cal-sky-moon', '');
+          el.setAttribute('data-moon-id', String(moon.id));
+          arc.appendChild(el);
+        }
+        applyMoonDesign(el, moon);
+        moonArcPlace(el, moon, sky);
+      });
+      sky.querySelectorAll('[data-cal-sky-moon]').forEach(function (el) {
+        var id = parseInt(el.getAttribute('data-moon-id'), 10);
+        if (!seen[id] && el.parentNode) el.parentNode.removeChild(el);
+      });
     });
   }
   window.__calMoonDesigns = MOON_DESIGNS;
@@ -2446,8 +2568,7 @@
   function applyMoodTint() {
     var mood = (worldState && worldState.moodTint) || { color: null, intensity: 0 };
     var a = moodWashAlpha(mood.intensity), on = !!(mood.color && a > 0);
-    var sky = document.querySelector('[data-cal-sky]');
-    if (sky) {
+    skyRoots().forEach(function (sky) {
       var wash = sky.querySelector('[data-cal-mood-wash]');
       if (!wash) {
         wash = document.createElement('div');
@@ -2459,7 +2580,7 @@
       }
       wash.style.background = on ? mood.color : 'transparent';
       wash.style.opacity = on ? a.toFixed(3) : '0';
-    }
+    });
     // Hourglass interior composites the same wash on its next frame.
     if (typeof HG_INTERIOR !== 'undefined' && HG_INTERIOR.setMood) HG_INTERIOR.setMood(on ? mood.color : null, a);
   }
@@ -2618,51 +2739,53 @@
   function renderTimePipeline(t) {
     t = Math.max(0, Math.min(0.9999, t));
     VIEW.timeFrac = t;
-    var sky = document.querySelector('[data-cal-sky]');
-    if (sky) {
-      sky.style.background = gradAt(t);
-      var sun = sky.querySelector('[data-cal-sky-sun]');
-      if (sun) {
-        var ap = arcPos(t);
-        var wake = (t - 0.25) / 0.5;
-        place(sun, clampArcToBand(ap, sky, sunSizePx(sky)));
-        // Q1: weather dims but never fully hides the sun. arcPos already fades
-        // it at the horizon (opacity 0 = below); only apply the weather factor
-        // (with a daytime floor) while it is actually up. Rays die first.
-        var sunEff = (worldState && worldState.weather && worldState.weather.type) || 'clear';
-        if (ap.opacity > 0) {
-          // Q1 floor is weather-aware: ordinary cover keeps the sun clearly
-          // visible (0.28); a heavy storm/fog may swallow it to a faint ember
-          // (0.10) — dimmed, never fully gone.
-          var dim = sunWeatherDim(sunEff);
-          var floor = dim <= 0.3 ? 0.10 : 0.28;
-          sun.style.opacity = Math.max(ap.opacity * dim * arcEdgeFade(wake), floor).toFixed(2);
-        }
-        sun.style.setProperty('--cal-sun-rays', sunRayStrength(sunEff).toFixed(2));
-      }
-      sky.querySelectorAll('[data-cal-sky-moon]').forEach(function (mn) {
-        var id = parseInt(mn.getAttribute('data-moon-id'), 10), off = 0;
-        var wm = moonById(id);                                  // WAVE 2: orbit from worldState (incl. demo-added moons)
-        if (wm) off = wm.orbitOffset || 0;
-        else (DATA.moons || []).forEach(function (mm) { if (mm.id === id) off = mm.phase_offset; });
-        var mt = t - 0.5 + off; while (mt < 0) mt += 1; while (mt > 1) mt -= 1;
-        var mp = arcPos(mt);
-        var mwake = (mt - 0.25) / 0.5;
-        // Moons hide entirely below the horizon (no half-sunk disc parking on
-        // the band edge) and melt in/out through the edge fade while low.
-        if (mwake <= 0.02 || mwake >= 0.98) mp.opacity = 0;
-        else mp.opacity *= arcEdgeFade(mwake);
-        place(mn, clampArcToBand(mp, sky, 40));
-      });
-      var rest = sky.querySelector('[data-cal-sky-sub-rest]');
-      if (rest) { var parts = rest.textContent.split(' · '); parts[1] = skyLabel(t); rest.textContent = parts.join(' · '); }
-    }
+    skyRoots().forEach(function (sky) { renderTimePipelineForSky(sky, t); });
     // Sync clocks (sky time label + hourglass clock) + the shelf's phase
     // label (it printed the SSR phase forever — "21:36 · Day" after a GM
-    // advance into night).
+    // advance into night). Already multi-target (querySelectorAll), so every
+    // band's clock/phase label updates in this one pass regardless of how
+    // many [data-cal-sky] roots are live.
     document.querySelectorAll('[data-cal-sky-time-label], [data-cal-time-clock]').forEach(function (c) { c.textContent = clockStr(t); });
     document.querySelectorAll('[data-cal-time-phase]').forEach(function (c) { c.textContent = skyLabel(t); });
     if (window.__calSyncTimeAria) window.__calSyncTimeAria();   // R1: keep the time-slider a11y in sync
+  }
+  function renderTimePipelineForSky(sky, t) {
+    sky.style.background = gradAt(t);
+    var sun = sky.querySelector('[data-cal-sky-sun]');
+    if (sun) {
+      var ap = arcPos(t);
+      var wake = (t - 0.25) / 0.5;
+      place(sun, clampArcToBand(ap, sky, sunSizePx(sky)));
+      // Q1: weather dims but never fully hides the sun. arcPos already fades
+      // it at the horizon (opacity 0 = below); only apply the weather factor
+      // (with a daytime floor) while it is actually up. Rays die first.
+      var sunEff = (worldState && worldState.weather && worldState.weather.type) || 'clear';
+      if (ap.opacity > 0) {
+        // Q1 floor is weather-aware: ordinary cover keeps the sun clearly
+        // visible (0.28); a heavy storm/fog may swallow it to a faint ember
+        // (0.10) — dimmed, never fully gone.
+        var dim = sunWeatherDim(sunEff);
+        var floor = dim <= 0.3 ? 0.10 : 0.28;
+        sun.style.opacity = Math.max(ap.opacity * dim * arcEdgeFade(wake), floor).toFixed(2);
+      }
+      sun.style.setProperty('--cal-sun-rays', sunRayStrength(sunEff).toFixed(2));
+    }
+    sky.querySelectorAll('[data-cal-sky-moon]').forEach(function (mn) {
+      var id = parseInt(mn.getAttribute('data-moon-id'), 10), off = 0;
+      var wm = moonById(id);                                  // WAVE 2: orbit from worldState (incl. demo-added moons)
+      if (wm) off = wm.orbitOffset || 0;
+      else (DATA.moons || []).forEach(function (mm) { if (mm.id === id) off = mm.phase_offset; });
+      var mt = t - 0.5 + off; while (mt < 0) mt += 1; while (mt > 1) mt -= 1;
+      var mp = arcPos(mt);
+      var mwake = (mt - 0.25) / 0.5;
+      // Moons hide entirely below the horizon (no half-sunk disc parking on
+      // the band edge) and melt in/out through the edge fade while low.
+      if (mwake <= 0.02 || mwake >= 0.98) mp.opacity = 0;
+      else mp.opacity *= arcEdgeFade(mwake);
+      place(mn, clampArcToBand(mp, sky, 40));
+    });
+    var rest = sky.querySelector('[data-cal-sky-sub-rest]');
+    if (rest) { var parts = rest.textContent.split(' · '); parts[1] = skyLabel(t); rest.textContent = parts.join(' · '); }
   }
   // Public time-change entry point → unified world-state (Wave 0 shim).
   // Preserves every caller (drag-scrub, time-input, hourglass tick,
@@ -2886,12 +3009,14 @@
   // Apply the resolved state to the sun element. Crossfading + CSS pulse
   // is driven by the matching layer's CSS rule.
   function applySunState(state) {
-    var sun = document.querySelector('[data-cal-sky-sun]');
-    if (!sun) return;
     state = state || 'default';
-    if (sun.getAttribute('data-cal-sun-state') !== state) {
-      sun.setAttribute('data-cal-sun-state', state);
-    }
+    skyRoots().forEach(function (sky) {
+      var sun = sky.querySelector('[data-cal-sky-sun]');
+      if (!sun) return;
+      if (sun.getAttribute('data-cal-sun-state') !== state) {
+        sun.setAttribute('data-cal-sun-state', state);
+      }
+    });
   }
   registerInitBlock('sun-state', function () {
     applySunState(currentSunState());
