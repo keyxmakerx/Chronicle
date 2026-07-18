@@ -42,11 +42,13 @@ func TestCalAlmanac_WeatherBundle(t *testing.T) {
 // TestCalAlmanac_WeatherFrameWiring — the rich renderers run through the shared
 // engine's per-surface frame hook (not a parallel rAF), and sun-bloom still
 // layers on top; the hourglass sand recolors from the effect's hgSand.
+// C-SKYBOX-MULTI-INSTANCE replaced the SKY_SURFACE singleton with one surface
+// per live SKY_BANDS entry, so the compositor hook is now per-band.
 func TestCalAlmanac_WeatherFrameWiring(t *testing.T) {
 	js := readCalAlmanacJS(t)
 	for _, m := range []string{
-		"SKY_SURFACE.setFrame(composeFrames(L.back))", // layered compositor (back canvas)
-		"EFFECTS[v2].hgSand.color", // hourglass sand syncs to the weather effect
+		"band.surface.setFrame(composeFrames(L.back))", // layered compositor (per-band back canvas)
+		"EFFECTS[v2].hgSand.color",                     // hourglass sand syncs to the weather effect
 	} {
 		if !strings.Contains(js, m) {
 			t.Errorf("weather frame-hook wiring marker missing: %q", m)
