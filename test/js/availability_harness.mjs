@@ -160,6 +160,19 @@ export function boot(opts = {}) {
   root.setAttribute('data-user-id', 'u1');
   root.setAttribute('data-can-detail', String(opts.canDetail !== false));
   root.setAttribute('data-tz', 'America/New_York');
+  // data-common-tz mirrors the server-embedded canonical list (C-TZ-
+  // CONSOLIDATION, internal/timeutil.CommonZonesJSON). This fixture is
+  // deliberately a small stand-in, NOT a copy of the real curated list —
+  // opts.commonTZ overrides it; opts.commonTZ === null omits the attribute
+  // entirely (exercising availability.js's no-attribute fallback);
+  // opts.commonTZRaw sets the attribute to a literal string, bypassing
+  // JSON.stringify (exercising the malformed-JSON fallback).
+  if (opts.commonTZRaw !== undefined) {
+    root.setAttribute('data-common-tz', opts.commonTZRaw);
+  } else if (opts.commonTZ !== null) {
+    const tz = opts.commonTZ || ['UTC', 'America/New_York', 'Europe/London'];
+    root.setAttribute('data-common-tz', JSON.stringify(tz));
+  }
   const mk = (tag, attrs) => { const e = new Element(tag); for (const k in (attrs || {})) e.setAttribute(k, attrs[k]); return e; };
   const tablist = mk('div', { role: 'tablist' });
   const tMine = mk('button', { 'data-avail-tab': 'mine', 'aria-selected': 'true' });

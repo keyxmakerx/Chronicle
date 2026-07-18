@@ -23,17 +23,20 @@
   var STATE_AVAIL = 'available';
   var STATE_PREFER = 'preferred';
 
-  // A compact curated IANA list for the member's zone selector. The member's
-  // stored zone and the browser-detected zone are merged in at init.
-  var COMMON_TZ = [
-    'UTC', 'America/New_York', 'America/Chicago', 'America/Denver',
-    'America/Los_Angeles', 'America/Anchorage', 'America/Phoenix',
-    'America/Toronto', 'America/Sao_Paulo', 'Europe/London', 'Europe/Dublin',
-    'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid', 'Europe/Rome',
-    'Europe/Athens', 'Europe/Moscow', 'Africa/Johannesburg', 'Asia/Dubai',
-    'Asia/Kolkata', 'Asia/Bangkok', 'Asia/Singapore', 'Asia/Shanghai',
-    'Asia/Tokyo', 'Australia/Sydney', 'Pacific/Auckland'
-  ];
+  // The curated IANA list for the member's zone selector is no longer
+  // hand-rolled here — it is server-embedded from the ONE canonical list
+  // (internal/timeutil, C-TZ-CONSOLIDATION) as JSON on the page root's
+  // data-common-tz attribute, so this file never drifts from the other
+  // curated-list surfaces (account settings, calendar real-time anchor).
+  // The member's stored zone and the browser-detected zone are still merged
+  // in at render time (see renderMine).
+  function loadCommonTZ(root) {
+    try {
+      var raw = root.getAttribute('data-common-tz');
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+  }
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
@@ -172,6 +175,7 @@
     this.userID = root.getAttribute('data-user-id');
     this.canDetail = root.getAttribute('data-can-detail') === 'true';
     this.tz = root.getAttribute('data-tz') || detectTZ() || 'UTC';
+    this.commonTZ = loadCommonTZ(root);
     this.live = $('[data-avail-live]', root);
     // grid[displayCol 0..6][hour 0..23] = '' | 'available' | 'preferred'
     this.grid = [];
@@ -253,7 +257,7 @@
     var tzWrap = el('label'); tzWrap.className = 'text-sm text-fg-secondary';
     tzWrap.appendChild(document.createTextNode('Your timezone '));
     var tzSel = el('select'); tzSel.className = 'ml-1 text-sm border border-edge rounded-md px-2 py-1 bg-surface';
-    var zones = COMMON_TZ.slice();
+    var zones = self.commonTZ.slice();
     [this.tz, detectTZ()].forEach(function (z) { if (z && zones.indexOf(z) < 0) zones.unshift(z); });
     zones.forEach(function (z) {
       var o = el('option'); o.value = z; o.textContent = z; if (z === self.tz) o.selected = true; tzSel.appendChild(o);
