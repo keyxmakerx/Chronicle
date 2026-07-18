@@ -214,7 +214,7 @@ docker run -d --rm \
     || fail "could not start throwaway MariaDB container (image $DRILL_IMAGE)" 3
 
 drill_sql() {
-    docker exec -i "$DRILL_NAME" env MYSQL_PWD="$DRILL_PW" mysql -uroot -N -B "$DRILL_DB" -e "$1" 2>/dev/null
+    docker exec -i "$DRILL_NAME" env MYSQL_PWD="$DRILL_PW" "$CLIENT_BIN" -uroot -N -B "$DRILL_DB" -e "$1" 2>/dev/null
 }
 
 READY=0
@@ -227,17 +227,25 @@ for _ in $(seq 1 30); do
 done
 [[ "$READY" == "1" ]] || fail "throwaway MariaDB container did not become healthy within 60s" 2
 
+# Recent mariadb images ship only the `mariadb` client binary, not the
+# `mysql`-named compat symlink older images carried (confirmed by CI: this
+# broke on the real mariadb:latest even though it worked fine against a
+# locally-installed MariaDB 10.11, which still has both names). Resolve
+# once, use everywhere below.
+CLIENT_BIN="$(docker exec "$DRILL_NAME" sh -c 'command -v mariadb || command -v mysql' 2>/dev/null | head -n1)"
+CLIENT_BIN="$(basename "${CLIENT_BIN:-mysql}")"
+
 # ============================================================================
 # Step 3 -- load the dump
 # ============================================================================
-info "loading dump into throwaway container..."
+info "loading dump into throwaway container... (client: $CLIENT_BIN)"
 case "$DB_LOCAL" in
     *.gz)
-        gunzip -c "$DB_LOCAL" | docker exec -i "$DRILL_NAME" env MYSQL_PWD="$DRILL_PW" mysql -uroot "$DRILL_DB" \
+        gunzip -c "$DB_LOCAL" | docker exec -i "$DRILL_NAME" env MYSQL_PWD="$DRILL_PW" "$CLIENT_BIN" -uroot "$DRILL_DB" \
             || fail "mysql import into throwaway container failed (dump may be corrupt)" 1
         ;;
     *)
-        docker exec -i "$DRILL_NAME" env MYSQL_PWD="$DRILL_PW" mysql -uroot "$DRILL_DB" < "$DB_LOCAL" \
+        docker exec -i "$DRILL_NAME" env MYSQL_PWD="$DRILL_PW" "$CLIENT_BIN" -uroot "$DRILL_DB" < "$DB_LOCAL" \
             || fail "mysql import into throwaway container failed (dump may be corrupt)" 1
         ;;
 esac
