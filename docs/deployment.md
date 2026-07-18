@@ -32,6 +32,7 @@ cp .env.example .env
 docker compose up -d
 docker compose logs -f chronicle  # wait for "health check summary passed=N"
 make backup-check                 # verify the backup pipeline before you need it
+./tools/restore-drill.sh          # prove your first backup actually restores (see docs/RESTORE-DRILL.md)
 ```
 
 Open `http://localhost:8080`, register the first user (becomes site admin),
@@ -321,6 +322,11 @@ requires a different code revision, chronicle refuses to start — pin a
 matching image tag and try again.
 
 ## 8. Backup procedure
+
+A backup you've never restored is a hope, not a backup — run
+`./tools/restore-drill.sh` monthly and before upgrades to prove the newest
+one actually restores, in a disposable container that never touches your
+live DB. See `docs/RESTORE-DRILL.md`.
 
 `scripts/backup.sh` snapshots DB + media + (optionally) Redis. Driven via
 `make backup`:

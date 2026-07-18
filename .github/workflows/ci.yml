@@ -98,6 +98,15 @@ jobs:
         # cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
         run: go test ./... -v -short
 
+      - name: Restore-drill self-test
+        # Per C-BACKUP-RESTORE-KIT + cordinator/plans/2026-07-10-beta-transition-plan.md
+        # §2 item 0.6. Runs tools/restore-drill.sh's real verify logic (migrations
+        # plausibility, row counts, FK spot check) against tiny fixtures in
+        # testdata/restore-drill/ — proves both the PASS path and every FAIL path
+        # still fire, so the drill kit itself can't rot silently. Spins real,
+        # disposable MariaDB containers; ubuntu-latest ships Docker, no setup needed.
+        run: ./tools/test-restore-drill.sh
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
