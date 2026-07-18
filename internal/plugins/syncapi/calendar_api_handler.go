@@ -152,6 +152,52 @@ func (h *CalendarAPIHandler) GetCurrentDate(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
+// confirmDateRequest is the JSON body for POST /calendar/date/confirm.
+type confirmDateRequest struct {
+	Year  int `json:"year"`
+	Month int `json:"month"`
+	Day   int `json:"day"`
+}
+
+// ConfirmDate records the date a Foundry module actually APPLIED to its
+// own calendar state — the "applied" half of the beacon #548 started
+// (C-SYNC-APPLIED-BEACON, upgrading the sync chip from "saw" to
+// "applied"). #548's served-date beacon only proves the module fetched a
+// date via GET /calendar/date; it could still fail to apply it. This
+// endpoint lets the module report back once it has.
+//
+// CRITICAL: mounted on the SAME dual-auth route shape as GetCurrentDate
+// (RequireAuthOrAPIKey — a session cookie OR a Bearer key both
+// authenticate), so a session-authed caller gets exactly the same
+// synthetic APIKey with ID == synthKeySessionID that GetCurrentDate's
+// recordCalendarDateBeaconIfModule guards against. Unlike that fire-and-
+// forget beacon write, this endpoint's entire purpose IS the write —
+// there's no calendar payload to still serve — so a synthetic-key caller
+// gets 403 rather than a silent no-op: a member browsing Chronicle's own
+// calendar over the session path is never "the module confirming a date"
+// and must see that its request did nothing, not a misleading 204.
+//
+// POST /api/v1/campaigns/:id/calendar/date/confirm
+func (h *CalendarAPIHandler) ConfirmDate(c echo.Context) error {
+	key := GetAPIKey(c)
+	if key == nil || key.ID == synthKeySessionID {
+		return apperror.NewForbidden("calendar date confirmation requires a real API key")
+	}
+
+	campaignID := c.Param("id")
+
+	var req confirmDateRequest
+	if err := c.Bind(&req); err != nil {
+		return apperror.NewBadRequest("invalid request body")
+	}
+
+	if err := h.syncSvc.ConfirmCalendarDate(c.Request().Context(), campaignID, req.Year, req.Month, req.Day); err != nil {
+		return err
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
 // --- Sub-resource Read ---
 
 // GetSeasons returns all season definitions.

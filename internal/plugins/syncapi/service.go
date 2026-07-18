@@ -64,9 +64,11 @@ type SyncAPIService interface {
 	// WebSocket authentication.
 	AuthenticateKeyForWS(ctx context.Context, rawKey string) (campaignID, userID string, role int, err error)
 
-	// Calendar date beacon (C-SYNC-DATE-BEACON).
+	// Calendar date beacon (C-SYNC-DATE-BEACON, extended by
+	// C-SYNC-APPLIED-BEACON).
 	RecordCalendarDateBeacon(ctx context.Context, campaignID string, year, month, day int) error
 	GetCalendarDateBeacon(ctx context.Context, campaignID string) (*CalendarDateBeacon, error)
+	ConfirmCalendarDate(ctx context.Context, campaignID string, year, month, day int) error
 }
 
 // syncAPIService implements SyncAPIService.
@@ -509,4 +511,22 @@ func (s *syncAPIService) RecordCalendarDateBeacon(ctx context.Context, campaignI
 // the caller's route already enforces (member-read, per the dispatch).
 func (s *syncAPIService) GetCalendarDateBeacon(ctx context.Context, campaignID string) (*CalendarDateBeacon, error) {
 	return s.repo.GetCalendarDateBeacon(ctx, campaignID)
+}
+
+// ConfirmCalendarDate records the date a Bearer-authed module actually
+// APPLIED to its own calendar (C-SYNC-APPLIED-BEACON, POST
+// /calendar/date/confirm) — upgrading the beacon from "saw" (#548's
+// served-date write above) to "applied". Unlike RecordCalendarDateBeacon
+// this is never throttled: a confirm is a deliberate, one-shot module
+// action (not a value read on every poll), so there's no hot-path
+// write-amplification concern to guard against.
+//
+// Callers MUST verify the caller is a real Bearer-authed module (API key
+// ID != synthKeySessionID) before calling this — see
+// calendar_api_handler.go ConfirmDate, which mirrors GetCurrentDate's
+// auth gate for the same reason: a member browsing Chronicle's own
+// calendar over the session-auth path on this dual-auth route must never
+// write a confirmation on the module's behalf.
+func (s *syncAPIService) ConfirmCalendarDate(ctx context.Context, campaignID string, year, month, day int) error {
+	return s.repo.ConfirmCalendarDateBeacon(ctx, campaignID, year, month, day, time.Now().UTC())
 }

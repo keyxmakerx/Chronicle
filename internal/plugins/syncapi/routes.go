@@ -159,6 +159,10 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	calGroup.GET("/calendars", calAPI.ListCalendars, RequirePermission(PermRead))
 	calGroup.GET("/calendar", calAPI.GetCalendar, RequirePermission(PermRead))
 	calGroup.GET("/calendar/date", calAPI.GetCurrentDate, RequirePermission(PermRead))
+	// Applied-date confirm (C-SYNC-APPLIED-BEACON): same auth + permission
+	// as the GET above — real Bearer keys only, see ConfirmDate's doc
+	// comment for the synthetic-session-key rejection.
+	calGroup.POST("/calendar/date/confirm", calAPI.ConfirmDate, RequirePermission(PermRead))
 	calGroup.GET("/calendar/seasons", calAPI.GetSeasons, RequirePermission(PermRead))
 	calGroup.GET("/calendar/moons", calAPI.GetMoons, RequirePermission(PermRead))
 	calGroup.GET("/calendar/eras", calAPI.GetEras, RequirePermission(PermRead))

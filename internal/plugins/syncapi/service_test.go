@@ -43,6 +43,15 @@ type mockSyncAPIRepo struct {
 	getBeaconFn           func(ctx context.Context, campaignID string) (*CalendarDateBeacon, error)
 	upsertBeaconFn        func(ctx context.Context, beacon *CalendarDateBeacon) error
 	upsertBeaconCalls     []CalendarDateBeacon
+	confirmBeaconFn       func(ctx context.Context, campaignID string, year, month, day int, appliedAt time.Time) error
+	confirmBeaconCalls    []confirmBeaconCall
+}
+
+// confirmBeaconCall captures one ConfirmCalendarDateBeacon invocation.
+type confirmBeaconCall struct {
+	campaignID       string
+	year, month, day int
+	appliedAt        time.Time
 }
 
 func (m *mockSyncAPIRepo) CreateKey(ctx context.Context, key *APIKey) error {
@@ -241,6 +250,14 @@ func (m *mockSyncAPIRepo) UpsertCalendarDateBeacon(ctx context.Context, beacon *
 	m.upsertBeaconCalls = append(m.upsertBeaconCalls, *beacon)
 	if m.upsertBeaconFn != nil {
 		return m.upsertBeaconFn(ctx, beacon)
+	}
+	return nil
+}
+
+func (m *mockSyncAPIRepo) ConfirmCalendarDateBeacon(ctx context.Context, campaignID string, year, month, day int, appliedAt time.Time) error {
+	m.confirmBeaconCalls = append(m.confirmBeaconCalls, confirmBeaconCall{campaignID, year, month, day, appliedAt})
+	if m.confirmBeaconFn != nil {
+		return m.confirmBeaconFn(ctx, campaignID, year, month, day, appliedAt)
 	}
 	return nil
 }
