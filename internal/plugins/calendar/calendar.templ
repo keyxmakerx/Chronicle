@@ -245,9 +245,16 @@ templ calendarGrid(cc *campaigns.CampaignContext, data CalendarViewData) {
 // dayCell renders a single day in the calendar grid. Shows season color as a
 // subtle left border and event chips. Read-only display: the V1 edit/drag/
 // quick-add affordances were removed with the V1 modal scripts they depended
-// on (C-CAL-V1-SUNSET) — interactive event editing lives in the V2 shell. The
-// dashboard/entity-page embed never had those handlers defined, so this only
-// drops attributes that already threw on click there.
+// on (C-CAL-V1-SUNSET) — interactive event editing lives in the V2 shell.
+//
+// C-CAL-EMBED-CHIPS-TAP (wave-8 #549 PASS_WITH_NOTES follow-up): the event
+// chips used to render as <button> with cursor-pointer + a hover ring but NO
+// click handler — the dashboard/entity-page embed never had one, so tapping
+// did nothing (pre-#549 it threw ReferenceError instead; #549 correctly
+// deleted the dead V1 scripts but left the now-inert affordance behind).
+// Chips are real <a> links now: tapping leaves the embed for the V2 shell
+// focused on the tapped day, via the year/month/day query params ShowV2
+// already parses (handler_v2.go ShowV2) — no new route.
 templ dayCell(data CalendarViewData, day int) {
 	<div
 		class={
@@ -268,9 +275,10 @@ templ dayCell(data CalendarViewData, day int) {
 		</div>
 		<!-- Events for this day -->
 		for _, evt := range data.EventsForDay(day) {
-			<button
+			<a
+				href={ dayCellEventHref(data, day) }
 				class={
-					"w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-accent/30",
+					"block w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded truncate mb-0.5 cursor-pointer hover:ring-1 hover:ring-accent/30",
 					templ.KV("bg-accent/15 text-accent", evt.Visibility == "everyone"),
 					templ.KV("bg-amber-500/15 text-amber-400", evt.Visibility == "dm_only"),
 				}
@@ -304,7 +312,7 @@ templ dayCell(data CalendarViewData, day int) {
 					{ " " }
 				}
 				{ evt.Name }
-			</button>
+			</a>
 		}
 	</div>
 }
@@ -364,6 +372,22 @@ func seasonBorderStyle(s *Season) string {
 		return ""
 	}
 	return fmt.Sprintf("border-left: 3px solid %s", s.Color)
+}
+
+// dayCellEventHref builds the tap target for an event chip in the read-only
+// embed grid (C-CAL-EMBED-CHIPS-TAP): the V2 calendar shell for the SAME
+// calendar the embed is showing (data.Calendar.ID may be a non-default
+// calendar the embed was explicitly bound to — EmbedCalendar accepts a
+// calId), cursor set to the day CELL being rendered via the year/month/day
+// query params ShowV2 already parses. Deliberately uses the cell's
+// year/month (data.Year/data.MonthIndex) + day, NOT evt.Year/evt.Month/
+// evt.Day: for a recurring event those hold the original occurrence's
+// creation date, not the date this chip is actually rendered under.
+func dayCellEventHref(data CalendarViewData, day int) templ.SafeURL {
+	return templ.SafeURL(fmt.Sprintf(
+		"/campaigns/%s/calendar/v2/%s?year=%d&month=%d&day=%d",
+		data.CampaignID, data.Calendar.ID, data.Year, data.MonthIndex, day,
+	))
 }
 
 // eventTooltip builds a tooltip string for an event chip.
