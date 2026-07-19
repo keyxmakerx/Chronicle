@@ -1047,9 +1047,25 @@
     // could misplace the folder on the first post-upgrade drag (0d).
     var targetIndex = calculateTargetIndex(targetNode, 'before', null);
 
-    // Read entity type from the tree container.
+    // Read entity type from the tree container. This is the drilled category's
+    // own type (server sets data-entity-type-id from the ?type= param), which the
+    // empty-folder node must be scoped to so it reloads via ListByType(typeID).
     var tree = document.getElementById('sidebar-entity-tree');
     var entityTypeId = parseInt(tree ? tree.getAttribute('data-entity-type-id') : '0', 10) || 0;
+
+    // A pure sidebar-node folder is keyed by entity type on the server and only
+    // reloads for an exact type match. Creating one with a missing/zero type
+    // would persist an orphan the sidebar never shows again while still
+    // reparenting the dropped entities under it — the silent "nothing happened"
+    // failure. Refuse rather than orphan; the page-as-folder path tolerates 0
+    // (quick-create falls back to the first type) so it is not gated here.
+    if (isPureFolder && !entityTypeId) {
+      console.error('sidebar_tree: cannot create empty folder — no entity type on tree container');
+      if (window.Chronicle && Chronicle.notify) {
+        Chronicle.notify('Could not create folder here', 'error');
+      }
+      return;
+    }
 
     // Step 1: Create the folder — either a pure sidebar node or a real entity.
     var createUrl = isPureFolder

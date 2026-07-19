@@ -16,7 +16,16 @@ import (
 // and reordering. The sidebar_tree.js script transforms this flat list into a
 // collapsible tree with folder/page icons and drag-and-drop support.
 // hiddenIDs marks entities that should appear dimmed for owners.
-templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, cc *campaigns.CampaignContext, hiddenIDs map[string]bool) {
+//
+// typeID is the drilled category's own entity type (the sidebar URL's ?type=),
+// NOT a per-row type. It drives data-entity-type-id, which sidebar_tree.js reads
+// when creating an empty folder (a sidebar_nodes row). The category listing rolls
+// up sub-type entities (expandTypeIDsForListing), so results[0].EntityTypeID may
+// be a SUB-type; scoping a new folder node to that sub-type made it invisible on
+// refresh (SearchAPI reloads nodes via ListByType(categoryTypeID), an exact
+// match) and silently orphaned the dropped entities — the "creating a folder does
+// nothing" bug. Anchoring on the category typeID keeps create and reload in sync.
+templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, typeID int, cc *campaigns.CampaignContext, hiddenIDs map[string]bool) {
 	if len(results) == 0 && len(nodes) == 0 {
 		<div class="px-4 py-6 text-center">
 			<i class="fa-solid fa-file-circle-plus text-lg text-gray-600 mb-2 block"></i>
@@ -27,11 +36,7 @@ templ SidebarEntityList(results []Entity, nodes []SidebarNode, total int, cc *ca
 			id="sidebar-entity-tree"
 			class="sidebar-entity-list py-1"
 			data-campaign-id={ cc.Campaign.ID }
-			if len(results) > 0 {
-				data-entity-type-id={ strconv.Itoa(results[0].EntityTypeID) }
-			} else if len(nodes) > 0 {
-				data-entity-type-id={ strconv.Itoa(nodes[0].EntityTypeID) }
-			}
+			data-entity-type-id={ strconv.Itoa(sidebarTreeType(typeID, results, nodes)) }
 		>
 			// Render sidebar folder nodes (pure organizational containers).
 			for _, node := range nodes {
