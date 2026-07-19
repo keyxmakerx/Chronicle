@@ -3,6 +3,7 @@ package aiexport
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -54,9 +55,13 @@ func NewService(
 // assembled markdown. The token-estimate placeholder in the header
 // is substituted with the final count once the body is rendered.
 //
-// Errors from one category abort the export — better to surface a
-// renderer failure than ship a half-document the owner pastes
-// into an AI tool not realising chunks are missing.
+// Resilience: a single category's failure never aborts the export. The
+// bad section is logged and replaced with a short "could not be exported"
+// note, then the remaining categories render as normal. This is what makes
+// "export everything" degrade to a partial document instead of the generic
+// error modal the owner previously hit when one private entity carried
+// HTML the converter rejected. (Per-field conversion failures are absorbed
+// even lower down, in bodyOrSkip.)
 //
 // Caller responsibility: ownerID + campaignID are the operator's
 // authenticated identity; this method trusts them. The owner-gate
@@ -71,7 +76,17 @@ func (s *Service) Generate(ctx context.Context, campaignName, ownerID, campaignI
 	for _, c := range opts.EnabledCategories() {
 		section, err := s.renderCategory(ctx, c, ownerID, campaignID, opts)
 		if err != nil {
-			return "", fmt.Errorf("aiexport: %s: %w", c, err)
+			// One category's lister/DB failure must not blank the whole
+			// export. Log for triage, drop a visible note so the owner
+			// knows the section was skipped, and continue. (The calendar
+			// branch already skips on error; this extends the same
+			// tolerance to every category.)
+			slog.Warn("aiexport: skipping category after render error",
+				slog.String("category", string(c)),
+				slog.String("campaign_id", campaignID),
+				slog.Any("error", err))
+			body.WriteString(categorySkipNote(c))
+			continue
 		}
 		if section != "" {
 			body.WriteString(section)
@@ -100,9 +115,10 @@ func (s *Service) renderCategory(
 		if s.Entities == nil {
 			return "", fmt.Errorf("entities lister not wired")
 		}
-		ents, _, err := s.Entities.List(ctx, campaignID, 0, role, ownerID, entities.ListOptions{
-			Page: 1, PerPage: 10000, // single-page export; campaigns rarely exceed
-		})
+		// Page through the whole campaign. A single PerPage:10000 request
+		// was silently clamped to 24 by entityService.List, so "export
+		// everything" only ever emitted the first 24 entities.
+		ents, err := s.listAllEntities(ctx, campaignID, role, ownerID)
 		if err != nil {
 			return "", err
 		}
@@ -214,4 +230,55 @@ func (s *Service) renderCategory(
 	}
 
 	return "", fmt.Errorf("unknown category %q", c)
+}
+
+// exportPageSize is the largest page entityService.List honors — it clamps
+// PerPage to 100 (and silently defaults anything larger to 24). The export
+// must page at this size, never with a fat single-page request.
+const exportPageSize = 100
+
+// exportMaxPages bounds the paging loop so a pathological campaign — or a
+// test stub that always returns a full page — can never spin forever.
+// 500 × 100 = 50,000 entities, far beyond any real campaign.
+const exportMaxPages = 500
+
+// listAllEntities pages through every entity visible at the given role and
+// returns them all. It exists because a single request for PerPage:10000 was
+// clamped to 24 by entityService.List, silently truncating "export
+// everything" to the first 24 entities. Rows are de-duplicated by ID so a
+// same-name reorder at a page boundary (the default ORDER BY is name-only)
+// can't double-count, and paging stops as soon as a page is short or adds
+// nothing new.
+func (s *Service) listAllEntities(ctx context.Context, campaignID string, role int, ownerID string) ([]entities.Entity, error) {
+	seen := make(map[string]struct{})
+	var all []entities.Entity
+	for page := 1; page <= exportMaxPages; page++ {
+		ents, _, err := s.Entities.List(ctx, campaignID, 0, role, ownerID, entities.ListOptions{
+			Page: page, PerPage: exportPageSize,
+		})
+		if err != nil {
+			return nil, err
+		}
+		added := 0
+		for i := range ents {
+			if _, dup := seen[ents[i].ID]; dup {
+				continue
+			}
+			seen[ents[i].ID] = struct{}{}
+			all = append(all, ents[i])
+			added++
+		}
+		// Short page (the last one) or no forward progress → done.
+		if len(ents) < exportPageSize || added == 0 {
+			break
+		}
+	}
+	return all, nil
+}
+
+// categorySkipNote is the visible placeholder Generate emits when a whole
+// category fails to render (a lister/DB error). Keeps the document flowing
+// so a partial export beats a blank error modal.
+func categorySkipNote(c Category) string {
+	return fmt.Sprintf("> _[The %q section could not be exported and was skipped.]_\n\n", string(c))
 }
