@@ -25,7 +25,7 @@ const src = readFileSync(path.join(here, '..', '..', 'static', 'js', 'sidebar_tr
  * want the pure helpers, not a full render. `ok` controls whether the stubbed
  * apiFetch resolves successfully (false exercises the reorder error path).
  */
-function load({ fetchCalls = [], notifyCalls = [], ok = true } = {}) {
+function load({ fetchCalls = [], notifyCalls = [], ok = true, treeTypeId = null } = {}) {
   const noopEl = {
     style: {}, className: '', innerHTML: '', textContent: '', type: '',
     setAttribute() {}, getAttribute() { return null; }, hasAttribute() { return false; },
@@ -36,7 +36,24 @@ function load({ fetchCalls = [], notifyCalls = [], ok = true } = {}) {
   };
 
   const document = {
-    getElementById() { return null; },
+    // When treeTypeId is set, the tree container answers data-entity-type-id with
+    // it — this is the drilled category's type that createGroupFolder scopes a new
+    // empty folder to. It is a full no-op element (querySelectorAll → []) so the
+    // load-time initTree() bails cleanly (no items) rather than crashing. Left
+    // null, getElementById returns null as before so the pure-helper tests are
+    // unaffected.
+    getElementById(id) {
+      if (id === 'sidebar-entity-tree' && treeTypeId != null) {
+        return Object.assign({}, noopEl, {
+          getAttribute: (k) => {
+            if (k === 'data-entity-type-id') return String(treeTypeId);
+            if (k === 'data-campaign-id') return 'camp-1';
+            return null;
+          },
+        });
+      }
+      return null;
+    },
     querySelector() { return null; },
     querySelectorAll() { return []; },
     createElement() { return Object.assign({}, noopEl); },
@@ -240,4 +257,50 @@ test('createGroupFolder positions the new folder at the target sibling INDEX, no
   assert.ok(posPut, 'the new folder is positioned via a PUT to its /reorder');
   assert.equal(posPut.opts.body.sort_order, 2,
     'folder lands at the target sibling index (2), not the stale stored data-sort-order (99)');
+});
+
+// --- Empty-folder ("New empty folder") path — the reported "nothing happens" bug ---
+
+test('createGroupFolder (empty folder) forwards the tree container type into the node POST', async () => {
+  // This pins the CLIENT half of the contract: createGroupFolder reads the type
+  // from the tree container's data-entity-type-id and forwards it verbatim into
+  // POST /sidebar-nodes (it must not hardcode or drop it). The SERVER half — that
+  // the container advertises the drilled CATEGORY type, not a rolled-up sub-type —
+  // is what actually vanished the folder on refresh and is pinned by the Go
+  // TestSidebarEntityList_AdvertisesCategoryTypeNotSubType. Together they keep node
+  // create-scope and reload-scope on one type.
+  // treeTypeId 7 = the drilled category's own type.
+  const { mod, fetchCalls } = load({ treeTypeId: 7 });
+  const target = makeGroupTarget(1, 3, { 'data-entity-id': 'target-1' });
+
+  mod.createGroupFolder('camp-1', 'dragged-1', target, 'New Folder', true);
+  await new Promise((r) => setTimeout(r, 0));
+
+  const createPost = fetchCalls.find(
+    (c) => /\/sidebar-nodes$/.test(c.url) && c.opts.method === 'POST');
+  assert.ok(createPost, 'an empty folder is created via POST /sidebar-nodes');
+  assert.equal(createPost.opts.body.entity_type_id, 7,
+    'the node is scoped to the drilled category type (7) so it reloads via ListByType(7)');
+
+  // Both dropped entities are reparented under the node via parent_node_id (not parent_id).
+  const nodeReparents = fetchCalls.filter(
+    (c) => /\/entities\/(target-1|dragged-1)\/reorder$/.test(c.url) &&
+      c.opts.method === 'PUT' && c.opts.body.parent_node_id === 'folder-1');
+  assert.equal(nodeReparents.length, 2,
+    'both the target and dragged entities are nested under the new folder node');
+});
+
+test('createGroupFolder (empty folder) refuses rather than orphaning when no tree type is known', async () => {
+  // No tree container type available → creating the node would persist an orphan
+  // the sidebar never shows again. The guard must abort before any POST and warn.
+  const { mod, fetchCalls, notifyCalls } = load({ treeTypeId: null });
+  const target = makeGroupTarget(1, 3, { 'data-entity-id': 'target-1' });
+
+  mod.createGroupFolder('camp-1', 'dragged-1', target, 'New Folder', true);
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.ok(!fetchCalls.some((c) => /\/sidebar-nodes$/.test(c.url)),
+    'no orphan sidebar node is created when the type is unknown');
+  assert.ok(notifyCalls.some((n) => n.level === 'error'),
+    'the failure surfaces as an error notify instead of silently doing nothing');
 });

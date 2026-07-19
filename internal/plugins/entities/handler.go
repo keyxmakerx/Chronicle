@@ -984,7 +984,11 @@ func (h *Handler) SearchAPI(c echo.Context) error {
 			nodes, _ = h.sidebarNodeRepo.ListByType(c.Request().Context(), cc.Campaign.ID, typeID)
 		}
 
-		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, cc, hiddenIDs))
+		// Pass the drilled category's typeID so the tree advertises it as
+		// data-entity-type-id. A new empty folder (sidebar_nodes row) is then
+		// scoped to this category and reloads via ListByType(typeID) above,
+		// instead of being scoped to a rolled-up sub-type row and vanishing.
+		return middleware.Render(c, http.StatusOK, SidebarEntityList(results, nodes, total, typeID, cc, hiddenIDs))
 	}
 
 	return middleware.Render(c, http.StatusOK, SearchResultsFragment(results, total, cc))
