@@ -17,8 +17,9 @@ type TransactionRepository interface {
 	// filtered by the given options.
 	ListByCampaign(ctx context.Context, campaignID string, opts TransactionListOptions) ([]Transaction, int, error)
 
-	// ListByShop returns transactions for a specific shop entity.
-	ListByShop(ctx context.Context, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
+	// ListByShop returns transactions for a specific shop entity, scoped to the
+	// given campaign so a shop id from another campaign yields nothing (SEC-IDOR-3).
+	ListByShop(ctx context.Context, campaignID, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
 
 	// ListByBuyer returns transactions for a specific buyer entity.
 	ListByBuyer(ctx context.Context, buyerEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
@@ -77,12 +78,14 @@ func (r *transactionRepository) ListByCampaign(ctx context.Context, campaignID s
 	return r.queryTransactions(ctx, where, args, opts)
 }
 
-// ListByShop returns transactions for a specific shop.
-func (r *transactionRepository) ListByShop(ctx context.Context, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error) {
+// ListByShop returns transactions for a specific shop, scoped to campaignID.
+// The campaign predicate is the cross-tenant guard (SEC-IDOR-3): a shop entity
+// id from another campaign matches no rows because its transactions carry that
+// other campaign_id.
+func (r *transactionRepository) ListByShop(ctx context.Context, campaignID, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error) {
 	opts.ShopEntityID = shopEntityID
-	// Derive campaign from the first result or use an empty campaign filter.
-	where := "WHERE t.shop_entity_id = ?"
-	args := []any{shopEntityID}
+	where := "WHERE t.campaign_id = ? AND t.shop_entity_id = ?"
+	args := []any{campaignID, shopEntityID}
 	where, args = appendTxFilters(where, args, opts)
 	return r.queryTransactions(ctx, where, args, opts)
 }

@@ -618,7 +618,7 @@ func (h *DrawingHandler) DeleteFog(c echo.Context) error {
 		return err
 	}
 
-	if err := h.drawingSvc.DeleteFog(c.Request().Context(), c.Param("fid")); err != nil {
+	if err := h.drawingSvc.DeleteFog(c.Request().Context(), c.Param("fid"), mapID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusOK)

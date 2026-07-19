@@ -40,7 +40,7 @@ func (m *mockAuditService) GetCampaignActivity(_ context.Context, _ string, _ in
 	return nil, 0, nil
 }
 
-func (m *mockAuditService) GetEntityHistory(_ context.Context, _ string) ([]audit.AuditEntry, error) {
+func (m *mockAuditService) GetEntityHistory(_ context.Context, _, _ string) ([]audit.AuditEntry, error) {
 	return nil, nil
 }
 
@@ -536,7 +536,7 @@ func (failingAuditSvc) Log(_ context.Context, _ *audit.AuditEntry) error {
 func (failingAuditSvc) GetCampaignActivity(_ context.Context, _ string, _ int) ([]audit.AuditEntry, int, error) {
 	return nil, 0, nil
 }
-func (failingAuditSvc) GetEntityHistory(_ context.Context, _ string) ([]audit.AuditEntry, error) {
+func (failingAuditSvc) GetEntityHistory(_ context.Context, _, _ string) ([]audit.AuditEntry, error) {
 	return nil, nil
 }
 func (failingAuditSvc) GetCampaignStats(_ context.Context, _ string) (*audit.CampaignStats, error) {
