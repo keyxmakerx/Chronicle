@@ -216,11 +216,12 @@ func renderEntity(
 	}
 
 	// Body — SEC-6-AMENDED invariant: EntryHTML through sanitize.HTMLPtr
-	// before the converter. htmlToMarkdown enforces this.
+	// before the converter. htmlToMarkdown enforces this. A conversion
+	// failure skips just this field (bodyOrSkip) rather than aborting the
+	// whole export — the differentiator behind the "export everything →
+	// error" bug, since private/owner-only bodies only render here.
 	body, err := htmlToMarkdown(e.EntryHTML)
-	if err != nil {
-		return fmt.Errorf("entity %q body: %w", e.Name, err)
-	}
+	body = bodyOrSkip("entity body", e.Name, body, err)
 	if body != "" {
 		b.WriteString(body)
 		b.WriteString("\n\n")
@@ -230,9 +231,7 @@ func renderEntity(
 	// them as GM-leaning content even when they're not marked dm_only).
 	if opts.Privacy != PrivacyModeSafe {
 		notesBody, err := htmlToMarkdown(e.PlayerNotesHTML)
-		if err != nil {
-			return fmt.Errorf("entity %q player_notes: %w", e.Name, err)
-		}
+		notesBody = bodyOrSkip("entity player notes", e.Name, notesBody, err)
 		if notesBody != "" {
 			b.WriteString("**Player notes:** ")
 			b.WriteString(notesBody)
@@ -384,9 +383,7 @@ func renderNoteTree(
 		}
 
 		body, err := htmlToMarkdown(n.EntryHTML)
-		if err != nil {
-			return fmt.Errorf("note %q body: %w", n.Title, err)
-		}
+		body = bodyOrSkip("note body", n.Title, body, err)
 		if body != "" {
 			b.WriteString(body)
 			b.WriteString("\n\n")
@@ -523,9 +520,7 @@ func renderCalendarEvent(b *strings.Builder, e *calendar.Event, opts Options) er
 	}
 
 	body, err := htmlToMarkdown(e.DescriptionHTML)
-	if err != nil {
-		return fmt.Errorf("event %q description: %w", e.Name, err)
-	}
+	body = bodyOrSkip("calendar event", e.Name, body, err)
 	if body != "" {
 		b.WriteString(body)
 		b.WriteString("\n\n")
@@ -627,9 +622,7 @@ func renderSession(
 
 	if s.RecapHTML != nil {
 		recap, err := htmlToMarkdown(s.RecapHTML)
-		if err != nil {
-			return fmt.Errorf("session %q recap: %w", s.Name, err)
-		}
+		recap = bodyOrSkip("session recap", s.Name, recap, err)
 		if recap != "" {
 			b.WriteString("### Recap\n\n")
 			b.WriteString(recap)
@@ -641,9 +634,7 @@ func renderSession(
 	// via htmlToMarkdown.
 	if opts.IncludeSessionGMNotes && opts.Privacy != PrivacyModeSafe && s.NotesHTML != nil {
 		notesBody, err := htmlToMarkdown(s.NotesHTML)
-		if err != nil {
-			return fmt.Errorf("session %q gm-notes: %w", s.Name, err)
-		}
+		notesBody = bodyOrSkip("session GM notes", s.Name, notesBody, err)
 		if notesBody != "" {
 			b.WriteString("### GM notes (owner-only — opted in)\n\n")
 			b.WriteString(notesBody)
@@ -734,9 +725,7 @@ func renderTimeline(b *strings.Builder, tl *timeline.Timeline, events []timeline
 	fmt.Fprintf(b, "## Timeline: %s {#timeline-%s}\n\n", tl.Name, slugify(tl.Name))
 
 	desc, err := htmlToMarkdown(tl.DescriptionHTML)
-	if err != nil {
-		return fmt.Errorf("timeline %q description: %w", tl.Name, err)
-	}
+	desc = bodyOrSkip("timeline description", tl.Name, desc, err)
 	if desc != "" {
 		b.WriteString(desc)
 		b.WriteString("\n\n")
@@ -789,9 +778,7 @@ func renderTimeline(b *strings.Builder, tl *timeline.Timeline, events []timeline
 		// invariant for free.
 		if ev.EventDescription != nil && *ev.EventDescription != "" {
 			body, err := htmlToMarkdown(ev.EventDescription)
-			if err != nil {
-				return fmt.Errorf("timeline %q event %q desc: %w", tl.Name, label, err)
-			}
+			body = bodyOrSkip("timeline event", label, body, err)
 			if body != "" {
 				b.WriteString(body)
 				b.WriteString("\n\n")
