@@ -138,22 +138,34 @@ func TestMobileMiniMonthDotColor_WhiteWhenSelected(t *testing.T) {
 	}
 }
 
-// --- Sidebar hide (avoids a duplicate mini-month on mobile) ----------------
+// --- Sidebar desktop-detach (C-CAL-SKYPANE-DETACH) -------------------------
 
-func TestMobileSidebarClasses_HiddenOnlyForMonthView(t *testing.T) {
+// TestMobileSidebarClasses_DesktopDetached: the desktop left mini-month column
+// is removed for every view, while the sidebar's MOBILE presentation is left
+// unchanged. Month hides at all widths (mobileMonthAssembly's navigator is the
+// only mini-month there); Week/Day/Timeline detach from desktop via md:hidden
+// but keep their pre-existing <768px sidebar. No view is desktop-visible.
+func TestMobileSidebarClasses_DesktopDetached(t *testing.T) {
 	month := mobileSidebarClasses(CalendarV2ViewData{View: "month"})
-	if !strings.Contains(month, "hidden") || !strings.Contains(month, "md:block") {
-		t.Errorf("month view: sidebar must hide at <768px (mobileMonthAssembly replaces it); got %q", month)
+	if !strings.Contains(month, "hidden") {
+		t.Errorf("month view: sidebar must be hidden (mobile navigator replaces it, desktop detaches it); got %q", month)
+	}
+	if strings.Contains(month, "md:block") {
+		t.Errorf("month view: sidebar must NOT reappear on desktop; got %q", month)
 	}
 	for _, v := range []string{"week", "day", "ledger"} {
 		got := mobileSidebarClasses(CalendarV2ViewData{View: v})
-		if strings.Contains(got, "hidden") {
-			t.Errorf("view %q: sidebar must keep its current (unchanged) mobile presentation; got %q", v, got)
+		if !strings.Contains(got, "md:hidden") {
+			t.Errorf("view %q: sidebar must detach from desktop (md:hidden) while keeping its mobile presentation; got %q", v, got)
+		}
+		if strings.Contains(got, "md:block") {
+			t.Errorf("view %q: sidebar must not be desktop-visible; got %q", v, got)
 		}
 	}
-	// Base classes are preserved regardless of the hide branch.
+	// Base classes are preserved regardless of the branch (mobile keeps the
+	// sidebar's width/border for the views that still render it).
 	if !strings.Contains(month, "w-60") {
-		t.Errorf("hidden branch must still carry the base sidebar classes; got %q", month)
+		t.Errorf("branch must still carry the base sidebar classes; got %q", month)
 	}
 }
 
@@ -425,17 +437,20 @@ func TestCalendarV2ViewSwitcher_MobileReduction(t *testing.T) {
 	}
 }
 
-// TestMiniMonthV2Sidebar_HiddenOnMobileOnlyForMonthView: avoids a duplicate
-// mini-month rendering alongside mobileMonthAssembly.
-func TestMiniMonthV2Sidebar_HiddenOnMobileOnlyForMonthView(t *testing.T) {
+// TestMiniMonthV2Sidebar_DesktopDetached: the rendered sidebar carries the
+// desktop-detach classes (C-CAL-SKYPANE-DETACH). The Month sidebar hides at
+// every width (the mobile navigator is the sole mini-month there); the Week
+// sidebar keeps its mobile presentation but detaches from desktop (md:hidden).
+// Neither is desktop-visible (no md:block), matching the signed desktop render.
+func TestMiniMonthV2Sidebar_DesktopDetached(t *testing.T) {
 	cal := mobileAgendaCalendar()
 	monthData := CalendarV2ViewData{ActiveCalendar: cal, View: "month", CampaignID: "camp-1", Year: 1492, Month: 1, Day: 13}
 	var sbMonth strings.Builder
 	if err := miniMonthV2Sidebar(monthData).Render(context.Background(), &sbMonth); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	if !strings.Contains(sbMonth.String(), "hidden md:block") {
-		t.Error("month view: sidebar must hide at <768px")
+	if strings.Contains(sbMonth.String(), "md:block") {
+		t.Error("month view: detached sidebar must not be desktop-visible (no md:block)")
 	}
 	weekData := monthData
 	weekData.View = "week"
@@ -443,8 +458,11 @@ func TestMiniMonthV2Sidebar_HiddenOnMobileOnlyForMonthView(t *testing.T) {
 	if err := miniMonthV2Sidebar(weekData).Render(context.Background(), &sbWeek); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	if strings.Contains(sbWeek.String(), "hidden md:block") {
-		t.Error("week view: sidebar must keep its current (unchanged) presentation")
+	if !strings.Contains(sbWeek.String(), "md:hidden") {
+		t.Error("week view: sidebar must detach from desktop (md:hidden) while keeping its mobile presentation")
+	}
+	if strings.Contains(sbWeek.String(), "md:block") {
+		t.Error("week view: detached sidebar must not be desktop-visible")
 	}
 }
 

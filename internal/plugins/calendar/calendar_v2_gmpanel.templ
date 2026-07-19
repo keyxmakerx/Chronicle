@@ -1,14 +1,18 @@
-// calendar_v2_gmpanel.templ — the GM world-state CONSOLE on calendar_v2
-// (C-CAL-WORLDSTATE-GM-OVERHAUL r2 — operator-directed full-band layout).
+// calendar_v2_gmpanel.templ — the GM world-state CONSOLE on calendar_v2, as a
+// PULL-OUT CARD on the skypane's top edge (C-CAL-SKYPANE-DETACH, §B —
+// operator-directed and FIXED).
 //
-// The console IS the sky band now: a slim always-visible STRIP carries the
-// time verbs (the DM's constant companions) + the live clock + section
-// buttons, and each section (Time / Weather / Events / Mood) opens as a
-// translucent glass SHEET covering the whole sky pane — the catalog gets the
-// full band's width to breathe, and the living sky stays visible through the
-// glass. While a world mutation runs, strip + sheet fade near-transparent
-// (data-gm-transition) so the DM watches the sky change under their hands.
-// The strip collapses to a slim "GM" pill.
+// The always-on worldState band is gone; the console no longer lives "in the
+// band". It is now a pull-out card anchored to the collapsible sky strip (the
+// "skypane"): a GM-gated TAB rides the strip's top edge, and clicking it slides
+// the dark-glass card OUT and OVER the command bar above, with ZERO reflow (the
+// card is absolutely positioned). ✕ / Esc / tap-outside fold it back into the
+// tab. The control BAR (close ✕ + clock + time verbs + section buttons +
+// pause/reset) is pinned at the strip's top edge — always reachable — and the
+// active section sheet (Time / Weather / Events / Mood) unfolds ABOVE the bar,
+// scrolling internally when a catalog outgrows the space. While a world
+// mutation runs the card fades near-transparent (data-gm-transition) so the DM
+// watches the sky (in the strip's skybox) change under their hands.
 //
 // It exposes the FULL effects catalog — every weather condition and
 // world-event the engine renders (gmWeatherTypes/gmCelestialTypes mirror
@@ -16,14 +20,15 @@
 // Every mutation has a clear/reset path: per-event × chips, clear-all, mood
 // clear, and a whole-sky reset.
 //
-// AUTHORITY: rendered ONLY for capability holders (data.CanControlWorldState
-// = Owner or co-DM). Players/Scribes never receive this markup — the gate is
-// server-side, not a CSS hide. Every control writes through
-// PUT /calendar/world-state; the response seed re-renders the band live.
+// AUTHORITY (unchanged): rendered ONLY for capability holders
+// (data.CanControlWorldState = Owner or co-DM). Players/Scribes never receive
+// this markup — the gate is server-side, not a CSS hide. Every control writes
+// through PUT /calendar/world-state; the response seed re-renders the sky live
+// (window.__calSetWorldState) — the identical wire the band console used.
 //
 // Chrome styling lives in static/css/gm_panel.css (plugin-served); it uses
 // translucent dark glass regardless of theme because it floats over the
-// rendering canvas, not over themeable page chrome.
+// rendering canvas + page chrome, and must stay legible over both.
 
 package calendar
 
@@ -36,227 +41,261 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 		<section
 			class="gm-console"
 			data-gm-panel
-			data-gm-collapsed="false"
+			data-gm-collapsed="true"
 			data-gm-sheet=""
 			aria-label="GM world-state console"
 		>
-			// Collapsed state: a slim glass pill that re-opens the console.
-			<button type="button" class="gm-console__pill" data-gm-panel-open aria-label="Open GM console">
+			// TAB — the GM-gated handle riding the sky strip's top edge; the only
+			// thing visible when collapsed (the console defaults collapsed now, not
+			// open). Click pulls the card out; the up-caret hints the direction.
+			// data-gm-panel-open is the same open hook the JS state machine binds.
+			<button type="button" class="gm-console__pill" data-gm-panel-open aria-label="Open GM world-state console" title="GM world-state console">
 				<i class="fa-solid fa-wand-sparkles" aria-hidden="true"></i>
 				<span>GM</span>
+				<i class="fa-solid fa-chevron-up gm-console__pill-caret" aria-hidden="true"></i>
 			</button>
-			// The always-visible strip: clock + quick time verbs + sections.
-			<div class="gm-console__strip" data-gm-panel-card>
-				// Collapse handle — fused to the strip's left edge (operator: "part
-				// of the edge, not floating"). Points right, toward the pill tab it
-				// shrinks into.
-				<button
-					type="button"
-					class="gm-console__collapse"
-					data-gm-panel-toggle
-					aria-expanded="true"
-					aria-label="Collapse console"
-				>
-					<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-				</button>
-				<span class="gm-console__title" title="GM Console">
-					<i class="fa-solid fa-wand-sparkles" aria-hidden="true"></i>
-				</span>
-				<span class="gm-console__clock" data-gm-clock>{ wsClock(data) }</span>
-				<span class="gm-console__divider" aria-hidden="true"></span>
-				<div class="gm-console__verbs" role="group" aria-label="Advance time">
-					<button type="button" class="gm-console__verb" data-gm-advance data-gm-minutes="10">+10m</button>
-					<button type="button" class="gm-console__verb" data-gm-advance data-gm-hours="1">+1h</button>
-					<button type="button" class="gm-console__verb" data-gm-advance data-gm-hours="8" title="Long rest (8h)">Rest</button>
-					<button type="button" class="gm-console__verb" data-gm-advance data-gm-days="1">+1d</button>
-					<button type="button" class="gm-console__verb" data-gm-advance data-gm-hours="-1" title="Step back one hour">−1h</button>
-				</div>
-				<span class="gm-console__divider" aria-hidden="true"></span>
-				<div class="gm-console__sections" role="group" aria-label="Console sections">
-					<button type="button" class="gm-console__section" data-gm-sheet-open="time" aria-expanded="false">Time</button>
-					<button type="button" class="gm-console__section" data-gm-sheet-open="weather" aria-expanded="false">Weather</button>
-					<button type="button" class="gm-console__section" data-gm-sheet-open="events" aria-expanded="false">Events</button>
-					<button type="button" class="gm-console__section" data-gm-sheet-open="mood" aria-expanded="false">Mood</button>
-				</div>
-				<span class="gm-console__divider" aria-hidden="true"></span>
-				<button type="button" class="gm-console__iconbtn" data-gm-pause aria-pressed="false" title="Pause atmosphere">
-					<i class="fa-solid fa-pause" aria-hidden="true"></i>
-					<span class="gm-console__sr" data-gm-pause-label>Pause</span>
-				</button>
-				<button type="button" class="gm-console__iconbtn" data-gm-reset title="Reset sky — clear weather, world-events and mood">
-					<i class="fa-solid fa-broom" aria-hidden="true"></i>
-				</button>
-			</div>
-			// ---- TIME sheet ----
-			<div class="gm-console__sheet" data-gm-sheet-panel="time" hidden>
-				<div class="gm-console__sheet-head">
-					<span class="gm-console__sheet-title">Set time &amp; date</span>
-					<button type="button" class="gm-console__iconbtn" data-gm-sheet-close aria-label="Close">
+			// CARD — the pull-out (data-gm-panel-card = the animated surface the CSS
+			// slides/fades). Slides out of the strip's top edge and OVER the command
+			// bar above (zero reflow — absolutely positioned). It is a column-reverse
+			// flex box so the control BAR stays pinned at the strip's edge (always
+			// reachable) while the active section sheet unfolds ABOVE it; bar + sheet
+			// read as one dark-glass card.
+			<div class="gm-console__card" data-gm-panel-card>
+				// Control bar — clock + quick time verbs + section buttons + pause/reset.
+				<div class="gm-console__strip">
+					// Close ✕ — folds the card back into the tab. data-gm-panel-toggle is
+					// the JS collapse hook (Esc + tap-outside route to the same collapse).
+					<button
+						type="button"
+						class="gm-console__collapse"
+						data-gm-panel-toggle
+						aria-expanded="true"
+						aria-label="Close GM console"
+					>
 						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
 					</button>
-				</div>
-				<div class="gm-console__sheet-body gm-console__sheet-body--rows">
-					<div class="gm-console__row">
-						<span class="gm-console__lbl gm-console__lbl--inline">Time</span>
-						<input type="number" min="0" class="gm-console__input gm-console__input--num" data-gm-time-hour
-							value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentHour) } aria-label="Hour"/>
-						<span class="gm-console__sep">:</span>
-						<input type="number" min="0" class="gm-console__input gm-console__input--num" data-gm-time-minute
-							value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentMinute) } aria-label="Minute"/>
-						<button type="button" class="gm-console__btn" data-gm-set-time>Set</button>
+					<span class="gm-console__title" title="GM Console">
+						<i class="fa-solid fa-wand-sparkles" aria-hidden="true"></i>
+					</span>
+					<span class="gm-console__clock" data-gm-clock>{ wsClock(data) }</span>
+					<span class="gm-console__divider" aria-hidden="true"></span>
+					<div class="gm-console__verbs" role="group" aria-label="Advance time">
+						<button type="button" class="gm-console__verb" data-gm-advance data-gm-minutes="10">+10m</button>
+						<button type="button" class="gm-console__verb" data-gm-advance data-gm-hours="1">+1h</button>
+						<button type="button" class="gm-console__verb" data-gm-advance data-gm-hours="8" title="Long rest (8h)">Rest</button>
+						<button type="button" class="gm-console__verb" data-gm-advance data-gm-days="1">+1d</button>
+						<button type="button" class="gm-console__verb" data-gm-advance data-gm-hours="-1" title="Step back one hour">−1h</button>
 					</div>
-					<div class="gm-console__row">
-						<span class="gm-console__lbl gm-console__lbl--inline">Date</span>
-						<input type="number" min="1" class="gm-console__input gm-console__input--num" data-gm-date-day
-							value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentDay) } aria-label="Day"/>
-						<select class="gm-console__input" data-gm-date-month aria-label="Month">
-							for i, m := range data.ActiveCalendar.Months {
-								if i == data.ActiveCalendar.CurrentMonth-1 {
-									<option value={ fmt.Sprintf("%d", i+1) } selected>{ m.Name }</option>
-								} else {
-									<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
+					<span class="gm-console__divider" aria-hidden="true"></span>
+					<div class="gm-console__sections" role="group" aria-label="Console sections">
+						<button type="button" class="gm-console__section" data-gm-sheet-open="time" aria-expanded="false">Time</button>
+						<button type="button" class="gm-console__section" data-gm-sheet-open="weather" aria-expanded="false">Weather</button>
+						<button type="button" class="gm-console__section" data-gm-sheet-open="events" aria-expanded="false">Events</button>
+						<button type="button" class="gm-console__section" data-gm-sheet-open="mood" aria-expanded="false">Mood</button>
+					</div>
+					<span class="gm-console__divider" aria-hidden="true"></span>
+					<button type="button" class="gm-console__iconbtn" data-gm-pause aria-pressed="false" title="Pause atmosphere">
+						<i class="fa-solid fa-pause" aria-hidden="true"></i>
+						<span class="gm-console__sr" data-gm-pause-label>Pause</span>
+					</button>
+					<button type="button" class="gm-console__iconbtn" data-gm-reset title="Reset sky — clear weather, world-events and mood">
+						<i class="fa-solid fa-broom" aria-hidden="true"></i>
+					</button>
+				</div>
+				// ---- TIME sheet ----
+				<div class="gm-console__sheet" data-gm-sheet-panel="time" hidden>
+					<div class="gm-console__sheet-head">
+						<span class="gm-console__sheet-title">Set time &amp; date</span>
+						<button type="button" class="gm-console__iconbtn" data-gm-sheet-close aria-label="Close">
+							<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+						</button>
+					</div>
+					<div class="gm-console__sheet-body gm-console__sheet-body--rows">
+						<div class="gm-console__row">
+							<span class="gm-console__lbl gm-console__lbl--inline">Time</span>
+							<input
+								type="number"
+								min="0"
+								class="gm-console__input gm-console__input--num"
+								data-gm-time-hour
+								value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentHour) }
+								aria-label="Hour"
+							/>
+							<span class="gm-console__sep">:</span>
+							<input
+								type="number"
+								min="0"
+								class="gm-console__input gm-console__input--num"
+								data-gm-time-minute
+								value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentMinute) }
+								aria-label="Minute"
+							/>
+							<button type="button" class="gm-console__btn" data-gm-set-time>Set</button>
+						</div>
+						<div class="gm-console__row">
+							<span class="gm-console__lbl gm-console__lbl--inline">Date</span>
+							<input
+								type="number"
+								min="1"
+								class="gm-console__input gm-console__input--num"
+								data-gm-date-day
+								value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentDay) }
+								aria-label="Day"
+							/>
+							<select class="gm-console__input" data-gm-date-month aria-label="Month">
+								for i, m := range data.ActiveCalendar.Months {
+									if i == data.ActiveCalendar.CurrentMonth-1 {
+										<option value={ fmt.Sprintf("%d", i+1) } selected>{ m.Name }</option>
+									} else {
+										<option value={ fmt.Sprintf("%d", i+1) }>{ m.Name }</option>
+									}
+								}
+							</select>
+							<input
+								type="number"
+								class="gm-console__input gm-console__input--num"
+								data-gm-date-year
+								value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentYear) }
+								aria-label="Year"
+							/>
+							<button type="button" class="gm-console__btn" data-gm-set-date>Set date</button>
+						</div>
+					</div>
+				</div>
+				// ---- WEATHER sheet (full catalog over the whole sky pane) ----
+				<div class="gm-console__sheet" data-gm-sheet-panel="weather" hidden>
+					<div class="gm-console__sheet-head">
+						<span class="gm-console__sheet-title">Weather</span>
+						<input
+							type="search"
+							class="gm-console__input gm-console__search"
+							data-gm-weather-search
+							placeholder="Filter conditions…"
+							aria-label="Filter weather conditions"
+						/>
+						<button type="button" class="gm-console__iconbtn" data-gm-sheet-close aria-label="Close">
+							<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+						</button>
+					</div>
+					<div class="gm-console__sheet-body">
+						<div class="gm-console__catalog" data-gm-weather-catalog>
+							for _, cat := range gmWeatherCategories() {
+								<div class="gm-console__cat" data-gm-cat={ cat }>{ cat }</div>
+								for _, w := range gmWeatherTypes() {
+									if w.Category == cat {
+										<button
+											type="button"
+											class="gm-console__tile"
+											data-gm-weather-tile
+											data-gm-id={ w.ID }
+											data-gm-label={ w.Label }
+											data-gm-active={ gmBoolAttr(w.ID == gmCurrentWeather(data)) }
+											title={ "Set weather: " + w.Label }
+										>
+											<span class="gm-console__tile-glyph" aria-hidden="true">{ w.Glyph }</span>
+											<span class="gm-console__tile-label">{ w.Label }</span>
+										</button>
+									}
 								}
 							}
-						</select>
-						<input type="number" class="gm-console__input gm-console__input--num" data-gm-date-year
-							value={ fmt.Sprintf("%d", data.ActiveCalendar.CurrentYear) } aria-label="Year"/>
-						<button type="button" class="gm-console__btn" data-gm-set-date>Set date</button>
+						</div>
 					</div>
 				</div>
-			</div>
-			// ---- WEATHER sheet (full catalog over the whole sky pane) ----
-			<div class="gm-console__sheet" data-gm-sheet-panel="weather" hidden>
-				<div class="gm-console__sheet-head">
-					<span class="gm-console__sheet-title">Weather</span>
-					<input
-						type="search"
-						class="gm-console__input gm-console__search"
-						data-gm-weather-search
-						placeholder="Filter conditions…"
-						aria-label="Filter weather conditions"
-					/>
-					<button type="button" class="gm-console__iconbtn" data-gm-sheet-close aria-label="Close">
-						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-					</button>
-				</div>
-				<div class="gm-console__sheet-body">
-					<div class="gm-console__catalog" data-gm-weather-catalog>
-						for _, cat := range gmWeatherCategories() {
-							<div class="gm-console__cat" data-gm-cat={ cat }>{ cat }</div>
-							for _, w := range gmWeatherTypes() {
-								if w.Category == cat {
-									<button
-										type="button"
-										class="gm-console__tile"
-										data-gm-weather-tile
-										data-gm-id={ w.ID }
-										data-gm-label={ w.Label }
-										data-gm-active={ gmBoolAttr(w.ID == gmCurrentWeather(data)) }
-										title={ "Set weather: " + w.Label }
-									>
-										<span class="gm-console__tile-glyph" aria-hidden="true">{ w.Glyph }</span>
-										<span class="gm-console__tile-label">{ w.Label }</span>
-									</button>
+				// ---- EVENTS sheet (trigger + per-event clear) ----
+				<div class="gm-console__sheet" data-gm-sheet-panel="events" hidden>
+					<div class="gm-console__sheet-head">
+						<span class="gm-console__sheet-title">World-events</span>
+						<div class="gm-console__active" data-gm-active-events>
+							if data.WorldState != nil {
+								for _, ev := range data.WorldState.Events {
+									<span class="gm-console__active-chip" data-gm-active-chip>
+										{ ev.Name }
+										<button
+											type="button"
+											class="gm-console__active-x"
+											data-gm-event-clear={ ev.Type }
+											aria-label={ "End " + ev.Name }
+											title={ "End " + ev.Name }
+										>×</button>
+									</span>
 								}
 							}
+						</div>
+						<button type="button" class="gm-console__link" data-gm-events-clear>Clear all</button>
+						<input
+							type="search"
+							class="gm-console__input gm-console__search"
+							data-gm-event-search
+							placeholder="Filter events…"
+							aria-label="Filter world-events"
+						/>
+						if data.CanAuthorDmOnly {
+							<label class="gm-console__check" title="Hidden from players">
+								<input type="checkbox" data-gm-event-dmonly/>
+								<span><i class="fa-solid fa-user-secret" aria-hidden="true"></i> DM only</span>
+							</label>
 						}
+						<button type="button" class="gm-console__iconbtn" data-gm-sheet-close aria-label="Close">
+							<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+						</button>
 					</div>
-				</div>
-			</div>
-			// ---- EVENTS sheet (trigger + per-event clear) ----
-			<div class="gm-console__sheet" data-gm-sheet-panel="events" hidden>
-				<div class="gm-console__sheet-head">
-					<span class="gm-console__sheet-title">World-events</span>
-					<div class="gm-console__active" data-gm-active-events>
-						if data.WorldState != nil {
-							for _, ev := range data.WorldState.Events {
-								<span class="gm-console__active-chip" data-gm-active-chip>
-									{ ev.Name }
-									<button
-										type="button"
-										class="gm-console__active-x"
-										data-gm-event-clear={ ev.Type }
-										aria-label={ "End " + ev.Name }
-										title={ "End " + ev.Name }
-									>×</button>
-								</span>
-							}
-						}
-					</div>
-					<button type="button" class="gm-console__link" data-gm-events-clear>Clear all</button>
-					<input
-						type="search"
-						class="gm-console__input gm-console__search"
-						data-gm-event-search
-						placeholder="Filter events…"
-						aria-label="Filter world-events"
-					/>
-					if data.CanAuthorDmOnly {
-						<label class="gm-console__check" title="Hidden from players">
-							<input type="checkbox" data-gm-event-dmonly/>
-							<span><i class="fa-solid fa-user-secret" aria-hidden="true"></i> DM only</span>
-						</label>
-					}
-					<button type="button" class="gm-console__iconbtn" data-gm-sheet-close aria-label="Close">
-						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-					</button>
-				</div>
-				<div class="gm-console__sheet-body">
-					<div class="gm-console__catalog" data-gm-event-catalog>
-						for _, cat := range gmCelestialCategories() {
-							<div class="gm-console__cat" data-gm-cat={ cat }>{ cat }</div>
-							for _, ev := range gmCelestialTypes() {
-								if ev.Category == cat {
-									<button
-										type="button"
-										class="gm-console__tile"
-										data-gm-event-tile
-										data-gm-id={ ev.ID }
-										data-gm-label={ ev.Label }
-										title={ "Trigger: " + ev.Label }
-									>
-										<span class="gm-console__tile-glyph" aria-hidden="true">{ ev.Glyph }</span>
-										<span class="gm-console__tile-label">{ ev.Label }</span>
-									</button>
+					<div class="gm-console__sheet-body">
+						<div class="gm-console__catalog" data-gm-event-catalog>
+							for _, cat := range gmCelestialCategories() {
+								<div class="gm-console__cat" data-gm-cat={ cat }>{ cat }</div>
+								for _, ev := range gmCelestialTypes() {
+									if ev.Category == cat {
+										<button
+											type="button"
+											class="gm-console__tile"
+											data-gm-event-tile
+											data-gm-id={ ev.ID }
+											data-gm-label={ ev.Label }
+											title={ "Trigger: " + ev.Label }
+										>
+											<span class="gm-console__tile-glyph" aria-hidden="true">{ ev.Glyph }</span>
+											<span class="gm-console__tile-label">{ ev.Label }</span>
+										</button>
+									}
 								}
 							}
-						}
+						</div>
 					</div>
 				</div>
-			</div>
-			// ---- MOOD sheet ----
-			<div class="gm-console__sheet" data-gm-sheet-panel="mood" hidden>
-				<div class="gm-console__sheet-head">
-					<span class="gm-console__sheet-title">Mood tint</span>
-					<button type="button" class="gm-console__link" data-gm-mood-clear>Clear</button>
-					<button type="button" class="gm-console__iconbtn" data-gm-sheet-close aria-label="Close">
-						<i class="fa-solid fa-xmark" aria-hidden="true"></i>
-					</button>
-				</div>
-				<div class="gm-console__sheet-body gm-console__sheet-body--rows">
-					<div class="gm-console__swatches">
-						for _, p := range gmMoodPresets() {
-							<button
-								type="button"
-								class="gm-console__swatch"
-								data-gm-mood
-								data-gm-mood-color={ p.Color }
-								data-gm-mood-intensity={ fmt.Sprintf("%.2f", p.Intensity) }
-								style={ "background:" + p.Color }
-								title={ p.Label }
-								aria-label={ "Mood: " + p.Label }
-							></button>
-						}
+				// ---- MOOD sheet ----
+				<div class="gm-console__sheet" data-gm-sheet-panel="mood" hidden>
+					<div class="gm-console__sheet-head">
+						<span class="gm-console__sheet-title">Mood tint</span>
+						<button type="button" class="gm-console__link" data-gm-mood-clear>Clear</button>
+						<button type="button" class="gm-console__iconbtn" data-gm-sheet-close aria-label="Close">
+							<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+						</button>
 					</div>
-					<div class="gm-console__row">
-						<label class="gm-console__custom">
-							<span class="gm-console__hint">Custom</span>
-							<input type="color" value="#c83232" data-gm-mood-custom aria-label="Custom mood color"/>
-						</label>
-						<label class="gm-console__intensity">
-							<span class="gm-console__hint">Intensity</span>
-							<input type="range" min="5" max="80" value="40" data-gm-mood-intensity-slider aria-label="Mood intensity"/>
-						</label>
+					<div class="gm-console__sheet-body gm-console__sheet-body--rows">
+						<div class="gm-console__swatches">
+							for _, p := range gmMoodPresets() {
+								<button
+									type="button"
+									class="gm-console__swatch"
+									data-gm-mood
+									data-gm-mood-color={ p.Color }
+									data-gm-mood-intensity={ fmt.Sprintf("%.2f", p.Intensity) }
+									style={ "background:" + p.Color }
+									title={ p.Label }
+									aria-label={ "Mood: " + p.Label }
+								></button>
+							}
+						</div>
+						<div class="gm-console__row">
+							<label class="gm-console__custom">
+								<span class="gm-console__hint">Custom</span>
+								<input type="color" value="#c83232" data-gm-mood-custom aria-label="Custom mood color"/>
+							</label>
+							<label class="gm-console__intensity">
+								<span class="gm-console__hint">Intensity</span>
+								<input type="range" min="5" max="80" value="40" data-gm-mood-intensity-slider aria-label="Mood intensity"/>
+							</label>
+						</div>
 					</div>
 				</div>
 			</div>

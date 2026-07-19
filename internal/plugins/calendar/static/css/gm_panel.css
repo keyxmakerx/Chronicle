@@ -1,27 +1,38 @@
-/* gm_panel.css — the GM world-state console (C-CAL-WORLDSTATE-GM-OVERHAUL r2,
- * operator-directed FULL-BAND layout).
+/* gm_panel.css — the GM world-state console as a PULL-OUT CARD on the sky
+ * strip's (skypane's) top edge (C-CAL-SKYPANE-DETACH §B — operator-directed,
+ * FIXED).
  *
- * The console spans the whole sky pane: a slim always-visible STRIP (clock +
- * time verbs + section buttons) floats at the band's top edge, and each
- * section opens as a translucent glass SHEET covering the entire band — the
- * effects catalog gets the full width to breathe while the animated sky
- * stays visible through the frost. While a transition runs
- * (data-gm-transition="true", set by gm_panel.js) strip + sheet fade to
- * near-transparent so the DM watches the sky change, then recover.
- * GPU-only animation (opacity/transform); reduced-motion drops the fades.
+ * The always-on band is gone. A GM-gated TAB rides the sky strip's top edge;
+ * opening it slides a dark-glass CARD out and UP, OVER the command bar above,
+ * with ZERO reflow (the card is absolutely positioned and grows upward). ✕ /
+ * Esc / tap-outside fold it back into the tab. The card is a column-reverse
+ * flex box: the control BAR stays pinned at the strip's edge (always reachable)
+ * while the active section sheet unfolds ABOVE it and scrolls internally when a
+ * catalog outgrows the space. While a world mutation runs the card fades
+ * near-transparent (data-gm-transition) so the DM watches the sky (in the
+ * strip's skybox) change. GPU-only animation (opacity/transform); reduced
+ * motion drops it.
  *
- * This is CHROME for a capability-gated tool that lives ON the rendering
- * canvas — it intentionally uses its own glass palette rather than page
- * theme tokens (it must stay legible over a midday sky and a thunderstorm
- * alike, in any app theme). */
+ * STACKING: .gm-console and its skypane wrapper deliberately take NO z-index
+ * (no stacking context), so the sticky command bar (z-30) still covers the
+ * strip on scroll; only the card + tab opt ABOVE the header via their own
+ * z-index. Do NOT add transform/filter/opacity to .gm-console or the wrapper —
+ * either would create a stacking context and trap the card beneath the header.
+ *
+ * This is CHROME for a capability-gated tool floating over both the rendering
+ * canvas and page chrome — it uses its own dark-glass palette (not theme
+ * tokens) so it stays legible over a midday sky, a thunderstorm, and any app
+ * theme alike. */
 
 .gm-console {
   position: absolute;
   inset: 0;
-  z-index: 40;
-  pointer-events: none; /* the sky stays clickable; controls opt back in */
+  pointer-events: none; /* the strip stays clickable; controls opt back in */
   font-size: 13px;
   color: oklch(0.97 0.005 250);
+  /* --gm-hinge = the sky strip's top edge: the skypane wrapper's pt-3 below
+   * .gm-console's (padding-box) top. Keep in sync if that gutter changes. */
+  --gm-hinge: 0.75rem;
 }
 .gm-console__sr {
   position: absolute;
@@ -31,20 +42,20 @@
   clip-path: inset(50%);
 }
 
-/* ---- collapsed pill ---- */
+/* ---- TAB — the collapsed handle riding the strip's top edge ---- */
 .gm-console__pill {
   display: none;
   position: absolute;
-  top: 0;
-  right: 0;
+  bottom: 100%;
+  right: 1.25rem;
+  margin-bottom: calc(-1 * var(--gm-hinge)); /* drop onto the strip's top edge */
   align-items: center;
-  gap: 7px;
-  padding: 7px 14px;
+  gap: 6px;
+  padding: 5px 12px;
   border: 1px solid oklch(1 0 0 / 0.18);
-  border-top: 0;
-  border-right: 0;
-  border-radius: 0 0 0 10px;
-  background: oklch(0.17 0.02 265 / 0.55);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: oklch(0.17 0.02 265 / 0.74);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   color: oklch(0.97 0.005 250);
@@ -52,47 +63,68 @@
   letter-spacing: 0.04em;
   cursor: pointer;
   pointer-events: auto;
-  box-shadow: 0 4px 18px oklch(0 0 0 / 0.35);
+  z-index: 31; /* above the sticky command bar (z-30) at the shared edge */
+  box-shadow: 0 -4px 16px oklch(0 0 0 / 0.32);
   transition: background 160ms ease, transform 160ms ease;
 }
-.gm-console__pill:hover { background: oklch(0.22 0.03 265 / 0.65); transform: translateY(-1px); }
+.gm-console__pill i:first-child { color: oklch(0.84 0.14 85); }
+.gm-console__pill:hover { background: oklch(0.22 0.03 265 / 0.82); transform: translateY(-1px); }
+.gm-console__pill-caret { font-size: 10px; opacity: 0.7; }
 .gm-console[data-gm-collapsed="true"] .gm-console__pill { display: inline-flex; }
-.gm-console[data-gm-collapsed="true"] .gm-console__strip,
-.gm-console[data-gm-collapsed="true"] .gm-console__sheet {
+
+/* ---- CARD — the pull-out (bar pinned at the hinge, sheet unfolding above) ---- */
+.gm-console__card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: calc(-1 * var(--gm-hinge)); /* card bottom sits on the strip's top edge */
+  display: flex;
+  flex-direction: column-reverse; /* control bar at the bottom (hinge); sheet above */
+  max-height: min(72vh, calc(100dvh - 4.5rem));
+  border: 1px solid oklch(1 0 0 / 0.16);
+  border-radius: 14px 14px 0 0;
+  background: oklch(0.15 0.022 265 / 0.86);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 -12px 40px -10px oklch(0 0 0 / 0.6), inset 0 1px 0 oklch(1 0 0 / 0.08);
+  text-shadow: 0 1px 2px oklch(0 0 0 / 0.45);
+  overflow: hidden;
+  pointer-events: auto;
+  z-index: 50; /* well above the sticky command bar (z-30) */
+  transition:
+    opacity 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* collapsed → the card folds away (the tab shows instead). Instant + total
+ * hit-test cut so an invisible card never eats a click meant for the page. */
+.gm-console[data-gm-collapsed="true"] .gm-console__card {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(10px);
   pointer-events: none;
-  /* instant + total hit-testing cut — children can never re-enable it, and
-   * there is no fade window where an invisible control eats the pill click */
   visibility: hidden;
 }
+/* the transition fade: the sky animates THROUGH the card while the world moves */
+.gm-console[data-gm-transition="true"] .gm-console__card { opacity: 0.16; }
 
-/* ---- the always-visible strip: DOCKED into the pane's top-right edge ---- */
+/* ---- control bar (pinned at the card's bottom = the strip's top edge) ---- */
 .gm-console__strip {
-  position: absolute;
-  top: 0;
-  right: 0;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 7px;
-  max-width: 100%;
-  padding: 6px 9px;
-  /* flush with the band: the pane's own edges frame the top + right sides */
-  border: 1px solid oklch(1 0 0 / 0.16);
-  border-top: 0;
-  border-right: 0;
-  border-radius: 0 0 0 12px;
-  background: oklch(0.16 0.022 265 / 0.55);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
-  backdrop-filter: blur(12px) saturate(1.1);
-  box-shadow: 0 8px 28px -8px oklch(0 0 0 / 0.5), inset 0 1px 0 oklch(1 0 0 / 0.08);
-  text-shadow: 0 1px 2px oklch(0 0 0 / 0.45);
-  pointer-events: auto;
-  transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1), transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 42px;
+  padding: 6px 10px;
+  border-top: 1px solid oklch(1 0 0 / 0.12); /* separates the bar from the sheet above */
+  background: oklch(0 0 0 / 0.22);
+  overflow-x: auto; /* narrow viewports scroll the bar and keep it one row */
+  scrollbar-width: none;
 }
-.gm-console__title { display: inline-flex; align-items: center; }
+.gm-console__strip::-webkit-scrollbar { display: none; }
+.gm-console__title { display: inline-flex; align-items: center; flex: none; }
 .gm-console__title i { color: oklch(0.84 0.14 85); font-size: 13px; }
 .gm-console__clock {
+  flex: none;
   font: 600 12px/1 "JetBrains Mono", ui-monospace, monospace;
   color: oklch(0.92 0.02 250);
   background: oklch(0 0 0 / 0.25);
@@ -102,38 +134,32 @@
   white-space: nowrap;
 }
 .gm-console__divider {
+  flex: none;
   width: 1px;
   align-self: stretch;
   background: oklch(1 0 0 / 0.14);
 }
 
-/* The transition fade: the sky animates THROUGH the console while the world
- * moves (the operator's translucent-console vision). */
-.gm-console[data-gm-transition="true"] .gm-console__strip,
-.gm-console[data-gm-transition="true"] .gm-console__sheet {
-  opacity: 0.14;
-}
-
-/* ---- collapse handle: fused to the strip's left edge ---- */
+/* ---- close ✕ — folds the card back into the tab ---- */
 .gm-console__collapse {
-  align-self: stretch;
+  flex: none;
   display: inline-flex;
   align-items: center;
-  margin: -6px 4px -6px -9px; /* bleed through the strip's padding to its edge */
-  padding: 0 8px;
-  border: 0;
-  border-right: 1px solid oklch(1 0 0 / 0.14);
-  border-radius: 0 0 0 12px; /* matches the docked strip's only rounded corner */
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid oklch(1 0 0 / 0.14);
+  border-radius: 7px;
   background: oklch(1 0 0 / 0.06);
-  color: oklch(0.80 0.01 250);
+  color: oklch(0.82 0.01 250);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   transition: background 120ms ease, color 120ms ease;
 }
-.gm-console__collapse:hover { background: oklch(1 0 0 / 0.14); color: oklch(0.98 0 0); }
+.gm-console__collapse:hover { background: oklch(0.62 0.2 25 / 0.55); color: oklch(0.98 0 0); }
 
-/* ---- quick verbs (always present) ---- */
-.gm-console__verbs { display: flex; gap: 5px; }
+/* ---- quick verbs ---- */
+.gm-console__verbs { display: flex; gap: 5px; flex: none; }
 .gm-console__verb {
   padding: 6px 9px;
   border: 1px solid oklch(1 0 0 / 0.14);
@@ -148,8 +174,8 @@
 .gm-console__verb:hover { background: oklch(1 0 0 / 0.15); transform: translateY(-1px); }
 .gm-console__verb:active { transform: translateY(0); }
 
-/* ---- section buttons (open the full-band sheets) ---- */
-.gm-console__sections { display: flex; gap: 4px; }
+/* ---- section buttons (open the sheets that unfold above the bar) ---- */
+.gm-console__sections { display: flex; gap: 4px; flex: none; }
 .gm-console__section {
   padding: 6px 10px;
   border: 0;
@@ -170,6 +196,7 @@
 
 .gm-console__iconbtn {
   position: relative;
+  flex: none;
   border: 0;
   background: transparent;
   color: oklch(0.82 0.01 250);
@@ -181,28 +208,13 @@
 .gm-console__iconbtn:hover { color: oklch(0.98 0 0); background: oklch(1 0 0 / 0.10); }
 .gm-console__iconbtn[aria-pressed="true"] { color: oklch(0.85 0.15 85); background: oklch(1 0 0 / 0.10); }
 
-/* ---- the full-band sheets ---- */
+/* ---- the section sheets (unfold ABOVE the bar, inside the card) ---- */
 .gm-console__sheet {
-  position: absolute;
-  /* below the strip — the verbs/sections stay visible + clickable while a
-   * sheet is open; flush to the pane's left/right/bottom edges so it reads
-   * as part of the band, not a floating card. */
-  top: 44px;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  flex: 0 1 auto; /* size to content; shrink + scroll when the card hits its cap */
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 0;
-  border-top: 1px solid oklch(1 0 0 / 0.16);
-  border-radius: 0;
-  background: oklch(0.15 0.022 265 / 0.62);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
-  backdrop-filter: blur(14px) saturate(1.15);
-  box-shadow: 0 10px 38px -8px oklch(0 0 0 / 0.55), inset 0 1px 0 oklch(1 0 0 / 0.08);
-  text-shadow: 0 1px 2px oklch(0 0 0 / 0.45);
-  pointer-events: auto;
-  transition: opacity 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  background: transparent;
   overflow: hidden;
 }
 .gm-console__sheet[hidden] { display: none; }
@@ -225,7 +237,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 6px 12px 10px;
+  padding: 8px 12px 10px;
   scrollbar-width: thin;
   scrollbar-color: oklch(1 0 0 / 0.25) transparent;
 }
@@ -294,7 +306,7 @@
 .gm-console__btn:hover { background: oklch(0.62 0.16 270 / 0.58); transform: translateY(-1px); }
 .gm-console__btn:disabled { opacity: 0.55; cursor: default; transform: none; }
 
-/* ---- catalog tiles (full-band grid) ---- */
+/* ---- catalog tiles ---- */
 .gm-console__catalog {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
@@ -417,21 +429,20 @@
   white-space: nowrap;
 }
 
-/* ---- reduced motion: no fades/lifts; everything still works ---- */
+/* ---- reduced motion: no slide/fade/lift; the pull-out still works ---- */
 @media (prefers-reduced-motion: reduce) {
-  .gm-console__strip,
-  .gm-console__sheet,
+  .gm-console__card,
   .gm-console__pill,
   .gm-console__verb,
   .gm-console__tile,
   .gm-console__btn,
   .gm-console__swatch { transition: none !important; }
-  .gm-console[data-gm-transition="true"] .gm-console__strip { opacity: 1; }
-  .gm-console[data-gm-transition="true"] .gm-console__sheet { opacity: 1; }
+  .gm-console[data-gm-collapsed="true"] .gm-console__card { transform: none; }
+  .gm-console[data-gm-transition="true"] .gm-console__card { opacity: 1; }
 }
 
-/* Tight viewports: the strip wraps; sheets stay full-pane. */
-@media (max-width: 860px) {
-  .gm-console__strip { flex-wrap: wrap; left: 10px; }
+/* Tight viewports: the sheet search shrinks; the bar already scrolls (nowrap). */
+@media (max-width: 640px) {
   .gm-console__search { width: 120px; }
+  .gm-console__card { max-height: min(80vh, calc(100dvh - 3.5rem)); }
 }

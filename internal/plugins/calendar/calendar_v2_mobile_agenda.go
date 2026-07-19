@@ -114,19 +114,27 @@ func mobileMiniMonthDotColor(color string, selected bool) string {
 	return color
 }
 
-// mobileSidebarClasses returns the classes for the persistent LEFT mini-month
-// sidebar (miniMonthV2Sidebar). Only the Month view gets a mobile-specific
-// replacement (mobileMonthAssembly below) — leaving the 240px sidebar visible
-// alongside it at <768px would render two mini-months at once. Hidden ONLY
-// for the Month view; Week/Day/Timeline keep their current (pre-existing,
-// unchanged) mobile presentation, since their own mobile pass is a separate
-// dispatch slice.
+// mobileSidebarClasses returns the classes for the LEFT mini-month sidebar
+// (miniMonthV2Sidebar). Per C-CAL-SKYPANE-DETACH the desktop left column is
+// removed — the signed design keeps the mini-month solely as the MOBILE Month
+// navigator (mobileMonthAssembly) — so the sidebar is now DESKTOP-DETACHED
+// while its MOBILE presentation is left byte-for-byte unchanged:
+//
+//   - Month view: hidden at every width. On mobile it was already hidden
+//     (mobileMonthAssembly's navigator replaces it); on desktop it is now
+//     hidden too (the detach). Dropping `md:block` is the whole desktop change.
+//   - Week/Day/Timeline: `md:hidden` detaches it from DESKTOP (≥768px) while
+//     `base` keeps its pre-existing <768px mobile presentation intact — those
+//     views' own mobile pass remains a separate dispatch slice, untouched here.
+//
+// Net: no mini-month sidebar renders on desktop for any view (matching the
+// signed desktop render), and mobile rendering is identical to before.
 func mobileSidebarClasses(data CalendarV2ViewData) string {
 	base := "w-60 flex-shrink-0 border-r border-edge px-3 py-4 overflow-y-auto"
 	if data.View == "month" {
-		return "hidden md:block " + base
+		return "hidden " + base
 	}
-	return base
+	return "md:hidden " + base
 }
 
 // --- Mobile agenda list --------------------------------------------------
