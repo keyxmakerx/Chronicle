@@ -439,7 +439,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 						this.isCustom = (this.systemId === 'custom');
 						if (!this.isCustom) this.save();
 					}
-				}`, cc.Campaign.ParseSettings().SystemID, systemOptionsJSON, cc.Campaign.ID) }
+				}`, jsEsc(cc.Campaign.ParseSettings().SystemID), systemOptionsJSON, cc.Campaign.ID) }
 			>
 				<select x-model="systemId" @change="onChange()" class="input w-full mb-2">
 					<option value="">None</option>

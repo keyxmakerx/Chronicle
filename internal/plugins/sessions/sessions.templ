@@ -425,7 +425,7 @@ templ editSessionModal(cc *campaigns.CampaignContext, session *Session, csrfToke
 	<dialog id="edit-session-modal" class="rounded-lg shadow-xl bg-surface border border-edge p-0 w-full max-w-md backdrop:bg-black/50">
 		<div class="p-6">
 			<h2 class="text-lg font-semibold text-fg mb-4">Edit Session</h2>
-			<div class="space-y-4" x-data={ fmt.Sprintf("{ recurring: %t, recType: '%s' }", session.IsRecurring, derefStr(session.RecurrenceType)) }>
+			<div class="space-y-4" x-data={ fmt.Sprintf("{ recurring: %t, recType: '%s' }", session.IsRecurring, jsEsc(derefStr(session.RecurrenceType))) }>
 				<div>
 					<label class="block text-sm font-medium text-fg-body mb-1">Session Name</label>
 					<input type="text" id="edit-session-name" class="input w-full" required value={ session.Name }/>
@@ -699,6 +699,33 @@ func derefStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// jsEsc escapes a string for safe embedding inside a single-quoted JavaScript
+// string literal in an Alpine.js `x-data` expression. templ HTML-escapes the
+// attribute and the browser HTML-decodes it before Alpine evaluates it as JS,
+// but a backslash is not an HTML metacharacter, so `\'` stays an escaped quote
+// through that round-trip and cannot break out of the literal. It mirrors the
+// entities plugin's helper of the same name and is re-declared locally rather
+// than imported to keep the sessions plugin free of a cross-plugin dependency
+// (core-tenets §T-B2, plugin isolation).
+func jsEsc(s string) string {
+	result := ""
+	for _, c := range s {
+		switch c {
+		case '\'':
+			result += "\\'"
+		case '\\':
+			result += "\\\\"
+		case '\n':
+			result += "\\n"
+		case '\r':
+			result += "\\r"
+		default:
+			result += string(c)
+		}
+	}
+	return result
 }
 
 // SidebarSessionsRSVP renders a collapsible sidebar section showing planned sessions

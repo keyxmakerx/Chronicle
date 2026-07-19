@@ -234,6 +234,22 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 		input.Status = StatusPlanned
 	}
 
+	// Validate recurrence type. CreateSession only checks this when IsRecurring
+	// is set, but the update path validates unconditionally: the edit-session
+	// modal reads RecurrenceType into an Alpine `x-data` JS string regardless of
+	// IsRecurring, so an unvalidated value persisted here is a stored-XSS vector
+	// (C-SEC-XSS-JSATTR-SWEEP-R1 sink 2 — the JSON PUT handler binds the body
+	// unchecked). A nil type means "no recurrence" and is always allowed;
+	// jsEsc at the sink is the second layer of defense.
+	if input.RecurrenceType != nil {
+		switch *input.RecurrenceType {
+		case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly, RecurrenceCustom:
+			// Valid.
+		default:
+			return nil, apperror.NewBadRequest("invalid recurrence type")
+		}
+	}
+
 	session, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
