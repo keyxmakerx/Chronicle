@@ -610,10 +610,13 @@ func (h *MapAPIHandler) CreateFog(c echo.Context) error {
 // DeleteFog removes a fog region.
 // DELETE /api/v1/campaigns/:id/maps/:mapID/fog/:fogID
 func (h *MapAPIHandler) DeleteFog(c echo.Context) error {
-	if _, err := h.requireMapInCampaign(c); err != nil {
+	m, err := h.requireMapInCampaign(c)
+	if err != nil {
 		return err
 	}
-	if err := h.drawingSvc.DeleteFog(c.Request().Context(), c.Param("fogID")); err != nil {
+	// Pass the campaign-verified map ID so the service rejects a fog id that
+	// belongs to another map (SEC-IDOR-4).
+	if err := h.drawingSvc.DeleteFog(c.Request().Context(), c.Param("fogID"), m.ID); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

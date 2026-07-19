@@ -63,7 +63,9 @@ type DrawingService interface {
 
 	// Fog CRUD.
 	CreateFog(ctx context.Context, input CreateFogInput) (*FogRegion, error)
-	DeleteFog(ctx context.Context, id string) error
+	// mapID is the authorization boundary from the URL path: the fog region
+	// must belong to that map (SEC-IDOR-4), mirroring DeleteDrawing/Token/Layer.
+	DeleteFog(ctx context.Context, id, mapID string) error
 	ListFog(ctx context.Context, mapID string) ([]FogRegion, error)
 	ResetFog(ctx context.Context, mapID string) error
 
@@ -538,10 +540,16 @@ func (s *drawingService) CreateFog(ctx context.Context, input CreateFogInput) (*
 // DeleteFog removes a fog region. Looks the row up first so the delete
 // event can carry mapID and so the handler still gets a 404 when the fog
 // region doesn't exist (rather than a silent success).
-func (s *drawingService) DeleteFog(ctx context.Context, id string) error {
+func (s *drawingService) DeleteFog(ctx context.Context, id, mapID string) error {
 	f, err := s.repo.GetFog(ctx, id)
 	if err != nil {
 		return err
+	}
+	// IDOR guard (SEC-IDOR-4): the fog region must belong to the map in the URL
+	// path — DeleteDrawing/Token/Layer all enforce this and DeleteFog was the
+	// lone omission. NotFound (not Forbidden) so existence isn't leaked.
+	if f.MapID != mapID {
+		return apperror.NewNotFound("fog region not found")
 	}
 	if err := s.repo.DeleteFog(ctx, id); err != nil {
 		return err

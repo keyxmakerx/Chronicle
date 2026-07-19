@@ -1403,9 +1403,32 @@ type npcVisibilityTogglerAdapter struct {
 	svc entities.EntityService
 }
 
-// TogglePrivate flips an entity's is_private flag.
-func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityID string) (bool, error) {
-	return a.svc.TogglePrivate(ctx, entityID)
+// TogglePrivate flips an entity's is_private flag, scoped to campaignID so the
+// npcs reveal toggle can't reach across campaigns (SEC-IDOR-1).
+func (a *npcVisibilityTogglerAdapter) TogglePrivate(ctx context.Context, entityID, campaignID string) (bool, error) {
+	return a.svc.TogglePrivateInCampaign(ctx, entityID, campaignID)
+}
+
+// auditEntityViewGuardAdapter wraps entities.EntityService to implement the
+// audit.EntityViewGuard interface. Resolves an entity's campaign and the
+// caller's view permission so the entity-history endpoint can enforce campaign
+// ownership + per-entity visibility (SEC-IDOR-2).
+type auditEntityViewGuardAdapter struct {
+	svc entities.EntityService
+}
+
+// ResolveEntityView returns the entity's campaign and whether the given
+// role/user may view it, mirroring the gate entities.GetEntry applies.
+func (a *auditEntityViewGuardAdapter) ResolveEntityView(ctx context.Context, entityID string, role int, userID string) (string, bool, error) {
+	e, err := a.svc.GetByID(ctx, entityID)
+	if err != nil {
+		return "", false, err
+	}
+	access, err := a.svc.CheckEntityAccess(ctx, entityID, role, userID)
+	if err != nil {
+		return e.CampaignID, false, err
+	}
+	return e.CampaignID, access.CanView, nil
 }
 
 // armoryItemTypeFinderAdapter wraps entities.EntityService to implement the
@@ -2630,6 +2653,9 @@ func (a *App) RegisterRoutes() {
 	auditRepo := audit.NewAuditRepository(a.DB)
 	auditService := audit.NewAuditService(auditRepo)
 	auditHandler := audit.NewHandler(auditService)
+	// Guard the entity-history endpoint with campaign ownership + per-entity
+	// visibility, resolved via the entities service (SEC-IDOR-2).
+	auditHandler.SetEntityViewGuard(&auditEntityViewGuardAdapter{svc: entityService})
 	audit.RegisterRoutes(e, auditHandler, campaignService, authService)
 
 	// Wire audit logging into mutation handlers so CRUD actions are recorded.

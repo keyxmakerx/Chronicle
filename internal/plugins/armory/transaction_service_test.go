@@ -12,7 +12,7 @@ import (
 type mockTransactionRepo struct {
 	createFn        func(ctx context.Context, tx *Transaction) error
 	listByCampaignFn func(ctx context.Context, campaignID string, opts TransactionListOptions) ([]Transaction, int, error)
-	listByShopFn    func(ctx context.Context, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
+	listByShopFn    func(ctx context.Context, campaignID, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
 	listByBuyerFn   func(ctx context.Context, buyerEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
 }
 
@@ -31,9 +31,9 @@ func (m *mockTransactionRepo) ListByCampaign(ctx context.Context, campaignID str
 	return nil, 0, nil
 }
 
-func (m *mockTransactionRepo) ListByShop(ctx context.Context, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error) {
+func (m *mockTransactionRepo) ListByShop(ctx context.Context, campaignID, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error) {
 	if m.listByShopFn != nil {
-		return m.listByShopFn(ctx, shopEntityID, opts)
+		return m.listByShopFn(ctx, campaignID, shopEntityID, opts)
 	}
 	return nil, 0, nil
 }
@@ -249,6 +249,47 @@ func TestListTransactions(t *testing.T) {
 	}
 	if total != 1 || len(txs) != 1 {
 		t.Errorf("expected 1 transaction, got %d (total=%d)", len(txs), total)
+	}
+}
+
+// TestListShopTransactions_CampaignScoped pins SEC-IDOR-3: the shop-transactions
+// list is scoped to the caller's campaign. The repo mock models the DB campaign
+// predicate (rows live only under camp-1); a caller scoped to camp-2 asking for
+// camp-1's shop id gets nothing, while the legitimate camp-1 caller gets the row.
+func TestListShopTransactions_CampaignScoped(t *testing.T) {
+	var seenCampaign string
+	repo := &mockTransactionRepo{
+		listByShopFn: func(_ context.Context, campaignID, shopEntityID string, _ TransactionListOptions) ([]Transaction, int, error) {
+			seenCampaign = campaignID
+			if campaignID == "camp-1" && shopEntityID == "shop-1" {
+				return []Transaction{{ID: 1, CampaignID: "camp-1", ShopEntityID: "shop-1"}}, 1, nil
+			}
+			return nil, 0, nil // campaign predicate matches nothing cross-tenant
+		},
+	}
+	svc := NewTransactionService(repo)
+
+	// Legit: the owning campaign sees the shop's transactions.
+	txs, total, err := svc.ListShopTransactions(context.Background(), "camp-1", "shop-1", DefaultTransactionListOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 1 || len(txs) != 1 {
+		t.Fatalf("owning campaign should see 1 transaction, got %d (total=%d)", len(txs), total)
+	}
+
+	// IDOR: a caller in another campaign asking for camp-1's shop id gets nothing.
+	txs, total, err = svc.ListShopTransactions(context.Background(), "camp-2", "shop-1", DefaultTransactionListOptions())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 0 || len(txs) != 0 {
+		t.Errorf("cross-campaign shop id must leak no transactions, got %d (total=%d)", len(txs), total)
+	}
+	// The service must thread the caller's campaign to the repo — the seam the
+	// DB campaign predicate depends on.
+	if seenCampaign != "camp-2" {
+		t.Errorf("service must pass the caller's campaign to the repo; got %q", seenCampaign)
 	}
 }
 
