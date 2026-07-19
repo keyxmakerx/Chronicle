@@ -20,6 +20,33 @@ func welcomeMessageJS(cc *CampaignContext) string {
 	return string(b)
 }
 
+// jsEsc escapes a string for safe embedding inside a single-quoted JavaScript
+// string literal in an Alpine.js `x-data` expression. templ HTML-escapes the
+// attribute and the browser HTML-decodes it before Alpine evaluates it as JS,
+// but a backslash is not an HTML metacharacter, so `\'` stays an escaped quote
+// through that round-trip and cannot break out of the literal. It mirrors the
+// entities plugin's helper of the same name and is re-declared locally rather
+// than imported to keep the campaigns plugin free of a cross-plugin dependency
+// (core-tenets §T-B2, plugin isolation).
+func jsEsc(s string) string {
+	result := ""
+	for _, c := range s {
+		switch c {
+		case '\'':
+			result += "\\'"
+		case '\\':
+			result += "\\\\"
+		case '\n':
+			result += "\\n"
+		case '\r':
+			result += "\\r"
+		default:
+			result += string(c)
+		}
+	}
+	return result
+}
+
 // entityTypesJSON serializes entity types to JSON for the entity type config widget.
 func entityTypesJSON(types []SettingsEntityType) string {
 	b, err := json.Marshal(types)
@@ -409,7 +436,7 @@ templ settingsGeneralTab(cc *CampaignContext, csrfToken, systemOptionsJSON strin
 						this.isCustom = (this.systemId === 'custom');
 						if (!this.isCustom) this.save();
 					}
-				}`, cc.Campaign.ParseSettings().SystemID, systemOptionsJSON, cc.Campaign.ID) }
+				}`, jsEsc(cc.Campaign.ParseSettings().SystemID), systemOptionsJSON, cc.Campaign.ID) }
 			>
 				<select x-model="systemId" @change="onChange()" class="input w-full mb-2">
 					<option value="">None</option>

@@ -406,7 +406,7 @@ templ parentSelector(campaignID string, parentEntity *Entity) {
 				this.query = '';
 				this.results = [];
 			}
-		}`, parentSelectorID(parentEntity), parentSelectorName(parentEntity), campaignID) }
+		}`, parentSelectorID(parentEntity), jsEsc(parentSelectorName(parentEntity)), campaignID) }
 		class="relative"
 	>
 		<label class="block text-sm font-medium text-fg-body mb-1">Parent Page (optional)</label>
