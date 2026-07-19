@@ -112,7 +112,7 @@ func TestCalendarV2Page_NoBand_NoDesktopSidebar_ConsoleInSkypane(t *testing.T) {
 	if strip < 0 {
 		t.Error("sky strip (data-cal-sky-strip) must render on the page")
 	}
-	if panel >= 0 && strip >= 0 && !(sky < panel && panel < strip) {
+	if panel >= 0 && strip >= 0 && (sky >= panel || panel >= strip) {
 		t.Errorf("GM console must sit inside the skypane, before the sky strip; got skypane=%d panel=%d strip=%d", sky, panel, strip)
 	}
 
