@@ -1,13 +1,14 @@
 // gm_panel_transition.test.mjs — the GM console's translucent-transition +
-// containment contracts (C-CAL-WORLDSTATE-GM-OVERHAUL; supersedes the #438
-// opacity flash and the #441 in-band body cap):
+// pull-out containment contracts (C-CAL-SKYPANE-DETACH §B; supersedes the
+// in-band full-pane sheet from C-CAL-WORLDSTATE-GM-OVERHAUL):
 //   1. Every world mutation sets data-gm-transition on the console root; the
 //      CSS owns the fade (opacity 0.16) so the sky animates through the card.
 //   2. prefers-reduced-motion neutralizes the fade IN CSS (opacity stays 1) —
 //      the JS stays branch-free.
-//   3. The card itself is height-capped + internally scrollable in CSS (it
-//      may float over the grid while open, but never grows unbounded), and
-//      collapses to a pill.
+//   3. The pull-out card is height-capped + internally scrollable in CSS (it
+//      floats OVER the command bar above while open, but never grows
+//      unbounded), pulls out of the strip's top edge, and collapses to a tab.
+//   4. Esc + tap-outside dismiss the open card (JS document-level handlers).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -67,39 +68,97 @@ test('advancing the day marks the console for the translucent transition', () =>
 });
 
 test('the transition fade lives in CSS and reduced-motion neutralizes it', () => {
-  assert.match(css, /\[data-gm-transition="true"\] \.gm-console__strip,\s*\n\.gm-console\[data-gm-transition="true"\] \.gm-console__sheet \{\s*\n\s*opacity: 0\.1/,
-    'transition state must fade strip + sheet to near-transparent');
+  assert.match(css, /\.gm-console\[data-gm-transition="true"\] \.gm-console__card \{ opacity: 0\.1/,
+    'transition state must fade the card to near-transparent');
   assert.match(css, /prefers-reduced-motion/, 'reduced-motion block missing');
-  assert.match(css, /prefers-reduced-motion[\s\S]*?\[data-gm-transition="true"\] \.gm-console__strip \{ opacity: 1; \}/,
-    'reduced-motion must keep the strip fully opaque (no fade)');
+  assert.match(css, /prefers-reduced-motion[\s\S]*?\[data-gm-transition="true"\] \.gm-console__card \{ opacity: 1; \}/,
+    'reduced-motion must keep the card fully opaque (no fade)');
 });
 
-test('sheets cover the band pane and scroll internally (never unbounded)', () => {
-  assert.match(css, /\.gm-console__sheet\s*\{[\s\S]*?top: 44px/, 'sheets must span the sky pane below the strip');
-  assert.match(css, /\.gm-console__sheet-body\s*\{[\s\S]*?overflow-y: auto/, 'sheet body must scroll internally');
-  assert.match(css, /\.gm-console\s*\{[\s\S]*?pointer-events: none/, 'console root must not block sky clicks');
+test('the pull-out card is height-capped + scrolls internally (never unbounded)', () => {
+  assert.match(css, /\.gm-console__card \{[\s\S]*?max-height: min\(/, 'card must be height-capped');
+  assert.match(css, /\.gm-console__sheet-body \{[\s\S]*?overflow-y: auto/, 'sheet body must scroll internally');
+  assert.match(css, /\.gm-console \{[\s\S]*?pointer-events: none/, 'console root must not block sky/strip clicks');
   assert.doesNotMatch(src, /maxHeight = 'none'/, 'JS must not release any body to an unbounded height');
 });
 
-test('the console is DOCKED into the pane edge (r3, cordinator#33)', () => {
-  assert.match(css, /\.gm-console__strip \{[\s\S]*?top: 0;[\s\S]*?right: 0;/, 'strip must be flush with the pane corner');
-  assert.match(css, /\.gm-console__strip \{[\s\S]*?border-radius: 0 0 0 12px/, 'strip squares off where it meets the edges');
-  assert.match(css, /\.gm-console__collapse \{/, 'edge-fused collapse handle missing');
-  assert.match(css, /\.gm-console__sheet \{[\s\S]*?left: 0;[\s\S]*?right: 0;[\s\S]*?bottom: 0;/, 'sheets flush to the pane edges');
+test('the console PULLS OUT of the strip top edge, over content above (§B)', () => {
+  // The card anchors to the strip's top edge (bottom:100%) and grows UPWARD,
+  // overlaying the command bar above with zero reflow.
+  assert.match(css, /\.gm-console__card \{[\s\S]*?bottom: 100%/, 'card bottom anchors on the strip top edge (grows up over content above)');
+  assert.match(css, /\.gm-console__card \{[\s\S]*?flex-direction: column-reverse/, 'control bar pinned at the hinge; the sheet unfolds above it');
+  assert.match(css, /\.gm-console__pill \{[\s\S]*?bottom: 100%/, 'the tab rides the strip top edge');
+  assert.match(css, /\.gm-console__collapse \{/, 'close ✕ handle missing');
 });
 
-test('collapsed console is fully inert — visibility cut, no click-traps (r3)', () => {
-  assert.match(css, /data-gm-collapsed="true"\][\s\S]*?visibility: hidden/, 'collapsed strip/sheets must be visibility:hidden');
+test('collapsed console is fully inert — visibility cut, no click-traps', () => {
+  assert.match(css, /data-gm-collapsed="true"\][\s\S]*?visibility: hidden/, 'the collapsed card must be visibility:hidden');
   const iconbtnRule = css.match(/\.gm-console__iconbtn \{[^}]*\}/);
   assert.ok(iconbtnRule, 'iconbtn rule present');
   assert.doesNotMatch(iconbtnRule[0], /pointer-events: auto/, 'icon buttons must not re-enable hit-testing (the invisible click-trap class)');
 });
 
-test('the console collapses to a pill (data-gm-collapsed contract)', () => {
+test('the console collapses to a tab (data-gm-collapsed contract)', () => {
   assert.match(css, /\.gm-console\[data-gm-collapsed="true"\] \.gm-console__pill \{ display: inline-flex; \}/,
-    'collapsed state must show the pill');
-  assert.match(css, /\.gm-console\[data-gm-collapsed="true"\] \.gm-console__strip,[\s\S]*?pointer-events: none/,
-    'collapsed state must disable the strip + sheets');
+    'collapsed state must show the tab');
+  assert.match(css, /\.gm-console\[data-gm-collapsed="true"\] \.gm-console__card \{[\s\S]*?pointer-events: none/,
+    'collapsed state must disable the card');
   assert.match(src, /data-gm-collapsed/, 'JS must drive the collapsed attribute');
   assert.match(src, /data-gm-sheet-open/, 'JS must wire the section sheet buttons');
+});
+
+// --- §B dismiss: Esc + tap-outside (new document-level handlers) ------------
+
+function bootDismiss() {
+  const docHandlers = {};
+  const toggle = el(); toggle._attrs['data-gm-panel-toggle'] = '';
+  const pill = el();
+  const inside = el();
+  const outside = el();
+  const panel = el({
+    _attrs: { 'data-gm-collapsed': 'false', 'data-gm-sheet': '' },
+    querySelector(sel) { return sel === '[data-gm-panel-toggle]' ? toggle : sel === '[data-gm-panel-open]' ? pill : null; },
+    querySelectorAll() { return []; },
+    contains(node) { return node === panel || node === inside; },
+  });
+  const root = el({ dataset: { calV2CampaignId: 'c', calV2CalendarId: 'cal', calV2CsrfToken: 't' } });
+  const sandbox = {
+    console, matchMedia: () => ({ matches: false }), setTimeout: () => 0, clearTimeout() {},
+    document: {
+      readyState: 'complete',
+      querySelector: (sel) => (sel === '[data-gm-panel]' ? panel : sel === '[data-cal-v2-root]' ? root : null),
+      addEventListener(type, fn) { docHandlers[type] = fn; },
+      removeEventListener() {},
+    },
+  };
+  sandbox.window = sandbox;
+  sandbox.Chronicle = { apiFetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }), notify() {} };
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox, { filename: 'gm_panel.js' });
+  return { panel, pill, inside, outside, docHandlers };
+}
+
+test('tap-outside dismisses the open card; clicks inside keep it open', () => {
+  const h = bootDismiss();
+  assert.equal(h.panel.getAttribute('data-gm-collapsed'), 'false', 'starts open (markup said open)');
+  assert.ok(h.docHandlers.click, 'document click (tap-outside) handler must be wired');
+  // A click on the tab/card (inside the panel) must NOT self-dismiss.
+  h.docHandlers.click({ target: h.inside });
+  assert.equal(h.panel.getAttribute('data-gm-collapsed'), 'false', 'inside click keeps it open');
+  // A click anywhere else collapses it.
+  h.docHandlers.click({ target: h.outside });
+  assert.equal(h.panel.getAttribute('data-gm-collapsed'), 'true', 'tap-outside collapses the card');
+  // Once collapsed, an outside click is a no-op (no double-fire hazard).
+  h.docHandlers.click({ target: h.outside });
+  assert.equal(h.panel.getAttribute('data-gm-collapsed'), 'true', 'collapsed stays collapsed');
+});
+
+test('Esc dismisses the open card', () => {
+  const h = bootDismiss();
+  assert.ok(h.docHandlers.keydown, 'document keydown (Esc) handler must be wired');
+  // A non-Esc key does nothing.
+  h.docHandlers.keydown({ key: 'a' });
+  assert.equal(h.panel.getAttribute('data-gm-collapsed'), 'false', 'other keys leave it open');
+  h.docHandlers.keydown({ key: 'Escape' });
+  assert.equal(h.panel.getAttribute('data-gm-collapsed'), 'true', 'Esc collapses the card');
 });

@@ -21,9 +21,15 @@ package calendar
 
 import "github.com/keyxmakerx/chronicle/internal/widgets/skybox"
 
-// worldStateBandV2 renders the ambient SKY band above the full calendar page
-// (C-CAL-V2-WORLDSTATE-BAND-FINISHING Part C: SKY ONLY — the hourglass is the
-// compact "shelf" variant). Renders nothing without an active calendar / seed.
+// worldStateBandV2 is the SKY-ONLY band composition (C-CAL-V2-WORLDSTATE-BAND-
+// FINISHING Part C — the hourglass is the compact "shelf" variant). Renders
+// nothing without an active calendar / seed.
+//
+// NOTE (C-CAL-SKYPANE-DETACH): the calendar_v2 PAGE no longer renders this —
+// the always-on band was detached; the sky now lives only in the collapsible
+// sky strip. This function is retained as the shared sky-only composition (the
+// shelf variant builds on the same worldStateBandVariantV2) and as the render
+// contract the worldState band tests pin. It is NOT mounted on the page.
 templ worldStateBandV2(data CalendarV2ViewData) {
 	@worldStateBandVariantV2(data, false)
 }

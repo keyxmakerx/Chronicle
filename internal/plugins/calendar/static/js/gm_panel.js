@@ -17,6 +17,14 @@
 (function () {
     'use strict';
 
+    // Dismiss wiring (Esc + tap-outside) lives at the document level, so it is
+    // added ONCE (docWired) and always drives the LIVE panel — currentPanel /
+    // currentApply are re-pointed by init on every (re)wire, incl. boosted-nav
+    // swaps that replace the panel node. The element-scoped control listeners
+    // stay in init (a fresh panel needs them rebound); only these two must not
+    // stack per swap. (C-CAL-SKYPANE-DETACH §B — ✕ / Esc / tap-outside dismiss.)
+    var currentPanel = null, currentApply = null, docWired = false;
+
     function init() {
         var panel = document.querySelector('[data-gm-panel]');
         if (!panel) return;
@@ -145,6 +153,27 @@
         // Normalize whatever state the markup arrived in (fresh render, boosted
         // -nav swap, or a desync from a pre-r3 session) on every (re)init.
         applyState(isCollapsed(), currentSheet());
+        // Point the document-level dismiss handlers at THIS (freshly-wired) panel.
+        currentPanel = panel;
+        currentApply = applyState;
+        if (!docWired) {
+            docWired = true;
+            // Esc dismisses the pull-out (collapsing forces any open sheet shut).
+            document.addEventListener('keydown', function (e) {
+                if (e.key !== 'Escape' && e.key !== 'Esc') return;
+                if (!currentPanel || !currentApply) return;
+                if (currentPanel.getAttribute('data-gm-collapsed') === 'true') return;
+                currentApply(true, '');
+            });
+            // Tap-outside dismisses; clicks on the card or its tab (both inside
+            // [data-gm-panel]) keep it open, so the open-tab click never self-closes.
+            document.addEventListener('click', function (e) {
+                if (!currentPanel || !currentApply) return;
+                if (currentPanel.getAttribute('data-gm-collapsed') === 'true') return;
+                if (currentPanel.contains(e.target)) return;
+                currentApply(true, '');
+            });
+        }
         if (toggleBtn) toggleBtn.addEventListener('click', function () { applyState(true, ''); });
         if (openBtn) openBtn.addEventListener('click', function () { applyState(false, ''); });
         panel.querySelectorAll('[data-gm-sheet-open]').forEach(function (btn) {

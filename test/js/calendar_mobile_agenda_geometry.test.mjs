@@ -122,8 +122,10 @@ test('day-select is a plain link (miniMonthDayHref) — no client JS required fo
   );
 });
 
-test('sidebar dedup: the persistent desktop mini-month sidebar hides ONLY for the Month view at <768px', () => {
+test('sidebar is DESKTOP-DETACHED: hidden on desktop for every view, mobile unchanged (C-CAL-SKYPANE-DETACH)', () => {
   const fn = block(helpers, 'func mobileSidebarClasses', '\n}');
-  assert.ok(fn.includes('data.View == "month"'), 'the sidebar hide must be scoped to the Month view only — Week/Day/Timeline keep their current mobile presentation');
-  assert.ok(fn.includes('hidden md:block'), 'the hidden branch must use the same CSS-swap technique as the grid/assembly pair');
+  assert.ok(fn.includes('data.View == "month"'), 'the Month branch stays distinct — the mobile navigator replaces the sidebar there, and desktop shows nothing');
+  assert.ok(!fn.includes('md:block'), 'the sidebar must never be desktop-visible (no md:block) — the desktop left column is detached');
+  assert.ok(fn.includes('"hidden "'), 'Month view hides the sidebar at every width (mobileMonthAssembly is the sole mini-month there)');
+  assert.ok(fn.includes('md:hidden'), 'Week/Day/Timeline detach from desktop (md:hidden) while keeping their pre-existing <768px mobile sidebar');
 });
