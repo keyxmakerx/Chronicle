@@ -19,9 +19,10 @@ type AuditRepository interface {
 	// the entries, total count (for pagination), and any error.
 	ListByCampaign(ctx context.Context, campaignID string, limit, offset int) ([]AuditEntry, int, error)
 
-	// ListByEntity returns the most recent audit entries for a specific entity.
-	// Used for entity-level change history.
-	ListByEntity(ctx context.Context, entityID string, limit int) ([]AuditEntry, error)
+	// ListByEntity returns the most recent audit entries for a specific entity,
+	// scoped to campaignID so a foreign entity id can't read another campaign's
+	// change history (SEC-IDOR-2).
+	ListByEntity(ctx context.Context, entityID, campaignID string, limit int) ([]AuditEntry, error)
 
 	// CountByCampaign returns the total number of audit entries for a campaign.
 	CountByCampaign(ctx context.Context, campaignID string) (int, error)
@@ -112,20 +113,22 @@ func (r *auditRepository) ListByCampaign(ctx context.Context, campaignID string,
 	return entries, total, nil
 }
 
-// ListByEntity returns the most recent audit entries for a specific entity.
-// Joins users table for display names.
-func (r *auditRepository) ListByEntity(ctx context.Context, entityID string, limit int) ([]AuditEntry, error) {
+// ListByEntity returns the most recent audit entries for a specific entity,
+// scoped to campaignID. Joins users table for display names. The campaign
+// predicate is the cross-tenant guard (SEC-IDOR-2): audit rows for an entity in
+// another campaign carry that campaign's id, so they never match here.
+func (r *auditRepository) ListByEntity(ctx context.Context, entityID, campaignID string, limit int) ([]AuditEntry, error) {
 	query := `SELECT a.id, a.campaign_id, a.user_id, a.action,
 	                 a.entity_type, a.entity_id, a.entity_name,
 	                 a.details, a.created_at,
 	                 COALESCE(u.display_name, 'Unknown User') AS user_name
 	          FROM audit_log a
 	          LEFT JOIN users u ON u.id = a.user_id
-	          WHERE a.entity_id = ?
+	          WHERE a.entity_id = ? AND a.campaign_id = ?
 	          ORDER BY a.created_at DESC
 	          LIMIT ?`
 
-	rows, err := r.db.QueryContext(ctx, query, entityID, limit)
+	rows, err := r.db.QueryContext(ctx, query, entityID, campaignID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("listing entity audit entries: %w", err)
 	}

@@ -116,8 +116,16 @@ type EntityService interface {
 	GetMentionLinks(ctx context.Context, campaignID string, role int, userID string) ([]MentionLink, error)
 
 	// TogglePrivate flips an entity's is_private flag and returns the new state.
-	// Used by the NPC gallery reveal toggle.
+	// Callers MUST have already verified the entity belongs to the acting
+	// campaign (BulkVisibilityAPI, syncapi both do). Prefer TogglePrivateInCampaign
+	// from surfaces that only hold a URL-supplied entity id.
 	TogglePrivate(ctx context.Context, entityID string) (newPrivate bool, err error)
+
+	// TogglePrivateInCampaign flips is_private only when the entity belongs to
+	// campaignID, returning NotFound otherwise. The campaign-scoped guard for
+	// callers that receive an entity id straight from the URL (npcs reveal
+	// toggle — SEC-IDOR-1).
+	TogglePrivateInCampaign(ctx context.Context, entityID, campaignID string) (newPrivate bool, err error)
 
 	// ListByOwner returns entities in a campaign owned by the given user,
 	// ordered most-recently-updated first. Powers the player landing page
@@ -937,9 +945,27 @@ func (s *entityService) Delete(ctx context.Context, entityID string) error {
 
 // TogglePrivate flips an entity's is_private flag and returns the new state.
 func (s *entityService) TogglePrivate(ctx context.Context, entityID string) (bool, error) {
+	return s.togglePrivate(ctx, entityID, "")
+}
+
+// TogglePrivateInCampaign flips is_private only when the entity belongs to
+// campaignID (SEC-IDOR-1). Returns NotFound on a campaign mismatch so a caller
+// holding only a URL-supplied id can't flip visibility on another campaign's
+// entity.
+func (s *entityService) TogglePrivateInCampaign(ctx context.Context, entityID, campaignID string) (bool, error) {
+	return s.togglePrivate(ctx, entityID, campaignID)
+}
+
+// togglePrivate flips an entity's is_private flag and returns the new state.
+// When campaignID is non-empty the entity must belong to it, otherwise the
+// call fails with NotFound before any write — the cross-campaign IDOR guard.
+func (s *entityService) togglePrivate(ctx context.Context, entityID, campaignID string) (bool, error) {
 	entity, err := s.entities.FindByID(ctx, entityID)
 	if err != nil {
 		return false, err
+	}
+	if campaignID != "" && entity.CampaignID != campaignID {
+		return false, apperror.NewNotFound("entity not found")
 	}
 
 	newPrivate := !entity.IsPrivate

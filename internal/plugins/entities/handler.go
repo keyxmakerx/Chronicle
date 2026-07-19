@@ -1770,6 +1770,15 @@ func (h *Handler) GetPlayerNotes(c echo.Context) error {
 		return apperror.NewNotFound("entity not found")
 	}
 
+	// Visibility gate: canonical CheckEntityAccess honors custom (grant-based)
+	// visibility, not just legacy is_private — matches GetEntry/GetFieldsAPI so a
+	// player excluded from this entity can't read its player_notes (SEC-IDOR-5).
+	userID := auth.GetUserID(c)
+	access, err := h.service.CheckEntityAccess(c.Request().Context(), entity.ID, int(cc.MemberRole), userID)
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"player_notes":      entity.PlayerNotes,
 		"player_notes_html": entity.PlayerNotesHTML,

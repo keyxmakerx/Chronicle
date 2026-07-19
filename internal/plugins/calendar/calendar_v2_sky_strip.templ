@@ -34,6 +34,14 @@ import "github.com/keyxmakerx/chronicle/internal/widgets/skybox"
 // client-side fetch replaces.
 templ calendarV2SkyStrip(data CalendarV2ViewData) {
 	if data.ActiveCalendar != nil {
+		// Engine seed + assets (C-CAL-SKYPANE-DETACH): the always-on worldState
+		// band used to embed the #cal-v2-worldstate seed blob and load the shared
+		// skybox engine (worldstate_provider.js + skybox.js + cal-almanac.js) +
+		// its render CSS. The band is gone, so the sky strip — now the sole sky
+		// consumer on the page — carries them. The strip's expanded pane mounts
+		// data-widget="skybox", and the GM console commits round-trip through the
+		// same engine (window.__calSetWorldState), so both depend on this load.
+		@calendarV2SkyAssets(data)
 		<section
 			class="card card-elev-static mb-3 overflow-hidden"
 			data-cal-sky-strip
@@ -137,4 +145,23 @@ templ calendarV2SyncChip(data CalendarV2ViewData) {
 		<span data-cal-sky-sync-word>Checking</span>
 		<span class="hidden sm:inline" data-cal-sky-sync-detail></span>
 	</span>
+}
+
+// calendarV2SkyAssets embeds the one-per-page worldState seed blob + loads the
+// shared skybox engine and its render CSS (C-CAL-SKYPANE-DETACH). This markup
+// was previously emitted by worldStateBandVariantV2 (the always-on band); with
+// the band detached from the calendar page it moves here, verbatim, so the sky
+// strip's skybox mount and the GM console's live re-render keep working. Gated
+// on wsActive (active calendar + a successfully-built seed) exactly as the band
+// was. The engine detects production by the [data-cal-worldstate] attribute
+// (C-CAL-CLOSEOUT E7), not the literal id, so the stable id is retained for the
+// single full-page seed. The shelf/entity embeds keep loading their own copies.
+templ calendarV2SkyAssets(data CalendarV2ViewData) {
+	if wsActive(data) {
+		<div id="cal-v2-worldstate" data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
+		<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
+		<script src="/static/js/widgets/worldstate_provider.js" defer></script>
+		<script src="/static/js/widgets/skybox.js" defer></script>
+		<script src="/static/js/cal-almanac.js" defer></script>
+	}
 }

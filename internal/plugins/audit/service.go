@@ -27,8 +27,9 @@ type AuditService interface {
 	// Returns entries, total count, and any error.
 	GetCampaignActivity(ctx context.Context, campaignID string, page int) ([]AuditEntry, int, error)
 
-	// GetEntityHistory returns the recent change history for a single entity.
-	GetEntityHistory(ctx context.Context, entityID string) ([]AuditEntry, error)
+	// GetEntityHistory returns the recent change history for a single entity,
+	// scoped to campaignID so it never returns another campaign's log (SEC-IDOR-2).
+	GetEntityHistory(ctx context.Context, entityID, campaignID string) ([]AuditEntry, error)
 
 	// GetCampaignStats returns aggregate statistics for a campaign including
 	// entity counts, word counts, and editor activity.
@@ -87,14 +88,18 @@ func (s *auditService) GetCampaignActivity(ctx context.Context, campaignID strin
 	return entries, total, nil
 }
 
-// GetEntityHistory returns the recent change history for a single entity.
-// Limited to maxEntityHistoryEntries to prevent excessively large responses.
-func (s *auditService) GetEntityHistory(ctx context.Context, entityID string) ([]AuditEntry, error) {
+// GetEntityHistory returns the recent change history for a single entity,
+// scoped to campaignID (SEC-IDOR-2). Limited to maxEntityHistoryEntries to
+// prevent excessively large responses.
+func (s *auditService) GetEntityHistory(ctx context.Context, entityID, campaignID string) ([]AuditEntry, error) {
 	if entityID == "" {
 		return nil, apperror.NewBadRequest("entity ID is required")
 	}
+	if campaignID == "" {
+		return nil, apperror.NewBadRequest("campaign ID is required")
+	}
 
-	entries, err := s.repo.ListByEntity(ctx, entityID, maxEntityHistoryEntries)
+	entries, err := s.repo.ListByEntity(ctx, entityID, campaignID, maxEntityHistoryEntries)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("listing entity history: %w", err))
 	}

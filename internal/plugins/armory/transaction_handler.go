@@ -137,7 +137,9 @@ func (h *TransactionHandler) ListShopTransactions(c echo.Context) error {
 		}
 	}
 
-	txs, total, err := h.svc.ListShopTransactions(c.Request().Context(), entityID, opts)
+	// Scope to the caller's campaign so a shop id from another campaign returns
+	// no transactions (SEC-IDOR-3).
+	txs, total, err := h.svc.ListShopTransactions(c.Request().Context(), cc.Campaign.ID, entityID, opts)
 	if err != nil {
 		return apperror.NewInternal(err)
 	}

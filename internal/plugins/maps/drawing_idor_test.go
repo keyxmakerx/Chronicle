@@ -1,5 +1,5 @@
-// drawing_idor_test.go — cross-map write guard for drawings, tokens, and layers
-// (audit-R2 Finding 2, IDOR). A child object that belongs to map B must never be
+// drawing_idor_test.go — cross-map write guard for drawings, tokens, layers, and
+// fog (audit-R2 Finding 2 + SEC-IDOR-4). A child object that belongs to map B must never be
 // mutated through a request scoped to map A: the service returns NotFound (not
 // Forbidden, so existence isn't leaked) and never reaches the repo write.
 package maps
@@ -36,6 +36,7 @@ func (r *idorRepo) UpdateTokenPosition(context.Context, string, float64, float64
 func (r *idorRepo) DeleteToken(context.Context, string) error { r.mutated = true; return nil }
 func (r *idorRepo) UpdateLayer(context.Context, *Layer) error { r.mutated = true; return nil }
 func (r *idorRepo) DeleteLayer(context.Context, string) error { r.mutated = true; return nil }
+func (r *idorRepo) DeleteFog(context.Context, string) error   { r.mutated = true; return nil }
 
 // Unused-by-these-tests methods round out the interface.
 func (r *idorRepo) CreateDrawing(context.Context, *Drawing) error                { return nil }
@@ -45,10 +46,11 @@ func (r *idorRepo) ListTokens(context.Context, string, int) ([]Token, error)    
 func (r *idorRepo) CreateLayer(context.Context, *Layer) error                    { return nil }
 func (r *idorRepo) ListLayers(context.Context, string) ([]Layer, error)          { return nil, nil }
 func (r *idorRepo) CreateFog(context.Context, *FogRegion) error                  { return nil }
-func (r *idorRepo) GetFog(context.Context, string) (*FogRegion, error)           { return &FogRegion{}, nil }
-func (r *idorRepo) DeleteFog(context.Context, string) error                      { return nil }
-func (r *idorRepo) ListFog(context.Context, string) ([]FogRegion, error)         { return nil, nil }
-func (r *idorRepo) ResetFog(context.Context, string) error                       { return nil }
+func (r *idorRepo) GetFog(_ context.Context, id string) (*FogRegion, error) {
+	return &FogRegion{ID: id, MapID: "map-B"}, nil
+}
+func (r *idorRepo) ListFog(context.Context, string) ([]FogRegion, error) { return nil, nil }
+func (r *idorRepo) ResetFog(context.Context, string) error               { return nil }
 
 // TestDrawingWrites_CrossMapRejected: every child-object write scoped to the
 // wrong map (the object lives in "map-B", the request carries "map-A") must be
@@ -80,6 +82,9 @@ func TestDrawingWrites_CrossMapRejected(t *testing.T) {
 		}},
 		{"DeleteLayer", func(s DrawingService) error {
 			return s.DeleteLayer(context.Background(), "l-1", wrongMap, nil)
+		}},
+		{"DeleteFog", func(s DrawingService) error {
+			return s.DeleteFog(context.Background(), "f-1", wrongMap)
 		}},
 	}
 
@@ -126,6 +131,9 @@ func TestDrawingWrites_SameMapAllowed(t *testing.T) {
 		}},
 		{"DeleteLayer", func(s DrawingService) error {
 			return s.DeleteLayer(context.Background(), "l-1", rightMap, nil)
+		}},
+		{"DeleteFog", func(s DrawingService) error {
+			return s.DeleteFog(context.Background(), "f-1", rightMap)
 		}},
 	}
 

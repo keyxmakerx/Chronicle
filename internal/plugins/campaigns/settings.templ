@@ -20,14 +20,17 @@ func welcomeMessageJS(cc *CampaignContext) string {
 	return string(b)
 }
 
-// jsEsc escapes a string for safe embedding inside a single-quoted JavaScript
-// string literal in an Alpine.js `x-data` expression. templ HTML-escapes the
-// attribute and the browser HTML-decodes it before Alpine evaluates it as JS,
-// but a backslash is not an HTML metacharacter, so `\'` stays an escaped quote
-// through that round-trip and cannot break out of the literal. It mirrors the
-// entities plugin's helper of the same name and is re-declared locally rather
-// than imported to keep the campaigns plugin free of a cross-plugin dependency
-// (core-tenets §T-B2, plugin isolation).
+// jsEsc escapes a string for safe embedding inside a single-quoted
+// JavaScript string literal in an Alpine.js attribute expression. It
+// mirrors the entities plugin's helper of the same name and is
+// re-declared locally rather than imported to keep the campaigns plugin
+// free of a cross-plugin dependency (core-tenets §T-B2, plugin isolation).
+//
+// Escaping the single quote and backslash is what defeats the Settings
+// `?tab=` reflected-XSS vector (SEC-1) at the sink: templ HTML-escapes
+// the attribute and the browser HTML-decodes it before Alpine evaluates
+// it as JS, but a backslash is not an HTML metacharacter, so `\'` stays
+// an escaped quote through that round-trip and cannot break the literal.
 func jsEsc(s string) string {
 	result := ""
 	for _, c := range s {
@@ -119,7 +122,7 @@ func pluginHubAddonsJSON(addons []PluginHubAddon) string {
 // used by the pre-tab banners.
 templ CampaignSettingsPage(cc *CampaignContext, transfer *OwnershipTransfer, csrfToken, errMsg, activeTab string, tabs []SettingsTab) {
 	@layouts.App(cc.Campaign.Name + " - Settings") {
-		<div class="max-w-4xl mx-auto" x-data={ fmt.Sprintf("{ tab: '%s' }", activeTab) }>
+		<div class="max-w-4xl mx-auto" x-data={ fmt.Sprintf("{ tab: '%s' }", jsEsc(activeTab)) }>
 			<div class="flex items-center justify-between mb-4">
 				<div>
 					<h1 class="text-2xl font-bold text-fg">Campaign Settings</h1>

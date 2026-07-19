@@ -15,7 +15,7 @@ import (
 type mockAuditRepo struct {
 	logFn              func(ctx context.Context, entry *AuditEntry) error
 	listByCampaignFn   func(ctx context.Context, campaignID string, limit, offset int) ([]AuditEntry, int, error)
-	listByEntityFn     func(ctx context.Context, entityID string, limit int) ([]AuditEntry, error)
+	listByEntityFn     func(ctx context.Context, entityID, campaignID string, limit int) ([]AuditEntry, error)
 	countByCampaignFn  func(ctx context.Context, campaignID string) (int, error)
 	getCampaignStatsFn func(ctx context.Context, campaignID string) (*CampaignStats, error)
 }
@@ -34,9 +34,9 @@ func (m *mockAuditRepo) ListByCampaign(ctx context.Context, campaignID string, l
 	return nil, 0, nil
 }
 
-func (m *mockAuditRepo) ListByEntity(ctx context.Context, entityID string, limit int) ([]AuditEntry, error) {
+func (m *mockAuditRepo) ListByEntity(ctx context.Context, entityID, campaignID string, limit int) ([]AuditEntry, error) {
 	if m.listByEntityFn != nil {
-		return m.listByEntityFn(ctx, entityID, limit)
+		return m.listByEntityFn(ctx, entityID, campaignID, limit)
 	}
 	return nil, nil
 }
@@ -245,15 +245,17 @@ func TestGetEntityHistory_Success(t *testing.T) {
 	}
 
 	var capturedLimit int
+	var capturedCampaign string
 	repo := &mockAuditRepo{
-		listByEntityFn: func(ctx context.Context, entityID string, limit int) ([]AuditEntry, error) {
+		listByEntityFn: func(ctx context.Context, entityID, campaignID string, limit int) ([]AuditEntry, error) {
 			capturedLimit = limit
+			capturedCampaign = campaignID
 			return entries, nil
 		},
 	}
 	svc := newTestAuditService(repo)
 
-	result, err := svc.GetEntityHistory(context.Background(), "ent-1")
+	result, err := svc.GetEntityHistory(context.Background(), "ent-1", "camp-1")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -263,24 +265,36 @@ func TestGetEntityHistory_Success(t *testing.T) {
 	if capturedLimit != 100 {
 		t.Errorf("expected limit 100, got %d", capturedLimit)
 	}
+	// The campaign must be threaded to the query — it is the cross-tenant scope
+	// (SEC-IDOR-2). A repo that ignored it would leak other campaigns' history.
+	if capturedCampaign != "camp-1" {
+		t.Errorf("expected campaign scope %q passed to repo, got %q", "camp-1", capturedCampaign)
+	}
 }
 
 func TestGetEntityHistory_EmptyID(t *testing.T) {
 	svc := newTestAuditService(&mockAuditRepo{})
 
-	_, err := svc.GetEntityHistory(context.Background(), "")
+	_, err := svc.GetEntityHistory(context.Background(), "", "camp-1")
+	assertAppError(t, err, 400)
+}
+
+func TestGetEntityHistory_EmptyCampaign(t *testing.T) {
+	svc := newTestAuditService(&mockAuditRepo{})
+
+	_, err := svc.GetEntityHistory(context.Background(), "ent-1", "")
 	assertAppError(t, err, 400)
 }
 
 func TestGetEntityHistory_RepoError(t *testing.T) {
 	repo := &mockAuditRepo{
-		listByEntityFn: func(ctx context.Context, entityID string, limit int) ([]AuditEntry, error) {
+		listByEntityFn: func(ctx context.Context, entityID, campaignID string, limit int) ([]AuditEntry, error) {
 			return nil, errors.New("db error")
 		},
 	}
 	svc := newTestAuditService(repo)
 
-	_, err := svc.GetEntityHistory(context.Background(), "ent-1")
+	_, err := svc.GetEntityHistory(context.Background(), "ent-1", "camp-1")
 	assertAppError(t, err, 500)
 }
 

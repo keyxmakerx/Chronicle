@@ -176,3 +176,35 @@ func (h *Handler) visibleSettingsTabs(
 	}
 	return out
 }
+
+// sanitizeSettingsTab resolves a requested settings-tab ID (from the
+// `?tab=` query param) to a known-safe value. It returns the requested
+// ID only when it matches a tab actually visible to the current viewer;
+// any empty, unknown, or hostile value falls back to "general".
+//
+// This is a security boundary, not merely UX. CampaignSettingsPage
+// interpolates the returned value into an Alpine.js `x-data` expression
+// (settings.templ), and because the browser HTML-decodes an attribute
+// before Alpine evaluates it as JavaScript, an unvalidated request value
+// is a reflected-XSS vector (audit SEC-1; cordinator core-tenets §T-B1).
+// Constraining the result to a developer-defined tab ID from `tabs`
+// closes that vector at the source; the templ sink additionally escapes
+// it (defense in depth).
+//
+// Matching against the already-role-filtered `tabs` slice (rather than a
+// static allowlist) also means a viewer cannot pre-select a tab their
+// role hides, and the fallback fixes the blank-tab-body symptom an
+// unknown tab produced (no `x-show` predicate matched). "general" is a
+// safe fallback: MinRole RolePlayer makes it visible to every role, and
+// Settings is owner-gated, so it is always present in `tabs`.
+func sanitizeSettingsTab(requested string, tabs []SettingsTab) string {
+	for _, t := range tabs {
+		if t.ID == requested {
+			// Return the registry's constant, never the raw request
+			// string. They are equal on a match, but returning t.ID makes
+			// the trusted provenance explicit at the call site.
+			return t.ID
+		}
+	}
+	return "general"
+}

@@ -63,8 +63,9 @@ type TransactionService interface {
 	// ListTransactions returns paginated transactions for a campaign.
 	ListTransactions(ctx context.Context, campaignID string, opts TransactionListOptions) ([]Transaction, int, error)
 
-	// ListShopTransactions returns transactions for a specific shop.
-	ListShopTransactions(ctx context.Context, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
+	// ListShopTransactions returns transactions for a specific shop, scoped to
+	// the caller's campaign so a foreign shop id leaks nothing (SEC-IDOR-3).
+	ListShopTransactions(ctx context.Context, campaignID, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
 
 	// ListBuyerTransactions returns transactions for a specific buyer.
 	ListBuyerTransactions(ctx context.Context, buyerEntityID string, opts TransactionListOptions) ([]Transaction, int, error)
@@ -231,9 +232,10 @@ func (s *transactionService) ListTransactions(ctx context.Context, campaignID st
 	return s.repo.ListByCampaign(ctx, campaignID, opts)
 }
 
-// ListShopTransactions returns transactions for a specific shop.
-func (s *transactionService) ListShopTransactions(ctx context.Context, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error) {
-	return s.repo.ListByShop(ctx, shopEntityID, opts)
+// ListShopTransactions returns transactions for a specific shop, scoped to
+// campaignID (SEC-IDOR-3).
+func (s *transactionService) ListShopTransactions(ctx context.Context, campaignID, shopEntityID string, opts TransactionListOptions) ([]Transaction, int, error) {
+	return s.repo.ListByShop(ctx, campaignID, shopEntityID, opts)
 }
 
 // ListBuyerTransactions returns transactions for a specific buyer.

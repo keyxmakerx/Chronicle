@@ -18,10 +18,12 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// VisibilityToggler toggles an entity's is_private flag and returns the new state.
-// Injected from the entities plugin to avoid circular imports.
+// VisibilityToggler toggles an entity's is_private flag and returns the new
+// state, scoped to the caller's campaign. Injected from the entities plugin to
+// avoid circular imports. campaignID is the authorization boundary: the entity
+// must belong to it or the toggle fails with NotFound (SEC-IDOR-1).
 type VisibilityToggler interface {
-	TogglePrivate(ctx context.Context, entityID string) (newPrivate bool, err error)
+	TogglePrivate(ctx context.Context, entityID, campaignID string) (newPrivate bool, err error)
 }
 
 // Handler serves NPC gallery endpoints.
@@ -92,9 +94,13 @@ func (h *Handler) ToggleReveal(c echo.Context) error {
 		return apperror.NewInternal(nil)
 	}
 
-	newPrivate, err := h.visToggler.TogglePrivate(c.Request().Context(), entityID)
+	// Scope the toggle to this campaign so a Scribe in one campaign can't flip
+	// visibility on another campaign's entity by UUID (SEC-IDOR-1). A campaign
+	// mismatch surfaces as NotFound from the toggler; return it verbatim (a 404)
+	// rather than masking it as a 500.
+	newPrivate, err := h.visToggler.TogglePrivate(c.Request().Context(), entityID, cc.Campaign.ID)
 	if err != nil {
-		return apperror.NewInternal(err)
+		return err
 	}
 
 	if middleware.IsHTMX(c) {
