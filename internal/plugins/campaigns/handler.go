@@ -976,12 +976,6 @@ func (h *Handler) Settings(c echo.Context) error {
 		smtpConfigured = h.smtpChecker.IsConfigured(ctx)
 	}
 
-	// Read the active tab from query params.
-	activeTab := c.QueryParam("tab")
-	if activeTab == "" {
-		activeTab = "general"
-	}
-
 	// Fetch available game systems for the system selector.
 	var systemOptions []SystemOption
 	if h.systemLister != nil {
@@ -995,6 +989,14 @@ func (h *Handler) Settings(c echo.Context) error {
 	// the tab — no remaining built-in tab needs it.
 
 	tabs := h.visibleSettingsTabs(cc, transfer, members, csrfToken, systemOptions, smtpConfigured)
+
+	// Resolve the requested tab against the set actually visible to this
+	// viewer. The raw `?tab=` value is attacker-controllable and flows
+	// into an Alpine `x-data` expression in settings.templ, so it must be
+	// constrained to a known tab ID (reflected-XSS guard — audit SEC-1,
+	// §T-B1); an empty or unknown value falls back to "general".
+	activeTab := sanitizeSettingsTab(c.QueryParam("tab"), tabs)
+
 	return middleware.Render(c, http.StatusOK, CampaignSettingsPage(cc, transfer, csrfToken, "", activeTab, tabs))
 }
 
