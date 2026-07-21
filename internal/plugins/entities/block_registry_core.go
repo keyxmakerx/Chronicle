@@ -54,7 +54,7 @@ func RegisterCoreBlocks(r *BlockRegistry) {
 		Contexts:    []string{"template"},
 		Singleton:   true,
 	}, func(ctx BlockRenderContext) templ.Component {
-		return blockCharacterSurface(ctx.CC, ctx.Entity, ctx.EntityType, ctx.CSRFToken)
+		return blockCharacterSurface(ctx.CC, ctx.Entity, ctx.EntityType, ctx.CSRFToken, ctx.UserID)
 	})
 
 	r.Register(BlockMeta{

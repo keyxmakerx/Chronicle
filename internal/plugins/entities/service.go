@@ -197,6 +197,11 @@ type EntityService interface {
 	// package install. Returns the count of types updated.
 	SyncFieldGMFlags(ctx context.Context, gmByCategory map[string]map[string]bool) (int, error)
 
+	// SyncFieldOwnerOnlyFlags is SyncFieldGMFlags's counterpart for
+	// FieldDefinition.OwnerOnly (C-FIELDS-OWNER-FILTER convergence) — same
+	// map shape, same idempotent per-type walk, different flag.
+	SyncFieldOwnerOnlyFlags(ctx context.Context, ownerOnlyByCategory map[string]map[string]bool) (int, error)
+
 	// BulkUpdateType changes the entity type for multiple entities at once.
 	// Returns the count of successfully updated entities. Validates that the
 	// target type belongs to the campaign and each entity is campaign-scoped.
@@ -2740,12 +2745,42 @@ func (s *entityService) EnsureEntityNotesBlockInDefaults(ctx context.Context) (i
 // layout_json), so this never races the layout backfills. Idempotent — a
 // type is written only when a flag actually changes. Best-effort per row.
 func (s *entityService) SyncFieldGMFlags(ctx context.Context, gmByCategory map[string]map[string]bool) (int, error) {
-	if s.types == nil || len(gmByCategory) == 0 {
+	return s.syncFieldFlag(ctx, gmByCategory, "gm-flag",
+		func(f *FieldDefinition) bool { return f.GMOnly },
+		func(f *FieldDefinition, v bool) { f.GMOnly = v },
+	)
+}
+
+// SyncFieldOwnerOnlyFlags is SyncFieldGMFlags's counterpart for
+// FieldDefinition.OwnerOnly (C-FIELDS-OWNER-FILTER convergence): same
+// (preset-category → field-key → owner_only) map shape, same idempotent
+// per-type walk via the shared syncFieldFlag helper, different flag.
+func (s *entityService) SyncFieldOwnerOnlyFlags(ctx context.Context, ownerOnlyByCategory map[string]map[string]bool) (int, error) {
+	return s.syncFieldFlag(ctx, ownerOnlyByCategory, "owner-only-flag",
+		func(f *FieldDefinition) bool { return f.OwnerOnly },
+		func(f *FieldDefinition, v bool) { f.OwnerOnly = v },
+	)
+}
+
+// syncFieldFlag is the shared walk behind SyncFieldGMFlags and
+// SyncFieldOwnerOnlyFlags: it re-stamps ONE boolean FieldDefinition flag
+// (selected via get/set) on stored entity types from a (preset-category →
+// field-key → desired value) map. logLabel only distinguishes log lines
+// between the two callers. See SyncFieldGMFlags's doc for the full
+// convergence rationale — identical here, just parameterized on the flag.
+func (s *entityService) syncFieldFlag(
+	ctx context.Context,
+	byCategory map[string]map[string]bool,
+	logLabel string,
+	get func(*FieldDefinition) bool,
+	set func(*FieldDefinition, bool),
+) (int, error) {
+	if s.types == nil || len(byCategory) == 0 {
 		return 0, nil
 	}
 	types, err := s.types.ListAll(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("listing entity types for gm-flag sync: %w", err)
+		return 0, fmt.Errorf("listing entity types for %s sync: %w", logLabel, err)
 	}
 
 	updated := 0
@@ -2754,14 +2789,14 @@ func (s *entityService) SyncFieldGMFlags(ctx context.Context, gmByCategory map[s
 		if et.PresetCategory == nil || *et.PresetCategory == "" {
 			continue
 		}
-		keyGM, ok := gmByCategory[*et.PresetCategory]
+		want, ok := byCategory[*et.PresetCategory]
 		if !ok {
 			continue
 		}
 		changed := false
 		for j := range et.Fields {
-			if want, has := keyGM[et.Fields[j].Key]; has && et.Fields[j].GMOnly != want {
-				et.Fields[j].GMOnly = want
+			if wantVal, has := want[et.Fields[j].Key]; has && get(&et.Fields[j]) != wantVal {
+				set(&et.Fields[j], wantVal)
 				changed = true
 			}
 		}
@@ -2770,12 +2805,12 @@ func (s *entityService) SyncFieldGMFlags(ctx context.Context, gmByCategory map[s
 		}
 		fieldsJSON, mErr := json.Marshal(et.Fields)
 		if mErr != nil {
-			slog.Warn("gm-flag sync: failed to marshal fields",
+			slog.Warn(logLabel+" sync: failed to marshal fields",
 				slog.Int("entity_type_id", et.ID), slog.Any("error", mErr))
 			continue
 		}
 		if uErr := s.types.UpdateFieldsSchema(ctx, et.ID, string(fieldsJSON)); uErr != nil {
-			slog.Warn("gm-flag sync: failed to update fields",
+			slog.Warn(logLabel+" sync: failed to update fields",
 				slog.Int("entity_type_id", et.ID), slog.Any("error", uErr))
 			continue
 		}

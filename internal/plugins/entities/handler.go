@@ -671,7 +671,7 @@ func (h *Handler) Show(c echo.Context) error {
 
 	c.SetRequest(c.Request().WithContext(ctx))
 
-	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken))
+	return middleware.Render(c, http.StatusOK, EntityShowPage(cc, entity, entityType, ancestors, children, showAttributes, showCalendar, claimingEnabled, ownerName, csrfToken, userID))
 }
 
 // Clone creates a copy of an entity (POST /campaigns/:id/entities/:eid/clone).
@@ -1864,16 +1864,19 @@ func (h *Handler) GetFieldsAPI(c echo.Context) error {
 		overrides = &FieldOverrides{}
 	}
 
-	// Strip GM-only field VALUES for non-GM viewers (audit M-1). The field
-	// DEFINITIONS stay so the attributes widget can render its schema (and
-	// hide the box); only the secret values are withheld. Gate on the full
-	// type schema (et.Fields), not effectiveFields, so a per-entity "hidden"
-	// override can't leave a gm_only value un-stripped. Scribe+ (co-GM) and
-	// Foundry Bearer callers keep full data — same bar as inline secrets.
+	// Strip GM-only and owner-only field VALUES for viewers who can't see
+	// them (audit M-1 / C-FIELDS-OWNER-FILTER). The field DEFINITIONS stay
+	// so the attributes widget can render its schema (and hide the box);
+	// only the restricted values are withheld. Gate on the full type schema
+	// (et.Fields), not effectiveFields, so a per-entity "hidden" override
+	// can't leave a restricted value un-stripped. Scribe+ (co-GM) and
+	// Foundry Bearer callers keep full data — same bar as inline secrets;
+	// an owner-only value is also kept for the entity's own claimed owner.
 	canSeeGM := cc.MemberRole >= campaigns.RoleScribe
+	isOwner := entity.IsOwnedBy(userID)
 	response := map[string]any{
 		"fields":          effectiveFields,
-		"fields_data":     FilterGMOnlyFields(entity.FieldsData, et.Fields, canSeeGM),
+		"fields_data":     FilterRestrictedFields(entity.FieldsData, et.Fields, canSeeGM, isOwner),
 		"field_overrides": overrides,
 		"type_fields":     et.Fields,
 	}
@@ -2112,9 +2115,10 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	attributes := make([]map[string]string, 0)
 	if cfg.ShowAttributes && entityType != nil {
 		effectiveFields := MergeFields(entityType.Fields, entity.FieldOverrides)
-		// Strip GM-only field values for non-GM viewers (audit M-1) — this
-		// preview/tooltip is player-reachable via the public campaign route.
-		fieldsData := FilterGMOnlyFields(entity.FieldsData, entityType.Fields, cc.MemberRole >= campaigns.RoleScribe)
+		// Strip GM-only and owner-only field values for viewers who can't see
+		// them (audit M-1 / C-FIELDS-OWNER-FILTER) — this preview/tooltip is
+		// player-reachable via the public campaign route.
+		fieldsData := FilterRestrictedFields(entity.FieldsData, entityType.Fields, cc.MemberRole >= campaigns.RoleScribe, entity.IsOwnedBy(userID))
 		for _, fd := range effectiveFields {
 			val, ok := fieldsData[fd.Key]
 			if !ok || val == nil || fmt.Sprintf("%v", val) == "" {

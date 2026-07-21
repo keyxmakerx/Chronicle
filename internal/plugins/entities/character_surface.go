@@ -55,8 +55,12 @@ type characterSurfaceSeed struct {
 //
 // canSeeGM gates the GM-only field filter: when false (a player viewing the
 // sheet), fields the system marks gm_only are omitted from the seed so their
-// values never reach the browser (audit M-1). Server is the authority.
-func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaignID, csrfToken string, canEdit, canSeeGM bool) string {
+// values never reach the browser (audit M-1). isOwner gates the owner-only
+// field filter the same way for fields the system marks owner_only (e.g.
+// Draw Steel's backstory) — visible to canSeeGM callers and the entity's own
+// claimed owner, omitted for every other viewer (C-FIELDS-OWNER-FILTER).
+// Server is the authority.
+func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaignID, csrfToken string, canEdit, canSeeGM, isOwner bool) string {
 	if entity == nil {
 		return "{}"
 	}
@@ -83,11 +87,12 @@ func CharacterSurfaceSchemaJSON(entity *Entity, entityType *EntityType, campaign
 	// first-seen section order so the sheet reads like the type designed it.
 	if entityType != nil {
 		fields := MergeFields(entityType.Fields, entity.FieldOverrides)
-		// Strip GM-only field values for non-GM viewers (audit M-1). Gate on
-		// the full type schema so a "hidden" override can't leave a value un-
-		// stripped; non-mutating, so other blocks rendering this entity see
-		// the original data.
-		fieldsData := FilterGMOnlyFields(entity.FieldsData, entityType.Fields, canSeeGM)
+		// Strip GM-only and owner-only field values for viewers who can't see
+		// them (audit M-1 / C-FIELDS-OWNER-FILTER). Gate on the full type
+		// schema so a "hidden" override can't leave a value un-stripped;
+		// non-mutating, so other blocks rendering this entity see the
+		// original data.
+		fieldsData := FilterRestrictedFields(entity.FieldsData, entityType.Fields, canSeeGM, isOwner)
 		order := []string{}
 		bySection := map[string]*characterSurfaceSection{}
 		for _, f := range fields {

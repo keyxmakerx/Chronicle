@@ -232,6 +232,38 @@ func TestMakeWidgetMountRenderer_EmitsBootJSMountPoint(t *testing.T) {
 	}
 }
 
+// TestMakeWidgetMountRenderer_EmitsOwnerFlag pins C-FIELDS-OWNER-FILTER's
+// widget-UI gate: the mount div's data-is-owner attribute reflects whether
+// ctx.UserID matches the entity's claimed owner, independent of data-is-gm.
+func TestMakeWidgetMountRenderer_EmitsOwnerFlag(t *testing.T) {
+	renderer := MakeWidgetMountRenderer("drawsteel-character-card")
+	owner := "player-1"
+
+	render := func(ctx EntityShowRenderContext) string {
+		t.Helper()
+		buf := &bytesBufferLike{}
+		if err := renderer(ctx).Render(context.Background(), buf); err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		return buf.String()
+	}
+
+	ownerView := render(EntityShowRenderContext{Entity: &Entity{ID: "e1", OwnerUserID: &owner}, UserID: "player-1"})
+	if !strings.Contains(ownerView, `data-is-owner="true"`) {
+		t.Errorf("claimed owner viewing their own entity should get data-is-owner=true; got %s", ownerView)
+	}
+
+	otherView := render(EntityShowRenderContext{Entity: &Entity{ID: "e1", OwnerUserID: &owner}, UserID: "player-2"})
+	if !strings.Contains(otherView, `data-is-owner="false"`) {
+		t.Errorf("a different viewer should get data-is-owner=false; got %s", otherView)
+	}
+
+	unclaimedView := render(EntityShowRenderContext{Entity: &Entity{ID: "e1"}, UserID: "player-1"})
+	if !strings.Contains(unclaimedView, `data-is-owner="false"`) {
+		t.Errorf("an unclaimed entity should get data-is-owner=false; got %s", unclaimedView)
+	}
+}
+
 // TestMakeWidgetMountRenderer_HandlesMissingContext is paranoia for the
 // boot path: if the registry is consulted before CC/Entity are populated
 // (shouldn't happen in real flow, but cheap to defend), the renderer

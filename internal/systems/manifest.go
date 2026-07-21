@@ -198,6 +198,17 @@ type FieldDef struct {
 	// field defs via preset application + the field-metadata reconciler.
 	GMOnly bool `json:"gm_only,omitempty"`
 
+	// OwnerOnly marks a field as visible only to GM-tier callers AND the
+	// entity's own claimed owner: its VALUE is stripped from entity API
+	// responses served to every other player, so player-private content
+	// like a character's backstory isn't shared with the rest of the party.
+	// Unlike GMOnly, the entity's own owner still sees it. Absent/false =
+	// party-visible (backward-compatible default). The systems tier only
+	// DECLARES this; core enforces it at egress (C-FIELDS-OWNER-FILTER). It
+	// flows to the entity type's stored field defs via preset application +
+	// the field-metadata reconciler, mirroring GMOnly.
+	OwnerOnly bool `json:"owner_only,omitempty"`
+
 	// FoundryPath is the dot-notation path to the corresponding field in
 	// a Foundry VTT Actor's system data (e.g., "system.abilities.str.value").
 	// Used by the generic Foundry adapter to auto-generate field mappings.

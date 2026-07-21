@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -91,6 +92,65 @@ func TestGetFieldsAPI_StripsGMFieldsForNonGM(t *testing.T) {
 			}
 			if _, ok := fd["gm_notes"]; ok != tc.wantGM {
 				t.Errorf("gm_notes present=%v, want %v; body=%s", ok, tc.wantGM, rec.Body)
+			}
+		})
+	}
+}
+
+// TestGetFieldsAPI_StripsOwnerOnlyFieldsForNonOwner pins C-FIELDS-OWNER-FILTER
+// at the GetFieldsAPI egress: an owner_only field's VALUE is present for the
+// entity's claimed owner and for a GM-tier viewer, but absent for a fellow
+// player who is neither.
+func TestGetFieldsAPI_StripsOwnerOnlyFieldsForNonOwner(t *testing.T) {
+	owner := "player-1"
+	et := &EntityType{ID: 7, Fields: []FieldDefinition{
+		{Key: "might", Label: "Might"},
+		{Key: "backstory", Label: "Backstory", OwnerOnly: true},
+	}}
+	ent := &Entity{
+		ID: "e1", CampaignID: "c1", EntityTypeID: 7, OwnerUserID: &owner,
+		FieldsData: map[string]any{"might": 2, "backstory": "raised by wolves"},
+	}
+
+	cases := []struct {
+		name          string
+		role          campaigns.Role
+		viewerID      string
+		wantBackstory bool
+	}{
+		{"another player strips backstory", campaigns.RolePlayer, "player-2", false},
+		{"claiming owner keeps backstory", campaigns.RolePlayer, owner, true},
+		{"scribe keeps backstory regardless of ownership", campaigns.RoleScribe, "player-2", true},
+		{"owner role keeps backstory regardless of ownership", campaigns.RoleOwner, "player-2", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &Handler{service: &stubSvcForFields{entity: ent, etype: et}}
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/campaigns/c1/entities/e1/fields", nil)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id", "eid")
+			c.SetParamValues("c1", "e1")
+			c.Set("campaign_context", &campaigns.CampaignContext{
+				Campaign:   &campaigns.Campaign{ID: "c1"},
+				MemberRole: tc.role,
+			})
+			auth.SetSession(c, &auth.Session{UserID: tc.viewerID})
+
+			if err := h.GetFieldsAPI(c); err != nil {
+				t.Fatalf("GetFieldsAPI: %v", err)
+			}
+			var resp map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode: %v (body=%s)", err, rec.Body)
+			}
+			fd, _ := resp["fields_data"].(map[string]any)
+			if _, ok := fd["might"]; !ok {
+				t.Errorf("player-visible field 'might' must always be present; body=%s", rec.Body)
+			}
+			if _, ok := fd["backstory"]; ok != tc.wantBackstory {
+				t.Errorf("backstory present=%v, want %v; body=%s", ok, tc.wantBackstory, rec.Body)
 			}
 		})
 	}

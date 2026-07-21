@@ -8,8 +8,8 @@ package entities
 
 import "github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 
-templ blockCharacterSurface(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken string) {
+templ blockCharacterSurface(cc *campaigns.CampaignContext, entity *Entity, entityType *EntityType, csrfToken, userID string) {
 	<div class="cs-character-surface" data-widget="dynamic-surface">
-		@templ.Raw(`<script type="application/json" data-surface-schema>` + CharacterSurfaceSchemaJSON(entity, entityType, cc.Campaign.ID, csrfToken, cc.MemberRole >= campaigns.RoleScribe, cc.MemberRole >= campaigns.RoleScribe) + `</script>`)
+		@templ.Raw(`<script type="application/json" data-surface-schema>` + CharacterSurfaceSchemaJSON(entity, entityType, cc.Campaign.ID, csrfToken, cc.MemberRole >= campaigns.RoleScribe, cc.MemberRole >= campaigns.RoleScribe, entity.IsOwnedBy(userID)) + `</script>`)
 	</div>
 }

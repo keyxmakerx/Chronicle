@@ -1738,6 +1738,11 @@ func (a *App) RegisterRoutes() {
 		// existing types so the GM-field egress filter (audit M-1) covers
 		// characters created before the manifest carried gm_only.
 		reconcileFieldGMFlags(ctx, entityService)
+
+		// Same convergence for owner_only field flags (C-FIELDS-OWNER-FILTER)
+		// so backstory-style fields become owner-private on types created
+		// before the manifest carried owner_only.
+		reconcileFieldOwnerOnlyFlags(ctx, entityService)
 	}()
 
 	// Campaigns plugin: CRUD, membership, ownership transfer.
@@ -2115,6 +2120,8 @@ func (a *App) RegisterRoutes() {
 		// field gm_only (audit M-1) takes effect on existing types without a
 		// restart — mirrors the boot-time reconcile.
 		reconcileFieldGMFlags(context.Background(), entityService)
+		// Same convergence for owner_only field flags (C-FIELDS-OWNER-FILTER).
+		reconcileFieldOwnerOnlyFlags(context.Background(), entityService)
 	})
 	packages.ConfigureSettings(pkgService, settingsRepo)
 	// Fail-loud installs: run the FULL loader-grade manifest validation at
