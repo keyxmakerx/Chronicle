@@ -165,3 +165,104 @@ func TestListEntities_StripsGMFieldsForNonGM(t *testing.T) {
 		})
 	}
 }
+
+// ownerOnlyTestFixtures mirrors gmTestFixtures but for the owner_only tier:
+// the fixture entity is claimed by "owner-1".
+func ownerOnlyTestFixtures() (*entities.Entity, *entities.EntityType) {
+	owner := "owner-1"
+	et := &entities.EntityType{ID: 7, Fields: []entities.FieldDefinition{
+		{Key: "might", Label: "Might"},
+		{Key: "backstory", Label: "Backstory", OwnerOnly: true},
+	}}
+	ent := &entities.Entity{
+		ID: "e1", CampaignID: "camp-1", EntityTypeID: 7, OwnerUserID: &owner,
+		FieldsData: map[string]any{"might": 2, "backstory": "raised by wolves"},
+	}
+	return ent, et
+}
+
+// gmContextAsUser mirrors gmContext but lets the caller set the session's
+// resolved user id (gmContext hardcodes "u1" via apiKeyContextKey), needed to
+// exercise "is this viewer the entity's claimed owner".
+func gmContextAsUser(method, path, entityID, userID string) (echo.Context, *httptest.ResponseRecorder) {
+	e := echo.New()
+	req := httptest.NewRequest(method, path, nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	if entityID != "" {
+		c.SetParamNames("id", "entityID")
+		c.SetParamValues("camp-1", entityID)
+	} else {
+		c.SetParamNames("id")
+		c.SetParamValues("camp-1")
+	}
+	c.Set(apiKeyContextKey, &APIKey{ID: synthKeySessionID, CampaignID: "camp-1", UserID: userID, IsActive: true})
+	return c, rec
+}
+
+var ownerViewerCases = []struct {
+	name          string
+	role          campaigns.Role
+	viewerID      string
+	wantBackstory bool
+}{
+	{"another player strips backstory", campaigns.RolePlayer, "player-2", false},
+	{"claiming owner keeps backstory", campaigns.RolePlayer, "owner-1", true},
+	{"scribe keeps backstory regardless of ownership", campaigns.RoleScribe, "player-2", true},
+	{"owner role keeps backstory regardless of ownership", campaigns.RoleOwner, "player-2", true},
+}
+
+func TestGetEntity_StripsOwnerOnlyFieldsForNonOwner(t *testing.T) {
+	for _, tc := range ownerViewerCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ent, et := ownerOnlyTestFixtures()
+			h := NewAPIHandler(nil, &stubEntityServiceForGM{entity: ent, etype: et}, &stubCampaignSvcForGM{role: tc.role}, nil)
+			c, rec := gmContextAsUser(http.MethodGet, "/api/v1/campaigns/camp-1/entities/e1", "e1", tc.viewerID)
+
+			if err := h.GetEntity(c); err != nil {
+				t.Fatalf("GetEntity: %v", err)
+			}
+			var resp map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode: %v (body=%s)", err, rec.Body)
+			}
+			fd, _ := resp["fields_data"].(map[string]any)
+			if _, ok := fd["might"]; !ok {
+				t.Errorf("player-visible field 'might' must always be present; body=%s", rec.Body)
+			}
+			if _, ok := fd["backstory"]; ok != tc.wantBackstory {
+				t.Errorf("backstory present=%v, want %v; body=%s", ok, tc.wantBackstory, rec.Body)
+			}
+		})
+	}
+}
+
+func TestListEntities_StripsOwnerOnlyFieldsForNonOwner(t *testing.T) {
+	for _, tc := range ownerViewerCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ent, et := ownerOnlyTestFixtures()
+			h := NewAPIHandler(nil, &stubEntityServiceForGM{entity: ent, etype: et}, &stubCampaignSvcForGM{role: tc.role}, nil)
+			c, rec := gmContextAsUser(http.MethodGet, "/api/v1/campaigns/camp-1/entities", "", tc.viewerID)
+
+			if err := h.ListEntities(c); err != nil {
+				t.Fatalf("ListEntities: %v", err)
+			}
+			var resp map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode: %v (body=%s)", err, rec.Body)
+			}
+			data, _ := resp["data"].([]any)
+			if len(data) != 1 {
+				t.Fatalf("want 1 entity in list, got %d; body=%s", len(data), rec.Body)
+			}
+			item, _ := data[0].(map[string]any)
+			fd, _ := item["fields_data"].(map[string]any)
+			if _, ok := fd["might"]; !ok {
+				t.Errorf("player-visible field 'might' must always be present; body=%s", rec.Body)
+			}
+			if _, ok := fd["backstory"]; ok != tc.wantBackstory {
+				t.Errorf("backstory present=%v, want %v; body=%s", ok, tc.wantBackstory, rec.Body)
+			}
+		})
+	}
+}

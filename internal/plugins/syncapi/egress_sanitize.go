@@ -136,32 +136,34 @@ func stripEntitiesSecretsForEgress(es []entities.Entity, role int) {
 	}
 }
 
-// stripEntityGMFieldsForEgress removes GM-only field VALUES from a single
-// entity's FieldsData for a non-GM caller (audit M-1). Unlike the inline
-// secret strip above (which only touches the HTML/JSON prose fields), this
-// scrubs the custom-field map, where a system marks fields gm_only (e.g.
-// Draw Steel's director gm_notes). resolveFields returns the entity type's
-// declared field defs — the source of the gm_only markers. No-op for
-// GM/owner/Bearer callers (role >= Scribe), so the Foundry lossless-sync
-// contract is preserved by the caller-privilege check, not by skipping the
-// egress. FilterGMOnlyFields never mutates the input map (nil-safe).
-func stripEntityGMFieldsForEgress(e *entities.Entity, role int, resolveFields func(typeID int) []entities.FieldDefinition) {
+// stripEntityFieldsForEgress removes GM-only and owner-only field VALUES from
+// a single entity's FieldsData for a caller who is neither GM-tier nor that
+// entity's claimed owner (audit M-1 / C-FIELDS-OWNER-FILTER). Unlike the
+// inline secret strip above (which only touches the HTML/JSON prose fields),
+// this scrubs the custom-field map, where a system marks fields gm_only (e.g.
+// Draw Steel's director gm_notes) or owner_only (e.g. Draw Steel's
+// backstory). resolveFields returns the entity type's declared field defs —
+// the source of both markers. No-op for GM/owner/Bearer callers (role >=
+// Scribe), so the Foundry lossless-sync contract is preserved by the
+// caller-privilege check, not by skipping the egress. FilterRestrictedFields
+// never mutates the input map (nil-safe).
+func stripEntityFieldsForEgress(e *entities.Entity, role int, userID string, resolveFields func(typeID int) []entities.FieldDefinition) {
 	if e == nil || role >= int(campaigns.RoleScribe) {
 		return
 	}
-	e.FieldsData = entities.FilterGMOnlyFields(e.FieldsData, resolveFields(e.EntityTypeID), false)
+	e.FieldsData = entities.FilterRestrictedFields(e.FieldsData, resolveFields(e.EntityTypeID), false, e.IsOwnedBy(userID))
 }
 
-// stripEntitiesGMFieldsForEgress applies stripEntityGMFieldsForEgress across
+// stripEntitiesFieldsForEgress applies stripEntityFieldsForEgress across
 // a fresh slice (ListEntities). The caller passes a resolveFields backed by
 // a single batched type load (map[typeID][]FieldDefinition) so this is not
 // an N+1 query.
-func stripEntitiesGMFieldsForEgress(es []entities.Entity, role int, resolveFields func(typeID int) []entities.FieldDefinition) {
+func stripEntitiesFieldsForEgress(es []entities.Entity, role int, userID string, resolveFields func(typeID int) []entities.FieldDefinition) {
 	if role >= int(campaigns.RoleScribe) {
 		return
 	}
 	for i := range es {
-		stripEntityGMFieldsForEgress(&es[i], role, resolveFields)
+		stripEntityFieldsForEgress(&es[i], role, userID, resolveFields)
 	}
 }
 

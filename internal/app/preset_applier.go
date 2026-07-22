@@ -164,6 +164,10 @@ func mapPresetFields(fields []systems.FieldDef) []entities.FieldDefinition {
 			// egress filter can strip GM secrets for non-GM callers
 			// (C-FIELDS-GM-FILTER / M-1).
 			GMOnly: f.GMOnly,
+			// Carry the owner-only marker so the egress filter can strip
+			// player-private content (e.g. backstory) from viewers who
+			// aren't the entity's claimed owner (C-FIELDS-OWNER-FILTER).
+			OwnerOnly: f.OwnerOnly,
 		})
 	}
 	return out
@@ -190,14 +194,15 @@ func mapPresetFieldType(t string) string {
 	}
 }
 
-// buildGMFlagsByCategory reads every installed system manifest and returns a
-// (preset-category → field-key → gm_only) map of the declared GM-only field
-// flags. Every declared field key is recorded (including gm_only=false) so
-// the reconciler converges in BOTH directions — a manifest can newly mark a
-// field gm_only, or un-mark one. On the rare key collision across two systems
-// sharing a preset category, the last manifest wins (keys are normally
-// system-specific). Nil-safe.
-func buildGMFlagsByCategory() map[string]map[string]bool {
+// buildFlagsByCategory reads every installed system manifest and returns a
+// (preset-category → field-key → flag) map, where get selects which boolean
+// annotation on a manifest field to record (GMOnly or OwnerOnly). Every
+// declared field key is recorded (including a false value) so the reconciler
+// converges in BOTH directions — a manifest can newly mark a field, or
+// un-mark one. On the rare key collision across two systems sharing a preset
+// category, the last manifest wins (keys are normally system-specific).
+// Nil-safe.
+func buildFlagsByCategory(get func(systems.FieldDef) bool) map[string]map[string]bool {
 	out := map[string]map[string]bool{}
 	for _, m := range systems.Registry() {
 		if m == nil {
@@ -212,11 +217,23 @@ func buildGMFlagsByCategory() map[string]map[string]bool {
 				if out[cat] == nil {
 					out[cat] = map[string]bool{}
 				}
-				out[cat][f.Key] = f.GMOnly
+				out[cat][f.Key] = get(f)
 			}
 		}
 	}
 	return out
+}
+
+// buildGMFlagsByCategory is buildFlagsByCategory specialized to the gm_only
+// annotation. See buildFlagsByCategory for the convergence rationale.
+func buildGMFlagsByCategory() map[string]map[string]bool {
+	return buildFlagsByCategory(func(f systems.FieldDef) bool { return f.GMOnly })
+}
+
+// buildOwnerOnlyFlagsByCategory is buildFlagsByCategory specialized to the
+// owner_only annotation (C-FIELDS-OWNER-FILTER). See buildFlagsByCategory.
+func buildOwnerOnlyFlagsByCategory() map[string]map[string]bool {
+	return buildFlagsByCategory(func(f systems.FieldDef) bool { return f.OwnerOnly })
 }
 
 // reconcileFieldGMFlags stamps the gm_only field flags declared by installed
@@ -238,5 +255,23 @@ func reconcileFieldGMFlags(ctx context.Context, entityService entities.EntitySer
 	}
 	if n > 0 {
 		slog.Info("entity_types: gm-flag field sync updated types", slog.Int("rows", n))
+	}
+}
+
+// reconcileFieldOwnerOnlyFlags is reconcileFieldGMFlags's counterpart for the
+// owner_only annotation (C-FIELDS-OWNER-FILTER convergence) — same
+// idempotent, best-effort contract, different flag.
+func reconcileFieldOwnerOnlyFlags(ctx context.Context, entityService entities.EntityService) {
+	flags := buildOwnerOnlyFlagsByCategory()
+	if len(flags) == 0 {
+		return
+	}
+	n, err := entityService.SyncFieldOwnerOnlyFlags(ctx, flags)
+	if err != nil {
+		slog.Warn("entity_types: owner-only-flag field sync failed", slog.Any("error", err))
+		return
+	}
+	if n > 0 {
+		slog.Info("entity_types: owner-only-flag field sync updated types", slog.Int("rows", n))
 	}
 }

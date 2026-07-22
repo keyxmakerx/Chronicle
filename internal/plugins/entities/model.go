@@ -303,6 +303,15 @@ type FieldDefinition struct {
 	// via preset application + EnsureFieldMetadataFromManifests. See
 	// C-FIELDS-GM-FILTER / audit M-1.
 	GMOnly bool `json:"gm_only,omitempty"`
+	// OwnerOnly marks the field's VALUE as visible only to GM-tier roles
+	// (same bar as GMOnly) AND the entity's own claimed owner
+	// (Entity.OwnerUserID): it is stripped from fields_data for every other
+	// Player-tier viewer, including fellow players who are not this entity's
+	// owner. Unlike GMOnly (a true GM-exclusive secret, hidden even from the
+	// owner), OwnerOnly is for content that is private between one player
+	// and the GM — e.g. a character's backstory — but not party-wide. See
+	// C-FIELDS-OWNER-FILTER.
+	OwnerOnly bool `json:"owner_only,omitempty"`
 }
 
 // Entity represents a single worldbuilding object — a character, location,
@@ -354,6 +363,14 @@ type Entity struct {
 
 	// Tags is populated at the handler level via batch fetch, not by the repository.
 	Tags []EntityTagInfo `json:"tags,omitempty"`
+}
+
+// IsOwnedBy reports whether userID is this entity's claimed owner (used to
+// gate OwnerOnly field VALUES — see FilterRestrictedFields). False for an
+// unclaimed entity, an empty/anonymous userID, or a nil receiver (so callers
+// don't need a separate nil-entity check before asking).
+func (e *Entity) IsOwnedBy(userID string) bool {
+	return e != nil && userID != "" && e.OwnerUserID != nil && *e.OwnerUserID == userID
 }
 
 // FieldOverrides holds per-entity field customizations that override the

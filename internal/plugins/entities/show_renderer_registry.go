@@ -47,6 +47,10 @@ type EntityShowRenderContext struct {
 	ShowAttributes bool
 	ShowCalendar   bool
 	CSRFToken      string
+	// UserID is the viewing user's id — used to tell "this entity's own
+	// claimed owner" apart from any other viewer (owner-only field
+	// visibility, C-FIELDS-OWNER-FILTER). Empty for an anonymous viewer.
+	UserID string
 }
 
 // EntityShowRenderer renders the inner contents of an entity show page
@@ -177,9 +181,14 @@ func MakeWidgetMountRenderer(widget string) EntityShowRenderer {
 	return func(ctx EntityShowRenderContext) templ.Component {
 		entityID := ""
 		visibility := ""
+		isOwner := false
 		if ctx.Entity != nil {
 			entityID = ctx.Entity.ID
 			visibility = string(ctx.Entity.Visibility)
+			// Gates owner-only widget UI (e.g. the Draw Steel sheet's Background
+			// box) safely server-side — mirrors the isGM gate below, but for
+			// "this viewer is the entity's claimed owner" instead of GM-tier.
+			isOwner = ctx.Entity.IsOwnedBy(ctx.UserID)
 		}
 		campaignID := ""
 		isGM := false
@@ -191,7 +200,7 @@ func MakeWidgetMountRenderer(widget string) EntityShowRenderer {
 			// widget UI (e.g. the Draw Steel sheet's GM Lore box) safely server-side.
 			isGM = ctx.CC.VisibilityRole() >= int(campaigns.RoleOwner)
 		}
-		return widgetMount{widget: widget, entityID: entityID, campaignID: campaignID, isGM: isGM, visibility: visibility}
+		return widgetMount{widget: widget, entityID: entityID, campaignID: campaignID, isGM: isGM, isOwner: isOwner, visibility: visibility}
 	}
 }
 
@@ -206,6 +215,7 @@ type widgetMount struct {
 	entityID   string
 	campaignID string
 	isGM       bool   // viewer can see dm_only content (gates GM-only widget UI)
+	isOwner    bool   // viewer is this entity's claimed owner (gates owner-only widget UI)
 	visibility string // entity visibility mode (drives a header pill)
 }
 
@@ -214,13 +224,18 @@ func (w widgetMount) Render(_ context.Context, out io.Writer) error {
 	if w.isGM {
 		isGM = "true"
 	}
+	isOwner := "false"
+	if w.isOwner {
+		isOwner = "true"
+	}
 	_, err := fmt.Fprintf(
 		out,
-		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s" data-is-gm="%s" data-visibility="%s"></div>`,
+		`<div data-widget="%s" data-entity-id="%s" data-campaign-id="%s" data-is-gm="%s" data-is-owner="%s" data-visibility="%s"></div>`,
 		templ.EscapeString(w.widget),
 		templ.EscapeString(w.entityID),
 		templ.EscapeString(w.campaignID),
 		isGM,
+		isOwner,
 		templ.EscapeString(w.visibility),
 	)
 	return err

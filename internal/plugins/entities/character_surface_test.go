@@ -25,7 +25,7 @@ func TestCharacterSurfaceSchemaJSON(t *testing.T) {
 		FieldsData: map[string]any{"might": 2, "agility": 1, "bond": "The company", "blank": ""},
 	}
 
-	out := CharacterSurfaceSchemaJSON(ent, et, "c1", "csrf-tok", true, true)
+	out := CharacterSurfaceSchemaJSON(ent, et, "c1", "csrf-tok", true, true, true)
 
 	var schema map[string]any
 	if err := json.Unmarshal([]byte(out), &schema); err != nil {
@@ -70,7 +70,7 @@ func TestCharacterSurfaceSchemaJSON(t *testing.T) {
 // a <script> tag — json.Marshal escapes '<', so no literal </script> survives.
 func TestCharacterSurfaceSchemaJSON_ScriptSafe(t *testing.T) {
 	ent := &Entity{ID: "e1", Name: "</script><script>alert(1)</script>", FieldsData: map[string]any{}}
-	out := CharacterSurfaceSchemaJSON(ent, &EntityType{}, "c1", "", false, false)
+	out := CharacterSurfaceSchemaJSON(ent, &EntityType{}, "c1", "", false, false, false)
 	if strings.Contains(out, "</script>") {
 		t.Fatalf("schema must not contain a literal </script>; got: %s", out)
 	}
@@ -89,7 +89,7 @@ func TestCharacterSurfaceSchemaJSON_StripsGMFieldsForNonGM(t *testing.T) {
 	}}
 
 	// Player (canSeeGM=false): the gm_only field and its value must be absent.
-	player := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false)
+	player := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, false)
 	if strings.Contains(player, "the-villain-is-his-father") || strings.Contains(player, "GM Notes") {
 		t.Errorf("player seed must omit the gm_only field + value; got %s", player)
 	}
@@ -98,15 +98,51 @@ func TestCharacterSurfaceSchemaJSON_StripsGMFieldsForNonGM(t *testing.T) {
 	}
 
 	// GM (canSeeGM=true): the gm_only value is present.
-	gm := CharacterSurfaceSchemaJSON(ent, et, "c1", "", true, true)
+	gm := CharacterSurfaceSchemaJSON(ent, et, "c1", "", true, true, false)
 	if !strings.Contains(gm, "the-villain-is-his-father") {
 		t.Errorf("GM seed must include the gm_only value; got %s", gm)
 	}
 }
 
+// TestCharacterSurfaceSchemaJSON_StripsOwnerOnlyFieldsForNonOwner pins that
+// the server-rendered character sheet omits owner_only field values (e.g.
+// Draw Steel's backstory) for a viewer who is neither GM nor the entity's
+// claimed owner, but keeps them for the owner and for a GM regardless of
+// ownership (C-FIELDS-OWNER-FILTER).
+func TestCharacterSurfaceSchemaJSON_StripsOwnerOnlyFieldsForNonOwner(t *testing.T) {
+	et := &EntityType{Fields: []FieldDefinition{
+		{Key: "might", Label: "Might", Section: "Stats"},
+		{Key: "backstory", Label: "Backstory", Section: "Story", OwnerOnly: true},
+	}}
+	ent := &Entity{ID: "e1", Name: "Hero", FieldsData: map[string]any{
+		"might": 3, "backstory": "raised by wolves",
+	}}
+
+	// Another player (canSeeGM=false, isOwner=false): backstory must be absent.
+	other := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, false)
+	if strings.Contains(other, "raised by wolves") || strings.Contains(other, "Backstory") {
+		t.Errorf("non-owner seed must omit the owner_only field + value; got %s", other)
+	}
+	if !strings.Contains(other, "Might") {
+		t.Errorf("non-owner seed must still include normal fields; got %s", other)
+	}
+
+	// The claiming owner (canSeeGM=false, isOwner=true): backstory is present.
+	owner := CharacterSurfaceSchemaJSON(ent, et, "c1", "", false, false, true)
+	if !strings.Contains(owner, "raised by wolves") {
+		t.Errorf("owner seed must include the owner_only value; got %s", owner)
+	}
+
+	// GM (canSeeGM=true, isOwner=false): backstory is present regardless.
+	gm := CharacterSurfaceSchemaJSON(ent, et, "c1", "", true, true, false)
+	if !strings.Contains(gm, "raised by wolves") {
+		t.Errorf("GM seed must include the owner_only value; got %s", gm)
+	}
+}
+
 // TestCharacterSurfaceSchemaJSON_NilEntity degrades to an empty object.
 func TestCharacterSurfaceSchemaJSON_NilEntity(t *testing.T) {
-	if got := CharacterSurfaceSchemaJSON(nil, nil, "c1", "", false, false); got != "{}" {
+	if got := CharacterSurfaceSchemaJSON(nil, nil, "c1", "", false, false, false); got != "{}" {
 		t.Errorf("nil entity = %q, want {}", got)
 	}
 }
