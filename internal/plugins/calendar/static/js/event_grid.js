@@ -330,6 +330,28 @@
             // Drawer actions (C-CAL-EDITOR-EXPANSION PR1): edit-mode only.
             currentEvent = editingID ? prefill : null;
             initDrawerActions(prefill);
+            // RSVP panel (C-CAL-RSVP-P1): load the live per-event RSVP controls
+            // into the drawer slot in EDIT mode. A new (unsaved) event has no id,
+            // so the slot keeps its "save first" hint.
+            loadDrawerRSVP();
+        }
+
+        // loadDrawerRSVP lazy-loads the RSVP panel fragment for the event being
+        // edited into the drawer slot. Uses the same campaign/calendar ids the
+        // shell root carries; htmx.ajax activates the fragment's hx-* buttons.
+        function loadDrawerRSVP() {
+            var slot = drawer.querySelector('[data-rsvp-drawer-slot]');
+            if (!slot) return;
+            if (!editingID) return; // create mode → keep the "save first" hint
+            var root = document.querySelector('[data-cal-v2-root]');
+            if (!root || !window.htmx) return;
+            var cid = root.dataset.calV2CampaignId;
+            var calId = root.dataset.calV2CalendarId;
+            if (!cid || !calId) return;
+            var url = '/campaigns/' + encodeURIComponent(cid) +
+                '/calendars/' + encodeURIComponent(calId) +
+                '/events/' + encodeURIComponent(editingID) + '/rsvp-panel';
+            window.htmx.ajax('GET', url, { target: slot, swap: 'innerHTML' });
         }
 
         function markDirty() { dirty = true; }

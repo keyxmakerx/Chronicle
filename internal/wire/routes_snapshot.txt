@@ -146,6 +146,7 @@ GET	/bindings/picker	internal/plugins/widgetbindings/routes.go
 GET	/browse	internal/plugins/packages/routes.go
 GET	/calendar	internal/plugins/calendar/routes.go
 GET	/calendar	internal/plugins/syncapi/routes.go
+GET	/calendar-rsvp/:token	internal/plugins/calendar/routes.go
 GET	/calendar-sync-beacon	internal/plugins/syncapi/routes.go
 GET	/calendar/cycles	internal/plugins/syncapi/routes.go
 GET	/calendar/date	internal/plugins/syncapi/routes.go
@@ -171,6 +172,8 @@ GET	/calendars/:calId/day	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/embed	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/event-categories	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/events/:eid/entities	internal/plugins/calendar/routes.go
+GET	/calendars/:calId/events/:eid/rsvp-panel	internal/plugins/calendar/routes.go
+GET	/calendars/:calId/events/:eid/rsvps	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/export	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/settings	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/timeline	internal/plugins/calendar/routes.go
@@ -446,6 +449,7 @@ POST	/backdrop	internal/plugins/campaigns/routes.go
 POST	/bindings	internal/plugins/widgetbindings/routes.go
 POST	/bindings/create	internal/plugins/widgetbindings/routes.go
 POST	/calendar	internal/plugins/syncapi/routes.go
+POST	/calendar-rsvp/:token	internal/plugins/calendar/routes.go
 POST	/calendar/advance	internal/plugins/syncapi/routes.go
 POST	/calendar/advance-time	internal/plugins/syncapi/routes.go
 POST	/calendar/date/confirm	internal/plugins/syncapi/routes.go
@@ -458,6 +462,8 @@ POST	/calendars/:calId/advance	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/advance-time	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/events	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/events/:eid/create-entity	internal/plugins/calendar/routes.go
+POST	/calendars/:calId/events/:eid/rsvp	internal/plugins/calendar/routes.go
+POST	/calendars/:calId/events/:eid/rsvp-collection	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/import	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/import/preview	internal/plugins/calendar/routes.go
 POST	/calendars/events	internal/plugins/calendar/routes.go

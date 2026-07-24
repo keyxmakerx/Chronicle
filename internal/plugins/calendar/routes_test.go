@@ -74,7 +74,12 @@ func newGuardRouter(public bool) *echo.Echo {
 	addonSvc := guardAddonSvc{}
 
 	campaigns.RegisterRoutes(e, campaigns.NewHandler(campaignSvc), campaignSvc, authSvc)
-	RegisterRoutes(e, NewHandler(guardCalSvc{}), campaignSvc, authSvc, addonSvc)
+	// RSVP routes are all authed (or the public token route, which this
+	// anonymous view-guard test never exercises); a minimal handler over the same
+	// calendar stub satisfies the new RegisterRoutes signature.
+	cal := guardCalSvc{}
+	rsvpHandler := NewRSVPHandler(NewRSVPService(nil, cal, campaignSvc, ""), cal)
+	RegisterRoutes(e, NewHandler(cal), rsvpHandler, campaignSvc, authSvc, addonSvc)
 	return e
 }
 

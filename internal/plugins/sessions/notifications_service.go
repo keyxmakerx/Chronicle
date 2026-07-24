@@ -132,6 +132,44 @@ func (s *sessionService) NotifyProposalConfirmed(ctx context.Context, campaignID
 	return nil
 }
 
+// NotifyUsers writes one notification per DISTINCT user into the shared store,
+// with a caller-supplied type/message/link. Generic by design (T-B2): the
+// scheduler is no longer the only writer — the calendar RSVP feature reaches
+// this through a narrow adapter (C-CAL-RSVP-P1). Empty user IDs and duplicates
+// are skipped; an empty campaignID/link is stored as NULL.
+func (s *sessionService) NotifyUsers(ctx context.Context, userIDs []string, campaignID, ntype, message, link string) error {
+	payload := marshalPayload(message, ntype)
+	now := time.Now().UTC()
+	var cid *string
+	if campaignID != "" {
+		cid = &campaignID
+	}
+	var linkPtr *string
+	if link != "" {
+		linkPtr = &link
+	}
+	seen := make(map[string]bool, len(userIDs))
+	for _, uid := range userIDs {
+		if uid == "" || seen[uid] {
+			continue
+		}
+		seen[uid] = true
+		n := &Notification{
+			ID:         generateUUID(),
+			UserID:     uid,
+			CampaignID: cid,
+			Type:       ntype,
+			Payload:    payload,
+			Link:       linkPtr,
+			CreatedAt:  now,
+		}
+		if err := s.repo.CreateNotification(ctx, n); err != nil {
+			return apperror.NewInternal(fmt.Errorf("writing notification: %w", err))
+		}
+	}
+	return nil
+}
+
 // ListMyNotifications returns the current user's notifications (newest first).
 func (s *sessionService) ListMyNotifications(ctx context.Context, userID string, limit int) ([]Notification, error) {
 	ns, err := s.repo.ListNotifications(ctx, userID, limit)

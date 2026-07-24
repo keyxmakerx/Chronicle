@@ -84,6 +84,12 @@ type SessionService interface {
 	// NotifyProposalConfirmed tells everyone who responded that the winning slot
 	// was picked, linking to the new session (C-SCHED-P3, reuses the P2 store).
 	NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error
+	// NotifyUsers is a generic fan-out into the shared notifications store
+	// (T-B2): write one notification per distinct user with a caller-supplied
+	// type/message/link. Added for the calendar RSVP feature (C-CAL-RSVP-P1),
+	// which reaches it through a narrow adapter — the store was always generic,
+	// this just exposes the generic write other features need.
+	NotifyUsers(ctx context.Context, userIDs []string, campaignID, ntype, message, link string) error
 	ListMyNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
 	CountMyUnreadNotifications(ctx context.Context, userID string) (int, error)
 	MarkNotificationRead(ctx context.Context, userID, notificationID string) error

@@ -12,7 +12,7 @@ import (
 // Calendar routes are scoped to a campaign and require membership.
 // Routes use the plural /calendars/:calId pattern supporting multiple calendars.
 // Setup and settings require Owner role; viewing requires Player role.
-func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+func RegisterRoutes(e *echo.Echo, h *Handler, rsvpHandler *RSVPHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
 	// Authenticated routes (create, settings, events, advance).
 	cg := e.Group("/campaigns/:id",
 		auth.RequireAuth(authSvc),
@@ -94,6 +94,17 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// drawer's gate); IDOR closed via requireEventInCampaign.
 	cg.POST("/calendars/:calId/events/:eid/create-entity", h.CreateEntityFromEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 
+	// First-class event RSVPs (C-CAL-RSVP-P1). All ride the authed cg group so
+	// they inherit auth + campaign access + the calendar-addon guard. Player+ may
+	// read the panel/counts and record their OWN RSVP (visibility-gated to events
+	// they can view, inside the handler); the per-person breakdown is Owner/co-DM
+	// only (handler-side detail gating). Enabling collection (which fans out
+	// invite emails) is Scribe+ — same gate as event edit.
+	cg.GET("/calendars/:calId/events/:eid/rsvp-panel", rsvpHandler.RSVPPanel, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/calendars/:calId/events/:eid/rsvps", rsvpHandler.GetRSVPs, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/calendars/:calId/events/:eid/rsvp", rsvpHandler.UpsertRSVP, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.POST("/calendars/:calId/events/:eid/rsvp-collection", rsvpHandler.ToggleCollection, campaigns.RequireRole(campaigns.RoleScribe))
+
 	// Public-capable views: calendar list, grid, timeline, upcoming events, and
 	// entity-event fragments are viewable by players and public campaigns.
 	// These must use AllowPublicCampaignAccess so HTMX lazy-loads from
@@ -112,7 +123,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// surfaces exist.
 	pub.GET("/calendars", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calId", h.RedirectShowV2, campaigns.RequireViewAccess())
-	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireViewAccess()) // PRESERVE: no V2 embed
+	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireViewAccess())   // PRESERVE: no V2 embed
 	pub.GET("/calendars/:calId/timeline", h.ShowTimeline, campaigns.RequireViewAccess()) // PRESERVE: Timeline V2 deferred
 	pub.GET("/calendars/:calId/week", h.RedirectWeekV2, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calId/day", h.RedirectDayV2, campaigns.RequireViewAccess())
@@ -193,6 +204,15 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// are gated client-side by IsOwner; mutations go through the
 	// existing V1 PUT endpoints which retain Owner-only auth.
 	cg.GET("/calendar/v2/:calId/settings/:resource", h.ShowV2SubresourceSettings, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// Public emailed-RSVP token redemption (C-CAL-RSVP-P1) — no auth required
+	// (the token is the credential, emailed to a member). Distinct path from the
+	// sessions RSVP route (/rsvp/:token) so the two never collide. GET renders a
+	// confirm interstitial (pure read — mail-scanner defense); POST applies. Both
+	// ride the global CSRF middleware (only /api/* and /ws are exempt): the GET
+	// mints the cookie + hidden field, the POST validates the double-submit.
+	e.GET("/calendar-rsvp/:token", rsvpHandler.RedeemRSVPToken)
+	e.POST("/calendar-rsvp/:token", rsvpHandler.ApplyRSVPToken)
 }
 
 // legacyRedirect 301s the bare /campaigns/:id/calendar to V2 (C-CAL-V1-V2-

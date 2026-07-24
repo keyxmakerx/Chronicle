@@ -151,7 +151,7 @@ func TestCutover_LegacyRedirectGoesToV2(t *testing.T) {
 // only stores the service refs — so nil services are safe for the route walk.
 func TestCutover_RouteTablePreservesTimelineAndEmbed(t *testing.T) {
 	e := echo.New()
-	RegisterRoutes(e, NewHandler(&cutoverStub{}), nil, nil, nil)
+	RegisterRoutes(e, NewHandler(&cutoverStub{}), nil, nil, nil, nil)
 
 	// path → substring its handler's func name must contain.
 	want := map[string]string{

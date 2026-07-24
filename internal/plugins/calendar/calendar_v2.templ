@@ -1319,19 +1319,17 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 						</div>
 						<input type="hidden" data-field="tier" data-tier-value/>
 					</div>
-					// Collect RSVPs — DISABLED + flagged. Chronicle events are not
-					// sessions; there is no per-event RSVP/attendee storage (sessions
-					// are a separate plugin surfaced read-only on the grid). Enabling
-					// this needs an event↔session link (schema) — out of scope (no
-					// migrations). See PR "Stop-and-flag".
-					<div class="flex items-center gap-3 rounded-lg border border-edge bg-surface/60 px-3 py-2 opacity-70">
-						<div class="flex-1 min-w-0">
+					// Collect RSVPs (C-CAL-RSVP-P1). Calendar events are now FIRST-CLASS
+					// RSVP surfaces in their own right (migration 013), superseding the
+					// old "needs an event↔session link" ruling — see .ai/decisions.md.
+					// event_grid.js loads the live RSVP panel (enable toggle + counts +
+					// buttons) into this slot when the drawer opens in EDIT mode; a brand-
+					// new unsaved event has no id to attach to yet, so it shows the hint.
+					<div class="rounded-lg border border-edge bg-surface/60 px-3 py-2" data-rsvp-drawer-wrap>
+						<div data-rsvp-drawer-slot>
 							<div class="text-xs font-semibold text-fg-secondary">Collect RSVPs</div>
-							<div class="text-[10.5px] text-fg-muted">Ships with the sessions RSVP link — coming soon</div>
+							<div class="text-[10.5px] text-fg-muted">Save the event first, then reopen it to open RSVPs.</div>
 						</div>
-						<button type="button" class="toggle" role="switch" aria-checked="false" aria-label="Collect RSVPs" disabled>
-							<span class="toggle-knob"></span>
-						</button>
 					</div>
 				</div>
 				// ── DETAILS ────────────────────────────────────────────────────

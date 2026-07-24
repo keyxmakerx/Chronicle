@@ -1862,3 +1862,64 @@ fail-fast), `internal/database/healthcheck.go` (`RunHealthChecks` split), `cmd/s
 ADR-044, ADR-028/030 (plugin migrations), ADR-037 (pre-migration backup), ADR-042 (cross-plugin
 injection pattern).
 
+
+---
+
+## ADR-046: Calendar events get first-class RSVPs, distinct from session attendance
+
+**Date:** 2026-07-24
+**Status:** Accepted
+
+**Context:** The operator's #1 calendar-remodel priority (cordinator
+`plans/2026-07-24-calendar-remodel-requirements.md` §1 item 6) is Outlook/Google-style
+RSVP visibility on calendar events: members respond yes/maybe/no in-app and via email
+links; the Director sees counts. The calendar V2 event drawer already carried a DISABLED
+"Collect RSVPs" toggle whose comment ruled that per-event RSVPs would require an
+event↔session link (RSVP storage lived only in the sessions plugin's `session_attendees`).
+That ruling is now superseded: an event↔session link is neither necessary nor desirable —
+a calendar event is a first-class thing players RSVP to, independent of whether a game
+session is ever created for it.
+
+**Decision:** RSVPs are a first-class calendar-plugin aggregate, in the calendar plugin's
+OWN tables (migration 013): `calendar_event_rsvps` (UNIQUE(event_id,user_id), status
+yes/maybe/no, note) + `calendar_event_rsvp_tokens` (single-use, expiring, opaque
+crypto/rand tokens for emailed one-click links) + a `collect_rsvps` opt-in column on
+`calendar_events`. A SEPARATE `RSVPService`/`RSVPRepository`/`RSVPHandler` — NOT an
+extension of `CalendarService`/`CalendarRepository`. Cross-plugin needs are narrow
+interfaces wired by post-construction setters at the app boundary (rule 8), all nil-safe:
+- `MailSender` (the shipped SMTP service) — invite-email fan-out, members-only,
+  visibility-gated (never email a hidden event's title), skipped when SMTP is unconfigured;
+- `RSVPNotifier` — a new generic `NotifyUsers(userIDs, campaignID, type, message, link)`
+  on the sessions notifications service (the store was always documented generic, T-B2;
+  this exposes the generic write) with a `NotifCalendarRSVP` type;
+- `AvailabilityExceptionWriter` — a SELF-write adapter over the sessions availability
+  service for the "out this week" email action (full-day `unavailable` exceptions across
+  the responder's real week, skipping hand-authored days — mirrors the existing
+  `availability.js` one-click). userID always comes from the redeemed token, never a caller
+  parameter.
+
+Two email-only verbs beyond yes/maybe/no: **"Out this week"** (RSVP no + the availability
+write) and **"Suggest another time"** (free-text → stored as the RSVP note + a bell to the
+event owner). Creating a slot proposal from an email click is REJECTED — proposal creation
+is Scribe+ by prior ruling; a player email click must never mint one.
+
+**Isolation + egress.** RSVP data is a distinct aggregate that must never leave via the
+campaign export, the calendar-native export, or the AI export — enforced by a structural
+pin test (`rsvp_egress_test.go`) that reflect-walks all three export roots asserting no
+`rsvp` field/tag, mirroring the sessions own-tables egress guard. The lane was kept
+deliberately disjoint from the parallel `C-CAL-ENTITY-TIES-LEAK-FIX` (which owns the shared
+CalendarService interfaces + `entity_ties_*`): new files only, a separate service.
+
+**Consequences.** Calendar RSVPs work without SMTP (in-app only) and degrade gracefully
+without the notifier/availability adapter. The superseded drawer ruling is corrected in
+`calendar_v2.templ` (the disabled toggle → a live per-event RSVP slot hydrated by
+`event_grid.js`). The public `/calendar-rsvp/:token` route is a new auth surface: GET
+renders a confirm interstitial (mail-scanner defense), POST applies, with the CSRF
+double-submit — distinct from the sessions `/rsvp/:token` route so the two never collide.
+
+**References.** `internal/plugins/calendar/{rsvp_model,rsvp_repository,rsvp_service,rsvp_handler,rsvp_pages}.go`,
+`rsvp.templ`, `migrations/013_event_rsvps.{up,down}.sql`, `rsvp_egress_test.go`,
+`rsvp_service_test.go`; `internal/plugins/sessions/notifications_service.go` (`NotifyUsers`);
+`internal/app/routes.go` (adapters + setter wiring); cordinator dispatch C-CAL-RSVP-P1;
+supersedes the calendar_v2.templ drawer RSVP ruling; ADR-042 (cross-plugin injection pattern);
+sessions C-SCHED-P2/P3 (token GET-confirm/POST-apply + notifications store precedent).

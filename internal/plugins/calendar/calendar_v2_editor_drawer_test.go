@@ -108,13 +108,19 @@ func TestEditorDrawer_GapsDisabledAndFlagged(t *testing.T) {
 	if !strings.Contains(html, "coming with location storage") {
 		t.Error("location field must render disabled with the coming-soon flag")
 	}
-	// RSVP — no per-event storage; disabled + flagged.
-	if !strings.Contains(html, "Collect RSVPs") || !strings.Contains(html, "coming soon") {
-		t.Error("Collect RSVPs must render disabled with the coming-soon flag")
+	// RSVP is NO LONGER a gap (C-CAL-RSVP-P1): calendar events are first-class
+	// RSVP surfaces (migration 013). The drawer now carries a live RSVP slot that
+	// event_grid.js hydrates per-event — NOT the old disabled "coming soon"
+	// toggle.
+	if !strings.Contains(html, "data-rsvp-drawer-slot") {
+		t.Error("drawer must render the first-class RSVP slot (data-rsvp-drawer-slot)")
 	}
-	// Every gap control must actually carry the disabled attribute.
-	if strings.Count(html, "disabled") < 3 {
-		t.Errorf("expected the 3 gap controls disabled; got %d 'disabled' tokens", strings.Count(html, "disabled"))
+	if strings.Contains(html, "coming soon") {
+		t.Error("the RSVP gap flag is superseded; 'coming soon' must be gone")
+	}
+	// The two REMAINING gap controls (sky-pin, location) must carry disabled.
+	if strings.Count(html, "disabled") < 2 {
+		t.Errorf("expected the 2 gap controls disabled; got %d 'disabled' tokens", strings.Count(html, "disabled"))
 	}
 }
 

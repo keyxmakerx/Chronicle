@@ -542,6 +542,55 @@ func (a *calendarEntityCreatorAdapter) CreateEntity(ctx context.Context, campaig
 	return ent.ID, nil
 }
 
+// calendarRSVPNotifierAdapter maps calendar.RSVPNotifier onto the sessions
+// notifications service's generic NotifyUsers (C-CAL-RSVP-P1, rule 8). The
+// notifications store is documented generic (T-B2); the calendar RSVP feature is
+// its second writer, reaching it only through this narrow adapter.
+type calendarRSVPNotifierAdapter struct {
+	svc sessions.SessionService
+}
+
+// NotifyUsers forwards a bell fan-out to the sessions notifications service.
+func (a *calendarRSVPNotifierAdapter) NotifyUsers(ctx context.Context, userIDs []string, campaignID, ntype, message, link string) error {
+	return a.svc.NotifyUsers(ctx, userIDs, campaignID, ntype, message, link)
+}
+
+// calendarAvailabilityWriterAdapter maps calendar.AvailabilityExceptionWriter
+// onto the sessions availability service (C-CAL-RSVP-P1, rule 8). SELF-write
+// only: userID flows straight through from the redeemed RSVP token / the
+// authenticated caller — never a value a request body controls.
+type calendarAvailabilityWriterAdapter struct {
+	svc sessions.SessionService
+}
+
+// ListMyExceptionDates projects the user's existing exceptions down to the set
+// of dates they occur on, so "out this week" can skip hand-authored days.
+func (a *calendarAvailabilityWriterAdapter) ListMyExceptionDates(ctx context.Context, campaignID, userID string) (map[string]bool, error) {
+	excs, err := a.svc.ListMyExceptions(ctx, campaignID, userID)
+	if err != nil {
+		return nil, err
+	}
+	dates := make(map[string]bool, len(excs))
+	for _, e := range excs {
+		dates[e.OnDate] = true
+	}
+	return dates, nil
+}
+
+// AddFullDayUnavailable writes a full-day (0–1440) 'unavailable' exception for
+// the given date in the caller's own recurring pattern (TZ is UTC — a full-day
+// block is zone-agnostic; the sessions service still validates it as a real
+// IANA zone).
+func (a *calendarAvailabilityWriterAdapter) AddFullDayUnavailable(ctx context.Context, campaignID, userID, onDate string) error {
+	return a.svc.AddMyException(ctx, campaignID, userID, sessions.AddExceptionRequest{
+		OnDate:      onDate,
+		StartMinute: 0,
+		EndMinute:   1440,
+		State:       "unavailable",
+		TZ:          "UTC",
+	})
+}
+
 // calendarEventListerAdapter wraps calendar.CalendarService to implement the
 // timeline.CalendarEventLister interface. Lists all calendar events for the
 // event picker when linking events to a timeline.
@@ -2421,6 +2470,16 @@ func (a *App) RegisterRoutes() {
 	// the cross-plugin write seam over the entities service (rule 8).
 	calendarHandler.SetEntityCreator(&calendarEntityCreatorAdapter{svc: entityService})
 
+	// C-CAL-RSVP-P1: first-class event RSVPs. Its OWN repo/service/handler,
+	// disjoint from CalendarService/CalendarRepository. The mailer wires now
+	// (smtpService already exists ~:1664); the notifier + self-write availability
+	// adapter are wired AFTER sessionsService is constructed below, via the SetX
+	// setter pattern (like SetTimelineLister :~2740). Nil-safe until then.
+	rsvpRepo := calendar.NewRSVPRepository(a.DB)
+	rsvpService := calendar.NewRSVPService(rsvpRepo, calendarService, campaignService, a.Config.BaseURL)
+	rsvpService.SetMailSender(smtpService)
+	rsvpHandler := calendar.NewRSVPHandler(rsvpService, calendarService)
+
 	// NW-2.2 Chunk F: register calendar in the App's metadata registry +
 	// expose its embedded static assets for serving at /static/plugins/calendar/.
 	// echo.MustSubFS strips the leading "static" dir from the embed so
@@ -2447,7 +2506,7 @@ func (a *App) RegisterRoutes() {
 	}
 
 	if a.PluginHealth.IsHealthy("calendar") {
-		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
+		calendar.RegisterRoutes(e, calendarHandler, rsvpHandler, campaignService, authService, addonService)
 
 		// C-CALENDAR-ENDPOINTS: public Foundry-facing calendar API
 		// gated by the same per-campaign signed token foundry_vtt
@@ -2510,6 +2569,14 @@ func (a *App) RegisterRoutes() {
 	} else {
 		slog.Warn("sessions plugin degraded — routes not registered")
 	}
+
+	// C-CAL-RSVP-P1 cross-plugin wiring (rule 8): back the calendar RSVP
+	// notifier + self-write availability writer with the sessions plugin now that
+	// sessionsService exists. Post-construction setters mutate the same
+	// rsvpService instance the calendar routes already hold (registered above),
+	// exactly like SetTimelineLister wires calendarHandler after the fact.
+	rsvpService.SetNotifier(&calendarRSVPNotifierAdapter{svc: sessionsService})
+	rsvpService.SetAvailabilityExceptionWriter(&calendarAvailabilityWriterAdapter{svc: sessionsService})
 
 	// Timeline plugin: interactive visual timelines with zoom levels and entity grouping.
 	timelineRepo := timeline.NewTimelineRepository(a.DB)
