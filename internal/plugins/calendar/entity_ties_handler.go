@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -33,6 +34,11 @@ type apiEntityTie struct {
 
 // ListEventEntitiesAPI — GET /campaigns/:id/calendars/:calId/events/:eid/entities.
 // Returns the entities tied to an event (with role) for the picker. Player+.
+//
+// Gated by the viewer's role + userID (C-CAL-ENTITY-TIES-LEAK-FIX, a
+// cordinator#32 gap #1 follow-up): without this, any Player could read a
+// dm_only / custom-restricted entity's NAME via this endpoint. VisibilityRole()
+// (not raw MemberRole) so a co-DM (IsDmGranted) is treated as Owner here too.
 func (h *Handler) ListEventEntitiesAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
@@ -41,7 +47,7 @@ func (h *Handler) ListEventEntitiesAPI(c echo.Context) error {
 	if _, err := h.requireEventInCampaign(c, eventID, cc.Campaign.ID); err != nil {
 		return err
 	}
-	ties, err := h.svc.EntitiesForEvent(ctx, eventID)
+	ties, err := h.svc.EntitiesForEvent(ctx, eventID, cc.VisibilityRole(), auth.GetUserID(c))
 	if err != nil {
 		return err
 	}

@@ -160,15 +160,24 @@ func (r *calendarRepo) EntitiesForCalendar(ctx context.Context, calendarID strin
 // EntitiesForEvent returns every entity tied to an event with its display info
 // (JOINs entities + entity_types — the same display source the event list
 // uses). Ordered by entity name for a stable picker/chips render.
-func (r *calendarRepo) EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error) {
+//
+// Gated by entityVisibilityFilter(role, userID) (C-CAL-ENTITY-TIES-LEAK-FIX,
+// a cordinator#32 gap #1 follow-up the initial audit missed): mirrors
+// EntitiesForCalendar exactly, including the `e` entities-table alias the
+// filter's SQL fragment hardcodes (renamed from `ent`) — so a Player can't
+// learn a dm_only / custom-restricted entity's NAME through an event's tie
+// list. Owners/co-DMs (role >= RoleOwner) get the unfiltered set.
+func (r *calendarRepo) EntitiesForEvent(ctx context.Context, eventID string, role int, userID string) ([]EntityTieRef, error) {
+	visFilter, visArgs := entityVisibilityFilter(role, userID)
+	args := append([]any{eventID}, visArgs...)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT l.entity_id, COALESCE(ent.name, ''), COALESCE(et.slug, ''),
+		`SELECT l.entity_id, COALESCE(e.name, ''), COALESCE(et.slug, ''),
 		        COALESCE(et.icon, ''), COALESCE(et.color, ''), l.participation_role
 		 FROM entity_event_links l
-		 JOIN entities ent ON ent.id = l.entity_id
-		 LEFT JOIN entity_types et ON et.id = ent.entity_type_id
-		 WHERE l.event_id = ?
-		 ORDER BY ent.name`, eventID)
+		 JOIN entities e ON e.id = l.entity_id
+		 LEFT JOIN entity_types et ON et.id = e.entity_type_id
+		 WHERE l.event_id = ?`+visFilter+`
+		 ORDER BY e.name`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -177,15 +186,20 @@ func (r *calendarRepo) EntitiesForEvent(ctx context.Context, eventID string) ([]
 }
 
 // EntitiesForEra returns every entity tied to an era with its display info.
-func (r *calendarRepo) EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error) {
+//
+// Gated by entityVisibilityFilter(role, userID) — same rationale and alias
+// convention as EntitiesForEvent above (C-CAL-ENTITY-TIES-LEAK-FIX).
+func (r *calendarRepo) EntitiesForEra(ctx context.Context, eraID int, role int, userID string) ([]EntityTieRef, error) {
+	visFilter, visArgs := entityVisibilityFilter(role, userID)
+	args := append([]any{eraID}, visArgs...)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT l.entity_id, COALESCE(ent.name, ''), COALESCE(et.slug, ''),
+		`SELECT l.entity_id, COALESCE(e.name, ''), COALESCE(et.slug, ''),
 		        COALESCE(et.icon, ''), COALESCE(et.color, ''), l.participation_role
 		 FROM entity_era_links l
-		 JOIN entities ent ON ent.id = l.entity_id
-		 LEFT JOIN entity_types et ON et.id = ent.entity_type_id
-		 WHERE l.era_id = ?
-		 ORDER BY ent.name`, eraID)
+		 JOIN entities e ON e.id = l.entity_id
+		 LEFT JOIN entity_types et ON et.id = e.entity_type_id
+		 WHERE l.era_id = ?`+visFilter+`
+		 ORDER BY e.name`, args...)
 	if err != nil {
 		return nil, err
 	}

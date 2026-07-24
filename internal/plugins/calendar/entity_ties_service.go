@@ -72,13 +72,16 @@ func (s *calendarService) ErasForEntity(ctx context.Context, entityID string) ([
 }
 
 // EntitiesForEvent returns the entities tied to an event (event-side query).
-func (s *calendarService) EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error) {
-	return s.repo.EntitiesForEvent(ctx, eventID)
+// role + userID are the viewer context forwarded to the repo so entity
+// visibility is enforced (cordinator#32 gap #1 / C-CAL-ENTITY-TIES-LEAK-FIX).
+func (s *calendarService) EntitiesForEvent(ctx context.Context, eventID string, role int, userID string) ([]EntityTieRef, error) {
+	return s.repo.EntitiesForEvent(ctx, eventID, role, userID)
 }
 
-// EntitiesForEra returns the entities tied to an era (era-side query).
-func (s *calendarService) EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error) {
-	return s.repo.EntitiesForEra(ctx, eraID)
+// EntitiesForEra returns the entities tied to an era (era-side query). Same
+// viewer-context gating as EntitiesForEvent above.
+func (s *calendarService) EntitiesForEra(ctx context.Context, eraID int, role int, userID string) ([]EntityTieRef, error) {
+	return s.repo.EntitiesForEra(ctx, eraID, role, userID)
 }
 
 // EntitiesForCalendar returns the distinct entities tied to any event/era of a
