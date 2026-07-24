@@ -162,12 +162,16 @@ func TestCheckMediaAccess_ExpiredSignature_NoCookie_PrivateCampaign(t *testing.T
 func TestCheckMediaAccess_TamperedSignature_NoCookie_PrivateCampaign(t *testing.T) {
 	h := newTestHandler("test-secret", nil)
 	expires, sig := signMediaURL(t, h.signer, "file-1", time.Hour)
-	tampered := sig[:len(sig)-1] + "0"
-	if tampered == sig {
-		// One-in-many edge case where the last char was '0' already;
-		// flip the first instead so the test stays meaningful.
-		tampered = "0" + sig[1:]
+	// Replace the last char with one guaranteed to differ — the previous
+	// "flip the first char to '0' instead" fallback was itself a no-op
+	// whenever the first AND last chars were both '0' (~1/256 runs, since
+	// the sig varies with the expiry timestamp), making the "tampered"
+	// sig identical to the real one and this test flake red in CI.
+	repl := "0"
+	if sig[len(sig)-1] == '0' {
+		repl = "1"
 	}
+	tampered := sig[:len(sig)-1] + repl
 	c := newAccessTestContext(map[string]string{"expires": expires, "sig": tampered}, nil)
 
 	err := h.checkMediaAccess(c, privateMediaFile(), false, "")
