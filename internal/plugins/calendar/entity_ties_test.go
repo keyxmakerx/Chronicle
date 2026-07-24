@@ -41,15 +41,15 @@ func (m *mockCalendarRepo) UnlinkEntityEra(ctx context.Context, entityID string,
 	}
 	return nil
 }
-func (m *mockCalendarRepo) EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error) {
+func (m *mockCalendarRepo) EntitiesForEvent(ctx context.Context, eventID string, role int, userID string) ([]EntityTieRef, error) {
 	if m.entitiesForEventFn != nil {
-		return m.entitiesForEventFn(ctx, eventID)
+		return m.entitiesForEventFn(ctx, eventID, role, userID)
 	}
 	return nil, nil
 }
-func (m *mockCalendarRepo) EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error) {
+func (m *mockCalendarRepo) EntitiesForEra(ctx context.Context, eraID int, role int, userID string) ([]EntityTieRef, error) {
 	if m.entitiesForEraFn != nil {
-		return m.entitiesForEraFn(ctx, eraID)
+		return m.entitiesForEraFn(ctx, eraID, role, userID)
 	}
 	return nil, nil
 }
@@ -189,14 +189,14 @@ func TestEntityTies_BothDirectionQueries(t *testing.T) {
 		eventsForEntityFn: func(_ context.Context, entityID string) ([]EntityEventTie, error) {
 			return []EntityEventTie{{Event: Event{ID: "evt-1", Name: "Siege"}, ParticipationRole: "involved"}}, nil
 		},
-		entitiesForEventFn: func(_ context.Context, eventID string) ([]EntityTieRef, error) {
-			role := "involved"
-			return []EntityTieRef{{EntityID: "ent-1", EntityName: "Marisha", EntityType: "npc", ParticipationRole: &role}}, nil
+		entitiesForEventFn: func(_ context.Context, eventID string, role int, userID string) ([]EntityTieRef, error) {
+			r := "involved"
+			return []EntityTieRef{{EntityID: "ent-1", EntityName: "Marisha", EntityType: "npc", ParticipationRole: &r}}, nil
 		},
 		erasForEntityFn: func(_ context.Context, entityID string) ([]EntityEraTie, error) {
 			return []EntityEraTie{{Era: Era{ID: 3, Name: "Age of Fire"}}}, nil // nil role
 		},
-		entitiesForEraFn: func(_ context.Context, eraID int) ([]EntityTieRef, error) {
+		entitiesForEraFn: func(_ context.Context, eraID int, role int, userID string) ([]EntityTieRef, error) {
 			return []EntityTieRef{{EntityID: "ent-1", EntityName: "Marisha", EntityType: "npc"}}, nil
 		},
 	}
@@ -207,7 +207,7 @@ func TestEntityTies_BothDirectionQueries(t *testing.T) {
 	if len(evs) != 1 || evs[0].Event.ID != "evt-1" || evs[0].ParticipationRole != "involved" {
 		t.Errorf("EventsForEntity wrong: %+v", evs)
 	}
-	ents, _ := svc.EntitiesForEvent(ctx, "evt-1")
+	ents, _ := svc.EntitiesForEvent(ctx, "evt-1", permissions.RoleOwner, "user-1")
 	if len(ents) != 1 || ents[0].EntityID != "ent-1" || ents[0].ParticipationRole == nil {
 		t.Errorf("EntitiesForEvent wrong: %+v", ents)
 	}
@@ -215,7 +215,7 @@ func TestEntityTies_BothDirectionQueries(t *testing.T) {
 	if len(eras) != 1 || eras[0].Era.ID != 3 || eras[0].ParticipationRole != nil {
 		t.Errorf("ErasForEntity wrong (era role should be nil-able): %+v", eras)
 	}
-	eraEnts, _ := svc.EntitiesForEra(ctx, 3)
+	eraEnts, _ := svc.EntitiesForEra(ctx, 3, permissions.RoleOwner, "user-1")
 	if len(eraEnts) != 1 || eraEnts[0].ParticipationRole != nil {
 		t.Errorf("EntitiesForEra wrong: %+v", eraEnts)
 	}
@@ -311,7 +311,116 @@ func TestEntityTies_OptionalBothWays(t *testing.T) {
 	if evs, err := svc.EventsForEntity(ctx, "lonely-entity"); err != nil || len(evs) != 0 {
 		t.Errorf("entity with no events should yield empty, got %v err=%v", evs, err)
 	}
-	if ents, err := svc.EntitiesForEvent(ctx, "lonely-event"); err != nil || len(ents) != 0 {
+	if ents, err := svc.EntitiesForEvent(ctx, "lonely-event", permissions.RolePlayer, "user-1"); err != nil || len(ents) != 0 {
 		t.Errorf("event with no entities should yield empty, got %v err=%v", ents, err)
+	}
+}
+
+// TestEntitiesForEvent_ServiceDelegates / TestEntitiesForEra_ServiceDelegates
+// pin C-CAL-ENTITY-TIES-LEAK-FIX's plumbing: the service must forward role +
+// userID unchanged to the repo (mirrors TestEntitiesForCalendar_ServiceDelegates
+// in app_dashboard_test.go, the sibling method cordinator#32 gap #1 already
+// hardened). If this seam ever drops role/userID again, the repo can't filter
+// and the leak returns.
+func TestEntitiesForEvent_ServiceDelegates(t *testing.T) {
+	var gotEventID, gotUser string
+	var gotRole int
+	repo := &mockCalendarRepo{
+		entitiesForEventFn: func(_ context.Context, eventID string, role int, userID string) ([]EntityTieRef, error) {
+			gotEventID, gotRole, gotUser = eventID, role, userID
+			return []EntityTieRef{{EntityID: "e1", EntityName: "Gandalf"}}, nil
+		},
+	}
+	svc := NewCalendarService(repo)
+	out, err := svc.EntitiesForEvent(context.Background(), "evt-9", permissions.RolePlayer, "user-7")
+	if err != nil {
+		t.Fatalf("EntitiesForEvent: %v", err)
+	}
+	if gotEventID != "evt-9" {
+		t.Errorf("repo got eventID %q, want evt-9", gotEventID)
+	}
+	if gotRole != permissions.RolePlayer || gotUser != "user-7" {
+		t.Errorf("viewer context not forwarded: role=%d user=%q, want role=%d user=user-7", gotRole, gotUser, permissions.RolePlayer)
+	}
+	if len(out) != 1 || out[0].EntityName != "Gandalf" {
+		t.Errorf("unexpected passthrough result: %+v", out)
+	}
+}
+
+func TestEntitiesForEra_ServiceDelegates(t *testing.T) {
+	var gotEraID int
+	var gotUser string
+	var gotRole int
+	repo := &mockCalendarRepo{
+		entitiesForEraFn: func(_ context.Context, eraID int, role int, userID string) ([]EntityTieRef, error) {
+			gotEraID, gotRole, gotUser = eraID, role, userID
+			return []EntityTieRef{{EntityID: "e1", EntityName: "Gandalf"}}, nil
+		},
+	}
+	svc := NewCalendarService(repo)
+	out, err := svc.EntitiesForEra(context.Background(), 42, permissions.RoleScribe, "user-3")
+	if err != nil {
+		t.Fatalf("EntitiesForEra: %v", err)
+	}
+	if gotEraID != 42 {
+		t.Errorf("repo got eraID %d, want 42", gotEraID)
+	}
+	if gotRole != permissions.RoleScribe || gotUser != "user-3" {
+		t.Errorf("viewer context not forwarded: role=%d user=%q, want role=%d user=user-3", gotRole, gotUser, permissions.RoleScribe)
+	}
+	if len(out) != 1 || out[0].EntityName != "Gandalf" {
+		t.Errorf("unexpected passthrough result: %+v", out)
+	}
+}
+
+// TestEntitiesForEra_VisibilityMatrix is the era-side counterpart to
+// TestListEventEntitiesAPI_RespectsEntityVisibility. EntitiesForEra has no
+// production HTTP route yet (grep confirms only EntitiesForEvent is routed,
+// in routes.go — C-CAL-ENTITY-TIES-LEAK-FIX threads role/userID through it
+// regardless, per dispatch, so the query is correct whenever a caller does
+// arrive), so this exercises the service→repo contract directly: the mock
+// models the same role>=RoleOwner threshold entityVisibilityFilter enforces
+// (see TestEntityVisibilityFilter above for the real SQL-fragment coverage).
+func TestEntitiesForEra_VisibilityMatrix(t *testing.T) {
+	tests := []struct {
+		name       string
+		role       int
+		wantSecret bool
+	}{
+		{"player cannot see dm_only era tie", permissions.RolePlayer, false},
+		{"owner can see dm_only era tie", permissions.RoleOwner, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockCalendarRepo{
+				entitiesForEraFn: func(_ context.Context, eraID int, role int, userID string) ([]EntityTieRef, error) {
+					out := []EntityTieRef{{EntityID: "public-1", EntityName: "Public NPC"}}
+					if role >= permissions.RoleOwner {
+						out = append(out, EntityTieRef{EntityID: "secret-1", EntityName: "Secret Villain"})
+					}
+					return out, nil
+				},
+			}
+			svc := NewCalendarService(repo)
+			out, err := svc.EntitiesForEra(context.Background(), 7, tt.role, "user-9")
+			if err != nil {
+				t.Fatalf("EntitiesForEra: %v", err)
+			}
+			var hasSecret, hasPublic bool
+			for _, e := range out {
+				switch e.EntityName {
+				case "Secret Villain":
+					hasSecret = true
+				case "Public NPC":
+					hasPublic = true
+				}
+			}
+			if hasSecret != tt.wantSecret {
+				t.Errorf("dm_only era tie visibility = %v, want %v", hasSecret, tt.wantSecret)
+			}
+			if !hasPublic {
+				t.Errorf("public era tie should always be visible")
+			}
+		})
 	}
 }

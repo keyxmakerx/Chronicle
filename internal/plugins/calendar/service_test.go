@@ -67,8 +67,8 @@ type mockCalendarRepo struct {
 	unlinkEntityEventFn   func(ctx context.Context, entityID, eventID string) error
 	linkEntityEraFn       func(ctx context.Context, entityID string, eraID int, role *string) error
 	unlinkEntityEraFn     func(ctx context.Context, entityID string, eraID int) error
-	entitiesForEventFn    func(ctx context.Context, eventID string) ([]EntityTieRef, error)
-	entitiesForEraFn      func(ctx context.Context, eraID int) ([]EntityTieRef, error)
+	entitiesForEventFn    func(ctx context.Context, eventID string, role int, userID string) ([]EntityTieRef, error)
+	entitiesForEraFn      func(ctx context.Context, eraID int, role int, userID string) ([]EntityTieRef, error)
 	entitiesForCalendarFn func(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error)
 	eventsForEntityFn     func(ctx context.Context, entityID string) ([]EntityEventTie, error)
 	erasForEntityFn       func(ctx context.Context, entityID string) ([]EntityEraTie, error)
