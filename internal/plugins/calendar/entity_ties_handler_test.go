@@ -16,6 +16,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -50,8 +51,11 @@ func tiesCtx(e *echo.Echo, method, body string, role campaigns.Role) (echo.Conte
 
 func TestListEventEntitiesAPI_ReturnsTies(t *testing.T) {
 	role := "involved"
+	var gotRole int
+	var gotUser string
 	repo := &mockCalendarRepo{
-		entitiesForEventFn: func(_ context.Context, eventID string) ([]EntityTieRef, error) {
+		entitiesForEventFn: func(_ context.Context, eventID string, viewerRole int, userID string) ([]EntityTieRef, error) {
+			gotRole, gotUser = viewerRole, userID
 			return []EntityTieRef{{EntityID: "npc-1", EntityName: "Marisha", EntityType: "npc", ParticipationRole: &role}}, nil
 		},
 	}
@@ -70,6 +74,88 @@ func TestListEventEntitiesAPI_ReturnsTies(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "Marisha") || !strings.Contains(body, `"participation_role":"involved"`) {
 		t.Errorf("response missing tie data: %s", body)
+	}
+	// C-CAL-ENTITY-TIES-LEAK-FIX: the handler must forward the real viewer
+	// role + userID to the repo — before the fix, EntitiesForEvent took no
+	// viewer context at all, so no filtering was structurally possible.
+	if gotRole != int(campaigns.RolePlayer) || gotUser != "user-1" {
+		t.Errorf("viewer context not forwarded to repo: role=%d user=%q, want role=%d user=user-1", gotRole, gotUser, campaigns.RolePlayer)
+	}
+}
+
+// TestListEventEntitiesAPI_RespectsEntityVisibility pins C-CAL-ENTITY-TIES-LEAK-FIX
+// (a cordinator#32 gap #1 follow-up the initial audit missed): before the fix,
+// ListEventEntitiesAPI called svc.EntitiesForEvent(ctx, eventID) with NO viewer
+// context, so any Player could read a dm_only entity's NAME via any event's tie
+// list. The mock repo below models the same role>=RoleOwner threshold
+// entityVisibilityFilter enforces in the real WHERE clause (see
+// TestEntityVisibilityFilter in entity_ties_test.go for the actual SQL-fragment
+// coverage — there is no live MariaDB in this sandbox for a literal query-level
+// repro; see the PR for that deviation note) to prove the handler now forwards
+// the viewer identity that filtering depends on, for Player, Owner, and co-DM
+// (IsDmGranted) requesters.
+func TestListEventEntitiesAPI_RespectsEntityVisibility(t *testing.T) {
+	visible := func() EntityTieRef {
+		r := "involved"
+		return EntityTieRef{EntityID: "public-1", EntityName: "Public NPC", EntityType: "npc", ParticipationRole: &r}
+	}
+	dmOnly := func() EntityTieRef {
+		r := "involved"
+		return EntityTieRef{EntityID: "secret-1", EntityName: "Secret Villain", EntityType: "npc", ParticipationRole: &r}
+	}
+
+	tests := []struct {
+		name        string
+		memberRole  campaigns.Role
+		isDmGranted bool
+		wantSecret  bool
+	}{
+		{"player cannot see dm_only tie", campaigns.RolePlayer, false, false},
+		{"owner can see dm_only tie", campaigns.RoleOwner, false, true},
+		{"co-DM (DM-granted player) can see dm_only tie", campaigns.RolePlayer, true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotRole int
+			var gotUser string
+			repo := &mockCalendarRepo{
+				entitiesForEventFn: func(_ context.Context, eventID string, role int, userID string) ([]EntityTieRef, error) {
+					gotRole, gotUser = role, userID
+					out := []EntityTieRef{visible()}
+					if role >= permissions.RoleOwner {
+						out = append(out, dmOnly())
+					}
+					return out, nil
+				},
+			}
+			h := tiesTestHandler(repo)
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/api", strings.NewReader(""))
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.Set("campaign_context", &campaigns.CampaignContext{
+				Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: tt.memberRole, IsDmGranted: tt.isDmGranted,
+			})
+			c.Set("auth_user_id", "user-9")
+			c.SetParamNames("id", "calId", "eid")
+			c.SetParamValues("camp-1", "cal-1", "evt-1")
+
+			if err := h.ListEventEntitiesAPI(c); err != nil {
+				t.Fatalf("ListEventEntitiesAPI: %v", err)
+			}
+			if gotUser != "user-9" {
+				t.Errorf("viewer userID not forwarded: got %q", gotUser)
+			}
+			body := rec.Body.String()
+			hasSecret := strings.Contains(body, "Secret Villain")
+			if hasSecret != tt.wantSecret {
+				t.Errorf("dm_only entity visibility = %v, want %v (forwarded role=%d, body=%s)", hasSecret, tt.wantSecret, gotRole, body)
+			}
+			if !strings.Contains(body, "Public NPC") {
+				t.Errorf("public entity should always be visible: %s", body)
+			}
+		})
 	}
 }
 

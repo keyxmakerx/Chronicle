@@ -204,10 +204,10 @@ func (s *stubCalendarSvc) EventsForEntity(context.Context, string) ([]calendar.E
 func (s *stubCalendarSvc) ErasForEntity(context.Context, string) ([]calendar.EntityEraTie, error) {
 	return nil, nil
 }
-func (s *stubCalendarSvc) EntitiesForEvent(context.Context, string) ([]calendar.EntityTieRef, error) {
+func (s *stubCalendarSvc) EntitiesForEvent(context.Context, string, int, string) ([]calendar.EntityTieRef, error) {
 	return nil, nil
 }
-func (s *stubCalendarSvc) EntitiesForEra(context.Context, int) ([]calendar.EntityTieRef, error) {
+func (s *stubCalendarSvc) EntitiesForEra(context.Context, int, int, string) ([]calendar.EntityTieRef, error) {
 	return nil, nil
 }
 

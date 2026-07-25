@@ -143,8 +143,13 @@ type CalendarService interface {
 	UnlinkEntityFromEra(ctx context.Context, entityID string, eraID int) error
 	EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error)
 	ErasForEntity(ctx context.Context, entityID string) ([]EntityEraTie, error)
-	EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error)
-	EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error)
+	// EntitiesForEvent/EntitiesForEra take role + userID (viewer context) so
+	// entity visibility is enforced the same way EntitiesForCalendar already
+	// is (cordinator#32 gap #1) — a Player must not learn the NAME of a
+	// dm_only / custom-restricted entity through an event/era tie list
+	// (C-CAL-ENTITY-TIES-LEAK-FIX). Owners/co-DMs see all.
+	EntitiesForEvent(ctx context.Context, eventID string, role int, userID string) ([]EntityTieRef, error)
+	EntitiesForEra(ctx context.Context, eraID int, role int, userID string) ([]EntityTieRef, error)
 	// EntitiesForCalendar lists the distinct entities tied to any event/era of
 	// a calendar (the Calendars dashboard associations panel, W1), gated by the
 	// viewer's role + userID so players never see dm_only / custom-restricted

@@ -140,8 +140,11 @@ type CalendarRepository interface {
 	UnlinkEntityEvent(ctx context.Context, entityID, eventID string) error
 	LinkEntityEra(ctx context.Context, entityID string, eraID int, role *string) error
 	UnlinkEntityEra(ctx context.Context, entityID string, eraID int) error
-	EntitiesForEvent(ctx context.Context, eventID string) ([]EntityTieRef, error)
-	EntitiesForEra(ctx context.Context, eraID int) ([]EntityTieRef, error)
+	// EntitiesForEvent/EntitiesForEra take role + userID (viewer context) so
+	// the repo can gate the returned entities via entityVisibilityFilter —
+	// C-CAL-ENTITY-TIES-LEAK-FIX, mirroring EntitiesForCalendar below.
+	EntitiesForEvent(ctx context.Context, eventID string, role int, userID string) ([]EntityTieRef, error)
+	EntitiesForEra(ctx context.Context, eraID int, role int, userID string) ([]EntityTieRef, error)
 	EntitiesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]EntityTieRef, error)
 	EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error)
 	ErasForEntity(ctx context.Context, entityID string) ([]EntityEraTie, error)
