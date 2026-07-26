@@ -1,0 +1,120 @@
+// block.templ — the Block itself: one component, four zones, one stylesheet.
+//
+// SIZE CLASS COMES FROM THE HOST, DENSITY FROM THE MEASURED COLUMN, AND BOTH ARE
+// CSS. There is no JS in this package and there cannot be: boot.js:163 sets
+// `htmx.config.allowScriptTags = false`, so a <script> inside an HTMX-swapped
+// fragment never executes and a JS-sized Block would silently render at the
+// wrong density after any swap. The .cal-block-host wrapper is the query
+// container for size class; each .cell is the query container for density.
+//
+// The wrapper also means the Block sizes itself when it is dropped anywhere a
+// widget can mount, before W-C's BlockHost exists. Nesting another inline-size
+// container above it is harmless — the innermost named container wins, and the
+// innermost one is this.
+
+package calendar_block
+
+import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
+
+// Block renders one calendar Block from a fully-resolved BlockData. It performs
+// no queries and reads no request state.
+templ Block(d BlockData) {
+	<div class="cal-block-host" data-cal-block>
+		@Stylesheet()
+		<div
+			class="block"
+			style={ blockStyle(d) }
+			data-cal-slug={ d.CalendarSlug }
+			if tieMode(d.Viewer) != "" {
+				data-tie-mode={ tieMode(d.Viewer) }
+			}
+			if d.IsRealWorld {
+				data-real-world
+			}
+		>
+			@nameplate(d)
+			if d.IsRealWorld {
+				@skybandPlaceholder()
+			}
+			<div class="body">
+				<div class="inst">
+					@instrument(d)
+					@belowMonthLayers(d)
+				</div>
+				if !d.Ledger.Hidden {
+					<div class="layer-col">
+						@ledgerStub(d)
+					</div>
+				}
+			</div>
+			<div class="minirail" aria-hidden="true"></div>
+			if !d.Shelf.Hidden {
+				@shelfStub(d)
+			}
+			@blockFoot(d)
+		</div>
+	</div>
+}
+
+// Stylesheet links the Block's unlayered, self-contained sheet. Emitted inside
+// the component so an HTMX-swapped fragment carries its own styling — a
+// fragment cannot add to <head>, and a duplicate <link> to an identical URL
+// costs one deduplicated request. Hosts that would rather put it in <head> can
+// call this component there as well.
+templ Stylesheet() {
+	<link rel="stylesheet" href={ layouts.AssetURL(StylesheetPath) }/>
+}
+
+// skybandPlaceholder is the ONE dashed idiom in the entire product: "not built
+// yet". It reserves the pictorial night sky on real-world Blocks, which is
+// PARKED (L12, D4) and shares nothing with the moon-phase data above it.
+templ skybandPlaceholder() {
+	<div class="skyband" aria-hidden="true">
+		<span class="a">Skybox — parked</span>
+		<span class="b">the pictorial night sky lands here · parked on usage grounds · unrelated to the moon-phase data above</span>
+	</div>
+}
+
+// belowMonthLayers holds the sections that open BELOW the month. Wave 1 renders
+// each as its correctly-placed zone carrying the signed `needs backend` chip
+// rather than fabricating content it cannot derive:
+//
+//   - legend    every mark's axis LABEL ("Quest", "Festival") is not in
+//     BlockData — Mark carries a hue, a pattern and a glyph, but no
+//     axis name — so a legend built here would be invented.
+//   - horizon   ruling 1: there is no queryable fog horizon on main. DayCell
+//     .Fogged stays false and this renders the chip the operator signed.
+//   - moongraph the whole-month illumination curve. Derivable from the per-cell
+//     MoonDisc series, but it is the `moongraph` layer and W-F owns the
+//     layer system; wave 1 reserves the zone instead of half-shipping it.
+templ belowMonthLayers(d BlockData) {
+	if hasLayer(d.Layers, "legend") {
+		<div class="layer needzone" data-layer="legend">
+			<span class="cap">Legend</span>
+			<span class="badge need">needs backend</span>
+		</div>
+	}
+	if hasLayer(d.Layers, "horizon") {
+		<div class="layer needzone" data-layer="horizon">
+			<span class="cap">Knowledge horizon</span>
+			<span class="badge need">needs backend</span>
+		</div>
+	}
+	if hasLayer(d.Layers, "moongraph") {
+		<div class="layer needzone" data-layer="moongraph">
+			<span class="cap">Illumination graph</span>
+			<span class="badge need">needs backend</span>
+		</div>
+	}
+}
+
+// blockFoot is the mini / sub-mini foot line. It states a count it can actually
+// derive from the marks in front of it; the mockup's "next: <event>" is not in
+// BlockData, so it is not printed rather than guessed.
+templ blockFoot(d BlockData) {
+	<div class="foot">
+		<span>{ d.Month.Name }</span>
+		<span class="dotsep">·</span>
+		<span>{ eventCountLabel(totalMarks(d)) }</span>
+	</div>
+}

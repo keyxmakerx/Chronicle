@@ -210,6 +210,37 @@ C-CALV4-SPINE-P2 only, and `calendar_v2.templ` / `calendar_v2_helpers.go` /
   pins those four as `reflect.Int64` and will fail loudly on the amendment. That
   is the pin working, not a bug: refresh it in the same PR as the amendment.
 
+### Calendar v4 remodel — booked follow-ups from C-CALV4-BLOCK-P1 (2026-07-26)
+
+W-A shipped the Block's render tier (`internal/widgets/calendar_block` +
+`static/css/calendar-block.css`). These are the things it deliberately did NOT
+do; each is named in the PR and in the widget's `.ai.md` §"Deliberate
+divergences".
+
+- **Wave-2 (W-B), the Ledger:** fill zone C. The zone is docked at its real
+  300px with the signed `needs backend` chip and the ANSWER key (`data-day`) is
+  already on every dated cell and row — W-B should not have to re-cut the
+  geometry. It also owns re-opening the motion question (the ANSWER primitive
+  and its `--m-swell` rail scale); canon guard B1 (`--dash`/`--gap` never
+  animate) and canon D3 (the ring lives inside `box-shadow`) must survive it.
+- **Wave-2 (W-E), the Shelf:** fill zone D, same deal.
+- **Wave-3 (W-F), the layer system:** the `⋯` switchboard popover (the invoker
+  ships inert), the per-viewer layer/sky/moon preference store, and the three
+  zones wave 1 reserved with the chip — `legend`, `horizon`, `moongraph`. The
+  **"colour by: type | owner | calendar"** segment belongs here too: it is a
+  per-viewer preference with no field in the pinned `BlockData`, so wave 1
+  omitted it rather than fabricating a pressed state.
+- **`BlockData` field gaps** (each needs a coordinator pin change, so each is a
+  stop-and-flag until then): a lead/trail label on `DayCell` (out-of-range cells
+  render empty because `Day == 0` IS the out-of-range marker, while the signed
+  Gregorian still shows a greyed 28/29/30); a hidden-event count and a declared-
+  moon total for the Nameplate's "N hidden" / "3 of 4 moons" badges; a scope
+  chip; a campaign clock for real-world Blocks.
+- **Coordinator re-sign, already booked (canon §D):** the `isNamed()` 470-vs-563
+  instrument constant. Wave 1 RETIRED the row-height clause rather than
+  inheriting or "correcting" it; `TestIsNamed_RetiredRowHeightClause` pins the
+  divergence in both directions so the re-sign has something concrete to move.
+
 ### calendar-v4 widgetization remodel — follow-ups booked by C-CALV4-SPINE-P2 (2026-07-26)
 
 Wave plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`. These are the

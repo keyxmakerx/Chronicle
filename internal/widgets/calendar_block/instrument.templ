@@ -1,0 +1,212 @@
+// instrument.templ — Zone B, the month.
+//
+// TEN-DAY WEEKS ARE NATIVE. There is no literal 7 anywhere in this file or in
+// the grid CSS: --week-len drives every column count, the five-column rule is
+// read from the producer's Half flags rather than re-derived from a week length,
+// and the header, the era bands, the cells and the intercalary row are all
+// subgrids across the SAME tracks, so nothing can drift out of alignment.
+//
+// ERA BANDS ARE PER WEEK ROW. An era spanning days 1–17 cannot be one band
+// across three rows — `span 17` silently wrecks the grid (design-notes §9
+// deviation 2). It is a band on each row it touches, column-aligned, with a
+// 1.5px editorial rule at a mid-month boundary.
+
+package calendar_block
+
+// instrument renders the month grid and, for the sub-mini tier, the thirty-tick
+// rule that honestly replaces it.
+templ instrument(d BlockData) {
+	<div class="grid" data-week-len={ intText(d.Month.WeekLen) } data-weeknums?={ hasLayer(d.Layers, "weeknums") }>
+		if len(d.Month.Weekdays) > 0 {
+			@weekdayHeader(d.Month)
+		}
+		for _, row := range d.Month.Rows {
+			@bandRow(d, row)
+			@weekRow(d, row)
+		}
+		@intercalaryRows(d)
+	</div>
+	@tickStrip(d)
+}
+
+// weekdayHeader emits BOTH abbreviation lengths; the container query picks one.
+// The five-column rule reaches the header cell, not just the day cell.
+templ weekdayHeader(m MonthGeometry) {
+	<div class="hd">
+		<span class="gut"></span>
+		for _, w := range m.Weekdays {
+			<b class={ weekdayClass(w) } title={ w.Name }>
+				<span class="wd-l">{ wdLong(w) }</span>
+				<span class="wd-s">{ wdShort(w) }</span>
+			</b>
+		}
+	</div>
+}
+
+// bandRow is one week's worth of era bands.
+//
+// THE SEASON IS A SUFFIX ON ROW 0 ONLY (§9 deviation 3) — it is also stated in
+// the Nameplate, and repeating it above every week row would make the era band
+// a caption instead of a boundary. The row-0 guard is enforced here rather than
+// trusted to the producer, because a suffix that leaks onto row 1 is the kind of
+// thing that reads as intentional in review.
+//
+// --bandhue is driven by the ERA. calendar-v4.html:1566 hardcodes the Harptos
+// hue on every band and is a known defect; EraBand.BandHue is the fix.
+templ bandRow(d BlockData, row WeekRow) {
+	if hasLayer(d.Layers, "eras") && len(row.Bands) > 0 {
+		<div class="bands">
+			<span class="gut"></span>
+			for _, b := range row.Bands {
+				<div class={ bandClass(b) } style={ bandStyle(b) } title={ b.Label }>
+					<span class="bl">{ b.Label }</span>
+					if row.Index == 0 && b.Suffix != "" {
+						<span class="sfx">{ "· " + b.Suffix }</span>
+					}
+				</div>
+			}
+			@halfRule(d.Month)
+		</div>
+	}
+}
+
+// halfRule is the five-column rule, carried across the era band row.
+//
+// DELIBERATE DEVIATION, flagged rather than silent: the mockup DECLARES
+// `.band.half` (calendar-v4.html:624) and never applies it to a band, so the
+// strong ramp step stops dead at the era band in every signed still. The
+// dispatch asks for it to be applied. Applying the class alone cannot draw the
+// rule where it belongs — a band is one grid item spanning many columns, so its
+// border-right lands at the band's own right edge, which is column 10 on a
+// full-width band and column 7 on the Harptos row-1 split. This ruler is a
+// zero-width grid item placed on the half column itself, so the step is
+// continuous at exactly the boundary whatever the bands are doing. `.band.half`
+// is still honoured from EraBand.Half for a band that genuinely ends there.
+templ halfRule(m MonthGeometry) {
+	if halfColumn(m) > 0 {
+		<i class="halfrule" style={ halfRuleStyle(halfColumn(m)) } aria-hidden="true"></i>
+	}
+}
+
+// weekRow is one row of day cells, plus the week-number gutter.
+templ weekRow(d BlockData, row WeekRow) {
+	<div class="wk">
+		<span class="gut">
+			if hasLayer(d.Layers, "weeknums") {
+				<b class="wknum">{ weekLabel(row) }</b>
+			}
+		</span>
+		for _, c := range row.Cells {
+			@dayCell(d, c)
+		}
+	</div>
+}
+
+// dayCell ships EXACTLY TWO SUBTREES — named chips and an underline — and the
+// cell's own container query shows one. Never four tiers of markup: a tier the
+// producer cannot see is a tier that silently rots.
+//
+// data-day is on the CELL, once, whichever subtree is visible (COMMON §6.6,
+// guard B4). Nothing consumes it in wave 1; W-B does.
+templ dayCell(d BlockData, c DayCell) {
+	<div
+		class={ cellClass(c, d.Month.WeekLen) }
+		if c.Day > 0 {
+			data-day={ dayKey(d.CalendarSlug, c.Day) }
+		}
+		if c.Tied {
+			data-tied
+		}
+	>
+		if c.Day > 0 {
+			<div class="cnamed">
+				@dayNumeral(c, true)
+				for _, m := range chipsFor(c) {
+					@namedChip(m)
+				}
+				if moreCount(c) > 0 {
+					<span class="more">{ "+" + intText(moreCount(c)) + " more" }</span>
+				}
+				@moonRow(c)
+			</div>
+			<div class="cunder">
+				@dayNumeral(c, false)
+				@underline(c)
+			</div>
+			@gmMarks(c)
+		}
+	</div>
+}
+
+// dayNumeral prints the day. TODAY is a non-accent ink stamp: the campaign
+// accent is chrome-only and must never land on a data cell.
+templ dayNumeral(c DayCell, named bool) {
+	if named {
+		<span class="dn">
+			if c.IsToday {
+				<span class="today">{ intText(c.Day) }</span>
+			} else {
+				{ intText(c.Day) }
+			}
+		</span>
+	} else {
+		<span class="dn dnw">
+			if c.IsToday {
+				<span class="today">{ intText(c.Day) }</span>
+			} else {
+				{ intText(c.Day) }
+			}
+		</span>
+	}
+}
+
+// gmMarks are the notch and the diamond. Both are absent — not greyed, not
+// ghosted — for a viewer who is not entitled to them, because the producer
+// leaves AudienceMark nil and there is nothing here to render.
+templ gmMarks(c DayCell) {
+	if cellHasGMOnly(c) {
+		<span class="dogear" title={ gmMarkTitle(c, false) } aria-hidden="true"></span>
+	}
+	if cellHasRestricted(c) {
+		<span class="audmark" title={ gmMarkTitle(c, true) } aria-hidden="true"></span>
+	}
+}
+
+// intercalaryRows are the days a 30-day / ten-day-week month has no cell for.
+// Canonical Harptos carries festival days outside every tenday. Rendered at
+// FULL TIER only, and overridden inline to grid-column:2/-1 so the row clears
+// the week gutter instead of sitting under it.
+templ intercalaryRows(d BlockData) {
+	for _, ic := range d.Month.Intercalary {
+		<div class="interc-row">
+			<span class="gut"></span>
+			<div class="interc" style="grid-column:2/-1" data-day={ intercalaryKey(d.CalendarSlug, ic.Day) }>
+				<span class="icd">{ intText(ic.Day) }</span>
+				<span class="cap">{ ic.Name }</span>
+				for _, m := range ic.Marks {
+					@namedChip(m)
+				}
+			</div>
+		</div>
+	}
+}
+
+// tickStrip is the sub-mini tier's whole instrument. Below 240px of host the
+// grid is DROPPED honestly rather than squeezed: ten columns in 204px of content
+// is four characters a column, and a month rule still answers "when is anything
+// happening".
+templ tickStrip(d BlockData) {
+	<div class="tickstrip">
+		<div class="tick">
+			for _, t := range tickDays(d) {
+				<i
+					class={ tickClass(t) }
+					data-day={ dayKey(d.CalendarSlug, t.Day) }
+					if t.HasMark {
+						style={ axisStyle(t.Axis) }
+					}
+				></i>
+			}
+		</div>
+	</div>
+}

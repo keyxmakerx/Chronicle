@@ -1,0 +1,103 @@
+// nameplate.templ — Zone A.
+//
+// ONE nameplate, restyled per size class by container query. The mockup builds
+// three different nameplates in JS (full / std / mini+submini); shipping three
+// DOM variants would mean the same fact rendered three times and a fourth place
+// for them to drift apart. Everything here is emitted once and the stylesheet
+// hides what a tier cannot afford — which is also the only way the sync pill's
+// two strings can both be present for a container query to choose between.
+//
+// WHAT IS DELIBERATELY NOT HERE, and why (flagged for the coordinator):
+//
+//   - the "colour by: type|owner|calendar" segmented control. It is a per-viewer
+//     PREFERENCE and BlockData carries no field for the current axis — Mark.Axis
+//     is already resolved by the producer. Rendering it would mean fabricating a
+//     pressed state. Same class as HasSwitchboard, same slice: W-F.
+//   - the "3 hidden" and "3 of 4 moons" badges. Neither a hidden-event count nor
+//     a declared-moon total exists in the pinned struct, and editing the struct
+//     is a stop-and-flag.
+//   - the campaign clock on real-world Blocks. There is no time field; the
+//     viewer's zone IS rendered, because ViewerContext.Zone exists and L15 says
+//     every real-world time is labelled with it.
+
+package calendar_block
+
+// nameplate renders Zone A.
+templ nameplate(d BlockData) {
+	<div class="np">
+		<span class="dot" aria-hidden="true"></span>
+		<span class="nm" title={ d.Name }>{ d.Name }</span>
+		@dateLine(d)
+		if eraBadgeText(d) != "" {
+			<span class="badge need mono era">{ eraBadgeText(d) }</span>
+		}
+		if d.SeasonLabel != "" {
+			<span class="sub season">{ d.SeasonLabel }</span>
+		}
+		@syncPill(d.Sync)
+		if d.IsRealWorld && d.Viewer.Zone != "" {
+			<span class="badge tz" title="your zone">{ d.Viewer.Zone }</span>
+		}
+		<span class="sp"></span>
+		@tieCounts(d.Viewer)
+		@layersInvoker(d.Layers)
+	</div>
+}
+
+// dateLine is the Block's single most load-bearing honesty state.
+//
+// When Fault is non-empty the Block prints THE FAULT WHERE THE DATE WOULD GO and
+// emits NO DATE ELEMENT AT ALL — not a zero, not an em dash, not a placeholder.
+// (Signed: the Dwarven .calrow.warnrow, "Needs eras — 0 eras defined, dates
+// cannot resolve".) A calendar that cannot resolve a date says so in the place
+// a reader is already looking.
+templ dateLine(d BlockData) {
+	if d.Fault != "" {
+		<span class="fault" role="status">{ d.Fault }</span>
+	} else if d.DateLabel != "" {
+		<span class="iw mono">{ d.DateLabel }</span>
+	}
+}
+
+// tieCounts states both sides of the tie toggle when the Block is hosted on an
+// entity page.
+//
+// TiedCount and WholeCount MUST come from the same viewer-filtered pass —
+// computing one pre-filter and one post-filter turns the toggle into an oracle
+// that differences hidden events out of the two numbers. That is the producer's
+// guarantee; this renders whatever it is handed, and renders BOTH numbers so the
+// pair is visible in review.
+//
+// The control is INERT in wave 1: W-C owns the CSS-only toggle, and it needs
+// only to change the Block's data-tie-mode. The markup is here so W-C does not
+// have to re-cut the Nameplate.
+templ tieCounts(v ViewerContext) {
+	if v.HostEntity != 0 {
+		<span class="seg tie" role="group" aria-label="Event scope">
+			<span class="tiebtn" aria-pressed={ boolAttr(v.TieMode == "tied") }>
+				{ "Tied " }{ intText(v.TiedCount) }
+			</span>
+			<span class="tiebtn" aria-pressed={ boolAttr(v.TieMode != "tied") }>
+				{ "Whole calendar " }{ intText(v.WholeCount) }
+			</span>
+		</span>
+	}
+}
+
+// layersInvoker is the ⋯ affordance. The switchboard popover itself is W-F, so
+// HasSwitchboard is false in wave 1 and the invoker renders INERT — present, so
+// the Nameplate's geometry is final, and disabled, so it is not a dead control
+// that swallows a click.
+templ layersInvoker(l LayerState) {
+	<button
+		type="button"
+		class="icb layers"
+		data-open-layers
+		disabled?={ !l.HasSwitchboard }
+		aria-haspopup="dialog"
+		title={ layersInvokerTitle(l) }
+	>
+		<span aria-hidden="true">⋯</span>
+		<span class="vh">Layers</span>
+	</button>
+}

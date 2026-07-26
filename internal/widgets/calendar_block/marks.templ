@@ -1,0 +1,74 @@
+// marks.templ — the axis layer.
+//
+// COLOUR IS NEVER LOAD-BEARING. Every axis value owns a HUE and a locked STROKE
+// PATTERN assigned by the same index, so every mark still resolves under
+// `filter: grayscale(1)` by its dash pattern plus a non-colour token — the glyph
+// for the type axis, initials for the owner axis, a letter for the calendar
+// axis. That is the greyscale identity channel, and it is what
+// v4-greyscale-proof.png gates.
+//
+// CHANNEL DISCIPLINE: --axis is the ONLY channel this layer may reference, and
+// it is FORBIDDEN from referencing --accent. The moment accent means "related to
+// what you're pointing at" it stops meaning "selected". --cal carries calendar
+// identity and --bandhue the era tint; neither belongs to a mark.
+
+package calendar_block
+
+// namedChip is the wide density's mark: a 3px patterned rail, a non-colour
+// token, and a label. A glyph WITH a label is legible; a glyph INSTEAD of a
+// label is a rebus.
+templ namedChip(m Mark) {
+	<div
+		class="chip"
+		style={ axisStyle(m.Axis) }
+		title={ markTitle(m) }
+		if m.EventID != 0 {
+			data-event-id={ intText64(m.EventID) }
+		}
+	>
+		<i class={ "rail " + patternClass(m.Pattern) } aria-hidden="true"></i>
+		if m.Glyph != "" {
+			<span class="tok g" aria-hidden="true">{ m.Glyph }</span>
+		}
+		<span class="lb">{ m.Title }</span>
+	</div>
+}
+
+// underline is the narrow density's mark: ONE bar, never a stack. A stack
+// encodes a magnitude the data does not have and reads as a progress meter.
+// Max three segments; a fourth turns the third neutral and the exact count lives
+// in the Ledger.
+templ underline(c DayCell) {
+	if len(c.Marks) > 0 {
+		<div class="ul">
+			for i, m := range underlineSegs(c) {
+				if underlineRestAt(c, i) {
+					<i class="ulseg rest" aria-hidden="true"></i>
+				} else {
+					<i
+						class={ "ulseg " + patternClass(m.Pattern) }
+						style={ axisStyle(m.Axis) }
+						title={ markTitle(m) }
+					></i>
+				}
+			}
+		</div>
+	}
+}
+
+// moonRow draws the sky where the eye already is.
+//
+// A derived TERMINATOR, not a pie fill (L25): filled means lit, an empty ring
+// means new, and a crescent looks like a crescent. Achromatic by law — the sky
+// may never borrow the event colour axis — and capped at three bodies, so the
+// month can never grow with the fiction. The ceiling is declared ONCE, in the
+// Nameplate, and never thirty times in the grid.
+templ moonRow(c DayCell) {
+	if len(c.Moons) > 0 {
+		<span class="phrow" aria-hidden="true">
+			for _, md := range moonsFor(c) {
+				<i class={ moonWaneClass(md) } style={ moonStyle(md) } title={ moonTitle(md) }></i>
+			}
+		</span>
+	}
+}
