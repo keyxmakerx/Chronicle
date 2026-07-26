@@ -494,3 +494,64 @@ func TestTieMode_IsAnAttributeNotAClass(t *testing.T) {
 	mustNotContain(t, render(t, fxHarptos(true)), `class="seg tie"`,
 		"the tie toggle is entity-hosted only")
 }
+
+// TestMarkCap_AgreesWithTheProducer pins the seam between the producer's
+// per-cell ceiling and this renderer's split of it.
+//
+// WHY THIS EXISTS. C-CALV4-SPINE-P2 landed BEFORE this render tier, so the two
+// halves of the contract were written by chats that could not see each other.
+// The producer keeps the FULL viewer-visible mark list and reports the overflow
+// (`blockCapMarks`, block_projection.go); this renderer decides how many chips
+// that means. Both must arrive at "three chips, or two plus a +n more row, never
+// both" from opposite directions, or the cell stops being a fixed 84px.
+//
+// It is pinned HERE, from the renderer's side, because this package does not own
+// internal/plugins/** and must not add a test there. The producer's own cap
+// constants are 3 / 2 (block_geometry.go:64-65); this table is what those
+// numbers have to mean once they reach a cell.
+func TestMarkCap_AgreesWithTheProducer(t *testing.T) {
+	// producerSplit mirrors blockCapMarks: never trims, reports the overflow.
+	producerSplit := func(n int) ([]Mark, int) {
+		marks := make([]Mark, n)
+		for i := range marks {
+			marks[i] = Mark{Title: "e", Axis: "var(--ev-social)", Pattern: "p1"}
+		}
+		if n <= namedChipCap {
+			return marks, 0
+		}
+		return marks, n - (namedChipCap - 1)
+	}
+
+	for n := 0; n <= 8; n++ {
+		marks, more := producerSplit(n)
+		c := DayCell{Day: 1, Col: 1, Marks: marks, MoreCount: more}
+
+		chips, overflow := len(chipsFor(c)), moreCount(c)
+
+		// The invariant: chips + the folded tail always accounts for every mark,
+		// and a cell never draws three chips AND an overflow row.
+		if overflow > 0 && chips != namedChipCap-1 {
+			t.Errorf("%d marks: %d chips beside a +%d more row; the signed cell draws two, "+
+				"never three, when it also carries the affordance", n, chips, overflow)
+		}
+		if overflow == 0 && chips != n {
+			t.Errorf("%d marks: %d chips and no overflow row — a mark went missing", n, chips)
+		}
+		if chips+overflow != n {
+			t.Errorf("%d marks: %d chips + %d folded = %d; the counts must reconcile or the "+
+				"'+n more' lies", n, chips, overflow, chips+overflow)
+		}
+
+		// The underline half of the same cell must still see real marks: a
+		// producer that trimmed to the chip cap would silently cost it segments.
+		segs := len(underlineSegs(c))
+		if want := min(n, underlineCap); segs != want {
+			t.Errorf("%d marks: underline drew %d segments, want %d — the producer must NOT "+
+				"trim Marks, because density is a container query and it cannot know which "+
+				"subtree will be visible", n, segs, want)
+		}
+		if n > underlineCap && !underlineRestAt(c, segs-1) {
+			t.Errorf("%d marks: the last underline segment must turn neutral", n)
+		}
+	}
+}
