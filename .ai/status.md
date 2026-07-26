@@ -142,6 +142,34 @@ Wave 1. Source-of-record for scope + operator priorities is the cordinator plan;
 **Operator gate still open:** RSVP *emails* need SMTP configured (Admin → `/admin/smtp` →
 "Send test email"). In-app RSVP works without it — every mail seam is nil-safe.
 
+##### calendar-v4 widgetization remodel (wave 1, 2026-07-26)
+
+Operator directive: *"just go with a full redo of the calendar."* Source of record is
+cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`; the design contract
+(`mockups/calendar-v4.html` + 73 signed stills) is **immutable**, and the nine coordinator
+rulings live in `dispatches/chronicle/C-CALV4-WAVE1-COMMON.md` §6.
+
+| Slice | What | Status |
+|---|---|---|
+| C-CALV4-SPINE-P2 | Server spine: leap-aware geometry, one-pass per-viewer projection, batched eager loader, narrow interfaces, the wave's only `app/routes.go` touch | ✅ this branch |
+
+**Two cross-slice facts a later slice must not re-derive:**
+
+- `internal/widgets/calendar_block/data.go` is the ONE cross-slice contract, pinned
+  verbatim at cordinator `dispatches/chronicle/C-CALV4-BLOCKDATA.go.txt`. It is copied
+  byte-identically (including a struct-tag alignment `gofmt` would change — do NOT run
+  `gofmt -w` on it; no gofmt linter is enabled in `.golangci.yml`, so it is safe).
+  **Editing the struct is a stop-and-flag.**
+- `calendar.BlockSpine()` is the process-wide accessor for the Block service, installed
+  from `app/routes.go` via `calendar.InstallBlockSpine`. It exists because `routes.go`
+  belongs to exactly one calendar-v4 slice for the whole wave, so the phase-B surfaces
+  (entity-page hosting, the Bench) reach the spine without re-editing it.
+
+**Raised to the coordinator, unresolved (see `internal/plugins/calendar/.ai.md`):** the
+pinned `BlockData` types `CalendarID` / `Mark.EventID` / `ViewerContext.UserID` /
+`ViewerContext.HostEntity` as `int64`, but all four are `VARCHAR(36)` UUIDs in Chronicle.
+The producer zeroes them and carries the calendar's identity in `CalendarSlug`.
+
 **Cross-plugin note:** `sessions.NotifyUsers` (generic notification fan-in) is new. The
 notifications store was always documented as generic (T-B2); C-CAL-RSVP-P1 is its first
 writer outside the scheduler. Future features should use `NotifyUsers` with their own type

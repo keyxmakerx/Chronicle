@@ -197,6 +197,45 @@ divergences".
   instrument constant. Wave 1 RETIRED the row-height clause rather than
   inheriting or "correcting" it; `TestIsNamed_RetiredRowHeightClause` pins the
   divergence in both directions so the re-sign has something concrete to move.
+### calendar-v4 widgetization remodel — follow-ups booked by C-CALV4-SPINE-P2 (2026-07-26)
+
+Wave plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`. These are the
+items the server spine surfaced and deliberately did NOT decide on its own.
+
+- [ ] **`BlockData` identity types** — `CalendarID`, `Mark.EventID`,
+  `ViewerContext.UserID` and `ViewerContext.HostEntity` are `int64` in the pinned struct;
+  all four are `VARCHAR(36)` UUIDs in Chronicle. The producer zeroes them and carries the
+  calendar's identity in `CalendarSlug`. Needs a coordinator amendment to the pinned file
+  (string ids) plus a producer update; `TestBlockIdentityIntFieldsAreZeroed` is the
+  tripwire. **Blocks:** any surface that wants to link a mark to its event.
+- [ ] **Multi-day event spans have no field in `BlockData`.** The signed render draws span
+  ribbons ("Eclipse window", span 5). Marks are placed by `Event.OccursOn`, which does not
+  expand a multi-day event past its start day, and the pinned struct has no ribbon/span
+  representation. Booked for the coordinator.
+- [ ] **Per-mark tie flag.** In "whole" mode the signed render dims the individual UNTIED
+  chips; the pinned struct carries tie state only per DAY (`DayCell.Tied`), so a day with
+  one tied and one untied event cannot express the distinction.
+- [ ] **`EraBand.Edge` is unreachable.** The signed render splits one month between two
+  eras at day 17/18; Chronicle's eras are year-granular, so a mid-month boundary is not
+  expressible. The general rule ships; `TestBlockEraBandEdgeIsUnreachableToday` pins the
+  current answer.
+- [ ] **The signed "Needs eras" fault has no trigger.** Chronicle has no era-RELATIVE year
+  numbering, so a calendar with zero eras still resolves its date. The fault MECHANISM
+  ships (no months / month out of range / day out of range); the era variant lands when
+  the model gains era-relative reckoning.
+- [ ] **Three-counter reconciliation** (its own dispatch, needs an operator gate).
+  `Calendar.AbsoluteDay` is leap-aware, `constLenDayIndex` is not, and they diverge by one
+  day per elapsed leap year — a per-day moon disc drifts against its own cell by that
+  amount. Ruling COMMON §6.4 froze `constLenDayIndex` for wave 1 because changing it would
+  shift the weekday column of every calendar in the operator's production database.
+  Measured and pinned by `TestBlockCounterDivergencePin`.
+- [ ] **`UpcomingByCalendar` still leaks `visibility_rules` names.** `service.go`'s
+  dashboard path filters base visibility in SQL only and never calls `filterEventsByUser`.
+  The Block's own `UpcomingAcrossCalendars` does not repeat it, but the old path is still
+  live on the Calendars dashboard.
+- [ ] **`MoonDisc.Eclipse` has no backend.** `calendar_celestial_events` (migration 008)
+  has no `moon_id`, so a stored eclipse cannot be attributed to a moon. Same class as the
+  fog ruling: the field stays false.
 
 ### Calendar Showcase: World-State Effects (C-CAL-WORLDSTATE-EFFECTS-SYSTEM)
 
