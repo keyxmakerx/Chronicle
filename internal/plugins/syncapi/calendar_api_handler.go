@@ -311,6 +311,53 @@ func (h *CalendarAPIHandler) GetWeather(c echo.Context) error {
 	return c.JSON(http.StatusOK, weather)
 }
 
+// GetWorldState returns the world-state seed (date, sun, moons with computed
+// phases, weather, and the date's celestial events) for the campaign's default
+// calendar.
+//
+// GET /api/v1/campaigns/:id/calendar/world-state?year=&month=&day=
+//
+// C-CAL-WORLDSTATE-WIRE (2026-07-26). The same seed the web route serves
+// (calendar/routes.go `pub.GET("/calendar/world-state")`) — but that route
+// lives on the session-authenticated web plugin group, so a Bearer-token
+// client such as the Foundry module could not reach it and had no way to
+// enrich a calendar.worldstate.changed push, or to seed itself on connect.
+// This is the syncapi mirror.
+//
+// dm_only celestial events are gated exactly the way every other syncapi
+// calendar read gates them: resolveRole maps the key's permissions to a role
+// (sync keys → Owner, read/write keys → Player) and the role is passed into
+// the seed builder, whose celestialSeeds drops dm_only rows for non-DM roles.
+// There is no second visibility predicate here — a divergent second path is
+// how the entity-ties leak happened (cordinator#32 / PR #565).
+func (h *CalendarAPIHandler) GetWorldState(c echo.Context) error {
+	campaignID := c.Param("id")
+	ctx := c.Request().Context()
+
+	cal, err := h.calendarSvc.GetCalendar(ctx, campaignID)
+	if err != nil || cal == nil {
+		return apperror.NewNotFound("calendar not found")
+	}
+
+	// Optional date pin; 0 means "the calendar's current date" (the seed
+	// builder applies that default), matching the web route's query contract.
+	year, _ := strconv.Atoi(c.QueryParam("year"))
+	month, _ := strconv.Atoi(c.QueryParam("month"))
+	day, _ := strconv.Atoi(c.QueryParam("day"))
+
+	// Empty userID: API-key auth has no user session, same as ListEvents.
+	seed, err := h.calendarSvc.BuildWorldStateSeed(ctx, cal.ID, year, month, day, h.resolveRole(c), "")
+	if err != nil {
+		slog.Error("api: failed to build world-state seed",
+			slog.String("campaign_id", campaignID),
+			slog.Any("error", err),
+		)
+		return apperror.NewInternal(fmt.Errorf("failed to get world state"))
+	}
+
+	return c.JSON(http.StatusOK, seed)
+}
+
 // GetCycles returns all cycle definitions.
 // GET /api/v1/campaigns/:id/calendar/cycles
 func (h *CalendarAPIHandler) GetCycles(c echo.Context) error {

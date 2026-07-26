@@ -1865,6 +1865,85 @@ injection pattern).
 
 ---
 
+## ADR-047: World-state broadcasts are audience-SPLIT, not audience-filtered
+
+**Status.** Accepted (2026-07-26, C-CAL-WORLDSTATE-WIRE). Numbered 047 because
+ADR-046 is claimed by the in-flight RSVP branch (PR #566); the two are
+independent.
+
+**Context.** `calendar.worldstate.changed` and `calendar.weather.zones.changed`
+were publisher-side dead letters: live emitters, no `case` in
+`calendarEventPublisherAdapter.PublishCalendarEvent`, so both hit its
+`default: return` and were discarded before the bus. The operator's meteors
+and eclipses had never reached a WebSocket client, which is why "celestial
+events unfindable/unsyncable" produced no trace to follow — there was no trace.
+
+Routing them is one line each. The real decision is what the world-state
+payload may carry. The original comment on `SetWorldState` justified a minimal
+`{date, moodTint}` payload precisely on privacy grounds: *"so a player WS
+subscriber never receives GM-only events through the change signal — clients
+re-GET the seed with their own role."* That reasoning is sound and the
+conclusion was still wrong in practice — a consumer that only learns "something
+changed" cannot announce the meteor shower the GM just triggered, and the
+"re-GET with your own role" escape hatch did not exist for token clients at all
+(the world-state GET was session-auth only).
+
+**Decision.** Enrich the payload, and get the privacy property from a SPLIT
+rather than from omission.
+
+`websocket.Message.RequiresDM` is a per-message flag consumed by the hub's
+broadcast loop. One message therefore cannot be rich for the GM and redacted
+for the table. So a world-state change emits:
+
+1. **always** — a player-safe payload, celestial events filtered to
+   `visibility="everyone"`, `RequiresDM` unset;
+2. **only when the date carries dm_only rows** — a second payload with the full
+   set, `RequiresDM` set, which the hub drops for non-DM clients.
+
+The DM copy is published under an INTERNAL event name
+(`calendar.worldstate.changed.dm`) that the adapter translates to the same
+public `ws.MessageType` with the flag set. The suffix never crosses the wire.
+It exists so the audience can be expressed without widening
+`CalendarEventPublisher` — an interface with four implementations, one of them
+a hand-written test mock — for a single caller. Same interface-churn trade-off
+ADR-046's branch made when it declined to widen `CalendarService`.
+
+Both payloads carry the STABLE `calendar_celestial_events` id. Without it a
+consumer cannot tell a re-broadcast or a reconnect replay from a new event, so
+it must either drop the feature or duplicate a note per delivery — which is
+exactly why the Foundry module abstained from celestial notes (PR #82).
+
+**Also decided: one shape, not two.** The broadcast reuses `WorldStateEvent` /
+`WorldStateMoon` / `WorldStateWeather` verbatim from `WorldStateSeed`, so a
+consumer parses the same celestial/moon/weather shape whether it arrived by
+push or by a GET refetch. The weather path already shipped two shapes for one
+concept (flat `WeatherInput` pushed, nested `Weather` returned) and the module
+had to write a normalizer for it; not repeating that is worth more than
+matching the DB column names on the wire.
+
+**Also decided: enrichment is best-effort.** A failed celestial/moon/weather
+load degrades to the minimal `{date, moodTint}` broadcast rather than
+abandoning the publish. The write already succeeded, and a consumer that hears
+nothing has no way to learn it is stale. Given the bug being fixed here is a
+silent drop, "degrade loudly" beats "drop quietly" by a wide margin.
+
+**Consequences.** Additive on the wire — `date` and `moodTint` keep their exact
+paths, which matters because the Foundry module shipped
+`formatWorldstateLine` against them while the event was still undeliverable. A
+date with dm_only content costs two broadcasts instead of one; a date without
+costs one. `default: return` in the calendar adapter is now pinned by a test
+over the WHOLE mapping, so the next emitter added without a case fails CI
+instead of a play session.
+
+**References.** `internal/websocket/message.go` (types),
+`internal/app/routes.go` (adapter + `routes_calendar_ws_test.go`),
+`internal/plugins/calendar/worldstate.go` (`WorldStateChangePayload`,
+`BuildWorldStateChangePayloads`), `worldstate_service.go`
+(`publishWorldStateChange`), `worldstate_wire_test.go`,
+`internal/plugins/syncapi/{calendar_api_handler,routes}.go` +
+`calendar_worldstate_handler_test.go`, `internal/websocket/hub.go:159-167`
+(the audience gate this relies on), Chronicle-Foundry-Module PR #82
+(the trace), cordinator `dispatches/chronicle/C-CAL-WORLDSTATE-WIRE.md`.
 ## ADR-046: Calendar events get first-class RSVPs, distinct from session attendance
 
 **Status.** Accepted (2026-07-25). Supersedes the in-code ruling at

@@ -169,6 +169,10 @@ func RegisterAPIRoutes(e *echo.Echo, api *APIHandler, calAPI *CalendarAPIHandler
 	calGroup.GET("/calendar/event-categories", calAPI.GetEventCategories, RequirePermission(PermRead))
 	calGroup.GET("/calendar/structure", calAPI.GetStructure, RequirePermission(PermRead))
 	calGroup.GET("/calendar/weather", calAPI.GetWeather, RequirePermission(PermRead))
+	// World-state seed (C-CAL-WORLDSTATE-WIRE): the Bearer-group mirror of the
+	// web route's GET /calendar/world-state. Same seed, same dm_only gating —
+	// the role resolved from the key is what filters celestial events.
+	calGroup.GET("/calendar/world-state", calAPI.GetWorldState, RequirePermission(PermRead))
 	calGroup.GET("/calendar/cycles", calAPI.GetCycles, RequirePermission(PermRead))
 	calGroup.GET("/calendar/festivals", calAPI.GetFestivals, RequirePermission(PermRead))
 	calGroup.GET("/calendar/events", calAPI.ListEvents, RequirePermission(PermRead))

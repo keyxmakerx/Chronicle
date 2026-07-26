@@ -142,12 +142,29 @@ type WorldStateWeather struct {
 
 // WorldStateEvent mirrors one celestial event in the showcase events[]
 // array. Field names (start_time/duration) match what celestialFor() emits
-// so the Phase-2 renderer wires straight through.
+// so the Phase-2 renderer wires straight through — start_time is the start
+// HOUR and duration is a count of HOURS (the calendar_celestial_events
+// start_hour / duration_hours columns).
+//
+// ID and Visibility were added by C-CAL-WORLDSTATE-WIRE (2026-07-26) so the
+// SAME shape can serve both the GET seed and the calendar.worldstate.changed
+// broadcast. ID is the stable calendar_celestial_events primary key, which is
+// what lets a WS consumer dedupe a re-broadcast or a reconnect replay instead
+// of creating a duplicate note per delivery (the Foundry module abstained from
+// celestial notes for exactly this reason — FM PR #82 abstention 2).
+// Visibility is the row's everyone/dm_only value; players never receive a
+// dm_only row at all (celestialSeeds drops it), so for a Player this field is
+// always "everyone" and discloses nothing.
 type WorldStateEvent struct {
-	Type      string `json:"type"`
-	Name      string `json:"name"`
-	StartTime int    `json:"start_time"`
-	Duration  int    `json:"duration"`
+	ID   int    `json:"id"`
+	Type string `json:"type"`
+	Name string `json:"name"`
+	// StartTime is the start hour within the day (calendar_celestial_events
+	// .start_hour). Named start_time on the wire for showcase parity.
+	StartTime int `json:"start_time"`
+	// Duration is the event's length in hours (.duration_hours).
+	Duration   int    `json:"duration"`
+	Visibility string `json:"visibility"`
 }
 
 // WorldStateMoodTint is the player mood overlay. Color is null when no mood
@@ -163,6 +180,113 @@ type WorldStateMoodTint struct {
 type WorldStateTimeControl struct {
 	Direction int     `json:"direction"`
 	Speed     float64 `json:"speed"`
+}
+
+// --- calendar.worldstate.changed broadcast payload (C-CAL-WORLDSTATE-WIRE) ---
+
+// Audience markers on WorldStateChangePayload. The DM copy is the strict
+// superset; a consumer that receives both for one change should prefer the DM
+// copy and drop the player-safe one (they share date + moodTint, and the DM
+// copy's events[] contains every id the player-safe copy carried).
+const (
+	// WorldStateAudienceEveryone marks the player-safe broadcast — celestial
+	// events filtered to visibility="everyone". Sent with RequiresDM unset,
+	// so the hub delivers it to every subscriber.
+	WorldStateAudienceEveryone = "everyone"
+	// WorldStateAudienceDM marks the DM-only broadcast — the full celestial
+	// set including dm_only rows. Sent with RequiresDM set, so the hub's
+	// audience gate (websocket/hub.go) drops it for non-DM clients.
+	WorldStateAudienceDM = "dm"
+)
+
+// WorldStateChangePayload is the payload of a calendar.worldstate.changed
+// broadcast.
+//
+// Before C-CAL-WORLDSTATE-WIRE this event carried only {date, moodTint} —
+// and never reached a client at all, because the publisher adapter had no
+// case for its name. Both halves are fixed together: a consumer that finally
+// receives the event needs the celestial detail to say anything useful about
+// it ("a meteor shower begins at hour 22"), and a mood tint alone cannot
+// carry that.
+//
+// The added fields are strictly ADDITIVE — `date` and `moodTint` keep their
+// exact prior shape, because the Foundry module's formatWorldstateLine
+// already reads them (Chronicle-Foundry-Module PR #82,
+// scripts/_calendar-subresources.mjs) and shipped against that contract while
+// the event was still a dead letter.
+//
+// Every nested type is reused verbatim from the GET-seed (WorldStateSeed), so
+// a consumer parses ONE celestial/moon/weather shape whether it arrived by
+// push or by a GET /calendar/world-state refetch. Two shapes for one concept
+// is the trap the weather path already fell into (flat WeatherInput on the
+// wire vs nested Weather on the GET) and is worth not repeating.
+type WorldStateChangePayload struct {
+	// Audience is WorldStateAudienceEveryone or WorldStateAudienceDM — see
+	// the constants. Lets a consumer that receives both copies of one change
+	// keep the richer one deterministically.
+	Audience string             `json:"audience"`
+	Date     WorldStateDate     `json:"date"`
+	MoodTint WorldStateMoodTint `json:"moodTint"`
+	// Events are the date's celestial events, each with its stable
+	// calendar_celestial_events id so a consumer can dedupe across
+	// re-broadcasts and reconnect replays. Never nil (emits [], not null).
+	Events []WorldStateEvent `json:"events"`
+	// Moons carries each moon's phase for the date — the same computed shape
+	// the seed emits.
+	Moons []WorldStateMoon `json:"moons"`
+	// Weather is the date's authored weather summary ({type, intensity}),
+	// defaulting to "clear" when nothing is authored. This is the per-DATE
+	// weather from the world-state model, NOT the live calendar_weather row
+	// that calendar.weather.changed carries.
+	Weather WorldStateWeather `json:"weather"`
+}
+
+// BuildWorldStateChangePayloads assembles the one or two broadcast payloads
+// for a world-state change. It is pure so the audience split is testable
+// without a bus or a DB.
+//
+// It always returns a player-safe payload (celestial events filtered to
+// visibility="everyone"). It additionally returns a DM payload — carrying the
+// FULL celestial set — only when at least one dm_only row exists for the
+// date; when none does, the two would be byte-identical and sending both
+// would just double every broadcast.
+//
+// The split is the whole point: the hub gates on Message.RequiresDM at
+// delivery, so the only safe way to ship dm_only celestial detail is in a
+// separate, separately-flagged message. Putting a dm_only meteor in the
+// broadcast every player receives would launder a server-side visibility
+// decision into a client-side one.
+func BuildWorldStateChangePayloads(
+	cal *Calendar,
+	year, month, day int,
+	dayWeather *DayWeather,
+	celestials []CelestialEvent,
+	moonPhases map[int][]MoonPhaseVocab,
+) (playerSafe *WorldStateChangePayload, dmOnly *WorldStateChangePayload) {
+	base := func(audience string, events []WorldStateEvent) *WorldStateChangePayload {
+		return &WorldStateChangePayload{
+			Audience: audience,
+			Date:     WorldStateDate{Year: year, Month: month, Day: day},
+			MoodTint: moodTintSeed(cal),
+			Events:   events,
+			Moons:    moonSeeds(cal, year, month, day, moonPhases),
+			Weather:  weatherSeed(dayWeather),
+		}
+	}
+
+	playerSafe = base(WorldStateAudienceEveryone, celestialSeeds(celestials, permissions.RolePlayer))
+
+	hasDMOnly := false
+	for _, ce := range celestials {
+		if ce.Visibility == storageVisibilityDMOnly {
+			hasDMOnly = true
+			break
+		}
+	}
+	if !hasDMOnly {
+		return playerSafe, nil
+	}
+	return playerSafe, base(WorldStateAudienceDM, celestialSeeds(celestials, permissions.RoleOwner))
 }
 
 // moonShortPhaseNames matches the showcase's procedural fallback labels
@@ -391,10 +515,12 @@ func celestialSeeds(celestials []CelestialEvent, role int) []WorldStateEvent {
 			continue
 		}
 		out = append(out, WorldStateEvent{
-			Type:      ce.Type,
-			Name:      ce.Name,
-			StartTime: ce.StartHour,
-			Duration:  ce.DurationHours,
+			ID:         ce.ID,
+			Type:       ce.Type,
+			Name:       ce.Name,
+			StartTime:  ce.StartHour,
+			Duration:   ce.DurationHours,
+			Visibility: ce.Visibility,
 		})
 	}
 	return out

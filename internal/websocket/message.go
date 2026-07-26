@@ -59,6 +59,15 @@ const (
 	// subscribe at the granularity it needs.
 	MsgCalendarCycleChanged    MessageType = "calendar.cycle.changed"
 	MsgCalendarFestivalChanged MessageType = "calendar.festival.changed"
+	// C-CAL-WORLDSTATE-WIRE (2026-07-26): the world-state and weather-zone
+	// signals had emitters (worldstate_service.go SetWorldState,
+	// service.go SetWeatherZones) but no public MessageType and no case in
+	// calendarEventPublisherAdapter — so both hit its `default: return`
+	// and never reached a client. Meteors, eclipses and zone edits authored
+	// in Chronicle had literally never crossed the wire. Naming them here
+	// is the first half of that fix; the adapter cases are the second.
+	MsgCalendarWorldstateChanged   MessageType = "calendar.worldstate.changed"
+	MsgCalendarWeatherZonesChanged MessageType = "calendar.weather.zones.changed"
 )
 
 // Entity type sync messages.

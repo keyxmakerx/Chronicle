@@ -797,6 +797,13 @@ func (a *calendarEventPublisherAdapter) PublishCalendarEvent(eventType, campaign
 		return
 	}
 	var msgType ws.MessageType
+	// requiresDM marks the message DM-audience-only at the hub. Only the
+	// world-state DM copy sets it today (C-CAL-WORLDSTATE-WIRE): the calendar
+	// service publishes the same public type twice — a player-safe payload
+	// under the plain name and, when the date carries dm_only celestial
+	// events, a full one under the internal ".dm" name. Both translate to the
+	// same ws.MessageType; only the audience flag differs.
+	requiresDM := false
 	switch eventType {
 	case "event.created":
 		msgType = ws.MsgCalendarEventCreated
@@ -820,10 +827,25 @@ func (a *calendarEventPublisherAdapter) PublishCalendarEvent(eventType, campaign
 		msgType = ws.MsgCalendarCycleChanged
 	case "calendar.festival.changed":
 		msgType = ws.MsgCalendarFestivalChanged
+	// C-CAL-WORLDSTATE-WIRE (2026-07-26): both of these had live emitters —
+	// worldstate_service.go's SetWorldState and service.go's SetWeatherZones —
+	// but no case here, so every one of them fell into `default: return`.
+	// They were publisher-side dead letters: the GM's meteors, eclipses and
+	// weather-zone edits had never once reached a WebSocket client. The
+	// regression pin is TestCalendarPublisherAdapter_* in routes_calendar_ws_test.go.
+	case calendar.EventWorldStateChanged:
+		msgType = ws.MsgCalendarWorldstateChanged
+	case calendar.EventWorldStateChangedDM:
+		msgType = ws.MsgCalendarWorldstateChanged
+		requiresDM = true
+	case "calendar.weather.zones.changed":
+		msgType = ws.MsgCalendarWeatherZonesChanged
 	default:
 		return
 	}
-	a.bus.Publish(ws.NewMessage(msgType, campaignID, resourceID, payload))
+	msg := ws.NewMessage(msgType, campaignID, resourceID, payload)
+	msg.RequiresDM = requiresDM
+	a.bus.Publish(msg)
 }
 
 // entityEventPublisherAdapter bridges the websocket.EventBus to the
