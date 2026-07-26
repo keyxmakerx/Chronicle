@@ -170,6 +170,7 @@ rulings live in `dispatches/chronicle/C-CALV4-WAVE1-COMMON.md` §6.
 
 | Slice | What | Status |
 |---|---|---|
+| C-CALV4-FOUNDATION-P0 | Phase A — the data contract + the guard rails: the pinned `BlockData` + its reflection shape pin, the three never-defined `--motion-*` tokens, guards B1–B4 and the dormant motion-discipline guard wired into CI, the vacuous templ-drift guard deleted, `make verify`, `calendar_v2/.ai.md`. Detail under its own dated heading above | ✅ PR #569 |
 | C-CALV4-SPINE-P2 | Server spine: leap-aware geometry, one-pass per-viewer projection, batched eager loader, narrow interfaces, the wave's only `app/routes.go` touch | ✅ this branch |
 
 **Two cross-slice facts a later slice must not re-derive:**

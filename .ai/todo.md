@@ -201,6 +201,13 @@ C-CALV4-SPINE-P2 only, and `calendar_v2.templ` / `calendar_v2_helpers.go` /
   cleanable: `calendar.templ:57,73,88`, `app_dashboard.templ:131`,
   `timeline.templ:143`, `campaigns/settings.templ:219,978`. Not this wave —
   `calendar.templ` is calendar-plugin surface another slice may touch.
+- [ ] **If the coordinator amends `BlockData`'s identity types to strings** (see
+  C-CALV4-SPINE-P2's first item below — `CalendarID` / `Mark.EventID` /
+  `ViewerContext.UserID` / `ViewerContext.HostEntity` are `int64` in the pin but
+  `VARCHAR(36)` UUIDs in Chronicle), `internal/widgets/calendar_block/data_test.go`
+  pins those four as `reflect.Int64` and will fail loudly on the amendment. That
+  is the pin working, not a bug: refresh it in the same PR as the amendment.
+
 ### calendar-v4 widgetization remodel — follow-ups booked by C-CALV4-SPINE-P2 (2026-07-26)
 
 Wave plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`. These are the
