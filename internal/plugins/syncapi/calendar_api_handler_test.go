@@ -29,6 +29,9 @@ type stubCalendarSvc struct {
 	// C-REAL-CALENDAR-P3 0b: capture the forwarded settings input + drive the
 	// endpoint's error surface for the mode-walk vector test.
 	onUpdate func(context.Context, string, calendar.UpdateCalendarInput) error
+	// C-CAL-WORLDSTATE-WIRE: capture the role the world-state endpoint
+	// forwards into the seed builder (that role IS the dm_only gate).
+	onWorldState func(ctx context.Context, calID string, year, month, day, role int, userID string) (*calendar.WorldStateSeed, error)
 }
 
 // --- methods we actually use in tests ---
@@ -220,7 +223,10 @@ func (s *stubCalendarSvc) CreateEntityFromEvent(context.Context, calendar.Entity
 
 // C-CAL-WORLDSTATE-SERVER-MODEL added these to CalendarService; syncapi
 // doesn't use them. Zero-value returns are fine for these tests.
-func (s *stubCalendarSvc) BuildWorldStateSeed(context.Context, string, int, int, int, int, string) (*calendar.WorldStateSeed, error) {
+func (s *stubCalendarSvc) BuildWorldStateSeed(ctx context.Context, calID string, year, month, day, role int, userID string) (*calendar.WorldStateSeed, error) {
+	if s.onWorldState != nil {
+		return s.onWorldState(ctx, calID, year, month, day, role, userID)
+	}
 	return nil, nil
 }
 func (s *stubCalendarSvc) SetWorldState(context.Context, string, calendar.WorldStateUpdateInput) error {

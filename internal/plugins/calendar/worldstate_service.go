@@ -8,6 +8,7 @@ package calendar
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
@@ -52,9 +53,14 @@ func (s *calendarService) BuildWorldStateSeed(ctx context.Context, calendarID st
 // seam for Phase-3 co-GM) lives at the route layer; this method assumes the
 // caller is authorized.
 //
-// The WS payload is deliberately minimal (date + mood, no celestial events)
-// so a player WS subscriber never receives GM-only events through the change
-// signal — clients re-GET the seed with their own role to refresh.
+// C-CAL-WORLDSTATE-WIRE (2026-07-26) supersedes the previous "the payload is
+// deliberately minimal (date + mood), clients re-GET the seed" rule. That rule
+// was safe but useless in practice: the event never reached a client at all
+// (no adapter case → publisher-side dead letter), and a consumer that only
+// learns "something changed" cannot announce the meteor shower the GM just
+// triggered without a second round trip it has no reason to make. The payload
+// now carries celestial detail — SPLIT BY AUDIENCE, so the original privacy
+// property survives: see publishWorldStateChange.
 func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, input WorldStateUpdateInput) error {
 	cal, err := s.repo.GetByID(ctx, calendarID)
 	if err != nil {
@@ -262,15 +268,81 @@ func (s *calendarService) SetWorldState(ctx context.Context, calendarID string, 
 	if err == nil && updated != nil {
 		cal = updated
 	}
-	s.events.PublishCalendarEvent("calendar.worldstate.changed", cal.CampaignID, calendarID, map[string]any{
-		"date": map[string]int{
-			"year":  cal.CurrentYear,
-			"month": cal.CurrentMonth,
-			"day":   cal.CurrentDay,
-		},
-		"moodTint": moodTintSeed(cal),
-	})
+	s.publishWorldStateChange(ctx, cal)
 	return nil
+}
+
+// EventWorldStateChangedDM is the INTERNAL publisher event name for the
+// DM-audience copy of calendar.worldstate.changed. It maps to the same public
+// ws.MessageType as EventWorldStateChanged, but the adapter sets RequiresDM on
+// it so the hub drops it for non-DM clients.
+//
+// Why a second event NAME rather than an audience argument: the
+// CalendarEventPublisher interface is implemented by the app-level adapter,
+// the no-op publisher, the syncapi stub and several hand-written test mocks.
+// Widening its signature to carry an audience flag would touch every one of
+// them for a single caller — the same interface-churn trade-off C-CAL-RSVP-P1
+// made when it declined to widen CalendarService. The name never crosses the
+// wire; the adapter translates it.
+const (
+	EventWorldStateChanged   = "calendar.worldstate.changed"
+	EventWorldStateChangedDM = "calendar.worldstate.changed.dm"
+)
+
+// publishWorldStateChange assembles and fans out the world-state broadcast for
+// the calendar's CURRENT date.
+//
+// Two messages, not one, when the date carries dm_only celestial events: the
+// hub gates delivery on Message.RequiresDM, which is a per-message flag, so a
+// single message cannot be "rich for the GM and redacted for the table". The
+// player-safe copy always goes out; the DM copy goes out only when there is
+// something dm_only to carry.
+//
+// Enrichment is best-effort by design. A failed celestial/moon/weather load
+// degrades to the minimal {date, moodTint} broadcast rather than swallowing
+// the change signal — the write already succeeded and callers re-GET the seed
+// on receipt, so a silent drop here would be strictly worse than a thin
+// payload. (Being a silent drop is what this dispatch exists to fix.)
+func (s *calendarService) publishWorldStateChange(ctx context.Context, cal *Calendar) {
+	if cal == nil || s.events == nil {
+		return
+	}
+	// The caller's calendar came off the bare repo read, so Moons/Seasons are
+	// empty — moonSeeds would emit []. Re-read through the eager-loading
+	// accessor (which also applies the real-time clock, so a real-time
+	// calendar broadcasts the date it actually shows). Falling back to the
+	// caller's copy keeps the broadcast alive if that read fails.
+	if hydrated, herr := s.GetCalendarByID(ctx, cal.ID); herr == nil && hydrated != nil {
+		cal = hydrated
+	}
+	year, month, day := cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay
+
+	dayWeather, werr := s.repo.GetDayWeather(ctx, cal.ID, year, month, day)
+	celestials, cerr := s.repo.GetCelestialEvents(ctx, cal.ID, year, month, day)
+	moonPhases, merr := s.repo.GetMoonPhasesForCalendar(ctx, cal.ID)
+	if werr != nil || cerr != nil || merr != nil {
+		slog.Warn("calendar: world-state broadcast falling back to minimal payload",
+			slog.String("calendar_id", cal.ID),
+			slog.Any("day_weather_err", werr),
+			slog.Any("celestial_err", cerr),
+			slog.Any("moon_phase_err", merr),
+		)
+		s.events.PublishCalendarEvent(EventWorldStateChanged, cal.CampaignID, cal.ID, &WorldStateChangePayload{
+			Audience: WorldStateAudienceEveryone,
+			Date:     WorldStateDate{Year: year, Month: month, Day: day},
+			MoodTint: moodTintSeed(cal),
+			Events:   []WorldStateEvent{},
+			Moons:    []WorldStateMoon{},
+			Weather:  weatherSeed(nil),
+		})
+		return
+	}
+
+	playerSafe, dmCopy := BuildWorldStateChangePayloads(cal, year, month, day, dayWeather, celestials, moonPhases)
+	s.events.PublishCalendarEvent(EventWorldStateChanged, cal.CampaignID, cal.ID, playerSafe)
+	if dmCopy != nil {
+		s.events.PublishCalendarEvent(EventWorldStateChangedDM, cal.CampaignID, cal.ID, dmCopy)
+	}
 }
 
 // advanceClock moves the calendar's current date/time by a signed
