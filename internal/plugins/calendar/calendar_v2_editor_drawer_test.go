@@ -108,11 +108,24 @@ func TestEditorDrawer_GapsDisabledAndFlagged(t *testing.T) {
 	if !strings.Contains(html, "coming with location storage") {
 		t.Error("location field must render disabled with the coming-soon flag")
 	}
-	// RSVP — no per-event storage; disabled + flagged.
-	if !strings.Contains(html, "Collect RSVPs") || !strings.Contains(html, "coming soon") {
-		t.Error("Collect RSVPs must render disabled with the coming-soon flag")
+	// RSVP is NO LONGER a gap (C-CAL-RSVP-P1 / ADR-046): calendar events have
+	// their own first-class RSVP storage now, so the control is live rather than
+	// flagged. It still renders disabled in CREATE mode — there is nothing to
+	// collect against until the event has an id — which is what the hint pins.
+	if !strings.Contains(html, "Collect RSVPs") {
+		t.Error("Collect RSVPs control must still render in the drawer")
 	}
-	// Every gap control must actually carry the disabled attribute.
+	if strings.Contains(html, "Ships with the sessions RSVP link") {
+		t.Error("the superseded sessions-link RSVP flag must be gone (ADR-046)")
+	}
+	if !strings.Contains(html, "data-rsvp-collect-toggle") {
+		t.Error("Collect RSVPs must render the live toggle hook")
+	}
+	if !strings.Contains(html, "Save the event first") {
+		t.Error("create-mode drawer must explain why the RSVP toggle starts disabled")
+	}
+	// Every gap control must actually carry the disabled attribute (sky-pin,
+	// location, and the create-mode RSVP toggle).
 	if strings.Count(html, "disabled") < 3 {
 		t.Errorf("expected the 3 gap controls disabled; got %d 'disabled' tokens", strings.Count(html, "disabled"))
 	}

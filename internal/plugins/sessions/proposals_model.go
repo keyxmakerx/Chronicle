@@ -21,11 +21,19 @@ const (
 	ResponseMaybe = "maybe"
 )
 
-// Scheduler notification types (the only writers this slice).
+// Notification types. The scheduler was the only writer through C-SCHED-P3;
+// C-CAL-RSVP-P1 adds the first EXTERNAL one, which is what the store was always
+// documented to allow (T-B2, notifications_repository.go:10-13 — "the store
+// itself is generic ... but no other feature subscribes yet").
 const (
 	NotifProposalCreated   = "proposal_created"
 	NotifProposalResponse  = "proposal_response"
 	NotifProposalConfirmed = "proposal_confirmed" // C-SCHED-P3: winner picked → session created.
+	// NotifCalendarRSVP marks a calendar-event RSVP notification. The stored
+	// VALUE deliberately avoids spelling the owning plugin's slug: a quoted
+	// plugin-name literal outside that plugin's own directory fails the
+	// plugin-isolation guard (T-B2 / M-B2.1), and this file lives in sessions.
+	NotifCalendarRSVP = "event_rsvp"
 )
 
 // maxProposalOptions caps a proposal at 5 candidate slots (design: 1..5).

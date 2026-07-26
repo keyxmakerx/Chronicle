@@ -195,6 +195,51 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.GET("/calendar/v2/:calId/settings/:resource", h.ShowV2SubresourceSettings, campaigns.RequireRole(campaigns.RolePlayer))
 }
 
+// RegisterRSVPRoutes mounts the event-RSVP surface (C-CAL-RSVP-P1).
+//
+// Kept as its OWN registration function rather than extra parameters on
+// RegisterRoutes: the RSVP handler is a separate type with its own cross-plugin
+// seams, and widening RegisterRoutes' signature would churn every existing
+// caller and route test for no behavioural gain. The authenticated group is
+// constructed with the IDENTICAL middleware stack as `cg` above — auth,
+// campaign access, and the calendar addon guard — so these routes are gated
+// exactly like every other calendar endpoint.
+//
+// Wire-contract note: adding routes updates internal/wire/routes_snapshot.txt
+// (TestWireContractConformance), regenerated in the same commit.
+func RegisterRSVPRoutes(e *echo.Echo, h *RSVPHandler, campaignSvc campaigns.CampaignService, authSvc auth.AuthService, addonSvc addons.AddonService) {
+	cg := e.Group("/campaigns/:id",
+		auth.RequireAuth(authSvc),
+		campaigns.RequireCampaignAccess(campaignSvc),
+		addons.RequireAddon(addonSvc, "calendar"),
+	)
+
+	// Answering is Player+ — every member who can SEE the event may respond, and
+	// the handler writes only the caller's own row (user id from the session,
+	// never the body). Reading is Player+ too, but the per-person breakdown
+	// inside the payload is Owner/co-DM-gated in the handler: members see the
+	// counts, the Director sees who.
+	cg.POST("/calendars/:calId/events/:eid/rsvp", h.SetEventRSVPAPI, campaigns.RequireRole(campaigns.RolePlayer))
+	cg.GET("/calendars/:calId/events/:eid/rsvps", h.GetEventRSVPsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
+	// The "Collect RSVPs" opt-in is Scribe+ — the same gate as editing the event
+	// it lives on. Enabling is the invite moment (email + bell fan-out), so it
+	// must not be reachable by the people being invited.
+	cg.PUT("/calendars/:calId/events/:eid/rsvp-collection", h.SetRSVPCollectionAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
+	// Public single-use token flow, mounted at the ROOT and deliberately
+	// distinct from the sessions plugin's /rsvp/:token. Registered directly on
+	// the Echo instance (not `cg`, not `pub`) because an emailed link carries no
+	// campaign in its path and its recipient may be logged out — exactly how
+	// sessions mounts its own token routes (sessions/routes.go:75-76). The token
+	// is the sole credential; the handler re-checks membership AND event
+	// visibility at redemption, fail-closed. GET is a pure read (confirm
+	// interstitial / suggestion form); POST applies. Both ride the global CSRF
+	// middleware, so the GET mints the cookie the POST double-submits.
+	e.GET("/calendar-rsvp/:token", h.RedeemEventRSVPToken)
+	e.POST("/calendar-rsvp/:token", h.ApplyEventRSVPToken)
+}
+
 // legacyRedirect 301s the bare /campaigns/:id/calendar to V2 (C-CAL-V1-V2-
 // CUTOVER — was → V1 /calendars). V2 resolves the active calendar (or shows the
 // empty-state setup link). Preserves bookmarks + external links.

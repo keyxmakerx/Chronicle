@@ -55,6 +55,34 @@ templ eventQuickEditV2(data CalendarV2ViewData) {
 				<p class="text-sm text-fg-secondary whitespace-pre-line max-h-28 overflow-y-auto" data-qe-desc-ro></p>
 			}
 		</div>
+		// RSVP block (C-CAL-RSVP-P1). THIS is the answer surface for every role:
+		// the full editor drawer is Scribe+ and Players never receive its DOM, so
+		// putting the buttons only there would ship RSVP to everyone except the
+		// people being asked. The quick-edit card is opened by the SAME
+		// [data-event-card] wiring used by month chips, ledger rows, and mobile
+		// agenda cards, so one block covers all three surfaces the dispatch names.
+		//
+		// Hidden until the opened event actually collects RSVPs (event_grid.js
+		// unhides it from the event's collect_rsvps flag).
+		<div class="hidden px-3 pb-1 pt-2 border-t border-edge/60" data-qe-rsvp>
+			<div class="flex items-center gap-1.5 flex-wrap">
+				<span class="text-[10.5px] text-fg-secondary mr-0.5">Going?</span>
+				<button type="button" class="btn-secondary text-[11px] px-2 py-1" data-qe-rsvp-btn="yes" aria-pressed="false">Yes</button>
+				<button type="button" class="btn-secondary text-[11px] px-2 py-1" data-qe-rsvp-btn="maybe" aria-pressed="false">Maybe</button>
+				<button type="button" class="btn-secondary text-[11px] px-2 py-1" data-qe-rsvp-btn="no" aria-pressed="false">No</button>
+			</div>
+			<div class="flex items-center gap-2 mt-1.5">
+				<button type="button" class="text-[10.5px] text-accent underline" data-qe-rsvp-outweek>
+					Out this week
+				</button>
+				<button type="button" class="text-[10.5px] text-accent underline" data-qe-rsvp-suggest>
+					Suggest another time
+				</button>
+			</div>
+			// Counts are visible to every member (aggregate only); the per-person
+			// list stays server-gated to Owner/co-DM and renders in the drawer.
+			<div class="mt-1.5 text-[10.5px] text-fg-muted" data-qe-rsvp-counts aria-live="polite"></div>
+		</div>
 		<div class="flex items-center gap-2 px-3 py-3">
 			if data.IsScribe {
 				<button type="button" class="btn-primary text-xs" data-qe-save>Save</button>
