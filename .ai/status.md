@@ -136,6 +136,7 @@ Wave 1. Source-of-record for scope + operator priorities is the cordinator plan;
 | C-CAL-ENTITY-TIES-LEAK-FIX | Entity-visibility leak on event/era tie lists | ✅ shipped PR #565 |
 | C-CAL-RSVP-P1 | First-class RSVPs on calendar events + SMTP action emails (operator's #1 priority) — ADR-046, calendar migration 013 | ✅ this branch |
 | C-CAL-RSVP-P2 | Players give TEMPORARY availability from the RSVP flow — "suggest another time" becomes structured windows that land in the scheduler overlay. No new tables/routes. ADR-046 amendment | ✅ this branch |
+| C-CAL-MOBILE-VIEWS-FIX | Phone Month\|Agenda toggle: the Agenda pill was a dead control (linked to the URL it was already on). Step 0 **disproved** the "mobile layout never swaps" half — a 390px browser probe shows the swap always worked; the reported "7-column grid" is the shipped mini-month. Absorbs **C-ASSET-VERSIONING** (see below) | ✅ this branch |
 
 **Operator gate still open:** RSVP *emails* need SMTP configured (Admin → `/admin/smtp` →
 "Send test email"). In-app RSVP works without it — every mail seam is nil-safe.
@@ -144,6 +145,35 @@ Wave 1. Source-of-record for scope + operator priorities is the cordinator plan;
 notifications store was always documented as generic (T-B2); C-CAL-RSVP-P1 is its first
 writer outside the scheduler. Future features should use `NotifyUsers` with their own type
 constant rather than adding a bespoke `NotifyX` per feature.
+
+#### Static asset versioning (C-ASSET-VERSIONING, shipped inside C-CAL-MOBILE-VIEWS-FIX, 2026-07-26)
+
+Every template-emitted static URL now carries a cache-busting `?v=<digest>`.
+**This is a cross-cutting convention, not a calendar detail** — a new template
+that writes `src="/static/…"` by hand fails a contract test.
+
+- **`layouts.AssetURL(path)`** (`internal/templates/layouts/assets.go`) is the
+  single helper. It appends the first 10 hex of the asset's SHA-256 when the
+  file resolves (on-disk `static/` root, or a plugin embed FS registered via
+  `layouts.RegisterAssetFS` — wired in `app.mountPluginStatic`), and falls back
+  to a per-BUILD token (executable size+mtime) when it can't. Non-`/static/`
+  URLs and URLs already carrying `?`/`#` are returned untouched. Digests are
+  memoized per path for the process lifetime.
+- **`middleware.StaticCache(prefix)`** (registered globally in `app.New`) turns
+  those tokens into policy: `immutable, max-age=1y` when `?v=` is present,
+  `max-age=0, must-revalidate` otherwise. The second arm is the safety net — an
+  unconverted asset degrades to "always revalidated", never to "silently stale".
+  Echo's `e.Static` sets NO Cache-Control at all, so before this browsers
+  applied heuristic freshness and could hold build-old assets for hours.
+- **Why now:** C-CAL-MOBILE-VIEWS-FIX Step 0 reproduced a live consequence.
+  `md:contents` was a NEW Tailwind utility in C-CAL-MOBILE-AGENDA; rendering
+  post-deploy HTML against a pre-deploy `app.css` drops the Week/Day/Timeline
+  pills from the **desktop** calendar entirely, with every DOM test green. That
+  is the "calendar looks old after deploy" class, demonstrated rather than
+  assumed.
+- **Guard:** `TestTemplatesUseAssetURL` walks every `.templ` in the repo and
+  fails on a bare `src="/static/`/`href="/static/`. All 101 existing call sites
+  across 17 templates were converted.
 
 #### Closed arc: NW-2.2 plugin-isolation refactor
 

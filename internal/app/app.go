@@ -25,6 +25,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/templates/pages"
 )
 
@@ -106,6 +107,15 @@ func New(cfg *config.Config, db *sql.DB, rdb *redis.Client, pluginHealth *databa
 	e.HTTPErrorHandler = app.errorHandler
 
 	// Serve static files (CSS, JS, vendor libs, fonts, images).
+	//
+	// C-ASSET-VERSIONING: StaticCache turns the `?v=<digest>` tokens that
+	// layouts.AssetURL stamps onto every template-emitted asset URL into a real
+	// caching policy — immutable for versioned requests, forced revalidation for
+	// bare ones. Registered as global middleware (rather than on a /static
+	// group) so it covers BOTH this on-disk mount and every plugin embed mount
+	// registered later in mountPluginStatic; the middleware itself is a no-op
+	// for non-/static paths.
+	e.Use(middleware.StaticCache(layouts.StaticURLPrefix))
 	e.Static("/static", "static")
 
 	return app

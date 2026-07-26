@@ -18,7 +18,7 @@ import (
 // per-plugin enhancement script and wraps the content fragment in the App shell.
 templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
 	@layouts.App("Characters - " + cc.Campaign.Name) {
-		<script src="/static/plugins/entities/js/characters.js" defer></script>
+		<script src={ layouts.AssetURL("/static/plugins/entities/js/characters.js") } defer></script>
 		<div class="max-w-7xl mx-auto px-4 py-6" id="characters-root">
 			@CharactersContent(cc, view)
 		</div>

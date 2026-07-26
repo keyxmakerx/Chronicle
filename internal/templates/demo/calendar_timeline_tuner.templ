@@ -40,9 +40,9 @@ import (
 // CSS + JS — no shared design assets — per the page-separation directive.
 templ DemoTimelineTuner() {
 	@layouts.App("Chronicle timeline — FM Tuner") {
-		<link rel="stylesheet" href="/static/css/cal-timeline-tuner.css"/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-timeline-tuner.css") }/>
 		@calTunerPage(CalTimelineTunerMock())
-		<script src="/static/js/cal-timeline-tuner.js" defer></script>
+		<script src={ layouts.AssetURL("/static/js/cal-timeline-tuner.js") } defer></script>
 	}
 }
 

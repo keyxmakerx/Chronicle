@@ -43,7 +43,7 @@ templ SubresourceSettingsPage(cc *campaigns.CampaignContext, data SubresourceVie
 			</div>
 		</div>
 		@subresourceDrawer(data)
-		<script src="/static/plugins/calendar/js/subresource_grid.js" defer></script>
+		<script src={ layouts.AssetURL("/static/plugins/calendar/js/subresource_grid.js") } defer></script>
 	}
 }
 

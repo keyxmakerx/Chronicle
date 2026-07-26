@@ -15,7 +15,11 @@
 
 package app
 
-import "io/fs"
+import (
+	"io/fs"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // PluginRegistration is the per-plugin entry in the App's registry.
 // Each plugin contributes exactly one entry, populated inline from
@@ -87,6 +91,11 @@ func (a *App) mountPluginStatic() {
 			continue
 		}
 		prefix := "/static/plugins/" + p.Slug
+		// C-ASSET-VERSIONING: register the embed FS with the asset-URL helper so
+		// layouts.AssetURL can content-hash plugin assets exactly like on-disk
+		// ones. Without this they'd still bust on deploy (via the per-build
+		// token fallback) but every deploy would invalidate all of them.
+		layouts.RegisterAssetFS(prefix+"/", p.StaticFS)
 		a.Echo.StaticFS(prefix, p.StaticFS)
 	}
 }

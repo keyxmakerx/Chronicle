@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // entityCalendarBlockView renders the embed. No calendar → empty-but-present;
@@ -63,11 +64,11 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, data CalendarV2V
 			<div class="relative w-full overflow-hidden border-b border-edge" style="height:150px">
 				@worldStateSkyBandV2(data)
 			</div>
-			<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
-			<script src="/static/js/cal-almanac.js" defer></script>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-almanac-render.css") }/>
+			<script src={ layouts.AssetURL("/static/js/cal-almanac.js") } defer></script>
 			// W5d: adaptive calendar widget — gains a mini month-grid when the
 			// embed has room (container-query driven), compact otherwise.
-			<link rel="stylesheet" href="/static/css/calendar-adaptive.css"/>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-adaptive.css") }/>
 			<div class="p-3 border-b border-edge">
 				@adaptiveCalendarWidget(adaptiveCalData{CampaignID: campaignID, Cal: cal, GridView: embedGridView(cal)})
 			</div>

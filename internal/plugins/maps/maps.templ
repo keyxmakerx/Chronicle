@@ -226,11 +226,11 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 	<!-- Leaflet CSS + JS (vendored locally for CSP compliance).
 	     Browsers dedupe link/script by URL, so two MapEditorBody mounts
 	     on different pages don't double-load. -->
-	<link rel="stylesheet" href="/static/vendor/leaflet.css"/>
-	<script src="/static/vendor/leaflet.js"></script>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/vendor/leaflet.css") }/>
+	<script src={ layouts.AssetURL("/static/vendor/leaflet.js") }></script>
 	<!-- MarkerCluster plugin for auto-grouping dense markers at low zoom -->
-	<link rel="stylesheet" href="/static/vendor/MarkerCluster.css"/>
-	<script src="/static/vendor/leaflet.markercluster.js"></script>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/vendor/MarkerCluster.css") }/>
+	<script src={ layouts.AssetURL("/static/vendor/leaflet.markercluster.js") }></script>
 
 	<!-- Inline toolbar: search + (Scribe+) place marker + (Scribe+) settings.
 	     Scoped to the editor body itself rather than the page header so the
@@ -823,7 +823,7 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 	</script>
 
 	if data.IsScribe {
-		<script src="/static/js/map_drawing_tools.js"></script>
+		<script src={ layouts.AssetURL("/static/js/map_drawing_tools.js") }></script>
 	}
 
 	<!-- Minimal CSS for Leaflet marker icons -->

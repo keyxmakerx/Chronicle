@@ -19,7 +19,11 @@
 
 package calendar
 
-import "github.com/keyxmakerx/chronicle/internal/widgets/skybox"
+import (
+	"github.com/keyxmakerx/chronicle/internal/widgets/skybox"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // worldStateBandV2 is the SKY-ONLY band composition (C-CAL-V2-WORLDSTATE-BAND-
 // FINISHING Part C — the hourglass is the compact "shelf" variant). Renders
@@ -63,16 +67,16 @@ templ worldStateBandVariantV2(data CalendarV2ViewData, withHourglass bool) {
 		// is the render-vs-chrome split (C-CAL-WORLDSTATE-GM-OVERHAUL): every
 		// rule the widget needs ships here, unscoped; demo-only chrome stays in
 		// cal-almanac.css, which production no longer loads.
-		<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-almanac-render.css") }/>
 		// worldstate_provider.js + skybox.js: worldStateSkyBandV2 above now
 		// mounts data-widget="skybox" (C-SKYBOX-WIDGET). The seed is already
 		// embedded on #cal-v2-worldstate, so the provider adopts it (zero
 		// fetch) — this is purely additive, the engine boot below is
 		// unchanged. Order matters: boot.js (loaded in <head>) must run
 		// first, which it always does (defer + document order).
-		<script src="/static/js/widgets/worldstate_provider.js" defer></script>
-		<script src="/static/js/widgets/skybox.js" defer></script>
-		<script src="/static/js/cal-almanac.js" defer></script>
+		<script src={ layouts.AssetURL("/static/js/widgets/worldstate_provider.js") } defer></script>
+		<script src={ layouts.AssetURL("/static/js/widgets/skybox.js") } defer></script>
+		<script src={ layouts.AssetURL("/static/js/cal-almanac.js") } defer></script>
 	}
 }
 

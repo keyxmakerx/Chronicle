@@ -15,7 +15,7 @@ templ Base(title string) {
 		<title>{ title } | Chronicle</title>
 
 		<!-- Favicon -->
-		<link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg"/>
+		<link rel="icon" type="image/svg+xml" href={ AssetURL("/static/img/favicon.svg") }/>
 
 		<!-- Theme: apply dark class + inline background-color before first paint to prevent flash -->
 		<script>
@@ -26,7 +26,7 @@ templ Base(title string) {
 		<style>[x-cloak]{display:none!important}body{opacity:0}</style>
 
 		<!-- Tailwind CSS (generated) -->
-		<link rel="stylesheet" href="/static/css/app.css"/>
+		<link rel="stylesheet" href={ AssetURL("/static/css/app.css") }/>
 
 		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -56,110 +56,110 @@ templ Base(title string) {
 		@ReauthModal()
 
 		<!-- Theme toggle (before other scripts so icons update early) -->
-		<script src="/static/js/theme.js" defer></script>
+		<script src={ AssetURL("/static/js/theme.js") } defer></script>
 
 		<!-- Vendored libraries -->
-		<script src="/static/vendor/htmx.min.js" defer></script>
+		<script src={ AssetURL("/static/vendor/htmx.min.js") } defer></script>
 
 		<!-- Toast notification system (must load before Alpine) -->
-		<script src="/static/js/notifications.js" defer></script>
+		<script src={ AssetURL("/static/js/notifications.js") } defer></script>
 
 		<!-- Widget system: boot.js defines Chronicle.apiFetch and auto-mounts
 		     data-widget elements. Must load before Alpine so Chronicle utilities
 		     are available when Alpine processes x-data expressions. -->
-		<script src="/static/js/boot.js" defer></script>
+		<script src={ AssetURL("/static/js/boot.js") } defer></script>
 
 		<!-- Dynamic-surface motion engine: the frame's transition-preset library
 		     (Chronicle.surface.play / .transitions). Loads after boot.js so the
 		     Chronicle namespace exists. -->
-		<script src="/static/js/widgets/dynamic_surface.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/dynamic_surface.js") } defer></script>
 
 		<!-- Generic character-sheet box renderers for the `character_surface`
 		     layout block. Loads after the frame so its box renderers are
 		     registered before boot.js auto-mounts the dynamic-surface widget. -->
-		<script src="/static/js/widgets/character_surface.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/character_surface.js") } defer></script>
 
 		<!-- Alpine.js: loaded AFTER boot.js so Chronicle.apiFetch/notify exist
 		     when Alpine initializes and evaluates x-data attributes. -->
-		<script src="/static/vendor/alpine-collapse.min.js" defer></script>
-		<script src="/static/vendor/alpine.min.js" defer></script>
+		<script src={ AssetURL("/static/vendor/alpine-collapse.min.js") } defer></script>
+		<script src={ AssetURL("/static/vendor/alpine.min.js") } defer></script>
 
 		<!-- Drill-down sidebar navigation (CSS toggling + HTMX triggers) -->
-		<script src="/static/js/sidebar_drill.js" defer></script>
+		<script src={ AssetURL("/static/js/sidebar_drill.js") } defer></script>
 		<!-- Sidebar tree: collapsible hierarchy + drag-and-drop reordering -->
-		<script src="/static/js/sidebar_tree.js" defer></script>
+		<script src={ AssetURL("/static/js/sidebar_tree.js") } defer></script>
 		<!-- Unified sidebar edit mode: pencil-triggered inline editing -->
-		<script src="/static/js/sidebar_editor.js" defer></script>
+		<script src={ AssetURL("/static/js/sidebar_editor.js") } defer></script>
 
 		<!-- Recently viewed entities tracker (localStorage-backed sidebar list) -->
-		<script src="/static/js/recent_entities.js" defer></script>
+		<script src={ AssetURL("/static/js/recent_entities.js") } defer></script>
 		<!-- Entity favorites (localStorage-backed sidebar list + star toggle) -->
-		<script src="/static/js/favorites.js" defer></script>
+		<script src={ AssetURL("/static/js/favorites.js") } defer></script>
 
 		<!-- TipTap rich text editor (vendored bundle) -->
-		<script src="/static/vendor/tiptap-bundle.min.js" defer></script>
+		<script src={ AssetURL("/static/vendor/tiptap-bundle.min.js") } defer></script>
 		<!-- @mention extension must load before editor.js so Chronicle.MentionExtension is available -->
-		<script src="/static/js/widgets/editor_mention.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/editor_mention.js") } defer></script>
 		<!-- Inline secrets mark (GM-only text, must load before editor.js) -->
-		<script src="/static/js/widgets/editor_secret.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/editor_secret.js") } defer></script>
 		<!-- Auto-link entities (must load before editor.js so Chronicle.autoLinkEntities is available) -->
-		<script src="/static/js/widgets/editor_autolink.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/editor_autolink.js") } defer></script>
 		<!-- Slash command menu (must load before editor.js so Chronicle.SlashCommands is available) -->
-		<script src="/static/js/widgets/editor_slash.js" defer></script>
-		<script src="/static/js/widgets/editor.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/editor_slash.js") } defer></script>
+		<script src={ AssetURL("/static/js/widgets/editor.js") } defer></script>
 
 		<!-- Image upload widget -->
-		<script src="/static/js/widgets/image_upload.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/image_upload.js") } defer></script>
 
 		<!-- Media picker (slideout for choosing existing campaign images) -->
-		<script src="/static/js/widgets/media_picker.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/media_picker.js") } defer></script>
 
 		<!-- Entity type config widget (unified sidebar + layout + color) -->
-		<script src="/static/js/widgets/entity_type_config.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/entity_type_config.js") } defer></script>
 
 		<!-- Template editor widget (drag-and-drop page builder) -->
-		<script src="/static/js/widgets/template_editor.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/template_editor.js") } defer></script>
 
 		<!-- Tag picker widget (entity tag management) -->
-		<script src="/static/js/widgets/tag_picker.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/tag_picker.js") } defer></script>
 
 		<!-- Entity tooltip widget (hover preview popover for entity links) -->
-		<script src="/static/js/widgets/entity_tooltip.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/entity_tooltip.js") } defer></script>
 		<!-- Bulk entity selection and actions -->
-		<script src="/static/js/widgets/bulk_actions.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/bulk_actions.js") } defer></script>
 
 		<!-- AI-Export modal copy-to-clipboard (C-AI-EXPORT-V1 PR-B) -->
-		<script src="/static/js/widgets/ai_export.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/ai_export.js") } defer></script>
 
 		<!-- AI-Workspace Import — drag/drop multi-file markdown importer (V1-D) -->
-		<script src="/static/js/widgets/markdown_importer.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/markdown_importer.js") } defer></script>
 
 		<!-- Relations widget (bi-directional entity linking) -->
-		<script src="/static/js/widgets/relations.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/relations.js") } defer></script>
 
 		<!-- Shop inventory widget (item list with price/quantity/stock) -->
-		<script src="/static/js/widgets/shop_inventory.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/shop_inventory.js") } defer></script>
 
 		<!-- Entity type editor widget (inline edit for entity type management) -->
-		<script src="/static/js/widgets/entity_type_editor.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/entity_type_editor.js") } defer></script>
 
 		<!-- Attributes widget (inline edit for entity custom fields) -->
-		<script src="/static/js/widgets/attributes.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/attributes.js") } defer></script>
 
 		<!-- Notes widget (floating personal notes panel) -->
-		<script src="/static/js/widgets/notes.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/notes.js") } defer></script>
 
 		<!-- Notification bell (C-SCHED-P2): topbar dropdown; badge polled via HTMX. -->
-		<script src="/static/js/widgets/notification_bell.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/notification_bell.js") } defer></script>
 
 		<!-- Journal widget (full-page Obsidian-like note editor) -->
-		<script src="/static/js/widgets/journal.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/journal.js") } defer></script>
 
 		<!-- Entity manager widget (sortable, filterable entity list block) -->
-		<script src="/static/js/widgets/entity_manager.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/entity_manager.js") } defer></script>
 
 		<!-- Tag filtering in sidebar drill panel -->
-		<script src="/static/js/sidebar_tag_filter.js" defer></script>
+		<script src={ AssetURL("/static/js/sidebar_tag_filter.js") } defer></script>
 
 		<!-- Dashboard layouts use the unified layout-editor widget (loaded
 		     further down). dashboard_editor.js was retired in favor of
@@ -168,7 +168,7 @@ templ Base(title string) {
 		     errors, missing config field types).  -->
 
 		<!-- Timeline D3 visualization widget (interactive SVG chart) -->
-		<script src="/static/js/widgets/timeline_viz.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/timeline_viz.js") } defer></script>
 
 		<!-- Plugin-contributed body scripts (injected at startup; calendar widget
 		     is the canonical first entry — avoids hardcoding plugin paths here). -->
@@ -177,60 +177,60 @@ templ Base(title string) {
 		}
 
 		<!-- Timeline widget (interactive timeline preview for dashboard embeds) -->
-		<script src="/static/js/widgets/timeline_widget.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/timeline_widget.js") } defer></script>
 
 		<!-- Map widget (embedded Leaflet map viewer for dashboard embeds) -->
-		<script src="/static/js/widgets/map_widget.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/map_widget.js") } defer></script>
 
 		<!-- Permissions widget (per-entity visibility and access control) -->
-		<script src="/static/js/widgets/permissions.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/permissions.js") } defer></script>
 
 		<!-- Groups management widget (campaign group CRUD) -->
-		<script src="/static/js/widgets/groups.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/groups.js") } defer></script>
 
 		<!-- Relations graph visualization (D3 force-directed) -->
-		<script src="/static/js/widgets/relation_graph.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/relation_graph.js") } defer></script>
 
 		<!-- Database schema explorer (admin D3 visualization) -->
-		<script src="/static/js/widgets/db_explorer.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/db_explorer.js") } defer></script>
 
 		<!-- Entity posts (sub-notes) -->
-		<script src="/static/js/widgets/entity_posts.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/entity_posts.js") } defer></script>
 
 		<!-- Entity notes (per-user player notes with audience ACL — player-notes addon) -->
-		<script src="/static/js/widgets/entity_notes.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/entity_notes.js") } defer></script>
 
 		<!-- Entity map editor (per-entity map assignment + iframe embed) -->
-		<script src="/static/js/widgets/entity_map.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/entity_map.js") } defer></script>
 
 		<!-- Appearance editor widget (campaign visual customization) -->
-		<script src="/static/js/widgets/appearance_editor.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/appearance_editor.js") } defer></script>
 
 		<!-- Unified layout editor widget (replaces dashboard_editor + template_editor) -->
-		<script src="/static/js/widgets/layout_editor.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/layout_editor.js") } defer></script>
 
 		<!-- Layout Studio widget (orchestrates layout-editor contexts) -->
-		<script src="/static/js/widgets/layout_studio.js" defer></script>
+		<script src={ AssetURL("/static/js/widgets/layout_studio.js") } defer></script>
 
 		<!-- Content template picker (entity create form + editor insert) -->
-		<script src="/static/js/template_picker.js" defer></script>
+		<script src={ AssetURL("/static/js/template_picker.js") } defer></script>
 
 		<!-- Quick Capture modal (Ctrl+Shift+N) and Session Journal -->
-		<script src="/static/js/quick_capture.js" defer></script>
+		<script src={ AssetURL("/static/js/quick_capture.js") } defer></script>
 
 		<!-- Quick Search modal (Ctrl+K / Cmd+K) -->
-		<script src="/static/js/search_modal.js" defer></script>
+		<script src={ AssetURL("/static/js/search_modal.js") } defer></script>
 		<!-- Inline topbar search (overrides Chronicle.openSearch when topbar elements exist) -->
-		<script src="/static/js/topbar_search.js" defer></script>
+		<script src={ AssetURL("/static/js/topbar_search.js") } defer></script>
 
 		<!-- Global keyboard shortcuts (Ctrl+N, Ctrl+E, Ctrl+S) -->
-		<script src="/static/js/keyboard_shortcuts.js" defer></script>
+		<script src={ AssetURL("/static/js/keyboard_shortcuts.js") } defer></script>
 
 		<!-- Command palette (Ctrl+Shift+P) -->
-		<script src="/static/js/command_palette.js" defer></script>
+		<script src={ AssetURL("/static/js/command_palette.js") } defer></script>
 
 		<!-- Keyboard shortcuts help overlay (press ?) -->
-		<script src="/static/js/shortcuts_help.js" defer></script>
+		<script src={ AssetURL("/static/js/shortcuts_help.js") } defer></script>
 
 		<!-- Extension widget scripts (injected per-campaign, loaded after boot.js) -->
 		for _, scriptURL := range GetExtWidgetScripts(ctx) {

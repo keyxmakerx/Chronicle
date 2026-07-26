@@ -410,7 +410,7 @@ func TestMobileAgendaCard_LockIconForNonPublic(t *testing.T) {
 }
 
 // TestCalendarV2ViewSwitcher_MobileReduction: phone command bar reduces to
-// Month/Agenda — Week/Day/Timeline hidden at <768px (§4).
+// Month|Agenda — Week/Day/Timeline hidden at <768px (§4).
 func TestCalendarV2ViewSwitcher_MobileReduction(t *testing.T) {
 	cal := mobileAgendaCalendar()
 	data := CalendarV2ViewData{ActiveCalendar: cal, AllCalendars: []Calendar{*cal}, View: "month", CampaignID: "camp-1", Year: 1492, Month: 1, Day: 13}
@@ -422,18 +422,119 @@ func TestCalendarV2ViewSwitcher_MobileReduction(t *testing.T) {
 	if !strings.Contains(html, ">Agenda<") {
 		t.Error("switcher missing the mobile Agenda pill")
 	}
-	if !strings.Contains(html, `class="md:hidden`) {
-		t.Error("Agenda pill must be phone-only (md:hidden)")
+	if !strings.Contains(html, `<span class="contents md:hidden">`) {
+		t.Error("the phone Month|Agenda pair must be phone-only (contents md:hidden) so it retires on desktop")
 	}
 	if !strings.Contains(html, `<span class="hidden md:contents">`) {
-		t.Error("Week/Day/Timeline must be wrapped in a hidden md:contents group so they vanish on phones without affecting desktop's pill layout")
+		t.Error("Month/Week/Day/Timeline must be wrapped in a hidden md:contents group so they vanish on phones without affecting desktop's pill layout")
 	}
-	// Agenda routes to the SAME href as the Month pill (no separate server
-	// view exists — "no new endpoints"). templ HTML-escapes the query
-	// string's "&" to "&amp;" on render, so mirror that before comparing.
-	monthHref := strings.ReplaceAll(string(v2ViewHref(data, "month")), "&", "&amp;")
-	if !strings.Contains(html, `href="`+monthHref+`"`) {
-		t.Errorf("Agenda pill must link to the same month-view route the Month pill uses; want href containing %q in:\n%s", monthHref, html)
+}
+
+// TestCalendarV2ViewSwitcher_AgendaPillIsNotDead is the C-CAL-MOBILE-VIEWS-FIX
+// regression pin. The shipped bug: the phone "Agenda" pill was an <a> pointing
+// at the SAME URL the page was already on, so tapping it did nothing visible —
+// a dead control (T-B3). Both halves of the fix are pinned here:
+//   - the two phone pills must resolve to DIFFERENT hrefs, and
+//   - exactly one of them may be selected in each state.
+func TestCalendarV2ViewSwitcher_AgendaPillIsNotDead(t *testing.T) {
+	cal := mobileAgendaCalendar()
+	base := CalendarV2ViewData{ActiveCalendar: cal, AllCalendars: []Calendar{*cal}, View: "month", CampaignID: "camp-1", Year: 1492, Month: 1, Day: 13}
+
+	monthHref := string(v2MobileMonthHref(base, false))
+	agendaHref := string(v2MobileMonthHref(base, true))
+	if monthHref == agendaHref {
+		t.Fatalf("the Month and Agenda pills must not share a URL (that IS the dead-pill bug); both = %q", monthHref)
+	}
+	if !strings.Contains(agendaHref, "agenda=1") {
+		t.Errorf("the Agenda pill must carry the agenda=1 state on the existing month route; got %q", agendaHref)
+	}
+	if strings.Contains(monthHref, "agenda=") {
+		t.Errorf("the Month pill must clear the agenda state; got %q", monthHref)
+	}
+
+	for _, tc := range []struct {
+		name           string
+		agenda         bool
+		wantSelected   string
+		wantUnselected string
+	}{
+		{"month state selects Month", false, "Month", "Agenda"},
+		{"agenda state selects Agenda", true, "Agenda", "Month"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := base
+			data.MobileAgenda = tc.agenda
+			var sb strings.Builder
+			if err := mobilePhonePills(data).Render(context.Background(), &sb); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			html := sb.String()
+			// The selected pill renders as a <span> (no href); the unselected
+			// one as an <a>. Assert on that pairing rather than class strings.
+			if !strings.Contains(html, `aria-selected="true"`) {
+				t.Fatalf("one phone pill must be selected; got:\n%s", html)
+			}
+			if strings.Count(html, `aria-selected="true"`) != 1 {
+				t.Errorf("exactly one phone pill may be selected; got:\n%s", html)
+			}
+			selectedIdx := strings.Index(html, `aria-selected="true"`)
+			if !strings.Contains(html[selectedIdx:], ">"+tc.wantSelected+"<") {
+				t.Errorf("%s should be the selected pill; got:\n%s", tc.wantSelected, html)
+			}
+			if !strings.Contains(html, ">"+tc.wantUnselected+"<") {
+				t.Errorf("%s pill missing; got:\n%s", tc.wantUnselected, html)
+			}
+		})
+	}
+}
+
+// TestCalendarV2ViewSwitcher_PhonePillsNeverSelectOffMonth: a deep link to
+// Week/Day/Timeline still renders the phone pair (those views have no phone
+// surface yet), but neither pill may claim selection there — a false
+// "Month is active" highlight on a Week page is the same class of lie the
+// dead Agenda pill was.
+func TestCalendarV2ViewSwitcher_PhonePillsNeverSelectOffMonth(t *testing.T) {
+	cal := mobileAgendaCalendar()
+	for _, view := range []string{"week", "day", "ledger"} {
+		data := CalendarV2ViewData{ActiveCalendar: cal, View: view, CampaignID: "camp-1", Year: 1492, Month: 1, Day: 13}
+		var sb strings.Builder
+		if err := mobilePhonePills(data).Render(context.Background(), &sb); err != nil {
+			t.Fatalf("render %s: %v", view, err)
+		}
+		if strings.Contains(sb.String(), `aria-selected="true"`) {
+			t.Errorf("view %q: no phone pill may render selected off the month view", view)
+		}
+	}
+}
+
+// TestMobileMonthAssembly_AgendaStateDropsNavigator: the two phone states must
+// render VISIBLY different DOM — otherwise the Agenda pill is dead again, just
+// with a different URL. Month = navigator + agenda; Agenda = agenda only.
+func TestMobileMonthAssembly_AgendaStateDropsNavigator(t *testing.T) {
+	data := designPass1Data("month", []Event{timedEvent("e1", "Session 12", 13, 19, 0)})
+
+	var month, agenda strings.Builder
+	if err := mobileMonthAssembly(data).Render(context.Background(), &month); err != nil {
+		t.Fatalf("render month state: %v", err)
+	}
+	data.MobileAgenda = true
+	if err := mobileMonthAssembly(data).Render(context.Background(), &agenda); err != nil {
+		t.Fatalf("render agenda state: %v", err)
+	}
+
+	if !strings.Contains(month.String(), "data-mobile-mini-month") {
+		t.Error("month state must render the mini-month navigator (the signed mockup's phone pattern)")
+	}
+	if strings.Contains(agenda.String(), "data-mobile-mini-month") {
+		t.Error("agenda state must drop the mini-month navigator so the list owns the viewport")
+	}
+	for name, html := range map[string]string{"month": month.String(), "agenda": agenda.String()} {
+		if !strings.Contains(html, "data-mobile-agenda=") {
+			t.Errorf("%s state must still render the agenda list", name)
+		}
+		if !strings.Contains(html, `class="md:hidden"`) {
+			t.Errorf("%s state must stay phone-only (md:hidden)", name)
+		}
 	}
 }
 
@@ -463,6 +564,19 @@ func TestMiniMonthV2Sidebar_DesktopDetached(t *testing.T) {
 	}
 	if strings.Contains(sbWeek.String(), "md:block") {
 		t.Error("week view: detached sidebar must not be desktop-visible")
+	}
+}
+
+// TestSource_ShowV2BindsMobileAgendaState: the phone toggle is only live if the
+// handler actually binds `?agenda=1` into the view data. Source-level pin (same
+// technique as TestSource_MonthViewPlaceholderIsCSSSwapNotFragment below) —
+// ShowV2 needs a full service+campaign-context fixture to exercise directly,
+// and the binding is a one-line contract worth guarding on its own.
+func TestSource_ShowV2BindsMobileAgendaState(t *testing.T) {
+	src := readRepoFile(t, "internal/plugins/calendar/handler_v2.go")
+	fn := src[strings.Index(src, "func (h *Handler) ShowV2("):]
+	if !strings.Contains(fn, `MobileAgenda:`) || !strings.Contains(fn, `c.QueryParam("agenda")`) {
+		t.Error("ShowV2 must bind the ?agenda=1 query param into CalendarV2ViewData.MobileAgenda — without it the phone Agenda pill is dead again")
 	}
 }
 
