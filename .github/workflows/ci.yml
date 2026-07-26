@@ -83,12 +83,35 @@ jobs:
         # Diff-scoped; needs full git history (fetch-depth: 0 above).
         run: ./tools/check-migration-immutability.sh
 
-      - name: Templ drift guard (M-O3.1 family)
-        # Per C-CI-GUARDS-PHASE-2 + cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md §0.5 D6.
-        # Re-runs `templ generate` and fails if the working tree diverges
-        # from what's checked in. Catches forgot-to-regenerate scenarios.
-        # templ binary already installed above; pinned to v0.3.1001.
-        run: ./tools/check-templ-drift.sh
+      # NOTE: the "Templ drift guard" step that used to sit here was DELETED by
+      # C-CALV4-FOUNDATION-P0 along with tools/check-templ-drift.sh. It diffed
+      # pathspec '*.templ.go' while templ emits '*_templ.go', and those are
+      # gitignored (.gitignore:30) and never committed — so it was structurally
+      # incapable of failing and reported OK on a tree where 753 generated files
+      # had just changed. A guard that cannot fail is worse than no guard: it
+      # reads as coverage. The "Generate templ files" + "Build" steps above
+      # already catch real drift, because a stale generator output fails to
+      # compile.
+
+      - name: V2 motion-discipline guard (§B2)
+        # Per cordinator/decisions/2026-05-28-cal-timeline-v2-design.md §B2.
+        # The script has existed since the V2 wave but was invoked by NOTHING —
+        # only referenced by a comment at static/css/input.css:103. Wired here
+        # by C-CALV4-FOUNDATION-P0. Diff-scoped FAIL: no NEW `transition: all` /
+        # `transition-all` in calendar / timeline / ai_workspace / campaigns
+        # sources. Pre-existing violations are grandfathered (7 lines across 5
+        # files as of this wiring). Needs full git history; fetch-depth: 0 above.
+        run: ./tools/check-v2-motion-discipline.sh
+
+      - name: Calendar-v4 guards B1–B4
+        # Per cordinator/decisions/2026-07-26-calendar-v4-canon-amendments.md §B.
+        # B1 no --dash/--gap in a transition/animation list · B2 no `font:`
+        # shorthand naming `inherit` as the family · B3 no interactive control
+        # reusing an <html> state-marker attribute name · B4 every data-cell /
+        # data-row marker also carries `data-day`. Diff-scoped; needs full git
+        # history (fetch-depth: 0 above). Every run first self-tests the guard
+        # against embedded fixtures, so "OK" always means the rules can fire.
+        run: ./tools/check-calendar-v4-lints.sh
 
       - name: Test
         # Includes M-B2.2 cross-plugin import guard (TestPluginImportGuard in

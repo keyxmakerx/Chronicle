@@ -424,3 +424,145 @@ func TestEntitiesForEra_VisibilityMatrix(t *testing.T) {
 		})
 	}
 }
+
+// --- EventsForEntityFiltered (C-CALV4-TIEFIX-PB Bug 1 item 3) ---
+//
+// EventsForEntityFiltered is a concrete-only method on *calendarService (not
+// part of the CalendarService interface — see its doc comment in
+// entity_ties_service.go), so these tests type-assert NewCalendarService's
+// return value the same way service.go's own SetBindingCleaner precedent is
+// reached in production code.
+
+// TestEventsForEntityFiltered_CalendarLevelVisibility pins the actual gap this
+// method closes: EventsForEntity's query never joins calendars, so a player
+// could see an event whose CALENDAR is dm_only as long as the event's own
+// visibility was 'everyone'. Owners still see everything.
+func TestEventsForEntityFiltered_CalendarLevelVisibility(t *testing.T) {
+	everyoneCal := &Calendar{ID: "cal-public", Visibility: "everyone"}
+	dmOnlyCal := &Calendar{ID: "cal-secret", Visibility: "dm_only"}
+
+	repo := &mockCalendarRepo{
+		eventsForEntityFn: func(_ context.Context, _ string) ([]EntityEventTie, error) {
+			return []EntityEventTie{
+				{Event: Event{ID: "evt-public", CalendarID: "cal-public", Name: "Fair", Visibility: "everyone"}, ParticipationRole: "involved"},
+				{Event: Event{ID: "evt-hidden-cal", CalendarID: "cal-secret", Name: "Secret Meeting", Visibility: "everyone"}, ParticipationRole: "involved"},
+			}, nil
+		},
+		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
+			switch id {
+			case "cal-public":
+				return everyoneCal, nil
+			case "cal-secret":
+				return dmOnlyCal, nil
+			}
+			return nil, nil
+		},
+	}
+	svc := NewCalendarService(repo).(*calendarService)
+	ctx := context.Background()
+
+	player, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RolePlayer, "user-9")
+	if err != nil {
+		t.Fatalf("EventsForEntityFiltered (player): %v", err)
+	}
+	if len(player) != 1 || player[0].Event.ID != "evt-public" {
+		t.Errorf("player should see only the event on the everyone calendar; got %+v", player)
+	}
+
+	owner, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RoleOwner, "user-9")
+	if err != nil {
+		t.Fatalf("EventsForEntityFiltered (owner): %v", err)
+	}
+	if len(owner) != 2 {
+		t.Errorf("owner should see both events; got %+v", owner)
+	}
+}
+
+// TestEventsForEntityFiltered_EventLevelVisibilityStillApplies confirms the
+// pre-existing per-event canUserView check (dm_only event) still applies
+// alongside the new calendar-level check — this method is additive, not a
+// replacement.
+func TestEventsForEntityFiltered_EventLevelVisibilityStillApplies(t *testing.T) {
+	pubCal := &Calendar{ID: "cal-1", Visibility: "everyone"}
+	repo := &mockCalendarRepo{
+		eventsForEntityFn: func(_ context.Context, _ string) ([]EntityEventTie, error) {
+			return []EntityEventTie{
+				{Event: Event{ID: "evt-public", CalendarID: "cal-1", Name: "Fair", Visibility: "everyone"}},
+				{Event: Event{ID: "evt-dm-only", CalendarID: "cal-1", Name: "War Room", Visibility: "dm_only"}},
+			}, nil
+		},
+		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) { return pubCal, nil },
+	}
+	svc := NewCalendarService(repo).(*calendarService)
+
+	player, err := svc.EventsForEntityFiltered(context.Background(), "ent-1", permissions.RolePlayer, "user-9")
+	if err != nil {
+		t.Fatalf("EventsForEntityFiltered: %v", err)
+	}
+	if len(player) != 1 || player[0].Event.ID != "evt-public" {
+		t.Errorf("player must not see the dm_only event; got %+v", player)
+	}
+}
+
+// TestEventsForEntityFiltered_OwnerAndSystemContextUnfiltered mirrors
+// filterEventsByUser's own short-circuit (service.go): owners/co-DMs and the
+// system context (userID == "") get the raw EventsForEntity result untouched
+// — and critically, make NO GetByID calls, so a block rendered with
+// context.Background() (COMMON §7: "Bound blocks render with
+// context.Background()") never pays for calendar lookups it doesn't need.
+func TestEventsForEntityFiltered_OwnerAndSystemContextUnfiltered(t *testing.T) {
+	calls := 0
+	repo := &mockCalendarRepo{
+		eventsForEntityFn: func(_ context.Context, _ string) ([]EntityEventTie, error) {
+			return []EntityEventTie{
+				{Event: Event{ID: "evt-1", CalendarID: "cal-1", Visibility: "dm_only"}},
+			}, nil
+		},
+		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) {
+			calls++
+			return &Calendar{ID: "cal-1", Visibility: "dm_only"}, nil
+		},
+	}
+	svc := NewCalendarService(repo).(*calendarService)
+	ctx := context.Background()
+
+	owner, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RoleOwner, "user-9")
+	if err != nil || len(owner) != 1 {
+		t.Fatalf("owner should see the unfiltered result: %+v, err=%v", owner, err)
+	}
+	system, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RolePlayer, "")
+	if err != nil || len(system) != 1 {
+		t.Fatalf("system context (empty userID) should see the unfiltered result: %+v, err=%v", system, err)
+	}
+	if calls != 0 {
+		t.Errorf("owner/system-context short-circuit must not call GetByID; got %d calls", calls)
+	}
+}
+
+// TestEventsForEntityFiltered_DedupesCalendarLookups: an entity tied to
+// several events in the SAME calendar fetches that calendar once, not once
+// per event — the doc comment's "not once per event" claim, pinned.
+func TestEventsForEntityFiltered_DedupesCalendarLookups(t *testing.T) {
+	calls := 0
+	repo := &mockCalendarRepo{
+		eventsForEntityFn: func(_ context.Context, _ string) ([]EntityEventTie, error) {
+			return []EntityEventTie{
+				{Event: Event{ID: "evt-1", CalendarID: "cal-1", Visibility: "everyone"}},
+				{Event: Event{ID: "evt-2", CalendarID: "cal-1", Visibility: "everyone"}},
+				{Event: Event{ID: "evt-3", CalendarID: "cal-1", Visibility: "everyone"}},
+			}, nil
+		},
+		getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
+			calls++
+			return &Calendar{ID: id, Visibility: "everyone"}, nil
+		},
+	}
+	svc := NewCalendarService(repo).(*calendarService)
+	out, err := svc.EventsForEntityFiltered(context.Background(), "ent-1", permissions.RolePlayer, "user-9")
+	if err != nil || len(out) != 3 {
+		t.Fatalf("expected all 3 events visible: %+v, err=%v", out, err)
+	}
+	if calls != 1 {
+		t.Errorf("expected exactly 1 GetByID call (deduped across 3 events in the same calendar), got %d", calls)
+	}
+}

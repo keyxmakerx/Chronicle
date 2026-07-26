@@ -23,6 +23,8 @@ Known broken or missing things, ordered by severity.
 - [x] **Calendar embed's event chips were silently inert (C-CAL-EMBED-CHIPS-TAP, wave-8 #549 gate finding)** — the dashboard/entity-page calendar embed (`calendar.templ` `dayCell`) rendered event chips as `<button>` with `cursor-pointer` + a hover ring but no click handler in the embed context (the V1 scripts that once wired them were correctly deleted by #549's V1 sunset). Fixed by making chips real `<a href>` links to the V2 calendar shell, cursored to the tapped day via query params `ShowV2` already parses — no new route (`routes_snapshot.txt` unchanged). See `internal/plugins/calendar/.ai.md` §"Embed event chips now navigate to V2".
 - [x] **Worldstate + weather-zone WS events were publisher-side dead letters (C-CAL-WORLDSTATE-WIRE)** — `calendar.worldstate.changed` and `calendar.weather.zones.changed` had live emitters but no `case` in `calendarEventPublisherAdapter.PublishCalendarEvent`, so both hit `default: return` and were discarded before reaching the bus. The operator's meteors and eclipses had NEVER crossed the wire (§2 of `cordinator/plans/2026-07-24-calendar-remodel-requirements.md`: "celestial events (meteors) unfindable/unsyncable"). Fixed additively: new `ws.MessageType` constants + adapter cases (with a whole-mapping regression pin, since a `default: return` silently swallows the next emitter too); an enriched `WorldStateChangePayload` carrying the day's celestial events with their **stable ids**, moons and weather, **split by audience** (player-safe broadcast always; a `RequiresDM` copy only when dm_only rows exist — the hub gates per-message, so one message can't be rich for the GM and redacted for the table); and `GET /api/v1/campaigns/:id/calendar/world-state` on the Bearer syncapi group so a token client can seed/enrich at all. See ADR-047 + `.ai/status.md` 2026-07-26 entry. **Foundry-module consumer half is PR #82 there** — it shipped the handler wired and waiting for exactly this.
 - [x] **Every calendar event LIST query was broken against MariaDB (found during C-CAL-RSVP-P1 Step 0)** — `scanEvents` (`internal/plugins/calendar/repository.go`) supplied 36 `Scan` destinations for `eventCols`' 37 columns: `&evt.RecurrenceDayOfWeek` was never added when migration 011 introduced the column, though `eventCols`, `GetEvent`'s own inline scan, and the INSERT/UPDATE all were. Month/week/day/range/upcoming/search/ledger all route through `scanEvents` and therefore failed with `sql: expected 37 destination arguments in Scan, not 36`; only the single-row `GetEvent` worked. Invisible to CI because nothing in the repo executes real SQL (no sqlmock/testify/dockertest in `go.mod`). Fixed in the C-CAL-RSVP-P1 branch because adding `collect_rsvps` to `eventCols` sits on the same lines and would otherwise have left the mismatch in place. New `event_scan_contract_test.go` parses `repository.go` with `go/parser` and pins SELECT arity == Scan arity for BOTH read paths, so the next column cannot repeat it. **⚠️ Operator: worth an eyes-on check that events now list on the V2 calendar — no DB in the build sandbox, so this is verified structurally.**
+- [x] **The SAME scan-mismatch landmine hit a THIRD query, entity-side (C-CALV4-TIEFIX-PB Bug 1)** — `EventsForEntity` (`internal/plugins/calendar/entity_ties_repository.go`) lives in a different file than `scanEvents`/`GetEvent`, so the C-CAL-RSVP-P1 fix above never touched it: it scanned 37 destinations against 39 selected columns (`eventCols`' 38 + `l.participation_role`), missing the same `&evt.RecurrenceDayOfWeek` + `&evt.CollectRSVPs` pair. Every entity-side tie read failed at runtime, and `entity_calendar_block.go:81` swallows the error and degrades silently — the entity-page calendar embed has shown no tied events since the day it shipped. Fixed; `event_scan_contract_test.go`'s guard is now file-parameterized and covers this third consumer (proven to fail pre-fix, pass post-fix). Also closed a related gap while in the file: `EventsForEntity` never joined `calendars`, so an event on a `dm_only` *calendar* was reachable through an entity tie — new `EventsForEntityFiltered` method (composed from existing repo methods, no interface widening) closes it, not yet wired into `entity_calendar_block.go` (a different slice's file). See `.ai/status.md` 2026-07-26 entry + `internal/plugins/calendar/.ai.md` §"Entity-side tie reads".
+- [x] **Timeline `EventCount` was a visibility oracle (C-CALV4-TIEFIX-PB Bug 2)** — `internal/plugins/timeline/repository.go`'s `List`/`ListByCalendar` computed `EventCount` via two unconditional `COUNT(*)` subqueries while `ListEventLinks`/`ListStandaloneEvents` filtered by base visibility — a player could see e.g. "12 events" and open only 9, the difference being a count of hidden events. Fixed by folding the same conditional predicate into both subqueries. **PARTIAL fix, stated honestly, not claimed closed:** `visibility_rules` (`{allowed_users, denied_users}`) is resolved in Go (`canUserView`), invisible to SQL, so a residual per-event gap remains — booked for a future dispatch. See `.ai/status.md` 2026-07-26 entry + `internal/plugins/timeline/.ai.md` §"EventCount visibility fix" (also lists it under Known Limitations).
 - [x] **Calendar events had no RSVPs (C-CAL-RSVP-P1)** — the operator's #1 calendar-remodel priority. The drawer shipped a DISABLED "Collect RSVPs" toggle whose comment ruled that RSVPs needed an event↔session link; superseded by ADR-046. Events now own first-class RSVP storage (calendar migration 013: `calendar_event_rsvps` + `calendar_event_rsvp_tokens` + `calendar_events.collect_rsvps`), a separate `RSVPService`/`RSVPRepository` pair, Player+ answer/count endpoints with Owner/co-DM-gated per-person detail, a Scribe+ collection toggle that fans out members-only visibility-gated action emails, and a public single-use token flow at `/calendar-rsvp/:token` (GET-confirm / POST-apply + CSRF double-submit). "Out this week" writes only the acting user's availability and skips hand-authored days; "suggest another time" writes a note + owner notification and deliberately does NOT mint a slot proposal. Egress pinned by `rsvp_egress_test.go`.
 
 - [x] **Players had no way to give TEMPORARY availability (C-CAL-RSVP-P2)** — C-CAL-RSVP-P1 shipped an asymmetry: "Out this week" wrote structured *un*availability the scheduler could aggregate, while "Suggest another time" wrote only a free-text note the Director had to read and re-key. Players could say when they COULDN'T play in a schedulable way and when they COULD only in prose. The suggestion surfaces (quick-edit card + emailed token page) now take date/from/to rows alongside the optional note; those become real `available` exceptions that land in the DM week overlay and the computed best window. No new tables (`availability_exceptions.state` always accepted `available`/`preferred`) and no new routes. The composition — exceptions REPLACE a date, so a naive write would erase the member's usual hours — lives in `sessions.AddMyAvailableWindows`/`composeOfferedDay` because that invariant is the scheduler's own; enforced server-side because the write can arrive from an email link with no editor in front of it. ADR-046 amendment.
@@ -167,6 +169,47 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
 New capabilities ordered by priority for alpha release.
 
+### Calendar v4 remodel — wave 1 (2026-07-26)
+
+Operator directive: *"just go with a full redo of the calendar."* Master plan
+`cordinator/plans/2026-07-26-calendar-v4-remodel-master-plan.md`; canon
+`cordinator/decisions/2026-07-26-calendar-v4-canon-amendments.md`; signed,
+immutable contract `cordinator/mockups/calendar-v4.html` + `mockups/renders/v4-*`.
+Five slices run as parallel chats; the parallelism is bought by three rules —
+no slice adds/removes/renames an Echo route, `internal/app/routes.go` belongs to
+C-CALV4-SPINE-P2 only, and `calendar_v2.templ` / `calendar_v2_helpers.go` /
+`calendar_v2_mobile_agenda.go` / `internal/widgets/calendar_v2/**` are FROZEN.
+
+- [x] **C-CALV4-FOUNDATION-P0 — the data contract + the guard rails.** Landed
+  `internal/widgets/calendar_block/data.go` (byte-identical to the coordinator
+  pin) + a reflection-only shape pin; defined the three never-defined
+  `--motion-*` tokens at their existing fallback values; shipped
+  `tools/check-calendar-v4-lints.sh` (B1–B4) and wired it plus the dormant
+  `tools/check-v2-motion-discipline.sh` into CI; deleted the vacuous
+  `tools/check-templ-drift.sh`; added `make verify`; filed
+  `internal/widgets/calendar_v2/.ai.md`. See `.ai/status.md` 2026-07-26 entry.
+- [ ] **B4 has no subjects yet.** Guard B4 keys on `data-cell` / `data-row`
+  marker attributes, which no template on `main` emits — C-CALV4-BLOCK-P1 must
+  adopt those markers for B4 to have teeth. The guard's own self-test proves it
+  fires; what is unproven is that anything will feed it. Coordinator to confirm
+  at W-B.
+- [ ] **`--motion-*` are not Tailwind utilities.** `tailwind.config.js` publishes
+  `--ease-*` / `--dur-*` / `--elev-*` as utility classes but not `--motion-*`
+  (they are consumed via raw `var()` only). Deliberately left alone — out of
+  scope for the foundation slice. Revisit if a V2 surface wants
+  `duration-motion-fast`.
+- [ ] **Grandfathered `transition-all`.** Now that the motion-discipline guard
+  runs in CI, the 7 pre-existing violations it steps over are visible and
+  cleanable: `calendar.templ:57,73,88`, `app_dashboard.templ:131`,
+  `timeline.templ:143`, `campaigns/settings.templ:219,978`. Not this wave —
+  `calendar.templ` is calendar-plugin surface another slice may touch.
+- [ ] **If the coordinator amends `BlockData`'s identity types to strings** (see
+  C-CALV4-SPINE-P2's first item below — `CalendarID` / `Mark.EventID` /
+  `ViewerContext.UserID` / `ViewerContext.HostEntity` are `int64` in the pin but
+  `VARCHAR(36)` UUIDs in Chronicle), `internal/widgets/calendar_block/data_test.go`
+  pins those four as `reflect.Int64` and will fail loudly on the amendment. That
+  is the pin working, not a bug: refresh it in the same PR as the amendment.
+
 ### Calendar v4 remodel — booked follow-ups from C-CALV4-BLOCK-P1 (2026-07-26)
 
 W-A shipped the Block's render tier (`internal/widgets/calendar_block` +
@@ -197,6 +240,7 @@ divergences".
   instrument constant. Wave 1 RETIRED the row-height clause rather than
   inheriting or "correcting" it; `TestIsNamed_RetiredRowHeightClause` pins the
   divergence in both directions so the re-sign has something concrete to move.
+
 ### calendar-v4 widgetization remodel — follow-ups booked by C-CALV4-SPINE-P2 (2026-07-26)
 
 Wave plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`. These are the
