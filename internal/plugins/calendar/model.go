@@ -247,6 +247,32 @@ func (c *Calendar) absDayIndex(year, month, day int) int {
 // branch), the display weekday path (v2WeekdayIndexFor), and the real-time
 // display calibration's 2026 epoch anchor (realTimeWeekdayIndex) all share, so
 // the geometry can never drift between recurrence and display.
+//
+// THE THREE-COUNTER DIVERGENCE (C-CALV4-SPINE-P2, coordinator ruling
+// COMMON §6.4 — documented and PINNED, deliberately NOT fixed in calendar-v4
+// wave 1).
+//
+// Three day counters coexist in this package and they do not agree:
+//
+//  1. Calendar.AbsoluteDay — LEAP-AWARE (it sums YearLengthForYear, which adds
+//     Month.LeapYearDays in a leap year). Consumed by moon phase only.
+//  2. constLenDayIndex (this function) — FIXED geometry: year*YearLength(),
+//     where YearLength() is the plain sum of Month.Days and never adds a leap
+//     day. Consumed by the weekday column and by recurrence.
+//  3. The legacy V1 path, which predates both.
+//
+// Counters 1 and 2 therefore diverge by exactly ONE DAY PER ELAPSED LEAP YEAR,
+// and a per-day moon disc — which takes its absolute day from counter 1 while
+// its grid COLUMN comes from counter 2 — drifts against its own cell by that
+// amount. TestBlockCounterDivergencePin measures it and pins today's numbers.
+//
+// It is not fixed here because making constLenDayIndex intercalary- or
+// leap-aware would shift the weekday column of every calendar already stored in
+// the operator's production database: every weekly event would move to a
+// different column overnight. That is a data-visible product decision with an
+// operator gate, not a rendering fix. Reconciliation is booked as its own
+// dispatch; until then, a change to this function must be deliberate, and the
+// pin exists to make sure it is.
 func (c *Calendar) constLenDayIndex(year, month, day int) int {
 	abs := year * c.YearLength()
 	for i := 0; i < month-1 && i < len(c.Months); i++ {

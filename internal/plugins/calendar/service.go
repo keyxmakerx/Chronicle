@@ -523,6 +523,21 @@ func (s *calendarService) applyRealTime(cal *Calendar) {
 	cal.CurrentMinute = n.Minute()
 }
 
+// ApplyRealTime is the exported face of applyRealTime, added by
+// C-CALV4-SPINE-P2 so the calendar-v4 Block spine can seam a calendar it loaded
+// through its own batched loader (BlockService.EagerLoadCalendars) without
+// holding the whole 60-method CalendarService.
+//
+// ADDITIVE ON PURPOSE: it is a method on *calendarService only — it is NOT
+// added to the CalendarService interface — so neither the hand-written
+// mockCalendarRepo in service_test.go nor the syncapi stub changes shape, and
+// the parallel calendar-v4 slices' test builds are untouched. The composition
+// root reaches it by asserting to calendar.RealTimeSeam, the same way it
+// already asserts for SetBindingCleaner (app/routes.go ~:2884). Without this
+// seam a batch-loaded real-time calendar prints its stale STORED date while
+// every other loader shows the wall clock (C-REAL-CALENDAR-P2 F1).
+func (s *calendarService) ApplyRealTime(cal *Calendar) { s.applyRealTime(cal) }
+
 // realTimeLocation resolves the calendar's IANA anchor zone. A nil/blank zone
 // is an error — real-time was enabled without a zone. P2's enable flow makes
 // the zone REQUIRED (RC-2), but the loader stays defensive so a hand-edited or

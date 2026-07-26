@@ -508,6 +508,45 @@ func (a *timelineForCalendarAdapter) ListTimelinesForCalendar(ctx context.Contex
 	return refs, nil
 }
 
+// calendarSyncLinkAdapter wraps syncapi.SyncAPIService to implement the
+// calendar.SyncLinkProbe interface — the read behind the calendar-v4 Block's
+// sync pill (C-CALV4-SPINE-P2). The calendar plugin never imports syncapi
+// (TestPluginImportGuard); it reaches it through this adapter at the app
+// boundary (plugin-isolation rule 8).
+//
+// The pill's numerator is DEFINED, not queried (coordinator ruling COMMON
+// §6.3): sync_mappings has no calendar type and every syncapi calendar endpoint
+// resolves the campaign default, so "connected" is a CAMPAIGN fact. The
+// campaign-scoped fact that exists is the calendar date beacon — the row a
+// Bearer-authed module writes when it reads GET /calendar/date, plus the
+// applied date it confirms afterwards. That is the honest source for
+// "connected", "pushed Nm ago" and "drifted".
+type calendarSyncLinkAdapter struct {
+	svc syncapi.SyncAPIService
+}
+
+// CampaignSyncSnapshot reports whether a module has ever talked to this
+// campaign and what date it last applied. A missing beacon is "not connected",
+// not an error — most campaigns have no module attached.
+func (a *calendarSyncLinkAdapter) CampaignSyncSnapshot(ctx context.Context, campaignID string) (calendar.BlockSyncSnapshot, error) {
+	b, err := a.svc.GetCalendarDateBeacon(ctx, campaignID)
+	if err != nil || b == nil {
+		return calendar.BlockSyncSnapshot{}, err
+	}
+	snap := calendar.BlockSyncSnapshot{
+		Connected: true,
+		// The beacon is written by the Foundry-facing sync API; it is the only
+		// transport that writes it today, so naming it here is a fact rather
+		// than a guess. A second transport would carry its own label.
+		Transport:    "Foundry",
+		LastSeen:     b.ServedAt,
+		AppliedYear:  b.AppliedYear,
+		AppliedMonth: b.AppliedMonth,
+		AppliedDay:   b.AppliedDay,
+	}
+	return snap, nil
+}
+
 // calendarEntityCreatorAdapter wraps entities.EntityService to implement the
 // calendar.EntityCreator interface — the cross-plugin write the event drawer's
 // "create entity from event" action needs (C-CAL-EDITOR-EXPANSION PR1). The
@@ -2839,6 +2878,30 @@ func (a *App) RegisterRoutes() {
 	// Calendars dashboard (E1 W1): inject the cross-plugin timeline read so the
 	// associations panel can list timelines bound to a calendar.
 	calendarHandler.SetTimelineLister(&timelineForCalendarAdapter{svc: timelineSvc})
+
+	// calendar-v4 Block spine (C-CALV4-SPINE-P2). INJECTOR WIRING ONLY — this
+	// slice adds no route, and internal/wire/routes_snapshot.txt stays
+	// byte-identical across the whole wave (COMMON §5 rule 1).
+	//
+	// Its repository is a NARROW read surface over the same *sql.DB rather than
+	// the 60-method CalendarRepository, so the hand-written mockCalendarRepo in
+	// the plugin's tests never has to grow. Two seams are installed
+	// post-construction, the SetTimelineLister idiom above:
+	//   - RealTimeSeam, reached by assertion because the exported
+	//     ApplyRealTime lives on *calendarService and NOT on the
+	//     CalendarService interface (adding it there would reshape the mock);
+	//   - SyncLinkProbe, the adapter over the campaign date beacon.
+	// The spine is installed as a package-level provider because this file
+	// belongs to exactly one calendar-v4 slice for the whole wave, and the
+	// surfaces that consume it (entity-page hosting, the Bench) land afterwards
+	// and must not need to re-edit it — the same idiom
+	// systems.SetSyncMappingProvider uses above.
+	calendarBlockSpine := calendar.NewBlockService(calendar.NewBlockRepository(a.DB))
+	if rt, ok := calendarService.(calendar.RealTimeSeam); ok {
+		calendarBlockSpine.SetRealTimeSeam(rt)
+	}
+	calendarBlockSpine.SetSyncLinkProbe(&calendarSyncLinkAdapter{svc: syncService})
+	calendar.InstallBlockSpine(calendarBlockSpine)
 	// And the enable-state checker the hub fragment route consults
 	// to render the disabled-extension placeholder. addonService
 	// already exposes IsEnabledForCampaign with the canonical narrow
