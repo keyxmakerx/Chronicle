@@ -167,6 +167,41 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 
 New capabilities ordered by priority for alpha release.
 
+### Calendar v4 remodel — wave 1 (2026-07-26)
+
+Operator directive: *"just go with a full redo of the calendar."* Master plan
+`cordinator/plans/2026-07-26-calendar-v4-remodel-master-plan.md`; canon
+`cordinator/decisions/2026-07-26-calendar-v4-canon-amendments.md`; signed,
+immutable contract `cordinator/mockups/calendar-v4.html` + `mockups/renders/v4-*`.
+Five slices run as parallel chats; the parallelism is bought by three rules —
+no slice adds/removes/renames an Echo route, `internal/app/routes.go` belongs to
+C-CALV4-SPINE-P2 only, and `calendar_v2.templ` / `calendar_v2_helpers.go` /
+`calendar_v2_mobile_agenda.go` / `internal/widgets/calendar_v2/**` are FROZEN.
+
+- [x] **C-CALV4-FOUNDATION-P0 — the data contract + the guard rails.** Landed
+  `internal/widgets/calendar_block/data.go` (byte-identical to the coordinator
+  pin) + a reflection-only shape pin; defined the three never-defined
+  `--motion-*` tokens at their existing fallback values; shipped
+  `tools/check-calendar-v4-lints.sh` (B1–B4) and wired it plus the dormant
+  `tools/check-v2-motion-discipline.sh` into CI; deleted the vacuous
+  `tools/check-templ-drift.sh`; added `make verify`; filed
+  `internal/widgets/calendar_v2/.ai.md`. See `.ai/status.md` 2026-07-26 entry.
+- [ ] **B4 has no subjects yet.** Guard B4 keys on `data-cell` / `data-row`
+  marker attributes, which no template on `main` emits — C-CALV4-BLOCK-P1 must
+  adopt those markers for B4 to have teeth. The guard's own self-test proves it
+  fires; what is unproven is that anything will feed it. Coordinator to confirm
+  at W-B.
+- [ ] **`--motion-*` are not Tailwind utilities.** `tailwind.config.js` publishes
+  `--ease-*` / `--dur-*` / `--elev-*` as utility classes but not `--motion-*`
+  (they are consumed via raw `var()` only). Deliberately left alone — out of
+  scope for the foundation slice. Revisit if a V2 surface wants
+  `duration-motion-fast`.
+- [ ] **Grandfathered `transition-all`.** Now that the motion-discipline guard
+  runs in CI, the 7 pre-existing violations it steps over are visible and
+  cleanable: `calendar.templ:57,73,88`, `app_dashboard.templ:131`,
+  `timeline.templ:143`, `campaigns/settings.templ:219,978`. Not this wave —
+  `calendar.templ` is calendar-plugin surface another slice may touch.
+
 ### Calendar Showcase: World-State Effects (C-CAL-WORLDSTATE-EFFECTS-SYSTEM)
 
 Synced world-state animation system — ONE `worldState` drives BOTH the Almanac

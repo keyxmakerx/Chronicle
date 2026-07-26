@@ -121,6 +121,33 @@
     --dur-large:       280ms;    /* view-level transitions */
 
     /* ──────────────────────────────────────────────────────────────────
+     * V2 widget-animation durations — the `--motion-*` family.
+     *
+     * The V2 widget animation library below (:2490-2610) has always
+     * consumed these THREE names, and they were never defined anywhere:
+     * every call site is `var(--motion-fast, 150ms)`-shaped, so the
+     * library has been running on its fallbacks since it shipped, and
+     * internal/widgets/calendar_v2/README.md's "Motion: PR #357
+     * --motion-* tokens" claim was aspirational.
+     *
+     * Defined here at EXACTLY the values the existing fallbacks already
+     * produce (fast 150ms · standard 200ms · leisurely 300ms) — every
+     * fallback in the file agrees on these three numbers, so this is a
+     * no-op on shipped surfaces. Choosing "better" numbers here would be
+     * a live timing change to production animation, not a cleanup, so
+     * don't: retune the call sites deliberately instead.
+     *
+     * Deliberately NOT aliased to the --dur-* family above: --dur-micro
+     * is 120ms while --motion-fast is 150ms, so aliasing would silently
+     * retime every V2 widget animation. Two families, two purposes —
+     * --dur-* is chrome, --motion-* is the V2 widget library.
+     * ─────────────────────────────────────────────────────────────── */
+
+    --motion-fast:      150ms;   /* chip add/remove, popover in, drawer out */
+    --motion-standard:  200ms;   /* drawer in, ribbon enter, tier transition */
+    --motion-leisurely: 300ms;   /* drop-receive pulse */
+
+    /* ──────────────────────────────────────────────────────────────────
      * V2 card elevation tiers — per §B1.
      *
      * Material's *physics* (elevation, shadow, hover lift, drag elevation,

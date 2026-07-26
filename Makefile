@@ -86,6 +86,34 @@ test-js: ## Run JS runtime tests (cal-almanac world-state spine, node --test)
 	node --test test/js/*.test.mjs
 
 # --- Linting & Security ---
+# --- Local CI ---
+# `make verify` runs the same sequence, in the same order, as the CI "Build &
+# Test" job — so a green run here is the strongest local signal a PR will land
+# green. Added by C-CALV4-FOUNDATION-P0 because five parallel calendar-v4 chats
+# each needed the sequence and were each reconstructing it by hand from ci.yml.
+#
+# NOT included: golangci-lint (its own CI job; `make lint`), govulncheck
+# (`make vuln`), and tools/test-restore-drill.sh (spins real MariaDB
+# containers — too heavy for an inner-loop check; CI still runs it).
+#
+# The three diff-scoped guards resolve their base as origin/main and need real
+# git history; in a shallow clone they silently report OK. Override with
+# DIFF_BASE=<ref>.
+.PHONY: verify
+verify: ## Run the full local CI sequence (templ → build → vet → guards → go test → js test)
+	@echo "==> templ generate";                templ generate
+	@echo "==> go build ./...";                go build ./...
+	@echo "==> go vet ./...";                  go vet ./...
+	@echo "==> guard: no-instance-hostname";   ./tools/check-no-instance-hostname.sh
+	@echo "==> guard: plugin-isolation";       ./tools/check-plugin-isolation.sh
+	@echo "==> guard: migration-immutability"; ./tools/check-migration-immutability.sh
+	@echo "==> guard: v2-motion-discipline";   ./tools/check-v2-motion-discipline.sh
+	@echo "==> guard: calendar-v4 B1-B4";      ./tools/check-calendar-v4-lints.sh
+	@echo "==> guard: decision-citations";     ./tools/check-decision-citations.sh
+	@echo "==> go test ./... -short";          go test ./... -short
+	@echo "==> make test-js";                  $(MAKE) test-js
+	@echo "==> verify: OK"
+
 .PHONY: lint
 lint: ## Run golangci-lint
 	golangci-lint run ./...
