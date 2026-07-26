@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // entityWorldStateBlockView renders the embed. No calendar → friendly
@@ -73,10 +74,10 @@ templ entityWorldStateBlockView(campaignID string, cal *Calendar, data CalendarV
 					<p class="text-sm text-fg-secondary">Couldn&#39;t load the world&#39;s current state. Try reloading the page.</p>
 				</div>
 			</div>
-			<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
-			<script src="/static/js/widgets/worldstate_provider.js" defer></script>
-			<script src="/static/js/widgets/worldstate.js" defer></script>
-			<script src="/static/js/cal-almanac.js" defer></script>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-almanac-render.css") }/>
+			<script src={ layouts.AssetURL("/static/js/widgets/worldstate_provider.js") } defer></script>
+			<script src={ layouts.AssetURL("/static/js/widgets/worldstate.js") } defer></script>
+			<script src={ layouts.AssetURL("/static/js/cal-almanac.js") } defer></script>
 		}
 	</div>
 }

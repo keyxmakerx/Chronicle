@@ -74,6 +74,12 @@ type CalendarV2ViewData struct {
 	// for Scribes (the only viewers who get the drawer) via the EntityCreator
 	// cross-plugin seam; empty hides the action.
 	EntityTypes []EntityTypeRef
+	// MobileAgenda: the phone-only Month/Agenda toggle's state, bound from the
+	// `?agenda=1` query param on the EXISTING month route (C-CAL-MOBILE-VIEWS-FIX
+	// — no new route). false = the mini-month navigator + agenda assembly
+	// (the "Month" pill); true = agenda-only, the mini-month is dropped
+	// ("Agenda"). Ignored entirely at ≥768px, where the desktop grid renders.
+	MobileAgenda bool
 }
 
 // CalendarV2Page is the full-page V2 shell. HTMX swaps target the
@@ -140,10 +146,10 @@ templ CalendarV2Page(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 			@dayDetailPopoverV2(data)
 			@eventQuickPeekV2()
 			@eventQuickEditV2(data)
-			<script src="/static/plugins/calendar/js/event_grid.js" defer></script>
-			<script src="/static/plugins/calendar/js/calendar_v2_shell.js" defer></script>
+			<script src={ layouts.AssetURL("/static/plugins/calendar/js/event_grid.js") } defer></script>
+			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_v2_shell.js") } defer></script>
 			if data.CanControlWorldState {
-				<script src="/static/plugins/calendar/js/gm_panel.js" defer></script>
+				<script src={ layouts.AssetURL("/static/plugins/calendar/js/gm_panel.js") } defer></script>
 			}
 		}
 	}
@@ -557,39 +563,68 @@ templ calendarV2Switcher(cc *campaigns.CampaignContext, data CalendarV2ViewData)
 //
 // Phone reduction (C-CAL-MOBILE-AGENDA §4, the mockup's <768px command bar):
 // Week/Day/Timeline have no phone-optimized view yet (separate dispatch
-// slices), so at <768px they're hidden (the `hidden md:contents` wrapper —
-// `contents` at md+ keeps them direct children of the `inline-flex` row, so
-// the pill layout is byte-for-byte unchanged on desktop) and replaced by a
-// single "Agenda" pill.
+// slices), so at <768px the whole desktop pill group is hidden (the
+// `hidden md:contents` wrapper — `contents` at md+ keeps its children direct
+// children of the `inline-flex` row, so the pill layout is byte-for-byte
+// unchanged on desktop) and replaced by the phone Month|Agenda pair.
+//
+// C-CAL-MOBILE-VIEWS-FIX: "Month" moved INTO the desktop group and the phone
+// pair became a real two-state toggle. Previously the phone "Agenda" pill was
+// an <a> pointing at the SAME URL the (always-selected) "Month" pill was
+// already on, so tapping it re-navigated to an identical page — no view
+// change, no error, a dead control (T-B3). Now each phone pill owns a distinct
+// URL and a distinct rendered assembly (see mobileMonthAssembly).
 templ calendarV2ViewSwitcher(cc *campaigns.CampaignContext, data CalendarV2ViewData) {
 	if data.ActiveCalendar == nil {
 		// No calendar = no view switcher.
 	} else {
 		<div class="inline-flex rounded-md border border-edge overflow-hidden" role="tablist" aria-label="Calendar view">
-			@calendarV2ViewPill(data, "month", "Month")
-			@mobileAgendaPill(data)
 			<span class="hidden md:contents">
+				@calendarV2ViewPill(data, "month", "Month")
 				@calendarV2ViewPill(data, "week", "Week")
 				@calendarV2ViewPill(data, "day", "Day")
 				@calendarV2ViewPill(data, "ledger", "Timeline")
 			</span>
+			@mobilePhonePills(data)
 		</div>
 	}
 }
 
-// mobileAgendaPill is the phone-only "Agenda" pill (C-CAL-MOBILE-AGENDA §4).
-// It links to the SAME month-view route as the "Month" pill: at <768px the
-// Month view already renders as the mini-month+agenda assembly
-// (mobileMonthAssembly) via the breakpoint swap in monthViewPlaceholder, so
-// "Agenda" is a correctly-labeled, working entry point into that assembly
-// rather than a second server-side view (none exists — "no new endpoints").
-templ mobileAgendaPill(data CalendarV2ViewData) {
-	<a
-		href={ v2ViewHref(data, "month") }
-		class="md:hidden px-3 py-1 text-xs font-medium text-fg-secondary hover:bg-surface-2 transition-colors duration-micro"
-		role="tab"
-		aria-selected="false"
-	>Agenda</a>
+// mobilePhonePills is the phone-only Month|Agenda toggle (C-CAL-MOBILE-VIEWS-FIX).
+// `contents` keeps both pills direct children of the `inline-flex` row at phone
+// width (so they read as one segmented control, exactly like the desktop group
+// does at md+); `md:hidden` retires the pair on desktop.
+//
+// Both pills only ever *select* while the Month view is active — Week/Day/
+// Timeline are unreachable from phone width, but a deep link to one of them
+// must not paint a false selection here.
+templ mobilePhonePills(data CalendarV2ViewData) {
+	<span class="contents md:hidden">
+		@mobilePhonePill(v2MobileMonthHref(data, false), "Month", data.View == "month" && !data.MobileAgenda)
+		@mobilePhonePill(v2MobileMonthHref(data, true), "Agenda", data.View == "month" && data.MobileAgenda)
+	</span>
+}
+
+// mobilePhonePill renders one phone pill. Mirrors calendarV2ViewPill's
+// selected/unselected treatment (including the App-accent slot chain) so the
+// phone control is visually the same component as the desktop one — it just
+// keys off the Month/Agenda toggle instead of data.View.
+templ mobilePhonePill(href templ.SafeURL, label string, selected bool) {
+	if selected {
+		<span
+			class="px-3 py-1 text-xs font-medium text-white"
+			style="background: var(--color-accent-app, var(--color-accent-surface-1, var(--color-accent, #6366f1)));"
+			role="tab"
+			aria-selected="true"
+		>{ label }</span>
+	} else {
+		<a
+			href={ href }
+			class="px-3 py-1 text-xs font-medium text-fg-secondary hover:bg-surface-2 transition-colors duration-micro"
+			role="tab"
+			aria-selected="false"
+		>{ label }</a>
+	}
 }
 
 templ calendarV2ViewPill(data CalendarV2ViewData, view, label string) {
@@ -649,9 +684,20 @@ templ monthViewPlaceholder(data CalendarV2ViewData) {
 // (C-CAL-MOBILE-AGENDA): a mini-month NAVIGATOR on top + a scrolling AGENDA
 // list below, per the signed mockup viewed <768px. `md:hidden` is the other
 // half of the breakpoint swap in monthViewPlaceholder.
+//
+// Two states (C-CAL-MOBILE-VIEWS-FIX), driven by the phone Month|Agenda pills:
+//   - Month (default): navigator + agenda, i.e. the signed mockup verbatim.
+//   - Agenda (`?agenda=1`): the navigator is dropped so the event list owns the
+//     whole viewport. This is what makes the "Agenda" pill a live control —
+//     the two states render visibly different DOM off the SAME month route.
+//
+// data-mobile-agenda-only marks the state for the render pin + for anyone
+// debugging a phone screenshot.
 templ mobileMonthAssembly(data CalendarV2ViewData) {
-	<div class="md:hidden" data-mobile-month-assembly="true">
-		@mobileMiniMonth(data)
+	<div class="md:hidden" data-mobile-month-assembly="true" data-mobile-agenda-only={ boolToStr(data.MobileAgenda) }>
+		if !data.MobileAgenda {
+			@mobileMiniMonth(data)
+		}
 		@mobileAgendaList(data)
 	</div>
 }

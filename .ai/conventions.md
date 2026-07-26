@@ -738,3 +738,40 @@ Always prefer the inline `@layer` for HTMX/Alpine-injected classes since the JIT
 Per `cordinator/decisions/2026-05-23-plugin-registration.md`: plugins self-describe via a `PluginRegistration` value (slug, optional `embed.FS` for migrations, optional `embed.FS` for static assets, optional smoke test). The registry lives at `internal/app/plugins.go`; entries are populated by each plugin's `registration.go`. Pilots: foundry_vtt + smtp (PR #334).
 
 Per `cordinator/decisions/2026-05-25-plugin-static-assets.md`: each plugin's static assets (JS / CSS shipped under `static/`) embed via Go's `embed.FS` and mount through the registry — no more app-level static-route enumeration. Calendar is the pilot (PR #336); remaining plugins migrate opportunistically.
+
+## Static asset URLs go through `layouts.AssetURL` (C-ASSET-VERSIONING)
+
+**Never write a bare `src="/static/…"` or `href="/static/…"` in a templ file.**
+A contract test (`TestTemplatesUseAssetURL` in
+`internal/templates/layouts/assets_test.go`) walks every `.templ` in the repo and
+fails on one.
+
+```templ
+// WRONG — the browser may hold a build-old copy for hours.
+<script src="/static/js/boot.js" defer></script>
+
+// RIGHT — ?v=<content digest>, so a deploy busts the cache.
+<script src={ layouts.AssetURL("/static/js/boot.js") } defer></script>
+```
+
+(Inside package `layouts` itself, call `AssetURL(...)` unqualified.)
+
+**Why it's load-bearing and not cosmetic.** Echo's `e.Static` serves through
+`http.ServeContent`, which emits `Last-Modified` but NO `Cache-Control`, so
+browsers fall back to heuristic freshness. Fresh HTML then pairs with a stale
+stylesheet — and a deploy that introduces a NEW Tailwind utility half-lands:
+the markup names a class the cached CSS has never heard of, and the affected
+elements silently take their unstyled (usually `hidden`) branch. This was
+reproduced, not theorized: `md:contents` arrived with C-CAL-MOBILE-AGENDA, and
+post-deploy calendar HTML against pre-deploy `app.css` loses the
+Week/Day/Timeline pills on desktop entirely — with every DOM test still green.
+
+`middleware.StaticCache` (registered globally in `app.New`) is the other half:
+`immutable, max-age=1y` for `?v=`-carrying requests, `max-age=0,
+must-revalidate` otherwise. That second arm is deliberate — a missed conversion
+degrades to "revalidated on every use", never to "silently stale".
+
+Plugin assets served from an `embed.FS` are content-hashed too, provided the FS
+is registered with `layouts.RegisterAssetFS` (done automatically for every
+`PluginRegistration.StaticFS` in `app.mountPluginStatic`). Anything
+unresolvable falls back to a per-build token, which still busts on deploy.

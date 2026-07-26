@@ -50,6 +50,27 @@ func v2ViewHref(data CalendarV2ViewData, view string) templ.SafeURL {
 		data.CampaignID, data.ActiveCalendar.ID, view, data.Year, data.Month, data.Day))
 }
 
+// v2MobileMonthHref builds the phone Month|Agenda toggle's two URLs
+// (C-CAL-MOBILE-VIEWS-FIX). Both point at the EXISTING month route — the
+// dispatch's "no new routes" bound — and differ only by `agenda=1`, which
+// ShowV2 binds into CalendarV2ViewData.MobileAgenda. Because the two states
+// render different DOM (mobileMonthAssembly), each pill is a live control
+// rather than a re-navigation to the URL you are already on (the dead-pill
+// bug this replaces).
+func v2MobileMonthHref(data CalendarV2ViewData, agenda bool) templ.SafeURL {
+	base := string(v2ViewHref(data, "month"))
+	if !agenda {
+		return templ.SafeURL(base)
+	}
+	// v2ViewHref always emits a query string for a resolved calendar; the
+	// zero-calendar fallback ("/campaigns/:id/calendar/v2") does not, so pick
+	// the right separator instead of assuming one.
+	if strings.Contains(base, "?") {
+		return templ.SafeURL(base + "&agenda=1")
+	}
+	return templ.SafeURL(base + "?agenda=1")
+}
+
 // v2ViewNavHref builds prev/today/next navigation URLs for the current
 // view. delta=-1 prev period, delta=0 today, delta=1 next period.
 //

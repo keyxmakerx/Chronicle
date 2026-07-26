@@ -104,10 +104,10 @@ templ calIndexLink(href, name, desc string, live bool) {
 // their own isolated asset files.
 templ DemoCalendarAlmanac() {
 	@layouts.App("Chronicle calendar — Almanac") {
-		<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
-		<link rel="stylesheet" href="/static/css/cal-almanac.css"/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-almanac-render.css") }/>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-almanac.css") }/>
 		@calAlmanacPage(CalAlmanacMock())
-		<script src="/static/js/cal-almanac.js" defer></script>
+		<script src={ layouts.AssetURL("/static/js/cal-almanac.js") } defer></script>
 	}
 }
 

@@ -22,13 +22,13 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 	@layouts.App("Calendars") {
 		<div class="sm:max-w-5xl mx-auto py-6 px-2 sm:px-4" data-cal-dashboard>
 			// W5d: container-query stylesheet for the adaptive calendar widget.
-			<link rel="stylesheet" href="/static/css/calendar-adaptive.css"/>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-adaptive.css") }/>
 			// C-REAL-CALENDAR-P3: the live-clock tick for real-time calendars reuses
 			// calendar_v2_shell.js (wireRealTimeClocks scans document-wide, so it runs
 			// here even though the dashboard has no [data-cal-v2-root] shell). Loaded
 			// only when a real-time calendar is present.
 			if dashboardHasRealTime(data) {
-				<script src="/static/plugins/calendar/js/calendar_v2_shell.js" defer></script>
+				<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_v2_shell.js") } defer></script>
 			}
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
@@ -66,7 +66,7 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 		// receive the editor DOM nor the PUT route).
 		if data.IsOwner {
 			@calendarPermissionsModal()
-			<script src="/static/plugins/calendar/js/calendar_permissions.js" defer></script>
+			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_permissions.js") } defer></script>
 		}
 		// D3 backs the timeline-viz previews (timeline_viz.js is already global
 		// in base.templ; D3 is page-loaded, same CDN the timeline page uses /
@@ -74,7 +74,7 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 		if data.Selected != nil && len(data.Timelines) > 0 {
 			// W1 (R1): vendored d3, not jsdelivr — `script-src 'self'` blocked the
 			// CDN script so the dashboard timeline viz never loaded.
-			<script src="/static/vendor/d3.min.js" defer></script>
+			<script src={ layouts.AssetURL("/static/vendor/d3.min.js") } defer></script>
 		}
 	}
 }

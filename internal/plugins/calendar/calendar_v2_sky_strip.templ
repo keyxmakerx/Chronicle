@@ -25,7 +25,11 @@
 // skyStripCurrentDateString in calendar_v2_sky_strip_helpers.go.
 package calendar
 
-import "github.com/keyxmakerx/chronicle/internal/widgets/skybox"
+import (
+	"github.com/keyxmakerx/chronicle/internal/widgets/skybox"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // calendarV2SkyStrip renders the strip. Nothing renders without an active
 // calendar (matching the header/view-switcher guard). Sub-sections degrade
@@ -159,9 +163,9 @@ templ calendarV2SyncChip(data CalendarV2ViewData) {
 templ calendarV2SkyAssets(data CalendarV2ViewData) {
 	if wsActive(data) {
 		<div id="cal-v2-worldstate" data-cal-worldstate={ data.WorldStateJSON } aria-hidden="true" hidden></div>
-		<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
-		<script src="/static/js/widgets/worldstate_provider.js" defer></script>
-		<script src="/static/js/widgets/skybox.js" defer></script>
-		<script src="/static/js/cal-almanac.js" defer></script>
+		<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-almanac-render.css") }/>
+		<script src={ layouts.AssetURL("/static/js/widgets/worldstate_provider.js") } defer></script>
+		<script src={ layouts.AssetURL("/static/js/widgets/skybox.js") } defer></script>
+		<script src={ layouts.AssetURL("/static/js/cal-almanac.js") } defer></script>
 	}
 }

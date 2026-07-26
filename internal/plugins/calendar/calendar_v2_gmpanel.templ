@@ -32,7 +32,11 @@
 
 package calendar
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
 
 // gmControlPanelV2 renders the GM console, or nothing when the viewer lacks
 // world-state control (or there's no active calendar).
@@ -299,7 +303,7 @@ templ gmControlPanelV2(data CalendarV2ViewData) {
 					</div>
 				</div>
 			</div>
-			<link rel="stylesheet" href="/static/plugins/calendar/css/gm_panel.css"/>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/plugins/calendar/css/gm_panel.css") }/>
 		</section>
 	}
 }

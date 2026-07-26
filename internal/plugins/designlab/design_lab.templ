@@ -17,7 +17,7 @@ templ SurfaceDemoPage() {
 		<!-- Sample System consumer: registers the box renderers + mounts the sheet.
 		     Loaded defer; it polls for Chronicle.surface (the frame loads later in
 		     base.templ) before mounting. -->
-		<script src="/static/js/widgets/surface_demo.js" defer></script>
+		<script src={ layouts.AssetURL("/static/js/widgets/surface_demo.js") } defer></script>
 
 		<div class="max-w-5xl mx-auto space-y-6 p-4">
 			<header class="space-y-1.5">

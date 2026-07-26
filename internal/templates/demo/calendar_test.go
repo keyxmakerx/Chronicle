@@ -55,8 +55,11 @@ func TestCalAlmanacJS_ExternalFileLoaded(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
-	if !strings.Contains(html, `src="/static/js/cal-almanac.js"`) {
-		t.Errorf("calendar templ must load /static/js/cal-almanac.js via <script src=… defer>")
+	// C-ASSET-VERSIONING: asset URLs now carry a `?v=<digest>` cache-busting
+	// token (layouts.AssetURL), so match the path prefix rather than the exact
+	// attribute value.
+	if !strings.Contains(html, `src="/static/js/cal-almanac.js?v=`) {
+		t.Errorf("calendar templ must load /static/js/cal-almanac.js via <script src=… defer>; got:\n%s", html)
 	}
 	if !strings.Contains(html, "defer") {
 		t.Errorf("script tag must carry defer")

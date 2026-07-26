@@ -105,6 +105,12 @@ func (h *Handler) ShowV2(c echo.Context) error {
 		CSRFToken:            middleware.GetCSRFToken(c),
 		TierDefinitions:      h.loadTierDefinitions(ctx, cc.Campaign.ID),
 		SidebarPinned:        sidebarPinned,
+		// Phone Month|Agenda toggle (C-CAL-MOBILE-VIEWS-FIX). A presentation-only
+		// flag on the EXISTING month route — no new route, no new query against
+		// the DB (both states render from the same data.Events the Month view
+		// already loads). Only meaningful for the month view; the other views
+		// ignore it.
+		MobileAgenda: view == "month" && c.QueryParam("agenda") == "1",
 	}
 
 	// Entity types for the drawer's "Create entity from event" action

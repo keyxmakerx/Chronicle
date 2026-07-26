@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/widgets/skybox"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
 // entitySkyboxBlockView renders the embed. No calendar → friendly "Create
@@ -36,10 +37,10 @@ templ entitySkyboxBlockView(campaignID string, cal *Calendar, data CalendarV2Vie
 			<div class="relative w-full overflow-hidden" style="height:200px" data-entity-skybox-band aria-label="Today's sky">
 				@skybox.Skybox(skyboxDataForBlock(campaignID, data, entityID), CalAlmanacSunBody())
 			</div>
-			<link rel="stylesheet" href="/static/css/cal-almanac-render.css"/>
-			<script src="/static/js/widgets/worldstate_provider.js" defer></script>
-			<script src="/static/js/widgets/skybox.js" defer></script>
-			<script src="/static/js/cal-almanac.js" defer></script>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-almanac-render.css") }/>
+			<script src={ layouts.AssetURL("/static/js/widgets/worldstate_provider.js") } defer></script>
+			<script src={ layouts.AssetURL("/static/js/widgets/skybox.js") } defer></script>
+			<script src={ layouts.AssetURL("/static/js/cal-almanac.js") } defer></script>
 		}
 	</div>
 }
