@@ -100,18 +100,23 @@ test('agenda card actions are visible at rest — no hover-only/opacity-gated af
 });
 
 test('command bar: phone reduction hides Week/Day/Timeline via one wrapper, keeps Month + adds Agenda', () => {
-  const fn = block(templ, 'templ calendarV2ViewSwitcher', '\ntempl mobileAgendaPill');
-  assert.ok(fn.includes('@mobileAgendaPill(data)'), 'view switcher must render the mobile Agenda pill');
+  // C-CAL-MOBILE-VIEWS-FIX restructured the pills: the phone pair now lives in
+  // its own templ (mobilePhonePills) and Month joined the desktop group. The
+  // pinned INTENT is unchanged: one hidden-md:contents desktop group + a
+  // phone-only Month|Agenda pair rendered by the switcher.
+  const fn = block(templ, 'templ calendarV2ViewSwitcher', '\ntempl mobilePhonePills');
+  assert.ok(fn.includes('@mobilePhonePills(data)'), 'view switcher must render the phone Month|Agenda pair');
   assert.ok(
     fn.includes('<span class="hidden md:contents">'),
-    'Week/Day/Timeline must be wrapped in one hidden-md:contents group (display:contents at md+ keeps desktop\'s pill row unchanged)',
+    'desktop pills must be wrapped in one hidden-md:contents group (display:contents at md+ keeps desktop\'s pill row unchanged)',
   );
 });
 
 test('Agenda pill links to the SAME month-view route the Month pill uses — no new endpoint', () => {
-  const fn = block(templ, 'templ mobileAgendaPill', '\ntempl ');
-  assert.ok(fn.includes('v2ViewHref(data, "month")'), 'Agenda pill must route to view=month, not a new server view');
-  assert.ok(fn.includes('md:hidden'), 'Agenda pill must be phone-only');
+  const fn = block(templ, 'templ mobilePhonePills', '\ntempl ');
+  assert.ok(fn.includes('v2MobileMonthHref(data, true)'), 'Agenda pill must route via the month-view href builder (agenda=1), not a new server view');
+  assert.ok(fn.includes('v2MobileMonthHref(data, false)'), 'Month pill must use the same builder without the agenda flag');
+  assert.ok(fn.includes('md:hidden'), 'the phone pair must be phone-only');
 });
 
 test('day-select is a plain link (miniMonthDayHref) — no client JS required for the tap-to-select interaction', () => {
