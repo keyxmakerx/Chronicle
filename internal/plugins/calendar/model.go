@@ -598,6 +598,12 @@ type Event struct {
 	Color                    *string `json:"color,omitempty"`
 	Icon                     *string `json:"icon,omitempty"`
 	AllDay                   bool    `json:"all_day"`
+	// CollectRSVPs is the per-event RSVP opt-in (C-CAL-RSVP-P1, migration 013).
+	// Read-only on this aggregate: the WRITE goes through RSVPRepository
+	// .SetCollectRSVPs, deliberately OFF the shared UpdateEvent path so the
+	// drawer's lossless quick-save (which re-sends the whole stored event shape)
+	// can never clobber the flag.
+	CollectRSVPs             bool    `json:"collect_rsvps"`
 	CreatedBy                *string `json:"created_by,omitempty"`
 	CreatedAt                time.Time `json:"created_at"`
 	UpdatedAt                time.Time `json:"updated_at"`

@@ -35,6 +35,47 @@ func proposalLink(campaignID, proposalID string) string {
 	return fmt.Sprintf("/campaigns/%s/proposals/%s", campaignID, proposalID)
 }
 
+// NotifyUsers writes one notification per recipient with a caller-supplied type,
+// message, and in-app link.
+//
+// The generic entry point (C-CAL-RSVP-P1). The store has always been generic
+// (T-B2) — this is the method that lets a non-scheduler feature use it without
+// the scheduler growing a bespoke NotifyX per feature and without that feature
+// touching the repository. Callers own their own type constant.
+//
+// Empty recipient ids are skipped rather than rejected, so a caller can pass a
+// roster slice that may contain a blank without pre-filtering. A blank ntype is
+// rejected: an untyped row would be invisible to any consumer that filters.
+func (s *sessionService) NotifyUsers(ctx context.Context, userIDs []string, campaignID, ntype, message, link string) error {
+	if ntype == "" {
+		return apperror.NewValidation("notification type is required")
+	}
+	payload := marshalPayload(message, ntype)
+	now := time.Now().UTC()
+	cid := campaignID
+	for _, uid := range userIDs {
+		if uid == "" {
+			continue
+		}
+		n := &Notification{
+			ID:         generateUUID(),
+			UserID:     uid,
+			CampaignID: &cid,
+			Type:       ntype,
+			Payload:    payload,
+			CreatedAt:  now,
+		}
+		if link != "" {
+			l := link
+			n.Link = &l
+		}
+		if err := s.repo.CreateNotification(ctx, n); err != nil {
+			return apperror.NewInternal(fmt.Errorf("writing notification: %w", err))
+		}
+	}
+	return nil
+}
+
 // NotifyProposalCreated writes a "new proposal" notification to each recipient
 // (the handler supplies the member list, minus the creator).
 func (s *sessionService) NotifyProposalCreated(ctx context.Context, campaignID, proposalID, title string, recipientIDs []string) error {

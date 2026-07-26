@@ -56,6 +56,10 @@ type SessionService interface {
 	ListMyExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	AddMyException(ctx context.Context, campaignID, userID string, req AddExceptionRequest) error
 	ReplaceMyDayExceptions(ctx context.Context, campaignID, userID string, req ReplaceDayExceptionsRequest) error
+	// AddMyAvailableWindows records temporary offered availability for specific
+	// dates, composing each day so the offer never erases the member's usual
+	// hours (C-CAL-RSVP-P2).
+	AddMyAvailableWindows(ctx context.Context, campaignID, userID, tz string, windows []AvailabilityWindowDTO) error
 	DeleteMyException(ctx context.Context, campaignID, userID, exceptionID string) error
 	BuildOverlay(ctx context.Context, campaignID string, members []overlayMemberInput, weekStart, viewerTZ string, includeDetail bool) (*WeekOverlay, error)
 
@@ -81,6 +85,11 @@ type SessionService interface {
 	// payload/link/message construction. See notifications_service.go.
 	NotifyProposalCreated(ctx context.Context, campaignID, proposalID, title string, recipientIDs []string) error
 	NotifyProposalResponse(ctx context.Context, campaignID, proposalID, responderName, response string) error
+	// NotifyUsers is the generic fan-in the notifications store was always
+	// documented to support (T-B2). Added by C-CAL-RSVP-P1 so a feature outside
+	// the scheduler can write a bell notification without the scheduler growing
+	// a method per feature — and without that feature reaching the repository.
+	NotifyUsers(ctx context.Context, userIDs []string, campaignID, ntype, message, link string) error
 	// NotifyProposalConfirmed tells everyone who responded that the winning slot
 	// was picked, linking to the new session (C-SCHED-P3, reuses the P2 store).
 	NotifyProposalConfirmed(ctx context.Context, campaignID, proposalID, sessionID string) error

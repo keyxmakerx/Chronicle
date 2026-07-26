@@ -542,6 +542,116 @@ func (a *calendarEntityCreatorAdapter) CreateEntity(ctx context.Context, campaig
 	return ent.ID, nil
 }
 
+// --- C-CAL-RSVP-P1 cross-plugin adapters ---
+//
+// The calendar plugin declares narrow interfaces for what event RSVPs need from
+// other plugins; these adapters bind them to the concrete services here at the
+// app boundary (rule 8). The calendar package gains no import edge into
+// sessions — which internal/wire/plugin_import_guard_test.go forbids — and each
+// seam is nil-safe on the calendar side, so an instance with no SMTP and no
+// scheduler still does in-app RSVP.
+
+// calendarRSVPNotifierAdapter wraps the sessions notifications service to
+// implement calendar.RSVPNotifier. The notification TYPE constant belongs to
+// the store's owner, so it is supplied HERE rather than by the calendar.
+type calendarRSVPNotifierAdapter struct {
+	svc sessions.SessionService
+}
+
+// NotifyRSVP writes one bell notification per recipient.
+func (a *calendarRSVPNotifierAdapter) NotifyRSVP(ctx context.Context, userIDs []string, campaignID, message, link string) error {
+	return a.svc.NotifyUsers(ctx, userIDs, campaignID, sessions.NotifCalendarRSVP, message, link)
+}
+
+// calendarAvailabilityAdapter wraps the sessions availability service to
+// implement calendar.AvailabilityExceptionWriter — the scheduler write behind
+// the emailed "Out this week" action.
+//
+// SELF-WRITE ONLY. Both methods take the userID the calendar resolved from a
+// redeemed token or an authenticated session and pass it straight through to
+// the sessions "…My…" methods, which scope every row to (campaign, user). There
+// is no code path by which one member's click writes another member's
+// availability.
+type calendarAvailabilityAdapter struct {
+	svc     sessions.SessionService
+	authSvc auth.AuthService
+}
+
+// ExceptionDates returns the dates on which the member already has ANY
+// availability exception, so the caller can skip hand-authored days.
+func (a *calendarAvailabilityAdapter) ExceptionDates(ctx context.Context, campaignID, userID string) ([]string, error) {
+	excs, err := a.svc.ListMyExceptions(ctx, campaignID, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(excs))
+	seen := make(map[string]bool, len(excs))
+	for _, e := range excs {
+		if seen[e.OnDate] {
+			continue
+		}
+		seen[e.OnDate] = true
+		out = append(out, e.OnDate)
+	}
+	return out, nil
+}
+
+// MarkDaysUnavailable writes one full-day (0–1440) 'unavailable' exception per
+// date, one ReplaceMyDayExceptions call each — the same per-date endpoint the
+// scheduler's own "Out this week" button loops over client-side
+// (static/js/availability.js fireOutWeek). Reusing it means the per-user
+// exception cap (C-SCHED-P2 0d) is re-checked on every day for free.
+func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) error {
+	tz := a.userTZ(ctx, userID)
+	for _, d := range dates {
+		req := sessions.ReplaceDayExceptionsRequest{
+			OnDate: d,
+			TZ:     tz,
+			Blocks: []sessions.ExceptionBlockDTO{{StartMinute: 0, EndMinute: 1440, State: "unavailable"}},
+		}
+		if err := a.svc.ReplaceMyDayExceptions(ctx, campaignID, userID, req); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// OfferAvailableWindows records TEMPORARY availability a member offered from an
+// RSVP surface (C-CAL-RSVP-P2).
+//
+// Delegates to the sessions service rather than looping ReplaceMyDayExceptions
+// here, because the composition rule — exceptions REPLACE a date, so an offer
+// must be merged onto the member's existing effective day or it silently erases
+// their usual hours — is the scheduler's own invariant and belongs with it.
+func (a *calendarAvailabilityAdapter) OfferAvailableWindows(ctx context.Context, campaignID, userID string, windows []calendar.RSVPAvailabilityWindow) error {
+	if len(windows) == 0 {
+		return nil
+	}
+	out := make([]sessions.AvailabilityWindowDTO, 0, len(windows))
+	for _, w := range windows {
+		out = append(out, sessions.AvailabilityWindowDTO{
+			OnDate:      w.OnDate,
+			StartMinute: w.StartMinute,
+			EndMinute:   w.EndMinute,
+		})
+	}
+	return a.svc.AddMyAvailableWindows(ctx, campaignID, userID, a.userTZ(ctx, userID), out)
+}
+
+// userTZ resolves the member's stored IANA zone, defaulting to UTC. Timezone is
+// a user-account concern, so it is resolved here rather than plumbed through
+// the calendar's interface.
+func (a *calendarAvailabilityAdapter) userTZ(ctx context.Context, userID string) string {
+	if a.authSvc == nil {
+		return "UTC"
+	}
+	u, err := a.authSvc.GetUser(ctx, userID)
+	if err != nil || u == nil || u.Timezone == nil || *u.Timezone == "" {
+		return "UTC"
+	}
+	return *u.Timezone
+}
+
 // calendarEventListerAdapter wraps calendar.CalendarService to implement the
 // timeline.CalendarEventLister interface. Lists all calendar events for the
 // event picker when linking events to a timeline.
@@ -2443,6 +2553,16 @@ func (a *App) RegisterRoutes() {
 	// the cross-plugin write seam over the entities service (rule 8).
 	calendarHandler.SetEntityCreator(&calendarEntityCreatorAdapter{svc: entityService})
 
+	// Event RSVPs (C-CAL-RSVP-P1). Its own repo/service/handler triple so the
+	// RSVP lane stays disjoint from the calendar aggregate's shared interfaces.
+	// The mail sender is available here; the two sessions-backed seams (bell
+	// notifications, scheduler availability) are wired further down, after the
+	// sessions service exists — the SetX pattern SetTimelineLister already uses.
+	calendarRSVPHandler := calendar.NewRSVPHandler(
+		calendar.NewRSVPService(calendar.NewRSVPRepository(a.DB), calendarRepo))
+	calendarRSVPHandler.SetMemberDirectory(campaignService)
+	calendarRSVPHandler.SetMailSender(smtpService, a.Config.BaseURL)
+
 	// NW-2.2 Chunk F: register calendar in the App's metadata registry +
 	// expose its embedded static assets for serving at /static/plugins/calendar/.
 	// echo.MustSubFS strips the leading "static" dir from the embed so
@@ -2470,6 +2590,10 @@ func (a *App) RegisterRoutes() {
 
 	if a.PluginHealth.IsHealthy("calendar") {
 		calendar.RegisterRoutes(e, calendarHandler, campaignService, authService, addonService)
+		// RSVP surface rides the same health gate: its tables ship in the
+		// calendar plugin's own migration chain (013), so a degraded calendar
+		// schema means these routes must not be registered either.
+		calendar.RegisterRSVPRoutes(e, calendarRSVPHandler, campaignService, authService, addonService)
 
 		// C-CALENDAR-ENDPOINTS: public Foundry-facing calendar API
 		// gated by the same per-campaign signed token foundry_vtt
@@ -2527,6 +2651,16 @@ func (a *App) RegisterRoutes() {
 	sessionsHandler := sessions.NewHandler(sessionsService)
 	sessionsHandler.SetMemberLister(campaignService)
 	sessionsHandler.SetMailSender(smtpService, a.Config.BaseURL)
+	// C-CAL-RSVP-P1: the two calendar-RSVP seams that need the sessions service.
+	// Wired here (post-construction setters) because the calendar plugin is
+	// constructed earlier — the same ordering constraint SetTimelineLister
+	// solves below. Both are nil-safe on the calendar side, so wiring them
+	// behind the sessions health gate would also have been correct; they are
+	// wired unconditionally because the notifications + availability tables are
+	// core-adjacent and a degraded sessions schema surfaces as a logged warning
+	// on use rather than a silently missing feature.
+	calendarRSVPHandler.SetRSVPNotifier(&calendarRSVPNotifierAdapter{svc: sessionsService})
+	calendarRSVPHandler.SetAvailabilityWriter(&calendarAvailabilityAdapter{svc: sessionsService, authSvc: authService})
 	if a.PluginHealth.IsHealthy("sessions") {
 		sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService, addonService)
 	} else {

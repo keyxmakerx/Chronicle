@@ -127,6 +127,24 @@ In order:
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### Active arc: Calendar remodel (cordinator `plans/2026-07-24-calendar-remodel-requirements.md`)
+
+Wave 1. Source-of-record for scope + operator priorities is the cordinator plan; ADRs land here.
+
+| Item | What | Status |
+|---|---|---|
+| C-CAL-ENTITY-TIES-LEAK-FIX | Entity-visibility leak on event/era tie lists | ✅ shipped PR #565 |
+| C-CAL-RSVP-P1 | First-class RSVPs on calendar events + SMTP action emails (operator's #1 priority) — ADR-046, calendar migration 013 | ✅ this branch |
+| C-CAL-RSVP-P2 | Players give TEMPORARY availability from the RSVP flow — "suggest another time" becomes structured windows that land in the scheduler overlay. No new tables/routes. ADR-046 amendment | ✅ this branch |
+
+**Operator gate still open:** RSVP *emails* need SMTP configured (Admin → `/admin/smtp` →
+"Send test email"). In-app RSVP works without it — every mail seam is nil-safe.
+
+**Cross-plugin note:** `sessions.NotifyUsers` (generic notification fan-in) is new. The
+notifications store was always documented as generic (T-B2); C-CAL-RSVP-P1 is its first
+writer outside the scheduler. Future features should use `NotifyUsers` with their own type
+constant rather than adding a bespoke `NotifyX` per feature.
+
 #### Closed arc: NW-2.2 plugin-isolation refactor
 
 Per `cordinator/reports/chronicle/2026-05-23-c-plugin-isolation-audit.md` §3 (7 chunks A-G + D2-cleanup):
