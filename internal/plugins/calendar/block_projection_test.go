@@ -408,25 +408,31 @@ func TestBlockIdentityIsStableAndGreyscale(t *testing.T) {
 		t.Fatalf("letters = %s/%s/%s, want H/R/E",
 			blockCalLetter(def), blockCalLetter(real), blockCalLetter(other))
 	}
-	// Stability: the same calendar always resolves to the same channels.
+	// Stability: the same calendar always resolves to the same channels. A
+	// re-derived struct stands in for "a second render on a second server" —
+	// the hash is over the UUID, so nothing else about the value can matter.
+	hue, pattern := blockCalHue(other), blockCalPattern(other)
 	for i := 0; i < 5; i++ {
-		if blockCalHue(other) != blockCalHue(other) || blockCalPattern(other) != blockCalPattern(other) {
-			t.Fatal("identity channels are not stable across calls")
+		again := &Calendar{ID: other.ID, Name: "renamed since", Mode: ModeFantasy}
+		if blockCalHue(again) != hue || blockCalPattern(again) != pattern {
+			t.Fatalf("identity channels shifted on re-derivation: %s/%s vs %s/%s",
+				blockCalHue(again), blockCalPattern(again), hue, pattern)
 		}
 	}
-	if h := blockCalHue(other); h != "harptos" && h != "elven" && h != "dwarven" {
-		t.Fatalf("hue token %q is outside the closed set the signed stylesheet defines", h)
+	if hue != "harptos" && hue != "elven" && hue != "dwarven" {
+		t.Fatalf("hue token %q is outside the closed set the signed stylesheet defines", hue)
 	}
-	if p := blockCalPattern(other); !strings.HasPrefix(p, "p") || p == "p1" || p == "p2" {
-		t.Fatalf("non-default pattern %q must sit in p3..p8", p)
+	if !strings.HasPrefix(pattern, "p") || pattern == "p1" || pattern == "p2" {
+		t.Fatalf("non-default pattern %q must sit in p3..p8", pattern)
 	}
 	// A mark's pattern is locked to its hue key, so a viewer who cannot separate
 	// the hues can still separate the marks.
-	if blockPatternFor("social") != blockPatternFor("social") {
-		t.Fatal("a mark's pattern is not locked to its key")
-	}
-	if blockPatternFor("social") == "" {
+	social := blockPatternFor("social")
+	if social == "" {
 		t.Fatal("every mark must carry a greyscale pattern")
+	}
+	if blockPatternFor("soc"+"ial") != social {
+		t.Fatal("a mark's pattern is not locked to its key")
 	}
 }
 
