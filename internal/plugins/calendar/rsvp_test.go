@@ -137,6 +137,17 @@ type mockAvailability struct {
 	existing []string
 	written  []string
 	forUser  string
+	offered  []RSVPAvailabilityWindow
+	offerErr error
+}
+
+func (m *mockAvailability) OfferAvailableWindows(_ context.Context, _, userID string, w []RSVPAvailabilityWindow) error {
+	if m.offerErr != nil {
+		return m.offerErr
+	}
+	m.forUser = userID
+	m.offered = append(m.offered, w...)
+	return nil
 }
 
 func (m *mockAvailability) ExceptionDates(_ context.Context, _, _ string) ([]string, error) {
@@ -348,7 +359,7 @@ func TestApplyToken_ConsumesBeforeWriting(t *testing.T) {
 	}
 	svc := newTestRSVPService(repo, testEvent(nil), testCalendar(nil))
 
-	if _, err := svc.ApplyToken(context.Background(), "tok", ""); err == nil {
+	if _, err := svc.ApplyToken(context.Background(), "tok"); err == nil {
 		t.Fatal("a token that lost the consume race must be refused")
 	}
 	if wrote {
@@ -366,7 +377,9 @@ func TestApplyToken_ActionMapping(t *testing.T) {
 		{RSVPActionMaybe, RSVPMaybe, false},
 		{RSVPActionNo, RSVPNo, false},
 		{RSVPActionOutWeek, RSVPNo, false}, // "out this week" is a decline...
-		{RSVPActionSuggest, "", true},      // ...but "suggest" writes only a note.
+		// ...but "suggest" carries NO status and no note write at this layer: the
+		// note + windows arrive with the POST, so the handler owns that effect.
+		{RSVPActionSuggest, "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.action, func(t *testing.T) {
@@ -378,7 +391,7 @@ func TestApplyToken_ActionMapping(t *testing.T) {
 				setNoteFn:   func(_ context.Context, _, _, _ string) error { gotNote = true; return nil },
 			}
 			svc := newTestRSVPService(repo, testEvent(nil), testCalendar(nil))
-			if _, err := svc.ApplyToken(context.Background(), "tok", "Sundays work"); err != nil {
+			if _, err := svc.ApplyToken(context.Background(), "tok"); err != nil {
 				t.Fatalf("ApplyToken(%s): %v", tt.action, err)
 			}
 			if gotStatus != tt.wantStatus {
@@ -615,7 +628,143 @@ func TestToken_EmptySuggestionRejected(t *testing.T) {
 	h, _ := newTokenHandler(t, RSVPActionSuggest, repo)
 	rec := serveToken(h, http.MethodPost, "tok", "note=")
 	if !strings.Contains(rec.Body.String(), "RSVP Failed") {
-		t.Errorf("an empty suggestion must be refused; body = %q", rec.Body.String())
+		t.Errorf("an empty suggestion with no times must be refused; body = %q", rec.Body.String())
+	}
+}
+
+// --- temporary offered availability (C-CAL-RSVP-P2) ---
+
+// TestToken_SuggestWithWindowsWritesAvailability is the point of the feature: a
+// member who can't make the proposed time offers real windows from the EMAIL,
+// and those become schedulable availability rather than prose.
+func TestToken_SuggestWithWindowsWritesAvailability(t *testing.T) {
+	gotNote := ""
+	repo := &mockRSVPRepo{setNoteFn: func(_ context.Context, _, _, note string) error { gotNote = note; return nil }}
+	h, notifier := newTokenHandler(t, RSVPActionSuggest, repo)
+	avail := &mockAvailability{}
+	h.SetAvailabilityWriter(avail)
+
+	// Row 0 complete; row 1 half-filled (no end time); row 2 empty.
+	form := "w0date=2026-08-05&w0from=18%3A00&w0to=22%3A30" +
+		"&w1date=2026-08-07&w1from=19%3A00" +
+		"&note="
+	rec := serveToken(h, http.MethodPost, "tok", form)
+
+	if len(avail.offered) != 1 {
+		t.Fatalf("expected exactly the one complete row to be offered; got %+v", avail.offered)
+	}
+	w := avail.offered[0]
+	if w.OnDate != "2026-08-05" || w.StartMinute != 18*60 || w.EndMinute != 22*60+30 {
+		t.Errorf("window parsed wrong: %+v", w)
+	}
+	if avail.forUser != "u1" {
+		t.Errorf("availability must be written for the token's own user; got %q", avail.forUser)
+	}
+	// With no note supplied, one is synthesised so the Director's response list
+	// shows the offer rather than a blank.
+	if !strings.Contains(gotNote, "2026-08-05 18:00–22:30") {
+		t.Errorf("note should carry the offered window; got %q", gotNote)
+	}
+	if len(notifier.messages) != 1 || !strings.Contains(notifier.messages[0], "18:00") {
+		t.Errorf("owner notification should carry the offered time; got %v", notifier.messages)
+	}
+	if !strings.Contains(rec.Body.String(), "added to your availability") {
+		t.Errorf("the member should be told their times were saved; body = %q", rec.Body.String())
+	}
+}
+
+func TestToken_SuggestWindowsMalformedRowsDropped(t *testing.T) {
+	repo := &mockRSVPRepo{}
+	h, _ := newTokenHandler(t, RSVPActionSuggest, repo)
+	avail := &mockAvailability{}
+	h.SetAvailabilityWriter(avail)
+
+	// Backwards range, junk time, and a missing date — all skipped; the note
+	// still carries the submission through.
+	form := "w0date=2026-08-05&w0from=22%3A00&w0to=18%3A00" +
+		"&w1date=2026-08-06&w1from=notatime&w1to=20%3A00" +
+		"&w2from=18%3A00&w2to=20%3A00" +
+		"&note=any+evening+really"
+	rec := serveToken(h, http.MethodPost, "tok", form)
+
+	if len(avail.offered) != 0 {
+		t.Errorf("no malformed row should be written; got %+v", avail.offered)
+	}
+	if !strings.Contains(rec.Body.String(), "sent to the organiser") {
+		t.Errorf("the note must still go through; body = %q", rec.Body.String())
+	}
+}
+
+// TestSuggestOffer_AvailabilityFailureStillRecordsAnswer pins that the RSVP note
+// and the owner notification — the promise this flow makes — survive a scheduler
+// that is absent or erroring.
+func TestSuggestOffer_AvailabilityFailureStillRecordsAnswer(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		avail *mockAvailability
+		want  string
+	}{
+		{"no scheduler wired", nil, "set up on this instance"},
+		{"scheduler errors", &mockAvailability{offerErr: errRSVPTokenSpent}, "be added to your availability"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			noted := false
+			repo := &mockRSVPRepo{setNoteFn: func(_ context.Context, _, _, _ string) error { noted = true; return nil }}
+			h, notifier := newTokenHandler(t, RSVPActionSuggest, repo)
+			if tc.avail != nil {
+				h.SetAvailabilityWriter(tc.avail)
+			}
+			rec := serveToken(h, http.MethodPost, "tok", "w0date=2026-08-05&w0from=18%3A00&w0to=22%3A00&note=")
+			if !noted {
+				t.Error("the RSVP note must still be recorded")
+			}
+			if len(notifier.messages) != 1 {
+				t.Error("the owner must still be notified")
+			}
+			if !strings.Contains(rec.Body.String(), tc.want) {
+				t.Errorf("member should be told the times weren't saved; body = %q", rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestParseHHMM(t *testing.T) {
+	tests := []struct {
+		in   string
+		want int
+		ok   bool
+	}{
+		{"18:00", 1080, true},
+		{"00:00", 0, true},
+		{"23:59", 1439, true},
+		{"09:05:00", 545, true}, // browsers that render seconds
+		{"24:00", 0, false},
+		{"18:60", 0, false},
+		{"18", 0, false},
+		{"", 0, false},
+		{"aa:bb", 0, false},
+	}
+	for _, tt := range tests {
+		got, ok := parseHHMM(tt.in)
+		if ok != tt.ok || (ok && got != tt.want) {
+			t.Errorf("parseHHMM(%q) = (%d, %v), want (%d, %v)", tt.in, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+func TestApplySuggestion_RejectsEmptyAndOverLongOffers(t *testing.T) {
+	h := NewRSVPHandler(newTestRSVPService(&mockRSVPRepo{}, testEvent(nil), testCalendar(nil)))
+	h.SetMemberDirectory(&mockMemberDir{})
+
+	if _, err := h.applySuggestion(context.Background(), "camp-1", testEvent(nil), "u1",
+		int(campaigns.RolePlayer), "   ", nil); err == nil {
+		t.Error("a blank note with no windows must be refused")
+	}
+
+	many := make([]RSVPAvailabilityWindow, maxRSVPWindows+1)
+	if _, err := h.applySuggestion(context.Background(), "camp-1", testEvent(nil), "u1",
+		int(campaigns.RolePlayer), "", many); err == nil {
+		t.Errorf("more than %d windows must be refused", maxRSVPWindows)
 	}
 }
 

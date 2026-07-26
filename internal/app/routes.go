@@ -616,6 +616,28 @@ func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, c
 	return nil
 }
 
+// OfferAvailableWindows records TEMPORARY availability a member offered from an
+// RSVP surface (C-CAL-RSVP-P2).
+//
+// Delegates to the sessions service rather than looping ReplaceMyDayExceptions
+// here, because the composition rule — exceptions REPLACE a date, so an offer
+// must be merged onto the member's existing effective day or it silently erases
+// their usual hours — is the scheduler's own invariant and belongs with it.
+func (a *calendarAvailabilityAdapter) OfferAvailableWindows(ctx context.Context, campaignID, userID string, windows []calendar.RSVPAvailabilityWindow) error {
+	if len(windows) == 0 {
+		return nil
+	}
+	out := make([]sessions.AvailabilityWindowDTO, 0, len(windows))
+	for _, w := range windows {
+		out = append(out, sessions.AvailabilityWindowDTO{
+			OnDate:      w.OnDate,
+			StartMinute: w.StartMinute,
+			EndMinute:   w.EndMinute,
+		})
+	}
+	return a.svc.AddMyAvailableWindows(ctx, campaignID, userID, a.userTZ(ctx, userID), out)
+}
+
 // userTZ resolves the member's stored IANA zone, defaulting to UTC. Timezone is
 // a user-account concern, so it is resolved here rather than plumbed through
 // the calendar's interface.

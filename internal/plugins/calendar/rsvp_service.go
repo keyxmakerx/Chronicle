@@ -51,9 +51,13 @@ type RSVPService interface {
 	// interstitial's pure read, so a mail scanner's prefetch changes nothing.
 	ValidateToken(ctx context.Context, token string) (*EventRSVPToken, error)
 
-	// ApplyToken consumes a token and writes its effect. note is used only by
-	// the "suggest another time" action and ignored otherwise.
-	ApplyToken(ctx context.Context, token, note string) (*EventRSVPToken, error)
+	// ApplyToken consumes a token and writes the RSVP status it implies.
+	//
+	// The two richer actions' side-effects are NOT applied here — "out this
+	// week" needs the scheduler and "suggest another time" needs the submitted
+	// windows/note, neither of which the service has an edge to. It consumes the
+	// token and reports which action it carried; the handler does the rest.
+	ApplyToken(ctx context.Context, token string) (*EventRSVPToken, error)
 
 	// CanUserViewEvent is the shared visibility predicate the handler needs for
 	// the email fan-out (never email a hidden event's title) and the token flow.
@@ -344,10 +348,17 @@ const rsvpBadTokenMsg = "this RSVP link is invalid or has expired"
 // the atomic winner-takes-it, so two concurrent submits of the same link apply
 // the action exactly once.
 //
-// The availability side-effect of "out this week" is NOT performed here — it
-// needs cross-plugin wiring the service has no edge to. ApplyToken records the
-// decline and returns the token; the handler performs the availability write.
-func (s *rsvpService) ApplyToken(ctx context.Context, token, note string) (*EventRSVPToken, error) {
+// Side-effects the service has no edge to are NOT performed here: "out this
+// week" needs the scheduler, and "suggest another time" needs the note and
+// windows the member submitted with the POST. Both are the handler's job, so
+// this consumes the token, writes the status the action implies (if any), and
+// reports which action it carried.
+//
+// "suggest" carries NO status — offering an alternative is not itself an answer,
+// and silently flipping someone to "no" because they proposed a better slot
+// would misreport the count to the Director. It returns early, before the status
+// write, with the token consumed.
+func (s *rsvpService) ApplyToken(ctx context.Context, token string) (*EventRSVPToken, error) {
 	t, err := s.ValidateToken(ctx, token)
 	if err != nil {
 		return nil, err
@@ -359,22 +370,11 @@ func (s *rsvpService) ApplyToken(ctx context.Context, token, note string) (*Even
 		return nil, apperror.NewInternal(err)
 	}
 
-	if t.Action == RSVPActionSuggest {
-		clean, err := normalizeRSVPNote(&note)
-		if err != nil {
-			return nil, err
-		}
-		if clean == nil {
-			return nil, apperror.NewValidation("please describe the times that would work better")
-		}
-		if err := s.repo.SetRSVPNote(ctx, t.EventID, t.UserID, *clean); err != nil {
-			return nil, apperror.NewInternal(err)
-		}
-		return t, nil
-	}
-
 	status := statusForAction(t.Action)
 	if status == "" {
+		if t.Action == RSVPActionSuggest {
+			return t, nil
+		}
 		return nil, apperror.NewBadRequest(rsvpBadTokenMsg)
 	}
 	if err := s.repo.UpsertRSVP(ctx, &EventRSVP{

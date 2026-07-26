@@ -16,6 +16,7 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -60,6 +61,11 @@ type AvailabilityExceptionWriter interface {
 	// MarkDaysUnavailable writes a full-day (0–1440) 'unavailable' exception for
 	// each supplied date.
 	MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) error
+	// OfferAvailableWindows records TEMPORARY availability the member is offering
+	// for specific dates. ADDITIVE: the implementation composes the rest of each
+	// day around the offer, so saying "I could also do Tuesday evening" can never
+	// leave the member less available than before.
+	OfferAvailableWindows(ctx context.Context, campaignID, userID string, windows []RSVPAvailabilityWindow) error
 }
 
 // RSVPMemberDirectory is the campaigns read the RSVP flows need: the roster (for
@@ -133,11 +139,11 @@ func (h *RSVPHandler) SetEventRSVPAPI(c echo.Context) error {
 		if req.Note != nil {
 			note = *req.Note
 		}
-		if err := h.svc.SuggestTime(ctx, evt, userID, cc.VisibilityRole(), note); err != nil {
+		var err error
+		notice, err = h.applySuggestion(ctx, cc.Campaign.ID, evt, userID, cc.VisibilityRole(), note, req.Windows)
+		if err != nil {
 			return err
 		}
-		h.notifySuggestion(ctx, cc.Campaign.ID, evt, userID, note)
-		notice = "Your suggestion was sent to the organiser."
 	case RSVPActionOutWeek:
 		if err := h.svc.SetMyRSVP(ctx, evt, userID, cc.VisibilityRole(),
 			SetRSVPRequest{Status: RSVPNo, Note: req.Note}); err != nil {
@@ -410,7 +416,7 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
 	}
 
-	applied, err := h.svc.ApplyToken(ctx, tokenStr, c.FormValue("note"))
+	applied, err := h.svc.ApplyToken(ctx, tokenStr)
 	if err != nil {
 		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
 	}
@@ -420,12 +426,62 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 	case RSVPActionOutWeek:
 		message = h.applyOutThisWeek(ctx, cal, evt, tok.UserID)
 	case RSVPActionSuggest:
-		message = "Thanks — your suggestion was sent to the organiser."
-		h.notifySuggestion(ctx, cal.CampaignID, evt, tok.UserID, c.FormValue("note"))
+		// The token flow's role is the member's real campaign role, resolved in
+		// resolveToken; re-resolve rather than assume, so the visibility gate
+		// inside SuggestTime is the same one every other path uses.
+		role, _ := h.memberRole(ctx, cal.CampaignID, tok.UserID)
+		msg, err := h.applySuggestion(ctx, cal.CampaignID, evt, tok.UserID, role,
+			c.FormValue("note"), parseOfferedWindows(c))
+		if err != nil {
+			return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed",
+				apperror.UserMessage(err, "Please add a time that would work, or a short note."), false))
+		}
+		message = msg
 	default:
 		h.notifyOwnerOfResponse(ctx, cal.CampaignID, evt, tok.UserID, statusForAction(applied.Action))
 	}
 	return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", message, true))
+}
+
+// parseOfferedWindows reads the emailed suggestion form's date/from/to rows.
+//
+// The form is plain HTML with NO JavaScript — it renders inside whatever browser
+// an email client hands off to, possibly for a logged-out member — so the rows
+// are a fixed set of indexed fields and a row is simply skipped unless all three
+// parts are present and coherent. Malformed input is DROPPED rather than
+// erroring: the note still gets through, and the member is told what was saved.
+func parseOfferedWindows(c echo.Context) []RSVPAvailabilityWindow {
+	out := make([]RSVPAvailabilityWindow, 0, rsvpSuggestFormRows)
+	for i := 0; i < rsvpSuggestFormRows; i++ {
+		date := strings.TrimSpace(c.FormValue(fmt.Sprintf("w%ddate", i)))
+		from := strings.TrimSpace(c.FormValue(fmt.Sprintf("w%dfrom", i)))
+		to := strings.TrimSpace(c.FormValue(fmt.Sprintf("w%dto", i)))
+		if date == "" || from == "" || to == "" {
+			continue
+		}
+		start, ok1 := parseHHMM(from)
+		end, ok2 := parseHHMM(to)
+		if !ok1 || !ok2 || start >= end {
+			continue
+		}
+		out = append(out, RSVPAvailabilityWindow{OnDate: date, StartMinute: start, EndMinute: end})
+	}
+	return out
+}
+
+// parseHHMM converts an <input type="time"> value into minutes from midnight.
+// Accepts "HH:MM" and the "HH:MM:SS" some browsers emit when seconds are shown.
+func parseHHMM(v string) (int, bool) {
+	parts := strings.Split(v, ":")
+	if len(parts) < 2 {
+		return 0, false
+	}
+	h, err1 := strconv.Atoi(parts[0])
+	m, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	return h*60 + m, true
 }
 
 // resolveToken validates a token and resolves the event + calendar behind it,
@@ -534,6 +590,64 @@ func (h *RSVPHandler) applyOutThisWeek(ctx context.Context, cal *Calendar, evt *
 		msg += fmt.Sprintf(" %d day(s) already had your own custom availability and were left alone.", skipped)
 	}
 	return msg
+}
+
+// applySuggestion is the shared "I can't make that — here's what would work"
+// path for BOTH the in-app buttons and the emailed token, so the two surfaces
+// can never drift apart.
+//
+// It accepts a free-text note, structured availability windows, or both, and
+// requires at least one. The windows are the schedulable half: they become real
+// `available` exceptions in the scheduler, so the Director's overlay and its
+// computed best-window can actually use them, instead of prose somebody has to
+// read and re-key. Writing availability is best-effort — the RSVP note and the
+// owner notification are the promise this flow makes, and a scheduler that is
+// absent or degraded must not swallow the member's answer.
+func (h *RSVPHandler) applySuggestion(ctx context.Context, campaignID string, evt *Event,
+	userID string, role int, note string, windows []RSVPAvailabilityWindow) (string, error) {
+
+	if len(windows) > maxRSVPWindows {
+		return "", apperror.NewBadRequest(fmt.Sprintf("at most %d time windows at once", maxRSVPWindows))
+	}
+	if strings.TrimSpace(note) == "" && len(windows) == 0 {
+		return "", apperror.NewValidation("add a time that would work, or a short note")
+	}
+
+	// The note is what persists on the RSVP row. When the member gave only
+	// windows, synthesise one so the Director sees something on the response
+	// list rather than a blank.
+	effectiveNote := strings.TrimSpace(note)
+	if effectiveNote == "" {
+		effectiveNote = "Could do: " + formatWindowList(windows)
+	}
+	if err := h.svc.SuggestTime(ctx, evt, userID, role, effectiveNote); err != nil {
+		return "", err
+	}
+
+	notice := "Thanks — your suggestion was sent to the organiser."
+	if len(windows) > 0 {
+		if h.availability == nil {
+			notice = "Thanks — your note was sent. (Scheduler availability isn't set up on this instance, so the times weren't saved to your calendar.)"
+		} else if err := h.availability.OfferAvailableWindows(ctx, campaignID, userID, windows); err != nil {
+			slog.Warn("calendar rsvp: writing offered availability failed",
+				slog.Any("error", err), slog.String("campaign_id", campaignID))
+			notice = "Thanks — your note was sent, but the times couldn't be added to your availability. You can set them by hand on the availability page."
+		} else {
+			notice = "Thanks — your times were added to your availability and sent to the organiser."
+		}
+	}
+
+	h.notifySuggestion(ctx, campaignID, evt, userID, effectiveNote)
+	return notice, nil
+}
+
+// formatWindowList renders offered windows for a note / notification.
+func formatWindowList(windows []RSVPAvailabilityWindow) string {
+	parts := make([]string, 0, len(windows))
+	for _, w := range windows {
+		parts = append(parts, w.FormatWindow())
+	}
+	return strings.Join(parts, ", ")
 }
 
 // notifySuggestion pings the event's owner that a member proposed a better time.

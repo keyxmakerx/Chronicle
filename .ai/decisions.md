@@ -1939,3 +1939,55 @@ can never silently block the wrong one.
 `internal/plugins/sessions/notifications_service.go` (`NotifyUsers`),
 `internal/plugins/calendar/{rsvp_test,rsvp_email_test,rsvp_egress_test,event_scan_contract_test}.go`,
 ADR-042 (cross-plugin injection), ADR-045 (migration safety), cordinator dispatch C-CAL-RSVP-P1.
+
+### ADR-046 amendment (2026-07-26) — "suggest another time" becomes structured availability
+
+**Status.** Accepted, amends ADR-046 above (C-CAL-RSVP-P2). Operator ask: "there needs to be a way
+for players to give temporary availability."
+
+**Context.** ADR-046 shipped an asymmetry. "Out this week" wrote structured *un*availability the
+scheduler could aggregate; "suggest another time" wrote a free-text note the Director had to read
+and re-key. Players could express when they COULDN'T play in a schedulable way, and when they COULD
+only in prose. Meanwhile the storage for the answer already existed —
+`availability_exceptions.state` has always accepted `available`/`preferred` per date, and
+`effectiveBlocks` already projects exceptions over the recurring pattern into the DM overlay — so
+what was missing was a safe WRITE path, not a schema.
+
+**Decision.**
+
+1. **Structured windows alongside the note.** The suggestion surfaces (in-app quick-edit card and
+   the emailed token page) accept date + from + to rows plus an optional note; the server requires
+   at least one of the two, so a member with a vague answer is never blocked. Windows become
+   `available` exceptions and land in the overlay + computed best-window; the note carries nuance.
+2. **The composition rule lives in SESSIONS, not calendar.** Exception rows REPLACE a date, so
+   writing only the offered window would erase the member's usual hours for that day — the exact
+   opposite of what they just said. `sessions.AddMyAvailableWindows` / `composeOfferedDay` composes
+   the day, paints the offer on a minute canvas, and writes the merged set. It belongs there because
+   replace-semantics is the scheduler's own invariant, and it is enforced SERVER-side because this
+   write can arrive from an email link with no editor in front of it. `preferred` is never
+   downgraded by a generic offer; `unavailable` is overwritten.
+3. **`ApplyToken` no longer applies the richer actions.** It consumes the token and writes only the
+   status the action implies (`suggest` carries none and returns early). Both richer actions need
+   either the POST body or the scheduler, neither of which the service has an edge to, so the
+   handler owns them — via one shared `applySuggestion` used by the in-app and emailed paths so the
+   two cannot drift.
+4. **Availability writing is best-effort.** The RSVP note and the owner notification are the promise
+   this flow makes; a scheduler that is absent or erroring still records the answer and tells the
+   member their times were not saved.
+
+**Consequences.** A player who can't make the proposed slot now answers once and the Director sees
+real, aggregatable availability instead of prose. No new tables and no new routes — the existing
+`POST …/events/:eid/rsvp` body gained an optional `windows` array and the emailed suggest page gained
+form rows. One existing test invariant was narrowed:
+`TestEventQuickEditV2_PlayersReadOnly` asserted the player card contained no `<input>`/`<textarea>`
+at all, which was a proxy for "a player cannot edit the event" and stopped being meaningful once
+players legitimately type their OWN data into that card; it now pins the event-editing fields by
+name (strictly narrower), with a companion test asserting the RSVP affordances render for
+non-Scribes.
+
+**References.** `internal/plugins/sessions/availability_service.go`
+(`AddMyAvailableWindows`, `composeOfferedDay`, `paint`, `runsToBlocks`),
+`internal/plugins/sessions/availability_offer_test.go`,
+`internal/plugins/calendar/rsvp_handler.go` (`applySuggestion`, `parseOfferedWindows`),
+`internal/plugins/calendar/rsvp_email.go` (`rsvpSuggestPage`),
+`internal/app/routes.go` (`calendarAvailabilityAdapter.OfferAvailableWindows`), ADR-046.

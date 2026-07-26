@@ -6,7 +6,10 @@
 // through the campaign export or the AI export (pinned by rsvp_egress_test.go).
 package calendar
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // RSVP status values. These are the exact ENUM members of
 // calendar_event_rsvps.status — the DB rejects anything else, and
@@ -142,7 +145,36 @@ type EventRSVPSummary struct {
 // action — the alternative was three near-identical routes. Omitting it makes
 // the body exactly {status, note?}.
 type SetRSVPRequest struct {
-	Status string  `json:"status"`
-	Note   *string `json:"note,omitempty"`
-	Action string  `json:"action,omitempty"` // "", "out_week", or "suggest"
+	Status  string                   `json:"status"`
+	Note    *string                  `json:"note,omitempty"`
+	Action  string                   `json:"action,omitempty"` // "", "out_week", or "suggest"
+	Windows []RSVPAvailabilityWindow `json:"windows,omitempty"`
+}
+
+// RSVPAvailabilityWindow is one TEMPORARY window a member offers when they
+// can't make the proposed time — "I could actually do Tuesday 6–10pm"
+// (C-CAL-RSVP-P2).
+//
+// This is the structured half of "suggest another time". A free-text note tells
+// the Director something they have to read and re-key; a window is real
+// availability that lands in the scheduler overlay and counts toward the
+// computed best-time-to-play. Both are accepted: the windows carry the
+// schedulable signal, the note carries the nuance.
+type RSVPAvailabilityWindow struct {
+	OnDate      string `json:"onDate"` // YYYY-MM-DD, real-world date
+	StartMinute int    `json:"startMinute"`
+	EndMinute   int    `json:"endMinute"`
+}
+
+// maxRSVPWindows bounds one offer. Matches the scheduler's own cap so the two
+// surfaces can't disagree about what is acceptable.
+const maxRSVPWindows = 8
+
+// FormatWindow renders a window as a short human label for notifications and
+// confirmation pages ("2026-08-05 18:00–22:00").
+func (w RSVPAvailabilityWindow) FormatWindow() string {
+	hhmm := func(m int) string {
+		return fmt.Sprintf("%02d:%02d", m/60, m%60)
+	}
+	return fmt.Sprintf("%s %s–%s", w.OnDate, hhmm(w.StartMinute), hhmm(w.EndMinute))
 }

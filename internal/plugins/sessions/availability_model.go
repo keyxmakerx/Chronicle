@@ -90,6 +90,18 @@ type ReplaceDayExceptionsRequest struct {
 	Blocks []ExceptionBlockDTO       `json:"blocks"`
 }
 
+// AvailabilityWindowDTO is one TEMPORARY window a member offers for a specific
+// real-world date — "I could actually do Tuesday 6–10pm" (C-CAL-RSVP-P2).
+//
+// Distinct from ExceptionBlockDTO, which is a composed piece of a whole-day
+// replacement: a window is an ADDITIVE offer, and the service composes the rest
+// of the day around it so the offer can never reduce the member's availability.
+type AvailabilityWindowDTO struct {
+	OnDate      string `json:"onDate"` // YYYY-MM-DD
+	StartMinute int    `json:"startMinute"`
+	EndMinute   int    `json:"endMinute"`
+}
+
 // ExceptionBlockDTO is one composed block within a day-replace request.
 type ExceptionBlockDTO struct {
 	StartMinute int    `json:"startMinute"`

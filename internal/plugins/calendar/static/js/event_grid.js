@@ -351,6 +351,55 @@
             });
         }
 
+        // rsvpToggleOffer shows/hides the "when could you make it" panel and
+        // clears it on close, so re-opening never resurrects a stale draft.
+        function rsvpToggleOffer(show) {
+            var box = qeEl('[data-qe-rsvp-offer]');
+            if (!box) return;
+            box.classList.toggle('hidden', !show);
+            if (show) {
+                var first = box.querySelector('[data-qe-offer-date]');
+                if (first && typeof first.focus === 'function') first.focus();
+                return;
+            }
+            box.querySelectorAll('input, textarea').forEach(function (el) { el.value = ''; });
+        }
+
+        // hhmmToMinutes converts an <input type="time"> value to minutes from
+        // midnight, or null when it isn't a usable time.
+        function hhmmToMinutes(v) {
+            var parts = String(v || '').split(':');
+            if (parts.length < 2) return null;
+            var h = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+            if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+            return h * 60 + m;
+        }
+
+        // rsvpSendOffer collects the filled rows and posts them as structured
+        // availability. A row is skipped unless all three parts are present and
+        // the range runs forwards; an incomplete row is a half-typed draft, not
+        // an error worth blocking the whole submit over.
+        function rsvpSendOffer() {
+            var box = qeEl('[data-qe-rsvp-offer]');
+            if (!box) return;
+            var windows = [];
+            box.querySelectorAll('[data-qe-offer-row]').forEach(function (row) {
+                var date = (row.querySelector('[data-qe-offer-date]') || {}).value || '';
+                var from = hhmmToMinutes((row.querySelector('[data-qe-offer-from]') || {}).value);
+                var to = hhmmToMinutes((row.querySelector('[data-qe-offer-to]') || {}).value);
+                if (!date || from === null || to === null || from >= to) return;
+                windows.push({ onDate: date, startMinute: from, endMinute: to });
+            });
+            var noteEl = box.querySelector('[data-qe-offer-note]');
+            var note = noteEl ? noteEl.value.trim() : '';
+            if (!windows.length && !note) {
+                window.Chronicle.notify('Add a time that would work, or a short note', 'error');
+                return;
+            }
+            rsvpPost({ status: 'maybe', action: 'suggest', note: note, windows: windows });
+            rsvpToggleOffer(false);
+        }
+
         if (qe && qe.dataset.qeRsvpWired !== '1') {
             qe.dataset.qeRsvpWired = '1'; // per-node guard (QA2 re-init class)
             ['yes', 'maybe', 'no'].forEach(function (st) {
@@ -363,13 +412,11 @@
                 rsvpPost({ status: 'no', action: 'out_week' });
             });
             var sgBtn = qeEl('[data-qe-rsvp-suggest]');
-            if (sgBtn) sgBtn.addEventListener('click', function () {
-                var note = window.prompt('What times would work better for you?');
-                if (note === null) return;
-                note = note.trim();
-                if (!note) return;
-                rsvpPost({ status: 'maybe', action: 'suggest', note: note });
-            });
+            if (sgBtn) sgBtn.addEventListener('click', function () { rsvpToggleOffer(true); });
+            var offCancel = qeEl('[data-qe-offer-cancel]');
+            if (offCancel) offCancel.addEventListener('click', function () { rsvpToggleOffer(false); });
+            var offSend = qeEl('[data-qe-offer-send]');
+            if (offSend) offSend.addEventListener('click', function () { rsvpSendOffer(); });
         }
 
         // Card click → open the quick-edit card. Every member gets this (the

@@ -182,7 +182,12 @@ func rsvpPageShell(title, accent, body string) string {
 .dot{width:44px;height:44px;border-radius:50%;margin:0 auto 1rem;background:` + accent + `}
 h1{font-size:1.25rem;margin:0 0 .5rem;color:#111}
 p{color:#666;margin:0 0 1.25rem;font-size:.92rem;line-height:1.5}
-textarea{font:inherit;width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #d4d4d8;border-radius:8px;margin-bottom:1rem}
+textarea,input[type=date],input[type=time]{font:inherit;width:100%;box-sizing:border-box;padding:.55rem;border:1px solid #d4d4d8;border-radius:8px;background:#fff;color:#111}
+textarea{margin-bottom:1rem}
+.wrow{text-align:left;margin-bottom:.7rem}
+.wrow label,.notelabel{display:block;font-size:.78rem;font-weight:600;color:#52525b;margin-bottom:.3rem}
+.wgrid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:.4rem}
+@media (max-width:420px){.wgrid{grid-template-columns:1fr}}
 button{font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius:8px;background:#6366f1;color:#fff;cursor:pointer}</style>
 </head><body><div class="card">` + body + `</div></body></html>`
 }
@@ -212,15 +217,52 @@ func rsvpConfirmPage(title, message, actionURL, confirmLabel, csrfToken string) 
 			`<button type="submit">`+escapeAttr(confirmLabel)+`</button></form>`)
 }
 
-// rsvpSuggestPage is the "suggest another time" free-text form. Same GET-renders
-// / POST-applies split as the confirm page; the note rides the POST body.
+// rsvpSuggestFormRows is how many date/time rows the emailed suggestion form
+// offers. Three is enough to express "any of these evenings" without turning an
+// email landing page into a scheduler.
+const rsvpSuggestFormRows = 3
+
+// rsvpSuggestPage is the "suggest another time" form: structured
+// date + from + to rows PLUS an optional free-text note.
+//
+// The rows are the point. A note tells the Director something they have to read
+// and re-key; a row becomes real temporary availability in the scheduler, so it
+// shows up in the overlay and counts toward the computed best window. Either is
+// accepted, so a member with a vague answer is never blocked — the server
+// requires at least one of the two.
+//
+// Plain HTML, no JavaScript: this renders for a possibly-logged-out member in
+// whatever browser their email client hands off to. `type="date"` / `type="time"`
+// degrade to text inputs on anything that doesn't support them, and the parser
+// simply skips a row it can't read.
+//
+// Same GET-renders / POST-applies split as the confirm page.
 func rsvpSuggestPage(detail, actionURL, csrfToken string) string {
+	var rows strings.Builder
+	for i := 0; i < rsvpSuggestFormRows; i++ {
+		idx := fmt.Sprint(i)
+		label := "Another time that works"
+		if i == 0 {
+			label = "A time that works for you"
+		}
+		rows.WriteString(
+			`<div class="wrow"><label for="w` + idx + `date">` + escapeAttr(label) + `</label>` +
+				`<div class="wgrid">` +
+				`<input type="date" id="w` + idx + `date" name="w` + idx + `date" aria-label="Date">` +
+				`<input type="time" name="w` + idx + `from" aria-label="From" placeholder="from">` +
+				`<input type="time" name="w` + idx + `to" aria-label="To" placeholder="to">` +
+				`</div></div>`)
+	}
+
 	return rsvpPageShell("Suggest another time", "#6366f1",
-		`<div class="dot"></div><h1>Suggest another time</h1>`+
-			`<p>`+escapeAttr(detail)+`<br>What times would work better for you?</p>`+
+		`<div class="dot"></div><h1>When could you make it?</h1>`+
+			`<p>`+escapeAttr(detail)+`<br>Add any times that would work — they'll be added to your `+
+			`availability so the organiser can see them on the schedule.</p>`+
 			`<form method="POST" action="`+escapeAttr(actionURL)+`">`+
 			`<input type="hidden" name="csrf_token" value="`+escapeAttr(csrfToken)+`">`+
-			`<textarea name="note" rows="4" maxlength="`+fmt.Sprint(maxRSVPNoteLen)+
-			`" placeholder="e.g. any evening after 8pm, or Sunday afternoon" required></textarea>`+
-			`<button type="submit">Send suggestion</button></form>`)
+			rows.String()+
+			`<label for="note" class="notelabel">Anything else? (optional)</label>`+
+			`<textarea id="note" name="note" rows="3" maxlength="`+fmt.Sprint(maxRSVPNoteLen)+
+			`" placeholder="e.g. any evening after 8pm, or Sunday afternoon"></textarea>`+
+			`<button type="submit">Send</button></form>`)
 }

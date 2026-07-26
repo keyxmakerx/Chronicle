@@ -56,6 +56,10 @@ type SessionService interface {
 	ListMyExceptions(ctx context.Context, campaignID, userID string) ([]AvailabilityException, error)
 	AddMyException(ctx context.Context, campaignID, userID string, req AddExceptionRequest) error
 	ReplaceMyDayExceptions(ctx context.Context, campaignID, userID string, req ReplaceDayExceptionsRequest) error
+	// AddMyAvailableWindows records temporary offered availability for specific
+	// dates, composing each day so the offer never erases the member's usual
+	// hours (C-CAL-RSVP-P2).
+	AddMyAvailableWindows(ctx context.Context, campaignID, userID, tz string, windows []AvailabilityWindowDTO) error
 	DeleteMyException(ctx context.Context, campaignID, userID, exceptionID string) error
 	BuildOverlay(ctx context.Context, campaignID string, members []overlayMemberInput, weekStart, viewerTZ string, includeDetail bool) (*WeekOverlay, error)
 

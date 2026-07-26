@@ -10,6 +10,7 @@ package calendar
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -207,8 +208,17 @@ func TestTokenPages_EscapeAndCarryCSRF(t *testing.T) {
 	if strings.Contains(suggest, "<script>alert(1)</script>") {
 		t.Error("suggest page must escape interpolated text")
 	}
-	if !strings.Contains(suggest, `<textarea name="note"`) {
+	if !strings.Contains(suggest, `name="note"`) {
 		t.Error("suggest page must render the free-text field")
+	}
+	// The structured rows are the point of the page — a note alone can't be
+	// scheduled against.
+	for i := 0; i < rsvpSuggestFormRows; i++ {
+		for _, part := range []string{"date", "from", "to"} {
+			if !strings.Contains(suggest, `name="w`+fmt.Sprint(i)+part+`"`) {
+				t.Errorf("suggest page must render row %d's %s field", i, part)
+			}
+		}
 	}
 	if !strings.Contains(suggest, `value="csrf-123"`) {
 		t.Error("suggest page must carry the CSRF token")

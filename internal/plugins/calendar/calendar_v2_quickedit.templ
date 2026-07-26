@@ -79,6 +79,36 @@ templ eventQuickEditV2(data CalendarV2ViewData) {
 					Suggest another time
 				</button>
 			</div>
+			// "Can't make that — here's when I could" (C-CAL-RSVP-P2). Hidden
+			// until the member asks for it. Two date/time rows plus an optional
+			// note: the ROWS are the point — they become real temporary
+			// availability in the scheduler, so the Director's overlay can use
+			// them, where a free-text note only tells them something they have to
+			// read and re-key. Either is accepted (the server requires one of the
+			// two), so a member with a vague answer is never blocked.
+			<div class="hidden mt-2 pt-2 border-t border-edge/60" data-qe-rsvp-offer>
+				<div class="text-[10.5px] text-fg-secondary mb-1">When could you make it?</div>
+				<div class="space-y-1" data-qe-offer-rows>
+					for i := 0; i < 2; i++ {
+						<div class="grid grid-cols-[1.4fr_1fr_1fr] gap-1" data-qe-offer-row>
+							<input type="date" class="input text-[11px] px-1.5 py-1" data-qe-offer-date aria-label="Date"/>
+							<input type="time" class="input text-[11px] px-1.5 py-1" data-qe-offer-from aria-label="From"/>
+							<input type="time" class="input text-[11px] px-1.5 py-1" data-qe-offer-to aria-label="To"/>
+						</div>
+					}
+				</div>
+				<textarea
+					class="input text-[11px] w-full mt-1.5"
+					rows="2"
+					data-qe-offer-note
+					aria-label="Note (optional)"
+					placeholder="Anything else? (optional)"
+				></textarea>
+				<div class="flex items-center gap-2 mt-1.5">
+					<button type="button" class="btn-primary text-[11px] px-2 py-1" data-qe-offer-send>Send</button>
+					<button type="button" class="text-[10.5px] text-fg-secondary underline" data-qe-offer-cancel>Cancel</button>
+				</div>
+			</div>
 			// Counts are visible to every member (aggregate only); the per-person
 			// list stays server-gated to Owner/co-DM and renders in the drawer.
 			<div class="mt-1.5 text-[10.5px] text-fg-muted" data-qe-rsvp-counts aria-live="polite"></div>
