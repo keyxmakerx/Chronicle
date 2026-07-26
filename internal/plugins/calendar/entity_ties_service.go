@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // LinkEntityToEvent ties an entity to an event with a participation role.
@@ -64,6 +65,70 @@ func (s *calendarService) UnlinkEntityFromEra(ctx context.Context, entityID stri
 // EventsForEntity returns the events tied to an entity (entity-side query).
 func (s *calendarService) EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error) {
 	return s.repo.EventsForEntity(ctx, entityID)
+}
+
+// EventsForEntityFiltered is the viewer-filtered sibling of EventsForEntity
+// (C-CALV4-TIEFIX-PB Bug 1 item 3). EventsForEntity's query joins only
+// entity_event_links + calendar_events, never calendars, so calendar-level
+// visibility is invisible to it: an event on a dm_only *calendar* is
+// reachable through an entity tie even when the event's own visibility is
+// 'everyone'. This method closes that gap.
+//
+// Composed from two EXISTING CalendarRepository methods (EventsForEntity +
+// GetByID) rather than a new SQL-joining repo method: a repo-level join would
+// need a new CalendarRepository interface method, which forces updating the
+// hand-written mockCalendarRepo in service_test.go — a file this dispatch
+// does not own, and COMMON's Bounds section explicitly forbids widening that
+// ~60-method interface (two other in-flight C-CALV4 slices depend on that
+// test file's build staying untouched). This composition enforces the
+// identical policy — calendarVisibleTo + canUserView, the same two predicates
+// every other visibility check in this package uses — without touching that
+// interface. Calendars are fetched once per DISTINCT CalendarID among the
+// ties (cached in a map), not once per event.
+//
+// Deliberately a NEW method rather than a signature change to EventsForEntity:
+// entity_calendar_block.go (owned by a different C-CALV4 slice — not in this
+// dispatch's file list) still calls the old, unfiltered signature today;
+// changing it would collide. Not added to the CalendarService interface
+// either, for the same file-ownership reason (that interface lives in
+// service.go) — reachable via a type assertion to *calendarService, mirroring
+// how SetBindingCleaner already does this (service.go:304-307). Wiring this
+// into entity_calendar_block.go's call site — replacing its lines 78-91,
+// which only apply the per-event canUserView half of this check — is
+// follow-up work for whoever owns that file.
+//
+// Rows come from ONE pass over the raw tie list into a freshly allocated
+// slice — never a second pass over an already-filtered slice, which would
+// corrupt filterEventsByUser-style events[:0] in-place filtering (COMMON §7).
+func (s *calendarService) EventsForEntityFiltered(ctx context.Context, entityID string, role int, userID string) ([]EntityEventTie, error) {
+	all, err := s.repo.EventsForEntity(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+	if permissions.CanSeeDmOnly(role) || userID == "" {
+		return all, nil
+	}
+
+	cals := make(map[string]*Calendar, 1)
+	out := make([]EntityEventTie, 0, len(all))
+	for _, tie := range all {
+		cal, seen := cals[tie.Event.CalendarID]
+		if !seen {
+			cal, err = s.repo.GetByID(ctx, tie.Event.CalendarID)
+			if err != nil {
+				return nil, err
+			}
+			cals[tie.Event.CalendarID] = cal
+		}
+		if !calendarVisibleTo(cal, role, userID) {
+			continue
+		}
+		if !canUserView(tie.Event.Visibility, tie.Event.VisibilityRules, role, userID) {
+			continue
+		}
+		out = append(out, tie)
+	}
+	return out, nil
 }
 
 // ErasForEntity returns the eras tied to an entity (entity-side query).

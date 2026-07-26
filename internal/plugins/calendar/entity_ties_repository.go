@@ -230,6 +230,18 @@ func scanEntityTieRefs(rows *sql.Rows) ([]EntityTieRef, error) {
 // EventsForEntity returns every event tied to an entity (with the tie role).
 // Reuses the event column projection + entity-display JOINs so the embedded
 // Event carries the same display fields as the regular event lists.
+//
+// PRE-EXISTING BUG FIXED HERE (C-CALV4-TIEFIX-PB Step-0 finding): this Scan
+// list was missing &evt.RecurrenceDayOfWeek and &evt.CollectRSVPs, so it
+// supplied 37 destinations for the 39 columns this query selects (eventCols'
+// 38 + l.participation_role) — the same class of landmine #566 found in
+// scanEvents (see the comment on that function), just never ported to this
+// file when migrations 011/013 added the two columns. Every call failed at
+// runtime with "sql: expected 39 destination arguments in Scan, not 37", and
+// entity_calendar_block.go:81 swallows that error and degrades silently, so
+// the entity-page calendar embed showed no tied events at all. Widened
+// TestEventColsMatchScanDestinations (event_scan_contract_test.go) now pins
+// this file's Scan list too.
 func (r *calendarRepo) EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT `+eventCols+`, l.participation_role
@@ -253,9 +265,9 @@ func (r *calendarRepo) EventsForEntity(ctx context.Context, entityID string) ([]
 			&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
 			&evt.IsRecurring, &evt.RecurrenceType,
 			&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
-			&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences,
+			&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences, &evt.RecurrenceDayOfWeek,
 			&evt.Visibility, &evt.VisibilityRules, &evt.Category, &evt.Tier,
-			&evt.Color, &evt.Icon, &evt.AllDay,
+			&evt.Color, &evt.Icon, &evt.AllDay, &evt.CollectRSVPs,
 			&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 			&evt.EntityName, &evt.EntityIcon, &evt.EntityColor,
 			&role,

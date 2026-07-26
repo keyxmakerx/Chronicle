@@ -110,20 +110,40 @@ func (r *timelineRepo) GetByID(ctx context.Context, id string) (*Timeline, error
 
 // List returns all timelines for a campaign, filtered by role-based visibility.
 // Owners see dm_only timelines; others see only 'everyone'.
+//
+// EventCount visibility (C-CALV4-TIEFIX-PB Bug 2, PARTIAL FIX): the two COUNT
+// subqueries used to be unconditional, so a player could see e.g. "12 events"
+// from this list while ListEventLinks/ListStandaloneEvents (the actual row
+// reads) returned only 9 — the difference being the number of hidden events,
+// a count that differences into knowledge the player shouldn't have. Folding
+// the SAME dm_only visibility predicate those two methods already apply
+// (linkedEventVisFilter mirrors ListEventLinks' `ce.visibility` fragment;
+// standaloneVisFilter mirrors ListStandaloneEvents' `te.visibility` fragment)
+// into these subqueries closes that delta. It does NOT close it entirely:
+// events carrying visibility_rules ({allowed_users, denied_users}) are
+// resolved in Go by canUserView (service.go's ListTimelineEvents), which SQL
+// cannot see, so a residual difference survives for those. Do not describe
+// this as closing the oracle — only the dm_only delta is closed.
 func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([]Timeline, error) {
 	visFilter := "AND t.visibility = 'everyone'"
+	linkedEventVisFilter := "AND ce.visibility = 'everyone'"
+	standaloneVisFilter := "AND te.visibility = 'everyone'"
 	if permissions.CanSeeDmOnly(role) {
 		visFilter = ""
+		linkedEventVisFilter = ""
+		standaloneVisFilter = ""
 	}
 
 	query := fmt.Sprintf(`
 		SELECT `+timelineCols+`, COALESCE(c.name, ''),
-		       (SELECT COUNT(*) FROM timeline_event_links tel WHERE tel.timeline_id = t.id) +
-		       (SELECT COUNT(*) FROM timeline_events te WHERE te.timeline_id = t.id)
+		       (SELECT COUNT(*) FROM timeline_event_links tel
+		          JOIN calendar_events ce ON ce.id = tel.event_id
+		          WHERE tel.timeline_id = t.id %s) +
+		       (SELECT COUNT(*) FROM timeline_events te WHERE te.timeline_id = t.id %s)
 		FROM timelines t
 		LEFT JOIN calendars c ON c.id = t.calendar_id
 		WHERE t.campaign_id = ? %s
-		ORDER BY t.sort_order, t.name`, visFilter)
+		ORDER BY t.sort_order, t.name`, linkedEventVisFilter, standaloneVisFilter, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, campaignID)
 	if err != nil {
@@ -151,20 +171,30 @@ func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([
 // (timelines.calendar_id), role-filtered like List. Backs the cross-plugin
 // "timelines for this calendar" read the Calendars dashboard consumes via a
 // service interface (C-APPS-CAL-DASH-W1) — no new columns, no migration.
+//
+// EventCount visibility: same PARTIAL fix as List above (C-CALV4-TIEFIX-PB
+// Bug 2) — see that function's doc comment for the full rationale and the
+// residual visibility_rules gap that is NOT closed by this change.
 func (r *timelineRepo) ListByCalendar(ctx context.Context, calendarID string, role int) ([]Timeline, error) {
 	visFilter := "AND t.visibility = 'everyone'"
+	linkedEventVisFilter := "AND ce.visibility = 'everyone'"
+	standaloneVisFilter := "AND te.visibility = 'everyone'"
 	if permissions.CanSeeDmOnly(role) {
 		visFilter = ""
+		linkedEventVisFilter = ""
+		standaloneVisFilter = ""
 	}
 
 	query := fmt.Sprintf(`
 		SELECT `+timelineCols+`, COALESCE(c.name, ''),
-		       (SELECT COUNT(*) FROM timeline_event_links tel WHERE tel.timeline_id = t.id) +
-		       (SELECT COUNT(*) FROM timeline_events te WHERE te.timeline_id = t.id)
+		       (SELECT COUNT(*) FROM timeline_event_links tel
+		          JOIN calendar_events ce ON ce.id = tel.event_id
+		          WHERE tel.timeline_id = t.id %s) +
+		       (SELECT COUNT(*) FROM timeline_events te WHERE te.timeline_id = t.id %s)
 		FROM timelines t
 		LEFT JOIN calendars c ON c.id = t.calendar_id
 		WHERE t.calendar_id = ? %s
-		ORDER BY t.sort_order, t.name`, visFilter)
+		ORDER BY t.sort_order, t.name`, linkedEventVisFilter, standaloneVisFilter, visFilter)
 
 	rows, err := r.db.QueryContext(ctx, query, calendarID)
 	if err != nil {
