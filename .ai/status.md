@@ -111,11 +111,12 @@ In order:
 | timeline | [internal/plugins/timeline/.ai.md](../internal/plugins/timeline/.ai.md) |
 | widgetbindings | [internal/plugins/widgetbindings/.ai.md](../internal/plugins/widgetbindings/.ai.md) |
 
-#### Widgets (9 of 10 — `calendar_v2` still lacks its `.ai.md`)
+#### Widgets (10 of 11 — `calendar_block` gets its `.ai.md` from C-CALV4-BLOCK-P1)
 
 | Widget | `.ai.md` |
 |---|---|
 | attributes | [internal/widgets/attributes/.ai.md](../internal/widgets/attributes/.ai.md) |
+| calendar_v2 | [internal/widgets/calendar_v2/.ai.md](../internal/widgets/calendar_v2/.ai.md) — **READ-ONLY for the calendar-v4 wave** |
 | editor | [internal/widgets/editor/.ai.md](../internal/widgets/editor/.ai.md) |
 | entity_notes | [internal/widgets/entity_notes/.ai.md](../internal/widgets/entity_notes/.ai.md) |
 | mentions | [internal/widgets/mentions/.ai.md](../internal/widgets/mentions/.ai.md) |
@@ -125,7 +126,26 @@ In order:
 | tags | [internal/widgets/tags/.ai.md](../internal/widgets/tags/.ai.md) |
 | title | [internal/widgets/title/.ai.md](../internal/widgets/title/.ai.md) |
 
+`calendar_block` (new, `internal/widgets/calendar_block/`) currently holds only
+the pinned cross-slice contract `data.go` + its reflection shape pin. Its
+`.ai.md` lands with the renderer in C-CALV4-BLOCK-P1.
+
 ### Cross-cutting state (not plugin-scoped)
+
+#### 2026-07-26 — C-CALV4-FOUNDATION-P0 (calendar-v4 wave 1, phase A)
+
+The floor the other four wave-1 slices stand on. Additive only — no Go behaviour
+change, no templ change, no route, no migration.
+
+| Item | What |
+|---|---|
+| Data contract | `internal/widgets/calendar_block/data.go`, copied **byte-identically** from the coordinator pin (`cordinator/dispatches/chronicle/C-CALV4-BLOCKDATA.go.txt`). It is the ONE cross-slice artifact of the wave; three dispatches write against it. **Editing the struct is a STOP-AND-FLAG**, not a judgement call. `data_test.go` pins the field set (name + kind + composite type, in declaration order) by **reflection only** — it reads no source text, so restructuring `data.go` cannot red CI. |
+| Motion tokens | `--motion-fast` / `--motion-standard` / `--motion-leisurely` were referenced fallback-only throughout the V2 animation library and **never defined**. Now defined in `static/css/input.css:146-148` at exactly their existing fallback values (150 / 200 / 300ms) — a no-op on shipped surfaces. Deliberately NOT aliased to `--dur-*` (`--dur-micro` is 120ms, not 150ms). |
+| Guards B1–B4 | `tools/check-calendar-v4-lints.sh`, wired into CI. Diff-scoped against `origin/main` like the other guards. Self-tests itself on every run, so "OK" always means the rules can still fire. |
+| Motion-discipline guard | `tools/check-v2-motion-discipline.sh` had existed since the V2 wave and was invoked by **nothing** — only a comment at `input.css:103` referenced it. Now wired into CI. It was already diff-scoped and passes on main; a non-diff-scoped run would flag 7 grandfathered lines across 5 files. |
+| Deleted guard | `tools/check-templ-drift.sh` — diffed pathspec `'*.templ.go'` while templ emits `*_templ.go`, which are gitignored. Structurally incapable of failing; reported OK on a tree where 753 generated files had changed. **Deleted rather than repaired**: `templ generate` + `go build` in CI already catch real drift, and a guard that reads as coverage it never provided is worse than no guard. |
+| `make verify` | New target chaining the full local CI sequence in CI order. Five parallel chats were each reconstructing it from `ci.yml` by hand. |
+| `calendar_v2/.ai.md` | Filed at last (house rule 7). States the package is **read-only for the v4 wave** and why: its `data-visibility-*` DOM contract has two independent JS drivers in the calendar plugin, and nothing — compiler or test — catches an attribute rename. |
 
 #### Active arc: Calendar remodel (cordinator `plans/2026-07-24-calendar-remodel-requirements.md`)
 
@@ -150,6 +170,7 @@ rulings live in `dispatches/chronicle/C-CALV4-WAVE1-COMMON.md` §6.
 
 | Slice | What | Status |
 |---|---|---|
+| C-CALV4-FOUNDATION-P0 | Phase A — the data contract + the guard rails: the pinned `BlockData` + its reflection shape pin, the three never-defined `--motion-*` tokens, guards B1–B4 and the dormant motion-discipline guard wired into CI, the vacuous templ-drift guard deleted, `make verify`, `calendar_v2/.ai.md`. Detail under its own dated heading above | ✅ PR #569 |
 | C-CALV4-SPINE-P2 | Server spine: leap-aware geometry, one-pass per-viewer projection, batched eager loader, narrow interfaces, the wave's only `app/routes.go` touch | ✅ this branch |
 
 **Two cross-slice facts a later slice must not re-derive:**
