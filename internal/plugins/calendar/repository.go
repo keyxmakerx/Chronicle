@@ -899,6 +899,13 @@ func (r *calendarRepo) GetEventCategories(ctx context.Context, calendarID string
 // eventCols is the column list for event queries (with entity join fields).
 // Wave 1.6 added e.tier between e.category and e.color to close the
 // PR #358 schema-only gap surfaced by PR #368 stop-and-flag #2.
+// C-CAL-RSVP-P1 added e.collect_rsvps after e.all_day (migration 013).
+//
+// INVARIANT: this list and the Scan destination lists in GetEvent + scanEvents
+// must stay the same length and order. TestEventColsMatchScanDestinations pins
+// it — a mismatch is invisible to every existing test (nothing in the repo runs
+// real SQL) but fails EVERY event query at runtime with
+// "sql: expected N destination arguments in Scan".
 const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.description_html,
        e.year, e.month, e.day, e.start_hour, e.start_minute,
        e.end_year, e.end_month, e.end_day, e.end_hour, e.end_minute,
@@ -906,7 +913,7 @@ const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.de
        e.recurrence_interval, e.recurrence_end_year, e.recurrence_end_month,
        e.recurrence_end_day, e.recurrence_max_occurrences, e.recurrence_day_of_week,
        e.visibility, e.visibility_rules, e.category, e.tier,
-       e.color, e.icon, e.all_day,
+       e.color, e.icon, e.all_day, e.collect_rsvps,
        e.created_by, e.created_at, e.updated_at,
        COALESCE(ent.name, ''), COALESCE(et.icon, ''), COALESCE(et.color, '')`
 
@@ -952,7 +959,7 @@ func (r *calendarRepo) GetEvent(ctx context.Context, id string) (*Event, error) 
 		&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
 		&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences, &evt.RecurrenceDayOfWeek,
 		&evt.Visibility, &evt.VisibilityRules, &evt.Category, &evt.Tier,
-		&evt.Color, &evt.Icon, &evt.AllDay,
+		&evt.Color, &evt.Icon, &evt.AllDay, &evt.CollectRSVPs,
 		&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 		&evt.EntityName, &evt.EntityIcon, &evt.EntityColor)
 	if err == sql.ErrNoRows {
@@ -1221,6 +1228,20 @@ func (r *calendarRepo) EventDatesForCalendars(ctx context.Context, calIDs []stri
 }
 
 // scanEvents reads event rows into a slice.
+//
+// PRE-EXISTING BUG FIXED HERE (C-CAL-RSVP-P1 Step-0 finding, out-of-dispatch but
+// blocking): this list was missing &evt.RecurrenceDayOfWeek, so it supplied 36
+// destinations for eventCols' 37 columns. Every LIST query routed through here
+// (month/week/day/range/upcoming/search/ledger) therefore failed against MariaDB
+// with "sql: expected 37 destination arguments in Scan, not 36" — only the
+// single-row GetEvent, which has its own correct inline scan, worked. It could
+// not be caught by any existing test because nothing in the repo executes real
+// SQL (no sqlmock/testify/dockertest in go.mod), and it was introduced when
+// migration 011 added recurrence_day_of_week to eventCols + GetEvent + the
+// INSERT/UPDATE but not to this function. Adding collect_rsvps on top of the
+// existing drift would have kept every list query broken, so the fix ships with
+// this lane rather than after it. TestEventColsMatchScanDestinations now pins
+// both lists so the next column can't repeat it.
 func scanEvents(rows *sql.Rows) ([]Event, error) {
 	var events []Event
 	for rows.Next() {
@@ -1231,9 +1252,9 @@ func scanEvents(rows *sql.Rows) ([]Event, error) {
 			&evt.EndYear, &evt.EndMonth, &evt.EndDay, &evt.EndHour, &evt.EndMinute,
 			&evt.IsRecurring, &evt.RecurrenceType,
 			&evt.RecurrenceInterval, &evt.RecurrenceEndYear, &evt.RecurrenceEndMonth,
-			&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences,
+			&evt.RecurrenceEndDay, &evt.RecurrenceMaxOccurrences, &evt.RecurrenceDayOfWeek,
 			&evt.Visibility, &evt.VisibilityRules, &evt.Category, &evt.Tier,
-			&evt.Color, &evt.Icon, &evt.AllDay,
+			&evt.Color, &evt.Icon, &evt.AllDay, &evt.CollectRSVPs,
 			&evt.CreatedBy, &evt.CreatedAt, &evt.UpdatedAt,
 			&evt.EntityName, &evt.EntityIcon, &evt.EntityColor,
 		); err != nil {

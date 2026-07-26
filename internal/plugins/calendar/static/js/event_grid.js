@@ -196,6 +196,8 @@
             }
             var vis = qeEl('[data-qe-vis]');
             if (vis) vis.textContent = (ev.visibility && ev.visibility !== 'everyone') ? '🔒 DM only' : '';
+            // RSVP block (C-CAL-RSVP-P1) — every role, not just Scribes.
+            rsvpShowForEvent(ev);
             // Position beside the chip: below by default, flipped above /
             // clamped when the viewport runs out.
             qe.classList.remove('hidden');
@@ -271,6 +273,152 @@
             closeQuickEdit(false);
         });
 
+        // --- Event RSVPs (C-CAL-RSVP-P1) ------------------------
+        // The quick-edit card is the ANSWER surface for every role: the full
+        // editor drawer is Scribe+ and players never receive its DOM, so the
+        // buttons live here and reach month chips, ledger rows, and mobile
+        // agenda cards for free (all three carry [data-event-card] and route
+        // through openQuickEdit above).
+        //
+        // Counts come back on every write, so a successful POST repaints from
+        // the server's own tally rather than a client-side guess.
+
+        function rsvpURL(eventID, suffix) {
+            return '/campaigns/' + campaignID + '/calendars/' + calendarID +
+                '/events/' + eventID + '/' + suffix;
+        }
+
+        function rsvpCountsText(s) {
+            if (!s || !s.counts) return '';
+            return s.counts.yes + ' going · ' + s.counts.maybe + ' maybe · ' + s.counts.no + ' out';
+        }
+
+        // rsvpPaint reflects a summary onto the quick-edit block: the counts
+        // line plus aria-pressed on whichever answer is the viewer's own.
+        function rsvpPaint(summary) {
+            var counts = qeEl('[data-qe-rsvp-counts]');
+            if (counts) counts.textContent = rsvpCountsText(summary);
+            ['yes', 'maybe', 'no'].forEach(function (st) {
+                var b = qeEl('[data-qe-rsvp-btn="' + st + '"]');
+                if (!b) return;
+                var mine = summary && summary.my_status === st;
+                b.setAttribute('aria-pressed', mine ? 'true' : 'false');
+                b.classList.toggle('btn-primary', !!mine);
+                b.classList.toggle('btn-secondary', !mine);
+            });
+        }
+
+        // rsvpShowForEvent unhides + loads the block for an event that collects
+        // RSVPs, and hides it otherwise. Hiding is the default so an event with
+        // collection switched off never shows a dead control.
+        function rsvpShowForEvent(ev) {
+            var box = qeEl('[data-qe-rsvp]');
+            if (!box) return;
+            if (!ev || !ev.collect_rsvps) { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+            rsvpPaint(null);
+            var counts = qeEl('[data-qe-rsvp-counts]');
+            if (counts) counts.textContent = 'Loading…';
+            window.Chronicle.apiFetch(rsvpURL(ev.id, 'rsvps'))
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (s) { if (s && qeID === ev.id) rsvpPaint(s); })
+                .catch(function () { if (counts) counts.textContent = ''; });
+        }
+
+        // rsvpPost is the single write path for every in-app RSVP action. The
+        // optional `action` distinguishes the two richer asks ("out this week",
+        // "suggest another time") from a plain status write, matching the
+        // emailed links' behaviour without a second endpoint per action.
+        function rsvpPost(body) {
+            var id = qeID;
+            if (!id) return;
+            window.Chronicle.apiFetch(rsvpURL(id, 'rsvp'), {
+                method: 'POST', body: body, headers: { 'X-CSRF-Token': csrfToken },
+            }).then(function (resp) {
+                if (!resp.ok) {
+                    return resp.json().catch(function () { return {}; }).then(function (b) {
+                        throw new Error((b && b.message) || 'Could not save your response');
+                    });
+                }
+                return resp.json();
+            }).then(function (summary) {
+                if (!summary) return;
+                // Keep the in-memory event list authoritative for the next open.
+                if (qeID === id) rsvpPaint(summary);
+                if (summary.notice) window.Chronicle.notify(summary.notice, 'success');
+            }).catch(function (e) {
+                window.Chronicle.notify((e && e.message) || 'Could not save your response', 'error');
+            });
+        }
+
+        // rsvpToggleOffer shows/hides the "when could you make it" panel and
+        // clears it on close, so re-opening never resurrects a stale draft.
+        function rsvpToggleOffer(show) {
+            var box = qeEl('[data-qe-rsvp-offer]');
+            if (!box) return;
+            box.classList.toggle('hidden', !show);
+            if (show) {
+                var first = box.querySelector('[data-qe-offer-date]');
+                if (first && typeof first.focus === 'function') first.focus();
+                return;
+            }
+            box.querySelectorAll('input, textarea').forEach(function (el) { el.value = ''; });
+        }
+
+        // hhmmToMinutes converts an <input type="time"> value to minutes from
+        // midnight, or null when it isn't a usable time.
+        function hhmmToMinutes(v) {
+            var parts = String(v || '').split(':');
+            if (parts.length < 2) return null;
+            var h = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+            if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+            return h * 60 + m;
+        }
+
+        // rsvpSendOffer collects the filled rows and posts them as structured
+        // availability. A row is skipped unless all three parts are present and
+        // the range runs forwards; an incomplete row is a half-typed draft, not
+        // an error worth blocking the whole submit over.
+        function rsvpSendOffer() {
+            var box = qeEl('[data-qe-rsvp-offer]');
+            if (!box) return;
+            var windows = [];
+            box.querySelectorAll('[data-qe-offer-row]').forEach(function (row) {
+                var date = (row.querySelector('[data-qe-offer-date]') || {}).value || '';
+                var from = hhmmToMinutes((row.querySelector('[data-qe-offer-from]') || {}).value);
+                var to = hhmmToMinutes((row.querySelector('[data-qe-offer-to]') || {}).value);
+                if (!date || from === null || to === null || from >= to) return;
+                windows.push({ onDate: date, startMinute: from, endMinute: to });
+            });
+            var noteEl = box.querySelector('[data-qe-offer-note]');
+            var note = noteEl ? noteEl.value.trim() : '';
+            if (!windows.length && !note) {
+                window.Chronicle.notify('Add a time that would work, or a short note', 'error');
+                return;
+            }
+            rsvpPost({ status: 'maybe', action: 'suggest', note: note, windows: windows });
+            rsvpToggleOffer(false);
+        }
+
+        if (qe && qe.dataset.qeRsvpWired !== '1') {
+            qe.dataset.qeRsvpWired = '1'; // per-node guard (QA2 re-init class)
+            ['yes', 'maybe', 'no'].forEach(function (st) {
+                var b = qeEl('[data-qe-rsvp-btn="' + st + '"]');
+                if (b) b.addEventListener('click', function () { rsvpPost({ status: st }); });
+            });
+            var owBtn = qeEl('[data-qe-rsvp-outweek]');
+            if (owBtn) owBtn.addEventListener('click', function () {
+                if (!window.confirm('Mark you as not attending and block your availability for that whole week?\n\nDays you have already customised are left alone.')) return;
+                rsvpPost({ status: 'no', action: 'out_week' });
+            });
+            var sgBtn = qeEl('[data-qe-rsvp-suggest]');
+            if (sgBtn) sgBtn.addEventListener('click', function () { rsvpToggleOffer(true); });
+            var offCancel = qeEl('[data-qe-offer-cancel]');
+            if (offCancel) offCancel.addEventListener('click', function () { rsvpToggleOffer(false); });
+            var offSend = qeEl('[data-qe-offer-send]');
+            if (offSend) offSend.addEventListener('click', function () { rsvpSendOffer(); });
+        }
+
         // Card click → open the quick-edit card. Every member gets this (the
         // mobile agenda cards, #544, carry the same data-event-card hook and
         // ride the same wiring here for free).
@@ -330,6 +478,95 @@
             // Drawer actions (C-CAL-EDITOR-EXPANSION PR1): edit-mode only.
             currentEvent = editingID ? prefill : null;
             initDrawerActions(prefill);
+            // RSVP collection toggle + readout (C-CAL-RSVP-P1). Edit-mode only:
+            // there is nothing to collect against until the event has an id.
+            initRSVPCollect(prefill);
+        }
+
+        // initRSVPCollect wires the drawer's "Collect RSVPs" switch and its
+        // counts/responders readout.
+        //
+        // Turning collection ON is the INVITE moment — it fans out action emails
+        // and bell notifications server-side — so the switch confirms before
+        // sending. The per-person list is server-gated: the endpoint omits
+        // `responders` entirely for anyone below Owner/co-DM, so rendering it
+        // here is display of data the viewer was already entitled to, never a
+        // client-side secret.
+        function initRSVPCollect(ev) {
+            var section = drawer.querySelector('[data-rsvp-collect-section]');
+            if (!section) return;
+            var toggle = section.querySelector('[data-rsvp-collect-toggle]');
+            var hint = section.querySelector('[data-rsvp-collect-hint]');
+            var summary = section.querySelector('[data-rsvp-collect-summary]');
+            var countsEl = section.querySelector('[data-rsvp-counts]');
+            var listEl = section.querySelector('[data-rsvp-responders]');
+            if (!toggle) return;
+
+            var id = editingID;
+            var on = !!(ev && ev.collect_rsvps);
+            toggle.setAttribute('aria-checked', on ? 'true' : 'false');
+            toggle.disabled = !id;
+            if (summary) summary.classList.toggle('hidden', !(id && on));
+            if (hint) {
+                hint.textContent = !id
+                    ? 'Save the event first, then invite the party'
+                    : (on ? 'Members can respond in-app and by email'
+                          : 'Turning this on emails the party a set of one-click RSVP links');
+            }
+            if (!id) return;
+
+            if (on) loadRSVPSummary(id, countsEl, listEl);
+
+            if (toggle.dataset.rsvpWired === '1') return;
+            toggle.dataset.rsvpWired = '1'; // per-node guard; the scaffold is page-level
+            toggle.addEventListener('click', function () {
+                var next = toggle.getAttribute('aria-checked') !== 'true';
+                if (next && !window.confirm('Invite the party?\n\nEveryone who can see this event gets a bell notification, and an email with one-click RSVP links if email is configured.')) return;
+                toggle.disabled = true;
+                window.Chronicle.apiFetch(rsvpURL(editingID, 'rsvp-collection'), {
+                    method: 'PUT', body: { enabled: next }, headers: { 'X-CSRF-Token': csrfToken },
+                }).then(function (resp) {
+                    toggle.disabled = false;
+                    if (!resp.ok) throw new Error('Could not update RSVP collection');
+                    toggle.setAttribute('aria-checked', next ? 'true' : 'false');
+                    // Keep the in-memory copy in step so re-opening the drawer (or
+                    // the quick-edit card) reflects the new state without a reload.
+                    var stored = eventByID(editingID);
+                    if (stored) stored.collect_rsvps = next;
+                    if (summary) summary.classList.toggle('hidden', !next);
+                    if (hint) hint.textContent = next
+                        ? 'Members can respond in-app and by email'
+                        : 'Turning this on emails the party a set of one-click RSVP links';
+                    if (next) loadRSVPSummary(editingID, countsEl, listEl);
+                    window.Chronicle.notify(next ? 'RSVPs are open — the party has been invited.' : 'RSVP collection turned off.', 'success');
+                }).catch(function (e) {
+                    toggle.disabled = false;
+                    window.Chronicle.notify((e && e.message) || 'Could not update RSVP collection', 'error');
+                });
+            });
+        }
+
+        // loadRSVPSummary paints the drawer's counts line and, when the server
+        // supplied it, the per-person breakdown.
+        function loadRSVPSummary(id, countsEl, listEl) {
+            if (countsEl) countsEl.textContent = 'Loading…';
+            if (listEl) listEl.innerHTML = '';
+            window.Chronicle.apiFetch(rsvpURL(id, 'rsvps'))
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (s) {
+                    if (!s) { if (countsEl) countsEl.textContent = ''; return; }
+                    if (countsEl) countsEl.textContent = rsvpCountsText(s);
+                    if (!listEl) return;
+                    listEl.innerHTML = '';
+                    (s.responders || []).forEach(function (r) {
+                        // textContent, never innerHTML: display names and notes are
+                        // user-authored free text.
+                        var li = document.createElement('li');
+                        li.textContent = r.display_name + ' — ' + r.status + (r.note ? ' · “' + r.note + '”' : '');
+                        listEl.appendChild(li);
+                    });
+                })
+                .catch(function () { if (countsEl) countsEl.textContent = ''; });
         }
 
         function markDirty() { dirty = true; }

@@ -1319,19 +1319,44 @@ templ eventV2Drawer(data CalendarV2ViewData) {
 						</div>
 						<input type="hidden" data-field="tier" data-tier-value/>
 					</div>
-					// Collect RSVPs — DISABLED + flagged. Chronicle events are not
-					// sessions; there is no per-event RSVP/attendee storage (sessions
-					// are a separate plugin surfaced read-only on the grid). Enabling
-					// this needs an event↔session link (schema) — out of scope (no
-					// migrations). See PR "Stop-and-flag".
-					<div class="flex items-center gap-3 rounded-lg border border-edge bg-surface/60 px-3 py-2 opacity-70">
-						<div class="flex-1 min-w-0">
-							<div class="text-xs font-semibold text-fg-secondary">Collect RSVPs</div>
-							<div class="text-[10.5px] text-fg-muted">Ships with the sessions RSVP link — coming soon</div>
+					// Collect RSVPs — LIVE (C-CAL-RSVP-P1). The former ruling here said
+					// this needed an event↔session link; that is SUPERSEDED. Calendar
+					// events now have their own first-class RSVP storage
+					// (calendar_event_rsvps, migration 013), deliberately distinct from
+					// sessions' attendance — an event is not a session. See ADR-046.
+					//
+					// Scribe+ only, because Players never receive the drawer DOM;
+					// their answer surface is the quick-edit card, which every member
+					// gets. Switching this ON is the invite moment: it fans out action
+					// emails + bell notifications to the members who can SEE the event.
+					// Disabled until the event has an id (create-mode has nothing to
+					// collect against yet), same rule the linked-entities section uses.
+					<div class="rounded-lg border border-edge bg-surface/60 px-3 py-2" data-rsvp-collect-section>
+						<div class="flex items-center gap-3">
+							<div class="flex-1 min-w-0">
+								<div class="text-xs font-semibold text-fg-secondary">Collect RSVPs</div>
+								<div class="text-[10.5px] text-fg-muted" data-rsvp-collect-hint>Save the event first, then invite the party</div>
+							</div>
+							<button
+								type="button"
+								class="toggle"
+								role="switch"
+								aria-checked="false"
+								aria-label="Collect RSVPs"
+								data-rsvp-collect-toggle
+								disabled
+							>
+								<span class="toggle-knob"></span>
+							</button>
 						</div>
-						<button type="button" class="toggle" role="switch" aria-checked="false" aria-label="Collect RSVPs" disabled>
-							<span class="toggle-knob"></span>
-						</button>
+						// Counts for everyone in the drawer; the per-person breakdown
+						// renders only for Owner/co-DM (server-gated — the endpoint
+						// omits `responders` entirely for anyone else, so this is not a
+						// client-side secret).
+						<div class="hidden mt-2 pt-2 border-t border-edge/60" data-rsvp-collect-summary>
+							<div class="text-[11px] text-fg-secondary" data-rsvp-counts></div>
+							<ul class="mt-1 space-y-0.5 text-[10.5px] text-fg-muted" data-rsvp-responders></ul>
+						</div>
 					</div>
 				</div>
 				// ── DETAILS ────────────────────────────────────────────────────

@@ -1862,3 +1862,132 @@ fail-fast), `internal/database/healthcheck.go` (`RunHealthChecks` split), `cmd/s
 ADR-044, ADR-028/030 (plugin migrations), ADR-037 (pre-migration backup), ADR-042 (cross-plugin
 injection pattern).
 
+
+---
+
+## ADR-046: Calendar events get first-class RSVPs, distinct from session attendance
+
+**Status.** Accepted (2026-07-25). Supersedes the in-code ruling at
+`internal/plugins/calendar/calendar_v2.templ` (the disabled "Collect RSVPs" toggle), which said
+RSVPs on a calendar event would require an event↔session link. Implements the operator's #1
+calendar-remodel priority (cordinator `plans/2026-07-24-calendar-remodel-requirements.md` §1
+item 6, §2 "RSVP is nearly free"); dispatch C-CAL-RSVP-P1.
+
+**Context.** The V2 event drawer shipped a DISABLED "Collect RSVPs" switch with a comment ruling
+that enabling it needed an event↔session link, because the only attendance storage in the
+product was the sessions plugin's `session_attendees` (+ `session_rsvp_tokens`). The operator's
+actual ask is Outlook/Google-style "who's coming" **on the calendar**, for calendar events —
+festivals, downtime windows, one-off scenes — most of which are not sessions and never will be.
+Routing them through a synthetic session would have created a session row per feast.
+
+**Decision — calendar events own their RSVP state.**
+
+1. **Separate storage, mirrored pattern.** `calendar_event_rsvps` (one row per event+user,
+   `UNIQUE(event_id, user_id)` so re-answering updates in place) and
+   `calendar_event_rsvp_tokens` (single-use, expiring, opaque `crypto/rand` tokens), both in the
+   calendar plugin's own migration chain (013). We MIRROR the sessions token pattern into
+   DISTINCT tables rather than reusing `session_rsvp_tokens` — the precedent
+   `slot_proposal_tokens` set. Reusing sessions' table would put a calendar FK on a sessions row
+   and couple two plugins' schemas.
+2. **Separate service.** `RSVPService` / `RSVPRepository` are their own narrow types, NOT
+   additions to `CalendarService` / `CalendarRepository` — those are wide interfaces mirrored by
+   a hand-written mock and the syncapi stub, so widening them makes every concurrent calendar
+   lane collide. The RSVP service reads the event aggregate through a two-method
+   `rsvpEventLookup` that the existing repo already satisfies.
+3. **Visibility is the existing predicate, reused.** Every RSVP path (write, read, email
+   fan-out, token redemption) gates on the calendar's existing `canUserView`. A second, subtly
+   different visibility path is exactly how the entity-ties leak happened
+   (C-CAL-ENTITY-TIES-LEAK-FIX); there is now one predicate.
+4. **Cross-plugin via narrow interfaces + post-construction setters** (rule 8, ADR-042). The
+   calendar declares `MailSender`, `RSVPNotifier`, `AvailabilityExceptionWriter`, and
+   `RSVPMemberDirectory`; `internal/app/routes.go` binds them to the smtp and sessions services.
+   The calendar gains no import edge into sessions — `internal/wire/plugin_import_guard_test.go`
+   forbids it — and every seam is nil-safe, so an instance with no SMTP and no scheduler still
+   does in-app RSVP end to end. The generic `sessions.NotifyUsers` added here is the first
+   external writer of the notifications store the store was always documented (T-B2) to allow.
+5. **Emailed actions are per-action single-use tokens** at `/calendar-rsvp/:token`, distinct
+   from sessions' `/rsvp/:token`, with the GET-confirm / POST-apply split (a mail scanner's
+   prefetch records nothing) and the CSRF double-submit the global middleware requires.
+   Membership AND visibility are re-checked at REDEMPTION, not just at mint time, so a link
+   cannot outlive the access that justified it.
+6. **"Suggest another time" does NOT mint a slot proposal.** It writes a note on the RSVP plus a
+   notification to the event's owner. Proposal creation is Scribe+ by ruling
+   (`sessions/routes.go`); a Player clicking a link in an email must not escalate into that
+   capability.
+
+**Policy — RSVP data never leaves via export.** Who is coming, who declined, and the free-text
+suggestion notes stay out of the campaign export and the AI export. Pinned structurally by
+`internal/plugins/calendar/rsvp_egress_test.go`, which walks `campaigns.CampaignExport`,
+`calendar.ChronicleExport`, and `aiexport.AllCategories()`. Session attendance — a different,
+pre-existing concept — keeps its existing export and is allowlisted by exact path.
+
+**Consequences.** The drawer's disabled toggle becomes a live Scribe+ control whose ON state is
+the invite moment (email + bell fan-out to members who can SEE the event). Players answer from
+the quick-edit card, which every role receives and which month chips, ledger rows, and mobile
+agenda cards all open — the drawer is Scribe+ and could never have been the player surface.
+"Out this week" writes only the acting user's availability and skips days that already carry a
+hand-authored exception, mirroring the scheduler's own client-side rule. Because availability
+exceptions are real-world dates while a calendar event may be in fantasy reckoning, the blocked
+week is the event's own week only when the calendar tracks real time; otherwise it falls back to
+the week of redemption, and the resolved week is always named back to the member so the action
+can never silently block the wrong one.
+
+**References.** `internal/plugins/calendar/migrations/013_event_rsvps.up.sql`,
+`internal/plugins/calendar/{rsvp_model,rsvp_repository,rsvp_service,rsvp_handler,rsvp_email}.go`,
+`internal/plugins/calendar/routes.go` (`RegisterRSVPRoutes`), `internal/app/routes.go`
+(`calendarRSVPNotifierAdapter`, `calendarAvailabilityAdapter`),
+`internal/plugins/sessions/notifications_service.go` (`NotifyUsers`),
+`internal/plugins/calendar/{rsvp_test,rsvp_email_test,rsvp_egress_test,event_scan_contract_test}.go`,
+ADR-042 (cross-plugin injection), ADR-045 (migration safety), cordinator dispatch C-CAL-RSVP-P1.
+
+### ADR-046 amendment (2026-07-26) — "suggest another time" becomes structured availability
+
+**Status.** Accepted, amends ADR-046 above (C-CAL-RSVP-P2). Operator ask: "there needs to be a way
+for players to give temporary availability."
+
+**Context.** ADR-046 shipped an asymmetry. "Out this week" wrote structured *un*availability the
+scheduler could aggregate; "suggest another time" wrote a free-text note the Director had to read
+and re-key. Players could express when they COULDN'T play in a schedulable way, and when they COULD
+only in prose. Meanwhile the storage for the answer already existed —
+`availability_exceptions.state` has always accepted `available`/`preferred` per date, and
+`effectiveBlocks` already projects exceptions over the recurring pattern into the DM overlay — so
+what was missing was a safe WRITE path, not a schema.
+
+**Decision.**
+
+1. **Structured windows alongside the note.** The suggestion surfaces (in-app quick-edit card and
+   the emailed token page) accept date + from + to rows plus an optional note; the server requires
+   at least one of the two, so a member with a vague answer is never blocked. Windows become
+   `available` exceptions and land in the overlay + computed best-window; the note carries nuance.
+2. **The composition rule lives in SESSIONS, not calendar.** Exception rows REPLACE a date, so
+   writing only the offered window would erase the member's usual hours for that day — the exact
+   opposite of what they just said. `sessions.AddMyAvailableWindows` / `composeOfferedDay` composes
+   the day, paints the offer on a minute canvas, and writes the merged set. It belongs there because
+   replace-semantics is the scheduler's own invariant, and it is enforced SERVER-side because this
+   write can arrive from an email link with no editor in front of it. `preferred` is never
+   downgraded by a generic offer; `unavailable` is overwritten.
+3. **`ApplyToken` no longer applies the richer actions.** It consumes the token and writes only the
+   status the action implies (`suggest` carries none and returns early). Both richer actions need
+   either the POST body or the scheduler, neither of which the service has an edge to, so the
+   handler owns them — via one shared `applySuggestion` used by the in-app and emailed paths so the
+   two cannot drift.
+4. **Availability writing is best-effort.** The RSVP note and the owner notification are the promise
+   this flow makes; a scheduler that is absent or erroring still records the answer and tells the
+   member their times were not saved.
+
+**Consequences.** A player who can't make the proposed slot now answers once and the Director sees
+real, aggregatable availability instead of prose. No new tables and no new routes — the existing
+`POST …/events/:eid/rsvp` body gained an optional `windows` array and the emailed suggest page gained
+form rows. One existing test invariant was narrowed:
+`TestEventQuickEditV2_PlayersReadOnly` asserted the player card contained no `<input>`/`<textarea>`
+at all, which was a proxy for "a player cannot edit the event" and stopped being meaningful once
+players legitimately type their OWN data into that card; it now pins the event-editing fields by
+name (strictly narrower), with a companion test asserting the RSVP affordances render for
+non-Scribes.
+
+**References.** `internal/plugins/sessions/availability_service.go`
+(`AddMyAvailableWindows`, `composeOfferedDay`, `paint`, `runsToBlocks`),
+`internal/plugins/sessions/availability_offer_test.go`,
+`internal/plugins/calendar/rsvp_handler.go` (`applySuggestion`, `parseOfferedWindows`),
+`internal/plugins/calendar/rsvp_email.go` (`rsvpSuggestPage`),
+`internal/app/routes.go` (`calendarAvailabilityAdapter.OfferAvailableWindows`), ADR-046.
