@@ -1,0 +1,1332 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   calendar-block.css — the calendar Block (calendar-v4, wave 1 / W-A).
+
+   UNLAYERED AND SELF-CONTAINED, per the rendering-canvas CSS exemption
+   (cordinator decisions/2026-06-05-rendering-canvas-css-exemption.md).
+   input.css's content is layered; an unlayered standalone sheet beats every
+   layer, which is exactly why the two cascade regimes never fight. Nothing
+   here is @apply'd, nothing here reads a Tailwind theme() value, and nothing
+   here is emitted by the Tailwind build.
+
+   EXEMPTION MARKER — the Wave-6 customization-readiness sweep skips this file
+   knowingly. The token block below is a self-contained re-derivation of the
+   signed contract's palette (cordinator mockups/calendar-v4.html @ 37cdd6d),
+   not hardcoded-colour debt: the Block is a rendering surface whose ramp is
+   verified in BOTH directions, and mapping it onto --chronicle-* chrome tokens
+   would break the ramp it exists to guarantee. The ONE token it inherits from
+   the host is the campaign accent (--color-accent), because that one IS chrome.
+
+   EVERY SELECTOR IS SCOPED under .cal-block-host. An unlayered sheet outranks
+   the app's layered CSS, so a bare `.badge` rule in here would silently restyle
+   the whole product.
+
+   ── THE THREE LAWS THIS FILE IS GRADED AGAINST ─────────────────────────────
+
+   1. TEN-DAY WEEKS ARE NATIVE. There is no literal 7 in any grid declaration.
+      --week-len drives every column count and is written per month.
+
+   2. SIZE CLASS FOLLOWS HOST WIDTH; DENSITY FOLLOWS MEASURED COLUMN WIDTH, and
+      BOTH ARE CONTAINER QUERIES. The signed mockup computes them in JS. On this
+      platform that is broken by construction — boot.js:163 sets
+      `htmx.config.allowScriptTags = false`, so a <script> inside an
+      HTMX-swapped fragment never executes and a JS-sized Block silently renders
+      at the wrong density after any swap.
+
+   3. NO MOTION, AT ALL, IN WAVE 1. Not one transition, not one animation, not
+      one @keyframes. The ANSWER primitive and its --m-swell rail scale ship
+      with W-B, and the coordinator re-opens the motion question then. Canon
+      A2/A8 govern: the month never animates.
+
+      Corollary (canon guard B1): --dash and --gap are NEVER animated or
+      transitioned. Morphing a dash pattern destroys the greyscale identity
+      channel the signed greyscale render promises, and it is the obvious
+      "improvement" the next hand reaches for.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TOKENS — light. The rule ramp is the load-bearing part: on light each step
+   is DARKER than the last, on dark each is LIGHTER. That is verified in both
+   directions here, which --color-border / --color-border-light was not.
+   ─────────────────────────────────────────────────────────────────────────── */
+.cal-block-host {
+  color-scheme: light dark;
+
+  /* surfaces + ink */
+  --surface-card: oklch(1 0 0);
+  --surface-inset: oklch(0.965 0.003 260);
+  --text-primary: oklch(0.22 0.015 265);
+  --text-body: oklch(0.38 0.014 265);
+  --text-secondary: oklch(0.55 0.012 265);
+  --text-muted: oklch(0.68 0.010 265);
+
+  /* the rule ramp */
+  --rule-hairline: oklch(0.915 0.004 265);
+  --rule-structural: oklch(0.855 0.006 265);
+  --rule-structural-strong: oklch(0.775 0.008 265);
+  --rule-editorial: oklch(0.775 0.008 265);
+
+  /* chrome accent. The ONE token inherited from the host page, because the
+     campaign accent IS chrome. It NEVER touches event data: the marks layer is
+     forbidden from referencing it (canon A7). */
+  --accent: var(--color-accent, oklch(0.58 0.20 270));
+
+  /* functional, decoupled from accent */
+  --ok: oklch(0.60 0.15 150);
+  --warn: oklch(0.65 0.15 65);
+  --bad: oklch(0.58 0.19 25);
+  --fog: oklch(0.65 0.03 250);
+  --gold: oklch(0.70 0.13 85);
+  --today-ink: oklch(0.22 0.015 265);
+  --today-ink-on: oklch(0.99 0 0);
+
+  /* event type hues (axis) */
+  --ev-social: oklch(0.55 0.17 258);
+  --ev-quest: oklch(0.60 0.19 25);
+  --ev-festival: oklch(0.75 0.16 80);
+  --ev-downtime: oklch(0.65 0.13 145);
+  --ev-session: oklch(0.55 0.04 255);
+  --ev-celestial: oklch(0.55 0.19 295);
+
+  /* owner hues: L deliberately VARIED so lightness is a second channel */
+  --own-kael: oklch(0.52 0.16 265);
+  --own-bryn: oklch(0.64 0.14 150);
+  --own-tam: oklch(0.56 0.17 25);
+  --own-nissa: oklch(0.68 0.15 80);
+  --own-rell: oklch(0.50 0.15 320);
+  --own-none: oklch(0.65 0.01 265);
+
+  /* calendar identity hues */
+  --cal-harptos: oklch(0.55 0.12 200);
+  --cal-real: oklch(0.55 0.18 270);
+  --cal-elven: oklch(0.58 0.15 300);
+  --cal-dwarven: oklch(0.62 0.10 70);
+
+  /* elevation: REST IS ALWAYS NONE. --elev-1 exists only inside the hover
+     ring's box-shadow list (see .surf.act:hover) so it can never appear alone. */
+  --elev-1: 0 1px 2px oklch(0.2 0.02 260/.06), 0 1px 3px oklch(0.2 0.02 260/.08);
+
+  /* radius: canon scale. 9px does not exist. */
+  --r-badge: 2px;
+  --r-chip: 4px;
+  --r-ctl: 6px;
+  --r-card: 8px;
+  --r-panel: 12px;
+  --r-full: 9999px;
+
+  /* the tie toggle changes ink LEVEL only */
+  --untied-ink: 0.7;
+
+  /* channel defaults, so a Block whose producer omits one still renders */
+  --cal: var(--rule-structural-strong);
+  --axis: var(--own-none);
+  --bandhue: var(--rule-structural);
+  --week-len: 10;
+  --gut: 0px;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TOKENS — dark. Chronicle switches themes with a `.dark` class on <html>
+   (tailwind.config.js darkMode:'class', static/js/theme.js).
+   ─────────────────────────────────────────────────────────────────────────── */
+.dark .cal-block-host {
+  --surface-card: oklch(0.215 0.012 265);
+  --surface-inset: oklch(0.255 0.013 265);
+  --text-primary: oklch(0.975 0.002 265);
+  --text-body: oklch(0.855 0.008 265);
+  --text-secondary: oklch(0.705 0.012 265);
+  --text-muted: oklch(0.565 0.012 265);
+
+  --rule-hairline: oklch(0.295 0.012 265);
+  --rule-structural: oklch(0.375 0.014 265);
+  --rule-structural-strong: oklch(0.475 0.014 265);
+  --rule-editorial: oklch(0.475 0.014 265);
+
+  --accent: var(--color-accent, oklch(0.72 0.16 272));
+
+  --ok: oklch(0.72 0.16 150);
+  --warn: oklch(0.78 0.15 70);
+  --bad: oklch(0.68 0.18 25);
+  --fog: oklch(0.55 0.03 250);
+  --gold: oklch(0.80 0.13 88);
+  --today-ink: oklch(0.97 0.002 265);
+  --today-ink-on: oklch(0.18 0.012 265);
+
+  --ev-social: oklch(0.66 0.16 258);
+  --ev-quest: oklch(0.70 0.17 25);
+  --ev-festival: oklch(0.82 0.14 82);
+  --ev-downtime: oklch(0.74 0.13 148);
+  --ev-session: oklch(0.68 0.04 255);
+  --ev-celestial: oklch(0.70 0.17 295);
+
+  --own-kael: oklch(0.68 0.15 265);
+  --own-bryn: oklch(0.76 0.13 152);
+  --own-tam: oklch(0.70 0.16 25);
+  --own-nissa: oklch(0.82 0.13 82);
+  --own-rell: oklch(0.66 0.15 320);
+  --own-none: oklch(0.55 0.01 265);
+
+  --cal-harptos: oklch(0.70 0.11 200);
+  --cal-real: oklch(0.70 0.15 272);
+  --cal-elven: oklch(0.72 0.13 300);
+  --cal-dwarven: oklch(0.76 0.10 72);
+
+  --elev-1: 0 1px 2px oklch(0 0 0/.40), 0 1px 3px oklch(0 0 0/.34);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §HOST — the size-class query container.
+
+   The Block cannot query itself, so the wrapper is the container and .block is
+   its child. Nesting another inline-size container above this one is harmless:
+   the innermost named container wins, and the innermost one is this.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-block-host {
+  container-type: inline-size;
+  container-name: cal-block;
+  display: block;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  /* tabular is the DEFAULT on a surface made almost entirely of numbers */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+.cal-block-host *,
+.cal-block-host *::before,
+.cal-block-host *::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §STATE — canon D3, enforced at the primitive.
+
+   Rest: 1px rule + card surface, box-shadow NONE.
+   Hover: the surface steps up AND the border reads thicker AND a soft shadow
+   appears — as ONE declaration. The thickening is a 0.5px-spread ring carried
+   INSIDE box-shadow, so (a) no layout shift jitters the numerals on the densest
+   surface in the product, and (b) IT IS STRUCTURALLY IMPOSSIBLE FOR THE SHADOW
+   TO ANIMATE ALONE. That is the "shadows from nowhere" rejection, fixed at the
+   primitive rather than per component.
+   Press: 12% cover, and the shadow returns to NONE — elevation DECREASES.
+   Selected: an inset 1.5px accent ring and a 4% tint, with NO shadow at all.
+   Selection is identity, not elevation.
+
+   Wave 1 ships no card-scale surface of its own; the primitive is here because
+   W-B's Ledger rows and W-E's Shelf cards build on it and must not re-derive it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-block-host .surf {
+  background: var(--surface-card);
+  border: 1px solid var(--rule-structural);
+  box-shadow: none;
+}
+.cal-block-host .surf.act:hover {
+  background: color-mix(in oklch, var(--surface-card) 95%, var(--text-primary));
+  box-shadow: 0 0 0 .5px var(--rule-structural-strong), var(--elev-1);
+}
+.cal-block-host .surf.act:active {
+  background: color-mix(in oklch, var(--surface-card) 88%, var(--text-primary));
+  box-shadow: none;
+}
+.cal-block-host .surf.sel,
+.cal-block-host .surf.sel:hover {
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--surface-card) 96%, var(--accent));
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* the page's most numerous hover targets get wash only, NO shadow */
+.cal-block-host .wash:hover {
+  background: color-mix(in oklch, transparent 94%, var(--text-primary));
+}
+.cal-block-host .wash:active {
+  background: color-mix(in oklch, transparent 88%, var(--text-primary));
+}
+/* canon D3 focus: a 2px outline on the element's OWN radius, NO shadow change */
+.cal-block-host :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §TYPE + CHIPS — small shared primitives.
+   NOTE the absence of a `font:` shorthand anywhere in this file. The shorthand
+   with `inherit` as the family is invalid CSS and silently dropped EIGHTY-ONE
+   declarations in the v4 mockup, with nothing failing loudly (canon guard B2).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-block-host .cap {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.cal-block-host .mono {
+  font-family: "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+}
+.cal-block-host .vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.cal-block-host .sub {
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.cal-block-host .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  border-radius: var(--r-badge);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+/* `needs backend` — a NEUTRAL chip, never a warning and never a fabricated
+   zero. It is a signed honesty state: the zone exists, at its real size, and
+   says out loud that its content does not. */
+.cal-block-host .badge.need {
+  border-color: var(--rule-structural);
+  color: var(--text-muted);
+}
+.cal-block-host .badge.gm {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.cal-block-host .badge.mono,
+.cal-block-host .badge.tz {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.cal-block-host .sp {
+  flex: 1;
+}
+.cal-block-host .dotsep {
+  color: var(--text-muted);
+}
+.cal-block-host .icb {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-ctl);
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+/* the layers invoker is INERT in wave 1 (the switchboard is W-F). It reads as a
+   reserved affordance, not as a dead control that swallows a click. */
+.cal-block-host .icb[disabled] {
+  color: var(--text-muted);
+  cursor: default;
+}
+.cal-block-host .icb:not([disabled]):hover {
+  background: color-mix(in oklch, transparent 92%, var(--accent));
+  color: var(--text-primary);
+}
+
+/* segmented control — rest bare, selected a full accent cover. There is no
+   sliding thumb and no travelling underline anywhere in Chronicle (canon A6):
+   selection is state ON the selected item, never a thing that moves between
+   items. */
+.cal-block-host .seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  height: 26px;
+  align-items: center;
+  border: 1px solid var(--rule-structural);
+  border-radius: var(--r-ctl);
+  background: var(--surface-card);
+  flex: none;
+}
+.cal-block-host .tiebtn {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--r-chip);
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 20px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.cal-block-host .tiebtn[aria-pressed="true"] {
+  background: color-mix(in oklch, transparent 96%, var(--accent));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §MARKS — the axis layer.
+
+   Every axis value owns a HUE and a locked STROKE PATTERN assigned by the same
+   index, so COLOUR IS NEVER THE ONLY CHANNEL and every mark survives
+   `filter: grayscale(1)`. This layer may reference --ev-* / --own-* / --cal-*
+   and is FORBIDDEN from referencing --accent.
+
+   p1 solid · p2 dash 4-2 · p3 dot 1-2 · p4 dash 2-2 · p5 double hairline ·
+   p6 dash 6-2 · p7 solid + notch · p8 fine dash 1-1.  p7/p8 are headroom.
+
+   --dash / --gap are the greyscale identity channel. Guard B1: they are never
+   animated and never transitioned.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-block-host .rail,
+.cal-block-host .ulseg {
+  --dash: 100%;
+  --gap: 0px;
+  background-color: var(--axis);
+}
+/* main-axis dashes: rails run vertically, underline segments horizontally */
+.cal-block-host .rail.p2,
+.cal-block-host .rail.p3,
+.cal-block-host .rail.p4,
+.cal-block-host .rail.p6,
+.cal-block-host .rail.p8 {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(to bottom, var(--axis) 0 var(--dash),
+      transparent var(--dash) calc(var(--dash) + var(--gap)));
+}
+.cal-block-host .ulseg.p2,
+.cal-block-host .ulseg.p3,
+.cal-block-host .ulseg.p4,
+.cal-block-host .ulseg.p6,
+.cal-block-host .ulseg.p8 {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(to right, var(--axis) 0 var(--dash),
+      transparent var(--dash) calc(var(--dash) + var(--gap)));
+}
+.cal-block-host .p2 { --dash: 4px; --gap: 2px }
+.cal-block-host .p3 { --dash: 1px; --gap: 2px }
+.cal-block-host .p4 { --dash: 2px; --gap: 2px }
+.cal-block-host .p6 { --dash: 6px; --gap: 2px }
+.cal-block-host .p8 { --dash: 1px; --gap: 1px }
+/* p5 double-hairline splits the CROSS axis */
+.cal-block-host .rail.p5 {
+  background-color: transparent;
+  background-image: linear-gradient(to right,
+      var(--axis) 0 1px, transparent 1px 2px, var(--axis) 2px 3px);
+}
+.cal-block-host .ulseg.p5 {
+  background-color: transparent;
+  background-image: linear-gradient(to bottom,
+      var(--axis) 0 1px, transparent 1px 2px, var(--axis) 2px 3px);
+}
+/* p7 solid with a 1px centre notch on the main axis */
+.cal-block-host .rail.p7 {
+  background-color: transparent;
+  background-image: linear-gradient(to bottom,
+      var(--axis) 0 calc(50% - .5px), transparent calc(50% - .5px) calc(50% + .5px),
+      var(--axis) calc(50% + .5px) 100%);
+}
+.cal-block-host .ulseg.p7 {
+  background-color: transparent;
+  background-image: linear-gradient(to right,
+      var(--axis) 0 calc(50% - .5px), transparent calc(50% - .5px) calc(50% + .5px),
+      var(--axis) calc(50% + .5px) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §BLOCK — four zones. EVERY DECLARATION BELOW IS THE `std` BASELINE; the
+   container queries at the foot of this file adjust it for full / mini /
+   sub-mini. Baseline-is-std means a Block that is rendered before its container
+   is measured (or in a context with no container support at all) degrades to
+   the middle size class rather than to the widest one.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-block-host .block {
+  background: var(--surface-card);
+  border: 1px solid var(--rule-structural);
+  border-radius: var(--r-panel);
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 200px;
+  height: auto;
+  max-height: 520px;
+}
+
+/* ── Zone A · NAMEPLATE ──────────────────────────────────────────────────── */
+.cal-block-host .np {
+  display: flex;
+  align-items: center;
+  align-content: center;
+  gap: 8px;
+  row-gap: 4px;
+  padding: 7px 10px;
+  flex: none;
+  flex-wrap: wrap;
+  min-height: 52px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-block-host .np > * {
+  flex: none;
+}
+/* the spacer must still grow: it is what pushes the ⋯ invoker to the far right.
+   Declared AFTER `.np > *` on purpose — equal specificity, later wins. */
+.cal-block-host .np > .sp {
+  flex: 1 1 auto;
+}
+.cal-block-host .np .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--cal);
+}
+.cal-block-host .np .nm {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 52px;
+}
+.cal-block-host .np .iw {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* THE FAULT, WHERE THE DATE WOULD GO. Not a zero, not an em dash, not a
+   placeholder — and no date element is emitted at all beside it. */
+.cal-block-host .np .fault {
+  font-weight: 650;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--warn);
+}
+.cal-block-host .np .era,
+.cal-block-host .np .season {
+  display: none;
+}
+
+/* the sync pill. A green "in sync" may never render without its denominator,
+   because that is precisely the lie the operator hit. */
+.cal-block-host .sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-full);
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  border: 1px solid var(--rule-structural);
+  color: var(--text-body);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-block-host .sync.s-ok { border-color: color-mix(in oklch, var(--ok) 40%, transparent); color: var(--ok) }
+.cal-block-host .sync.s-drift { border-color: color-mix(in oklch, var(--warn) 45%, transparent); color: var(--warn) }
+.cal-block-host .sync.s-bad { border-color: color-mix(in oklch, var(--bad) 45%, transparent); color: var(--bad) }
+.cal-block-host .sync.s-pause { color: var(--text-muted) }
+.cal-block-host .sync .d {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: currentColor;
+  flex: none;
+}
+/* BOTH strings are always in the DOM; the container query picks. std shows the
+   compact one, full the wide one, mini and below neither. */
+.cal-block-host .sync-full { display: none }
+.cal-block-host .sync-compact { display: inline }
+
+/* ── the ONE dashed idiom in the entire product: "not built yet" ─────────── */
+.cal-block-host .skyband {
+  margin: 8px 12px;
+  height: 36px;
+  border-radius: var(--r-ctl);
+  flex: none;
+  background: var(--surface-inset);
+  border: 1px dashed var(--rule-structural);
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 1px;
+}
+.cal-block-host .skyband .a {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cal-block-host .skyband .b {
+  display: none;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+/* ── Zone B · INSTRUMENT ─────────────────────────────────────────────────── */
+.cal-block-host .body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.cal-block-host .inst {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 8px;
+  overflow: hidden;
+}
+
+/* THE GRID. The week-number gutter is column 1 of the SAME grid and every row
+   is a subgrid across it, so header / era band / cells / intercalary can never
+   drift out of alignment (canon D8 names subgrid for exactly this problem).
+
+   THERE IS NO LITERAL 7 HERE. --week-len is written per month by the producer
+   and defaults to 10 on the Block. */
+.cal-block-host .grid {
+  display: grid;
+  min-width: calc(var(--week-len) * 30px);
+  grid-template-columns: var(--gut, 0px) repeat(var(--week-len), minmax(0, 1fr));
+  grid-auto-rows: auto;
+  align-content: start;
+}
+.cal-block-host .grid > * {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+.cal-block-host .grid .hd b {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* two abbreviation lengths, one header cell; the container query picks */
+.cal-block-host .wd-l { display: none }
+.cal-block-host .wd-s { display: inline }
+/* §GUTTER — the week-number track.
+   The viewer's layer choice arrives as [data-weeknums]; whether the track can
+   AFFORD to open is a host measurement, and the mockup drops it below 481px
+   (calendar-v4.html:1537). Expressing that as a container query rather than as
+   an inline --gut is what stops a 20px track landing on a 358px phone, where the
+   signed still shows no gutter at all. The .gut element itself always exists so
+   the subgrid's column 1 never disappears under the cells. */
+.cal-block-host .grid[data-weeknums] { --gut: 0px }
+/* the label is hidden with the track rather than merely clipped by it: a 0px
+   track plus overflow is one browser quirk away from a stray glyph in column 1 */
+.cal-block-host .wknum { display: none }
+@container cal-block (min-width: 481px) {
+  .cal-block-host .grid[data-weeknums] { --gut: 20px }
+  .cal-block-host .grid[data-weeknums] .wknum { display: inline }
+}
+.cal-block-host .gut {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding-right: 5px;
+  overflow: hidden;
+}
+
+/* ── era / season band, subgrid-aligned to the columns ───────────────────── */
+.cal-block-host .bands {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+.cal-block-host .band {
+  grid-row: 1;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  padding: 0 5px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  overflow: hidden;
+  white-space: nowrap;
+  /* --bandhue is driven by the ERA, never hardcoded per calendar */
+  background: color-mix(in oklch, transparent 94%, var(--bandhue));
+}
+.cal-block-host .band .bl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the editorial rule at a MID-MONTH era boundary */
+.cal-block-host .band.edge { border-left: 1.5px solid var(--rule-editorial) }
+/* the mockup declares .band.half and never applies it. It is applied here from
+   EraBand.Half, for a band that genuinely ends on the half column. */
+.cal-block-host .band.half { border-right: 1px solid var(--rule-structural-strong) }
+.cal-block-host .band .sfx {
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+/* THE FIVE-COLUMN RULE, carried across the band row. A ramp step that stops at
+   the era band is a visible seam; a band is one grid item spanning many columns
+   so its own border-right cannot land at the boundary. This ruler can. */
+.cal-block-host .halfrule {
+  grid-row: 1;
+  align-self: stretch;
+  border-right: 1px solid var(--rule-structural-strong);
+  pointer-events: none;
+}
+
+/* ── the day cell ────────────────────────────────────────────────────────── */
+/* EACH CELL IS THE DENSITY QUERY CONTAINER. Padding lives on the two subtrees,
+   not here, so the container's content box is the real column box (less its
+   1px rule) and the 84px flip measures what the eye measures. */
+.cal-block-host .cell {
+  container-type: inline-size;
+  container-name: cal-cell;
+  position: relative;
+  padding: 0;
+  border-right: 1px solid var(--rule-hairline);
+  border-bottom: 1px solid var(--rule-hairline);
+  background: transparent;
+}
+.cal-block-host .cell:hover {
+  background: color-mix(in oklch, transparent 95%, var(--text-primary));
+}
+/* THE FIVE-COLUMN RULE: humans cannot count to ten across identical columns;
+   5+5 is instant. Highest-value single addition to a ten-wide grid. */
+.cal-block-host .cell.half,
+.cal-block-host .grid .hd b.half {
+  border-right: 1px solid var(--rule-structural-strong);
+}
+.cal-block-host .cell.lastcol { border-right: 0 }
+.cal-block-host .cell.out .dn { opacity: .4 }
+/* WAVE-1 DEAD BY RULING: there is no queryable knowledge horizon on main, so
+   DayCell.Fogged is always false and this rule ships unused. W-F wires it. */
+.cal-block-host .cell.fog { background: var(--surface-inset) }
+.cal-block-host .cell.fog .dn { color: var(--text-muted) }
+/* selection is IDENTITY, not elevation: an inset ring and a tint, no shadow */
+.cal-block-host .cell.sel {
+  background: color-mix(in oklch, var(--surface-card) 96%, var(--accent));
+}
+.cal-block-host .cell.sel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* the two subtrees. Baseline is the underline; the cell query promotes. */
+.cal-block-host .cell > .cnamed { display: none }
+.cal-block-host .cell > .cunder {
+  display: block;
+  height: 52px;
+  overflow: hidden;
+  padding: 2px 2px 0;
+}
+.cal-block-host .cell .dn {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-body);
+  display: block;
+  text-align: center;
+}
+.cal-block-host .cell .dnw {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+/* TODAY is a non-accent ink stamp. The campaign accent is chrome-only; calv3
+   put a filled accent-indigo today pill on a DATA cell. */
+.cal-block-host .cell .today {
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--today-ink);
+  color: var(--today-ink-on);
+  font-weight: 650;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+}
+
+/* NAMED chip: a 3px patterned rail, a non-colour token, and a label. A glyph
+   WITH a label is legible; a glyph INSTEAD of a label is a rebus. */
+.cal-block-host .chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  margin-bottom: 1px;
+  border-radius: var(--r-chip);
+  padding-right: 4px;
+  overflow: hidden;
+  border: 0;
+  background: color-mix(in oklch, var(--surface-card) 90%, var(--axis));
+}
+.cal-block-host .chip .rail {
+  width: 3px;
+  height: 100%;
+  flex: none;
+  border-radius: var(--r-full);
+}
+.cal-block-host .chip .tok {
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-body);
+  flex: none;
+}
+.cal-block-host .chip .lb {
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-block-host .more {
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 13px;
+  color: var(--text-muted);
+  height: 13px;
+  display: block;
+  width: 100%;
+}
+
+/* UNDERLINE density: ONE bar, never a stack. A stack encodes a magnitude the
+   data does not have and reads as a progress meter. */
+.cal-block-host .ul {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 1px;
+  height: 3px;
+  display: flex;
+  gap: 1px;
+}
+.cal-block-host .ulseg {
+  flex: 1;
+  border-radius: var(--r-full);
+  min-width: 0;
+}
+.cal-block-host .ulseg.rest {
+  background-color: var(--own-none);
+  background-image: none;
+}
+
+/* three unrelated conditions, three distinct marks, one printed legend */
+.cal-block-host .dogear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+}
+.cal-block-host .dogear::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 7px solid color-mix(in oklch, var(--gold) 55%, transparent);
+  border-left: 7px solid transparent;
+}
+.cal-block-host .dogear::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 11px;
+  height: 11px;
+  border-top: 1px solid var(--gold);
+  transform: rotate(-45deg);
+  transform-origin: top right;
+}
+/* a gold DIAMOND — never a circle, because circles are moons (L22) */
+.cal-block-host .audmark {
+  display: none;
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--gold);
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
+/* the sky, where the eye already is. Achromatic by law: the sky may never
+   borrow the event colour axis. */
+.cal-block-host .phrow {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  display: none;
+  gap: 2.5px;
+  align-items: center;
+}
+.cal-block-host .ph {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-full);
+  flex: none;
+  background: var(--surface-card);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--rule-structural-strong);
+}
+.cal-block-host .ph::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--rule-structural-strong);
+  clip-path: inset(0 0 0 50%);
+}
+.cal-block-host .ph.wane::before { clip-path: inset(0 50% 0 0) }
+.cal-block-host .ph::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 50%;
+  width: var(--term, 0px);
+  transform: translateX(-50%);
+  border-radius: var(--r-full);
+  background: var(--termfill, transparent);
+}
+
+/* THE INTERCALARY ROW — the case a 30-day / ten-day-week month has no cell for.
+   Canonical Harptos carries festival days outside every tenday. Full tier only;
+   grid-column:2/-1 inline so it clears the week gutter. */
+.cal-block-host .interc-row { display: none }
+.cal-block-host .interc {
+  border-top: 1.5px solid var(--rule-editorial);
+  background: var(--surface-inset);
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+}
+.cal-block-host .interc .icd {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ── the sub-mini tier's whole instrument: a thirty-tick month rule ──────── */
+.cal-block-host .tickstrip {
+  display: none;
+  padding: 6px 8px;
+}
+.cal-block-host .tick {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  height: 14px;
+  position: relative;
+}
+.cal-block-host .tick i {
+  flex: 1;
+  height: 4px;
+  border-top: 1px solid var(--rule-hairline);
+  position: relative;
+}
+.cal-block-host .tick i.ev::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 3px;
+  height: 9px;
+  transform: translateX(-50%);
+  background: var(--axis);
+  border-radius: 1px;
+}
+.cal-block-host .tick i.now::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 2px;
+  height: 14px;
+  transform: translateX(-50%);
+  background: var(--today-ink);
+}
+.cal-block-host .tick i.fg { background: var(--surface-inset) }
+
+/* ── the layer zones that are not built yet ──────────────────────────────── */
+.cal-block-host .needzone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 0;
+  margin-top: 6px;
+  border-top: 1px solid var(--rule-hairline);
+  flex: none;
+}
+
+/* ── Zone C · THE DOCKED LEDGER ──────────────────────────────────────────────
+   There is NO drawer anywhere in the calendar. The Ledger IS the drawer,
+   permanently docked, so choosing a day repaints a panel that was already on
+   screen. Nothing appears from nowhere; nothing reflows. (Canon amendment A3
+   struck D9's drawer clause for exactly this.) */
+.cal-block-host .layer-col {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+.cal-block-host .ledger {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--rule-structural);
+}
+.cal-block-host .lhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  flex: none;
+  flex-wrap: nowrap;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-block-host .lhead .t {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.cal-block-host .lhead .c {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.cal-block-host .lrows {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.cal-block-host .lzero {
+  padding: 14px 10px;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Zone D · SHELF ──────────────────────────────────────────────────────── */
+.cal-block-host .shelf {
+  flex: none;
+  border-top: 1px solid var(--rule-structural);
+  display: flex;
+  flex-direction: column;
+}
+.cal-block-host .shelf .st {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  flex: none;
+}
+.cal-block-host .shelf .sp2 {
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+/* the mini tier's one piece of calendar identity below the Nameplate */
+.cal-block-host .minirail {
+  display: none;
+  height: 4px;
+  margin: 0 8px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: color-mix(in oklch, transparent 92%, var(--cal));
+}
+
+/* the mini / sub-mini foot line */
+.cal-block-host .foot {
+  display: none;
+  flex: none;
+  height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--rule-hairline);
+}
+
+/* ── the tie toggle changes INK LEVEL only ───────────────────────────────────
+   No cell may grow, move, or leave the DOM when it flips — that is what makes
+   it legal under the no-motion rule and what makes TiedCount and WholeCount
+   non-differenceable. W-C's CSS-only toggle needs only to change
+   [data-tie-mode] on .block; the ink rule is already here. */
+.cal-block-host .block[data-tie-mode="tied"] .cell:not([data-tied]) .chip,
+.cal-block-host .block[data-tie-mode="tied"] .cell:not([data-tied]) .ul {
+  opacity: var(--untied-ink);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §DENSITY — a function of MEASURED COLUMN WIDTH, not of tier.
+
+   Separating density from size class is what lets a ten-column and a
+   seven-column calendar share one component and still be honest about what each
+   can afford. At host 1040, full tier: Harptos' ten columns measure 68.2px and
+   fall to the underline; the Gregorian's seven measure 97.4px and earn names.
+   Same component, same zones, same invariant height — only the cell interior
+   differs, and it differs for a stated reason rather than by surprise.
+
+   THE 84px THRESHOLD IS THE CONTRACT'S OWN RULE (`colWidth(...) < 84` →
+   underline, calendar-v4.html:1438), expressed natively. Because the query
+   measures the REAL column rather than the contract's model of it, the flip
+   lands ~12px of host width earlier than the model predicts (the model
+   under-counts the Block's chrome by ~1.2px per column at full tier). Every
+   signed still sits on the same side of the line under both, and the Go pin in
+   sizing_test.go keeps the model honest.
+
+   THE MOCKUP'S SECOND CLAUSE IS DELIBERATELY RETIRED, NOT INHERITED.
+   isNamed() also asks `instrument height / rows >= 68`, with a hardcoded 470px
+   at full tier against a MEASURED 563px — wrong by ~93px and a known, booked,
+   deliberately-unfixed defect (canon amendments §D). Correcting the constant was
+   explicitly refused: it desynchronises the signed stills. Here the question the
+   clause was approximating — "does a named cell fit vertically" — is answered by
+   real layout: .block's max-height plus the instrument's own overflow.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@container cal-cell (min-width: 84px) {
+  .cal-block-host .cell > .cnamed {
+    display: block;
+    height: 84px;
+    overflow: hidden;
+    padding: 6px 4px 5px;
+  }
+  .cal-block-host .cell > .cunder { display: none }
+  .cal-block-host .cell > .cnamed > .dn {
+    font-size: 13px;
+    text-align: left;
+  }
+  .cal-block-host .cell > .cnamed .today {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
+  .cal-block-host .cell .phrow { display: flex }
+  .cal-block-host .cell .audmark { display: block }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §SIZE CLASS — a function of HOST width. full ≥900 · std ≥300 · mini ≥240 ·
+   else sub-mini. The std case is the baseline above; these three adjust it.
+
+   Declared heights are INVARIANT so dropping a Block into any host page can
+   never shove that page around.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── FULL ────────────────────────────────────────────────────────────────── */
+@container cal-block (min-width: 900px) {
+  .cal-block-host .block {
+    min-height: 220px;
+    height: auto;
+    max-height: 780px;
+  }
+
+  .cal-block-host .np {
+    height: 60px;
+    min-height: 0;
+    flex-wrap: nowrap;
+    padding: 0 12px;
+    row-gap: 0;
+  }
+  .cal-block-host .np .nm { font-size: 15px }
+  .cal-block-host .np .iw { font-size: 14px }
+  .cal-block-host .np .fault { font-size: 14px }
+  .cal-block-host .np .era,
+  .cal-block-host .np .season { display: inline-flex }
+  .cal-block-host .np .season { display: inline }
+
+  .cal-block-host .sync-full { display: inline }
+  .cal-block-host .sync-compact { display: none }
+
+  .cal-block-host .skyband { height: 40px }
+  .cal-block-host .skyband .b { display: block }
+
+  /* the docked Ledger sits BESIDE the month. Its 300px is the same 300px the
+     full-tier column arithmetic subtracts, which is why the zone has to be
+     here in wave 1 even as a stub: skip it and every column measures wrong. */
+  .cal-block-host .body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .cal-block-host .inst {
+    flex: 1;
+    min-width: 0;
+  }
+  .cal-block-host .layer-col {
+    width: 300px;
+    flex: none;
+  }
+  .cal-block-host .ledger {
+    border-left: 1px solid var(--rule-structural);
+    border-top: 0;
+  }
+
+  .cal-block-host .grid .hd b { height: 22px }
+  .cal-block-host .wd-l { display: inline }
+  .cal-block-host .wd-s { display: none }
+
+  /* the intercalary row renders at full tier only */
+  .cal-block-host .interc-row { display: grid }
+}
+
+/* ── MINI ────────────────────────────────────────────────────────────────── */
+@container cal-block (min-width: 240px) and (max-width: 299.98px) {
+  .cal-block-host .block {
+    height: 180px;
+    min-height: 0;
+    max-height: none;
+  }
+  .cal-block-host .np {
+    height: 28px;
+    min-height: 0;
+    padding: 0 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .cal-block-host .np .dot { width: 6px; height: 6px }
+  .cal-block-host .np .nm { font-size: 12px }
+  .cal-block-host .np .iw,
+  .cal-block-host .np .fault { font-size: 11px; font-weight: 650 }
+  .cal-block-host .sync,
+  .cal-block-host .seg.tie,
+  .cal-block-host .skyband,
+  .cal-block-host .needzone,
+  .cal-block-host .layer-col,
+  .cal-block-host .shelf { display: none }
+
+  .cal-block-host .inst { padding: 0 8px 4px }
+  .cal-block-host .grid { min-width: calc(var(--week-len) * 24px) }
+  /* no weekday header and no era bands: neither fits, and a truncated era name
+     is worse than an absent one */
+  .cal-block-host .hd,
+  .cal-block-host .bands,
+  .cal-block-host .interc-row { display: none }
+
+  /* density is forced, not measured — mini can never afford names */
+  .cal-block-host .cell > .cnamed { display: none }
+  .cal-block-host .cell > .cunder {
+    display: block;
+    height: 26px;
+    padding: 1px 1px 0;
+  }
+  .cal-block-host .cell .dn { font-size: 11px }
+  .cal-block-host .cell .today { width: 16px; height: 16px; font-size: 10px }
+  .cal-block-host .cell .dogear { display: none }
+  .cal-block-host .ul { height: 2px; left: 1px; right: 1px }
+
+  .cal-block-host .minirail { display: block }
+  .cal-block-host .foot { display: flex }
+}
+
+/* ── SUB-MINI ────────────────────────────────────────────────────────────────
+   Below 240px the grid is DROPPED HONESTLY for a thirty-tick month rule. Ten
+   columns in 204px of content is four characters a column; a month rule still
+   answers "when is anything happening". */
+@container cal-block (max-width: 239.98px) {
+  .cal-block-host .block {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+  .cal-block-host .np {
+    height: 28px;
+    min-height: 0;
+    padding: 0 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .cal-block-host .np .dot { width: 6px; height: 6px }
+  .cal-block-host .np .nm { font-size: 12px }
+  .cal-block-host .np .iw,
+  .cal-block-host .np .fault { font-size: 11px; font-weight: 650 }
+  .cal-block-host .sync,
+  .cal-block-host .seg.tie,
+  .cal-block-host .skyband,
+  .cal-block-host .needzone,
+  .cal-block-host .layer-col,
+  .cal-block-host .shelf,
+  .cal-block-host .grid { display: none }
+
+  .cal-block-host .inst { padding: 0 }
+  .cal-block-host .tickstrip { display: block }
+  .cal-block-host .foot { display: flex }
+
+  /* the cell subtrees are unreachable here (the grid is gone) but the forced
+     underline stays declared, so a future host that shows the grid at this
+     width cannot accidentally get named chips */
+  .cal-block-host .cell > .cnamed { display: none }
+  .cal-block-host .cell > .cunder { display: block }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §MOTION — there is none.
+
+   No transition, no animation, no @keyframes, no will-change anywhere above.
+   That is a wave-1 rule (COMMON §6.5), not an oversight, and this stylesheet is
+   the most likely place a reviewer will look for a violation. Because nothing
+   moves, no `prefers-reduced-motion` override is needed: there is nothing for
+   it to disable.
+
+   When W-B lands the ANSWER primitive and its --m-swell rail scale, the two
+   things that must NOT come with it are (a) any transition on --dash / --gap
+   (canon guard B1 — it destroys the greyscale identity channel) and (b) any
+   rule that animates box-shadow independently of the 0.5px ring it carries
+   (§STATE above makes that structurally impossible; keep it that way).
+   ═══════════════════════════════════════════════════════════════════════════ */

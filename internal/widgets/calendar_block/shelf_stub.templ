@@ -1,0 +1,24 @@
+// shelf_stub.templ — Zone D, the foot of the Block.
+//
+// Same contract as the Ledger: wave 1 docks the zone at its real size and
+// renders the signed `needs backend` chip. W-E fills it with Upcoming, Filters
+// and the Almanac.
+//
+// The Shelf honours ShelfStub.Hidden — the Bench's real-world Block renders with
+// noShelf, and a hidden Shelf must actually remove the zone rather than collapse
+// it, or the Block's declared heights stop being invariant.
+
+package calendar_block
+
+templ shelfStub(d BlockData) {
+	<div class="shelf" data-zone="shelf">
+		<div class="st">
+			<span class="cap">Shelf</span>
+			<span class="sp"></span>
+			<span class="badge need">needs backend</span>
+		</div>
+		<div class="sp2">
+			<div class="lzero">Upcoming, filters and the Almanac land here.</div>
+		</div>
+	</div>
+}

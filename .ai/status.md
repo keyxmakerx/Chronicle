@@ -111,11 +111,12 @@ In order:
 | timeline | [internal/plugins/timeline/.ai.md](../internal/plugins/timeline/.ai.md) |
 | widgetbindings | [internal/plugins/widgetbindings/.ai.md](../internal/plugins/widgetbindings/.ai.md) |
 
-#### Widgets (9 of 10 — `calendar_v2` still lacks its `.ai.md`)
+#### Widgets (10 of 11 — `calendar_v2` still lacks its `.ai.md`)
 
 | Widget | `.ai.md` |
 |---|---|
 | attributes | [internal/widgets/attributes/.ai.md](../internal/widgets/attributes/.ai.md) |
+| calendar_block | [internal/widgets/calendar_block/.ai.md](../internal/widgets/calendar_block/.ai.md) |
 | editor | [internal/widgets/editor/.ai.md](../internal/widgets/editor/.ai.md) |
 | entity_notes | [internal/widgets/entity_notes/.ai.md](../internal/widgets/entity_notes/.ai.md) |
 | mentions | [internal/widgets/mentions/.ai.md](../internal/widgets/mentions/.ai.md) |
@@ -145,6 +146,37 @@ Wave 1. Source-of-record for scope + operator priorities is the cordinator plan;
 notifications store was always documented as generic (T-B2); C-CAL-RSVP-P1 is its first
 writer outside the scheduler. Future features should use `NotifyUsers` with their own type
 constant rather than adding a bespoke `NotifyX` per feature.
+
+#### 2026-07-26 · C-CALV4-BLOCK-P1 (calendar-v4 wave 1, W-A) — the Block, render tier
+
+New plugin-agnostic widget package **`internal/widgets/calendar_block`** plus
+**`static/css/calendar-block.css`**. Nothing outside those two paths changed;
+no route, no migration, no edit to any frozen calendar file. Full detail lives in
+[internal/widgets/calendar_block/.ai.md](../internal/widgets/calendar_block/.ai.md);
+the load-bearing points for anyone else in this repo:
+
+- **Sizing is CSS container queries, and it has to be.** `boot.js:163` sets
+  `htmx.config.allowScriptTags = false`, so a `<script>` inside an HTMX-swapped
+  fragment never executes — a JS-sized widget silently renders at the wrong
+  density after any swap. Size class comes from the host wrapper
+  (`container-name: cal-block`; full ≥900 · std ≥300 · mini ≥240 · else
+  sub-mini), density from each cell (`container-name: cal-cell`; measured column
+  ≥84px → names). **This is the pattern any future self-sizing widget should
+  copy**; `internal/widgets/calendar_block/sizing.go` carries the arithmetic in
+  Go for tests only and is never called at render time.
+- **`static/css/calendar-block.css` is UNLAYERED and self-contained** per
+  `cordinator decisions/2026-06-05-rendering-canvas-css-exemption.md`, and every
+  selector is scoped under `.cal-block-host`. An unlayered sheet outranks the
+  app's layered CSS, so an unscoped rule in it would restyle the whole product;
+  `TestCSS_EverySelectorIsScoped` parses the sheet and enforces that.
+- **A second real-browser probe exists.**
+  `container_query_probe_test.go` joins
+  `calendar_v2_mobile_breakpoint_probe_test.go` as a test CI never runs (both
+  skip under `-short`). Measured columns at the signed host widths are tabulated
+  in the widget's `.ai.md`.
+- **`data.go` is a cross-slice PIN** (cordinator
+  `dispatches/chronicle/C-CALV4-BLOCKDATA.go.txt`). Editing the struct is a
+  stop-and-flag: C-CALV4-SPINE-P2 writes what this package reads.
 
 #### Static asset versioning (C-ASSET-VERSIONING, shipped inside C-CAL-MOBILE-VIEWS-FIX, 2026-07-26)
 

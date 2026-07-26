@@ -1,0 +1,38 @@
+// sync_pill.templ — the honesty pill.
+//
+// FIVE STATES, TWO STRINGS, ONE INVARIANT.
+//
+// The invariant: THE DENOMINATOR NEVER DROPS. Only transport and timestamp do.
+// A green "In sync" with no denominator is the exact lie the operator hit, so
+// SyncFullText / SyncCompactText repair a producer that loses it rather than
+// rendering it.
+//
+//	state  full                                              compact
+//	ok     In sync · Foundry · pushed 2m ago · 1 of 4 linked  In sync · 1 of 4
+//	drift  Drifted · 3 days · 1 of 4 linked                   Drifted · 1 of 4
+//	bad    Incompatible structure · 12×10 ↔ 12×7              Incompatible
+//	pause  Paused · date push paused — tracks real time       Paused · tracks real time
+//	none   Not linked · 0 of 4 linked                         Not linked · 0 of 4
+//
+// BOTH strings are emitted on every render and the container query chooses:
+// full tier shows Full, std shows Compact, mini and sub-mini show neither. A
+// Go-side tier decision would be wrong by construction — the producer does not
+// know the host width.
+//
+// WAVE-1 RULING on the numerator: "linked" is DEFINED, not queried. sync_mappings
+// has no calendar type and every syncapi endpoint resolves the campaign default,
+// so Linked is 1 when a module is connected and Total is the number of calendars
+// in the campaign. That is exactly what the signed "1 of 4 linked" says; a
+// per-calendar linkage would be invented.
+
+package calendar_block
+
+templ syncPill(s SyncPill) {
+	<span class={ "sync " + syncStateClass(s.State) } title={ s.State }>
+		if syncHasDot(s.State) {
+			<span class="d" aria-hidden="true"></span>
+		}
+		<span class="sync-full">{ SyncFullText(s) }</span>
+		<span class="sync-compact" aria-hidden="true">{ SyncCompactText(s) }</span>
+	</span>
+}
