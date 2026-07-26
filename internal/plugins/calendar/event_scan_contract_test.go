@@ -1,21 +1,29 @@
 package calendar
 
-// Event column/scan contract guard (C-CAL-RSVP-P1 Step-0 finding).
+// Event column/scan contract guard (C-CAL-RSVP-P1 Step-0 finding, widened by
+// C-CALV4-TIEFIX-PB to cover a third consumer).
 //
-// WHY THIS EXISTS: `eventCols` and the two Scan destination lists that consume
-// it (GetEvent's inline scan and scanEvents) drifted apart when migration 011
-// added recurrence_day_of_week to the column list but not to scanEvents. The
-// result was 37 columns against 36 destinations, so EVERY event LIST query
-// (month/week/day/range/upcoming/search/ledger) failed at runtime with
-// "sql: expected 37 destination arguments in Scan, not 36" while the
-// single-row GetEvent kept working.
+// WHY THIS EXISTS: `eventCols` and the Scan destination lists that consume it
+// drift apart whenever a migration adds a column to one side and not the
+// other. It has happened twice:
+//   - scanEvents (repository.go) was missing &evt.RecurrenceDayOfWeek after
+//     migration 011 added recurrence_day_of_week to eventCols: 37 columns
+//     against 36 destinations, so EVERY event LIST query (month/week/day/
+//     range/upcoming/search/ledger) failed at runtime with "sql: expected 37
+//     destination arguments in Scan, not 36" while the single-row GetEvent
+//     (its own correct inline scan) kept working.
+//   - EventsForEntity (entity_ties_repository.go) was missing BOTH
+//     &evt.RecurrenceDayOfWeek and &evt.CollectRSVPs (C-CALV4-TIEFIX-PB
+//     Step-0 finding): 39 columns (eventCols' 38 + l.participation_role)
+//     against 37 destinations. The scanEvents fix never touched this file, so
+//     the same drift reappeared in a third place — this guard now covers it.
 //
-// It survived because nothing in this repository executes real SQL — there is
+// It survives because nothing in this repository executes real SQL — there is
 // no sqlmock/testify/dockertest in go.mod — so no unit test could observe the
-// mismatch. This guard closes that hole WITHOUT a database: it parses
-// repository.go with go/parser and compares the arity of the SELECT list to the
-// arity of each Scan call. Any future column added to one side and not the
-// other fails here instead of in production.
+// mismatch. This guard closes that hole WITHOUT a database: it parses the
+// owning source file with go/parser and compares the arity of the SELECT list
+// to the arity of each Scan call. Any future column added to one side and not
+// the other fails here instead of in production.
 
 import (
 	"go/ast"
@@ -50,14 +58,15 @@ func countEventCols(t *testing.T) int {
 	return n
 }
 
-// scanArity parses repository.go and returns the number of arguments passed to
-// the `.Scan(...)` call inside the named function.
-func scanArity(t *testing.T, fnName string) int {
+// scanArity parses the named source file (relative to this package dir, same
+// convention `go test` already runs under) and returns the number of
+// arguments passed to the `.Scan(...)` call inside the named function.
+func scanArity(t *testing.T, filename, fnName string) int {
 	t.Helper()
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "repository.go", nil, 0)
+	f, err := parser.ParseFile(fset, filename, nil, 0)
 	if err != nil {
-		t.Fatalf("parsing repository.go: %v", err)
+		t.Fatalf("parsing %s: %v", filename, err)
 	}
 
 	var arity = -1
@@ -86,24 +95,51 @@ func scanArity(t *testing.T, fnName string) int {
 	})
 
 	if arity == -1 {
-		t.Fatalf("no .Scan(...) call found in %s — has repository.go been restructured?", fnName)
+		t.Fatalf("no .Scan(...) call found in %s (%s) — has it been restructured?", fnName, filename)
 	}
 	return arity
 }
 
-// TestEventColsMatchScanDestinations pins the invariant both event read paths
-// depend on: SELECT arity == Scan arity, for the row scan AND the list scan.
+// eventScanSites enumerates every function that owns an INDEPENDENT Scan
+// destination list built against eventCols — i.e. every function with its own
+// inline `.Scan(...)` call, as opposed to one that just delegates to
+// scanEvents (every List* query in repository.go: ListEventsForMonth,
+// ListEventsForYear, ListAllEvents, ListEventsForDateRange,
+// ListEventsForEntity, ListUpcomingEvents, SearchEvents — none of those need
+// their own entry here, since scanEvents already covers their Scan call).
+//
+// Add a new entry whenever a new such consumer is introduced — that is
+// exactly the mistake this guard exists to catch mechanically instead of at
+// runtime in production (C-CALV4-TIEFIX-PB found the third one by hand).
+//
+// extra counts any additional columns the SELECT appends alongside eventCols
+// itself (EventsForEntity also selects l.participation_role, so its Scan list
+// is one longer than eventCols' own arity).
+var eventScanSites = []struct {
+	file  string
+	fn    string
+	extra int
+}{
+	{"repository.go", "GetEvent", 0},
+	{"repository.go", "scanEvents", 0},
+	{"entity_ties_repository.go", "EventsForEntity", 1},
+}
+
+// TestEventColsMatchScanDestinations pins the invariant every event read path
+// depends on: SELECT arity == Scan arity, for each site in eventScanSites.
 func TestEventColsMatchScanDestinations(t *testing.T) {
 	cols := countEventCols(t)
 
-	for _, fn := range []string{"GetEvent", "scanEvents"} {
-		got := scanArity(t, fn)
-		if got != cols {
-			t.Errorf("%s scans %d destinations but eventCols selects %d columns.\n"+
+	for _, site := range eventScanSites {
+		got := scanArity(t, site.file, site.fn)
+		want := cols + site.extra
+		if got != want {
+			t.Errorf("%s (%s) scans %d destinations but eventCols selects %d columns"+
+				" (%d + %d extra).\n"+
 				"Every event query through this path will fail at runtime with "+
 				"\"sql: expected %d destination arguments in Scan, not %d\".\n"+
 				"Add the new column to BOTH eventCols and this Scan list, in the same position.",
-				fn, got, cols, cols, got)
+				site.fn, site.file, got, want, cols, site.extra, want, got)
 		}
 	}
 }
