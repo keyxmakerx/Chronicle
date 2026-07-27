@@ -541,7 +541,61 @@ func (s *campaignService) RemoveMember(ctx context.Context, campaignID, userID s
 		return apperror.NewInternal(fmt.Errorf("removing member: %w", err))
 	}
 
+	// A removed member must not keep their co-DM grant (C-PERM-DMGRANT-REVOKE).
+	// Left in place, the id survives in settings.dm_grant_ids indefinitely, and
+	// on a PUBLIC campaign that is a live leak: AllowPublicCampaignAccess admits
+	// an authenticated non-member as RoleNone, the grant still resolves, and
+	// VisibilityRole() hands them RoleOwner over every dm_only object.
+	if err := s.revokeDmGrant(ctx, campaignID, userID); err != nil {
+		return err
+	}
+
 	slog.Info("member removed from campaign",
+		slog.String("campaign_id", campaignID),
+		slog.String("user_id", userID),
+	)
+	return nil
+}
+
+// revokeDmGrant drops one user from a campaign's dm_grant_ids. It is a no-op
+// when the user holds no grant, so ordinary member removal does not churn the
+// settings row.
+//
+// This closes the STORED half of the leak. The resolve-time half lives in
+// middleware.go, which refuses to honour a grant for a non-member — both are
+// needed. This alone leaves campaigns whose data is already corrupt exposed
+// until someone happens to re-save them; the middleware gate alone leaves wrong
+// data behind for the next code path that reads the list directly.
+func (s *campaignService) revokeDmGrant(ctx context.Context, campaignID, userID string) error {
+	campaign, err := s.repo.FindByID(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+
+	settings := campaign.ParseSettings()
+	kept := make([]string, 0, len(settings.DmGrantIDs))
+	for _, id := range settings.DmGrantIDs {
+		if id != userID {
+			kept = append(kept, id)
+		}
+	}
+	if len(kept) == len(settings.DmGrantIDs) {
+		return nil // held no grant; nothing to write
+	}
+	settings.DmGrantIDs = kept
+
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return apperror.NewInternal(fmt.Errorf("marshaling settings: %w", err))
+	}
+	if err := s.repo.UpdateSettings(ctx, campaignID, string(settingsJSON)); err != nil {
+		return apperror.NewInternal(fmt.Errorf("revoking dm grant: %w", err))
+	}
+
+	slog.Info("dm grant revoked with membership",
 		slog.String("campaign_id", campaignID),
 		slog.String("user_id", userID),
 	)
@@ -1118,9 +1172,31 @@ func (s *campaignService) UpdateDmGrants(ctx context.Context, campaignID string,
 	if err != nil {
 		return err
 	}
+	// Sibling settings mutators (SetFoundryModulePin) all carry this guard; its
+	// absence here made a missing campaign a nil dereference instead of a 404.
+	if campaign == nil {
+		return apperror.NewNotFound("campaign not found")
+	}
+
+	// Validate and dedup before storing. Once membership gates whether a grant
+	// is HONOURED (middleware.go), an unvalidated write is the remaining way to
+	// get an id into the list that should never have been there — and a grant
+	// held by a non-member is exactly the state C-PERM-DMGRANT-REVOKE closes.
+	seen := make(map[string]bool, len(userIDs))
+	clean := make([]string, 0, len(userIDs))
+	for _, id := range userIDs {
+		if id == "" || seen[id] {
+			continue
+		}
+		if _, err := s.repo.FindMember(ctx, campaignID, id); err != nil {
+			return apperror.NewBadRequest("cannot grant dm_only visibility to a non-member")
+		}
+		seen[id] = true
+		clean = append(clean, id)
+	}
 
 	settings := campaign.ParseSettings()
-	settings.DmGrantIDs = userIDs
+	settings.DmGrantIDs = clean
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
