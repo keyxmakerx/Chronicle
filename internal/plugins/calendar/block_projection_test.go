@@ -436,35 +436,54 @@ func TestBlockIdentityIsStableAndGreyscale(t *testing.T) {
 	}
 }
 
-// TestBlockIdentityIntFieldsAreZeroed pins the STOP-AND-FLAG raised in the PR:
-// the pinned BlockData types CalendarID / Mark.EventID / ViewerContext.UserID /
-// ViewerContext.HostEntity as int64, but every one of those identities is a
-// VARCHAR(36) UUID in Chronicle. Rather than hash a UUID into an int64 that
-// looks usable and is not, the producer zeroes them and carries the calendar's
-// real identity in CalendarSlug. This test is the tripwire: if the struct is
-// later amended to string ids, it fails and the producer gets updated with it.
-func TestBlockIdentityIntFieldsAreZeroed(t *testing.T) {
+// TestBlockIdentityFieldsCarryRealIDs is the INVERSION of the old
+// TestBlockIdentityIntFieldsAreZeroed tripwire.
+//
+// The four identity fields were once typed int64 while every one of those
+// identities is a VARCHAR(36) UUID, so the producer zeroed them and smuggled the
+// calendar's id through CalendarSlug. The old test pinned that workaround so the
+// struct amendment could not land silently — it did its job, the pin was amended
+// (r50), and this now pins the opposite: the real ids are carried, and nothing
+// is zeroed or hashed.
+//
+// Deleting it rather than inverting it would have removed the only guard on
+// these four fields.
+func TestBlockIdentityFieldsCarryRealIDs(t *testing.T) {
 	cal, events, tied := blockProjectionFixture()
+	viewer := BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner, HostEntity: "ent-1"}
 	got := projectBlock(BlockProjectionInput{Calendar: cal, Events: blockCopyEvents(events),
-		Viewer:     BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner, HostEntity: "ent-1"},
-		MonthIndex: 0, Year: 1523, TiedEventIDs: tied})
+		Viewer: viewer, MonthIndex: 0, Year: 1523, TiedEventIDs: tied})
 
-	if got.CalendarID != 0 || got.Viewer.UserID != 0 || got.Viewer.HostEntity != 0 {
-		t.Fatal("an int64 identity field is populated; Chronicle's ids are UUID strings and " +
-			"no lossless projection exists — see the identity note on projectBlock")
+	if got.CalendarID != cal.ID {
+		t.Errorf("CalendarID = %q, want the calendar's UUID %q", got.CalendarID, cal.ID)
 	}
-	if got.CalendarSlug != cal.ID {
-		t.Fatalf("CalendarSlug = %q, want the calendar's UUID %q — it is the only string "+
-			"identity field the contract has", got.CalendarSlug, cal.ID)
+	if got.Viewer.UserID != viewer.UserID {
+		t.Errorf("Viewer.UserID = %q, want %q", got.Viewer.UserID, viewer.UserID)
 	}
+	if got.Viewer.HostEntity != viewer.HostEntity {
+		t.Errorf("Viewer.HostEntity = %q, want %q — the tie toggle is gated on this being "+
+			"non-empty, so zeroing it is what kept the control off the page",
+			got.Viewer.HostEntity, viewer.HostEntity)
+	}
+	// CalendarSlug goes back to meaning the slug now that CalendarID exists.
+	if got.CalendarSlug == "" {
+		t.Error("CalendarSlug is empty")
+	}
+
+	marks := 0
 	for _, row := range got.Month.Rows {
 		for _, cell := range row.Cells {
 			for _, m := range cell.Marks {
-				if m.EventID != 0 {
-					t.Fatal("Mark.EventID is populated; event ids are UUID strings")
+				marks++
+				if m.EventID == "" {
+					t.Fatalf("a Mark on day %d has no EventID; the renderer keys "+
+						"data-event-id off it", cell.Day)
 				}
 			}
 		}
+	}
+	if marks == 0 {
+		t.Fatal("fixture produced no marks — this test would pass vacuously")
 	}
 }
 

@@ -465,7 +465,7 @@ func TestStylesheet_IsVersioned(t *testing.T) {
 // no cell may grow, move, or leave the DOM when it flips.
 func TestTieMode_IsAnAttributeNotAClass(t *testing.T) {
 	d := fxHarptos(true)
-	d.Viewer.HostEntity = 77
+	d.Viewer.HostEntity = "ent-77"
 	d.Viewer.TiedCount = 4
 	d.Viewer.WholeCount = 14
 

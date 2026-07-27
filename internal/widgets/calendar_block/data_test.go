@@ -91,7 +91,7 @@ func elementTypeName(t reflect.Type) string {
 
 func TestBlockData_ShapePinned(t *testing.T) {
 	assertShape(t, reflect.TypeOf(BlockData{}), []pinnedField{
-		{name: "CalendarID", kind: reflect.Int64},
+		{name: "CalendarID", kind: reflect.String},
 		{name: "CalendarSlug", kind: reflect.String},
 		{name: "Name", kind: reflect.String},
 		{name: "CalHue", kind: reflect.String},
@@ -127,6 +127,9 @@ func TestMonthGeometry_ShapePinned(t *testing.T) {
 		{name: "Rows", kind: reflect.Slice, typeName: "WeekRow"},
 		{name: "Intercalary", kind: reflect.Slice, typeName: "IntercalaryDay"},
 		{name: "TodayDay", kind: reflect.Int},
+		// r51: the grid draws at most three moons; this states how many the
+		// calendar DECLARES, so a fourth does not vanish silently.
+		{name: "MoonsDeclared", kind: reflect.Int},
 	})
 }
 
@@ -175,8 +178,8 @@ func TestSyncPill_ShapePinned(t *testing.T) {
 func TestViewerContext_ShapePinned(t *testing.T) {
 	assertShape(t, reflect.TypeOf(ViewerContext{}), []pinnedField{
 		{name: "IsGM", kind: reflect.Bool},
-		{name: "UserID", kind: reflect.Int64},
-		{name: "HostEntity", kind: reflect.Int64},
+		{name: "UserID", kind: reflect.String},
+		{name: "HostEntity", kind: reflect.String},
 		// TiedCount and WholeCount must come from THE SAME viewer-filtered pass
 		// or the tie toggle becomes an oracle. The pin holds the pair together.
 		{name: "TiedCount", kind: reflect.Int},
@@ -191,7 +194,7 @@ func TestViewerContext_ShapePinned(t *testing.T) {
 // renamed field breaks this literal at build time, before any test runs.
 func fullyPopulated() BlockData {
 	mark := Mark{
-		EventID: 909,
+		EventID: "ev-909",
 		Title:   "Feast of the Long Dusk",
 		Axis:    "a3",
 		Pattern: "p4",
@@ -223,7 +226,7 @@ func fullyPopulated() BlockData {
 	}
 
 	return BlockData{
-		CalendarID:   42,
+		CalendarID:   "cal-42",
 		CalendarSlug: "harptos",
 		Name:         "Calendar of Harptos",
 		CalHue:       "harptos",
@@ -274,7 +277,7 @@ func fullyPopulated() BlockData {
 				Day:   31,
 				Marks: []Mark{mark},
 			}},
-			TodayDay: 9,
+			TodayDay: 9, MoonsDeclared: 4,
 		},
 
 		Sync: SyncPill{
@@ -295,8 +298,8 @@ func fullyPopulated() BlockData {
 
 		Viewer: ViewerContext{
 			IsGM:       true,
-			UserID:     7,
-			HostEntity: 15,
+			UserID:     "u-7",
+			HostEntity: "ent-15",
 			TiedCount:  4,
 			WholeCount: 11,
 			TieMode:    "tied",

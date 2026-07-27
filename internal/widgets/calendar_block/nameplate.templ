@@ -72,7 +72,7 @@ templ dateLine(d BlockData) {
 // only to change the Block's data-tie-mode. The markup is here so W-C does not
 // have to re-cut the Nameplate.
 templ tieCounts(v ViewerContext) {
-	if v.HostEntity != 0 {
+	if v.HostEntity != "" {
 		<span class="seg tie" role="group" aria-label="Event scope">
 			<span class="tiebtn" aria-pressed={ boolAttr(v.TieMode == "tied") }>
 				{ "Tied " }{ intText(v.TiedCount) }

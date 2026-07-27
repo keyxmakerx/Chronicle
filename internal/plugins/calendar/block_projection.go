@@ -91,17 +91,11 @@ func blockDefaultLayers() calblock.LayerState {
 
 // projectBlock turns a calendar + its candidate events into one BlockData.
 //
-// IDENTITY — STOP-AND-FLAG, raised to the coordinator in the PR body.
-// BlockData.CalendarID, Mark.EventID, ViewerContext.UserID and
-// ViewerContext.HostEntity are typed int64 in the pinned struct, but every one
-// of those identities is a VARCHAR(36) UUID in Chronicle (calendars.id and
-// calendar_events.id in migration 001; entities.id and users.id in core). No
-// lossless projection exists. Editing the pinned struct is itself a
-// stop-and-flag (it desynchronises a parallel chat), so this producer leaves
-// those four fields ZERO and carries the real identity in the string field the
-// struct already has: CalendarSlug, documented as "stable identity", receives
-// the calendar's UUID. A hashed int64 was rejected — it would look usable and
-// silently fail the first time a consumer tried to load by it.
+// IDENTITY — RESOLVED (pin r50). The four identity fields were typed int64
+// while every one of those identities is a VARCHAR(36) UUID in Chronicle, so
+// this producer used to zero them and smuggle the calendar's id through
+// CalendarSlug. The pin was amended and they are now `string`; the real ids
+// are carried directly. CalendarSlug goes back to meaning the slug.
 func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	cal := in.Calendar
 	viewer := in.Viewer
@@ -122,7 +116,7 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	})
 
 	data := calblock.BlockData{
-		CalendarID:   0, // see the identity note above
+		CalendarID:   cal.ID,
 		CalendarSlug: blockCalendarSlug(cal),
 		Name:         blockCalendarName(cal),
 		CalHue:       blockCalHue(cal),
@@ -145,8 +139,8 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	counts := blockCountEvents(cal, visible, in, tieMode)
 	data.Viewer = calblock.ViewerContext{
 		IsGM:       permissions.CanSeeDmOnly(viewer.Role),
-		UserID:     0, // see the identity note above
-		HostEntity: 0, // see the identity note above
+		UserID:     viewer.UserID,
+		HostEntity: viewer.HostEntity,
 		TiedCount:  counts.tied,
 		WholeCount: counts.whole,
 		TieMode:    tieMode,
@@ -321,7 +315,7 @@ func blockCapMarks(marks []calblock.Mark) ([]calblock.Mark, int) {
 func blockMarkFor(cal *Calendar, e *Event, isGM bool) calblock.Mark {
 	key, color, icon := blockEventAxisKey(cal, e)
 	return calblock.Mark{
-		EventID:  0, // see the identity note on projectBlock
+		EventID:  e.ID,
 		Title:    e.Name,
 		Axis:     color,
 		Pattern:  blockPatternFor(key),

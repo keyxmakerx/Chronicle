@@ -419,7 +419,6 @@ func moonTitle(md MoonDisc) string {
 
 func intText(n int) string { return strconv.Itoa(n) }
 
-func intText64(n int64) string { return strconv.FormatInt(n, 10) }
 
 func boolAttr(b bool) string {
 	if b {
@@ -667,7 +666,7 @@ func gmMarkTitle(c DayCell, restricted bool) string {
 // it flips — that is what makes it legal under the no-motion rule and what makes
 // TiedCount and WholeCount non-differenceable.
 func tieMode(v ViewerContext) string {
-	if v.HostEntity == 0 {
+	if v.HostEntity == "" {
 		return ""
 	}
 	if v.TieMode == "tied" {

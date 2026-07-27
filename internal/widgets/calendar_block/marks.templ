@@ -22,8 +22,8 @@ templ namedChip(m Mark) {
 		class="chip"
 		style={ axisStyle(m.Axis) }
 		title={ markTitle(m) }
-		if m.EventID != 0 {
-			data-event-id={ intText64(m.EventID) }
+		if m.EventID != "" {
+			data-event-id={ m.EventID }
 		}
 	>
 		<i class={ "rail " + patternClass(m.Pattern) } aria-hidden="true"></i>
