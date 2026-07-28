@@ -152,7 +152,13 @@ func buildWeekOverlay(
 				Name:   m.Name,
 				Color:  paletteColor(i),
 				Avatar: m.Avatar,
-				Role:   roleLabel(m.IsOwner),
+				// COPIED, NEVER DERIVED. The old roleLabel(m.IsOwner) is gone:
+				// it mislabelled a co-DM as "player" on a permission surface
+				// (WG-4). This file stays pure and campaigns-free precisely
+				// because the label arrives already resolved.
+				Role:   m.RoleLabel,
+				IsCoDM: m.IsCoDM,
+				TZ:     m.TZ,
 				Lanes:  lanes,
 			})
 		}
@@ -223,10 +229,13 @@ func splitToViewerDays(start, end time.Time, loc *time.Location) []viewerSeg {
 	return out
 }
 
-// roleLabel maps the owner flag to the overlay's coarse role label.
-func roleLabel(isOwner bool) string {
-	if isOwner {
-		return "DM"
-	}
-	return "player"
-}
+// roleLabel is RETIRED (C-CALV4-RSVP-P8 §4 / WG-4, ADR-048 §17). It mapped
+// isOwner → "DM" | "player", which was a SECOND role vocabulary competing with
+// campaigns.Role.DisplayName(), and it ignored IsDmGranted entirely — so a
+// co-DM was labelled "player" on the surface whose whole subject is
+// who-may-see-what, while receiving owner-tier detail. The label is now
+// resolved once, at the handler, from the roster's own Role plus the campaign's
+// DmGrantIDs, and copied through overlayMemberInput.RoleLabel / IsCoDM.
+//
+// The function is deleted rather than deprecated on purpose: leaving it
+// compiling is how a second vocabulary comes back.

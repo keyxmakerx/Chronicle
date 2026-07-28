@@ -36,6 +36,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler,
 	// one the rest of the sessions plugin already uses, so availability inherits
 	// that battle-tested gating through the shared group.
 	h.SetUserDirectory(authSvc)
+	// The overlay roster's role column reads the campaign's co-DM grant list
+	// (WG-4): campaigns.Role alone labels a co-DM "Player" while handing them
+	// owner-tier detail. One read per overlay, not one per member.
+	h.SetCampaignReader(campaignSvc)
 	cg.GET("/availability", h.ShowAvailability, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.GET("/availability/mine", h.GetMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.PUT("/availability/mine", h.SaveMyAvailabilityAPI, campaigns.RequireRole(campaigns.RolePlayer))

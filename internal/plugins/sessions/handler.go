@@ -30,6 +30,9 @@ type Handler struct {
 	mailer       MailSender
 	baseURL      string // Application base URL for RSVP links (e.g. "https://chronicle.example.com").
 	userDir      UserDirectory // Resolves a user's stored IANA timezone for the availability overlay.
+	// campaignReader is the one-read source of the co-DM grant set the overlay
+	// roster's role column needs (WG-4). Nil-safe.
+	campaignReader CampaignReader
 }
 
 // NewHandler creates a new sessions Handler.

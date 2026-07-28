@@ -99,6 +99,72 @@ func TestEventRSVPs_AbsentFromCalendarExport(t *testing.T) {
 	assertNoRSVPFields(t, reflect.TypeOf(calendar.ChronicleExport{}), "ChronicleExport", map[reflect.Type]bool{})
 }
 
+// EXTENDED by C-CALV4-RSVP-P8 §5/§8.3.
+//
+// The Bench RSVP panel prints, beside every answer, that member's IANA zone and
+// their local clock for the session. Those are user-account facts about where a
+// person physically is, reached through a member-scoped DTO
+// (sessions.OverlayMember.TZ) — and they are strictly MORE sensitive than the
+// answer word beside them, because an answer is about one evening and a zone is
+// about someone's life. The RSVP tokens above would not catch a field named
+// Timezone or LocalTime, so the zone vocabulary gets its own pass over the same
+// two export roots. The sessions plugin holds the mirror of this assertion over
+// its own DTO (availability_egress_test.go).
+var rsvpZoneTokens = []string{"timezone", "localtime", "local_time"}
+
+// rsvpZoneAllowlist names export paths that legitimately match a zone token.
+//
+// A CALENDAR's anchor zone is not a PERSON's zone. `Calendar.RealTimeZone` is
+// the IANA zone a real-time calendar computes its own date from — campaign
+// configuration the operator typed, with no subject — and it has always ridden
+// the calendar export because a calendar is unusable without it. Allowlisting
+// the one known path keeps the guard armed on every other: a new
+// member-shaped zone field anywhere in either aggregate still fails.
+var rsvpZoneAllowlist = map[string]bool{
+	"ChronicleExport.Calendar.RealTimeZone": true,
+}
+
+func TestEventRSVPs_PerMemberZoneAbsentFromExports(t *testing.T) {
+	assertNoZoneFields(t, reflect.TypeOf(campaigns.CampaignExport{}), "CampaignExport", map[reflect.Type]bool{})
+	assertNoZoneFields(t, reflect.TypeOf(calendar.ChronicleExport{}), "ChronicleExport", map[reflect.Type]bool{})
+}
+
+// assertNoZoneFields is assertNoRSVPFields over rsvpZoneTokens. It is a second
+// walk rather than a widened token list on the first, because the two failure
+// messages have to say different things: an RSVP leak and a whereabouts leak
+// are not the same finding and must not be reported as one.
+func assertNoZoneFields(t *testing.T, typ reflect.Type, path string, seen map[reflect.Type]bool) {
+	t.Helper()
+	for typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Map {
+		typ = typ.Elem()
+	}
+	if typ.Kind() != reflect.Struct || seen[typ] {
+		return
+	}
+	seen[typ] = true
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		name, tag := strings.ToLower(f.Name), strings.ToLower(f.Tag.Get("json"))
+		for _, tok := range rsvpZoneTokens {
+			if rsvpZoneAllowlist[path+"."+f.Name] {
+				break
+			}
+			if strings.Contains(name, tok) || strings.Contains(tag, tok) {
+				t.Errorf("egress leak: %s.%s exposes a member's whereabouts (%q) — per-member "+
+					"zones and local clocks are Bench-render data, not export data (C-CALV4-RSVP-P8 §5)",
+					path, f.Name, tok)
+			}
+		}
+		ft := f.Type
+		for ft.Kind() == reflect.Ptr || ft.Kind() == reflect.Slice || ft.Kind() == reflect.Map {
+			ft = ft.Elem()
+		}
+		if ft.Kind() == reflect.Struct && ft.PkgPath() != "time" {
+			assertNoZoneFields(t, ft, path+"."+f.Name, seen)
+		}
+	}
+}
+
 func TestEventRSVPs_AbsentFromAIExportCategories(t *testing.T) {
 	for _, c := range aiexport.AllCategories() {
 		lc := strings.ToLower(string(c))
