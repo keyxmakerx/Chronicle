@@ -61,12 +61,19 @@ templ shelf(d BlockData) {
 			if shelfShowsFilters(d) {
 				@shelfTab(d, shelfTabFilters, "Filters")
 			}
+			if almanacReachable(d) {
+				@shelfTab(d, shelfTabAlmanac, "Almanac")
+				@almanacSubTabs(d)
+			}
 			<span class="sp"></span>
 		</div>
 		<div class="sp2">
 			@shelfUpcomingPanel(d)
 			if shelfShowsFilters(d) {
 				@shelfFiltersPanel()
+			}
+			if almanacReachable(d) {
+				@almanacPanel(d)
 			}
 		</div>
 	</div>

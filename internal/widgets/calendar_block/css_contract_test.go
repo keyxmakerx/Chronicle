@@ -381,8 +381,21 @@ func TestCSS_NoLiteralWeekLength(t *testing.T) {
 		if strings.Contains(val, "minmax(0, 1fr) auto") {
 			continue // the full-tier body: instrument + docked Ledger, not a week
 		}
-		t.Errorf("grid-template-columns:%s is neither a subgrid, a --week-len repeat, nor the "+
-			"body split", val)
+		// EXTENDED TO THE ALMANAC by C-CALV4-SHELF-P7. Zone D adds two grids
+		// that are not the month, and both are allowed BY NAME rather than by
+		// widening the rule:
+		//
+		//   · `auto 1fr` — the .kv definition list (Tonight and Moons). A
+		//     two-column key/value list; there is no day in it.
+		//   · `62px` — the Almanac LANE's fixed moon-name column, and only
+		//     that. The lane's day columns come from grid-auto-flow, asserted
+		//     below, so the day count is structural and no literal or variable
+		//     repeat() exists for it at all.
+		if val == "auto 1fr" || val == "62px" {
+			continue
+		}
+		t.Errorf("grid-template-columns:%s is neither a subgrid, a --week-len repeat, the "+
+			"body split, nor one of the Almanac's two named grids", val)
 	}
 	if found < 3 {
 		t.Errorf("only %d grid-template-columns declarations found; expected at least the grid, "+
@@ -390,6 +403,27 @@ func TestCSS_NoLiteralWeekLength(t *testing.T) {
 	}
 	if !strings.Contains(code, "calc(var(--week-len) * 30px)") {
 		t.Error("the grid's min-width must scale with --week-len, not with a literal")
+	}
+
+	// ── the Almanac's own half of the same rule ────────────────────────────
+	//
+	// The lane is ONE COLUMN PER DAY OF THE MONTH — never per weekday, never a
+	// literal. The mockup writes `repeat(30, 1fr)` twice (cv4:881, :887) and a
+	// thirty-day month is exactly the assumption this whole brief exists to
+	// escape, so the shipped lane uses grid-auto-flow instead: the columns
+	// follow the CELLS, which the producer emitted one per real day.
+	if !strings.Contains(code, "grid-auto-flow: column") {
+		t.Error("the Almanac lane must take its day columns from grid-auto-flow — a repeat() " +
+			"count would either be a literal month length or a second place the day count lives")
+	}
+	// --alm-days may appear ONLY inside a calc(). It is a length multiplier for
+	// the scroller's minimum width, and the moment it becomes a repeat() count
+	// the month's day count is declared in two places again.
+	for _, m := range regexp.MustCompile(`[^(\s]*\(?[^;{}]*var\(--alm-days\)[^;{}]*`).FindAllString(code, -1) {
+		if !strings.Contains(m, "calc(") {
+			t.Errorf("--alm-days is used outside a calc(): %q — it is a LENGTH multiplier, "+
+				"never a column count", strings.TrimSpace(m))
+		}
 	}
 }
 
