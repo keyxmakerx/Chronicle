@@ -1075,6 +1075,72 @@
   flex: none;
 }
 
+/* ── the `legend` layer's section, under the month ─────────────────────────
+   FILLED by C-CALV4-LAYERS-P9. Its counts come from ONE pass over the same
+   Rows[].Cells[].Marks the grid drew, so the legend, the grid and the docked
+   Ledger cannot drift.
+
+   THE SWATCH IS A (HUE, PATTERN) PAIR, never a hue alone. --axis carries the
+   type's channel and the p1..p8 class carries its locked stroke, because colour
+   is never load-bearing and the pair must still resolve in greyscale. Guard B1:
+   --dash and --gap are the identity channel and are NEVER animated — the swatch
+   is a static stroke. */
+.cal-block-host .legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 6px 0 0;
+  margin-top: 6px;
+  border-top: 1px solid var(--rule-hairline);
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.cal-block-host .legend i {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-style: normal;
+}
+/* The swatch reuses the .ulseg ORIENTATION (horizontal) and the SAME --dash /
+   --gap tokens the .p2..p8 classes already declare — it is the underline mark
+   at legend size, not a second pattern vocabulary. A parallel set of stroke
+   rules is exactly how a legend starts disagreeing with the marks it labels. */
+.cal-block-host .legend .lr {
+  flex: none;
+  width: 12px;
+  height: 3px;
+  border-radius: var(--r-full);
+  --dash: 100%;
+  --gap: 0px;
+  background-color: var(--axis);
+}
+.cal-block-host .legend .lr.p2,
+.cal-block-host .legend .lr.p3,
+.cal-block-host .legend .lr.p4,
+.cal-block-host .legend .lr.p6,
+.cal-block-host .legend .lr.p8 {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(to right, var(--axis) 0 var(--dash),
+      transparent var(--dash) calc(var(--dash) + var(--gap)));
+}
+.cal-block-host .legend .lr.p5 {
+  background-color: transparent;
+  background-image: linear-gradient(to bottom,
+      var(--axis) 0 1px, transparent 1px 2px, var(--axis) 2px 3px);
+}
+.cal-block-host .legend .lr.p7 {
+  background-color: transparent;
+  background-image: linear-gradient(to right,
+      var(--axis) 0 calc(50% - .5px), transparent calc(50% - .5px) calc(50% + .5px),
+      var(--axis) calc(50% + .5px) 100%);
+}
+.cal-block-host .legend .n {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 /* ── Zone C · THE DOCKED LEDGER ──────────────────────────────────────────────
    There is NO drawer anywhere in the calendar. The Ledger IS the drawer,
    permanently docked, so choosing a day repaints a panel that was already on

@@ -38,6 +38,15 @@ func mustContain(t *testing.T, body, want, why string) {
 	}
 }
 
+// legendOnly renders the SAME Block with only the legend layer on, so an
+// assertion about the legend's own zone cannot be satisfied — or defeated — by
+// a sibling zone's markup.
+func legendOnly(t *testing.T, d BlockData) string {
+	t.Helper()
+	d.Layers = LayerState{Enabled: []string{"legend"}}
+	return render(t, d)
+}
+
 func mustNotContain(t *testing.T, body, bad, why string) {
 	t.Helper()
 	if strings.Contains(flatten(body), bad) {
@@ -440,18 +449,32 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 		t.Error("with a switchboard the invoker must not be inert")
 	}
 
-	// The three zones wave 1 cannot fill render their zone with the chip rather
-	// than fabricating content — and ONLY what the registry names renders: with
-	// neither zone key nor "moons" enabled, the stubs and the discs leave too.
-	// (This count was 5 when the Ledger and Shelf rendered past the registry;
-	// inverted, not deleted, when the layer gate landed.)
+	// The three below-month zones render at the right place, and ONLY what the
+	// registry names renders: with neither zone key nor "moons" enabled, the
+	// stubs and the discs leave too. (This count was 5 when the Ledger and Shelf
+	// rendered past the registry; inverted, not deleted, when the layer gate
+	// landed.)
+	//
+	// THE CHIP COUNT INVERTS AGAIN AT C-CALV4-LAYERS-P9, and it is a wave-3 EDIT
+	// rather than a break — the third time this file has turned an honesty state
+	// over deliberately. TWO of the three zones are now FILLED: `legend` because
+	// r52's Mark.AxisLabel arrived, `moongraph` because r53's Almanac register
+	// did. `horizon` keeps its chip because there is still no queryable fog
+	// horizon on main and DayCell.Fogged is still false for everybody — that is
+	// data that exists for NOBODY, which is exactly what the chip means.
 	d.Layers = LayerState{Enabled: []string{"legend", "horizon", "moongraph"}}
 	zones := render(t, d)
 	for _, k := range []string{"legend", "horizon", "moongraph"} {
-		mustContain(t, zones, `data-layer="`+k+`"`, k+"'s zone is reserved at the right place")
+		mustContain(t, zones, `data-layer="`+k+`"`, k+"'s zone renders at the right place")
 	}
-	if n := strings.Count(zones, `class="badge need">needs backend`); n != 3 {
-		t.Errorf("%d `needs backend` chips; want exactly the 3 enabled layer zones", n)
+	// A FILLED zone must never carry the chip, and an unfilled one must. Stated
+	// per zone rather than as a bare total, so the next slice that fills one
+	// edits the claim it is actually changing.
+	mustNotContain(t, legendOnly(t, d), "needs backend",
+		"`legend` is FILLED (r52's Mark.AxisLabel); a chip on it would be a lie")
+	if n := strings.Count(zones, `class="badge need">needs backend`); n != 2 {
+		t.Errorf("%d `needs backend` chips; want exactly 2 — `horizon` (no queryable fog "+
+			"horizon on main) and `moongraph` (filled by this slice's next stage)", n)
 	}
 	mustNotContain(t, zones, `data-zone="ledger"`, "the ledger layer is not enabled here")
 	mustNotContain(t, zones, `data-zone="shelf"`, "the shelf layer is not enabled here")

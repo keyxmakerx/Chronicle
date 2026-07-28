@@ -461,7 +461,19 @@ func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
 	cal := blockTenDayCal()
 	cal.Eras = []Era{{ID: 1, CalendarID: cal.ID, Name: "Reckoning of Wards", StartYear: 1, Color: "#8b5cf6"}}
 	cal.Moons = []Moon{{ID: 1, CalendarID: cal.ID, Name: "Selune", CycleDays: 30.4}}
-	events := []Event{blockEvent("layered-1", 4, "everyone")}
+	// The event carries a DECLARED CATEGORY as of C-CALV4-LAYERS-P9, and the
+	// fixture note above is why: the legend is built from Mark.AxisLabel, which
+	// resolves only through the calendar's declared categories. An uncategorised
+	// event yields no label, the legend renders nothing, and "the legend layer
+	// is off" would be indistinguishable from "this month has no types" — the
+	// unfalsifiable absence this whole test exists to refuse.
+	cal.EventCategories = []EventCategory{
+		{ID: 1, CalendarID: cal.ID, Slug: "quest", Name: "Quest", Icon: "▲", Color: "#ef4444"},
+	}
+	quest := "quest"
+	layered := blockEvent("layered-1", 4, "everyone")
+	layered.Category = &quest
+	events := []Event{layered}
 
 	in := BlockProjectionInput{
 		Calendar:   cal,

@@ -1915,3 +1915,89 @@ func layerRowPressed(l LayerState, key string) string {
 // shipping a dead one, and the dedicated test still fails so the producer gets
 // fixed rather than hidden.
 func switchboardLive(l LayerState) bool { return l.HasSwitchboard && l.PersistURL != "" }
+
+// ── the legend (C-CALV4-LAYERS-P9) ──────────────────────────────────────────
+
+// legendEntry is one axis value's swatch, label and count.
+type legendEntry struct {
+	Axis    string
+	Pattern string
+	Label   string
+	Count   int
+}
+
+// buildLegend walks the month's marks ONCE and groups them by axis label.
+//
+// ONE PASS OVER THE SAME STRUCTURE THE GRID DREW, which is r52 §5's whole
+// argument for putting marks on the cells rather than in a parallel row list:
+// the Ledger, the grid and now the legend cannot drift, because there is only
+// one place a mark lives. Intercalary marks are included for the same reason
+// totalMarks includes them — an intercalary day is a day of this month.
+//
+// THE COUNTS ARE VIEWER-FILTERED BY CONSTRUCTION. Nothing here filters
+// anything: the producer already emitted exactly the marks this viewer may see
+// (permission is ABSENCE — a player's dm_only rows were never in the slice), so
+// summing them cannot leak. That is also why the legend joins the count oracle:
+// the sum of its counts must equal the viewer's own visible mark total, for GM,
+// Nissa and Bryn on the signed fixture. A count with no denominator behind it is
+// the shape `needs backend` exists to replace.
+//
+// ONLY THE `type` AXIS EXISTS, and that is a data fact rather than a choice.
+// There is no Mark.OwnerLabel (r52 §5 refused it; CTS-5 SIGNED "omit for wave
+// 2") and no per-calendar label, so two of the signed picker's three options
+// cannot be built at all. The owner and calendar branches are therefore NOT
+// built and NOT stubbed — they are booked to C-CALV4-AXIS-P11, which carries the
+// pin amendment for both labels.
+//
+// ORDER IS FIRST APPEARANCE IN THE MONTH, not alphabetical and not a second
+// declaration of the type list: the swatch a reader meets first in the grid is
+// the swatch they meet first in the legend.
+//
+// A mark with no AxisLabel contributes to NOTHING. Its label is the campaign's
+// data and an empty one means the type has no display name — inventing "Other"
+// would be exactly the fabrication the wave-1 chip refused.
+func buildLegend(d BlockData) []legendEntry {
+	out := make([]legendEntry, 0, 8)
+	idx := map[string]int{}
+
+	add := func(m Mark) {
+		if m.AxisLabel == "" {
+			return
+		}
+		if i, ok := idx[m.AxisLabel]; ok {
+			out[i].Count++
+			return
+		}
+		idx[m.AxisLabel] = len(out)
+		out = append(out, legendEntry{
+			Axis:    m.Axis,
+			Pattern: m.Pattern,
+			Label:   m.AxisLabel,
+			Count:   1,
+		})
+	}
+
+	for _, r := range d.Month.Rows {
+		for _, c := range r.Cells {
+			for _, m := range c.Marks {
+				add(m)
+			}
+		}
+	}
+	for _, ic := range d.Month.Intercalary {
+		for _, m := range ic.Marks {
+			add(m)
+		}
+	}
+	return out
+}
+
+// legendSwatchStyle carries the entry's own hue, exactly as every other mark
+// surface does. --axis is the mark's channel and it is FORBIDDEN from
+// referencing --accent.
+func legendSwatchStyle(e legendEntry) string { return "--axis:" + axisToken(e.Axis) }
+
+// legendSwatchClass pairs the hue with its locked stroke pattern. Colour is
+// never load-bearing: the (hue, pattern) pair must still resolve with the hue
+// removed, which is what makes the legend readable in greyscale.
+func legendSwatchClass(e legendEntry) string { return "lr " + patternClass(e.Pattern) }

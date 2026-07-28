@@ -105,9 +105,16 @@ templ skybandPlaceholder() {
 // content is for everybody, subject to the viewer filter that already governs
 // it.
 //
-//   - legend    every mark's axis LABEL ("Quest", "Festival") is not in
-//     BlockData — Mark carries a hue, a pattern and a glyph, but no
-//     axis name — so a legend built here would be invented.
+//   - legend    FILLED by C-CALV4-LAYERS-P9. The blocker was real and is
+//     gone: r52 added Mark.AxisLabel for the Ledger's meta line and
+//     said in terms that it "incidentally unblocks W-F's legend".
+//     Its chip retired the way the wave-1 chips were designed to —
+//     the data arrived, so the zone renders content. TYPE AXIS ONLY:
+//     there is still no Mark.OwnerLabel (r52 §5 refused it, CTS-5
+//     SIGNED) and no per-calendar label, so the picker's other two
+//     options are booked to C-CALV4-AXIS-P11 rather than stubbed.
+//     Being GM-gated ended with the chip: real content is for
+//     everybody, under the viewer filter that already produced it.
 //   - horizon   ruling 1: there is no queryable fog horizon on main. DayCell
 //     .Fogged stays false and this renders the chip the operator signed.
 //
@@ -132,11 +139,8 @@ templ skybandPlaceholder() {
 //     MoonDisc series, but it is the `moongraph` layer and W-F owns the
 //     layer system; wave 1 reserves the zone instead of half-shipping it.
 templ belowMonthLayers(d BlockData) {
-	if hasLayer(d.Layers, "legend") && d.Viewer.IsGM {
-		<div class="layer needzone" data-layer="legend">
-			<span class="cap">Legend</span>
-			<span class="badge need">needs backend</span>
-		</div>
+	if hasLayer(d.Layers, "legend") {
+		@legendZone(d)
 	}
 	if hasLayer(d.Layers, "horizon") && d.Viewer.IsGM {
 		<div class="layer needzone" data-layer="horizon">

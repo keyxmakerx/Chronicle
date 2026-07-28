@@ -433,3 +433,109 @@ func blockPlural(n int) string {
 	}
 	return strconv.Itoa(n) + " events"
 }
+
+// ── the legend JOINS the oracle (C-CALV4-LAYERS-P9 §8.1) ───────────────────
+
+// TestOracle_LegendCountsSumToTheViewersOwnTotal is the legend's admission to
+// this file, and the reason it is admitted rather than tested in the widget
+// package: an assertion that "the producer counted correctly" is vacuous where
+// the test author writes the BlockData.
+//
+// THE CLAIM. The legend prints one count per event TYPE. Those counts are not
+// checked for being "right" — that is the discipline this file exists to refuse.
+// They must be INDEPENDENTLY REPRODUCIBLE from this viewer's own visible set,
+// recomputed here from filterEventsByUser's output, for all three signed
+// readings: GM 14, Nissa 11, Bryn 9.
+//
+// WHY IT MATTERS MORE THAN THE OTHER COUNTS ON SCREEN. Every other number here
+// is a total; the legend is a BREAKDOWN, and a breakdown is the easiest place
+// in the whole Block to leak a hidden event. A legend counted before the viewer
+// filter would put "Quest 5" under a grid drawing four quests, and the missing
+// one is a dm_only event the viewer just learned exists — differenceable from
+// two numbers on the same screen. This asserts the sum AND every per-type
+// figure, because the sum alone can be right while two types are swapped.
+func TestOracle_LegendCountsSumToTheViewersOwnTotal(t *testing.T) {
+	cal, events := oracleLedgerFixture()
+
+	for _, w := range oracleViewers() {
+		t.Run(w.name, func(t *testing.T) {
+			visible := oracleVisible(events, w.v)
+
+			// The independent oracle: this viewer's own per-TYPE tallies,
+			// keyed on the display name the legend prints.
+			perType := map[string]int{}
+			for i := range visible {
+				if label := blockEventAxisLabel(cal, &visible[i]); label != "" {
+					perType[label]++
+				}
+			}
+
+			d := projectBlock(BlockProjectionInput{
+				Calendar: cal, Events: blockCopyEvents(events),
+				Viewer: w.v, MonthIndex: 0, Year: 1523,
+			})
+			d.Layers.Enabled = []string{"moons", "legend"}
+			body := seamRenderBlockData(t, d)
+
+			sum := 0
+			for label, want := range perType {
+				sum += want
+				// The legend's own markup: the label, then its count in .n.
+				marker := label + ` <span class="n">` + strconv.Itoa(want) + `</span>`
+				seamContain(t, body, marker,
+					"the legend's "+label+" count must be reproducible from this viewer's "+
+						"own visible set — a breakdown counted pre-filter is differenceable "+
+						"against the grid beside it")
+			}
+			if sum != len(visible) {
+				t.Fatalf("the oracle's own per-type tallies sum to %d for a viewer who can "+
+					"see %d events — the fixture, not the legend, is wrong", sum, len(visible))
+			}
+
+		})
+	}
+}
+
+// TestOracle_LegendOmitsATypeTheViewerCannotSeeAtAll is the legend's half of
+// r52 rule 3 — NOT EVEN A ZERO — and it needs its own fixture because the
+// signed month gives every viewer at least one event of every type, which makes
+// the claim unfalsifiable there.
+//
+// So this hides a WHOLE TYPE: every Festival in the month becomes dm_only. The
+// GM's legend still lists Festivals; a player's must not list them at all —
+// not "Festival 0", not a greyed swatch, not a tooltip. "Festival 0" beside a
+// grid with no festival marks tells a player that festivals exist this month
+// and none of them are theirs to know, which is the single most differenceable
+// shape a breakdown can take.
+func TestOracle_LegendOmitsATypeTheViewerCannotSeeAtAll(t *testing.T) {
+	cal, events := oracleLedgerFixture()
+	for i := range events {
+		if events[i].Category != nil && *events[i].Category == "festival" {
+			events[i].Visibility = "dm_only"
+		}
+	}
+
+	renderFor := func(v BlockViewer) string {
+		d := projectBlock(BlockProjectionInput{
+			Calendar: cal, Events: blockCopyEvents(events),
+			Viewer: v, MonthIndex: 0, Year: 1523,
+		})
+		d.Layers.Enabled = []string{"moons", "legend"}
+		return seamRenderBlockData(t, d)
+	}
+
+	gm := renderFor(BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
+	seamContain(t, gm, "Festival <span",
+		"the GM can see every festival, so their legend must list the type")
+
+	for _, v := range []BlockViewer{
+		{UserID: "u-nissa", Role: permissions.RolePlayer},
+		{UserID: "u-bryn", Role: permissions.RolePlayer},
+	} {
+		body := renderFor(v)
+		if strings.Contains(body, "Festival") {
+			t.Errorf("%s's legend names a type whose every event is hidden from them — "+
+				"permission is ABSENCE, and not even a zero (r52 rule 3)", v.UserID)
+		}
+	}
+}
