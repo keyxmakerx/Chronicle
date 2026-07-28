@@ -49,6 +49,8 @@ type BlockViewer struct {
 
 // BlockProjectionInput is the complete input to one Block render.
 //
+// Calendar MUST be non-nil — see the contract on projectBlock.
+//
 // Events is the CANDIDATE set — the rows the repository already narrowed by
 // base visibility in SQL, for the rendered month plus any intercalary months
 // hanging off it. It is consumed destructively (see the file header); callers
@@ -91,6 +93,16 @@ func blockDefaultLayers() calblock.LayerState {
 
 // projectBlock turns a calendar + its candidate events into one BlockData.
 //
+// CONTRACT: in.Calendar is NON-NIL. The sole production caller —
+// BlockService.Block — sits downstream of requireVisibleCalendar, which
+// returns a calendar or an error, never nil-and-no-error; the seam and
+// projection tests all construct a calendar. The projection's fault path is a
+// calendar that cannot resolve a date (a MONTHLESS one — see blockDateLine),
+// not a nil one, so this function reads cal.ID bare and carries no cal != nil
+// guards of its own (coordinator ruling 2026-07-28 §3, stage 16). The shared
+// helpers it calls (blockCalendarSlug, blockDateLine, …) keep their internal
+// nil checks because they are also used standalone.
+//
 // IDENTITY — RESOLVED (r50 retype, amended r51). The four identity fields
 // were typed int64 while every one of those identities is a VARCHAR(36) UUID
 // in Chronicle, so this producer used to zero them and smuggle the calendar's
@@ -124,8 +136,8 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		CalHue:       blockCalHue(cal),
 		Pattern:      blockCalPattern(cal),
 		Letter:       blockCalLetter(cal),
-		IsRealWorld:  cal != nil && cal.IsRealLife(),
-		IsDefault:    cal != nil && cal.IsDefault,
+		IsRealWorld:  cal.IsRealLife(),
+		IsDefault:    cal.IsDefault,
 		IsActive:     in.IsActive,
 		Month:        geo,
 		Sync:         blockSyncForCalendar(in.Sync, cal),

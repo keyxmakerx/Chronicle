@@ -74,10 +74,16 @@ func TestTieMode_ChangesInkNotGeometry(t *testing.T) {
 
 	// The ONLY difference should be the mode attribute and the ink class the
 	// stylesheet keys off. Byte length may differ trivially ("tied" vs "untied"),
-	// but not structurally.
-	if delta := len(whole) - len(tied); delta < 0 {
+	// but not structurally. Take the absolute delta FIRST, then compare once, so
+	// the threshold fires in BOTH directions — hanging the comparison off the
+	// else of the normalisation silenced exactly the tied-exceeds-whole side,
+	// the stop-and-flag direction of the r51 payload prediction (coordinator
+	// ruling 2026-07-28 §3, stage 16).
+	delta := len(whole) - len(tied)
+	if delta < 0 {
 		delta = -delta
-	} else if delta > len(tied)/50 {
+	}
+	if delta > len(tied)/50 {
 		t.Errorf("rendered length differs by %d bytes (>2%%) — the two modes should differ "+
 			"only by class names, not content", delta)
 	}
