@@ -1371,41 +1371,68 @@ const (
 	shelfTabAlmanac  = "almanac"
 )
 
-// almanacReachable is the wave-2 reduction of the signed default predicate, and
-// the gate on the Almanac tab existing at all.
+// skyOn is the signed SKY_ON() predicate, RESTORED IN ONE PLACE
+// (C-CALV4-LAYERS-P9 §7 / [LYR-5] SIGNED). Wave 2 asked for exactly this: "so
+// W-F restores them in ONE place rather than re-deriving them wrong".
 //
-// THE SIGNED PREDICATE IS `SKY_ON() && m.moons` (cv4:1777-1783), where
-// SKY_ON() = MOONS_ON() || GRAPH_ON() (:1341), MOONS_ON() = L('moons') &&
-// S.moonstyle !== 'off' (:1339) and GRAPH_ON() = L('moongraph') (:1340).
+// THE SIGNED PREDICATE (cv4:1339-1341):
 //
-// TWO OF THOSE FOUR TERMS DO NOT EXIST IN WAVE 2, and they are named here so
-// W-F restores them in ONE place rather than re-deriving them wrong:
+//	SKY_ON()   = MOONS_ON() || GRAPH_ON()
+//	MOONS_ON() = L('moons') && S.moonstyle !== 'off'
+//	GRAPH_ON() = L('moongraph')
 //
-//   - `moongraph` is omitted from BOTH host layer sets and booked for W-F
-//     (HOST-P3 §4.2, BENCH-P4 §5.7), so GRAPH_ON() is constant false;
-//   - S.moonstyle is a PER-VIEWER store and W-F owns it, so the `!== 'off'`
-//     term has nothing to read.
+// THREE OF THE FOUR TERMS ARE NOW REAL. `moongraph` was constant false in wave
+// 2 because the key was omitted from both host layer sets and the zone was a
+// chip; W-F fills the zone and the switchboard makes the key reachable, so
+// GRAPH_ON() is a live layer read. `moons` was always real.
 //
-// What is left is exactly "the moons layer is enabled AND the calendar declares
-// at least one moon" — and the register is empty in every case where the second
-// half is false, including the one the producer knows about and the renderer
-// does not (a host that removed the Shelf builds no register at all).
+// THE ONE TERM THAT IS STILL MISSING IS `S.moonstyle`, AND IT IS DEFERRED RATHER
+// THAN PENDING ([LYR-5] SIGNED). L20's sky preference is `?sky=graph|words|
+// moons|off`, and THREE OF ITS FOUR VALUES REDUCE TO LAYER KEYS the store now
+// persists: graph = moongraph on, moons = moons on, off = neither. The fourth,
+// `words`, names a register that exists NOWHERE in Chronicle — `moonstyle`
+// appears in this repo only in guard-B3 negative assertions and in this comment
+// — so building it would be a FOURTH moon presentation with no signed render of
+// its own. It is a named follow-on, not a half-shipped register, and there is
+// deliberately no `sky` column and no LayerState.Sky (r54 §5): a field whose
+// three live values are already layer keys is a second home for one fact.
+//
+// So MOONS_ON() reduces to L('moons') — not because the `!== 'off'` term was
+// forgotten, but because the only value it could ever have excluded is `off`,
+// and `off` IS the moons layer being off.
+func skyOn(d BlockData) bool {
+	return hasLayer(d.Layers, "moons") || hasLayer(d.Layers, "moongraph")
+}
+
+// almanacReachable is the signed default predicate `SKY_ON() && m.moons`
+// (cv4:1777-1783), and the gate on the Almanac tab existing at all.
+//
+// The register is empty in every case where the second half is false, including
+// the one the producer knows about and the renderer does not (a host that
+// removed the Shelf builds no register at all), so len(Almanac) IS `m.moons`.
 //
 // IT GATES THE TAB, not just the default. A tab whose panel has nothing to draw
 // is an inert control, and WG-spec V18 is explicit that a `title` explaining an
 // inert control is not an honesty mechanism. Absence is.
 func almanacReachable(d BlockData) bool {
-	return hasLayer(d.Layers, "moons") && len(d.Month.Almanac) > 0
+	return skyOn(d) && len(d.Month.Almanac) > 0
 }
 
-// shelfDefaultTab is the SERVER-RENDERED pressed tab, and it is the one thing
-// W-F has to change when the per-viewer store exists.
+// shelfDefaultTab is the SERVER-RENDERED pressed tab.
 //
 // The signed default is `SKY_ON() && m.moons` (cv4:1777-1783) — the Almanac
 // leads when there is a sky to lead with, and Upcoming otherwise. It is the
 // SAME predicate that decides whether the Almanac tab exists at all, called in
 // one place, so the tab that is pressed and the panel that exists can never
 // disagree.
+//
+// WAVE 2 EXPECTED W-F TO CHANGE THIS, AND W-F DID NOT — the change landed one
+// level down instead, which is the better place for it. The predicate's SOURCE
+// is now the viewer's own persisted layer set rather than the host's seed, so a
+// viewer who turns the illumination graph on gets an Almanac-leading Shelf
+// without this function learning anything new. What wave 2 called "the one
+// thing W-F has to change" turned out to be a term inside SKY_ON(), and fixing
+// it in one place is exactly what helpers.go:1363-1388 asked for.
 func shelfDefaultTab(d BlockData) string {
 	if almanacReachable(d) {
 		return shelfTabAlmanac

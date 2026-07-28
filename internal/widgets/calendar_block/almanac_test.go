@@ -387,3 +387,72 @@ func TestAlmanac_DrawsNoNodeBracket(t *testing.T) {
 		"the node-window bracket has no backend; the CSS ships as vocabulary and nothing emits it")
 	mustNotContain(t, z, "shadow ", "and no node-window title")
 }
+
+// ── SKY_ON() restored (C-CALV4-LAYERS-P9 §7, [LYR-5] SIGNED) ───────────────
+
+// TestSkyOn_IsTheSignedPredicateWithItsGraphTermLive pins the restoration that
+// helpers.go asked for by name: "so W-F restores them in ONE place rather than
+// re-deriving them wrong". Wave 2 had GRAPH_ON() constant false because the key
+// was in neither host seed and the zone was a chip. Both are now untrue.
+//
+// The claim is that the Almanac tab is reachable through EITHER term, which is
+// what SKY_ON() = MOONS_ON() || GRAPH_ON() means and what a single-term
+// reduction would silently lose.
+func TestSkyOn_IsTheSignedPredicateWithItsGraphTermLive(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		enabled []string
+		want    bool
+	}{
+		{"moons alone — the wave-2 reduction, still true", []string{"moons", "shelf"}, true},
+		{"the GRAPH term alone — constant false in wave 2, live now",
+			[]string{"moongraph", "shelf"}, true},
+		{"both", []string{"moons", "moongraph", "shelf"}, true},
+		{"neither — `off` in L20's vocabulary", []string{"ledger", "shelf"}, false},
+	} {
+		d := fxAlmanac(t, true)
+		d.Layers = LayerState{Enabled: tc.enabled}
+		if got := skyOn(d); got != tc.want {
+			t.Errorf("%s: skyOn = %v, want %v", tc.name, got, tc.want)
+		}
+		// The tab's existence and the pressed default are ONE predicate called
+		// in one place, so they can never disagree.
+		if got := almanacReachable(d); got != tc.want {
+			t.Errorf("%s: almanacReachable = %v, want %v — the gate and the default must "+
+				"be the same call", tc.name, got, tc.want)
+		}
+		if want := shelfTabAlmanac; tc.want && shelfDefaultTab(d) != want {
+			t.Errorf("%s: the Almanac must LEAD when there is a sky to lead with", tc.name)
+		}
+		if !tc.want && shelfDefaultTab(d) == shelfTabAlmanac {
+			t.Errorf("%s: a Shelf with no sky must not open on a tab that does not exist", tc.name)
+		}
+	}
+
+	// A calendar with no moons has no sky whatever the layers say. The register
+	// is the second half of the signed predicate (`&& m.moons`).
+	moonless := fxAlmanac(t, true)
+	moonless.Month.Almanac = nil
+	moonless.Layers = LayerState{Enabled: []string{"moons", "moongraph", "shelf"}}
+	if almanacReachable(moonless) {
+		t.Error("a calendar declaring no moons must not reach the Almanac — a tab whose " +
+			"panel has nothing to draw is an inert control")
+	}
+}
+
+// [LYR-5]'s other half: `moonstyle=words` is DEFERRED, and the deferral is
+// visible in the code rather than only in a dispatch. A `sky` field or a
+// `moonstyle` register appearing on BlockData would be a second home for a fact
+// three of whose four values are already layer keys.
+func TestSkyOn_NoMoonstyleRegisterWasBuilt(t *testing.T) {
+	d := fxAlmanac(t, true)
+	d.Layers = LayerState{Enabled: []string{"moons", "moongraph", "shelf"}}
+	body := flatten(render(t, d))
+	for _, forbidden := range []string{"moonstyle", "data-sky", `"words"`} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("the render carries %q — `words` names a register that exists nowhere "+
+				"in Chronicle, and building it would be a fourth moon presentation with no "+
+				"signed render of its own", forbidden)
+		}
+	}
+}
