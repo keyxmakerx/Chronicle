@@ -20,6 +20,44 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — WAVE 3 IN FLIGHT · W-G PART A LANDED (2026-07-28)
+
+**The operator's #1 feature is backed, and the slice began by retracting a
+claim we had signed.** `C-CALV4-RSVP-P8` **Part A** filled the Bench's signed
+RSVP panel (`cv4:2205-2263`) from storage that had shipped long before wave 1
+said it had not. Wave 1's honesty copy asserted, in code and in the page
+caption, that *"there is no session entity, no RSVP table and no per-member time
+zone"* — **all three false**, contradicted by calendar migration 013, sessions
+migrations 002 and 004, and core migration 000001. A `needs backend` chip that
+is wrong is a fabricated ABSENCE and is worse than no chip, because it reads as
+a verified finding. **ADR-048 §15** records the miss and the rule it produces:
+a chip is a preflight FINDING, and a finding names the migration or the route it
+checked.
+
+What Part A ships: per-member availability lanes (owner / co-DM only), the
+anonymous density row (everyone's), a **derived** recommended window under a
+permanent `derived · not stored` chip with a quorum refusal below three
+members, the party-visible member table with roles, zone chips, per-member
+local clocks and answers, and a **live** RSVP trio on the session tile. Its
+gate is `bench_rsvp_oracle_test.go` — no stored aggregate reaches the surface,
+and a departed member's stored row changes no number.
+
+**Zero new routes, zero migrations, zero JS.** `internal/wire/routes_snapshot.txt`
+is byte-identical at 720 lines: the trio posts form-encoded to the existing
+Player+ RSVP endpoint and the handler branches on `middleware.IsHTMX`.
+`014_` in the calendar plugin is still free for W-F.
+
+**ADR-048 gains §15-§19**: the preflight miss, the permission law (answers are
+party-visible, lanes are not), the retired two-value role vocabulary and
+`.badge.gm`'s third signed string `co-DM`, the zone-abbreviation ruling and the
+zone-less clock, and the no-stored-aggregate rule.
+
+**Still open in wave 3:** W-F (`C-CALV4-LAYERS-P9`) takes the route lane after
+P8 seals. **W-G Part B** (`/campaigns/:id/schedule` — the Verdict, the
+Director's matrix, the Roster, the Painter) is GATED on a coordinator drawing
+pass and is NOT built; `C-CALV4-RSVP-P8B` ("the asking email") is booked for the
+reminder endpoint the Nudge control still lacks.
+
 ### calendar-v4 — WAVE 2 COMPLETE (2026-07-28)
 
 **The Block's four zones are all REAL.** Wave 1 (P0, PB, P1, P2, P5, P3, P4) is

@@ -281,7 +281,8 @@ Phase B, W-D: the nav Calendar tab's landing surface.
   `calendarPermissionsModal`) and must survive the sweep; the associations
   panel's `EntitiesForCalendar` / `TimelineLister` reads have no caller at all
   now and the sweep should decide whether they earn a home on the Bench or go.
-- [ ] **The Bench does not draw the signed RSVP panel.** ~~Per-member
+- [x] **The Bench does not draw the signed RSVP panel.** — **DONE 2026-07-28,
+  `C-CALV4-RSVP-P8` Part A.** ~~Per-member
   availability lanes, the density row, the recommended window and the member
   table with per-member time zones all need stores that do not exist (no
   session entity, no RSVP table, no member time zone).~~ **CORRECTED
@@ -292,7 +293,7 @@ Phase B, W-D: the nav Calendar tab's landing surface.
   migration 002), `users.timezone` (core migration 000001), and session
   `scheduled_date`/`scheduled_time` (sessions migration 004). The item is kept
   rather than deleted so the miss stays visible; W-G Part A owns the panel body
-  and it needs **no migration at all**.
+  and it needed **no migration at all**, no new route and no JS.
 - [ ] **`moongraph` + `horizon` are not in the Bench's layer set.** The signed
   bench render shows both on the primary Block; wave 1 renders each as a
   `needs backend` chip and nothing else, and at std tier the extra need-zones
@@ -917,3 +918,66 @@ the widget's `.ai.md`.
   artefact contains a Shelf configuration surface, and building one would be the
   fifth authoring surface L5 forbids. Re-book "who configures the Shelf, and
   where" to the wave that ships a config store, with its own design pass first.
+
+### calendar-v4 wave 3 — booked by C-CALV4-RSVP-P8 Part A (2026-07-28)
+
+Part A filled the Bench's signed RSVP panel. These are what it deliberately did
+NOT take, each with the reason it was left.
+
+- [ ] **W-G PART B — `GET /campaigns/:id/schedule`.** The Verdict, the
+  Director's matrix, the Roster, the Painter and the Answer panel, in a new
+  `.cal-schedule`-scoped stylesheet. **GATED on a coordinator drawing pass**:
+  `mockups/calendar-v4-schedule.html` and the 17 starred stills do not exist,
+  and the design spec's own header forbids building from it. Part A left it
+  clean — **no `.sc-`-prefixed class ships, no `/schedule` route is reserved,
+  and the panel head is not yet a link** (a link to a 404 is worse than no
+  link). `tools/check-calendar-v4-lints.sh`'s B4 glob already covers
+  `*schedule*`, and its self-test proves the resolution, so the file will be
+  guarded on the day it is created.
+- [ ] **`C-CALV4-RSVP-P8B` — "the asking email".** One endpoint, one template, a
+  rate limit and a tokened link to the availability grid. It is what flips the
+  `no reminder endpoint` honesty state and un-chips the Bench's `Nudge`, and it
+  is the operator's own directive
+  (`decisions/2026-07-28-operator-directive-availability-solicitation.md`). The
+  RSVP fan-out today fires ONLY on the `collect_rsvps` OFF→ON transition.
+- [ ] **The propose-from-window write path.** `routes_snapshot.txt` carries no
+  such route; `POST /campaigns/:id/proposals` is Scribe+ and takes explicit
+  options. The derived window is real and Propose is inert beside it — the gap
+  is stated in the panel's caption, not hidden.
+- [ ] **Ledger #3 stays open and is Part B's.** `OverlayMember` has no
+  `HasPattern`, so *"never answered"* is still indistinguishable from *"busy all
+  week"*. It is the W-G spec's own single most important gap and the Bench panel
+  cannot close it — the lanes have one mark, and a second one needs the mark
+  vocabulary the drawing pass settles.
+- [ ] **"Out just this week" is not a fourth status and did not ship.**
+  `RSVPAction` already carries `out_week` and `rsvpWeekDates` resolves it, but
+  the control needs a confirm popover naming the resolved week and the
+  hand-set days it leaves alone — and **zero popovers exist in the calendar-v4
+  surfaces**; W-F ships the first. If it ever lands: NEVER a silent success. On
+  a degraded response the panel must print *"only the RSVP was recorded — your
+  availability was not changed"* in `--warn`.
+- [ ] **The `.mtable` head's slot picker is a NON-INTERACTIVE label.** The
+  mockup draws a `popovertarget` there; same reason as above.
+- [ ] **Availability ENTRY stays where it is.** `GET /campaigns/:id/availability`
+  and its 1,310 lines of `static/js/availability.js` are untouched and the nav
+  still points at them. When Part B's Painter ships it is reached ONLY from the
+  Bench panel, and **retiring `/availability` is its own slice with its own
+  fidelity gate** — `internal/app/routes.go` documents that the calendar's
+  out-week adapter deliberately mirrors `availability.js`'s `fireOutWeek`, so
+  that retirement owns the comment's referent too.
+- [ ] **WG-5's chip-beside-every-disabled-control rule is product-wide but only
+  IMPLEMENTED where wave 3 touched.** `helpers.go`'s `layersInvokerTitle` is
+  still `title`-only; W-F makes that invoker live, so the state disappears on
+  its own. Promote the rule to a blocking lint once both wave-3 slices land.
+- [ ] **The `/apps/calendar` anonymous-public gap is still open and still its own
+  slice.** Deliberately NOT folded into P8: moving that route onto a
+  public-capable group in the same slice that fills the page with per-member
+  roles, zones and clocks would make the security review reason about a nil
+  viewer against brand-new code, on the most person-identifying surface in the
+  product. Do it against settled code, with `buildBench`'s degrade ladder and the
+  W5a `ListVisibleCalendars` path each proven for a nil viewer.
+- [ ] **Density's per-day numerator is "the busiest hour of that column".** It is
+  the only per-day reduction the per-hour aggregate supports without inventing a
+  rule, and each bar states its own denominator in `title`. If the drawing pass
+  ever specifies a different reduction, it is one function
+  (`benchRsvpDensity`) and the count oracle moves with it.
