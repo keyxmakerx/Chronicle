@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
+	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
 )
 
 // generateID creates a random UUID v4 string.
@@ -63,6 +65,14 @@ type CalendarService interface {
 	// calendar_active row.
 	GetSidebarPinned(ctx context.Context, userID, campaignID string) (bool, error)
 	SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error
+
+	// Per-viewer calendar-v4 Block layer set (C-CALV4-LAYERS-P9 [LYR-3]).
+	// nil from Get means "never chosen" and the host's seed renders; a
+	// non-nil empty slice means the viewer chose a bare month. Set validates
+	// every key against calblock.LayerKeys and REJECTS an unknown one rather
+	// than dropping it.
+	GetBlockLayers(ctx context.Context, userID, campaignID string) ([]string, error)
+	SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error
 
 	// Sub-resource bulk updates (replace all).
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
@@ -1141,6 +1151,80 @@ func (s *calendarService) SetSidebarPinned(ctx context.Context, userID, campaign
 		return apperror.NewValidation("user_id required to set sidebar pin")
 	}
 	return s.repo.SetSidebarPinned(ctx, userID, campaignID, pinned)
+}
+
+// GetBlockLayers returns the viewer's stored calendar-v4 Block layer set, or
+// nil when they have never chosen one (C-CALV4-LAYERS-P9 [LYR-3]).
+//
+// Anonymous viewers (empty user_id) get nil — there is nowhere to persist a
+// per-anonymous preference, so they always see the host's seed, which is
+// exactly what every wave-1/2 render shows.
+//
+// A STORED KEY THAT HAS CEASED TO EXIST IS FILTERED HERE, WITH A LOG LINE,
+// NEVER A 500 (dispatch §12.1). The route validates on the way IN and rejects
+// an unknown key outright, so the only way an unknown key reaches this read is
+// a registry that SHRANK after the write — a deploy, not a caller. Bricking a
+// viewer's calendar over the product's own history would be the wrong failure:
+// the honest answer is the subset that still means something, and a log line so
+// the shrink is visible in ops.
+func (s *calendarService) GetBlockLayers(ctx context.Context, userID, campaignID string) ([]string, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	stored, err := s.repo.GetBlockLayers(ctx, userID, campaignID)
+	if err != nil || stored == nil {
+		return nil, err
+	}
+	kept := make([]string, 0, len(stored))
+	var dropped []string
+	for _, k := range stored {
+		if slices.Contains(calblock.LayerKeys, k) {
+			kept = append(kept, k)
+			continue
+		}
+		dropped = append(dropped, k)
+	}
+	if len(dropped) > 0 {
+		slog.Warn("calendar: stored Block layer key(s) no longer in the registry; filtering at read",
+			slog.Any("dropped", dropped),
+			slog.Any("kept", kept),
+			slog.String("user_id", userID),
+			slog.String("campaign_id", campaignID))
+	}
+	// Still non-nil even when everything was dropped: the viewer HAS chosen,
+	// and what they chose no longer exists. That is a bare month, not a fall
+	// back to the host's seed.
+	return kept, nil
+}
+
+// SetBlockLayers persists the viewer's layer set.
+//
+// VALIDATION IS ON THE WAY IN AND IT REJECTS RATHER THAN DROPS: an unknown key
+// fails the whole write. A silently-dropped key half-applies a choice the
+// viewer made, and they cannot tell from the result which half landed.
+//
+// Empty user_id rejects for the same reason SetSidebarPinned does — an
+// anonymous toggle would report success and persist nothing.
+func (s *calendarService) SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error {
+	if userID == "" {
+		return apperror.NewValidation("user_id required to set Block layers")
+	}
+	if len(keys) > len(calblock.LayerKeys) {
+		return apperror.NewValidation("too many layer keys")
+	}
+	seen := make(map[string]bool, len(keys))
+	clean := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if !slices.Contains(calblock.LayerKeys, k) {
+			return apperror.NewValidation(fmt.Sprintf("unknown layer key %q", k))
+		}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		clean = append(clean, k)
+	}
+	return s.repo.SetBlockLayers(ctx, userID, campaignID, clean)
 }
 
 // SetMonths replaces all months. Validates at least one month exists.

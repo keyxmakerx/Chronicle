@@ -1,0 +1,42 @@
+-- C-CALV4-LAYERS-P9 (wave 3, W-F) [LYR-3 SIGNED]: the per-viewer Block layer
+-- preference. This is the store three calendar-v4 waves have written "does not
+-- exist yet" about, in the same three files, byte-identically.
+--
+-- EXTENDS calendar_active RATHER THAN ADDING A TABLE, and that is not a
+-- convenience: migration 007 already made this exact choice under a live
+-- coordinator decision (PR #368 stop-and-flag #3) — "simpler; reuses the
+-- existing (user_id, campaign_id) PK + FK cascade + index discipline" — and an
+-- executor may not quietly reverse a signed decision. The grain is therefore
+-- (user_id, campaign_id): one layer set per VIEWER per CAMPAIGN, honoured at
+-- every host in it.
+--
+-- NULL IS LOAD-BEARING AND IS NOT THE EMPTY SET.
+--
+--   NULL  the viewer has never chosen. The Block renders the HOST'S SEED
+--         exactly as it did before this migration — DEF = ["moons"] on the
+--         default surface, five keys on the entity page and the Bench. Every
+--         wave-1/2 screenshot stays valid on day one because a fresh viewer
+--         has no row and an existing row has no value here.
+--   ''    the viewer chose NOTHING: a bare month, every layer off. A legal,
+--         reachable state, and the reason a NOT NULL DEFAULT '' would have
+--         been a bug rather than a tidier schema.
+--
+-- VARCHAR, NOT JSON. The repo has no precedent for JSON preference blobs; a
+-- comma-joined key list stays greppable in a production incident and keeps the
+-- validation in Go, beside the eight-key registry (calblock.LayerKeys) that
+-- actually defines the vocabulary. Keys are validated on the way IN (the route
+-- rejects an unknown key with 400 rather than dropping it silently) and
+-- filtered on the way OUT with a log line, so a registry change can never brick
+-- a viewer's calendar. Eight keys of at most a dozen characters each cannot
+-- approach 255; the bound that matters is the Go validation, not the column.
+--
+-- IDEMPOTENT DDL (`ADD COLUMN IF NOT EXISTS`) per CLAUDE.md and ADR-044/045.
+-- Migration 007's bare `ADD COLUMN` predates that rule and is immutable under
+-- tools/check-migration-immutability.sh — it is NOT the shape to copy.
+--
+-- Plugin-scoped: calendar_active is a calendar-plugin table, so this lives in
+-- internal/plugins/calendar/migrations/. A core migration referencing it would
+-- crash a fresh DB, because core migrations run BEFORE plugin ones.
+
+ALTER TABLE calendar_active
+  ADD COLUMN IF NOT EXISTS block_layers VARCHAR(255) DEFAULT NULL;

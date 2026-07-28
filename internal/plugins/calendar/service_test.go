@@ -62,6 +62,8 @@ type mockCalendarRepo struct {
 	// Wave 1.7A §G sidebar pin preference injection.
 	getSidebarPinnedFn func(ctx context.Context, userID, campaignID string) (bool, error)
 	setSidebarPinnedFn func(ctx context.Context, userID, campaignID string, pinned bool) error
+	getBlockLayersFn   func(ctx context.Context, userID, campaignID string) ([]string, error)
+	setBlockLayersFn   func(ctx context.Context, userID, campaignID string, keys []string) error
 	// C-CAL-ENTITY-TIES-DATA-MODEL: link-table injection.
 	linkEntityEventFn     func(ctx context.Context, entityID, eventID, role string) error
 	unlinkEntityEventFn   func(ctx context.Context, entityID, eventID string) error
@@ -414,6 +416,23 @@ func (m *mockCalendarRepo) GetSidebarPinned(ctx context.Context, userID, campaig
 func (m *mockCalendarRepo) SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error {
 	if m.setSidebarPinnedFn != nil {
 		return m.setSidebarPinnedFn(ctx, userID, campaignID, pinned)
+	}
+	return nil
+}
+
+// GetBlockLayers / SetBlockLayers — the C-CALV4-LAYERS-P9 per-viewer layer
+// store. The zero-value mock answers nil, which is the "never chosen" branch:
+// every pre-existing test keeps rendering the host's seed, unchanged.
+func (m *mockCalendarRepo) GetBlockLayers(ctx context.Context, userID, campaignID string) ([]string, error) {
+	if m.getBlockLayersFn != nil {
+		return m.getBlockLayersFn(ctx, userID, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error {
+	if m.setBlockLayersFn != nil {
+		return m.setBlockLayersFn(ctx, userID, campaignID, keys)
 	}
 	return nil
 }
