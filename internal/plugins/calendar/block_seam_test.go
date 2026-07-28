@@ -531,6 +531,127 @@ func TestSeam_DeclaredMoonTotalReachesTheNameplate(t *testing.T) {
 		"a calendar declaring three or fewer states nothing extra (r51 acceptance)")
 }
 
+// ── L21's other half: the declared body the grid does NOT draw ─────────────
+
+// TestSeam_TheFourthDeclaredMoonReachesTheAlmanac is the seam L21 actually
+// depends on, and the one C-CALV4-SHELF-P7 §11 asks for by name.
+//
+// TestSeam_DeclaredMoonTotalReachesTheNameplate above proves only that the
+// badge STATES a total. That is the ceiling being announced. It says nothing
+// about where the announced-but-undrawn body went — and "the grid can never
+// grow with the fiction" is legitimate ONLY because "the Almanac carries every
+// declared body at full width" (design notes :667). A producer that filled
+// MoonsDeclared and left MonthGeometry.Almanac empty would keep every
+// assertion above green while the fourth moon vanished from the product.
+//
+// IT RUNS THE REAL PRODUCER PATH, exactly as its sibling does — BlockService
+// .Block hydrates Calendar.Moons through the repo's batch read before
+// buildMonthGeometry runs — because the register cannot be derived from
+// anything a hand-written widget fixture could supply.
+func TestSeam_TheFourthDeclaredMoonReachesTheAlmanac(t *testing.T) {
+	cal := blockTenDayCal()
+	cal.Moons = blockFourMoons()
+	svc := NewBlockService(newBlockFakeRepo(cal))
+	d, err := svc.Block(context.Background(), BlockRequest{
+		CalendarID: cal.ID, CampaignID: "camp-1",
+		Viewer:  BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner},
+		MoonCap: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The producer's own half: four lanes from a MoonCap-3 request, and the
+	// grid still drawing three discs per day. Both facts in ONE render is what
+	// makes the ceiling and the register coexist rather than contradict.
+	if n := len(d.Month.Almanac); n != 4 {
+		t.Fatalf("the register carries %d lanes for four declared moons; the fourth body has "+
+			"nowhere else in BlockData to be (DayCell.Moons is capped)", n)
+	}
+	drawn := 0
+	for _, m := range d.Month.Almanac {
+		if m.Drawn {
+			drawn++
+		}
+	}
+	if drawn != 3 {
+		t.Errorf("%d lanes are marked Drawn under MoonCap 3; the badge's '3 of 4' and the "+
+			"register's own flags must state one ceiling, not two", drawn)
+	}
+
+	// The renderer's half: the Shelf docks, and the undrawn body is IN THE DOM.
+	// Overriding Layers stands in for W-F's per-viewer store and nothing else;
+	// every other field is the producer's real output.
+	d.Layers.Enabled = []string{"moons", "eras", "weeknums", "ledger", "shelf"}
+	body := seamRenderBlockData(t, d)
+
+	seamContain(t, body, `data-spane="almanac"`,
+		"a calendar with declared moons must reach the Almanac panel")
+	seamContain(t, body, ">Sable<",
+		"Sable is the fourth declared body and the grid does not draw it; if it is not here "+
+			"it is nowhere, and the ceiling stops being legitimate")
+	seamContain(t, body, "past the ceiling the grid draws",
+		"the Moons panel must SAY which bodies the ceiling excluded — Drawn is the only "+
+			"place the renderer learns it")
+	seamContain(t, body, ">3 of 4 moons<",
+		"the badge and the register agree in one render: three drawn, four declared")
+	seamContain(t, body, "all of them are in the Almanac",
+		"and the badge's restored hover tail is TRUE in this render (SEAM-P5 §4.8)")
+}
+
+// TestSeam_TheAlmanacRegisterIgnoresMoonCap is [S5], SIGNED, at the seam.
+//
+// MoonCap is a HOST-passed parameter — the entity host passes 3
+// (entity_calendar_block.go) — and this is the one sanctioned place it is
+// deliberately non-authoritative. It governs the GRID; it does not govern the
+// register the grid's ceiling points at. That is a new shape, which is why it
+// was signed once here rather than discovered later.
+//
+// The producer-side unit assertion lives in block_almanac_test.go. This is the
+// COMPOSED one: it drives BlockService.Block, which is the path the entity host
+// and the Bench actually take, so a MoonCap that leaked into the register
+// anywhere between the request and the geometry is caught.
+func TestSeam_TheAlmanacRegisterIgnoresMoonCap(t *testing.T) {
+	cal := blockTenDayCal()
+	cal.Moons = blockFourMoons()
+
+	for _, mc := range []int{1, 2, 3, 4, 0} {
+		svc := NewBlockService(newBlockFakeRepo(cal))
+		d, err := svc.Block(context.Background(), BlockRequest{
+			CalendarID: cal.ID, CampaignID: "camp-1",
+			Viewer:  BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner},
+			MoonCap: mc,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := len(d.Month.Almanac); n != len(cal.Moons) {
+			t.Errorf("MoonCap %d: the register carries %d lanes for %d declared moons — the "+
+				"Almanac is UNCAPPED ([S5]); MoonCap decides Drawn and nothing else",
+				mc, n, len(cal.Moons))
+		}
+		// Every lane carries its WHOLE month: "never partially filled — a moon
+		// that appears here appears with its whole month, because the Month
+		// lane, the Tonight readout and the Moons arithmetic are three views of
+		// one pass".
+		for _, m := range d.Month.Almanac {
+			if len(m.Days) != d.Month.Days {
+				t.Errorf("MoonCap %d: %s carries %d of %d days", mc, m.Name, len(m.Days), d.Month.Days)
+			}
+		}
+		// …and the GRID still honours it, or the two would be agreeing by both
+		// being wrong.
+		for _, r := range d.Month.Rows {
+			for _, c := range r.Cells {
+				if c.Day > 0 && mc > 0 && len(c.Moons) > mc {
+					t.Fatalf("MoonCap %d: day %d drew %d discs — the register being uncapped "+
+						"must not uncap the grid", mc, c.Day, len(c.Moons))
+				}
+			}
+		}
+	}
+}
+
 // ── §5: a recurring event marks each day ONCE across intercalary months ─────
 
 // TestSeam_RecurringEventMarksOnceAcrossIntercalaryMonths pins dispatch §5 at
