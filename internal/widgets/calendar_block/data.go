@@ -12,6 +12,13 @@
 // precedent). Changing a field name or type is a STOP-AND-FLAG, not a
 // judgement call: it desynchronises a parallel chat you cannot see.
 //
+// AMENDED r54 (2026-07-28). One field for the wave-3 switchboard (W-F):
+// LayerState.PersistURL — the campaign-scoped endpoint the switchboard posts a
+// layer choice to, built by the producer (the widget has no router and renders
+// under context.Background()). EMPTY MEANS NO SWITCHBOARD, and the invariant
+// HasSwitchboard == (PersistURL != "") is pinned by test. See
+// decisions/2026-07-28-calv4-layers-p9-pin-amendment.md.
+//
 // AMENDED r53 (2026-07-28). The Almanac register for the wave-2 Shelf (W-E):
 // MonthGeometry.Almanac []AlmanacMoon plus the AlmanacMoon and AlmanacDay
 // types — the full celestial register, deliberately UNCAPPED by MoonCap (the
@@ -371,9 +378,33 @@ type SyncPill struct {
 // WAVE-1 RULING: layer preferences are per-viewer and persisted (L20/L26/L29),
 // and that store does not exist yet. Wave 1 renders DEF and emits the ⋯
 // invoker; the switchboard itself is W-F. HasSwitchboard is false in wave 1.
+//
+// WAVE-3 (W-F, r54): the store exists. Enabled is now the VIEWER'S OWN stored
+// set when they have one and the host's seed set when they do not, resolved by
+// the producer — the Block still performs no queries and holds no request
+// state.
 type LayerState struct {
 	Enabled        []string
 	HasSwitchboard bool
+
+	// PersistURL is the campaign-scoped endpoint the switchboard's controls
+	// post a layer choice to. EMPTY MEANS THERE IS NO SWITCHBOARD, and the
+	// invariant is pinned rather than assumed:
+	//
+	//	HasSwitchboard == (PersistURL != "")
+	//
+	// Built by the PRODUCER because this package is plugin-agnostic: it has no
+	// router, no campaign id in scope, and it renders under
+	// context.Background() (data.go:45-46), so it can neither construct a URL
+	// nor read one off a request. Same division as Mark.Time (r52 §3.1) — the
+	// producer formats, the renderer prints.
+	//
+	// There is deliberately NO CSRF field beside it. boot.js attaches
+	// X-CSRF-Token to every HTMX mutating request from the cookie, globally
+	// and outside this widget, so a token carried in BlockData would be a
+	// second copy of a fact the page already owns — and a copy that can go
+	// stale inside a cached fragment.
+	PersistURL string
 }
 
 // LedgerStub / ShelfStub: wave 1 docks these zones at the correct size and

@@ -249,6 +249,84 @@ func TestSyncPill_ShapePinned(t *testing.T) {
 	})
 }
 
+// TestLayerState_ShapePinned — r54. LayerState had no shape pin until W-F
+// added the field the switchboard needs, which is exactly the moment a struct
+// stops being obvious enough to leave unpinned.
+//
+// THREE FIELDS AND NO FOURTH. The pin is as much a refusal as a record: the
+// amendment's §5 turned down eight candidates by name, and two of them would
+// have landed here. `Sky` is refused because three of its four values ARE layer
+// keys already (graph = moongraph on, moons = moons on, off = neither) and the
+// fourth, `words`, names a register that exists nowhere in Chronicle. A
+// per-layer `NeedsBackend` flag is refused because two of the three chipped
+// zones are filled in this same slice and the third keeps an unconditional
+// chip — a flag would be a speculative field, and golangci's `unused` turns
+// one of those into a red build rather than a comment.
+func TestLayerState_ShapePinned(t *testing.T) {
+	assertShape(t, reflect.TypeOf(LayerState{}), []pinnedField{
+		// The viewer's OWN set when they have one, the host's seed when they do
+		// not. The producer resolves it; the widget never queries.
+		{name: "Enabled", kind: reflect.Slice},
+		{name: "HasSwitchboard", kind: reflect.Bool},
+		// r54. The campaign-scoped endpoint the switchboard posts to, built by
+		// the producer because this package has no router and renders under
+		// context.Background(). There is deliberately no CSRF field beside it.
+		{name: "PersistURL", kind: reflect.String},
+	})
+}
+
+// TestLayerState_SwitchboardAndURLAreOneFact pins r54's INVARIANT rather than
+// leaving it as a comment:
+//
+//	HasSwitchboard == (PersistURL != "")
+//
+// It matters because the two ways to break it are opposite and BOTH are silent.
+// A true flag with an empty URL renders a live-looking switchboard whose every
+// row posts back to the page it is on — a control that looks enabled and does
+// nothing, which is exactly the inert-control shape WG-spec V18 forbids. A URL
+// with a false flag is a producer that built the endpoint and then left the
+// invoker disabled: the only symptom is a missing feature, so nobody ever files
+// it.
+//
+// layerStateConsistent is the predicate, and it is exercised in BOTH directions
+// — the two legal states pass, both broken states fail — so the pin cannot be
+// satisfied by a checker that always says yes.
+func TestLayerState_SwitchboardAndURLAreOneFact(t *testing.T) {
+	const url = "/campaigns/camp-1/calendar/prefs"
+
+	for _, tc := range []struct {
+		name string
+		l    LayerState
+		want bool
+	}{
+		{"no store: the wave-1/2 state, and an anonymous viewer's",
+			LayerState{Enabled: []string{"moons"}}, true},
+		{"live switchboard",
+			LayerState{Enabled: []string{"moons"}, HasSwitchboard: true, PersistURL: url}, true},
+		{"flag without an endpoint — rows that post to the page they are on",
+			LayerState{Enabled: []string{"moons"}, HasSwitchboard: true}, false},
+		{"endpoint without a flag — a switchboard nobody can open",
+			LayerState{Enabled: []string{"moons"}, PersistURL: url}, false},
+	} {
+		if got := layerStateConsistent(tc.l); got != tc.want {
+			t.Errorf("%s: consistent=%v, want %v (HasSwitchboard=%v, PersistURL=%q)",
+				tc.name, got, tc.want, tc.l.HasSwitchboard, tc.l.PersistURL)
+		}
+	}
+
+	// The package fixture is a producer's output in miniature and obeys it too.
+	if !layerStateConsistent(fullyPopulated().Layers) {
+		t.Error("fullyPopulated() emits a LayerState that breaks r54's invariant")
+	}
+}
+
+// layerStateConsistent is r54's invariant as a predicate. The producers'
+// obedience to it is asserted where the producers live (internal/plugins/
+// calendar); this is the definition both sides read.
+func layerStateConsistent(l LayerState) bool {
+	return l.HasSwitchboard == (l.PersistURL != "")
+}
+
 func TestViewerContext_ShapePinned(t *testing.T) {
 	assertShape(t, reflect.TypeOf(ViewerContext{}), []pinnedField{
 		{name: "IsGM", kind: reflect.Bool},
@@ -388,7 +466,11 @@ func fullyPopulated() BlockData {
 		},
 		Layers: LayerState{
 			Enabled:        []string{"moons"},
-			HasSwitchboard: true, // fixture only — wave-1 renders DEF with this false
+			HasSwitchboard: true,
+			// r54: HasSwitchboard and PersistURL are ONE fact spelled two ways.
+			// The fixture sets them together because the invariant below says
+			// they can never disagree.
+			PersistURL: "/campaigns/camp-1/calendar/prefs",
 		},
 		Ledger: LedgerStub{NeedsBackend: true, Hidden: true},
 		Shelf:  ShelfStub{NeedsBackend: true, Hidden: true},
@@ -428,6 +510,11 @@ func TestFixture_LeavesNoPinnedFieldZero(t *testing.T) {
 		{"AlmanacDay", reflect.ValueOf(d.Month.Almanac[0].Days[0])},
 		{"SyncPill", reflect.ValueOf(d.Sync)},
 		{"ViewerContext", reflect.ValueOf(d.Viewer)},
+		// ADDED WITH r54's PersistURL. LayerState was absent from this walk
+		// while it had two fields nobody could forget; the moment it grew a
+		// third — one a producer can plausibly leave empty — the fixture needed
+		// the same guard every other pinned struct already had.
+		{"LayerState", reflect.ValueOf(d.Layers)},
 	}
 
 	for _, c := range checks {
