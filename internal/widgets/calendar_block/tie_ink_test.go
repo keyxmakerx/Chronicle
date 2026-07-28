@@ -166,7 +166,15 @@ func TestTieToggle_IsAPureCSSControl(t *testing.T) {
 		}
 	}
 	// Exactly one option is selected, and it is the server's mode.
-	if n := strings.Count(body, " checked"); n != 1 {
+	//
+	// REFRESHED BY C-CALV4-SHELF-P7 for the second time and for the same
+	// reason the radio count was refreshed by W-B: this counted ` checked`
+	// across the WHOLE Block, which was the same statement while the tie pair
+	// was the only DEFAULT-checked control in it. W-E's Shelf tabs are a third
+	// CSS-only radio group and one of them is checked by the server, so the
+	// count is scoped to the tie group's own inputs. The intent is unchanged —
+	// exactly one tie option, so the toggle can never be in neither mode.
+	if n := tieChecked(body); n != 1 {
 		t.Errorf("exactly one tie option may be checked; got %d", n)
 	}
 	// Zero JS. Not "little": none.
@@ -189,7 +197,7 @@ func TestTieToggle_IsAPureCSSControl(t *testing.T) {
 
 	// Flipping the mode moves `checked` and changes nothing else about the pair.
 	whole := render(t, fxTieHosted(t, "whole"))
-	if strings.Count(whole, " checked") != 1 {
+	if tieChecked(whole) != 1 {
 		t.Error("whole mode must still check exactly one option")
 	}
 	// Order is checked by relative position, not by byte offset: `checked` moves
@@ -245,4 +253,21 @@ func TestTieToggle_GroupNameIsStableAndPerBlock(t *testing.T) {
 	if strings.Contains(tieGroupName(empty), "--") {
 		t.Error("an empty identity must still yield a non-degenerate token")
 	}
+}
+
+// tieChecked counts the CHECKED tie radios in a rendered Block.
+//
+// The Block now carries three CSS-only radio groups — the tie toggle, W-B's
+// day pick and W-E's Shelf tabs — so a bare `strings.Count(body, " checked")`
+// no longer says which group it counted. It splits on the input tag rather
+// than pattern-matching an attribute order, because attribute order in
+// generated markup is not a contract this test wants to depend on.
+func tieChecked(body string) int {
+	n := 0
+	for _, frag := range strings.Split(body, "<input ") {
+		if strings.Contains(frag, `class="tiepick"`) && strings.Contains(frag, " checked") {
+			n++
+		}
+	}
+	return n
 }

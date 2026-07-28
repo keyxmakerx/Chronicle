@@ -1266,3 +1266,156 @@ func blockFootCount(d BlockData) string {
 	}
 	return eventCountLabel(totalMarks(d))
 }
+
+// ── Zone D · the Shelf ──────────────────────────────────────────────────────
+//
+// THE SHELF READS. It authors nothing and it grows no configuration surface of
+// its own — contract §8 item 2 (L5) says the celestial surface is "a dedicated
+// filtered Almanac list in the shelf widget. No fifth authoring surface", and
+// that clause is a bound rather than decoration.
+//
+// THREE PANELS, ONE RADIO GROUP, ZERO JAVASCRIPT ([S7], SIGNED). A bound Block
+// renders under context.Background() (entity_calendar_block.go), so the
+// mockup's `?alm=` query param is not reachable, and per-viewer persistence is
+// W-F's store, which does not exist. The tabs are therefore the same CSS-only
+// radio mechanism the tie toggle proved (nameplate.templ, TestCSS_TieToggle-
+// FlipsInkWithoutJS): the server renders the default pressed state, the
+// stylesheet does the rest, and W-F later swaps the DEFAULT's source for a
+// stored preference and touches nothing else.
+
+// shelfPickGroupName is the radio group shared by this Block's three Shelf
+// tabs, and shelfPickInputID one tab's DOM id.
+//
+// Pure functions of the data, for the third time in this package and for the
+// same two reasons (see tieGroupName): the Bench composes four Blocks on one
+// page and two of them sharing a radio name would fight over one piece of
+// state, while the SAME Block re-rendered by an HTMX binding swap must keep the
+// name or the viewer's chosen tab is lost in the swap.
+func shelfPickGroupName(d BlockData) string {
+	return "shelf-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+func shelfPickInputID(d BlockData, key string) string {
+	return shelfPickGroupName(d) + "-" + domToken(key)
+}
+
+// The Shelf tab keys, declared once. The stylesheet writes one rule per key
+// against these exact strings. The Almanac's key is added with its panel.
+const (
+	shelfTabUpcoming = "upcoming"
+	shelfTabFilters  = "filters"
+)
+
+// shelfDefaultTab is the SERVER-RENDERED pressed tab, and it is the one thing
+// W-F has to change when the per-viewer store exists.
+//
+// The signed default is `SKY_ON() && m.moons` (cv4:1777-1783) — the Almanac
+// leads when there is a sky to lead with, and Upcoming otherwise. This stage
+// ships the Upcoming half; the Almanac's term arrives with the Almanac panel,
+// in one place, so the tab that is pressed and the panel that exists can never
+// disagree.
+func shelfDefaultTab(d BlockData) string {
+	return shelfTabUpcoming
+}
+
+// shelfShowsFilters gates the Filters tab on the viewer being a GM.
+//
+// [S10], SIGNED: a 2-tab Shelf for players and a 3-tab Shelf for the GM. It is
+// the 2026-07-27 needs-backend-audience ruling applied one level down — "for a
+// player the zone simply does not appear" — and it is ABSENCE rather than a
+// disabled control. The Filters panel is a bare `needs backend` chip ([S2]) and
+// that chip must never render to a player; gating the chip alone would leave a
+// player a tab that opens on nothing, which is worse than either.
+//
+// It is worth naming as what it is: the FIRST per-role difference inside a
+// chrome strip rather than inside content. Everywhere else on the Block,
+// permission is absence of DATA.
+func shelfShowsFilters(d BlockData) bool { return d.Viewer.IsGM }
+
+// shelfUpcoming is Zone D's Upcoming panel, assembled from the SAME
+// ledgerView the Ledger draws.
+//
+// IT REUSES THE LEDGER'S ROW PRIMITIVE VERBATIM (cv4:1794, :1798 — the signed
+// panel calls ledgerRow(e, 'full', i)). There is no second row implementation
+// and no second walk: newLedgerView already produced every line from the one
+// viewer-filtered pass, so the Shelf's counts cannot disagree with the Ledger's
+// head, the Block's foot or the day-cell total. A parallel list here would
+// re-open the two-computations defect for the fourth time.
+//
+// MONTH-SCOPED, EXACTLY AS DRAWN ([S1], SIGNED). The panel is Today plus up to
+// four later days of the SAME month on ONE calendar. The cross-calendar index
+// exists — BlockService.UpcomingAcrossCalendars — but it is the BENCH's NEXT UP
+// surface, and a second one inside the Block is the duplicate-surface decay the
+// proportion rule exists to stop. It also keeps the Block's data self-contained
+// under context.Background(), which is what lets a Block be embedded anywhere.
+//
+// THE FOUR-ROW CAP IS NORMATIVE ([S1]). `.sp2` is a fixed 132px with its own
+// scroller; the cap is what keeps the scroller from becoming the panel.
+type shelfUpcomingView struct {
+	// Today is the rows on TodayDay. Empty is a real state and gets its own
+	// line, because "no events today" and "today is not in this month" are
+	// different claims — the same split ledgerZeroAll/ledgerZeroDay makes.
+	Today []ledgerLine
+	// Later is the next LaterCap days' rows, in ordinal order.
+	Later []ledgerLine
+	// TodayInMonth is false when the calendar's current day falls outside the
+	// rendered month, which is the ordinary case for any month but this one.
+	TodayInMonth bool
+	// Truncated is true when the cap dropped rows, so the panel can say so
+	// rather than silently ending. A list that stops without saying it stopped
+	// is the same class of omission as a count with no denominator.
+	Truncated bool
+}
+
+// shelfUpcomingCap is the signed `.slice(0, 4)` (cv4:1798), normative per [S1].
+const shelfUpcomingCap = 4
+
+func newShelfUpcoming(d BlockData) shelfUpcomingView {
+	v := shelfUpcomingView{TodayInMonth: d.Month.TodayDay > 0}
+	for _, l := range newLedgerView(d).Lines {
+		// INTERCALARY DAYS ARE NOT IN THIS LIST, and that is arithmetic rather
+		// than a judgement: an intercalary day's ordinal is its own (Midwinter
+		// 1 is not Deepwinter 1), so comparing it against TodayDay would order
+		// it against a different scale. They keep their place in the Ledger,
+		// which lists by ordinal day within each namespace.
+		if strings.HasPrefix(l.Ord, "i") {
+			continue
+		}
+		switch {
+		case v.TodayInMonth && l.Day == d.Month.TodayDay:
+			v.Today = append(v.Today, l)
+		case l.Day > d.Month.TodayDay:
+			if len(v.Later) < shelfUpcomingCap {
+				v.Later = append(v.Later, l)
+			} else {
+				v.Truncated = true
+			}
+		}
+	}
+	return v
+}
+
+// shelfTodayZero is the Today band's empty line. Two strings for two claims:
+// the month HAS a today and nothing is on it, or the month does not contain
+// today at all — printing "Nothing today" for the second would assert the
+// viewer is looking at the current month when they are not.
+func shelfTodayZero(d BlockData, v shelfUpcomingView) string {
+	if !v.TodayInMonth {
+		return "Today is not in " + d.Month.Name + "."
+	}
+	return "Nothing today."
+}
+
+// shelfLaterZero is the This month band's empty line — the month has no events
+// after the anchor day. It names the month for the same reason ledgerZeroAll
+// does: the claim is about the month, not about a day.
+func shelfLaterZero(d BlockData) string {
+	return "Nothing further in " + d.Month.Name + "."
+}
+
+// shelfMoreText states what the four-row cap dropped. The cap is normative, so
+// the honest form is to say the list is capped rather than to end silently —
+// the Ledger, one zone up, lists every row and is one scroll away.
+func shelfMoreText() string {
+	return "First " + strconv.Itoa(shelfUpcomingCap) + " shown — the Ledger lists the whole month."
+}

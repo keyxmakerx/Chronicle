@@ -504,9 +504,30 @@ func TestLedger_TabStripCarriesMonthAlone(t *testing.T) {
 	if !strings.Contains(body, `class="ltab" aria-pressed="true">Month<`) {
 		t.Error("the one tab is the current panel and says so")
 	}
+	// REFRESHED BY C-CALV4-SHELF-P7, INTENT UNCHANGED. This scanned the WHOLE
+	// Block for the three labels, which was the same statement while nothing
+	// else in the Block could emit them. W-E's Shelf now emits Upcoming,
+	// Filters and Almanac as real tabs WITH their panels, in Zone D's own
+	// strip — so the claim is narrowed to the container it was always about:
+	// the LEDGER's strip carries Month alone, and W-E added no second tab to
+	// P6's `.ltabs` ([S9]: consume the container, do not duplicate it).
+	//
+	// The slice bounds are CHECKED, never bare: COMMON §3 names a raw
+	// strings.Index result used as a bound as the pin shape that PANICS on a
+	// rename instead of failing cleanly.
+	open := strings.Index(body, `<div class="ltabs">`)
+	if open < 0 {
+		t.Fatal("no `.ltabs` strip in the Block — W-B's container is the one this pin is about")
+	}
+	end := strings.Index(body[open:], "</div>")
+	if end < 0 {
+		t.Fatal("the `.ltabs` strip never closes")
+	}
+	tabs := body[open : open+end]
 	for _, unbuilt := range []string{">Upcoming<", ">Filters<", ">Almanac<"} {
-		if strings.Contains(body, unbuilt) {
-			t.Errorf("%s is W-E's panel; a tab without its panel is an inert control", unbuilt)
+		if strings.Contains(tabs, unbuilt) {
+			t.Errorf("%s is in the LEDGER's strip; zone D owns those three tabs and their "+
+				"panels, and a duplicate here would be two controls for one piece of state", unbuilt)
 		}
 	}
 	// W-F's two std-head surfaces stay OUT rather than shipping inert.

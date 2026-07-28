@@ -220,16 +220,91 @@ func TestOracle_EveryLedgerCountComesFromTheViewersOwnSet(t *testing.T) {
 				"the fold on day 5 must count only what this viewer received")
 
 			// 6. THE LEDGER LISTS EXACTLY THE VIEWER'S OWN SET, once each.
-			if n := strings.Count(body, `class="lrow `); n != want {
+			//
+			//    SCOPED TO ZONE C BY C-CALV4-SHELF-P7. Before W-E filled the
+			//    Shelf, `class="lrow ` counted the whole Block because only one
+			//    zone emitted rows. The Shelf's Upcoming panel now reuses the
+			//    SAME row primitive — deliberately, so the two zones cannot
+			//    drift — which means an unscoped count reads the Ledger's rows
+			//    plus a subset of them again. The intent is unchanged (the
+			//    Ledger lists this viewer's own set, once each); what changed
+			//    is that the count now names the zone it is counting.
+			ledgerZone := oracleZone(t, body, "ledger")
+			if n := strings.Count(ledgerZone, `class="lrow `); n != want {
 				t.Errorf("the Ledger listed %d rows for a viewer who can see %d events", n, want)
 			}
 			for i := range visible {
-				if !strings.Contains(body, `data-event-id="`+visible[i].ID+`"`) {
+				if !strings.Contains(ledgerZone, `data-event-id="`+visible[i].ID+`"`) {
 					t.Errorf("event %s is visible to this viewer and is not in the Ledger", visible[i].ID)
 				}
 			}
+
+			// 7. THE SHELF'S UPCOMING PANEL COMES FROM THE SAME PASS
+			//    (C-CALV4-SHELF-P7 §11). It is a THIRD reading of the same
+			//    filtered set — Today's rows plus up to four later ones — and
+			//    it is the reading a second walk would break first, because a
+			//    forward list is the natural place to reach for the raw event
+			//    slice instead of the cells the grid already drew.
+			shelfZone := oracleZone(t, body, "shelf")
+			today, later := 0, 0
+			for i := range visible {
+				switch {
+				case visible[i].Day == oracleTodayDay:
+					today++
+				case visible[i].Day > oracleTodayDay:
+					later++
+				}
+			}
+			if later > shelfUpcomingCapForTest {
+				later = shelfUpcomingCapForTest
+			}
+			if n := strings.Count(shelfZone, `class="lrow `); n != today+later {
+				t.Errorf("the Shelf's Upcoming panel listed %d rows; this viewer has %d today "+
+					"and %d later (capped at %d) in their own set",
+					n, today, later, shelfUpcomingCapForTest)
+			}
+			// The cap is NORMATIVE ([S1]) — .sp2 is a fixed 132px and the cap
+			// is what keeps its scroller from becoming the panel — so the
+			// Shelf's row count is deliberately NOT the month total. Asserting
+			// that too is what stops a later hand "fixing" the difference.
+			if today+later > want {
+				t.Errorf("the Upcoming panel claims %d rows out of a %d-event set", today+later, want)
+			}
 		})
 	}
+}
+
+// oracleTodayDay is the fixture calendar's current day, and the anchor the
+// Shelf's Upcoming panel splits on. Named rather than inlined because three
+// assertions read it and a silent change to blockTenDayCal would otherwise
+// move the split without moving the expectation.
+const oracleTodayDay = 14
+
+// shelfUpcomingCapForTest mirrors the widget package's unexported
+// shelfUpcomingCap. It cannot be imported, and hardcoding 4 in three places is
+// how a normative cap becomes a number nobody can find.
+const shelfUpcomingCapForTest = 4
+
+// oracleZone slices the rendered Block to ONE zone's markup, from its
+// data-zone marker to the next one (or the end).
+//
+// It exists because W-E gave the Block a second surface that emits the Ledger's
+// row primitive, so a whole-body substring count can no longer say which zone
+// it counted. It fails cleanly rather than slicing on a negative index —
+// COMMON §3 names a bare strings.Index used as a slice bound as the pin shape
+// that PANICS on a rename instead of failing.
+func oracleZone(t *testing.T, body, zone string) string {
+	t.Helper()
+	marker := `data-zone="` + zone + `"`
+	i := strings.Index(body, marker)
+	if i < 0 {
+		t.Fatalf("the rendered Block has no %s zone", zone)
+	}
+	rest := body[i:]
+	if j := strings.Index(rest[len(marker):], `data-zone="`); j >= 0 {
+		return rest[:len(marker)+j]
+	}
+	return rest
 }
 
 // TestOracle_NoHiddenEventReachesAPlayerInAnyForm is the negative half, and it

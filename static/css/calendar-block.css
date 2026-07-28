@@ -1353,9 +1353,97 @@
   padding: 0 10px;
   flex: none;
 }
+.cal-block-host .shelf .st .sp {
+  flex: 1;
+}
 .cal-block-host .shelf .sp2 {
   max-height: 132px;
   overflow-y: auto;
+}
+
+/* ── the Shelf's tabs, and its panels ──────────────────────────────────────
+   THE TABS ARE A RADIO GROUP AND THE PANELS ARE ALL RENDERED ([S7], SIGNED).
+   A bound Block renders under context.Background(), so the mockup's `?alm=`
+   query param is unreachable; per-viewer persistence is W-F's store, which
+   does not exist; and there is no JS in this package (block.templ:2-8) and no
+   route (routes_snapshot.txt is byte-identical). What is left is the mechanism
+   the tie toggle already proved: the server renders the pressed default, the
+   stylesheet reveals the matching panel, and W-F swaps the DEFAULT's source
+   for a stored preference and touches nothing here.
+
+   NO TRAVELLING INDICATOR (canon A6). The pressed look is state ON the pressed
+   item — the same accent cover .ltab[aria-pressed] uses one zone up, written
+   here rather than borrowed so W-B's rule is not restyled ([S9]). */
+.cal-block-host .shelfpick {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  appearance: none;
+}
+.cal-block-host .stab {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-ctl);
+  font-weight: 650;
+  font-size: 11px;
+  line-height: 22px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  flex: none;
+}
+.cal-block-host .shelfpick:checked + .stab {
+  color: var(--accent);
+  background: color-mix(in oklch, transparent 96%, var(--accent));
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* The focus ring is borrowed from the input by its label, because the input the
+   keyboard actually lands on is the invisible one. */
+.cal-block-host .shelfpick:focus-visible + .stab {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* One panel at a time. The set is CLOSED — three keys, three rules, written by
+   hand — which is why this is not a generated ladder: the day ladder is
+   generated because its key set is the month's day count, and this one is
+   three. */
+.cal-block-host .spane {
+  display: none;
+}
+.cal-block-host .block:has(.shelfpick[data-shelf-pick="upcoming"]:checked) .spane-upcoming {
+  display: block;
+}
+/* The Filters panel is one chip and a sentence. It is NOT a control surface:
+   with no filter engine, an inert chip row would be exactly the fabricated
+   state `needs backend` exists to replace ([S2]). Its revealed box is a flex
+   row rather than a block, which is why it takes its own reveal rule. */
+.cal-block-host .spane-filters {
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px;
+}
+.cal-block-host .block:has(.shelfpick[data-shelf-pick="filters"]:checked) .spane-filters {
+  display: flex;
+}
+.cal-block-host .sneed {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+/* The four-row cap says it capped. A list that stops without saying so is the
+   same class of omission as a count printed with no denominator. */
+.cal-block-host .smore {
+  padding: 6px 10px 8px;
+  font-weight: 500;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
 }
 
 /* the mini tier's one piece of calendar identity below the Nameplate */

@@ -400,16 +400,26 @@ func TestBlockLayersAreDefOnlyInWave1(t *testing.T) {
 	if got.Layers.HasSwitchboard {
 		t.Fatal("HasSwitchboard must be false in wave 1 — the per-viewer store is W-F's")
 	}
-	// INVERTED BY C-CALV4-LEDGER-P6, not deleted. The Ledger half asserted the
-	// wave-1 honesty state; W-B filled the zone, so the honest statement is now
-	// the opposite one and it is worth just as much — a producer that left the
-	// flag up would put "needs backend" beside a list of real events. The SHELF
-	// half is untouched and still asserts true: W-E owns that flip.
+	// INVERTED IN TWO STEPS, NEVER DELETED, and both halves are wave-2 EDITS
+	// rather than breaks. Each half asserted the wave-1 honesty state — the
+	// zone docks at its real size and says it has no backend — and each
+	// filling slice turned its own half over deliberately:
+	//
+	//   · the Ledger half, by C-CALV4-LEDGER-P6 (W-B), which filled zone C;
+	//   · the Shelf half, by C-CALV4-SHELF-P7 (W-E), which filled zone D with
+	//     Upcoming, Filters and the Almanac.
+	//
+	// The inverted statements are worth exactly as much as the originals: a
+	// producer that left either flag up would put "needs backend" beside a
+	// list of real events, which is the same lie one direction over.
+	//
+	// THE FLAGS THEMSELVES ARE NOT RETIRED. They are the host's honesty
+	// switch, so a host that docks a zone it cannot fill still gets the chip.
 	if got.Ledger.NeedsBackend {
-		t.Fatal("the Ledger is FILLED from wave 2; its `needs backend` flag must be down")
+		t.Fatal("the Ledger is FILLED from wave 2 (W-B); its `needs backend` flag must be down")
 	}
-	if !got.Shelf.NeedsBackend {
-		t.Fatal("the Shelf zone still docks with the signed `needs backend` chip — W-E fills it")
+	if got.Shelf.NeedsBackend {
+		t.Fatal("the Shelf is FILLED from wave 2 (W-E); its `needs backend` flag must be down")
 	}
 }
 
