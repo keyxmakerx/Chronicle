@@ -537,13 +537,24 @@ func eventCountLabel(n int) string {
 	return strconv.Itoa(n) + " events"
 }
 
-// layersInvokerTitle says out loud that the switchboard is not built yet, so an
-// inert control reads as a reserved affordance rather than as a bug.
+// layersInvokerTitle titles the ⋯ invoker.
+//
+// ITS "Layers — needs backend" RETURN IS GONE (C-CALV4-LAYERS-P9). Not because
+// the chip was wrong — it was exactly right for three waves, and it named the
+// missing per-viewer preference store precisely — but because this slice BUILT
+// the thing it named. That distinction matters: a wave-3 sibling found a chip
+// that was factually false about its own backend, and this is the other kind.
+//
+// The remaining branch is not dead. HasSwitchboard is false whenever the
+// producer cannot resolve a persistence endpoint — an anonymous viewer, or any
+// host that composes a Block outside a campaign — and the invoker is disabled
+// there for the original reason: present, so the Nameplate's geometry is final,
+// and inert rather than a dead control that swallows a click.
 func layersInvokerTitle(l LayerState) string {
 	if l.HasSwitchboard {
 		return "Layers"
 	}
-	return "Layers — needs backend"
+	return "Layers — sign in to choose"
 }
 
 // wdLong / wdShort are the weekday header's two lengths. Both are emitted and
@@ -1776,3 +1787,131 @@ func almanacLaneClass(m AlmanacMoon) string {
 // structural mark, "new" a hairline and "full" a 4px block (cv4:799-801). It is
 // ACHROMATIC by law — the sky may never borrow the event colour axis.
 func almanacTurnClass(a AlmanacDay) string { return "skyturn " + a.Turn }
+
+// ── Layers ──────────────────────────────────────────────────────────────────
+//
+// C-CALV4-LAYERS-P9 (W-F). The switchboard is a TOP-LAYER [popover] opened
+// declaratively by `popovertarget`, and every helper here exists so the sheet
+// can be built with markup alone. There is no JS in this package and there
+// cannot be (block.templ's header, boot.js:163/167): a <script> in an
+// HTMX-swapped fragment never executes and `hx-on` is dead with allowEval off.
+
+// layerSheetID is the sheet's DOM id, and it is what `popovertarget` names.
+//
+// Pure function of the data, for the fourth time in this package and for the
+// same two reasons as tieGroupName: the Bench composes four Blocks on one page,
+// so a shared id would make every ⋯ open the first Block's sheet; and an
+// HTMX binding swap re-renders the SAME Block, which must keep its id or the
+// invoker's target dangles.
+func layerSheetID(d BlockData) string {
+	return "lsheet-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+// layerAnchorName is this Block's CSS anchor-positioning name.
+//
+// It is per-INSTANCE and carried in a `style` attribute rather than the
+// stylesheet because the stylesheet cannot know how many Blocks a page has: two
+// Blocks sharing one anchor-name make the anchor ambiguous, and the Bench
+// routinely renders four. The stylesheet supplies the position-area under
+// @supports; this supplies the identity. A browser without anchor positioning
+// ignores both custom-ident declarations and lands the sheet viewport-centred,
+// which is [LYR-9] item 3's pre-authorised fallback and is honest — a centred
+// sheet still reads as a disclosure the viewer opened.
+func layerAnchorName(d BlockData) string {
+	return "--calv4-layers-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+func layerAnchorStyle(d BlockData) string { return "anchor-name:" + layerAnchorName(d) }
+
+func layerSheetAnchorStyle(d BlockData) string { return "position-anchor:" + layerAnchorName(d) }
+
+// layerOnCount is the switchboard's numerator. The DENOMINATOR IS ALWAYS
+// len(LayerRows) AND NEVER VARIES BY ROLE (dispatch §5.1): same eight rows and
+// the same "of 8" for owner, co-DM and player, because a layer is a per-viewer
+// display preference and not a permission. Only the on-set differs.
+func layerOnCount(l LayerState) int {
+	n := 0
+	for _, r := range LayerRows {
+		if hasLayer(l, r.Key) {
+			n++
+		}
+	}
+	return n
+}
+
+// layerSheetHeading is the sheet's own title line: "Layers · N of 8 on".
+func layerSheetHeading(l LayerState) string {
+	return "Layers · " + strconv.Itoa(layerOnCount(l)) + " of " + strconv.Itoa(len(LayerRows)) + " on"
+}
+
+// layerRowsInside / layerRowsBelow split the registry into the sheet's two
+// groups ([LYR-10] SIGNED: the two-group revision ships).
+//
+// The split is canon A8's two laws written where the viewer meets them. The
+// INSIDE three change the month's own geometry, so they apply instantly and
+// silently — "instant · no confirm, no animation". The other five open a
+// section beside or below the month. Grouping is the one distinction the pinned
+// registry actually carries, and the flat signed list hides it.
+func layerRowsInside() []LayerRow { return layerRowsWhere(true) }
+
+func layerRowsBelow() []LayerRow { return layerRowsWhere(false) }
+
+func layerRowsWhere(inside bool) []LayerRow {
+	out := make([]LayerRow, 0, len(LayerRows))
+	for _, r := range LayerRows {
+		if r.Inside == inside {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// layerToggleVals is the hx-vals payload for ONE row: the whole layer set that
+// results from toggling that row, as a comma-joined list.
+//
+// THE ROW POSTS THE RESULTING SET, NOT A DELTA. Three reasons, and the third is
+// the one that decides it: a set write is idempotent under a double click; the
+// route needs no read-modify-write and therefore no transaction; and the SET is
+// what the seam test can compare against what renders, which is the whole
+// falsifiability argument that barred a CSS-only reveal.
+//
+// Order follows LayerRows so the stored string is stable — a viewer toggling
+// two layers back and forth does not rewrite the row with a permuted list.
+//
+// It is plain JSON, never `js:`-prefixed: htmx JSON.parses a plain hx-vals and
+// only the js: form needs eval, which boot.js:167 has disabled globally.
+func layerToggleVals(l LayerState, key string) string {
+	next := make([]string, 0, len(LayerRows))
+	for _, r := range LayerRows {
+		on := hasLayer(l, r.Key)
+		if r.Key == key {
+			on = !on
+		}
+		if on {
+			next = append(next, r.Key)
+		}
+	}
+	return `{"layers":"` + strings.Join(next, ",") + `"}`
+}
+
+// layerRowPressed is the row's aria-pressed value. The switch IS the state; it
+// is not a thing that travels between positions (canon A6).
+func layerRowPressed(l LayerState, key string) string {
+	if hasLayer(l, key) {
+		return "true"
+	}
+	return "false"
+}
+
+// switchboardLive is the ONE gate both the ⋯ invoker and the sheet read, and it
+// is r54's invariant enforced at the surface rather than only asserted in a
+// test.
+//
+// HasSwitchboard alone would be enough IF the producers could never disagree
+// with themselves — but the failure mode is silent and ugly: a true flag with
+// an empty PersistURL renders eight rows that post to the page they are already
+// on, which is a control that looks enabled and does nothing. Reading BOTH here
+// means a producer that breaks the invariant loses the switchboard rather than
+// shipping a dead one, and the dedicated test still fails so the producer gets
+// fixed rather than hidden.
+func switchboardLive(l LayerState) bool { return l.HasSwitchboard && l.PersistURL != "" }

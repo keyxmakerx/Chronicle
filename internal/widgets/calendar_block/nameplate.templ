@@ -52,7 +52,7 @@ templ nameplate(d BlockData) {
 		}
 		<span class="sp"></span>
 		@tieCounts(d)
-		@layersInvoker(d.Layers)
+		@layersInvoker(d)
 	</div>
 }
 
@@ -123,18 +123,30 @@ templ tieCounts(d BlockData) {
 	}
 }
 
-// layersInvoker is the ⋯ affordance. The switchboard popover itself is W-F, so
-// HasSwitchboard is false in wave 1 and the invoker renders INERT — present, so
-// the Nameplate's geometry is final, and disabled, so it is not a dead control
-// that swallows a click.
-templ layersInvoker(l LayerState) {
+// layersInvoker is the ⋯ affordance, and as of C-CALV4-LAYERS-P9 it is LIVE.
+//
+// `popovertarget` opens the top-layer switchboard DECLARATIVELY — zero JS,
+// which is the only way this package could ever have had a popover at all.
+// The sheet is a sibling of .block inside .cal-block-host (block.templ), so it
+// escapes `.block { overflow: hidden }` and the host's inline-size container
+// without leaving the scoping root every CSS test requires.
+//
+// The disabled branch survives for the viewers who genuinely have no store:
+// anonymous, or any host composing a Block outside a campaign. There the
+// invoker stays present — the Nameplate's geometry is final either way — and
+// inert rather than a dead control that swallows a click.
+templ layersInvoker(d BlockData) {
 	<button
 		type="button"
 		class="icb layers"
 		data-open-layers
-		disabled?={ !l.HasSwitchboard }
+		if switchboardLive(d.Layers) {
+			popovertarget={ layerSheetID(d) }
+			style={ layerAnchorStyle(d) }
+		}
+		disabled?={ !switchboardLive(d.Layers) }
 		aria-haspopup="dialog"
-		title={ layersInvokerTitle(l) }
+		title={ layersInvokerTitle(d.Layers) }
 	>
 		<span aria-hidden="true">⋯</span>
 		<span class="vh">Layers</span>

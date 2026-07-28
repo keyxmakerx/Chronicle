@@ -41,6 +41,50 @@ var LayerKeys = []string{
 	"ledger", "moongraph", "legend", "horizon", "shelf", // beside / below
 }
 
+// LayerRow is one row of the switchboard, and the shape is EXACTLY the signed
+// registry's: {k, n, where[, inside]} (mockups/calendar-v4.html:1186-1195).
+//
+// NO FIFTH FIELD, EVER. A `gmOnly:` or `need:` was proposed and refused by name
+// — "a PERMISSION dimension bolted onto a per-viewer DISPLAY PREFERENCE
+// registry … a struct field invented to make a narrative work"
+// (mockups/v4-proposed/REVIEW.md:264-268). Permission is expressed as ABSENCE
+// at the surface the key controls, never as a column here; build status is
+// expressed by the zone's own chip. The denominator this registry defines —
+// "N of 8 on" — is IDENTICAL for owner, co-DM and player, and only the on-set
+// differs.
+type LayerRow struct {
+	Key string
+	// Name is the row's label ("Moon phases").
+	Name string
+	// Where says where the layer lands ("in the dates", "beside the month").
+	// It is the row's whole explanation and it is why no tooltip is needed.
+	Where string
+	// Inside marks the three layers that change the MONTH'S OWN GEOMETRY and
+	// therefore apply instantly and silently (canon A8 / L-M2). It is also what
+	// splits the sheet into its two groups: "In the month" (instant · no
+	// confirm, no animation) and "Below the month" (opens a section).
+	Inside bool
+}
+
+// LayerRows is the switchboard's registry, pinned against the signed table.
+//
+// It lives BESIDE LayerKeys rather than travelling on BlockData (r54 §5): these
+// are contract constants, identical for every viewer of every calendar, and a
+// copy on the wire would be eight rows of static text re-serialised per Block.
+// LayerKeys stays the ordering authority and a test holds the two in lockstep,
+// so a key added to one and forgotten in the other is a red build rather than a
+// row that silently vanishes from the sheet.
+var LayerRows = []LayerRow{
+	{Key: "moons", Name: "Moon phases", Where: "in the dates", Inside: true},
+	{Key: "eras", Name: "Era & season", Where: "above each week", Inside: true},
+	{Key: "weeknums", Name: "Week numbers", Where: "left margin", Inside: true},
+	{Key: "ledger", Name: "Event list", Where: "beside the month"},
+	{Key: "moongraph", Name: "Illumination graph", Where: "foot of the month"},
+	{Key: "legend", Name: "Legend", Where: "under the month"},
+	{Key: "horizon", Name: "Knowledge horizon", Where: "under the legend"},
+	{Key: "shelf", Name: "Shelf", Where: "foot of the block"},
+}
+
 // PatternKeys are the eight locked stroke patterns. They are the GREYSCALE
 // IDENTITY CHANNEL: colour is never load-bearing, so every (hue, pattern) pair
 // must still resolve with the hue removed.

@@ -416,7 +416,18 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 	mustNotContain(t, body, `data-zone="shelf"`, "the shelf layer is off by default")
 
 	// Switching them on is the producer's decision and the renderer honours it.
-	d.Layers = LayerState{Enabled: []string{"moons", "eras", "weeknums"}, HasSwitchboard: true}
+	//
+	// THE CONSTRUCTION CHANGED UNDER r54, NOT THE CLAIM (C-CALV4-LAYERS-P9).
+	// "A Block with a switchboard" is now HasSwitchboard AND PersistURL set
+	// together — the pinned invariant — because a flag with no endpoint renders
+	// rows that post to the page they are already on. The assertion below is
+	// the wave-1 assertion verbatim; only the fixture learned what a live
+	// switchboard actually is.
+	d.Layers = LayerState{
+		Enabled:        []string{"moons", "eras", "weeknums"},
+		HasSwitchboard: true,
+		PersistURL:     "/campaigns/camp-1/calendar/prefs",
+	}
 	on := render(t, d)
 	mustContain(t, on, `class="bands"`, "the eras layer draws its bands")
 	// The gutter's WIDTH is a container query (the mockup drops it below 481px of
