@@ -364,8 +364,8 @@ func blockEventAxisKey(cal *Calendar, e *Event) (key, color, icon string) {
 	return key, strings.TrimSpace(color), strings.TrimSpace(icon)
 }
 
-// blockAudienceFor is the gold diamond (L22: circles are moons, permission is a
-// diamond).
+// blockAudienceFor is the pair of gold GM marks (L22: circles are moons,
+// permission is gold).
 //
 // WAVE-1 RULING (COMMON §6.2): composed tag+member audiences DO NOT EXIST on
 // main. There is no member_tags/user_tags table anywhere — tags attach to
@@ -373,6 +373,12 @@ func blockEventAxisKey(cal *Calendar, e *Event) (key, color, icon string) {
 // + campaign_group_members. So this is populated ONLY from what exists:
 // visibility == dm_only ("GM only") or a visibility_rules restriction
 // ("Restricted"). The composed audience is W-G's.
+//
+// Restricted is the DISCRIMINATOR between the two signed marks, not a synonym
+// for "hidden" (the AudienceMark ruling in data.go, closed at P5 §3.3):
+// dm_only → Restricted false, the gold DOGEAR; a visibility_rules restriction
+// → Restricted true, the gold DIAMOND. Setting it true on both branches drew
+// the diamond on every dm_only day and the dogear nowhere in the product.
 //
 // It is nil for a player, always. Permission is ABSENCE: a player who can see
 // an event sees an ordinary mark with no hint that anyone else cannot, and a
@@ -382,7 +388,7 @@ func blockAudienceFor(e *Event, isGM bool) *calblock.AudienceMark {
 		return nil
 	}
 	if e.Visibility == "dm_only" {
-		return &calblock.AudienceMark{Label: "GM only", Restricted: true}
+		return &calblock.AudienceMark{Label: "GM only", Restricted: false}
 	}
 	if r := e.ParseVisibilityRules(); r != nil && (len(r.AllowedUsers) > 0 || len(r.DeniedUsers) > 0) {
 		return &calblock.AudienceMark{Label: "Restricted", Restricted: true}
