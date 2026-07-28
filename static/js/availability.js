@@ -554,7 +554,15 @@
       var on = !self.excluded[m.userId];
       var b = el('button', 'avail-chip'); b.type = 'button'; b.setAttribute('aria-pressed', on ? 'true' : 'false');
       var dot = el('span', 'dot'); dot.style.background = m.color; b.appendChild(dot);
-      var name = el('span'); name.textContent = m.name + (m.role === 'DM' ? ' (DM)' : ''); b.appendChild(name);
+      // ONE ROLE VOCABULARY (C-CALV4-RSVP-P8 / WG-4). This read used to be
+      // `m.role === 'DM'`, against a server-side roleLabel(isOwner) that
+      // returned "DM" | "player" and IGNORED the co-DM grant — so a co-DM was
+      // labelled a plain player here while receiving full per-member detail.
+      // m.role is now campaigns.Role.DisplayName() (Owner | Scribe | Player)
+      // and m.isCoDm carries the grant separately.
+      var role = m.role || '';
+      if (m.isCoDm) role = role ? role + ' · co-DM' : 'co-DM';
+      var name = el('span'); name.textContent = m.name + (role ? ' (' + role + ')' : ''); b.appendChild(name);
       b.addEventListener('click', function () {
         self.excluded[m.userId] = !self.excluded[m.userId];
         b.setAttribute('aria-pressed', self.excluded[m.userId] ? 'false' : 'true');

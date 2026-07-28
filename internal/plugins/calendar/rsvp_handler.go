@@ -24,6 +24,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -162,6 +163,17 @@ func (h *RSVPHandler) SetEventRSVPAPI(c echo.Context) error {
 		h.notifyOwnerOfResponse(ctx, cc.Campaign.ID, evt, userID, req.Status)
 	}
 
+	// THE FRAGMENT BRANCH (WG-6). Same route, same method, same role gate — the
+	// only thing that changes is the representation, which is the house
+	// convention (CLAUDE.md, "HTMX detection") and strictly less surface than a
+	// second route performing the same write. The JSON below is untouched, so
+	// static/js/availability.js and the Foundry-facing /api/v1 group keep
+	// working exactly as they did.
+	if middleware.IsHTMX(c) {
+		return middleware.Render(c, http.StatusOK,
+			benchTileView(h.benchSessionFragment(c, cc, evt, userID, notice)))
+	}
+
 	summary, err := h.svc.Summary(ctx, evt, userID, cc.VisibilityRole(), cc.CanControlWorldState())
 	if err != nil {
 		return err
@@ -174,6 +186,63 @@ func (h *RSVPHandler) SetEventRSVPAPI(c echo.Context) error {
 		}{summary, notice})
 	}
 	return c.JSON(http.StatusOK, summary)
+}
+
+// benchSessionFragment re-renders the Bench's session tile after a write.
+//
+// ── WHAT LEAVES THE SERVER HERE, FIELD BY FIELD (§8.3 item 1) ──────────────
+//
+//	the event's name        — the caller passed its id and CanUserViewEvent
+//	                          has already allowed them to see it
+//	how far off it is       — derived from the event they can see
+//	`N of M answered`       — two integers, both recomputed below from the
+//	                          MEMBERSHIP-FILTERED roster
+//	the caller's own answer — their own data, which Summary already returns
+//	                          to them as my_status
+//
+// A FRAGMENT IS EASIER TO OVER-FILL THAN A JSON BODY, because it looks like
+// markup rather than like data. So this one is deliberately POORER than the
+// JSON response it replaces: it carries no responder names, no notes and no
+// per-person breakdown, all of which Summary returns to an Owner/co-DM. There
+// is no role branch here at all — nothing on this tile is gated because nothing
+// on it is privileged.
+//
+// THE TALLY IS RECOMPUTED, NEVER READ BACK (§6). Summary.Counts is raw rows and
+// would count somebody who has left the campaign; this walks the roster and
+// counts members holding a row, exactly as the panel does.
+func (h *RSVPHandler) benchSessionFragment(c echo.Context, cc *campaigns.CampaignContext,
+	evt *Event, userID, notice string) BenchTile {
+	ctx := c.Request().Context()
+	in := benchSessionTileInput{
+		// IsGM matches buildBench's own gate exactly, so the tile a write
+		// returns is the tile the page would have rendered — a Director gets
+		// their chipped Nudge back, not a player's answer form.
+		IsGM:       permissions.CanSeeDmOnly(cc.VisibilityRole()),
+		CampaignID: cc.Campaign.ID,
+		CalendarID: evt.CalendarID,
+		EventID:    evt.ID,
+		Name:       evt.Name,
+		When:       "next up",
+		CSRFToken:  middleware.GetCSRFToken(c),
+		Notice:     notice,
+	}
+	answers, err := h.svc.AnswersByUser(ctx, evt, userID, cc.VisibilityRole())
+	if err != nil {
+		slog.Warn("bench rsvp fragment: answers read failed",
+			slog.String("event_id", evt.ID), slog.Any("error", err))
+	}
+	in.MyStatus = answers[userID]
+	if h.members != nil {
+		if members, merr := h.members.ListMembers(ctx, cc.Campaign.ID); merr == nil {
+			in.Total = len(members)
+			for _, m := range members {
+				if _, ok := answers[m.UserID]; ok {
+					in.Answered++
+				}
+			}
+		}
+	}
+	return benchSessionTileLive(in)
 }
 
 // GetEventRSVPsAPI returns counts for everyone who can see the event, plus the

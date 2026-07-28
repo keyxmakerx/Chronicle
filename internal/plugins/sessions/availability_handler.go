@@ -28,6 +28,23 @@ type UserDirectory interface {
 // app-wiring is required.
 func (h *Handler) SetUserDirectory(ud UserDirectory) { h.userDir = ud }
 
+// CampaignReader is the ONE campaign read the overlay's role column needs: the
+// campaign row, whose parsed settings carry the co-DM grant list.
+//
+// It is deliberately GetByID and not IsUserDmGranted(campaign, user):
+// campaigns' IsUserDmGranted re-reads the campaign row per call, so asking it
+// once per member would turn a roster render into an N+1. One read, one grant
+// set, every member labelled from it (WG-4).
+type CampaignReader interface {
+	GetByID(ctx context.Context, id string) (*campaigns.Campaign, error)
+}
+
+// SetCampaignReader wires the campaign read used for co-DM labelling. Nil-safe:
+// with no reader the roster still labels roles correctly, it just cannot mark
+// the co-DM grant — which is a degradation, not a leak, because the grant only
+// ever ADDS a marker.
+func (h *Handler) SetCampaignReader(cr CampaignReader) { h.campaignReader = cr }
+
 // ShowAvailability renders the availability page shell (paint grid + DM
 // overlay). The interactive grid/heatmap is rendered client-side from the JSON
 // APIs below, matching the signed mockup encoding.
@@ -89,12 +106,82 @@ func (h *Handler) GetOverlayAPI(c echo.Context) error {
 	viewerTZ := h.resolveViewerTZ(c, userID)
 	includeDetail := cc.MemberRole >= campaigns.RoleOwner || cc.IsDmGranted
 
-	overlay, err := h.svc.BuildOverlay(c.Request().Context(), cc.Campaign.ID,
-		h.overlayMembers(c.Request().Context(), cc.Campaign.ID), week, viewerTZ, includeDetail)
+	overlay, err := h.CampaignWeekOverlay(c.Request().Context(), cc.Campaign.ID, week, viewerTZ, includeDetail)
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 	return c.JSON(http.StatusOK, overlay)
+}
+
+// --- the cross-plugin read seam (C-CALV4-RSVP-P8 §5) ------------------------
+//
+// The calendar's Bench RSVP panel prints the same availability this plugin
+// serves at /availability/overlay. The two surfaces read through the SAME two
+// functions below rather than each assembling a roster, because the thing they
+// must never disagree about is who is free and who may see it — and two
+// assemblies of the same facts is how that disagreement gets built.
+//
+// Neither takes an echo.Context: the calendar reaches them through a narrow
+// interface wired in internal/app/routes.go (house rule 8), so this plugin
+// gains no edge into the calendar and the calendar gains none into this one.
+
+// RosterEntry is one member of the overlay roster with NO availability attached
+// — the PARTY-VISIBLE half of the roster.
+//
+// The split matters and is the signed contract's (C-CALV4-RSVP-P8 §4): a
+// member's name, role, zone and answer are visible to the whole party, while
+// their availability LANES are owner / co-DM only. WeekOverlay.Members carries
+// both fused together and is therefore populated only under includeDetail, so a
+// player-facing surface that needs the names cannot use it. This type is what a
+// player is entitled to; nothing on it is gated.
+//
+// The ORDER is the identity key: hue and pattern are taken from the index, so
+// the order must not depend on availability, tally or answer.
+type RosterEntry struct {
+	UserID string
+	Name   string
+	// Role is campaigns.Role.DisplayName(): Owner | Scribe | Player.
+	Role string
+	// IsOwner is the ordering key (owners first), not the label.
+	IsOwner bool
+	// IsCoDM is the campaign's DM grant — a capability over a role, not a role.
+	IsCoDM bool
+	// TZ is the stored IANA zone, EMPTY when unset. Empty is a state, not a
+	// default: see OverlayMember.TZ.
+	TZ string
+}
+
+// CampaignRoster returns the overlay roster in its stable render order, with
+// roles, co-DM grants and zones resolved from their truth sources. Availability
+// is deliberately not included — see RosterEntry.
+func (h *Handler) CampaignRoster(ctx context.Context, campaignID string) []RosterEntry {
+	in := h.overlayMembers(ctx, campaignID)
+	out := make([]RosterEntry, 0, len(in))
+	for _, m := range in {
+		out = append(out, RosterEntry{
+			UserID:  m.UserID,
+			Name:    m.Name,
+			Role:    m.RoleLabel,
+			IsOwner: m.IsOwner,
+			IsCoDM:  m.IsCoDM,
+			TZ:      m.TZ,
+		})
+	}
+	return out
+}
+
+// CampaignWeekOverlay builds the campaign's availability overlay for the week
+// containing weekStart, projected into viewerTZ.
+//
+// includeDetail IS THE PERMISSION and it is the caller's to decide, from role,
+// in a handler — never from a route (sessions/routes.go:29-46). When it is
+// false BuildOverlay omits Members and every *IDs array WHOLESALE: a
+// non-entitled viewer's payload does not contain another member's lane data at
+// all, hidden or otherwise. Absence is in the payload.
+func (h *Handler) CampaignWeekOverlay(ctx context.Context, campaignID, weekStart, viewerTZ string,
+	includeDetail bool) (*WeekOverlay, error) {
+	return h.svc.BuildOverlay(ctx, campaignID, h.overlayMembers(ctx, campaignID),
+		weekStart, viewerTZ, includeDetail)
 }
 
 // ListMyExceptionsAPI returns the current user's per-date overrides.
@@ -168,22 +255,69 @@ func (h *Handler) DeleteExceptionAPI(c echo.Context) error {
 
 // resolveViewerTZ picks the zone the overlay renders in: an explicit ?tz=
 // override if valid, else the member's stored account zone, else UTC.
+//
+// The UTC fallback is correct HERE — the grid has to be drawn in some zone and
+// it labels which — and wrong for a per-member clock, which is why storedTZ
+// below reports absence rather than guessing (ADR-048 §18).
 func (h *Handler) resolveViewerTZ(c echo.Context, userID string) string {
 	if tz := c.QueryParam("tz"); timeutil.IsValidLocation(tz) {
 		return tz
 	}
-	if h.userDir != nil {
-		if u, err := h.userDir.GetUser(c.Request().Context(), userID); err == nil && u != nil &&
-			u.Timezone != nil && timeutil.IsValidLocation(*u.Timezone) {
-			return *u.Timezone
-		}
+	if tz := h.storedTZ(c.Request().Context(), userID); tz != "" {
+		return tz
 	}
 	return "UTC"
+}
+
+// storedTZ returns a member's stored IANA zone, or "" when they have not set a
+// valid one. UNLIKE resolveViewerTZ IT DOES NOT FALL BACK TO UTC: an empty
+// string is the honest answer and the callers that print a per-member clock
+// depend on being able to tell "no zone" from "UTC" (§5).
+func (h *Handler) storedTZ(ctx context.Context, userID string) string {
+	if h.userDir == nil || userID == "" {
+		return ""
+	}
+	u, err := h.userDir.GetUser(ctx, userID)
+	if err != nil || u == nil || u.Timezone == nil || !timeutil.IsValidLocation(*u.Timezone) {
+		return ""
+	}
+	return *u.Timezone
+}
+
+// dmGrantSet reads the campaign's co-DM grant list ONCE and returns it as a set.
+// A missing reader or a failed read yields an empty set, which under-marks
+// rather than over-marks: a co-DM loses their badge, nobody gains one.
+func (h *Handler) dmGrantSet(ctx context.Context, campaignID string) map[string]bool {
+	if h.campaignReader == nil || campaignID == "" {
+		return nil
+	}
+	camp, err := h.campaignReader.GetByID(ctx, campaignID)
+	if err != nil || camp == nil {
+		return nil
+	}
+	ids := camp.ParseSettings().DmGrantIDs
+	if len(ids) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set
 }
 
 // overlayMembers builds the deterministic roster the overlay renders: DM first,
 // then members by name, then user ID — so lane colors stay stable per member
 // across renders.
+//
+// The ORDER is also the identity key on the Bench's RSVP panel: hue and pattern
+// are taken from this index, so a member answering an RSVP may not move a single
+// element (C-CALV4-RSVP-P8 §3). Never sort by availability, tally or answer.
+//
+// Roles and zones are resolved HERE, once, from the truth sources — the roster's
+// own campaigns.Role, the campaign's DmGrantIDs, and users.timezone — so the
+// pure projection stays campaigns-free and there is exactly one role vocabulary
+// in the product (WG-4).
 func (h *Handler) overlayMembers(ctx context.Context, campaignID string) []overlayMemberInput {
 	if h.memberLister == nil {
 		return nil
@@ -192,13 +326,17 @@ func (h *Handler) overlayMembers(ctx context.Context, campaignID string) []overl
 	if err != nil {
 		return nil
 	}
+	grants := h.dmGrantSet(ctx, campaignID)
 	out := make([]overlayMemberInput, 0, len(members))
 	for _, m := range members {
 		out = append(out, overlayMemberInput{
-			UserID:  m.UserID,
-			Name:    m.DisplayName,
-			Avatar:  m.AvatarPath,
-			IsOwner: m.Role >= campaigns.RoleOwner,
+			UserID:    m.UserID,
+			Name:      m.DisplayName,
+			Avatar:    m.AvatarPath,
+			IsOwner:   m.Role >= campaigns.RoleOwner,
+			RoleLabel: m.Role.DisplayName(),
+			IsCoDM:    grants[m.UserID],
+			TZ:        h.storedTZ(ctx, m.UserID),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {

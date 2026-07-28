@@ -21,6 +21,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -778,5 +779,174 @@ func TestToken_CollectionOffRefused(t *testing.T) {
 	rec := serveToken(h, http.MethodGet, "tok", "")
 	if !strings.Contains(rec.Body.String(), "no longer collecting") {
 		t.Errorf("a link for an event that stopped collecting must be refused; body = %q", rec.Body.String())
+	}
+}
+
+// --- the Bench write path (C-CALV4-RSVP-P8 §8, WG-6) ------------------------
+//
+// ZERO NEW ROUTES. The Bench's session tile posts, form-encoded, to the
+// EXISTING Player+ endpoint, and the handler content-negotiates: an HTMX
+// request gets the tile back, everything else gets the unchanged JSON. These
+// tests are §8.3's security review in executable form — each heading it names
+// is one assertion below, so a reviewer can read the claim and the proof
+// together.
+
+// serveRSVPWrite drives SetEventRSVPAPI the way a browser would.
+func serveRSVPWrite(h *RSVPHandler, body string, contentType string, htmx bool,
+	role campaigns.Role, userID string) (*httptest.ResponseRecorder, error) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost,
+		"/campaigns/camp-1/calendars/cal-1/events/evt-1/rsvp", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, contentType)
+	if htmx {
+		req.Header.Set("HX-Request", "true")
+	}
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id", "calId", "eid")
+	c.SetParamValues("camp-1", "cal-1", "evt-1")
+	c.Set("campaign_context", &campaigns.CampaignContext{
+		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: role, IsMember: true,
+	})
+	c.Set("auth_user_id", userID)
+	return rec, h.SetEventRSVPAPI(c)
+}
+
+func newBenchWriteHandler(repo RSVPRepository) *RSVPHandler {
+	h := NewRSVPHandler(newTestRSVPService(repo, testEvent(nil), testCalendar(nil)))
+	h.SetMemberDirectory(&mockMemberDir{members: []campaigns.CampaignMember{
+		{UserID: "u1", Role: campaigns.RolePlayer, DisplayName: "Ari"},
+		{UserID: "u2", Role: campaigns.RolePlayer, DisplayName: "Bo"},
+		{UserID: "u3", Role: campaigns.RoleOwner, DisplayName: "Cass"},
+	}})
+	return h
+}
+
+// §8.3 item 2 — WHO MAY CALL IT, and the part a route gate cannot express:
+// THE USER ID COMES FROM THE SESSION, NEVER THE BODY. Proven by SUPPLYING one:
+// the request carries user_id, userId AND user fields naming somebody else, and
+// the row still lands on the authenticated caller.
+func TestBenchWrite_BodySuppliedUserIDIsIgnored(t *testing.T) {
+	for _, body := range []struct {
+		name, payload, ctype string
+	}{
+		{"form", "status=yes&user_id=victim&userId=victim&UserID=victim", echo.MIMEApplicationForm},
+		{"json", `{"status":"yes","user_id":"victim","userId":"victim","UserID":"victim"}`, echo.MIMEApplicationJSON},
+	} {
+		t.Run(body.name, func(t *testing.T) {
+			var got *EventRSVP
+			repo := &mockRSVPRepo{upsertFn: func(_ context.Context, r *EventRSVP) error { got = r; return nil }}
+			h := newBenchWriteHandler(repo)
+
+			if _, err := serveRSVPWrite(h, body.payload, body.ctype, false,
+				campaigns.RolePlayer, "caller-1"); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			if got == nil {
+				t.Fatal("nothing was written")
+			}
+			if got.UserID != "caller-1" {
+				t.Errorf("the row landed on %q — a body field redirected the write", got.UserID)
+			}
+		})
+	}
+}
+
+// THE `form:` TAGS ARE THE POINT (ledger #20). Without them Echo binds a
+// form-encoded body by capitalised field name, so `status=yes` binds to nothing
+// and the ENUM gate rejects an empty status. This is the regression that would
+// silently return the Bench's tile to a dead control.
+func TestBenchWrite_FormEncodedBodyBinds(t *testing.T) {
+	for _, status := range []string{RSVPYes, RSVPNo, RSVPMaybe} {
+		var got *EventRSVP
+		repo := &mockRSVPRepo{upsertFn: func(_ context.Context, r *EventRSVP) error { got = r; return nil }}
+		h := newBenchWriteHandler(repo)
+
+		if _, err := serveRSVPWrite(h, "status="+status+"&csrf_token=t",
+			echo.MIMEApplicationForm, false, campaigns.RolePlayer, "u1"); err != nil {
+			t.Fatalf("status %q: %v", status, err)
+		}
+		if got == nil || got.Status != status {
+			t.Errorf("form status=%q bound to %+v — SetRSVPRequest needs its form tags", status, got)
+		}
+	}
+}
+
+// §8.3 item 1 — WHAT THE FRAGMENT EXPOSES. It must not be RICHER than the JSON
+// it replaces, and a fragment is easier to over-fill because it looks like
+// markup rather than data. The JSON returns the per-person breakdown to an
+// Owner/co-DM; the fragment returns nobody's name at all.
+func TestBenchWrite_HTMXFragmentIsPoorerThanTheJSON(t *testing.T) {
+	repo := &mockRSVPRepo{listFn: func(_ context.Context, _ string) ([]EventRSVP, error) {
+		return []EventRSVP{
+			{UserID: "u1", Status: RSVPYes},
+			{UserID: "u2", Status: RSVPNo},
+			{UserID: "departed", Status: RSVPYes},
+		}, nil
+	}}
+	h := newBenchWriteHandler(repo)
+
+	rec, err := serveRSVPWrite(h, "status=yes", echo.MIMEApplicationForm, true,
+		campaigns.RoleOwner, "u3")
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-bench-tile="session"`) {
+		t.Fatalf("an HTMX write must answer with the session tile; got %q", body)
+	}
+	// No names, no notes, no per-person breakdown — none of which the tile has
+	// any use for and all of which the JSON response carries for this role.
+	for _, leaked := range []string{"Ari", "Bo", "Cass", "u1", "u2", "departed", "responders"} {
+		if strings.Contains(body, leaked) {
+			t.Errorf("the fragment leaked %q — it must be poorer than the JSON, not richer", leaked)
+		}
+	}
+	// And the tally is RECOMPUTED from the membership-filtered roster: the
+	// departed row is stored, and it must not be in the count.
+	if !strings.Contains(body, "2 of 3 answered") {
+		t.Errorf("fragment tally is wrong — a departed member's stored row reached it: %q", body)
+	}
+}
+
+// The JSON consumers are NOT retired. static/js/availability.js and the
+// Foundry-facing /api/v1 group are separate consumers of this endpoint, and a
+// non-HTMX write must still get the summary shape back.
+func TestBenchWrite_NonHTMXStillGetsJSON(t *testing.T) {
+	h := newBenchWriteHandler(&mockRSVPRepo{})
+	rec, err := serveRSVPWrite(h, `{"status":"yes"}`, echo.MIMEApplicationJSON, false,
+		campaigns.RolePlayer, "u1")
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"event_id"`) || !strings.Contains(body, `"counts"`) {
+		t.Errorf("a non-HTMX write must still return EventRSVPSummary; got %q", body)
+	}
+	if strings.Contains(body, "data-bench-tile") {
+		t.Error("a non-HTMX write returned markup")
+	}
+}
+
+// §8.3 item 4 — CSRF. The write is NOT under /api/ and NOT /ws, which are the
+// only two prefixes internal/middleware/csrf.go skips, so the global
+// double-submit guard covers it. Proven against the real middleware rather than
+// asserted: a POST with no token is rejected before the handler runs.
+func TestBenchWrite_TokenlessPostIsRejectedByCSRF(t *testing.T) {
+	e := echo.New()
+	guarded := middleware.CSRF()(func(c echo.Context) error {
+		return c.String(http.StatusOK, "handler ran")
+	})
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/campaigns/camp-1/calendars/cal-1/events/evt-1/rsvp", strings.NewReader("status=yes"))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	if err := guarded(e.NewContext(req, rec)); err == nil && rec.Code < 400 {
+		t.Fatalf("a token-less POST to the RSVP path was allowed through (code %d, body %q)",
+			rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "handler ran") {
+		t.Error("the handler ran without a CSRF token")
 	}
 }

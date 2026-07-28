@@ -675,3 +675,356 @@
   .cal-bench .nextup .cn { display: none; }
   .cal-bench .nextup .dg { width: 88px; font-size: 13px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §RSVP PANEL — the signed session/schedule panel (cv4:2205-2263, CSS at
+   cv4:981-1022), built by C-CALV4-RSVP-P8 Part A.
+
+   IT IS NOT A RESTYLE. Preflight measured every one of these class names at
+   ZERO occurrences across both shipped calendar-v4 sheets: .ovgrid, .lane,
+   .recbr, .mrow, .swatch, .slot. The W-G spec's framing claim — "the matrix
+   already exists in the signed contract, in miniature… it is not a new idiom" —
+   is true of the mockup and false of the repo. This region builds the panel
+   body from nothing.
+
+   EVERY PRELUDE NAMES .cal-bench, WITHOUT EXCEPTION. This sheet is unlayered
+   and therefore outranks the whole layered app cascade, so a bare `.lane`,
+   `.slot`, `.mrow` or `.swatch` rule in here would silently restyle the entire
+   product. Those are generic nouns; that is exactly why the scope is not
+   optional and why TestBenchCSS_EverySelectorIsScoped polices it.
+
+   THE W-G SPEC'S MANDATED @layer LADDER IS OVERRULED FOR THIS SHEET. Its stated
+   purpose — stopping an unlayered rule from detaching every .seg in the product
+   — is achieved MORE strongly by root-scoping, because no rule can escape
+   .cal-bench at all. The sheet stays unlayered and self-contained.
+
+   NOTHING HERE MOVES. cv4:998,1015 give .lane:hover and .mrow:hover a
+   background-colour wash and nothing else, and that is shipped exactly. The
+   mockup's `transition:background-color` on .mrow is deliberately NOT ported:
+   the Bench sheet is under tools/check-v2-motion-discipline.sh and this panel
+   adds no transition, animation, @keyframes, will-change, @starting-style or
+   view-transition. Guard B1 in particular: --dash / --gap are identity, never
+   animated.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── member identity hues, keyed to the stable roster index ───────────────── */
+/* The first five are the signed contract's own owner hues (--own-kael …
+   --own-rell); three more extend the ramp past the fixture's roster. Colour is
+   never load-bearing alone — every swatch also carries a locked .p1..p8 dash
+   pattern, which is what survives grayscale(1) and is why OverlayMember.Color
+   (ten hex values, one channel) is ignored. */
+.cal-bench {
+  --own-1: oklch(0.52 0.16 265);
+  --own-2: oklch(0.64 0.14 150);
+  --own-3: oklch(0.56 0.17 25);
+  --own-4: oklch(0.68 0.15 80);
+  --own-5: oklch(0.50 0.15 320);
+  --own-6: oklch(0.55 0.12 200);
+  --own-7: oklch(0.60 0.13 110);
+  --own-8: oklch(0.48 0.10 40);
+}
+
+.dark .cal-bench {
+  --own-1: oklch(0.68 0.15 265);
+  --own-2: oklch(0.76 0.13 152);
+  --own-3: oklch(0.70 0.16 25);
+  --own-4: oklch(0.82 0.13 82);
+  --own-5: oklch(0.66 0.15 320);
+  --own-6: oklch(0.72 0.11 200);
+  --own-7: oklch(0.76 0.12 110);
+  --own-8: oklch(0.64 0.09 40);
+}
+
+/* ── the panel shell ─────────────────────────────────────────────────────── */
+.cal-bench .rsvp {
+  border-radius: var(--r-panel);
+  padding: 12px;
+  margin-bottom: 22px;
+}
+.cal-bench .rsvp > .lhead {
+  border: 0;
+  padding: 0 0 8px;
+}
+.cal-bench .rsvp .top {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.cal-bench .rsvp .ov {
+  flex: 1;
+  min-width: 320px;
+}
+.cal-bench .rsvp .side {
+  width: 290px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.cal-bench .rsvp .side .hl {
+  font-weight: 650;
+  font-size: 20px;
+  line-height: 1.2;
+}
+.cal-bench .rsvp .side .rec {
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-body);
+}
+.cal-bench .rsvp .side .rec.warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+/* The .why sentence names what the derived window CANNOT include. It is
+   permanent copy, not a chip, so it takes caption ink rather than badge ink. */
+.cal-bench .rsvp .side .why {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.cal-bench .rsvp .side .btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+/* An inert control and its visible chip travel together (WG-5), so the chip can
+   never wrap away from the button it explains. */
+.cal-bench .rsvp .inert {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── the overlay grid ────────────────────────────────────────────────────── */
+.cal-bench .rsvp .ovwrap {
+  overflow-x: auto;
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--r-ctl);
+}
+.cal-bench .rsvp .ovgrid { min-width: 520px; }
+.cal-bench .rsvp .ovhead {
+  display: grid;
+  grid-template-columns: 96px repeat(7, 1fr);
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-bench .rsvp .ovhead b {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px 4px;
+  text-align: center;
+}
+.cal-bench .rsvp .ovhead b:first-child {
+  text-align: left;
+  padding-left: 8px;
+}
+.cal-bench .rsvp .lane {
+  display: grid;
+  grid-template-columns: 96px repeat(7, 1fr);
+  align-items: center;
+  height: 22px;
+  border-bottom: 1px solid var(--rule-hairline);
+  position: relative;
+}
+.cal-bench .rsvp .lane:hover {
+  background: color-mix(in oklch, transparent 96%, var(--text-primary));
+}
+.cal-bench .rsvp .lane .who {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 8px;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  position: sticky;
+  left: 0;
+  background: var(--surface-card);
+}
+.cal-bench .rsvp .lane .slot {
+  height: 8px;
+  margin: 0 2px;
+  border-radius: var(--r-full);
+}
+/* A hollow pill in that member's own axis: one per DAY, which is the SIGNED
+   boolean day-slot. The spec's minute-positioned .sc-off lozenge is a
+   /schedule-page primitive and belongs to Part B — no .sc- class ships here. */
+.cal-bench .rsvp .lane .slot.free {
+  border: 1.5px solid var(--axis);
+  background: transparent;
+}
+.cal-bench .rsvp .lane.dens-row { height: 14px; }
+.cal-bench .rsvp .lane .dens {
+  height: 3px;
+  margin: 0 2px;
+  border-radius: var(--r-full);
+  background: color-mix(in oklch, transparent 70%, var(--text-secondary));
+  opacity: var(--dens, 0.12);
+}
+.cal-bench .rsvp .lane.brk-row {
+  height: 18px;
+  border: 0;
+}
+/* --accent is legal here and ONLY here on this panel: the bracket is the TOOL
+   talking, not event data (canon A7 / REVIEW.md:126-136). */
+.cal-bench .rsvp .recbr {
+  height: 100%;
+  border-left: 1.5px solid var(--accent);
+  border-right: 1.5px solid var(--accent);
+  border-top: 1.5px solid var(--accent);
+  position: relative;
+}
+.cal-bench .rsvp .recbr b {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-card);
+  padding: 0 5px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* ── identity swatch: hue AND pattern, because colour is never alone ──────── */
+/* The pattern is a repeating gradient driven by the same --dash / --gap channel
+   the .chip rail uses, so p1 (dash 999px) renders the signed flat dot and every
+   other index renders a distinguishable one under grayscale(1). */
+.cal-bench .rsvp .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-full);
+  flex: none;
+  background-color: var(--axis);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--axis) 0 var(--dash),
+    color-mix(in oklch, transparent 55%, var(--axis)) var(--dash) calc(var(--dash) + var(--gap))
+  );
+}
+
+/* ── the party-visible member table ──────────────────────────────────────── */
+.cal-bench .rsvp .mtable {
+  margin-top: 12px;
+  border-top: 1px solid var(--rule-hairline);
+}
+.cal-bench .rsvp .mtable .lhead {
+  border: 0;
+  padding: 6px 4px;
+}
+.cal-bench .rsvp .mrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  border-bottom: 1px solid var(--rule-hairline);
+  padding: 0 4px;
+}
+.cal-bench .rsvp .mrow:hover {
+  background: color-mix(in oklch, transparent 96%, var(--text-primary));
+}
+.cal-bench .rsvp .mrow .nm {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  width: 150px;
+  flex: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-bench .rsvp .mrow .ro {
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted);
+  width: 64px;
+  flex: none;
+}
+.cal-bench .rsvp .mrow .nm .ro { width: auto; }
+.cal-bench .rsvp .mrow .sp { flex: 1; }
+.cal-bench .rsvp .mrow .lt {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  text-align: right;
+  width: 96px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+/* Antisocial ink: before 06:00 and at or after 23:00. Drawn in every state —
+   these are the two cases where getting it wrong wakes somebody at 5am. */
+.cal-bench .rsvp .mrow .lt.small { color: var(--warn); }
+.cal-bench .rsvp .mrow .rs {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  width: 52px;
+  text-align: right;
+  flex: none;
+  color: var(--text-muted);
+}
+.cal-bench .rsvp .mrow .rs.ok { color: var(--ok); }
+.cal-bench .rsvp .mrow .rs.bad { color: var(--bad); }
+/* The zone chip is a .badge WITHOUT .need: an abbreviation is a product fact,
+   not a build gap, and .badge.need is reserved for the literal "needs backend"
+   so it cannot be diluted (§7). */
+.cal-bench .rsvp .badge.tz {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+/* The panel's captions are SENTENCES, not eyebrows. The Bench's shared .cap is
+   a 10px uppercase label, which is right for "DENSITY" and unreadable for the
+   two-line explanation of why a count was recomputed — and an unread honesty
+   statement is an absent one. The lane's own `density` label keeps the eyebrow
+   treatment; everything else in the panel reverts. */
+.cal-bench .rsvp .cap {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.cal-bench .rsvp .lane .who.cap {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── the phone reading ───────────────────────────────────────────────────── */
+/* cv4:1068 and cv4:1093-1095, exactly. THE `zone not set` + `Ask →` PAIR STAYS
+   AT EVERY WIDTH: the repair may never be the thing that disappears on the
+   smallest screen, which is where a player most likely is. */
+@media (max-width: 900px) {
+  .cal-bench .rsvp .side { width: 100%; }
+}
+@media (max-width: 640px) {
+  .cal-bench .rsvp .mrow {
+    height: auto;
+    padding: 7px 4px;
+    flex-wrap: wrap;
+  }
+  /* cv4:1094 is `width:auto;flex:1`. The min-width RESTORES the mockup's own
+     behaviour rather than adding to it: this sheet's `.cal-bench *` reset sets
+     min-width:0 globally, which the mockup has no equivalent of, and without it
+     a flex:1 name shrinks below its content and ellipses "Kael" to "K…". The
+     row already wraps at this width, so the right answer is to let it wrap —
+     and a truncated NAME on the panel whose whole subject is which person said
+     what is the one thing here that must never be abbreviated. */
+  .cal-bench .rsvp .mrow .nm { width: auto; flex: 1; min-width: 9ch; }
+  .cal-bench .rsvp .mrow .lt { width: auto; }
+}

@@ -2302,6 +2302,127 @@ already claimed the scope the code did not have. The rule that falls out:
 its zone as well**, and the guard must check the SELECTOR and not only the
 property. `.lrows .lrow`, `.lctx[…]`, `.lzero.lday[…]` — all three are pinned.
 
+**15. A PREFLIGHT ERROR REACHED SIGNED HONESTY COPY, AND THE RETRACTION COMES
+BEFORE THE FILL.** (C-CALV4-RSVP-P8 §2, wave 3 / W-G Part A.) Wave 1 shipped the
+Bench RSVP panel as a header plus a `needs backend` chip, justified in code by
+this, verbatim (`bench.go`, `type BenchRsvp`): *"there is no session entity, no
+RSVP table and no per-member time zone."* **All three claims were false, and two
+of them were false on the branch that wrote them:**
+
+| Claimed absent | Actually shipped |
+|---|---|
+| session entity | `internal/plugins/sessions`, with `scheduled_date` + `scheduled_time` (`sessions/migrations/004`) |
+| RSVP table | `calendar_event_rsvps` + `calendar_event_rsvp_tokens` + `calendar_events.collect_rsvps` (`calendar/migrations/013`) — and `calendar_v2.templ` already rendered against them on the same branch |
+| per-member time zone | `users.timezone` since `db/migrations/000001_baseline`, with a live edit surface at `PUT /account/timezone` |
+| (also) availability storage | `member_availability` + `availability_exceptions` (`sessions/migrations/002`), minute-accurate, DST-correct, additive-offer invariant enforced server-side |
+
+The failure class is the one this whole discipline exists to prevent, inverted.
+Every honesty state in calendar-v4 is a claim that Chronicle **cannot** compute
+something; §7's chip audience rule, §13's ledger and the `.badge.need`
+non-dilution rule all assume that claim is checked. **A `needs backend` chip
+that is wrong is a fabricated ABSENCE — strictly worse than no chip**, because
+it is read as a verified finding: it told the operator that his most-wanted
+feature had no foundation when it had almost all of one, and it is the kind of
+error that gets a shipped store re-built rather than used.
+
+So the four sites were retired **as a correction, in the slice's first stage,
+before any of the filling work** — `BenchRsvp`'s doc block, `benchRsvpPanel`'s
+note, `benchSessionTile`'s qualifier and every inert control's title, and the
+Bench page caption's design-ahead inventory. The rule that falls out and binds
+every later wave: **a `needs backend` chip is a preflight FINDING, and a finding
+names the migration or the route it checked.** Copy that asserts an absence
+without naming what was looked at is not an honesty state, it is a guess with a
+badge on it.
+
+Three things in the panel genuinely are unbacked and keep their state, all
+GM-tier so a player receives none of them: the **propose** write
+(`routes_snapshot.txt` carries no propose-from-window path), the
+**reminder/nudge** endpoint (the fan-out fires only on the `collect_rsvps`
+OFF→ON transition; booked as C-CALV4-RSVP-P8B, "the asking email"), and a
+server-side **recommender** — which WG-3 retires by *deriving* the window
+arithmetically from the overlay's own per-hour free counts rather than storing
+it, under a permanent `derived · not stored` chip.
+
+**16. RSVP ANSWERS ARE PARTY-VISIBLE; AVAILABILITY LANES ARE NOT.** (WG-4 /
+C-CALV4-RSVP-P8 §4.) Two artefacts openly disagreed — the unsigned W-G spec
+gives a player only their own roster row; `mockups/v4-proposed/roles-and-rsvp.html`
+makes every answer party-visible — and the SIGNED contract settles it, because
+`rsvpPanel()` renders the lanes under `${GM ? lanes : ''}` but renders the full
+`.mtable` of every member unconditionally, and `v4-bench-player-light.png` shows
+a player receiving every name, role, zone chip, local clock and answer word. The
+law, in one sentence:
+
+> **RSVP answers, roles, zones and per-member local clocks are party-visible.
+> Per-member availability LANES are owner / co-DM only. The aggregate density
+> row is everyone's.**
+
+Consequences that are structural rather than stylistic: detail is gated **in the
+handler by role, never by route** (the shipped shape, `sessions/routes.go:29-46`),
+so a player's payload does not contain another member's lane data at all —
+absence is in the payload, not in the template; the anonymous aggregate is
+post-filtered **server-side from the set the viewer is entitled to**, never
+recomputed from the rows in the viewer's own DOM (which would flatten every
+player's density to `1 of 1`); and the count lane's denominator is
+`TotalMembers`, the Director included, so it is never labelled "of 5 players".
+
+**17. THE ROLE VOCABULARY WAS TWO-VALUED ON A PERMISSION SURFACE, AND
+`.badge.gm` GAINS A THIRD SIGNED STRING.** (WG-4.) `availability_overlay.go`'s
+`roleLabel(isOwner)` derived from `Role >= RoleOwner` and ignored
+`IsDmGranted` — so a **co-DM rendered as "player" while receiving full
+owner-tier detail**, on the one surface whose entire subject is who-may-see-what.
+It is retired: `campaigns.Role.DisplayName()` (Owner / Scribe / Player) is the
+single lookup, printed through one shim so the later "role names come from the
+installed game system" slice
+(`decisions/2026-07-27-calendar-scope-and-roles.md` §4) stays a one-file change.
+
+P6 ruled that `.badge.gm` carries exactly two strings, `"<N> hidden"` and
+`"GM"`. **It gains a third, `co-DM`, ruled once here.** The two-string rule
+exists to stop the GM badge accreting invented content in the Block's *grid and
+Ledger*, where it marks event VISIBILITY; a roster's role column is a different
+surface with a genuine third case. The alternatives are worse: a new badge class
+is a new primitive in a slice meant to add none, and plain `.ro` text loses the
+weight on the one surface where a mislabelled co-DM is a permission bug.
+
+**18. ZONE ABBREVIATIONS STAY; THE HONEST RESIDUAL IS SMALLER AND DIFFERENT.**
+(C-CALV4-RSVP-P8 §5.) The W-G spec forbids `CDT`/`EDT`, mandates the last IANA
+path segment, and books a *"friendly zone names need a backend helper"* chip.
+Overruled three ways: the signed render prints abbreviations directly; W-B
+already ships them per-instant and DST-correct through the stdlib
+(`Format("MST")` folded into `Mark.Time`, **pinned** in the BlockData pin, so
+un-doing it is a pin amendment this slice does not have); and `EDT` is *more*
+honest than `New_York`, because a location is not a clock. The spec's reasoning
+was drawn from `internal/timeutil/zones.go` alone — true of `timeutil`,
+irrelevant to the stdlib call that actually produces the string.
+
+The real residual is narrower and is printed as a **caption, not a chip**:
+`Format("MST")` degrades to a numeric offset (`+0545`) for zones with no
+alphabetic abbreviation. The full IANA identifier rides in `title` on every
+abbreviation, which is the Nameplate's existing shape one notch denser — **one
+fact at two densities, not three conventions**.
+
+And the state that has no clock at all: `users.timezone` is NULLABLE and both
+viewer-zone resolvers silently fall back to `"UTC"`, so a rendered clock for a
+zone-less member is **a guess presented as a fact**. The signed pair is
+`.badge.warn "zone not set"` + `.btn.xs.ghost "Ask →"` and a **literally empty**
+`.lt` — never `--:--`, never a dash, never a UTC guess. It is
+`BlockData.Fault`'s fault-where-the-date-would-go idiom applied to a clock, and
+the pair survives at every width, because the repair may not be the thing that
+disappears on the screen a player is most likely holding.
+
+**19. NO STORED RSVP AGGREGATE REACHES THE PANEL.** (C-CALV4-RSVP-P8 §6, the
+slice's gate.) `EventRSVPSummary.Counts` is raw rows, while `decorateResponders`
+drops ex-members from the named list — so a stored aggregate printed beside a
+membership-filtered name list is a **counts-vs-names disagreement by
+construction**, and the disagreement grows every time somebody leaves a
+campaign. Killing it structurally is cheaper than asserting it: every number on
+the panel is recomputed from the visible, membership-filtered rows, and the
+`.caption` says why. The gate is a count-oracle test in the P6 shape — the
+assertion is not "the numbers are right" but *"every number a viewer receives is
+independently reproducible from that viewer's own visible set"* — over a fixture
+whose load-bearing case is **one departed member holding a stored
+`calendar_event_rsvps` row**, because that is the one case a screenshot cannot
+reconstruct.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store become sections HERE when they

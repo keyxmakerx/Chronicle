@@ -144,10 +144,19 @@ type EventRSVPSummary struct {
 // ("out this week", "suggest another time") without a second endpoint per
 // action — the alternative was three near-identical routes. Omitting it makes
 // the body exactly {status, note?}.
+// FORM TAGS ARE NOT DECORATION (C-CALV4-RSVP-P8, WG-6 / the W-G ledger's #20).
+// Echo's binder matches a form-encoded body against the `form:` tag and falls
+// back to the CAPITALISED Go field name when there is none — so before these
+// tags, a `status=yes` POST from an HTML form bound to nothing, silently, and
+// wrote an empty status that the ENUM gate then rejected as a bad request. The
+// Bench's session tile posts a form, so one line of struct tag is what lets it
+// reuse this endpoint instead of needing a second route beside it. The JSON
+// consumers (static/js/availability.js, the Foundry-facing /api/v1 group) are
+// unaffected: the json tags are unchanged and both spellings coincide.
 type SetRSVPRequest struct {
-	Status  string                   `json:"status"`
-	Note    *string                  `json:"note,omitempty"`
-	Action  string                   `json:"action,omitempty"` // "", "out_week", or "suggest"
+	Status  string                   `json:"status" form:"status"`
+	Note    *string                  `json:"note,omitempty" form:"note"`
+	Action  string                   `json:"action,omitempty" form:"action"` // "", "out_week", or "suggest"
 	Windows []RSVPAvailabilityWindow `json:"windows,omitempty"`
 }
 

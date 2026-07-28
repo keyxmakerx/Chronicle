@@ -103,9 +103,163 @@ func benchFxAll() []Calendar {
 	return []Calendar{benchFxHarptos(), benchFxGregorian(), benchFxElven(), benchFxDwarven()}
 }
 
+// --- the RSVP panel's fixture (C-CALV4-RSVP-P8, WG-9) -----------------------
+//
+// SIGNED: 5 in the campaign · 3 answered · 1 DEPARTED member with a stored row.
+// It lives HERE, beside the rest of the Bench fixture, rather than in the oracle
+// file, because the oracle must EXTEND this suite and not fork it — and because
+// the panel now renders on every Bench assertion, so the fixture is shared.
+//
+// The roster mirrors the signed contract's own cast (cv4 OWNERS) so a render
+// against it can be read beside v4-bench-desktop-light.png and
+// v4-bench-player-light.png: Kael owns the campaign, Nissa holds a co-DM grant,
+// and Rell has NO stored zone — the state that must print the repair and a
+// literally empty clock.
+const (
+	benchFxDepartedID   = "u-departed"
+	benchFxDepartedName = "Ghost of Campaigns Past"
+)
+
+func benchFxRoster() []BenchRosterMember {
+	return []BenchRosterMember{
+		{UserID: "u-kael", Name: "Kael", Role: "Owner", IsOwner: true, TZ: "America/Chicago"},
+		{UserID: "u-bryn", Name: "Bryn", Role: "Player", TZ: "America/New_York"},
+		{UserID: "u-nissa", Name: "Nissa", Role: "Scribe", IsCoDM: true, TZ: "Europe/London"},
+		{UserID: "u-rell", Name: "Rell", Role: "Player"},
+		{UserID: "u-tam", Name: "Tam", Role: "Player", TZ: "America/Los_Angeles"},
+	}
+}
+
+// benchFxRsvpInitials mirrors what the lanes label their rows with, so the
+// permission assertion can look for lane traces in a player's DOM by content
+// rather than only by marker.
+func benchFxRsvpInitials() []string {
+	out := make([]string, 0, 5)
+	for _, m := range benchFxRoster() {
+		out = append(out, benchRsvpInitials(m.Name))
+	}
+	return out
+}
+
+// benchFxAvail is the week overlay. Saturday (column 5) carries the week's peak
+// — all five free for three contiguous hours — so the derived window has a
+// single unambiguous answer that the oracle can recompute.
+func benchFxAvail(includeDetail bool) *BenchAvailability {
+	dates := []string{"2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23",
+		"2026-07-24", "2026-07-25", "2026-07-26"}
+	a := &BenchAvailability{WeekStart: dates[0], WithPattern: 5}
+	for i, d := range dates {
+		free := make([]int, 24)
+		for h := 18; h < 23; h++ {
+			free[h] = 2
+			if i >= 4 {
+				free[h] = 3
+			}
+		}
+		if i == 5 {
+			free[19], free[20], free[21] = 5, 5, 5
+		}
+		a.Days = append(a.Days, BenchAvailabilityDay{Date: d, Free: free})
+	}
+	if includeDetail {
+		a.FreeDays = map[string][]bool{
+			"u-kael":  {false, true, false, false, true, true, true},
+			"u-bryn":  {false, false, false, false, true, true, false},
+			"u-nissa": {true, false, true, false, true, true, false},
+			"u-rell":  {false, false, false, false, false, true, false},
+			"u-tam":   {false, true, false, false, true, true, true},
+		}
+	}
+	return a
+}
+
+// benchFxRsvpInput is the signed fixture as the builder takes it.
+//
+// THE DEPARTED ROW IS THE LOAD-BEARING CASE: u-departed holds a stored `yes`
+// and is NOT in the roster. Every number the panel prints must be identical
+// with and without it.
+func benchFxRsvpInput(isGM bool) benchRsvpInput {
+	loc, _ := time.LoadLocation("America/Chicago")
+	return benchRsvpInput{
+		IsGM:       isGM,
+		ViewerID:   "u-kael",
+		CampaignID: "camp-1",
+		Roster:     benchFxRoster(),
+		Avail:      benchFxAvail(isGM),
+		Answers: map[string]string{
+			"u-kael":          RSVPYes,
+			"u-nissa":         RSVPYes,
+			"u-rell":          RSVPNo,
+			benchFxDepartedID: RSVPYes,
+		},
+		Session: &BenchRsvpSession{
+			Name:     "Session 41",
+			Instant:  time.Date(2026, 7, 25, 19, 0, 0, 0, loc),
+			Anchored: true,
+		},
+		ViewerZone:       "America/Chicago",
+		ViewerZoneSource: "member",
+		WeekLabel:        "20 Jul 2026",
+	}
+}
+
+// benchFxHonesty* are the panel's three honesty states, shot as evidence
+// because each is a case where the panel could plausibly have invented
+// something instead: no answers, not enough availability to rank, and no
+// session to answer.
+type benchFxHonestyState int
+
+const (
+	benchFxHonestyNoAnswers benchFxHonestyState = iota
+	benchFxHonestyThin
+	benchFxHonestyNoSession
+)
+
+func benchFxDataRsvpHonesty(state benchFxHonestyState) BenchData {
+	in := benchFxRsvpInput(true)
+	switch state {
+	case benchFxHonestyNoAnswers:
+		in.Answers = map[string]string{}
+	case benchFxHonestyThin:
+		in.Avail.WithPattern = benchRsvpQuorum - 1
+	case benchFxHonestyNoSession:
+		in.Session = nil
+	}
+	d := benchFxData(true, true)
+	d.Rsvp = benchRsvpBuild(in)
+	return d
+}
+
+// benchFxDataRsvp is benchFxData with the RSVP panel FILLED. It is a separate
+// entry point rather than a flag on benchFxData so the wave-1 assertions that
+// deliberately exercise the panel's UNFILLED state keep doing so.
+func benchFxDataRsvp(isGM, isOwner bool) BenchData {
+	in := benchFxRsvpInput(isGM)
+	d := benchFxData(isGM, isOwner)
+	d.Rsvp = benchRsvpBuild(in)
+	// The ribbon's session tile is fed from the SAME resolution the panel is,
+	// exactly as buildBench does it — so a fixture render exercises the live
+	// tile rather than the not-yet-reading one, and the tile's tally and the
+	// panel's tally are visibly the same number.
+	answered, _ := benchRsvpTally(in.Roster, in.Answers)
+	d.Ribbon = benchRibbon(benchRibbonInput{
+		IsGM: isGM, CampaignID: "camp-1", NextUp: d.NextUp,
+		Sync:      calblock.SyncPill{State: blockSyncStateOK, Linked: 1, Total: 4, Full: "In sync · 1 of 4 linked"},
+		Attention: benchAttentionRows(benchFxAll(), "camp-1"),
+		Session: &benchSessionTileInput{
+			IsGM: isGM, CampaignID: "camp-1", CalendarID: "cal-real", EventID: "evt-41",
+			Name: in.Session.Name, When: benchRsvpWhen(in.Session.DaysUntil),
+			Answered: answered, Total: len(in.Roster),
+			MyStatus: in.Answers[in.ViewerID], CSRFToken: "fx-csrf",
+		},
+	})
+	return d
+}
+
 // benchFxData builds a BenchData the way buildBench does, minus the IO. The
 // Blocks are projected through the REAL projection so the DOM under test is the
-// DOM production renders.
+// DOM production renders. Its RSVP panel is the UNFILLED state — the one a
+// campaign that has entered nothing gets; benchFxDataRsvp is the filled twin.
 func benchFxData(isGM, isOwner bool) BenchData {
 	cals := benchFxAll()
 	if !isGM {
@@ -406,29 +560,45 @@ func benchGridSection(t *testing.T, html string) string {
 func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	html := renderBench(t, benchFxData(true, true))
 
-	// RE-PINNED DELIBERATELY, TWICE, AND IT IS AN ENUMERATION RATHER THAN A
-	// NUMBER ([S12], SIGNED AS MODIFIED). It began as `>= 4` — a floor a
+	// RE-PINNED DELIBERATELY, THREE TIMES NOW, AND IT IS AN ENUMERATION RATHER
+	// THAN A NUMBER ([S12], SIGNED AS MODIFIED). It began as `>= 4` — a floor a
 	// Block-side chip could satisfy on the Bench's behalf, and in fact did:
 	// on wave-1 main it was met by FIVE, four Bench-side plus one Block-side
 	// zone chip. A floor another surface can meet stops proving anything.
 	//
 	// C-CALV4-LEDGER-P6 §9 made it an exact count of the Bench's OWN chips,
-	// subtracting the Block-side ones first. C-CALV4-SHELF-P7 keeps that shape
-	// and re-states WHICH Block-side chip is subtracted, because the Shelf's
-	// zone chip is gone and a different, smaller one took its place.
+	// subtracting the Block-side ones first. C-CALV4-SHELF-P7 kept that shape.
+	// C-CALV4-RSVP-P8 re-enumerates because it RETIRES one chip and MOVES
+	// another: the count is unchanged at four and every entry beneath it is
+	// different, which is exactly why this must never be maintained as a number.
 	//
-	// THE SURVIVING CHIPS, EVERY ONE, BY FILE AND LINE. The count below is a
+	// THE SURVIVING CHIPS, EVERY ONE, BY SITE. The count below is a
 	// consequence of this list and must never be nudged without editing it:
 	//
-	//   BENCH-SIDE (this test's subject) — four:
-	//     1. bench.go:840   the session tile   — session dates have no store
-	//                       on Chronicle at all
-	//     2. bench.go:867   the sync tile      — the transport has no
-	//                       per-calendar linkage to report
-	//     3. bench.go:945   the horizon tile   — there is no queryable
-	//                       knowledge horizon (COMMON §6.1)
-	//     4. bench.templ:257 the RSVP panel header — RSVP surfaces are W-G
-	//        (1-3 are emitted by the shared tile template, bench.templ:149)
+	//   BENCH-SIDE (this test's subject) — four, ALL GM-TIER:
+	//     1. bench.go benchSessionTile  — the tile does not read the shipped
+	//        RSVP store yet. GM-only as of P8: the chip is build status, and
+	//        build status never reaches a player
+	//        (decisions/2026-07-27-needs-backend-audience.md). The count
+	//        oracle caught wave 1 rendering it at every role.
+	//     2. bench.go benchSyncTile     — the transport has no per-calendar
+	//        linkage to report
+	//     3. bench.go benchAttentionTile's sibling, the horizon tile — there is
+	//        no queryable knowledge horizon (COMMON §6.1)
+	//     4. bench.go benchSessionTile's Nudge action — WG-5's visible chip
+	//        beside a disabled control; there is no reminder endpoint, and
+	//        C-CALV4-RSVP-P8B ("the asking email") is where it gets one.
+	//
+	//   RETIRED BY P8, and it is the point of the slice:
+	//     · the RSVP PANEL HEADER's chip. It was drawn when the whole panel was
+	//       design-ahead; the panel is now backed, and a panel-level chip over a
+	//       filled panel is the same lie class as a green sync pill with no
+	//       denominator, inverted (WG-8). The chip moved to the two controls
+	//       inside it that really are unbacked.
+	//
+	//   BENCH-SIDE BUT NOT IN THIS FIXTURE: the RSVP panel's Propose and Nudge
+	//   chips, which only render once the panel is FILLED — benchFxDataRsvp is
+	//   the fixture that exercises them, and TestBenchRsvp_* below counts them.
 	//
 	//   BLOCK-SIDE (subtracted) — one:
 	//     5. calendar_block/shelf.templ, shelfFiltersPanel — the Filters TAB's
@@ -448,7 +618,7 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	const filtersChip = `data-spane="filters"><span ` + chip
 	benchOwn := strings.Count(html, chip) - strings.Count(html, filtersChip)
 	if benchOwn != 4 {
-		t.Errorf("the Bench's own chips = %d, want 4 (session · sync · horizon · RSVP header); "+
+		t.Errorf("the Bench's own chips = %d, want 4 (session tile · sync · horizon · Nudge); "+
 			"Block-side chips are subtracted and must not stand in for them", benchOwn)
 	}
 	// The Ledger's chip is gone because W-B FILLED the zone, and the Shelf's
@@ -478,8 +648,209 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	if !strings.Contains(html, "data-bench-rsvp") {
 		t.Error("the RSVP panel header must render")
 	}
-	if strings.Contains(html, "recommended window") {
-		t.Error("the RSVP panel must not draw a recommended window it cannot compute")
+	// INVERTED, NOT DELETED (C-CALV4-RSVP-P8 / WG-3). The wave-1 assertion was
+	// `must not draw a recommended window it cannot compute`, and it was right
+	// for as long as there was no per-hour free count to compute one from. There
+	// is one now, so the rule it was defending — the panel never states a
+	// ranking it has no data for — is asserted at its two real edges instead:
+	// an EMPTY panel still draws nothing, and a filled one is asserted below
+	// (TestBenchRsvp_*) to carry the permanent `derived · not stored` chip and
+	// to refuse below quorum. Deleting it would have retired the rule with it.
+	if strings.Contains(html, "Most free:") {
+		t.Error("the UNFILLED RSVP panel must not draw a window — it has no availability to rank")
+	}
+	if strings.Contains(html, "derived · not stored") {
+		t.Error("the UNFILLED RSVP panel must not carry the derived-window chip")
+	}
+}
+
+// --- the RSVP panel (C-CALV4-RSVP-P8 Part A) --------------------------------
+
+// The signed DOM ships in the signed ORDER. The class names ARE the contract
+// (cv4:2205-2263), and preflight measured every one of them at zero occurrences
+// across both shipped calendar-v4 sheets — this panel body is built from
+// nothing, so there is no prior markup to inherit the order from.
+func TestBenchRsvp_SignedDOMInSignedOrder(t *testing.T) {
+	html := renderBench(t, benchFxDataRsvp(true, true))
+	order := []string{
+		`class="rsvp surf"`, `class="lhead"`, `class="top"`, `class="ov"`,
+		`class="ovwrap"`, `class="ovgrid"`, `class="ovhead"`,
+		`class="lane"`, `class="who"`, `class="swatch`, `class="slot`,
+		`class="lane dens-row"`, `class="dens"`, `class="recbr"`,
+		`class="side"`, `class="hl"`, `class="rec"`, `class="btns"`,
+		`class="mtable"`, `class="mrow"`, `class="nm"`, `class="ro"`, `class="lt`, `class="rs`,
+	}
+	at := 0
+	for _, want := range order {
+		i := strings.Index(html[at:], want)
+		if i < 0 {
+			t.Fatalf("the signed panel is missing %q (or it is out of order after %d)", want, at)
+		}
+		at += i
+	}
+}
+
+// EVERY SWATCH CARRIES ITS PATTERN CLASS. Colour is never load-bearing alone:
+// the pattern is the greyscale identity channel, which is the whole reason
+// OverlayMember.Color (ten hex values, one channel) is ignored. The
+// v4-proposed mockup ships a pattern-less swatch; that is a defect and this
+// asserts it was not inherited.
+func TestBenchRsvp_EverySwatchCarriesItsPattern(t *testing.T) {
+	html := renderBench(t, benchFxDataRsvp(true, true))
+	total := strings.Count(html, `class="rsvp surf"`)
+	if total == 0 {
+		t.Fatal("no RSVP panel rendered")
+	}
+	swatches := strings.Count(html, `class="swatch`)
+	patterned := 0
+	for _, p := range []string{"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"} {
+		patterned += strings.Count(html, `class="swatch `+p+`"`)
+	}
+	if swatches == 0 || swatches != patterned {
+		t.Errorf("%d swatches, %d of them patterned — the pattern class is not optional",
+			swatches, patterned)
+	}
+	// The identity pair is keyed to the stable roster index and stays unique
+	// past the eighth member, hue repeating while the pattern steps.
+	h0, p0 := benchRsvpIdentity(0)
+	h8, p8 := benchRsvpIdentity(8)
+	if h0 != h8 {
+		t.Errorf("hue should repeat at index 8: %q vs %q", h0, h8)
+	}
+	if p0 == p8 {
+		t.Errorf("pattern must STEP at index 8, both were %q — index 8 would be index 0's twin", p0)
+	}
+}
+
+// The zone-less member is a FIRST-CLASS STATE: the repair renders, the clock is
+// LITERALLY EMPTY, and neither is a dash, a `--:--` or a UTC guess.
+func TestBenchRsvp_ZonelessMemberGetsTheRepairAndNoClock(t *testing.T) {
+	p := benchRsvpBuild(benchFxRsvpInput(true))
+	var rell BenchRsvpMember
+	for _, m := range p.Members {
+		if m.Name == "Rell" {
+			rell = m
+		}
+	}
+	if rell.Name == "" {
+		t.Fatal("the fixture's zone-less member is gone")
+	}
+	if rell.Zone != "" || rell.LocalTime != "" {
+		t.Errorf("a zone-less member got zone=%q clock=%q; both must be empty", rell.Zone, rell.LocalTime)
+	}
+	if rell.AskHref == "" {
+		t.Error("the `Ask →` repair must have somewhere to go")
+	}
+	html := renderBench(t, benchFxDataRsvp(false, false))
+	for _, want := range []string{`class="badge warn">zone not set`, `Ask →`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("a player's DOM is missing the zone repair %q — the repair may never be "+
+				"the thing that disappears", want)
+		}
+	}
+	for _, forbidden := range []string{"--:--", ">—<span", "UTC guess"} {
+		if strings.Contains(html, forbidden) {
+			t.Errorf("a zone-less clock printed %q instead of nothing", forbidden)
+		}
+	}
+}
+
+// Abbreviations are real, DST-correct and carry the full identifier in `title`
+// — one fact at two densities. `+1d` and the antisocial ink are drawn in every
+// state, because those are the two cases where getting it wrong wakes somebody
+// at 5am.
+func TestBenchRsvp_ZoneAbbreviationsAndTheNextDayBadge(t *testing.T) {
+	p := benchRsvpBuild(benchFxRsvpInput(true))
+	byName := map[string]BenchRsvpMember{}
+	for _, m := range p.Members {
+		byName[m.Name] = m
+	}
+	if got := byName["Kael"].Zone; got != "CDT" {
+		t.Errorf("Kael's zone chip = %q, want the DST-correct CDT", got)
+	}
+	if got := byName["Kael"].ZoneTitle; got != "America/Chicago" {
+		t.Errorf("the full identifier must ride in title; got %q", got)
+	}
+	// 19:00 CDT is 01:00 the NEXT day in London — the signed player render's own
+	// case, and the one a member reads wrong without the badge.
+	n := byName["Nissa"]
+	if n.LocalTime != "01:00" || !n.NextDay || !n.Antisocial {
+		t.Errorf("Nissa: clock=%q nextDay=%v antisocial=%v; want 01:00 with +1d and warn ink",
+			n.LocalTime, n.NextDay, n.Antisocial)
+	}
+	if byName["Kael"].NextDay || byName["Kael"].Antisocial {
+		t.Error("19:00 in the viewer's own zone is neither next-day nor antisocial")
+	}
+}
+
+// The co-DM is marked with `.badge.gm`'s third signed string (WG-4), and the
+// role column prints the truth rather than the retired two-value vocabulary.
+func TestBenchRsvp_CoDMIsMarkedAndRolesAreTheTruth(t *testing.T) {
+	html := renderBench(t, benchFxDataRsvp(false, false))
+	if !strings.Contains(html, `class="badge gm">co-DM`) {
+		t.Error("the co-DM marker is missing — a co-DM labelled a plain player on a " +
+			"permission surface is the defect WG-4 exists to close")
+	}
+	for _, role := range []string{">Owner<", ">Scribe<", ">Player<"} {
+		if !strings.Contains(html, role) {
+			t.Errorf("role column is missing %q — Role.DisplayName() is the vocabulary", role)
+		}
+	}
+	if strings.Contains(html, `class="ro">DM<`) {
+		t.Error("the retired roleLabel vocabulary is back")
+	}
+}
+
+// The panel's captions carry the facts the numbers cannot state about
+// themselves, including §6's mandated sentence about the stored tally.
+func TestBenchRsvp_CaptionsStateWhyTheCountsAreRecomputed(t *testing.T) {
+	html := renderBench(t, benchFxDataRsvp(true, true))
+	for _, want := range []string{
+		"recomputed from these rows, not from the stored tally",
+		"still counts people who have left the campaign",
+		"the Director included",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the panel does not say %q", want)
+		}
+	}
+}
+
+// The derived window ships with its PERMANENT chip, and Propose stays inert
+// beside it with a VISIBLE one (WG-3 + WG-5). The readout is real, the action
+// is not, and the gap between them is stated.
+func TestBenchRsvp_DerivedWindowShipsChippedAndProposeStaysInert(t *testing.T) {
+	html := renderBench(t, benchFxDataRsvp(true, true))
+	if !strings.Contains(html, "derived · not stored") {
+		t.Error("the derived window must carry its permanent chip")
+	}
+	if !strings.Contains(html, "does not know what is already on the calendar") {
+		t.Error("the window must name what it cannot include (ledger #16)")
+	}
+	if !strings.Contains(html, `class="inert"`) {
+		t.Error("an inert control must carry a visible chip, not a title alone (WG-5)")
+	}
+	if !strings.Contains(html, "Propose and Nudge are inert") {
+		t.Error("the specific reason must be VISIBLE, not only in title")
+	}
+	// The chip beside them is the literal "needs backend" and never the reason,
+	// so `.badge.need` cannot be diluted.
+	if strings.Contains(html, `class="badge need">no reminder endpoint`) ||
+		strings.Contains(html, `class="badge need">propose`) {
+		t.Error(".badge.need was diluted — its text is always the literal `needs backend`")
+	}
+}
+
+// PART B IS NOT BUILT. No `.sc-` class, no /schedule link, no Verdict, Matrix,
+// Roster or Painter. This is a bound, so it is pinned rather than trusted.
+func TestBenchRsvp_PartBIsNotBuilt(t *testing.T) {
+	for _, gm := range []bool{true, false} {
+		html := renderBench(t, benchFxDataRsvp(gm, gm))
+		for _, forbidden := range []string{`class="sc-`, ` sc-`, `/schedule`, "cal-schedule"} {
+			if strings.Contains(html, forbidden) {
+				t.Errorf("gm=%v Part B leaked into Part A: %q", gm, forbidden)
+			}
+		}
 	}
 }
 
@@ -661,6 +1032,16 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 		".cal-bench .nextup", ".cal-bench .tick", ".cal-bench .badge.need",
 		"--cal-harptos", "--cal-real", "--cal-elven", "--cal-dwarven",
 		".cal-bench .p1", ".cal-bench .p8",
+		// The RSVP panel body (C-CALV4-RSVP-P8). Preflight measured every one of
+		// these at ZERO occurrences before this slice — the panel is built from
+		// nothing, so this pin is the only thing standing between the markup and
+		// a sheet that silently drops what it depends on (the #568 gap).
+		".cal-bench .rsvp", ".cal-bench .rsvp .ovgrid", ".cal-bench .rsvp .lane",
+		".cal-bench .rsvp .lane .slot.free", ".cal-bench .rsvp .lane .dens",
+		".cal-bench .rsvp .recbr", ".cal-bench .rsvp .swatch",
+		".cal-bench .rsvp .mrow", ".cal-bench .rsvp .mrow .lt.small",
+		".cal-bench .rsvp .side", ".cal-bench .rsvp .inert",
+		"--own-1", "--own-8",
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("calendar-bench.css does not define %q", want)
@@ -738,6 +1119,40 @@ func TestGenerateBenchScreenshots(t *testing.T) {
 		{file: "06-bench-empty-player-light.png", title: "The Bench · a player with nothing shared",
 			caption: "the calm empty state, with no create affordance a player would meet a 403 on",
 			w:       1280, h: 700, host: 1232, data: BenchData{CampaignID: "camp-1", CampaignName: "Imix"}},
+
+		// C-CALV4-RSVP-P8 Part A. The pair at 07/08 is THE PERMISSION PROOF and
+		// must be read side by side at the same width: the Director's panel
+		// carries five availability lanes and two chipped Director controls, and
+		// the player's carries neither — while both carry the identical member
+		// table, density row and 3 / 5, because answers, roles, zones and local
+		// clocks are party-visible and only the LANES are owner / co-DM only.
+		{file: "07-rsvp-panel-gm-light.png", title: "RSVP panel · desktop · DIRECTOR · light",
+			caption: "GM · lanes, the derived window with its permanent `derived · not stored` chip, and two chipped inert controls",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvp(true, true)},
+		{file: "08-rsvp-panel-player-light.png", title: "RSVP panel · desktop · PLAYER · light — THE PERMISSION PROOF",
+			caption: "same width, same panel: NO lanes and NO Director controls, but the same density denominator, the same 3 / 5 and the same full member table",
+			w:       1280, h: 2600, host: 1232, data: benchFxDataRsvp(false, false)},
+		{file: "09-rsvp-panel-gm-dark.png", title: "RSVP panel · desktop · DIRECTOR · dark",
+			caption: "the identity hues carry their own dark ramp; the pattern channel is unchanged, because a pattern does not have a theme",
+			dark:    true, w: 1280, h: 3000, host: 1232, data: benchFxDataRsvp(true, true)},
+		{file: "10-rsvp-panel-mobile-light.png", title: "RSVP panel · phone · PLAYER · light",
+			caption: "BENCH_HOST 358px — the `zone not set` + `Ask →` repair SURVIVES at this width; the repair may never be the thing that disappears",
+			w:       500, h: 3600, host: 358, data: benchFxDataRsvp(false, false)},
+		{file: "11-rsvp-panel-mobile-dark.png", title: "RSVP panel · phone · PLAYER · dark",
+			caption: "BENCH_HOST 358px, dark — same reflow, same surviving repair",
+			dark:    true, w: 500, h: 3600, host: 358, data: benchFxDataRsvp(false, false)},
+		{file: "12-rsvp-honesty-nobody-answered.png", title: "RSVP panel · nobody has answered",
+			caption: "every member silent, the tally 0 / 5 — the panel states it rather than dropping the line",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpHonesty(benchFxHonestyNoAnswers)},
+		{file: "13-rsvp-honesty-below-quorum.png", title: "RSVP panel · not enough saved availability",
+			caption: "the derived window REFUSES to rank below three members, and says so — a ranking from two people's data is a guess wearing a number",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpHonesty(benchFxHonestyThin)},
+		{file: "14-rsvp-honesty-no-session.png", title: "RSVP panel · no session is collecting RSVPs",
+			caption: "the roster, the zones and the density are all real; there is simply nothing to answer, and no clock is invented for it",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpHonesty(benchFxHonestyNoSession)},
+		{file: "15-rsvp-panel-unfilled.png", title: "RSVP panel · a campaign that has entered nothing",
+			caption: "the corrected copy: the STORAGE exists — what is empty is this campaign's data, and the panel no longer claims otherwise",
+			w:       1280, h: 900, host: 1232, data: benchFxData(true, true)},
 	}
 
 	css := benchCSS(t) + benchBlockSheet(t)

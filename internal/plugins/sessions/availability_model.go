@@ -145,13 +145,38 @@ type OverlayHour struct {
 
 // OverlayMember is one member's roster entry: a stable color for their lane
 // plus, for the DM, their projected per-day availability lanes.
+//
+// ROLE IS THE TRUTH, NOT A GUESS (C-CALV4-RSVP-P8 §4 / WG-4, ADR-048 §17). This
+// field used to be produced by a local roleLabel(isOwner) that returned "DM" or
+// "player" from Role >= RoleOwner alone, ignoring IsDmGranted — so a **co-DM
+// rendered as "player" while receiving full owner-tier detail**, on the one
+// surface whose entire subject is who-may-see-what. Role now carries
+// campaigns.Role.DisplayName() (Owner / Scribe / Player), resolved by the
+// handler from the campaign roster, and IsCoDM carries the grant separately so
+// a consumer can mark it without the role string having to encode two facts.
 type OverlayMember struct {
 	UserID string        `json:"userId"`
 	Name   string        `json:"name"`
 	Color  string        `json:"color"`
 	Avatar *string       `json:"avatar,omitempty"`
-	Role   string        `json:"role"` // "DM" or "player"
-	Lanes  []LaneSegment `json:"lanes,omitempty"`
+	Role   string        `json:"role"` // campaigns.Role.DisplayName(): Owner | Scribe | Player
+	// IsCoDM is the DM grant (campaigns.CampaignContext.CanControlWorldState's
+	// second clause). A co-DM is not a role — it is a capability laid over one —
+	// so it rides beside Role rather than replacing it.
+	IsCoDM bool `json:"isCoDm,omitempty"`
+	// TZ is the member's stored IANA zone, EMPTY when they have not set one.
+	//
+	// Empty is a first-class state and must stay one: users.timezone is NULLABLE
+	// and every viewer-zone resolver in the product silently falls back to
+	// "UTC", so a clock rendered for a zone-less member is a guess presented as
+	// a fact. Consumers print the "zone not set" repair and NO clock — never
+	// "--:--", never a dash, never a UTC guess (§5, ADR-048 §18).
+	//
+	// It is a DTO field and deliberately NOT a campaign_members column: zone is
+	// a user-account fact, campaign-independent, and duplicating it per
+	// membership would create a second copy that can go stale.
+	TZ    string        `json:"tz,omitempty"`
+	Lanes []LaneSegment `json:"lanes,omitempty"`
 }
 
 // LaneSegment is one contiguous availability run for a member on one column,
@@ -166,11 +191,23 @@ type LaneSegment struct {
 // overlayMemberInput is the handler→service projection input, mapped from
 // campaigns.CampaignMember so the pure builder stays free of the campaigns
 // import and is trivially unit-testable.
+//
+// RoleLabel and IsCoDM are resolved by the HANDLER, from campaigns.Role
+// .DisplayName() and the campaign's DmGrantIDs setting, rather than derived
+// here — that is what keeps this file campaigns-free while still letting the
+// overlay print the truth (WG-4). IsOwner survives because it is the ORDERING
+// key (owners first), which is a different question from what a row is labelled.
 type overlayMemberInput struct {
-	UserID  string
-	Name    string
-	Avatar  *string
+	UserID string
+	Name   string
+	Avatar *string
+	// IsOwner is the stable-order key, not the label.
 	IsOwner bool
+	// RoleLabel is campaigns.Role.DisplayName(); IsCoDM is the DM grant.
+	RoleLabel string
+	IsCoDM    bool
+	// TZ is the member's stored IANA zone, "" when unset (see OverlayMember.TZ).
+	TZ string
 }
 
 // availabilityPalette is a colorblind-friendly (CVD-checked) set of lane

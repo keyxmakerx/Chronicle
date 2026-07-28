@@ -691,6 +691,96 @@ func (a *calendarAvailabilityAdapter) userTZ(ctx context.Context, userID string)
 	return *u.Timezone
 }
 
+// calendarBenchScheduleAdapter wraps the sessions plugin's availability handler
+// to implement calendar.BenchScheduleReader — the READ seam behind the Bench's
+// RSVP panel (C-CALV4-RSVP-P8).
+//
+// It maps sessions' own types onto the calendar's narrow DTOs rather than
+// sharing a type, because the wire contract
+// (internal/wire/plugin_import_guard_test.go) forbids a compile-time edge
+// between the two plugins outright. That is the same shape
+// calendarAvailabilityAdapter already uses for the WRITE direction.
+//
+// PERMISSION PASSES STRAIGHT THROUGH AND IS NEVER WIDENED HERE. includeDetail
+// arrives from the calendar handler, which derived it from the viewer's role,
+// and is handed to the same CampaignWeekOverlay the /availability/overlay
+// endpoint calls — so the Bench and the scheduler page cannot disagree about
+// who may see whose lanes.
+type calendarBenchScheduleAdapter struct {
+	sessions *sessions.Handler
+}
+
+// BenchRoster returns the party-visible roster: every member, in the overlay's
+// stable order, with role, co-DM grant and stored zone resolved.
+func (a *calendarBenchScheduleAdapter) BenchRoster(ctx context.Context, campaignID string) ([]calendar.BenchRosterMember, error) {
+	if a.sessions == nil {
+		return nil, nil
+	}
+	in := a.sessions.CampaignRoster(ctx, campaignID)
+	out := make([]calendar.BenchRosterMember, 0, len(in))
+	for _, m := range in {
+		out = append(out, calendar.BenchRosterMember{
+			UserID: m.UserID, Name: m.Name, Role: m.Role,
+			IsOwner: m.IsOwner, IsCoDM: m.IsCoDM, TZ: m.TZ,
+		})
+	}
+	return out, nil
+}
+
+// BenchAvailability narrows the week overlay to the three things the panel
+// prints: the per-hour free counts (the density row and the derived window),
+// how many members have entered anything (the window's quorum), and — only when
+// the caller is entitled to it — a per-member, per-day free flag for the lanes.
+//
+// The lane map is built ONLY from overlay.Members, which BuildOverlay leaves
+// empty unless includeDetail is true. So a player's returned value carries no
+// member lane data at all: the absence is in the payload, not in a template
+// branch downstream (§4).
+func (a *calendarBenchScheduleAdapter) BenchAvailability(ctx context.Context, campaignID, weekStart,
+	viewerTZ string, includeDetail bool) (*calendar.BenchAvailability, error) {
+	if a.sessions == nil {
+		return nil, nil
+	}
+	ov, err := a.sessions.CampaignWeekOverlay(ctx, campaignID, weekStart, viewerTZ, includeDetail)
+	if err != nil || ov == nil {
+		return nil, err
+	}
+	out := &calendar.BenchAvailability{WeekStart: ov.WeekStart}
+	for _, d := range ov.Days {
+		free := make([]int, len(d.Hours))
+		for h, cell := range d.Hours {
+			free[h] = cell.Free
+		}
+		out.Days = append(out.Days, calendar.BenchAvailabilityDay{Date: d.Date, Free: free})
+	}
+	// WithPattern is an AGGREGATE — a count with no identity in it — so it is
+	// safe at every role. Derived from the per-hour counts rather than from the
+	// roster, because a member with a saved pattern that never overlaps this
+	// week genuinely has nothing to rank.
+	seen := 0
+	for _, d := range out.Days {
+		for _, n := range d.Free {
+			if n > seen {
+				seen = n
+			}
+		}
+	}
+	out.WithPattern = seen
+	if includeDetail && len(ov.Members) > 0 {
+		out.FreeDays = make(map[string][]bool, len(ov.Members))
+		for _, m := range ov.Members {
+			days := make([]bool, len(out.Days))
+			for _, seg := range m.Lanes {
+				if seg.DayIndex >= 0 && seg.DayIndex < len(days) {
+					days[seg.DayIndex] = true
+				}
+			}
+			out.FreeDays[m.UserID] = days
+		}
+	}
+	return out, nil
+}
+
 // calendarEventListerAdapter wraps calendar.CalendarService to implement the
 // timeline.CalendarEventLister interface. Lists all calendar events for the
 // event picker when linking events to a timeline.
@@ -2597,10 +2687,14 @@ func (a *App) RegisterRoutes() {
 	// The mail sender is available here; the two sessions-backed seams (bell
 	// notifications, scheduler availability) are wired further down, after the
 	// sessions service exists — the SetX pattern SetTimelineLister already uses.
-	calendarRSVPHandler := calendar.NewRSVPHandler(
-		calendar.NewRSVPService(calendar.NewRSVPRepository(a.DB), calendarRepo))
+	calendarRSVPService := calendar.NewRSVPService(calendar.NewRSVPRepository(a.DB), calendarRepo)
+	calendarRSVPHandler := calendar.NewRSVPHandler(calendarRSVPService)
 	calendarRSVPHandler.SetMemberDirectory(campaignService)
 	calendarRSVPHandler.SetMailSender(smtpService, a.Config.BaseURL)
+	// The Bench RSVP panel reads answers through the SAME service the RSVP
+	// routes write through (C-CALV4-RSVP-P8 §6): one arithmetic, not a Bench one
+	// and an API one. Hoisted to a variable for exactly that reason.
+	calendarHandler.SetRSVPReader(calendarRSVPService)
 
 	// NW-2.2 Chunk F: register calendar in the App's metadata registry +
 	// expose its embedded static assets for serving at /static/plugins/calendar/.
@@ -2700,6 +2794,11 @@ func (a *App) RegisterRoutes() {
 	// on use rather than a silently missing feature.
 	calendarRSVPHandler.SetRSVPNotifier(&calendarRSVPNotifierAdapter{svc: sessionsService})
 	calendarRSVPHandler.SetAvailabilityWriter(&calendarAvailabilityAdapter{svc: sessionsService, authSvc: authService})
+	// The Bench RSVP panel's READ seam (C-CALV4-RSVP-P8). Wired here for the
+	// same ordering reason as the two above — the calendar handler is
+	// constructed earlier — and nil-safe on the calendar side, so a degraded
+	// sessions schema costs the panel its body and nothing else on the page.
+	calendarHandler.SetScheduleReader(&calendarBenchScheduleAdapter{sessions: sessionsHandler})
 	if a.PluginHealth.IsHealthy("sessions") {
 		sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService, addonService)
 	} else {
