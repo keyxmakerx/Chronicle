@@ -281,12 +281,18 @@ Phase B, W-D: the nav Calendar tab's landing surface.
   `calendarPermissionsModal`) and must survive the sweep; the associations
   panel's `EntitiesForCalendar` / `TimelineLister` reads have no caller at all
   now and the sweep should decide whether they earn a home on the Bench or go.
-- [ ] **The Bench does not draw the signed RSVP panel.** Per-member
+- [ ] **The Bench does not draw the signed RSVP panel.** ~~Per-member
   availability lanes, the density row, the recommended window and the member
   table with per-member time zones all need stores that do not exist (no
-  session entity, no RSVP table, no member time zone). The panel ships its
-  header and the `needs backend` chip. Whoever builds session scheduling owns
-  the panel body.
+  session entity, no RSVP table, no member time zone).~~ **CORRECTED
+  2026-07-28 (C-CALV4-RSVP-P8 §2, ADR-048 §15): that booking was factually
+  wrong.** Every store it named had already shipped — `calendar_event_rsvps` +
+  `calendar_event_rsvp_tokens` + `calendar_events.collect_rsvps` (calendar
+  migration 013), `member_availability` + `availability_exceptions` (sessions
+  migration 002), `users.timezone` (core migration 000001), and session
+  `scheduled_date`/`scheduled_time` (sessions migration 004). The item is kept
+  rather than deleted so the miss stays visible; W-G Part A owns the panel body
+  and it needs **no migration at all**.
 - [ ] **`moongraph` + `horizon` are not in the Bench's layer set.** The signed
   bench render shows both on the primary Block; wave 1 renders each as a
   `needs backend` chip and nothing else, and at std tier the extra need-zones

@@ -270,14 +270,37 @@ type BenchNextUpRow struct {
 
 // BenchRsvp is the session/RSVP panel.
 //
-// DESIGN-AHEAD IN FULL. The signed panel draws per-member availability lanes, a
-// density row, a recommended window and a member table with per-member time
-// zones and answers. NONE of that has a store on main: there is no session
-// entity, no RSVP table and no per-member time zone. Wave 1 therefore renders
-// the panel's HEADER with the signed `needs backend` chip and a plain statement
-// of what will live there — and draws no lanes, no densities and no member
-// rows, because every one of them would be a fabricated fact on the one surface
-// whose entire job is honesty (dispatch §4).
+// ── A CORRECTION, STATED AS ONE (C-CALV4-RSVP-P8 §2, ADR-048 §15) ──────────
+//
+// Wave 1 shipped this type carrying, verbatim: "there is no session entity, no
+// RSVP table and no per-member time zone." ALL THREE CLAIMS WERE FALSE, and two
+// of them were false when they were written:
+//
+//	sessions        — scheduled_date + scheduled_time since
+//	                  sessions/migrations/004_session_scheduled_time.up.sql
+//	RSVP storage    — calendar_event_rsvps + calendar_event_rsvp_tokens +
+//	                  calendar_events.collect_rsvps, calendar migration 013,
+//	                  and calendar_v2.templ already renders against them
+//	member zones    — users.timezone since db/migrations/000001_baseline, with
+//	                  a live edit surface at PUT /account/timezone
+//	availability    — member_availability + availability_exceptions since
+//	                  sessions/migrations/002, minute-accurate and DST-correct
+//
+// That was a preflight error which propagated into SIGNED HONESTY COPY — the
+// exact failure class the honesty states exist to prevent. A `needs backend`
+// chip that is wrong is a FABRICATED ABSENCE, and it is worse than no chip: it
+// told the operator his most-wanted feature had no foundation when it had
+// almost all of one. The retraction, not the fill, is why this type's doc block
+// is the first thing the slice rewrote.
+//
+// WHAT IS ACTUALLY UNBACKED, and it is three controls rather than a panel:
+// the propose write (routes_snapshot.txt carries no propose-from-window path),
+// the reminder/nudge endpoint (the fan-out fires only on the collect_rsvps
+// OFF→ON transition), and a server-side recommender — the last of which this
+// slice retires by DERIVING the window arithmetically rather than storing it
+// (WG-3). All three are GM-tier; a player receives none of them and therefore
+// receives no `needs backend` chip at all
+// (decisions/2026-07-27-needs-backend-audience.md).
 type BenchRsvp struct {
 	Title string
 	Note  string
@@ -825,23 +848,27 @@ func benchNextUpTile(in benchRibbonInput) BenchTile {
 	return t
 }
 
-// benchSessionTile is DESIGN-AHEAD and says so.
+// benchSessionTile is the RSVP tile in its NOT-YET-READING state.
 //
-// There is no session entity and no RSVP store on main, so this tile prints the
-// signed `needs backend` chip rather than the mockup's "RSVP 3 / 5" — which is
-// a fabricated number, and §4 of the dispatch is explicit that design-ahead
-// surfaces carry the chip and never a fabricated zero. The signed controls
-// still render, INERT: present so the tile's geometry is final, disabled so
-// they are not dead controls that swallow a click (the same reading the Block's
-// own layersInvoker ships under).
+// CORRECTED (C-CALV4-RSVP-P8 §2). Wave 1's copy said "session dates and RSVPs
+// have no store on Chronicle yet" and titled every inert control "session
+// scheduling and RSVP storage do not exist yet". Both were false — see
+// BenchRsvp for the four shipped migrations they contradicted. The chip stays
+// for exactly as long as this TILE does not read those stores, and the copy now
+// names that gap rather than inventing a missing backend.
+//
+// The signed controls still render, INERT: present so the tile's geometry is
+// final, disabled so they are not dead controls that swallow a click (the same
+// reading the Block's own layersInvoker ships under). The trio is IMMUTABLE —
+// three loose `.btn.xs`, Yes filled, then No, then Maybe, in that order.
 func benchSessionTile(isGM bool) BenchTile {
 	t := BenchTile{
 		Key: "session", Glyph: "◷", Eyebrow: "Session",
 		Headline: "Not scheduled here yet", NeedsBackend: true,
-		Qual:   "session dates and RSVPs have no store on Chronicle yet",
-		Detail: "this tile fills in when session scheduling lands",
+		Qual:   "no upcoming session on your calendars is collecting RSVPs",
+		Detail: "this tile does not read the RSVP store yet",
 	}
-	const why = "session scheduling and RSVP storage do not exist yet"
+	const why = "this tile does not read the RSVP store yet"
 	if isGM {
 		t.Actions = []BenchAction{{Label: "Nudge", Title: why}}
 		return t
@@ -1081,13 +1108,20 @@ func benchShortCalName(cal *Calendar) string {
 
 // --- the RSVP panel ---------------------------------------------------------
 
-// benchRsvpPanel is the design-ahead session panel. See BenchRsvp for why it
-// draws no lanes, no densities and no member rows.
+// benchRsvpPanel is the panel's unfilled state — the one a campaign with no
+// availability, no roster read and no RSVP-collecting session gets.
+//
+// The note names the REAL gap. Wave 1's note said "none of it is stored on
+// Chronicle yet", which was false (BenchRsvp): the stores shipped in calendar
+// migration 013, sessions migration 002 and core migration 000001. What is
+// actually empty here is the campaign's own data, and a surface that says "the
+// feature does not exist" when it means "nobody has entered anything" teaches
+// the operator to distrust every other honesty state on the page.
 func benchRsvpPanel() BenchRsvp {
 	return BenchRsvp{
 		Title: "RSVP · Schedule",
-		Note: "Per-member availability, time zones and session answers land here. " +
-			"None of it is stored on Chronicle yet, so this panel states that " +
-			"rather than drawing a schedule nobody entered.",
+		Note: "Nobody in this campaign has saved availability, and no upcoming " +
+			"session is collecting RSVPs. The storage for all of it exists — " +
+			"this panel fills in from the scheduler and the event RSVP opt-in.",
 	}
 }

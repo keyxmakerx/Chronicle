@@ -412,9 +412,11 @@ templ benchCaption() {
 		The Bench is a cockpit: every tile states a fact at rest and is a door, and the two full
 		Blocks below it are the same widget you drop on an entity page. Proportion is a rule, not an
 		accident — one primary calendar, one real-world calendar, then subordinate rows; there is no
-		width at which this becomes four identical panels. Tiles marked <b>needs backend</b> are
-		design-ahead: session RSVP storage, per-calendar sync link state and a queryable knowledge
-		horizon do not exist yet, so those tiles say so rather than printing a zero.
+		width at which this becomes four identical panels. Tiles marked <b>needs backend</b> name a
+		gap in what Chronicle can compute, not a gap in the page: per-calendar sync link state and a
+		queryable knowledge horizon do not exist, so those tiles say so rather than printing a zero.
+		This list previously named session RSVP storage as well, which was wrong — that storage has
+		shipped since calendar migration 013 and the scheduler&#39;s since sessions migration 002.
 	</div>
 }
 
