@@ -130,6 +130,53 @@ func TestMonthGeometry_ShapePinned(t *testing.T) {
 		// r51: the grid draws at most three moons; this states how many the
 		// calendar DECLARES, so a fourth does not vanish silently.
 		{name: "MoonsDeclared", kind: reflect.Int},
+		// r53: the Almanac register — every DECLARED moon over this month, at
+		// full width and deliberately uncapped by MoonCap. It is the second
+		// half of L21: the grid's three-moon ceiling is only legitimate
+		// because the overflow body goes somewhere, and this is that
+		// somewhere. A rename here silently empties the Shelf's Almanac tab
+		// while every hand-written widget fixture stays green.
+		{name: "Almanac", kind: reflect.Slice, typeName: "AlmanacMoon"},
+	})
+}
+
+// TestAlmanacMoon_ShapePinned pins r53's first new type. Every field is written
+// by a producer in package calendar and read by a renderer in this package, so
+// nothing but reflection would notice a rename — the same argument that gave
+// Mark its first pin at r52.
+func TestAlmanacMoon_ShapePinned(t *testing.T) {
+	assertShape(t, reflect.TypeOf(AlmanacMoon{}), []pinnedField{
+		{name: "Name", kind: reflect.String},
+		{name: "PeriodDays", kind: reflect.Float64},
+		// Drawn is the ONE place the renderer learns which bodies the grid's
+		// ceiling excluded. Re-deriving it by counting DayCell.Moons would put
+		// moonCap's arithmetic in two places.
+		{name: "Drawn", kind: reflect.Bool},
+		// The printed arithmetic — "no date in the register was typed by
+		// hand". Both are computed against the month's REAL day count, never
+		// the mockup's hardcoded thirty.
+		{name: "TurnsThisMonth", kind: reflect.Int},
+		{name: "DriftDays", kind: reflect.Float64},
+		{name: "Days", kind: reflect.Slice, typeName: "AlmanacDay"},
+		{name: "NextNewDay", kind: reflect.Int},
+		{name: "NextFullDay", kind: reflect.Int},
+	})
+	// There is deliberately NO Epithet ([S6]): calendar.Moon has no such
+	// column and the mockup's "the great pale moon" is fixture text. assertShape
+	// already fails on an EXTRA field, so this pin is what refuses the dead
+	// column as well as the rename.
+}
+
+// TestAlmanacDay_ShapePinned pins r53's second new type. Day is the ordinal the
+// data-day ANSWER key is built from (dayKey => "<slug>-<day>"), which is why it
+// is an int here and formatted exactly once, in the renderer.
+func TestAlmanacDay_ShapePinned(t *testing.T) {
+	assertShape(t, reflect.TypeOf(AlmanacDay{}), []pinnedField{
+		{name: "Day", kind: reflect.Int},
+		{name: "Illum", kind: reflect.Float64},
+		{name: "Phase", kind: reflect.String},
+		{name: "Turn", kind: reflect.String},
+		{name: "Node", kind: reflect.Bool},
 	})
 }
 
@@ -318,6 +365,16 @@ func fullyPopulated() BlockData {
 				Marks: []Mark{mark},
 			}},
 			TodayDay: 9, MoonsDeclared: 4,
+			// r53: the Almanac register. One lane, fully populated — the
+			// register's own contract is "never partially filled", so a
+			// fixture entry with an empty Days list would exercise a shape the
+			// producer may not emit.
+			Almanac: []AlmanacMoon{{
+				Name: "Alder", PeriodDays: 31.4, Drawn: true,
+				TurnsThisMonth: 1, DriftDays: 30,
+				NextNewDay: 3, NextFullDay: 19,
+				Days: []AlmanacDay{{Day: 1, Illum: .62, Phase: "waxing gibbous", Turn: "full", Node: true}},
+			}},
 		},
 
 		Sync: SyncPill{
@@ -367,6 +424,8 @@ func TestFixture_LeavesNoPinnedFieldZero(t *testing.T) {
 		{"WeekRow", reflect.ValueOf(d.Month.Rows[0])},
 		{"DayCell", reflect.ValueOf(d.Month.Rows[0].Cells[0])},
 		{"Mark", reflect.ValueOf(d.Month.Rows[0].Cells[0].Marks[0])},
+		{"AlmanacMoon", reflect.ValueOf(d.Month.Almanac[0])},
+		{"AlmanacDay", reflect.ValueOf(d.Month.Almanac[0].Days[0])},
 		{"SyncPill", reflect.ValueOf(d.Sync)},
 		{"ViewerContext", reflect.ValueOf(d.Viewer)},
 	}

@@ -12,6 +12,14 @@
 // precedent). Changing a field name or type is a STOP-AND-FLAG, not a
 // judgement call: it desynchronises a parallel chat you cannot see.
 //
+// AMENDED r53 (2026-07-28). The Almanac register for the wave-2 Shelf (W-E):
+// MonthGeometry.Almanac []AlmanacMoon plus the AlmanacMoon and AlmanacDay
+// types — the full celestial register, deliberately UNCAPPED by MoonCap (the
+// second half of L21: the grid's three-moon ceiling is only legitimate because
+// the Almanac carries every declared body at full width). See
+// decisions/2026-07-28-calv4-shelf-pin-amendment.md. Its §4b
+// (ShelfStub.Upcoming) was NOT signed — Upcoming is month-scoped (ruling S1).
+//
 // AMENDED r52 (2026-07-28). Three additive fields for the wave-2 Ledger (W-B):
 // Mark.Time and Mark.AxisLabel (the row's time column and meta line, neither
 // derivable in a plugin-agnostic widget) and ViewerContext.HiddenCount (the
@@ -113,6 +121,81 @@ type MonthGeometry struct {
 	// Without this the omission is silent and a builder wonders why the moon they
 	// configured never appears. len(Moons) per cell cannot supply it — already capped.
 	MoonsDeclared int
+
+	// Almanac is the full celestial register for THIS month: every moon the
+	// calendar declares, at full width, deliberately UNCAPPED by MoonCap.
+	//
+	// It is the data behind contract §8 item 2 (L5) — "a dedicated filtered
+	// Almanac list in the shelf widget" — and it is the second half of L21. The
+	// grid's three-moon ceiling is only legitimate because "the Almanac carries
+	// every declared body at full width"; without this field the fourth declared
+	// moon exists in the database, is counted by MoonsDeclared, and is drawn
+	// nowhere.
+	//
+	// It CANNOT be derived from DayCell.Moons: that list is capped at moonCap,
+	// so the overflow body has no illumination anywhere in BlockData, and a
+	// MoonDisc is one day's disc geometry with no period, no turn and no drift.
+	//
+	// Empty when the calendar declares no moons, or when no Shelf is reachable
+	// in this render. Never partially filled — a moon that appears here appears
+	// with its whole month, because the Month lane, the Tonight readout and the
+	// Moons arithmetic are three views of one pass.
+	Almanac []AlmanacMoon
+}
+
+// AlmanacMoon is one declared moon over one month.
+//
+// Drawn is whether the month grid draws this body. It is the ONE place the
+// renderer learns which bodies the ceiling excluded; re-deriving it by counting
+// DayCell.Moons would put moonCap's arithmetic in two places, and the nameplate
+// badge already proves how that goes wrong (it states a total it cannot itself
+// compute, which is why MoonsDeclared exists).
+//
+// There is deliberately NO Epithet. calendar.Moon has no epithet column
+// (internal/plugins/calendar/model.go:461-473); the mockup's "the great pale
+// moon" is fixture text. Wave 2 prints no epithet rather than inventing one.
+type AlmanacMoon struct {
+	Name       string  // the moon's configured name
+	PeriodDays float64 // the declared cycle length, in days
+	Drawn      bool    // whether the month grid draws this body (within moonCap)
+
+	// TurnsThisMonth and DriftDays exist because the signed Moons panel prints
+	// its own arithmetic — "the arithmetic is printed so it can be audited, no
+	// date in the register was typed by hand". Both are computed from PeriodDays
+	// against the month's REAL day count. The mockup's `30 % period` hardcodes a
+	// thirty-day month and must not be ported into a product whose thesis is
+	// arbitrary month lengths.
+	TurnsThisMonth int
+	DriftDays      float64
+
+	// Days is one entry per day of this month, in ordinal order, always the
+	// month's full length. Per-day illumination is where the VETOED composite
+	// "how bright is tonight" scalar was relocated (L19/L24): a magnitude as an
+	// explicit readout, never a glanceable claim. Deriving it in the renderer
+	// would mean shipping the phase function into the widget package, which has
+	// no calendar geometry and no leap rules.
+	Days []AlmanacDay
+
+	// NextNewDay / NextFullDay are the next turn of each kind at or after the
+	// answered day, 0 when this month contains none. The Tonight readout prints
+	// "next full 19". They ride along rather than being scanned out of Days
+	// because the answered day is per-render state and the scan would otherwise
+	// run in the template.
+	NextNewDay  int
+	NextFullDay int
+}
+
+// AlmanacDay is one moon on one day of the month.
+//
+// Day is the ordinal day, 1-based, matching DayCell.Day and the data-day key
+// namespace (dayKey => "<slug>-<day>") — the Almanac's month lane is a DATED
+// surface under guard B4 and an ANSWER partner of the grid and the Ledger.
+type AlmanacDay struct {
+	Day   int     // ordinal day of the month, 1-based
+	Illum float64 // illuminated fraction, 0..1
+	Phase string  // the phase word, e.g. "waxing gibbous"
+	Turn  string  // "" | "new" | "full" — a turn landing on this day
+	Node  bool    // inside the node window the .abr bracket draws
 }
 
 type Weekday struct {

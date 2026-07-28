@@ -128,6 +128,9 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		Year:       in.Year,
 		ShowMoons:  true,
 		MoonCap:    in.MoonCap,
+		// W-E: the Almanac register is the Shelf's data, so a Block whose host
+		// removed the zone builds none.
+		ShelfHidden: in.ShelfHidden,
 	})
 
 	data := calblock.BlockData{
