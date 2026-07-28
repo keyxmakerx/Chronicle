@@ -462,8 +462,15 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 	// did. `horizon` keeps its chip because there is still no queryable fog
 	// horizon on main and DayCell.Fogged is still false for everybody — that is
 	// data that exists for NOBODY, which is exactly what the chip means.
-	d.Layers = LayerState{Enabled: []string{"legend", "horizon", "moongraph"}}
-	zones := render(t, d)
+	//
+	// THE FIXTURE HAS TO CARRY THE DATA, or a filled zone's absence is
+	// unfalsifiable — the same rule the seam suite states about layer-owned
+	// surfaces. fxHarptos has no Almanac register, so the graph correctly
+	// renders NOTHING for it; fxAlmanac is the fixture that can tell the two
+	// apart.
+	zoned := fxAlmanac(t, true)
+	zoned.Layers = LayerState{Enabled: []string{"legend", "horizon", "moongraph"}}
+	zones := render(t, zoned)
 	for _, k := range []string{"legend", "horizon", "moongraph"} {
 		mustContain(t, zones, `data-layer="`+k+`"`, k+"'s zone renders at the right place")
 	}
@@ -472,10 +479,17 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 	// edits the claim it is actually changing.
 	mustNotContain(t, legendOnly(t, d), "needs backend",
 		"`legend` is FILLED (r52's Mark.AxisLabel); a chip on it would be a lie")
-	if n := strings.Count(zones, `class="badge need">needs backend`); n != 2 {
-		t.Errorf("%d `needs backend` chips; want exactly 2 — `horizon` (no queryable fog "+
-			"horizon on main) and `moongraph` (filled by this slice's next stage)", n)
+	if n := strings.Count(zones, `class="badge need">needs backend`); n != 1 {
+		t.Errorf("%d `needs backend` chips; want exactly 1 — `horizon` alone. There is still "+
+			"no queryable fog horizon on main and DayCell.Fogged is false for everybody, "+
+			"which is what the chip means; a chip on a FILLED zone would be a lie", n)
 	}
+	// An empty register graphs NOTHING — no zone, no empty frame. A calendar
+	// with no moons has no illumination, and absence is already this product's
+	// vocabulary for "there is nothing here".
+	d.Layers = LayerState{Enabled: []string{"moongraph"}}
+	mustNotContain(t, render(t, d), `data-layer="moongraph"`,
+		"a Block with no Almanac register must render no graph at all")
 	mustNotContain(t, zones, `data-zone="ledger"`, "the ledger layer is not enabled here")
 	mustNotContain(t, zones, `data-zone="shelf"`, "the shelf layer is not enabled here")
 	mustNotContain(t, zones, `class="phrow"`, "the moons layer is not enabled here; the discs must leave")

@@ -1141,6 +1141,108 @@
   color: var(--text-muted);
 }
 
+/* ── the `moongraph` layer's section: the illumination graph ───────────────
+   FILLED by C-CALV4-LAYERS-P9 from MonthGeometry.Almanac (r53) with no new pin
+   field. One lane per DRAWN body — never a composite (L19/L24) — and the
+   ceiling stays declared once in the Nameplate (L30).
+
+   NO LITERAL AND NO VARIABLE repeat() FOR THE DAY COLUMNS. The mockup writes
+   `repeat(30, minmax(0,1fr))` twice and a thirty-day month is precisely the
+   assumption this whole brief exists to escape. The lane takes its columns from
+   grid-auto-flow, exactly as the Almanac lane already does: the columns follow
+   the CELLS, which the producer emitted one per real day, so the day count is
+   structural and lives in exactly one place.
+
+   The moon-name column is a fixed 52px track and the day cells flow after it. */
+.cal-block-host .skyfoot {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--rule-hairline);
+}
+.cal-block-host .sfrow,
+.cal-block-host .sfaxis {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-template-columns: 52px;
+}
+.cal-block-host .sfrow {
+  align-items: end;
+  height: 18px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-block-host .sfrow .nm {
+  align-self: center;
+  font-weight: 650;
+  font-size: 9.5px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cal-block-host .sfcell {
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+/* The bar. ACHROMATIC BY LAW: the sky may never borrow the event colour axis,
+   so this is a structural rule token and never var(--axis) or var(--accent). */
+.cal-block-host .sfcell i {
+  display: block;
+  width: 88%;
+  background: var(--rule-structural-strong);
+}
+/* the every-fifth / every-tenth counting aid — the five-column rule's sibling.
+   Humans cannot count to thirty across identical columns. */
+.cal-block-host .sfcell.t5 {
+  box-shadow: inset -1px 0 0 var(--rule-hairline);
+}
+.cal-block-host .sfcell.t10 {
+  box-shadow: inset -1px 0 0 var(--rule-structural);
+}
+.cal-block-host .sfcell .tn {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  background: var(--text-primary);
+}
+.cal-block-host .sfcell .tn.full {
+  height: 4px;
+}
+.cal-block-host .sfcell .tn.new {
+  height: 1px;
+}
+.cal-block-host .sfaxis {
+  height: 12px;
+  align-items: center;
+}
+.cal-block-host .sfaxis b {
+  font-weight: 650;
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+  color: var(--text-muted);
+}
+.cal-block-host .sfaxis .lb {
+  font-weight: 650;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cal-block-host .sffoot {
+  padding-top: 3px;
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 /* ── Zone C · THE DOCKED LEDGER ──────────────────────────────────────────────
    There is NO drawer anywhere in the calendar. The Ledger IS the drawer,
    permanently docked, so choosing a day repaints a panel that was already on

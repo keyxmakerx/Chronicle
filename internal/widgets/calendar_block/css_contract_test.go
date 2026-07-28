@@ -391,7 +391,16 @@ func TestCSS_NoLiteralWeekLength(t *testing.T) {
 		//     that. The lane's day columns come from grid-auto-flow, asserted
 		//     below, so the day count is structural and no literal or variable
 		//     repeat() exists for it at all.
-		if val == "auto 1fr" || val == "62px" {
+		//
+		// EXTENDED AGAIN BY C-CALV4-LAYERS-P9, by NAME and for the same reason:
+		//
+		//   · `52px` — the illumination graph's fixed moon-name column, on
+		//     .sfrow and .sfaxis. The signed builder writes
+		//     `repeat(30, minmax(0,1fr))` for the day columns TWICE, and a
+		//     thirty-day month is exactly the assumption this rule exists to
+		//     escape, so the graph takes them from grid-auto-flow as well. The
+		//     allowlist grows one literal; the rule does not widen.
+		if val == "auto 1fr" || val == "62px" || val == "52px" {
 			continue
 		}
 		t.Errorf("grid-template-columns:%s is neither a subgrid, a --week-len repeat, the "+

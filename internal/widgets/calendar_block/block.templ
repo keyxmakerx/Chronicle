@@ -135,9 +135,13 @@ templ skybandPlaceholder() {
 //     one control produces both: permission-is-absence hides data that EXISTS
 //     from a viewer not entitled to it; the needs-backend omission hides data
 //     that exists FOR NOBODY. Identical in the DOM, different rules.
-//   - moongraph the whole-month illumination curve. Derivable from the per-cell
-//     MoonDisc series, but it is the `moongraph` layer and W-F owns the
-//     layer system; wave 1 reserves the zone instead of half-shipping it.
+//   - moongraph FILLED by C-CALV4-LAYERS-P9, and with NO new pin field: r53's
+//     MonthGeometry.Almanac closed the data dependency completely on
+//     its way past for the wave-2 Shelf. One lane per DRAWN body — no
+//     composite, ever (L19/L24) — and the ceiling stays declared once,
+//     in the Nameplate (L30). The foot's "+N more in the almanac"
+//     names a destination rather than a ceiling, and the destination
+//     is real because the register is uncapped by MoonCap.
 templ belowMonthLayers(d BlockData) {
 	if hasLayer(d.Layers, "legend") {
 		@legendZone(d)
@@ -148,11 +152,8 @@ templ belowMonthLayers(d BlockData) {
 			<span class="badge need">needs backend</span>
 		</div>
 	}
-	if hasLayer(d.Layers, "moongraph") && d.Viewer.IsGM {
-		<div class="layer needzone" data-layer="moongraph">
-			<span class="cap">Illumination graph</span>
-			<span class="badge need">needs backend</span>
-		</div>
+	if hasLayer(d.Layers, "moongraph") {
+		@moongraphZone(d)
 	}
 }
 

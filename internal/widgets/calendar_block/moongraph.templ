@@ -1,0 +1,76 @@
+// moongraph.templ — the `moongraph` layer's section, at the foot of the month
+// (C-CALV4-LAYERS-P9, W-F).
+//
+// EVERY NUMBER COMES FROM MonthGeometry.Almanac AND THIS ZONE ADDS NO PIN
+// FIELD. r53 landed the celestial register for the wave-2 Shelf and closed this
+// zone's data dependency completely on the way past: the bars are
+// AlmanacDay.Illum, the ticks are AlmanacDay.Turn, the lanes are the bodies with
+// Drawn set, and the "+N more in the almanac" tail is MoonsDeclared against
+// them. Wave 1's chip said "the whole-month illumination curve … it is the
+// `moongraph` layer and W-F owns the layer system"; the layer system now exists,
+// so the zone renders.
+//
+// TWO BOUNDS CARRIED FROM THE ALMANAC'S OWN RULINGS, both load-bearing:
+//
+//   - L19/L24 · NO COMPOSITE. One lane per body, and no summed "how bright is
+//     tonight" figure anywhere in this zone at any density. Three independent
+//     attempts at a composite disagreed about the same five nights; that is why
+//     the composite is dead and the graph is per-body.
+//   - L30 · THE CEILING IS DECLARED ONCE, IN THE NAMEPLATE. "3 of 4 moons" is
+//     the Nameplate's chip and this zone does not repeat it. The foot may say
+//     "+N more in the almanac" because that names a DESTINATION rather than a
+//     ceiling — and the destination is real, because the Almanac register is
+//     deliberately uncapped by MoonCap. There is never a per-cell "+1".
+//
+// GUARD B4: EVERY .sfcell IS A DATED NODE and carries data-day in the dayKey
+// namespace. It does not ANSWER yet — the generated ANSWER ladder is W-B's file
+// and extending it is the split-out C-CALV4-ANSWER-EXT — but the key is emitted
+// for the slice that pays for the ladder, exactly as wave 1 emitted keys for a
+// consumer that did not exist.
+//
+// NOTHING HERE GROWS A PICTORIAL SKY. The skybox is PARKED (L12/D4) and this is
+// computed data, which is the whole distinction: a graph of a number the
+// calendar already knows, not a painting of a night.
+
+package calendar_block
+
+// moongraphZone renders one lane per drawn body, a day rule, and the footnote.
+//
+// AN EMPTY REGISTER RENDERS NOTHING AT ALL. A calendar with no moons, or a Block
+// whose host removed the Shelf (which is where the register is built), has no
+// illumination to graph — and an empty framed box saying so is worse than
+// absence, because absence is already this product's vocabulary for "there is
+// nothing here".
+templ moongraphZone(d BlockData) {
+	if lanes := graphMoons(d); len(lanes) > 0 {
+		<div class="layer" data-layer="moongraph">
+			<div class="skyfoot">
+				for _, m := range lanes {
+					<div class="sfrow">
+						<span class="nm">{ m.Name }</span>
+						for _, a := range m.Days {
+							<span
+								class={ graphCellClass(a.Day) }
+								data-cell="sf"
+								data-day={ dayKey(d.CalendarSlug, a.Day) }
+								title={ graphCellTitle(m, a) }
+							>
+								if a.Turn != "" {
+									<i class={ graphTurnClass(a) } aria-hidden="true"></i>
+								}
+								<i style={ graphBarStyle(a) } aria-hidden="true"></i>
+							</span>
+						}
+					</div>
+				}
+				<div class="sfaxis">
+					<span class="lb">day</span>
+					for day := 1; day <= d.Month.Days; day++ {
+						<b>{ graphAxisLabel(day) }</b>
+					}
+				</div>
+				<div class="sffoot">{ graphFoot(d) }</div>
+			</div>
+		</div>
+	}
+}

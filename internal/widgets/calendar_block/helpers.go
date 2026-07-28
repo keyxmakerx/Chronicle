@@ -2001,3 +2001,102 @@ func legendSwatchStyle(e legendEntry) string { return "--axis:" + axisToken(e.Ax
 // never load-bearing: the (hue, pattern) pair must still resolve with the hue
 // removed, which is what makes the legend readable in greyscale.
 func legendSwatchClass(e legendEntry) string { return "lr " + patternClass(e.Pattern) }
+
+// ── the illumination graph (C-CALV4-LAYERS-P9) ──────────────────────────────
+//
+// The `moongraph` layer's section, at the foot of the month. EVERY NUMBER COMES
+// FROM MonthGeometry.Almanac (r53) and this zone adds NO pin field: the bars are
+// AlmanacDay.Illum, the ticks are AlmanacDay.Turn, the lanes are the drawn
+// bodies, and the "+N more" tail is MoonsDeclared against them.
+
+// graphMoons is the lanes the graph draws: ONE LANE PER DRAWN BODY.
+//
+// L19/L24: THERE IS NO COMPOSITE. No summed "how bright is tonight" figure
+// appears in this zone at any density. Three independent attempts at one
+// disagreed about the same five nights, which is exactly why the composite is
+// dead and the graph is per-body.
+func graphMoons(d BlockData) []AlmanacMoon {
+	out := make([]AlmanacMoon, 0, len(d.Month.Almanac))
+	for _, m := range d.Month.Almanac {
+		if m.Drawn {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// graphExtraMoons is how many DECLARED bodies the graph does not draw.
+//
+// L30: THE CEILING IS DECLARED ONCE, IN THE NAMEPLATE ("3 of 4 moons"). The
+// graph's foot may say "+N more in the almanac" because that names a
+// DESTINATION rather than a ceiling — and the destination is real, because the
+// Almanac register is deliberately uncapped by MoonCap ([S5], signed). There is
+// never a per-cell "+1".
+func graphExtraMoons(d BlockData) int {
+	n := d.Month.MoonsDeclared - len(graphMoons(d))
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+// graphBarStyle is one day's bar height: max(1, round(illum × 14))px, the
+// signed builder's own arithmetic. The floor of 1px is load-bearing — a new moon
+// is 0% lit and a zero-height bar would read as MISSING DATA rather than as
+// darkness.
+func graphBarStyle(a AlmanacDay) string {
+	h := int(a.Illum*14 + 0.5)
+	if h < 1 {
+		h = 1
+	}
+	return "height:" + strconv.Itoa(h) + "px"
+}
+
+// graphCellClass carries the every-fifth / every-tenth day rules, which are the
+// same counting aid the month grid's five-column rule is: humans cannot count to
+// thirty across identical columns.
+func graphCellClass(day int) string {
+	switch {
+	case day%10 == 0:
+		return "sfcell t10"
+	case day%5 == 0:
+		return "sfcell t5"
+	}
+	return "sfcell"
+}
+
+// graphCellTitle names the body, the day and the illumination as a percentage —
+// the readout L19/L24 relocated the vetoed composite INTO: a magnitude stated
+// explicitly, never a glanceable claim.
+func graphCellTitle(m AlmanacMoon, a AlmanacDay) string {
+	return m.Name + " " + strconv.Itoa(int(a.Illum*100+0.5)) + "% · day " + strconv.Itoa(a.Day)
+}
+
+// graphAxisLabel labels the day rule at day 1 and every fifth day after it.
+func graphAxisLabel(day int) string {
+	if day == 1 || day%5 == 0 {
+		return strconv.Itoa(day)
+	}
+	return ""
+}
+
+// graphFoot is the signed footnote: "illumination across <month> · filled marks
+// are turns", plus the destination tail when the calendar declares more bodies
+// than the graph draws.
+//
+// THE NODE-WINDOW CLAUSE IS NOT PRINTED. calendar.Moon has no orbital-node
+// column, so AlmanacDay.Node is false everywhere and "<moon> in shadow 12–17"
+// would be an interval with nothing behind it — the same refusal the Almanac's
+// month lane already records for the .abr bracket.
+func graphFoot(d BlockData) string {
+	s := "illumination across " + d.Month.Name + " · filled marks are turns"
+	if n := graphExtraMoons(d); n > 0 {
+		s += " · +" + strconv.Itoa(n) + " more in the almanac"
+	}
+	return s
+}
+
+// graphTurnClass is the turn marker: the signed square-ended structural mark,
+// "new" a hairline and "full" a 4px block. ACHROMATIC BY LAW — the sky may never
+// borrow the event colour axis.
+func graphTurnClass(a AlmanacDay) string { return "tn " + a.Turn }
