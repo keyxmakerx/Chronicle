@@ -976,6 +976,23 @@ func ledgerDocked(d BlockData) bool {
 //  1. filter — every Ledger row that is not this day leaves the flow. This is
 //     the ONE sanctioned content change in the Block and it is bounded to
 //     .lrows; the month grid never moves (2026-07-27 motion policy).
+//
+//     THE SELECTOR NOW SAYS `.lrows .lrow` AND THAT IS A ONE-WORD DEFECT FIX,
+//     NOT A DESIGN CHANGE (C-CALV4-SHELF-P7). The rule was written as a bare
+//     `.lrow:not(...)` when Zone C was the only surface that emitted the row
+//     primitive. W-E's Upcoming panel reuses that primitive VERBATIM — the
+//     signed panel calls the same ledgerRow, deliberately, so the two zones
+//     cannot drift — at which point the unscoped filter reached into the Shelf
+//     and hid its rows too. Measured, not reasoned: the Block was 618px with no
+//     day chosen and 532px with one, because the Shelf's body is content-driven
+//     under its 132px ceiling. That is the docked Ledger's own promise broken
+//     by its own mechanism, and it is the SECOND time a rule in this ladder has
+//     reached a surface it was never written for (the first was the reveal
+//     rule, LEDGER-P6 §4.5).
+//
+//     The paragraph above already said "bounded to .lrows". The selector now
+//     says so as well, and TestCSS_AnswerLadderChangesNothingButVisibility
+//     pins it so a future hand cannot un-scope it by "tidying".
 //  2. reveal — this day's head-context line and its "nothing on this day"
 //     line, which are rendered for every day and hidden until chosen. CSS
 //     cannot compute "3 Deepwinter · 1 event", so the server renders all of
@@ -1019,7 +1036,7 @@ func answerLadderCSS() string {
 	b.WriteString("   UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/ */\n")
 	for _, k := range answerLadderKeys() {
 		fmt.Fprintf(&b,
-			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lrow:not([data-lday=\"%s\"]) { display: none }\n",
+			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lrows .lrow:not([data-lday=\"%s\"]) { display: none }\n",
 			k, k)
 		fmt.Fprintf(&b,
 			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lhead .lctx[data-lday=\"%s\"],\n"+

@@ -812,6 +812,20 @@ func TestCSS_AnswerLadderChangesNothingButVisibility(t *testing.T) {
 					"therefore every geometric assertion in the suite, stays identical.",
 					prop, val, sel, ok)
 			}
+			// A FILTER NAMES ITS ZONE. `.lrow` is emitted by TWO surfaces from
+			// wave 2 on — the docked Ledger and the Shelf's Upcoming panel,
+			// which reuses the primitive verbatim so the zones cannot drift —
+			// so an unscoped `.lrow:not(...)` filters the Shelf as well, and
+			// the Shelf's body is content-driven under its 132px ceiling. That
+			// made the Block 618px unselected and 532px selected: the docked
+			// Ledger's own promise broken by its own mechanism. The filter must
+			// name .lrows, which is what its doc comment always claimed.
+			if prop == "display" && val == "none" && strings.Contains(sel, ".lrow") &&
+				!strings.Contains(sel, ".lrows .lrow") {
+				t.Errorf("a ladder filter rule targets %q — the row filter is bounded to "+
+					"`.lrows .lrow`. Unscoped it reaches the Shelf's Upcoming panel, which "+
+					"emits the SAME row primitive, and choosing a day then reflows the Block.", sel)
+			}
 			// A reveal names its surfaces. `.lrow` is never one of them.
 			if prop == "display" && val != "none" {
 				for _, part := range strings.Split(sel, ",") {

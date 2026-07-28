@@ -556,6 +556,9 @@ type ledgerProbeReading struct {
 	BlockBot    float64 `json:"blockBot"`
 	ScrollH     float64 `json:"scrollH"`
 	ClientH     float64 `json:"clientH"`
+	// ShelfCapVis is "the Shelf's strip is inside the Block at full height".
+	// It is EVIDENCE rather than an assertion — the collision assertions above
+	// are the gate — but it is the first thing a std squeeze visibly breaks.
 	ShelfCapVis bool    `json:"shelfCapVis"`
 
 	// RowDisplay is the SET of computed `display` values across every visible
@@ -594,8 +597,13 @@ function(root){
   // sheet: a fixed-height row that has stopped being a flex row measures the
   // same as one that has not, so the display value is read directly and the
   // time/day overprint the collapse produces is measured beside it.
+  //
+  // SCOPED TO .lrows BY C-CALV4-SHELF-P7. W-E's Upcoming panel reuses the same
+  // row primitive, so an unscoped querySelectorAll counts the Shelf's rows too
+  // — this probe read 18 rows for a 14-event month and would have measured the
+  // Shelf's shape while claiming to measure the Ledger's.
   var disp = {}, overprint = false, numerals = [], times = [];
-  [].slice.call(root.querySelectorAll('.lrow')).forEach(function(el){
+  [].slice.call(rows ? rows.querySelectorAll('.lrow') : []).forEach(function(el){
     if (!vis(el)) return;
     shown++;
     disp[getComputedStyle(el).display] = true;
@@ -645,11 +653,16 @@ function(root){
     blockBot: r(block).bottom,
     scrollH: block.scrollHeight,
     clientH: block.clientHeight,
+    // RE-POINTED BY C-CALV4-SHELF-P7. This read the Shelf's .cap caption,
+    // which wave 1 used to name a zone with no content to name itself. The
+    // filled zone's strip carries its TABS instead, so the reading that still
+    // means something is "is the Shelf's strip inside the Block, at its full
+    // height" — which is what a std collision would break first.
     shelfCapVis: (function(){
-      var cap = shelf && shelf.querySelector('.cap');
-      if (!cap) return false;
-      var b = r(cap), bb = r(block);
-      return b.height > 0 && b.top >= bb.top - 1 && b.bottom <= bb.bottom + 1;
+      var st = shelf && shelf.querySelector('.st');
+      if (!st) return false;
+      var b = r(st), bb = r(block);
+      return b.height > 30 && b.top >= bb.top - 1 && b.bottom <= bb.bottom + 1;
     })(),
     rowDisplay: Object.keys(disp).sort().join(','),
     overprint: overprint
@@ -709,17 +722,23 @@ var ledgerProbeWidths []string
 func ledgerProbeBoxes(t *testing.T, widths []int, d BlockData, day string) ([]string, []string) {
 	t.Helper()
 	base := stripLink(render(t, d))
-	group := dayPickGroupName(d)
 	var boxes, styles []string
 	for i, w := range widths {
 		// Radios sharing a name are ONE GROUP document-wide, so every box gets
 		// its own suffix — otherwise only the last `checked` in the page
 		// survives and every earlier box measures as unselected, which would
 		// make the whole probe pass vacuously.
-		unsel := strings.ReplaceAll(base, `"`+group+`"`, fmt.Sprintf(`"%s-p%da"`, group, i))
-		unsel = strings.ReplaceAll(unsel, `"`+group+`-`, fmt.Sprintf(`"%s-p%da-`, group, i))
-		sel := strings.ReplaceAll(base, `"`+group+`"`, fmt.Sprintf(`"%s-p%db"`, group, i))
-		sel = strings.ReplaceAll(sel, `"`+group+`-`, fmt.Sprintf(`"%s-p%db-`, group, i))
+		//
+		// WIDENED BY C-CALV4-SHELF-P7 from the day group alone to EVERY control
+		// the Block emits. W-E added two more radio groups (the Shelf tabs and
+		// the Almanac sub-tabs) and one of them is checked BY THE SERVER, so
+		// with only the day group isolated the first N-1 boxes measured with no
+		// Shelf tab pressed — every panel display:none, the zone collapsed to a
+		// bare 34px strip, and the CTS-8 collision reading taken against the
+		// SMALLEST Shelf the product can render rather than the real one. A
+		// gate that measures an impossible state has stopped gating.
+		unsel := isolateBlockControls(base, fmt.Sprintf("-p%da", i))
+		sel := isolateBlockControls(base, fmt.Sprintf("-p%db", i))
 		picked := strings.Replace(sel,
 			`data-day-pick="`+day+`" name=`, `data-day-pick="`+day+`" checked name=`, 1)
 		if picked == sel {
@@ -867,7 +886,7 @@ func TestProbe_StdTierFilledLedgerDoesNotCollide(t *testing.T) {
 	for i, w := range widths {
 		for _, r := range []ledgerProbeReading{readings[2*i], readings[2*i+1]} {
 			t.Logf("std %dpx — block %.1fpx (content %.0f in %.0f) · ledger %.1f→%.1f · "+
-				"shelf %.1f→%.1f · rows %.1fpx · shelf caption visible=%v",
+				"shelf %.1f→%.1f · rows %.1fpx · shelf strip intact=%v",
 				w, r.BlockHeight, r.ScrollH, r.ClientH, r.LedgerTop, r.LedgerBot,
 				r.ShelfTop, r.ShelfBot, r.RowsHeight, r.ShelfCapVis)
 			// CONTENT overlap, not box overlap. The two zone BOXES abut exactly
