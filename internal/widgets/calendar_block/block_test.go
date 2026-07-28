@@ -491,13 +491,19 @@ func TestTieMode_IsAnAttributeNotAClass(t *testing.T) {
 		t.Error("tied days must be marked as a FACT, independent of the current mode")
 	}
 	// The DOM is otherwise identical: the toggle may not add or remove a cell.
+	//
+	// PIN REFRESHED at C-CALV4-HOST-P3 §3, intent unchanged. The selected state
+	// used to be `aria-pressed` on two spans; the toggle is now a real radio
+	// pair, so the state that legitimately moves is the `checked` attribute.
+	// Everything else this assertion protects — no cell added, removed or
+	// re-ordered — is untouched.
 	stripMode := func(s string) string {
 		return strings.NewReplacer(`data-tie-mode="tied"`, "", `data-tie-mode="whole"`, "",
-			`aria-pressed="true"`, "", `aria-pressed="false"`, "").Replace(s)
+			` checked`, "").Replace(s)
 	}
 	if stripMode(whole) != stripMode(tied) {
 		t.Error("flipping the tie mode changed the DOM beyond the mode attribute and the " +
-			"pressed states — ink LEVEL only, or the counts become differenceable")
+			"checked radio — ink LEVEL only, or the counts become differenceable")
 	}
 
 	// Off an entity page there is no tie control at all.

@@ -113,7 +113,13 @@
   --r-panel: 12px;
   --r-full: 9999px;
 
-  /* the tie toggle changes ink LEVEL only */
+  /* the tie toggle changes ink LEVEL only. Two levels, from the signed
+     setTie() (calendar-v4.html:2823-2824): in TIED mode an untied mark drops
+     to 0.28 so the entity's own days read as the lit ones; in WHOLE mode the
+     added marks come back at 0.7, not at full ink, so "which of these are
+     actually this entity's" survives the toggle (the v4-entity-whole-light
+     caption says exactly that). */
+  --tied-ink: 0.28;
   --untied-ink: 0.7;
 
   /* channel defaults, so a Block whose producer omits one still renders */
@@ -356,6 +362,24 @@
   background: var(--surface-card);
   flex: none;
 }
+/* the tie toggle's own radios live inside it, taken out of flow */
+.cal-block-host .seg.tie {
+  position: relative;
+}
+/* The radio pair IS the toggle's state (C-CALV4-HOST-P3 §3). Visually hidden
+   but still rendered and still focusable: `display:none` would drop it from the
+   tab order AND from :checked, which is the whole mechanism. Zero-size +
+   transparent keeps it addressable by its label and by the keyboard. */
+.cal-block-host .tiepick {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  appearance: none;
+}
 .cal-block-host .tiebtn {
   height: 20px;
   padding: 0 8px;
@@ -365,11 +389,18 @@
   line-height: 20px;
   color: var(--text-secondary);
   white-space: nowrap;
+  cursor: pointer;
 }
-.cal-block-host .tiebtn[aria-pressed="true"] {
+.cal-block-host .tiepick:checked + .tiebtn {
   background: color-mix(in oklch, transparent 96%, var(--accent));
   color: var(--accent);
   box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* The focus ring has to be borrowed from the input by its label, because the
+   input the keyboard actually lands on is the invisible one. */
+.cal-block-host .tiepick:focus-visible + .tiebtn {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1146,9 +1177,40 @@
    The flip is INSTANT — no transition. TestCSS_NoMotionAtAll bans the word
    outright in wave 1, and an opacity fade, though it moves nothing, is still
    motion this wave has not signed. W-B ships the Block's motion; the fade
-   belongs there, not smuggled in here. */
+   belongs there, not smuggled in here.
+
+   TWO LEVELS, NOT ONE. The signed setTie() (calendar-v4.html:2823-2824) inks an
+   untied mark at 0.28 in tied mode and at --m-untied-ink (0.7) in whole mode.
+   Before C-CALV4-HOST-P3 this sheet had only the tied branch and used the WHOLE
+   value for it, so tied mode under-dimmed and whole mode did not dim at all. */
+
+/* THE BASELINE — the server's answer, and the whole story on an engine without
+   `:has()`. data-tie-mode carries the mode the Block was rendered in. */
 .cal-block-host .block[data-tie-mode="tied"] .chip.untied,
 .cal-block-host .block[data-tie-mode="tied"] .ulseg.untied {
+  opacity: var(--tied-ink);
+}
+.cal-block-host .block[data-tie-mode="whole"] .chip.untied,
+.cal-block-host .block[data-tie-mode="whole"] .ulseg.untied {
+  opacity: var(--untied-ink);
+}
+
+/* THE FLIP — the viewer's answer, with ZERO JavaScript and zero routes
+   (C-CALV4-HOST-P3 §3). The hidden radio pair in the Nameplate is the state;
+   `:has()` reads it from the Block and re-inks. Nothing is fetched, because
+   BOTH counts and EVERY viewer-visible mark are already in this DOM in both
+   modes — which is also why the pair can never be differenced to infer a
+   hidden event.
+
+   These outrank the baseline on specificity alone (the :has() argument
+   contributes its own), so the viewer's choice always beats the server's
+   initial answer without depending on source order. */
+.cal-block-host .block:has(.tiepick[data-tie-pick="tied"]:checked) .chip.untied,
+.cal-block-host .block:has(.tiepick[data-tie-pick="tied"]:checked) .ulseg.untied {
+  opacity: var(--tied-ink);
+}
+.cal-block-host .block:has(.tiepick[data-tie-pick="whole"]:checked) .chip.untied,
+.cal-block-host .block:has(.tiepick[data-tie-pick="whole"]:checked) .ulseg.untied {
   opacity: var(--untied-ink);
 }
 

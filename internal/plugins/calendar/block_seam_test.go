@@ -87,6 +87,18 @@ func TestSeam_TieToggleReachesTheDOM(t *testing.T) {
 	// pins the numbers; this pins that they reach the operator's screen).
 	seamContain(t, body, "Tied 3", "the tied count is computed and then dropped on the floor")
 	seamContain(t, body, "Whole calendar 4", "the whole-calendar count never reaches the DOM")
+
+	// C-CALV4-HOST-P3 §3: the toggle is now LIVE, and pure CSS. From the composed
+	// side that means the radio pair the stylesheet's :has() rule reads is
+	// actually in the HTML a viewer receives, with exactly one option selected —
+	// and that the Block still ships no script to operate it.
+	seamContain(t, body, `data-tie-pick="tied"`, "the CSS-only toggle's tied radio is absent")
+	seamContain(t, body, `data-tie-pick="whole"`, "the CSS-only toggle's whole radio is absent")
+	if n := strings.Count(body, " checked"); n != 1 {
+		t.Errorf("exactly one tie option may be selected in the composed HTML; got %d", n)
+	}
+	seamNotContain(t, body, "<script",
+		"the Block must ship no script — a <script> in an HTMX-swapped fragment never executes (boot.js:163)")
 }
 
 // TestSeam_CalendarIdentityTripleReachesTheDOM pins §3.2 from the composed
