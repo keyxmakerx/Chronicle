@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -218,10 +219,21 @@ func TestBlockPrefs_ColumnIsNotInAnyEgressQuery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
 		}
-		if strings.Contains(string(body), "block_layers") {
+		// Comments are stripped first: a file may legitimately NAME the column
+		// while explaining why it does not query it, and prose about a rule
+		// must never be the thing that trips the rule.
+		if strings.Contains(stripGoComments(string(body)), "block_layers") {
 			t.Errorf("%s names the block_layers COLUMN — a per-viewer display preference is "+
 				"not campaign content and must not reach an export/DTO/egress surface; the "+
 				"column belongs to repository.go alone", f)
 		}
 	}
 }
+
+// stripGoComments blanks // and /* */ spans so the egress assertion above judges
+// CODE and never prose.
+func stripGoComments(src string) string {
+	return goCommentRe.ReplaceAllString(src, " ")
+}
+
+var goCommentRe = regexp.MustCompile(`(?s)/\*.*?\*/|//[^\n]*`)

@@ -81,12 +81,23 @@ import (
 // overflow goes somewhere. It is the one place a host-passed parameter is
 // deliberately non-authoritative for a zone.
 //
-// HasSwitchboard stays false: layer preferences are per-viewer and PERSISTED
-// (L20/L26/L29) and that store is W-F's.
-func entityBlockLayers() calblock.LayerState {
-	return calblock.LayerState{
-		Enabled: []string{"moons", "eras", "weeknums", "ledger", "shelf"},
-	}
+// THE SET IS NOW A SEED, NOT A VERDICT (C-CALV4-LAYERS-P9, [LYR-3] SIGNED).
+// The five keys below are what a viewer who has NEVER opened the switchboard
+// sees — byte-for-byte what wave 1 and wave 2 rendered, which is why every
+// signed entity render stays valid on day one. The first explicit switchboard
+// write persists the viewer's own set, and from then on the store wins here and
+// on the Bench alike, because L20 describes a viewer's preference for how they
+// read calendars and "eras off" almost certainly means "off, everywhere".
+//
+// THE SET ITSELF DID NOT GAIN A KEY ([LYR-7] SIGNED). The HOST-P3/BENCH-P4
+// bookings that reserved `moongraph` and `horizon` for this slice close as
+// SUPERSEDED rather than DONE: their stated purpose was REACHABILITY, and the
+// switchboard supplies reachability directly. L29 says the illumination graph's
+// default is OFF, so seeding it would contradict the law that put it in W-F;
+// and `horizon` is still chipped, so seeding it would ship a `needs backend`
+// chip into a default view — the exact inverse of the DEF ruling.
+func entityBlockLayers(prefs blockLayerPrefs) calblock.LayerState {
+	return resolveBlockLayers([]string{"moons", "eras", "weeknums", "ledger", "shelf"}, prefs)
 }
 
 // entityBlockMoonCap matches the renderer's own ceiling (calendar_block's
@@ -151,8 +162,13 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false)
 	}
 
+	// The viewer's stored layer set + their persistence endpoint, read ONCE.
+	// An anonymous viewer or a read failure both land on the host's seed with
+	// no switchboard, which is the wave-1/2 surface exactly.
+	prefs := blockLayerPrefsFor(ctx, svc, userID, cc.Campaign.ID)
+
 	// THE BLOCK. The spine owns the visibility gate, the one viewer-filtered
-	// pass, and both tie counts; this host owns only the layer set.
+	// pass, and both tie counts; this host owns only the layer SEED.
 	var block *calblock.BlockData
 	if spine := BlockSpine(); spine != nil {
 		d, err := spine.Block(ctx, BlockRequest{
@@ -172,7 +188,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		})
 		switch {
 		case err == nil:
-			d.Layers = entityBlockLayers()
+			d.Layers = entityBlockLayers(prefs)
 			block = &d
 		case isNotFound(err):
 			// Hidden or missing — indistinguishable on purpose (stage 9).

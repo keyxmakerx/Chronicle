@@ -108,6 +108,15 @@ func renderEntityCal(t *testing.T, svc CalendarService, role campaigns.Role, dmG
 	return sb.String()
 }
 
+// GetBlockLayers — C-CALV4-LAYERS-P9. The stub EMBEDS CalendarService (a nil
+// interface), so a method it does not implement compiles fine and panics at
+// call time. The host now reads the viewer's stored layer set, so the stub has
+// to answer: nil, meaning "never chosen", which is what keeps every assertion
+// in this file about the host's SEED rather than about a preference.
+func (s *entityCalBlockStub) GetBlockLayers(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
+
 func sampleEmbedSvc() *entityCalBlockStub {
 	return &entityCalBlockStub{
 		cal:  &Calendar{ID: "cal-1", CampaignID: "camp-1", Name: "Harptos", CurrentYear: 1492, CurrentMonth: 4, CurrentDay: 15, HoursPerDay: 24, MinutesPerHour: 60},
@@ -373,14 +382,23 @@ func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 	// measured layout ground: with it enabled the std tier stacks the moongraph
 	// needzone row, the docked Ledger and the Shelf into one another and the
 	// Ledger/Shelf headers collide. Wave 1's zone is a `needs backend` chip, so
-	// the collision buys nothing. Invert this assertion — do not delete it —
-	// when W-F fills the zone and owns its placement.
+	// the collision buys nothing.
+	//
+	// IT STAYS UNINVERTED AFTER W-F, and that is a RULING rather than an
+	// oversight ([LYR-7] SIGNED, C-CALV4-LAYERS-P9). W-F filled the zone and
+	// deliberately did NOT add the key: the booking wanted REACHABILITY and the
+	// switchboard supplies it directly, while L29 says the illumination graph
+	// defaults OFF. So the host SEED still omits moongraph, this assertion still
+	// holds for a viewer who has never chosen, and the zone is now one toggle
+	// away instead of a wave away.
 	if strings.Contains(html, `data-layer="moongraph"`) {
 		t.Error("moongraph is booked for W-F: enabling its stub zone collides with the docked " +
 			"Ledger and the Shelf at std tier, for a chip that carries no information")
 	}
-	// The set is the HOST's, not DEF's: DEF stays moons-only under the ruling.
-	if got := blockDefaultLayers().Enabled; len(got) != 1 || got[0] != "moons" {
+	// The set is the HOST's, not DEF's: DEF stays moons-only under the ruling —
+	// and it still does after C-CALV4-LAYERS-P9, for a viewer with no stored
+	// row. The zero blockLayerPrefs IS that viewer.
+	if got := blockDefaultLayers(blockLayerPrefs{}).Enabled; len(got) != 1 || got[0] != "moons" {
 		t.Errorf("producer DEF must stay [\"moons\"] (cordinator ruling 2026-07-28 §1); got %v", got)
 	}
 }

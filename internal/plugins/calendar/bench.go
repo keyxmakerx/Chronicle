@@ -578,6 +578,12 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	viewer := BlockViewer{UserID: in.UserID, Role: in.Role}
 	spine := BlockSpine()
 
+	// The viewer's stored layer set + persistence endpoint, read ONCE for the
+	// whole Bench. The preference is per-(user, campaign), so a per-Block read
+	// would be four identical queries for one answer — and the Bench is the
+	// surface where that difference is visible.
+	layerPrefs := blockLayerPrefsFor(ctx, h.svc, in.UserID, in.Campaign.ID)
+
 	// Hydrate every listed calendar in a fixed number of queries, then apply the
 	// viewer's active-calendar marker.
 	hydrated := benchHydrate(ctx, spine, cals)
@@ -603,7 +609,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	data.NeedsSetup = benchNeedsSetup(hydrated)
 
 	if primary != nil {
-		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false); b != nil {
+		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, layerPrefs); b != nil {
 			data.Primary = b
 		} else {
 			rows = append([]*Calendar{primary}, rows...)
@@ -612,7 +618,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	if realWorld != nil {
 		// noShelf — the signed real-world Block on the Bench renders with its
 		// Shelf docked but hidden, which is the ShelfHidden flag's whole purpose.
-		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true); b != nil {
+		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, layerPrefs); b != nil {
 			data.RealWorld = b
 		} else {
 			rows = append(rows, realWorld)
@@ -703,7 +709,7 @@ func benchSyncPill(ctx context.Context, spine *BlockService, campaignID string, 
 // hidden calendar by construction (C-CALV4-SEAM-P5 stage 9) and this host must
 // not undo that, so it does not branch on which — any failure simply demotes
 // the calendar to a subordinate row.
-func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool) *BenchBlock {
+func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, prefs blockLayerPrefs) *BenchBlock {
 	if spine == nil || cal == nil {
 		return nil
 	}
@@ -714,11 +720,12 @@ func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Cale
 		IsActive:    cal.ID == activeID,
 		ShelfHidden: noShelf,
 		MoonCap:     benchMoonCap,
+		LayerPrefs:  prefs,
 	})
 	if err != nil {
 		return nil
 	}
-	d.Layers = benchBlockLayers()
+	d.Layers = benchBlockLayers(prefs)
 	return &BenchBlock{Data: d, Manage: benchManage(cal, activeID, cal.CampaignID)}
 }
 
@@ -749,12 +756,22 @@ func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Cale
 // cost the 390px reading, which this slice's own screenshots gate. W-F fills
 // both zones and owns their placement; the host adds the keys then.
 //
-// HasSwitchboard stays false: layer preferences are per-viewer and PERSISTED
-// (L20/L26/L29) and that store is W-F's.
-func benchBlockLayers() calblock.LayerState {
-	return calblock.LayerState{
-		Enabled: []string{"moons", "eras", "weeknums", "ledger", "shelf"},
-	}
+// THE SET IS NOW A SEED, NOT A VERDICT (C-CALV4-LAYERS-P9, [LYR-3] SIGNED).
+// These five keys are what a viewer who has never opened the switchboard sees —
+// byte-for-byte the wave-1/2 Bench, which is why every signed bench render
+// stays valid. A viewer who has chosen gets their own set here and on the entity
+// page alike: one row per (viewer, campaign), honoured at every host in it.
+//
+// THE TWO OMITTED KEYS STAY OMITTED ([LYR-7] SIGNED). The paragraph above ends
+// "W-F fills both zones and owns their placement; the host adds the keys then."
+// W-F fills them and DOES NOT add the keys: the booking wanted reachability and
+// the switchboard supplies it directly, L29 makes the graph default OFF, and
+// seeding a still-chipped `horizon` would put a `needs backend` chip in a
+// default view. The measurement that kept them out is therefore never load-
+// bearing for a default render — it binds the SWITCHBOARD's worst case instead,
+// which is what this slice's screenshots gate.
+func benchBlockLayers(prefs blockLayerPrefs) calblock.LayerState {
+	return resolveBlockLayers([]string{"moons", "eras", "weeknums", "ledger", "shelf"}, prefs)
 }
 
 // benchSortKeys adapts the viewer-filtered cross-calendar index into the shape

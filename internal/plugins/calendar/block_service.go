@@ -159,6 +159,15 @@ type BlockRequest struct {
 	ShelfHidden  bool
 	// MoonCap bounds the per-day discs; <= 0 draws every declared moon.
 	MoonCap int
+	// LayerPrefs is the viewer's stored layer set + persistence endpoint
+	// (C-CALV4-LAYERS-P9). Resolved ONCE PER PAGE by the host — the Bench
+	// composes four Blocks and the preference is per-(user, campaign), so a
+	// per-Block read would be four identical queries for one answer.
+	//
+	// The spine does not read it itself for the same reason it takes MoonCap
+	// rather than deciding one: this is a host fact, and both hosts override
+	// the seed anyway. Its zero value is the wave-1/2 behaviour exactly.
+	LayerPrefs blockLayerPrefs
 }
 
 // requireVisibleCalendar loads one calendar eagerly and applies the
@@ -230,6 +239,7 @@ func (s *BlockService) Block(ctx context.Context, req BlockRequest) (calblock.Bl
 	}
 
 	return projectBlock(BlockProjectionInput{
+		LayerPrefs:   req.LayerPrefs,
 		Calendar:     cal,
 		Events:       events,
 		Viewer:       req.Viewer,
