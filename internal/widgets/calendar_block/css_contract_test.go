@@ -183,6 +183,41 @@ func TestCSS_NoLiteralWeekLength(t *testing.T) {
 	}
 }
 
+// TestCSS_BandHalfDrawsNoRightEdge. EraBand.Half means the half column lands
+// INSIDE this band (r51, data.go) — but a band is one grid item spanning many
+// columns, so its own border-right lands at the band's edge, wherever that
+// happens to be, never reliably at the half column. Only the dedicated
+// .halfrule ruler may draw the five-column rule across the band row (P5 §3.5);
+// the half class on a band is a semantic marker and draws nothing.
+func TestCSS_BandHalfDrawsNoRightEdge(t *testing.T) {
+	code := stripComments(blockCSS(t))
+	blockRe := regexp.MustCompile(`(?s)([^;{}]*)\{([^}]*)\}`)
+	// The border shorthand sets all four sides, so it would smuggle the right
+	// edge back in without the literal "border-right" ever appearing.
+	borderShorthand := regexp.MustCompile(`(^|[;\s])border\s*:`)
+	sawRuler := false
+	for _, m := range blockRe.FindAllStringSubmatch(code, -1) {
+		sel, body := strings.TrimSpace(m[1]), m[2]
+		if strings.Contains(sel, ".halfrule") {
+			// The ruler element is the ONE place the rule may be drawn — and
+			// must keep being drawn, or deleting it becomes the next "fix".
+			if strings.Contains(body, "border-right: 1px solid var(--rule-structural-strong)") {
+				sawRuler = true
+			}
+			continue
+		}
+		if strings.Contains(sel, ".band") && strings.Contains(sel, ".half") &&
+			(strings.Contains(body, "border-right") || borderShorthand.MatchString(body)) {
+			t.Errorf("%q draws a border on the band's own edge — the half class marks the band, "+
+				"it draws nothing; the .halfrule ruler owns the rule at the half column", sel)
+		}
+	}
+	if !sawRuler {
+		t.Error("the .halfrule ruler lost its structural border-right — it is the only element " +
+			"that draws the five-column rule across the band row")
+	}
+}
+
 // ── sizing is CSS, and it is these numbers ──────────────────────────────────
 
 // TestCSS_SizingIsContainerQueries pins the four size-class thresholds and the
