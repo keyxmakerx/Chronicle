@@ -382,7 +382,7 @@ func TestSeam_FootTotalEqualsTheDayCellTotal(t *testing.T) {
 		"the Ledger head, the foot line and the day-cell total are ONE number read three ways")
 	seamNotContain(t, led, fmt.Sprintf(">Deepwinter · %d events<", total+folded),
 		"the Ledger head added the chip fold to the day's list — MoreCount is OVERLAPPING")
-	if n := strings.Count(led, `class="lrow lday`); n != total {
+	if n := strings.Count(led, `class="lrow `); n != total {
 		t.Errorf("the Ledger listed %d rows against a day-cell total of %d — a second pass", n, total)
 	}
 	// The dense day's own head line agrees with its own cell.

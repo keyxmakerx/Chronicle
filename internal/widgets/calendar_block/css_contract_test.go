@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"runtime"
 	"strings"
@@ -731,22 +732,95 @@ func TestCSS_AnswerLadderAgreesWithGo(t *testing.T) {
 // avoid, and the reason .lrows carries a min-height instead.
 //
 // So every generated rule may declare EXACTLY ONE of: display, or --answer.
+//
+// AND THE VALUE IS CHECKED, NOT ONLY THE PROPERTY. Allowlisting `display` by
+// name is not enough and the fix round proved it: `display: block` on a flex
+// row is EXACTLY the box change the paragraph above forbids, and it shipped
+// under a guard that read the property and stopped. The ladder may only take a
+// surface OUT of the flow (`none`) or put one back as itself (`revert`); it may
+// never assert what kind of box anything is.
+//
+// The selector is checked too. A reveal rule may only name the two surfaces
+// that are display:none at rest — the head's per-day context line and the
+// per-day empty state. Any reveal that could reach `.lrow` is the shipped
+// defect returning.
 func TestCSS_AnswerLadderChangesNothingButVisibility(t *testing.T) {
 	ladder := answerLadderCSS()
-	declRe := regexp.MustCompile(`\{([^}]*)\}`)
-	allowed := map[string]bool{"display": true, "--answer": true}
-	for _, m := range declRe.FindAllStringSubmatch(ladder, -1) {
-		for _, decl := range strings.Split(m[1], ";") {
+	ruleRe := regexp.MustCompile(`(?s)([^{}\n][^{}]*)\{([^}]*)\}`)
+	allowedValues := map[string][]string{
+		"display":  {"none", "revert"},
+		"--answer": {"1"},
+	}
+	for _, m := range ruleRe.FindAllStringSubmatch(ladder, -1) {
+		sel := strings.TrimSpace(m[1])
+		for _, decl := range strings.Split(m[2], ";") {
 			decl = strings.TrimSpace(decl)
 			if decl == "" {
 				continue
 			}
-			prop := strings.TrimSpace(strings.SplitN(decl, ":", 2)[0])
-			if !allowed[prop] {
+			parts := strings.SplitN(decl, ":", 2)
+			prop := strings.TrimSpace(parts[0])
+			val := ""
+			if len(parts) == 2 {
+				val = strings.TrimSpace(parts[1])
+			}
+			ok, known := allowedValues[prop]
+			if !known {
 				t.Errorf("a generated ladder rule declares %q — the ladder may only change "+
 					"what is SHOWN (display) and who is answered (--answer). Anything that "+
 					"changes a box makes choosing a day reflow the month.", prop)
+				continue
 			}
+			if !slices.Contains(ok, val) {
+				t.Errorf("a generated ladder rule sets %s:%s on %q — the allowed values are %v. "+
+					"`display:block` on a flex row is a BOX CHANGE, not a visibility change: it "+
+					"collapses the signed one-line row into a stack while its fixed height, and "+
+					"therefore every geometric assertion in the suite, stays identical.",
+					prop, val, sel, ok)
+			}
+			// A reveal names its surfaces. `.lrow` is never one of them.
+			if prop == "display" && val != "none" {
+				for _, part := range strings.Split(sel, ",") {
+					part = strings.TrimSpace(part)
+					if part == "" {
+						continue
+					}
+					if !strings.Contains(part, ".lctx[") && !strings.Contains(part, ".lzero.lday[") {
+						t.Errorf("a ladder reveal rule targets %q — a reveal may only name the two "+
+							"surfaces that are display:none at rest (.lhead .lctx and .lzero.lday). "+
+							"Anything wider reaches the Ledger row, which is visible at rest and is "+
+							"filtered by attribute, never revealed by class.", part)
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestLedger_RowCarriesNoRevealToken is the same rule stated on the OTHER side
+// of the collision, in Go, where the row's class list is actually built.
+//
+// The guard above stops the sheet from reaching the row. This one stops the row
+// from walking into the sheet. Either lock alone would have prevented what
+// shipped; both together mean the defect cannot be re-opened by editing one
+// file, which matters because the two files have different owners in wave 2 and
+// the connection between them is a bare string token.
+func TestLedger_RowCarriesNoRevealToken(t *testing.T) {
+	for _, m := range []Mark{
+		{Title: "plain"},
+		{Title: "tied", Tied: true},
+	} {
+		cls := ledgerRowClass(m)
+		for _, f := range strings.Fields(cls) {
+			if f == "lday" {
+				t.Errorf("ledgerRowClass(%+v) = %q — `.lday` marks a surface that is HIDDEN at "+
+					"rest and revealed when its day is chosen. The row is visible at rest and "+
+					"hidden by the filter; carrying the token made every listed row collapse "+
+					"out of flex the moment a day was picked.", m, cls)
+			}
+		}
+		if !strings.HasPrefix(cls, "lrow") {
+			t.Errorf("ledgerRowClass(%+v) = %q — the row class leads with `lrow`", m, cls)
 		}
 	}
 }

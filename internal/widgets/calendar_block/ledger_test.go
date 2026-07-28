@@ -265,7 +265,7 @@ func TestLedger_ListsByOrdinalDayFromTheCellsThemselves(t *testing.T) {
 	d := fxLedgerMarks(t)
 	body := render(t, d)
 
-	if n := strings.Count(body, `class="lrow lday`); n != 4 {
+	if n := strings.Count(body, `class="lrow `); n != 4 {
 		t.Fatalf("%d Ledger rows for 4 marks", n)
 	}
 	// Ordinal order: day 2, then 4, then 9, then the intercalary row LAST.
@@ -483,7 +483,7 @@ func TestLedger_RendersInTheFaultCase(t *testing.T) {
 
 	mustContain(t, body, `class="fault"`, "the fault prints where the date would go")
 	mustNotContain(t, body, `class="iw mono"`, "no date element is emitted in the fault case")
-	if n := strings.Count(body, `class="lrow lday`); n != 4 {
+	if n := strings.Count(body, `class="lrow `); n != 4 {
 		t.Errorf("the Ledger listed %d of 4 rows on a calendar that cannot resolve a date; "+
 			"ordinal listing needs no era", n)
 	}
@@ -536,6 +536,25 @@ type ledgerProbeReading struct {
 	ScrollH     float64 `json:"scrollH"`
 	ClientH     float64 `json:"clientH"`
 	ShelfCapVis bool    `json:"shelfCapVis"`
+
+	// RowDisplay is the SET of computed `display` values across every visible
+	// .lrow, sorted and comma-joined — "flex" when the row is the signed row,
+	// anything else when a rule reached it that should not have.
+	//
+	// It exists because the height probe above CANNOT SEE A COLLAPSE. .lrow
+	// carries a fixed height (48px full / 44px std), so a row whose display
+	// flips to `block` stacks its children into a pile INSIDE a box of exactly
+	// the right height: every geometric reading in this struct stays identical
+	// and the component is visibly broken. That is not hypothetical — it is
+	// what shipped, and what this reading now makes impossible to ship again.
+	RowDisplay string `json:"rowDisplay"`
+
+	// Overprint is true when any visible row's time string is drawn over any
+	// visible day numeral. It is the collapse's SYMPTOM measured independently
+	// of its cause: a stacked row is ~70px of content inside a 48px box, so it
+	// spills onto the numeral of the row beneath it. A future rule that breaks
+	// the row some other way is caught here even if `display` still reads flex.
+	Overprint bool `json:"overprint"`
 }
 
 const ledgerProbeScript = `
@@ -550,7 +569,29 @@ function(root){
   var tabs   = root.querySelector('.ltabs');
   var vis = function(el){ var b = r(el); return !!b && b.width > 0 && b.height > 0 };
   var shown = 0, ctx = '';
-  [].slice.call(root.querySelectorAll('.lrow')).forEach(function(el){ if (vis(el)) shown++ });
+  // The row's own SHAPE, read from the engine rather than inferred from the
+  // sheet: a fixed-height row that has stopped being a flex row measures the
+  // same as one that has not, so the display value is read directly and the
+  // time/day overprint the collapse produces is measured beside it.
+  var disp = {}, overprint = false, numerals = [], times = [];
+  [].slice.call(root.querySelectorAll('.lrow')).forEach(function(el){
+    if (!vis(el)) return;
+    shown++;
+    disp[getComputedStyle(el).display] = true;
+    // The row's height is FIXED, so a row whose content stopped fitting spills
+    // into the row below it rather than growing. That is where the collapse
+    // actually became visible: a stacked row's time string landed on the NEXT
+    // row's day numeral. So the two are collected across the whole list and
+    // intersected pairwise, not compared within one row.
+    [].slice.call(el.querySelectorAll('.dg')).forEach(function(n){ numerals.push(r(n)) });
+    [].slice.call(el.querySelectorAll('.tm')).forEach(function(n){ times.push(r(n)) });
+  });
+  numerals.forEach(function(a){
+    times.forEach(function(b){
+      if (a.right > b.left + 0.5 && b.right > a.left + 0.5 &&
+          a.bottom > b.top + 0.5 && b.bottom > a.top + 0.5) overprint = true;
+    });
+  });
   [].slice.call(root.querySelectorAll('.lctx-all,.lctx')).forEach(function(el){
     if (vis(el)) ctx = el.textContent.trim();
   });
@@ -588,7 +629,9 @@ function(root){
       if (!cap) return false;
       var b = r(cap), bb = r(block);
       return b.height > 0 && b.top >= bb.top - 1 && b.bottom <= bb.bottom + 1;
-    })()
+    })(),
+    rowDisplay: Object.keys(disp).sort().join(','),
+    overprint: overprint
   };
 }`
 
@@ -724,6 +767,36 @@ func TestProbe_LedgerHeightIsInvariantUnderSelection(t *testing.T) {
 		if unsel.HeadWrapped || sel.HeadWrapped {
 			t.Errorf("host %dpx: .lhead wrapped — design notes §10 defect 5, the jolt on the "+
 				"commonest interaction in the component", w)
+		}
+
+		// THE ROW MUST STILL BE THE ROW AFTER A DAY IS CHOSEN. The signed row is
+		// one flex line — day ordinal · rail · gold rail · glyph · name · chips ·
+		// meta · right-aligned time — and every reading above is blind to its
+		// collapse, because .lrow's height is fixed: a row that stops being a
+		// flex container piles its children up INSIDE a box of exactly the right
+		// height and every geometric invariant still holds.
+		//
+		// This is the one that shipped: the ladder's reveal rule was written for
+		// the two surfaces that are display:none at rest and matched on a class
+		// token the row also carried, so choosing a day turned all six matching
+		// rows into stacks with the time drawn over the numeral. Measured, not
+		// inferred — a string assertion over the sheet could not see it and did
+		// not.
+		for _, r := range []struct {
+			when string
+			read ledgerProbeReading
+		}{{"unselected", unsel}, {"selected", sel}} {
+			if r.read.RowDisplay != "flex" {
+				t.Errorf("host %dpx, %s: visible Ledger rows compute display=%q, not \"flex\" — "+
+					"the row is a single flex line and a rule has reached it. Choosing a day "+
+					"may change WHICH rows are listed and nothing else about them.",
+					w, r.when, r.read.RowDisplay)
+			}
+			if r.read.Overprint {
+				t.Errorf("host %dpx, %s: a Ledger time string is drawn over a day numeral — "+
+					"the rows have stopped laying out along one line each and are spilling "+
+					"past their own fixed height into the row below", w, r.when)
+			}
 		}
 	}
 

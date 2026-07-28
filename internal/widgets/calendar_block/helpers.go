@@ -944,6 +944,24 @@ func ledgerDocked(d BlockData) bool {
 //     line, which are rendered for every day and hidden until chosen. CSS
 //     cannot compute "3 Deepwinter · 1 event", so the server renders all of
 //     them and the ladder picks one.
+//
+//     IT NAMES ITS TWO SURFACES AND REVERTS RATHER THAN SETTING A BOX, and
+//     both halves of that are a fix, not a style. The rule was first written
+//     as `.lday[data-lday="N"] { display: block }` — matching on a class token
+//     that .lrow ALSO carried — so choosing a day turned every listed row from
+//     the signed one-line flex row into a stack with the time drawn over the
+//     day numeral. It survived review because .lrow's height is FIXED, so the
+//     collapse changed no geometry any probe was reading (the fix round on
+//     C-CALV4-LEDGER-P6; the row lost the token in the same commit, and
+//     TestProbe_LedgerHeightIsInvariantUnderSelection now reads computed
+//     `display` off a real engine).
+//
+//     `revert` rather than `block` because these two surfaces have DIFFERENT
+//     natural boxes — .lctx is a span in the head, .lzero a div in the rows —
+//     and a reveal rule that has to know which is a reveal rule that can be
+//     wrong. Reverting to the UA default un-hides each one as itself and
+//     asserts nothing about layout, which is precisely the claim the ladder is
+//     allowed to make.
 //  3. answer — a hovered or focused day cell lights the matching Ledger row and
 //     vice versa, by setting --answer on the PARTNER. The M1 region rule falls
 //     out of the selector's own shape: the partner is always drawn from the
@@ -968,8 +986,9 @@ func answerLadderCSS() string {
 			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lrow:not([data-lday=\"%s\"]) { display: none }\n",
 			k, k)
 		fmt.Fprintf(&b,
-			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lday[data-lday=\"%s\"] { display: block }\n",
-			k, k)
+			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lhead .lctx[data-lday=\"%s\"],\n"+
+				".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lzero.lday[data-lday=\"%s\"] { display: revert }\n",
+			k, k, k, k)
 		fmt.Fprintf(&b,
 			".cal-block-host .block:has(.grid [data-day-ord=\"%s\"]:is(:hover, :focus-within)) .lrows .lrow[data-lday=\"%s\"],\n"+
 				".cal-block-host .block:has(.lrows .lrow[data-lday=\"%s\"]:is(:hover, :focus-within)) .grid [data-day-ord=\"%s\"] { --answer: 1 }\n",
@@ -1145,7 +1164,22 @@ func ledgerZeroDay(c ledgerContext) string { return "Nothing on " + c.Label + ".
 
 // ledgerRowClass stamps the row's tie state so the tie toggle re-inks the
 // Ledger exactly as it re-inks the grid — one flip, both zones.
-func ledgerRowClass(m Mark) string { return "lrow lday" + tieClass(m) }
+//
+// THE ROW DOES NOT CARRY `.lday`, AND THAT IS LOAD-BEARING. `.lday` is the
+// token for a per-day surface that is display:none AT REST and revealed by the
+// ladder when its day is chosen — the head's context line and the per-day
+// empty state, and only those two. The row is the opposite kind of surface: it
+// is visible at rest and HIDDEN by the ladder's filter, which selects it by its
+// `data-lday` attribute and never by a class.
+//
+// Carrying both was the fix round's blocking defect. The reveal rule matched
+// the row, `display: block` beat `.lrow { display: flex }` on specificity and
+// source order, and every listed row for the chosen day collapsed into a stack
+// with the time overprinting the numeral — invisibly to every height assertion,
+// because .lrow's height is fixed. The ladder is now scoped to its two surfaces
+// as well (answerLadderCSS rule 2); this is the second of the two locks and the
+// reason a future hand cannot re-open the collision by "tidying" the selector.
+func ledgerRowClass(m Mark) string { return "lrow" + tieClass(m) }
 
 // ledgerShowsGoldRail reports whether a row draws the gold GM rail and the `GM`
 // badge.

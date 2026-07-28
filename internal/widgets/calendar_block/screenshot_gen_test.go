@@ -157,7 +157,7 @@ func TestGenerateScreenshots(t *testing.T) {
 		},
 		{
 			file: "12-ledger-full-selected.png", title: "ANSWERED · day 5 chosen · full tier · GM",
-			caption: "choosing a day repaints a panel that was already on screen. The Block's DECLARED HEIGHT IS IDENTICAL to shot 10 — measured, not asserted (TestProbe_LedgerHeightIsInvariantUnderSelection). `✕ all` is the reserved head slot, revealed by visibility and never by display.",
+			caption: "choosing a day repaints a panel that was already on screen. Compare shot 10 ROW FOR ROW, not just corner to corner: the Block's declared height is identical AND each listed row is still the one signed flex line — ordinal · rail · gold rail · glyph · name · chips · meta · right-aligned time. Both readings are measured (TestProbe_LedgerHeightIsInvariantUnderSelection reads computed `display` and day/time overprint in Chromium), because a fixed-height row that has collapsed out of flex is invisible to a height assertion — which is exactly how the first cut of this shot shipped broken. `✕ all` is the reserved head slot, revealed by visibility and never by display.",
 			w: 1320, h: 900,
 			body: func(t *testing.T) string {
 				return fmt.Sprintf(`<div class="shot-host" style="width:1232px">%s</div>`,

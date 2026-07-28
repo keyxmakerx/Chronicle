@@ -220,7 +220,7 @@ func TestOracle_EveryLedgerCountComesFromTheViewersOwnSet(t *testing.T) {
 				"the fold on day 5 must count only what this viewer received")
 
 			// 6. THE LEDGER LISTS EXACTLY THE VIEWER'S OWN SET, once each.
-			if n := strings.Count(body, `class="lrow lday`); n != want {
+			if n := strings.Count(body, `class="lrow `); n != want {
 				t.Errorf("the Ledger listed %d rows for a viewer who can see %d events", n, want)
 			}
 			for i := range visible {
