@@ -329,3 +329,88 @@ func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
 	seamContain(t, inverse, `class="wknum"`,
 		"the weeknums layer labels the gutter, not just the grid")
 }
+
+// ── §5: a recurring event marks each day ONCE across intercalary months ─────
+
+// TestSeam_RecurringEventMarksOnceAcrossIntercalaryMonths pins dispatch §5 at
+// the only level that can see it: the SERVICE. candidateEvents reads the
+// rendered month PLUS every intercalary month hanging off it, and
+// ListEventsForMonth's recurring-candidate widening (repository.go, C-CAL-
+// EDITOR-EXPANSION PR2) returns every recurring row regardless of the month
+// asked for — so the concatenated candidate slice carries one copy of a
+// recurring event PER QUERIED MONTH. blockCountEvents dedupes on event id;
+// blockMarksForDate does not, and emits one mark per duplicate row, so the
+// grid and the totals disagree. TestBlockRecurringEventsAreExpandedOnce could
+// never catch this: it hand-feeds projectBlock a single copy, which is exactly
+// the input the service fails to produce. The dedupe belongs at the SOURCE
+// (candidateEvents), never in a downstream marks filter — the projection's
+// one-pass rule assumes `visible` holds each event once.
+func TestSeam_RecurringEventMarksOnceAcrossIntercalaryMonths(t *testing.T) {
+	// Deepwinter with Midwinter hanging off it, and a weekly event based on
+	// day 1: a ten-day week lands it on grid days 1/11/21 AND on the
+	// intercalary day itself (absolute day 30), so both surfaces are probed.
+	cal := blockTenDayCal()
+	cal.Months = append(cal.Months[:1], append([]Month{{
+		ID: 99, CalendarID: cal.ID, Name: "Midwinter", Days: 1, SortOrder: 1, IsIntercalary: true,
+	}}, cal.Months[1:]...)...)
+
+	rt := RecurrenceWeekly
+	repo := newBlockFakeRepo(cal)
+	repo.events[cal.ID] = []Event{{
+		ID: "weekly", CalendarID: cal.ID, Name: "Tenday market",
+		Year: 1523, Month: 1, Day: 1, Visibility: "everyone",
+		IsRecurring: true, RecurrenceType: &rt,
+	}}
+	svc := NewBlockService(repo)
+
+	d, err := svc.Block(context.Background(), BlockRequest{
+		CalendarID: cal.ID, CampaignID: "camp-1",
+		Viewer: BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The producer half: each occurrence day carries the event ONCE. A map of
+	// day → mark count makes the failure state legible (one mark per queried
+	// month on every occurrence day).
+	perDay := map[int]int{}
+	for _, row := range d.Month.Rows {
+		for _, c := range row.Cells {
+			for _, m := range c.Marks {
+				if m.EventID == "weekly" {
+					perDay[c.Day]++
+				}
+			}
+		}
+	}
+	if len(perDay) != 3 || perDay[1] != 1 || perDay[11] != 1 || perDay[21] != 1 {
+		t.Errorf("weekly marks per grid day = %v, want days 1/11/21 exactly once each — the candidate slice holds duplicates", perDay)
+	}
+	if len(d.Month.Intercalary) != 1 {
+		t.Fatalf("intercalary rows = %d, want 1", len(d.Month.Intercalary))
+	}
+	if n := len(d.Month.Intercalary[0].Marks); n != 1 {
+		t.Errorf("Midwinter carries %d marks for one event, want 1", n)
+	}
+	// The totals agree with the grid: one DISTINCT event (the counts already
+	// dedupe — that green half is what let the marks half hide), four marks.
+	if d.Viewer.WholeCount != 1 {
+		t.Errorf("WholeCount = %d; four occurrences of one event are one event", d.Viewer.WholeCount)
+	}
+
+	// The composed half: the operator's screen. Four chips, and a foot line
+	// totalling the marks the grid actually draws.
+	var sb strings.Builder
+	if err := calblock.Block(d).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render composed Block: %v", err)
+	}
+	body := sb.String()
+	if n := strings.Count(body, `data-event-id="weekly"`); n != 4 {
+		t.Errorf("composed HTML draws %d chips for the 4 occurrences of one event", n)
+	}
+	seamContain(t, body, ">4 events<",
+		"the foot line must total the deduped mark set, one per occurrence day")
+	seamNotContain(t, body, ">8 events<",
+		"a doubled foot total is the duplicate candidate slice reaching the operator")
+}

@@ -283,21 +283,38 @@ func (s *BlockService) resolveView(cal *Calendar, v BlockDate) (monthIdx, year i
 }
 
 // candidateEvents reads the rendered month PLUS every intercalary month hanging
-// off it, as one candidate slice.
+// off it, as one candidate slice holding each event ONCE.
 //
 // Concatenating before the viewer filter (rather than filtering each month) is
 // what keeps the one-pass rule intact: projectBlock filters the union exactly
 // once, so the counts and the intercalary marks come from the same pass as the
 // grid cells.
+//
+// The union DEDUPES on event id, and the dedupe lives HERE, at the source
+// (C-CALV4-SEAM-P5 §5 ruling — not a downstream marks filter). Every
+// ListEventsForMonth call returns every recurring candidate regardless of the
+// month asked for (the C-CAL-EDITOR-EXPANSION PR2 widening; OccursOn decides
+// placement in Go), so querying the rendered month plus N intercalary months
+// yields N+1 copies of each recurring row. Downstream assumes the slice holds
+// each event once: blockCountEvents happens to dedupe on id, but
+// blockMarksForDate emits one mark per row, so an undeduped union draws
+// duplicate chips and a doubled foot total while the counts stay right.
 func (s *BlockService) candidateEvents(ctx context.Context, cal *Calendar, monthIdx, year, role int) ([]Event, error) {
 	months := append([]int{monthIdx}, blockIntercalaryMonths(cal, monthIdx)...)
 	var out []Event
+	seen := make(map[string]bool)
 	for _, mi := range months {
 		evs, err := s.repo.ListEventsForMonth(ctx, cal.ID, year, mi+1, role)
 		if err != nil {
 			return nil, fmt.Errorf("block events for month %d: %w", mi+1, err)
 		}
-		out = append(out, evs...)
+		for i := range evs {
+			if seen[evs[i].ID] {
+				continue
+			}
+			seen[evs[i].ID] = true
+			out = append(out, evs[i])
+		}
 	}
 	return out, nil
 }
