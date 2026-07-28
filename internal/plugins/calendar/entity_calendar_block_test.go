@@ -5,9 +5,11 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -48,13 +50,19 @@ func TestEntityEmbeds_DistinctSeedIds(t *testing.T) {
 	}
 }
 
-// entityCalBlockStub satisfies CalendarService via embedding; only the three
-// methods EntityCalendarBlock calls are overridden.
+// entityCalBlockStub satisfies CalendarService via embedding; only the methods
+// EntityCalendarBlock calls are overridden.
 type entityCalBlockStub struct {
 	CalendarService
 	cal  *Calendar
 	seed *WorldStateSeed
 	ties []EntityEventTie
+
+	// filteredCalls records every EventsForEntityFiltered call's viewer context,
+	// so the switch away from the hand-rolled filter loop is pinned by what the
+	// host ASKED FOR, not only by what came back.
+	filteredCalls [][2]string // {entityID, userID}
+	filteredRoles []int
 }
 
 func (s *entityCalBlockStub) GetCalendar(context.Context, string) (*Calendar, error) {
@@ -63,8 +71,31 @@ func (s *entityCalBlockStub) GetCalendar(context.Context, string) (*Calendar, er
 func (s *entityCalBlockStub) BuildWorldStateSeed(context.Context, string, int, int, int, int, string) (*WorldStateSeed, error) {
 	return s.seed, nil
 }
+
+// EventsForEntity is deliberately left FAILING. Nothing in the entity embed may
+// reach for the unfiltered read any more: it applies no calendar-level
+// visibility, so a tie into a calendar the viewer cannot see would surface that
+// event's name (C-CALV4-TIEFIX-PB Bug 1 item 3).
 func (s *entityCalBlockStub) EventsForEntity(context.Context, string) ([]EntityEventTie, error) {
-	return s.ties, nil
+	return nil, errors.New("entity embed must use the viewer-filtered read, not EventsForEntity")
+}
+
+// EventsForEntityFiltered mirrors the real method's contract: event-level
+// visibility applied for this viewer (the calendar-level half needs a repo and
+// is pinned in entity_ties_test.go).
+func (s *entityCalBlockStub) EventsForEntityFiltered(_ context.Context, entityID string, role int, userID string) ([]EntityEventTie, error) {
+	s.filteredCalls = append(s.filteredCalls, [2]string{entityID, userID})
+	s.filteredRoles = append(s.filteredRoles, role)
+	if permissions.CanSeeDmOnly(role) || userID == "" {
+		return s.ties, nil
+	}
+	var out []EntityEventTie
+	for _, t := range s.ties {
+		if canUserView(t.Event.Visibility, t.Event.VisibilityRules, role, userID) {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 func renderEntityCal(t *testing.T, svc CalendarService, role campaigns.Role, dmGranted bool) string {
@@ -204,5 +235,216 @@ func TestEntityCalendarBlock_EmptyStates(t *testing.T) {
 	noTies := renderEntityCal(t, svc, campaigns.RoleOwner, false)
 	if !strings.Contains(noTies, "Linked events") || !strings.Contains(noTies, "No linked events") {
 		t.Errorf("no-ties should show the header + empty note, got: %q", noTies)
+	}
+}
+
+// ── C-CALV4-HOST-P3: the entity page hosts the calendar-v4 Block ────────────
+
+// entityHostEvents is the signed entity scenario as EVENT ROWS: two visible
+// events tied to the host entity, one visible and untied, one dm_only and tied.
+//
+// The tie is carried by calendar_events.entity_id — the original one-entity
+// link, which blockEventTied honours directly — rather than by the batched
+// entity_event_links read, so this fixture needs nothing from the repository
+// fake beyond the rows themselves.
+func entityHostEvents() []Event {
+	host := "ent-1"
+	evs := []Event{
+		blockEvent("tied-visible-1", 3, "everyone"),
+		blockEvent("tied-visible-2", 8, "everyone"),
+		blockEvent("untied-visible", 12, "everyone"),
+		blockEvent("tied-hidden", 5, "dm_only"), // a player must never learn this exists
+	}
+	evs[0].EntityID = &host
+	evs[1].EntityID = &host
+	evs[3].EntityID = &host
+	return evs
+}
+
+// entityHostSpine installs a real BlockService over the fake repository for the
+// duration of one test, and restores whatever was there before.
+//
+// The spine is a process-wide singleton (InstallBlockSpine) because
+// internal/app/routes.go belongs to exactly one calendar-v4 slice for the whole
+// wave, so tests save and restore rather than construct one per call.
+func entityHostSpine(t *testing.T, cal *Calendar) *entityCalBlockStub {
+	t.Helper()
+	repo := newBlockFakeRepo(cal)
+	repo.events[cal.ID] = entityHostEvents()
+	prev := BlockSpine()
+	InstallBlockSpine(NewBlockService(repo))
+	t.Cleanup(func() { blockSpine.Store(prev) })
+
+	svc := sampleEmbedSvc()
+	svc.cal = cal
+	return svc
+}
+
+// TestEntityCalendarBlock_RendersTheV4Block is §1: the embed's month surface is
+// now internal/widgets/calendar_block.Block, projected through the spine — not
+// the compact adaptiveCalendarWidget it grew before the Block existed.
+func TestEntityCalendarBlock_RendersTheV4Block(t *testing.T) {
+	svc := entityHostSpine(t, blockTenDayCal())
+
+	html := renderEntityCal(t, svc, campaigns.RoleOwner, false)
+	for _, want := range []string{
+		"data-cal-block",                 // the Block's size-class query container
+		`data-cal-slug="cal-harptos"`,    // the real calendar identity, not a zero
+		"Harptos of Imix",                // the nameplate
+		"/static/css/calendar-block.css", // the Block brings its own sheet
+		"Deepwinter",                     // the month it resolved
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("entity embed missing %q — the Block did not render", want)
+		}
+	}
+	// The pre-v4 surface is gone from THIS embed (app_dashboard.templ keeps the
+	// component; removing dead code there is a post-wave slice).
+	if strings.Contains(html, "data-cal-adaptive") {
+		t.Error("the entity embed still renders the pre-v4 adaptive calendar widget")
+	}
+	// The rest of the ladder still renders around it.
+	for _, want := range []string{"data-entity-calendar", `id="cal-v2-worldstate-cal-ent-1"`, "Linked events"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the Block replaced more than the month surface: %q is gone", want)
+		}
+	}
+}
+
+// TestEntityCalendarBlock_TieToggleIsHostedAndDefaultsTied is §3 from the host's
+// side: the Block knows which entity hosts it, so the toggle renders with both
+// counts, defaults to the signed tie-filtered mode, and carries the CSS-only
+// control's radios. Both counts come from the spine's ONE viewer-filtered pass.
+func TestEntityCalendarBlock_TieToggleIsHostedAndDefaultsTied(t *testing.T) {
+	svc := entityHostSpine(t, blockTenDayCal())
+
+	gm := renderEntityCal(t, svc, campaigns.RoleOwner, false)
+	for _, want := range []string{
+		`data-tie-mode="tied"`, // the signed default on an entity page
+		`class="seg tie"`,
+		`data-tie-pick="tied"`,
+		`data-tie-pick="whole"`,
+		"Tied 3",           // 3 of the GM's 4 visible events are tied to ent-1
+		"Whole calendar 4",
+	} {
+		if !strings.Contains(gm, want) {
+			t.Errorf("entity-hosted Block missing %q", want)
+		}
+	}
+
+	// A player's pair is computed from the PLAYER's own visible set, so their
+	// difference can never be used to infer the dm_only event.
+	player := renderEntityCal(t, svc, campaigns.RolePlayer, false)
+	if !strings.Contains(player, "Tied 2") || !strings.Contains(player, "Whole calendar 3") {
+		t.Error("player counts must come from the player's own filtered pass (want Tied 2 / Whole calendar 3)")
+	}
+	if strings.Contains(player, "tied-hidden") {
+		t.Error("the dm_only event reached a player's DOM")
+	}
+}
+
+// TestEntityCalendarBlock_HostLayerSet is the A4 ruling made testable.
+//
+// Producer DEF is ["moons"] and stays there (cordinator ruling 2026-07-28 §1).
+// The entity page is a HOST that passes its own layer set, and the set it passes
+// is the one the signed entity renders show: eras, week numbers, the docked
+// Ledger, the illumination strip and the Shelf — and NOT the legend or the
+// knowledge horizon, which those renders do not show.
+func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
+	svc := entityHostSpine(t, blockTenDayCal())
+	html := renderEntityCal(t, svc, campaigns.RoleOwner, false)
+
+	for _, want := range []struct{ needle, why string }{
+		{`data-zone="ledger"`, "the docked Ledger — the full-tier column arithmetic subtracts its 300px unconditionally"},
+		{`data-zone="shelf"`, "the Shelf foot"},
+		{`data-layer="moongraph"`, "the illumination strip"},
+		{"data-weeknums", "the W1/W2/W3 gutter"},
+	} {
+		if !strings.Contains(html, want.needle) {
+			t.Errorf("entity host layer set is missing %s (%s)", want.needle, want.why)
+		}
+	}
+	for _, bad := range []string{`data-layer="legend"`, `data-layer="horizon"`} {
+		if strings.Contains(html, bad) {
+			t.Errorf("%s is not in the signed entity renders — the host must not enable it", bad)
+		}
+	}
+	// The set is the HOST's, not DEF's: DEF stays moons-only under the ruling.
+	if got := blockDefaultLayers().Enabled; len(got) != 1 || got[0] != "moons" {
+		t.Errorf("producer DEF must stay [\"moons\"] (cordinator ruling 2026-07-28 §1); got %v", got)
+	}
+}
+
+// TestEntityCalendarBlock_HiddenCalendarIsIndistinguishableFromNone is A2 /
+// C-CALV4-SEAM-P5 stage 9 held at the host boundary.
+//
+// BlockService.Block answers a calendar the viewer may not see with the same
+// not-found a nonexistent one gets. This host must not undo that by rendering a
+// different state for the two — a viewer who could tell them apart could probe
+// for hidden calendars one entity page at a time.
+func TestEntityCalendarBlock_HiddenCalendarIsIndistinguishableFromNone(t *testing.T) {
+	cal := blockTenDayCal()
+	cal.Visibility = "dm_only"
+	svc := entityHostSpine(t, cal)
+
+	hidden := renderEntityCal(t, svc, campaigns.RolePlayer, false)
+	// The no-calendar rung, for a campaign that genuinely has none.
+	none := renderEntityCal(t, &entityCalBlockStub{}, campaigns.RolePlayer, false)
+
+	if hidden != none {
+		t.Errorf("a hidden calendar must render byte-identically to no calendar at all;\nhidden: %q\nnone:   %q", hidden, none)
+	}
+	for _, leak := range []string{"Harptos of Imix", "cal-harptos", "Deepwinter", "data-cal-block"} {
+		if strings.Contains(hidden, leak) {
+			t.Errorf("a hidden calendar leaked %q to a player", leak)
+		}
+	}
+	// The GM still sees it — the gate is visibility, not a blanket removal.
+	if gm := renderEntityCal(t, svc, campaigns.RoleOwner, false); !strings.Contains(gm, "data-cal-block") {
+		t.Error("the GM must still get the Block for a dm_only calendar")
+	}
+}
+
+// TestEntityCalendarBlock_DegradesWithoutTheSpine keeps the ladder honest: a
+// degraded calendar plugin (no spine installed) omits the Block and renders
+// everything it can still build, rather than blanking the entity page.
+func TestEntityCalendarBlock_DegradesWithoutTheSpine(t *testing.T) {
+	prev := BlockSpine()
+	blockSpine.Store(nil)
+	t.Cleanup(func() { blockSpine.Store(prev) })
+
+	html := renderEntityCal(t, sampleEmbedSvc(), campaigns.RoleOwner, false)
+	if strings.Contains(html, "data-cal-block") {
+		t.Error("no spine, but a Block rendered")
+	}
+	for _, want := range []string{"data-entity-calendar", "data-cal-sky", "Linked events", "Public Siege"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the embed must still render %q when the Block cannot be built", want)
+		}
+	}
+}
+
+// TestEntityCalendarBlock_TiesUseTheViewerFilteredRead pins §3's read.
+//
+// The old loop called EventsForEntity and re-implemented the event-level filter
+// inline, which left the CALENDAR-level half unapplied: a tie into a calendar
+// the viewer may not see still printed that event's name. The stub's
+// EventsForEntity now returns an error, so a regression to it fails loudly
+// rather than silently widening what a player sees.
+func TestEntityCalendarBlock_TiesUseTheViewerFilteredRead(t *testing.T) {
+	svc := sampleEmbedSvc()
+	html := renderEntityCal(t, svc, campaigns.RolePlayer, false)
+
+	if len(svc.filteredCalls) != 1 {
+		t.Fatalf("expected exactly one viewer-filtered tie read; got %d", len(svc.filteredCalls))
+	}
+	if got := svc.filteredCalls[0]; got != [2]string{"ent-1", "user-1"} {
+		t.Errorf("the tie read must carry the host entity and the viewer; got %v", got)
+	}
+	if svc.filteredRoles[0] != permissions.RolePlayer {
+		t.Errorf("the tie read must carry the viewer's role; got %d", svc.filteredRoles[0])
+	}
+	if strings.Contains(html, "Secret Pact") {
+		t.Error("the dm_only linked event survived the filtered read")
 	}
 }

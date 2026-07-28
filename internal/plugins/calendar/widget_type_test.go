@@ -6,7 +6,10 @@ package calendar
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/a-h/templ"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
@@ -207,5 +210,37 @@ func TestCalendarInstanceBacking_CreateInstance(t *testing.T) {
 	if _, err := NewCalendarWidgetType(&wtCalStub{createErr: errors.New("nope")}).
 		CreateInstance(context.Background(), "camp-1", widgetbindings.CreateInput{Name: "x"}); err == nil {
 		t.Errorf("CreateInstance must surface a service error")
+	}
+}
+
+// TestCalendarWidgetType_SlugAndHostContract (C-CALV4-HOST-P3 §2/§4).
+//
+// The calendar-v4 remodel swapped what the "calendar" widget renders. It must
+// NOT have swapped what it is called: widget_type is an append-only
+// discriminator persisted in widget_bindings, so a new slug orphans every
+// existing binding — silently, since resolution simply finds nothing and falls
+// back to the campaign default.
+//
+// Constructing the widget type also declares its BlockHost an inline-size
+// container, because the Block's size class is a CSS container query on the
+// host's width. Pinned here rather than left implicit: without it every Block
+// on an entity page measures the wrong box, which is invisible in a Go test and
+// obvious only on a real page.
+func TestCalendarWidgetType_SlugAndHostContract(t *testing.T) {
+	if WidgetTypeCalendar != "calendar" {
+		t.Fatalf("the persisted calendar widget slug must stay %q; got %q", "calendar", WidgetTypeCalendar)
+	}
+	wt := NewCalendarWidgetType(&wtCalStub{})
+	if wt.Slug() != WidgetTypeCalendar {
+		t.Errorf("widget type slug = %q, want %q", wt.Slug(), WidgetTypeCalendar)
+	}
+
+	var sb strings.Builder
+	host := widgetbindings.BlockHost(WidgetTypeCalendar, "ent-1", templ.NopComponent)
+	if err := host.Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render host: %v", err)
+	}
+	if !strings.Contains(sb.String(), "container-type:inline-size") {
+		t.Errorf("the calendar's BlockHost must be a measured inline-size container; got %q", sb.String())
 	}
 }

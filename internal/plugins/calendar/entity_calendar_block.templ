@@ -12,11 +12,16 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
 )
 
 // entityCalendarBlockView renders the embed. No calendar → empty-but-present;
 // no linked events → header + "no linked events" (never blank).
-templ entityCalendarBlockView(campaignID string, cal *Calendar, data CalendarV2ViewData, ties []EntityEventTie, entityID, source string, isScribe bool) {
+//
+// block is the calendar-v4 Block, or nil when the spine is absent or errored —
+// in which case the surrounding embed still renders, which is the degrade
+// ladder EntityCalendarBlock documents.
+templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.BlockData, data CalendarV2ViewData, ties []EntityEventTie, entityID, source string, isScribe bool) {
 	<div class="card p-0 overflow-hidden" data-entity-calendar>
 		if cal == nil {
 			// EMPTY STATE (C-CAL-EMBED-CONVERGE-POLISH item 3): no calendar yet
@@ -66,12 +71,17 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, data CalendarV2V
 			</div>
 			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/cal-almanac-render.css") }/>
 			<script src={ layouts.AssetURL("/static/js/cal-almanac.js") } defer></script>
-			// W5d: adaptive calendar widget — gains a mini month-grid when the
-			// embed has room (container-query driven), compact otherwise.
-			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-adaptive.css") }/>
-			<div class="p-3 border-b border-edge">
-				@adaptiveCalendarWidget(adaptiveCalData{CampaignID: campaignID, Cal: cal, GridView: embedGridView(cal)})
-			</div>
+			// THE BLOCK (C-CALV4-HOST-P3 §1) — the calendar-v4 widget, replacing
+			// W5d's adaptiveCalendarWidget. It brings its own stylesheet and
+			// sizes itself from the host box with container queries, so there is
+			// nothing to configure here and nothing to measure in Go. Omitted
+			// when the spine could not build one; the band and the linked events
+			// still render, which is the same degrade shape as the seed rung.
+			if block != nil {
+				<div class="p-3 border-b border-edge">
+					@calblock.Block(*block)
+				</div>
+			}
 			// This entity's linked events.
 			<div class="p-3">
 				<h3 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider mb-2">

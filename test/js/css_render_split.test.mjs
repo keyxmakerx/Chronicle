@@ -108,6 +108,42 @@ test('every widget surface links the render layer', () => {
   }
 });
 
+// PIN REFRESHED at C-CALV4-HOST-P3 §1, intent extended rather than relaxed.
+//
+// The entity calendar embed used to be a single-widget surface: the almanac
+// band and nothing else. It now composes TWO widgets — the almanac band (whose
+// render layer the test above still pins) and the calendar-v4 Block, which
+// carries its own unlayered, self-contained stylesheet.
+//
+// The reason the original pin exists is that a surface which forgets a widget's
+// stylesheet renders unstyled IN PRODUCTION ONLY and stays green everywhere
+// else. That failure mode applies to the second widget exactly as it applied to
+// the first, so the guard grows with the surface instead of half-covering it.
+test('the entity calendar embed carries BOTH widgets it composes', () => {
+  const f = 'internal/plugins/calendar/entity_calendar_block.templ';
+  const src = readFileSync(join(root, f), 'utf8');
+
+  // Widget 1 — the almanac band, still linked directly by this surface.
+  assert.ok(src.includes('/static/css/cal-almanac-render.css'),
+    f + ' must keep linking the almanac render layer');
+  assert.ok(src.includes('/static/js/cal-almanac.js'),
+    f + ' must keep loading the shared almanac engine');
+
+  // Widget 2 — the Block. It brings its own sheet with it (calblock.Block emits
+  // Stylesheet() inside the component so an HTMX-swapped fragment carries its
+  // styling), so this surface composes the component rather than linking a
+  // second <link> of its own. Pinning the composition is what proves the sheet
+  // arrives; a bare href here would additionally fail TestTemplatesUseAssetURL.
+  assert.ok(src.includes('calblock.Block('),
+    f + ' must compose the calendar-v4 Block — it is the embed\'s month surface');
+  assert.ok(!src.includes('href="/static/css/calendar-block.css"'),
+    f + ' must not hand-link the Block stylesheet; the component emits it via AssetURL');
+
+  // The pre-v4 month surface is gone from this embed.
+  assert.ok(!src.includes('adaptiveCalendarWidget('),
+    f + ' still renders the pre-v4 adaptive calendar widget');
+});
+
 test('the band markup carries both engine canvases (back + front)', () => {
   // C-SKYBOX-WIDGET: the canvas markup now lives in the skybox widget
   // package (internal/widgets/skybox/skybox.templ) — calendar_v2_worldstate

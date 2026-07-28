@@ -21,6 +21,14 @@ import (
 )
 
 // WidgetTypeCalendar is the persisted widget_type discriminator for calendars.
+//
+// THE SLUG DOES NOT CHANGE, EVER (C-CALV4-HOST-P3 §2). widget_type and host_type
+// are APPEND-ONLY discriminators written into widget_bindings rows. The
+// calendar-v4 remodel swapped what the "calendar" widget RENDERS — the Block
+// instead of the compact adaptive widget — and that is a renderer change, not a
+// new kind of widget. Minting a `calendar_v4` slug would orphan every existing
+// binding (they resolve by slug), and it would add a third instance-deleted hook
+// to DeleteCalendar, which widget_type_test.go pins at exactly two.
 const WidgetTypeCalendar = "calendar"
 
 // isNotFound reports whether err is (or wraps) a 404 AppError. apperror.SafeCode
@@ -120,7 +128,16 @@ type calendarWidgetType struct {
 
 // NewCalendarWidgetType builds the calendar WidgetType for registration into
 // the widget-binding registry at app startup.
+//
+// It also declares the calendar's BlockHost wrapper an inline-size CONTAINER
+// (C-CALV4-HOST-P3 §4): the Block takes its size class from the HOST's width in
+// CSS container queries, never in Go — boot.js:163 disables scripts inside
+// HTMX-swapped fragments, so a JS-sized Block would render at the wrong density
+// after any binding swap. The declaration is per widget type on purpose;
+// `container-type` implies `contain: layout`, which would trap the maps block's
+// `fixed inset-0` modals inside its own embed (see block_host.go).
 func NewCalendarWidgetType(svc CalendarService) widgetbindings.WidgetType {
+	widgetbindings.DeclareInlineSizeHost(WidgetTypeCalendar)
 	return &calendarWidgetType{calendarInstanceBacking{svc: svc}}
 }
 

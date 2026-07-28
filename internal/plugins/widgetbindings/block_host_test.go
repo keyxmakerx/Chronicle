@@ -20,6 +20,12 @@ import (
 	"github.com/a-h/templ"
 )
 
+// fakeWidgetType stands in for a real widget slug. The tests deliberately do
+// NOT name calendar / timeline / maps / worldstate: a quoted plugin slug outside
+// its owning plugin directory is what tools/check-plugin-isolation.sh exists to
+// catch, and none of these assertions is about a particular plugin.
+const fakeWidgetType = "widget-under-test"
+
 func renderComp(t *testing.T, c templ.Component) string {
 	t.Helper()
 	var sb strings.Builder
@@ -32,8 +38,8 @@ func renderComp(t *testing.T, c templ.Component) string {
 // TestBlockHost_IsARealBox. The wrapper is a plain <div> carrying the stable
 // swap-target id — never display:contents, which is the QA1 Bug 3 regression.
 func TestBlockHost_IsARealBox(t *testing.T) {
-	html := renderComp(t, BlockHost("timeline", "ent-1", templ.NopComponent))
-	if !strings.Contains(html, `<div id="widget-block-timeline-ent-1"`) {
+	html := renderComp(t, BlockHost(fakeWidgetType, "ent-1", templ.NopComponent))
+	if !strings.Contains(html, `<div id="`+BlockHostID(fakeWidgetType, "ent-1")+`"`) {
 		t.Errorf("BlockHost must wrap the block in a real <div> box; got %q", html)
 	}
 	if strings.Contains(html, "display:contents") || strings.Contains(html, "display: contents") {
@@ -50,7 +56,7 @@ func TestBlockHost_IsARealBox(t *testing.T) {
 // wrapper. A declared one must carry it, or the calendar Block's size-class
 // queries measure something other than its host.
 func TestBlockHost_ContainerDeclarationIsOptIn(t *testing.T) {
-	const undeclared = "widget-type-that-never-declared"
+	const undeclared = fakeWidgetType + "-undeclared"
 	if s := blockHostStyle(undeclared); s != "" {
 		t.Errorf("an undeclared widget type must carry no inline style; got %q", s)
 	}
@@ -59,7 +65,7 @@ func TestBlockHost_ContainerDeclarationIsOptIn(t *testing.T) {
 		t.Errorf("an undeclared host must not become a containment context; got %q", html)
 	}
 
-	const declared = "widget-type-under-test"
+	const declared = fakeWidgetType + "-declared"
 	DeclareInlineSizeHost(declared)
 	if got, want := blockHostStyle(declared), "container-type:inline-size"; got != want {
 		t.Errorf("declared host style = %q, want %q", got, want)
@@ -79,7 +85,7 @@ func TestBlockHost_ContainerDeclarationIsOptIn(t *testing.T) {
 // is rendered on, so a dashboard-hosted block's picker reads and writes the
 // dashboard's binding rather than an entity's.
 func TestBindingAffordanceFor_NamesItsHostType(t *testing.T) {
-	dash := renderComp(t, BindingAffordanceFor("camp-1", HostTypeDashboard, "calendar", "camp-1:player", "calendar", SourceDefault))
+	dash := renderComp(t, BindingAffordanceFor("camp-1", HostTypeDashboard, fakeWidgetType, "camp-1:player", "widget", SourceDefault))
 	if !strings.Contains(dash, "host_type=dashboard") {
 		t.Errorf("dashboard affordance must query host_type=dashboard; got %q", dash)
 	}
@@ -89,7 +95,7 @@ func TestBindingAffordanceFor_NamesItsHostType(t *testing.T) {
 
 	// An unknown host type degrades to the entity host the affordance always
 	// used — never to an empty host_type, which would read no binding at all.
-	junk := renderComp(t, BindingAffordanceFor("camp-1", "not-a-host-type", "calendar", "ent-1", "calendar", SourceDefault))
+	junk := renderComp(t, BindingAffordanceFor("camp-1", "not-a-host-type", fakeWidgetType, "ent-1", "widget", SourceDefault))
 	if !strings.Contains(junk, "host_type=entity") {
 		t.Errorf("an unknown host type must degrade to the entity host; got %q", junk)
 	}
@@ -100,8 +106,8 @@ func TestBindingAffordanceFor_NamesItsHostType(t *testing.T) {
 // one, or this refactor silently re-cuts four surfaces.
 func TestBindingAffordance_DelegatesUnchanged(t *testing.T) {
 	for _, src := range []string{SourceOwn, SourceEntityType, SourceDefault} {
-		old := renderComp(t, BindingAffordance("camp-1", "maps", "ent-9", "map", src))
-		neu := renderComp(t, BindingAffordanceFor("camp-1", HostTypeEntity, "maps", "ent-9", "map", src))
+		old := renderComp(t, BindingAffordance("camp-1", fakeWidgetType, "ent-9", "widget", src))
+		neu := renderComp(t, BindingAffordanceFor("camp-1", HostTypeEntity, fakeWidgetType, "ent-9", "widget", src))
 		if old != neu {
 			t.Errorf("source %q: BindingAffordance must delegate byte-identically\nold: %s\nnew: %s", src, old, neu)
 		}
