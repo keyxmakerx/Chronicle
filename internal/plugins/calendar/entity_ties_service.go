@@ -89,13 +89,13 @@ func (s *calendarService) EventsForEntity(ctx context.Context, entityID string) 
 // Deliberately a NEW method rather than a signature change to EventsForEntity:
 // entity_calendar_block.go (owned by a different C-CALV4 slice — not in this
 // dispatch's file list) still calls the old, unfiltered signature today;
-// changing it would collide. Not added to the CalendarService interface
-// either, for the same file-ownership reason (that interface lives in
-// service.go) — reachable via a type assertion to *calendarService, mirroring
-// how SetBindingCleaner already does this (service.go:304-307). Wiring this
-// into entity_calendar_block.go's call site — replacing its lines 78-91,
-// which only apply the per-event canUserView half of this check — is
-// follow-up work for whoever owns that file.
+// changing it would collide. Originally concrete-only on *calendarService for
+// the same file-ownership reason; C-CALV4-SEAM-P5 §7 put it on the
+// CalendarService interface because its only planned consumer — the phase-B
+// entity-page host — lives outside this package and cannot type-assert an
+// unexported type. Wiring this into entity_calendar_block.go's call site —
+// replacing its lines 78-91, which only apply the per-event canUserView half
+// of this check — is follow-up work for whoever owns that file.
 //
 // Rows come from ONE pass over the raw tie list into a freshly allocated
 // slice — never a second pass over an already-filtered slice, which would

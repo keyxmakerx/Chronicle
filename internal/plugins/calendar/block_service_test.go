@@ -2,11 +2,14 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
@@ -21,6 +24,10 @@ type blockFakeRepo struct {
 	events map[string][]Event
 
 	calls map[string]int
+	// tieReadIDs records the event ids handed to the LAST TiedEventIDsForEntity
+	// call, so the ordering invariant — the tie read only ever sees
+	// viewer-filtered events — can be asserted rather than trusted to a comment.
+	tieReadIDs []string
 }
 
 func newBlockFakeRepo(cals ...*Calendar) *blockFakeRepo {
@@ -180,6 +187,7 @@ func (r *blockFakeRepo) EntitiesForEventsBatch(_ context.Context, eventIDs []str
 
 func (r *blockFakeRepo) TiedEventIDsForEntity(_ context.Context, entityID string, eventIDs []string) (map[string]bool, error) {
 	r.hit("TiedEventIDsForEntity")
+	r.tieReadIDs = append([]string(nil), eventIDs...)
 	return map[string]bool{}, nil
 }
 
@@ -509,6 +517,139 @@ func TestBlockEventsForDayFiltersOnceAndExpandsRecurrence(t *testing.T) {
 	// Deterministic order regardless of the repo's return order.
 	if gm[0].Name > gm[1].Name && gm[0].Day == gm[1].Day {
 		t.Fatalf("EventsForDay is not stably ordered: %v", []string{gm[0].Name, gm[1].Name})
+	}
+}
+
+// --- calendar-level visibility on the spine (C-CALV4-SEAM-P5 §4) ------------
+
+// TestBlockSpineCalendarVisibilityGate pins that Block and EventsForDay refuse
+// a calendar the viewer may not see with EXACTLY the not-found shape a
+// nonexistent calendar produces — the apperror.NewNotFound("calendar not
+// found") handler_v2.go answers through requireVisibleCalendar — so a hidden
+// calendar's existence cannot be inferred from a distinguishable error.
+//
+// The gate lives HERE, in the spine, because calendarVisibleTo is unexported:
+// a phase-B host outside the package cannot reproduce it, and its only
+// alternative would be the 60-method service the spine exists to avoid.
+func TestBlockSpineCalendarVisibilityGate(t *testing.T) {
+	newSvc := func() *BlockService {
+		open := blockTenDayCal()
+		secret := blockDeepCountCal()
+		secret.Visibility = "dm_only"
+		repo := newBlockFakeRepo(open, secret)
+		repo.events[open.ID] = []Event{{ID: "e-open", CalendarID: open.ID, Name: "Open court",
+			Year: 1523, Month: 1, Day: 14, Visibility: "everyone"}}
+		repo.events[secret.ID] = []Event{{ID: "e-secret", CalendarID: secret.ID, Name: "Deep secret",
+			Year: 218, Month: 5, Day: 20, Visibility: "everyone"}}
+		return NewBlockService(repo)
+	}
+
+	player := BlockViewer{UserID: "u-player", Role: permissions.RolePlayer}
+	gm := BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}
+
+	entryPoints := []struct {
+		name string
+		call func(svc *BlockService, calID string, v BlockViewer) error
+	}{
+		{"Block", func(svc *BlockService, calID string, v BlockViewer) error {
+			_, err := svc.Block(context.Background(), BlockRequest{CalendarID: calID, Viewer: v})
+			return err
+		}},
+		{"EventsForDay", func(svc *BlockService, calID string, v BlockViewer) error {
+			_, err := svc.EventsForDay(context.Background(), calID, v,
+				BlockDate{Year: 1523, Month: 1, Day: 14})
+			return err
+		}},
+	}
+
+	cases := []struct {
+		name         string
+		calID        string
+		viewer       BlockViewer
+		wantNotFound bool
+	}{
+		{"player + dm_only calendar → the missing-calendar answer", "cal-dwarven", player, true},
+		{"player + nonexistent calendar → not-found", "cal-does-not-exist", player, true},
+		{"GM + dm_only calendar → success", "cal-dwarven", gm, false},
+		{"player + visible calendar → success", "cal-harptos", player, false},
+	}
+
+	for _, ep := range entryPoints {
+		t.Run(ep.name, func(t *testing.T) {
+			svc := newSvc()
+			// The oracle: what THIS entry point answers for an id that does not
+			// exist at all. Every hidden-calendar refusal below must be
+			// byte-for-byte this.
+			missingErr := ep.call(svc, "cal-does-not-exist", player)
+			if missingErr == nil {
+				t.Fatal("a nonexistent calendar must error")
+			}
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					err := ep.call(svc, tc.calID, tc.viewer)
+					if !tc.wantNotFound {
+						if err != nil {
+							t.Fatalf("want success, got %v", err)
+						}
+						return
+					}
+					if err == nil {
+						t.Fatalf("calendar %q must be refused for this viewer", tc.calID)
+					}
+					var appErr *apperror.AppError
+					if !errors.As(err, &appErr) || appErr.Code != http.StatusNotFound {
+						t.Fatalf("refusal is %v, want the apperror not-found shape handler_v2.go uses", err)
+					}
+					if err.Error() != missingErr.Error() {
+						t.Fatalf("a hidden calendar is distinguishable from a missing one:\n  hidden:  %q\n  missing: %q",
+							err.Error(), missingErr.Error())
+					}
+					if want := apperror.NewNotFound("calendar not found").Error(); err.Error() != want {
+						t.Fatalf("refusal %q does not match requireVisibleCalendar's %q", err.Error(), want)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestBlockTieReadReceivesOnlyViewerVisibleEvents pins the §4 ordering fix:
+// TiedEventIDsForEntity applies no visibility filter of its own — its contract
+// is that the event set handed to it is ALREADY viewer-filtered. That is only
+// true if Block runs filterEventsByUser BEFORE the tie read, not later inside
+// projectBlock. Base dm_only narrowing already happens in "SQL"
+// (ListEventsForMonth), so the event that leaks through a late filter is one
+// carrying visibility_rules.
+func TestBlockTieReadReceivesOnlyViewerVisibleEvents(t *testing.T) {
+	cal := blockTenDayCal()
+	repo := newBlockFakeRepo(cal)
+	repo.events[cal.ID] = []Event{
+		{ID: "e-open", CalendarID: cal.ID, Name: "Open court",
+			Year: 1523, Month: 1, Day: 3, Visibility: "everyone"},
+		{ID: "e-rules", CalendarID: cal.ID, Name: "Secret council",
+			Year: 1523, Month: 1, Day: 5, Visibility: "everyone",
+			VisibilityRules: blockStrPtr(`{"allowed_users":["u-gm"]}`)},
+	}
+	svc := NewBlockService(repo)
+
+	if _, err := svc.Block(context.Background(), BlockRequest{
+		CalendarID: cal.ID,
+		Viewer:     BlockViewer{UserID: "u-player", Role: permissions.RolePlayer, HostEntity: "ent-1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.calls["TiedEventIDsForEntity"]; got != 1 {
+		t.Fatalf("tie read issued %d times, want 1", got)
+	}
+	for _, id := range repo.tieReadIDs {
+		if id == "e-rules" {
+			t.Fatalf("the tie read received %q, an event this viewer may not see — "+
+				"filterEventsByUser must run before tiedEventIDs (tie read saw %v)",
+				id, repo.tieReadIDs)
+		}
+	}
+	if len(repo.tieReadIDs) != 1 || repo.tieReadIDs[0] != "e-open" {
+		t.Fatalf("tie read saw %v, want exactly the viewer-visible [e-open]", repo.tieReadIDs)
 	}
 }
 

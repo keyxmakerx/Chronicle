@@ -81,7 +81,10 @@ templ bandRow(d BlockData, row WeekRow) {
 // full-width band and column 7 on the Harptos row-1 split. This ruler is a
 // zero-width grid item placed on the half column itself, so the step is
 // continuous at exactly the boundary whatever the bands are doing. `.band.half`
-// is still honoured from EraBand.Half for a band that genuinely ends there.
+// is still STAMPED from EraBand.Half, but as a semantic marker only — since
+// §3.5 the class draws nothing (its border-right landed the rule at the band's
+// own right edge, wherever the band happened to end); this ruler is the rule's
+// single owner (TestCSS_BandHalfDrawsNoRightEdge).
 templ halfRule(m MonthGeometry) {
 	if halfColumn(m) > 0 {
 		<i class="halfrule" style={ halfRuleStyle(halfColumn(m)) } aria-hidden="true"></i>
@@ -89,8 +92,14 @@ templ halfRule(m MonthGeometry) {
 }
 
 // weekRow is one row of day cells, plus the week-number gutter.
+//
+// The row is a dated surface in its own right (COMMON §6.6: every dated cell
+// AND row carries the answer key), so it takes the data-row marker guard B4
+// keys on. Its key lives in the week namespace (weekKey), never a day's. The
+// gutter LABEL stays bare — weekLabel is a position readout, not the row's
+// identity.
 templ weekRow(d BlockData, row WeekRow) {
-	<div class="wk">
+	<div class="wk" data-row data-day={ weekKey(d.CalendarSlug, row) }>
 		<span class="gut">
 			if hasLayer(d.Layers, "weeknums") {
 				<b class="wknum">{ weekLabel(row) }</b>
@@ -102,16 +111,38 @@ templ weekRow(d BlockData, row WeekRow) {
 	</div>
 }
 
+// weekKey is the row's ANSWER key. COMMON §6.6 has every dated cell AND row
+// carry data-day, with guard B4 keying on the data-cell/data-row markers
+// beside it — so a dated surface that later loses its key fails CI instead of
+// just going quiet. A week is a position, not a date: its key gets the "-w"
+// namespace beside dayKey's "slug-N" and intercalaryKey's "slug-iN", so a row
+// can never answer for a day. 1-based, agreeing with the gutter's W1.
+func weekKey(slug string, r WeekRow) string {
+	if slug == "" {
+		slug = "cal" // dayKey's placeholder; the key namespaces must agree on it
+	}
+	return slug + "-w" + intText(r.Index+1)
+}
+
 // dayCell ships EXACTLY TWO SUBTREES — named chips and an underline — and the
 // cell's own container query shows one. Never four tiers of markup: a tier the
 // producer cannot see is a tier that silently rots.
 //
-// data-day is on the CELL, once, whichever subtree is visible (COMMON §6.6,
-// guard B4). Nothing consumes it in wave 1; W-B does.
+// data-day is on the CELL, once, whichever subtree is visible, with data-cell
+// beside it as the marker guard B4 keys on (COMMON §6.6) — the marker is what
+// lets the guard notice a dated surface that later LOSES its key. Both sit
+// behind the same c.Day > 0 gate: an out-of-range cell is not dated and must
+// not claim to be. Nothing consumes the key in wave 1; W-B does.
+//
+// The per-cell moon discs belong to the "moons" LAYER (data.go: DEF =
+// ["moons"], the moongraph key owns the CURVE, not the discs), so the row is
+// gated on the registry like every other layer-owned surface — a cell that
+// carries Moons the viewer switched off must not draw them.
 templ dayCell(d BlockData, c DayCell) {
 	<div
 		class={ cellClass(c, d.Month.WeekLen) }
 		if c.Day > 0 {
+			data-cell
 			data-day={ dayKey(d.CalendarSlug, c.Day) }
 		}
 		if c.Tied {
@@ -127,7 +158,9 @@ templ dayCell(d BlockData, c DayCell) {
 				if moreCount(c) > 0 {
 					<span class="more">{ "+" + intText(moreCount(c)) + " more" }</span>
 				}
-				@moonRow(c)
+				if hasLayer(d.Layers, "moons") {
+					@moonRow(c)
+				}
 			</div>
 			<div class="cunder">
 				@dayNumeral(c, false)

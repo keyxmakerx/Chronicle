@@ -49,6 +49,8 @@ type BlockViewer struct {
 
 // BlockProjectionInput is the complete input to one Block render.
 //
+// Calendar MUST be non-nil — see the contract on projectBlock.
+//
 // Events is the CANDIDATE set — the rows the repository already narrowed by
 // base visibility in SQL, for the rendered month plus any intercalary months
 // hanging off it. It is consumed destructively (see the file header); callers
@@ -91,11 +93,23 @@ func blockDefaultLayers() calblock.LayerState {
 
 // projectBlock turns a calendar + its candidate events into one BlockData.
 //
-// IDENTITY — RESOLVED (pin r50). The four identity fields were typed int64
-// while every one of those identities is a VARCHAR(36) UUID in Chronicle, so
-// this producer used to zero them and smuggle the calendar's id through
-// CalendarSlug. The pin was amended and they are now `string`; the real ids
-// are carried directly. CalendarSlug goes back to meaning the slug.
+// CONTRACT: in.Calendar is NON-NIL. The sole production caller —
+// BlockService.Block — sits downstream of requireVisibleCalendar, which
+// returns a calendar or an error, never nil-and-no-error; the seam and
+// projection tests all construct a calendar. The projection's fault path is a
+// calendar that cannot resolve a date (a MONTHLESS one — see blockDateLine),
+// not a nil one, so this function reads cal.ID bare and carries no cal != nil
+// guards of its own (coordinator ruling 2026-07-28 §3, stage 16). The shared
+// helpers it calls (blockCalendarSlug, blockDateLine, …) keep their internal
+// nil checks because they are also used standalone.
+//
+// IDENTITY — RESOLVED (r50 retype, amended r51). The four identity fields
+// were typed int64 while every one of those identities is a VARCHAR(36) UUID
+// in Chronicle, so this producer used to zero them and smuggle the calendar's
+// id through CalendarSlug. The r50 retype made them `string`; the pin now in
+// force is its r51 amendment (Mark.Tied + MonthGeometry.MoonsDeclared, which
+// the books cite). The real ids are carried directly and CalendarSlug goes
+// back to meaning the slug.
 func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	cal := in.Calendar
 	viewer := in.Viewer
@@ -122,8 +136,8 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		CalHue:       blockCalHue(cal),
 		Pattern:      blockCalPattern(cal),
 		Letter:       blockCalLetter(cal),
-		IsRealWorld:  cal != nil && cal.IsRealLife(),
-		IsDefault:    cal != nil && cal.IsDefault,
+		IsRealWorld:  cal.IsRealLife(),
+		IsDefault:    cal.IsDefault,
 		IsActive:     in.IsActive,
 		Month:        geo,
 		Sync:         blockSyncForCalendar(in.Sync, cal),
@@ -225,18 +239,6 @@ func blockEventTied(e *Event, in BlockProjectionInput) bool {
 	return in.TiedEventIDs[e.ID]
 }
 
-// blockDecorateCells layers the per-viewer marks onto the geometry.
-//
-// TieMode changes which marks are emitted, exactly as the signed contract does
-// (mockups/calendar-v4.html VIEWS.entity: tied mode passes `filter = e =>
-// e.ties`). DayCell.Tied is set from the same pass in BOTH modes, so a cell
-// that carries a tie is identifiable whichever way the toggle sits.
-//
-// KNOWN CONTRACT GAP, flagged to the coordinator: in "whole" mode the signed
-// render dims the individual untied CHIPS (opacity .7 + a hairline rail), but
-// the pinned Mark struct carries no per-mark tie flag — only DayCell.Tied,
-// which is per DAY. A day with one tied and one untied event cannot express
-// that distinction in wave 1.
 // blockDecorateCells fills every cell's marks and tie flag.
 //
 // It takes NO tie mode, and that absence is the r51 contract made structural:
@@ -364,8 +366,8 @@ func blockEventAxisKey(cal *Calendar, e *Event) (key, color, icon string) {
 	return key, strings.TrimSpace(color), strings.TrimSpace(icon)
 }
 
-// blockAudienceFor is the gold diamond (L22: circles are moons, permission is a
-// diamond).
+// blockAudienceFor is the pair of gold GM marks (L22: circles are moons,
+// permission is gold).
 //
 // WAVE-1 RULING (COMMON §6.2): composed tag+member audiences DO NOT EXIST on
 // main. There is no member_tags/user_tags table anywhere — tags attach to
@@ -373,6 +375,12 @@ func blockEventAxisKey(cal *Calendar, e *Event) (key, color, icon string) {
 // + campaign_group_members. So this is populated ONLY from what exists:
 // visibility == dm_only ("GM only") or a visibility_rules restriction
 // ("Restricted"). The composed audience is W-G's.
+//
+// Restricted is the DISCRIMINATOR between the two signed marks, not a synonym
+// for "hidden" (the AudienceMark ruling in data.go, closed at P5 §3.3):
+// dm_only → Restricted false, the gold DOGEAR; a visibility_rules restriction
+// → Restricted true, the gold DIAMOND. Setting it true on both branches drew
+// the diamond on every dm_only day and the dogear nowhere in the product.
 //
 // It is nil for a player, always. Permission is ABSENCE: a player who can see
 // an event sees an ordinary mark with no hint that anyone else cannot, and a
@@ -382,7 +390,7 @@ func blockAudienceFor(e *Event, isGM bool) *calblock.AudienceMark {
 		return nil
 	}
 	if e.Visibility == "dm_only" {
-		return &calblock.AudienceMark{Label: "GM only", Restricted: true}
+		return &calblock.AudienceMark{Label: "GM only", Restricted: false}
 	}
 	if r := e.ParseVisibilityRules(); r != nil && (len(r.AllowedUsers) > 0 || len(r.DeniedUsers) > 0) {
 		return &calblock.AudienceMark{Label: "Restricted", Restricted: true}

@@ -711,9 +711,11 @@
 }
 /* the editorial rule at a MID-MONTH era boundary */
 .cal-block-host .band.edge { border-left: 1.5px solid var(--rule-editorial) }
-/* the mockup declares .band.half and never applies it. It is applied here from
-   EraBand.Half, for a band that genuinely ends on the half column. */
-.cal-block-host .band.half { border-right: 1px solid var(--rule-structural-strong) }
+/* .band.half (stamped from EraBand.Half) is a SEMANTIC marker — the half
+   column lands inside this band — and draws NOTHING here. A band is one grid
+   item spanning many columns, so its own border-right lands at the band's
+   edge, wherever that happens to be, never reliably at the half column. The
+   .halfrule ruler below owns the rule at the half column (P5 §3.5). */
 .cal-block-host .band .sfx {
   font-weight: 500;
   font-size: 10px;

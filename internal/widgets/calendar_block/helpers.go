@@ -347,19 +347,26 @@ func underlineSegs(c DayCell) []Mark {
 }
 
 // underlineRestAt reports whether segment i is the neutral overflow segment.
+// The day's total is len(Marks) — MoreCount is OVERLAPPING (a chip fold within
+// that list, data.go), so adding it here claimed events that do not exist.
 func underlineRestAt(c DayCell, i int) bool {
 	shown := len(underlineSegs(c))
-	return i == shown-1 && len(c.Marks)+c.MoreCount > shown
+	return i == shown-1 && len(c.Marks) > shown
 }
 
 // totalMarks counts every mark the viewer can see in this month, including the
 // intercalary row. Used only by the mini / sub-mini foot line, which states a
 // count it can actually derive rather than a "next event" it cannot.
+//
+// A day's total is len(Marks), NEVER len(Marks)+MoreCount: MoreCount is
+// OVERLAPPING (data.go) — it counts marks already in the list that are not
+// drawn as chips, so adding it double-counts the folded tail and the foot
+// printed "10 events" for a 7-event month.
 func totalMarks(d BlockData) int {
 	n := 0
 	for _, r := range d.Month.Rows {
 		for _, c := range r.Cells {
-			n += len(c.Marks) + c.MoreCount
+			n += len(c.Marks)
 		}
 	}
 	for _, ic := range d.Month.Intercalary {
@@ -742,4 +749,28 @@ func eraBadgeText(d BlockData) string {
 		return ""
 	}
 	return d.EraLabel + " · " + strconv.Itoa(d.Month.Year)
+}
+
+// moonsBadgeText is the Nameplate's declared-moon statement — the r51
+// acceptance line made visible: a calendar declaring MORE moons than the grid
+// draws states the total ("3 of 4 moons"), and one declaring three or fewer
+// states nothing extra. The ceiling is moonCap, declared ONCE here and never
+// per cell (L25/L30), and the number is MonthGeometry.MoonsDeclared — the
+// per-cell Moons are already capped (data.go) and cannot supply it.
+//
+// The badge is layer-gated with the discs it explains (the signed MOONS_ON()
+// gate): with the moons layer off the grid draws no moons at all, and
+// "3 of 4" would be a claim about a surface that is not there.
+func moonsBadgeText(d BlockData) string {
+	if !hasLayer(d.Layers, "moons") || d.Month.MoonsDeclared <= moonCap {
+		return ""
+	}
+	return fmt.Sprintf("%d of %d moons", moonCap, d.Month.MoonsDeclared)
+}
+
+// moonsBadgeTitle explains the ceiling on hover. The signed title's "all of
+// them are in the Almanac" tail is NOT ported: the Almanac is W-E and does not
+// exist yet, and a hover that points at an unbuilt surface is a small lie.
+func moonsBadgeTitle(d BlockData) string {
+	return fmt.Sprintf("%d moons declared; the grid draws %d", d.Month.MoonsDeclared, moonCap)
 }

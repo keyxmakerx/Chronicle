@@ -142,6 +142,14 @@ type CalendarService interface {
 	LinkEntityToEra(ctx context.Context, entityID string, eraID int, role *string) error
 	UnlinkEntityFromEra(ctx context.Context, entityID string, eraID int) error
 	EventsForEntity(ctx context.Context, entityID string) ([]EntityEventTie, error)
+	// EventsForEntityFiltered is the viewer-filtered sibling of
+	// EventsForEntity: it additionally enforces calendar-level AND
+	// event-level visibility (calendarVisibleTo + canUserView) for the given
+	// viewer (C-CALV4-TIEFIX-PB Bug 1 item 3). On the interface — not
+	// concrete-only on *calendarService — because its planned consumer, the
+	// phase-B entity-page host, lives OUTSIDE this package and cannot
+	// type-assert an unexported type (C-CALV4-SEAM-P5 §7).
+	EventsForEntityFiltered(ctx context.Context, entityID string, role int, userID string) ([]EntityEventTie, error)
 	ErasForEntity(ctx context.Context, entityID string) ([]EntityEraTie, error)
 	// EntitiesForEvent/EntitiesForEra take role + userID (viewer context) so
 	// entity visibility is enforced the same way EntitiesForCalendar already

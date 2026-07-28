@@ -119,14 +119,24 @@ func (r *timelineRepo) GetByID(ctx context.Context, id string) (*Timeline, error
 // the SAME dm_only visibility predicate those two methods already apply
 // (linkedEventVisFilter mirrors ListEventLinks' `ce.visibility` fragment;
 // standaloneVisFilter mirrors ListStandaloneEvents' `te.visibility` fragment)
-// into these subqueries closes that delta. It does NOT close it entirely:
-// events carrying visibility_rules ({allowed_users, denied_users}) are
-// resolved in Go by canUserView (service.go's ListTimelineEvents), which SQL
-// cannot see, so a residual difference survives for those. Do not describe
-// this as closing the oracle — only the dm_only delta is closed.
+// into these subqueries closes that delta.
+//
+// C-CALV4-SEAM-P5 §7: the linked fragment ALSO folds in the link-level
+// visibility_override — COALESCE(NULLIF(tel.visibility_override, ''),
+// ce.visibility) is the SQL mirror of EventLink.EffectiveVisibility(), which
+// the service's ListTimelineEvents enforces on the row path. Without it a
+// link the GM overrode to dm_only was hidden from a player's rows but still
+// counted: the same oracle, one column over.
+//
+// It does NOT close the delta entirely: links/events carrying
+// visibility_rules ({allowed_users, denied_users}) are resolved in Go by
+// canUserView (service.go's ListTimelineEvents), which SQL cannot see, so a
+// residual difference survives for those. Do not describe this as closing
+// the oracle — only the dm_only deltas (event visibility + link override)
+// are closed.
 func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([]Timeline, error) {
 	visFilter := "AND t.visibility = 'everyone'"
-	linkedEventVisFilter := "AND ce.visibility = 'everyone'"
+	linkedEventVisFilter := "AND ce.visibility = 'everyone' AND COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'"
 	standaloneVisFilter := "AND te.visibility = 'everyone'"
 	if permissions.CanSeeDmOnly(role) {
 		visFilter = ""
@@ -173,11 +183,12 @@ func (r *timelineRepo) List(ctx context.Context, campaignID string, role int) ([
 // service interface (C-APPS-CAL-DASH-W1) — no new columns, no migration.
 //
 // EventCount visibility: same PARTIAL fix as List above (C-CALV4-TIEFIX-PB
-// Bug 2) — see that function's doc comment for the full rationale and the
-// residual visibility_rules gap that is NOT closed by this change.
+// Bug 2 + the C-CALV4-SEAM-P5 §7 visibility_override fold-in) — see that
+// function's doc comment for the full rationale and the residual
+// visibility_rules gap that is NOT closed by this change.
 func (r *timelineRepo) ListByCalendar(ctx context.Context, calendarID string, role int) ([]Timeline, error) {
 	visFilter := "AND t.visibility = 'everyone'"
-	linkedEventVisFilter := "AND ce.visibility = 'everyone'"
+	linkedEventVisFilter := "AND ce.visibility = 'everyone' AND COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'"
 	standaloneVisFilter := "AND te.visibility = 'everyone'"
 	if permissions.CanSeeDmOnly(role) {
 		visFilter = ""

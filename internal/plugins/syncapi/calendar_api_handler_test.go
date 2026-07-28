@@ -204,6 +204,12 @@ func (s *stubCalendarSvc) UnlinkEntityFromEra(context.Context, string, int) erro
 func (s *stubCalendarSvc) EventsForEntity(context.Context, string) ([]calendar.EntityEventTie, error) {
 	return nil, nil
 }
+
+// C-CALV4-SEAM-P5 §7 put EventsForEntityFiltered on CalendarService for its
+// phase-B consumer; syncapi doesn't use it.
+func (s *stubCalendarSvc) EventsForEntityFiltered(context.Context, string, int, string) ([]calendar.EntityEventTie, error) {
+	return nil, nil
+}
 func (s *stubCalendarSvc) ErasForEntity(context.Context, string) ([]calendar.EntityEraTie, error) {
 	return nil, nil
 }

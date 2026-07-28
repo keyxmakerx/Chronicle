@@ -18,6 +18,16 @@ import "github.com/keyxmakerx/chronicle/internal/templates/layouts"
 
 // Block renders one calendar Block from a fully-resolved BlockData. It performs
 // no queries and reads no request state.
+//
+// THE LAYER REGISTRY GATES EVERY LAYER-OWNED SURFACE. The Ledger and Shelf
+// zones are two of the eight LayerState keys (data.go), so they render only
+// when their key is enabled — under wave 1's DEF (["moons"]) neither does,
+// because the default surface is a month with its moon phases and nothing
+// else. The Hidden flags are the HOST's removal (the Bench's real-world Block
+// renders with noShelf) and the layer key is the VIEWER's; the zone renders
+// only when both agree. The stubs' "docked at its real width" contract
+// describes what the zone is WHEN it renders, not a licence to render it past
+// the registry.
 templ Block(d BlockData) {
 	<div class="cal-block-host" data-cal-block>
 		@Stylesheet()
@@ -41,14 +51,14 @@ templ Block(d BlockData) {
 					@instrument(d)
 					@belowMonthLayers(d)
 				</div>
-				if !d.Ledger.Hidden {
+				if hasLayer(d.Layers, "ledger") && !d.Ledger.Hidden {
 					<div class="layer-col">
 						@ledgerStub(d)
 					</div>
 				}
 			</div>
 			<div class="minirail" aria-hidden="true"></div>
-			if !d.Shelf.Hidden {
+			if hasLayer(d.Layers, "shelf") && !d.Shelf.Hidden {
 				@shelfStub(d)
 			}
 			@blockFoot(d)

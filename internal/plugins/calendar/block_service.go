@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
 )
 
@@ -160,21 +161,48 @@ type BlockRequest struct {
 	MoonCap int
 }
 
+// requireVisibleCalendar loads one calendar eagerly and applies the
+// calendar-level visibility gate (C-CALV4-SEAM-P5 §4): a calendar the viewer
+// may not see answers with the SAME not-found shape a nonexistent one does —
+// the apperror.NewNotFound("calendar not found") handler_v2.go's
+// requireVisibleCalendar returns — so a hidden calendar's existence never
+// leaks through a distinguishable error. ONE return site covers both branches
+// on purpose: two constructors would eventually drift into an oracle.
+//
+// The gate lives on the spine because calendarVisibleTo is unexported: a
+// phase-B host outside this package cannot reproduce it, and its only
+// alternative is the 60-method service the spine exists to avoid. Same
+// predicate family as UpcomingAcrossCalendars' filterCalendarsByUser — the
+// owner/co-DM and system-context (empty UserID) bypasses are the predicate's,
+// not re-decided here.
+func (s *BlockService) requireVisibleCalendar(ctx context.Context, calendarID string, viewer BlockViewer) (*Calendar, error) {
+	cals, err := s.EagerLoadCalendars(ctx, []string{calendarID})
+	if err != nil {
+		return nil, err
+	}
+	cal := cals[calendarID]
+	if cal == nil || !calendarVisibleTo(cal, viewer.Role, viewer.UserID) {
+		return nil, apperror.NewNotFound("calendar not found")
+	}
+	return cal, nil
+}
+
 // Block builds one BlockData.
 //
-// The order is load-bearing: load the calendar (eager, real-time-seamed), read
-// the month's candidate events plus any intercalary months hanging off it,
-// resolve ties in ONE batched query, then hand everything to projectBlock,
-// which runs the SINGLE viewer filter and derives both counts and every cell
-// from that one result.
+// The order is load-bearing: resolve the calendar (eager, real-time-seamed,
+// visibility-GATED — see requireVisibleCalendar), read the month's candidate
+// events plus any intercalary months hanging off it, run the viewer filter,
+// resolve ties in ONE batched query over the FILTERED set — the tie read
+// applies no visibility filter of its own and relies on this ordering
+// (TiedEventIDsForEntity's contract) — then hand everything to projectBlock,
+// which derives both counts and every cell from one pass. projectBlock's own
+// filterEventsByUser is idempotent over the already-filtered slice, so direct
+// projectBlock callers (the seam tests) still get the single authoritative
+// filter.
 func (s *BlockService) Block(ctx context.Context, req BlockRequest) (calblock.BlockData, error) {
-	cals, err := s.EagerLoadCalendars(ctx, []string{req.CalendarID})
+	cal, err := s.requireVisibleCalendar(ctx, req.CalendarID, req.Viewer)
 	if err != nil {
 		return calblock.BlockData{}, err
-	}
-	cal := cals[req.CalendarID]
-	if cal == nil {
-		return calblock.BlockData{}, fmt.Errorf("block: calendar %q not found", req.CalendarID)
 	}
 
 	monthIdx, year := s.resolveView(cal, req.View)
@@ -182,6 +210,12 @@ func (s *BlockService) Block(ctx context.Context, req BlockRequest) (calblock.Bl
 	if err != nil {
 		return calblock.BlockData{}, err
 	}
+	// Filter BEFORE the tie read. TiedEventIDsForEntity deliberately applies no
+	// visibility filter of its own on the promise that every event id it is
+	// handed is already viewer-visible; handing it raw candidates would ask it
+	// about events this viewer may not see. `events` is compacted in place and
+	// only the filtered prefix is read from here on (COMMON §7).
+	events = filterEventsByUser(events, req.Viewer.Role, req.Viewer.UserID)
 
 	tied, err := s.tiedEventIDs(ctx, req.Viewer.HostEntity, events)
 	if err != nil {
@@ -249,27 +283,49 @@ func (s *BlockService) resolveView(cal *Calendar, v BlockDate) (monthIdx, year i
 }
 
 // candidateEvents reads the rendered month PLUS every intercalary month hanging
-// off it, as one candidate slice.
+// off it, as one candidate slice holding each event ONCE.
 //
 // Concatenating before the viewer filter (rather than filtering each month) is
 // what keeps the one-pass rule intact: projectBlock filters the union exactly
 // once, so the counts and the intercalary marks come from the same pass as the
 // grid cells.
+//
+// The union DEDUPES on event id, and the dedupe lives HERE, at the source
+// (C-CALV4-SEAM-P5 §5 ruling — not a downstream marks filter). Every
+// ListEventsForMonth call returns every recurring candidate regardless of the
+// month asked for (the C-CAL-EDITOR-EXPANSION PR2 widening; OccursOn decides
+// placement in Go), so querying the rendered month plus N intercalary months
+// yields N+1 copies of each recurring row. Downstream assumes the slice holds
+// each event once: blockCountEvents happens to dedupe on id, but
+// blockMarksForDate emits one mark per row, so an undeduped union draws
+// duplicate chips and a doubled foot total while the counts stay right.
 func (s *BlockService) candidateEvents(ctx context.Context, cal *Calendar, monthIdx, year, role int) ([]Event, error) {
 	months := append([]int{monthIdx}, blockIntercalaryMonths(cal, monthIdx)...)
 	var out []Event
+	seen := make(map[string]bool)
 	for _, mi := range months {
 		evs, err := s.repo.ListEventsForMonth(ctx, cal.ID, year, mi+1, role)
 		if err != nil {
 			return nil, fmt.Errorf("block events for month %d: %w", mi+1, err)
 		}
-		out = append(out, evs...)
+		for i := range evs {
+			if seen[evs[i].ID] {
+				continue
+			}
+			seen[evs[i].ID] = true
+			out = append(out, evs[i])
+		}
 	}
 	return out, nil
 }
 
 // tiedEventIDs resolves the tie set in ONE batched query. Off an entity page
 // there is nothing to tie to and no query is issued.
+//
+// PRECONDITION: `events` is already viewer-filtered (Block runs
+// filterEventsByUser before calling this). TiedEventIDsForEntity applies no
+// visibility filter of its own on the strength of that invariant — see its
+// doc comment in block_repository.go.
 func (s *BlockService) tiedEventIDs(ctx context.Context, hostEntity string, events []Event) (map[string]bool, error) {
 	if strings.TrimSpace(hostEntity) == "" || len(events) == 0 {
 		return nil, nil
@@ -291,16 +347,14 @@ func (s *BlockService) tiedEventIDs(ctx context.Context, hostEntity string, even
 // expanded through the single OccursOn predicate.
 //
 // Consumed by W-B (the docked Ledger answering a day) and the ledger surfaces.
-// The filter runs ONCE over the month's candidate rows; the day selection is
+// The calendar itself is visibility-gated (requireVisibleCalendar) — a hidden
+// calendar's day must be as unanswerable as a nonexistent one's. The event
+// filter runs ONCE over the month's candidate rows; the day selection is
 // applied to the filtered result, never to a second filtering pass.
 func (s *BlockService) EventsForDay(ctx context.Context, calendarID string, viewer BlockViewer, date BlockDate) ([]Event, error) {
-	cals, err := s.EagerLoadCalendars(ctx, []string{calendarID})
+	cal, err := s.requireVisibleCalendar(ctx, calendarID, viewer)
 	if err != nil {
 		return nil, err
-	}
-	cal := cals[calendarID]
-	if cal == nil {
-		return nil, fmt.Errorf("events for day: calendar %q not found", calendarID)
 	}
 	candidates, err := s.repo.ListEventsForMonth(ctx, calendarID, date.Year, date.Month, viewer.Role)
 	if err != nil {
@@ -543,11 +597,19 @@ func (s *BlockService) UpcomingAcrossCalendars(ctx context.Context, campaignID s
 	var out []BlockUpcoming
 	for _, id := range ids {
 		cal := byID[id]
+		if cal == nil || len(cal.Months) == 0 {
+			continue
+		}
+		// The current-date base is loop-invariant across this calendar's
+		// events, and Calendar.AbsoluteDay loops over every prior year (the
+		// COMMON §7 trap monthBaseAbsoluteDay documents) — compute it once
+		// per calendar, not once per event (C-CALV4-SEAM-P5 §7).
+		base := cal.AbsoluteDay(cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 		// THE ONE PASS, per calendar — rows[id] is compacted in place here and
 		// is not read again.
 		visible := filterEventsByUser(rows[id], viewer.Role, viewer.UserID)
 		for i := range visible {
-			if up, ok := s.nextOccurrence(cal, &visible[i]); ok {
+			if up, ok := s.nextOccurrence(cal, base, &visible[i]); ok {
 				out = append(out, up)
 			}
 		}
@@ -560,12 +622,14 @@ func (s *BlockService) UpcomingAcrossCalendars(ctx context.Context, campaignID s
 }
 
 // nextOccurrence finds an event's soonest occurrence at or after its calendar's
-// current date, expanding recurrence through OccursOn.
-func (s *BlockService) nextOccurrence(cal *Calendar, e *Event) (BlockUpcoming, bool) {
+// current date, expanding recurrence through OccursOn. base must be
+// cal.AbsoluteDay of the calendar's current date — the caller hoists it
+// because it is identical for every event on the calendar and AbsoluteDay is
+// O(years) (C-CALV4-SEAM-P5 §7).
+func (s *BlockService) nextOccurrence(cal *Calendar, base int, e *Event) (BlockUpcoming, bool) {
 	if cal == nil || len(cal.Months) == 0 {
 		return BlockUpcoming{}, false
 	}
-	base := cal.AbsoluteDay(cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 	year, month := cal.CurrentYear, cal.CurrentMonth
 	limit := cal.CurrentYear + blockUpcomingHorizonYears
 	for year <= limit {

@@ -6,9 +6,9 @@
 //     removes the visibility fragment from the count subqueries again. This
 //     is the one that actually runs in CI.
 //  2. TestTimelineEventCount_Integration — a real-MariaDB behavioral proof
-//     that List/ListByCalendar's EventCount agrees with
-//     ListEventLinks+ListStandaloneEvents' row counts for a player viewer
-//     with a dm_only event in scope. Mirrors the two pre-existing DB
+//     that List/ListByCalendar's EventCount agrees with the merged service
+//     read (ListTimelineEvents) for a player viewer with a dm_only event AND
+//     a dm_only link override in scope. Mirrors the two pre-existing DB
 //     integration tests in internal/plugins/entities (same DSN/skip
 //     conventions, copied verbatim) — like those two, it is skipped under
 //     `-short` and therefore never runs in CI either; it was NOT executed in
@@ -86,12 +86,22 @@ func flatten(s string) string {
 // two COUNT(*) subqueries were unconditional — a player would see e.g. "12
 // events" while the actual row reads returned only 9, the difference being a
 // count of hidden events (a visibility oracle, cordinator#32-class leak).
+//
+// C-CALV4-SEAM-P5 §7 extends the linked fragment: the row path a player
+// actually sees is repo-level `ce.visibility` filtering FOLLOWED BY the
+// service's EffectiveVisibility() step (ListTimelineEvents), which honors the
+// GM-settable timeline_event_links.visibility_override. A count that folds in
+// only ce.visibility re-opens the same oracle one column over — a link
+// overridden to dm_only is hidden from the player's rows but still counted.
+// COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) is the SQL
+// mirror of EffectiveVisibility(): override when non-NULL and non-empty,
+// otherwise the event's own visibility.
 func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 	for _, fn := range []string{"List", "ListByCalendar"} {
 		body := flatten(funcSource(t, "repository.go", fn))
 		for _, want := range []string{
 			"JOIN calendar_events ce ON ce.id = tel.event_id",
-			`linkedEventVisFilter := "AND ce.visibility = 'everyone'"`,
+			`linkedEventVisFilter := "AND ce.visibility = 'everyone' AND COALESCE(NULLIF(tel.visibility_override, ''), ce.visibility) = 'everyone'"`,
 			`standaloneVisFilter := "AND te.visibility = 'everyone'"`,
 		} {
 			if !strings.Contains(body, flatten(want)) {
@@ -111,16 +121,20 @@ func TestEventCountVisibility_MatchesListFilters(t *testing.T) {
 // --- real-MariaDB behavioral proof (see file doc comment for why this is
 // skipped rather than run in this sandbox / in CI) ---
 
-// TestTimelineEventCount_Integration exercises List/ListByCalendar +
-// ListEventLinks/ListStandaloneEvents against a real MariaDB with one
-// timeline carrying a public linked event, a dm_only linked event, and a
+// TestTimelineEventCount_Integration exercises List/ListByCalendar against a
+// real MariaDB with one timeline carrying a public linked event, a dm_only
+// linked event, a public linked event whose LINK is overridden to dm_only
+// (timeline_event_links.visibility_override, C-CALV4-SEAM-P5 §7), and a
 // dm_only standalone event — the exact "player viewer, dm_only event in
-// scope" scenario the dispatch's guard asks for. Asserts EventCount equals
-// the actual row count for BOTH a player and an owner viewer, so a
-// regression that silently reintroduces the unconditional COUNT(*) (or
-// over-corrects and hides events from owners) fails loudly here instead of
-// shipping unnoticed, same rationale as the entities package's two
-// integration tests.
+// scope" scenario the dispatch's guard asks for, plus the override variant.
+// Asserts EventCount equals the row count the real service method
+// (ListTimelineEvents — repo filter + EffectiveVisibility()) returns for
+// BOTH a player and an owner viewer, so a regression that silently
+// reintroduces the unconditional COUNT(*) (or over-corrects and hides events
+// from owners) fails loudly here instead of shipping unnoticed, same
+// rationale as the entities package's two integration tests. Links carrying
+// visibility_rules remain OUTSIDE this agreement (resolved in Go per user;
+// SQL cannot see them) — the residual gap List's doc comment describes.
 func TestTimelineEventCount_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test requires a database; skipped under -short")
@@ -138,6 +152,7 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 	timelineID := testUUID(t)
 	publicEventID := testUUID(t)
 	secretEventID := testUUID(t)
+	overriddenEventID := testUUID(t)
 	secretStandaloneID := testUUID(t)
 
 	mustExec(t, db, `INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
@@ -157,6 +172,8 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 		publicEventID, calendarID, "Public Event")
 	mustExec(t, db, `INSERT INTO calendar_events (id, calendar_id, name, year, month, day, visibility) VALUES (?, ?, ?, 1, 1, 2, 'dm_only')`,
 		secretEventID, calendarID, "Secret Event")
+	mustExec(t, db, `INSERT INTO calendar_events (id, calendar_id, name, year, month, day, visibility) VALUES (?, ?, ?, 1, 1, 4, 'everyone')`,
+		overriddenEventID, calendarID, "Overridden Event")
 	mustExec(t, db, `INSERT INTO timelines (id, campaign_id, calendar_id, name) VALUES (?, ?, ?, ?)`,
 		timelineID, campaignID, calendarID, "Test Timeline")
 
@@ -166,6 +183,16 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 	if err := repo.LinkEvent(ctx, &EventLink{TimelineID: timelineID, EventID: secretEventID}); err != nil {
 		t.Fatalf("link secret event: %v", err)
 	}
+	// The §7 case: the EVENT is 'everyone' but the GM overrode this LINK to
+	// dm_only. The service's EffectiveVisibility() hides it from a player's
+	// rows; the count subquery must agree or the link-level oracle is back.
+	if err := repo.LinkEvent(ctx, &EventLink{TimelineID: timelineID, EventID: overriddenEventID}); err != nil {
+		t.Fatalf("link overridden event: %v", err)
+	}
+	dmOnly := "dm_only"
+	if err := repo.UpdateEventLinkVisibility(ctx, timelineID, overriddenEventID, &dmOnly, nil); err != nil {
+		t.Fatalf("override link visibility: %v", err)
+	}
 	if err := repo.CreateEvent(ctx, &TimelineEvent{
 		ID: secretStandaloneID, TimelineID: timelineID, Name: "Secret Standalone",
 		Year: 1, Month: 1, Day: 3, Visibility: "dm_only",
@@ -174,9 +201,13 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 	}
 
 	// assertAgrees is the actual "count and list agree" proof: it derives the
-	// row count from the SAME two queries the merged ListTimelineEvents
-	// service method reads from, and checks List's EventCount against that —
-	// not against a hardcoded expectation — so it fails if EITHER side drifts.
+	// row count from the REAL merged service read (ListTimelineEvents — the
+	// same repo queries PLUS the EffectiveVisibility() override step a player
+	// actually gets), and checks List's EventCount against that — not against
+	// a hardcoded expectation — so it fails if EITHER side drifts. Before
+	// C-CALV4-SEAM-P5 §7 the count ignored visibility_override, so the raw
+	// repo lists agreed with it while the service rows did not.
+	svc := NewTimelineService(repo, nil, nil, nil)
 	assertAgrees := func(t *testing.T, role int, wantCount int) {
 		t.Helper()
 		tls, err := repo.List(ctx, campaignID, role)
@@ -187,18 +218,14 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 			t.Fatalf("expected exactly 1 timeline, got %d", len(tls))
 		}
 
-		links, err := repo.ListEventLinks(ctx, timelineID, role)
+		rows, err := svc.ListTimelineEvents(ctx, timelineID, role, userID)
 		if err != nil {
-			t.Fatalf("ListEventLinks: %v", err)
+			t.Fatalf("ListTimelineEvents: %v", err)
 		}
-		standalone, err := repo.ListStandaloneEvents(ctx, timelineID, role)
-		if err != nil {
-			t.Fatalf("ListStandaloneEvents: %v", err)
-		}
-		gotRows := len(links) + len(standalone)
+		gotRows := len(rows)
 
 		if gotRows != wantCount {
-			t.Fatalf("role %d: len(ListEventLinks)+len(ListStandaloneEvents) = %d, want %d (fixture drift, not the bug under test)", role, gotRows, wantCount)
+			t.Fatalf("role %d: len(ListTimelineEvents) = %d, want %d (fixture drift, not the bug under test)", role, gotRows, wantCount)
 		}
 		if tls[0].EventCount != gotRows {
 			t.Errorf("role %d: List's EventCount (%d) and the actual row count (%d) DISAGREE — the visibility-oracle bug is back", role, tls[0].EventCount, gotRows)
@@ -208,8 +235,8 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 	t.Run("player sees only the public linked event", func(t *testing.T) {
 		assertAgrees(t, permissions.RolePlayer, 1)
 	})
-	t.Run("owner sees all three events", func(t *testing.T) {
-		assertAgrees(t, permissions.RoleOwner, 3)
+	t.Run("owner sees all four events", func(t *testing.T) {
+		assertAgrees(t, permissions.RoleOwner, 4)
 	})
 
 	// ListByCalendar carries the identical fix; confirm it agrees too.

@@ -504,6 +504,13 @@ func buildMonthGeometry(cal *Calendar, in blockMonthGeometryInput) calblock.Mont
 	}
 
 	geo.Name = cal.Months[in.MonthIndex].Name
+	// MoonsDeclared is the CALENDAR'S declared total (r51), independent of
+	// ShowMoons and MoonCap on purpose: the per-cell discs are capped so the
+	// month can never grow with the fiction, which means len(Moons) per cell
+	// cannot state how many moons exist — and without this number a fourth
+	// moon vanishes silently. The Nameplate turns it into "3 of 4 moons" only
+	// when it exceeds the grid's ceiling.
+	geo.MoonsDeclared = len(cal.Moons)
 	geo.Days = blockMonthDays(cal, in.MonthIndex, in.Year)
 	geo.Lead = blockMonthLead(cal, in.MonthIndex, in.Year)
 	geo.RowCount = blockRowCount(geo.Lead, geo.Days, weekLen)

@@ -180,8 +180,9 @@ lint_file() {
 
     # ---------------- B3 + B4: element-scoped ------------------------------
     # Evaluates one complete OPEN TAG (`<button ... >`), however many lines it
-    # spans. Quoted values and templ `{ ... }` expressions are skipped so a
-    # `>` inside either does not close the tag early.
+    # spans. Quoted values, templ `{ ... }` expressions AND the Go expression
+    # of a templ control-flow attribute header (`if c.Day > 0 {`) are skipped
+    # so a `>` inside any of them does not close the tag early.
     function evalTag(buf, from, to,   name, i, m) {
       if (!isAdded(from, to)) return
 
@@ -214,14 +215,14 @@ lint_file() {
         scanB1(code, ln); scanB2(code, ln)
       }
 
-      inTag = 0; buf = ""; from = 0; q = ""; brace = 0
+      inTag = 0; buf = ""; from = 0; q = ""; brace = 0; ctrl = 0
       for (ln = 1; ln <= NR; ln++) {
         s = LINE[ln]; L = length(s)
         for (i = 1; i <= L; i++) {
           c = substr(s, i, 1)
           if (!inTag) {
             if (c == "<" && substr(s, i + 1) ~ /^[A-Za-z]/) {
-              inTag = 1; buf = "<"; from = ln; q = ""; brace = 0
+              inTag = 1; buf = "<"; from = ln; q = ""; brace = 0; ctrl = 0
             }
             continue
           }
@@ -230,6 +231,20 @@ lint_file() {
                                 if (c == "{") brace++
                                 else if (c == "}") brace--                 ; continue }
           if (c == "\"" || c == SQ)  { q = c; buf = buf c;                   continue }
+          # A templ control-flow attribute header (`if c.Day > 0 {`, and the
+          # else/for/switch forms) puts a Go expression BEFORE the `{` that
+          # engages brace-skip — and a bare `>` in that expression must not
+          # close the tag, or everything after the conditional falls off the
+          # buffer: B4 false-positives on cells whose data-day sits behind the
+          # conditional, B3 false-negatives on controls whose state marker
+          # does. Keyword must sit on a word boundary — followed by
+          # space/paren/brace, never `=` — so attribute names like `data-if`
+          # or `<label for="x">` cannot trigger it.
+          if (!ctrl && (i == 1 || substr(s, i - 1, 1) ~ /[[:space:]]/) && \
+              substr(s, i) ~ /^(if|else|for|switch)([[:space:]({]|$)/) {
+                                ctrl = 1; buf = buf c;                      continue }
+          if (ctrl)           { buf = buf c
+                                if (c == "{") { brace = 1; ctrl = 0 }      ; continue }
           if (c == "{")       { brace = 1; buf = buf c;                     continue }
           if (c == ">")       { evalTag(buf ">", from, ln); inTag = 0; buf = ""; continue }
           buf = buf c
@@ -298,6 +313,41 @@ templ Clean() {
 	<tr data-row="2" data-day="harptos-w1"><td>x</td></tr>
 	<div data-colour="type">a non-interactive state marker is fine</div>
 	<div data-daynum="9" data-cell="2" data-day="harptos-2">near-miss attr names</div>
+	<div
+		data-cell="3"
+		if c.Day > 0 {
+			data-day={ dayKey(c) }
+		}
+		class="cell"
+	>9</div>
+	<button
+		type="button"
+		if open > 0 {
+			data-colour-pick="type"
+		}
+		class="pick"
+	>Colour</button>
+}
+FIXTURE
+
+  # Conditional-attribute VIOLATIONS: the marker the rule keys on sits inside
+  # a templ conditional whose Go expression carries a bare `>`. A scanner that
+  # closes the tag on that `>` never sees the marker — B3/B4 false-negatives.
+  cat > "${dir}/cond-dirty.templ" <<'FIXTURE'
+templ CondDirty() {
+	<button
+		type="button"
+		if open > 0 {
+			data-colour="type"
+		}
+		class="pick"
+	>Colour</button>
+	<div
+		if c.Day > 0 {
+			data-cell="1"
+		}
+		class="cell"
+	>9</div>
 }
 FIXTURE
 
@@ -317,6 +367,10 @@ FIXTURE
   expect "clean.templ stays quiet"      "${dir}/clean.templ" 1 "NONE"
   # B4 must not fire outside its scope, even on the same markup.
   expect "dirty.templ out of B4 scope"  "${dir}/dirty.templ" 0 "B3"
+  # Markers behind templ conditional attributes must still be seen: the whole
+  # tag — conditional blocks included — is one open tag to B3/B4.
+  expect "cond-dirty.templ fires B3+B4" "${dir}/cond-dirty.templ" 1 "B3,B4"
+  expect "cond-dirty.templ out of B4 scope" "${dir}/cond-dirty.templ" 0 "B3"
 
   if (( rc != 0 )); then
     echo "check-calendar-v4-lints: SELF-TEST FAILED — the guard is broken, fix the guard." >&2

@@ -381,10 +381,13 @@ func (r *calendarRepo) EntitiesForEventsBatch(ctx context.Context, eventIDs []st
 // No entity-visibility filter is applied and that is deliberate: the caller
 // already holds the host entity (the Block is rendering ON its page, which is
 // itself permission-gated), and the event set passed in has already been
-// viewer-filtered. The answer therefore reveals nothing the viewer does not
-// already have. Using the visibility-filtered join instead would make the tie
-// COUNT depend on the host entity's own visibility, which is a different
-// question and a subtler oracle.
+// viewer-filtered — BlockService.Block enforces that by running
+// filterEventsByUser over the candidates BEFORE the tie read (C-CALV4-SEAM-P5
+// §4; pinned by TestBlockTieReadReceivesOnlyViewerVisibleEvents), so every
+// event id that reaches this query is one the viewer may see. The answer
+// therefore reveals nothing the viewer does not already have. Using the
+// visibility-filtered join instead would make the tie COUNT depend on the host
+// entity's own visibility, which is a different question and a subtler oracle.
 func (r *calendarRepo) TiedEventIDsForEntity(ctx context.Context, entityID string, eventIDs []string) (map[string]bool, error) {
 	out := map[string]bool{}
 	if strings.TrimSpace(entityID) == "" {

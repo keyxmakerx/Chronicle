@@ -296,8 +296,15 @@ func TestBlockFoggedIsAlwaysFalse(t *testing.T) {
 
 // TestBlockAudienceMarkUsesOnlyWhatExists pins ruling COMMON §6.2: composed
 // tag+member audiences do not exist on main (no member_tags table; the shipped
-// people primitive is campaign_groups), so the gold diamond is populated ONLY
+// people primitive is campaign_groups), so the gold marks are populated ONLY
 // from visibility == dm_only or a visibility_rules restriction.
+//
+// EXTENDED at P5 §3.3 to pin the DISCRIMINATOR, not just the labels. This test
+// originally checked Label alone, which is why the producer could set
+// Restricted true on both branches — drawing the diamond on every dm_only day
+// and the dogear nowhere — without a single test going red. The ruling
+// (data.go, AudienceMark): Restricted == false → the gold DOGEAR (dm_only);
+// Restricted == true → the gold DIAMOND (a visibility_rules restriction).
 func TestBlockAudienceMarkUsesOnlyWhatExists(t *testing.T) {
 	cal := blockTenDayCal()
 	restricted := blockEvent("restricted", 6, "everyone")
@@ -311,11 +318,13 @@ func TestBlockAudienceMarkUsesOnlyWhatExists(t *testing.T) {
 	gm := projectBlock(BlockProjectionInput{Calendar: cal, Events: blockCopyEvents(events),
 		Viewer: BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}, MonthIndex: 0, Year: 1523})
 	labels := map[string]string{}
+	restrictedFlag := map[string]bool{}
 	for _, row := range gm.Month.Rows {
 		for _, cell := range row.Cells {
 			for _, m := range cell.Marks {
 				if m.Audience != nil {
 					labels[m.Title] = m.Audience.Label
+					restrictedFlag[m.Title] = m.Audience.Restricted
 				} else {
 					labels[m.Title] = ""
 				}
@@ -330,6 +339,13 @@ func TestBlockAudienceMarkUsesOnlyWhatExists(t *testing.T) {
 	}
 	if labels["Event restricted"] != "Restricted" {
 		t.Fatalf("visibility_rules audience = %q, want \"Restricted\"", labels["Event restricted"])
+	}
+	if restrictedFlag["Event gmonly"] {
+		t.Fatal("dm_only set Restricted = true — the renderer draws the restricted-audience " +
+			"diamond and the dogear renders nowhere in the product")
+	}
+	if !restrictedFlag["Event restricted"] {
+		t.Fatal("a visibility_rules restriction set Restricted = false — the diamond is its mark")
 	}
 
 	// A player who CAN see the restricted event sees an ordinary mark: no
