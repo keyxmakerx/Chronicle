@@ -51,9 +51,9 @@ templ Block(d BlockData) {
 					@instrument(d)
 					@belowMonthLayers(d)
 				</div>
-				if hasLayer(d.Layers, "ledger") && !d.Ledger.Hidden {
+				if ledgerDocked(d) {
 					<div class="layer-col">
-						@ledgerStub(d)
+						@ledger(d)
 					</div>
 				}
 			</div>
@@ -118,13 +118,18 @@ templ belowMonthLayers(d BlockData) {
 	}
 }
 
-// blockFoot is the mini / sub-mini foot line. It states a count it can actually
-// derive from the marks in front of it; the mockup's "next: <event>" is not in
-// BlockData, so it is not printed rather than guessed.
+// blockFoot is the mini / sub-mini foot line — and it is the LEDGER'S SMALLEST
+// FORM, not a separate surface. Below 300px of host the docked zone is
+// display:none and this line is all that is left of it.
+//
+// It states a count it can actually derive from the marks in front of it; the
+// mockup's "next: <event>" is not in BlockData, so it is not printed rather
+// than guessed. Which count it states is blockFootCount's business, and the
+// answer is not always the month's — see there.
 templ blockFoot(d BlockData) {
 	<div class="foot">
 		<span>{ d.Month.Name }</span>
 		<span class="dotsep">·</span>
-		<span>{ eventCountLabel(totalMarks(d)) }</span>
+		<span>{ blockFootCount(d) }</span>
 	</div>
 }

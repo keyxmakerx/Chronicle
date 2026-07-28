@@ -16,7 +16,15 @@ package calendar_block
 // instrument renders the month grid and, for the sub-mini tier, the thirty-tick
 // rule that honestly replaces it.
 templ instrument(d BlockData) {
-	<div class="grid" data-week-len={ intText(d.Month.WeekLen) } data-weeknums?={ hasLayer(d.Layers, "weeknums") }>
+	<div
+		class="grid"
+		data-week-len={ intText(d.Month.WeekLen) }
+		data-weeknums?={ hasLayer(d.Layers, "weeknums") }
+		if ledgerDocked(d) {
+			role="group"
+			aria-label="Choose a day — the event list beside the month answers"
+		}
+	>
 		if len(d.Month.Weekdays) > 0 {
 			@weekdayHeader(d.Month)
 		}
@@ -138,18 +146,31 @@ func weekKey(slug string, r WeekRow) string {
 // ["moons"], the moongraph key owns the CURVE, not the discs), so the row is
 // gated on the registry like every other layer-owned surface — a cell that
 // carries Moons the viewer switched off must not draw them.
+// data-day-ord is the LADDER key beside data-day: the bare ordinal, because the
+// generated ladder lives in one static sheet shared by every calendar and
+// cannot know a slug. It is what lets a hovered cell light its Ledger row.
+//
+// --axis on the cell is the cell's DATUM HUE, taken from its first mark exactly
+// as the sub-mini tick rule already takes it (tickDays). A partner without its
+// own identity borrows the datum's — never --accent (canon A7). A cell with no
+// marks carries none and the ANSWER wash falls back to the structural rule.
 templ dayCell(d BlockData, c DayCell) {
 	<div
 		class={ cellClass(c, d.Month.WeekLen) }
 		if c.Day > 0 {
 			data-cell
 			data-day={ dayKey(d.CalendarSlug, c.Day) }
+			data-day-ord={ dayOrdKey(c.Day) }
+		}
+		if cellAxis(c) != "" {
+			style={ axisStyle(cellAxis(c)) }
 		}
 		if c.Tied {
 			data-tied
 		}
 	>
 		if c.Day > 0 {
+			@dayPick(d, dayOrdKey(c.Day), dayPickLabel("", c.Day), dayAnswers(c.Day))
 			<div class="cnamed">
 				@dayNumeral(c, true)
 				for _, m := range chipsFor(c) {
@@ -169,6 +190,40 @@ templ dayCell(d BlockData, c DayCell) {
 			@gmMarks(c)
 		}
 	</div>
+}
+
+// dayPick is one day's selection control: a visually-hidden radio plus the
+// STRETCHED LABEL that is the day's real hit target.
+//
+// THE LABEL, NOT THE CELL. cv4:2775-2782 excludes the dogear and the "+n more"
+// affordance from day selection, and a <label> wrapping the whole cell cannot
+// express that exclusion — so the label is an absolutely-positioned sibling
+// UNDER the cell's interactive children, and those two raise themselves above
+// it. Absolute positioning also keeps the cell's fixed 84px height untouched:
+// a control that changed the cell's height would break the no-motion rule the
+// whole grid depends on.
+//
+// GATED ON THE LEDGER (ledgerDocked). A Block with no docked Ledger has nothing
+// for a chosen day to repaint and no home for the `✕ all` option that
+// deselects it; shipping the radios anyway would be a radio group with no way
+// out of it.
+//
+// PAST THE LADDER'S BOUND `answers` is false and NOTHING is emitted — no
+// radio, no label, no dead affordance (CTS-2). The Ledger still lists the day.
+templ dayPick(d BlockData, key, label string, answers bool) {
+	if answers && ledgerDocked(d) {
+		<input
+			type="radio"
+			class="daypick"
+			data-day-pick={ key }
+			name={ dayPickGroupName(d) }
+			id={ dayPickInputID(d, key) }
+			aria-label={ label }
+		/>
+		<label class="dsel" for={ dayPickInputID(d, key) }>
+			<span class="vh">{ label }</span>
+		</label>
+	}
 }
 
 // dayNumeral prints the day. TODAY is a non-accent ink stamp: the campaign
@@ -213,7 +268,13 @@ templ intercalaryRows(d BlockData) {
 	for _, ic := range d.Month.Intercalary {
 		<div class="interc-row">
 			<span class="gut"></span>
-			<div class="interc" style="grid-column:2/-1" data-day={ intercalaryKey(d.CalendarSlug, ic.Day) }>
+			<div
+				class="interc"
+				style="grid-column:2/-1"
+				data-day={ intercalaryKey(d.CalendarSlug, ic.Day) }
+				data-day-ord={ intercalaryOrdKey(ic.Day) }
+			>
+				@dayPick(d, intercalaryOrdKey(ic.Day), dayPickLabel(ic.Name, ic.Day), intercalaryAnswers(ic.Day))
 				<span class="icd">{ intText(ic.Day) }</span>
 				<span class="cap">{ ic.Name }</span>
 				for _, m := range ic.Marks {

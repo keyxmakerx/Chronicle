@@ -122,6 +122,17 @@
   --tied-ink: 0.28;
   --untied-ink: 0.7;
 
+  /* THE MOTION BUDGET's own scalars (W-B, §MOTION at the foot of this file).
+     They are declared here, beside the ink levels, because they are values the
+     budget interpolates BETWEEN — not a licence to move anything: --m-swell is
+     the answered rail's optical scale (3px → 4.02px along its own axis, never
+     a width change) and the two durations are the only two this sheet uses. */
+  --m-swell: 1.34;
+  --t-fast: 100ms;
+  --t-base: 150ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-dec: cubic-bezier(0.05, 0.7, 0.1, 1);
+
   /* channel defaults, so a Block whose producer omits one still renders */
   --cal: var(--rule-structural-strong);
   --axis: var(--own-none);
@@ -794,11 +805,15 @@
    DayCell.Fogged is always false and this rule ships unused. W-F wires it. */
 .cal-block-host .cell.fog { background: var(--surface-inset) }
 .cal-block-host .cell.fog .dn { color: var(--text-muted) }
-/* selection is IDENTITY, not elevation: an inset ring and a tint, no shadow */
-.cal-block-host .cell.sel {
+/* selection is IDENTITY, not elevation: an inset ring and a tint, no shadow.
+   The :has() branch is the CSS-only day pick (W-B): the cell's own hidden radio
+   IS the selected state, so no class has to be moved by anything. */
+.cal-block-host .cell.sel,
+.cal-block-host .cell:has(> .daypick:checked) {
   background: color-mix(in oklch, var(--surface-card) 96%, var(--accent));
 }
-.cal-block-host .cell.sel::after {
+.cal-block-host .cell.sel::after,
+.cal-block-host .cell:has(> .daypick:checked)::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1104,10 +1119,180 @@
   text-overflow: ellipsis;
   min-width: 0;
 }
+/* .lhead's `✕ all` slot is RESERVED, and the control toggles VISIBILITY, never
+   display. Design notes §10 defect 5: a conditionally-rendered "all month" chip
+   made the head WRAP the moment it appeared, jolting the Ledger on the
+   commonest interaction in the component. nowrap above + a reserved box here.
+
+   It is NOT a .badge.need. That chip means exactly "needs backend"; wave 2 adds
+   no use of it that is not literally that (REVIEW.md:428-432). */
+.cal-block-host .lclear {
+  visibility: hidden;
+  height: 18px;
+  padding: 0 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+/* the per-day head lines: one per selectable day, all hidden until the ladder
+   reveals the chosen one. CSS cannot compute "3 Deepwinter · 1 event", so the
+   server renders every one of them. */
+.cal-block-host .lhead .lctx {
+  display: none;
+}
+.cal-block-host .lhead .lctx-all,
+.cal-block-host .lhead .lctx {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* THE ROWS BOX IS WHAT MAKES "nothing reflows" TRUE, and it does it differently
+   at the two tiers it exists at. MEASURED, not assumed —
+   TestProbe_LedgerHeightIsInvariantUnderSelection reads both in a real engine.
+
+   At STD (this baseline) the Ledger stacks BELOW the month and takes the flex
+   share the Block's max-height leaves it, so its box is the same size whether
+   it lists fourteen rows or one. The floor is 0 here DELIBERATELY: a 176px
+   floor cannot be honoured inside the 140px the std Block affords the zone, and
+   the measurement is unambiguous about what happens if it is written anyway —
+   the rows box keeps its 176px, bleeds 36px past the Ledger's own box, and
+   lands on top of the Shelf. That is exactly the std collision CTS-8 exists to
+   catch, and it is answered INSIDE this zone's own geometry rather than by
+   touching a host layer set. See the slice report's CTS-8 section.
+
+   At FULL tier the 176px floor is added back (§SIZE CLASS), where it is the
+   real invariance device. */
 .cal-block-host .lrows {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+}
+.cal-block-host .lrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 44px;
+  border-bottom: 1px solid var(--rule-hairline);
+  position: relative;
+}
+.cal-block-host .lrow .dg {
+  width: 22px;
+  flex: none;
+  font-weight: 650;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-body);
+}
+/* the rail SWELLS by transform, never by width: `width:4px` on a flex item is a
+   layout property and was design notes §10 defect 3. The swell itself lives in
+   §ANSWER. */
+.cal-block-host .lrow .rail {
+  width: 3px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-full);
+}
+/* the gold GM rail. dm_only ONLY — a restricted audience is the chip, never
+   this, exactly as the grid draws the dogear for one and the diamond for the
+   other. */
+.cal-block-host .lrow .gr {
+  width: 3px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--gold);
+}
+.cal-block-host .lrow .tok {
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--axis);
+  flex: none;
+  width: 16px;
+}
+.cal-block-host .lrow .mid {
+  flex: 1;
+  min-width: 0;
+}
+.cal-block-host .lrow .nmrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.cal-block-host .lrow .nm {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.cal-block-host .lrow .mt {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.cal-block-host .lrow .badge.gm,
+.cal-block-host .lrow .audchip {
+  flex: none;
+  font-weight: 650;
+  font-size: 9.5px;
+  line-height: 1.3;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: var(--r-badge);
+  border: 1px solid var(--gold);
+  color: var(--text-body);
+  white-space: nowrap;
+}
+.cal-block-host .lrow .audchip {
+  border-style: dashed;
+}
+.cal-block-host .lrow .tm {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+  text-align: right;
+}
+/* L15: a real-world time is labelled with its zone and an in-world one never
+   is. Both facts come from BlockData.IsRealWorld — one fact, one decision. The
+   .z de-emphasis ships as Zone C vocabulary; r52 folds the abbreviation INTO
+   the producer's formatted string, so nothing emits .z today (see the report). */
+.cal-block-host .lrow .tm .z {
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+  margin-left: 3px;
+}
+.cal-block-host .lrow .tm.mono {
+  font-size: 11.5px;
+}
+/* .lband — the sticky group header. Styled HERE, in Zone C's vocabulary, and
+   consumed by W-E's Upcoming panel (cv4:1793-1799). The Ledger itself is FLAT
+   and ungrouped: v4-plus-list.png shows all fourteen GM rows unbanded. Shipping
+   it here rather than making W-E redefine it is what keeps one vocabulary. */
+.cal-block-host .lband {
+  position: sticky;
+  top: 0;
+  background: var(--surface-inset);
+  padding: 4px 10px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--rule-hairline);
 }
 .cal-block-host .lzero {
   padding: 14px 10px;
@@ -1115,6 +1300,42 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
+}
+/* the per-day empty states, revealed by the ladder exactly as the head lines
+   are. "Nothing on 3 Deepwinter" and "No events in Deepwinter" are different
+   strings for different claims and both are signed. */
+.cal-block-host .lzero.lday {
+  display: none;
+}
+/* THE PANEL STRIP, std tier. Emitted at every tier and shown by the container
+   query — the same discipline the sync pill's two strings follow. Wave 2 puts
+   ONE tab in it (CTS-7); W-E adds each further tab WITH its panel.
+
+   NO TRAVELLING INDICATOR (canon A6): the pressed state is state ON the pressed
+   item, never a sliding thumb or a moving underline. */
+.cal-block-host .ltabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+  flex: none;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-block-host .ltab {
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  font-weight: 650;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cal-block-host .ltab[aria-pressed="true"] {
+  color: var(--accent);
+  background: color-mix(in oklch, transparent 96%, var(--accent));
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 /* ── Zone D · SHELF ──────────────────────────────────────────────────────── */
@@ -1215,6 +1436,121 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   §ANSWER — the day pick, and the ANSWER primitive, with ZERO JavaScript and
+   ZERO routes (CTS-1, SIGNED: Option A).
+
+   THE DOCKED LEDGER'S PROMISE is that choosing a day repaints a panel that was
+   already on screen: nothing appears from nowhere and nothing reflows. A fetch
+   would put latency inside that promise. And ANSWER fires on hover, which a
+   network round trip cannot serve at all — so a static per-day rule ladder has
+   to exist whatever selection does, and once it exists selection is one more
+   rule per day. The generated ladder lives at the FOOT of this file.
+
+   THE STATE IS A RADIO GROUP, one per Block, named by a pure function of the
+   data (dayPickGroupName) so two Blocks on the Bench cannot fight over one
+   piece of state while the SAME Block survives an HTMX binding swap with the
+   viewer's choice intact. `✕ all` in the Ledger head is the group's explicit
+   "none" option — a radio cannot be un-checked by another radio, which is
+   exactly why that head slot is RESERVED rather than conditionally rendered.
+
+   THE ANSWERED LOOK IS DECLARED ONCE, HERE. The ladder's per-key rules set one
+   inherited custom property, --answer, and these rules read it. 48 keys × the
+   full declaration set would be the same values written 48 times, and the
+   motion budget's allowlist could not then be read by a human.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The radio IS the state. Visually hidden but still rendered and still
+   focusable: `display:none` would drop it from the tab order AND from
+   :checked, which is the whole mechanism. Same shape as .tiepick. */
+.cal-block-host .daypick {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  appearance: none;
+}
+
+/* The stretched label is the day's real hit target. It sits UNDER the cell's
+   interactive children — cv4:2775-2782 excludes the dogear and "+n more" from
+   day selection, and a <label> wrapping the whole cell could not express that
+   exclusion. Absolute, so the cell's fixed height is untouched. */
+.cal-block-host .dsel {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.cal-block-host .cell .dogear,
+.cal-block-host .cell .audmark {
+  z-index: 1;
+}
+.cal-block-host .cell .more {
+  position: relative;
+  z-index: 1;
+}
+/* The focus ring is borrowed from the input by its label, because the input the
+   keyboard actually lands on is the invisible one. The group is ONE tab stop
+   and the arrow keys move between days — which is how a keyboard answers. */
+.cal-block-host .daypick:focus-visible + .dsel {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ── A DAY IS CHOSEN · the three rules that are NOT per-key ─────────────────
+   Everything here holds for ANY chosen day, so it is written once instead of
+   48 times. `all` is excluded because it is the group's explicit "none"
+   option — its whole job is to put the Block back in this state. */
+.cal-block-host .block:has(.daypick[data-day-pick]:checked:not([data-day-pick="all"])) .lctx-all,
+.cal-block-host .block:has(.daypick[data-day-pick]:checked:not([data-day-pick="all"])) .lzero-all {
+  display: none;
+}
+/* VISIBILITY, NEVER DISPLAY. `display` would take the control out of flow and
+   the head would re-lay-out around it — design notes §10 defect 5, the jolt on
+   the commonest interaction in the component. The slot is reserved either way. */
+.cal-block-host .block:has(.daypick[data-day-pick]:checked:not([data-day-pick="all"])) .lclear {
+  visibility: visible;
+}
+
+/* ── ANSWERED · the signature. Partners light in the DATUM's own hue ────────
+   A partner without its own identity borrows the DATUM's — NEVER --accent
+   (canon A7: the moment accent means "related to what you're pointing at" it
+   stops meaning "selected"). --answer is 0 at rest and 1 on a partner, and
+   every value below interpolates between the two, so the state is a colour
+   change and nothing else: no shadow gained or lost, no border thickness
+   changed, nothing moved (canon A5). */
+.cal-block-host .cell,
+.cal-block-host .interc,
+.cal-block-host .lrow {
+  --answer: 0;
+  background-color: color-mix(in oklch,
+    transparent calc(100% - 20% * var(--answer)),
+    var(--axis, var(--rule-structural-strong)));
+}
+/* the answered day's numeral inks in the datum's hue too — a second cue in the
+   SAME channel, so primary-vs-partner stays a channel distinction and the echo
+   survives h264 compression */
+.cal-block-host .cell .dn {
+  color: color-mix(in oklch,
+    var(--text-body) calc(100% - 100% * var(--answer)),
+    var(--axis, var(--text-body)));
+}
+/* the rail swells along its own axis — a transform, never a width. `width:4px`
+   on a flex item is a layout property and was design notes §10 defect 3. */
+.cal-block-host .lrow .rail {
+  transform-origin: left center;
+  transform: scaleX(calc(1 + (var(--m-swell) - 1) * var(--answer)));
+}
+/* THE GOLD GM RAIL NEVER SWELLS (cv4:435). This is not decoration: a
+   permission marker that animates reads as a state change. */
+.cal-block-host .lrow .gr {
+  transform: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    §DENSITY — a function of MEASURED COLUMN WIDTH, not of tier.
 
    Separating density from size class is what lets a ten-column and a
@@ -1310,14 +1646,43 @@
     flex: 1;
     min-width: 0;
   }
+  /* THE LEDGER MAY NOT DRIVE THE BLOCK'S HEIGHT, and that is the second half
+     of the invariance promise (the first is .lrows{min-height}).
+
+     Both items of a grid row contribute to its height, so a docked Ledger
+     listing fourteen 48px rows would make the Block 780px tall unselected and
+     532px selected — choosing a day would reflow the whole component, which is
+     precisely what canon A3 struck D9's drawer clause to prevent. Taking the
+     Ledger out of flow inside its own 300px column makes the MONTH the only
+     thing that decides the Block's height, and the row list scrolls inside
+     whatever the month affords. TestProbe_LedgerHeightIsInvariantUnderSelection
+     measures both readings in a real engine.
+
+     The column keeps its 300px: that is the same 300px the full-tier column
+     arithmetic subtracts (sizing.go's ledgerDock), and it stays a plain
+     positioned box so W-F's top-layer switchboard popover can still anchor
+     inside it. */
   .cal-block-host .layer-col {
     width: 300px;
     flex: none;
+    position: relative;
+  }
+  .cal-block-host .layer-col > .ledger {
+    position: absolute;
+    inset: 0;
   }
   .cal-block-host .ledger {
     border-left: 1px solid var(--rule-structural);
     border-top: 0;
   }
+  /* the panel strip is a std affordance: at full tier the Shelf sits at the
+     foot of the Block and the Ledger head has no tabs (cv4 block(), :1842). */
+  .cal-block-host .ltabs { display: none }
+  .cal-block-host .lrow { height: 48px }
+  /* the signed 176px floor, at the tier that can afford it. Together with the
+     out-of-flow column above, this is what keeps the Block's declared height
+     identical selected and unselected. */
+  .cal-block-host .lrows { min-height: 176px }
 
   .cal-block-host .grid .hd b { height: 22px }
   .cal-block-host .wd-l { display: inline }
@@ -1417,17 +1782,366 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   §MOTION — there is none.
+   §MOTION — the budget, and it is EXACTLY this.
 
-   No transition, no animation, no @keyframes, no will-change anywhere above.
-   That is a wave-1 rule (COMMON §6.5), not an oversight, and this stylesheet is
-   the most likely place a reviewer will look for a violation. Because nothing
-   moves, no `prefers-reduced-motion` override is needed: there is nothing for
-   it to disable.
+   Wave 1 forbade motion outright and named W-B as the slice that re-opens the
+   question (COMMON §6.5). This is that re-opening, and it is a BUDGET rather
+   than a permission: TestCSS_NoMotionAtAll is now an ALLOWLIST — these
+   properties on these selectors — and every other transition, animation,
+   @keyframes, will-change, @starting-style or view-transition anywhere in this
+   file is still an error.
 
-   When W-B lands the ANSWER primitive and its --m-swell rail scale, the two
-   things that must NOT come with it are (a) any transition on --dash / --gap
-   (canon guard B1 — it destroys the greyscale identity channel) and (b) any
-   rule that animates box-shadow independently of the 0.5px ring it carries
-   (§STATE above makes that structurally impossible; keep it that way).
+   THE FOUR ITEMS, and why each is legal:
+
+   1. background-color and ink hue, on the surfaces that ANSWER. Canon A5 mints
+      ANSWERED as "the state of a surface that has just repainted because the
+      viewer pointed at a dated row. It changes background-colour and ink hue
+      ONLY. It never gains or loses shadow, never changes border thickness,
+      never moves." That is what makes the docked Ledger legal under L1: the
+      answer arrives as a COLOUR change, not as motion.
+
+   2. transform: scaleX() on a Ledger row's rail — and NEVER on .gr, the gold
+      GM rail (cv4:435). That is not decoration: a permission marker that
+      animates reads as a state change. It is a transform rather than a width
+      because `width:4px` on a flex item is a LAYOUT property and was design
+      notes §10 defect 3, found and fixed before signing.
+
+   3. m-latch on the selected cell's ring: centre → corners, nothing slides. A
+      viewer's own explicit act may latch (canon A6 forbids TRAVELLING
+      indicators, not a ring closing in place).
+
+   4. M5 NON-TARGET SILENCE, as a selector rather than a JS budget
+      (cv4:513-516). Rail and row transitions are killed unless the Block is
+      hovered, focused within, or swapping. ADDING BLOCKS MUST ADD RESTING COST
+      ONLY — this is not polish, it is how a Bench with four Blocks stays cheap.
+
+   Wrapped in prefers-reduced-motion: no-preference. Under reduced motion the
+   colour change is INSTANTANEOUS and every law above still holds, which is
+   itself the proof that ANSWERED is a colour state and not an animation.
+
+   EXPLICITLY OUT OF THE BUDGET, each for a stated reason:
+     · any transition on --dash / --gap (canon guard B1). Morphing a dash
+       pattern destroys the greyscale identity channel the signed greyscale
+       render promises, and it is the obvious "improvement" the next hand
+       reaches for. TestCSS_GuardB1_DashAndGapNeverAnimate stays green.
+     · animating box-shadow independently of the 0.5px ring it carries (canon
+       D3). §STATE makes that structurally impossible; keep it that way.
+     · will-change · @starting-style · view-transition — refusals, not omissions.
+     · the drawOnce() --m-step settle ladder (cv4:396-419). That is a JS
+       post-repaint pass; there is no repaint under CTS-1 = Option A and there
+       is no JS in this package. BOOKED, not approximated.
+     · THE MONTH GRID NEVER MOVES (2026-07-27 motion policy): "Cells, marks,
+       moons and era bands do not animate, reflow, or change size — including
+       when the tie toggle flips." The Ledger's row filter is the ONE sanctioned
+       content change and it is bounded to .lrows.
    ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: no-preference) {
+  /* 1 — colour only, on the surfaces that answer each other. */
+  .cal-block-host .cell,
+  .cal-block-host .interc,
+  .cal-block-host .lrow {
+    transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease);
+  }
+  .cal-block-host .cell .dn {
+    transition: color var(--t-base) var(--ease);
+  }
+
+  /* 2 — the rail swells along its own axis; the gold GM rail never does. */
+  .cal-block-host .lrow .rail {
+    transition: transform var(--t-base) var(--ease);
+  }
+  .cal-block-host .lrow .gr {
+    transition: none;
+  }
+
+  /* 3 — the latch closes centre → corners. Nothing slides, nothing travels. */
+  @keyframes m-latch {
+    from { clip-path: inset(0 50% 0 50%) }
+    to { clip-path: inset(0) }
+  }
+  .cal-block-host .cell:has(> .daypick:checked)::after {
+    animation: m-latch var(--t-fast) var(--ease-dec) both;
+  }
+
+  /* 4 — M5. A Block nobody is pointing at costs nothing to have on screen. */
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .cell,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .interc,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .lrow,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .cell .dn,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .lrow .rail {
+    transition: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §LADDER — GENERATED. Do not edit the block below by hand.
+
+   CSS cannot compare two dynamic attribute values, so day answering needs one
+   static rule set per DAY ORDINAL. The bound is 40 ordinary + 8 intercalary
+   keys (CTS-2, SIGNED), declared once in Go as answerLadderDays /
+   answerLadderIntercalary and mirrored here by the generator;
+   TestCSS_AnswerLadderAgreesWithGo asserts the two cannot drift.
+
+   PAST THE BOUND A DAY CARRIES NO SELECTION CONTROL AT ALL — no radio, no
+   label, no dead affordance. The Ledger still lists the day; only the
+   answering stops.
+
+   BOTH KEY NAMESPACES ARE ENUMERATED. An intercalary day's key is `iN`, and a
+   ladder that forgot it would make Midwinter silently stop answering — guard
+   B4's exact failure mode one level up.
+
+   Regenerate with:
+     UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* BEGIN ANSWER LADDER — generated */
+/* 40 ordinary + 8 intercalary keys × 3 rules. Regenerate with:
+   UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/ */
+.cal-block-host .block:has(.daypick[data-day-pick="1"]:checked) .lrow:not([data-lday="1"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="1"]:checked) .lhead .lctx[data-lday="1"],
+.cal-block-host .block:has(.daypick[data-day-pick="1"]:checked) .lzero.lday[data-lday="1"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="1"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="1"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="1"]:is(:hover, :focus-within)) .grid [data-day-ord="1"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="2"]:checked) .lrow:not([data-lday="2"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="2"]:checked) .lhead .lctx[data-lday="2"],
+.cal-block-host .block:has(.daypick[data-day-pick="2"]:checked) .lzero.lday[data-lday="2"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="2"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="2"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="2"]:is(:hover, :focus-within)) .grid [data-day-ord="2"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="3"]:checked) .lrow:not([data-lday="3"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="3"]:checked) .lhead .lctx[data-lday="3"],
+.cal-block-host .block:has(.daypick[data-day-pick="3"]:checked) .lzero.lday[data-lday="3"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="3"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="3"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="3"]:is(:hover, :focus-within)) .grid [data-day-ord="3"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="4"]:checked) .lrow:not([data-lday="4"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="4"]:checked) .lhead .lctx[data-lday="4"],
+.cal-block-host .block:has(.daypick[data-day-pick="4"]:checked) .lzero.lday[data-lday="4"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="4"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="4"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="4"]:is(:hover, :focus-within)) .grid [data-day-ord="4"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="5"]:checked) .lrow:not([data-lday="5"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="5"]:checked) .lhead .lctx[data-lday="5"],
+.cal-block-host .block:has(.daypick[data-day-pick="5"]:checked) .lzero.lday[data-lday="5"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="5"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="5"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="5"]:is(:hover, :focus-within)) .grid [data-day-ord="5"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="6"]:checked) .lrow:not([data-lday="6"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="6"]:checked) .lhead .lctx[data-lday="6"],
+.cal-block-host .block:has(.daypick[data-day-pick="6"]:checked) .lzero.lday[data-lday="6"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="6"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="6"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="6"]:is(:hover, :focus-within)) .grid [data-day-ord="6"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="7"]:checked) .lrow:not([data-lday="7"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="7"]:checked) .lhead .lctx[data-lday="7"],
+.cal-block-host .block:has(.daypick[data-day-pick="7"]:checked) .lzero.lday[data-lday="7"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="7"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="7"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="7"]:is(:hover, :focus-within)) .grid [data-day-ord="7"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="8"]:checked) .lrow:not([data-lday="8"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="8"]:checked) .lhead .lctx[data-lday="8"],
+.cal-block-host .block:has(.daypick[data-day-pick="8"]:checked) .lzero.lday[data-lday="8"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="8"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="8"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="8"]:is(:hover, :focus-within)) .grid [data-day-ord="8"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="9"]:checked) .lrow:not([data-lday="9"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="9"]:checked) .lhead .lctx[data-lday="9"],
+.cal-block-host .block:has(.daypick[data-day-pick="9"]:checked) .lzero.lday[data-lday="9"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="9"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="9"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="9"]:is(:hover, :focus-within)) .grid [data-day-ord="9"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="10"]:checked) .lrow:not([data-lday="10"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="10"]:checked) .lhead .lctx[data-lday="10"],
+.cal-block-host .block:has(.daypick[data-day-pick="10"]:checked) .lzero.lday[data-lday="10"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="10"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="10"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="10"]:is(:hover, :focus-within)) .grid [data-day-ord="10"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="11"]:checked) .lrow:not([data-lday="11"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="11"]:checked) .lhead .lctx[data-lday="11"],
+.cal-block-host .block:has(.daypick[data-day-pick="11"]:checked) .lzero.lday[data-lday="11"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="11"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="11"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="11"]:is(:hover, :focus-within)) .grid [data-day-ord="11"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="12"]:checked) .lrow:not([data-lday="12"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="12"]:checked) .lhead .lctx[data-lday="12"],
+.cal-block-host .block:has(.daypick[data-day-pick="12"]:checked) .lzero.lday[data-lday="12"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="12"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="12"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="12"]:is(:hover, :focus-within)) .grid [data-day-ord="12"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="13"]:checked) .lrow:not([data-lday="13"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="13"]:checked) .lhead .lctx[data-lday="13"],
+.cal-block-host .block:has(.daypick[data-day-pick="13"]:checked) .lzero.lday[data-lday="13"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="13"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="13"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="13"]:is(:hover, :focus-within)) .grid [data-day-ord="13"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="14"]:checked) .lrow:not([data-lday="14"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="14"]:checked) .lhead .lctx[data-lday="14"],
+.cal-block-host .block:has(.daypick[data-day-pick="14"]:checked) .lzero.lday[data-lday="14"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="14"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="14"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="14"]:is(:hover, :focus-within)) .grid [data-day-ord="14"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="15"]:checked) .lrow:not([data-lday="15"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="15"]:checked) .lhead .lctx[data-lday="15"],
+.cal-block-host .block:has(.daypick[data-day-pick="15"]:checked) .lzero.lday[data-lday="15"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="15"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="15"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="15"]:is(:hover, :focus-within)) .grid [data-day-ord="15"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="16"]:checked) .lrow:not([data-lday="16"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="16"]:checked) .lhead .lctx[data-lday="16"],
+.cal-block-host .block:has(.daypick[data-day-pick="16"]:checked) .lzero.lday[data-lday="16"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="16"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="16"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="16"]:is(:hover, :focus-within)) .grid [data-day-ord="16"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="17"]:checked) .lrow:not([data-lday="17"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="17"]:checked) .lhead .lctx[data-lday="17"],
+.cal-block-host .block:has(.daypick[data-day-pick="17"]:checked) .lzero.lday[data-lday="17"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="17"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="17"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="17"]:is(:hover, :focus-within)) .grid [data-day-ord="17"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="18"]:checked) .lrow:not([data-lday="18"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="18"]:checked) .lhead .lctx[data-lday="18"],
+.cal-block-host .block:has(.daypick[data-day-pick="18"]:checked) .lzero.lday[data-lday="18"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="18"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="18"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="18"]:is(:hover, :focus-within)) .grid [data-day-ord="18"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="19"]:checked) .lrow:not([data-lday="19"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="19"]:checked) .lhead .lctx[data-lday="19"],
+.cal-block-host .block:has(.daypick[data-day-pick="19"]:checked) .lzero.lday[data-lday="19"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="19"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="19"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="19"]:is(:hover, :focus-within)) .grid [data-day-ord="19"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="20"]:checked) .lrow:not([data-lday="20"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="20"]:checked) .lhead .lctx[data-lday="20"],
+.cal-block-host .block:has(.daypick[data-day-pick="20"]:checked) .lzero.lday[data-lday="20"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="20"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="20"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="20"]:is(:hover, :focus-within)) .grid [data-day-ord="20"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="21"]:checked) .lrow:not([data-lday="21"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="21"]:checked) .lhead .lctx[data-lday="21"],
+.cal-block-host .block:has(.daypick[data-day-pick="21"]:checked) .lzero.lday[data-lday="21"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="21"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="21"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="21"]:is(:hover, :focus-within)) .grid [data-day-ord="21"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="22"]:checked) .lrow:not([data-lday="22"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="22"]:checked) .lhead .lctx[data-lday="22"],
+.cal-block-host .block:has(.daypick[data-day-pick="22"]:checked) .lzero.lday[data-lday="22"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="22"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="22"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="22"]:is(:hover, :focus-within)) .grid [data-day-ord="22"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="23"]:checked) .lrow:not([data-lday="23"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="23"]:checked) .lhead .lctx[data-lday="23"],
+.cal-block-host .block:has(.daypick[data-day-pick="23"]:checked) .lzero.lday[data-lday="23"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="23"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="23"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="23"]:is(:hover, :focus-within)) .grid [data-day-ord="23"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="24"]:checked) .lrow:not([data-lday="24"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="24"]:checked) .lhead .lctx[data-lday="24"],
+.cal-block-host .block:has(.daypick[data-day-pick="24"]:checked) .lzero.lday[data-lday="24"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="24"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="24"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="24"]:is(:hover, :focus-within)) .grid [data-day-ord="24"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="25"]:checked) .lrow:not([data-lday="25"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="25"]:checked) .lhead .lctx[data-lday="25"],
+.cal-block-host .block:has(.daypick[data-day-pick="25"]:checked) .lzero.lday[data-lday="25"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="25"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="25"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="25"]:is(:hover, :focus-within)) .grid [data-day-ord="25"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="26"]:checked) .lrow:not([data-lday="26"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="26"]:checked) .lhead .lctx[data-lday="26"],
+.cal-block-host .block:has(.daypick[data-day-pick="26"]:checked) .lzero.lday[data-lday="26"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="26"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="26"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="26"]:is(:hover, :focus-within)) .grid [data-day-ord="26"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="27"]:checked) .lrow:not([data-lday="27"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="27"]:checked) .lhead .lctx[data-lday="27"],
+.cal-block-host .block:has(.daypick[data-day-pick="27"]:checked) .lzero.lday[data-lday="27"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="27"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="27"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="27"]:is(:hover, :focus-within)) .grid [data-day-ord="27"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="28"]:checked) .lrow:not([data-lday="28"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="28"]:checked) .lhead .lctx[data-lday="28"],
+.cal-block-host .block:has(.daypick[data-day-pick="28"]:checked) .lzero.lday[data-lday="28"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="28"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="28"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="28"]:is(:hover, :focus-within)) .grid [data-day-ord="28"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="29"]:checked) .lrow:not([data-lday="29"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="29"]:checked) .lhead .lctx[data-lday="29"],
+.cal-block-host .block:has(.daypick[data-day-pick="29"]:checked) .lzero.lday[data-lday="29"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="29"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="29"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="29"]:is(:hover, :focus-within)) .grid [data-day-ord="29"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="30"]:checked) .lrow:not([data-lday="30"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="30"]:checked) .lhead .lctx[data-lday="30"],
+.cal-block-host .block:has(.daypick[data-day-pick="30"]:checked) .lzero.lday[data-lday="30"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="30"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="30"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="30"]:is(:hover, :focus-within)) .grid [data-day-ord="30"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="31"]:checked) .lrow:not([data-lday="31"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="31"]:checked) .lhead .lctx[data-lday="31"],
+.cal-block-host .block:has(.daypick[data-day-pick="31"]:checked) .lzero.lday[data-lday="31"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="31"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="31"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="31"]:is(:hover, :focus-within)) .grid [data-day-ord="31"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="32"]:checked) .lrow:not([data-lday="32"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="32"]:checked) .lhead .lctx[data-lday="32"],
+.cal-block-host .block:has(.daypick[data-day-pick="32"]:checked) .lzero.lday[data-lday="32"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="32"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="32"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="32"]:is(:hover, :focus-within)) .grid [data-day-ord="32"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="33"]:checked) .lrow:not([data-lday="33"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="33"]:checked) .lhead .lctx[data-lday="33"],
+.cal-block-host .block:has(.daypick[data-day-pick="33"]:checked) .lzero.lday[data-lday="33"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="33"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="33"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="33"]:is(:hover, :focus-within)) .grid [data-day-ord="33"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="34"]:checked) .lrow:not([data-lday="34"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="34"]:checked) .lhead .lctx[data-lday="34"],
+.cal-block-host .block:has(.daypick[data-day-pick="34"]:checked) .lzero.lday[data-lday="34"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="34"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="34"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="34"]:is(:hover, :focus-within)) .grid [data-day-ord="34"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="35"]:checked) .lrow:not([data-lday="35"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="35"]:checked) .lhead .lctx[data-lday="35"],
+.cal-block-host .block:has(.daypick[data-day-pick="35"]:checked) .lzero.lday[data-lday="35"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="35"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="35"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="35"]:is(:hover, :focus-within)) .grid [data-day-ord="35"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="36"]:checked) .lrow:not([data-lday="36"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="36"]:checked) .lhead .lctx[data-lday="36"],
+.cal-block-host .block:has(.daypick[data-day-pick="36"]:checked) .lzero.lday[data-lday="36"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="36"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="36"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="36"]:is(:hover, :focus-within)) .grid [data-day-ord="36"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="37"]:checked) .lrow:not([data-lday="37"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="37"]:checked) .lhead .lctx[data-lday="37"],
+.cal-block-host .block:has(.daypick[data-day-pick="37"]:checked) .lzero.lday[data-lday="37"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="37"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="37"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="37"]:is(:hover, :focus-within)) .grid [data-day-ord="37"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="38"]:checked) .lrow:not([data-lday="38"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="38"]:checked) .lhead .lctx[data-lday="38"],
+.cal-block-host .block:has(.daypick[data-day-pick="38"]:checked) .lzero.lday[data-lday="38"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="38"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="38"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="38"]:is(:hover, :focus-within)) .grid [data-day-ord="38"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="39"]:checked) .lrow:not([data-lday="39"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="39"]:checked) .lhead .lctx[data-lday="39"],
+.cal-block-host .block:has(.daypick[data-day-pick="39"]:checked) .lzero.lday[data-lday="39"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="39"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="39"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="39"]:is(:hover, :focus-within)) .grid [data-day-ord="39"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="40"]:checked) .lrow:not([data-lday="40"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="40"]:checked) .lhead .lctx[data-lday="40"],
+.cal-block-host .block:has(.daypick[data-day-pick="40"]:checked) .lzero.lday[data-lday="40"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="40"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="40"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="40"]:is(:hover, :focus-within)) .grid [data-day-ord="40"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="i1"]:checked) .lrow:not([data-lday="i1"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="i1"]:checked) .lhead .lctx[data-lday="i1"],
+.cal-block-host .block:has(.daypick[data-day-pick="i1"]:checked) .lzero.lday[data-lday="i1"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="i1"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i1"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="i1"]:is(:hover, :focus-within)) .grid [data-day-ord="i1"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="i2"]:checked) .lrow:not([data-lday="i2"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="i2"]:checked) .lhead .lctx[data-lday="i2"],
+.cal-block-host .block:has(.daypick[data-day-pick="i2"]:checked) .lzero.lday[data-lday="i2"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="i2"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i2"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="i2"]:is(:hover, :focus-within)) .grid [data-day-ord="i2"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="i3"]:checked) .lrow:not([data-lday="i3"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="i3"]:checked) .lhead .lctx[data-lday="i3"],
+.cal-block-host .block:has(.daypick[data-day-pick="i3"]:checked) .lzero.lday[data-lday="i3"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="i3"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i3"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="i3"]:is(:hover, :focus-within)) .grid [data-day-ord="i3"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="i4"]:checked) .lrow:not([data-lday="i4"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="i4"]:checked) .lhead .lctx[data-lday="i4"],
+.cal-block-host .block:has(.daypick[data-day-pick="i4"]:checked) .lzero.lday[data-lday="i4"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="i4"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i4"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="i4"]:is(:hover, :focus-within)) .grid [data-day-ord="i4"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="i5"]:checked) .lrow:not([data-lday="i5"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="i5"]:checked) .lhead .lctx[data-lday="i5"],
+.cal-block-host .block:has(.daypick[data-day-pick="i5"]:checked) .lzero.lday[data-lday="i5"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="i5"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i5"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="i5"]:is(:hover, :focus-within)) .grid [data-day-ord="i5"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="i6"]:checked) .lrow:not([data-lday="i6"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="i6"]:checked) .lhead .lctx[data-lday="i6"],
+.cal-block-host .block:has(.daypick[data-day-pick="i6"]:checked) .lzero.lday[data-lday="i6"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="i6"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i6"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="i6"]:is(:hover, :focus-within)) .grid [data-day-ord="i6"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="i7"]:checked) .lrow:not([data-lday="i7"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="i7"]:checked) .lhead .lctx[data-lday="i7"],
+.cal-block-host .block:has(.daypick[data-day-pick="i7"]:checked) .lzero.lday[data-lday="i7"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="i7"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i7"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="i7"]:is(:hover, :focus-within)) .grid [data-day-ord="i7"] { --answer: 1 }
+.cal-block-host .block:has(.daypick[data-day-pick="i8"]:checked) .lrow:not([data-lday="i8"]) { display: none }
+.cal-block-host .block:has(.daypick[data-day-pick="i8"]:checked) .lhead .lctx[data-lday="i8"],
+.cal-block-host .block:has(.daypick[data-day-pick="i8"]:checked) .lzero.lday[data-lday="i8"] { display: revert }
+.cal-block-host .block:has(.grid [data-day-ord="i8"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i8"],
+.cal-block-host .block:has(.lrows .lrow[data-lday="i8"]:is(:hover, :focus-within)) .grid [data-day-ord="i8"] { --answer: 1 }
+/* END ANSWER LADDER */
+
+/* the two strings `.badge.gm` carries in the signed set — "<N> hidden" on the
+   Nameplate and "GM" on a Ledger row. Gold, because permission is gold (L22).
+   It is not extended beyond those two. */
+.cal-block-host .badge.gm {
+  border-color: var(--gold);
+  color: var(--text-body);
+}

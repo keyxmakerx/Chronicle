@@ -13,11 +13,12 @@
 //     PREFERENCE and BlockData carries no field for the current axis — Mark.Axis
 //     is already resolved by the producer. Rendering it would mean fabricating a
 //     pressed state. Same class as HasSwitchboard, same slice: W-F.
-//   - the "3 hidden" hidden-event-count badge. A hidden-event count still has
-//     no field in the pinned struct, and editing the struct is a stop-and-flag.
-//     (Its "3 of 4 moons" sibling moved OFF this list at C-CALV4-SEAM-P5
-//     stage 15: r51 added MonthGeometry.MoonsDeclared and the badge renders
-//     below — see moonsBadgeText.)
+//   - (the "3 hidden" hidden-event-count badge moved OFF this list at
+//     C-CALV4-LEDGER-P6: r52 added ViewerContext.HiddenCount and the badge
+//     renders below — see hiddenBadgeText. Its "3 of 4 moons" sibling moved off
+//     at C-CALV4-SEAM-P5 stage 15 the same way. Both were absent because the
+//     pinned struct had nowhere to put the number, not because either was
+//     rejected.)
 //   - the campaign clock on real-world Blocks. There is no time field; the
 //     viewer's zone IS rendered, because ViewerContext.Zone exists and L15 says
 //     every real-world time is labelled with it.
@@ -41,6 +42,9 @@ templ nameplate(d BlockData) {
 		}
 		if moonsBadgeText(d) != "" {
 			<span class="badge need moons" title={ moonsBadgeTitle(d) }>{ moonsBadgeText(d) }</span>
+		}
+		if hiddenBadgeText(d) != "" {
+			<span class="badge gm" title="events on this month that players cannot see">{ hiddenBadgeText(d) }</span>
 		}
 		@syncPill(d.Sync)
 		if d.IsRealWorld && d.Viewer.Zone != "" {

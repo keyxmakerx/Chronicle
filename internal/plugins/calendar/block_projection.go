@@ -24,6 +24,7 @@ import (
 	"hash/fnv"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
@@ -142,7 +143,11 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		Month:        geo,
 		Sync:         blockSyncForCalendar(in.Sync, cal),
 		Layers:       blockDefaultLayers(),
-		Ledger:       calblock.LedgerStub{NeedsBackend: true, Hidden: in.LedgerHidden},
+		// W-B FILLED THE LEDGER (C-CALV4-LEDGER-P6 §9), so the zone's signed
+		// `needs backend` chip retires here — by a producer flag, without a
+		// template edit, which is the promise the flag existed to keep. The
+		// Shelf's flag on the next line is W-E's and is deliberately untouched.
+		Ledger:       calblock.LedgerStub{NeedsBackend: false, Hidden: in.LedgerHidden},
 		Shelf:        calblock.ShelfStub{NeedsBackend: true, Hidden: in.ShelfHidden},
 	}
 	data.DateLabel, data.Fault = blockDateLine(cal)
@@ -150,15 +155,21 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 
 	// Counts and cells, both derived from `visible` and nothing else.
 	tieMode := blockResolveTieMode(viewer)
-	counts := blockCountEvents(cal, visible, in, tieMode)
+	isGM := permissions.CanSeeDmOnly(viewer.Role)
+	counts := blockCountEvents(cal, visible, in, tieMode, isGM)
 	data.Viewer = calblock.ViewerContext{
-		IsGM:       permissions.CanSeeDmOnly(viewer.Role),
+		IsGM:       isGM,
 		UserID:     viewer.UserID,
 		HostEntity: viewer.HostEntity,
 		TiedCount:  counts.tied,
 		WholeCount: counts.whole,
 		TieMode:    tieMode,
 		Zone:       blockViewerZone(cal, viewer),
+		// r52 rule 1: populated ONLY for a GM, at the SOURCE. blockCountEvents
+		// leaves it zero for every other viewer by construction rather than the
+		// renderer filtering it out later — a renderer-side gate is a rule one
+		// careless template edit can lose.
+		HiddenCount: counts.hidden,
 	}
 
 	blockDecorateCells(&data, cal, visible, in)
@@ -178,8 +189,14 @@ func blockResolveTieMode(v BlockViewer) string {
 	return "tied"
 }
 
-// blockCounts is the pair that must never be differenceable.
-type blockCounts struct{ tied, whole int }
+// blockCounts is the pair that must never be differenceable, plus the GM-only
+// hidden total r52 added.
+//
+// `hidden` is NOT a third member of the differenceable pair: a player receives
+// it in NO form at all (r52 rule 3), so unlike tied/whole — which a player does
+// receive, deliberately post-filter on both sides — there is nothing on a
+// player's screen for it to be an oracle against.
+type blockCounts struct{ tied, whole, hidden int }
 
 // blockCountEvents counts DISTINCT viewer-visible events that the Block draws —
 // the rendered month plus its intercalary rows. Both numbers come off the same
@@ -187,7 +204,13 @@ type blockCounts struct{ tied, whole int }
 // events the viewer can already see, and nothing else. A viewer who cannot see
 // event X contributes X to NEITHER number, so X cannot be recovered from the
 // pair. TestBlockCountsAreNotAnOracle pins exactly that.
-func blockCountEvents(cal *Calendar, visible []Event, in BlockProjectionInput, tieMode string) blockCounts {
+// r52 folds the hidden-event total into THIS SAME WALK (rule 2). It is the GM's
+// own pass — a GM's `visible` is unfiltered by construction (filterEventsByUser
+// returns early for a role that can see dm_only), so there is no
+// pre-filter/post-filter pair anywhere in the function to difference. isGM
+// gates the counter itself, so every other viewer gets a structural zero rather
+// than a filtered-out number.
+func blockCountEvents(cal *Calendar, visible []Event, in BlockProjectionInput, tieMode string, isGM bool) blockCounts {
 	_ = tieMode // counts are mode-INDEPENDENT: both are always shown on the toggle
 	var out blockCounts
 	if cal == nil {
@@ -204,6 +227,12 @@ func blockCountEvents(cal *Calendar, visible []Event, in BlockProjectionInput, t
 		out.whole++
 		if blockEventTied(e, in) {
 			out.tied++
+		}
+		// DISTINCT events, on the same dedupe: a recurring dm_only event
+		// occurring on six days of the month is ONE hidden event, and counting
+		// its marks would inflate the chip past anything a GM could reconcile.
+		if isGM && e.Visibility == "dm_only" {
+			out.hidden++
 		}
 	}
 	return out
@@ -250,13 +279,17 @@ func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event
 		return
 	}
 	month := in.MonthIndex + 1
+	// The time formatter is resolved ONCE per Block: time.LoadLocation reads the
+	// zoneinfo database, and a month of dense cells would otherwise re-open it
+	// per mark. Same discipline as the one-pass rule above it.
+	times := blockMarkTimes(cal, in.Viewer)
 	for r := range data.Month.Rows {
 		for c := range data.Month.Rows[r].Cells {
 			cell := &data.Month.Rows[r].Cells[c]
 			if cell.Day == 0 {
 				continue
 			}
-			marks, tied := blockMarksForDate(cal, visible, in, month, cell.Day)
+			marks, tied := blockMarksForDate(cal, visible, in, month, cell.Day, times)
 			cell.Tied = tied
 			cell.Marks, cell.MoreCount = blockCapMarks(marks)
 		}
@@ -269,7 +302,7 @@ func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event
 	for _, mi := range inter {
 		days := cal.MonthDays(mi, in.Year)
 		for d := 1; d <= days && idx < len(data.Month.Intercalary); d++ {
-			marks, _ := blockMarksForDate(cal, visible, in, mi+1, d)
+			marks, _ := blockMarksForDate(cal, visible, in, mi+1, d, times)
 			data.Month.Intercalary[idx].Marks, _ = blockCapMarks(marks)
 			idx++
 		}
@@ -278,7 +311,7 @@ func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event
 
 // blockMarksForDate builds the marks for one date and reports whether the date
 // carries at least one TIED event. Both come from the same walk over `visible`.
-func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, month, day int) ([]calblock.Mark, bool) {
+func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, month, day int, times blockMarkTimeFormatter) ([]calblock.Mark, bool) {
 	var marks []calblock.Mark
 	tied := false
 	isGM := permissions.CanSeeDmOnly(in.Viewer.Role)
@@ -297,7 +330,7 @@ func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, 
 		// and therefore its height, which broke the no-motion rule the toggle
 		// depends on, and left the CSS-only toggle nothing to re-ink — CSS cannot
 		// restore a mark the server never sent.
-		marks = append(marks, blockMarkFor(cal, e, isGM, evTied))
+		marks = append(marks, blockMarkFor(cal, e, isGM, evTied, times))
 	}
 	return marks, tied
 }
@@ -323,18 +356,106 @@ func blockCapMarks(marks []calblock.Mark) ([]calblock.Mark, int) {
 // the hues can still separate the marks. Axis is a concrete colour value from
 // the operator's own data and NEVER references --accent (which is the campaign
 // accent and would collide with the surface's own axis channel).
-func blockMarkFor(cal *Calendar, e *Event, isGM, tied bool) calblock.Mark {
+// r52 widens it by two fields, both of which the widget package CANNOT derive:
+// the formatted time (the widget has no clock, no calendar hour/minute geometry
+// and no zone rules) and the event TYPE's display name (Axis is a hue token and
+// the hue→name mapping lives in the campaign's data). Both drop their Ledger
+// segment when empty rather than printing an empty element — the
+// blockSyncStrings idiom.
+func blockMarkFor(cal *Calendar, e *Event, isGM, tied bool, times blockMarkTimeFormatter) calblock.Mark {
 	key, color, icon := blockEventAxisKey(cal, e)
 	return calblock.Mark{
-		EventID:  e.ID,
-		Title:    e.Name,
-		Axis:     color,
-		Pattern:  blockPatternFor(key),
-		Glyph:    icon,
-		Named:    strings.TrimSpace(e.Name) != "",
-		Tied:     tied,
-		Audience: blockAudienceFor(e, isGM),
+		EventID:   e.ID,
+		Title:     e.Name,
+		Axis:      color,
+		Pattern:   blockPatternFor(key),
+		Glyph:     icon,
+		Named:     strings.TrimSpace(e.Name) != "",
+		Tied:      tied,
+		Time:      times.format(e),
+		AxisLabel: blockEventAxisLabel(cal, e),
+		Audience:  blockAudienceFor(e, isGM),
 	}
+}
+
+// blockEventAxisLabel resolves the event TYPE's DISPLAY NAME — "Quest",
+// "Festival" — for the Ledger row's meta line (r52, Mark.AxisLabel).
+//
+// It is deliberately a separate function rather than a fourth return value on
+// blockEventAxisKey: the Bench's own axis read (bench.go) consumes that
+// signature, and widening it would drag a file this slice does not own into the
+// diff for no behavioural reason.
+//
+// It resolves ONLY through the calendar's declared categories. An event whose
+// category slug matches no declared category yields "" and the meta line drops
+// the segment, because a slug is an identifier and printing it would be the
+// widget inventing a display name from data that does not carry one — the same
+// refusal block.templ records for the legend layer.
+func blockEventAxisLabel(cal *Calendar, e *Event) string {
+	if cal == nil || e == nil || e.Category == nil {
+		return ""
+	}
+	slug := strings.TrimSpace(*e.Category)
+	if slug == "" {
+		return ""
+	}
+	for i := range cal.EventCategories {
+		if cal.EventCategories[i].Slug == slug {
+			return strings.TrimSpace(cal.EventCategories[i].Name)
+		}
+	}
+	return ""
+}
+
+// blockMarkTimeFormatter formats Mark.Time (r52). It is resolved ONCE per Block
+// and carries the two facts a per-mark call would otherwise re-derive: whether
+// this CALENDAR is real-world, and — only then — the viewer's resolved zone.
+//
+// THE ZONE LABEL IS FOLDED INTO THE STRING, and only on a real-world calendar.
+// L15 requires every real-world time to carry its zone; the same rule forbids a
+// zone-labelled time on an in-world calendar, where the label would be a claim
+// about a clock that does not exist. Keeping the two in one formatter with one
+// `realWorld` flag — taken from the same Calendar the renderer reads
+// BlockData.IsRealWorld from — is what makes the two statements structurally
+// unable to disagree. That is why r52 §5 refused a per-mark real-world flag and
+// a separate ViewerContext.ZoneAbbr.
+type blockMarkTimeFormatter struct {
+	realWorld bool
+	loc       *time.Location
+}
+
+// blockMarkTimes resolves the formatter for one Block.
+func blockMarkTimes(cal *Calendar, v BlockViewer) blockMarkTimeFormatter {
+	if cal == nil || !cal.IsRealLife() {
+		return blockMarkTimeFormatter{}
+	}
+	f := blockMarkTimeFormatter{realWorld: true}
+	if zone := strings.TrimSpace(blockViewerZone(cal, v)); zone != "" {
+		if loc, err := time.LoadLocation(zone); err == nil {
+			f.loc = loc
+		}
+	}
+	return f
+}
+
+// format returns the event's start time, or "" when it has none — in which case
+// the Ledger row DROPS the .tm segment rather than printing an empty one.
+func (f blockMarkTimeFormatter) format(e *Event) string {
+	if e == nil {
+		return ""
+	}
+	t := e.FormatTime()
+	if t == "" || !f.realWorld || f.loc == nil {
+		return t
+	}
+	// The abbreviation is resolved at the event's OWN instant, not at "now", so
+	// an event either side of a DST boundary is labelled with the offset that
+	// actually applies to it.
+	inst := time.Date(e.Year, time.Month(e.Month), e.Day, *e.StartHour, *e.StartMinute, 0, 0, f.loc)
+	if abbr := inst.Format("MST"); abbr != "" {
+		return t + " " + abbr
+	}
+	return t
 }
 
 // blockEventAxisKey resolves the single key that drives an event's hue, pattern

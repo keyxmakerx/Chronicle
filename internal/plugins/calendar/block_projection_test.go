@@ -400,8 +400,16 @@ func TestBlockLayersAreDefOnlyInWave1(t *testing.T) {
 	if got.Layers.HasSwitchboard {
 		t.Fatal("HasSwitchboard must be false in wave 1 — the per-viewer store is W-F's")
 	}
-	if !got.Ledger.NeedsBackend || !got.Shelf.NeedsBackend {
-		t.Fatal("the Ledger and Shelf zones dock with the signed `needs backend` chip in wave 1")
+	// INVERTED BY C-CALV4-LEDGER-P6, not deleted. The Ledger half asserted the
+	// wave-1 honesty state; W-B filled the zone, so the honest statement is now
+	// the opposite one and it is worth just as much — a producer that left the
+	// flag up would put "needs backend" beside a list of real events. The SHELF
+	// half is untouched and still asserts true: W-E owns that flip.
+	if got.Ledger.NeedsBackend {
+		t.Fatal("the Ledger is FILLED from wave 2; its `needs backend` flag must be down")
+	}
+	if !got.Shelf.NeedsBackend {
+		t.Fatal("the Shelf zone still docks with the signed `needs backend` chip — W-E fills it")
 	}
 }
 
@@ -702,5 +710,125 @@ func TestBlockRecurringEventsAreExpandedOnce(t *testing.T) {
 	if got.Viewer.WholeCount != 1 {
 		t.Fatalf("WholeCount = %d; three occurrences of one event are one event",
 			got.Viewer.WholeCount)
+	}
+}
+
+// --- r52: the three fields the Ledger row cannot derive ---------------------
+
+// TestBlockR52FieldsAreProducedNotDerived pins the producer half of pin
+// amendment r52 (decisions/2026-07-28-calv4-ledger-p6-pin-amendment.md).
+//
+// All three fields exist because the WIDGET cannot compute them: it has no
+// clock, no calendar hour/minute geometry, no zone rules, and no hue→type-name
+// mapping. So the only place their absence can be caught is here, on the
+// producer's own output — a widget-side test would assert against a BlockData
+// the test author wrote, which is the seam blindness block_seam_test.go's
+// header describes.
+//
+// The three acceptance lines of the amendment's §8, in order.
+func TestBlockR52FieldsAreProducedNotDerived(t *testing.T) {
+	cal := blockTenDayCal()
+	cal.EventCategories = []EventCategory{
+		{ID: 1, CalendarID: cal.ID, Slug: "quest", Name: "Quest", Icon: "▲", Color: "#a855f7"},
+	}
+	quest := "quest"
+	orphan := "no-such-category"
+
+	timed := blockEvent("timed", 3, "everyone")
+	timed.Category = &quest
+	timed.StartHour, timed.StartMinute = blockIntPtr(18), blockIntPtr(30)
+
+	untimed := blockEvent("untimed", 4, "everyone")
+	untimed.Category = &quest
+
+	typeless := blockEvent("typeless", 5, "everyone")
+
+	// A category slug the calendar does not declare. The widget must not invent
+	// a display name out of an identifier — the same refusal block.templ makes
+	// for the legend layer.
+	unknownType := blockEvent("unknown-type", 6, "everyone")
+	unknownType.Category = &orphan
+
+	find := func(d calblock.BlockData, id string) calblock.Mark {
+		t.Helper()
+		for _, row := range d.Month.Rows {
+			for _, c := range row.Cells {
+				for _, m := range c.Marks {
+					if m.EventID == id {
+						return m
+					}
+				}
+			}
+		}
+		t.Fatalf("no mark for event %q reached the projection", id)
+		return calblock.Mark{}
+	}
+
+	// ── in-world calendar: a bare time, NEVER a zone label (L15) ─────────────
+	inWorld := projectBlock(BlockProjectionInput{
+		Calendar: cal,
+		Events:   []Event{timed, untimed, typeless, unknownType},
+		Viewer:   BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner, Zone: "America/Chicago"},
+		MonthIndex: 0, Year: 1523,
+	})
+	if got := find(inWorld, "timed").Time; got != "18:30" {
+		t.Errorf("in-world Mark.Time = %q, want %q — an in-world calendar has no zone to label", got, "18:30")
+	}
+	if got := find(inWorld, "untimed").Time; got != "" {
+		t.Errorf("an untimed event must carry Time %q so the row DROPS the .tm segment; got %q", "", got)
+	}
+	if got := find(inWorld, "timed").AxisLabel; got != "Quest" {
+		t.Errorf("Mark.AxisLabel = %q, want the declared category's display NAME %q", got, "Quest")
+	}
+	if got := find(inWorld, "typeless").AxisLabel; got != "" {
+		t.Errorf("a typeless event must carry AxisLabel %q so the meta line drops the segment; got %q", "", got)
+	}
+	if got := find(inWorld, "unknown-type").AxisLabel; got != "" {
+		t.Errorf("an undeclared category slug must yield %q, not the slug itself; got %q", "", got)
+	}
+
+	// ── real-world calendar: the zone label is folded INTO the string ────────
+	real := blockRealTimeCal()
+	realTimed := Event{ID: "rt", CalendarID: real.ID, Name: "Session 41",
+		Year: 2028, Month: 2, Day: 29, Visibility: "everyone",
+		StartHour: blockIntPtr(19), StartMinute: blockIntPtr(0)}
+	rw := projectBlock(BlockProjectionInput{
+		Calendar: real,
+		Events:   []Event{realTimed},
+		Viewer:   BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner, Zone: "America/Chicago"},
+		MonthIndex: 1, Year: 2028,
+	})
+	got := find(rw, "rt").Time
+	if !strings.HasPrefix(got, "19:00 ") || len(got) <= len("19:00 ") {
+		t.Errorf("real-world Mark.Time = %q, want %q plus the zone abbreviation L15 requires", got, "19:00")
+	}
+
+	// ── HiddenCount: GM-only BY CONSTRUCTION (r52 §3.3 rules 1 and 3) ────────
+	hiddenFx := []Event{
+		blockEvent("open-1", 3, "everyone"),
+		blockEvent("dm-1", 5, "dm_only"),
+		blockEvent("dm-2", 7, "dm_only"),
+	}
+	gm := projectBlock(BlockProjectionInput{Calendar: cal, Events: blockCopyEvents(hiddenFx),
+		Viewer: BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}, MonthIndex: 0, Year: 1523})
+	if gm.Viewer.HiddenCount != 2 {
+		t.Errorf("GM HiddenCount = %d, want 2 — the two dm_only events on this month", gm.Viewer.HiddenCount)
+	}
+	player := projectBlock(BlockProjectionInput{Calendar: cal, Events: blockCopyEvents(hiddenFx),
+		Viewer: BlockViewer{UserID: "u-player", Role: permissions.RolePlayer}, MonthIndex: 0, Year: 1523})
+	if player.Viewer.HiddenCount != 0 {
+		t.Errorf("player HiddenCount = %d, want 0 AT THE PRODUCER — permission is absence, and "+
+			"a renderer-side gate is a rule one template edit can lose", player.Viewer.HiddenCount)
+	}
+
+	// A recurring dm_only event is ONE hidden event however many days it marks.
+	rt := RecurrenceWeekly
+	rec := blockEvent("dm-weekly", 2, "dm_only")
+	rec.IsRecurring, rec.RecurrenceType = true, &rt
+	recurring := projectBlock(BlockProjectionInput{Calendar: cal, Events: []Event{rec},
+		Viewer: BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}, MonthIndex: 0, Year: 1523})
+	if recurring.Viewer.HiddenCount != 1 {
+		t.Errorf("HiddenCount = %d for one recurring dm_only event on three days; the chip counts "+
+			"DISTINCT events, not marks", recurring.Viewer.HiddenCount)
 	}
 }

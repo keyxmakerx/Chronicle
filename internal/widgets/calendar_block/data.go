@@ -12,6 +12,13 @@
 // precedent). Changing a field name or type is a STOP-AND-FLAG, not a
 // judgement call: it desynchronises a parallel chat you cannot see.
 //
+// AMENDED r52 (2026-07-28). Three additive fields for the wave-2 Ledger (W-B):
+// Mark.Time and Mark.AxisLabel (the row's time column and meta line, neither
+// derivable in a plugin-agnostic widget) and ViewerContext.HiddenCount (the
+// signed "<N> hidden" chip — GM-only BY CONSTRUCTION; see the field's own
+// comment for the four rules that answer r51 §4's set-aside). See
+// decisions/2026-07-28-calv4-ledger-p6-pin-amendment.md.
+//
 // AMENDED r51 (2026-07-27). Two additive fields: Mark.Tied and
 // MonthGeometry.MoonsDeclared. See decisions/2026-07-27-calv4-tie-mark-emission.md.
 // Mark.Tied makes the tie toggle an INK change instead of a membership change —
@@ -197,6 +204,35 @@ type Mark struct {
 	// TieMode's.
 	Tied     bool
 
+	// Time is the event's time, ALREADY FORMATTED, or "" when the event has no
+	// time — in which case the Ledger row DROPS the segment rather than printing
+	// an empty one.
+	//
+	// Formatted in the producer because that is where the calendar's own
+	// hour/minute geometry lives (it is not 24x60 on every calendar) and where
+	// the viewer's zone can be resolved. The widget package is
+	// plugin-agnostic: it has no clock, no calendar geometry and no zone rules.
+	//
+	// There is deliberately NO per-mark real-world flag. Whether this string is
+	// a real-world time (rendered .tm, with a zone abbreviation appended by the
+	// producer) or an in-world time (rendered .tm.mono, never zone-labelled) is
+	// a property of the CALENDAR, and BlockData.IsRealWorld already carries it.
+	// A second copy of one fact can disagree with itself, and the disagreement
+	// is precisely L15's forbidden case: a zone-labelled real-world time
+	// printed on an in-world calendar.
+	Time string
+
+	// AxisLabel is the event TYPE's display name ("Quest", "Festival") — the
+	// first segment of the Ledger row's meta line. Empty drops the segment.
+	//
+	// It cannot be derived from Axis: Axis is a hue token, and the mapping from
+	// hue to type name lives in the campaign's data, not in the widget. This is
+	// the same absence block.templ already books as the reason the `legend`
+	// layer cannot be built. Adding it here does NOT transfer the legend to
+	// this wave — the legend zone's NeedsBackend flag stays unminted until the
+	// wave that fills it (2026-07-28 zone-chip ruling §2).
+	AxisLabel string
+
 	Audience *AudienceMark
 }
 
@@ -291,4 +327,26 @@ type ViewerContext struct {
 	WholeCount int
 	TieMode    string // "tied" | "whole"
 	Zone       string // IANA zone, labelled on every real-world time (L15)
+
+	// HiddenCount is how many events on this month are hidden from players —
+	// the signed "<N> hidden" chip on the nameplate, whose own title makes it a
+	// Ledger control.
+	//
+	// GM-ONLY BY CONSTRUCTION, and the construction is the safety argument:
+	//   1. the producer sets it ONLY when IsGM; it is zero for every other
+	//      viewer at the source, never filtered out at the renderer;
+	//   2. it comes from the SAME single viewer-filtered pass as TiedCount and
+	//      WholeCount — the GM's pass, which sees everything, so there is no
+	//      pre-filter/post-filter pair to difference;
+	//   3. it is NEVER rendered to a player in any form — no chip, no title, no
+	//      aria label, and above all no zero. Permission is ABSENCE.
+	// Unlike the tie pair (which a player DOES receive, deliberately
+	// non-differenceable), a player receives this in no form at all, so there
+	// is nothing for it to be an oracle against.
+	//
+	// It cannot be derived by the renderer: the hidden events are not in a
+	// player's BlockData at all, and counting Audience != nil across a GM's
+	// marks would conflate dm_only with visibility_rules and double-count a
+	// recurring event.
+	HiddenCount int
 }

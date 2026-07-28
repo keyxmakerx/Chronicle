@@ -16,20 +16,28 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-func blockCSS(t *testing.T) string {
+// blockCSSPath resolves the sheet on disk. Separate from blockCSS because the
+// generated ANSWER ladder is written back through it under UPDATE_ANSWER_LADDER.
+func blockCSSPath(t *testing.T) string {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("cannot resolve test file path")
 	}
 	root := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
-	body, err := os.ReadFile(filepath.Join(root, "static", "css", "calendar-block.css"))
+	return filepath.Join(root, "static", "css", "calendar-block.css")
+}
+
+func blockCSS(t *testing.T) string {
+	t.Helper()
+	body, err := os.ReadFile(blockCSSPath(t))
 	if err != nil {
 		t.Fatalf("read calendar-block.css: %v", err)
 	}
@@ -45,22 +53,159 @@ var cssCommentRe = regexp.MustCompile(`(?s)/\*.*?\*/`)
 // a rule that forbids them.
 func stripComments(css string) string { return cssCommentRe.ReplaceAllString(css, " ") }
 
-// ── no motion ───────────────────────────────────────────────────────────────
+// ── the motion budget ───────────────────────────────────────────────────────
 
-// TestCSS_NoMotionAtAll. COMMON §6.5: no transitions inside the Block, at all,
-// in wave 1. This stylesheet is the most likely place a reviewer will look for a
-// violation, so it is also the place a test should look.
+// motionBudget is the SIGNED budget (C-CALV4-LEDGER-P6 §8) expressed as data,
+// so the test below is an ALLOWLIST rather than a ban.
+var motionBudget = struct {
+	// guard is the at-rule everything that moves must live inside. Under
+	// reduced motion the colour change is instantaneous and every law of the
+	// budget still holds — which is itself the proof that ANSWERED is a colour
+	// STATE and not an animation.
+	guard string
+	// properties are the only things this stylesheet may transition. "none" is
+	// in the set because M5's non-target silence and the gold rail's refusal
+	// are both expressed as `transition: none`.
+	properties map[string]bool
+	// keyframes are the only named animations that may exist at all.
+	keyframes map[string]bool
+	// refused are outside the budget entirely, and they are REFUSALS rather
+	// than omissions — each was considered and each is named in §MOTION.
+	refused []string
+}{
+	guard: "@media (prefers-reduced-motion: no-preference)",
+	properties: map[string]bool{
+		"background-color": true, // canon A5: ANSWERED changes background-colour…
+		"color":            true, // …and ink hue. ONLY.
+		"transform":        true, // the rail's scaleX swell — never a width (§10 defect 3)
+		"none":             true, // M5 silence, and the gold GM rail's refusal
+	},
+	keyframes: map[string]bool{
+		"m-latch": true, // centre → corners on the viewer's own explicit act
+	},
+	refused: []string{"will-change", "@starting-style", "view-transition"},
+}
+
+// TestCSS_NoMotionAtAll — REWRITTEN AS AN ALLOWLIST by C-CALV4-LEDGER-P6, and
+// deliberately not renamed and not deleted. A test that stops asserting is
+// worse than no test, and this one still fails on everything outside the §8
+// budget; what changed is that the budget is no longer empty.
+//
+// THE RULE, for whoever reads this next: the Block may transition
+// background-colour, ink hue and one transform, on the surfaces that ANSWER
+// each other, inside a prefers-reduced-motion guard — and nothing else, ever.
+// The month grid never moves. If you are here because you added a transition
+// and this failed, the question to answer is not "how do I allow it" but
+// "which signed law does it satisfy" — canon A5 and A6, the 2026-07-27 motion
+// policy, and §MOTION in the stylesheet itself all say what the answers are.
 func TestCSS_NoMotionAtAll(t *testing.T) {
 	code := stripComments(blockCSS(t))
-	for _, bad := range []string{
-		"transition", "animation", "@keyframes", "will-change",
-		"@starting-style", "view-transition",
-	} {
+
+	// 1. The refusals. These are not "not yet"; they are decided.
+	for _, bad := range motionBudget.refused {
 		if strings.Contains(code, bad) {
-			t.Errorf("calendar-block.css contains %q — the Block does not move in wave 1. "+
-				"The ANSWER primitive and its --m-swell rail scale ship with W-B.", bad)
+			t.Errorf("calendar-block.css contains %q — outside the motion budget entirely, "+
+				"and refused rather than omitted (§MOTION)", bad)
 		}
 	}
+
+	// 2. EVERYTHING THAT MOVES LIVES INSIDE THE REDUCED-MOTION GUARD. Not a
+	//    politeness: it is what makes the budget provable — under reduced
+	//    motion the Block still obeys every law above, so ANSWERED is a colour
+	//    state rather than an animation.
+	inside, outside, ok := splitAtRuleBlock(code, motionBudget.guard)
+	if !ok {
+		t.Fatalf("the stylesheet has no %q block — the whole motion budget must live inside one",
+			motionBudget.guard)
+	}
+	for _, bad := range []string{"transition", "animation", "@keyframes"} {
+		if strings.Contains(outside, bad) {
+			t.Errorf("%q appears OUTSIDE %s — a viewer who asked for no motion would still get it",
+				bad, motionBudget.guard)
+		}
+	}
+
+	// 3. Only the allowlisted properties may be transitioned.
+	transRe := regexp.MustCompile(`transition\s*:\s*([^;}]+)`)
+	for _, m := range transRe.FindAllStringSubmatch(inside, -1) {
+		for _, part := range strings.Split(m[1], ",") {
+			fields := strings.Fields(part)
+			if len(fields) == 0 {
+				continue
+			}
+			if !motionBudget.properties[fields[0]] {
+				t.Errorf("transition on %q is outside the motion budget — the budget is "+
+					"background-color, color and transform, and nothing else (canon A5)", fields[0])
+			}
+		}
+	}
+
+	// 4. Only the allowlisted keyframes may exist, and only they may be run.
+	kfRe := regexp.MustCompile(`@keyframes\s+([A-Za-z0-9_-]+)`)
+	for _, m := range kfRe.FindAllStringSubmatch(inside, -1) {
+		if !motionBudget.keyframes[m[1]] {
+			t.Errorf("@keyframes %s is not in the motion budget — the budget names exactly "+
+				"one, and it closes a ring in place rather than moving anything", m[1])
+		}
+	}
+	animRe := regexp.MustCompile(`(^|[;{\s])animation\s*:\s*([^;}]+)`)
+	for _, m := range animRe.FindAllStringSubmatch(inside, -1) {
+		named := false
+		for name := range motionBudget.keyframes {
+			if strings.Contains(m[2], name) {
+				named = true
+			}
+		}
+		if !named {
+			t.Errorf("animation %q runs something outside the budget's one keyframe set",
+				strings.TrimSpace(m[2]))
+		}
+	}
+
+	// 5. THE GOLD GM RAIL NEVER SWELLS (cv4:435). A permission marker that
+	//    animates reads as a state change, so it is refused at the property
+	//    level as well as declared `transform: none` in §ANSWER.
+	flat := strings.Join(strings.Fields(inside), " ")
+	if !strings.Contains(flat, ".lrow .gr { transition: none; }") {
+		t.Error("the gold GM rail must explicitly refuse the transition its sibling rail takes")
+	}
+
+	// 6. M5 NON-TARGET SILENCE. Adding Blocks must add RESTING cost only; a
+	//    Bench with four Blocks stays cheap because a Block nobody is pointing
+	//    at transitions nothing.
+	if !strings.Contains(flat, ":not(:hover):not(:focus-within):not([data-swapping])") {
+		t.Error("M5 is missing: rail and row transitions must be killed unless the Block is " +
+			"hovered, focused within or swapping — as a SELECTOR, not as a JS budget")
+	}
+}
+
+// splitAtRuleBlock returns (inside, outside, ok) for the first at-rule block
+// whose prelude matches `head`, by brace matching. Fails cleanly rather than
+// slicing on a bare strings.Index result, which PANICS on a rename — see the
+// PIN DISCIPLINE note at the top of this file.
+func splitAtRuleBlock(code, head string) (inside, outside string, ok bool) {
+	i := strings.Index(code, head)
+	if i < 0 {
+		return "", code, false
+	}
+	j := strings.Index(code[i:], "{")
+	if j < 0 {
+		return "", code, false
+	}
+	start := i + j
+	depth := 0
+	for k := start; k < len(code); k++ {
+		switch code[k] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return code[start : k+1], code[:i] + code[k+1:], true
+			}
+		}
+	}
+	return "", code, false
 }
 
 // TestCSS_GuardB1_DashAndGapNeverAnimate. Morphing a dash pattern destroys the
@@ -121,18 +266,82 @@ var (
 	preludeRe = regexp.MustCompile(`(?s)(^|[;{}])([^;{}]*)\{`)
 )
 
+// stripKeyframes removes @keyframes blocks whole.
+func stripKeyframes(code string) string {
+	for {
+		i := strings.Index(code, "@keyframes")
+		if i < 0 {
+			return code
+		}
+		j := strings.Index(code[i:], "{")
+		if j < 0 {
+			return code[:i]
+		}
+		depth, end := 0, -1
+		for k := i + j; k < len(code); k++ {
+			switch code[k] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					end = k + 1
+				}
+			}
+			if end >= 0 {
+				break
+			}
+		}
+		if end < 0 {
+			return code[:i]
+		}
+		code = code[:i] + code[end:]
+	}
+}
+
+// splitSelectorList splits a rule prelude on its TOP-LEVEL commas only.
+//
+// REFRESHED BY C-CALV4-LEDGER-P6, and it was a latent defect in the guard, not
+// a change of intent: a bare strings.Split(",") tears
+// `:is(:hover, :focus-within)` in half and then reports the tail as an
+// unscoped selector. That would have false-alarmed on any functional
+// pseudo-class taking a selector LIST, which is a whole family of correct CSS
+// — including every rule in the generated ANSWER ladder. The scoping rule
+// itself is unchanged: nothing may match outside a .cal-block-host subtree.
+func splitSelectorList(prelude string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i, r := range prelude {
+		switch r {
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				out = append(out, prelude[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, prelude[start:])
+}
+
 // TestCSS_EverySelectorIsScoped. An unlayered sheet outranks the app's layered
 // CSS, so a bare `.badge` rule in here would silently restyle the whole product.
 // Nothing may match outside a .cal-block-host subtree.
 func TestCSS_EverySelectorIsScoped(t *testing.T) {
-	code := stripComments(blockCSS(t))
+	// @keyframes bodies carry KEYFRAME SELECTORS (from/to/50%), which are not
+	// selectors at all and cannot be scoped. Removed before the scan by
+	// C-CALV4-LEDGER-P6; the scoping rule itself is unchanged.
+	code := stripKeyframes(stripComments(blockCSS(t)))
 	var offenders []string
 	for _, m := range preludeRe.FindAllStringSubmatch(code, -1) {
 		prelude := strings.TrimSpace(m[2])
 		if prelude == "" || strings.HasPrefix(prelude, "@") {
 			continue // at-rules carry their own nested preludes, matched separately
 		}
-		for _, sel := range strings.Split(prelude, ",") {
+		for _, sel := range splitSelectorList(prelude) {
 			sel = strings.TrimSpace(sel)
 			if sel == "" {
 				continue
@@ -427,4 +636,191 @@ func cssVarNumber(t *testing.T, code, name string) float64 {
 		t.Fatalf("%s is not a number: %q", name, m[1])
 	}
 	return v
+}
+
+// ── the ANSWER ladder (C-CALV4-LEDGER-P6 §1, CTS-1/CTS-2) ───────────────────
+
+// TestCSS_AnswerLadderIsGenerated. CSS cannot compare two dynamic attribute
+// values, so day answering needs one static rule set per day ordinal — ~144
+// rules that nobody will ever hand-maintain correctly. They are GENERATED from
+// answerLadderCSS() into the marked block at the foot of the sheet, and this
+// test regenerates and diffs, which is the repo's existing snapshot idiom
+// (UPDATE_ROUTES_SNAPSHOT, UPDATE_SANITIZE_SNAPSHOT).
+//
+// Regenerate with: UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/
+func TestCSS_AnswerLadderIsGenerated(t *testing.T) {
+	path := blockCSSPath(t)
+	raw := blockCSS(t)
+
+	start := strings.Index(raw, answerLadderBegin)
+	end := strings.Index(raw, answerLadderEnd)
+	if start < 0 || end < 0 || end < start {
+		t.Fatalf("the generated ladder's markers are missing or inverted — %q … %q must both "+
+			"appear, in that order", answerLadderBegin, answerLadderEnd)
+	}
+	got := raw[start : end+len(answerLadderEnd)]
+	want := answerLadderCSS()
+	if got == want {
+		return
+	}
+	if os.Getenv("UPDATE_ANSWER_LADDER") == "" {
+		t.Errorf("the generated ANSWER ladder is stale (%d bytes on disk, %d generated). "+
+			"Regenerate: UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/",
+			len(got), len(want))
+		return
+	}
+	updated := raw[:start] + want + raw[end+len(answerLadderEnd):]
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		t.Fatalf("rewrite the ladder: %v", err)
+	}
+	t.Logf("ANSWER ladder regenerated: %d bytes (%d keys × 3 rules)",
+		len(want), len(answerLadderKeys()))
+}
+
+// TestCSS_AnswerLadderAgreesWithGo pins the CTS-2 bound in BOTH places at once.
+//
+// The Go constants decide which days get a selection control (instrument.templ
+// gates dayPick on dayAnswers / intercalaryAnswers) and the sheet decides which
+// days a control can actually filter with. If those two numbers drift, a day
+// gets a radio that no rule reads — a control that is present, focusable, and
+// silently does nothing, which is the one outcome CTS-2 ruled out.
+//
+// It also pins the SECOND KEY NAMESPACE. An intercalary day's key is `iN`, and
+// a ladder written only over `1..N` would make Midwinter stop answering with
+// nothing failing — guard B4's failure mode one level up.
+func TestCSS_AnswerLadderAgreesWithGo(t *testing.T) {
+	code := stripComments(blockCSS(t))
+	pickRe := regexp.MustCompile(`\.daypick\[data-day-pick="([^"]+)"\]:checked`)
+
+	seen := map[string]bool{}
+	for _, m := range pickRe.FindAllStringSubmatch(code, -1) {
+		seen[m[1]] = true
+	}
+	for _, k := range answerLadderKeys() {
+		if !seen[k] {
+			t.Errorf("the sheet has no rule for ladder key %q — a day inside the Go bound "+
+				"(%d ordinary + %d intercalary) whose control nothing reads",
+				k, answerLadderDays, answerLadderIntercalary)
+		}
+		delete(seen, k)
+	}
+	for k := range seen {
+		t.Errorf("the sheet carries ladder key %q, which is past the Go bound — the markup "+
+			"never emits a control for it", k)
+	}
+
+	// Both namespaces, explicitly, so a future "simplification" to a numeric
+	// loop fails here rather than in a fidelity review six months later.
+	for _, want := range []string{`data-day-pick="1"`, `data-day-pick="i1"`,
+		`data-lday="i1"`, `data-day-ord="i1"`} {
+		if !strings.Contains(code, want) {
+			t.Errorf("the ladder is missing %q — the intercalary namespace is not optional", want)
+		}
+	}
+	for _, bad := range []string{`data-day-pick="41"`, `data-day-pick="i9"`} {
+		if strings.Contains(code, bad) {
+			t.Errorf("the ladder reaches past its own bound with %q", bad)
+		}
+	}
+}
+
+// TestCSS_AnswerLadderChangesNothingButVisibility. The Ledger's row filter is
+// the ONE sanctioned content change in the Block, and the motion policy bounds
+// it: "Cells, marks, moons and era bands do not animate, reflow, or change
+// size." A ladder rule that set a height, a padding or a margin would make
+// choosing a day reflow the month — the exact thing the docked Ledger exists to
+// avoid, and the reason .lrows carries a min-height instead.
+//
+// So every generated rule may declare EXACTLY ONE of: display, or --answer.
+//
+// AND THE VALUE IS CHECKED, NOT ONLY THE PROPERTY. Allowlisting `display` by
+// name is not enough and the fix round proved it: `display: block` on a flex
+// row is EXACTLY the box change the paragraph above forbids, and it shipped
+// under a guard that read the property and stopped. The ladder may only take a
+// surface OUT of the flow (`none`) or put one back as itself (`revert`); it may
+// never assert what kind of box anything is.
+//
+// The selector is checked too. A reveal rule may only name the two surfaces
+// that are display:none at rest — the head's per-day context line and the
+// per-day empty state. Any reveal that could reach `.lrow` is the shipped
+// defect returning.
+func TestCSS_AnswerLadderChangesNothingButVisibility(t *testing.T) {
+	ladder := answerLadderCSS()
+	ruleRe := regexp.MustCompile(`(?s)([^{}\n][^{}]*)\{([^}]*)\}`)
+	allowedValues := map[string][]string{
+		"display":  {"none", "revert"},
+		"--answer": {"1"},
+	}
+	for _, m := range ruleRe.FindAllStringSubmatch(ladder, -1) {
+		sel := strings.TrimSpace(m[1])
+		for _, decl := range strings.Split(m[2], ";") {
+			decl = strings.TrimSpace(decl)
+			if decl == "" {
+				continue
+			}
+			parts := strings.SplitN(decl, ":", 2)
+			prop := strings.TrimSpace(parts[0])
+			val := ""
+			if len(parts) == 2 {
+				val = strings.TrimSpace(parts[1])
+			}
+			ok, known := allowedValues[prop]
+			if !known {
+				t.Errorf("a generated ladder rule declares %q — the ladder may only change "+
+					"what is SHOWN (display) and who is answered (--answer). Anything that "+
+					"changes a box makes choosing a day reflow the month.", prop)
+				continue
+			}
+			if !slices.Contains(ok, val) {
+				t.Errorf("a generated ladder rule sets %s:%s on %q — the allowed values are %v. "+
+					"`display:block` on a flex row is a BOX CHANGE, not a visibility change: it "+
+					"collapses the signed one-line row into a stack while its fixed height, and "+
+					"therefore every geometric assertion in the suite, stays identical.",
+					prop, val, sel, ok)
+			}
+			// A reveal names its surfaces. `.lrow` is never one of them.
+			if prop == "display" && val != "none" {
+				for _, part := range strings.Split(sel, ",") {
+					part = strings.TrimSpace(part)
+					if part == "" {
+						continue
+					}
+					if !strings.Contains(part, ".lctx[") && !strings.Contains(part, ".lzero.lday[") {
+						t.Errorf("a ladder reveal rule targets %q — a reveal may only name the two "+
+							"surfaces that are display:none at rest (.lhead .lctx and .lzero.lday). "+
+							"Anything wider reaches the Ledger row, which is visible at rest and is "+
+							"filtered by attribute, never revealed by class.", part)
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestLedger_RowCarriesNoRevealToken is the same rule stated on the OTHER side
+// of the collision, in Go, where the row's class list is actually built.
+//
+// The guard above stops the sheet from reaching the row. This one stops the row
+// from walking into the sheet. Either lock alone would have prevented what
+// shipped; both together mean the defect cannot be re-opened by editing one
+// file, which matters because the two files have different owners in wave 2 and
+// the connection between them is a bare string token.
+func TestLedger_RowCarriesNoRevealToken(t *testing.T) {
+	for _, m := range []Mark{
+		{Title: "plain"},
+		{Title: "tied", Tied: true},
+	} {
+		cls := ledgerRowClass(m)
+		for _, f := range strings.Fields(cls) {
+			if f == "lday" {
+				t.Errorf("ledgerRowClass(%+v) = %q — `.lday` marks a surface that is HIDDEN at "+
+					"rest and revealed when its day is chosen. The row is visible at rest and "+
+					"hidden by the filter; carrying the token made every listed row collapse "+
+					"out of flex the moment a day was picked.", m, cls)
+			}
+		}
+		if !strings.HasPrefix(cls, "lrow") {
+			t.Errorf("ledgerRowClass(%+v) = %q — the row class leads with `lrow`", m, cls)
+		}
+	}
 }

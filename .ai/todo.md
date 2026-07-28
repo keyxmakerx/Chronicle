@@ -220,12 +220,14 @@ W-A shipped the Block's render tier (`internal/widgets/calendar_block` +
 do; each is named in the PR and in the widget's `.ai.md` §"Deliberate
 divergences".
 
-- **Wave-2 (W-B), the Ledger:** fill zone C. The zone is docked at its real
-  300px with the signed `needs backend` chip and the ANSWER key (`data-day`) is
-  already on every dated cell and row — W-B should not have to re-cut the
-  geometry. It also owns re-opening the motion question (the ANSWER primitive
-  and its `--m-swell` rail scale); canon guard B1 (`--dash`/`--gap` never
-  animate) and canon D3 (the ring lives inside `box-shadow`) must survive it.
+- **Wave-2 (W-B), the Ledger: DONE (2026-07-28, C-CALV4-LEDGER-P6).** Zone C is
+  filled and lists by ordinal day, reassembled from the cells the grid already
+  draws. Day answering is CSS-only (no route, no JS, `routes_snapshot.txt`
+  byte-identical) via a generated 40+8-key ladder. The motion question is
+  re-opened as a four-item BUDGET and `TestCSS_NoMotionAtAll` is now an
+  allowlist; guard B1 and canon D3 both survive it, untouched and green. Pin
+  amendment r52 landed three fields. See `.ai/decisions.md` ADR-048 and the
+  widget's `.ai.md`.
 - **Wave-2 (W-E), the Shelf:** fill zone D, same deal.
 - **Wave-3 (W-F), the layer system:** the `⋯` switchboard popover (the invoker
   ships inert), the per-viewer layer/sky/moon preference store, and the three
@@ -236,9 +238,14 @@ divergences".
 - **`BlockData` field gaps** (each needs a coordinator pin change, so each is a
   stop-and-flag until then): a lead/trail label on `DayCell` (out-of-range cells
   render empty because `Day == 0` IS the out-of-range marker, while the signed
-  Gregorian still shows a greyed 28/29/30); a hidden-event count for the
-  Nameplate's "N hidden" badge; a scope chip; a campaign clock for real-world
-  Blocks. The declared-moon total is **CLOSED** (r51 + C-CALV4-SEAM-P5
+  Gregorian still shows a greyed 28/29/30); **a scope chip** — the Ledger head's
+  `opts.scopeLabel` (cv4:1742); W-B bumped into it and OMITTED rather than
+  invented; a campaign clock for real-world Blocks; an owner/creator surface on
+  `Event`, which is why the Ledger meta line prints the type alone (CTS-5). The
+  hidden-event count for the Nameplate's "N hidden" badge is **CLOSED** (r52 +
+  C-CALV4-LEDGER-P6, 2026-07-28): `ViewerContext.HiddenCount`, GM-only BY
+  CONSTRUCTION — set only when `IsGM`, from the same single viewer-filtered pass
+  as the tie pair, and never rendered to a player in any form including a zero. The declared-moon total is **CLOSED** (r51 + C-CALV4-SEAM-P5
   stage 15, 2026-07-28): `buildMonthGeometry` populates
   `MonthGeometry.MoonsDeclared` from `Calendar.Moons`, and the Nameplate
   states "3 of 4 moons" when the declared total exceeds the grid's `moonCap`
@@ -792,3 +799,42 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 ### Security Hardening — Audit Completion (2026-03-25)
 
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
+
+### calendar-v4 remodel — booked follow-ups from C-CALV4-LEDGER-P6 (2026-07-28)
+
+Wave 2, W-B filled the docked Ledger. These are the things it deliberately did
+NOT do; each is named in its report and in the widget's `.ai.md`.
+
+- [ ] **W-E (`C-CALV4-SHELF-P7`) is unblocked and may start.** It consumes what
+  W-B left: the `.lband` sticky group header (styled in Zone C, used by the
+  Upcoming panel), and the `.ltabs` strip, which carries `Month` alone today —
+  W-E adds each further tab **with its panel, in the same commit** (CTS-7). It
+  lands its own r53 (CTS-3: r52 covers W-B alone). Its booked restore is
+  `moonsBadgeTitle`'s missing *"— all of them are in the Almanac"* tail.
+- [ ] **W-F now owns four things the Ledger touched and did not take:** the
+  `colour: <axis> ⌄` picker and the std legend (both left OUT rather than
+  shipped inert — `Mark.AxisLabel` incidentally unblocks the legend, which does
+  NOT transfer it); the per-day overflow popovers (CTS-6 — `+N more` stays a
+  count, not a control, because the docked Ledger already gives the day's full
+  list a home; W-F's own *"a top-layer popover must not occlude the docked
+  Ledger"* argument belongs with the switchboard); and the horizon, where it
+  must add the **GRID-side** fog split only — **the Ledger is never
+  horizon-filtered**, and that is the argument that let the week-scale fog
+  reversal be withdrawn.
+- [ ] **CTS-8 needs a coordinator eye, not a fix.** The std-tier collision
+  measurement was re-taken with the Ledger FULL at both production host widths
+  (entity 420px, Bench 358px) and is clean — but only after `.lrows`'s signed
+  176px floor was scoped to full tier, where the Block can afford it. Written at
+  every tier it kept its declared size inside a 140px zone and landed 36px on
+  top of the Shelf. The answer was taken INSIDE the Block's own std geometry; no
+  host layer key was dropped and no pinned host file was touched. If the
+  coordinator prefers a host change or a re-signed still instead, say so.
+- [ ] **`.tm .z` ships as Zone C vocabulary and nothing emits it.** r52 folds
+  the zone abbreviation INTO the producer's formatted `Mark.Time` string, so a
+  renderer-side split would be the second copy of one fact r52 refused. The
+  class is in the sheet for the wave that has a reason to separate them.
+- [ ] **A `title` on a Ledger row's chip is now unreachable at named density.**
+  The day's stretched selection label covers the cell, so a `.chip`'s hover
+  `title` — which carried the audience label — no longer shows. The Ledger row's
+  audience chip states it in full instead, which is why this is a trade and not
+  a loss; noted so nobody "fixes" it by removing the label.

@@ -2070,3 +2070,172 @@ non-Scribes.
 `internal/plugins/calendar/rsvp_handler.go` (`applySuggestion`, `parseOfferedWindows`),
 `internal/plugins/calendar/rsvp_email.go` (`rsvpSuggestPage`),
 `internal/app/routes.go` (`calendarAvailabilityAdapter.OfferAvailableWindows`), ADR-046.
+
+---
+
+## ADR-048: calendar-v4 — the Block is the calendar, and its honesty states are load-bearing
+
+**Date:** 2026-07-28 · **Status:** Accepted · **Supersedes:** nothing; the
+calendar-v2 depth ruling (cordinator `decisions/2026-07-23`) still governs V2.
+
+**Number check:** `.ai/decisions.md` carried no calendar-v4 ADR at all when this
+was written (zero hits for `calendar-v4|calv4`; the last numbers taken were 046
+and 047). CLAUDE.md rule 6 has required one since the arc began; it was booked
+at the C-CALV4-SEAM-P5 preflight and written by W-B, the slice that COMPLETES
+the four-zone component and therefore the first slice able to describe a
+finished thing.
+
+### Context
+
+The operator's directive was one sentence: *"just go with a full redo of the
+calendar"* (2026-07-26). What came back from the judging round was not a new
+skin on the V2 month grid but a different unit of composition — a **Block**: one
+component, four zones (Nameplate / Instrument / docked Ledger / Shelf), dropped
+anywhere a widget can mount, and a **Bench** that composes several of them.
+
+The contract is `cordinator/mockups/calendar-v4.html`, signed 2026-07-25 (r43)
+and IMMUTABLE. It is state-addressable by query param, and the `mockups/renders/
+v4-*.png` stills gate fidelity. Eight canon amendments (A1–A8) and four guards
+(B1–B4) were signed on top of it (`decisions/2026-07-26-calendar-v4-canon-
+amendments.md`), and the pinned render contract `internal/widgets/calendar_block
+/data.go` has been amended twice under numbered decisions: **r51**
+(`2026-07-27-calv4-tie-mark-emission.md`) and **r52**
+(`2026-07-28-calv4-ledger-p6-pin-amendment.md`).
+
+### Decision
+
+**1. The Block is a WIDGET, and it is plugin-agnostic by construction.**
+`internal/widgets/calendar_block` imports nothing from `internal/plugins/**`,
+exactly as `calendar_v2` does. Everything it draws arrives in one
+fully-resolved `BlockData`; it performs no queries and reads no request state,
+because bound blocks render with `context.Background()`.
+
+That constraint is not tidiness — it is what forces every honesty question to be
+answered at the producer, where the data is, instead of guessed at the renderer,
+where it is not. Three fields exist only because of it: `Mark.Time` (the widget
+has no clock, no calendar hour/minute geometry and no zone rules),
+`Mark.AxisLabel` (a hue token cannot be mapped to a type name without campaign
+data), and `MonthGeometry.MoonsDeclared` (the per-cell discs are already capped).
+
+**2. Size class follows HOST width; density follows MEASURED COLUMN width; both
+are CSS container queries.** The signed mockup computes them in JS. On this
+platform that is broken by construction: `boot.js:163` sets
+`htmx.config.allowScriptTags = false`, so a `<script>` inside an HTMX-swapped
+fragment never runs and a JS-sized Block would silently render at the wrong
+density after any swap. Separating the two is what lets a ten-column Harptos and
+a seven-column Gregorian share one component and still be honest about what each
+can afford at the same host width.
+
+**3. There is NO JavaScript in the package, and every control is therefore CSS.**
+The tie toggle is a hidden radio pair plus `:has()`. Day answering is a hidden
+radio group plus a generated per-ordinal rule ladder. Both are pure functions of
+the data, so two Blocks on one page cannot fight over one piece of state while
+the same Block survives an HTMX binding swap with the viewer's choice intact.
+
+**4. There is NO drawer. The Ledger IS the drawer, permanently docked.** Canon
+A3 struck D9's 480px slide-in drawer clause outright; canon A4 rewrote D6's
+resolution sentence to *"the panel is already there; choosing a day changes what
+it says."* This is the decision the whole direction was judged on, and it has a
+measurable consequence: **the Block's declared height must be identical selected
+and unselected**, which is verified in a real engine rather than argued.
+
+**5. Motion is a BUDGET of four items, not a permission.** Canon A5 mints
+ANSWERED — *"it changes background-colour and ink hue only; it never gains or
+loses shadow, never changes border thickness, never moves"* — and that is what
+makes a docked panel that repaints legal under L1: the answer arrives as a
+COLOUR change. The budget is (i) background-colour and ink hue on answering
+surfaces, (ii) one `scaleX` on a Ledger row's rail and never on the gold GM
+rail, (iii) the `m-latch` ring closing centre→corners on the viewer's own
+explicit act, (iv) M5 non-target silence expressed as a selector, so adding
+Blocks adds RESTING cost only. All inside `prefers-reduced-motion:
+no-preference`, which is what proves ANSWERED is a state and not an animation.
+`TestCSS_NoMotionAtAll` is an ALLOWLIST enforcing exactly this; the month grid
+never moves (`decisions/2026-07-27-motion-policy.md`).
+
+**6. HONESTY STATES ARE FIRST-CLASS, and they are the reason this arc is
+different from its predecessors.** Four distinct idioms, deliberately not
+interchangeable:
+
+| Idiom | Means | Example |
+|---|---|---|
+| the FAULT | this thing cannot resolve, and it says so **where its value would go** | a calendar with no months prints the fault instead of the date, and emits no date element at all — not a zero, not an em dash |
+| the `needs backend` chip | this SURFACE is designed and its store does not exist | the Shelf zone, the Bench's horizon tile. It is **never rendered to a player** (`decisions/2026-07-27-needs-backend-audience.md`) |
+| ABSENCE | this viewer is not entitled to it | a player receives no dm_only mark: no placeholder, no ghost, no "+1", and no hidden-count chip — **not even a zero** |
+| OMISSION | the data exists nowhere yet, so the segment DROPS | the Ledger meta line's owner segment, `· RSVP n/m`, the mini foot's `next:` |
+
+The rule that makes them work is that none of them is ever satisfied by a
+`title` (WG-spec V18) or by a fabricated number.
+
+**7. EVERY COUNT COMES FROM ONE VIEWER-FILTERED PASS**, and that is enforced
+rather than intended. `filterEventsByUser` compacts in place, so a second
+filtering pass reads a corrupted slice — but the real reason is stronger: two
+counts on one screen, one computed pre-filter and one post, are an ORACLE whose
+difference is exactly the number of events the viewer may not know about. The
+signed mockup's own `tiedCount` is that shape and is deliberately not ported.
+Two tests hold it: `TestBlockCountsAreNotAnOracle` and, since W-B,
+`block_count_oracle_test.go`, which asserts that every number on screen is
+independently reproducible from that viewer's own filtered set — not that the
+numbers are right.
+
+The structural half matters more than the tests: **the Ledger is reassembled
+from the cells the grid already draws**, never from a parallel row list, so the
+head count, the foot count and the day-cell total are three READINGS of one
+number rather than three computations that happen to agree.
+
+**8. The eight-key LAYER REGISTRY governs every layer-owned surface, and DEF is
+`["moons"]`.** "The default surface is a month with its moon phases and nothing
+else" (L-M2/A8 via L20/L26/L29). A HOST that wants more passes a set — which is
+how the entity page and the Bench dock the Ledger — and that is a host decision,
+not a DEF change (`decisions/2026-07-28-calv4-def-and-zone-chips-ruling.md` §1).
+A zone's `NeedsBackend` flag belongs to the wave that FILLS it: one wave, one
+field, one owner (§2 of the same ruling).
+
+**9. The cross-slice contract is a PINNED FILE amended by numbered decisions.**
+`data.go` is byte-copied from `dispatches/chronicle/C-CALV4-BLOCKDATA.go.txt`,
+never `gofmt -w`-ed (the repo is not plain-gofmt-clean; a glob format churned
+~24 unrelated files in a past retro). Changing a field is a STOP-AND-FLAG, not a
+judgement call, because it desynchronises a parallel chat nobody can see. New
+fields land in their own blank-line-separated paragraphs so gofmt's alignment
+groups cannot force a realign of the existing block.
+
+### Consequences
+
+- **A seam-test category exists now and did not before.** Phase A shipped a
+  producer and a renderer that were each green in isolation and composed into a
+  Block that was visibly wrong five ways. `block_seam_test.go` pushes real
+  producer output through the real renderer and reads the HTML; assertions about
+  what the producer CHOSE live there, never in the widget package, where the
+  test author writes the input and every such assertion is vacuous.
+- **Three counters disagree about days** (leap-aware `Calendar.AbsoluteDay`,
+  fixed-geometry `constLenDayIndex`, the legacy V1 path) and per-day moon discs
+  mix the first two. Making `constLenDayIndex` intercalary-aware would shift the
+  weekday column of every calendar in the operator's production database, so it
+  is an operator-gated product decision, documented and pinned rather than
+  "fixed".
+- **What the model cannot express is booked, not faked:** composed
+  tag+member audiences (W-G), a queryable knowledge horizon (W-F), per-calendar
+  sync linkage, subordinate calendars, an owner/creator surface on `Event`, and
+  era-relative year reckoning.
+- **CSS-only controls have a ceiling.** Day answering needs one static rule set
+  per day ordinal, so the bound is 40 + 8 keys, generated and diff-tested. Past
+  it a day carries no control at all — the honest failure, not a dead one.
+
+### Sections inside this ADR rather than beside it
+
+W-E's Almanac and celestial decisions, and W-F's layer switchboard and
+preference store, become sections HERE when they land. calendar-v4 is one
+architecture decision; competing ADRs for its later waves would fragment the
+rationale that a future re-litigation needs in one place.
+
+### References
+
+- Master plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`
+- Canon: `decisions/2026-07-26-calendar-v4-canon-amendments.md` (A1–A8, B1–B4)
+- Pins: `decisions/2026-07-27-calv4-tie-mark-emission.md` (r51) ·
+  `decisions/2026-07-28-calv4-ledger-p6-pin-amendment.md` (r52)
+- Rulings: `2026-07-28-calv4-def-and-zone-chips-ruling.md` ·
+  `2026-07-27-motion-policy.md` · `2026-07-27-needs-backend-audience.md` ·
+  `2026-07-27-calendar-scope-and-roles.md`
+- Wave reports: `reports/chronicle/2026-07-28-C-CALV4-{SEAM-P5,HOST-P3,BENCH-P4,
+  LEDGER-P6}.md`
+- Contract: `mockups/calendar-v4.html` + `mockups/renders/v4-*.png`

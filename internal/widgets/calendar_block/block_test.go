@@ -366,16 +366,25 @@ func TestMoons_CappedAndDerived(t *testing.T) {
 // ── zones C and D ───────────────────────────────────────────────────────────
 
 // TestStubs_DockedAtTheRightSizeWithTheChip. The chip is a SIGNED honesty state,
-// not a shortcut. What matters for wave 1 is that the Ledger zone is present:
-// the full-tier column arithmetic subtracts its 300px unconditionally, so a
-// Block that skipped it would flip density at the wrong host width.
+// not a shortcut. What matters is that both zones are PRESENT: the full-tier
+// column arithmetic subtracts the Ledger's 300px unconditionally, so a Block
+// that skipped it would flip density at the wrong host width.
+//
+// INVERTED BY C-CALV4-LEDGER-P6, not weakened. The chip count was 2 while both
+// zones were stubs. W-B FILLS the Ledger, so exactly one chip is left — the
+// Shelf's, which W-E retires the same way. The assertion is still a count and
+// still exact, because "one fewer chip than I expected" is the failure this
+// line exists to catch.
 func TestStubs_DockedAtTheRightSizeWithTheChip(t *testing.T) {
 	body := render(t, fxHarptos(true))
 	mustContain(t, body, `data-zone="ledger"`, "the Ledger zone is docked")
 	mustContain(t, body, `data-zone="shelf"`, "the Shelf zone is at the foot")
-	if n := strings.Count(body, `class="badge need">needs backend`); n != 2 {
-		t.Errorf("%d `needs backend` chips; want one on the Ledger and one on the Shelf", n)
+	if n := strings.Count(body, `class="badge need">needs backend`); n != 1 {
+		t.Errorf("%d `needs backend` chips; want exactly one — the Shelf's. The Ledger is "+
+			"filled from wave 2 and must carry none.", n)
 	}
+	mustNotContain(t, body, `data-zone="ledger" class`,
+		"the filled Ledger zone keeps its marker attribute first")
 
 	// Hidden means REMOVED, not collapsed: the declared heights are invariant.
 	g := render(t, fxGregorian())
@@ -497,13 +506,40 @@ func TestTieMode_IsAnAttributeNotAClass(t *testing.T) {
 	// pair, so the state that legitimately moves is the `checked` attribute.
 	// Everything else this assertion protects — no cell added, removed or
 	// re-ordered — is untouched.
+	//
+	// REFRESHED AGAIN at C-CALV4-LEDGER-P6 §6, intent unchanged. The mini /
+	// sub-mini FOOT now states the TIED count when the Block is entity-hosted
+	// and tie-scoped, which is a deliberate, pre-authorised divergence: the
+	// mockup's foot ignores the scope the entity sidebar passes, so the
+	// Hollowmere-scoped sidebar printed "14 events" beside an Attributes card
+	// reading "Ties 4". Correcting it means the foot LINE legitimately differs
+	// between modes, so it is excluded here and asserted explicitly below.
+	//
+	// Nothing this test protects is weakened: it still proves the toggle adds,
+	// removes and re-orders no cell, and neither count it prints is new
+	// information — both are already stated by the toggle itself in both modes,
+	// which is what keeps them non-differenceable.
 	stripMode := func(s string) string {
-		return strings.NewReplacer(`data-tie-mode="tied"`, "", `data-tie-mode="whole"`, "",
+		s = strings.NewReplacer(`data-tie-mode="tied"`, "", `data-tie-mode="whole"`, "",
 			` checked`, "").Replace(s)
+		i := strings.Index(s, `<div class="foot">`)
+		if i < 0 {
+			t.Fatal("no foot line in the rendered Block")
+		}
+		return s[:i]
 	}
 	if stripMode(whole) != stripMode(tied) {
-		t.Error("flipping the tie mode changed the DOM beyond the mode attribute and the " +
-			"checked radio — ink LEVEL only, or the counts become differenceable")
+		t.Error("flipping the tie mode changed the DOM beyond the mode attribute, the " +
+			"checked radio and the foot's scope line — ink LEVEL only, or the counts " +
+			"become differenceable")
+	}
+	if !strings.Contains(whole, ">14 events<") {
+		t.Error("in whole mode the foot states the month's total")
+	}
+	if !strings.Contains(tied, ">4 events tied<") {
+		t.Error("in tied mode the foot states the TIED count AND says the word `tied` — an " +
+			"unqualified number beside an entity reads as the entity's, and at mini the tie " +
+			"toggle is display:none so nothing else qualifies it")
 	}
 
 	// Off an entity page there is no tie control at all.
