@@ -58,7 +58,7 @@ templ Block(d BlockData) {
 				}
 			</div>
 			<div class="minirail" aria-hidden="true"></div>
-			if hasLayer(d.Layers, "shelf") && !d.Shelf.Hidden {
+			if shelfDocked(d) {
 				@shelf(d)
 			}
 			@blockFoot(d)

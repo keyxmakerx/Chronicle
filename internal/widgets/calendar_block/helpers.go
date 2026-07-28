@@ -804,11 +804,47 @@ func moonsBadgeText(d BlockData) string {
 	return fmt.Sprintf("%d of %d moons", moonCap, d.Month.MoonsDeclared)
 }
 
-// moonsBadgeTitle explains the ceiling on hover. The signed title's "all of
-// them are in the Almanac" tail is NOT ported: the Almanac is W-E and does not
-// exist yet, and a hover that points at an unbuilt surface is a small lie.
+// moonsBadgeTitle explains the ceiling on hover.
+//
+// THE SIGNED TAIL IS RESTORED, CONDITIONALLY (C-CALV4-SEAM-P5 §4.8 booked it by
+// name for this slice). The signed title is
+//
+//	"${MOONS.length} moons declared; the grid draws ${SKY_MAX} — all of them
+//	 are in the Almanac"                                        (cv4:1653-1655)
+//
+// and stage 15 withheld the tail because the Almanac did not exist: a hover
+// that points at an unbuilt surface is a small lie. W-E built it, so the
+// sentence becomes true — but only WHERE IT IS TRUE, which is the second of
+// stage 15's two conditions and the reason there are two strings here rather
+// than one.
+//
+// TWO GATES, BOTH FROM STAGE 15's OWN REASONING:
+//
+//  1. the badge itself is already gated on the MOONS LAYER (moonsBadgeText,
+//     the signed MOONS_ON() gate). Nothing here weakens that.
+//  2. the tail is additionally gated on the Almanac being REACHABLE IN THIS
+//     RENDER. A Block with the Shelf hidden (noShelf — the Bench's real-world
+//     Block) or with the shelf layer off draws no Almanac, and a title that
+//     names an absent surface is the same lie class as a green sync pill with
+//     no denominator. Two title strings, exactly as stage 15 said to ship if
+//     it came to that.
 func moonsBadgeTitle(d BlockData) string {
-	return fmt.Sprintf("%d moons declared; the grid draws %d", d.Month.MoonsDeclared, moonCap)
+	base := fmt.Sprintf("%d moons declared; the grid draws %d", d.Month.MoonsDeclared, moonCap)
+	if shelfDocked(d) && almanacReachable(d) {
+		return base + " — all of them are in the Almanac"
+	}
+	return base
+}
+
+// shelfDocked reports whether Zone D renders for this viewer: the layer
+// registry says yes AND the host has not removed it.
+//
+// It is the Shelf's half of ledgerDocked, and it exists for the same reason:
+// the predicate is read in three places now — the zone's call site, the
+// moons-badge tail, and whatever asks next — and three copies of an `&&` is how
+// a title starts naming a surface that is not there.
+func shelfDocked(d BlockData) bool {
+	return hasLayer(d.Layers, "shelf") && !d.Shelf.Hidden
 }
 
 // ── the ANSWER ladder: day selection, in CSS, with no JS and no route ───────
