@@ -347,19 +347,26 @@ func underlineSegs(c DayCell) []Mark {
 }
 
 // underlineRestAt reports whether segment i is the neutral overflow segment.
+// The day's total is len(Marks) — MoreCount is OVERLAPPING (a chip fold within
+// that list, data.go), so adding it here claimed events that do not exist.
 func underlineRestAt(c DayCell, i int) bool {
 	shown := len(underlineSegs(c))
-	return i == shown-1 && len(c.Marks)+c.MoreCount > shown
+	return i == shown-1 && len(c.Marks) > shown
 }
 
 // totalMarks counts every mark the viewer can see in this month, including the
 // intercalary row. Used only by the mini / sub-mini foot line, which states a
 // count it can actually derive rather than a "next event" it cannot.
+//
+// A day's total is len(Marks), NEVER len(Marks)+MoreCount: MoreCount is
+// OVERLAPPING (data.go) — it counts marks already in the list that are not
+// drawn as chips, so adding it double-counts the folded tail and the foot
+// printed "10 events" for a 7-event month.
 func totalMarks(d BlockData) int {
 	n := 0
 	for _, r := range d.Month.Rows {
 		for _, c := range r.Cells {
-			n += len(c.Marks) + c.MoreCount
+			n += len(c.Marks)
 		}
 	}
 	for _, ic := range d.Month.Intercalary {

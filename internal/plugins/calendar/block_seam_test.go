@@ -21,6 +21,7 @@ package calendar
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -173,4 +174,64 @@ func TestSeam_GMMarksDiscriminateDogearFromDiamond(t *testing.T) {
 	seamNotContain(t, player, `class="audmark"`, "a player must see no audience marks at all")
 	seamContain(t, player, `data-event-id="restricted"`,
 		"the player is allowed this event; it must render as an ordinary mark")
+}
+
+// ── §3.4: the foot line states the REAL event total ─────────────────────────
+
+// TestSeam_FootTotalEqualsTheDayCellTotal pins the MoreCount ruling (data.go:
+// OVERLAPPING, not additive — Marks holds the FULL viewer-visible list and
+// MoreCount is how many of those are not drawn as chips) at the only level that
+// can see both halves at once. The producer keeps every mark AND declares the
+// chip fold, so a renderer that adds the two counts the folded marks twice: a
+// month with 7 events prints "10 events" in its foot. Neither suite alone could
+// see it — the producer's numbers were internally consistent, and the widget's
+// fixture left MoreCount 0 everywhere, the one shape on which the additive and
+// overlapping readings agree.
+func TestSeam_FootTotalEqualsTheDayCellTotal(t *testing.T) {
+	// Five events on one day: dense enough that blockCapMarks declares an
+	// overflow (MoreCount 3 beside 5 kept marks), so the additive bug actually
+	// fires. Two sparse days prove the total is a sum, not one cell's count.
+	events := []Event{
+		blockEvent("dense-1", 4, "everyone"),
+		blockEvent("dense-2", 4, "everyone"),
+		blockEvent("dense-3", 4, "everyone"),
+		blockEvent("dense-4", 4, "everyone"),
+		blockEvent("dense-5", 4, "everyone"),
+		blockEvent("sparse-1", 9, "everyone"),
+		blockEvent("sparse-2", 12, "everyone"),
+	}
+	in := BlockProjectionInput{
+		Calendar:   blockTenDayCal(),
+		Viewer:     BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner},
+		MonthIndex: 0,
+		Year:       1523,
+	}
+
+	// The true total, computed the way the ruling defines it: sum of len(Marks)
+	// over every cell, intercalary rows included, MoreCount never added.
+	in.Events = blockCopyEvents(events)
+	d := projectBlock(in)
+	total, folded := 0, 0
+	for _, r := range d.Month.Rows {
+		for _, c := range r.Cells {
+			total += len(c.Marks)
+			folded += c.MoreCount
+		}
+	}
+	for _, ic := range d.Month.Intercalary {
+		total += len(ic.Marks)
+	}
+	if total != len(events) {
+		t.Fatalf("fixture drift: projected %d marks for %d events", total, len(events))
+	}
+	if folded == 0 {
+		t.Fatal("fixture drift: no cell overflows the chip cap, so an additive foot would not over-count")
+	}
+
+	in.Events = blockCopyEvents(events)
+	body := seamRender(t, in)
+	seamContain(t, body, fmt.Sprintf(">%d events<", total),
+		"the foot line must state the true day-cell total")
+	seamNotContain(t, body, fmt.Sprintf(">%d events<", total+folded),
+		"len(Marks)+MoreCount counts the folded marks twice — MoreCount is OVERLAPPING")
 }

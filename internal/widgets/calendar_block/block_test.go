@@ -555,3 +555,38 @@ func TestMarkCap_AgreesWithTheProducer(t *testing.T) {
 		}
 	}
 }
+
+// TestUnderlineRest_MoreCountIsOverlapping pins the §3.4 ruling (data.go:
+// MoreCount is OVERLAPPING, not additive) on the renderer's other counting
+// site. The day total is len(Marks), so the neutral overflow segment may only
+// appear when REAL marks are off the bar — MoreCount describes the chip fold,
+// not extra events beyond the list. A renderer that adds it turns the last
+// segment neutral on a fully-shown day, claiming events that do not exist.
+//
+// This lives widget-side because the seam cannot reach it: the producer only
+// sets MoreCount > 0 when len(Marks) already exceeds the underline cap, the one
+// region where the additive and overlapping formulas agree.
+func TestUnderlineRest_MoreCountIsOverlapping(t *testing.T) {
+	// Three marks, three segments: the whole day is on the bar. No segment may
+	// turn neutral, whatever chip fold the cell declares.
+	folded := DayCell{Day: 1, Col: 1,
+		Marks:     []Mark{{Title: "a"}, {Title: "b"}, {Title: "c"}},
+		MoreCount: 2,
+	}
+	for i := range underlineSegs(folded) {
+		if underlineRestAt(folded, i) {
+			t.Errorf("segment %d turned neutral on a fully-shown day — MoreCount folds "+
+				"chips, it never adds events beyond len(Marks)", i)
+		}
+	}
+
+	// Four marks, three segments: one real mark is off the bar, so the last
+	// segment MUST still turn neutral — the fix may not overshoot into
+	// never-neutral.
+	over := DayCell{Day: 2, Col: 2,
+		Marks: []Mark{{Title: "a"}, {Title: "b"}, {Title: "c"}, {Title: "d"}},
+	}
+	if !underlineRestAt(over, len(underlineSegs(over))-1) {
+		t.Error("the last segment must turn neutral when len(Marks) exceeds the segments shown")
+	}
+}
