@@ -220,7 +220,7 @@ func fxHarptos(gm bool) BlockData {
 		CalendarID:   "cal-1",
 		CalendarSlug: "harptos-of-imix",
 		Name:         "Harptos of Imix",
-		CalHue:       "var(--cal-harptos)",
+		CalHue:       "harptos",
 		Pattern:      "p1",
 		Letter:       "H",
 		IsDefault:    true,
@@ -302,7 +302,7 @@ func fxGregorian() BlockData {
 		CalendarID:   "cal-2",
 		CalendarSlug: "real-world",
 		Name:         "Real world / Gregorian",
-		CalHue:       "var(--cal-real)",
+		CalHue:       "real",
 		Pattern:      "p2",
 		Letter:       "R",
 		IsRealWorld:  true,
@@ -333,7 +333,7 @@ func fxDwarvenFault() BlockData {
 	d.CalendarID = "cal-4"
 	d.CalendarSlug = "dwarven-deep-count"
 	d.Name = "Dwarven Deep-count"
-	d.CalHue = "var(--cal-dwarven)"
+	d.CalHue = "dwarven"
 	d.Pattern = "p4"
 	d.Letter = "D"
 	d.DateLabel = "" // no date element is emitted at all

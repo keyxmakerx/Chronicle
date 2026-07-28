@@ -25,7 +25,10 @@ package calendar_block
 // nameplate renders Zone A.
 templ nameplate(d BlockData) {
 	<div class="np">
-		<span class="dot" aria-hidden="true"></span>
+		<span class={ "dot " + patternClass(d.Pattern) } aria-hidden="true"></span>
+		if d.Letter != "" {
+			<span class="callet" aria-hidden="true">{ calLetter(d.Letter) }</span>
+		}
 		<span class="nm" title={ d.Name }>{ d.Name }</span>
 		@dateLine(d)
 		if eraBadgeText(d) != "" {

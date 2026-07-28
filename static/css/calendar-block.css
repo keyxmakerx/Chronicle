@@ -482,11 +482,37 @@
 .cal-block-host .np > .sp {
   flex: 1 1 auto;
 }
+/* The calendar identity is a TRIPLE: hue + stroke pattern + letter. Colour is
+   never the only channel, and at 8px a dot cannot carry a pattern legibly, so
+   the letter is what actually survives greyscale and a washed-out projector. */
 .cal-block-host .np .dot {
   width: 8px;
   height: 8px;
   border-radius: var(--r-full);
   background: var(--cal);
+}
+/* The pattern rides as a ring so the dot keeps its size at every tier. */
+.cal-block-host .np .dot.p2,
+.cal-block-host .np .dot.p3,
+.cal-block-host .np .dot.p4,
+.cal-block-host .np .dot.p6,
+.cal-block-host .np .dot.p8 {
+  box-shadow: 0 0 0 1.5px var(--surface-card), 0 0 0 2.5px var(--cal);
+}
+.cal-block-host .np .dot.p5,
+.cal-block-host .np .dot.p7 {
+  box-shadow: 0 0 0 1.5px var(--surface-card), 0 0 0 2.5px var(--rule-structural-strong);
+}
+.cal-block-host .np .callet {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--cal);
+  border: 1px solid var(--cal);
+  border-radius: var(--r-badge);
+  padding: 1px 3px;
+  margin-inline-start: -2px;
 }
 .cal-block-host .np .nm {
   font-weight: 700;
