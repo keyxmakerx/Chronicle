@@ -1,7 +1,16 @@
 // app_dashboard_w5c_test.go — C-CAL-DASHBOARD-W5c: the role-aware dashboard
 // surface. Proves the player sees only the calendars visible to them (reusing
-// the W5a filter through the handler), the owner sees all, and the card-grid
-// sort + visibility-badge helpers behave.
+// the W5a filter through the handler), the owner sees all, and the sort +
+// visibility-badge helpers behave.
+//
+// PIN REFRESH, C-CALV4-BENCH-P4. The surface these drive is now THE BENCH: the
+// route is unchanged and so is the guarantee, but the fragment the assertions
+// used to read (the card grid, ?grid=1) is now the Bench's SUBORDINATE-row
+// section, which by construction holds only the calendars that did not become
+// Blocks. Reading it would have made the leak test pass for the wrong reason —
+// a player's calendar can be a Block. So the driver renders THE WHOLE PAGE and
+// the assertions are unchanged in substance: the dm_only calendar's NAME must
+// not appear anywhere in a player's DOM, and must appear in an owner's.
 package calendar
 
 import (
@@ -16,9 +25,9 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
-// dashboardGridFor drives AppDashboard for a role and returns the rendered card
-// grid (the HTMX grid fragment — layout-free, exactly the calendars the viewer
-// gets). Repo returns one 'everyone' + one 'dm_only' calendar.
+// dashboardGridFor drives AppDashboard for a role and returns the rendered
+// page — exactly the calendars the viewer gets, wherever on the Bench they
+// land. Repo returns one 'everyone' + one 'dm_only' calendar.
 func dashboardGridFor(t *testing.T, role campaigns.Role) string {
 	t.Helper()
 	repo := &mockCalendarRepo{
@@ -33,9 +42,7 @@ func dashboardGridFor(t *testing.T, role campaigns.Role) string {
 	h := NewHandler(NewCalendarService(repo))
 
 	e := echo.New()
-	// grid=1 + HX-Request → the handler returns just the grid fragment.
-	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/apps/calendar?grid=1", nil)
-	req.Header.Set("HX-Request", "true")
+	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/apps/calendar", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
@@ -59,12 +66,17 @@ func TestAppDashboard_PlayerSeesOnlyVisibleCalendars(t *testing.T) {
 	if strings.Contains(body, "GM Secret Calendar") {
 		t.Errorf("player must NOT see the dm_only calendar (W5a filter through the handler)")
 	}
-	// Players get read-only cards: no owner-only sort controls or Permissions stub.
+	// Players get a read-only Bench: no owner-only sort controls, no Permissions
+	// trigger, and no New-calendar slot (the create route is Owner-gated, so an
+	// affordance a player took would meet a 403 — permission is absence).
 	if strings.Contains(body, "data-cal-dashboard-sort") {
 		t.Errorf("players must not get the owner sort controls")
 	}
-	if strings.Contains(body, "data-cal-permissions-stub") {
+	if strings.Contains(body, "data-cal-permissions") {
 		t.Errorf("players must not get the Permissions action")
+	}
+	if strings.Contains(body, "data-bench-newslot") {
+		t.Errorf("players must not get the New-calendar slot")
 	}
 }
 
@@ -73,11 +85,50 @@ func TestAppDashboard_OwnerSeesAllCalendars(t *testing.T) {
 	if !strings.Contains(body, "Shared Calendar") || !strings.Contains(body, "GM Secret Calendar") {
 		t.Errorf("owner should see ALL calendars (incl. dm_only)")
 	}
-	// Owner gets the sort controls + the per-card Permissions stub + visibility badges.
+	// Owner gets the sort controls + the per-calendar Permissions trigger +
+	// visibility badges — the W5b affordances the Bench carries on its rows and
+	// on each Block's management strip.
 	for _, want := range []string{"data-cal-dashboard-sort", "data-cal-permissions", `data-cal-visibility="dm_only"`, `data-cal-visibility="everyone"`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("owner grid missing %q", want)
+			t.Errorf("owner bench missing %q", want)
 		}
+	}
+}
+
+// The sort control's HTMX fragment still answers on the same route with no new
+// route: ?sort=…&grid=1 swaps the Bench's subordinate-row section in place.
+func TestAppDashboard_SortFragmentSwapsTheRowSection(t *testing.T) {
+	repo := &mockCalendarRepo{
+		listByCampaignIDFn: func(_ context.Context, campaignID string) ([]Calendar, error) {
+			return []Calendar{
+				{ID: "a", CampaignID: campaignID, Name: "Alpha", SortOrder: 1},
+				{ID: "b", CampaignID: campaignID, Name: "Beta", SortOrder: 2},
+				{ID: "c", CampaignID: campaignID, Name: "Gamma", SortOrder: 3},
+			}, nil
+		},
+		getActiveCalendarIDFn: func(_ context.Context, _, _ string) (string, error) { return "", nil },
+	}
+	h := NewHandler(NewCalendarService(repo))
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/apps/calendar?sort=name&grid=1", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("camp-1")
+	c.Set("campaign_context", &campaigns.CampaignContext{
+		Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Camp"}, MemberRole: campaigns.RoleOwner,
+	})
+	c.Set("auth_user_id", "user-1")
+	if err := h.AppDashboard(c); err != nil {
+		t.Fatalf("AppDashboard: %v", err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="cal-dash-grid"`) {
+		t.Error("the grid fragment must still be the #cal-dash-grid section the hx-get targets")
+	}
+	if strings.Contains(body, "data-bench-ribbon") {
+		t.Error("the grid fragment is a FRAGMENT — it must not carry the whole page")
 	}
 }
 

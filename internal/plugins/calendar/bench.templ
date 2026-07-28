@@ -1,0 +1,539 @@
+// bench.templ — THE BENCH's markup (calendar-v4 wave 1, phase B).
+//
+// THE CONTRACT'S DOM ORDER, EXACTLY (mockups/calendar-v4.html ?view=dashboard):
+//
+//	.phead
+//	ribbon()          six tiles for a GM, THREE for a player
+//	.sechead "The bench"
+//	.stack            primary Block, then the real-world Block (noShelf)
+//	rsvpPanel()
+//	nextUp()
+//	.rowgrid          subordinate rows, the GM-only warnrow, the New slot
+//	.caption
+//
+// popovers() has no subject in wave 1 and is therefore not emitted: the signed
+// Bench's popovers are the BLOCK's own per-day hidden-event and overflow
+// panels, and the shipped Block emits neither (calendar_block has no popover
+// invoker — the switchboard popover is W-F and the day ANSWER is W-B). A Bench
+// that emitted them would be shipping orphan DOM keyed to invokers that do not
+// exist. When the Block grows them, they arrive inside the Block, where their
+// invokers are.
+//
+// NO MOTION. COMMON §6.5: no transitions inside the Block, at all, in wave 1.
+// The Bench's own chrome keeps the same discipline — calendar-bench.css defines
+// no transition, no animation and no @keyframes, and its contract test says so.
+
+package calendar
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
+)
+
+// BenchPage renders the full Bench at GET /campaigns/:id/apps/calendar.
+templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
+	@layouts.App("Calendar") {
+		<div class="cal-bench" data-cal-bench data-cal-dashboard>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-bench.css") }/>
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Apps", Href: fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)},
+				{Label: "Calendars"},
+			})
+			@benchSurface(data)
+		</div>
+		// W5b: the per-calendar permissions editor. Owners only — players never
+		// receive the editor DOM nor the PUT route. Retained verbatim from the
+		// card grid this surface replaces: the Bench moved the trigger onto the
+		// Block's management strip and the subordinate rows, and the modal +
+		// its driver are unchanged.
+		if data.IsOwner {
+			@calendarPermissionsModal()
+			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_permissions.js") } defer></script>
+		}
+	}
+}
+
+// benchSurface is everything inside the page wrap, in contract order.
+templ benchSurface(data BenchData) {
+	@benchHead(data)
+	if data.LoadError {
+		<div class="bench-note" data-cal-dashboard-error>
+			<i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+			Couldn&#39;t load the calendars right now. Try reloading the page.
+		</div>
+	} else if data.CalendarCount == 0 {
+		@calendarAppDashboardEmpty(data.CampaignID, data.IsOwner)
+	} else {
+		@benchRibbonView(data)
+		<div class="sechead">
+			<span class="cap">The bench</span>
+			<span class="c">{ benchSectionSubtitle(data) }</span>
+		</div>
+		<div class="stack" data-bench-stack>
+			if data.Primary != nil {
+				@benchBlockView(*data.Primary, data, "primary")
+			}
+			if data.RealWorld != nil {
+				@benchBlockView(*data.RealWorld, data, "real-world")
+			}
+		</div>
+		@benchRsvpView(data)
+		@benchNextUpView(data)
+		@benchRowGridSection(data)
+		@benchCaption()
+	}
+}
+
+// benchHead is .phead: the title, the count line, and the control cluster.
+//
+// The signed .ctl carries "colour by: type ⌄", "Builder →" and "+ New event".
+// The colour-by axis is a PER-VIEWER PREFERENCE with no store (the Block books
+// the same control for the same reason — nameplate.templ), and there is no
+// event-create route outside the V2 shell and wave 1 adds no routes. So the
+// cluster ships the two doors that exist: the calendar itself, and — for an
+// owner — the builder and the new-calendar wizard.
+templ benchHead(data BenchData) {
+	<div class="phead">
+		<div>
+			<h1>Calendar</h1>
+			<p>{ benchHeadSubtitle(data) }</p>
+		</div>
+		<span class="sp"></span>
+		<div class="ctl">
+			if data.Primary != nil {
+				<a class="btn ghost" href={ templ.SafeURL(data.Primary.Manage.OpenHref) }>Open calendar →</a>
+				if data.IsOwner {
+					<a class="btn ghost" href={ templ.SafeURL(data.Primary.Manage.SettingsHref) }>Builder →</a>
+				}
+			}
+			if data.IsOwner {
+				<a class="btn fill" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", data.CampaignID)) }>+ New calendar</a>
+			}
+		</div>
+	</div>
+}
+
+// --- the ribbon -------------------------------------------------------------
+
+// benchRibbonView renders the tiles. Six for a GM, THREE for a player — and the
+// three GM tiles are absent from the DOM, not hidden: benchRibbon never builds
+// them for a player, so there is nothing here to gate.
+templ benchRibbonView(data BenchData) {
+	<div class="ribbon" data-bench-ribbon>
+		for _, t := range data.Ribbon {
+			@benchTileView(t)
+		}
+	</div>
+}
+
+templ benchTileView(t BenchTile) {
+	<div class={ benchTileClass(t) } data-bench-tile={ t.Key }>
+		<div class="eb">
+			<span class="g" aria-hidden="true">{ t.Glyph }</span>
+			<span class="cap">{ t.Eyebrow }</span>
+			<span class="sp"></span>
+			if t.Href != "" {
+				<a class="ar" href={ templ.SafeURL(t.Href) } aria-label={ t.Eyebrow }>→</a>
+			}
+		</div>
+		<div class={ "hl", benchToneClass(t.Tone) }>{ t.Headline }</div>
+		<div class="ql">
+			{ t.Qual }
+			if t.NeedsBackend {
+				<span class="badge need">needs backend</span>
+			}
+		</div>
+		for _, r := range t.Rows {
+			<a class={ "arow", templ.KV("bad", r.Bad) } href={ templ.SafeURL(r.Href) }>{ r.Label }</a>
+		}
+		if len(t.Actions) > 0 {
+			<div class="rsvpb">
+				for _, a := range t.Actions {
+					@benchActionView(a)
+				}
+			</div>
+		}
+		if t.Detail != "" {
+			<div class="dt">{ t.Detail }</div>
+		}
+		if len(t.Ticks) > 0 {
+			@benchTickRule(t.Ticks)
+		}
+	</div>
+}
+
+// benchActionView renders a tile control. An action with no Href is INERT —
+// rendered so the tile's geometry is final, disabled so it is not a dead
+// control that swallows a click (the Block's layersInvoker precedent).
+templ benchActionView(a BenchAction) {
+	if a.Href != "" {
+		<a class={ "btn xs", templ.KV("fill", a.Fill) } href={ templ.SafeURL(a.Href) }>{ a.Label }</a>
+	} else {
+		<button type="button" class={ "btn xs", templ.KV("fill", a.Fill) } disabled title={ a.Title }>{ a.Label }</button>
+	}
+}
+
+// benchTickRule is the Today tile's month rule. Every tick carries data-day —
+// the ANSWER key, emitted in wave 1 and consumed in W-B (guard B4).
+templ benchTickRule(ticks []BenchTick) {
+	<div class="tick" aria-hidden="true" style={ fmt.Sprintf("--month-len:%d", len(ticks)) }>
+		for _, tk := range ticks {
+			<i
+				class={ "t", templ.KV("ev", tk.Event), templ.KV("now", tk.Today) }
+				data-cell={ benchIntAttr(tk.Day) }
+				data-day={ tk.DayKey }
+				style={ benchTickStyle(tk) }
+			></i>
+		}
+	</div>
+}
+
+// --- the stack --------------------------------------------------------------
+
+// benchBlockView is one .stack entry: the Block, then the owner-only management
+// strip. The strip is a documented addition — see BenchBlock's doc comment.
+templ benchBlockView(b BenchBlock, data BenchData, role string) {
+	<div class="benchblock" data-bench-block={ role } data-calendar-id={ b.Manage.CalendarID }>
+		@calblock.Block(b.Data)
+		if data.IsOwner {
+			@benchManageStrip(b.Manage)
+		}
+	</div>
+}
+
+// benchManageStrip is the owner's per-calendar cluster: the W5b visibility
+// badge, the permissions trigger (seeded exactly as the retired card seeded it,
+// so calendar_permissions.js is untouched) and the Settings link.
+templ benchManageStrip(m BenchManage) {
+	<div class="manage" data-bench-manage data-calendar-id={ m.CalendarID }>
+		@benchVisibilityBadge(m)
+		if m.IsDefault {
+			<span class="badge">Default</span>
+		}
+		if m.IsActive {
+			<span class="badge">Active</span>
+		}
+		<span class="sp"></span>
+		<button
+			type="button"
+			class="btn xs"
+			data-cal-permissions
+			data-calendar-id={ m.CalendarID }
+			data-cal-vis-mode={ m.VisMode }
+			data-cal-vis-rules={ m.VisRules }
+		>Permissions</button>
+		<a class="btn xs" href={ templ.SafeURL(m.SettingsHref) }>Settings</a>
+	</div>
+}
+
+// benchVisibilityBadge is the W5b owner badge: Everyone · GM only · Custom.
+templ benchVisibilityBadge(m BenchManage) {
+	switch m.Visibility {
+		case "custom":
+			<span class="badge" data-cal-visibility="custom">Custom</span>
+		case "dm_only":
+			<span class="badge" data-cal-visibility="dm_only">GM only</span>
+		default:
+			<span class="badge" data-cal-visibility="everyone">Everyone</span>
+	}
+}
+
+// --- RSVP -------------------------------------------------------------------
+
+// benchRsvpView is the design-ahead session panel. It draws its HEADER and the
+// signed `needs backend` chip and nothing else — see BenchRsvp for why every
+// lane, density and member row the signed panel shows would be a fabricated
+// fact here.
+templ benchRsvpView(data BenchData) {
+	<div class="rsvp" data-bench-rsvp>
+		<div class="lhead">
+			<span class="t">{ data.Rsvp.Title }</span>
+			<span class="badge need">needs backend</span>
+		</div>
+		<p class="note">{ data.Rsvp.Note }</p>
+	</div>
+}
+
+// --- NEXT UP ----------------------------------------------------------------
+
+// benchNextUpView is a printed index, not a stack of cards. Every row is
+// viewer-filtered at the source (UpcomingAcrossCalendars) and every count is
+// computed post-filter — the mockup's hardcoded "all 11" tail is not ported.
+templ benchNextUpView(data BenchData) {
+	<div class="nextup" data-bench-nextup>
+		<div class="sechead">
+			<span class="cap">Next up</span>
+			<span class="c">{ benchNextUpSubtitle(data.NextUp) }</span>
+		</div>
+		if len(data.NextUp.Rows) == 0 {
+			<p class="note" data-bench-nextup-empty>Nothing upcoming on the calendars you can see.</p>
+		} else {
+			for _, r := range data.NextUp.Rows {
+				<a
+					class="r"
+					href={ templ.SafeURL(r.Href) }
+					data-row={ r.DayKey }
+					data-day={ r.DayKey }
+					style={ benchNextUpStyle(r) }
+				>
+					<span class="dg">{ r.DateLabel }</span>
+					<span class="cn">{ r.CalendarLabel }</span>
+					<span class="nm">
+						{ r.Name }
+						if r.GMOnly {
+							<span class="badge gm">GM</span>
+						}
+					</span>
+					<span class={ "chip", benchPatternClass(r.Pattern) }>
+						if r.Glyph != "" {
+							<span class="gl" aria-hidden="true">{ r.Glyph }</span>
+						}
+					</span>
+				</a>
+			}
+			<div class="tail">
+				<span class="c">{ benchNextUpTail(data.NextUp) }</span>
+			</div>
+		}
+	</div>
+}
+
+// --- the row grid -----------------------------------------------------------
+
+// benchRowGridSection wraps the subordinate rows in #cal-dash-grid so the
+// pre-existing owner sort control keeps HTMX-swapping exactly this section
+// (?sort=…&grid=1). That hx-get is the ONLY HTMX on the page and adds no route.
+templ benchRowGridSection(data BenchData) {
+	<div id="cal-dash-grid">
+		if data.IsOwner && len(data.Rows) > 1 {
+			<div class="sortrow" data-cal-dashboard-sort role="group" aria-label="Sort calendars">
+				<span class="c">Sort</span>
+				@calendarSortLink(CalendarAppDashboardData{CampaignID: data.CampaignID, Sort: data.Sort}, "", "Default")
+				@calendarSortLink(CalendarAppDashboardData{CampaignID: data.CampaignID, Sort: data.Sort}, "name", "Name")
+				@calendarSortLink(CalendarAppDashboardData{CampaignID: data.CampaignID, Sort: data.Sort}, "created", "Newest")
+				@calendarSortLink(CalendarAppDashboardData{CampaignID: data.CampaignID, Sort: data.Sort}, "updated", "Recently active")
+				@calendarSortLink(CalendarAppDashboardData{CampaignID: data.CampaignID, Sort: data.Sort}, "nextevent", "Next event")
+			</div>
+		}
+		<div class="rowgrid" data-cal-dashboard-list>
+			for _, r := range data.Rows {
+				@benchRowView(r, data)
+			}
+			if data.ShowNewSlot {
+				@benchNewSlot(data.CampaignID)
+			}
+		</div>
+	</div>
+}
+
+// benchRowView is one subordinate calendar.
+//
+// THE WARNROW PRINTS ITS FAULT WHERE THE DATE WOULD GO: the fault takes the
+// name's slot and the row carries NO date element at all — no zero, no
+// placeholder, no em dash. That branch is GM-only (benchRows never builds it
+// for a player).
+templ benchRowView(r BenchRow, data BenchData) {
+	<div
+		class={ "calrow", benchPatternClass(r.Pattern), templ.KV("warnrow", r.Warn) }
+		data-bench-row
+		data-calendar-id={ r.Manage.CalendarID }
+		style={ benchRowStyle(r) }
+	>
+		<span class="dot" aria-hidden="true"></span>
+		// THE ROW IS A DOOR, for every role: the name navigates to the calendar.
+		// A plain href, never an HTMX swap — the target page loads engine
+		// scripts, and boot.js:163 disables scripts inside swapped fragments.
+		<a class="grow" href={ templ.SafeURL(r.Manage.OpenHref) }>
+			if r.Warn {
+				<div class="fault" role="status">{ r.Fault }</div>
+			} else {
+				<div class="nm">{ r.Name }</div>
+			}
+			<div class="dt">{ r.Detail }</div>
+		</a>
+		<span class="sp"></span>
+		if r.Warn {
+			<span class="badge warn">setup</span>
+		} else if r.DateLabel != "" {
+			<span class="iw mono">{ r.DateLabel }</span>
+		}
+		if data.IsOwner {
+			@benchVisibilityBadge(r.Manage)
+			<button
+				type="button"
+				class="btn xs"
+				data-cal-permissions
+				data-calendar-id={ r.Manage.CalendarID }
+				data-cal-vis-mode={ r.Manage.VisMode }
+				data-cal-vis-rules={ r.Manage.VisRules }
+			>Permissions</button>
+			<a class="btn xs" href={ templ.SafeURL(r.Manage.SettingsHref) }>Settings</a>
+		}
+	</div>
+}
+
+// benchNewSlot is the New-calendar slot.
+//
+// OWNER-ONLY, which is a deviation from the signed render: the mockup draws the
+// slot in the player view too, but POST /calendars is Owner-gated, so a player
+// who took the affordance would meet a 403. Permission is absence — the same
+// rule the empty state already follows ("No calendars shared with you yet",
+// with no create affordance).
+templ benchNewSlot(campaignID string) {
+	<a class="calrow newslot" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) } data-bench-newslot>
+		<span class="plus" aria-hidden="true">＋</span>
+		<div class="grow">
+			<div class="nm">New calendar</div>
+			<div class="dt">wizard · presets</div>
+		</div>
+		<span class="sp"></span>
+		<span class="pill">Real-life</span>
+		<span class="pill">Custom</span>
+		<span class="pill">Import</span>
+	</a>
+}
+
+// benchCaption is the page's closing note — the proportion rule, stated where a
+// reader can hold the page and the rule in the same glance, and the honest
+// inventory of what is design-ahead.
+templ benchCaption() {
+	<div class="caption" data-bench-caption>
+		The Bench is a cockpit: every tile states a fact at rest and is a door, and the two full
+		Blocks below it are the same widget you drop on an entity page. Proportion is a rule, not an
+		accident — one primary calendar, one real-world calendar, then subordinate rows; there is no
+		width at which this becomes four identical panels. Tiles marked <b>needs backend</b> are
+		design-ahead: session RSVP storage, per-calendar sync link state and a queryable knowledge
+		horizon do not exist yet, so those tiles say so rather than printing a zero.
+	</div>
+}
+
+// --- view helpers -----------------------------------------------------------
+
+// benchTileClass composes a tile's class list. Kept in Go rather than as three
+// templ.KV entries so the ORDER of the modifiers is fixed and the stylesheet's
+// specificity story stays readable.
+func benchTileClass(t BenchTile) string {
+	cls := "tile"
+	if t.Class != "" {
+		cls += " " + t.Class
+	}
+	return cls
+}
+
+// benchToneClass maps a headline tone onto the sheet's two ink modifiers.
+func benchToneClass(tone string) string {
+	switch tone {
+	case "ok":
+		return "ok"
+	case "warn":
+		return "warn"
+	default:
+		return ""
+	}
+}
+
+// benchPatternClass normalises a stroke pattern to p1..p8.
+//
+// MIRRORED from calendar_block's patternClass, which is unexported. The pattern
+// — not the hue — is the GREYSCALE IDENTITY CHANNEL, so the Bench's rows and
+// chips must carry it for the same reason the Block's marks do; defaulting to
+// p1 (the solid stroke) is safe because it is legible under every filter.
+func benchPatternClass(p string) string {
+	p = strings.TrimSpace(p)
+	switch p {
+	case "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8":
+		return p
+	default:
+		return "p1"
+	}
+}
+
+// benchCalToken maps a --cal TOKEN NAME to its channel.
+//
+// MIRRORED from calendar_block's calToken, and mirrored for the reason its own
+// comment gives: CalHue is a token name, not a colour value, and a renderer
+// that whitelists colour VALUES greys out every calendar's identity channel —
+// which is exactly what happened once in wave 1. Unknown tokens fall back to
+// the neutral structural rule rather than to nothing.
+func benchCalToken(v string) string {
+	switch strings.TrimSpace(v) {
+	case "harptos", "real", "elven", "dwarven":
+		return "var(--cal-" + strings.TrimSpace(v) + ")"
+	default:
+		return "var(--rule-structural-strong)"
+	}
+}
+
+// benchRowStyle writes the row's identity channel.
+func benchRowStyle(r BenchRow) string { return "--cal:" + benchCalToken(r.CalHue) }
+
+// benchNextUpStyle writes an index row's two channels: the calendar's identity
+// and the event's axis. Axis is a concrete colour from the operator's own data
+// and never references --accent (canon A7).
+func benchNextUpStyle(r BenchNextUpRow) string {
+	style := "--cal:" + benchCalToken(r.CalHue)
+	if a := strings.TrimSpace(r.Axis); a != "" {
+		style += ";--axis:" + a
+	}
+	return style
+}
+
+// benchTickStyle positions one tick and carries its axis when the day is live.
+func benchTickStyle(t BenchTick) string {
+	style := fmt.Sprintf("--m-i:%d", t.Day)
+	if a := strings.TrimSpace(t.Axis); a != "" {
+		style += ";--axis:" + a
+	}
+	return style
+}
+
+// benchIntAttr renders an int for a data attribute.
+func benchIntAttr(n int) string { return fmt.Sprintf("%d", n) }
+
+// benchHeadSubtitle is the .phead's count line — the signed "four calendars in
+// Imix — the block below is the widget you embed", with the viewer's own count.
+func benchHeadSubtitle(data BenchData) string {
+	return fmt.Sprintf("%s in %s — the block below is the widget you embed",
+		benchCalendarCount(data.CalendarCount), data.CampaignName)
+}
+
+// benchSectionSubtitle is the "4 calendars · 1 needs setup" line. The setup half
+// is GM-only: a player is not told that a calendar they cannot fix is broken.
+func benchSectionSubtitle(data BenchData) string {
+	s := benchCalendarCount(data.CalendarCount)
+	if data.IsGM && data.NeedsSetup > 0 {
+		s += fmt.Sprintf(" · %d needs setup", data.NeedsSetup)
+	}
+	return s
+}
+
+// benchCalendarCount renders "1 calendar" / "4 calendars".
+func benchCalendarCount(n int) string {
+	if n == 1 {
+		return "1 calendar"
+	}
+	return fmt.Sprintf("%d calendars", n)
+}
+
+// benchNextUpSubtitle names the breadth of the index — across how many of the
+// VIEWER's calendars, never the campaign's total.
+func benchNextUpSubtitle(u BenchNextUp) string {
+	if u.Calendars == 1 {
+		return "across 1 calendar"
+	}
+	return fmt.Sprintf("across %d calendars", u.Calendars)
+}
+
+// benchNextUpTail is the "all 14 →" line, stated from the viewer's own index.
+func benchNextUpTail(u BenchNextUp) string {
+	if u.Total <= len(u.Rows) {
+		return fmt.Sprintf("that is all %d", u.Total)
+	}
+	return fmt.Sprintf("%d more upcoming", u.Total-len(u.Rows))
+}

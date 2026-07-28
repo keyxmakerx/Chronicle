@@ -1,5 +1,23 @@
 // app_dashboard_w5d_test.go — C-CAL-DASHBOARD-W5d: the batch upcoming read +
 // next-event sort + the adaptive calendar widget (both container-query variants).
+//
+// PIN NOTE (C-CALV4-BENCH-P4). Two of these now cover surfaces the route no
+// longer uses, and both are kept deliberately rather than deleted:
+//
+//   - UpcomingByCalendar is still a service method with its own contract, but
+//     the Bench does NOT read it: that path filters base visibility in SQL only
+//     and never applies filterEventsByUser, so an event carrying
+//     visibility_rules leaks its NAME to a player there (dispatch §5). The Bench
+//     feeds both its NEXT UP index and the ?sort=nextevent comparator from
+//     UpcomingAcrossCalendars instead — see bench.go's benchSortKeys and its
+//     test in bench_test.go.
+//   - adaptiveCalendarWidget is a RETAINED component (dispatch Bounds:
+//     C-CALV4-HOST-P3 still references it and dead-code removal is a post-wave
+//     slice). The Bench renders real calendar_block Blocks instead.
+//
+// sortDashboardCalendars and normalizeCalendarSort ARE live: the Bench orders
+// its subordinate rows through them, so the sort tests here still guard the
+// shipped control.
 package calendar
 
 import (

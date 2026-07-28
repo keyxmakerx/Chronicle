@@ -121,34 +121,48 @@ func TestCalVisModeForCard(t *testing.T) {
 	}
 }
 
+// benchW5bData is a one-calendar Bench whose single calendar is dm_only, so the
+// permissions trigger's seeded state is exercised end to end.
+//
+// PIN REFRESH (C-CALV4-BENCH-P4): the route now renders the Bench, so these
+// drive BenchPage. The W5b guarantee is unchanged and so is every marker —
+// the Bench moved the per-calendar trigger from the card onto the row and the
+// Block's management strip, and left the modal and its driver untouched.
+func benchW5bData(isOwner bool) BenchData {
+	cal := Calendar{ID: "c1", CampaignID: "camp-1", Name: "Secret", Visibility: "dm_only"}
+	return BenchData{
+		CampaignID: "camp-1", CampaignName: "Imix",
+		IsGM: isOwner, IsOwner: isOwner, ShowNewSlot: isOwner,
+		CalendarCount: 1,
+		Rsvp:          benchRsvpPanel(),
+		Rows:          benchRows([]*Calendar{&cal}, "", "camp-1", isOwner),
+	}
+}
+
 // TestDashboard_OwnerGetsPermissionsEditor: the owner page ships the modal +
 // the reused chip-row editor (with the GM-only mode) + the driver script, and
-// the cards carry their current visibility state for the editor to seed.
+// the per-calendar trigger carries its current visibility state for the editor
+// to seed.
 func TestDashboard_OwnerGetsPermissionsEditor(t *testing.T) {
-	data := sampleDashboardData()
-	data.IsOwner = true
-	data.Calendars = []Calendar{{ID: "c1", CampaignID: "camp-1", Name: "Secret", Visibility: "dm_only"}}
-	html := renderDashboardPage(t, data)
+	html := renderBench(t, benchW5bData(true))
 	for _, want := range []string{
 		"cal-permissions-modal",      // the modal
 		"data-visibility-editor",     // the reused Q-V2-7 widget
 		`value="gmonly"`,             // the W5b GM-only mode
 		"calendar_permissions.js",    // the driver
-		`data-cal-vis-mode="gmonly"`, // the card seeds the editor with current state
+		`data-cal-vis-mode="gmonly"`, // the trigger seeds the editor with current state
+		`data-cal-visibility="dm_only"`,
 	} {
 		if !strings.Contains(html, want) {
-			t.Errorf("owner dashboard missing %q", want)
+			t.Errorf("owner bench missing %q", want)
 		}
 	}
 }
 
 // TestDashboard_PlayerNoPermissionsEditor: players never receive the editor DOM,
-// the driver, or the per-card Permissions trigger.
+// the driver, or the per-calendar Permissions trigger.
 func TestDashboard_PlayerNoPermissionsEditor(t *testing.T) {
-	data := sampleDashboardData()
-	data.IsOwner = false
-	data.Selected = nil
-	html := renderDashboardPage(t, data)
+	html := renderBench(t, benchW5bData(false))
 	for _, forbidden := range []string{"cal-permissions-modal", "data-cal-permissions", "calendar_permissions.js", "data-visibility-editor"} {
 		if strings.Contains(html, forbidden) {
 			t.Errorf("player must NOT receive %q", forbidden)

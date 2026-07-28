@@ -1,20 +1,20 @@
-// app_dashboard.go — the Calendars management dashboard (C-APPS-CAL-DASH-W1).
+// app_dashboard.go — the Calendar app's route entry point.
 //
-// A dedicated page reached from the Extensions hub's per-app "Open dashboard"
-// entry for the calendar app. List + detail-pane layout: the campaign's
-// calendars on the left, the selected calendar's CRUD-compose actions +
-// a READ-ONLY associations panel (associated entities + timelines) on the
-// right. Wave 1 COMPOSES the existing calendar CRUD surfaces (settings, setup
-// wizard, delete, active-switch) — it does not reimplement any of them — and
-// reads associations via two queries added this wave (EntitiesForCalendar +
-// the cross-plugin TimelineLister). Live "see in action" embeds are Wave 2;
-// inline link/unlink + create-timeline are Wave 3.
+// WHAT THIS FILE IS NOW. GET /campaigns/:id/apps/calendar renders THE BENCH
+// (calendar-v4 wave 1 phase B): the assembly is bench.go's, the markup is
+// bench.templ's, and this file holds the thin handler, the ?sort control's
+// helpers — which the Bench still uses to order its subordinate rows — and the
+// RETAINED card-grid view model (see the retention note further down).
+//
+// WHAT IT WAS. C-APPS-CAL-DASH-W1's Calendars management dashboard: a card grid
+// of the campaign's calendars over a detail pane composing the existing CRUD
+// surfaces plus a read-only associations panel, with W2's live "see in action"
+// embeds. That surface is what the Bench replaces — the operator's screenshot
+// of it is what opened the calendar-v4 arc.
 package calendar
 
 import (
 	"context"
-	"encoding/json"
-	"log/slog"
 	"sort"
 	"strings"
 
@@ -83,112 +83,41 @@ type CalendarAppDashboardData struct {
 	WorldStateJSON string
 }
 
-// AppDashboard renders the Calendars dashboard. Full page on a normal GET;
-// just the detail pane on an HTMX request (selecting a calendar in the list
-// swaps #cal-dash-detail). Read-only/compose only this wave.
+// AppDashboard renders THE BENCH at GET /campaigns/:id/apps/calendar.
+//
+// SAME ROUTE, NEW SURFACE (calendar-v4 wave 1 phase B, C-CALV4-BENCH-P4). The
+// path is unchanged — the nav target and the Extensions hub both carry it as a
+// bare string, and any change would force a routes_snapshot.txt regeneration —
+// and the handler stays thin: it resolves the request context and delegates the
+// whole assembly to buildBench (bench.go) and the whole markup to bench.templ.
+//
+// The role branch it used to carry lives in buildBench now, unchanged in
+// substance: owners get ListCalendars, players get ListVisibleCalendars, and
+// UNIFYING THE TWO REOPENS THE W5a LEAK (dispatch §8).
 func (h *Handler) AppDashboard(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	if cc == nil || cc.Campaign == nil {
 		return apperror.NewMissingContext()
 	}
-	ctx := c.Request().Context()
-	userID := auth.GetUserID(c)
-	role := cc.VisibilityRole()
-
-	data := CalendarAppDashboardData{
-		CampaignID: cc.Campaign.ID,
-		IsOwner:    cc.MemberRole >= campaigns.RoleOwner,
-		CSRFToken:  middleware.GetCSRFToken(c),
-		Sort:       normalizeCalendarSort(c.QueryParam("sort")),
-	}
-
-	// W5c role-branch: owners manage ALL calendars; players see only the
-	// calendars visible to them (per-calendar visibility, W5a). Enforced in the
-	// service layer (ListVisibleCalendars), not by hiding cards in the view.
-	var (
-		cals []Calendar
-		err  error
-	)
-	if data.IsOwner {
-		cals, err = h.svc.ListCalendars(ctx, cc.Campaign.ID)
-	} else {
-		cals, err = h.svc.ListVisibleCalendars(ctx, cc.Campaign.ID, role, userID)
-	}
-	if err != nil {
-		slog.Warn("calendars dashboard: list failed",
-			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", err))
-		data.LoadError = true
-		return h.renderAppDashboard(c, cc, data)
-	}
-	// W5d: one batch read for the next-event sort + the adaptive widget's
-	// agenda (best-effort — a failure just omits the agenda / falls back to the
-	// default order). No N+1: a single query across all the dashboard calendars.
-	if up, uerr := h.svc.UpcomingByCalendar(ctx, cals, role); uerr == nil {
-		data.Upcoming = up
-	} else {
-		slog.Warn("calendars dashboard: upcoming batch failed",
-			slog.String("campaign_id", cc.Campaign.ID), slog.Any("error", uerr))
-	}
-	sortDashboardCalendars(cals, data.Sort, data.Upcoming)
-	data.Calendars = cals
-
-	// The user's active calendar drives the "active" badge + the default
-	// selection when the request doesn't name one.
-	if active, aerr := h.svc.GetActiveCalendar(ctx, userID, cc.Campaign.ID); aerr == nil && active != nil {
-		data.ActiveID = active.ID
-	}
-
-	// Resolve the selected calendar: explicit ?calId, else active, else first.
-	selID := c.QueryParam("calId")
-	if selID == "" {
-		if data.ActiveID != "" {
-			selID = data.ActiveID
-		} else if len(cals) > 0 {
-			selID = cals[0].ID
-		}
-	}
-	if selID != "" {
-		// Eager-load the full calendar for the detail pane (months for the
-		// date label, eras, etc.). Fall back silently if it's gone. W5c: a player
-		// must not open a calendar hidden from them via an explicit ?calId, so the
-		// detail only loads when the viewer may see it (owner/co-DM always can).
-		if sel, serr := h.svc.GetCalendarByID(ctx, selID); serr == nil && sel != nil &&
-			sel.CampaignID == cc.Campaign.ID && calendarVisibleTo(sel, role, userID) {
-			data.Selected = sel
-			data.Entities = h.loadCalendarEntities(ctx, sel.ID, role, userID)
-			data.Timelines = h.loadCalendarTimelines(ctx, sel.ID, role, userID)
-
-			// W2: the LIVE worldstate band renders only for the active
-			// calendar (engine binds the active calendar — see the struct
-			// doc). Build its seed here so the reused worldStateBandV2 paints
-			// on full page load (the engine inits in prod mode from the seed).
-			data.SelectedIsActive = data.ActiveID == sel.ID
-			if data.SelectedIsActive {
-				if seed, berr := h.svc.BuildWorldStateSeed(ctx, sel.ID, sel.CurrentYear, sel.CurrentMonth, sel.CurrentDay, role, userID); berr == nil && seed != nil {
-					data.WorldState = seed
-					if b, merr := json.Marshal(seed); merr == nil {
-						data.WorldStateJSON = string(b)
-					}
-				}
-			}
-		}
-	}
-
+	data := h.buildBench(c.Request().Context(), benchInput{
+		Campaign:  cc.Campaign,
+		UserID:    auth.GetUserID(c),
+		Role:      cc.VisibilityRole(),
+		IsOwner:   cc.MemberRole >= campaigns.RoleOwner,
+		CSRFToken: middleware.GetCSRFToken(c),
+		Sort:      c.QueryParam("sort"),
+	})
 	return h.renderAppDashboard(c, cc, data)
 }
 
-// renderAppDashboard returns a fragment for HTMX swaps (the card grid for a
-// sort change `?grid=1`, else the detail pane for a list selection), or the
-// full page otherwise.
-func (h *Handler) renderAppDashboard(c echo.Context, cc *campaigns.CampaignContext, data CalendarAppDashboardData) error {
-	if middleware.IsHTMX(c) {
-		// W5c: a sort control swaps just the grid section (it carries ?grid=1).
-		if c.QueryParam("grid") == "1" {
-			return middleware.Render(c, 200, calendarAppDashboardGridSection(data))
-		}
-		return middleware.Render(c, 200, calendarAppDashboardDetail(data))
+// renderAppDashboard returns the Bench's row-grid section for the sort
+// control's HTMX swap (?sort=…&grid=1 — the ONLY HTMX on this page, and it adds
+// no route), or the full page otherwise.
+func (h *Handler) renderAppDashboard(c echo.Context, cc *campaigns.CampaignContext, data BenchData) error {
+	if middleware.IsHTMX(c) && c.QueryParam("grid") == "1" {
+		return middleware.Render(c, 200, benchRowGridSection(data))
 	}
-	return middleware.Render(c, 200, CalendarAppDashboardPage(cc, data))
+	return middleware.Render(c, 200, BenchPage(cc, data))
 }
 
 // calendarSortKeys are the supported card-grid sort keys. "" is the default
@@ -241,31 +170,21 @@ func sortDashboardCalendars(cals []Calendar, key string, upcoming map[string]Cal
 	}
 }
 
-// loadCalendarEntities reads the associated entities, logging+degrading on
-// error so a stale read can't 500 the dashboard. role + userID are the viewer
-// context so the associations panel respects entity visibility (cordinator#32
-// gap #1) — a player never sees a dm_only / custom-restricted entity's name.
-func (h *Handler) loadCalendarEntities(ctx context.Context, calendarID string, role int, userID string) []EntityTieRef {
-	ents, err := h.svc.EntitiesForCalendar(ctx, calendarID, role, userID)
-	if err != nil {
-		slog.Warn("calendars dashboard: entities read failed",
-			slog.String("calendar_id", calendarID), slog.Any("error", err))
-		return nil
-	}
-	return ents
-}
-
-// loadCalendarTimelines reads the associated timelines via the cross-plugin
-// lister (absent → empty panel).
-func (h *Handler) loadCalendarTimelines(ctx context.Context, calendarID string, role int, userID string) []TimelineRef {
-	if h.timelineLister == nil {
-		return nil
-	}
-	tls, err := h.timelineLister.ListTimelinesForCalendar(ctx, calendarID, role, userID)
-	if err != nil {
-		slog.Warn("calendars dashboard: timelines read failed",
-			slog.String("calendar_id", calendarID), slog.Any("error", err))
-		return nil
-	}
-	return tls
-}
+// THE CARD-GRID VIEW IS RETAINED BUT NO LONGER ROUTED.
+//
+// CalendarAppDashboardData and the components in app_dashboard.templ
+// (CalendarAppDashboardPage, the card grid, the detail pane, the "see in
+// action" embeds, adaptiveCalendarWidget and calendarPermissionsModal) all stay
+// exactly where they are. Two of them are still live: the Bench renders
+// calendarAppDashboardEmpty for a campaign with no calendars and
+// calendarPermissionsModal for an owner, and C-CALV4-HOST-P3 references
+// adaptiveCalendarWidget. The rest is retained deliberately — dead-code removal
+// is a post-wave slice (dispatch Bounds), and their tests still exercise them.
+//
+// The two loader helpers that fed ONLY the retired detail pane
+// (loadCalendarEntities / loadCalendarTimelines) were removed with their only
+// caller rather than left as unreachable code the `unused` lint would flag on
+// every subsequent PR. The reads they wrapped are untouched: the service's
+// EntitiesForCalendar keeps its viewer-context seam and its test, and
+// SetTimelineLister keeps its composition-root wiring for the next surface that
+// wants the cross-plugin timeline read.
