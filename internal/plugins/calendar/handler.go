@@ -27,6 +27,12 @@ type Handler struct {
 	tierLister     TierDefinitionsLister
 	timelineLister TimelineLister // cross-plugin read for the Calendars dashboard (W1).
 	entityCreator  EntityCreator  // cross-plugin write for "create entity from event" (C-CAL-EDITOR-EXPANSION PR1).
+	// schedule is the sessions read the Bench RSVP panel needs (C-CALV4-RSVP-P8);
+	// rsvpRead is the event-RSVP read for the same panel's answer column. Both
+	// nil-safe: without them the panel renders its unfilled state and the rest
+	// of the Bench is untouched.
+	schedule BenchScheduleReader
+	rsvpRead RSVPService
 }
 
 // TierDefinitionsLister surfaces the campaign-aware tier vocabulary

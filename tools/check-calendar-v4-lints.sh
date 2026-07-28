@@ -77,6 +77,22 @@ STATE_MARKERS="data-theme,data-view,data-role,data-colour,data-moonstyle,data-re
 # regex anchored on surrounding structure is exactly the brittleness the wave
 # COMMON brief §3 warns about. B1–B4 all key on the marker itself.
 # ---------------------------------------------------------------------------
+# b4_scope_for decides whether guard B4 applies to a file, BY FILENAME.
+#
+# B4 is the calendar-v4 surfaces' own rule (every dated node carries data-day);
+# B1-B3 are universal CSS/markup correctness and run repo-wide. The glob is the
+# whole scope, so a surface whose filename it does not match is silently
+# unguarded — which is why `*schedule*` is here BEFORE the file exists
+# (C-CALV4-RSVP-P8 §11: Part B's /schedule page is drawn on the coordinator
+# lane, and a missing glob is invisible in review). Extracted from the main loop
+# so the self-test can exercise the RESOLUTION and not just the rules.
+b4_scope_for() {
+  case "$1" in
+    *calendar_block*|*bench*|*Bench*|*schedule*|*Schedule*) echo 1 ;;
+    *) echo 0 ;;
+  esac
+}
+
 lint_file() {
   local file="$1" added="$2" b4scope="$3"
 
@@ -351,6 +367,27 @@ templ CondDirty() {
 }
 FIXTURE
 
+  # B4's scope is resolved BY FILENAME, and the resolution is now self-tested
+  # too. It was not before, and that was the gap: a Part B file named
+  # schedule.templ would have been silently OUT of scope, which is precisely the
+  # invisible coverage hole this guard's header says it exists to prevent. A
+  # missing glob is invisible; the glob is free (C-CALV4-RSVP-P8 §11).
+  expect_scope() { # expect_scope <path> <want 0|1>
+    local f="$1" want="$2" got
+    got="$(b4_scope_for "${f}")"
+    if [[ "${got}" != "${want}" ]]; then
+      echo "  self-test FAILED: B4 scope for ${f} = ${got}; expected ${want}" >&2
+      rc=1
+    fi
+  }
+  expect_scope "internal/widgets/calendar_block/block.templ"   1
+  expect_scope "internal/plugins/calendar/bench.templ"         1
+  expect_scope "internal/plugins/calendar/Bench.templ"         1
+  # Part B's file, which lands in a later slice. In scope BEFORE it exists.
+  expect_scope "internal/plugins/calendar/schedule.templ"      1
+  expect_scope "static/css/calendar-schedule.css"              1
+  expect_scope "internal/plugins/calendar/calendar_v2.templ"   0
+
   expect() { # expect <label> <file> <b4scope> <want-rules|NONE>
     local label="$1" f="$2" scope="$3" want="$4" got
     got="$(lint_file "${f}" ALL "${scope}" | cut -d'|' -f1 | sort -u | paste -sd, -)"
@@ -427,10 +464,7 @@ while IFS= read -r file; do
   # B4 scopes to the calendar-v4 Block and Bench surfaces only. B1–B3 are
   # universal CSS/markup correctness and run repo-wide (diff-scoped, so they
   # only judge new code).
-  b4scope=0
-  case "${file}" in
-    *calendar_block*|*bench*|*Bench*) b4scope=1 ;;
-  esac
+  b4scope="$(b4_scope_for "${file}")"
 
   while IFS='|' read -r rule ln detail; do
     [[ -z "${rule}" ]] && continue

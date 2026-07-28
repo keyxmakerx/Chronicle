@@ -106,12 +106,82 @@ func (h *Handler) GetOverlayAPI(c echo.Context) error {
 	viewerTZ := h.resolveViewerTZ(c, userID)
 	includeDetail := cc.MemberRole >= campaigns.RoleOwner || cc.IsDmGranted
 
-	overlay, err := h.svc.BuildOverlay(c.Request().Context(), cc.Campaign.ID,
-		h.overlayMembers(c.Request().Context(), cc.Campaign.ID), week, viewerTZ, includeDetail)
+	overlay, err := h.CampaignWeekOverlay(c.Request().Context(), cc.Campaign.ID, week, viewerTZ, includeDetail)
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}
 	return c.JSON(http.StatusOK, overlay)
+}
+
+// --- the cross-plugin read seam (C-CALV4-RSVP-P8 §5) ------------------------
+//
+// The calendar's Bench RSVP panel prints the same availability this plugin
+// serves at /availability/overlay. The two surfaces read through the SAME two
+// functions below rather than each assembling a roster, because the thing they
+// must never disagree about is who is free and who may see it — and two
+// assemblies of the same facts is how that disagreement gets built.
+//
+// Neither takes an echo.Context: the calendar reaches them through a narrow
+// interface wired in internal/app/routes.go (house rule 8), so this plugin
+// gains no edge into the calendar and the calendar gains none into this one.
+
+// RosterEntry is one member of the overlay roster with NO availability attached
+// — the PARTY-VISIBLE half of the roster.
+//
+// The split matters and is the signed contract's (C-CALV4-RSVP-P8 §4): a
+// member's name, role, zone and answer are visible to the whole party, while
+// their availability LANES are owner / co-DM only. WeekOverlay.Members carries
+// both fused together and is therefore populated only under includeDetail, so a
+// player-facing surface that needs the names cannot use it. This type is what a
+// player is entitled to; nothing on it is gated.
+//
+// The ORDER is the identity key: hue and pattern are taken from the index, so
+// the order must not depend on availability, tally or answer.
+type RosterEntry struct {
+	UserID string
+	Name   string
+	// Role is campaigns.Role.DisplayName(): Owner | Scribe | Player.
+	Role string
+	// IsOwner is the ordering key (owners first), not the label.
+	IsOwner bool
+	// IsCoDM is the campaign's DM grant — a capability over a role, not a role.
+	IsCoDM bool
+	// TZ is the stored IANA zone, EMPTY when unset. Empty is a state, not a
+	// default: see OverlayMember.TZ.
+	TZ string
+}
+
+// CampaignRoster returns the overlay roster in its stable render order, with
+// roles, co-DM grants and zones resolved from their truth sources. Availability
+// is deliberately not included — see RosterEntry.
+func (h *Handler) CampaignRoster(ctx context.Context, campaignID string) []RosterEntry {
+	in := h.overlayMembers(ctx, campaignID)
+	out := make([]RosterEntry, 0, len(in))
+	for _, m := range in {
+		out = append(out, RosterEntry{
+			UserID:  m.UserID,
+			Name:    m.Name,
+			Role:    m.RoleLabel,
+			IsOwner: m.IsOwner,
+			IsCoDM:  m.IsCoDM,
+			TZ:      m.TZ,
+		})
+	}
+	return out
+}
+
+// CampaignWeekOverlay builds the campaign's availability overlay for the week
+// containing weekStart, projected into viewerTZ.
+//
+// includeDetail IS THE PERMISSION and it is the caller's to decide, from role,
+// in a handler — never from a route (sessions/routes.go:29-46). When it is
+// false BuildOverlay omits Members and every *IDs array WHOLESALE: a
+// non-entitled viewer's payload does not contain another member's lane data at
+// all, hidden or otherwise. Absence is in the payload.
+func (h *Handler) CampaignWeekOverlay(ctx context.Context, campaignID, weekStart, viewerTZ string,
+	includeDetail bool) (*WeekOverlay, error) {
+	return h.svc.BuildOverlay(ctx, campaignID, h.overlayMembers(ctx, campaignID),
+		weekStart, viewerTZ, includeDetail)
 }
 
 // ListMyExceptionsAPI returns the current user's per-date overrides.

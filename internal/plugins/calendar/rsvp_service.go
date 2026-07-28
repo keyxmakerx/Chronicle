@@ -62,6 +62,31 @@ type RSVPService interface {
 	// CanUserViewEvent is the shared visibility predicate the handler needs for
 	// the email fan-out (never email a hidden event's title) and the token flow.
 	CanUserViewEvent(evt *Event, role int, userID string) bool
+
+	// AnswersByUser returns EVERY stored answer to one event, keyed by user id.
+	//
+	// WHY THIS IS NOT Summary's Responders (C-CALV4-RSVP-P8 §4). Responders is
+	// Owner/co-DM only, because the JSON API's audience question is "who may see
+	// the breakdown of a count". The Bench RSVP panel answers a DIFFERENT and
+	// separately signed question, and the signed contract answers it directly:
+	// rsvpPanel() renders the availability lanes under `${GM ? lanes : ''}` but
+	// renders the full member table — every member's role, zone, local clock and
+	// ANSWER — unconditionally, and v4-bench-player-light.png shows a player
+	// receiving exactly that. The law:
+	//
+	//	RSVP answers, roles, zones and per-member local clocks are
+	//	party-visible. Per-member availability LANES are owner / co-DM only.
+	//	The aggregate density row is everyone's.
+	//
+	// So: statuses for everyone, and NOTES FOR NOBODY. A free-text "these times
+	// work better" note is not covered by that ruling, is the most personal
+	// thing in the table, and the Bench has nowhere to print it — it stays on
+	// Summary, behind the detail gate.
+	//
+	// The event-visibility gate is unchanged: a caller who cannot see the event
+	// gets not-found, exactly as Summary does, so an RSVP read still cannot
+	// confirm a hidden event's existence.
+	AnswersByUser(ctx context.Context, evt *Event, userID string, role int) (map[string]string, error)
 }
 
 // rsvpEventLookup is the narrow slice of the calendar aggregate the RSVP service
@@ -232,6 +257,33 @@ func (s *rsvpService) Summary(ctx context.Context, evt *Event, userID string, ro
 				Note:   rows[i].Note,
 			})
 		}
+	}
+	return out, nil
+}
+
+// AnswersByUser returns every stored answer to the event, keyed by user id. See
+// the interface doc for why the audience is the whole party and why notes are
+// excluded.
+//
+// The returned map is the RAW STORED SET, ex-members included. That is
+// deliberate: filtering by membership is the CALLER'S job, because the caller is
+// the one that knows which roster it is printing beside, and a store-side filter
+// would hide the very disagreement the Bench's count oracle exists to catch —
+// a stored row belonging to somebody who has left the campaign.
+func (s *rsvpService) AnswersByUser(ctx context.Context, evt *Event, userID string, role int) (map[string]string, error) {
+	if evt == nil {
+		return nil, apperror.NewNotFound("event not found")
+	}
+	if !s.CanUserViewEvent(evt, role, userID) {
+		return nil, apperror.NewNotFound("event not found")
+	}
+	rows, err := s.repo.ListRSVPsForEvent(ctx, evt.ID)
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	out := make(map[string]string, len(rows))
+	for i := range rows {
+		out[rows[i].UserID] = rows[i].Status
 	}
 	return out, nil
 }

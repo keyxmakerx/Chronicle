@@ -171,9 +171,26 @@ templ benchTileView(t BenchTile) {
 // benchActionView renders a tile control. An action with no Href is INERT —
 // rendered so the tile's geometry is final, disabled so it is not a dead
 // control that swallows a click (the Block's layersInvoker precedent).
+//
+// WG-5, ADOPTED PRODUCT-WIDE AND IMPLEMENTED WHERE WAVE 3 ALREADY TOUCHES: an
+// inert control carries a VISIBLE `.badge.need`, not a `title` alone. The old
+// shape was `title`-only twice and deliberately (here and helpers.go's
+// layersInvokerTitle) — and it is independently an a11y defect, because `title`
+// is not announced by several screen readers and is unreachable by touch.
+//
+// The chip's text is the literal "needs backend" and never the specific reason,
+// because `.badge.need` is not diluted (§7). The specific reason is carried
+// visibly too, by the surrounding surface's `.cap` — so the accessibility rule
+// and the non-dilution rule are both satisfied rather than traded against each
+// other. A control that carries a chip is GM-tier, since the chip is.
 templ benchActionView(a BenchAction) {
 	if a.Href != "" {
 		<a class={ "btn xs", templ.KV("fill", a.Fill) } href={ templ.SafeURL(a.Href) }>{ a.Label }</a>
+	} else if a.NeedsBackend {
+		<span class="inert">
+			<button type="button" class={ "btn xs", templ.KV("fill", a.Fill) } disabled title={ a.Title }>{ a.Label }</button>
+			<span class="badge need">needs backend</span>
+		</span>
 	} else {
 		<button type="button" class={ "btn xs", templ.KV("fill", a.Fill) } disabled title={ a.Title }>{ a.Label }</button>
 	}
@@ -246,17 +263,176 @@ templ benchVisibilityBadge(m BenchManage) {
 
 // --- RSVP -------------------------------------------------------------------
 
-// benchRsvpView is the design-ahead session panel. It draws its HEADER and the
-// signed `needs backend` chip and nothing else — see BenchRsvp for why every
-// lane, density and member row the signed panel shows would be a fabricated
-// fact here.
+// benchRsvpView is the signed panel (cv4:2205-2263), in the signed order.
+//
+// THE PANEL-LEVEL `needs backend` CHIP IS GONE (WG-8). It was drawn when the
+// WHOLE panel was design-ahead; after this slice the panel is backed and three
+// controls inside it are not, so the chip moves to those controls. Leaving a
+// panel-level chip over a filled panel is the same lie class as a green sync
+// pill with no denominator, inverted — and it would ship the operator's most
+// wanted feature announcing itself as unbuilt on the day it was built.
+//
+// WHAT A PLAYER RECEIVES, and what they do not. The full member table — every
+// name, role, zone chip, local clock and answer word — renders to EVERYONE:
+// that is the signed contract's own reading (`${table}` is unconditional at
+// cv4:2261) and v4-bench-player-light.png shows it directly. The availability
+// LANES are owner / co-DM only, and they are absent from a player's payload
+// before this template ever runs. The Director's two inert controls are absent
+// too, because a disabled control whose reason is a `needs backend` chip may not
+// render to a player (decisions/2026-07-27-needs-backend-audience.md).
 templ benchRsvpView(data BenchData) {
-	<div class="rsvp" data-bench-rsvp>
+	<div class="rsvp surf" data-bench-rsvp>
 		<div class="lhead">
 			<span class="t">{ data.Rsvp.Title }</span>
-			<span class="badge need">needs backend</span>
+			if data.Rsvp.Filled {
+				<span class="c" title={ data.Rsvp.FrameTitle }>{ data.Rsvp.Frame }</span>
+				<span class="sp"></span>
+				<span class="c">{ data.Rsvp.Scope }</span>
+			}
 		</div>
-		<p class="note">{ data.Rsvp.Note }</p>
+		if !data.Rsvp.Filled {
+			<p class="note">{ data.Rsvp.Note }</p>
+		} else {
+			<div class="top">
+				<div class="ov">
+					<div class="ovwrap">
+						<div class="ovgrid" data-bench-rsvp-grid>
+							<div class="ovhead">
+								<b>Member</b>
+								for _, d := range data.Rsvp.DayHeads {
+									<b>{ d.Label }</b>
+								}
+							</div>
+							@benchRsvpLanesView(data.Rsvp)
+							@benchRsvpDensityView(data.Rsvp)
+							@benchRsvpBracketView(data.Rsvp)
+						</div>
+					</div>
+				</div>
+				<div class="side">
+					<div class="hl">{ data.Rsvp.Headline }</div>
+					if data.Rsvp.Rec != "" {
+						<div class="rec">
+							{ data.Rsvp.Rec }
+							if data.Rsvp.RecDerived {
+								<span class="badge">derived · not stored</span>
+							}
+						</div>
+					}
+					if data.Rsvp.Why != "" {
+						<div class="why">{ data.Rsvp.Why }</div>
+					}
+					if len(data.Rsvp.Actions) > 0 {
+						<div class="btns">
+							for _, a := range data.Rsvp.Actions {
+								@benchActionView(a)
+							}
+						</div>
+						<div class="cap">{ data.Rsvp.ActionsWhy }</div>
+					}
+					if data.Rsvp.Silent != "" {
+						<div class="rec warn">{ data.Rsvp.Silent }</div>
+					}
+					<div class="cap">{ data.Rsvp.SideCap }</div>
+				</div>
+			</div>
+			<div class="mtable" data-bench-rsvp-table>
+				<div class="lhead">
+					<span class="t">{ data.Rsvp.SlotLabel }</span>
+				</div>
+				for _, m := range data.Rsvp.Members {
+					@benchRsvpMemberView(m)
+				}
+			</div>
+			for _, c := range data.Rsvp.Captions {
+				<p class="cap">{ c }</p>
+			}
+		}
+	</div>
+}
+
+// benchRsvpLanesView draws the per-member lanes. There is no `if IsGM` here on
+// purpose: a player's BenchRsvp carries no Lanes at all, so the absence is in
+// the data and this loop simply has nothing to walk. A permission expressed as
+// a template branch is one refactor away from being lost.
+templ benchRsvpLanesView(p BenchRsvp) {
+	for _, l := range p.Lanes {
+		<div class="lane" data-bench-rsvp-lane>
+			<span class="who">
+				<span class={ "swatch", l.Pattern } style={ benchAxisStyle(l.Axis) }></span>
+				{ l.Initials }
+			</span>
+			for i, free := range l.Free {
+				<span
+					class={ "slot", templ.KV("free", free) }
+					style={ benchAxisStyle(l.Axis) }
+					data-day={ benchLaneDayKey(l, i) }
+				></span>
+			}
+		</div>
+	}
+}
+
+// benchRsvpDensityView is the anonymous aggregate — EVERYONE'S, at every role.
+// Each bar's own denominator rides in `title`, so the opacity is never the only
+// carrier of the number.
+templ benchRsvpDensityView(p BenchRsvp) {
+	<div class="lane dens-row">
+		<span class="who cap">density</span>
+		for _, d := range p.Density {
+			<span class="dens" style={ benchDensityStyle(d) } title={ d.Title } data-day={ d.DayKey }></span>
+		}
+	</div>
+}
+
+// benchRsvpBracketView draws the derived window's bracket. --accent is legal
+// here precisely because it is the TOOL talking, not an event (REVIEW.md:126-136).
+templ benchRsvpBracketView(p BenchRsvp) {
+	if p.Bracket != nil {
+		<div class="lane brk-row">
+			<span class="who"></span>
+			<span class="recbr" style={ benchBracketStyle(p.Bracket) }>
+				<b>{ p.Bracket.Label }</b>
+			</span>
+		</div>
+	}
+}
+
+// benchRsvpMemberView is one party-visible member row.
+//
+// The `zone not set` + `Ask →` pair STAYS AT EVERY WIDTH — the repair may never
+// be the thing that disappears on the smallest screen, which is where a player
+// most likely is — and the clock beside it is LITERALLY EMPTY rather than a
+// dash or a UTC guess (§5).
+templ benchRsvpMemberView(m BenchRsvpMember) {
+	<div class="mrow" data-bench-rsvp-row>
+		<span class={ "swatch", m.Pattern } style={ benchAxisStyle(m.Axis) }></span>
+		<span class="nm">
+			{ m.Name }
+			if m.Host {
+				<span class="ro">(host)</span>
+			}
+		</span>
+		<span class="ro">{ m.Role }</span>
+		if m.IsCoDM {
+			<span class="badge gm">co-DM</span>
+		}
+		<span class="sp"></span>
+		if m.Zone == "" {
+			<span class="badge warn">zone not set</span>
+			if m.AskHref != "" {
+				<a class="btn xs ghost" href={ templ.SafeURL(m.AskHref) }>Ask →</a>
+			}
+		} else {
+			<span class="badge tz" title={ m.ZoneTitle }>{ m.Zone }</span>
+		}
+		<span class={ "lt", templ.KV("small", m.Antisocial) }>
+			{ m.LocalTime }
+			if m.NextDay {
+				<span class="badge warn tz">+1d</span>
+			}
+		</span>
+		<span class={ "rs", benchToneClass(m.Tone) }>{ m.Answer }</span>
 	</div>
 }
 
@@ -440,9 +616,54 @@ func benchToneClass(tone string) string {
 		return "ok"
 	case "warn":
 		return "warn"
+	case "bad":
+		return "bad"
 	default:
 		return ""
 	}
+}
+
+// --- RSVP panel view helpers ------------------------------------------------
+
+// benchAxisStyle hands a member's identity hue to the --axis channel the
+// swatch, the lane pill and the pattern all read. The PATTERN rides as a class
+// (p1..p8) rather than a style, because it is the greyscale identity channel and
+// a channel that lives in a style attribute is one CSP tightening from vanishing.
+func benchAxisStyle(axis string) string {
+	if a := strings.TrimSpace(axis); a != "" {
+		return "--axis:" + a
+	}
+	return ""
+}
+
+// benchLaneDayKey returns the lane cell's ANSWER key. Guard B4: every dated node
+// carries data-day, in bench.templ's EXISTING namespace — never a second one.
+func benchLaneDayKey(l BenchRsvpLane, i int) string {
+	if i < 0 || i >= len(l.DayKeys) {
+		return ""
+	}
+	return l.DayKeys[i]
+}
+
+// benchDensityStyle maps a column's free count onto the bar's opacity.
+//
+// The floor is deliberate: a column where NOBODY is free still draws a bar, at
+// the lowest step, because a vanished bar reads as "no data" and this row's
+// whole job is to distinguish "nobody can make it" from "nobody has said".
+func benchDensityStyle(d BenchRsvpDensity) string {
+	if d.Total <= 0 {
+		return "--dens:0.12"
+	}
+	return fmt.Sprintf("--dens:%.2f", 0.12+0.88*float64(d.Free)/float64(d.Total))
+}
+
+// benchBracketStyle positions the derived window's bracket over the columns it
+// spans. Grid lines, not day indices — column 1 is the 96px member label.
+func benchBracketStyle(b *BenchRsvpBracket) string {
+	if b == nil {
+		return ""
+	}
+	return fmt.Sprintf("grid-column:%d/%d", b.Start, b.End)
 }
 
 // benchPatternClass normalises a stroke pattern to p1..p8.
