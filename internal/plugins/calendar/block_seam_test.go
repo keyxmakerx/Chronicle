@@ -151,6 +151,13 @@ func TestSeam_CalendarIdentityTripleReachesTheDOM(t *testing.T) {
 //
 // Each condition is projected alone so the mark cannot be attributed to the
 // wrong event.
+// EXTENDED BY C-CALV4-LEDGER-P6 §7. The docked Ledger draws the SAME
+// discrimination one layer down — a gold rail plus a `GM` badge for dm_only, an
+// audience chip alone for a visibility_rules restriction — so a Ledger that
+// drew the rail on both would be the identical defect, and it would be invisible
+// to any test that only reads the grid. seamLedger renders the same projection
+// with the Ledger layer on, because the producer has no layer input to vary
+// (the per-viewer layer store is W-F's).
 func TestSeam_GMMarksDiscriminateDogearFromDiamond(t *testing.T) {
 	gm := BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}
 
@@ -197,6 +204,110 @@ func TestSeam_GMMarksDiscriminateDogearFromDiamond(t *testing.T) {
 	seamNotContain(t, player, `class="audmark"`, "a player must see no audience marks at all")
 	seamContain(t, player, `data-event-id="restricted"`,
 		"the player is allowed this event; it must render as an ordinary mark")
+
+	// ── the SAME split, in the docked Ledger (§7) ───────────────────────────
+	dmLedger := seamLedger(t, BlockProjectionInput{
+		Calendar:   blockTenDayCal(),
+		Events:     []Event{blockEvent("gmonly", 4, "dm_only")},
+		Viewer:     gm,
+		MonthIndex: 0,
+		Year:       1523,
+	})
+	seamContain(t, dmLedger, `<i class="gr" title="hidden from players"`,
+		"a dm_only event's Ledger row must draw the gold GM rail (Restricted == false)")
+	seamContain(t, dmLedger, `class="badge gm">GM<`,
+		"the rail and the `GM` badge are one condition, not two")
+	seamContain(t, dmLedger, `class="audchip">GM only<`,
+		"the audience chip says WHICH permission it is")
+
+	restrictedLedger := restricted // OccursOn is pure; the struct is reusable
+	rulesLedger := seamLedger(t, BlockProjectionInput{
+		Calendar:   blockTenDayCal(),
+		Events:     []Event{restrictedLedger},
+		Viewer:     gm,
+		MonthIndex: 0,
+		Year:       1523,
+	})
+	seamNotContain(t, rulesLedger, `class="gr"`,
+		"a visibility_rules row is not a dm_only row: the gold rail is the wrong mark, and "+
+			"drawing it on both is the SEAM-P5 stage-4 defect one layer down")
+	seamNotContain(t, rulesLedger, `class="badge gm">GM<`,
+		"the `GM` badge follows the rail, so it is wrong here too")
+	seamContain(t, rulesLedger, `class="audchip">Restricted<`,
+		"a restricted audience is stated by the chip alone")
+
+	// And a player receives none of it, in the Ledger as in the grid.
+	playerLedger := seamLedger(t, BlockProjectionInput{
+		Calendar:   blockTenDayCal(),
+		Events:     []Event{blockEvent("gmonly", 4, "dm_only"), restrictedAgain},
+		Viewer:     BlockViewer{UserID: "u-player", Role: permissions.RolePlayer},
+		MonthIndex: 0,
+		Year:       1523,
+	})
+	for _, mark := range []string{`class="gr"`, `class="badge gm"`, `class="audchip"`} {
+		seamNotContain(t, playerLedger, mark, "a permission marker reached a player's Ledger")
+	}
+}
+
+// seamLedger is seamRender with the Ledger layer switched on. The producer has
+// no layer input to vary — the per-viewer layer store is W-F's (data.go) — so
+// overriding Layers.Enabled on the projected BlockData stands in for exactly
+// that store and nothing else; every other field is the producer's real output.
+// This is the same stand-in TestSeam_EnabledLayerSetMatchesWhatRenders makes,
+// and it goes through the same seamRenderBlockData rather than a second loop.
+func seamLedger(t *testing.T, in BlockProjectionInput) string {
+	t.Helper()
+	d := projectBlock(in)
+	d.Layers.Enabled = []string{"moons", "ledger"}
+	return seamRenderBlockData(t, d)
+}
+
+// TestSeam_LedgerTimesFollowTheCalendarNotTheEvent is r52's own composed-HTML
+// acceptance line (§8): "a real-world calendar's Ledger times carry the zone
+// abbreviation and an in-world calendar's carry .tm.mono and NO zone".
+//
+// It can only be asserted here. The renderer picks .tm vs .tm.mono from
+// BlockData.IsRealWorld, which a widget-side test sets itself; what this proves
+// is that the PRODUCER folds a zone label into Mark.Time on a real-world
+// calendar and never on an in-world one — the two halves of one fact, which r52
+// refused to let become two fields precisely so they could not disagree. A
+// zone-labelled real-world time printed on an in-world calendar is L15's
+// forbidden case.
+func TestSeam_LedgerTimesFollowTheCalendarNotTheEvent(t *testing.T) {
+	viewer := BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner, Zone: "America/Chicago"}
+
+	inWorldEv := blockEvent("timed", 4, "everyone")
+	inWorldEv.StartHour, inWorldEv.StartMinute = blockIntPtr(18), blockIntPtr(30)
+	inWorld := seamLedger(t, BlockProjectionInput{
+		Calendar: blockTenDayCal(), Events: []Event{inWorldEv},
+		Viewer: viewer, MonthIndex: 0, Year: 1523,
+	})
+	seamContain(t, inWorld, `class="tm mono">18:30<`,
+		"an in-world calendar's Ledger time is .tm.mono and carries NO zone label — a "+
+			"zone-labelled time there would be a claim about a clock that does not exist")
+
+	real := blockRealTimeCal()
+	realEv := Event{ID: "rt", CalendarID: real.ID, Name: "Session 41",
+		Year: 2028, Month: 2, Day: 29, Visibility: "everyone",
+		StartHour: blockIntPtr(19), StartMinute: blockIntPtr(0)}
+	rw := seamLedger(t, BlockProjectionInput{
+		Calendar: real, Events: []Event{realEv},
+		Viewer: viewer, MonthIndex: 1, Year: 2028,
+	})
+	seamNotContain(t, rw, `class="tm mono"`,
+		"a real-world calendar's Ledger time is plain .tm")
+	if !regexp.MustCompile(`class="tm">19:00 [A-Z]{2,5}<`).MatchString(seamWS.ReplaceAllString(rw, " ")) {
+		t.Error("a real-world Ledger time must carry the zone abbreviation L15 requires, folded " +
+			"into the producer's formatted string (r52 §3.1)")
+	}
+
+	// An UNTIMED event drops the segment rather than printing an empty one.
+	untimed := seamLedger(t, BlockProjectionInput{
+		Calendar: blockTenDayCal(), Events: []Event{blockEvent("untimed", 4, "everyone")},
+		Viewer: viewer, MonthIndex: 0, Year: 1523,
+	})
+	seamNotContain(t, untimed, `class="tm`,
+		"an untimed event must emit NO .tm element, not an empty one")
 }
 
 // ── §3.4: the foot line states the REAL event total ─────────────────────────
@@ -257,6 +368,26 @@ func TestSeam_FootTotalEqualsTheDayCellTotal(t *testing.T) {
 		"the foot line must state the true day-cell total")
 	seamNotContain(t, body, fmt.Sprintf(">%d events<", total+folded),
 		"len(Marks)+MoreCount counts the folded marks twice — MoreCount is OVERLAPPING")
+
+	// ── EXTENDED BY C-CALV4-LEDGER-P6 §6: a THIRD reading of the same number.
+	//
+	// The docked Ledger's head prints the month total too. Three surfaces now
+	// state one number, and the point of extending this test rather than
+	// writing a parallel one is that they are three READINGS, not three
+	// computations: the Ledger is reassembled from the very cells the foot
+	// totals, so a disagreement here means someone introduced a second pass.
+	in.Events = blockCopyEvents(events)
+	led := seamLedger(t, in)
+	seamContain(t, led, fmt.Sprintf(">Deepwinter · %d events<", total),
+		"the Ledger head, the foot line and the day-cell total are ONE number read three ways")
+	seamNotContain(t, led, fmt.Sprintf(">Deepwinter · %d events<", total+folded),
+		"the Ledger head added the chip fold to the day's list — MoreCount is OVERLAPPING")
+	if n := strings.Count(led, `class="lrow lday`); n != total {
+		t.Errorf("the Ledger listed %d rows against a day-cell total of %d — a second pass", n, total)
+	}
+	// The dense day's own head line agrees with its own cell.
+	seamContain(t, led, `data-lday="4">4 Deepwinter · 5 events<`,
+		"the per-day head line is the day cell's own count, not a share of the month's")
 }
 
 // ── §1 acceptance: the enabled-layer set matches what renders ───────────────
