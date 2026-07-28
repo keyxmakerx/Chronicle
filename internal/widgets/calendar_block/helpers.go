@@ -810,3 +810,186 @@ func moonsBadgeText(d BlockData) string {
 func moonsBadgeTitle(d BlockData) string {
 	return fmt.Sprintf("%d moons declared; the grid draws %d", d.Month.MoonsDeclared, moonCap)
 }
+
+// ── the ANSWER ladder: day selection, in CSS, with no JS and no route ───────
+//
+// THE DOCKED LEDGER'S WHOLE PROMISE is that choosing a day repaints a panel
+// that was already on screen: nothing appears from nowhere and nothing reflows
+// (canon A3 struck D9's slide-in drawer clause on exactly this ground). A
+// network round trip would put latency inside that promise, so selection rides
+// the initial render and resolves in the stylesheet (CTS-1, SIGNED: Option A).
+//
+// It could not be JS in any case — boot.js:163 sets
+// `htmx.config.allowScriptTags = false`, so a <script> inside an HTMX-swapped
+// fragment never executes — and ANSWER-on-hover forces a static per-day rule
+// set regardless of how SELECTION is implemented, because a hover cannot be
+// served by a fetch. Once that ladder exists, selection is one more rule per
+// day and a route buys nothing.
+//
+// WHAT THE LADDER IS. CSS cannot compare two dynamic attribute values, so there
+// is one static rule set per DAY ORDINAL, generated into the stylesheet between
+// the BEGIN/END markers by answerLadderCSS() below and diff-tested by
+// TestCSS_AnswerLadderIsGenerated. Hand-writing it is how it would rot.
+//
+// TWO KEY NAMESPACES, and forgetting the second is guard B4's failure mode one
+// level up: an intercalary day's key is `slug-iN` (intercalaryKey), not
+// `slug-N`, so a ladder keyed on the ordinal alone would make Midwinter
+// silently stop answering. The ladder enumerates both.
+
+const (
+	// answerLadderDays is the ladder's ceiling for ordinary days and
+	// answerLadderIntercalary for intercalary ones (CTS-2, SIGNED).
+	//
+	// PAST THE BOUND A DAY CARRIES NO SELECTION CONTROL AT ALL — no radio, no
+	// label, no dead affordance. That is the house honesty idiom (WG-spec V18:
+	// a misconfigured thing prints its fault where its value would go, and a
+	// `title` is not an honesty mechanism), and it beats a control that
+	// silently does nothing. The Ledger still LISTS every day; only the
+	// answering stops, and only past the bound.
+	//
+	// Mirrored in the stylesheet by the generated block. TestCSS_AnswerLadder
+	// AgreesWithGo asserts the two cannot drift.
+	answerLadderDays        = 40
+	answerLadderIntercalary = 8
+)
+
+// answerLadderMarkers bracket the generated block in the stylesheet. The repo's
+// existing snapshot idiom (UPDATE_ROUTES_SNAPSHOT, UPDATE_SANITIZE_SNAPSHOT).
+const (
+	answerLadderBegin = "/* BEGIN ANSWER LADDER — generated */"
+	answerLadderEnd   = "/* END ANSWER LADDER */"
+)
+
+// dayOrdKey is a day's LADDER key: the bare ordinal, calendar-independent,
+// because the ladder lives in ONE static sheet shared by every calendar.
+// dayKey's `slug-N` cannot be used for it — the sheet cannot know the slug.
+func dayOrdKey(day int) string { return strconv.Itoa(day) }
+
+// intercalaryOrdKey is the second namespace. Midwinter 1 is not Deepwinter 1,
+// and a suffix ladder keyed on "-1" would match both.
+func intercalaryOrdKey(day int) string { return "i" + strconv.Itoa(day) }
+
+// dayAnswers / intercalaryAnswers report whether an ordinal is inside the
+// ladder's bound and therefore gets a selection control at all.
+func dayAnswers(day int) bool { return day >= 1 && day <= answerLadderDays }
+
+func intercalaryAnswers(day int) bool { return day >= 1 && day <= answerLadderIntercalary }
+
+// answerLadderKeys enumerates BOTH namespaces in the order the sheet writes
+// them. The one place the two bounds are turned into keys, so the markup, the
+// sheet and the tests cannot disagree about what the ladder covers.
+func answerLadderKeys() []string {
+	keys := make([]string, 0, answerLadderDays+answerLadderIntercalary)
+	for d := 1; d <= answerLadderDays; d++ {
+		keys = append(keys, dayOrdKey(d))
+	}
+	for d := 1; d <= answerLadderIntercalary; d++ {
+		keys = append(keys, intercalaryOrdKey(d))
+	}
+	return keys
+}
+
+// dayPickAll is the radio group's explicit "none" option. A radio cannot be
+// un-checked by another radio, so the Ledger head's reserved `✕ all` slot is
+// this option's LABEL — which is why that slot is reserved rather than
+// conditionally rendered (design notes §10 defect 5: a conditional chip made
+// .lhead wrap and jolted the Ledger on the commonest interaction).
+const dayPickAll = "all"
+
+// dayPickGroupName is the radio group shared by this Block's day options.
+//
+// A PURE FUNCTION OF THE DATA, exactly as tieGroupName is and for the same two
+// reasons: a page may compose more than one Block (the Bench composes four) and
+// two Blocks sharing a radio name would fight over one piece of state; but the
+// SAME Block re-rendered by an HTMX binding swap must keep the same name, or
+// the swapped-in fragment loses the day the viewer had just chosen. A counter
+// satisfies the first and breaks the second, and would differ between servers.
+func dayPickGroupName(d BlockData) string {
+	return "day-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+// dayPickInputID is one day option's DOM id, addressed by its stretched label.
+func dayPickInputID(d BlockData, key string) string {
+	return dayPickGroupName(d) + "-" + domToken(key)
+}
+
+// dayPickLabel is the option's accessible name. The radios are visually hidden,
+// so this is the only name a screen reader or a keyboard user ever gets.
+func dayPickLabel(name string, day int) string {
+	if name != "" {
+		return name
+	}
+	return "Day " + strconv.Itoa(day)
+}
+
+// ledgerDocked reports whether the Ledger zone renders for this viewer: the
+// layer registry says yes AND the host has not removed it.
+//
+// THE DAY-SELECTION CONTROLS ARE GATED ON THE SAME PREDICATE, in one place, so
+// the two cannot drift. A Block with no Ledger has nothing for a chosen day to
+// repaint and no home for the `✕ all` option that deselects it, so shipping the
+// controls anyway would be shipping a radio group with no way out of it.
+func ledgerDocked(d BlockData) bool {
+	return hasLayer(d.Layers, "ledger") && !d.Ledger.Hidden
+}
+
+// answerLadderCSS renders the generated ladder block, markers included.
+//
+// THREE RULES PER KEY, and the third is the ANSWER primitive:
+//
+//  1. filter — every Ledger row that is not this day leaves the flow. This is
+//     the ONE sanctioned content change in the Block and it is bounded to
+//     .lrows; the month grid never moves (2026-07-27 motion policy).
+//  2. reveal — this day's head-context line and its "nothing on this day"
+//     line, which are rendered for every day and hidden until chosen. CSS
+//     cannot compute "3 Deepwinter · 1 event", so the server renders all of
+//     them and the ladder picks one.
+//  3. answer — a hovered or focused day cell lights the matching Ledger row and
+//     vice versa, by setting --answer on the PARTNER. The M1 region rule falls
+//     out of the selector's own shape: the partner is always drawn from the
+//     OTHER region (.grid ↔ .lrows), never from the origin's own, so hovering
+//     one Ledger row cannot light the five siblings beside it.
+//
+// The answered LOOK is not repeated 48 times. Rule 3 sets one inherited custom
+// property and the hand-written §ANSWER rules read it, so every value the
+// ANSWERED state changes lives in one auditable place — which is also what
+// keeps the motion budget's allowlist small enough to be a real allowlist.
+func answerLadderCSS() string {
+	var b strings.Builder
+	b.WriteString(answerLadderBegin)
+	b.WriteString("\n/* ")
+	b.WriteString(strconv.Itoa(answerLadderDays))
+	b.WriteString(" ordinary + ")
+	b.WriteString(strconv.Itoa(answerLadderIntercalary))
+	b.WriteString(" intercalary keys × 3 rules. Regenerate with:\n")
+	b.WriteString("   UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/ */\n")
+	for _, k := range answerLadderKeys() {
+		fmt.Fprintf(&b,
+			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lrow:not([data-lday=\"%s\"]) { display: none }\n",
+			k, k)
+		fmt.Fprintf(&b,
+			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lday[data-lday=\"%s\"] { display: block }\n",
+			k, k)
+		fmt.Fprintf(&b,
+			".cal-block-host .block:has(.grid [data-day-ord=\"%s\"]:is(:hover, :focus-within)) .lrows .lrow[data-lday=\"%s\"],\n"+
+				".cal-block-host .block:has(.lrows .lrow[data-lday=\"%s\"]:is(:hover, :focus-within)) .grid [data-day-ord=\"%s\"] { --answer: 1 }\n",
+			k, k, k, k)
+	}
+	b.WriteString(answerLadderEnd)
+	return b.String()
+}
+
+// cellAxis is the cell's DATUM HUE for the ANSWER wash: the first mark's axis,
+// normalised through the same whitelist every other axis value passes.
+//
+// It is the tick rule's existing derivation (tickDays reads c.Marks[0].Axis)
+// applied one surface up, not a new fact — DayCell has no axis field and does
+// not need one. A cell with no marks returns "" and carries no --axis at all,
+// so the ANSWER wash falls back to the neutral structural rule rather than
+// borrowing a hue from a day that has no events.
+func cellAxis(c DayCell) string {
+	if len(c.Marks) == 0 {
+		return ""
+	}
+	return axisToken(c.Marks[0].Axis)
+}

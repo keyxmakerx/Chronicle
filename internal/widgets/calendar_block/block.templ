@@ -51,7 +51,7 @@ templ Block(d BlockData) {
 					@instrument(d)
 					@belowMonthLayers(d)
 				</div>
-				if hasLayer(d.Layers, "ledger") && !d.Ledger.Hidden {
+				if ledgerDocked(d) {
 					<div class="layer-col">
 						@ledgerStub(d)
 					</div>

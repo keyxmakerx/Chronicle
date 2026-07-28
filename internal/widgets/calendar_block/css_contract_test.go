@@ -22,14 +22,21 @@ import (
 	"testing"
 )
 
-func blockCSS(t *testing.T) string {
+// blockCSSPath resolves the sheet on disk. Separate from blockCSS because the
+// generated ANSWER ladder is written back through it under UPDATE_ANSWER_LADDER.
+func blockCSSPath(t *testing.T) string {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("cannot resolve test file path")
 	}
 	root := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
-	body, err := os.ReadFile(filepath.Join(root, "static", "css", "calendar-block.css"))
+	return filepath.Join(root, "static", "css", "calendar-block.css")
+}
+
+func blockCSS(t *testing.T) string {
+	t.Helper()
+	body, err := os.ReadFile(blockCSSPath(t))
 	if err != nil {
 		t.Fatalf("read calendar-block.css: %v", err)
 	}
@@ -121,6 +128,34 @@ var (
 	preludeRe = regexp.MustCompile(`(?s)(^|[;{}])([^;{}]*)\{`)
 )
 
+// splitSelectorList splits a rule prelude on its TOP-LEVEL commas only.
+//
+// REFRESHED BY C-CALV4-LEDGER-P6, and it was a latent defect in the guard, not
+// a change of intent: a bare strings.Split(",") tears
+// `:is(:hover, :focus-within)` in half and then reports the tail as an
+// unscoped selector. That would have false-alarmed on any functional
+// pseudo-class taking a selector LIST, which is a whole family of correct CSS
+// — including every rule in the generated ANSWER ladder. The scoping rule
+// itself is unchanged: nothing may match outside a .cal-block-host subtree.
+func splitSelectorList(prelude string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i, r := range prelude {
+		switch r {
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				out = append(out, prelude[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, prelude[start:])
+}
+
 // TestCSS_EverySelectorIsScoped. An unlayered sheet outranks the app's layered
 // CSS, so a bare `.badge` rule in here would silently restyle the whole product.
 // Nothing may match outside a .cal-block-host subtree.
@@ -132,7 +167,7 @@ func TestCSS_EverySelectorIsScoped(t *testing.T) {
 		if prelude == "" || strings.HasPrefix(prelude, "@") {
 			continue // at-rules carry their own nested preludes, matched separately
 		}
-		for _, sel := range strings.Split(prelude, ",") {
+		for _, sel := range splitSelectorList(prelude) {
 			sel = strings.TrimSpace(sel)
 			if sel == "" {
 				continue
@@ -427,4 +462,118 @@ func cssVarNumber(t *testing.T, code, name string) float64 {
 		t.Fatalf("%s is not a number: %q", name, m[1])
 	}
 	return v
+}
+
+// ── the ANSWER ladder (C-CALV4-LEDGER-P6 §1, CTS-1/CTS-2) ───────────────────
+
+// TestCSS_AnswerLadderIsGenerated. CSS cannot compare two dynamic attribute
+// values, so day answering needs one static rule set per day ordinal — ~144
+// rules that nobody will ever hand-maintain correctly. They are GENERATED from
+// answerLadderCSS() into the marked block at the foot of the sheet, and this
+// test regenerates and diffs, which is the repo's existing snapshot idiom
+// (UPDATE_ROUTES_SNAPSHOT, UPDATE_SANITIZE_SNAPSHOT).
+//
+// Regenerate with: UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/
+func TestCSS_AnswerLadderIsGenerated(t *testing.T) {
+	path := blockCSSPath(t)
+	raw := blockCSS(t)
+
+	start := strings.Index(raw, answerLadderBegin)
+	end := strings.Index(raw, answerLadderEnd)
+	if start < 0 || end < 0 || end < start {
+		t.Fatalf("the generated ladder's markers are missing or inverted — %q … %q must both "+
+			"appear, in that order", answerLadderBegin, answerLadderEnd)
+	}
+	got := raw[start : end+len(answerLadderEnd)]
+	want := answerLadderCSS()
+	if got == want {
+		return
+	}
+	if os.Getenv("UPDATE_ANSWER_LADDER") == "" {
+		t.Errorf("the generated ANSWER ladder is stale (%d bytes on disk, %d generated). "+
+			"Regenerate: UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/",
+			len(got), len(want))
+		return
+	}
+	updated := raw[:start] + want + raw[end+len(answerLadderEnd):]
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		t.Fatalf("rewrite the ladder: %v", err)
+	}
+	t.Logf("ANSWER ladder regenerated: %d bytes (%d keys × 3 rules)",
+		len(want), len(answerLadderKeys()))
+}
+
+// TestCSS_AnswerLadderAgreesWithGo pins the CTS-2 bound in BOTH places at once.
+//
+// The Go constants decide which days get a selection control (instrument.templ
+// gates dayPick on dayAnswers / intercalaryAnswers) and the sheet decides which
+// days a control can actually filter with. If those two numbers drift, a day
+// gets a radio that no rule reads — a control that is present, focusable, and
+// silently does nothing, which is the one outcome CTS-2 ruled out.
+//
+// It also pins the SECOND KEY NAMESPACE. An intercalary day's key is `iN`, and
+// a ladder written only over `1..N` would make Midwinter stop answering with
+// nothing failing — guard B4's failure mode one level up.
+func TestCSS_AnswerLadderAgreesWithGo(t *testing.T) {
+	code := stripComments(blockCSS(t))
+	pickRe := regexp.MustCompile(`\.daypick\[data-day-pick="([^"]+)"\]:checked`)
+
+	seen := map[string]bool{}
+	for _, m := range pickRe.FindAllStringSubmatch(code, -1) {
+		seen[m[1]] = true
+	}
+	for _, k := range answerLadderKeys() {
+		if !seen[k] {
+			t.Errorf("the sheet has no rule for ladder key %q — a day inside the Go bound "+
+				"(%d ordinary + %d intercalary) whose control nothing reads",
+				k, answerLadderDays, answerLadderIntercalary)
+		}
+		delete(seen, k)
+	}
+	for k := range seen {
+		t.Errorf("the sheet carries ladder key %q, which is past the Go bound — the markup "+
+			"never emits a control for it", k)
+	}
+
+	// Both namespaces, explicitly, so a future "simplification" to a numeric
+	// loop fails here rather than in a fidelity review six months later.
+	for _, want := range []string{`data-day-pick="1"`, `data-day-pick="i1"`,
+		`data-lday="i1"`, `data-day-ord="i1"`} {
+		if !strings.Contains(code, want) {
+			t.Errorf("the ladder is missing %q — the intercalary namespace is not optional", want)
+		}
+	}
+	for _, bad := range []string{`data-day-pick="41"`, `data-day-pick="i9"`} {
+		if strings.Contains(code, bad) {
+			t.Errorf("the ladder reaches past its own bound with %q", bad)
+		}
+	}
+}
+
+// TestCSS_AnswerLadderChangesNothingButVisibility. The Ledger's row filter is
+// the ONE sanctioned content change in the Block, and the motion policy bounds
+// it: "Cells, marks, moons and era bands do not animate, reflow, or change
+// size." A ladder rule that set a height, a padding or a margin would make
+// choosing a day reflow the month — the exact thing the docked Ledger exists to
+// avoid, and the reason .lrows carries a min-height instead.
+//
+// So every generated rule may declare EXACTLY ONE of: display, or --answer.
+func TestCSS_AnswerLadderChangesNothingButVisibility(t *testing.T) {
+	ladder := answerLadderCSS()
+	declRe := regexp.MustCompile(`\{([^}]*)\}`)
+	allowed := map[string]bool{"display": true, "--answer": true}
+	for _, m := range declRe.FindAllStringSubmatch(ladder, -1) {
+		for _, decl := range strings.Split(m[1], ";") {
+			decl = strings.TrimSpace(decl)
+			if decl == "" {
+				continue
+			}
+			prop := strings.TrimSpace(strings.SplitN(decl, ":", 2)[0])
+			if !allowed[prop] {
+				t.Errorf("a generated ladder rule declares %q — the ladder may only change "+
+					"what is SHOWN (display) and who is answered (--answer). Anything that "+
+					"changes a box makes choosing a day reflow the month.", prop)
+			}
+		}
+	}
 }

@@ -150,7 +150,14 @@ func TestTieToggle_IsAPureCSSControl(t *testing.T) {
 	if n := strings.Count(body, `class="tiepick"`); n != 2 {
 		t.Fatalf("expected exactly 2 tie radios (tied + whole); got %d", n)
 	}
-	if n := strings.Count(body, `type="radio"`); n != 2 {
+	// REFRESHED BY C-CALV4-LEDGER-P6: this counted every `type="radio"` in the
+	// Block, which was the same thing while the tie pair was the only radio
+	// group in it. W-B's CSS-only day pick adds a second group (one radio per
+	// selectable day), so the count is now scoped to the tie group's own
+	// inputs. The INTENT is unchanged and is the reason it is a count and not a
+	// Contains: the tie options must be RADIOS, because a checkbox pair can
+	// reach a state that is neither mode.
+	if n := strings.Count(body, `<input type="radio" class="tiepick"`); n != 2 {
 		t.Errorf("the tie options must be radios — a checkbox pair can reach a state that is neither mode; got %d", n)
 	}
 	for _, want := range []string{`data-tie-pick="tied"`, `data-tie-pick="whole"`} {
