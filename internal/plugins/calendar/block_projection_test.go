@@ -185,26 +185,61 @@ func TestBlockTieModeChangesInkNotGeometry(t *testing.T) {
 			}
 		}
 	}
-	// Day 12's event is untied: tied mode draws no mark there, whole mode does,
-	// and the CELL is present and identical either way.
-	dayMarks := func(d calblock.BlockData, day int) int {
+	// INVERTED at pin r51. This block used to assert that tied mode drew ZERO
+	// marks on the untied day 12 — it pinned the defect as correct behaviour,
+	// reconciling it with the no-motion law above by reading "cell" structurally:
+	// the cell element survived, so nothing "left the DOM".
+	//
+	// That reading holds in isolation and fails in composition. A cell with one
+	// mark and a cell with none do not render at the same height, and CSS cannot
+	// restore a mark the server never sent — which made the CSS-only tie toggle
+	// unimplementable. Membership is not a function of TieMode; ink is.
+	dayMarks := func(d calblock.BlockData, day int) []calblock.Mark {
 		for _, row := range d.Month.Rows {
 			for _, cell := range row.Cells {
 				if cell.Day == day {
-					return len(cell.Marks)
+					return cell.Marks
 				}
 			}
 		}
-		return -1
+		return nil
 	}
-	if got := dayMarks(tiedView, 12); got != 0 {
-		t.Fatalf("tied mode drew %d marks on the untied day 12", got)
+
+	// Every day draws the same marks in both modes. This is the whole ruling.
+	for _, row := range tiedView.Month.Rows {
+		for _, cell := range row.Cells {
+			if cell.Day == 0 {
+				continue
+			}
+			a, b := dayMarks(tiedView, cell.Day), dayMarks(wholeView, cell.Day)
+			if len(a) != len(b) {
+				t.Fatalf("day %d: tied mode drew %d marks, whole mode %d — TieMode must "+
+					"change ink, never membership, or the toggle cannot be CSS-only and the "+
+					"cell changes height when it flips", cell.Day, len(a), len(b))
+			}
+			for i := range a {
+				if a[i].EventID != b[i].EventID {
+					t.Fatalf("day %d mark %d: %q vs %q — mark ORDER must also be "+
+						"mode-independent", cell.Day, i, a[i].EventID, b[i].EventID)
+				}
+			}
+		}
 	}
-	if got := dayMarks(wholeView, 12); got != 1 {
-		t.Fatalf("whole mode drew %d marks on day 12, want 1", got)
+
+	// And the flag carries the distinction the drop used to carry.
+	untied := dayMarks(tiedView, 12)
+	if len(untied) != 1 {
+		t.Fatalf("day 12 drew %d marks, want 1 — the fixture's untied event must still "+
+			"reach the cell", len(untied))
 	}
-	if got := dayMarks(tiedView, 3); got != 1 {
-		t.Fatalf("tied mode drew %d marks on the tied day 3, want 1", got)
+	if untied[0].Tied {
+		t.Error("day 12's event is not tied to the host entity, but Mark.Tied is true — " +
+			"the renderer would ink it as tied")
+	}
+	tiedDay := dayMarks(tiedView, 3)
+	if len(tiedDay) != 1 || !tiedDay[0].Tied {
+		t.Errorf("day 3 carries the tied event; got %d marks, Tied=%v", len(tiedDay),
+			len(tiedDay) == 1 && tiedDay[0].Tied)
 	}
 }
 

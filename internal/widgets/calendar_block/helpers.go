@@ -417,6 +417,24 @@ func moonTitle(md MoonDisc) string {
 
 // ── small text helpers ──────────────────────────────────────────────────────
 
+// tieClass stamps the per-mark tie state so CSS can change INK without the
+// server changing membership (pin r51).
+//
+// TieMode never removes a mark from a cell: the producer emits the whole
+// viewer-visible set in both modes and flags each one. Dropping untied marks
+// would change a cell's contents and therefore its height — the no-motion
+// violation the toggle cannot survive — and would leave a CSS-only toggle
+// nothing to re-ink, because CSS cannot restore a mark that was never sent.
+//
+// Off an entity page there is nothing to be tied to, so every mark is emitted
+// unclassed and the toggle does not render at all.
+func tieClass(m Mark) string {
+	if m.Tied {
+		return " tied"
+	}
+	return " untied"
+}
+
 func intText(n int) string { return strconv.Itoa(n) }
 
 

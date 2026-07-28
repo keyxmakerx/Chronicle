@@ -1106,10 +1106,21 @@
 /* ── the tie toggle changes INK LEVEL only ───────────────────────────────────
    No cell may grow, move, or leave the DOM when it flips — that is what makes
    it legal under the no-motion rule and what makes TiedCount and WholeCount
-   non-differenceable. W-C's CSS-only toggle needs only to change
-   [data-tie-mode] on .block; the ink rule is already here. */
-.cal-block-host .block[data-tie-mode="tied"] .cell:not([data-tied]) .chip,
-.cal-block-host .block[data-tie-mode="tied"] .cell:not([data-tied]) .ul {
+   non-differenceable. A CSS-only toggle needs only to change [data-tie-mode]
+   on .block.
+
+   PER-MARK since pin r51. This used to key on .cell:not([data-tied]), which is
+   per-DAY: a day carrying one tied and one untied event dimmed neither, because
+   the cell as a whole counted as tied. Mark.Tied closes that — the producer now
+   emits every viewer-visible mark in BOTH modes and flags each one, so the
+   dimming lands on the individual chip or underline segment.
+
+   The flip is INSTANT — no transition. TestCSS_NoMotionAtAll bans the word
+   outright in wave 1, and an opacity fade, though it moves nothing, is still
+   motion this wave has not signed. W-B ships the Block's motion; the fade
+   belongs there, not smuggled in here. */
+.cal-block-host .block[data-tie-mode="tied"] .chip.untied,
+.cal-block-host .block[data-tie-mode="tied"] .ulseg.untied {
   opacity: var(--untied-ink);
 }
 
