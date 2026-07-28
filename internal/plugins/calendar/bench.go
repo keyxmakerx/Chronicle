@@ -130,6 +130,10 @@ type BenchTile struct {
 	Rows []BenchTileRow
 	// Actions are the tile's buttons. Wave 1's are INERT (see BenchAction).
 	Actions []BenchAction
+	// RSVPForm makes the session tile's trio LIVE. When it is set, Actions is
+	// empty — the same three controls cannot be inert and live at once, and
+	// having one field decide keeps that impossible rather than conventional.
+	RSVPForm *BenchRsvpForm
 	// Ticks is the Today tile's 30-tick month rule; empty on every other tile.
 	Ticks []BenchTick
 	// Href makes the whole tile a door. Empty = not a link.
@@ -175,6 +179,35 @@ type BenchAction struct {
 	// GM-tier too: for a player it is ABSENT, not greyed
 	// (decisions/2026-07-27-needs-backend-audience.md).
 	NeedsBackend bool
+}
+
+// BenchRsvpForm is the session tile's LIVE answer control.
+//
+// It posts to the EXISTING Player+ RSVP route (WG-6: zero new routes in Part A)
+// as a form, which is why SetRSVPRequest grew `form:` tags. The route path,
+// method, group and role gate are all unchanged, so internal/wire/
+// routes_snapshot.txt stays byte-identical.
+type BenchRsvpForm struct {
+	// Action is the existing POST path. CSRFToken rides as a hidden field:
+	// internal/middleware/csrf.go accepts either the X-CSRF-Token header or a
+	// csrf_token form field, and this request is NOT under /api/, so it is not
+	// one of the two paths CSRF() skips.
+	Action    string
+	CSRFToken string
+	// My is the viewer's own stored answer, printed as "You: …" rather than as
+	// a fourth button state — the signed trio is three buttons and stays three.
+	My string
+	// Options are Yes, No, Maybe, IN THAT ORDER, Yes filled. IMMUTABLE: the
+	// spec's `.seg.lg` conversion is a /schedule-page proposal and is explicitly
+	// excluded from the Bench.
+	Options []BenchRsvpOption
+}
+
+// BenchRsvpOption is one of the signed trio.
+type BenchRsvpOption struct {
+	Label string
+	Value string
+	Fill  bool
 }
 
 // BenchTick is one day of the Today tile's tick rule. Day carries the ANSWER
@@ -558,7 +591,8 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	// two can never disagree about which events this viewer may see.
 	upcoming := benchUpcoming(ctx, spine, in.Campaign.ID, viewer)
 	data.NextUp = benchNextUp(upcoming, data.IsGM, in.Campaign.ID)
-	data.Rsvp = h.benchRsvpResolve(ctx, in, upcoming)
+	rsvpPanel, sessionTile := h.benchRsvpResolve(ctx, in, upcoming)
+	data.Rsvp = rsvpPanel
 
 	// The subordinate-row ordering reuses the shipped ?sort control. The
 	// nextevent key is fed from the SAME viewer-filtered index the NEXT UP panel
@@ -591,6 +625,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		Primary:    primary,
 		Block:      data.Primary,
 		NextUp:     data.NextUp,
+		Session:    sessionTile,
 		Sync:       benchSyncPill(ctx, spine, in.Campaign.ID, data.Primary),
 		Attention:  benchAttentionRows(hydrated, data.CampaignID),
 	})
@@ -937,6 +972,11 @@ type benchRibbonInput struct {
 	Sync    calblock.SyncPill
 	// Attention is the resolved Needs-attention row set (empty = all clear).
 	Attention []BenchTileRow
+	// Session is the LIVE session tile's input, nil when no upcoming event is
+	// collecting RSVPs. It is resolved by benchRsvpResolve and handed here so
+	// the tile and the panel can never disagree about which session, which
+	// tally, or which answer — one resolution, two surfaces.
+	Session *benchSessionTileInput
 }
 
 // benchRibbon builds the ribbon.
@@ -947,10 +987,14 @@ type benchRibbonInput struct {
 // Permission is absence, and bench_test.go asserts the three markers do not
 // appear in a player render.
 func benchRibbon(in benchRibbonInput) []BenchTile {
+	session := benchSessionTile(in.IsGM)
+	if in.Session != nil {
+		session = benchSessionTileLive(*in.Session)
+	}
 	tiles := []BenchTile{
 		benchTodayTile(in),
 		benchNextUpTile(in),
-		benchSessionTile(in.IsGM),
+		session,
 	}
 	if !in.IsGM {
 		return tiles
@@ -1063,6 +1107,76 @@ func benchSessionTile(isGM bool) BenchTile {
 		{Label: "Maybe", Title: why},
 	}
 	return t
+}
+
+// benchSessionTileInput is what the LIVE session tile needs. Every count on it
+// has already been recomputed from the membership-filtered roster by the caller
+// — this function prints, it does not tally.
+type benchSessionTileInput struct {
+	IsGM       bool
+	CampaignID string
+	CalendarID string
+	EventID    string
+	Name       string
+	When       string
+	Answered   int
+	Total      int
+	MyStatus   string
+	CSRFToken  string
+	// Notice carries a degraded-write message straight through, so a partial
+	// success is NEVER a silent one.
+	Notice string
+}
+
+// benchSessionTileLive is the session tile once it reads the shipped store.
+//
+// NO CHIP. The tile is backed now, and a `needs backend` chip over a backed
+// tile is the same lie class as a green sync pill with no denominator,
+// inverted. The Director keeps a chipped Nudge because the reminder endpoint
+// genuinely does not exist (C-CALV4-RSVP-P8B is where it gets one); a player
+// gets the live trio and no commentary on Chronicle's build state.
+func benchSessionTileLive(in benchSessionTileInput) BenchTile {
+	t := BenchTile{
+		Key: "session", Glyph: "◷", Eyebrow: "Session",
+		Headline: in.Name,
+		Qual:     fmt.Sprintf("%s · %d of %d answered", in.When, in.Answered, in.Total),
+		Detail:   benchSessionMine(in.MyStatus),
+	}
+	if in.Notice != "" {
+		// A degraded write says so where the answer is, not in a console.
+		t.Detail = in.Notice
+		t.Tone = "warn"
+	}
+	if in.IsGM {
+		t.Actions = []BenchAction{{
+			Label: "Nudge", NeedsBackend: true,
+			Title: "there is no reminder endpoint — RSVP mail fans out only when collection is switched on",
+		}}
+		return t
+	}
+	t.RSVPForm = &BenchRsvpForm{
+		Action: fmt.Sprintf("/campaigns/%s/calendars/%s/events/%s/rsvp",
+			in.CampaignID, in.CalendarID, in.EventID),
+		CSRFToken: in.CSRFToken,
+		My:        in.MyStatus,
+		Options: []BenchRsvpOption{
+			{Label: "Yes", Value: RSVPYes, Fill: true},
+			{Label: "No", Value: RSVPNo},
+			{Label: "Maybe", Value: RSVPMaybe},
+		},
+	}
+	return t
+}
+
+// benchSessionMine prints the viewer's own answer back to them. "no answer" is
+// stated rather than left blank — a blank reads as "answered nothing yet"
+// exactly as loudly as it reads as "the tile is broken".
+func benchSessionMine(status string) string {
+	word, _ := benchRsvpAnswerWord(status)
+	if status == "" {
+		return "You: no answer"
+	}
+	return "You: " + word
 }
 
 // benchSyncTile prints the resolved sync pill.
@@ -2001,9 +2115,10 @@ func benchRsvpAnyNumericZone(members []BenchRsvpMember) bool {
 // in.Role decides what the sessions seam RETURNS, not what the template hides.
 // A player's BenchAvailability comes back with FreeDays nil, so their HTML
 // cannot contain another member's lane data even by accident.
-func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput, upcoming []BlockUpcoming) BenchRsvp {
+func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
+	upcoming []BlockUpcoming) (BenchRsvp, *benchSessionTileInput) {
 	if h.schedule == nil {
-		return benchRsvpPanel()
+		return benchRsvpPanel(), nil
 	}
 	roster, err := h.schedule.BenchRoster(ctx, in.Campaign.ID)
 	if err != nil || len(roster) == 0 {
@@ -2011,7 +2126,7 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput, upcoming 
 			slog.Warn("bench: rsvp roster read failed",
 				slog.String("campaign_id", in.Campaign.ID), slog.Any("error", err))
 		}
-		return benchRsvpPanel()
+		return benchRsvpPanel(), nil
 	}
 
 	isGM := permissions.CanSeeDmOnly(in.Role)
@@ -2019,7 +2134,7 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput, upcoming 
 		IsGM: isGM, ViewerID: in.UserID, CampaignID: in.Campaign.ID, Roster: roster,
 	}
 
-	session, evt, anchorZone := benchRsvpPickSession(upcoming)
+	session, row, anchorZone := benchRsvpPickSession(upcoming)
 	out.Session = session
 
 	// The zone the panel states its own times in: the viewer's own stored zone
@@ -2053,15 +2168,35 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput, upcoming 
 			slog.String("campaign_id", in.Campaign.ID), slog.Any("error", aerr))
 	}
 
-	if evt != nil && h.rsvpRead != nil {
-		answers, rerr := h.rsvpRead.AnswersByUser(ctx, evt, in.UserID, in.Role)
+	if row != nil && h.rsvpRead != nil {
+		answers, rerr := h.rsvpRead.AnswersByUser(ctx, &row.Event, in.UserID, in.Role)
 		if rerr != nil {
 			slog.Warn("bench: rsvp answers read failed",
-				slog.String("event_id", evt.ID), slog.Any("error", rerr))
+				slog.String("event_id", row.Event.ID), slog.Any("error", rerr))
 		}
 		out.Answers = answers
 	}
-	return benchRsvpBuild(out)
+
+	// The ribbon's session tile is fed from THIS resolution, not from a second
+	// one: the tile's tally and the panel's tally are the same recomputation
+	// over the same membership-filtered roster, so they cannot disagree.
+	var tile *benchSessionTileInput
+	if session != nil && row != nil {
+		answered, _ := benchRsvpTally(roster, out.Answers)
+		tile = &benchSessionTileInput{
+			IsGM:       isGM,
+			CampaignID: in.Campaign.ID,
+			CalendarID: row.Calendar.ID,
+			EventID:    row.Event.ID,
+			Name:       session.Name,
+			When:       benchRsvpWhen(session.DaysUntil),
+			Answered:   answered,
+			Total:      len(roster),
+			MyStatus:   out.Answers[in.UserID],
+			CSRFToken:  in.CSRFToken,
+		}
+	}
+	return benchRsvpBuild(out), tile
 }
 
 // benchRsvpPickSession finds the occurrence the panel is about: the soonest row
@@ -2072,7 +2207,7 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput, upcoming 
 // and a zone-labelled real-world time on an in-world calendar would contradict
 // L15's own rule — real-world time and in-world time can never be confused, and
 // this panel is entirely about real clocks in real places.
-func benchRsvpPickSession(upcoming []BlockUpcoming) (*BenchRsvpSession, *Event, string) {
+func benchRsvpPickSession(upcoming []BlockUpcoming) (*BenchRsvpSession, *BlockUpcoming, string) {
 	for i := range upcoming {
 		u := &upcoming[i]
 		if u.Calendar == nil || !u.Calendar.IsRealLife() || !u.Event.CollectRSVPs {
@@ -2091,7 +2226,7 @@ func benchRsvpPickSession(upcoming []BlockUpcoming) (*BenchRsvpSession, *Event, 
 				s.Anchored = true
 			}
 		}
-		return s, &evt, anchor
+		return s, u, anchor
 	}
 	return nil, nil, ""
 }

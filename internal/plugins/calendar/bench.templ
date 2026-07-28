@@ -152,7 +152,9 @@ templ benchTileView(t BenchTile) {
 		for _, r := range t.Rows {
 			<a class={ "arow", templ.KV("bad", r.Bad) } href={ templ.SafeURL(r.Href) }>{ r.Label }</a>
 		}
-		if len(t.Actions) > 0 {
+		if t.RSVPForm != nil {
+			@benchRsvpFormView(t.RSVPForm)
+		} else if len(t.Actions) > 0 {
 			<div class="rsvpb">
 				for _, a := range t.Actions {
 					@benchActionView(a)
@@ -194,6 +196,41 @@ templ benchActionView(a BenchAction) {
 	} else {
 		<button type="button" class={ "btn xs", templ.KV("fill", a.Fill) } disabled title={ a.Title }>{ a.Label }</button>
 	}
+}
+
+// benchRsvpFormView is the session tile's LIVE trio.
+//
+// ZERO NEW ROUTES (WG-6). It posts, form-encoded, to the EXISTING Player+ RSVP
+// endpoint — same path, same method, same group, same role gate — which is why
+// internal/wire/routes_snapshot.txt is byte-identical after this slice. The
+// handler answers with this tile re-rendered when the request is HTMX and with
+// the unchanged JSON otherwise, so the two existing JSON consumers
+// (static/js/availability.js and the Foundry-facing /api/v1 group) are
+// untouched.
+//
+// NO JS IS ADDED TO THE BENCH. hx-* attributes are markup; the sort control on
+// this same page already works this way. The CSRF token rides as a hidden
+// field because internal/middleware/csrf.go accepts either the X-CSRF-Token
+// header or a csrf_token form field, and this path is not under /api/, so it is
+// not one of the two the middleware skips.
+//
+// The trio is IMMUTABLE: three loose .btn.xs, Yes filled, then No, then Maybe.
+// The viewer's own answer is stated in the tile's detail line rather than as a
+// fourth button state, because a fourth state is a fourth button in disguise.
+templ benchRsvpFormView(f *BenchRsvpForm) {
+	<form
+		class="rsvpb"
+		method="post"
+		action={ templ.SafeURL(f.Action) }
+		hx-post={ f.Action }
+		hx-target="[data-bench-tile='session']"
+		hx-swap="outerHTML"
+	>
+		<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
+		for _, o := range f.Options {
+			<button type="submit" class={ "btn xs", templ.KV("fill", o.Fill) } name="status" value={ o.Value }>{ o.Label }</button>
+		}
+	</form>
 }
 
 // benchTickRule is the Today tile's month rule. Every tick carries data-day —
