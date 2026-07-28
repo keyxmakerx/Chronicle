@@ -19,11 +19,11 @@ package calendar_block
 // label is a rebus.
 templ namedChip(m Mark) {
 	<div
-		class="chip"
+		class={ "chip" + tieClass(m) }
 		style={ axisStyle(m.Axis) }
 		title={ markTitle(m) }
-		if m.EventID != 0 {
-			data-event-id={ intText64(m.EventID) }
+		if m.EventID != "" {
+			data-event-id={ m.EventID }
 		}
 	>
 		<i class={ "rail " + patternClass(m.Pattern) } aria-hidden="true"></i>
@@ -46,7 +46,7 @@ templ underline(c DayCell) {
 					<i class="ulseg rest" aria-hidden="true"></i>
 				} else {
 					<i
-						class={ "ulseg " + patternClass(m.Pattern) }
+						class={ "ulseg " + patternClass(m.Pattern) + tieClass(m) }
 						style={ axisStyle(m.Axis) }
 						title={ markTitle(m) }
 					></i>

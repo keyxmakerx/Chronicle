@@ -132,7 +132,14 @@ func AllowPublicCampaignAccess(service CampaignService) echo.MiddlewareFunc {
 					// grants do not. C-PERM-ANON-IDENTITY.
 					cc.MemberRole = RoleNone
 				}
-				cc.IsDmGranted = hasDmGrant(campaign, session.UserID)
+				// A grant is only honoured for an actual member
+				// (C-PERM-DMGRANT-REVOKE). Above, an authenticated non-member on
+				// a PUBLIC campaign is deliberately admitted as RoleNone; without
+				// this membership test a stale id in dm_grant_ids would then send
+				// them straight back to RoleOwner through VisibilityRole(), which
+				// is the whole leak. Site admins are unaffected — they take the
+				// IsSiteAdmin branch above and never rely on a grant.
+				cc.IsDmGranted = cc.IsMember && hasDmGrant(campaign, session.UserID)
 				c.Set(contextKeyCampaign, cc)
 				return next(c)
 			}

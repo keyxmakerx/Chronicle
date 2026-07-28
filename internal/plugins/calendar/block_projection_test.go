@@ -185,26 +185,61 @@ func TestBlockTieModeChangesInkNotGeometry(t *testing.T) {
 			}
 		}
 	}
-	// Day 12's event is untied: tied mode draws no mark there, whole mode does,
-	// and the CELL is present and identical either way.
-	dayMarks := func(d calblock.BlockData, day int) int {
+	// INVERTED at pin r51. This block used to assert that tied mode drew ZERO
+	// marks on the untied day 12 — it pinned the defect as correct behaviour,
+	// reconciling it with the no-motion law above by reading "cell" structurally:
+	// the cell element survived, so nothing "left the DOM".
+	//
+	// That reading holds in isolation and fails in composition. A cell with one
+	// mark and a cell with none do not render at the same height, and CSS cannot
+	// restore a mark the server never sent — which made the CSS-only tie toggle
+	// unimplementable. Membership is not a function of TieMode; ink is.
+	dayMarks := func(d calblock.BlockData, day int) []calblock.Mark {
 		for _, row := range d.Month.Rows {
 			for _, cell := range row.Cells {
 				if cell.Day == day {
-					return len(cell.Marks)
+					return cell.Marks
 				}
 			}
 		}
-		return -1
+		return nil
 	}
-	if got := dayMarks(tiedView, 12); got != 0 {
-		t.Fatalf("tied mode drew %d marks on the untied day 12", got)
+
+	// Every day draws the same marks in both modes. This is the whole ruling.
+	for _, row := range tiedView.Month.Rows {
+		for _, cell := range row.Cells {
+			if cell.Day == 0 {
+				continue
+			}
+			a, b := dayMarks(tiedView, cell.Day), dayMarks(wholeView, cell.Day)
+			if len(a) != len(b) {
+				t.Fatalf("day %d: tied mode drew %d marks, whole mode %d — TieMode must "+
+					"change ink, never membership, or the toggle cannot be CSS-only and the "+
+					"cell changes height when it flips", cell.Day, len(a), len(b))
+			}
+			for i := range a {
+				if a[i].EventID != b[i].EventID {
+					t.Fatalf("day %d mark %d: %q vs %q — mark ORDER must also be "+
+						"mode-independent", cell.Day, i, a[i].EventID, b[i].EventID)
+				}
+			}
+		}
 	}
-	if got := dayMarks(wholeView, 12); got != 1 {
-		t.Fatalf("whole mode drew %d marks on day 12, want 1", got)
+
+	// And the flag carries the distinction the drop used to carry.
+	untied := dayMarks(tiedView, 12)
+	if len(untied) != 1 {
+		t.Fatalf("day 12 drew %d marks, want 1 — the fixture's untied event must still "+
+			"reach the cell", len(untied))
 	}
-	if got := dayMarks(tiedView, 3); got != 1 {
-		t.Fatalf("tied mode drew %d marks on the tied day 3, want 1", got)
+	if untied[0].Tied {
+		t.Error("day 12's event is not tied to the host entity, but Mark.Tied is true — " +
+			"the renderer would ink it as tied")
+	}
+	tiedDay := dayMarks(tiedView, 3)
+	if len(tiedDay) != 1 || !tiedDay[0].Tied {
+		t.Errorf("day 3 carries the tied event; got %d marks, Tied=%v", len(tiedDay),
+			len(tiedDay) == 1 && tiedDay[0].Tied)
 	}
 }
 
@@ -436,35 +471,54 @@ func TestBlockIdentityIsStableAndGreyscale(t *testing.T) {
 	}
 }
 
-// TestBlockIdentityIntFieldsAreZeroed pins the STOP-AND-FLAG raised in the PR:
-// the pinned BlockData types CalendarID / Mark.EventID / ViewerContext.UserID /
-// ViewerContext.HostEntity as int64, but every one of those identities is a
-// VARCHAR(36) UUID in Chronicle. Rather than hash a UUID into an int64 that
-// looks usable and is not, the producer zeroes them and carries the calendar's
-// real identity in CalendarSlug. This test is the tripwire: if the struct is
-// later amended to string ids, it fails and the producer gets updated with it.
-func TestBlockIdentityIntFieldsAreZeroed(t *testing.T) {
+// TestBlockIdentityFieldsCarryRealIDs is the INVERSION of the old
+// TestBlockIdentityIntFieldsAreZeroed tripwire.
+//
+// The four identity fields were once typed int64 while every one of those
+// identities is a VARCHAR(36) UUID, so the producer zeroed them and smuggled the
+// calendar's id through CalendarSlug. The old test pinned that workaround so the
+// struct amendment could not land silently — it did its job, the pin was amended
+// (r50), and this now pins the opposite: the real ids are carried, and nothing
+// is zeroed or hashed.
+//
+// Deleting it rather than inverting it would have removed the only guard on
+// these four fields.
+func TestBlockIdentityFieldsCarryRealIDs(t *testing.T) {
 	cal, events, tied := blockProjectionFixture()
+	viewer := BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner, HostEntity: "ent-1"}
 	got := projectBlock(BlockProjectionInput{Calendar: cal, Events: blockCopyEvents(events),
-		Viewer:     BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner, HostEntity: "ent-1"},
-		MonthIndex: 0, Year: 1523, TiedEventIDs: tied})
+		Viewer: viewer, MonthIndex: 0, Year: 1523, TiedEventIDs: tied})
 
-	if got.CalendarID != 0 || got.Viewer.UserID != 0 || got.Viewer.HostEntity != 0 {
-		t.Fatal("an int64 identity field is populated; Chronicle's ids are UUID strings and " +
-			"no lossless projection exists — see the identity note on projectBlock")
+	if got.CalendarID != cal.ID {
+		t.Errorf("CalendarID = %q, want the calendar's UUID %q", got.CalendarID, cal.ID)
 	}
-	if got.CalendarSlug != cal.ID {
-		t.Fatalf("CalendarSlug = %q, want the calendar's UUID %q — it is the only string "+
-			"identity field the contract has", got.CalendarSlug, cal.ID)
+	if got.Viewer.UserID != viewer.UserID {
+		t.Errorf("Viewer.UserID = %q, want %q", got.Viewer.UserID, viewer.UserID)
 	}
+	if got.Viewer.HostEntity != viewer.HostEntity {
+		t.Errorf("Viewer.HostEntity = %q, want %q — the tie toggle is gated on this being "+
+			"non-empty, so zeroing it is what kept the control off the page",
+			got.Viewer.HostEntity, viewer.HostEntity)
+	}
+	// CalendarSlug goes back to meaning the slug now that CalendarID exists.
+	if got.CalendarSlug == "" {
+		t.Error("CalendarSlug is empty")
+	}
+
+	marks := 0
 	for _, row := range got.Month.Rows {
 		for _, cell := range row.Cells {
 			for _, m := range cell.Marks {
-				if m.EventID != 0 {
-					t.Fatal("Mark.EventID is populated; event ids are UUID strings")
+				marks++
+				if m.EventID == "" {
+					t.Fatalf("a Mark on day %d has no EventID; the renderer keys "+
+						"data-event-id off it", cell.Day)
 				}
 			}
 		}
+	}
+	if marks == 0 {
+		t.Fatal("fixture produced no marks — this test would pass vacuously")
 	}
 }
 

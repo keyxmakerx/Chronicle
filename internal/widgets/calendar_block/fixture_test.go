@@ -30,7 +30,7 @@ var fxTypes = map[string]evType{
 }
 
 type fxEvent struct {
-	id         int64
+	id         string
 	day        int
 	title      string
 	kind       string
@@ -43,20 +43,20 @@ type fxEvent struct {
 // declared order. The stacking order is FIXED by type rank, so two cells with
 // the same load always look the same.
 var fxHarptosEvents = []fxEvent{
-	{1, 3, "Council of Wards", "social", false, false, true},
-	{2, 5, "Barrow scouting", "quest", true, false, true},
-	{3, 5, "Caravan due", "downtime", false, false, false},
-	{4, 5, "Ward levy", "social", false, false, false},
-	{5, 5, "Smith’s deadline", "downtime", false, false, false},
-	{6, 5, "Rumour: the pale", "social", false, false, false},
-	{7, 5, "Tithe collected", "downtime", false, false, false},
-	{8, 8, "Supply run", "downtime", false, false, true},
-	{9, 8, "Into the Barrow", "quest", true, false, false},
-	{10, 12, "Nissa’s recital", "social", false, true, true},
-	{11, 14, "Emberfall Vigil", "festival", false, false, false},
-	{12, 17, "Ward-court summons", "social", false, true, false},
-	{13, 21, "Frost fair", "festival", false, false, false},
-	{14, 26, "Warden’s writ due", "quest", true, false, false},
+	{"ev-1", 3, "Council of Wards", "social", false, false, true},
+	{"ev-2", 5, "Barrow scouting", "quest", true, false, true},
+	{"ev-3", 5, "Caravan due", "downtime", false, false, false},
+	{"ev-4", 5, "Ward levy", "social", false, false, false},
+	{"ev-5", 5, "Smith’s deadline", "downtime", false, false, false},
+	{"ev-6", 5, "Rumour: the pale", "social", false, false, false},
+	{"ev-7", 5, "Tithe collected", "downtime", false, false, false},
+	{"ev-8", 8, "Supply run", "downtime", false, false, true},
+	{"ev-9", 8, "Into the Barrow", "quest", true, false, false},
+	{"ev-10", 12, "Nissa’s recital", "social", false, true, true},
+	{"ev-11", 14, "Emberfall Vigil", "festival", false, false, false},
+	{"ev-12", 17, "Ward-court summons", "social", false, true, false},
+	{"ev-13", 21, "Frost fair", "festival", false, false, false},
+	{"ev-14", 26, "Warden’s writ due", "quest", true, false, false},
 }
 
 // fxMoons are the three bodies the grid draws. A fourth (Sable, 88.2 days) is
@@ -217,10 +217,10 @@ func fxHarptos(gm bool) BlockData {
 
 	linked, total := 1, 4
 	return BlockData{
-		CalendarID:   1,
+		CalendarID:   "cal-1",
 		CalendarSlug: "harptos-of-imix",
 		Name:         "Harptos of Imix",
-		CalHue:       "var(--cal-harptos)",
+		CalHue:       "harptos",
 		Pattern:      "p1",
 		Letter:       "H",
 		IsDefault:    true,
@@ -242,7 +242,7 @@ func fxHarptos(gm bool) BlockData {
 				Name: "Midwinter · intercalary — belongs to no tenday",
 				Day:  1,
 			}},
-			TodayDay: 14,
+			TodayDay: 14, MoonsDeclared: len(fxMoons) + 1,
 		},
 		Sync: SyncPill{
 			State:     "ok",
@@ -256,7 +256,7 @@ func fxHarptos(gm bool) BlockData {
 		Layers: LayerState{Enabled: []string{"moons", "eras", "weeknums"}},
 		Ledger: LedgerStub{NeedsBackend: true},
 		Shelf:  ShelfStub{NeedsBackend: true},
-		Viewer: ViewerContext{IsGM: gm, UserID: 1, TieMode: "whole", Zone: "America/Chicago"},
+		Viewer: ViewerContext{IsGM: gm, UserID: "u-1", TieMode: "whole", Zone: "America/Chicago"},
 	}
 }
 
@@ -288,7 +288,7 @@ func fxGregorian() BlockData {
 				if day == 25 {
 					t := fxTypes["session"]
 					cell.Marks = []Mark{{
-						EventID: 100, Title: "Session 41",
+						EventID: "ev-100", Title: "Session 41",
 						Axis: t.axis, Pattern: t.pattern, Glyph: t.glyph, Named: true,
 					}}
 				}
@@ -299,10 +299,10 @@ func fxGregorian() BlockData {
 	}
 
 	return BlockData{
-		CalendarID:   2,
+		CalendarID:   "cal-2",
 		CalendarSlug: "real-world",
 		Name:         "Real world / Gregorian",
-		CalHue:       "var(--cal-real)",
+		CalHue:       "real",
 		Pattern:      "p2",
 		Letter:       "R",
 		IsRealWorld:  true,
@@ -311,6 +311,7 @@ func fxGregorian() BlockData {
 			Index: 6, Year: 2026, Name: "July",
 			WeekLen: week, Lead: lead, Days: days,
 			RowCount: len(rows), Weekdays: wds, Rows: rows, TodayDay: 25,
+			MoonsDeclared: 1,
 		},
 		Sync: SyncPill{
 			State:   "pause",
@@ -321,7 +322,7 @@ func fxGregorian() BlockData {
 		Layers: LayerState{Enabled: []string{"moons"}},
 		Ledger: LedgerStub{NeedsBackend: true},
 		Shelf:  ShelfStub{Hidden: true}, // the Bench's real-world Block renders with noShelf
-		Viewer: ViewerContext{IsGM: true, UserID: 1, TieMode: "whole", Zone: "America/Chicago"},
+		Viewer: ViewerContext{IsGM: true, UserID: "u-1", TieMode: "whole", Zone: "America/Chicago"},
 	}
 }
 
@@ -329,10 +330,10 @@ func fxGregorian() BlockData {
 // date says so WHERE THE DATE WOULD GO.
 func fxDwarvenFault() BlockData {
 	d := fxHarptos(true)
-	d.CalendarID = 4
+	d.CalendarID = "cal-4"
 	d.CalendarSlug = "dwarven-deep-count"
 	d.Name = "Dwarven Deep-count"
-	d.CalHue = "var(--cal-dwarven)"
+	d.CalHue = "dwarven"
 	d.Pattern = "p4"
 	d.Letter = "D"
 	d.DateLabel = "" // no date element is emitted at all

@@ -91,17 +91,11 @@ func blockDefaultLayers() calblock.LayerState {
 
 // projectBlock turns a calendar + its candidate events into one BlockData.
 //
-// IDENTITY — STOP-AND-FLAG, raised to the coordinator in the PR body.
-// BlockData.CalendarID, Mark.EventID, ViewerContext.UserID and
-// ViewerContext.HostEntity are typed int64 in the pinned struct, but every one
-// of those identities is a VARCHAR(36) UUID in Chronicle (calendars.id and
-// calendar_events.id in migration 001; entities.id and users.id in core). No
-// lossless projection exists. Editing the pinned struct is itself a
-// stop-and-flag (it desynchronises a parallel chat), so this producer leaves
-// those four fields ZERO and carries the real identity in the string field the
-// struct already has: CalendarSlug, documented as "stable identity", receives
-// the calendar's UUID. A hashed int64 was rejected — it would look usable and
-// silently fail the first time a consumer tried to load by it.
+// IDENTITY — RESOLVED (pin r50). The four identity fields were typed int64
+// while every one of those identities is a VARCHAR(36) UUID in Chronicle, so
+// this producer used to zero them and smuggle the calendar's id through
+// CalendarSlug. The pin was amended and they are now `string`; the real ids
+// are carried directly. CalendarSlug goes back to meaning the slug.
 func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	cal := in.Calendar
 	viewer := in.Viewer
@@ -122,7 +116,7 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	})
 
 	data := calblock.BlockData{
-		CalendarID:   0, // see the identity note above
+		CalendarID:   cal.ID,
 		CalendarSlug: blockCalendarSlug(cal),
 		Name:         blockCalendarName(cal),
 		CalHue:       blockCalHue(cal),
@@ -145,15 +139,15 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	counts := blockCountEvents(cal, visible, in, tieMode)
 	data.Viewer = calblock.ViewerContext{
 		IsGM:       permissions.CanSeeDmOnly(viewer.Role),
-		UserID:     0, // see the identity note above
-		HostEntity: 0, // see the identity note above
+		UserID:     viewer.UserID,
+		HostEntity: viewer.HostEntity,
 		TiedCount:  counts.tied,
 		WholeCount: counts.whole,
 		TieMode:    tieMode,
 		Zone:       blockViewerZone(cal, viewer),
 	}
 
-	blockDecorateCells(&data, cal, visible, in, tieMode)
+	blockDecorateCells(&data, cal, visible, in)
 	return data
 }
 
@@ -243,7 +237,13 @@ func blockEventTied(e *Event, in BlockProjectionInput) bool {
 // the pinned Mark struct carries no per-mark tie flag — only DayCell.Tied,
 // which is per DAY. A day with one tied and one untied event cannot express
 // that distinction in wave 1.
-func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event, in BlockProjectionInput, tieMode string) {
+// blockDecorateCells fills every cell's marks and tie flag.
+//
+// It takes NO tie mode, and that absence is the r51 contract made structural:
+// after the ink-not-membership ruling nothing about a cell's contents depends
+// on which way the toggle is set. A mode parameter here could only be used to
+// reintroduce the defect.
+func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event, in BlockProjectionInput) {
 	if cal == nil {
 		return
 	}
@@ -254,7 +254,7 @@ func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event
 			if cell.Day == 0 {
 				continue
 			}
-			marks, tied := blockMarksForDate(cal, visible, in, month, cell.Day, tieMode)
+			marks, tied := blockMarksForDate(cal, visible, in, month, cell.Day)
 			cell.Tied = tied
 			cell.Marks, cell.MoreCount = blockCapMarks(marks)
 		}
@@ -267,7 +267,7 @@ func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event
 	for _, mi := range inter {
 		days := cal.MonthDays(mi, in.Year)
 		for d := 1; d <= days && idx < len(data.Month.Intercalary); d++ {
-			marks, _ := blockMarksForDate(cal, visible, in, mi+1, d, tieMode)
+			marks, _ := blockMarksForDate(cal, visible, in, mi+1, d)
 			data.Month.Intercalary[idx].Marks, _ = blockCapMarks(marks)
 			idx++
 		}
@@ -276,7 +276,7 @@ func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event
 
 // blockMarksForDate builds the marks for one date and reports whether the date
 // carries at least one TIED event. Both come from the same walk over `visible`.
-func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, month, day int, tieMode string) ([]calblock.Mark, bool) {
+func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, month, day int) ([]calblock.Mark, bool) {
 	var marks []calblock.Mark
 	tied := false
 	isGM := permissions.CanSeeDmOnly(in.Viewer.Role)
@@ -289,10 +289,13 @@ func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, 
 		if evTied {
 			tied = true
 		}
-		if tieMode == "tied" && !evTied {
-			continue
-		}
-		marks = append(marks, blockMarkFor(cal, e, isGM))
+		// TieMode does NOT decide membership (r51). Every viewer-visible mark is
+		// emitted in BOTH modes and flagged; the renderer stamps a class and CSS
+		// changes the ink. Dropping untied marks here changed a cell's contents
+		// and therefore its height, which broke the no-motion rule the toggle
+		// depends on, and left the CSS-only toggle nothing to re-ink — CSS cannot
+		// restore a mark the server never sent.
+		marks = append(marks, blockMarkFor(cal, e, isGM, evTied))
 	}
 	return marks, tied
 }
@@ -318,15 +321,16 @@ func blockCapMarks(marks []calblock.Mark) ([]calblock.Mark, int) {
 // the hues can still separate the marks. Axis is a concrete colour value from
 // the operator's own data and NEVER references --accent (which is the campaign
 // accent and would collide with the surface's own axis channel).
-func blockMarkFor(cal *Calendar, e *Event, isGM bool) calblock.Mark {
+func blockMarkFor(cal *Calendar, e *Event, isGM, tied bool) calblock.Mark {
 	key, color, icon := blockEventAxisKey(cal, e)
 	return calblock.Mark{
-		EventID:  0, // see the identity note on projectBlock
+		EventID:  e.ID,
 		Title:    e.Name,
 		Axis:     color,
 		Pattern:  blockPatternFor(key),
 		Glyph:    icon,
 		Named:    strings.TrimSpace(e.Name) != "",
+		Tied:     tied,
 		Audience: blockAudienceFor(e, isGM),
 	}
 }

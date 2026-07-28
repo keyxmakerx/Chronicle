@@ -12,6 +12,22 @@
 // precedent). Changing a field name or type is a STOP-AND-FLAG, not a
 // judgement call: it desynchronises a parallel chat you cannot see.
 //
+// AMENDED r51 (2026-07-27). Two additive fields: Mark.Tied and
+// MonthGeometry.MoonsDeclared. See decisions/2026-07-27-calv4-tie-mark-emission.md.
+// Mark.Tied makes the tie toggle an INK change instead of a membership change —
+// the producer emits the whole viewer-visible set in both modes and flags each
+// mark, so CSS can dim rather than the server dropping cells. MoonsDeclared
+// states how many moons the calendar declares, since the grid draws at most
+// three and a fourth would otherwise vanish silently.
+//
+// AMENDED r50 (2026-07-26) after the wave-1 gate. Four identity fields were
+// int64 and are now string: Chronicle's ids are VARCHAR(36)/CHAR(36) UUIDs
+// (calendars, calendar_events, users) and every Go model already uses string.
+// The original pin was derived from the signed design, which shows no types.
+// Also clarified, because two chats read them in opposite directions and both
+// readings were defensible: CalHue, MoreCount, AudienceMark.Restricted,
+// EraBand.Half, and the two NeedsBackend flags.
+//
 // Field set derived from the SIGNED contract, cordinator
 // mockups/calendar-v4.html @ 37cdd6d + mockups/renders/v4-*.
 // Rulings that shaped it are in the dispatch files under "Coordinator rulings".
@@ -30,10 +46,15 @@ package calendar_block
 // (widgetbindings renders bound blocks with context.Background()).
 type BlockData struct {
 	// --- Identity (Nameplate zone A) ---
-	CalendarID   int64
+	CalendarID   string // UUID (calendars.id is VARCHAR(36))
 	CalendarSlug string // stable identity; drives the --cal channel
 	Name         string
-	CalHue       string // --cal token: "harptos" | "real" | "elven" | "dwarven" | …
+	// CalHue is a TOKEN NAME, not a colour value: "harptos" | "real" | "elven" |
+	// "dwarven" | … The RENDERER maps it to var(--cal-<token>) through a fixed
+	// allowlist and falls back to the neutral structural rule for an unknown
+	// token. A renderer that whitelists only colour VALUES will grey out every
+	// calendar's identity channel — which is exactly what happened in wave 1.
+	CalHue       string
 	Pattern      string // p1..p8 — the GREYSCALE identity channel, never colour alone
 	Letter       string // single-character calendar mark
 	IsRealWorld  bool
@@ -78,6 +99,13 @@ type MonthGeometry struct {
 	Rows        []WeekRow
 	Intercalary []IntercalaryDay // rendered at full tier only
 	TodayDay    int              // 0 when today is not in this month
+
+	// MoonsDeclared is how many moons the CALENDAR declares, which is not how many
+	// the grid draws. The grid's ceiling is three (moonCap) so a month can never
+	// grow with the fiction; a calendar declaring four leaves one drawn nowhere.
+	// Without this the omission is silent and a builder wonders why the moon they
+	// configured never appears. len(Moons) per cell cannot supply it — already capped.
+	MoonsDeclared int
 }
 
 type Weekday struct {
@@ -105,7 +133,11 @@ type EraBand struct {
 	OpenLeft  bool   // era continues before this row
 	OpenRight bool   // era continues after this row
 	Edge      bool   // editorial rule at a mid-month era boundary
-	Half      bool   // the five-column rule reaches the band too
+	// Half means THIS BAND CONTAINS the half column. The rule itself is drawn by
+	// the dedicated half-column ruler element at the half column — the band must
+	// NOT also put a border on its own right edge, which lands the rule wherever
+	// the band happens to end.
+	Half      bool
 }
 
 type DayCell struct {
@@ -116,7 +148,12 @@ type DayCell struct {
 	Intercalary bool
 	Moons       []MoonDisc
 	Marks       []Mark
-	MoreCount   int  // the "+n more" overflow; the ceiling is declared once, in the Nameplate (L30)
+	// MoreCount is OVERLAPPING, not additive: Marks holds the FULL viewer-visible
+	// list for the day, and MoreCount is how many of those are not drawn as
+	// chips. The day's event total is len(Marks) — NEVER len(Marks)+MoreCount.
+	// Adding them double-counts and the Block prints a wrong total in its foot.
+	// The ceiling is declared once, in the Nameplate (L30).
+	MoreCount   int
 	Tied        bool // this day carries at least one event tied to the host entity
 
 	// Fogged is the knowledge-horizon layer.
@@ -143,12 +180,23 @@ type MoonDisc struct {
 }
 
 type Mark struct {
-	EventID  int64
+	EventID  string // UUID (calendar_events.id is VARCHAR(36))
 	Title    string
 	Axis     string // --axis value. FORBIDDEN from referencing --accent.
 	Pattern  string // p1..p8 — locked (hue, pattern) pair; colour is never load-bearing
 	Glyph    string // ■ ▲ ✦ ◆ ● ☾ …
 	Named    bool   // named chip vs underline; decided in CSS, this is the content hint
+
+	// Tied is whether THIS event is tied to ViewerContext.HostEntity.
+	//
+	// The producer emits the WHOLE viewer-visible set in BOTH tie modes and sets
+	// this per mark; TieMode never removes a mark from a cell. Dropping untied
+	// marks in "tied" mode changes a cell's contents and therefore its height,
+	// which breaks the no-motion rule the toggle depends on, and leaves a CSS-only
+	// toggle nothing to re-ink. Ink is the renderer's job; membership is not
+	// TieMode's.
+	Tied     bool
+
 	Audience *AudienceMark
 }
 
@@ -161,6 +209,12 @@ type Mark struct {
 // populates this ONLY from what exists: visibility == dm_only, or a
 // visibility_rules restriction. Label is then "GM only" or "Restricted".
 // The composed audience is W-G.
+// Restricted is the DISCRIMINATOR between the two signed GM marks, not a
+// synonym for "hidden":
+//   Restricted == false -> the gold DOGEAR   (visibility == dm_only)
+//   Restricted == true  -> the gold DIAMOND  (a visibility_rules restriction)
+// Setting it true on both branches means the dogear never renders anywhere in
+// the product. Label is "GM only" or "Restricted" to match.
 type AudienceMark struct {
 	Label      string
 	Restricted bool
@@ -206,6 +260,9 @@ type LayerState struct {
 // LedgerStub / ShelfStub: wave 1 docks these zones at the correct size and
 // renders the signed `needs backend` chip. That is an honesty state the
 // operator signed, not a shortcut. W-B and W-E fill them.
+// NeedsBackend GATES the chip — the renderer must not emit it unconditionally.
+// W-B sets it false when the Ledger is filled, and it must not have to edit the
+// stub template to stop the chip rendering.
 type LedgerStub struct {
 	NeedsBackend bool
 	Hidden       bool // the real-world Block on the Bench renders with noShelf
@@ -227,8 +284,9 @@ type ShelfStub struct {
 // what makes the counts non-differenceable.
 type ViewerContext struct {
 	IsGM       bool
-	UserID     int64
-	HostEntity int64  // 0 when the Block is not hosted on an entity page
+	UserID     string // UUID (users.id is CHAR(36))
+	HostEntity string // UUID; EMPTY when the Block is not hosted on an entity page.
+	//                   Renderers gate the tie toggle on HostEntity != "".
 	TiedCount  int
 	WholeCount int
 	TieMode    string // "tied" | "whole"

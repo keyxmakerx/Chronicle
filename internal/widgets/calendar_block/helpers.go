@@ -62,7 +62,34 @@ func colourToken(v, fallback string) string {
 }
 
 func axisToken(v string) string { return colourToken(v, AxisFallback) }
-func calToken(v string) string  { return colourToken(v, "var(--rule-structural-strong)") }
+// calHueTokens is the CLOSED set of --cal channel tokens. CalHue is a TOKEN
+// NAME ("harptos"), never a colour value — the producer picks from this set
+// (blockCalHue) and the stylesheet defines a --cal-<token> for each.
+//
+// The whitelist discipline is unchanged and still the point: a bare value must
+// never reach a style attribute. What changed is WHAT is whitelisted. Accepting
+// only colour values, as this did, greyed out every real calendar's identity,
+// because a token name is not a colour and fell through to the fallback.
+//
+// This set is MIRRORED from the producer and cannot see it. TestCalToken_
+// MatchesStylesheet catches half the drift — a token here with no --cal-<token>
+// in the CSS. The other half (the producer adding a token this set lacks) is
+// caught by the cross-layer seam test, which is why that test exists.
+var calHueTokens = map[string]bool{
+	"harptos": true,
+	"real":    true,
+	"elven":   true,
+	"dwarven": true,
+}
+
+// calToken maps a --cal token name to its channel, falling back to the neutral
+// structural rule for anything unrecognised.
+func calToken(v string) string {
+	if calHueTokens[strings.TrimSpace(v)] {
+		return "var(--cal-" + strings.TrimSpace(v) + ")"
+	}
+	return "var(--rule-structural-strong)"
+}
 func bandToken(v string) string { return colourToken(v, "var(--rule-structural)") }
 
 // patternClass normalises a stroke pattern to p1..p8.
@@ -417,9 +444,40 @@ func moonTitle(md MoonDisc) string {
 
 // ── small text helpers ──────────────────────────────────────────────────────
 
+// tieClass stamps the per-mark tie state so CSS can change INK without the
+// server changing membership (pin r51).
+//
+// TieMode never removes a mark from a cell: the producer emits the whole
+// viewer-visible set in both modes and flags each one. Dropping untied marks
+// would change a cell's contents and therefore its height — the no-motion
+// violation the toggle cannot survive — and would leave a CSS-only toggle
+// nothing to re-ink, because CSS cannot restore a mark that was never sent.
+//
+// Off an entity page there is nothing to be tied to, so every mark is emitted
+// unclassed and the toggle does not render at all.
+func tieClass(m Mark) string {
+	if m.Tied {
+		return " tied"
+	}
+	return " untied"
+}
+
+// calLetter is the calendar's single-character identity mark — the third
+// channel beside hue and pattern.
+//
+// Colour is never the only identity channel, and neither is colour+pattern: a
+// pattern is legible on a stroke but a 8px dot cannot carry one at every tier.
+// The letter survives greyscale, low resolution and a washed-out projector.
+// Truncated to one rune because the surface budgets exactly one.
+func calLetter(s string) string {
+	for _, r := range strings.TrimSpace(s) {
+		return string(r)
+	}
+	return ""
+}
+
 func intText(n int) string { return strconv.Itoa(n) }
 
-func intText64(n int64) string { return strconv.FormatInt(n, 10) }
 
 func boolAttr(b bool) string {
 	if b {
@@ -667,7 +725,7 @@ func gmMarkTitle(c DayCell, restricted bool) string {
 // it flips — that is what makes it legal under the no-motion rule and what makes
 // TiedCount and WholeCount non-differenceable.
 func tieMode(v ViewerContext) string {
-	if v.HostEntity == 0 {
+	if v.HostEntity == "" {
 		return ""
 	}
 	if v.TieMode == "tied" {
