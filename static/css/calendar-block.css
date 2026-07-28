@@ -1782,20 +1782,96 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   §MOTION — there is none.
+   §MOTION — the budget, and it is EXACTLY this.
 
-   No transition, no animation, no @keyframes, no will-change anywhere above.
-   That is a wave-1 rule (COMMON §6.5), not an oversight, and this stylesheet is
-   the most likely place a reviewer will look for a violation. Because nothing
-   moves, no `prefers-reduced-motion` override is needed: there is nothing for
-   it to disable.
+   Wave 1 forbade motion outright and named W-B as the slice that re-opens the
+   question (COMMON §6.5). This is that re-opening, and it is a BUDGET rather
+   than a permission: TestCSS_NoMotionAtAll is now an ALLOWLIST — these
+   properties on these selectors — and every other transition, animation,
+   @keyframes, will-change, @starting-style or view-transition anywhere in this
+   file is still an error.
 
-   When W-B lands the ANSWER primitive and its --m-swell rail scale, the two
-   things that must NOT come with it are (a) any transition on --dash / --gap
-   (canon guard B1 — it destroys the greyscale identity channel) and (b) any
-   rule that animates box-shadow independently of the 0.5px ring it carries
-   (§STATE above makes that structurally impossible; keep it that way).
+   THE FOUR ITEMS, and why each is legal:
+
+   1. background-color and ink hue, on the surfaces that ANSWER. Canon A5 mints
+      ANSWERED as "the state of a surface that has just repainted because the
+      viewer pointed at a dated row. It changes background-colour and ink hue
+      ONLY. It never gains or loses shadow, never changes border thickness,
+      never moves." That is what makes the docked Ledger legal under L1: the
+      answer arrives as a COLOUR change, not as motion.
+
+   2. transform: scaleX() on a Ledger row's rail — and NEVER on .gr, the gold
+      GM rail (cv4:435). That is not decoration: a permission marker that
+      animates reads as a state change. It is a transform rather than a width
+      because `width:4px` on a flex item is a LAYOUT property and was design
+      notes §10 defect 3, found and fixed before signing.
+
+   3. m-latch on the selected cell's ring: centre → corners, nothing slides. A
+      viewer's own explicit act may latch (canon A6 forbids TRAVELLING
+      indicators, not a ring closing in place).
+
+   4. M5 NON-TARGET SILENCE, as a selector rather than a JS budget
+      (cv4:513-516). Rail and row transitions are killed unless the Block is
+      hovered, focused within, or swapping. ADDING BLOCKS MUST ADD RESTING COST
+      ONLY — this is not polish, it is how a Bench with four Blocks stays cheap.
+
+   Wrapped in prefers-reduced-motion: no-preference. Under reduced motion the
+   colour change is INSTANTANEOUS and every law above still holds, which is
+   itself the proof that ANSWERED is a colour state and not an animation.
+
+   EXPLICITLY OUT OF THE BUDGET, each for a stated reason:
+     · any transition on --dash / --gap (canon guard B1). Morphing a dash
+       pattern destroys the greyscale identity channel the signed greyscale
+       render promises, and it is the obvious "improvement" the next hand
+       reaches for. TestCSS_GuardB1_DashAndGapNeverAnimate stays green.
+     · animating box-shadow independently of the 0.5px ring it carries (canon
+       D3). §STATE makes that structurally impossible; keep it that way.
+     · will-change · @starting-style · view-transition — refusals, not omissions.
+     · the drawOnce() --m-step settle ladder (cv4:396-419). That is a JS
+       post-repaint pass; there is no repaint under CTS-1 = Option A and there
+       is no JS in this package. BOOKED, not approximated.
+     · THE MONTH GRID NEVER MOVES (2026-07-27 motion policy): "Cells, marks,
+       moons and era bands do not animate, reflow, or change size — including
+       when the tie toggle flips." The Ledger's row filter is the ONE sanctioned
+       content change and it is bounded to .lrows.
    ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: no-preference) {
+  /* 1 — colour only, on the surfaces that answer each other. */
+  .cal-block-host .cell,
+  .cal-block-host .interc,
+  .cal-block-host .lrow {
+    transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease);
+  }
+  .cal-block-host .cell .dn {
+    transition: color var(--t-base) var(--ease);
+  }
+
+  /* 2 — the rail swells along its own axis; the gold GM rail never does. */
+  .cal-block-host .lrow .rail {
+    transition: transform var(--t-base) var(--ease);
+  }
+  .cal-block-host .lrow .gr {
+    transition: none;
+  }
+
+  /* 3 — the latch closes centre → corners. Nothing slides, nothing travels. */
+  @keyframes m-latch {
+    from { clip-path: inset(0 50% 0 50%) }
+    to { clip-path: inset(0) }
+  }
+  .cal-block-host .cell:has(> .daypick:checked)::after {
+    animation: m-latch var(--t-fast) var(--ease-dec) both;
+  }
+
+  /* 4 — M5. A Block nobody is pointing at costs nothing to have on screen. */
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .cell,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .interc,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .lrow,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .cell .dn,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .lrow .rail {
+    transition: none;
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    §LADDER — GENERATED. Do not edit the block below by hand.

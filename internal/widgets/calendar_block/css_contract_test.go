@@ -52,22 +52,159 @@ var cssCommentRe = regexp.MustCompile(`(?s)/\*.*?\*/`)
 // a rule that forbids them.
 func stripComments(css string) string { return cssCommentRe.ReplaceAllString(css, " ") }
 
-// ── no motion ───────────────────────────────────────────────────────────────
+// ── the motion budget ───────────────────────────────────────────────────────
 
-// TestCSS_NoMotionAtAll. COMMON §6.5: no transitions inside the Block, at all,
-// in wave 1. This stylesheet is the most likely place a reviewer will look for a
-// violation, so it is also the place a test should look.
+// motionBudget is the SIGNED budget (C-CALV4-LEDGER-P6 §8) expressed as data,
+// so the test below is an ALLOWLIST rather than a ban.
+var motionBudget = struct {
+	// guard is the at-rule everything that moves must live inside. Under
+	// reduced motion the colour change is instantaneous and every law of the
+	// budget still holds — which is itself the proof that ANSWERED is a colour
+	// STATE and not an animation.
+	guard string
+	// properties are the only things this stylesheet may transition. "none" is
+	// in the set because M5's non-target silence and the gold rail's refusal
+	// are both expressed as `transition: none`.
+	properties map[string]bool
+	// keyframes are the only named animations that may exist at all.
+	keyframes map[string]bool
+	// refused are outside the budget entirely, and they are REFUSALS rather
+	// than omissions — each was considered and each is named in §MOTION.
+	refused []string
+}{
+	guard: "@media (prefers-reduced-motion: no-preference)",
+	properties: map[string]bool{
+		"background-color": true, // canon A5: ANSWERED changes background-colour…
+		"color":            true, // …and ink hue. ONLY.
+		"transform":        true, // the rail's scaleX swell — never a width (§10 defect 3)
+		"none":             true, // M5 silence, and the gold GM rail's refusal
+	},
+	keyframes: map[string]bool{
+		"m-latch": true, // centre → corners on the viewer's own explicit act
+	},
+	refused: []string{"will-change", "@starting-style", "view-transition"},
+}
+
+// TestCSS_NoMotionAtAll — REWRITTEN AS AN ALLOWLIST by C-CALV4-LEDGER-P6, and
+// deliberately not renamed and not deleted. A test that stops asserting is
+// worse than no test, and this one still fails on everything outside the §8
+// budget; what changed is that the budget is no longer empty.
+//
+// THE RULE, for whoever reads this next: the Block may transition
+// background-colour, ink hue and one transform, on the surfaces that ANSWER
+// each other, inside a prefers-reduced-motion guard — and nothing else, ever.
+// The month grid never moves. If you are here because you added a transition
+// and this failed, the question to answer is not "how do I allow it" but
+// "which signed law does it satisfy" — canon A5 and A6, the 2026-07-27 motion
+// policy, and §MOTION in the stylesheet itself all say what the answers are.
 func TestCSS_NoMotionAtAll(t *testing.T) {
 	code := stripComments(blockCSS(t))
-	for _, bad := range []string{
-		"transition", "animation", "@keyframes", "will-change",
-		"@starting-style", "view-transition",
-	} {
+
+	// 1. The refusals. These are not "not yet"; they are decided.
+	for _, bad := range motionBudget.refused {
 		if strings.Contains(code, bad) {
-			t.Errorf("calendar-block.css contains %q — the Block does not move in wave 1. "+
-				"The ANSWER primitive and its --m-swell rail scale ship with W-B.", bad)
+			t.Errorf("calendar-block.css contains %q — outside the motion budget entirely, "+
+				"and refused rather than omitted (§MOTION)", bad)
 		}
 	}
+
+	// 2. EVERYTHING THAT MOVES LIVES INSIDE THE REDUCED-MOTION GUARD. Not a
+	//    politeness: it is what makes the budget provable — under reduced
+	//    motion the Block still obeys every law above, so ANSWERED is a colour
+	//    state rather than an animation.
+	inside, outside, ok := splitAtRuleBlock(code, motionBudget.guard)
+	if !ok {
+		t.Fatalf("the stylesheet has no %q block — the whole motion budget must live inside one",
+			motionBudget.guard)
+	}
+	for _, bad := range []string{"transition", "animation", "@keyframes"} {
+		if strings.Contains(outside, bad) {
+			t.Errorf("%q appears OUTSIDE %s — a viewer who asked for no motion would still get it",
+				bad, motionBudget.guard)
+		}
+	}
+
+	// 3. Only the allowlisted properties may be transitioned.
+	transRe := regexp.MustCompile(`transition\s*:\s*([^;}]+)`)
+	for _, m := range transRe.FindAllStringSubmatch(inside, -1) {
+		for _, part := range strings.Split(m[1], ",") {
+			fields := strings.Fields(part)
+			if len(fields) == 0 {
+				continue
+			}
+			if !motionBudget.properties[fields[0]] {
+				t.Errorf("transition on %q is outside the motion budget — the budget is "+
+					"background-color, color and transform, and nothing else (canon A5)", fields[0])
+			}
+		}
+	}
+
+	// 4. Only the allowlisted keyframes may exist, and only they may be run.
+	kfRe := regexp.MustCompile(`@keyframes\s+([A-Za-z0-9_-]+)`)
+	for _, m := range kfRe.FindAllStringSubmatch(inside, -1) {
+		if !motionBudget.keyframes[m[1]] {
+			t.Errorf("@keyframes %s is not in the motion budget — the budget names exactly "+
+				"one, and it closes a ring in place rather than moving anything", m[1])
+		}
+	}
+	animRe := regexp.MustCompile(`(^|[;{\s])animation\s*:\s*([^;}]+)`)
+	for _, m := range animRe.FindAllStringSubmatch(inside, -1) {
+		named := false
+		for name := range motionBudget.keyframes {
+			if strings.Contains(m[2], name) {
+				named = true
+			}
+		}
+		if !named {
+			t.Errorf("animation %q runs something outside the budget's one keyframe set",
+				strings.TrimSpace(m[2]))
+		}
+	}
+
+	// 5. THE GOLD GM RAIL NEVER SWELLS (cv4:435). A permission marker that
+	//    animates reads as a state change, so it is refused at the property
+	//    level as well as declared `transform: none` in §ANSWER.
+	flat := strings.Join(strings.Fields(inside), " ")
+	if !strings.Contains(flat, ".lrow .gr { transition: none; }") {
+		t.Error("the gold GM rail must explicitly refuse the transition its sibling rail takes")
+	}
+
+	// 6. M5 NON-TARGET SILENCE. Adding Blocks must add RESTING cost only; a
+	//    Bench with four Blocks stays cheap because a Block nobody is pointing
+	//    at transitions nothing.
+	if !strings.Contains(flat, ":not(:hover):not(:focus-within):not([data-swapping])") {
+		t.Error("M5 is missing: rail and row transitions must be killed unless the Block is " +
+			"hovered, focused within or swapping — as a SELECTOR, not as a JS budget")
+	}
+}
+
+// splitAtRuleBlock returns (inside, outside, ok) for the first at-rule block
+// whose prelude matches `head`, by brace matching. Fails cleanly rather than
+// slicing on a bare strings.Index result, which PANICS on a rename — see the
+// PIN DISCIPLINE note at the top of this file.
+func splitAtRuleBlock(code, head string) (inside, outside string, ok bool) {
+	i := strings.Index(code, head)
+	if i < 0 {
+		return "", code, false
+	}
+	j := strings.Index(code[i:], "{")
+	if j < 0 {
+		return "", code, false
+	}
+	start := i + j
+	depth := 0
+	for k := start; k < len(code); k++ {
+		switch code[k] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return code[start : k+1], code[:i] + code[k+1:], true
+			}
+		}
+	}
+	return "", code, false
 }
 
 // TestCSS_GuardB1_DashAndGapNeverAnimate. Morphing a dash pattern destroys the
@@ -128,6 +265,39 @@ var (
 	preludeRe = regexp.MustCompile(`(?s)(^|[;{}])([^;{}]*)\{`)
 )
 
+// stripKeyframes removes @keyframes blocks whole.
+func stripKeyframes(code string) string {
+	for {
+		i := strings.Index(code, "@keyframes")
+		if i < 0 {
+			return code
+		}
+		j := strings.Index(code[i:], "{")
+		if j < 0 {
+			return code[:i]
+		}
+		depth, end := 0, -1
+		for k := i + j; k < len(code); k++ {
+			switch code[k] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					end = k + 1
+				}
+			}
+			if end >= 0 {
+				break
+			}
+		}
+		if end < 0 {
+			return code[:i]
+		}
+		code = code[:i] + code[end:]
+	}
+}
+
 // splitSelectorList splits a rule prelude on its TOP-LEVEL commas only.
 //
 // REFRESHED BY C-CALV4-LEDGER-P6, and it was a latent defect in the guard, not
@@ -160,7 +330,10 @@ func splitSelectorList(prelude string) []string {
 // CSS, so a bare `.badge` rule in here would silently restyle the whole product.
 // Nothing may match outside a .cal-block-host subtree.
 func TestCSS_EverySelectorIsScoped(t *testing.T) {
-	code := stripComments(blockCSS(t))
+	// @keyframes bodies carry KEYFRAME SELECTORS (from/to/50%), which are not
+	// selectors at all and cannot be scoped. Removed before the scan by
+	// C-CALV4-LEDGER-P6; the scoping rule itself is unchanged.
+	code := stripKeyframes(stripComments(blockCSS(t)))
 	var offenders []string
 	for _, m := range preludeRe.FindAllStringSubmatch(code, -1) {
 		prelude := strings.TrimSpace(m[2])
