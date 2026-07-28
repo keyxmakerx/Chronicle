@@ -13,6 +13,9 @@
 // 300px for it unconditionally, so a Block that skipped the zone would measure
 // its own columns wrong and flip density at the wrong host width. W-B fills it
 // and must not have to re-cut the geometry.
+//
+// NeedsBackend GATES the chip (data.go ruling): W-B sets it false when the
+// Ledger is filled, and must not have to edit this template to stop the chip.
 
 package calendar_block
 
@@ -22,7 +25,9 @@ templ ledgerStub(d BlockData) {
 			<span class="t">Ledger</span>
 			<span class="c">{ d.Month.Name }</span>
 			<span class="sp"></span>
-			<span class="badge need">needs backend</span>
+			if d.Ledger.NeedsBackend {
+				<span class="badge need">needs backend</span>
+			}
 		</div>
 		<div class="lrows">
 			<div class="lzero">
