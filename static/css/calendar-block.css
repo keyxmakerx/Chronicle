@@ -2013,3 +2013,11 @@
 .cal-block-host .block:has(.grid [data-day-ord="i8"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i8"],
 .cal-block-host .block:has(.lrows .lrow[data-lday="i8"]:is(:hover, :focus-within)) .grid [data-day-ord="i8"] { --answer: 1 }
 /* END ANSWER LADDER */
+
+/* the two strings `.badge.gm` carries in the signed set — "<N> hidden" on the
+   Nameplate and "GM" on a Ledger row. Gold, because permission is gold (L22).
+   It is not extended beyond those two. */
+.cal-block-host .badge.gm {
+  border-color: var(--gold);
+  color: var(--text-body);
+}

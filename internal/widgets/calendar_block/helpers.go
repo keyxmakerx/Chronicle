@@ -1187,3 +1187,48 @@ func ledgerTimeClass(d BlockData) string {
 	}
 	return "tm mono"
 }
+
+// ── the counts the Block puts on screen ─────────────────────────────────────
+
+// hiddenBadgeText is the signed "<N> hidden" chip (cv4:1650-1651), which
+// nameplate.templ used to record as absent "because the pinned struct has
+// nowhere to put the number, not because it was rejected". r52 gave it one.
+//
+// GM-ONLY BY CONSTRUCTION, TWICE. The producer sets ViewerContext.HiddenCount
+// only when IsGM and leaves it zero for every other viewer at the source (r52
+// rule 1). This gate is NOT a substitute for that one — it is a second lock on
+// the same door, because the one thing that must never happen is a player
+// receiving this number in any form, including a zero. Permission is ABSENCE:
+// a player has no second number to difference it against because a player has
+// no number at all.
+//
+// `.badge.gm` carries exactly two strings in the signed set — "<N> hidden" and
+// "GM". It is not extended.
+func hiddenBadgeText(d BlockData) string {
+	if !d.Viewer.IsGM || d.Viewer.HiddenCount <= 0 {
+		return ""
+	}
+	return intText(d.Viewer.HiddenCount) + " hidden"
+}
+
+// blockFootCount is the mini / sub-mini foot's number, and it is NOT always the
+// month's total.
+//
+// DELIBERATE, PRE-AUTHORISED DIVERGENCE FROM THE MINI STILLS (dispatch §6). The
+// mockup's foot uses visFor(m).length and ignores the scope the entity sidebar
+// passes (cv4:2410-2411), so the Hollowmere-scoped 280px sidebar prints "14
+// events" while its own Attributes card, two inches above, prints "Ties 4".
+// That is the tie-count oracle's shape one size down, and it is visible in
+// v4-entity-whole-light.png.
+//
+// So: when the Block is entity-hosted AND tie-scoped, the foot states the TIED
+// count and says the word "tied". The tie toggle is display:none at that size,
+// so an unqualified number beside an entity reads as the entity's — and at that
+// size it had better be. Both numbers are already on ViewerContext; this needs
+// no new pin field and no second pass.
+func blockFootCount(d BlockData) string {
+	if d.Viewer.HostEntity != "" && d.Viewer.TieMode == "tied" {
+		return eventCountLabel(d.Viewer.TiedCount) + " tied"
+	}
+	return eventCountLabel(totalMarks(d))
+}

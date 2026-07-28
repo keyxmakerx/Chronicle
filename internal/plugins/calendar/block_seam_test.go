@@ -34,7 +34,18 @@ import (
 // calblock.Block → HTML. Everything in this file asserts on its output.
 func seamRender(t *testing.T, in BlockProjectionInput) string {
 	t.Helper()
-	d := projectBlock(in)
+	return seamRenderBlockData(t, projectBlock(in))
+}
+
+// seamRenderBlockData is seamRender's second half, split out so a caller that
+// must stand in for a store the producer cannot supply — today only the
+// per-viewer LAYER store, which is W-F's and does not exist — can override that
+// one field and push the producer's REAL output through the same renderer.
+// TestSeam_EnabledLayerSetMatchesWhatRenders already needed it inline; the
+// count-oracle suite needs it too, and two hand-copied render loops is how a
+// seam suite quietly forks.
+func seamRenderBlockData(t *testing.T, d calblock.BlockData) string {
+	t.Helper()
 	var sb strings.Builder
 	if err := calblock.Block(d).Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render composed Block: %v", err)
@@ -323,11 +334,7 @@ func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
 	in.Events = blockCopyEvents(events)
 	d := projectBlock(in)
 	d.Layers.Enabled = []string{"eras", "weeknums", "ledger", "moongraph", "legend", "horizon", "shelf"}
-	var sb strings.Builder
-	if err := calblock.Block(d).Render(context.Background(), &sb); err != nil {
-		t.Fatalf("render composed Block: %v", err)
-	}
-	inverse := sb.String()
+	inverse := seamRenderBlockData(t, d)
 	for _, s := range seamLayerSurfaces {
 		if s.key == "moons" {
 			seamNotContain(t, inverse, s.marker,

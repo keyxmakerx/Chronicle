@@ -506,13 +506,40 @@ func TestTieMode_IsAnAttributeNotAClass(t *testing.T) {
 	// pair, so the state that legitimately moves is the `checked` attribute.
 	// Everything else this assertion protects — no cell added, removed or
 	// re-ordered — is untouched.
+	//
+	// REFRESHED AGAIN at C-CALV4-LEDGER-P6 §6, intent unchanged. The mini /
+	// sub-mini FOOT now states the TIED count when the Block is entity-hosted
+	// and tie-scoped, which is a deliberate, pre-authorised divergence: the
+	// mockup's foot ignores the scope the entity sidebar passes, so the
+	// Hollowmere-scoped sidebar printed "14 events" beside an Attributes card
+	// reading "Ties 4". Correcting it means the foot LINE legitimately differs
+	// between modes, so it is excluded here and asserted explicitly below.
+	//
+	// Nothing this test protects is weakened: it still proves the toggle adds,
+	// removes and re-orders no cell, and neither count it prints is new
+	// information — both are already stated by the toggle itself in both modes,
+	// which is what keeps them non-differenceable.
 	stripMode := func(s string) string {
-		return strings.NewReplacer(`data-tie-mode="tied"`, "", `data-tie-mode="whole"`, "",
+		s = strings.NewReplacer(`data-tie-mode="tied"`, "", `data-tie-mode="whole"`, "",
 			` checked`, "").Replace(s)
+		i := strings.Index(s, `<div class="foot">`)
+		if i < 0 {
+			t.Fatal("no foot line in the rendered Block")
+		}
+		return s[:i]
 	}
 	if stripMode(whole) != stripMode(tied) {
-		t.Error("flipping the tie mode changed the DOM beyond the mode attribute and the " +
-			"checked radio — ink LEVEL only, or the counts become differenceable")
+		t.Error("flipping the tie mode changed the DOM beyond the mode attribute, the " +
+			"checked radio and the foot's scope line — ink LEVEL only, or the counts " +
+			"become differenceable")
+	}
+	if !strings.Contains(whole, ">14 events<") {
+		t.Error("in whole mode the foot states the month's total")
+	}
+	if !strings.Contains(tied, ">4 events tied<") {
+		t.Error("in tied mode the foot states the TIED count AND says the word `tied` — an " +
+			"unqualified number beside an entity reads as the entity's, and at mini the tie " +
+			"toggle is display:none so nothing else qualifies it")
 	}
 
 	// Off an entity page there is no tie control at all.
