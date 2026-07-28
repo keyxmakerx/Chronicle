@@ -2098,9 +2098,10 @@ and IMMUTABLE. It is state-addressable by query param, and the `mockups/renders/
 v4-*.png` stills gate fidelity. Eight canon amendments (A1–A8) and four guards
 (B1–B4) were signed on top of it (`decisions/2026-07-26-calendar-v4-canon-
 amendments.md`), and the pinned render contract `internal/widgets/calendar_block
-/data.go` has been amended twice under numbered decisions: **r51**
-(`2026-07-27-calv4-tie-mark-emission.md`) and **r52**
-(`2026-07-28-calv4-ledger-p6-pin-amendment.md`).
+/data.go` has been amended three times under numbered decisions: **r51**
+(`2026-07-27-calv4-tie-mark-emission.md`), **r52**
+(`2026-07-28-calv4-ledger-p6-pin-amendment.md`) and **r53**
+(`2026-07-28-calv4-shelf-pin-amendment.md`).
 
 ### Decision
 
@@ -2159,7 +2160,7 @@ interchangeable:
 | Idiom | Means | Example |
 |---|---|---|
 | the FAULT | this thing cannot resolve, and it says so **where its value would go** | a calendar with no months prints the fault instead of the date, and emits no date element at all — not a zero, not an em dash |
-| the `needs backend` chip | this SURFACE is designed and its store does not exist | the Shelf zone, the Bench's horizon tile. It is **never rendered to a player** (`decisions/2026-07-27-needs-backend-audience.md`) |
+| the `needs backend` chip | this SURFACE is designed and its store does not exist | the Shelf's Filters TAB, the Bench's horizon tile. It is **never rendered to a player** (`decisions/2026-07-27-needs-backend-audience.md`) |
 | ABSENCE | this viewer is not entitled to it | a player receives no dm_only mark: no placeholder, no ghost, no "+1", and no hidden-count chip — **not even a zero** |
 | OMISSION | the data exists nowhere yet, so the segment DROPS | the Ledger meta line's owner segment, `· RSVP n/m`, the mini foot's `next:` |
 
@@ -2220,22 +2221,105 @@ groups cannot force a realign of the existing block.
   per day ordinal, so the bound is 40 + 8 keys, generated and diff-tested. Past
   it a day carries no control at all — the honest failure, not a dead one.
 
+### Section: the Almanac, and why the grid's moon ceiling is legitimate (W-E, C-CALV4-SHELF-P7, 2026-07-28)
+
+**Added as a SECTION and not as ADR-049, per the paragraph below.** W-F's layer
+switchboard and preference store join it here when they land.
+
+**10. THE GRID'S THREE-MOON CEILING IS ONLY LEGITIMATE BECAUSE THE ALMANAC
+EXISTS.** L21 caps the month grid at `moonCap = 3` so *"the grid can never grow
+with the fiction"* — and the second half of the same law is *"the Almanac
+carries every declared body at full width"*. Wave 1 shipped the ceiling and the
+nameplate badge that announces it (`MonthGeometry.MoonsDeclared`, r51) and
+nothing shipped the place the overflow goes, so a builder who configured a
+fourth moon had it silently drop out of the product. `BlockData` could not
+express it either: `DayCell.Moons` is capped, so the fourth body had no
+illumination data anywhere in the render contract at all.
+
+r53 (`decisions/2026-07-28-calv4-shelf-pin-amendment.md`) adds
+`MonthGeometry.Almanac []AlmanacMoon` — a per-month celestial register, produced
+once, in the calendar's own declaration order — and it is **deliberately
+UNCAPPED by the request's `MoonCap`**. That is the ONE sanctioned place a
+host-passed parameter is non-authoritative for a zone, and it is signed once
+here rather than discovered later: `MoonCap` governs the grid, and it does not
+govern the surface the grid's ceiling points at. `AlmanacMoon.Drawn` is the only
+place the renderer learns which bodies the ceiling excluded, so `moonCap`'s
+arithmetic lives in exactly one place.
+
+The consequence worth stating: **the nameplate badge's hover tail is now true
+and is therefore printed** — *"N moons declared; the grid draws 3 — all of them
+are in the Almanac"* — but only in renders where an Almanac is actually
+reachable. A Block with the Shelf hidden (`noShelf`, the Bench's real-world
+Block) or with the shelf layer off gets the sentence WITHOUT its tail. A title
+that names an absent surface is the same lie class as a green sync pill with no
+denominator, and SEAM-P5 withheld the tail for exactly that reason for one whole
+wave.
+
+**11. THE CELESTIAL SURFACE IS A READOUT, AND IT IS NOT A FIFTH AUTHORING
+SURFACE.** Contract §8 item 2 (L5) is explicit: celestial events are an event
+type, authored in the normal event editor, *"surfaced through a dedicated
+filtered Almanac list in the shelf widget. No fifth authoring surface."* The
+Shelf reads. It authors nothing and it configures nothing — the master plan's
+*"owner/scribe-configurable"* clause is STRUCK for wave 2 and re-booked to
+whichever wave ships a config store, because no signed artefact contains a Shelf
+configuration surface and building one would be the surface L5 forbids by name.
+
+The vetoed composite-brightness ribbon was RELOCATED into the Almanac's month
+lane rather than resurrected: a magnitude as an explicit readout with its
+percentage in reach, never a glanceable claim (L19/L24). Timepiece, skybox and
+skypane stay PARKED (L12/D4) — the Shelf must not grow a pictorial sky.
+
+**12. THE ARITHMETIC IS PRINTED SO IT CAN BE AUDITED, so none of it may be a
+constant.** The Almanac's own signed footnote says *"no date in the register was
+typed by hand"*, and the mockup hardcodes a thirty-day month in four places — in
+a product whose whole thesis is ten-day weeks and arbitrary month lengths. All
+four are fixed rather than ported: the footnote's column count, the drift
+figure and the "N moons declared · none keeps the month" line are derived from
+the month's REAL day count, and the fourth was fixture content and is not
+printed at all. `TestCSS_NoLiteralWeekLength` is extended to the lane, which
+takes its day columns from `grid-auto-flow` so that no literal and no variable
+`repeat()` count for a month length exists anywhere in the sheet.
+
+**13. THE CSS-ONLY CONTROL BUDGET IS NOW THREE RADIO GROUPS, AND IT HAS A SHAPE
+IT CANNOT EXCEED.** The tie toggle, the day pick, the Shelf's three tabs and the
+Almanac's three sub-tabs are all hidden radios plus `:has()`, all named by pure
+functions of the data. The ceiling this ran into is worth recording: **a
+server-rendered `checked` attribute cannot vary by container query**, so one
+radio group cannot carry two tier-dependent defaults. That is why the signed std
+construction — four tabs in the Ledger head, the Ledger's rows as the "Month"
+panel — is not buildable while selection is CSS-only, and why the Shelf keeps
+its own strip at every tier. It is a real bound on the no-JS discipline and the
+next surface that wants a per-tier default will hit it too.
+
+**14. A SHARED PRIMITIVE MAKES ONE RULE REACH TWO ZONES, TWICE NOW.** W-E's
+Upcoming panel reuses the Ledger's row component VERBATIM — deliberately, so the
+two zones cannot drift and the count oracle can be an equality — and the moment
+it did, two of W-B's mechanisms reached into it: the day-pick ladder's row
+FILTER (which made choosing a day reflow the Block by 86px) and, in W-B's own
+fix round, its reveal rule. Both were unscoped selectors whose doc comments
+already claimed the scope the code did not have. The rule that falls out:
+**when a primitive is shared across zones, every rule that names it must name
+its zone as well**, and the guard must check the SELECTOR and not only the
+property. `.lrows .lrow`, `.lctx[…]`, `.lzero.lday[…]` — all three are pinned.
+
 ### Sections inside this ADR rather than beside it
 
-W-E's Almanac and celestial decisions, and W-F's layer switchboard and
-preference store, become sections HERE when they land. calendar-v4 is one
-architecture decision; competing ADRs for its later waves would fragment the
-rationale that a future re-litigation needs in one place.
+W-F's layer switchboard and preference store become sections HERE when they
+land. calendar-v4 is one architecture decision; competing ADRs for its later
+waves would fragment the rationale that a future re-litigation needs in one
+place. W-E followed this rule: its Almanac decisions are §10-§14 above rather
+than an ADR-049.
 
 ### References
 
 - Master plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`
 - Canon: `decisions/2026-07-26-calendar-v4-canon-amendments.md` (A1–A8, B1–B4)
 - Pins: `decisions/2026-07-27-calv4-tie-mark-emission.md` (r51) ·
-  `decisions/2026-07-28-calv4-ledger-p6-pin-amendment.md` (r52)
+  `decisions/2026-07-28-calv4-ledger-p6-pin-amendment.md` (r52) ·
+  `decisions/2026-07-28-calv4-shelf-pin-amendment.md` (r53, the Almanac register)
 - Rulings: `2026-07-28-calv4-def-and-zone-chips-ruling.md` ·
   `2026-07-27-motion-policy.md` · `2026-07-27-needs-backend-audience.md` ·
   `2026-07-27-calendar-scope-and-roles.md`
 - Wave reports: `reports/chronicle/2026-07-28-C-CALV4-{SEAM-P5,HOST-P3,BENCH-P4,
-  LEDGER-P6}.md`
+  LEDGER-P6,SHELF-P7}.md`
 - Contract: `mockups/calendar-v4.html` + `mockups/renders/v4-*.png`
