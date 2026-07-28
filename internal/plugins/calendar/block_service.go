@@ -597,11 +597,19 @@ func (s *BlockService) UpcomingAcrossCalendars(ctx context.Context, campaignID s
 	var out []BlockUpcoming
 	for _, id := range ids {
 		cal := byID[id]
+		if cal == nil || len(cal.Months) == 0 {
+			continue
+		}
+		// The current-date base is loop-invariant across this calendar's
+		// events, and Calendar.AbsoluteDay loops over every prior year (the
+		// COMMON §7 trap monthBaseAbsoluteDay documents) — compute it once
+		// per calendar, not once per event (C-CALV4-SEAM-P5 §7).
+		base := cal.AbsoluteDay(cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 		// THE ONE PASS, per calendar — rows[id] is compacted in place here and
 		// is not read again.
 		visible := filterEventsByUser(rows[id], viewer.Role, viewer.UserID)
 		for i := range visible {
-			if up, ok := s.nextOccurrence(cal, &visible[i]); ok {
+			if up, ok := s.nextOccurrence(cal, base, &visible[i]); ok {
 				out = append(out, up)
 			}
 		}
@@ -614,12 +622,14 @@ func (s *BlockService) UpcomingAcrossCalendars(ctx context.Context, campaignID s
 }
 
 // nextOccurrence finds an event's soonest occurrence at or after its calendar's
-// current date, expanding recurrence through OccursOn.
-func (s *BlockService) nextOccurrence(cal *Calendar, e *Event) (BlockUpcoming, bool) {
+// current date, expanding recurrence through OccursOn. base must be
+// cal.AbsoluteDay of the calendar's current date — the caller hoists it
+// because it is identical for every event on the calendar and AbsoluteDay is
+// O(years) (C-CALV4-SEAM-P5 §7).
+func (s *BlockService) nextOccurrence(cal *Calendar, base int, e *Event) (BlockUpcoming, bool) {
 	if cal == nil || len(cal.Months) == 0 {
 		return BlockUpcoming{}, false
 	}
-	base := cal.AbsoluteDay(cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 	year, month := cal.CurrentYear, cal.CurrentMonth
 	limit := cal.CurrentYear + blockUpcomingHorizonYears
 	for year <= limit {

@@ -427,11 +427,11 @@ func TestEntitiesForEra_VisibilityMatrix(t *testing.T) {
 
 // --- EventsForEntityFiltered (C-CALV4-TIEFIX-PB Bug 1 item 3) ---
 //
-// EventsForEntityFiltered is a concrete-only method on *calendarService (not
-// part of the CalendarService interface — see its doc comment in
-// entity_ties_service.go), so these tests type-assert NewCalendarService's
-// return value the same way service.go's own SetBindingCleaner precedent is
-// reached in production code.
+// EventsForEntityFiltered started concrete-only on *calendarService;
+// C-CALV4-SEAM-P5 §7 put it on the CalendarService interface for its phase-B
+// consumer outside the package (see its doc comment in
+// entity_ties_service.go), so these tests call it straight off
+// NewCalendarService's return value.
 
 // TestEventsForEntityFiltered_CalendarLevelVisibility pins the actual gap this
 // method closes: EventsForEntity's query never joins calendars, so a player
@@ -458,7 +458,7 @@ func TestEventsForEntityFiltered_CalendarLevelVisibility(t *testing.T) {
 			return nil, nil
 		},
 	}
-	svc := NewCalendarService(repo).(*calendarService)
+	svc := NewCalendarService(repo)
 	ctx := context.Background()
 
 	player, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RolePlayer, "user-9")
@@ -493,7 +493,7 @@ func TestEventsForEntityFiltered_EventLevelVisibilityStillApplies(t *testing.T) 
 		},
 		getByIDFn: func(_ context.Context, _ string) (*Calendar, error) { return pubCal, nil },
 	}
-	svc := NewCalendarService(repo).(*calendarService)
+	svc := NewCalendarService(repo)
 
 	player, err := svc.EventsForEntityFiltered(context.Background(), "ent-1", permissions.RolePlayer, "user-9")
 	if err != nil {
@@ -523,7 +523,7 @@ func TestEventsForEntityFiltered_OwnerAndSystemContextUnfiltered(t *testing.T) {
 			return &Calendar{ID: "cal-1", Visibility: "dm_only"}, nil
 		},
 	}
-	svc := NewCalendarService(repo).(*calendarService)
+	svc := NewCalendarService(repo)
 	ctx := context.Background()
 
 	owner, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RoleOwner, "user-9")
@@ -557,7 +557,7 @@ func TestEventsForEntityFiltered_DedupesCalendarLookups(t *testing.T) {
 			return &Calendar{ID: id, Visibility: "everyone"}, nil
 		},
 	}
-	svc := NewCalendarService(repo).(*calendarService)
+	svc := NewCalendarService(repo)
 	out, err := svc.EventsForEntityFiltered(context.Background(), "ent-1", permissions.RolePlayer, "user-9")
 	if err != nil || len(out) != 3 {
 		t.Fatalf("expected all 3 events visible: %+v, err=%v", out, err)
