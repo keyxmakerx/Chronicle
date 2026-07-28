@@ -235,3 +235,97 @@ func TestSeam_FootTotalEqualsTheDayCellTotal(t *testing.T) {
 	seamNotContain(t, body, fmt.Sprintf(">%d events<", total+folded),
 		"len(Marks)+MoreCount counts the folded marks twice — MoreCount is OVERLAPPING")
 }
+
+// ── §1 acceptance: the enabled-layer set matches what renders ───────────────
+
+// seamLayerSurfaces maps each of the eight LayerState keys (data.go: moons ·
+// eras · weeknums · ledger · moongraph · legend · horizon · shelf) to the HTML
+// marker its surface carries. A key with no marker here would be a layer that
+// gates nothing — the set-and-ignored defect class this file exists to kill.
+//
+// The halfrule ruler and the .band.half class are NOT in this table: both are
+// month GEOMETRY (the producer's Weekday/DayCell/EraBand Half flags), not a
+// layer, and gating geometry on a layer key would let a viewer preference
+// break the five-column counting aid.
+var seamLayerSurfaces = []struct {
+	key    string
+	marker string
+}{
+	{"moons", `class="phrow"`},           // the per-cell moon discs (the moongraph is the CURVE, a separate key)
+	{"eras", `class="bands"`},            // the era band row
+	{"weeknums", `data-weeknums`},        // the grid states the layer; the gutter labels it
+	{"ledger", `data-zone="ledger"`},     // zone C
+	{"moongraph", `data-layer="moongraph"`},
+	{"legend", `data-layer="legend"`},
+	{"horizon", `data-layer="horizon"`},
+	{"shelf", `data-zone="shelf"`},       // zone D
+}
+
+// TestSeam_EnabledLayerSetMatchesWhatRenders pins the dispatch §1 acceptance
+// line at the only level that can see both halves at once: the producer's
+// layer choice AND the renderer's obedience to it.
+//
+// Wave 1's producer emits DEF = ["moons"] (blockDefaultLayers, a signed
+// ruling): the default surface is a month with its moon phases and NOTHING
+// else. The first half renders that real projection and asserts exactly that —
+// discs present, all seven other surfaces absent. Before this stage the
+// Ledger and Shelf zones rendered anyway, so the composed DEF surface never
+// matched the registry that claims to govern it.
+//
+// The second half flips the registry to every key EXCEPT moons and re-renders
+// the SAME projection. The producer has no layer input to vary — the
+// per-viewer layer store is W-F (data.go) — so overriding Layers.Enabled on
+// the projected BlockData is standing in for exactly that store and nothing
+// else; every other field is the producer's real output. Each surface must
+// appear, and the moon discs must leave.
+func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
+	// The fixture must CARRY every layer-owned surface's data, or an absence
+	// is unfalsifiable: a missing era band could mean "gated off" or "this
+	// calendar has no eras", and only the former is this test's claim.
+	cal := blockTenDayCal()
+	cal.Eras = []Era{{ID: 1, CalendarID: cal.ID, Name: "Reckoning of Wards", StartYear: 1, Color: "#8b5cf6"}}
+	cal.Moons = []Moon{{ID: 1, CalendarID: cal.ID, Name: "Selune", CycleDays: 30.4}}
+	events := []Event{blockEvent("layered-1", 4, "everyone")}
+
+	in := BlockProjectionInput{
+		Calendar:   cal,
+		Events:     blockCopyEvents(events),
+		Viewer:     BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner},
+		MonthIndex: 0,
+		Year:       1523,
+	}
+
+	// DEF, exactly as the producer emits it.
+	def := seamRender(t, in)
+	for _, s := range seamLayerSurfaces {
+		if s.key == "moons" {
+			seamContain(t, def, s.marker,
+				"DEF's month must draw its moon phases")
+			continue
+		}
+		seamNotContain(t, def, s.marker,
+			"DEF is a month with its moon phases and NOTHING else; the "+s.key+" layer is off")
+	}
+
+	// The complement: every key except moons.
+	in.Events = blockCopyEvents(events)
+	d := projectBlock(in)
+	d.Layers.Enabled = []string{"eras", "weeknums", "ledger", "moongraph", "legend", "horizon", "shelf"}
+	var sb strings.Builder
+	if err := calblock.Block(d).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render composed Block: %v", err)
+	}
+	inverse := sb.String()
+	for _, s := range seamLayerSurfaces {
+		if s.key == "moons" {
+			seamNotContain(t, inverse, s.marker,
+				"the moons layer is off; the discs must leave the DOM")
+			continue
+		}
+		seamContain(t, inverse, s.marker,
+			"the "+s.key+" layer is on; its surface must render")
+	}
+	// The weeknums gutter label, beyond the grid's data attribute.
+	seamContain(t, inverse, `class="wknum"`,
+		"the weeknums layer labels the gutter, not just the grid")
+}

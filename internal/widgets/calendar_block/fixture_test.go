@@ -253,7 +253,10 @@ func fxHarptos(gm bool) BlockData {
 			Transport: "Foundry",
 			PushedAgo: "pushed 2m ago",
 		},
-		Layers: LayerState{Enabled: []string{"moons", "eras", "weeknums"}},
+		// The signed stills show the Ledger docked and the Shelf at the foot,
+		// so the still's layer state has both keys ON — the zones are
+		// layer-owned (data.go's 8-key registry) and absent under bare DEF.
+		Layers: LayerState{Enabled: []string{"moons", "eras", "weeknums", "ledger", "shelf"}},
 		Ledger: LedgerStub{NeedsBackend: true},
 		Shelf:  ShelfStub{NeedsBackend: true},
 		Viewer: ViewerContext{IsGM: gm, UserID: "u-1", TieMode: "whole", Zone: "America/Chicago"},
@@ -319,7 +322,10 @@ func fxGregorian() BlockData {
 			Compact: "Paused · tracks real time · 1 of 4",
 			Linked:  1, Total: 4,
 		},
-		Layers: LayerState{Enabled: []string{"moons"}},
+		// Both zone keys ON: the Bench still docks its Ledger, and keeping
+		// "shelf" enabled is what makes the noShelf assertion prove Hidden —
+		// with the key off, the Shelf's absence would be the layer gate's.
+		Layers: LayerState{Enabled: []string{"moons", "ledger", "shelf"}},
 		Ledger: LedgerStub{NeedsBackend: true},
 		Shelf:  ShelfStub{Hidden: true}, // the Bench's real-world Block renders with noShelf
 		Viewer: ViewerContext{IsGM: true, UserID: "u-1", TieMode: "whole", Zone: "America/Chicago"},

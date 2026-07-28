@@ -401,6 +401,10 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 	mustNotContain(t, body, `class="bands"`, "eras are off by default")
 	mustNotContain(t, body, "data-weeknums", "week numbers are off by default")
 	mustNotContain(t, body, `class="wknum"`, "week numbers are off by default")
+	// …and NOTHING else (data.go: DEF = ["moons"]). The Ledger and Shelf zones
+	// are layer-owned and used to render past the registry.
+	mustNotContain(t, body, `data-zone="ledger"`, "the ledger layer is off by default")
+	mustNotContain(t, body, `data-zone="shelf"`, "the shelf layer is off by default")
 
 	// Switching them on is the producer's decision and the renderer honours it.
 	d.Layers = LayerState{Enabled: []string{"moons", "eras", "weeknums"}, HasSwitchboard: true}
@@ -417,15 +421,21 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 	}
 
 	// The three zones wave 1 cannot fill render their zone with the chip rather
-	// than fabricating content.
+	// than fabricating content — and ONLY what the registry names renders: with
+	// neither zone key nor "moons" enabled, the stubs and the discs leave too.
+	// (This count was 5 when the Ledger and Shelf rendered past the registry;
+	// inverted, not deleted, when the layer gate landed.)
 	d.Layers = LayerState{Enabled: []string{"legend", "horizon", "moongraph"}}
 	zones := render(t, d)
 	for _, k := range []string{"legend", "horizon", "moongraph"} {
 		mustContain(t, zones, `data-layer="`+k+`"`, k+"'s zone is reserved at the right place")
 	}
-	if n := strings.Count(zones, `class="badge need">needs backend`); n != 5 {
-		t.Errorf("%d `needs backend` chips; want 3 layer zones + Ledger + Shelf", n)
+	if n := strings.Count(zones, `class="badge need">needs backend`); n != 3 {
+		t.Errorf("%d `needs backend` chips; want exactly the 3 enabled layer zones", n)
 	}
+	mustNotContain(t, zones, `data-zone="ledger"`, "the ledger layer is not enabled here")
+	mustNotContain(t, zones, `data-zone="shelf"`, "the shelf layer is not enabled here")
+	mustNotContain(t, zones, `class="phrow"`, "the moons layer is not enabled here; the discs must leave")
 }
 
 // ── no motion ───────────────────────────────────────────────────────────────

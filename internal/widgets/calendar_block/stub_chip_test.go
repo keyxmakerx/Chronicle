@@ -26,9 +26,10 @@ func TestStubChips_GatedOnNeedsBackend(t *testing.T) {
 	const chip = `class="badge need">needs backend`
 
 	// Wave 1's signed honesty state: both flags true, one chip per zone.
-	// Layers hold no needzone keys so the count isolates the two stubs.
+	// The two zone keys are ON (the zones are layer-owned and absent without
+	// them) and no needzone key is, so the count isolates the two stubs.
 	d := fxHarptos(true)
-	d.Layers = LayerState{Enabled: []string{"moons"}}
+	d.Layers = LayerState{Enabled: []string{"moons", "ledger", "shelf"}}
 	if n := strings.Count(render(t, d), chip); n != 2 {
 		t.Errorf("NeedsBackend=true on both stubs: %d chips; want one on the Ledger and one on the Shelf", n)
 	}
