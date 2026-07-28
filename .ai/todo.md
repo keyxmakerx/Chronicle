@@ -248,6 +248,42 @@ divergences".
   inheriting or "correcting" it; `TestIsNamed_RetiredRowHeightClause` pins the
   divergence in both directions so the re-sign has something concrete to move.
 
+### calendar-v4 remodel — booked follow-ups from C-CALV4-BENCH-P4 (2026-07-28)
+
+Phase B, W-D: the nav Calendar tab's landing surface.
+
+- [ ] **The anonymous-public gap.** `/apps/calendar` rides the authenticated
+  group (`calendar/routes.go:179`) while `/calendar/v2` is public-capable
+  (`routes.go:147-149`), so an anonymous visitor to a **public** campaign who
+  clicks the nav Calendar tab lands on `/login`. Fixing it needs a route-group
+  change plus a `routes_snapshot.txt` regeneration, which no wave-1 slice may
+  do → its own wave-2 slice. Booked by the dispatch, not a finding.
+- [ ] **The retired card grid is dead code awaiting the post-wave sweep.**
+  `CalendarAppDashboardData`, `CalendarAppDashboardPage`,
+  `calendarAppDashboardDetail` + its "see in action" children and
+  `adaptiveCalendarWidget` are retained (Bounds) and only their tests exercise
+  them. Two of them are still LIVE on the Bench (`calendarAppDashboardEmpty`,
+  `calendarPermissionsModal`) and must survive the sweep; the associations
+  panel's `EntitiesForCalendar` / `TimelineLister` reads have no caller at all
+  now and the sweep should decide whether they earn a home on the Bench or go.
+- [ ] **The Bench does not draw the signed RSVP panel.** Per-member
+  availability lanes, the density row, the recommended window and the member
+  table with per-member time zones all need stores that do not exist (no
+  session entity, no RSVP table, no member time zone). The panel ships its
+  header and the `needs backend` chip. Whoever builds session scheduling owns
+  the panel body.
+- [ ] **`moongraph` + `horizon` are not in the Bench's layer set.** The signed
+  bench render shows both on the primary Block; wave 1 renders each as a
+  `needs backend` chip and nothing else, and at std tier the extra need-zones
+  stack against the docked Ledger and the Shelf for no information at all.
+  W-F fills them and adds the keys — one line in `benchBlockLayers`.
+- [ ] **The `.phead` control cluster is two doors, not the signed three.**
+  "colour by: type ⌄" is a per-viewer preference with no store (the Block books
+  the identical control for the identical reason, `nameplate.templ`) and
+  "+ New event" has no create route outside the V2 shell, which wave 1 may not
+  add. The cluster ships Open calendar / Builder / + New calendar. W-F and the
+  event-editor slice own the other two.
+
 ### calendar-v4 remodel — booked follow-ups from C-CALV4-HOST-P3 (2026-07-28)
 
 Phase B, W-C: the Block's first production caller (the entity-page embed).
