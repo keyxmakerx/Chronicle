@@ -986,11 +986,23 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
 }
+/* The panel's captions are SENTENCES, not eyebrows. The Bench's shared .cap is
+   a 10px uppercase label, which is right for "DENSITY" and unreadable for the
+   two-line explanation of why a count was recomputed — and an unread honesty
+   statement is an absent one. The lane's own `density` label keeps the eyebrow
+   treatment; everything else in the panel reverts. */
 .cal-bench .rsvp .cap {
   font-weight: 500;
   font-size: 11px;
   line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
   color: var(--text-muted);
+}
+.cal-bench .rsvp .lane .who.cap {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 /* ── the phone reading ───────────────────────────────────────────────────── */
@@ -1006,6 +1018,13 @@
     padding: 7px 4px;
     flex-wrap: wrap;
   }
-  .cal-bench .rsvp .mrow .nm { width: auto; flex: 1; }
+  /* cv4:1094 is `width:auto;flex:1`. The min-width RESTORES the mockup's own
+     behaviour rather than adding to it: this sheet's `.cal-bench *` reset sets
+     min-width:0 globally, which the mockup has no equivalent of, and without it
+     a flex:1 name shrinks below its content and ellipses "Kael" to "K…". The
+     row already wraps at this width, so the right answer is to let it wrap —
+     and a truncated NAME on the panel whose whole subject is which person said
+     what is the one thing here that must never be abbreviated. */
+  .cal-bench .rsvp .mrow .nm { width: auto; flex: 1; min-width: 9ch; }
   .cal-bench .rsvp .mrow .lt { width: auto; }
 }

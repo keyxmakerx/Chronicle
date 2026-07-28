@@ -203,12 +203,56 @@ func benchFxRsvpInput(isGM bool) benchRsvpInput {
 	}
 }
 
+// benchFxHonesty* are the panel's three honesty states, shot as evidence
+// because each is a case where the panel could plausibly have invented
+// something instead: no answers, not enough availability to rank, and no
+// session to answer.
+type benchFxHonestyState int
+
+const (
+	benchFxHonestyNoAnswers benchFxHonestyState = iota
+	benchFxHonestyThin
+	benchFxHonestyNoSession
+)
+
+func benchFxDataRsvpHonesty(state benchFxHonestyState) BenchData {
+	in := benchFxRsvpInput(true)
+	switch state {
+	case benchFxHonestyNoAnswers:
+		in.Answers = map[string]string{}
+	case benchFxHonestyThin:
+		in.Avail.WithPattern = benchRsvpQuorum - 1
+	case benchFxHonestyNoSession:
+		in.Session = nil
+	}
+	d := benchFxData(true, true)
+	d.Rsvp = benchRsvpBuild(in)
+	return d
+}
+
 // benchFxDataRsvp is benchFxData with the RSVP panel FILLED. It is a separate
 // entry point rather than a flag on benchFxData so the wave-1 assertions that
 // deliberately exercise the panel's UNFILLED state keep doing so.
 func benchFxDataRsvp(isGM, isOwner bool) BenchData {
+	in := benchFxRsvpInput(isGM)
 	d := benchFxData(isGM, isOwner)
-	d.Rsvp = benchRsvpBuild(benchFxRsvpInput(isGM))
+	d.Rsvp = benchRsvpBuild(in)
+	// The ribbon's session tile is fed from the SAME resolution the panel is,
+	// exactly as buildBench does it — so a fixture render exercises the live
+	// tile rather than the not-yet-reading one, and the tile's tally and the
+	// panel's tally are visibly the same number.
+	answered, _ := benchRsvpTally(in.Roster, in.Answers)
+	d.Ribbon = benchRibbon(benchRibbonInput{
+		IsGM: isGM, CampaignID: "camp-1", NextUp: d.NextUp,
+		Sync:      calblock.SyncPill{State: blockSyncStateOK, Linked: 1, Total: 4, Full: "In sync · 1 of 4 linked"},
+		Attention: benchAttentionRows(benchFxAll(), "camp-1"),
+		Session: &benchSessionTileInput{
+			IsGM: isGM, CampaignID: "camp-1", CalendarID: "cal-real", EventID: "evt-41",
+			Name: in.Session.Name, When: benchRsvpWhen(in.Session.DaysUntil),
+			Answered: answered, Total: len(in.Roster),
+			MyStatus: in.Answers[in.ViewerID], CSRFToken: "fx-csrf",
+		},
+	})
 	return d
 }
 
@@ -1075,6 +1119,40 @@ func TestGenerateBenchScreenshots(t *testing.T) {
 		{file: "06-bench-empty-player-light.png", title: "The Bench · a player with nothing shared",
 			caption: "the calm empty state, with no create affordance a player would meet a 403 on",
 			w:       1280, h: 700, host: 1232, data: BenchData{CampaignID: "camp-1", CampaignName: "Imix"}},
+
+		// C-CALV4-RSVP-P8 Part A. The pair at 07/08 is THE PERMISSION PROOF and
+		// must be read side by side at the same width: the Director's panel
+		// carries five availability lanes and two chipped Director controls, and
+		// the player's carries neither — while both carry the identical member
+		// table, density row and 3 / 5, because answers, roles, zones and local
+		// clocks are party-visible and only the LANES are owner / co-DM only.
+		{file: "07-rsvp-panel-gm-light.png", title: "RSVP panel · desktop · DIRECTOR · light",
+			caption: "GM · lanes, the derived window with its permanent `derived · not stored` chip, and two chipped inert controls",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvp(true, true)},
+		{file: "08-rsvp-panel-player-light.png", title: "RSVP panel · desktop · PLAYER · light — THE PERMISSION PROOF",
+			caption: "same width, same panel: NO lanes and NO Director controls, but the same density denominator, the same 3 / 5 and the same full member table",
+			w:       1280, h: 2600, host: 1232, data: benchFxDataRsvp(false, false)},
+		{file: "09-rsvp-panel-gm-dark.png", title: "RSVP panel · desktop · DIRECTOR · dark",
+			caption: "the identity hues carry their own dark ramp; the pattern channel is unchanged, because a pattern does not have a theme",
+			dark:    true, w: 1280, h: 3000, host: 1232, data: benchFxDataRsvp(true, true)},
+		{file: "10-rsvp-panel-mobile-light.png", title: "RSVP panel · phone · PLAYER · light",
+			caption: "BENCH_HOST 358px — the `zone not set` + `Ask →` repair SURVIVES at this width; the repair may never be the thing that disappears",
+			w:       500, h: 3600, host: 358, data: benchFxDataRsvp(false, false)},
+		{file: "11-rsvp-panel-mobile-dark.png", title: "RSVP panel · phone · PLAYER · dark",
+			caption: "BENCH_HOST 358px, dark — same reflow, same surviving repair",
+			dark:    true, w: 500, h: 3600, host: 358, data: benchFxDataRsvp(false, false)},
+		{file: "12-rsvp-honesty-nobody-answered.png", title: "RSVP panel · nobody has answered",
+			caption: "every member silent, the tally 0 / 5 — the panel states it rather than dropping the line",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpHonesty(benchFxHonestyNoAnswers)},
+		{file: "13-rsvp-honesty-below-quorum.png", title: "RSVP panel · not enough saved availability",
+			caption: "the derived window REFUSES to rank below three members, and says so — a ranking from two people's data is a guess wearing a number",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpHonesty(benchFxHonestyThin)},
+		{file: "14-rsvp-honesty-no-session.png", title: "RSVP panel · no session is collecting RSVPs",
+			caption: "the roster, the zones and the density are all real; there is simply nothing to answer, and no clock is invented for it",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpHonesty(benchFxHonestyNoSession)},
+		{file: "15-rsvp-panel-unfilled.png", title: "RSVP panel · a campaign that has entered nothing",
+			caption: "the corrected copy: the STORAGE exists — what is empty is this campaign's data, and the panel no longer claims otherwise",
+			w:       1280, h: 900, host: 1232, data: benchFxData(true, true)},
 	}
 
 	css := benchCSS(t) + benchBlockSheet(t)
