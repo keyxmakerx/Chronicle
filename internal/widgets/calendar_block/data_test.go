@@ -161,6 +161,33 @@ func TestDayCell_ShapePinned(t *testing.T) {
 	})
 }
 
+// TestMark_ShapePinned. Mark had NO reflect-shape pin before r52, which is
+// exactly how a field gets silently dropped by the next amendment: the two
+// fields r52 adds are read by a renderer in this package and written by a
+// producer in another, and nothing else would notice a rename.
+func TestMark_ShapePinned(t *testing.T) {
+	assertShape(t, reflect.TypeOf(Mark{}), []pinnedField{
+		{name: "EventID", kind: reflect.String},
+		{name: "Title", kind: reflect.String},
+		{name: "Axis", kind: reflect.String},
+		{name: "Pattern", kind: reflect.String},
+		{name: "Glyph", kind: reflect.String},
+		{name: "Named", kind: reflect.Bool},
+		// r51: ink, never membership. The producer emits the whole
+		// viewer-visible set in BOTH tie modes and flags each mark.
+		{name: "Tied", kind: reflect.Bool},
+		// r52: PRE-FORMATTED in the producer, because the calendar's own
+		// hour/minute geometry and the viewer's zone live there and this
+		// package is plugin-agnostic. Empty DROPS the .tm segment.
+		{name: "Time", kind: reflect.String},
+		// r52: the event TYPE's display name — the Ledger meta line's only
+		// segment in wave 2. Empty DROPS the segment; it is never printed as a
+		// dangling separator.
+		{name: "AxisLabel", kind: reflect.String},
+		{name: "Audience", kind: reflect.Ptr, typeName: "AudienceMark"},
+	})
+}
+
 func TestSyncPill_ShapePinned(t *testing.T) {
 	assertShape(t, reflect.TypeOf(SyncPill{}), []pinnedField{
 		{name: "State", kind: reflect.String},
@@ -186,6 +213,12 @@ func TestViewerContext_ShapePinned(t *testing.T) {
 		{name: "WholeCount", kind: reflect.Int},
 		{name: "TieMode", kind: reflect.String},
 		{name: "Zone", kind: reflect.String},
+		// r52: GM-ONLY BY CONSTRUCTION. The producer sets it only when IsGM, it
+		// comes from the same single viewer-filtered pass as the tie pair, and
+		// it is never rendered to a player in any form — not even a zero.
+		// Pinned here so a later hand cannot quietly move it onto BlockData,
+		// where "populate only for a GM" stops being a per-viewer statement.
+		{name: "HiddenCount", kind: reflect.Int},
 	})
 }
 
@@ -200,6 +233,13 @@ func fullyPopulated() BlockData {
 		Pattern: "p4",
 		Glyph:   "◆",
 		Named:   true,
+		Tied:    true,
+		// r52. Time carries the zone label already folded in by the producer —
+		// there is deliberately no per-mark real-world flag, because whether a
+		// time is real-world is a property of the CALENDAR (BlockData
+		// .IsRealWorld) and a second copy of one fact can disagree with itself.
+		Time:      "18:30 CST",
+		AxisLabel: "Festival",
 		Audience: &AudienceMark{
 			Label:      "GM only",
 			Restricted: true,
@@ -304,6 +344,8 @@ func fullyPopulated() BlockData {
 			WholeCount: 11,
 			TieMode:    "tied",
 			Zone:       "America/New_York",
+			// Fixture only — a real producer sets this ONLY for a GM (r52).
+			HiddenCount: 3,
 		},
 	}
 }
@@ -324,6 +366,7 @@ func TestFixture_LeavesNoPinnedFieldZero(t *testing.T) {
 		{"MonthGeometry", reflect.ValueOf(d.Month)},
 		{"WeekRow", reflect.ValueOf(d.Month.Rows[0])},
 		{"DayCell", reflect.ValueOf(d.Month.Rows[0].Cells[0])},
+		{"Mark", reflect.ValueOf(d.Month.Rows[0].Cells[0].Marks[0])},
 		{"SyncPill", reflect.ValueOf(d.Sync)},
 		{"ViewerContext", reflect.ValueOf(d.Viewer)},
 	}
