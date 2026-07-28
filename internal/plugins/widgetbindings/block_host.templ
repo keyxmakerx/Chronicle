@@ -15,8 +15,18 @@ import "fmt"
 // (NOT display:contents) so the entity-page column's `space-y-*` between-block
 // spacing applies to it — display:contents made margins no-ops, butting the
 // widget block against its neighbour (C-WIDGET-BINDING-QA1 Bug 3).
+// It is also the box a container-query-sized block measures itself against —
+// but ONLY for widget types that asked for it (DeclareInlineSizeHost). See
+// blockHostStyle in block_host.go for why that opt-in exists rather than an
+// unconditional `container-type`.
 templ BlockHost(widgetType, hostID string, inner templ.Component) {
-	<div id={ BlockHostID(widgetType, hostID) } data-widget-host={ widgetType }>
+	<div
+		id={ BlockHostID(widgetType, hostID) }
+		data-widget-host={ widgetType }
+		if s := blockHostStyle(widgetType); s != "" {
+			style={ s }
+		}
+	>
 		@inner
 	</div>
 }
@@ -26,7 +36,30 @@ templ BlockHost(widgetType, hostID string, inner templ.Component) {
 // the generic create-or-pick picker into an inline slot. Callers gate it on
 // Scribe+ (players never render it). Replaces P4a's per-block bespoke affordance
 // so all four widgets surface identical UX.
+//
+// SIGNATURE FROZEN ON PURPOSE (C-CALV4-HOST-P3 §5). Four widget blocks embed
+// this exact call — calendar, worldstate, timeline, maps — so widening it
+// ripples into four templs at once. It now delegates to BindingAffordanceFor
+// with the entity host type it always hardcoded; behaviour is byte-identical.
 templ BindingAffordance(campaignID, widgetType, hostID, widgetLabel, source string) {
+	@BindingAffordanceFor(campaignID, HostTypeEntity, widgetType, hostID, widgetLabel, source)
+}
+
+// BindingAffordanceFor is the host-type-agnostic form: the same control, with
+// the picker's host_type supplied by the caller instead of hardcoded.
+//
+// WHY IT EXISTS (C-CALV4-HOST-P3 §5). The picker query hardcoded
+// `host_type=entity`, which is exactly the "P3b dashboard-level binding" gap —
+// a dashboard-hosted block could render the affordance but the picker it opened
+// would then read and write the WRONG host's binding. Round-1 delta L3 makes
+// entity pages the primary consumption surface and the dashboard a peer, so the
+// affordance has to be able to name its own host.
+//
+// SCOPE NOTE — the affordance is added, NOT the capability. The binding key is
+// UNIQUE(campaign_id, host_type, host_id, widget_type) and BlockHostID is per
+// (widget_type, host), so TWO DIFFERENTLY-BOUND CALENDARS ON ONE PAGE ARE NOT
+// REPRESENTABLE without a schema change. Wave 1 does not promise it.
+templ BindingAffordanceFor(campaignID, hostType, widgetType, hostID, widgetLabel, source string) {
 	<div class="flex items-center justify-end gap-2 px-3 pt-2" data-binding-affordance={ widgetType }>
 		if source == SourceOwn {
 			<span class="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-medium" data-binding-badge="own">Bound</span>
@@ -39,7 +72,7 @@ templ BindingAffordance(campaignID, widgetType, hostID, widgetLabel, source stri
 			type="button"
 			class="text-xs text-accent hover:underline"
 			data-change-binding={ widgetType }
-			hx-get={ fmt.Sprintf("/campaigns/%s/bindings/picker?host_type=entity&host_id=%s&widget_type=%s", campaignID, hostID, widgetType) }
+			hx-get={ fmt.Sprintf("/campaigns/%s/bindings/picker?host_type=%s&host_id=%s&widget_type=%s", campaignID, pickerHostType(hostType), hostID, widgetType) }
 			hx-target={ "#" + pickerSlotID(widgetType, hostID) }
 			hx-swap="innerHTML"
 		>
