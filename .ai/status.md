@@ -20,6 +20,16 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — wave 2 in progress (2026-07-28)
+
+The Block is architecturally COMPLETE as of C-CALV4-LEDGER-P6: four zones, all
+four filled or honestly reserved, and `.ai/decisions.md` **ADR-048** now records
+the whole architecture decision — the widget/producer split, the CSS-only
+controls, the four honesty idioms, the one-pass count rule and the motion
+budget. Wave 1 (P0, PB, P1, P2, P5, P3, P4) is merged; wave 2's W-B (the docked
+Ledger) is done and **W-E (the Shelf) is unblocked**. W-F (the layer system) is
+wave 3.
+
 ### Current release + branch state
 
 - **Release line:** 0.0.1 (Release Readiness completed 2026-04-25 — backup scripts + mariadb-client in image + deployment runbook)

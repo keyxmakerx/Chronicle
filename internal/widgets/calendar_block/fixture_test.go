@@ -13,20 +13,25 @@ import (
 )
 
 // ── the axis table: the locked (hue, pattern, glyph) triples ────────────────
+// label is the type's DISPLAY NAME — Mark.AxisLabel, r52. It is the first (and
+// in wave 2 the only) segment of a Ledger row's meta line, and it is here
+// rather than derived because Axis is a hue token and the hue→name mapping
+// lives in the campaign's data, never in the widget.
 type evType struct {
 	axis    string
 	pattern string
 	glyph   string
+	label   string
 	rank    int
 }
 
 var fxTypes = map[string]evType{
-	"session":   {"var(--ev-session)", "p5", "■", 0},
-	"quest":     {"var(--ev-quest)", "p2", "▲", 1},
-	"festival":  {"var(--ev-festival)", "p4", "✦", 2},
-	"social":    {"var(--ev-social)", "p1", "◆", 3},
-	"downtime":  {"var(--ev-downtime)", "p3", "●", 4},
-	"celestial": {"var(--ev-celestial)", "p6", "☾", 5},
+	"session":   {"var(--ev-session)", "p5", "■", "Session", 0},
+	"quest":     {"var(--ev-quest)", "p2", "▲", "Quest", 1},
+	"festival":  {"var(--ev-festival)", "p4", "✦", "Festival", 2},
+	"social":    {"var(--ev-social)", "p1", "◆", "Social", 3},
+	"downtime":  {"var(--ev-downtime)", "p3", "●", "Downtime", 4},
+	"celestial": {"var(--ev-celestial)", "p6", "☾", "Celestial", 5},
 }
 
 type fxEvent struct {
@@ -37,26 +42,36 @@ type fxEvent struct {
 	gmOnly     bool // visibility == dm_only        → the gold NOTCH
 	restricted bool // a visibility_rules restriction → the gold DIAMOND
 	tied       bool
+	// at is Mark.Time as the PRODUCER would already have formatted it (r52).
+	// Empty means the event has no time, and the Ledger row then DROPS the
+	// segment rather than printing an empty one — half the fixture is untimed
+	// on purpose, so the drop is visible in the fidelity evidence.
+	//
+	// No zone label: Harptos is an IN-WORLD calendar, and a zone-labelled time
+	// on one is L15's forbidden case. The real/in-world split is a property of
+	// the CALENDAR (BlockData.IsRealWorld), which is why r52 added no per-mark
+	// real-world flag.
+	at string
 }
 
 // fxHarptosEvents mirrors the mockup's EV list for the harptos calendar, in its
 // declared order. The stacking order is FIXED by type rank, so two cells with
 // the same load always look the same.
 var fxHarptosEvents = []fxEvent{
-	{"ev-1", 3, "Council of Wards", "social", false, false, true},
-	{"ev-2", 5, "Barrow scouting", "quest", true, false, true},
-	{"ev-3", 5, "Caravan due", "downtime", false, false, false},
-	{"ev-4", 5, "Ward levy", "social", false, false, false},
-	{"ev-5", 5, "Smith’s deadline", "downtime", false, false, false},
-	{"ev-6", 5, "Rumour: the pale", "social", false, false, false},
-	{"ev-7", 5, "Tithe collected", "downtime", false, false, false},
-	{"ev-8", 8, "Supply run", "downtime", false, false, true},
-	{"ev-9", 8, "Into the Barrow", "quest", true, false, false},
-	{"ev-10", 12, "Nissa’s recital", "social", false, true, true},
-	{"ev-11", 14, "Emberfall Vigil", "festival", false, false, false},
-	{"ev-12", 17, "Ward-court summons", "social", false, true, false},
-	{"ev-13", 21, "Frost fair", "festival", false, false, false},
-	{"ev-14", 26, "Warden’s writ due", "quest", true, false, false},
+	{"ev-1", 3, "Council of Wards", "social", false, false, true, "09:00"},
+	{"ev-2", 5, "Barrow scouting", "quest", true, false, true, "05:30"},
+	{"ev-3", 5, "Caravan due", "downtime", false, false, false, ""},
+	{"ev-4", 5, "Ward levy", "social", false, false, false, "11:00"},
+	{"ev-5", 5, "Smith’s deadline", "downtime", false, false, false, ""},
+	{"ev-6", 5, "Rumour: the pale", "social", false, false, false, ""},
+	{"ev-7", 5, "Tithe collected", "downtime", false, false, false, ""},
+	{"ev-8", 8, "Supply run", "downtime", false, false, true, "07:15"},
+	{"ev-9", 8, "Into the Barrow", "quest", true, false, false, "06:00"},
+	{"ev-10", 12, "Nissa’s recital", "social", false, true, true, "19:30"},
+	{"ev-11", 14, "Emberfall Vigil", "festival", false, false, false, "20:00"},
+	{"ev-12", 17, "Ward-court summons", "social", false, true, false, "10:00"},
+	{"ev-13", 21, "Frost fair", "festival", false, false, false, ""},
+	{"ev-14", 26, "Warden’s writ due", "quest", true, false, false, ""},
 }
 
 // fxMoons are the three bodies the grid draws. A fourth (Sable, 88.2 days) is
@@ -102,12 +117,14 @@ func fxMarks(day int, gm bool) []Mark {
 				continue // PERMISSION IS ABSENCE: the row is not in a player's DOM
 			}
 			m := Mark{
-				EventID: e.id,
-				Title:   e.title,
-				Axis:    t.axis,
-				Pattern: t.pattern,
-				Glyph:   t.glyph,
-				Named:   true,
+				EventID:   e.id,
+				Title:     e.title,
+				Axis:      t.axis,
+				Pattern:   t.pattern,
+				Glyph:     t.glyph,
+				Named:     true,
+				Time:      e.at,
+				AxisLabel: t.label,
 			}
 			if gm {
 				switch {

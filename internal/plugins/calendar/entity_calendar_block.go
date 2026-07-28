@@ -62,10 +62,13 @@ import (
 // host adds the key then. Screenshots of both readings are in the slice's
 // evidence set.
 //
-// Wave 1 fills neither ledger nor shelf — each renders its zone at the right
-// size carrying the signed `needs backend` chip, which is the honesty state the
-// operator signed rather than a shortcut. W-B and W-E retire the chips by
-// flipping a flag, without editing a template.
+// THE LEDGER IS FILLED SINCE W-B (2026-07-28). The chip retired exactly the way
+// the flag promised it would: the producer set LedgerStub.NeedsBackend false and
+// no template on this path was edited. The Shelf still carries its chip and is
+// W-E's to retire the same way.
+//
+// The moongraph measurement above was re-taken with the Ledger FULL, at both
+// production host widths, and still holds — see the plugin .ai.md's CTS-8 note.
 //
 // HasSwitchboard stays false: layer preferences are per-viewer and PERSISTED
 // (L20/L26/L29) and that store is W-F's.
