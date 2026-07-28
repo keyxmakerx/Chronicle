@@ -485,12 +485,48 @@ func calLetter(s string) string {
 
 func intText(n int) string { return strconv.Itoa(n) }
 
+// ── the CSS-only tie toggle's identifiers ───────────────────────────────────
+//
+// The toggle is a hidden radio pair (nameplate.templ) whose :checked state a
+// `:has()` rule reads to change the untied ink level. That needs two things Go
+// has to supply: a radio GROUP NAME unique to this Block, and a stable ID per
+// option so each <label> can address its own input.
+//
+// Unique per (calendar, host entity) — NOT a package counter and NOT a random
+// value. A page may compose more than one Block, and two Blocks sharing a radio
+// name would fight over one piece of state; but the same Block re-rendered by an
+// HTMX binding swap must keep the SAME name, or the swapped-in fragment loses
+// the mode the viewer had just chosen. A pure function of the data satisfies
+// both, and it stays identical across servers, which a counter would not.
 
-func boolAttr(b bool) string {
-	if b {
-		return "true"
+// tieGroupName is the radio group shared by this Block's two tie options.
+func tieGroupName(d BlockData) string {
+	return "tie-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+// tieInputID is one tie option's DOM id ("…-tied" / "…-whole").
+func tieInputID(d BlockData, mode string) string {
+	return tieGroupName(d) + "-" + domToken(mode)
+}
+
+// domToken reduces an arbitrary identifier to characters that are safe in an
+// id/name and in the attribute selectors the stylesheet writes. Chronicle's ids
+// are UUIDs and already safe; this exists so a slug that is not cannot break the
+// markup, and so an empty identity still yields a usable token.
+func domToken(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
 	}
-	return "false"
+	if b.Len() == 0 {
+		return "x"
+	}
+	return b.String()
 }
 
 // eventCountLabel keeps the foot line grammatical without a template branch.

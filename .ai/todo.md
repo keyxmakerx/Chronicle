@@ -248,6 +248,73 @@ divergences".
   inheriting or "correcting" it; `TestIsNamed_RetiredRowHeightClause` pins the
   divergence in both directions so the re-sign has something concrete to move.
 
+### calendar-v4 remodel — booked follow-ups from C-CALV4-BENCH-P4 (2026-07-28)
+
+Phase B, W-D: the nav Calendar tab's landing surface.
+
+- [ ] **The anonymous-public gap.** `/apps/calendar` rides the authenticated
+  group (`calendar/routes.go:179`) while `/calendar/v2` is public-capable
+  (`routes.go:147-149`), so an anonymous visitor to a **public** campaign who
+  clicks the nav Calendar tab lands on `/login`. Fixing it needs a route-group
+  change plus a `routes_snapshot.txt` regeneration, which no wave-1 slice may
+  do → its own wave-2 slice. Booked by the dispatch, not a finding.
+- [ ] **The retired card grid is dead code awaiting the post-wave sweep.**
+  `CalendarAppDashboardData`, `CalendarAppDashboardPage`,
+  `calendarAppDashboardDetail` + its "see in action" children and
+  `adaptiveCalendarWidget` are retained (Bounds) and only their tests exercise
+  them. Two of them are still LIVE on the Bench (`calendarAppDashboardEmpty`,
+  `calendarPermissionsModal`) and must survive the sweep; the associations
+  panel's `EntitiesForCalendar` / `TimelineLister` reads have no caller at all
+  now and the sweep should decide whether they earn a home on the Bench or go.
+- [ ] **The Bench does not draw the signed RSVP panel.** Per-member
+  availability lanes, the density row, the recommended window and the member
+  table with per-member time zones all need stores that do not exist (no
+  session entity, no RSVP table, no member time zone). The panel ships its
+  header and the `needs backend` chip. Whoever builds session scheduling owns
+  the panel body.
+- [ ] **`moongraph` + `horizon` are not in the Bench's layer set.** The signed
+  bench render shows both on the primary Block; wave 1 renders each as a
+  `needs backend` chip and nothing else, and at std tier the extra need-zones
+  stack against the docked Ledger and the Shelf for no information at all.
+  W-F fills them and adds the keys — one line in `benchBlockLayers`.
+- [ ] **The `.phead` control cluster is two doors, not the signed three.**
+  "colour by: type ⌄" is a per-viewer preference with no store (the Block books
+  the identical control for the identical reason, `nameplate.templ`) and
+  "+ New event" has no create route outside the V2 shell, which wave 1 may not
+  add. The cluster ships Open calendar / Builder / + New calendar. W-F and the
+  event-editor slice own the other two.
+
+### calendar-v4 remodel — booked follow-ups from C-CALV4-HOST-P3 (2026-07-28)
+
+Phase B, W-C: the Block's first production caller (the entity-page embed).
+
+- [ ] **All four bound widget types need a LIVE-CLIENT render check.** The
+  entity-page BlockHost now carries `container-type: inline-size`, declared per
+  widget type (`widgetbindings.DeclareInlineSizeHost`) so calendar / worldstate
+  / timeline / maps cannot be changed together by accident. The dispatch's
+  warning that this would trap the maps block's `fixed inset-0` modals was
+  MEASURED AND DOES NOT REPRODUCE (`contain: layout` traps them;
+  `container-type` does not — Chromium 141, numbers in the slice report). What
+  is still unverified is the three OTHER render paths in a real browser with a
+  database, which this sandbox has none of. Once someone runs them, the
+  declaration can become unconditional — one line in `block_host.go`.
+- [ ] **P3b — dashboard-level widget bindings.** `BindingAffordanceFor` exists
+  and carries its own `host_type`, so the affordance is no longer entity-only.
+  The CAPABILITY is not added: the binding key is
+  `UNIQUE(campaign_id, host_type, host_id, widget_type)` and `BlockHostID` is
+  per `(widget_type, host)`, so **two differently-bound calendars on one page
+  are not representable** without a schema change. Wave 1 must not promise it.
+- [ ] **The entity embed still stacks the almanac sky band above the Block.**
+  Kept deliberately: it is live, working, and pinned (the per-band seed-blob id
+  scheme, `entity_calendar_block_test.go`), and the Block has no pictorial sky
+  (the Skybox is PARKED, L12/D4). The signed entity render shows no band there,
+  so whether the band stays on this surface is a design call for whoever owns
+  the entity page's composition — not a rendering defect.
+- [ ] **The entity page's "no calendar" rung shows a Create-calendar CTA to
+  players.** Pre-existing, and now reached by one more path: a calendar the
+  viewer may not see renders the same rung (deliberately indistinguishable from
+  missing). Softening the CTA per role is a separate, small UX slice.
+
 ### calendar-v4 widgetization remodel — follow-ups booked by C-CALV4-SPINE-P2 (2026-07-26)
 
 Wave plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`. These are the

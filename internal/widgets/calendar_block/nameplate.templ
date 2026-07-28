@@ -47,7 +47,7 @@ templ nameplate(d BlockData) {
 			<span class="badge tz" title="your zone">{ d.Viewer.Zone }</span>
 		}
 		<span class="sp"></span>
-		@tieCounts(d.Viewer)
+		@tieCounts(d)
 		@layersInvoker(d.Layers)
 	</div>
 }
@@ -76,18 +76,45 @@ templ dateLine(d BlockData) {
 // guarantee; this renders whatever it is handed, and renders BOTH numbers so the
 // pair is visible in review.
 //
-// The control is INERT in wave 1: W-C owns the CSS-only toggle, and it needs
-// only to change the Block's data-tie-mode. The markup is here so W-C does not
-// have to re-cut the Nameplate.
-templ tieCounts(v ViewerContext) {
-	if v.HostEntity != "" {
+// THE CONTROL IS LIVE AND IT IS PURE CSS (C-CALV4-HOST-P3 §3). A hidden radio
+// pair plus `:has()` drives the ink; nothing else in the DOM moves.
+//
+// It cannot be JS: boot.js:163 sets `htmx.config.allowScriptTags = false`, so a
+// <script> inside an HTMX-swapped fragment never runs and the toggle would go
+// dead after any binding swap. It cannot be a route either — wave 1 freezes
+// routes_snapshot.txt, and it does not need one: BOTH counts and EVERY mark are
+// already server-rendered in both modes, so the flip has nothing to fetch.
+//
+// The radios are the state. `checked` moves between them, `:has()` re-inks, and
+// no cell grows, moves, appears or leaves — which is what keeps the toggle legal
+// under the no-motion rule AND keeps the two counts non-differenceable.
+// data-tie-mode stays on .block as the server's initial answer and as the
+// baseline for an engine without `:has()`.
+templ tieCounts(d BlockData) {
+	if d.Viewer.HostEntity != "" {
 		<span class="seg tie" role="group" aria-label="Event scope">
-			<span class="tiebtn" aria-pressed={ boolAttr(v.TieMode == "tied") }>
-				{ "Tied " }{ intText(v.TiedCount) }
-			</span>
-			<span class="tiebtn" aria-pressed={ boolAttr(v.TieMode != "tied") }>
-				{ "Whole calendar " }{ intText(v.WholeCount) }
-			</span>
+			<input
+				type="radio"
+				class="tiepick"
+				data-tie-pick="tied"
+				name={ tieGroupName(d) }
+				id={ tieInputID(d, "tied") }
+				checked?={ d.Viewer.TieMode == "tied" }
+			/>
+			<label class="tiebtn" for={ tieInputID(d, "tied") }>
+				{ "Tied " }{ intText(d.Viewer.TiedCount) }
+			</label>
+			<input
+				type="radio"
+				class="tiepick"
+				data-tie-pick="whole"
+				name={ tieGroupName(d) }
+				id={ tieInputID(d, "whole") }
+				checked?={ d.Viewer.TieMode != "tied" }
+			/>
+			<label class="tiebtn" for={ tieInputID(d, "whole") }>
+				{ "Whole calendar " }{ intText(d.Viewer.WholeCount) }
+			</label>
 		</span>
 	}
 }

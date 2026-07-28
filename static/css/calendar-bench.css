@@ -1,0 +1,677 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   calendar-bench.css — THE BENCH, the nav Calendar tab's landing surface
+   (calendar-v4, wave 1 / phase B, C-CALV4-BENCH-P4).
+
+   UNLAYERED AND SELF-CONTAINED, exactly as calendar-block.css is, per the
+   rendering-canvas CSS exemption (cordinator decisions/2026-06-05-rendering-
+   canvas-css-exemption.md). input.css's content is layered; an unlayered
+   standalone sheet beats every layer, which is why the two cascade regimes
+   never fight. Nothing here is @apply'd, nothing reads a Tailwind theme()
+   value, nothing is emitted by the Tailwind build, and it is linked ONLY
+   through layouts.AssetURL (a bare href="/static/…" in any .templ fails
+   TestTemplatesUseAssetURL repo-wide).
+
+   EVERY SELECTOR IS SCOPED under .cal-bench. An unlayered sheet outranks the
+   app's layered CSS, so a bare `.badge` rule in here would silently restyle the
+   whole product. The Block inside the Bench brings its OWN sheet scoped under
+   .cal-block-host and the two do not overlap.
+
+   ── THE THREE LAWS THIS FILE IS GRADED AGAINST ─────────────────────────────
+
+   1. THE PROPORTION RULE, which the signed contract writes twice, verbatim:
+      one primary Block, one real-world Block, two subordinate rows, one slot.
+      THERE IS NO WIDTH AT WHICH THIS BECOMES FOUR IDENTICAL PANELS. That is
+      why .stack is a column and .rowgrid is a row grid, and why no media query
+      below promotes a row into a panel or demotes a Block into a row.
+
+   2. NO MOTION, AT ALL, IN WAVE 1 (COMMON §6.5). Not one transition, not one
+      animation, not one @keyframes. The Block's own sheet is pinned against
+      this by TestCSS_NoMotionAtAll; this sheet is pinned by the sibling test in
+      bench_test.go, for the same reason and with the same wording.
+
+      Corollary (canon guard B1): --dash and --gap are NEVER animated or
+      transitioned. Morphing a dash pattern destroys the greyscale identity
+      channel the signed greyscale render promises.
+
+   3. COLOUR IS NEVER LOAD-BEARING ALONE. Every identity here carries a locked
+      stroke PATTERN as well as a hue (.p1..p8 below), so a row still resolves
+      with the colour removed.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TOKENS — light. The rule ramp is the load-bearing part: on light each step is
+   DARKER than the last, on dark each is LIGHTER. Mirrored from
+   calendar-block.css so the Bench chrome and the Blocks standing on it read as
+   one surface; the two sheets are separate because their SCOPES are separate.
+   ─────────────────────────────────────────────────────────────────────────── */
+.cal-bench {
+  color-scheme: light dark;
+
+  --surface-page: oklch(0.985 0.002 260);
+  --surface-card: oklch(1 0 0);
+  --surface-inset: oklch(0.965 0.003 260);
+  --text-primary: oklch(0.22 0.015 265);
+  --text-body: oklch(0.38 0.014 265);
+  --text-secondary: oklch(0.55 0.012 265);
+  --text-muted: oklch(0.68 0.010 265);
+
+  --rule-hairline: oklch(0.915 0.004 265);
+  --rule-structural: oklch(0.855 0.006 265);
+  --rule-structural-strong: oklch(0.775 0.008 265);
+
+  /* the ONE token inherited from the host page, because the campaign accent IS
+     chrome. It never touches event data (canon A7). */
+  --accent: var(--color-accent, oklch(0.58 0.20 270));
+
+  --ok: oklch(0.60 0.15 150);
+  --warn: oklch(0.65 0.15 65);
+  --bad: oklch(0.58 0.19 25);
+  --gold: oklch(0.70 0.13 85);
+
+  --cal-harptos: oklch(0.55 0.12 200);
+  --cal-real: oklch(0.55 0.18 270);
+  --cal-elven: oklch(0.58 0.15 300);
+  --cal-dwarven: oklch(0.62 0.10 70);
+
+  --r-badge: 2px;
+  --r-chip: 4px;
+  --r-ctl: 6px;
+  --r-card: 8px;
+  --r-panel: 12px;
+  --r-full: 9999px;
+
+  /* channel defaults, so a row whose producer omits one still renders */
+  --cal: var(--rule-structural-strong);
+  --axis: var(--rule-structural-strong);
+  --month-len: 30;
+
+  display: block;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+.cal-bench *,
+.cal-bench *::before,
+.cal-bench *::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TOKENS — dark. Chronicle switches themes with a `.dark` class on <html>
+   (tailwind.config.js darkMode:'class', static/js/theme.js).
+   ─────────────────────────────────────────────────────────────────────────── */
+.dark .cal-bench {
+  --surface-page: oklch(0.175 0.011 265);
+  --surface-card: oklch(0.215 0.012 265);
+  --surface-inset: oklch(0.255 0.013 265);
+  --text-primary: oklch(0.975 0.002 265);
+  --text-body: oklch(0.855 0.008 265);
+  --text-secondary: oklch(0.705 0.012 265);
+  --text-muted: oklch(0.565 0.012 265);
+
+  --rule-hairline: oklch(0.295 0.012 265);
+  --rule-structural: oklch(0.375 0.014 265);
+  --rule-structural-strong: oklch(0.475 0.014 265);
+
+  --accent: var(--color-accent, oklch(0.72 0.16 272));
+
+  --ok: oklch(0.72 0.16 150);
+  --warn: oklch(0.78 0.15 70);
+  --bad: oklch(0.68 0.18 25);
+  --gold: oklch(0.80 0.13 88);
+
+  --cal-harptos: oklch(0.70 0.11 200);
+  --cal-real: oklch(0.70 0.15 272);
+  --cal-elven: oklch(0.72 0.13 300);
+  --cal-dwarven: oklch(0.76 0.10 72);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §SURFACES — rest is a 1px rule and a card surface, box-shadow NONE
+   (canon D3). The Bench has no hover elevation of its own: the Block already
+   owns that vocabulary and a second, subtly different one on the page around
+   it is exactly how two surfaces stop reading as one product.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench .tile,
+.cal-bench .calrow,
+.cal-bench .rsvp,
+.cal-bench .bench-note {
+  background: var(--surface-card);
+  border: 1px solid var(--rule-structural);
+}
+
+/* ── page head ───────────────────────────────────────────────────────────── */
+.cal-bench .phead {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 2px 0 16px;
+}
+.cal-bench .phead h1 {
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.cal-bench .phead p {
+  margin: 4px 0 0;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.cal-bench .sp { flex: 1; }
+.cal-bench .phead .ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── buttons + pills + badges ────────────────────────────────────────────── */
+.cal-bench .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: var(--r-ctl);
+  border: 1px solid var(--rule-structural);
+  background: var(--surface-card);
+  color: var(--text-body);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+.cal-bench .btn.xs { height: 24px; padding: 0 8px; font-size: 11px; }
+.cal-bench .btn.ghost { background: transparent; }
+.cal-bench .btn.fill {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: oklch(0.99 0 0);
+}
+.cal-bench .btn:hover { border-color: var(--rule-structural-strong); }
+/* An INERT control (a design-ahead action with no store behind it) is present
+   so the tile's geometry is final and disabled so it is not a dead control
+   that swallows a click — the Block's own layersInvoker ships under the same
+   reading. */
+.cal-bench .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+.cal-bench .btn:disabled:hover { border-color: var(--rule-structural); }
+
+.cal-bench .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
+  border-radius: var(--r-badge);
+  border: 1px solid var(--rule-structural);
+  color: var(--text-secondary);
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* the signed design-ahead chip: dashed, because dashed means "not built yet"
+   and it is the ONE dashed idiom in the product. */
+.cal-bench .badge.need {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+.cal-bench .badge.warn { border-color: var(--warn); color: var(--warn); }
+.cal-bench .badge.gm { border-color: var(--gold); color: var(--gold); }
+.cal-bench .pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--rule-hairline);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 10.5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §RIBBON — six tiles for a GM, three for a player. The grid is auto-fit so
+   the player's three fill the row rather than leaving three ghost columns.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench .ribbon {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.cal-bench .tile {
+  border-radius: var(--r-card);
+  padding: 10px 11px;
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+.cal-bench .tile .eb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  flex: none;
+}
+.cal-bench .tile .eb .g { font-size: 13px; line-height: 1; }
+.cal-bench .cap {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cal-bench .tile .eb .ar {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.cal-bench .tile .eb .ar:hover { color: var(--accent); }
+.cal-bench .tile .hl {
+  font-weight: 650;
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-bench .tile .hl.ok { color: var(--ok); }
+.cal-bench .tile .hl.warn { color: var(--warn); }
+.cal-bench .tile .ql {
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-body);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.cal-bench .tile .dt {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  margin-top: auto;
+}
+.cal-bench .tile.accenttint {
+  background: color-mix(in oklch, var(--surface-card) 96%, var(--accent));
+}
+/* The attention tile carries a warn rail on its left edge. It is a BORDER
+   substitute, not decoration: the tile must read as "act on me" in greyscale,
+   so the rail is 3px of geometry rather than a hue change alone. */
+.cal-bench .tile.attn {
+  border-color: color-mix(in oklch, var(--warn) 40%, var(--rule-structural));
+  background: color-mix(in oklch, var(--surface-card) 94%, var(--warn));
+  padding-left: 14px;
+}
+.cal-bench .tile.attn::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--r-card) 0 0 var(--r-card);
+  background: var(--warn);
+}
+.cal-bench .tile .arow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 4px 8px;
+  position: relative;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.3;
+  border-radius: var(--r-chip);
+  color: var(--text-body);
+  text-decoration: none;
+}
+.cal-bench .tile .arow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: var(--r-full);
+  background: var(--warn);
+}
+.cal-bench .tile .arow.bad::before { background: var(--bad); }
+.cal-bench .tile .arow:hover { background: color-mix(in oklch, transparent 94%, var(--text-primary)); }
+.cal-bench .tile .rsvpb { display: flex; gap: 4px; margin-top: auto; }
+
+/* ── the Today tile's month rule ─────────────────────────────────────────── */
+/* One tick per day of the primary calendar's current month. --month-len drives
+   the column count; there is no literal 30 here for the same reason there is no
+   literal 7 in the Block's grid. */
+.cal-bench .tick {
+  display: grid;
+  grid-template-columns: repeat(var(--month-len), minmax(0, 1fr));
+  align-items: end;
+  gap: 1px;
+  height: 14px;
+  margin-top: auto;
+}
+.cal-bench .tick .t {
+  display: block;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--rule-hairline);
+}
+.cal-bench .tick .t.ev { height: 9px; background: var(--axis); }
+.cal-bench .tick .t.now { height: 14px; background: var(--text-primary); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §SECTION HEADS + THE STACK
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench .sechead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule-hairline);
+  margin: 0 0 12px;
+}
+.cal-bench .sechead .c,
+.cal-bench .c {
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* THE PROPORTION RULE, in geometry. .stack is a COLUMN and stays one at every
+   width: two Blocks side by side would be two identical panels, which is the
+   exact decay this surface exists to prevent. */
+.cal-bench .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.cal-bench .benchblock { display: block; }
+.cal-bench .manage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 2px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §RSVP — the design-ahead session panel. Header and chip only; see
+   bench.go's BenchRsvp for why no lane, density or member row is drawn.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench .rsvp {
+  border-radius: var(--r-panel);
+  padding: 12px;
+  margin-bottom: 22px;
+}
+.cal-bench .lhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+}
+.cal-bench .lhead .t {
+  font-weight: 650;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.cal-bench .note {
+  margin: 0;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-body);
+  max-width: 88ch;
+}
+.cal-bench .bench-note {
+  border-radius: var(--r-card);
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-body);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §NEXT UP — a printed index, not a stack of cards. No per-row card, no
+   elevation: the rows are ruled lines, which is what makes five of them read
+   as an index rather than as five more panels.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench .nextup { margin-bottom: 22px; }
+.cal-bench .nextup .r {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--rule-hairline);
+  padding: 4px;
+  position: relative;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+.cal-bench .nextup .r:hover { background: color-mix(in oklch, transparent 95%, var(--text-primary)); }
+.cal-bench .nextup .r:hover::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: var(--r-full);
+  background: var(--axis);
+}
+.cal-bench .nextup .dg {
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 1.15;
+  width: 108px;
+  flex: none;
+}
+.cal-bench .nextup .cn {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cal);
+  width: 104px;
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-bench .nextup .nm {
+  font-weight: 650;
+  font-size: 12px;
+  line-height: 1;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cal-bench .nextup .tail { padding: 8px 4px; }
+
+/* ── the chip's rail: the GREYSCALE IDENTITY CHANNEL ─────────────────────── */
+/* The (hue, pattern) pair is locked per axis, so an event that shares a hue
+   with another shares its pattern too and a viewer who cannot separate the hues
+   can still separate the marks. Guard B1: --dash / --gap are NEVER animated. */
+.cal-bench .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px 0 0;
+  flex: none;
+  border-left: 3px solid var(--axis);
+  border-image: repeating-linear-gradient(
+      to bottom,
+      var(--axis) 0 var(--dash),
+      transparent var(--dash) calc(var(--dash) + var(--gap))
+    ) 3 / 3px / 0 stretch;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+.cal-bench .chip .gl { font-size: 11px; line-height: 1; }
+
+.cal-bench .p1 { --dash: 999px; --gap: 0px; }
+.cal-bench .p2 { --dash: 4px; --gap: 2px; }
+.cal-bench .p3 { --dash: 1px; --gap: 2px; }
+.cal-bench .p4 { --dash: 2px; --gap: 2px; }
+.cal-bench .p5 { --dash: 6px; --gap: 4px; }
+.cal-bench .p6 { --dash: 6px; --gap: 2px; }
+.cal-bench .p7 { --dash: 10px; --gap: 3px; }
+.cal-bench .p8 { --dash: 1px; --gap: 1px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §ROW GRID — the subordinate calendars and the New slot. A ROW, never a
+   panel: the minmax floor is 300px so two rows sit side by side on a desktop
+   and stack on a phone, and neither state ever grows a row into a Block.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench .sortrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+.cal-bench .rowgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.cal-bench .calrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 76px;
+  padding: 10px 12px;
+  border-radius: var(--r-card);
+  text-decoration: none;
+  color: var(--text-primary);
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.cal-bench .calrow:hover { border-color: var(--rule-structural-strong); }
+.cal-bench .calrow .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  flex: none;
+  background: var(--cal);
+}
+/* The row's name is the door, so it is an anchor — and an anchor inside a card
+   must not read as body-copy-with-a-blue-underline. The row carries the link
+   affordance; the text carries the information. */
+.cal-bench .calrow .grow {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.cal-bench .calrow .grow:hover .nm { color: var(--accent); }
+.cal-bench .calrow .nm { font-weight: 650; font-size: 14px; line-height: 1.25; }
+.cal-bench .calrow .iw { font-weight: 600; font-size: 13px; line-height: 1.3; flex: none; }
+.cal-bench .mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.cal-bench .calrow .dt {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+/* THE WARNROW. Its fault takes the NAME's slot and the row carries no date
+   element at all — not a zero, not a placeholder, not an em dash. The producer
+   enforces that (bench.go's benchRows); this only draws it. */
+.cal-bench .calrow.warnrow {
+  border-color: color-mix(in oklch, var(--warn) 35%, var(--rule-structural));
+  background: color-mix(in oklch, var(--surface-card) 94%, var(--warn));
+  padding-left: 15px;
+  position: relative;
+}
+.cal-bench .calrow.warnrow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--r-card) 0 0 var(--r-card);
+  background: var(--warn);
+}
+.cal-bench .calrow .fault {
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--warn);
+}
+
+.cal-bench .newslot {
+  background: var(--surface-page);
+  border: 1px dashed var(--rule-structural);
+}
+.cal-bench .newslot .plus { font-size: 16px; color: var(--text-muted); }
+
+/* ── the closing caption ─────────────────────────────────────────────────── */
+.cal-bench .caption {
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 104ch;
+  padding: 2px 0 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §RESPONSIVE — the phone reading. Nothing here changes the proportion rule:
+   the stack is still a column, the rows are still rows, and the New slot is
+   still a slot. Only the head's control cluster and the ribbon's column count
+   give way, which is what the signed 390px render shows.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .cal-bench .phead h1 { font-size: 22px; }
+  .cal-bench .phead .ctl { width: 100%; }
+  .cal-bench .phead .ctl .btn.fill { width: 100%; height: 40px; justify-content: center; }
+  .cal-bench .ribbon { grid-template-columns: 1fr; }
+  .cal-bench .tile { min-height: 132px; }
+  .cal-bench .rowgrid { grid-template-columns: 1fr; }
+  .cal-bench .nextup .cn { display: none; }
+  .cal-bench .nextup .dg { width: 88px; font-size: 13px; }
+}

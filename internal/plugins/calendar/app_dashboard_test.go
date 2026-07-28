@@ -1,7 +1,20 @@
-// app_dashboard_test.go — C-APPS-CAL-DASH-W1. Covers the calendar-side
-// EntitiesForCalendar read (service passthrough) and the dashboard view:
-// list + detail render, CRUD-compose actions, owner-gating, and the
-// read-only associations panel with/without associations + empty states.
+// app_dashboard_test.go — C-APPS-CAL-DASH-W1, refreshed by C-CALV4-BENCH-P4.
+//
+// Two surfaces are covered here now, and the split is deliberate:
+//
+//   - THE ROUTE'S PAGE. GET /campaigns/:id/apps/calendar renders the Bench, so
+//     every assertion that ever meant "what the Calendar tab shows" renders
+//     BenchPage. The guarantees are unchanged — every visible calendar is
+//     reachable, the empty and load-error states are friendly and role-aware,
+//     selection is a full navigation and not an HTMX detail swap.
+//   - THE RETAINED CARD-GRID COMPONENTS. calendarAppDashboardDetail and its
+//     children are no longer fed by the route but are RETAINED (dispatch
+//     Bounds: dead-code removal is a post-wave slice), so their tests are kept
+//     verbatim rather than deleted. They are marked below so nobody mistakes
+//     them for coverage of the live page.
+//
+// The calendar-side EntitiesForCalendar service passthrough is untouched: the
+// read is still on the service and still forwards the viewer context.
 package calendar
 
 import (
@@ -78,32 +91,38 @@ func sampleDashboardData() CalendarAppDashboardData {
 	}
 }
 
-func TestCalendarAppDashboardPage_ListAndDetail(t *testing.T) {
-	html := renderDashboardPage(t, sampleDashboardData())
+// THE ROUTE'S PAGE. Predecessor: TestCalendarAppDashboardPage_ListAndDetail,
+// which pinned "every calendar the viewer may see is on the page, with a door
+// to it and — for an owner — a door to its settings". That guarantee is
+// unchanged; only the shape it takes is (a Block, a subordinate row, or a
+// named attention item, never a card grid).
+func TestCalendarAppPage_ReachesEveryVisibleCalendar(t *testing.T) {
+	html := renderBench(t, benchFxData(true, true))
 	for _, want := range []string{
-		"data-cal-dashboard",                    // page container
-		"data-cal-dashboard-list",               // the list column
-		`data-calendar-id="cal-1"`,              // list row + detail
-		"Harptos", "Gregorian",                  // both calendars in the list
-		"id=\"cal-dash-detail\"",                // detail swap target
-		"/campaigns/camp-1/apps/calendar?calId=cal-2", // list selection link
-		// CRUD-compose actions (existing surfaces, not reimplemented):
-		"/campaigns/camp-1/calendars/cal-1",          // Open calendar
-		"/campaigns/camp-1/calendars/cal-1/settings", // Settings (edit)
-		// associations:
-		"Linked entities (1)", "Gandalf",
-		"Timelines (1)", "Main Arc", "7 events",
-		"/campaigns/camp-1/entities/e1",  // entity link
-		"/campaigns/camp-1/timelines/t1", // timeline link
+		"data-cal-dashboard",      // the page container marker, kept for continuity
+		"data-cal-bench",          // the Bench itself
+		"data-bench-ribbon",       // the ribbon
+		"data-cal-dashboard-list", // the subordinate-row list
+		// every visible calendar is named somewhere on the page…
+		"Harptos of Imix", "Real world / Gregorian", "Elven Reckoning",
+		// …including the misconfigured one, whose NAME reaches the GM through
+		// the attention tile even though its row prints the fault instead.
+		"Dwarven Deep-count",
+		// doors to the existing surfaces — no CRUD is reimplemented:
+		"/campaigns/camp-1/calendar/v2/cal-harptos",        // Open calendar
+		"/campaigns/camp-1/calendars/cal-harptos/settings", // Builder / Settings
+		"/campaigns/camp-1/calendars/cal-elven/settings",   // per-row settings
+		"/campaigns/camp-1/calendars/new",                  // the New-calendar slot
 	} {
 		if !strings.Contains(html, want) {
-			t.Errorf("dashboard page missing %q", want)
+			t.Errorf("bench page missing %q", want)
 		}
 	}
 }
 
-// When the selected calendar isn't the user's active one, the detail offers
-// the "Set active" compose action (POST to the existing switch endpoint).
+// RETAINED COMPONENT. When the selected calendar isn't the user's active one,
+// the detail offers the "Set active" compose action (POST to the existing
+// switch endpoint).
 func TestCalendarAppDashboard_SetActiveWhenNotActive(t *testing.T) {
 	data := sampleDashboardData()
 	data.ActiveID = "cal-2" // selected cal-1 is not active → switch offered
@@ -116,6 +135,11 @@ func TestCalendarAppDashboard_SetActiveWhenNotActive(t *testing.T) {
 	}
 }
 
+// RETAINED COMPONENT. NOTE ON THE LAST ASSERTION: the "non-owner still gets
+// the Open action" check passes on `/campaigns/camp-1/calendars/cal-1`, which
+// is the "see in action" embed's hx-get (…/calendars/cal-1/embed), NOT the Open
+// button — the Open button targets `/campaigns/camp-1/calendar/v2/cal-1`
+// (singular). Read before rewriting, or the wrong intent gets preserved.
 func TestCalendarAppDashboard_OwnerGating(t *testing.T) {
 	owner := renderDashboardDetail(t, sampleDashboardData())
 	if !strings.Contains(owner, "/calendars/cal-1/settings") || !strings.Contains(owner, "Delete") {
@@ -136,6 +160,7 @@ func TestCalendarAppDashboard_OwnerGating(t *testing.T) {
 	}
 }
 
+// RETAINED COMPONENT.
 func TestCalendarAppDashboard_NoAssociations(t *testing.T) {
 	data := sampleDashboardData()
 	data.Entities = nil
@@ -149,33 +174,55 @@ func TestCalendarAppDashboard_NoAssociations(t *testing.T) {
 	}
 }
 
+// THE ROUTE'S PAGE. The role-aware empty state is REUSED verbatim by the Bench
+// (calendarAppDashboardEmpty), which is why it keeps its markers: an owner is
+// prompted to create a calendar, a player gets the calm "nothing shared yet"
+// with no create affordance, and neither gets the retired detail pane.
 func TestCalendarAppDashboard_EmptyStates(t *testing.T) {
-	// No calendars at all → friendly create CTA, no detail pane.
-	empty := renderDashboardPage(t, CalendarAppDashboardData{CampaignID: "camp-1", IsOwner: true})
+	empty := renderBench(t, BenchData{CampaignID: "camp-1", CampaignName: "Imix", IsOwner: true, IsGM: true})
 	for _, want := range []string{"data-cal-dashboard-empty", "No calendars yet", "Create calendar", "/campaigns/camp-1/calendars"} {
 		if !strings.Contains(empty, want) {
 			t.Errorf("no-calendars state missing %q", want)
 		}
 	}
-	if strings.Contains(empty, "id=\"cal-dash-detail\"") {
-		t.Errorf("no-calendars state must not render the detail pane")
+	for _, forbidden := range []string{`id="cal-dash-detail"`, "data-bench-ribbon", "data-bench-stack"} {
+		if strings.Contains(empty, forbidden) {
+			t.Errorf("a campaign with no calendars must not render %q", forbidden)
+		}
+	}
+	player := renderBench(t, BenchData{CampaignID: "camp-1", CampaignName: "Imix"})
+	if !strings.Contains(player, "data-cal-dashboard-empty-player") {
+		t.Error("a player with nothing shared gets the calm empty state")
+	}
+	if strings.Contains(player, "Create calendar") {
+		t.Error("a player gets no create affordance")
 	}
 
-	// Calendars exist but none selected → detail prompts a selection.
+	// RETAINED COMPONENT (see the file header): the card grid's detail pane.
 	noSel := renderDashboardDetail(t, CalendarAppDashboardData{CampaignID: "camp-1"})
 	if !strings.Contains(noSel, "data-cal-dashboard-detail-empty") || !strings.Contains(noSel, "Select a calendar") {
 		t.Errorf("no-selection detail missing the prompt")
 	}
 }
 
+// THE ROUTE'S PAGE. A failed list degrades to the same friendly card, with the
+// same marker, so the operator-facing behaviour is byte-identical.
 func TestCalendarAppDashboard_LoadError(t *testing.T) {
-	html := renderDashboardPage(t, CalendarAppDashboardData{CampaignID: "camp-1", LoadError: true})
+	html := renderBench(t, BenchData{CampaignID: "camp-1", CampaignName: "Imix", LoadError: true})
 	if !strings.Contains(html, "data-cal-dashboard-error") || !strings.Contains(html, "load the calendars") {
 		t.Errorf("load-error state missing friendly message")
+	}
+	if strings.Contains(html, "data-bench-stack") {
+		t.Error("a load error must not render a half-built bench")
 	}
 }
 
 // --- W2: live "see in action" embeds (C-APPS-CAL-DASH-W2) ---
+//
+// RETAINED COMPONENTS from here down (see the file header): the detail pane and
+// its embeds are no longer fed by the route. Their tests are kept verbatim
+// rather than deleted — including the engine-singleton count below, which is
+// the invariant that a page may never mount two #cal-v2-worldstate surfaces.
 
 func sampleW2Active() CalendarAppDashboardData {
 	d := sampleDashboardData()
@@ -261,11 +308,24 @@ func TestCalendarAppDashboard_TimelinePreviews(t *testing.T) {
 	}
 }
 
-// The page loads D3 (for timeline-viz) only when the selection has timelines.
-// W1 (R1): D3 is the VENDORED copy (`/static/vendor/d3.min.js`), not the
-// jsdelivr CDN — `script-src 'self'` blocked the CDN script so the viz never ran.
+// RETAINED COMPONENT + a live guard. The card grid's page loads D3 (for
+// timeline-viz) only when the selection has timelines, and W1 (R1) pinned that
+// D3 is the VENDORED copy (`/static/vendor/d3.min.js`), not the jsdelivr CDN —
+// `script-src 'self'` blocked the CDN script so the viz never ran.
+//
+// The CSP half of that guard is what still matters on the live page, so it is
+// asserted against the Bench too: the Bench renders no timeline previews and
+// must therefore load neither D3 nor, ever, a CDN script.
 func TestCalendarAppDashboard_LoadsD3ForTimelines(t *testing.T) {
 	const d3Src = "/static/vendor/d3.min.js"
+	bench := renderBench(t, benchFxData(true, true))
+	if strings.Contains(bench, "jsdelivr") {
+		t.Errorf("the Bench must never load a CDN script (CSP script-src 'self')")
+	}
+	if strings.Contains(bench, d3Src) {
+		t.Errorf("the Bench renders no timeline previews, so it must not load D3")
+	}
+
 	withTL := renderDashboardPage(t, sampleW2Active())
 	if !strings.Contains(withTL, d3Src) {
 		t.Errorf("page should load vendored D3 when there are timeline previews")
@@ -281,15 +341,27 @@ func TestCalendarAppDashboard_LoadsD3ForTimelines(t *testing.T) {
 	}
 }
 
-// W2 selection is a full navigation: list rows are plain hrefs (no HTMX detail
-// swap), so the embed/engine scripts execute on load and teardown is the page
-// unload (one live surface, clean teardown).
+// THE ROUTE'S PAGE. W2 made selection a full navigation on purpose: list rows
+// are plain hrefs, so the engine/embed scripts a target page loads actually
+// execute (htmx.config.allowScriptTags is false, boot.js:163) and teardown is
+// the page unload. The Bench keeps that choice — every calendar door on it is a
+// plain href, and the ONLY hx-get on the page is the sort control, which swaps
+// the row section and nothing else.
 func TestCalendarAppDashboard_RowsAreFullNav(t *testing.T) {
-	html := renderDashboardPage(t, sampleDashboardData())
+	html := renderBench(t, benchFxData(true, true))
 	if strings.Contains(html, `hx-target="#cal-dash-detail"`) {
-		t.Errorf("W2 list rows must not HTMX-swap the detail (full-nav for engine scripts)")
+		t.Errorf("bench doors must not HTMX-swap a detail pane (full-nav for engine scripts)")
 	}
-	if !strings.Contains(html, `href="/campaigns/camp-1/apps/calendar?calId=cal-2"`) {
-		t.Errorf("list rows should be plain navigation links")
+	if !strings.Contains(html, `href="/campaigns/camp-1/calendar/v2/cal-elven"`) {
+		t.Errorf("subordinate rows should be plain navigation links")
+	}
+	// The sort control's five links are the ONLY HTMX the Bench itself emits,
+	// and every one of them swaps the row section. (The app shell's own
+	// `hx-target="#main-content"` nav is not the Bench's and is not counted.)
+	if n := strings.Count(html, `hx-get="/campaigns/camp-1/apps/calendar`); n != 5 {
+		t.Errorf("the Bench should emit exactly the five sort hx-gets; got %d", n)
+	}
+	if n := strings.Count(html, `hx-target="#cal-dash-grid"`); n != 5 {
+		t.Errorf("every Bench hx-get must target the row section; got %d", n)
 	}
 }

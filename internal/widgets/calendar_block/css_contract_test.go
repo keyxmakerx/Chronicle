@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"runtime"
 	"strings"
 	"testing"
@@ -358,4 +359,72 @@ func TestCSS_ChannelDiscipline(t *testing.T) {
 			"as animatable colours. Interpolating one is a per-frame style recalculation across " +
 			"up to 900 gradient-backed nodes.")
 	}
+}
+
+// ── the tie toggle's flip (C-CALV4-HOST-P3 §3) ──────────────────────────────
+
+// TestCSS_TieToggleFlipsInkWithoutJS. The toggle's whole legality rests on the
+// stylesheet: the markup tests can see that two radios exist, but only this can
+// see whether anything reads them. Without the `:has()` rules the control is
+// present, focusable, and does nothing — which is worse than absent.
+//
+// It also pins the TWO ink levels. The signed setTie() inks an untied mark at
+// 0.28 in tied mode and at 0.7 in whole mode (calendar-v4.html:2823-2824);
+// before this slice the sheet carried one branch at one level, so tied mode
+// under-dimmed and whole mode did not dim at all.
+func TestCSS_TieToggleFlipsInkWithoutJS(t *testing.T) {
+	code := stripComments(blockCSS(t))
+	flat := strings.Join(strings.Fields(code), " ")
+
+	for _, want := range []string{
+		`:has(.tiepick[data-tie-pick="tied"]:checked)`,
+		`:has(.tiepick[data-tie-pick="whole"]:checked)`,
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("no rule reads the tie radios (%s missing) — the control would be inert, "+
+				"and it cannot be rescued with JS: a <script> in an HTMX-swapped fragment never runs", want)
+		}
+	}
+	// The mark classes the flip re-inks must both be covered — a day carrying one
+	// named chip and one underline segment must dim consistently.
+	for _, want := range []string{".chip.untied", ".ulseg.untied"} {
+		if strings.Count(flat, want) < 2 {
+			t.Errorf("%s must be re-inked by BOTH the baseline and the :has() flip", want)
+		}
+	}
+	// The server-rendered baseline survives for engines without :has().
+	if !strings.Contains(flat, `[data-tie-mode="whole"]`) || !strings.Contains(flat, `[data-tie-mode="tied"]`) {
+		t.Error("both data-tie-mode baselines must exist — they are the answer on an engine without :has()")
+	}
+
+	// Two levels, ordered. Tied mode must dim HARDER than whole mode, and whole
+	// mode must still dim: an untied mark at full ink makes "which of these are
+	// actually this entity's" unanswerable in whole mode.
+	tied, whole := cssVarNumber(t, code, "--tied-ink"), cssVarNumber(t, code, "--untied-ink")
+	if !(tied < whole) {
+		t.Errorf("--tied-ink (%v) must be lower than --untied-ink (%v)", tied, whole)
+	}
+	if !(whole < 1) {
+		t.Errorf("--untied-ink (%v) must dim: whole mode still distinguishes the entity's own days", whole)
+	}
+	if !(tied > 0) {
+		t.Errorf("--tied-ink (%v) must stay visible: the toggle changes ink, never membership", tied)
+	}
+}
+
+// cssVarNumber reads a numeric custom-property value out of the sheet. Fails
+// cleanly when the property is gone, rather than panicking on a slice bound —
+// see the PIN DISCIPLINE note at the top of this file.
+func cssVarNumber(t *testing.T, code, name string) float64 {
+	t.Helper()
+	re := regexp.MustCompile(regexp.QuoteMeta(name) + `\s*:\s*([0-9.]+)\s*;`)
+	m := re.FindStringSubmatch(code)
+	if m == nil {
+		t.Fatalf("calendar-block.css does not define %s", name)
+	}
+	v, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		t.Fatalf("%s is not a number: %q", name, m[1])
+	}
+	return v
 }
