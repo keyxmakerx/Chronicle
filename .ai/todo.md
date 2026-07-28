@@ -188,11 +188,14 @@ C-CALV4-SPINE-P2 only, and `calendar_v2.templ` / `calendar_v2_helpers.go` /
   `tools/check-v2-motion-discipline.sh` into CI; deleted the vacuous
   `tools/check-templ-drift.sh`; added `make verify`; filed
   `internal/widgets/calendar_v2/.ai.md`. See `.ai/status.md` 2026-07-26 entry.
-- [ ] **B4 has no subjects yet.** Guard B4 keys on `data-cell` / `data-row`
-  marker attributes, which no template on `main` emits — C-CALV4-BLOCK-P1 must
-  adopt those markers for B4 to have teeth. The guard's own self-test proves it
-  fires; what is unproven is that anything will feed it. Coordinator to confirm
-  at W-B.
+- [x] **B4 has no subjects yet.** Closed by C-CALV4-SEAM-P5 stages 11–12
+  (2026-07-28): stage 11 first fixed the scanner's templ-conditional blind spot
+  (a `>` inside `if c.Day > 0 {` truncated the tag, so B4 false-positived on
+  correct markup and B3 false-negatived on dirty markup; self-test fixtures now
+  cover conditional attributes from both sides), THEN stage 12 had
+  `instrument.templ` stamp `data-cell` on dated cells and `data-row` + a `-w`
+  answer key on week rows. B4 was watched firing on real markup (key withheld →
+  exit 1) and passing correct markup.
 - [ ] **`--motion-*` are not Tailwind utilities.** `tailwind.config.js` publishes
   `--ease-*` / `--dur-*` / `--elev-*` as utility classes but not `--motion-*`
   (they are consumed via raw `var()` only). Deliberately left alone — out of
@@ -203,12 +206,12 @@ C-CALV4-SPINE-P2 only, and `calendar_v2.templ` / `calendar_v2_helpers.go` /
   cleanable: `calendar.templ:57,73,88`, `app_dashboard.templ:131`,
   `timeline.templ:143`, `campaigns/settings.templ:219,978`. Not this wave —
   `calendar.templ` is calendar-plugin surface another slice may touch.
-- [ ] **If the coordinator amends `BlockData`'s identity types to strings** (see
-  C-CALV4-SPINE-P2's first item below — `CalendarID` / `Mark.EventID` /
-  `ViewerContext.UserID` / `ViewerContext.HostEntity` are `int64` in the pin but
-  `VARCHAR(36)` UUIDs in Chronicle), `internal/widgets/calendar_block/data_test.go`
-  pins those four as `reflect.Int64` and will fail loudly on the amendment. That
-  is the pin working, not a bug: refresh it in the same PR as the amendment.
+- [x] **If the coordinator amends `BlockData`'s identity types to strings** —
+  happened: the r51 amendment (C-CALV4-SEAM-P5 stage 1, 2026-07-27) typed all
+  four `string`; `data_test.go`'s reflect pins were flipped to `reflect.String`
+  in the same commit, exactly as this entry prescribed, and
+  `TestBlockIdentityIntFieldsAreZeroed` was INVERTED (now
+  `TestBlockIdentityFieldsCarryRealIDs`), not deleted.
 
 ### Calendar v4 remodel — booked follow-ups from C-CALV4-BLOCK-P1 (2026-07-26)
 
@@ -233,9 +236,12 @@ divergences".
 - **`BlockData` field gaps** (each needs a coordinator pin change, so each is a
   stop-and-flag until then): a lead/trail label on `DayCell` (out-of-range cells
   render empty because `Day == 0` IS the out-of-range marker, while the signed
-  Gregorian still shows a greyed 28/29/30); a hidden-event count and a declared-
-  moon total for the Nameplate's "N hidden" / "3 of 4 moons" badges; a scope
-  chip; a campaign clock for real-world Blocks.
+  Gregorian still shows a greyed 28/29/30); a hidden-event count for the
+  Nameplate's "N hidden" badge; a scope chip; a campaign clock for real-world
+  Blocks. The declared-moon total is no longer a field gap — r51 added
+  `MonthGeometry.MoonsDeclared` — but the field is **populated only by the
+  widget fixtures**: no producer sets it and the Nameplate renders no
+  "3 of 4 moons" badge yet. Booked residual from C-CALV4-SEAM-P5.
 - **Coordinator re-sign, already booked (canon §D):** the `isNamed()` 470-vs-563
   instrument constant. Wave 1 RETIRED the row-height clause rather than
   inheriting or "correcting" it; `TestIsNamed_RetiredRowHeightClause` pins the
@@ -246,19 +252,22 @@ divergences".
 Wave plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`. These are the
 items the server spine surfaced and deliberately did NOT decide on its own.
 
-- [ ] **`BlockData` identity types** — `CalendarID`, `Mark.EventID`,
-  `ViewerContext.UserID` and `ViewerContext.HostEntity` are `int64` in the pinned struct;
-  all four are `VARCHAR(36)` UUIDs in Chronicle. The producer zeroes them and carries the
-  calendar's identity in `CalendarSlug`. Needs a coordinator amendment to the pinned file
-  (string ids) plus a producer update; `TestBlockIdentityIntFieldsAreZeroed` is the
-  tripwire. **Blocks:** any surface that wants to link a mark to its event.
+- [x] **`BlockData` identity types** — closed by the r51 pin amendment
+  (C-CALV4-SEAM-P5 stage 1, 2026-07-27): all four fields are `string`, the
+  producer carries the real UUIDs, `CalendarSlug` means the slug again, and the
+  `TestBlockIdentityIntFieldsAreZeroed` tripwire was inverted into
+  `TestBlockIdentityFieldsCarryRealIDs`. This is also what un-gated the tie
+  toggle (`HostEntity != ""` now passes for a real host entity).
 - [ ] **Multi-day event spans have no field in `BlockData`.** The signed render draws span
   ribbons ("Eclipse window", span 5). Marks are placed by `Event.OccursOn`, which does not
   expand a multi-day event past its start day, and the pinned struct has no ribbon/span
   representation. Booked for the coordinator.
-- [ ] **Per-mark tie flag.** In "whole" mode the signed render dims the individual UNTIED
-  chips; the pinned struct carries tie state only per DAY (`DayCell.Tied`), so a day with
-  one tied and one untied event cannot express the distinction.
+- [x] **Per-mark tie flag.** Closed by r51's `Mark.Tied` + C-CALV4-SEAM-P5
+  stage 2 (2026-07-27): the producer emits the WHOLE viewer-visible mark set in
+  both tie modes and flags each mark; the renderer stamps `tied`/`untied` and
+  the CSS ink rule moved per-DAY → per-MARK. TieMode changes ink, never
+  membership — measured payload cost of emitting everything in tied mode: 1
+  byte (the mode attribute).
 - [ ] **`EraBand.Edge` is unreachable.** The signed render splits one month between two
   eras at day 17/18; Chronicle's eras are year-granular, so a mid-month boundary is not
   expressible. The general rule ships; `TestBlockEraBandEdgeIsUnreachableToday` pins the

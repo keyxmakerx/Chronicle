@@ -225,18 +225,6 @@ func blockEventTied(e *Event, in BlockProjectionInput) bool {
 	return in.TiedEventIDs[e.ID]
 }
 
-// blockDecorateCells layers the per-viewer marks onto the geometry.
-//
-// TieMode changes which marks are emitted, exactly as the signed contract does
-// (mockups/calendar-v4.html VIEWS.entity: tied mode passes `filter = e =>
-// e.ties`). DayCell.Tied is set from the same pass in BOTH modes, so a cell
-// that carries a tie is identifiable whichever way the toggle sits.
-//
-// KNOWN CONTRACT GAP, flagged to the coordinator: in "whole" mode the signed
-// render dims the individual untied CHIPS (opacity .7 + a hairline rail), but
-// the pinned Mark struct carries no per-mark tie flag — only DayCell.Tied,
-// which is per DAY. A day with one tied and one untied event cannot express
-// that distinction in wave 1.
 // blockDecorateCells fills every cell's marks and tie flag.
 //
 // It takes NO tie mode, and that absence is the r51 contract made structural:

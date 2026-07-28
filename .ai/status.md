@@ -25,22 +25,40 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 - **Release line:** 0.0.1 (Release Readiness completed 2026-04-25 — backup scripts + mariadb-client in image + deployment runbook)
 - **Active phase:** Pre-launch cleanup — locked macro-sequence: Calendar → Docs-audit → Tech-debt → Bugs → Features. The ~2026-06-26 target launch date has elapsed; pre-launch cleanup continues (no new date set). PC-Claim all 4 stages complete (Foundry PR #64 merged). Sidebar/nav consolidation (C-NAV-V3, both PRs) shipped as the last major structural arc; see `cordinator/plans/2026-05-21-master-plan.md` for the prior phase definition, current dispatch queue drives day-to-day priorities.
 - **Coordinator artifacts (books, reports, dispatches):** live on the Cordinator repo's `main` branch — no dedicated working branch anymore.
-- **IN FLIGHT (2026-07-27), branch `claude/calv4-seam-p5-handoff-w3fujj`:**
-  `C-CALV4-SEAM-P5` is **partially landed** — stages 1–3 committed green.
-  Read `cordinator/dispatches/chronicle/C-CALV4-SEAM-P5-RESUME.md` before
-  touching the calendar, or you will redo merged work.
-  - `18a84b8` the amended **r51** `BlockData` pin: four identity fields
-    `int64`→`string`, plus `Mark.Tied` and `MonthGeometry.MoonsDeclared`.
-  - `ae9405d` the tie toggle changes **ink, not membership** — the producer
-    no longer drops untied marks. Measured cost: 1 byte.
-  - `71bfc99` the calendar **identity triple** (hue token + pattern + letter)
-    now reaches the DOM; it rendered as a grey dot for all of wave 1.
-  - `0c5f5f4` (not P5) `C-PERM-DMGRANT-REVOKE`: a removed co-DM kept
-    owner-level visibility on **public** campaigns. Both the stored grant and
-    the resolve-time gate are fixed. No migration.
-  - Still open in P5: §3.3 dogear, §3.4 foot line (two sites), §3.5 the
-    `.band.half` border, §3.6 chip gating, §4 the calendar visibility gate,
-    §5 recurring dedupe, §6 the lint scanner, §7 fold-ins.
+- **LANDED (2026-07-28), branch `claude/coordinator-handoff-stage-3-3d3s4w`:**
+  `C-CALV4-SEAM-P5` is **complete** — stages 1–14, one commit per stage, each
+  green on the full `-short` suite. The durable deliverable is the **seam
+  suite** (`internal/plugins/calendar/block_seam_test.go`): real fixtures
+  projected through `projectBlock` and rendered through `calblock.Block`,
+  asserted on the HTML. The discipline it encodes: assertions about what the
+  PRODUCER chose to emit live producer-side; widget-side tests only pin
+  renderer behaviour on hand-written `BlockData`.
+  - Stages 1–3 (`18a84b8`/`ae9405d`/`71bfc99`): the amended **r51** pin (four
+    identity fields `int64`→`string`, `Mark.Tied`,
+    `MonthGeometry.MoonsDeclared`), the tie toggle as **ink, not membership**
+    (measured cost: 1 byte), the calendar **identity triple** reaching the DOM.
+  - Stages 4–13 closed everything the RESUME listed open: §3.3 the dm_only
+    **dogear** (`Restricted` is the discriminator: false→notch,
+    true→diamond), §3.4 the overlapping `MoreCount` (both foot-line sites),
+    §3.5 `.band.half`'s stray border-right, §3.6 `needs backend` chips gated
+    on their flags, **layer gating** (3 of 8 `LayerState` keys gated nothing;
+    the widget fixtures were pinning the defect), §4 calendar-level
+    visibility on `Block()`/`EventsForDay()` (a hidden calendar answers
+    byte-identical to a missing one), §5 recurring-event dedupe at
+    `candidateEvents`, §6 the lint scanner's templ-conditional blind spot +
+    guard B4's `data-cell`/`data-row` subjects, §7 the three review fold-ins
+    (timeline `visibility_override` folded into `EventCount`,
+    `nextOccurrence`'s loop-invariant base hoisted,
+    `EventsForEntityFiltered` promoted onto the `CalendarService`
+    interface). Dated detail: `internal/plugins/calendar/.ai.md` +
+    `internal/widgets/calendar_block/.ai.md`.
+  - **Residual, booked in todo.md:** `MonthGeometry.MoonsDeclared` is in the
+    r51 pin and populated by the widget fixtures, but no producer populates
+    it and no Nameplate badge renders it yet — the "3 of 4 moons" badge is
+    still unbuilt.
+  - `0c5f5f4` (same branch, not P5) `C-PERM-DMGRANT-REVOKE`: a removed co-DM
+    kept owner-level visibility on **public** campaigns. Both the stored
+    grant and the resolve-time gate are fixed. No migration.
 - **`data.go` is byte-identical to the coordinator's pin and must never be
   `gofmt`-ed** — the pin is not gofmt-clean and formatting it breaks the
   match. Verify with `cmp` against `C-CALV4-BLOCKDATA.go.txt`.
@@ -205,10 +223,12 @@ rulings live in `dispatches/chronicle/C-CALV4-WAVE1-COMMON.md` §6.
   belongs to exactly one calendar-v4 slice for the whole wave, so the phase-B surfaces
   (entity-page hosting, the Bench) reach the spine without re-editing it.
 
-**Raised to the coordinator, unresolved (see `internal/plugins/calendar/.ai.md`):** the
-pinned `BlockData` types `CalendarID` / `Mark.EventID` / `ViewerContext.UserID` /
-`ViewerContext.HostEntity` as `int64`, but all four are `VARCHAR(36)` UUIDs in Chronicle.
-The producer zeroes them and carries the calendar's identity in `CalendarSlug`.
+**RESOLVED (r51 pin amendment, C-CALV4-SEAM-P5 stage 1, 2026-07-27):** the pin
+originally typed `CalendarID` / `Mark.EventID` / `ViewerContext.UserID` /
+`ViewerContext.HostEntity` as `int64` while all four are `VARCHAR(36)` UUIDs in
+Chronicle, so the producer zeroed them and smuggled the calendar's identity
+through `CalendarSlug`. The amended pin types them `string`; the producer now
+carries the real ids and `CalendarSlug` means the slug again.
 
 **Cross-plugin note:** `sessions.NotifyUsers` (generic notification fan-in) is new. The
 notifications store was always documented as generic (T-B2); C-CAL-RSVP-P1 is its first
