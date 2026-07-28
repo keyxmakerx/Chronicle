@@ -290,11 +290,16 @@ templ benchNextUpView(data BenchData) {
 							<span class="badge gm">GM</span>
 						}
 					</span>
-					<span class={ "chip", benchPatternClass(r.Pattern) }>
-						if r.Glyph != "" {
-							<span class="gl" aria-hidden="true">{ r.Glyph }</span>
-						}
-					</span>
+					// The axis chip renders only when the event HAS an identity to
+					// draw. An event with no category carries no hue, no pattern
+					// and no glyph, and an empty rail is a mark that means nothing.
+					if r.Axis != "" || r.Glyph != "" {
+						<span class={ "chip", benchPatternClass(r.Pattern) }>
+							if r.Glyph != "" {
+								<span class="gl" aria-hidden="true">{ r.Glyph }</span>
+							}
+						</span>
+					}
 				</a>
 			}
 			<div class="tail">
@@ -530,10 +535,8 @@ func benchNextUpSubtitle(u BenchNextUp) string {
 	return fmt.Sprintf("across %d calendars", u.Calendars)
 }
 
-// benchNextUpTail is the "all 14 →" line, stated from the viewer's own index.
+// benchNextUpTail is the signed "all 14 →" line, stated from the VIEWER's own
+// index rather than from the mockup's hardcoded 11.
 func benchNextUpTail(u BenchNextUp) string {
-	if u.Total <= len(u.Rows) {
-		return fmt.Sprintf("that is all %d", u.Total)
-	}
-	return fmt.Sprintf("%d more upcoming", u.Total-len(u.Rows))
+	return fmt.Sprintf("all %d →", u.Total)
 }

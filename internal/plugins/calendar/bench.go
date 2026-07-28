@@ -701,6 +701,8 @@ func benchRowDetail(c *Calendar) string {
 		return "real-world calendar · tracks wall-clock time"
 	case len(c.Months) == 0:
 		return "no months defined"
+	case len(c.Months) == 1:
+		return fmt.Sprintf("1 month · %d-day week", blockWeekLen(c))
 	default:
 		return fmt.Sprintf("%d months · %d-day week", len(c.Months), blockWeekLen(c))
 	}
@@ -877,7 +879,10 @@ func benchSyncTile(p calblock.SyncPill) BenchTile {
 	default:
 		t.Headline = "Not linked"
 	}
-	t.Qual = p.Full
+	// The qualifier names the LINK, not the state — the headline already said
+	// the state, and "In sync / In sync · 1 of 4 linked" reads as a bug.
+	// Segments whose data is absent are dropped rather than printed empty.
+	t.Qual = strings.Join(benchNonEmpty(p.Transport, p.PushedAgo), " · ")
 	return t
 }
 

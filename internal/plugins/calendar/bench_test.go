@@ -20,12 +20,15 @@ package calendar
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
@@ -614,3 +617,170 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 // ptrCal is a fixture helper: benchRows takes pointers into a caller-owned
 // slice, and a test that took &benchFxDwarven() directly would not compile.
 func ptrCal(c Calendar) *Calendar { return &c }
+
+// --- the fidelity evidence generator ---------------------------------------
+//
+// Not a test: a tool that happens to live in a _test.go file so it can reuse
+// the fixtures and the REAL templ output rather than re-implementing either.
+// Same shape as the Block's own screenshot_gen_test.go, and inert unless
+// BENCH_SCREENSHOTS names an output directory:
+//
+//	BENCH_SCREENSHOTS=/tmp/shots go test ./internal/plugins/calendar/ -run BenchScreenshots
+//
+// It renders benchSurface — the page WITHOUT the app shell — because the shell
+// needs the Tailwind build and a live server, and what is under review here is
+// the Bench's own sheet. The widths are the contract's own:
+// BENCH_HOST = min(1232, VW - (VW <= 640 ? 32 : 48)).
+
+type benchShot struct {
+	file    string
+	title   string
+	caption string
+	dark    bool
+	// w/h are the browser window; host is the Bench's own content width, written
+	// explicitly so the arithmetic is readable off the image rather than taken
+	// on trust. CHROMIUM CLAMPS ITS WINDOW WIDTH TO 500 CSS px, so a 390px
+	// phone cannot be simulated by --window-size alone — the phone shots use a
+	// 500px window (which still satisfies the <=640px media queries, exactly as
+	// a real 390px viewport does) and give the Bench its real 358px box.
+	w, h, host int
+	data       BenchData
+}
+
+func TestGenerateBenchScreenshots(t *testing.T) {
+	outDir := os.Getenv("BENCH_SCREENSHOTS")
+	if outDir == "" {
+		t.Skip("bench screenshot generator: set BENCH_SCREENSHOTS=<dir> to run")
+	}
+	chrome := benchFindChromium()
+	if chrome == "" {
+		t.Skip("bench screenshot generator: no Chromium binary found (set CHROMIUM_BIN)")
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", outDir, err)
+	}
+
+	const gmCap = "GM · four calendars, one misconfigured · viewport 1280px → BENCH_HOST 1232px"
+	const mobileCap = "GM · the phone reading · BENCH_HOST 358px, i.e. a 390px viewport — the stack is still a column, the rows are still rows"
+	shots := []benchShot{
+		{file: "01-bench-desktop-light.png", title: "The Bench · desktop · GM · light",
+			caption: gmCap, w: 1280, h: 2700, host: 1232, data: benchFxData(true, true)},
+		{file: "02-bench-desktop-dark.png", title: "The Bench · desktop · GM · dark",
+			caption: gmCap, dark: true, w: 1280, h: 2700, host: 1232, data: benchFxData(true, true)},
+		{file: "03-bench-mobile-light.png", title: "The Bench · phone · GM · light",
+			caption: mobileCap, w: 500, h: 3600, host: 358, data: benchFxData(true, true)},
+		{file: "04-bench-mobile-dark.png", title: "The Bench · phone · GM · dark",
+			caption: mobileCap, dark: true, w: 500, h: 3600, host: 358, data: benchFxData(true, true)},
+		{file: "05-bench-player-light.png", title: "The Bench · desktop · PLAYER · light",
+			caption: "permission is ABSENCE — Sync, Needs attention and Horizon are not in this DOM, and no gap hints that they exist",
+			w:       1280, h: 2400, host: 1232, data: benchFxData(false, false)},
+		{file: "06-bench-empty-player-light.png", title: "The Bench · a player with nothing shared",
+			caption: "the calm empty state, with no create affordance a player would meet a 403 on",
+			w:       1280, h: 700, host: 1232, data: BenchData{CampaignID: "camp-1", CampaignName: "Imix"}},
+	}
+
+	css := benchCSS(t) + benchBlockSheet(t)
+	for _, s := range shots {
+		t.Run(s.file, func(t *testing.T) {
+			var sb strings.Builder
+			if err := benchSurface(s.data).Render(context.Background(), &sb); err != nil {
+				t.Fatalf("render bench surface: %v", err)
+			}
+			page := benchShotPage(s, css, benchStripLinks(sb.String()))
+			dir := t.TempDir()
+			src := filepath.Join(dir, "shot.html")
+			if err := os.WriteFile(src, []byte(page), 0o644); err != nil {
+				t.Fatalf("write page: %v", err)
+			}
+			out := filepath.Join(outDir, s.file)
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, chrome,
+				"--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
+				"--force-device-scale-factor=2",
+				fmt.Sprintf("--window-size=%d,%d", s.w, s.h),
+				"--virtual-time-budget=4000",
+				"--screenshot="+out, "file://"+src,
+			)
+			if combined, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("chromium screenshot: %v\n%s", err, combined)
+			}
+			if fi, err := os.Stat(out); err != nil || fi.Size() == 0 {
+				t.Fatalf("screenshot %s was not written", out)
+			}
+		})
+	}
+}
+
+// benchBlockSheet inlines the BLOCK's stylesheet too: the Bench's two Blocks
+// are real calendar_block components and a shot without their sheet would be a
+// shot of unstyled markup.
+func benchBlockSheet(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot resolve test file path")
+	}
+	root := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	body, err := os.ReadFile(filepath.Join(root, "static", "css", "calendar-block.css"))
+	if err != nil {
+		t.Fatalf("read calendar-block.css: %v", err)
+	}
+	return string(body)
+}
+
+var benchLinkRe = regexp.MustCompile(`<link[^>]*>`)
+
+// benchStripLinks removes the AssetURL <link> elements: file:// cannot resolve
+// /static/, and inlining the sheets guarantees the shot is of THESE stylesheets
+// rather than of a stale build artefact.
+func benchStripLinks(markup string) string { return benchLinkRe.ReplaceAllString(markup, "") }
+
+func benchShotPage(s benchShot, css, body string) string {
+	cls := ""
+	if s.dark {
+		cls = ` class="dark"`
+	}
+	pad := "20px"
+	if s.w <= 640 {
+		pad = "16px"
+	}
+	return `<!doctype html><html` + cls + `><head><meta charset="utf-8"><style>` +
+		`html,body{margin:0;padding:0}` +
+		`body{background:#f9fafb;color:#111827;` +
+		`font-family:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}` +
+		`html.dark body{background:oklch(0.165 0.010 265);color:oklch(0.975 0.002 265)}` +
+		`.shot-wrap{padding:` + pad + `}` +
+		fmt.Sprintf(`.cal-bench{width:%dpx}`, s.host) +
+		`h1{font-size:18px;line-height:1.2;margin:0 0 4px;letter-spacing:-.02em}` +
+		`.shot-cap{font-size:11.5px;line-height:1.5;margin:0 0 14px;opacity:.72}` +
+		css +
+		`</style></head><body><div class="shot-wrap">` +
+		`<h1>` + s.title + `</h1><p class="shot-cap">` + s.caption + `</p>` +
+		`<div class="cal-bench">` + body + `</div>` +
+		`</div></body></html>`
+}
+
+// benchFindChromium locates a headless Chromium the same way the Block's
+// container-query probe does.
+func benchFindChromium() string {
+	if p := os.Getenv("CHROMIUM_BIN"); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	for _, name := range []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	for _, pattern := range []string{
+		"/opt/pw-browsers/chromium-*/chrome-linux/chrome",
+		filepath.Join(os.Getenv("HOME"), ".cache/ms-playwright/chromium-*/chrome-linux/chrome"),
+	} {
+		if matches, _ := filepath.Glob(pattern); len(matches) > 0 {
+			return matches[len(matches)-1]
+		}
+	}
+	return ""
+}

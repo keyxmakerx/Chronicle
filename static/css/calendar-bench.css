@@ -594,7 +594,16 @@
   flex: none;
   background: var(--cal);
 }
-.cal-bench .calrow .grow { flex: 1 1 auto; min-width: 0; }
+/* The row's name is the door, so it is an anchor — and an anchor inside a card
+   must not read as body-copy-with-a-blue-underline. The row carries the link
+   affordance; the text carries the information. */
+.cal-bench .calrow .grow {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.cal-bench .calrow .grow:hover .nm { color: var(--accent); }
 .cal-bench .calrow .nm { font-weight: 650; font-size: 14px; line-height: 1.25; }
 .cal-bench .calrow .iw { font-weight: 600; font-size: 13px; line-height: 1.3; flex: none; }
 .cal-bench .mono {
