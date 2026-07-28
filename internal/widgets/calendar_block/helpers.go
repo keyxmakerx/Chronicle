@@ -750,3 +750,27 @@ func eraBadgeText(d BlockData) string {
 	}
 	return d.EraLabel + " · " + strconv.Itoa(d.Month.Year)
 }
+
+// moonsBadgeText is the Nameplate's declared-moon statement — the r51
+// acceptance line made visible: a calendar declaring MORE moons than the grid
+// draws states the total ("3 of 4 moons"), and one declaring three or fewer
+// states nothing extra. The ceiling is moonCap, declared ONCE here and never
+// per cell (L25/L30), and the number is MonthGeometry.MoonsDeclared — the
+// per-cell Moons are already capped (data.go) and cannot supply it.
+//
+// The badge is layer-gated with the discs it explains (the signed MOONS_ON()
+// gate): with the moons layer off the grid draws no moons at all, and
+// "3 of 4" would be a claim about a surface that is not there.
+func moonsBadgeText(d BlockData) string {
+	if !hasLayer(d.Layers, "moons") || d.Month.MoonsDeclared <= moonCap {
+		return ""
+	}
+	return fmt.Sprintf("%d of %d moons", moonCap, d.Month.MoonsDeclared)
+}
+
+// moonsBadgeTitle explains the ceiling on hover. The signed title's "all of
+// them are in the Almanac" tail is NOT ported: the Almanac is W-E and does not
+// exist yet, and a hover that points at an unbuilt surface is a small lie.
+func moonsBadgeTitle(d BlockData) string {
+	return fmt.Sprintf("%d moons declared; the grid draws %d", d.Month.MoonsDeclared, moonCap)
+}

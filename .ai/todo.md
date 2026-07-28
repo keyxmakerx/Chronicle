@@ -238,10 +238,11 @@ divergences".
   render empty because `Day == 0` IS the out-of-range marker, while the signed
   Gregorian still shows a greyed 28/29/30); a hidden-event count for the
   Nameplate's "N hidden" badge; a scope chip; a campaign clock for real-world
-  Blocks. The declared-moon total is no longer a field gap — r51 added
-  `MonthGeometry.MoonsDeclared` — but the field is **populated only by the
-  widget fixtures**: no producer sets it and the Nameplate renders no
-  "3 of 4 moons" badge yet. Booked residual from C-CALV4-SEAM-P5.
+  Blocks. The declared-moon total is **CLOSED** (r51 + C-CALV4-SEAM-P5
+  stage 15, 2026-07-28): `buildMonthGeometry` populates
+  `MonthGeometry.MoonsDeclared` from `Calendar.Moons`, and the Nameplate
+  states "3 of 4 moons" when the declared total exceeds the grid's `moonCap`
+  ceiling — three or fewer states nothing extra.
 - **Coordinator re-sign, already booked (canon §D):** the `isNamed()` 470-vs-563
   instrument constant. Wave 1 RETIRED the row-height clause rather than
   inheriting or "correcting" it; `TestIsNamed_RetiredRowHeightClause` pins the

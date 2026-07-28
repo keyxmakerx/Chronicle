@@ -26,7 +26,7 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 - **Active phase:** Pre-launch cleanup — locked macro-sequence: Calendar → Docs-audit → Tech-debt → Bugs → Features. The ~2026-06-26 target launch date has elapsed; pre-launch cleanup continues (no new date set). PC-Claim all 4 stages complete (Foundry PR #64 merged). Sidebar/nav consolidation (C-NAV-V3, both PRs) shipped as the last major structural arc; see `cordinator/plans/2026-05-21-master-plan.md` for the prior phase definition, current dispatch queue drives day-to-day priorities.
 - **Coordinator artifacts (books, reports, dispatches):** live on the Cordinator repo's `main` branch — no dedicated working branch anymore.
 - **LANDED (2026-07-28), branch `claude/coordinator-handoff-stage-3-3d3s4w`:**
-  `C-CALV4-SEAM-P5` is **complete** — stages 1–14, one commit per stage, each
+  `C-CALV4-SEAM-P5` is **complete** — stages 1–15, one commit per stage, each
   green on the full `-short` suite. The durable deliverable is the **seam
   suite** (`internal/plugins/calendar/block_seam_test.go`): real fixtures
   projected through `projectBlock` and rendered through `calblock.Block`,
@@ -52,10 +52,14 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
     `EventsForEntityFiltered` promoted onto the `CalendarService`
     interface). Dated detail: `internal/plugins/calendar/.ai.md` +
     `internal/widgets/calendar_block/.ai.md`.
-  - **Residual, booked in todo.md:** `MonthGeometry.MoonsDeclared` is in the
-    r51 pin and populated by the widget fixtures, but no producer populates
-    it and no Nameplate badge renders it yet — the "3 of 4 moons" badge is
-    still unbuilt.
+  - **Stage 15 (2026-07-28) closed the booked residual:** `buildMonthGeometry`
+    populates `MonthGeometry.MoonsDeclared` from `Calendar.Moons` (hydrated by
+    the block path's `MoonsForCalendars` batch read), and the Nameplate renders
+    the r51 "3 of 4 moons" badge IFF the declared total exceeds the grid's
+    `moonCap` ceiling (3) — a calendar declaring three or fewer states nothing
+    extra, per the signed acceptance line. Seam-pinned through the real
+    `BlockService.Block` path (`TestSeam_DeclaredMoonTotalReachesTheNameplate`)
+    plus a widget-side render pin on hand-written `BlockData`.
   - `0c5f5f4` (same branch, not P5) `C-PERM-DMGRANT-REVOKE`: a removed co-DM
     kept owner-level visibility on **public** campaigns. Both the stored
     grant and the resolve-time gate are fixed. No migration.

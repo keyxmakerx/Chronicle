@@ -81,7 +81,10 @@ templ bandRow(d BlockData, row WeekRow) {
 // full-width band and column 7 on the Harptos row-1 split. This ruler is a
 // zero-width grid item placed on the half column itself, so the step is
 // continuous at exactly the boundary whatever the bands are doing. `.band.half`
-// is still honoured from EraBand.Half for a band that genuinely ends there.
+// is still STAMPED from EraBand.Half, but as a semantic marker only — since
+// §3.5 the class draws nothing (its border-right landed the rule at the band's
+// own right edge, wherever the band happened to end); this ruler is the rule's
+// single owner (TestCSS_BandHalfDrawsNoRightEdge).
 templ halfRule(m MonthGeometry) {
 	if halfColumn(m) > 0 {
 		<i class="halfrule" style={ halfRuleStyle(halfColumn(m)) } aria-hidden="true"></i>

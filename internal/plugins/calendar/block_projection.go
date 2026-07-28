@@ -91,11 +91,13 @@ func blockDefaultLayers() calblock.LayerState {
 
 // projectBlock turns a calendar + its candidate events into one BlockData.
 //
-// IDENTITY — RESOLVED (pin r50). The four identity fields were typed int64
-// while every one of those identities is a VARCHAR(36) UUID in Chronicle, so
-// this producer used to zero them and smuggle the calendar's id through
-// CalendarSlug. The pin was amended and they are now `string`; the real ids
-// are carried directly. CalendarSlug goes back to meaning the slug.
+// IDENTITY — RESOLVED (r50 retype, amended r51). The four identity fields
+// were typed int64 while every one of those identities is a VARCHAR(36) UUID
+// in Chronicle, so this producer used to zero them and smuggle the calendar's
+// id through CalendarSlug. The r50 retype made them `string`; the pin now in
+// force is its r51 amendment (Mark.Tied + MonthGeometry.MoonsDeclared, which
+// the books cite). The real ids are carried directly and CalendarSlug goes
+// back to meaning the slug.
 func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	cal := in.Calendar
 	viewer := in.Viewer
