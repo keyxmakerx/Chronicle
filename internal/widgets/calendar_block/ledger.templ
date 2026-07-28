@@ -1,0 +1,191 @@
+// ledger.templ — Zone C, docked, and FILLED.
+//
+// THERE IS NO DRAWER. The Ledger IS the drawer, permanently docked, so choosing
+// a day repaints a panel that was already on screen: nothing appears from
+// nowhere and nothing reflows. That is why canon D9's 480px slide-in drawer
+// clause was STRUCK (canon amendment A3) rather than reinterpreted, and it is
+// the reason this direction won its judging round. Canon A4 rewrote D6's
+// resolution sentence to say it in one line: "the panel is already there;
+// choosing a day changes what it says."
+//
+// WAVE 2 FILLS IT. LedgerStub.NeedsBackend is false from this slice on and the
+// signed `needs backend` chip — an honesty state, never a parking space —
+// retires by a producer flag rather than a template edit, which is the promise
+// the flag existed to keep.
+//
+// THE ROWS ARE REASSEMBLED FROM THE CELLS THE GRID ALREADY DRAWS (helpers.go,
+// newLedgerView). Not for cheapness: it structurally guarantees that the head
+// count, the foot count and the day-cell total are three readings of ONE
+// number, from one viewer-filtered pass. A parallel row list would re-open the
+// two-computations defect the projection exists to kill.
+//
+// EVERYTHING HERE IS SERVER-RENDERED AND THE SELECTION IS CSS. Every day's head
+// line and every empty day's "nothing here" line is emitted on every render and
+// revealed by the generated ladder, because CSS cannot compute "3 Deepwinter ·
+// 1 event". That is also why §6's count oracle is this slice's gate rather than
+// an afterthought: the Ledger multiplies the numbers on screen by roughly five,
+// and every one of them has to come from the viewer's own set.
+
+package calendar_block
+
+templ ledger(d BlockData) {
+	<div class="ledger" data-zone="ledger">
+		@ledgerTabs()
+		@ledgerHead(d, newLedgerView(d))
+		@ledgerRows(d, newLedgerView(d))
+	</div>
+}
+
+// ledgerTabs is the std tier's panel strip.
+//
+// IT CARRIES `Month` ALONE (CTS-7, SIGNED). The signed std still shows four
+// tabs — Month · Upcoming · Filters · Almanac — but the other three panels are
+// W-E's Shelf, and three tabs that do nothing are three inert controls; a
+// `title` explaining that is not an honesty mechanism (WG-spec V18). A single
+// pressed tab is the truthful statement that there is currently one panel, and
+// W-E adds each tab WITH its panel in the same commit.
+//
+// THE CONTAINER, ITS CSS AND ITS GEOMETRY ARE THIS SLICE'S, and the strip is
+// emitted at every tier with the container query choosing where it shows — the
+// same discipline the sync pill's two strings follow. W-E's addition is then
+// purely additive: same .ltabs box, same pressed treatment, same 34px metrics.
+//
+// NO TRAVELLING INDICATOR, EVER (canon A6): selection is state on the selected
+// item, never a sliding thumb or a moving underline.
+templ ledgerTabs() {
+	<div class="ltabs">
+		<button type="button" class="ltab" aria-pressed="true">Month</button>
+	</div>
+}
+
+// ledgerHead is the reserved-slot header.
+//
+// `.lhead` IS flex-wrap:nowrap AND THE `✕ all` SLOT IS RESERVED, both
+// deliberately. Design notes §10 defect 5: a conditionally-rendered "all month"
+// chip made the head WRAP the moment it appeared, jolting the Ledger on the
+// commonest interaction in the whole component. So the control is always in the
+// DOM and the stylesheet toggles its VISIBILITY, never its display.
+//
+// It is also the radio group's explicit "none" option. A radio cannot be
+// un-checked by another radio, so without this label a viewer who chose a day
+// could never get back to the month — which is why the slot is reserved rather
+// than conditional, in both senses at once.
+//
+// It is NOT a `.badge.need`. That chip means exactly "needs backend"
+// (REVIEW.md:428-432, the calendar-settings 9-badges-3-meanings failure), and
+// wave 2 adds no use of it that is not literally that.
+templ ledgerHead(d BlockData, v ledgerView) {
+	<div class="lhead">
+		<span class="t">Ledger</span>
+		<span class="c">
+			<span class="lctx-all">{ v.Head }</span>
+			for _, c := range v.Ctx {
+				<span class="lday lctx" data-lday={ c.Ord }>{ c.Text }</span>
+			}
+		</span>
+		<span class="sp"></span>
+		<input
+			type="radio"
+			class="daypick"
+			data-day-pick={ dayPickAll }
+			name={ dayPickGroupName(d) }
+			id={ dayPickInputID(d, dayPickAll) }
+			aria-label="All month"
+		/>
+		<label class="badge lclear" for={ dayPickInputID(d, dayPickAll) }>✕ all</label>
+	</div>
+}
+
+// ledgerRows is the scrolling list.
+//
+// `.lrows` CARRIES A MIN-HEIGHT AND IT IS THE INVARIANCE DEVICE. It is what
+// makes "nothing reflows" true when choosing a day filters fourteen rows down
+// to one: the rows box cannot shrink below it, so the Block's declared height
+// is identical selected and unselected — at full tier, and at std where the
+// Ledger stacks and would otherwise drag the whole page height around.
+// TestProbe_LedgerHeightIsInvariantUnderSelection measures it in a real engine.
+//
+// THE FILTER IS THE ONE SANCTIONED CONTENT CHANGE IN THE BLOCK, and it is
+// bounded to this box. Cells, marks, moons and era bands never animate, reflow
+// or change size (2026-07-27 motion policy); the same policy's escape table
+// permits "Content expansion — the Ledger opening … Reflows INSIDE the widget",
+// which is the licence this rides on.
+//
+// The list is FLAT and ungrouped: v4-plus-list.png shows all fourteen GM rows
+// unscrolled with no band. `.lband` is styled in Zone C and consumed by W-E's
+// Upcoming panel — this slice ships its CSS and does not use it.
+templ ledgerRows(d BlockData, v ledgerView) {
+	<div class="lrows">
+		if v.Zero {
+			<div class="lzero lzero-all">
+				{ ledgerZeroAll(d) }
+				<br/>
+				Ledger lists by ordinal day, so it works before eras are defined.
+			</div>
+		}
+		for _, l := range v.Lines {
+			@ledgerRow(d, l)
+		}
+		for _, c := range v.Ctx {
+			if c.Empty {
+				<div class="lzero lday" data-lday={ c.Ord }>{ ledgerZeroDay(c) }</div>
+			}
+		}
+	</div>
+}
+
+// ledgerRow is the signed row (cv4:1713-1729).
+//
+// data-day is the ANSWER key and data-lday the LADDER key: the first is what a
+// partner surface anywhere in the product matches on, the second is the bare
+// ordinal the one static sheet can filter with. Every dated surface must carry
+// data-day or the Ledger stops answering it — that rule is stated in the
+// package .ai.md for the next surface's author.
+//
+// THE GOLD RAIL AND THE `GM` BADGE SPLIT ON dm_only, NOT ON "hidden". The grid
+// draws the gold DOGEAR for dm_only and the gold DIAMOND for a visibility_rules
+// restriction; this row must split identically or it is the same defect one
+// layer down (ledgerShowsGoldRail). The audience CHIP renders for both and says
+// which — "GM only" or "Restricted" — because that is the pin's own wave-1
+// ruling; the composed `◈ Wardens · Rell` audience does not exist on main and
+// is W-G's.
+//
+// The meta line and the time BOTH drop rather than print empty: a typeless
+// event emits no .mt and an untimed one emits no .tm.
+templ ledgerRow(d BlockData, l ledgerLine) {
+	<div
+		class={ ledgerRowClass(l.Mark) }
+		data-day={ l.Key }
+		data-lday={ l.Ord }
+		style={ axisStyle(l.Mark.Axis) }
+		if l.Mark.EventID != "" {
+			data-event-id={ l.Mark.EventID }
+		}
+	>
+		<span class="dg">{ intText(l.Day) }</span>
+		<i class={ "rail " + patternClass(l.Mark.Pattern) } aria-hidden="true"></i>
+		if ledgerShowsGoldRail(l.Mark) {
+			<i class="gr" title="hidden from players" aria-hidden="true"></i>
+		}
+		if l.Mark.Glyph != "" {
+			<span class="tok" aria-hidden="true">{ l.Mark.Glyph }</span>
+		}
+		<span class="mid">
+			<span class="nmrow">
+				<span class="nm">{ l.Mark.Title }</span>
+				if ledgerShowsGoldRail(l.Mark) {
+					<span class="badge gm">GM</span>
+				}
+				if l.Mark.Audience != nil && l.Mark.Audience.Label != "" {
+					<span class="audchip">{ l.Mark.Audience.Label }</span>
+				}
+			</span>
+			if ledgerMetaLine(l.Mark) != "" {
+				<span class="mt">{ ledgerMetaLine(l.Mark) }</span>
+			}
+		</span>
+		if l.Mark.Time != "" {
+			<span class={ ledgerTimeClass(d) }>{ l.Mark.Time }</span>
+		}
+	</div>
+}

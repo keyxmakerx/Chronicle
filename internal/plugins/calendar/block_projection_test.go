@@ -400,8 +400,16 @@ func TestBlockLayersAreDefOnlyInWave1(t *testing.T) {
 	if got.Layers.HasSwitchboard {
 		t.Fatal("HasSwitchboard must be false in wave 1 — the per-viewer store is W-F's")
 	}
-	if !got.Ledger.NeedsBackend || !got.Shelf.NeedsBackend {
-		t.Fatal("the Ledger and Shelf zones dock with the signed `needs backend` chip in wave 1")
+	// INVERTED BY C-CALV4-LEDGER-P6, not deleted. The Ledger half asserted the
+	// wave-1 honesty state; W-B filled the zone, so the honest statement is now
+	// the opposite one and it is worth just as much — a producer that left the
+	// flag up would put "needs backend" beside a list of real events. The SHELF
+	// half is untouched and still asserts true: W-E owns that flip.
+	if got.Ledger.NeedsBackend {
+		t.Fatal("the Ledger is FILLED from wave 2; its `needs backend` flag must be down")
+	}
+	if !got.Shelf.NeedsBackend {
+		t.Fatal("the Shelf zone still docks with the signed `needs backend` chip — W-E fills it")
 	}
 }
 

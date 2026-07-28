@@ -143,7 +143,11 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		Month:        geo,
 		Sync:         blockSyncForCalendar(in.Sync, cal),
 		Layers:       blockDefaultLayers(),
-		Ledger:       calblock.LedgerStub{NeedsBackend: true, Hidden: in.LedgerHidden},
+		// W-B FILLED THE LEDGER (C-CALV4-LEDGER-P6 §9), so the zone's signed
+		// `needs backend` chip retires here — by a producer flag, without a
+		// template edit, which is the promise the flag existed to keep. The
+		// Shelf's flag on the next line is W-E's and is deliberately untouched.
+		Ledger:       calblock.LedgerStub{NeedsBackend: false, Hidden: in.LedgerHidden},
 		Shelf:        calblock.ShelfStub{NeedsBackend: true, Hidden: in.ShelfHidden},
 	}
 	data.DateLabel, data.Fault = blockDateLine(cal)

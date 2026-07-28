@@ -1119,10 +1119,180 @@
   text-overflow: ellipsis;
   min-width: 0;
 }
+/* .lhead's `✕ all` slot is RESERVED, and the control toggles VISIBILITY, never
+   display. Design notes §10 defect 5: a conditionally-rendered "all month" chip
+   made the head WRAP the moment it appeared, jolting the Ledger on the
+   commonest interaction in the component. nowrap above + a reserved box here.
+
+   It is NOT a .badge.need. That chip means exactly "needs backend"; wave 2 adds
+   no use of it that is not literally that (REVIEW.md:428-432). */
+.cal-block-host .lclear {
+  visibility: hidden;
+  height: 18px;
+  padding: 0 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+/* the per-day head lines: one per selectable day, all hidden until the ladder
+   reveals the chosen one. CSS cannot compute "3 Deepwinter · 1 event", so the
+   server renders every one of them. */
+.cal-block-host .lhead .lctx {
+  display: none;
+}
+.cal-block-host .lhead .lctx-all,
+.cal-block-host .lhead .lctx {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* THE ROWS BOX IS WHAT MAKES "nothing reflows" TRUE, and it does it differently
+   at the two tiers it exists at. MEASURED, not assumed —
+   TestProbe_LedgerHeightIsInvariantUnderSelection reads both in a real engine.
+
+   At STD (this baseline) the Ledger stacks BELOW the month and takes the flex
+   share the Block's max-height leaves it, so its box is the same size whether
+   it lists fourteen rows or one. The floor is 0 here DELIBERATELY: a 176px
+   floor cannot be honoured inside the 140px the std Block affords the zone, and
+   the measurement is unambiguous about what happens if it is written anyway —
+   the rows box keeps its 176px, bleeds 36px past the Ledger's own box, and
+   lands on top of the Shelf. That is exactly the std collision CTS-8 exists to
+   catch, and it is answered INSIDE this zone's own geometry rather than by
+   touching a host layer set. See the slice report's CTS-8 section.
+
+   At FULL tier the 176px floor is added back (§SIZE CLASS), where it is the
+   real invariance device. */
 .cal-block-host .lrows {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+}
+.cal-block-host .lrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 44px;
+  border-bottom: 1px solid var(--rule-hairline);
+  position: relative;
+}
+.cal-block-host .lrow .dg {
+  width: 22px;
+  flex: none;
+  font-weight: 650;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-body);
+}
+/* the rail SWELLS by transform, never by width: `width:4px` on a flex item is a
+   layout property and was design notes §10 defect 3. The swell itself lives in
+   §ANSWER. */
+.cal-block-host .lrow .rail {
+  width: 3px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-full);
+}
+/* the gold GM rail. dm_only ONLY — a restricted audience is the chip, never
+   this, exactly as the grid draws the dogear for one and the diamond for the
+   other. */
+.cal-block-host .lrow .gr {
+  width: 3px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--gold);
+}
+.cal-block-host .lrow .tok {
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--axis);
+  flex: none;
+  width: 16px;
+}
+.cal-block-host .lrow .mid {
+  flex: 1;
+  min-width: 0;
+}
+.cal-block-host .lrow .nmrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.cal-block-host .lrow .nm {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.cal-block-host .lrow .mt {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.cal-block-host .lrow .badge.gm,
+.cal-block-host .lrow .audchip {
+  flex: none;
+  font-weight: 650;
+  font-size: 9.5px;
+  line-height: 1.3;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: var(--r-badge);
+  border: 1px solid var(--gold);
+  color: var(--text-body);
+  white-space: nowrap;
+}
+.cal-block-host .lrow .audchip {
+  border-style: dashed;
+}
+.cal-block-host .lrow .tm {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+  text-align: right;
+}
+/* L15: a real-world time is labelled with its zone and an in-world one never
+   is. Both facts come from BlockData.IsRealWorld — one fact, one decision. The
+   .z de-emphasis ships as Zone C vocabulary; r52 folds the abbreviation INTO
+   the producer's formatted string, so nothing emits .z today (see the report). */
+.cal-block-host .lrow .tm .z {
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+  margin-left: 3px;
+}
+.cal-block-host .lrow .tm.mono {
+  font-size: 11.5px;
+}
+/* .lband — the sticky group header. Styled HERE, in Zone C's vocabulary, and
+   consumed by W-E's Upcoming panel (cv4:1793-1799). The Ledger itself is FLAT
+   and ungrouped: v4-plus-list.png shows all fourteen GM rows unbanded. Shipping
+   it here rather than making W-E redefine it is what keeps one vocabulary. */
+.cal-block-host .lband {
+  position: sticky;
+  top: 0;
+  background: var(--surface-inset);
+  padding: 4px 10px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--rule-hairline);
 }
 .cal-block-host .lzero {
   padding: 14px 10px;
@@ -1130,6 +1300,42 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
+}
+/* the per-day empty states, revealed by the ladder exactly as the head lines
+   are. "Nothing on 3 Deepwinter" and "No events in Deepwinter" are different
+   strings for different claims and both are signed. */
+.cal-block-host .lzero.lday {
+  display: none;
+}
+/* THE PANEL STRIP, std tier. Emitted at every tier and shown by the container
+   query — the same discipline the sync pill's two strings follow. Wave 2 puts
+   ONE tab in it (CTS-7); W-E adds each further tab WITH its panel.
+
+   NO TRAVELLING INDICATOR (canon A6): the pressed state is state ON the pressed
+   item, never a sliding thumb or a moving underline. */
+.cal-block-host .ltabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+  flex: none;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-block-host .ltab {
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  font-weight: 650;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cal-block-host .ltab[aria-pressed="true"] {
+  color: var(--accent);
+  background: color-mix(in oklch, transparent 96%, var(--accent));
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 /* ── Zone D · SHELF ──────────────────────────────────────────────────────── */
@@ -1294,6 +1500,21 @@
   outline-offset: -2px;
 }
 
+/* ── A DAY IS CHOSEN · the three rules that are NOT per-key ─────────────────
+   Everything here holds for ANY chosen day, so it is written once instead of
+   48 times. `all` is excluded because it is the group's explicit "none"
+   option — its whole job is to put the Block back in this state. */
+.cal-block-host .block:has(.daypick[data-day-pick]:checked:not([data-day-pick="all"])) .lctx-all,
+.cal-block-host .block:has(.daypick[data-day-pick]:checked:not([data-day-pick="all"])) .lzero-all {
+  display: none;
+}
+/* VISIBILITY, NEVER DISPLAY. `display` would take the control out of flow and
+   the head would re-lay-out around it — design notes §10 defect 5, the jolt on
+   the commonest interaction in the component. The slot is reserved either way. */
+.cal-block-host .block:has(.daypick[data-day-pick]:checked:not([data-day-pick="all"])) .lclear {
+  visibility: visible;
+}
+
 /* ── ANSWERED · the signature. Partners light in the DATUM's own hue ────────
    A partner without its own identity borrows the DATUM's — NEVER --accent
    (canon A7: the moment accent means "related to what you're pointing at" it
@@ -1425,14 +1646,43 @@
     flex: 1;
     min-width: 0;
   }
+  /* THE LEDGER MAY NOT DRIVE THE BLOCK'S HEIGHT, and that is the second half
+     of the invariance promise (the first is .lrows{min-height}).
+
+     Both items of a grid row contribute to its height, so a docked Ledger
+     listing fourteen 48px rows would make the Block 780px tall unselected and
+     532px selected — choosing a day would reflow the whole component, which is
+     precisely what canon A3 struck D9's drawer clause to prevent. Taking the
+     Ledger out of flow inside its own 300px column makes the MONTH the only
+     thing that decides the Block's height, and the row list scrolls inside
+     whatever the month affords. TestProbe_LedgerHeightIsInvariantUnderSelection
+     measures both readings in a real engine.
+
+     The column keeps its 300px: that is the same 300px the full-tier column
+     arithmetic subtracts (sizing.go's ledgerDock), and it stays a plain
+     positioned box so W-F's top-layer switchboard popover can still anchor
+     inside it. */
   .cal-block-host .layer-col {
     width: 300px;
     flex: none;
+    position: relative;
+  }
+  .cal-block-host .layer-col > .ledger {
+    position: absolute;
+    inset: 0;
   }
   .cal-block-host .ledger {
     border-left: 1px solid var(--rule-structural);
     border-top: 0;
   }
+  /* the panel strip is a std affordance: at full tier the Shelf sits at the
+     foot of the Block and the Ledger head has no tabs (cv4 block(), :1842). */
+  .cal-block-host .ltabs { display: none }
+  .cal-block-host .lrow { height: 48px }
+  /* the signed 176px floor, at the tier that can afford it. Together with the
+     out-of-flow column above, this is what keeps the Block's declared height
+     identical selected and unselected. */
+  .cal-block-host .lrows { min-height: 176px }
 
   .cal-block-host .grid .hd b { height: 22px }
   .cal-block-host .wd-l { display: inline }

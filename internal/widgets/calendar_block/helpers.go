@@ -993,3 +993,197 @@ func cellAxis(c DayCell) string {
 	}
 	return axisToken(c.Marks[0].Axis)
 }
+
+// ── Zone C · the docked Ledger's content ────────────────────────────────────
+//
+// THE LEDGER IS REASSEMBLED FROM THE CELLS THE GRID ALREADY DRAWS. There is no
+// Ledger.Rows list on the pin and there deliberately is not going to be (r52
+// §5): a parallel row list re-opens the two-computations defect that
+// block_projection.go exists to kill. Walking Month.Rows[].Cells[] plus
+// Month.Intercalary[].Marks STRUCTURALLY GUARANTEES that the Ledger and the
+// grid come from one viewer-filtered pass, which makes the count-oracle
+// discipline unbreakable instead of merely re-asserted — the head count, the
+// foot count and the day-cell total are three readings of one number.
+//
+// It is safe because DayCell.Marks is the FULL viewer-visible list (data.go):
+// blockCapMarks returns marks unchanged and only computes the fold count, so
+// nothing the Ledger should list is missing from the cells.
+//
+// THE LEDGER IS NEVER HORIZON-FILTERED. visFor() applies no fog filter and the
+// signed v4-plus-list.png shows the GM Ledger listing day 26 while the grid
+// blanks days 22-30 — "the Ledger already carries the GM's working list for
+// fogged days, so the grid never has to" is the argument that let the week-scale
+// fog reversal be withdrawn. DayCell.Fogged is permanently false in wave 1, so
+// nothing bites today; W-F adds the GRID-side split only.
+
+// ledgerLine is one assembled Ledger row: a mark, plus the day it sits on and
+// that day's two keys.
+type ledgerLine struct {
+	// Ord is the LADDER key ("3" / "i1") — what the generated sheet filters on.
+	Ord string
+	// Key is the ANSWER key (dayKey / intercalaryKey) — what a partner surface
+	// elsewhere in the product matches on.
+	Key  string
+	Day  int
+	Mark Mark
+}
+
+// ledgerContext is one day's head line and, when the day is empty, its own
+// "nothing here" line. Both are rendered for EVERY selectable day and revealed
+// by the ladder, because CSS cannot compute "3 Deepwinter · 1 event".
+type ledgerContext struct {
+	Ord   string
+	Label string // "3 Deepwinter" / the intercalary day's own name
+	Text  string // the head line: Label + " · N events"
+	Empty bool   // this day carries no marks, so it needs a .lzero of its own
+}
+
+// ledgerView is everything Zone C draws, computed once per render.
+type ledgerView struct {
+	Lines []ledgerLine
+	Ctx   []ledgerContext
+	// Head is the UNSELECTED head line: "<Month> · N events".
+	//
+	// The scope chip the signed head also carries (opts.scopeLabel, cv4:1742)
+	// is NOT printed: BlockData has no scope field, and inventing one is the
+	// thing this arc refuses. Booked, not closed (.ai/todo.md).
+	Head string
+	// Zero is true when the whole month carries no marks at all.
+	Zero bool
+}
+
+// newLedgerView assembles Zone C. One walk, no second pass over anything.
+func newLedgerView(d BlockData) ledgerView {
+	cells := make(map[int]DayCell, d.Month.Days)
+	for _, r := range d.Month.Rows {
+		for _, c := range r.Cells {
+			if c.Day > 0 {
+				cells[c.Day] = c
+			}
+		}
+	}
+
+	v := ledgerView{Lines: make([]ledgerLine, 0, 16)}
+	perDay := make(map[string]int, d.Month.Days+len(d.Month.Intercalary))
+
+	// Ordinal order, which is the Ledger's own promise: it "lists by ordinal
+	// day, so it works before eras are defined".
+	for day := 1; day <= d.Month.Days; day++ {
+		c, ok := cells[day]
+		if !ok {
+			continue
+		}
+		ord := dayOrdKey(day)
+		perDay[ord] = len(c.Marks)
+		for _, m := range c.Marks {
+			v.Lines = append(v.Lines, ledgerLine{
+				Ord: ord, Key: dayKey(d.CalendarSlug, day), Day: day, Mark: m,
+			})
+		}
+	}
+	for _, ic := range d.Month.Intercalary {
+		ord := intercalaryOrdKey(ic.Day)
+		perDay[ord] = len(ic.Marks)
+		for _, m := range ic.Marks {
+			v.Lines = append(v.Lines, ledgerLine{
+				Ord: ord, Key: intercalaryKey(d.CalendarSlug, ic.Day), Day: ic.Day, Mark: m,
+			})
+		}
+	}
+
+	v.Zero = len(v.Lines) == 0
+	v.Head = d.Month.Name + " · " + eventCountLabel(len(v.Lines))
+
+	// One context per SELECTABLE day. Past the ladder's bound a day has no
+	// control, so a context for it could never be revealed — emitting one would
+	// be dead markup on every render of a long month.
+	for day := 1; day <= d.Month.Days; day++ {
+		if _, ok := cells[day]; !ok || !dayAnswers(day) {
+			continue
+		}
+		ord := dayOrdKey(day)
+		label := intText(day) + " " + d.Month.Name
+		v.Ctx = append(v.Ctx, ledgerContext{
+			Ord: ord, Label: label,
+			Text:  label + " · " + eventCountLabel(perDay[ord]),
+			Empty: perDay[ord] == 0,
+		})
+	}
+	for _, ic := range d.Month.Intercalary {
+		if !intercalaryAnswers(ic.Day) {
+			continue
+		}
+		ord := intercalaryOrdKey(ic.Day)
+		label := ic.Name
+		if strings.TrimSpace(label) == "" {
+			label = intText(ic.Day) + " " + d.Month.Name
+		}
+		v.Ctx = append(v.Ctx, ledgerContext{
+			Ord: ord, Label: label,
+			Text:  label + " · " + eventCountLabel(perDay[ord]),
+			Empty: perDay[ord] == 0,
+		})
+	}
+	return v
+}
+
+// ledgerZeroAll is the UNSELECTED empty state. Its second sentence is
+// load-bearing and not decoration: it is the reason the Ledger renders in the
+// FAULT case at all. A calendar that cannot resolve a date prints its fault
+// where the date would go (BlockData.Fault) and STILL lists its events, because
+// listing by ordinal day needs no era, no epoch and no reckoning.
+func ledgerZeroAll(d BlockData) string {
+	return "No events in " + d.Month.Name + "."
+}
+
+// ledgerZeroDay is the SELECTED empty state — a different string from
+// ledgerZeroAll, and both are signed. "Nothing on 3 Deepwinter" names the day
+// the viewer chose; "No events in Deepwinter" names the month they are looking
+// at. Printing the month's string for a chosen day would say the month is empty
+// when it is not.
+func ledgerZeroDay(c ledgerContext) string { return "Nothing on " + c.Label + "." }
+
+// ledgerRowClass stamps the row's tie state so the tie toggle re-inks the
+// Ledger exactly as it re-inks the grid — one flip, both zones.
+func ledgerRowClass(m Mark) string { return "lrow lday" + tieClass(m) }
+
+// ledgerShowsGoldRail reports whether a row draws the gold GM rail and the `GM`
+// badge.
+//
+// IT SPLITS THE SAME WAY THE GRID'S DOGEAR AND DIAMOND DO, and that is the
+// whole point: Audience.Restricted is the DISCRIMINATOR, not a synonym for
+// "hidden". dm_only (Restricted false) is the gold notch in the grid and the
+// gold rail here; a visibility_rules restriction (Restricted true) is the
+// diamond in the grid and the audience chip alone here. A Ledger that drew the
+// gold rail on a restricted-audience row would be the identical defect one
+// layer down from the one SEAM-P5 stage 4 fixed.
+func ledgerShowsGoldRail(m Mark) bool {
+	return m.Audience != nil && !m.Audience.Restricted
+}
+
+// ledgerMetaLine is the row's meta line.
+//
+// WAVE 2 PRINTS THE TYPE ALONE. The signed line is "<type lowercased> ·
+// <Owner>", but Event carries no owner/creator surface in the projection and
+// resolving a display name for a user id implies caching this wave has no
+// reason to build (CTS-5, SIGNED: omit). It drops the absent segment rather
+// than printing "quest · " with a dangling separator — the blockSyncStrings
+// idiom. `· RSVP 3/5` is not printed either: RSVP SURFACES are W-G, and the
+// Bench's RSVP panel already carries the `needs backend` chip for that reason.
+//
+// Empty means the row emits no .mt element at all, not an empty one.
+func ledgerMetaLine(m Mark) string {
+	return strings.ToLower(strings.TrimSpace(m.AxisLabel))
+}
+
+// ledgerTimeClass picks the row's time treatment, and it is a per-CALENDAR
+// decision rather than a per-event one (L15, design notes §9 dev 5): a
+// zone-labelled real-world time printed on an in-world calendar would
+// contradict L15's own rule. BlockData.IsRealWorld is the one fact that decides
+// it, which is exactly why r52 added no per-mark real-world flag.
+func ledgerTimeClass(d BlockData) string {
+	if d.IsRealWorld {
+		return "tm"
+	}
+	return "tm mono"
+}

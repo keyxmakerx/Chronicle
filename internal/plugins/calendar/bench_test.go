@@ -405,8 +405,35 @@ func benchGridSection(t *testing.T, html string) string {
 // not appear.
 func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	html := renderBench(t, benchFxData(true, true))
-	if n := strings.Count(html, `class="badge need">needs backend`); n < 4 {
-		t.Errorf("the session, sync and horizon tiles plus the RSVP panel header all carry the chip; got %d", n)
+
+	// RE-PINNED DELIBERATELY BY C-CALV4-LEDGER-P6 §9. This was `>= 4`, which is
+	// an assertion a Block-side chip could satisfy on the Bench's behalf — and
+	// the Block-side chips are leaving one wave at a time (W-B took the
+	// Ledger's here, W-E takes the Shelf's next). A floor that another zone can
+	// meet stops proving anything about the Bench.
+	//
+	// So the Bench's OWN chips are counted, exactly, and named:
+	//   1. the session tile      — session dates have no store on Chronicle
+	//   2. the sync tile         — the transport's per-calendar linkage
+	//   3. the horizon tile      — there is no queryable knowledge horizon
+	//   4. the RSVP panel header — RSVP surfaces are W-G
+	// Everything else is subtracted first, so this line can only ever be
+	// satisfied by the four tiles it names.
+	const chip = `class="badge need">needs backend`
+	const shelfChip = `<span class="cap">Shelf</span> <span class="sp"></span> <span ` + chip
+	benchOwn := strings.Count(html, chip) - strings.Count(html, shelfChip)
+	if benchOwn != 4 {
+		t.Errorf("the Bench's own chips = %d, want 4 (session · sync · horizon · RSVP header); "+
+			"Block-side zone chips are subtracted and must not stand in for them", benchOwn)
+	}
+	// The Ledger's chip is gone because W-B FILLED the zone. Inverted, not
+	// deleted: a chip beside fourteen real rows would be a lie.
+	if !strings.Contains(html, `data-zone="ledger"`) {
+		t.Error("the Bench's Blocks must still dock the Ledger — the full-tier column " +
+			"arithmetic subtracts its 300px unconditionally")
+	}
+	if n := strings.Count(html, shelfChip); n == 0 {
+		t.Error("the Shelf zone still carries the signed chip until W-E fills it")
 	}
 	for _, fabricated := range []string{"RSVP 3 / 5", "9 days fogged", "2 RSVPs unanswered"} {
 		if strings.Contains(html, fabricated) {

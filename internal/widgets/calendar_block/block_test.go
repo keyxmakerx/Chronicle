@@ -366,16 +366,25 @@ func TestMoons_CappedAndDerived(t *testing.T) {
 // ── zones C and D ───────────────────────────────────────────────────────────
 
 // TestStubs_DockedAtTheRightSizeWithTheChip. The chip is a SIGNED honesty state,
-// not a shortcut. What matters for wave 1 is that the Ledger zone is present:
-// the full-tier column arithmetic subtracts its 300px unconditionally, so a
-// Block that skipped it would flip density at the wrong host width.
+// not a shortcut. What matters is that both zones are PRESENT: the full-tier
+// column arithmetic subtracts the Ledger's 300px unconditionally, so a Block
+// that skipped it would flip density at the wrong host width.
+//
+// INVERTED BY C-CALV4-LEDGER-P6, not weakened. The chip count was 2 while both
+// zones were stubs. W-B FILLS the Ledger, so exactly one chip is left — the
+// Shelf's, which W-E retires the same way. The assertion is still a count and
+// still exact, because "one fewer chip than I expected" is the failure this
+// line exists to catch.
 func TestStubs_DockedAtTheRightSizeWithTheChip(t *testing.T) {
 	body := render(t, fxHarptos(true))
 	mustContain(t, body, `data-zone="ledger"`, "the Ledger zone is docked")
 	mustContain(t, body, `data-zone="shelf"`, "the Shelf zone is at the foot")
-	if n := strings.Count(body, `class="badge need">needs backend`); n != 2 {
-		t.Errorf("%d `needs backend` chips; want one on the Ledger and one on the Shelf", n)
+	if n := strings.Count(body, `class="badge need">needs backend`); n != 1 {
+		t.Errorf("%d `needs backend` chips; want exactly one — the Shelf's. The Ledger is "+
+			"filled from wave 2 and must carry none.", n)
 	}
+	mustNotContain(t, body, `data-zone="ledger" class`,
+		"the filled Ledger zone keeps its marker attribute first")
 
 	// Hidden means REMOVED, not collapsed: the declared heights are invariant.
 	g := render(t, fxGregorian())
