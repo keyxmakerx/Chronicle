@@ -804,11 +804,47 @@ func moonsBadgeText(d BlockData) string {
 	return fmt.Sprintf("%d of %d moons", moonCap, d.Month.MoonsDeclared)
 }
 
-// moonsBadgeTitle explains the ceiling on hover. The signed title's "all of
-// them are in the Almanac" tail is NOT ported: the Almanac is W-E and does not
-// exist yet, and a hover that points at an unbuilt surface is a small lie.
+// moonsBadgeTitle explains the ceiling on hover.
+//
+// THE SIGNED TAIL IS RESTORED, CONDITIONALLY (C-CALV4-SEAM-P5 §4.8 booked it by
+// name for this slice). The signed title is
+//
+//	"${MOONS.length} moons declared; the grid draws ${SKY_MAX} — all of them
+//	 are in the Almanac"                                        (cv4:1653-1655)
+//
+// and stage 15 withheld the tail because the Almanac did not exist: a hover
+// that points at an unbuilt surface is a small lie. W-E built it, so the
+// sentence becomes true — but only WHERE IT IS TRUE, which is the second of
+// stage 15's two conditions and the reason there are two strings here rather
+// than one.
+//
+// TWO GATES, BOTH FROM STAGE 15's OWN REASONING:
+//
+//  1. the badge itself is already gated on the MOONS LAYER (moonsBadgeText,
+//     the signed MOONS_ON() gate). Nothing here weakens that.
+//  2. the tail is additionally gated on the Almanac being REACHABLE IN THIS
+//     RENDER. A Block with the Shelf hidden (noShelf — the Bench's real-world
+//     Block) or with the shelf layer off draws no Almanac, and a title that
+//     names an absent surface is the same lie class as a green sync pill with
+//     no denominator. Two title strings, exactly as stage 15 said to ship if
+//     it came to that.
 func moonsBadgeTitle(d BlockData) string {
-	return fmt.Sprintf("%d moons declared; the grid draws %d", d.Month.MoonsDeclared, moonCap)
+	base := fmt.Sprintf("%d moons declared; the grid draws %d", d.Month.MoonsDeclared, moonCap)
+	if shelfDocked(d) && almanacReachable(d) {
+		return base + " — all of them are in the Almanac"
+	}
+	return base
+}
+
+// shelfDocked reports whether Zone D renders for this viewer: the layer
+// registry says yes AND the host has not removed it.
+//
+// It is the Shelf's half of ledgerDocked, and it exists for the same reason:
+// the predicate is read in three places now — the zone's call site, the
+// moons-badge tail, and whatever asks next — and three copies of an `&&` is how
+// a title starts naming a surface that is not there.
+func shelfDocked(d BlockData) bool {
+	return hasLayer(d.Layers, "shelf") && !d.Shelf.Hidden
 }
 
 // ── the ANSWER ladder: day selection, in CSS, with no JS and no route ───────
@@ -940,6 +976,23 @@ func ledgerDocked(d BlockData) bool {
 //  1. filter — every Ledger row that is not this day leaves the flow. This is
 //     the ONE sanctioned content change in the Block and it is bounded to
 //     .lrows; the month grid never moves (2026-07-27 motion policy).
+//
+//     THE SELECTOR NOW SAYS `.lrows .lrow` AND THAT IS A ONE-WORD DEFECT FIX,
+//     NOT A DESIGN CHANGE (C-CALV4-SHELF-P7). The rule was written as a bare
+//     `.lrow:not(...)` when Zone C was the only surface that emitted the row
+//     primitive. W-E's Upcoming panel reuses that primitive VERBATIM — the
+//     signed panel calls the same ledgerRow, deliberately, so the two zones
+//     cannot drift — at which point the unscoped filter reached into the Shelf
+//     and hid its rows too. Measured, not reasoned: the Block was 618px with no
+//     day chosen and 532px with one, because the Shelf's body is content-driven
+//     under its 132px ceiling. That is the docked Ledger's own promise broken
+//     by its own mechanism, and it is the SECOND time a rule in this ladder has
+//     reached a surface it was never written for (the first was the reveal
+//     rule, LEDGER-P6 §4.5).
+//
+//     The paragraph above already said "bounded to .lrows". The selector now
+//     says so as well, and TestCSS_AnswerLadderChangesNothingButVisibility
+//     pins it so a future hand cannot un-scope it by "tidying".
 //  2. reveal — this day's head-context line and its "nothing on this day"
 //     line, which are rendered for every day and hidden until chosen. CSS
 //     cannot compute "3 Deepwinter · 1 event", so the server renders all of
@@ -983,7 +1036,7 @@ func answerLadderCSS() string {
 	b.WriteString("   UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/ */\n")
 	for _, k := range answerLadderKeys() {
 		fmt.Fprintf(&b,
-			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lrow:not([data-lday=\"%s\"]) { display: none }\n",
+			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lrows .lrow:not([data-lday=\"%s\"]) { display: none }\n",
 			k, k)
 		fmt.Fprintf(&b,
 			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lhead .lctx[data-lday=\"%s\"],\n"+
@@ -1266,3 +1319,460 @@ func blockFootCount(d BlockData) string {
 	}
 	return eventCountLabel(totalMarks(d))
 }
+
+// ── Zone D · the Shelf ──────────────────────────────────────────────────────
+//
+// THE SHELF READS. It authors nothing and it grows no configuration surface of
+// its own — contract §8 item 2 (L5) says the celestial surface is "a dedicated
+// filtered Almanac list in the shelf widget. No fifth authoring surface", and
+// that clause is a bound rather than decoration.
+//
+// THREE PANELS, ONE RADIO GROUP, ZERO JAVASCRIPT ([S7], SIGNED). A bound Block
+// renders under context.Background() (entity_calendar_block.go), so the
+// mockup's `?alm=` query param is not reachable, and per-viewer persistence is
+// W-F's store, which does not exist. The tabs are therefore the same CSS-only
+// radio mechanism the tie toggle proved (nameplate.templ, TestCSS_TieToggle-
+// FlipsInkWithoutJS): the server renders the default pressed state, the
+// stylesheet does the rest, and W-F later swaps the DEFAULT's source for a
+// stored preference and touches nothing else.
+
+// shelfPickGroupName is the radio group shared by this Block's three Shelf
+// tabs, and shelfPickInputID one tab's DOM id.
+//
+// Pure functions of the data, for the third time in this package and for the
+// same two reasons (see tieGroupName): the Bench composes four Blocks on one
+// page and two of them sharing a radio name would fight over one piece of
+// state, while the SAME Block re-rendered by an HTMX binding swap must keep the
+// name or the viewer's chosen tab is lost in the swap.
+func shelfPickGroupName(d BlockData) string {
+	return "shelf-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+func shelfPickInputID(d BlockData, key string) string {
+	return shelfPickGroupName(d) + "-" + domToken(key)
+}
+
+// The three Shelf tab keys, declared once. The stylesheet writes one rule per
+// key against these exact strings.
+const (
+	shelfTabUpcoming = "upcoming"
+	shelfTabFilters  = "filters"
+	shelfTabAlmanac  = "almanac"
+)
+
+// almanacReachable is the wave-2 reduction of the signed default predicate, and
+// the gate on the Almanac tab existing at all.
+//
+// THE SIGNED PREDICATE IS `SKY_ON() && m.moons` (cv4:1777-1783), where
+// SKY_ON() = MOONS_ON() || GRAPH_ON() (:1341), MOONS_ON() = L('moons') &&
+// S.moonstyle !== 'off' (:1339) and GRAPH_ON() = L('moongraph') (:1340).
+//
+// TWO OF THOSE FOUR TERMS DO NOT EXIST IN WAVE 2, and they are named here so
+// W-F restores them in ONE place rather than re-deriving them wrong:
+//
+//   - `moongraph` is omitted from BOTH host layer sets and booked for W-F
+//     (HOST-P3 §4.2, BENCH-P4 §5.7), so GRAPH_ON() is constant false;
+//   - S.moonstyle is a PER-VIEWER store and W-F owns it, so the `!== 'off'`
+//     term has nothing to read.
+//
+// What is left is exactly "the moons layer is enabled AND the calendar declares
+// at least one moon" — and the register is empty in every case where the second
+// half is false, including the one the producer knows about and the renderer
+// does not (a host that removed the Shelf builds no register at all).
+//
+// IT GATES THE TAB, not just the default. A tab whose panel has nothing to draw
+// is an inert control, and WG-spec V18 is explicit that a `title` explaining an
+// inert control is not an honesty mechanism. Absence is.
+func almanacReachable(d BlockData) bool {
+	return hasLayer(d.Layers, "moons") && len(d.Month.Almanac) > 0
+}
+
+// shelfDefaultTab is the SERVER-RENDERED pressed tab, and it is the one thing
+// W-F has to change when the per-viewer store exists.
+//
+// The signed default is `SKY_ON() && m.moons` (cv4:1777-1783) — the Almanac
+// leads when there is a sky to lead with, and Upcoming otherwise. It is the
+// SAME predicate that decides whether the Almanac tab exists at all, called in
+// one place, so the tab that is pressed and the panel that exists can never
+// disagree.
+func shelfDefaultTab(d BlockData) string {
+	if almanacReachable(d) {
+		return shelfTabAlmanac
+	}
+	return shelfTabUpcoming
+}
+
+// shelfShowsFilters gates the Filters tab on the viewer being a GM.
+//
+// [S10], SIGNED: a 2-tab Shelf for players and a 3-tab Shelf for the GM. It is
+// the 2026-07-27 needs-backend-audience ruling applied one level down — "for a
+// player the zone simply does not appear" — and it is ABSENCE rather than a
+// disabled control. The Filters panel is a bare `needs backend` chip ([S2]) and
+// that chip must never render to a player; gating the chip alone would leave a
+// player a tab that opens on nothing, which is worse than either.
+//
+// It is worth naming as what it is: the FIRST per-role difference inside a
+// chrome strip rather than inside content. Everywhere else on the Block,
+// permission is absence of DATA.
+func shelfShowsFilters(d BlockData) bool { return d.Viewer.IsGM }
+
+// shelfUpcoming is Zone D's Upcoming panel, assembled from the SAME
+// ledgerView the Ledger draws.
+//
+// IT REUSES THE LEDGER'S ROW PRIMITIVE VERBATIM (cv4:1794, :1798 — the signed
+// panel calls ledgerRow(e, 'full', i)). There is no second row implementation
+// and no second walk: newLedgerView already produced every line from the one
+// viewer-filtered pass, so the Shelf's counts cannot disagree with the Ledger's
+// head, the Block's foot or the day-cell total. A parallel list here would
+// re-open the two-computations defect for the fourth time.
+//
+// MONTH-SCOPED, EXACTLY AS DRAWN ([S1], SIGNED). The panel is Today plus up to
+// four later days of the SAME month on ONE calendar. The cross-calendar index
+// exists — BlockService.UpcomingAcrossCalendars — but it is the BENCH's NEXT UP
+// surface, and a second one inside the Block is the duplicate-surface decay the
+// proportion rule exists to stop. It also keeps the Block's data self-contained
+// under context.Background(), which is what lets a Block be embedded anywhere.
+//
+// THE FOUR-ROW CAP IS NORMATIVE ([S1]). `.sp2` is a fixed 132px with its own
+// scroller; the cap is what keeps the scroller from becoming the panel.
+type shelfUpcomingView struct {
+	// Today is the rows on TodayDay. Empty is a real state and gets its own
+	// line, because "no events today" and "today is not in this month" are
+	// different claims — the same split ledgerZeroAll/ledgerZeroDay makes.
+	Today []ledgerLine
+	// Later is the next LaterCap days' rows, in ordinal order.
+	Later []ledgerLine
+	// TodayInMonth is false when the calendar's current day falls outside the
+	// rendered month, which is the ordinary case for any month but this one.
+	TodayInMonth bool
+	// Truncated is true when the cap dropped rows, so the panel can say so
+	// rather than silently ending. A list that stops without saying it stopped
+	// is the same class of omission as a count with no denominator.
+	Truncated bool
+}
+
+// shelfUpcomingCap is the signed `.slice(0, 4)` (cv4:1798), normative per [S1].
+const shelfUpcomingCap = 4
+
+func newShelfUpcoming(d BlockData) shelfUpcomingView {
+	v := shelfUpcomingView{TodayInMonth: d.Month.TodayDay > 0}
+	for _, l := range newLedgerView(d).Lines {
+		// INTERCALARY DAYS ARE NOT IN THIS LIST, and that is arithmetic rather
+		// than a judgement: an intercalary day's ordinal is its own (Midwinter
+		// 1 is not Deepwinter 1), so comparing it against TodayDay would order
+		// it against a different scale. They keep their place in the Ledger,
+		// which lists by ordinal day within each namespace.
+		if strings.HasPrefix(l.Ord, "i") {
+			continue
+		}
+		switch {
+		case v.TodayInMonth && l.Day == d.Month.TodayDay:
+			v.Today = append(v.Today, l)
+		case l.Day > d.Month.TodayDay:
+			if len(v.Later) < shelfUpcomingCap {
+				v.Later = append(v.Later, l)
+			} else {
+				v.Truncated = true
+			}
+		}
+	}
+	return v
+}
+
+// shelfTodayZero is the Today band's empty line. Two strings for two claims:
+// the month HAS a today and nothing is on it, or the month does not contain
+// today at all — printing "Nothing today" for the second would assert the
+// viewer is looking at the current month when they are not.
+func shelfTodayZero(d BlockData, v shelfUpcomingView) string {
+	if !v.TodayInMonth {
+		return "Today is not in " + d.Month.Name + "."
+	}
+	return "Nothing today."
+}
+
+// shelfLaterZero is the This month band's empty line — the month has no events
+// after the anchor day. It names the month for the same reason ledgerZeroAll
+// does: the claim is about the month, not about a day.
+func shelfLaterZero(d BlockData) string {
+	return "Nothing further in " + d.Month.Name + "."
+}
+
+// shelfMoreText states what the four-row cap dropped. The cap is normative, so
+// the honest form is to say the list is capped rather than to end silently —
+// the Ledger, one zone up, lists every row and is one scroll away.
+func shelfMoreText() string {
+	return "First " + strconv.Itoa(shelfUpcomingCap) + " shown — the Ledger lists the whole month."
+}
+
+// ── Zone D · the Almanac ────────────────────────────────────────────────────
+//
+// THE ALMANAC IS L21's OTHER HALF. The month grid caps at moonCap so "the grid
+// can never grow with the fiction", and that ceiling is legitimate ONLY because
+// "the Almanac carries every declared body at full width" (design notes :667).
+// Everything here therefore iterates MonthGeometry.Almanac — the producer's
+// UNCAPPED register ([S5], signed) — and never DayCell.Moons, which is capped
+// and physically cannot carry the overflow body.
+//
+// IT IS A READOUT AND NOT A PICTURE. Timepiece, skybox and skypane are PARKED
+// (L12/D4), and the vetoed composite-brightness ribbon was RELOCATED here
+// rather than resurrected (design notes :594-598): a magnitude as an explicit
+// readout, never a glanceable claim (L19/L24). The Shelf must not grow a
+// pictorial sky.
+//
+// EVERY NUMBER COMES FROM THE MONTH'S REAL DAY COUNT. The mockup hardcodes a
+// thirty-day month in four places (cv4:2096, :2101, :2112, :2116) — in a
+// product whose whole thesis is ten-day weeks and arbitrary month lengths, and
+// in a panel whose own signed footnote says "no date in the register was typed
+// by hand". Three of the four are arithmetic and are fixed in the producer; the
+// fourth (":2116", "— meteors 22:00–02:00") is fixture content and is simply
+// not printed: it comes from the day's events or it does not appear.
+//
+// THERE IS NO EPITHET ([S6], signed). calendar.Moon (model.go:461-473) has
+// Name, CycleDays, PhaseOffset, Color, BaseDesign, Tint, PhaseSource, Size and
+// OrbitSpeed — and no epithet or description column. The mockup's "the great
+// pale moon" and "the far wanderer" are fabricated fixture text. A migration
+// adding one would be legal and would ship a dead column with no authoring
+// surface to fill it, which is a fifth authoring surface waiting to happen.
+// The panel is complete without it.
+
+// The Almanac's three sub-tab keys, and their radio-group identifiers.
+//
+// data-alm-pick, never data-moonstyle: guard B3 — `moonstyle` is one of the
+// <html> state-marker nouns, and an interactive control that reuses one made
+// every click on the mockup re-navigate, twice.
+const (
+	almTabTonight = "tonight"
+	almTabMonth   = "month"
+	almTabMoons   = "moons"
+)
+
+func almPickGroupName(d BlockData) string {
+	return "alm-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+func almPickInputID(d BlockData, key string) string {
+	return almPickGroupName(d) + "-" + domToken(key)
+}
+
+// almanacAnchorDay is the day the Tonight readout is written for.
+//
+// THE SIGNED ANCHOR IS `S.sel || m.today` (cv4:2074) — the Almanac follows the
+// Ledger's selected day. WAVE 2 SHIPS THE `m.today` HALF ONLY, and this is the
+// slice's one substantive divergence from a signed still
+// (v4-block-full-selected.png), taken deliberately rather than missed:
+//
+// Selection inside the Block is CSS-only (CTS-1, W-B) — a hidden radio and a
+// generated per-day rule ladder — so a Tonight readout that retargeted would
+// have to be rendered ONCE PER SELECTABLE DAY and revealed by that ladder, the
+// way the Ledger's per-day head lines are. That is 40 days x (one line per
+// declared moon plus a lit-list line) of markup on every Block, on top of the
+// +67% the docked Ledger already costs (LEDGER-P6 §3.2), and it would require
+// editing W-B's generated ladder and the guard that scopes its reveal rule to
+// two named surfaces — both explicitly out of this slice's bounds.
+//
+// The Month lane still carries data-day on every cell, so the Almanac remains a
+// keyed ANSWER partner and the retarget is one ladder extension away for
+// whichever slice pays for it. Booked, not approximated.
+func almanacAnchorDay(d BlockData) int {
+	if d.Month.TodayDay > 0 {
+		return d.Month.TodayDay
+	}
+	return 1
+}
+
+// almanacDayAt returns one moon's entry for a day, and whether it exists. The
+// register is never partially filled, so a miss means the anchor is out of the
+// month rather than that the lane is short — either way the caller prints
+// nothing rather than a zero.
+func almanacDayAt(m AlmanacMoon, day int) (AlmanacDay, bool) {
+	if day < 1 || day > len(m.Days) {
+		return AlmanacDay{}, false
+	}
+	return m.Days[day-1], true
+}
+
+// almanacIllumPct is the signed rounding: `il = Math.round(illumOf(ph) * 100)`.
+// The grid's gibbous/crescent split uses the same rounded percentage, so the
+// readout and the disc can never disagree about which side of half a moon is on.
+func almanacIllumPct(a AlmanacDay) int { return int(math.Round(a.Illum * 100)) }
+
+// almanacKeepsTheMonth reports whether a moon's cycle divides this month
+// exactly — the moon that "keeps the month".
+//
+// The mockup prints "none keeps the month" as a LITERAL (cv4:2112) beside a
+// literal "three moons declared". Both are derived here instead: the count from
+// MonthGeometry.MoonsDeclared (r51) and this from the moon's own drift against
+// the month's real length. The tolerance is a floating-point one, not a
+// fuzziness — cycle lengths are decimals and 30 mod 30.0 must not miss by 1e-15.
+func almanacKeepsTheMonth(m AlmanacMoon) bool {
+	return m.PeriodDays > 0 && (m.DriftDays < 1e-9 || m.PeriodDays-m.DriftDays < 1e-9)
+}
+
+// almanacSkyLine is the Tonight panel's summary row — the signed
+// "three moons declared · none keeps the month" with both halves computed.
+func almanacSkyLine(d BlockData) string {
+	var keepers []string
+	for _, m := range d.Month.Almanac {
+		if almanacKeepsTheMonth(m) {
+			keepers = append(keepers, m.Name)
+		}
+	}
+	line := strconv.Itoa(d.Month.MoonsDeclared) + " moons declared · "
+	if len(keepers) == 0 {
+		return line + "none keeps the month"
+	}
+	return line + strings.Join(keepers, " and ") + " keeps the month"
+}
+
+// almanacNextTurn is the next turn of EITHER kind at or after the anchor,
+// wrapping to the month's first — the signed `t.find(x => x.d > d) || t[0]`
+// (cv4:2110). It reads the producer's two pre-scanned turn days rather than
+// re-scanning Days, because the scan belongs beside the pass that produced them.
+//
+// Returns 0 when the month contains no turn of either kind, at which point the
+// readout DROPS the segment rather than printing "next  0".
+func almanacNextTurn(m AlmanacMoon, anchor int) (int, string) {
+	type turn struct {
+		day  int
+		kind string
+	}
+	var best, wrap turn
+	for _, c := range []turn{{m.NextNewDay, "new"}, {m.NextFullDay, "full"}} {
+		if c.day <= 0 {
+			continue
+		}
+		if wrap.day == 0 || c.day < wrap.day {
+			wrap = c
+		}
+		if c.day >= anchor && (best.day == 0 || c.day < best.day) {
+			best = c
+		}
+	}
+	if best.day > 0 {
+		return best.day, best.kind
+	}
+	return wrap.day, wrap.kind
+}
+
+// almanacMoonLine is one moon's Tonight row: "68% waxing gibbous · next full 19".
+func almanacMoonLine(m AlmanacMoon, anchor int) string {
+	a, ok := almanacDayAt(m, anchor)
+	if !ok {
+		return ""
+	}
+	line := strconv.Itoa(almanacIllumPct(a)) + "% " + a.Phase
+	if day, kind := almanacNextTurn(m, anchor); day > 0 {
+		line += " · next " + kind + " " + strconv.Itoa(day)
+	}
+	return line
+}
+
+// almanacLitThreshold is the signed "meaningfully lit" bound (cv4:2114-2115).
+const almanacLitThreshold = .25
+
+// almanacLitLine is the Tonight panel's closing row: which bodies are up.
+//
+// THE THRESHOLD IS A STATED ONE. "no moon meaningfully lit" is a claim about a
+// number, and the number is illum > .25 — which is why the panel prints the
+// percentages above it rather than only this sentence.
+func almanacLitLine(d BlockData, anchor int) string {
+	var lit []string
+	for _, m := range d.Month.Almanac {
+		if a, ok := almanacDayAt(m, anchor); ok && a.Illum > almanacLitThreshold {
+			lit = append(lit, m.Name)
+		}
+	}
+	if len(lit) == 0 {
+		return "no moon meaningfully lit"
+	}
+	return strings.Join(lit, " and ") + " up"
+}
+
+// almanacMoonsLine is one moon's Moons-panel row, and it is the panel whose own
+// footnote promises the arithmetic can be audited.
+//
+// It prints period, turns this month and drift — all from the month's REAL day
+// count — and, for a body past the grid's ceiling, says so. That last clause is
+// the only place in the product where L21's second half is stated in words to
+// the person configuring a fourth moon.
+func almanacMoonsLine(m AlmanacMoon) string {
+	line := "period " + almanacDays(m.PeriodDays) + " days · " +
+		strconv.Itoa(m.TurnsThisMonth) + " turns this month · drifts " +
+		almanacDays(m.DriftDays) + " days per month"
+	if !m.Drawn {
+		// No apostrophe: templ escapes text content, so a possessive would
+		// reach the DOM as `grid&#39;s` and every substring pin over this
+		// sentence would have to know that. Plain words survive the round trip.
+		line += " · past the ceiling the grid draws — carried here at full width"
+	}
+	return line
+}
+
+// almanacDays formats a day figure to one decimal, matching the signed
+// `.toFixed(1)` (cv4:2101). Cycle lengths are decimals and rounding them to
+// whole days would make two different moons print the same period.
+func almanacDays(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) }
+
+// almanacNote is the Month panel's signed footnote (cv4:2095-2096), with the
+// mockup's literal "thirty columns" replaced by the month's real day count.
+func almanacNote(d BlockData) string {
+	return "one lane per moon, " + strconv.Itoa(d.Month.Days) +
+		" columns — the shape that cannot fit on a month grid, which is why the " +
+		"grid never grows with moon count"
+}
+
+// almanacWrapStyle carries the month's day count into the stylesheet as a
+// LENGTH multiplier, never as a grid repeat count.
+//
+// The lane is `grid-auto-flow: column` past one fixed name column, so the
+// column COUNT is structural and no literal or variable repeat() is needed —
+// which is what keeps css_contract_test's no-literal-week-length rule true for
+// a grid that is one column per DAY of the month rather than per weekday. The
+// variable is used only inside a calc() for the scroller's minimum width.
+func almanacWrapStyle(d BlockData) string {
+	return "--alm-days:" + strconv.Itoa(d.Month.Days)
+}
+
+// almanacLitStyle is the per-day bar's height — the relocated magnitude, as an
+// explicit readout. The signed form is `max(1, round(illum * 16))px`
+// (cv4:2086): a height, NEVER a dash pattern, because guard B1 forbids
+// animating --dash/--gap and the greyscale identity channel is not a magnitude
+// channel.
+func almanacLitStyle(a AlmanacDay) string {
+	h := int(math.Round(a.Illum * 16))
+	if h < 1 {
+		h = 1
+	}
+	return "height:" + strconv.Itoa(h) + "px"
+}
+
+// almanacCellTitle is the per-day cell's hover text. It states the moon and the
+// percentage, so the bar's magnitude is always recoverable as a number.
+func almanacCellTitle(m AlmanacMoon, a AlmanacDay) string {
+	return m.Name + " " + strconv.Itoa(almanacIllumPct(a)) + "% · day " + strconv.Itoa(a.Day)
+}
+
+// almanacHeadLabel labels the month ruler at day 1 and every fifth day after
+// it — the signed `(i+1) % 5 === 0 || i === 0` (cv4:2078). Every other column
+// gets an empty <b>, so the ruler keeps one box per day and cannot drift out of
+// step with the lanes beneath it.
+func almanacHeadLabel(day int) string {
+	if day == 1 || day%5 == 0 {
+		return strconv.Itoa(day)
+	}
+	return ""
+}
+
+// almanacLaneClass marks a lane the grid does not draw, so the Month panel's
+// own layout states the ceiling rather than only the Moons panel's prose.
+func almanacLaneClass(m AlmanacMoon) string {
+	if m.Drawn {
+		return "who"
+	}
+	return "who over"
+}
+
+// almanacTurnClass is the turn marker's class: the signed square-ended
+// structural mark, "new" a hairline and "full" a 4px block (cv4:799-801). It is
+// ACHROMATIC by law — the sky may never borrow the event colour axis.
+func almanacTurnClass(a AlmanacDay) string { return "skyturn " + a.Turn }

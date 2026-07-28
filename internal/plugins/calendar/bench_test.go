@@ -406,34 +406,68 @@ func benchGridSection(t *testing.T, html string) string {
 func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	html := renderBench(t, benchFxData(true, true))
 
-	// RE-PINNED DELIBERATELY BY C-CALV4-LEDGER-P6 §9. This was `>= 4`, which is
-	// an assertion a Block-side chip could satisfy on the Bench's behalf — and
-	// the Block-side chips are leaving one wave at a time (W-B took the
-	// Ledger's here, W-E takes the Shelf's next). A floor that another zone can
-	// meet stops proving anything about the Bench.
+	// RE-PINNED DELIBERATELY, TWICE, AND IT IS AN ENUMERATION RATHER THAN A
+	// NUMBER ([S12], SIGNED AS MODIFIED). It began as `>= 4` — a floor a
+	// Block-side chip could satisfy on the Bench's behalf, and in fact did:
+	// on wave-1 main it was met by FIVE, four Bench-side plus one Block-side
+	// zone chip. A floor another surface can meet stops proving anything.
 	//
-	// So the Bench's OWN chips are counted, exactly, and named:
-	//   1. the session tile      — session dates have no store on Chronicle
-	//   2. the sync tile         — the transport's per-calendar linkage
-	//   3. the horizon tile      — there is no queryable knowledge horizon
-	//   4. the RSVP panel header — RSVP surfaces are W-G
-	// Everything else is subtracted first, so this line can only ever be
-	// satisfied by the four tiles it names.
+	// C-CALV4-LEDGER-P6 §9 made it an exact count of the Bench's OWN chips,
+	// subtracting the Block-side ones first. C-CALV4-SHELF-P7 keeps that shape
+	// and re-states WHICH Block-side chip is subtracted, because the Shelf's
+	// zone chip is gone and a different, smaller one took its place.
+	//
+	// THE SURVIVING CHIPS, EVERY ONE, BY FILE AND LINE. The count below is a
+	// consequence of this list and must never be nudged without editing it:
+	//
+	//   BENCH-SIDE (this test's subject) — four:
+	//     1. bench.go:840   the session tile   — session dates have no store
+	//                       on Chronicle at all
+	//     2. bench.go:867   the sync tile      — the transport has no
+	//                       per-calendar linkage to report
+	//     3. bench.go:945   the horizon tile   — there is no queryable
+	//                       knowledge horizon (COMMON §6.1)
+	//     4. bench.templ:257 the RSVP panel header — RSVP surfaces are W-G
+	//        (1-3 are emitted by the shared tile template, bench.templ:149)
+	//
+	//   BLOCK-SIDE (subtracted) — one:
+	//     5. calendar_block/shelf.templ, shelfFiltersPanel — the Filters TAB's
+	//        panel, unconditional inside a FILLED zone ([S2]: the tab ships,
+	//        the engine does not; W-F is the named filling wave). It renders
+	//        once here because the Bench's real-world Block carries noShelf,
+	//        and to a GM only.
+	//
+	//   GONE, and both by a producer flag rather than a template edit:
+	//     · the Ledger zone chip (W-B, C-CALV4-LEDGER-P6)
+	//     · the Shelf zone chip  (W-E, C-CALV4-SHELF-P7)
+	//
+	//   NOT ON THE BENCH AT ALL: the legend / horizon / moongraph zone chips
+	//   (block.templ). benchBlockLayers enables none of those keys, so their
+	//   unconditional chips never render here.
 	const chip = `class="badge need">needs backend`
-	const shelfChip = `<span class="cap">Shelf</span> <span class="sp"></span> <span ` + chip
-	benchOwn := strings.Count(html, chip) - strings.Count(html, shelfChip)
+	const filtersChip = `data-spane="filters"><span ` + chip
+	benchOwn := strings.Count(html, chip) - strings.Count(html, filtersChip)
 	if benchOwn != 4 {
 		t.Errorf("the Bench's own chips = %d, want 4 (session · sync · horizon · RSVP header); "+
-			"Block-side zone chips are subtracted and must not stand in for them", benchOwn)
+			"Block-side chips are subtracted and must not stand in for them", benchOwn)
 	}
-	// The Ledger's chip is gone because W-B FILLED the zone. Inverted, not
-	// deleted: a chip beside fourteen real rows would be a lie.
+	// The Ledger's chip is gone because W-B FILLED the zone, and the Shelf's
+	// because W-E did. Inverted, not deleted: a chip beside real rows is a lie
+	// whichever zone it sits in.
 	if !strings.Contains(html, `data-zone="ledger"`) {
 		t.Error("the Bench's Blocks must still dock the Ledger — the full-tier column " +
 			"arithmetic subtracts its 300px unconditionally")
 	}
-	if n := strings.Count(html, shelfChip); n == 0 {
-		t.Error("the Shelf zone still carries the signed chip until W-E fills it")
+	if !strings.Contains(html, `data-zone="shelf"`) {
+		t.Error("the Bench's Blocks must still dock the Shelf")
+	}
+	const shelfZoneChip = `data-zone="shelf"><div class="st"`
+	if !strings.Contains(html, shelfZoneChip) {
+		t.Error("the Shelf's strip must open on its tabs")
+	}
+	if n := strings.Count(html, filtersChip); n != 1 {
+		t.Errorf("the Filters panel's chip renders %d times, want 1 — the real-world Block "+
+			"carries noShelf and a player receives no Filters panel at all", n)
 	}
 	for _, fabricated := range []string{"RSVP 3 / 5", "9 days fogged", "2 RSVPs unanswered"} {
 		if strings.Contains(html, fabricated) {

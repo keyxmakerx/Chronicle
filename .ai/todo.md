@@ -228,7 +228,15 @@ divergences".
   allowlist; guard B1 and canon D3 both survive it, untouched and green. Pin
   amendment r52 landed three fields. See `.ai/decisions.md` ADR-048 and the
   widget's `.ai.md`.
-- **Wave-2 (W-E), the Shelf:** fill zone D, same deal.
+- **Wave-2 (W-E), the Shelf: DONE (2026-07-28, C-CALV4-SHELF-P7).** Zone D is
+  filled with Upcoming, Filters and the Almanac. The Block's four zones are all
+  real and the calendar-v4 Block is architecturally complete. Upcoming reuses
+  the Ledger's row primitive VERBATIM off the same one filtered pass; Filters
+  ships the tab and not the engine (no filter store exists — W-F owns it); and
+  the Almanac carries every DECLARED moon at full width, uncapped by MoonCap,
+  which is what makes the grid's three-moon ceiling legitimate. Pin amendment
+  r53 landed the celestial register. Three CSS-only radio groups now, still no
+  JS and still no route. See ADR-048's Almanac section.
 - **Wave-3 (W-F), the layer system:** the `⋯` switchboard popover (the invoker
   ships inert), the per-viewer layer/sky/moon preference store, and the three
   zones wave 1 reserved with the chip — `legend`, `horizon`, `moongraph`. The
@@ -805,12 +813,11 @@ _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
 Wave 2, W-B filled the docked Ledger. These are the things it deliberately did
 NOT do; each is named in its report and in the widget's `.ai.md`.
 
-- [ ] **W-E (`C-CALV4-SHELF-P7`) is unblocked and may start.** It consumes what
-  W-B left: the `.lband` sticky group header (styled in Zone C, used by the
-  Upcoming panel), and the `.ltabs` strip, which carries `Month` alone today —
-  W-E adds each further tab **with its panel, in the same commit** (CTS-7). It
-  lands its own r53 (CTS-3: r52 covers W-B alone). Its booked restore is
-  `moonsBadgeTitle`'s missing *"— all of them are in the Almanac"* tail.
+- [x] **W-E (`C-CALV4-SHELF-P7`) is DONE.** It consumed `.lband` and the row
+  primitive, landed r53, and restored `moonsBadgeTitle`'s *"— all of them are in
+  the Almanac"* tail — gated, so a Block with no reachable Almanac (noShelf, or
+  the shelf layer off) still withholds it. It did NOT add its three tabs to
+  `.ltabs`: see the new open item below.
 - [ ] **W-F now owns four things the Ledger touched and did not take:** the
   `colour: <axis> ⌄` picker and the std legend (both left OUT rather than
   shipped inert — `Mark.AxisLabel` incidentally unblocks the legend, which does
@@ -821,6 +828,24 @@ NOT do; each is named in its report and in the widget's `.ai.md`.
   must add the **GRID-side** fog split only — **the Ledger is never
   horizon-filtered**, and that is the argument that let the week-scale fog
   reversal be withdrawn.
+- [ ] **`.ltabs` still carries `Month` alone, and [S9] expected four.** The
+  ruling assumed the signed std construction, where `block()` emits NO `.shelf`
+  element and the three Shelf panels live under the Ledger head's tab strip.
+  Chronicle's shipped Block renders the Shelf zone at std as well, so the three
+  tabs already have exactly one home per tier and a second copy in `.ltabs`
+  would be two controls for one piece of state. It is also **not buildable
+  under [S7]**: the pressed tab is a server-rendered `checked` attribute and one
+  radio group cannot carry two tier-dependent defaults (Month at std, Almanac at
+  full), so folding the Ledger's Month tab into the group would make the std
+  Block open on the Almanac with its Ledger hidden. Re-book with the wave that
+  gives the tabs a per-viewer store, or overrule and re-sign the std still.
+- [ ] **The std-tier Shelf is a strip plus ~36px of scroller.** At 420px and
+  358px the Block cannot afford a month, a filled Ledger and a 166px Shelf at
+  once, so Zone D yields (its body scrolls; the Ledger's head and strip cannot)
+  and takes what is left. No collision, nothing clipped, and the signed 132px
+  ceiling is unchanged at both tiers — but the zone is visibly cramped at std,
+  and the signed std render has no Shelf in it to compare against. Coordinator
+  eye, same class as the CTS-8 item below.
 - [ ] **CTS-8 needs a coordinator eye, not a fix.** The std-tier collision
   measurement was re-taken with the Ledger FULL at both production host widths
   (entity 420px, Bench 358px) and is clean — but only after `.lrows`'s signed
@@ -838,3 +863,51 @@ NOT do; each is named in its report and in the widget's `.ai.md`.
   `title` — which carried the audience label — no longer shows. The Ledger row's
   audience chip states it in full instead, which is why this is a trade and not
   a loss; noted so nobody "fixes" it by removing the label.
+
+### calendar-v4 remodel — booked follow-ups from C-CALV4-SHELF-P7 (2026-07-28)
+
+Wave 2, W-E filled the Shelf. With it the Block's four zones are all real. These
+are the things it deliberately did NOT do; each is named in its report and in
+the widget's `.ai.md`.
+
+- [ ] **The Almanac's Tonight readout does not follow the selected day.** The
+  signed anchor is `S.sel || m.today`; this ships the `m.today` half. Selection
+  is CSS-only, so retargeting means emitting the whole readout ONCE PER
+  SELECTABLE DAY and revealing it through W-B's generated ladder — 40 days ×
+  (one line per declared moon plus a lit-list line) on every Block, on top of
+  the +67% the docked Ledger already costs, plus an edit to the ladder and to
+  the guard that scopes its reveal rule to two named surfaces. Every Almanac
+  month cell already carries its `data-day`, so the retarget is one ladder
+  extension away for whichever slice pays for it.
+- [ ] **The Almanac's month lane does not ANSWER yet.** Its cells carry
+  `data-day` and `data-axis="var(--text-primary)"` (guard B4, canon A7's
+  datum-hue rule), but W-B's ladder pairs only `.grid` ↔ `.lrows`. Adding
+  `.sp2` is a change to the generated ladder's third rule, which is W-B's file.
+  Same shape as wave 1 emitting `data-day` for a consumer that did not exist.
+- [ ] **`AlmanacDay.Node` is false everywhere and `.abr` ships unused.**
+  `calendar.Moon` has no orbital-node column — the mockup's `nodeWindow()` keys
+  on a hardcoded flag on its second fixture moon — so the node-window bracket
+  would be an interval with nothing behind it. Declared in the sheet the way
+  `.cell.fog` is, so the slice that acquires the data adds a field and not a
+  stylesheet region.
+- [ ] **No moon epithet** ([S6]). `calendar.Moon` has no epithet or description
+  column; a migration would be legal and would ship a dead column with no
+  authoring surface to fill it, which L5 forbids by name. Re-book with whichever
+  wave gives moons an editor.
+- [ ] **The `filters N` badge is withheld** ([S4]) and returns WITH the filter
+  engine, joining the per-viewer count oracle at that point. A count with no
+  denominator behind it is the shape `needs backend` exists to replace.
+- [ ] **W-F now also owns the Filters engine** ([S2], named prospectively): the
+  filter axes are per-viewer display preferences by the same argument that made
+  the colour-by axis W-F's, and they need the per-viewer store W-F is building.
+  The Filters TAB and its `needs backend` chip ship now; the engine does not.
+- [ ] **W-F's `moongraph`/`horizon` re-add is still one line each**, and it is
+  reported rather than acted on ([S11]). `benchBlockLayers()` and
+  `entityBlockLayers()` are unchanged, DEF is still `["moons"]`, and no zone
+  flag was minted. The std tier is TIGHTER than it was, though — see the
+  std-Shelf item above — so the re-add needs its own measurement rather than
+  inheriting this slice's.
+- [ ] **"Owner/scribe-configurable" is struck for wave 2** ([S3]). No signed
+  artefact contains a Shelf configuration surface, and building one would be the
+  fifth authoring surface L5 forbids. Re-book "who configures the Shelf, and
+  where" to the wave that ships a config store, with its own design pass first.

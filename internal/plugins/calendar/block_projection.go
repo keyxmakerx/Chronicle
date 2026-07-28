@@ -128,6 +128,9 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		Year:       in.Year,
 		ShowMoons:  true,
 		MoonCap:    in.MoonCap,
+		// W-E: the Almanac register is the Shelf's data, so a Block whose host
+		// removed the zone builds none.
+		ShelfHidden: in.ShelfHidden,
 	})
 
 	data := calblock.BlockData{
@@ -143,12 +146,22 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		Month:        geo,
 		Sync:         blockSyncForCalendar(in.Sync, cal),
 		Layers:       blockDefaultLayers(),
-		// W-B FILLED THE LEDGER (C-CALV4-LEDGER-P6 §9), so the zone's signed
-		// `needs backend` chip retires here — by a producer flag, without a
-		// template edit, which is the promise the flag existed to keep. The
-		// Shelf's flag on the next line is W-E's and is deliberately untouched.
+		// BOTH ZONES ARE FILLED, and both signed `needs backend` chips retire
+		// here — by a producer flag, without a template edit, which is the
+		// promise the flags existed to keep. W-B filled the Ledger
+		// (C-CALV4-LEDGER-P6 §9); W-E fills the Shelf (C-CALV4-SHELF-P7), and
+		// with that the Block's four zones are all real.
+		//
+		// THE FIELDS STAY. They are the HOST's honesty switch rather than a
+		// wave marker: a host that docks a zone it cannot fill turns one back
+		// on and gets the signed chip instead of an empty box.
+		//
+		// NO NEW ZONE FLAG IS MINTED (2026-07-28 DEF/zone-chip ruling §2).
+		// legend / horizon / moongraph keep their UNCONDITIONAL chips inside
+		// their layer gates (block.templ) because no filling wave is named for
+		// them, and the unconditional chip is the honest state today.
 		Ledger:       calblock.LedgerStub{NeedsBackend: false, Hidden: in.LedgerHidden},
-		Shelf:        calblock.ShelfStub{NeedsBackend: true, Hidden: in.ShelfHidden},
+		Shelf:        calblock.ShelfStub{NeedsBackend: false, Hidden: in.ShelfHidden},
 	}
 	data.DateLabel, data.Fault = blockDateLine(cal)
 	data.SeasonLabel, data.EraLabel = blockSeasonEraLabels(cal)

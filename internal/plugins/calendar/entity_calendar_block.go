@@ -62,13 +62,24 @@ import (
 // host adds the key then. Screenshots of both readings are in the slice's
 // evidence set.
 //
-// THE LEDGER IS FILLED SINCE W-B (2026-07-28). The chip retired exactly the way
-// the flag promised it would: the producer set LedgerStub.NeedsBackend false and
-// no template on this path was edited. The Shelf still carries its chip and is
-// W-E's to retire the same way.
+// BOTH DOCKED ZONES ARE FILLED (W-B and W-E, 2026-07-28), and both chips
+// retired exactly the way the flags promised: the producer set NeedsBackend
+// false and no template on this path was edited. The layer set below is
+// UNCHANGED by either slice — filling a zone is not a host decision, and the
+// 2026-07-28 DEF/zone-chip ruling §1 keeps DEF at ["moons"] whatever the zones
+// now contain.
 //
-// The moongraph measurement above was re-taken with the Ledger FULL, at both
-// production host widths, and still holds — see the plugin .ai.md's CTS-8 note.
+// The moongraph measurement above was re-taken with BOTH zones full, at both
+// production host widths, and still holds — but the std tier is TIGHTER than it
+// was, because a filled Shelf wants 166px where the stub wanted 40. W-F's
+// re-add is still one line here and it needs its own measurement rather than
+// inheriting W-E's; see the plugin .ai.md's CTS-8 note and .ai/todo.md.
+//
+// THE ALMANAC IGNORES entityBlockMoonCap ON PURPOSE ([S5], r53). The cap below
+// governs the GRID's discs; the Shelf's celestial register carries every
+// DECLARED body at full width, because the ceiling is only legitimate if the
+// overflow goes somewhere. It is the one place a host-passed parameter is
+// deliberately non-authoritative for a zone.
 //
 // HasSwitchboard stays false: layer preferences are per-viewer and PERSISTED
 // (L20/L26/L29) and that store is W-F's.

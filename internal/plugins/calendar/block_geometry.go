@@ -78,7 +78,22 @@ type blockMonthGeometryInput struct {
 	// MoonCap bounds how many moons get a per-day disc. The ceiling is declared
 	// ONCE in the Nameplate ("3 of 4 moons"), never per cell (L25/L30), so the
 	// producer only has to honour it, not announce it. <= 0 means "all".
+	//
+	// IT DOES NOT BOUND THE ALMANAC REGISTER ([S5], signed): the register is
+	// the place the bodies past the ceiling actually go, so capping it would
+	// make the ceiling illegitimate. MoonCap only decides AlmanacMoon.Drawn.
 	MoonCap int
+	// ShelfHidden mirrors ShelfStub.Hidden — the HOST has removed zone D
+	// entirely (the Bench's real-world Block renders with noShelf). The Almanac
+	// register is the Shelf's data and nothing else reads it, so a Block with
+	// no Shelf carries none: the pin's own contract is "empty when … no Shelf
+	// is reachable in this render", and on a four-Block Bench that is four
+	// registers not built.
+	//
+	// The LAYER half of "reachable" is not knowable here — the producer emits
+	// DEF (["moons"]) and the host overrides Layers afterwards — so the layer
+	// gate stays where it can be evaluated, in block.templ.
+	ShelfHidden bool
 }
 
 // blockWeekLen returns the calendar's week length, falling back to the NAMED
@@ -251,6 +266,171 @@ func moonDiscsForDay(moons []Moon, baseAbsDay, day, moonCap int) []calblock.Moon
 		})
 	}
 	return out
+}
+
+// ── the Almanac register (r53) ──────────────────────────────────────────────
+//
+// THE SECOND HALF OF L21. The grid caps at moonCap so "the grid can never grow
+// with the fiction"; that ceiling is legitimate ONLY because "the Almanac
+// carries every declared body at full width" (design notes :667). This is the
+// producer of that register, and it is deliberately UNCAPPED — MoonCap governs
+// the grid and does not govern the surface the grid's ceiling points at ([S5],
+// signed). It is the one sanctioned place a host-passed parameter is
+// non-authoritative for a zone.
+//
+// EVERY NUMBER IS COMPUTED FROM THE MONTH'S REAL DAY COUNT. The signed Moons
+// panel prints its own arithmetic — "the arithmetic is printed so it can be
+// audited, no date in the register was typed by hand" (cv4:2104-2105) — so the
+// mockup's four thirty-day literals (:2096, :2101, :2112, :2116) are FIXED
+// here rather than ported: a hardcoded thirty in a product whose thesis is
+// arbitrary month lengths is the same class of defect as the count-oracle
+// leaks. TestBlockAlmanac_EveryNumberComesFromTheMonthsRealDayCount pins it.
+//
+// ONE PASS, LIKE THE COUNTS. The Month lane, the Tonight readout and the Moons
+// arithmetic are three views of THIS list, so they cannot disagree — the same
+// discipline block_projection.go states for the counts and newLedgerView for
+// the Ledger.
+
+// blockMoonPhaseAt is Moon.MoonPhase widened to a FRACTIONAL absolute day.
+//
+// The model's method takes an int because every existing caller asks about a
+// whole day. Turn detection needs half-day samples: the signed turnsIn()
+// (cv4:1327-1335) reads the phase at d-0.5 and d+0.5 and calls a NEW where the
+// phase wraps and a FULL where it crosses 0.5. Rounding those to whole days
+// would put a knife-edge on the turn and drop or double it on a moon whose
+// period is near the day, which is exactly the arithmetic the Moons panel
+// promises is auditable.
+//
+// It mirrors Moon.MoonPhase's formula exactly rather than reimplementing it;
+// TestBlockAlmanac_FractionalPhaseAgreesWithTheModel holds the two together.
+func blockMoonPhaseAt(m Moon, absDay float64) float64 {
+	if m.CycleDays <= 0 {
+		return 0
+	}
+	raw := (absDay + m.PhaseOffset) / m.CycleDays
+	phase := raw - math.Floor(raw)
+	if phase < 0 {
+		phase += 1
+	}
+	return phase
+}
+
+// blockPhaseWord is the SIGNED phase vocabulary (cv4:1354-1357), verbatim.
+//
+// It is NOT Moon.MoonPhaseName: that method's eight equal eighths put "Full
+// Moon" across an eighth of the cycle, while the signed word narrows `full` to
+// a ±3% window and widens the gibbous phases around it — which is what makes
+// the Almanac's "68% waxing gibbous" agree with the disc the grid drew.
+// Changing this to the model's method would desynchronise the readout from the
+// terminator geometry moonDiscsForDay derives from the same phase.
+func blockPhaseWord(phase float64) string {
+	switch {
+	case phase < 0.03 || phase > 0.97:
+		return "new"
+	case phase < 0.22:
+		return "waxing crescent"
+	case phase < 0.28:
+		return "first quarter"
+	case phase < 0.47:
+		return "waxing gibbous"
+	case phase < 0.53:
+		return "full"
+	case phase < 0.72:
+		return "waning gibbous"
+	case phase < 0.78:
+		return "last quarter"
+	default:
+		return "waning crescent"
+	}
+}
+
+// blockAlmanacRegister builds MonthGeometry.Almanac.
+//
+// `days` is the month's REAL day count (leap-aware, from blockMonthDays) and
+// `anchor` is the day the Tonight readout is written for — the server-rendered
+// answered day, which is TodayDay when today falls in this month and day 1
+// otherwise. Selection inside the Block is CSS-only and per-render, so there
+// is no second anchor to consult and no request state to read; see the
+// divergence note in almanac.templ.
+//
+// moonCap <= 0 means "all", matching moonDiscsForDay.
+func blockAlmanacRegister(moons []Moon, baseAbsDay, days, anchor, moonCap int) []calblock.AlmanacMoon {
+	if len(moons) == 0 || days <= 0 {
+		return nil
+	}
+	out := make([]calblock.AlmanacMoon, 0, len(moons))
+	for i, m := range moons {
+		am := calblock.AlmanacMoon{
+			Name:       m.Name,
+			PeriodDays: m.CycleDays,
+			// The ceiling's arithmetic lives in ONE place. The renderer reads
+			// this flag rather than re-counting DayCell.Moons, because a second
+			// copy of moonCap is how the nameplate badge's total went wrong.
+			Drawn: moonCap <= 0 || i < moonCap,
+			Days:  make([]calblock.AlmanacDay, 0, days),
+		}
+		// DriftDays is the mockup's `30 % mo.period` with the thirty replaced
+		// by the month's real length: how far the moon's own cycle slips
+		// against THIS month. A moon whose period divides the month exactly
+		// drifts 0 and is the one that "keeps the month".
+		if m.CycleDays > 0 {
+			am.DriftDays = math.Mod(float64(days), m.CycleDays)
+		}
+		for d := 1; d <= days; d++ {
+			abs := float64(baseAbsDay + d - 1)
+			phase := blockMoonPhaseAt(m, abs)
+			ad := calblock.AlmanacDay{
+				Day:   d,
+				Illum: (1 - math.Cos(2*math.Pi*phase)) / 2,
+				Phase: blockPhaseWord(phase),
+				// WAVE-2 RULING, the same shape as DayCell.Fogged and
+				// MoonDisc.Eclipse: calendar.Moon (model.go:461-473) has no
+				// node/orbital-node column, so the node window the signed .abr
+				// bracket draws has no backend. The mockup's own nodeWindow()
+				// keys on a hardcoded `node:true` on its second fixture moon.
+				// The field stays false rather than fabricating an interval,
+				// and the .abr bracket therefore never draws in wave 2.
+				Node: false,
+			}
+			// The signed turn test, on half-day samples either side of the day.
+			a := blockMoonPhaseAt(m, abs-0.5)
+			b := blockMoonPhaseAt(m, abs+0.5)
+			switch {
+			case b < a:
+				ad.Turn = "new"
+			case a < 0.5 && b >= 0.5:
+				ad.Turn = "full"
+			}
+			if ad.Turn != "" {
+				am.TurnsThisMonth++
+			}
+			am.Days = append(am.Days, ad)
+		}
+		am.NextNewDay = blockNextTurn(am.Days, anchor, "new")
+		am.NextFullDay = blockNextTurn(am.Days, anchor, "full")
+		out = append(out, am)
+	}
+	return out
+}
+
+// blockNextTurn finds the next turn of one kind at or after `anchor`, WRAPPING
+// to the month's first such turn — the signed `t.find(x => x.d > d) || t[0]`
+// (cv4:2110). 0 when the month contains none, which is what makes the readout
+// drop the segment rather than print a zero.
+func blockNextTurn(days []calblock.AlmanacDay, anchor int, kind string) int {
+	first := 0
+	for _, d := range days {
+		if d.Turn != kind {
+			continue
+		}
+		if first == 0 {
+			first = d.Day
+		}
+		if d.Day >= anchor {
+			return d.Day
+		}
+	}
+	return first
 }
 
 // --- era bands -------------------------------------------------------------
@@ -556,6 +736,25 @@ func buildMonthGeometry(cal *Calendar, in blockMonthGeometryInput) calblock.Mont
 			row.Cells = append(row.Cells, cell)
 		}
 		geo.Rows = append(geo.Rows, row)
+	}
+
+	// The Almanac register, from cal.Moons UNCAPPED and off the SAME base
+	// absolute day the discs stepped from — so the fourth declared body is
+	// computed by the identical arithmetic as the three the grid drew, and the
+	// register cannot disagree with the cells beside it.
+	//
+	// It uses cal.Moons directly rather than the (possibly nil) `moons` local:
+	// `moons` is the DISC pass's input and is emptied when the moons layer is
+	// off, while MoonsDeclared — and therefore the Almanac — is the calendar's
+	// declared total either way (r51's own argument, one field up).
+	if !in.ShelfHidden && len(cal.Moons) > 0 {
+		anchor := geo.TodayDay
+		if anchor < 1 {
+			anchor = 1
+		}
+		geo.Almanac = blockAlmanacRegister(
+			cal.Moons, monthBaseAbsoluteDay(cal, in.MonthIndex, in.Year),
+			geo.Days, anchor, in.MoonCap)
 	}
 	return geo
 }
