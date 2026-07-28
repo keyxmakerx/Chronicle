@@ -63,6 +63,40 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
   - `0c5f5f4` (same branch, not P5) `C-PERM-DMGRANT-REVOKE`: a removed co-DM
     kept owner-level visibility on **public** campaigns. Both the stored
     grant and the resolve-time gate are fixed. No migration.
+- **LANDED (2026-07-28), same branch — `C-CALV4-HOST-P3` (wave 1, phase B):**
+  the calendar-v4 Block now has its **first production caller**. Entity pages
+  are the primary consumption surface (round-1 delta L3), so the entity calendar
+  embed's month surface is `calendar_block.Block` projected through the P2
+  spine, replacing the compact `adaptiveCalendarWidget`. Three commits.
+  - `dcaaa4b` **the block host seam.** `BindingAffordanceFor` is the
+    host-type-agnostic affordance (the old signature is unchanged and
+    delegates; four widget blocks embed it), closing the deferred P3b gap where
+    the picker query hardcoded `host_type=entity`. `BlockHost` gains
+    `container-type: inline-size` **per widget type**
+    (`DeclareInlineSizeHost`), not unconditionally — see the measured note
+    below.
+  - `fc2fe9c` **the tie toggle is live and pure CSS.** A hidden radio pair plus
+    `:has()` changes the untied ink level; zero JavaScript (a `<script>` in an
+    HTMX-swapped fragment never runs, `boot.js:163`) and zero routes. TWO ink
+    levels now, per the signed `setTie()`: 0.28 in tied mode, 0.70 in whole —
+    the sheet previously had one branch at the wrong level.
+  - `0437fad` **the entity page hosts the Block.** Degrade ladder kept and
+    extended: a calendar the viewer may not see renders **byte-identically** to
+    no calendar at all (P5 stage 9's not-found shape, held at the host
+    boundary). The linked-events list moved onto `EventsForEntityFiltered` —
+    the loop it replaced applied only the event-level half of the filter. The
+    entity page passes its own **layer set** (`moons, eras, weeknums, ledger,
+    moongraph, shelf`), which is the mechanism the DEF ruling named; producer
+    DEF stays `["moons"]`.
+- **MEASURED, and it retracts a wave-1 assumption:**
+  `container-type: inline-size` does **NOT** make an element a containing block
+  for `position: fixed` / `position: absolute` descendants — `contain: layout`
+  does. Chromium 141, three identical hosts: plain `(0,0)`, `container-type`
+  `(0,0)`, `contain: layout` `(82,450)`. The C-CALV4-HOST-P3 dispatch warned
+  the opposite (it would have trapped the maps block's `fixed inset-0` modals),
+  and the warning reads correct from the spec text. Do not re-derive it from
+  the spec; the reproduction is in
+  `cordinator/reports/chronicle/screenshots/2026-07-28-c-calv4-host-p3/`.
 - **`data.go` is byte-identical to the coordinator's pin and must never be
   `gofmt`-ed** — the pin is not gofmt-clean and formatting it breaks the
   match. Verify with `cmp` against `C-CALV4-BLOCKDATA.go.txt`.

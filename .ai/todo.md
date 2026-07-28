@@ -248,6 +248,37 @@ divergences".
   inheriting or "correcting" it; `TestIsNamed_RetiredRowHeightClause` pins the
   divergence in both directions so the re-sign has something concrete to move.
 
+### calendar-v4 remodel — booked follow-ups from C-CALV4-HOST-P3 (2026-07-28)
+
+Phase B, W-C: the Block's first production caller (the entity-page embed).
+
+- [ ] **All four bound widget types need a LIVE-CLIENT render check.** The
+  entity-page BlockHost now carries `container-type: inline-size`, declared per
+  widget type (`widgetbindings.DeclareInlineSizeHost`) so calendar / worldstate
+  / timeline / maps cannot be changed together by accident. The dispatch's
+  warning that this would trap the maps block's `fixed inset-0` modals was
+  MEASURED AND DOES NOT REPRODUCE (`contain: layout` traps them;
+  `container-type` does not — Chromium 141, numbers in the slice report). What
+  is still unverified is the three OTHER render paths in a real browser with a
+  database, which this sandbox has none of. Once someone runs them, the
+  declaration can become unconditional — one line in `block_host.go`.
+- [ ] **P3b — dashboard-level widget bindings.** `BindingAffordanceFor` exists
+  and carries its own `host_type`, so the affordance is no longer entity-only.
+  The CAPABILITY is not added: the binding key is
+  `UNIQUE(campaign_id, host_type, host_id, widget_type)` and `BlockHostID` is
+  per `(widget_type, host)`, so **two differently-bound calendars on one page
+  are not representable** without a schema change. Wave 1 must not promise it.
+- [ ] **The entity embed still stacks the almanac sky band above the Block.**
+  Kept deliberately: it is live, working, and pinned (the per-band seed-blob id
+  scheme, `entity_calendar_block_test.go`), and the Block has no pictorial sky
+  (the Skybox is PARKED, L12/D4). The signed entity render shows no band there,
+  so whether the band stays on this surface is a design call for whoever owns
+  the entity page's composition — not a rendering defect.
+- [ ] **The entity page's "no calendar" rung shows a Create-calendar CTA to
+  players.** Pre-existing, and now reached by one more path: a calendar the
+  viewer may not see renders the same rung (deliberately indistinguishable from
+  missing). Softening the CTA per role is a separate, small UX slice.
+
 ### calendar-v4 widgetization remodel — follow-ups booked by C-CALV4-SPINE-P2 (2026-07-26)
 
 Wave plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`. These are the

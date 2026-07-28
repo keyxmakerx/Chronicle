@@ -347,9 +347,10 @@ func TestEntityCalendarBlock_TieToggleIsHostedAndDefaultsTied(t *testing.T) {
 //
 // Producer DEF is ["moons"] and stays there (cordinator ruling 2026-07-28 §1).
 // The entity page is a HOST that passes its own layer set, and the set it passes
-// is the one the signed entity renders show: eras, week numbers, the docked
-// Ledger, the illumination strip and the Shelf — and NOT the legend or the
-// knowledge horizon, which those renders do not show.
+// is the one the signed entity renders show — eras, week numbers, the docked
+// Ledger and the Shelf — minus the one key that is measurably premature
+// (moongraph, below) and minus the two those renders do not show at all
+// (legend, horizon).
 func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 	svc := entityHostSpine(t, blockTenDayCal())
 	html := renderEntityCal(t, svc, campaigns.RoleOwner, false)
@@ -357,7 +358,6 @@ func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 	for _, want := range []struct{ needle, why string }{
 		{`data-zone="ledger"`, "the docked Ledger — the full-tier column arithmetic subtracts its 300px unconditionally"},
 		{`data-zone="shelf"`, "the Shelf foot"},
-		{`data-layer="moongraph"`, "the illumination strip"},
 		{"data-weeknums", "the W1/W2/W3 gutter"},
 	} {
 		if !strings.Contains(html, want.needle) {
@@ -368,6 +368,16 @@ func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 		if strings.Contains(html, bad) {
 			t.Errorf("%s is not in the signed entity renders — the host must not enable it", bad)
 		}
+	}
+	// moongraph IS in the signed entity renders and is still omitted, on a
+	// measured layout ground: with it enabled the std tier stacks the moongraph
+	// needzone row, the docked Ledger and the Shelf into one another and the
+	// Ledger/Shelf headers collide. Wave 1's zone is a `needs backend` chip, so
+	// the collision buys nothing. Invert this assertion — do not delete it —
+	// when W-F fills the zone and owns its placement.
+	if strings.Contains(html, `data-layer="moongraph"`) {
+		t.Error("moongraph is booked for W-F: enabling its stub zone collides with the docked " +
+			"Ledger and the Shelf at std tier, for a chip that carries no information")
 	}
 	// The set is the HOST's, not DEF's: DEF stays moons-only under the ruling.
 	if got := blockDefaultLayers().Enabled; len(got) != 1 || got[0] != "moons" {

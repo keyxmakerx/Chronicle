@@ -133,9 +133,11 @@ type calendarWidgetType struct {
 // (C-CALV4-HOST-P3 §4): the Block takes its size class from the HOST's width in
 // CSS container queries, never in Go — boot.js:163 disables scripts inside
 // HTMX-swapped fragments, so a JS-sized Block would render at the wrong density
-// after any binding swap. The declaration is per widget type on purpose;
-// `container-type` implies `contain: layout`, which would trap the maps block's
-// `fixed inset-0` modals inside its own embed (see block_host.go).
+// after any binding swap. The declaration is per widget type because exactly one
+// of the four widgets BlockHost wraps is sized this way; the dispatch's warning
+// that it would trap the maps block's `fixed inset-0` modals was MEASURED and
+// does not reproduce — block_host.go records the numbers rather than repeating
+// the claim.
 func NewCalendarWidgetType(svc CalendarService) widgetbindings.WidgetType {
 	widgetbindings.DeclareInlineSizeHost(WidgetTypeCalendar)
 	return &calendarWidgetType{calendarInstanceBacking{svc: svc}}

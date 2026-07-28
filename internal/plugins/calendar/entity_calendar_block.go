@@ -48,21 +48,30 @@ import (
 //	           Ledger's 300px unconditionally (sizing.go), so an entity Block
 //	           that skipped the zone would measure its own columns wrong and
 //	           flip density at the wrong host width.
-//	moongraph  the illumination strip under the month
 //	shelf      the Month / Upcoming / Filters / Almanac foot
 //
 // Absent, because the renders do not show them here: legend, horizon.
 //
-// Wave 1 fills none of ledger / moongraph / shelf — each renders its zone at the
-// right size carrying the signed `needs backend` chip, which is the honesty
-// state the operator signed rather than a shortcut. W-B, W-F and W-E retire the
-// chips by flipping a flag, without editing a template.
+// ONE KEY THE RENDERS SHOW AND THIS SET DELIBERATELY OMITS: `moongraph`, the
+// illumination strip. It is MEASURED, not assumed — with it enabled the std
+// tier (host 420px) stacks the moongraph needzone row, the docked Ledger and
+// the Shelf on top of one another, and the Ledger and Shelf headers visibly
+// collide; without it they stack cleanly. Wave 1's moongraph zone renders a
+// `needs backend` chip and nothing else, so the collision buys no information
+// at all. The zone belongs to W-F, which fills it and owns its placement; the
+// host adds the key then. Screenshots of both readings are in the slice's
+// evidence set.
+//
+// Wave 1 fills neither ledger nor shelf — each renders its zone at the right
+// size carrying the signed `needs backend` chip, which is the honesty state the
+// operator signed rather than a shortcut. W-B and W-E retire the chips by
+// flipping a flag, without editing a template.
 //
 // HasSwitchboard stays false: layer preferences are per-viewer and PERSISTED
 // (L20/L26/L29) and that store is W-F's.
 func entityBlockLayers() calblock.LayerState {
 	return calblock.LayerState{
-		Enabled: []string{"moons", "eras", "weeknums", "ledger", "moongraph", "shelf"},
+		Enabled: []string{"moons", "eras", "weeknums", "ledger", "shelf"},
 	}
 }
 
