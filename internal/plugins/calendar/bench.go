@@ -181,6 +181,44 @@ type BenchAction struct {
 	NeedsBackend bool
 }
 
+// BenchAskForm is the panel's LIVE schedule-ask control (C-CALV4-RSVP-P8B,
+// [PB-5]) — the one Nudge in the product that does something.
+//
+// A SIBLING OF BenchRsvpForm, NOT A METHOD FIELD ON BenchAction. BenchAction
+// carries only Href and renders an <a>, i.e. a GET, and mailing a roster from a
+// GET is one link prefetcher away from a fan-out nobody clicked. Giving
+// BenchAction a method field would make every other tile control one typo away
+// from being a POST, so the write control gets its own narrow type exactly as
+// the RSVP trio did.
+//
+// THREE STATES, ALL GM-TIER (§8). The control is live when a mail server is
+// configured and the campaign is outside its cooldown; disabled with a reason
+// otherwise. Never a silent success, and never "we emailed them" when nothing
+// was sent.
+type BenchAskForm struct {
+	// Action is the campaign-scoped POST path. CSRFToken rides as a hidden
+	// field for the same reason BenchRsvpForm's does.
+	Action    string
+	CSRFToken string
+	// EventID is the collecting session the panel already resolved, carried so
+	// the send can attach the RSVP half. EMPTY is normal and correct: the
+	// schedule ask does not need a session.
+	EventID string
+	Label   string
+	Title   string
+	// Disabled marks the two refusing states; Badge is the `.badge.warn` that
+	// rides beside the control in the SMTP-unconfigured one ([PB-8]).
+	//
+	// NOT `.badge.need`. An unconfigured mail server is not a build gap — the
+	// endpoint exists, the template exists, the operator has not configured
+	// SMTP. That is a deployment fact in the same register as `zone not set`,
+	// and the fix is an admin action rather than a Chronicle release. Diluting
+	// `.badge.need` here would leave a "needs backend" chip over a backend that
+	// was built, which is the inversion WG-8 retired.
+	Disabled bool
+	Badge    string
+}
+
 // BenchRsvpForm is the session tile's LIVE answer control.
 //
 // It posts to the EXISTING Player+ RSVP route (WG-6: zero new routes in Part A)
@@ -400,12 +438,18 @@ type BenchRsvp struct {
 	// Silent names the members who are in the campaign and have not answered.
 	// DERIVED, never stored — there is no invitee table (ledger #13).
 	Silent string
-	// Actions are the Director's two unbacked controls. GM-tier: a player's DOM
-	// omits them entirely (WG-8).
+	// Actions are the Director's remaining unbacked controls. GM-tier: a
+	// player's DOM omits them entirely (WG-8). After C-CALV4-RSVP-P8B this is
+	// Propose alone — Nudge moved to Ask below, because it is backed now.
 	Actions []BenchAction
 	// ActionsWhy is the VISIBLE carrier of why those controls are inert (WG-5).
 	ActionsWhy string
-	SideCap    string
+	// Ask is the Director's LIVE schedule-ask control ([PB-5]): the ONE live
+	// Nudge in the product, in this panel's `.side`, as a POST form. NIL for a
+	// player and nil when the panel is unfilled — the absence is in the payload,
+	// not in a template branch.
+	Ask     *BenchAskForm
+	SideCap string
 
 	// SlotLabel is the member table's head. NON-INTERACTIVE in Part A: the
 	// mockup draws a `popovertarget` there and zero popovers exist in the
@@ -1111,7 +1155,11 @@ func benchSessionTile(isGM bool) BenchTile {
 		// Chronicle's build state.
 		t.NeedsBackend = true
 		t.Detail = why
-		t.Actions = []BenchAction{{Label: "Nudge", Title: why, NeedsBackend: true}}
+		// NO ACTION. This tile's `Nudge` is RETIRED, not made live ([PB-5]
+		// item 3): a "Nudge" on a tile whose headline is "Not scheduled here
+		// yet" never had a referent, and under [PB-1](b) the ask does not need
+		// a session — so the capability is not lost, it lives in the RSVP
+		// panel, which renders whenever a roster exists.
 		return t
 	}
 	// The signed RSVP trio is IMMUTABLE: three loose .btn.xs, Yes filled, then
@@ -1149,9 +1197,10 @@ type benchSessionTileInput struct {
 //
 // NO CHIP. The tile is backed now, and a `needs backend` chip over a backed
 // tile is the same lie class as a green sync pill with no denominator,
-// inverted. The Director keeps a chipped Nudge because the reminder endpoint
-// genuinely does not exist (C-CALV4-RSVP-P8B is where it gets one); a player
-// gets the live trio and no commentary on Chronicle's build state.
+// inverted. As of C-CALV4-RSVP-P8B the Director's branch renders NO ACTION at
+// all: the reminder endpoint exists now, and the one live control that uses it
+// lives in the RSVP panel below, where the roster it mails is. A player gets
+// the live trio and no commentary on Chronicle's build state.
 func benchSessionTileLive(in benchSessionTileInput) BenchTile {
 	t := BenchTile{
 		Key: "session", Glyph: "◷", Eyebrow: "Session",
@@ -1165,10 +1214,11 @@ func benchSessionTileLive(in benchSessionTileInput) BenchTile {
 		t.Tone = "warn"
 	}
 	if in.IsGM {
-		t.Actions = []BenchAction{{
-			Label: "Nudge", NeedsBackend: true,
-			Title: "there is no reminder endpoint — RSVP mail fans out only when collection is switched on",
-		}}
+		// NO ACTION, and the tile is correct without one ([PB-5] item 2). This
+		// Nudge is RETIRED rather than made live: two live buttons that mail the
+		// same roster, stacked on one page, is a double-send affordance, and
+		// this tile holds no roster of its own to reason about. The GM's action
+		// is six inches below, in the panel that does.
 		return t
 	}
 	t.RSVPForm = &BenchRsvpForm{
@@ -1492,6 +1542,24 @@ func (h *Handler) SetScheduleReader(r BenchScheduleReader) { h.schedule = r }
 // an API one.
 func (h *Handler) SetRSVPReader(r RSVPService) { h.rsvpRead = r }
 
+// MailStatusReader is the one thing the Bench needs to know about email: is a
+// mail server configured on this instance.
+//
+// Declared HERE and injected from internal/app/routes.go (house rule 8); the
+// concrete smtp service satisfies it, as it already satisfies MailSender. It is
+// deliberately one boolean and not the MailSender interface — the Bench renders
+// a state, it does not send anything, and a seam that could send would invite
+// exactly that.
+type MailStatusReader interface {
+	IsConfigured(ctx context.Context) bool
+}
+
+// SetMailStatus wires the mail-configuration read behind the panel's ask
+// control. NIL-SAFE: with no seam wired the panel behaves exactly as it did
+// before this slice — the control renders live and the endpoint's own
+// unconfigured refusal is the honest backstop.
+func (h *Handler) SetMailStatus(r MailStatusReader) { h.mailStatus = r }
+
 // --- the RSVP panel ---------------------------------------------------------
 
 // benchRsvpQuorum is the number of members with saved availability below which
@@ -1644,6 +1712,22 @@ type benchRsvpInput struct {
 	ViewerZoneSource string
 	// WeekLabel is the human date of the overlay week's Monday.
 	WeekLabel string
+
+	// --- the schedule-ask control's three states (C-CALV4-RSVP-P8B §8) ---
+	//
+	// CSRFToken rides here because the control is a POST form. EventID is the
+	// collecting session the resolver already found, empty when there is none.
+	CSRFToken string
+	EventID   string
+	// MailConfigured is the ONE email fact the Bench asks for, read once per
+	// render, GM-only and panel-filled-only. It DEFAULTS TRUE so that a Bench
+	// built without the seam (every existing fixture, and any host that has not
+	// wired it) behaves exactly as it did before this slice.
+	MailConfigured bool
+	// AskState is the persisted per-campaign cooldown, read through the same
+	// predicate the endpoint enforces, so the control and the send cannot
+	// disagree about whether an ask is allowed.
+	AskState ScheduleAskState
 }
 
 // benchRsvpBuild assembles the signed panel.
@@ -1694,23 +1778,60 @@ func benchRsvpBuild(in benchRsvpInput) BenchRsvp {
 	p.Silent = silent
 	p.SideCap = "slot localised per member below"
 	if in.IsGM {
+		// PROPOSE KEEPS ITS CHIP. There is still no propose-from-window write
+		// path, and a chip is the honest state for a control with no backend.
 		p.Actions = []BenchAction{
 			{Label: "Propose", Fill: true, NeedsBackend: true,
 				Title: "there is no propose-from-window write path"},
-			{Label: "Nudge", NeedsBackend: true,
-				Title: "there is no reminder endpoint — RSVP mail fans out only when collection is switched on"},
 		}
-		// THE VISIBLE CARRIER of why those two are inert (WG-5). `title` is
+		// THE VISIBLE CARRIER of why it is inert (WG-5). `title` is
 		// supplementary here, never the only carrier: it is not announced by
 		// several screen readers and is unreachable by touch.
-		p.ActionsWhy = "Propose and Nudge are inert: Chronicle has no propose-from-window " +
-			"write path, and RSVP mail fans out only at the moment collection is switched on."
+		//
+		// SHORTER THAN IT WAS, and that is the point ([PB-5] item 4). It used to
+		// end "…and RSVP mail fans out only at the moment collection is switched
+		// on", which stopped being true the moment C-CALV4-RSVP-P8B shipped the
+		// ask endpoint. A sentence that still said it would be a NEW false
+		// honesty state, which is the exact failure class ADR-048 §15 exists to
+		// prevent.
+		p.ActionsWhy = "Propose is inert: Chronicle has no propose-from-window write path."
+		p.Ask = benchRsvpAsk(in)
 	}
 
 	p.SlotLabel = benchRsvpSlotLabel(in)
 	p.Members = benchRsvpMembers(in)
 	p.Captions = benchRsvpCaptions(in, p)
 	return p
+}
+
+// benchRsvpAsk builds the Director's ask control in whichever of its three
+// states this render is in (§8's table, and PB-9's divergences 1 and 4).
+//
+//	configured, no recent ask   LIVE, no badge, no extra line
+//	configured, cooling down    disabled, "Asked N ago. You can ask again in M."
+//	NOT configured              disabled, `.badge.warn`, the verbatim sentence
+//
+// The label stays `Nudge`. The mockup draws `Nudge 2`; P8A shipped it without
+// the numeral and the silent names ride the `.rec.warn` line below it. That
+// divergence is settled and is not reopened here.
+func benchRsvpAsk(in benchRsvpInput) *BenchAskForm {
+	f := &BenchAskForm{
+		Action:    "/campaigns/" + in.CampaignID + "/calendar/ask",
+		CSRFToken: in.CSRFToken,
+		EventID:   in.EventID,
+		Label:     "Nudge",
+		Title:     "email the roster asking for their schedule",
+	}
+	switch {
+	case !in.MailConfigured:
+		f.Disabled = true
+		f.Badge = "email not configured"
+		f.Title = mailNotConfiguredLine
+	case !in.AskState.Ready:
+		f.Disabled = true
+		f.Title = scheduleAskCooldownLine(in.AskState)
+	}
+	return f
 }
 
 // benchRsvpFrame states what the panel's times mean, ONCE, and says whose zone
@@ -2101,6 +2222,25 @@ func benchRsvpCaptions(in benchRsvpInput, p BenchRsvp) []string {
 		caps = append(caps, "The window above is derived from saved availability at render time and "+
 			"is not stored anywhere; Propose cannot act on it yet.")
 	}
+	// THE ASK CONTROL'S TWO REFUSING STATES, stated where the operator can read
+	// them (§8, PB-9 divergence 4). Both are GM-tier, because p.Ask is nil for a
+	// player and the absence is in the payload rather than in a template branch.
+	//
+	// The askable state adds NO line: silence is the true state, and a caption
+	// saying "you may press this button" would be noise on the one surface that
+	// has spent three waves removing noise.
+	if p.Ask != nil {
+		switch {
+		case p.Ask.Badge != "":
+			// VERBATIM, and shared as a single package-level constant with the
+			// endpoint that refuses the send, so a future edit cannot make the
+			// Bench and the server disagree about what an unconfigured mail
+			// server means.
+			caps = append(caps, mailNotConfiguredLine)
+		case p.Ask.Disabled:
+			caps = append(caps, scheduleAskCooldownLine(in.AskState))
+		}
+	}
 	return caps
 }
 
@@ -2149,6 +2289,33 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
 	isGM := permissions.CanSeeDmOnly(in.Role)
 	out := benchRsvpInput{
 		IsGM: isGM, ViewerID: in.UserID, CampaignID: in.Campaign.ID, Roster: roster,
+		CSRFToken: in.CSRFToken,
+		// Default TRUE so a Bench with no mail seam wired renders exactly as it
+		// did before this slice; the endpoint's own refusal is the backstop.
+		MailConfigured: true,
+		AskState:       ScheduleAskState{Ready: true},
+	}
+
+	// ── THE TWO ASK-CONTROL READS, ONCE PER BENCH RENDER ──────────────────
+	//
+	// GM-ONLY and PANEL-FILLED-ONLY, and that is a cost decision as much as a
+	// permission one: smtp.IsConfigured is a DATABASE READ on every call
+	// (service.go → repo.Get), and the cooldown is a second one. A player has
+	// no ask control to explain, and an unfilled panel has nowhere to put the
+	// answer, so neither read happens in either case. Same discipline as the
+	// layer preference above, for the same reason.
+	if isGM {
+		if h.mailStatus != nil {
+			out.MailConfigured = h.mailStatus.IsConfigured(ctx)
+		}
+		if h.rsvpRead != nil {
+			if st, serr := h.rsvpRead.ScheduleAskState(ctx, in.Campaign.ID); serr == nil {
+				out.AskState = st
+			} else {
+				slog.Warn("bench: schedule-ask cooldown read failed",
+					slog.String("campaign_id", in.Campaign.ID), slog.Any("error", serr))
+			}
+		}
 	}
 
 	session, row, anchorZone := benchRsvpPickSession(upcoming)
@@ -2183,6 +2350,12 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
 	} else {
 		slog.Warn("bench: rsvp availability read failed",
 			slog.String("campaign_id", in.Campaign.ID), slog.Any("error", aerr))
+	}
+
+	if row != nil {
+		// The collecting session the ask control attaches, so the emailed RSVP
+		// half is about the event this panel is already printing.
+		out.EventID = row.Event.ID
 	}
 
 	if row != nil && h.rsvpRead != nil {

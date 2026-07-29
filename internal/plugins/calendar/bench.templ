@@ -359,13 +359,22 @@ templ benchRsvpView(data BenchData) {
 					if data.Rsvp.Why != "" {
 						<div class="why">{ data.Rsvp.Why }</div>
 					}
-					if len(data.Rsvp.Actions) > 0 {
+					if len(data.Rsvp.Actions) > 0 || data.Rsvp.Ask != nil {
+						// ONE `.btns` ROW, as the signed contract draws it
+						// (cv4:2254-2255). The ask control joins Propose in the
+						// row rather than sitting under the caption: [PB-9]
+						// pre-authorises Nudge going LIVE, not Nudge moving.
 						<div class="btns">
 							for _, a := range data.Rsvp.Actions {
 								@benchActionView(a)
 							}
+							if data.Rsvp.Ask != nil {
+								@benchAskFormView(data.Rsvp.Ask)
+							}
 						</div>
-						<div class="cap">{ data.Rsvp.ActionsWhy }</div>
+						if data.Rsvp.ActionsWhy != "" {
+							<div class="cap">{ data.Rsvp.ActionsWhy }</div>
+						}
 					}
 					if data.Rsvp.Silent != "" {
 						<div class="rec warn">{ data.Rsvp.Silent }</div>
@@ -799,4 +808,65 @@ func benchNextUpSubtitle(u BenchNextUp) string {
 // index rather than from the mockup's hardcoded 11.
 func benchNextUpTail(u BenchNextUp) string {
 	return fmt.Sprintf("all %d →", u.Total)
+}
+
+// benchAskFormView is the panel's LIVE ask control (C-CALV4-RSVP-P8B, [PB-5]).
+//
+// EXACTLY ONE LIVE NUDGE EXISTS IN THE PRODUCT, and it is this one. The panel
+// is the only surface that already holds the roster, the derived silent set and
+// the resolved session, so the button belongs where its subject is. The two
+// tile Nudges are RETIRED rather than made live: two live buttons that mail the
+// same roster, stacked on one page, is a double-send affordance.
+//
+// A POST FORM, NEVER A LINK. BenchAction carries only Href and renders an <a>,
+// i.e. a GET — and mailing a roster from a GET is one link prefetcher away from
+// a fan-out nobody clicked. So this takes BenchRsvpForm's shape: a form-encoded
+// POST with the CSRF token as a hidden field, because
+// internal/middleware/csrf.go accepts either the X-CSRF-Token header or a
+// csrf_token field and this path is not under /api/ or /ws.
+//
+// NO JS IS ADDED TO THE BENCH. hx-* attributes are markup. The response swaps
+// THIS form for one .cap line stating the outcome — the same sentence the JSON
+// carries, no richer — which is also honest about state, because the cooldown
+// has just begun and the control is correctly no longer there.
+//
+// event_id rides as a hidden field only when the panel resolved a collecting
+// session. It is the ONE accepted parameter and the handler re-resolves it
+// through the existing campaign-scoping check; there is no field by which a
+// caller could name a recipient.
+//
+// THE DISABLED BRANCH carries `.badge.warn`, never `.badge.need`: an
+// unconfigured mail server is a deployment fact in the `zone not set` register,
+// not a build gap, and the reason is ALSO carried visibly in the panel's foot
+// rather than in `title` alone.
+templ benchAskFormView(f *BenchAskForm) {
+	if f.Disabled {
+		<span class="inert">
+			<button type="button" class="btn xs" disabled title={ f.Title }>{ f.Label }</button>
+			if f.Badge != "" {
+				<span class="badge warn">{ f.Badge }</span>
+			}
+		</span>
+	} else {
+		<form
+			method="post"
+			action={ templ.SafeURL(f.Action) }
+			hx-post={ f.Action }
+			hx-target="this"
+			hx-swap="outerHTML"
+		>
+			<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
+			if f.EventID != "" {
+				<input type="hidden" name="event_id" value={ f.EventID }/>
+			}
+			<button type="submit" class="btn xs" title={ f.Title }>{ f.Label }</button>
+		</form>
+	}
+}
+
+// benchAskResultView is what replaces the control after a send: one .cap line,
+// carrying the count and nothing else. No identities, no per-recipient outcome
+// — the send is backgrounded, so per-recipient outcomes do not exist yet.
+templ benchAskResultView(line string) {
+	<div class="cap" data-bench-ask-result>{ line }</div>
 }

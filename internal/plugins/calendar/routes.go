@@ -1,12 +1,98 @@
 package calendar
 
 import (
+	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
+
+// scheduleAskActorBurst is the third rate-limit layer ([PB-4]): the cheap outer
+// guard against a stuck client or a repeated submit, at 10 per hour per ACTOR.
+//
+// Per-USER, not per-IP, and that is the whole reason it is not
+// middleware.RateLimit: the actor here is authenticated, and a table shares an
+// IP (one house, one hotspot, one convention hall) far more often than it
+// shares an account.
+const scheduleAskActorBurst = 10
+
+// calendarUserRateLimit is a per-authenticated-user sliding-window limiter,
+// answering 429 with Retry-After.
+//
+// LIFTED, NOT IMPORTED. bestiary.UserRateLimit is the same algorithm, but
+// importing it would be a plugin-to-plugin edge that
+// internal/wire/plugin_import_guard_test.go forbids outright. The other
+// candidate home — internal/middleware, beside RateLimit — is ALSO unavailable,
+// and for a harder reason than taste: a per-user limiter has to read the
+// session, auth.GetUserID lives in the auth plugin, and auth/handler.go already
+// imports internal/middleware. Putting it there would be an import cycle. So it
+// lives here, in the plugin that needs it, which is the choice this slice made
+// and is reporting.
+//
+// Unauthenticated requests fall through: this middleware runs behind
+// RequireAuth, so an empty user id means the auth layer is already answering.
+func calendarUserRateLimit(maxRequests int, window time.Duration) echo.MiddlewareFunc {
+	type entry struct {
+		count       int
+		windowStart time.Time
+	}
+	var mu sync.Mutex
+	entries := make(map[string]*entry)
+
+	// Bounded memory: a user whose window is two windows stale is forgotten.
+	go func() {
+		for {
+			time.Sleep(time.Minute)
+			mu.Lock()
+			now := time.Now()
+			for key, e := range entries {
+				if now.Sub(e.windowStart) > window*2 {
+					delete(entries, key)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
+
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			userID := auth.GetUserID(c)
+			if userID == "" {
+				return next(c)
+			}
+			now := time.Now()
+
+			mu.Lock()
+			e, ok := entries[userID]
+			if !ok || now.Sub(e.windowStart) > window {
+				entries[userID] = &entry{count: 1, windowStart: now}
+				mu.Unlock()
+				return next(c)
+			}
+			e.count++
+			if e.count > maxRequests {
+				retryAfter := int(window.Seconds() - now.Sub(e.windowStart).Seconds())
+				if retryAfter < 1 {
+					retryAfter = 1
+				}
+				mu.Unlock()
+				c.Response().Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				return c.JSON(http.StatusTooManyRequests, map[string]string{
+					"error":   "rate_limited",
+					"message": fmt.Sprintf("Too many requests. Try again in %d seconds.", retryAfter),
+				})
+			}
+			mu.Unlock()
+			return next(c)
+		}
+	}
+}
 
 // RegisterRoutes sets up all calendar-related routes.
 // Calendar routes are scoped to a campaign and require membership.
@@ -112,7 +198,7 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// surfaces exist.
 	pub.GET("/calendars", h.Index, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calId", h.RedirectShowV2, campaigns.RequireViewAccess())
-	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireViewAccess()) // PRESERVE: no V2 embed
+	pub.GET("/calendars/:calId/embed", h.EmbedCalendar, campaigns.RequireViewAccess())   // PRESERVE: no V2 embed
 	pub.GET("/calendars/:calId/timeline", h.ShowTimeline, campaigns.RequireViewAccess()) // PRESERVE: Timeline V2 deferred
 	pub.GET("/calendars/:calId/week", h.RedirectWeekV2, campaigns.RequireViewAccess())
 	pub.GET("/calendars/:calId/day", h.RedirectDayV2, campaigns.RequireViewAccess())
@@ -246,6 +332,26 @@ func RegisterRSVPRoutes(e *echo.Echo, h *RSVPHandler, campaignSvc campaigns.Camp
 	// it lives on. Enabling is the invite moment (email + bell fan-out), so it
 	// must not be reachable by the people being invited.
 	cg.PUT("/calendars/:calId/events/:eid/rsvp-collection", h.SetRSVPCollectionAPI, campaigns.RequireRole(campaigns.RoleScribe))
+
+	// The schedule ask (C-CALV4-RSVP-P8B, [PB-3]). Scribe+, identical to the
+	// collection toggle it is the re-send of, and for the same stated reason:
+	// this is an invite moment, so it must not be reachable by the people being
+	// invited. Campaign-scoped rather than per-event, because the ask is about
+	// the roster's schedule and does not require an event to exist; it sits in
+	// the /campaigns/:id/calendar/<noun> namespace P9 established with
+	// /calendar/prefs, deliberately not under /calendar/v2/… (the frozen V2
+	// shell) and deliberately not under /schedule… (Part B's namespace).
+	//
+	// LITERAL PATH: wire_contract_test.go skips and logs a route registered
+	// through a variable, so a non-literal path would be an auth surface outside
+	// the oracle.
+	//
+	// The per-ACTOR limiter is the third rate-limit layer and the only
+	// in-memory one; the campaign cooldown and the per-recipient floor are
+	// persisted and enforced in the handler.
+	cg.POST("/calendar/ask", h.AskAvailabilityAPI,
+		campaigns.RequireRole(campaigns.RoleScribe),
+		calendarUserRateLimit(scheduleAskActorBurst, time.Hour))
 
 	// Public single-use token flow, mounted at the ROOT and deliberately
 	// distinct from the sessions plugin's /rsvp/:token. Registered directly on

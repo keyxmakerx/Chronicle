@@ -9,6 +9,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -72,11 +73,17 @@ func newGuardRouter(public bool) *echo.Echo {
 	return e
 }
 
+// isLoginRedirect reports whether the response bounced an anonymous visitor to
+// the login page. Since C-CALV4-RSVP-P8B stage 1 the bounce also carries where
+// the visitor was going (/login?redirect=<sanitized path>), so the assertion is
+// on the login path, not on the whole Location — the property under test here
+// is "anonymous access was refused", not the shape of the query string.
 func isLoginRedirect(rec *httptest.ResponseRecorder) bool {
 	switch rec.Code {
 	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther,
 		http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
-		return rec.Header().Get("Location") == "/login"
+		loc := rec.Header().Get("Location")
+		return loc == "/login" || strings.HasPrefix(loc, "/login?")
 	}
 	return false
 }

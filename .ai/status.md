@@ -20,6 +20,62 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — WAVE 3 TAIL · THE ASKING EMAIL SHIPPED (2026-07-29)
+
+**`C-CALV4-RSVP-P8B` closed the operator's own 28 July directive and the last
+`needs backend` chip inside the RSVP panel.** Chronicle can now ask a table for
+its schedule.
+
+**The route:** `POST /campaigns/:id/calendar/ask`, Scribe+, inside
+`RegisterRSVPRoutes`' authed `cg` — **721 → 722, one addition, zero removals**.
+Same role floor as the `rsvp-collection` toggle it is the re-send of, for that
+toggle's own stated reason: enabling is the invite moment, so it must not be
+reachable by the people being invited.
+
+**One email, two sections.** The schedule ask leads — subject and primary CTA —
+and needs no session, so it is valid in a campaign that has scheduled nothing.
+The five EXISTING RSVP action links ride the same email when a collecting
+session is resolvable AND the recipient may see it, re-minted through the
+unchanged `MintActionTokens`. `renderScheduleAskEmail` is a sibling of
+`renderInviteEmail` sharing lifted package-level helpers; the invite email's
+output is byte-identical after the lift.
+
+**The CTA is a plain deep link, and that is a correction to the booking, not a
+reduction.** *"A tokened link to the availability grid"* is not buildable: the
+grid is a 1,318-line client SPA over six authenticated JSON routes, so a token
+would have to authenticate all six or mint a session from an emailed link. The
+directive's one-time-token pattern is honoured by the RSVP links in the same
+email. See ADR-048 §25(b) — it is the section a future slice will need most.
+
+**Three auth defects repaired first, in their own commit** (stage 1, fenced to
+destination preservation + sanitisation): `handleUnauthenticated` now carries
+where you were going into `/login?redirect=…`; the login form carries it through
+the POST as a hidden field exactly as register already did; and `Login` uses
+`sanitizeRedirect` instead of a bare `HasPrefix(redir, "/")`, which accepted
+`//evil.example`. The third was unreachable ONLY because of the second, and this
+slice is what made it reachable.
+
+**The rate limit is persisted.** Calendar migration `015_schedule_asks`: a 6h
+per-campaign cooldown and a 24h per-recipient floor, plus a per-user 10/h
+in-memory limiter on the route. The cooldown REFUSES the send; the floor SKIPS
+that member, so a second ask after somebody joins mails the new member and
+nobody else. Nothing is recorded when nothing was sent.
+
+**The panel's `Nudge` is LIVE, in exactly one place.** Both session-tile Nudges
+were RETIRED rather than lit — two live buttons mailing one roster from one page
+is a double-send affordance. `Propose` keeps its chip and `ActionsWhy` shrank to
+name it alone. The Bench's own chip enumeration went from four to three. The
+`email not configured` state is a `.badge.warn`, never `.badge.need`.
+
+**Still open and named:** the propose-from-window write path; ledger #3
+(`HasPattern`) which stays Part B's; a plain Scribe has the ask capability and
+no button, because the panel `.side` is GM-tier by WG-8; and **`C-NOTIFY-PREFS`
+is newly booked** — this is the first Chronicle email a member can receive
+repeatedly because somebody else pressed a button, and there are no notification
+preferences anywhere in the product.
+
+---
+
 ### calendar-v4 — WAVE 3 · W-F LANDED, THE LAYER SYSTEM IS REAL (2026-07-29)
 
 **A default nobody can leave is not a default — and for three waves, nobody

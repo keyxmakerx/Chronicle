@@ -175,3 +175,74 @@ func TestEventRSVPs_AbsentFromAIExportCategories(t *testing.T) {
 		}
 	}
 }
+
+// EXTENDED by C-CALV4-RSVP-P8B §9.11 — the schedule-ask send log.
+//
+// `calendar_schedule_asks` is send bookkeeping, and it JOINS the two things the
+// egress guards already keep out of every export: it names a member (who was
+// emailed) and it is about their availability (why). It is member-scoped by
+// construction — the same class as the availability rows and the block layer
+// preference before it — so it enters no export DTO, and this asserts that in
+// the same commit that creates the table rather than trusting it.
+//
+// A THIRD walk rather than a widened token list, for the reason the zone walk
+// gives: "we mailed this person on Tuesday" is a distinct finding from "here is
+// their RSVP" and from "here is where they live", and three findings reported
+// as one is how a leak gets triaged as a duplicate.
+var scheduleAskTokens = []string{"scheduleask", "schedule_ask", "askedat", "asked_at", "lastasked", "last_asked"}
+
+func TestScheduleAskLog_AbsentFromExports(t *testing.T) {
+	assertNoScheduleAskFields(t, reflect.TypeOf(campaigns.CampaignExport{}), "CampaignExport", map[reflect.Type]bool{})
+	assertNoScheduleAskFields(t, reflect.TypeOf(calendar.ChronicleExport{}), "ChronicleExport", map[reflect.Type]bool{})
+
+	// The row type itself must not have acquired a json tag set that would let
+	// it be serialised straight into an export or an API payload by accident.
+	askType := reflect.TypeOf(calendar.ScheduleAsk{})
+	for i := 0; i < askType.NumField(); i++ {
+		if tag := askType.Field(i).Tag.Get("json"); tag != "" {
+			t.Errorf("egress risk: calendar.ScheduleAsk.%s carries a json tag %q — the ask log is "+
+				"send bookkeeping and has no wire shape", askType.Field(i).Name, tag)
+		}
+	}
+}
+
+func TestScheduleAskLog_AbsentFromAIExportCategories(t *testing.T) {
+	for _, c := range aiexport.AllCategories() {
+		lc := strings.ToLower(string(c))
+		for _, tok := range scheduleAskTokens {
+			if strings.Contains(lc, tok) {
+				t.Errorf("egress leak: AI export category %q exposes the schedule-ask log (%q)", c, tok)
+			}
+		}
+	}
+}
+
+// assertNoScheduleAskFields is the ask-log walk over the same two export roots.
+func assertNoScheduleAskFields(t *testing.T, typ reflect.Type, path string, seen map[reflect.Type]bool) {
+	t.Helper()
+	for typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Map {
+		typ = typ.Elem()
+	}
+	if typ.Kind() != reflect.Struct || seen[typ] {
+		return
+	}
+	seen[typ] = true
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		name, tag := strings.ToLower(f.Name), strings.ToLower(f.Tag.Get("json"))
+		for _, tok := range scheduleAskTokens {
+			if strings.Contains(name, tok) || strings.Contains(tag, tok) {
+				t.Errorf("egress leak: %s.%s exposes the schedule-ask send log (%q) — who was "+
+					"emailed about their availability, and when, is member-scoped bookkeeping "+
+					"and never export data (C-CALV4-RSVP-P8B §9.11)", path, f.Name, tok)
+			}
+		}
+		ft := f.Type
+		for ft.Kind() == reflect.Ptr || ft.Kind() == reflect.Slice || ft.Kind() == reflect.Map {
+			ft = ft.Elem()
+		}
+		if ft.Kind() == reflect.Struct && ft.PkgPath() != "time" {
+			assertNoScheduleAskFields(t, ft, path+"."+f.Name, seen)
+		}
+	}
+}

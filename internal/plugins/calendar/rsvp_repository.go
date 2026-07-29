@@ -32,6 +32,36 @@ type RSVPRepository interface {
 	CreateRSVPToken(ctx context.Context, t *EventRSVPToken) error
 	FindRSVPToken(ctx context.Context, token string) (*EventRSVPToken, error)
 	MarkRSVPTokenUsed(ctx context.Context, token string) error
+
+	// Schedule-ask send bookkeeping (C-CALV4-RSVP-P8B, migration 015). The two
+	// PERSISTED rate limits are reads off this one log; the third layer (per
+	// actor, in memory) never touches the database.
+	RecordScheduleAsk(ctx context.Context, a *ScheduleAsk) error
+	// LastScheduleAskAt is the campaign cooldown's input: MAX(sent_at) for one
+	// campaign, or the zero time when nobody has ever been asked.
+	LastScheduleAskAt(ctx context.Context, campaignID string) (time.Time, error)
+	// ScheduleAskRecipientsSince is the per-recipient floor's input: the
+	// distinct members of one campaign emailed at or after `since`.
+	ScheduleAskRecipientsSince(ctx context.Context, campaignID string, since time.Time) ([]string, error)
+}
+
+// ScheduleAsk is one recorded schedule-ask send: one row per recipient ACTUALLY
+// HANDED TO THE MAILER WITHOUT ERROR.
+//
+// The invariant this type exists to carry: NOTHING IS RECORDED WHEN NOTHING WAS
+// SENT. SMTP unconfigured, no address on file, or a send error writes no row,
+// because a cooldown must never lock out a campaign that received no mail.
+//
+// EventID is a pointer because it is genuinely optional: the schedule question
+// does not need a session, and the ask outlives whichever session it happened
+// to mention (the column is ON DELETE SET NULL for the same reason).
+type ScheduleAsk struct {
+	ID              string
+	CampaignID      string
+	EventID         *string
+	RecipientUserID string
+	ActorUserID     string
+	SentAt          time.Time
 }
 
 // rsvpRepo is the MariaDB implementation of RSVPRepository.
@@ -202,4 +232,70 @@ func (r *rsvpRepo) MarkRSVPTokenUsed(ctx context.Context, token string) error {
 		return errRSVPTokenSpent
 	}
 	return nil
+}
+
+// --- Schedule-ask send bookkeeping (C-CALV4-RSVP-P8B) ---
+
+// RecordScheduleAsk appends one send row. Append-only by design: there is no
+// update and no delete, because the log's whole purpose is to answer "when was
+// this roster last mailed" honestly, and a row that can be edited answers a
+// different question.
+func (r *rsvpRepo) RecordScheduleAsk(ctx context.Context, a *ScheduleAsk) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_schedule_asks
+		     (id, campaign_id, event_id, recipient_user_id, actor_user_id, sent_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		a.ID, a.CampaignID, a.EventID, a.RecipientUserID, a.ActorUserID, a.SentAt)
+	if err != nil {
+		return fmt.Errorf("recording schedule ask: %w", err)
+	}
+	return nil
+}
+
+// LastScheduleAskAt reports when this campaign's roster was last mailed, or the
+// zero time when it never has been.
+//
+// MAX over an empty set is SQL NULL, not an error, so the NULL scan IS the
+// "never asked" answer rather than a missing-row special case.
+func (r *rsvpRepo) LastScheduleAskAt(ctx context.Context, campaignID string) (time.Time, error) {
+	var last sql.NullTime
+	err := r.db.QueryRowContext(ctx,
+		`SELECT MAX(sent_at) FROM calendar_schedule_asks WHERE campaign_id = ?`,
+		campaignID).Scan(&last)
+	if err != nil && err != sql.ErrNoRows {
+		return time.Time{}, fmt.Errorf("reading last schedule ask: %w", err)
+	}
+	if !last.Valid {
+		return time.Time{}, nil
+	}
+	return last.Time.UTC(), nil
+}
+
+// ScheduleAskRecipientsSince lists the distinct members of one campaign emailed
+// at or after `since` — the per-recipient floor's skip set.
+//
+// DISTINCT because the answer is set membership, not a count: a member mailed
+// twice inside the window is skipped exactly as much as a member mailed once.
+func (r *rsvpRepo) ScheduleAskRecipientsSince(ctx context.Context, campaignID string, since time.Time) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT recipient_user_id FROM calendar_schedule_asks
+		 WHERE campaign_id = ? AND sent_at >= ?`,
+		campaignID, since.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("listing recent schedule ask recipients: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning schedule ask recipient: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating schedule ask recipients: %w", err)
+	}
+	return out, nil
 }

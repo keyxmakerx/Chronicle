@@ -186,6 +186,13 @@ func benchFxRsvpInput(isGM bool) benchRsvpInput {
 		CampaignID: "camp-1",
 		Roster:     benchFxRoster(),
 		Avail:      benchFxAvail(isGM),
+		// The default world for every pre-P8B fixture: a mail server IS
+		// configured and this campaign has never been asked, so the ask control
+		// is LIVE and adds no caption. The three states get their own fixture
+		// (benchFxDataRsvpAsk) rather than perturbing every existing render.
+		CSRFToken:      "fx-csrf",
+		MailConfigured: true,
+		AskState:       ScheduleAskState{Ready: true},
 		Answers: map[string]string{
 			"u-kael":          RSVPYes,
 			"u-nissa":         RSVPYes,
@@ -568,9 +575,11 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	//
 	// C-CALV4-LEDGER-P6 §9 made it an exact count of the Bench's OWN chips,
 	// subtracting the Block-side ones first. C-CALV4-SHELF-P7 kept that shape.
-	// C-CALV4-RSVP-P8 re-enumerates because it RETIRES one chip and MOVES
-	// another: the count is unchanged at four and every entry beneath it is
-	// different, which is exactly why this must never be maintained as a number.
+	// C-CALV4-RSVP-P8 re-enumerated because it RETIRED one chip and MOVED
+	// another. C-CALV4-RSVP-P8B RE-ENUMERATES AGAIN, and this time the count
+	// really does move — four to three — because the thing one of them was
+	// waiting for now exists. That is the reason this is a list and not a
+	// number: the number changing is not the finding, WHICH entry left is.
 	//
 	// THE SURVIVING CHIPS, EVERY ONE, BY SITE. The count below is a
 	// consequence of this list and must never be nudged without editing it:
@@ -585,11 +594,22 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	//        linkage to report
 	//     3. bench.go benchAttentionTile's sibling, the horizon tile — there is
 	//        no queryable knowledge horizon (COMMON §6.1)
-	//     4. bench.go benchSessionTile's Nudge action — WG-5's visible chip
-	//        beside a disabled control; there is no reminder endpoint, and
-	//        C-CALV4-RSVP-P8B ("the asking email") is where it gets one.
 	//
-	//   RETIRED BY P8, and it is the point of the slice:
+	//   RETIRED BY P8B, and it is the point of THAT slice:
+	//     · benchSessionTile's Nudge action — the fourth chip in this list until
+	//       this slice. It was WG-5's visible chip beside a disabled control,
+	//       and its stated reason was "there is no reminder endpoint".
+	//       POST /campaigns/:id/calendar/ask is that endpoint. The control is
+	//       not made live here, though: it is RETIRED ([PB-5] item 3), because a
+	//       "Nudge" on a tile headlined "Not scheduled here yet" never had a
+	//       referent, and the one live ask control lives in the RSVP panel where
+	//       the roster it mails is. benchSessionTileLive's Nudge is retired for
+	//       the sibling reason ([PB-5] item 2) — two live buttons mailing one
+	//       roster from one page is a double-send affordance — but it never
+	//       appeared in this fixture's count, because that tile only renders
+	//       once the panel resolves a session.
+	//
+	//   RETIRED BY P8, and it is the point of THAT slice:
 	//     · the RSVP PANEL HEADER's chip. It was drawn when the whole panel was
 	//       design-ahead; the panel is now backed, and a panel-level chip over a
 	//       filled panel is the same lie class as a green sync pill with no
@@ -617,9 +637,12 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	const chip = `class="badge need">needs backend`
 	const filtersChip = `data-spane="filters"><span ` + chip
 	benchOwn := strings.Count(html, chip) - strings.Count(html, filtersChip)
-	if benchOwn != 4 {
-		t.Errorf("the Bench's own chips = %d, want 4 (session tile · sync · horizon · Nudge); "+
-			"Block-side chips are subtracted and must not stand in for them", benchOwn)
+	if benchOwn != 3 {
+		t.Errorf("the Bench's own chips = %d, want 3 (session tile · sync · horizon); "+
+			"Block-side chips are subtracted and must not stand in for them. If this "+
+			"dropped to 2, a chip was retired without its entry above being struck; "+
+			"if it rose to 4, the retired Nudge came back over a backend that exists",
+			benchOwn)
 	}
 	// The Ledger's chip is gone because W-B FILLED the zone, and the Shelf's
 	// because W-E did. Inverted, not deleted: a chip beside real rows is a lie
@@ -830,8 +853,18 @@ func TestBenchRsvp_DerivedWindowShipsChippedAndProposeStaysInert(t *testing.T) {
 	if !strings.Contains(html, `class="inert"`) {
 		t.Error("an inert control must carry a visible chip, not a title alone (WG-5)")
 	}
-	if !strings.Contains(html, "Propose and Nudge are inert") {
+	// C-CALV4-RSVP-P8B SHRANK THIS SENTENCE and the pin follows it, intent
+	// preserved: the reason must still be visible rather than title-only, but it
+	// now names Propose ALONE. The old wording ended "…and RSVP mail fans out
+	// only at the moment collection is switched on", which stopped being true
+	// the moment this slice shipped the ask endpoint — a sentence that still
+	// said it would be a NEW false honesty state.
+	if !strings.Contains(html, "Propose is inert") {
 		t.Error("the specific reason must be VISIBLE, not only in title")
+	}
+	if strings.Contains(html, "Propose and Nudge are inert") ||
+		strings.Contains(html, "fans out only at the moment") {
+		t.Error("ActionsWhy still describes Nudge as inert after the endpoint shipped")
 	}
 	// The chip beside them is the literal "needs backend" and never the reason,
 	// so `.badge.need` cannot be diluted.
@@ -1153,6 +1186,36 @@ func TestGenerateBenchScreenshots(t *testing.T) {
 		{file: "15-rsvp-panel-unfilled.png", title: "RSVP panel · a campaign that has entered nothing",
 			caption: "the corrected copy: the STORAGE exists — what is empty is this campaign's data, and the panel no longer claims otherwise",
 			w:       1280, h: 900, host: 1232, data: benchFxData(true, true)},
+
+		// C-CALV4-RSVP-P8B. THE ASK CONTROL IN ALL THREE STATES, plus the
+		// player's proof that none of them reaches them. 16/17/18 must be read
+		// as a set: the control is live only when it can actually send, and
+		// each refusal states its own reason where the Director can see it
+		// rather than behind a click.
+		{file: "16-ask-askable-light.png", title: "The ask · ASKABLE · DIRECTOR · light",
+			caption: "a configured mail server and no recent ask: Nudge is LIVE, no chip, no badge, and the foot says nothing — silence is the true state",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpAskShot(true, benchFxAskNever)},
+		{file: "17-ask-cooling-down-light.png", title: "The ask · COOLING DOWN · DIRECTOR · light",
+			caption: "asked 2 hours ago: disabled, and the panel's foot says when and how long — a limit whose only expression is an error page is a limit the operator hits blind",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpAskShot(true, benchFxAskCooling)},
+		{file: "18-ask-no-smtp-light.png", title: "The ask · EMAIL NOT CONFIGURED · DIRECTOR · light",
+			caption: "no mail server: disabled with `.badge.warn` (NOT `.badge.need` — the endpoint exists, the operator has not configured SMTP), and ledger item 11's sentence verbatim in the foot",
+			w:       1280, h: 3000, host: 1232, data: benchFxDataRsvpAskShot(false, benchFxAskNever)},
+		{file: "19-ask-askable-dark.png", title: "The ask · ASKABLE · DIRECTOR · dark",
+			caption: "the same live control in dark", dark: true,
+			w: 1280, h: 3000, host: 1232, data: benchFxDataRsvpAskShot(true, benchFxAskNever)},
+		{file: "20-ask-cooling-down-dark.png", title: "The ask · COOLING DOWN · DIRECTOR · dark",
+			caption: "the cooldown line in dark", dark: true,
+			w: 1280, h: 3000, host: 1232, data: benchFxDataRsvpAskShot(true, benchFxAskCooling)},
+		{file: "21-ask-no-smtp-dark.png", title: "The ask · EMAIL NOT CONFIGURED · DIRECTOR · dark",
+			caption: "the warn badge in dark, where a `.badge.need` would be indistinguishable from a build gap if the class had been diluted", dark: true,
+			w: 1280, h: 3000, host: 1232, data: benchFxDataRsvpAskShot(false, benchFxAskNever)},
+		{file: "22-ask-mobile-light.png", title: "The ask · phone · DIRECTOR · light",
+			caption: "BENCH_HOST 358px — the control and its reason both survive the phone reading; the reason may never be the thing that disappears",
+			w:       500, h: 3600, host: 358, data: benchFxDataRsvpAskShot(false, benchFxAskNever)},
+		{file: "23-ask-player-light.png", title: "The ask · PLAYER · light — THE ABSENCE PROOF",
+			caption: "same width, same panel, same unconfigured server: NO control, NO cooldown line, NO SMTP sentence. Deployment status is build status for audience purposes, and a player has no control to explain",
+			w:       1280, h: 2600, host: 1232, data: benchFxDataRsvpAskShot(false, benchFxAskPlayer)},
 	}
 
 	css := benchCSS(t) + benchBlockSheet(t)

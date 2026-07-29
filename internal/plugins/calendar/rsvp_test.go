@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,6 +37,10 @@ type mockRSVPRepo struct {
 	createTokenFn func(ctx context.Context, t *EventRSVPToken) error
 	findTokenFn   func(ctx context.Context, token string) (*EventRSVPToken, error)
 	markUsedFn    func(ctx context.Context, token string) error
+	// Schedule-ask send bookkeeping (C-CALV4-RSVP-P8B).
+	recordAskFn func(ctx context.Context, a *ScheduleAsk) error
+	lastAskFn   func(ctx context.Context, campaignID string) (time.Time, error)
+	recentAskFn func(ctx context.Context, campaignID string, since time.Time) ([]string, error)
 }
 
 func (m *mockRSVPRepo) UpsertRSVP(ctx context.Context, r *EventRSVP) error {
@@ -86,6 +91,27 @@ func (m *mockRSVPRepo) MarkRSVPTokenUsed(ctx context.Context, token string) erro
 	}
 	return nil
 }
+func (m *mockRSVPRepo) RecordScheduleAsk(ctx context.Context, a *ScheduleAsk) error {
+	if m.recordAskFn != nil {
+		return m.recordAskFn(ctx, a)
+	}
+	return nil
+}
+
+// LastScheduleAskAt defaults to the zero time — "nobody has ever been asked" —
+// so every pre-existing fixture behaves as a campaign with no send history.
+func (m *mockRSVPRepo) LastScheduleAskAt(ctx context.Context, campaignID string) (time.Time, error) {
+	if m.lastAskFn != nil {
+		return m.lastAskFn(ctx, campaignID)
+	}
+	return time.Time{}, nil
+}
+func (m *mockRSVPRepo) ScheduleAskRecipientsSince(ctx context.Context, campaignID string, since time.Time) ([]string, error) {
+	if m.recentAskFn != nil {
+		return m.recentAskFn(ctx, campaignID, since)
+	}
+	return nil, nil
+}
 
 type mockEventLookup struct {
 	evt *Event
@@ -110,15 +136,35 @@ func (m *mockMemberDir) IsUserDmGranted(_ context.Context, _, userID string) (bo
 	return m.dmGrant[userID], nil
 }
 
+// mockMailer records what was handed to it. The mutex is not decoration: the
+// schedule-ask fan-out is deliberately backgrounded (C-CALV4-RSVP-P8B §6), so
+// its tests read these slices while a goroutine writes them.
 type mockMailer struct {
+	mu         sync.Mutex
 	configured bool
 	sent       []string // one entry per recipient address
+	subjects   []string
+	plains     []string
 	bodies     []string
+	// attempts counts every call, successful or not, so a test can wait for a
+	// fan-out whose sends all FAIL (the "nothing is recorded when nothing was
+	// sent" case) as well as one whose sends land.
+	attempts int
+	// sendErr, when set, makes every send fail.
+	sendErr error
 }
 
 func (m *mockMailer) IsConfigured(_ context.Context) bool { return m.configured }
-func (m *mockMailer) SendHTMLMail(_ context.Context, to []string, _, _, htmlBody string) error {
+func (m *mockMailer) SendHTMLMail(_ context.Context, to []string, subject, plain, htmlBody string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.attempts++
+	if m.sendErr != nil {
+		return m.sendErr
+	}
 	m.sent = append(m.sent, to...)
+	m.subjects = append(m.subjects, subject)
+	m.plains = append(m.plains, plain)
 	m.bodies = append(m.bodies, htmlBody)
 	return nil
 }
