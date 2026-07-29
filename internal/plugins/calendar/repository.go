@@ -36,6 +36,19 @@ type CalendarRepository interface {
 	GetSidebarPinned(ctx context.Context, userID, campaignID string) (bool, error)
 	SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error
 
+	// Per-viewer calendar-v4 Block layer set (C-CALV4-LAYERS-P9 [LYR-3]).
+	// Piggybacked on the SAME calendar_active row as the two above, per
+	// migration 007's coordinator decision (PR #368 stop-and-flag #3).
+	//
+	// THE nil RETURN IS THE POINT. Get answers (nil, nil) when the column is
+	// NULL — "this viewer has never chosen" — and a NON-NIL, possibly EMPTY
+	// slice when they have. The caller renders the host's seed for nil and the
+	// viewer's own set for anything else, so "every layer off" is a reachable
+	// state distinct from "no preference". A []string that collapsed both onto
+	// len()==0 would make a bare month unreachable.
+	GetBlockLayers(ctx context.Context, userID, campaignID string) ([]string, error)
+	SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error
+
 	// Months.
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
 	GetMonths(ctx context.Context, calendarID string) ([]Month, error)
@@ -334,6 +347,62 @@ func (r *calendarRepo) SetSidebarPinned(ctx context.Context, userID, campaignID 
 		 VALUES (?, ?, '', ?)
 		 ON DUPLICATE KEY UPDATE sidebar_pinned = VALUES(sidebar_pinned)`,
 		userID, campaignID, pinned)
+	return err
+}
+
+// GetBlockLayers returns the viewer's stored calendar-v4 Block layer set for a
+// campaign, or nil when they have never chosen one (C-CALV4-LAYERS-P9 [LYR-3]).
+//
+// NULL AND EMPTY ARE DIFFERENT ANSWERS and the sql.NullString is what keeps
+// them apart:
+//
+//	no row / NULL  → (nil, nil)         the host's seed renders, as before
+//	''             → ([]string{}, nil)  the viewer chose a bare month
+//	'moons,eras'   → ([...], nil)       the viewer's own set
+//
+// No validation happens here. A repository owns SQL; the eight-key registry
+// lives in the widget package and the filtering happens where it can log — see
+// calendarService.GetBlockLayers.
+func (r *calendarRepo) GetBlockLayers(ctx context.Context, userID, campaignID string) ([]string, error) {
+	var stored sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT block_layers FROM calendar_active WHERE user_id = ? AND campaign_id = ?`,
+		userID, campaignID).Scan(&stored)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !stored.Valid {
+		return nil, nil
+	}
+	if stored.String == "" {
+		// Deliberately non-nil and empty: "every layer off", not "unchosen".
+		return []string{}, nil
+	}
+	return strings.Split(stored.String, ","), nil
+}
+
+// SetBlockLayers persists the viewer's layer set. Upserts through the same
+// calendar_active row as the pin preference, with the identical empty-
+// calendar_id fallback on first write, so a viewer who sets layers before ever
+// picking a calendar still gets a row.
+//
+// A nil keys slice writes NULL — "forget my choice", the reset the switchboard
+// does not expose yet but the store must be able to express, or a viewer could
+// never get back to the host's seed. An empty non-nil slice writes '', which is
+// the bare month.
+func (r *calendarRepo) SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error {
+	var val any
+	if keys != nil {
+		val = strings.Join(keys, ",")
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_active (user_id, campaign_id, calendar_id, block_layers)
+		 VALUES (?, ?, '', ?)
+		 ON DUPLICATE KEY UPDATE block_layers = VALUES(block_layers)`,
+		userID, campaignID, val)
 	return err
 }
 

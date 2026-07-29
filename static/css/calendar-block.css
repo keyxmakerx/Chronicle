@@ -650,12 +650,71 @@
 }
 
 /* ── Zone B · INSTRUMENT ─────────────────────────────────────────────────── */
+/* THE BODY SCROLLS AT STD, AND THAT IS THE §15 ANSWER
+   (C-CALV4-LAYERS-P9 screenshot finding).
+
+   Wave 1/2 needed nothing here: the only thing under the month was at most
+   three one-line `needs backend` chips, and both host seeds omitted the keys
+   that produce them precisely BECAUSE HOST-P3 measured the collision. W-F fills
+   two of those zones with real content and the switchboard lets any viewer
+   switch all three on, so the collision is now reachable — and at 420px and
+   358px it drew the docked Ledger's head and the Shelf's strip on top of one
+   another.
+
+   THE CANDIDATES, and why each of the other three was refused:
+     · shrink the month — refused. It is the primary surface, and a Block that
+       loses week rows to make room for a legend has its priorities inverted.
+       Measured: it also changes every std Block NOWHERE NEAR the ceiling,
+       because a shrinkable instrument hands the Ledger space the month had.
+     · clip the Ledger — refused. A zone that silently vanishes is worse than
+       one that scrolls; the viewer has no way to learn it is still there.
+     · bound the below-month stack with a literal — refused. At 420px the month
+       is already most of the Block's height, so any honest bound is ~0 and the
+       sections the viewer just switched on would be a scrollbar.
+     · SCROLL THE BODY — taken. Everything stays in DOM order, nothing overlaps,
+       no layer key is dropped (the viewer ASKED for the key), the month keeps
+       every week row, and the Shelf's strip stays pinned at the foot because it
+       is the Block's child rather than the body's. Scrolling is already this
+       Block's own idiom for a zone that cannot fit — .lrows and the Shelf's
+       panels both use it — which is CTS-8's precedent applied one level up.
+
+   It costs nothing when the content fits, which is every Block that renders the
+   default surface. */
 .cal-block-host .body {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
+/* THE INSTRUMENT SCROLLS RATHER THAN PUSHING ITS SIBLINGS OUT, and that is a
+   §15 SCREENSHOT FINDING from C-CALV4-LAYERS-P9 rather than a tidy-up.
+
+   Wave 1/2 could leave this `flex: none`, because the only thing under the
+   month was at most three one-line `needs backend` chips. W-F fills two of
+   those zones with REAL content — a legend and an eight-lane illumination graph
+   — and a viewer can switch all three on at once. At the 420px entity host and
+   the 358px bench, that pushed .inst past the Block's 520px ceiling, and its
+   siblings (the docked Ledger's head and strip, the Shelf's tab strip) drew on
+   top of one another.
+
+   THE FIX IS CTS-8's PRECEDENT, EXACTLY: the answer is taken inside the Block's
+   own std geometry, THE ZONE THAT CAN YIELD YIELDS, and NO LAYER KEY IS
+   DROPPED — the viewer asked for the key. The month keeps its intrinsic height
+   because the grid has one; what scrolls is the stack of sections BELOW it,
+   which is the only part that can grow without bound. The Ledger and the Shelf
+   keep their strips intact, which is the invariance promise the whole std tier
+   is written against.
+
+   `overflow-y: auto` and not `hidden`: hiding it would silently drop a section
+   the viewer switched on, which is the same defect one direction over. */
+/* UNCHANGED SINCE WAVE 1, and deliberately so: `flex: none` is what makes the
+   MONTH the thing that decides the Block's height. C-CALV4-LAYERS-P9 tried
+   letting this shrink and the screenshots caught it immediately — a shrinkable
+   instrument hands the docked Ledger space the month had, and every std Block
+   nowhere near the ceiling redraws with fewer week rows. The yielding happens
+   one level down, in .belowzones. */
 .cal-block-host .inst {
   flex: none;
   min-height: 0;
@@ -663,6 +722,31 @@
   flex-direction: column;
   padding: 0 12px 8px;
   overflow: hidden;
+}
+/* THE STACK OF SECTIONS BELOW THE MONTH — legend, knowledge horizon,
+   illumination graph — AND IT IS THE ZONE THAT YIELDS.
+   (C-CALV4-LAYERS-P9 §15 screenshot finding; see block.templ.)
+
+   Wave 1/2 needed no bound here, because the only thing under the month was at
+   most three one-line `needs backend` chips. W-F fills two of those zones with
+   real content and a viewer can switch all three on at once, which at 420px and
+   358px pushed the instrument past the Block's 520px ceiling and drew the
+   docked Ledger's head and the Shelf's strip over one another.
+
+   CTS-8's precedent is the fix: the answer is taken INSIDE the Block's own std
+   geometry, THE ZONE THAT CAN YIELD YIELDS, and NO LAYER KEY IS DROPPED —
+   the viewer asked for the key. The month keeps every week row; the Ledger and
+   the Shelf keep their heads and strips; the sections the viewer added scroll
+   inside a bounded stack.
+
+   It carries no bound of its own: the yielding happens in .body, which is the
+   only place that can see how much room is actually left. A literal here would
+   have to be ~0 at 420px, and a section the viewer just switched on rendering
+   as a scrollbar is the same defect one direction over. */
+.cal-block-host .belowzones {
+  display: flex;
+  flex-direction: column;
+  flex: none;
 }
 
 /* THE GRID. The week-number gutter is column 1 of the SAME grid and every row
@@ -1073,6 +1157,174 @@
   margin-top: 6px;
   border-top: 1px solid var(--rule-hairline);
   flex: none;
+}
+
+/* ── the `legend` layer's section, under the month ─────────────────────────
+   FILLED by C-CALV4-LAYERS-P9. Its counts come from ONE pass over the same
+   Rows[].Cells[].Marks the grid drew, so the legend, the grid and the docked
+   Ledger cannot drift.
+
+   THE SWATCH IS A (HUE, PATTERN) PAIR, never a hue alone. --axis carries the
+   type's channel and the p1..p8 class carries its locked stroke, because colour
+   is never load-bearing and the pair must still resolve in greyscale. Guard B1:
+   --dash and --gap are the identity channel and are NEVER animated — the swatch
+   is a static stroke. */
+.cal-block-host .legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 6px 0 0;
+  margin-top: 6px;
+  border-top: 1px solid var(--rule-hairline);
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.cal-block-host .legend i {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-style: normal;
+}
+/* The swatch reuses the .ulseg ORIENTATION (horizontal) and the SAME --dash /
+   --gap tokens the .p2..p8 classes already declare — it is the underline mark
+   at legend size, not a second pattern vocabulary. A parallel set of stroke
+   rules is exactly how a legend starts disagreeing with the marks it labels. */
+.cal-block-host .legend .lr {
+  flex: none;
+  width: 12px;
+  height: 3px;
+  border-radius: var(--r-full);
+  --dash: 100%;
+  --gap: 0px;
+  background-color: var(--axis);
+}
+.cal-block-host .legend .lr.p2,
+.cal-block-host .legend .lr.p3,
+.cal-block-host .legend .lr.p4,
+.cal-block-host .legend .lr.p6,
+.cal-block-host .legend .lr.p8 {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(to right, var(--axis) 0 var(--dash),
+      transparent var(--dash) calc(var(--dash) + var(--gap)));
+}
+.cal-block-host .legend .lr.p5 {
+  background-color: transparent;
+  background-image: linear-gradient(to bottom,
+      var(--axis) 0 1px, transparent 1px 2px, var(--axis) 2px 3px);
+}
+.cal-block-host .legend .lr.p7 {
+  background-color: transparent;
+  background-image: linear-gradient(to right,
+      var(--axis) 0 calc(50% - .5px), transparent calc(50% - .5px) calc(50% + .5px),
+      var(--axis) calc(50% + .5px) 100%);
+}
+.cal-block-host .legend .n {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ── the `moongraph` layer's section: the illumination graph ───────────────
+   FILLED by C-CALV4-LAYERS-P9 from MonthGeometry.Almanac (r53) with no new pin
+   field. One lane per DRAWN body — never a composite (L19/L24) — and the
+   ceiling stays declared once in the Nameplate (L30).
+
+   NO LITERAL AND NO VARIABLE repeat() FOR THE DAY COLUMNS. The mockup writes
+   `repeat(30, minmax(0,1fr))` twice and a thirty-day month is precisely the
+   assumption this whole brief exists to escape. The lane takes its columns from
+   grid-auto-flow, exactly as the Almanac lane already does: the columns follow
+   the CELLS, which the producer emitted one per real day, so the day count is
+   structural and lives in exactly one place.
+
+   The moon-name column is a fixed 52px track and the day cells flow after it. */
+.cal-block-host .skyfoot {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--rule-hairline);
+}
+.cal-block-host .sfrow,
+.cal-block-host .sfaxis {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-template-columns: 52px;
+}
+.cal-block-host .sfrow {
+  align-items: end;
+  height: 18px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-block-host .sfrow .nm {
+  align-self: center;
+  font-weight: 650;
+  font-size: 9.5px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cal-block-host .sfcell {
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+/* The bar. ACHROMATIC BY LAW: the sky may never borrow the event colour axis,
+   so this is a structural rule token and never var(--axis) or var(--accent). */
+.cal-block-host .sfcell i {
+  display: block;
+  width: 88%;
+  background: var(--rule-structural-strong);
+}
+/* the every-fifth / every-tenth counting aid — the five-column rule's sibling.
+   Humans cannot count to thirty across identical columns. */
+.cal-block-host .sfcell.t5 {
+  box-shadow: inset -1px 0 0 var(--rule-hairline);
+}
+.cal-block-host .sfcell.t10 {
+  box-shadow: inset -1px 0 0 var(--rule-structural);
+}
+.cal-block-host .sfcell .tn {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  background: var(--text-primary);
+}
+.cal-block-host .sfcell .tn.full {
+  height: 4px;
+}
+.cal-block-host .sfcell .tn.new {
+  height: 1px;
+}
+.cal-block-host .sfaxis {
+  height: 12px;
+  align-items: center;
+}
+.cal-block-host .sfaxis b {
+  font-weight: 650;
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+  color: var(--text-muted);
+}
+.cal-block-host .sfaxis .lb {
+  font-weight: 650;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cal-block-host .sffoot {
+  padding-top: 3px;
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-muted);
 }
 
 /* ── Zone C · THE DOCKED LEDGER ──────────────────────────────────────────────
@@ -1972,6 +2224,12 @@
     grid-template-columns: minmax(0, 1fr) auto;
     flex: 1;
     min-height: 0;
+    /* At full tier the docked Ledger is ABSOLUTELY POSITIONED inside its own
+       300px column (see below), and a scrolling body would make that column a
+       containing block for scroll rather than for position. There is also room
+       here: the §15 worst case renders whole at 1232px. So the std scroller is
+       explicitly OFF, not merely inherited-away. */
+    overflow: visible;
   }
   .cal-block-host .inst {
     flex: 1;
@@ -2120,6 +2378,223 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   §SWITCHBOARD — the layer sheet (C-CALV4-LAYERS-P9, W-F).
+
+   IT IS A TOP-LAYER [popover] AND THAT IS THE WHOLE REASON IT WORKS. `.block`
+   sets overflow:hidden and .cal-block-host is an inline-size query container,
+   so an absolutely-positioned box inside the Nameplate is clipped. The docked
+   Ledger was deliberately left a plain positioned box (see Zone C) so this
+   popover could still anchor inside it. The sheet is a SIBLING of .block,
+   inside .cal-block-host — inside the query container, inside the scoping root,
+   and in the top layer when open.
+
+   IT DOES NOT ANIMATE OPEN, at all, for anyone. The signed contract's popover
+   fades and scales in via opacity/transform/@starting-style and animates its
+   .pop-bar; every one of those is outside the §MOTION budget and
+   @starting-style is an explicit REFUSAL. The design notes already wrote the
+   branch shipped here — "Under prefers-reduced-motion the section simply
+   exists" — and Chronicle ships it for everyone ([LYR-9] item 1). The only
+   motion in this section is the row's switch, and it lives in §MOTION's guard.
+
+   PLACEMENT ([LYR-2] SIGNED). CSS anchor positioning under @supports, opening
+   block-end / span-inline-start from the ⋯ — DOWN and LEFT, over the month,
+   never over the docked Ledger column, whose own "Event list" row the sheet
+   contains. The anchor NAME is per-instance and comes from a style attribute
+   (helpers.go: layerAnchorName), because the Bench composes four Blocks on one
+   page and one shared anchor-name would be ambiguous. A browser without anchor
+   positioning ignores both custom-ident declarations and lands the sheet
+   viewport-centred: the pre-authorised fallback, and an honest one — a centred
+   sheet still reads as a disclosure the viewer opened.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-block-host .lsheet {
+  position: fixed;
+  margin: 0;
+  inset: auto;
+  width: 300px;
+  max-width: min(300px, 92vw);
+  padding: 0;
+  border: 1px solid var(--rule-structural);
+  border-radius: var(--r-card);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  /* STATIC, in frame one, never interpolated (canon D3's sibling rule). */
+  box-shadow: var(--elev-3);
+}
+.cal-block-host .lsheet:not(:popover-open) {
+  display: none;
+}
+.cal-block-host .lsheet::backdrop {
+  background: transparent;
+}
+/* the accent rail across the top. A STATIC stroke: it is drawn, never drawn-on
+   (guard B1's sibling — the identity channel is never animated). */
+.cal-block-host .lsheet .pop-bar {
+  height: 3px;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  background-color: var(--accent);
+}
+.cal-block-host .lsheet .pop-h {
+  padding: 8px 12px 4px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+/* the two group headers. Their .how lines are canon A8's two laws written where
+   the viewer meets them: the INSIDE three change the month's geometry and apply
+   instantly and silently; the other five open a section. */
+.cal-block-host .lsheet .grp {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 12px 3px;
+  border-top: 1px solid var(--rule-hairline);
+}
+.cal-block-host .lsheet .grp .g {
+  font-weight: 650;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.cal-block-host .lsheet .grp .how {
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+/* THE ROW IS A REAL BUTTON — focusable and keyboard-reachable. REVIEW failed
+   the proposed sheet for making it a <div>, and a <div> is also invisible to
+   the keyboard. */
+.cal-block-host .lsheet .layerrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-top: 1px solid var(--rule-hairline);
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cal-block-host .lsheet .grp + .layerrow {
+  border-top: 0;
+}
+/* `transparent 96%` and not color-mix against --surface-card: --surface-card is
+   hue-0, so the card-based form drifts pink in light. BOOKED for the _tokens.css
+   re-sign pass, not patched per-file — this is its third consumer. */
+.cal-block-host .lsheet .layerrow:hover,
+.cal-block-host .lsheet .layerrow:focus-visible {
+  background: color-mix(in oklch, transparent 94%, var(--text-primary));
+}
+.cal-block-host .lsheet .layerrow .sw {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 15px;
+  border-radius: var(--r-full);
+  background: var(--rule-structural);
+}
+.cal-block-host .lsheet .layerrow .sw::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: var(--r-full);
+  background: var(--surface-card);
+}
+/* THE SWITCH IS A STATE, NOT A THING THAT TRAVELS (canon A6). aria-pressed IS
+   the state; the transform below is the same state rendered, and it is legal
+   only because `transform` is in the budget and lives inside the guard. */
+.cal-block-host .lsheet .layerrow[aria-pressed="true"] .sw {
+  background: var(--accent);
+}
+.cal-block-host .lsheet .layerrow[aria-pressed="true"] .sw::after {
+  transform: translateX(11px);
+}
+.cal-block-host .lsheet .layerrow .tx {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cal-block-host .lsheet .layerrow .nm {
+  font-weight: 600;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+.cal-block-host .lsheet .layerrow .wh {
+  font-weight: 500;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+.cal-block-host .lsheet .pop-f {
+  padding: 8px 12px;
+  border-top: 1px solid var(--rule-hairline);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ── the hover preview: pointing at a row lights the section it controls ─────
+   The switchboard's whole affordance (cv4:507-511). box-shadow + background,
+   no geometry change, canon-legal — A5's sibling idea applied to a control and
+   its target.
+
+   ROOTED AT .cal-block-host, NOT AT THE SHEET. A popover in the top layer
+   cannot :has() back out of itself to reach the month, so the common ancestor
+   does the reaching. This is exactly why the sheet is mounted as a sibling of
+   .block rather than inside the Nameplate. */
+.cal-block-host:has(.layerrow[data-layer-pick="ledger"]:hover) .layer-col,
+.cal-block-host:has(.layerrow[data-layer-pick="shelf"]:hover) .shelf,
+.cal-block-host:has(.layerrow[data-layer-pick="legend"]:hover) .layer[data-layer="legend"],
+.cal-block-host:has(.layerrow[data-layer-pick="horizon"]:hover) .layer[data-layer="horizon"],
+.cal-block-host:has(.layerrow[data-layer-pick="moongraph"]:hover) .layer[data-layer="moongraph"] {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  background: color-mix(in oklch, transparent 96%, var(--accent));
+  border-radius: var(--r-ctl);
+}
+/* the three INSIDE layers point at the month itself: its dates, its bands, its
+   gutter. One target, because they are all the same geometry. */
+.cal-block-host:has(.layerrow[data-layer-pick="moons"]:hover) .grid,
+.cal-block-host:has(.layerrow[data-layer-pick="eras"]:hover) .grid,
+.cal-block-host:has(.layerrow[data-layer-pick="weeknums"]:hover) .grid {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  border-radius: var(--r-ctl);
+}
+
+@supports (anchor-name: --calv4) {
+  /* THE ANCHOR IS THE MONTH, AND THAT IS A SCREENSHOT FINDING.
+     [LYR-2]'s sketch anchors to the ⋯ and opens block-end / span-inline-start.
+     The ⋯ sits at the far right of the Nameplate, directly ABOVE the docked
+     Ledger column, so that placement covers the Ledger entirely — including the
+     Ledger's own "Event list" row, which is a control hiding its own target and
+     an explicit STOP-AND-FLAG. The binding clause of the ruling is "over the
+     month, never over the Ledger column"; anchoring to the INSTRUMENT satisfies
+     it by construction at every tier, rather than by an offset nudged until it
+     looked right. At std, where no Ledger is docked, it changes nothing.
+
+     The sheet's top-right corner meets the month's top-right corner and it
+     grows leftwards and downwards over the month — still "down and left from
+     the ⋯" to a reader, since the ⋯ is the nearest thing above it. */
+  .cal-block-host .lsheet {
+    position-area: none;
+    inset: auto;
+    top: anchor(top);
+    right: anchor(right);
+    margin: 4px;
+    position-try-fallbacks: flip-block, flip-inline;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    §MOTION — the budget, and it is EXACTLY this.
 
    Wave 1 forbade motion outright and named W-B as the slice that re-opens the
@@ -2199,6 +2674,26 @@
   }
   .cal-block-host .cell:has(> .daypick:checked)::after {
     animation: m-latch var(--t-fast) var(--ease-dec) both;
+  }
+
+  /* 5 — the switchboard row (C-CALV4-LAYERS-P9). Three transitions, all three
+     already in the budget's property list, and they are here rather than in
+     §SWITCHBOARD because clause 2 of TestCSS_NoMotionAtAll requires the WHOLE
+     budget inside one reduced-motion block — which is itself the proof that the
+     switch is a STATE and not an animation. Under reduced motion the row still
+     highlights and the switch still reads on/off; only the interpolation goes.
+
+     NOTHING ELSE IN THE SWITCHBOARD MOVES. The sheet does not fade or scale in,
+     the .pop-bar is not drawn on, and no section animates open — the budget was
+     signed by the slice that rewrote this test and W-F does not widen it. */
+  .cal-block-host .lsheet .layerrow {
+    transition: background-color var(--t-base) var(--ease);
+  }
+  .cal-block-host .lsheet .layerrow .sw {
+    transition: background-color var(--t-fast) linear;
+  }
+  .cal-block-host .lsheet .layerrow .sw::after {
+    transition: transform var(--t-fast) var(--ease);
   }
 
   /* 4 — M5. A Block nobody is pointing at costs nothing to have on screen. */

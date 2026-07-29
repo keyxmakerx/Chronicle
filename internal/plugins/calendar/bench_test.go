@@ -304,7 +304,7 @@ func benchFxBlock(cal *Calendar, viewer BlockViewer, noShelf bool) *BenchBlock {
 		Sync:        calblock.SyncPill{State: blockSyncStateOK, Linked: 1, Total: 4, Full: "In sync · 1 of 4 linked", Compact: "In sync · 1 of 4"},
 		ShelfHidden: noShelf, MoonCap: benchMoonCap,
 	})
-	d.Layers = benchBlockLayers()
+	d.Layers = benchBlockLayers(blockLayerPrefs{})
 	return &BenchBlock{Data: d, Manage: benchManage(cal, "cal-harptos", "camp-1")}
 }
 

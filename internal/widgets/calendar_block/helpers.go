@@ -537,13 +537,24 @@ func eventCountLabel(n int) string {
 	return strconv.Itoa(n) + " events"
 }
 
-// layersInvokerTitle says out loud that the switchboard is not built yet, so an
-// inert control reads as a reserved affordance rather than as a bug.
+// layersInvokerTitle titles the ⋯ invoker.
+//
+// ITS "Layers — needs backend" RETURN IS GONE (C-CALV4-LAYERS-P9). Not because
+// the chip was wrong — it was exactly right for three waves, and it named the
+// missing per-viewer preference store precisely — but because this slice BUILT
+// the thing it named. That distinction matters: a wave-3 sibling found a chip
+// that was factually false about its own backend, and this is the other kind.
+//
+// The remaining branch is not dead. HasSwitchboard is false whenever the
+// producer cannot resolve a persistence endpoint — an anonymous viewer, or any
+// host that composes a Block outside a campaign — and the invoker is disabled
+// there for the original reason: present, so the Nameplate's geometry is final,
+// and inert rather than a dead control that swallows a click.
 func layersInvokerTitle(l LayerState) string {
 	if l.HasSwitchboard {
 		return "Layers"
 	}
-	return "Layers — needs backend"
+	return "Layers — sign in to choose"
 }
 
 // wdLong / wdShort are the weekday header's two lengths. Both are emitted and
@@ -1360,41 +1371,68 @@ const (
 	shelfTabAlmanac  = "almanac"
 )
 
-// almanacReachable is the wave-2 reduction of the signed default predicate, and
-// the gate on the Almanac tab existing at all.
+// skyOn is the signed SKY_ON() predicate, RESTORED IN ONE PLACE
+// (C-CALV4-LAYERS-P9 §7 / [LYR-5] SIGNED). Wave 2 asked for exactly this: "so
+// W-F restores them in ONE place rather than re-deriving them wrong".
 //
-// THE SIGNED PREDICATE IS `SKY_ON() && m.moons` (cv4:1777-1783), where
-// SKY_ON() = MOONS_ON() || GRAPH_ON() (:1341), MOONS_ON() = L('moons') &&
-// S.moonstyle !== 'off' (:1339) and GRAPH_ON() = L('moongraph') (:1340).
+// THE SIGNED PREDICATE (cv4:1339-1341):
 //
-// TWO OF THOSE FOUR TERMS DO NOT EXIST IN WAVE 2, and they are named here so
-// W-F restores them in ONE place rather than re-deriving them wrong:
+//	SKY_ON()   = MOONS_ON() || GRAPH_ON()
+//	MOONS_ON() = L('moons') && S.moonstyle !== 'off'
+//	GRAPH_ON() = L('moongraph')
 //
-//   - `moongraph` is omitted from BOTH host layer sets and booked for W-F
-//     (HOST-P3 §4.2, BENCH-P4 §5.7), so GRAPH_ON() is constant false;
-//   - S.moonstyle is a PER-VIEWER store and W-F owns it, so the `!== 'off'`
-//     term has nothing to read.
+// THREE OF THE FOUR TERMS ARE NOW REAL. `moongraph` was constant false in wave
+// 2 because the key was omitted from both host layer sets and the zone was a
+// chip; W-F fills the zone and the switchboard makes the key reachable, so
+// GRAPH_ON() is a live layer read. `moons` was always real.
 //
-// What is left is exactly "the moons layer is enabled AND the calendar declares
-// at least one moon" — and the register is empty in every case where the second
-// half is false, including the one the producer knows about and the renderer
-// does not (a host that removed the Shelf builds no register at all).
+// THE ONE TERM THAT IS STILL MISSING IS `S.moonstyle`, AND IT IS DEFERRED RATHER
+// THAN PENDING ([LYR-5] SIGNED). L20's sky preference is `?sky=graph|words|
+// moons|off`, and THREE OF ITS FOUR VALUES REDUCE TO LAYER KEYS the store now
+// persists: graph = moongraph on, moons = moons on, off = neither. The fourth,
+// `words`, names a register that exists NOWHERE in Chronicle — `moonstyle`
+// appears in this repo only in guard-B3 negative assertions and in this comment
+// — so building it would be a FOURTH moon presentation with no signed render of
+// its own. It is a named follow-on, not a half-shipped register, and there is
+// deliberately no `sky` column and no LayerState.Sky (r54 §5): a field whose
+// three live values are already layer keys is a second home for one fact.
+//
+// So MOONS_ON() reduces to L('moons') — not because the `!== 'off'` term was
+// forgotten, but because the only value it could ever have excluded is `off`,
+// and `off` IS the moons layer being off.
+func skyOn(d BlockData) bool {
+	return hasLayer(d.Layers, "moons") || hasLayer(d.Layers, "moongraph")
+}
+
+// almanacReachable is the signed default predicate `SKY_ON() && m.moons`
+// (cv4:1777-1783), and the gate on the Almanac tab existing at all.
+//
+// The register is empty in every case where the second half is false, including
+// the one the producer knows about and the renderer does not (a host that
+// removed the Shelf builds no register at all), so len(Almanac) IS `m.moons`.
 //
 // IT GATES THE TAB, not just the default. A tab whose panel has nothing to draw
 // is an inert control, and WG-spec V18 is explicit that a `title` explaining an
 // inert control is not an honesty mechanism. Absence is.
 func almanacReachable(d BlockData) bool {
-	return hasLayer(d.Layers, "moons") && len(d.Month.Almanac) > 0
+	return skyOn(d) && len(d.Month.Almanac) > 0
 }
 
-// shelfDefaultTab is the SERVER-RENDERED pressed tab, and it is the one thing
-// W-F has to change when the per-viewer store exists.
+// shelfDefaultTab is the SERVER-RENDERED pressed tab.
 //
 // The signed default is `SKY_ON() && m.moons` (cv4:1777-1783) — the Almanac
 // leads when there is a sky to lead with, and Upcoming otherwise. It is the
 // SAME predicate that decides whether the Almanac tab exists at all, called in
 // one place, so the tab that is pressed and the panel that exists can never
 // disagree.
+//
+// WAVE 2 EXPECTED W-F TO CHANGE THIS, AND W-F DID NOT — the change landed one
+// level down instead, which is the better place for it. The predicate's SOURCE
+// is now the viewer's own persisted layer set rather than the host's seed, so a
+// viewer who turns the illumination graph on gets an Almanac-leading Shelf
+// without this function learning anything new. What wave 2 called "the one
+// thing W-F has to change" turned out to be a term inside SKY_ON(), and fixing
+// it in one place is exactly what helpers.go:1363-1388 asked for.
 func shelfDefaultTab(d BlockData) string {
 	if almanacReachable(d) {
 		return shelfTabAlmanac
@@ -1776,3 +1814,326 @@ func almanacLaneClass(m AlmanacMoon) string {
 // structural mark, "new" a hairline and "full" a 4px block (cv4:799-801). It is
 // ACHROMATIC by law — the sky may never borrow the event colour axis.
 func almanacTurnClass(a AlmanacDay) string { return "skyturn " + a.Turn }
+
+// ── Layers ──────────────────────────────────────────────────────────────────
+//
+// C-CALV4-LAYERS-P9 (W-F). The switchboard is a TOP-LAYER [popover] opened
+// declaratively by `popovertarget`, and every helper here exists so the sheet
+// can be built with markup alone. There is no JS in this package and there
+// cannot be (block.templ's header, boot.js:163/167): a <script> in an
+// HTMX-swapped fragment never executes and `hx-on` is dead with allowEval off.
+
+// layerSheetID is the sheet's DOM id, and it is what `popovertarget` names.
+//
+// Pure function of the data, for the fourth time in this package and for the
+// same two reasons as tieGroupName: the Bench composes four Blocks on one page,
+// so a shared id would make every ⋯ open the first Block's sheet; and an
+// HTMX binding swap re-renders the SAME Block, which must keep its id or the
+// invoker's target dangles.
+func layerSheetID(d BlockData) string {
+	return "lsheet-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+// layerAnchorName is this Block's CSS anchor-positioning name.
+//
+// IT IS ON THE INSTRUMENT — THE MONTH — AND NOT ON THE ⋯ BUTTON. The first
+// build anchored to the invoker, which is what [LYR-2]'s sketch reads like, and
+// the screenshot gate failed it immediately: the ⋯ sits at the far right of the
+// Nameplate, directly ABOVE the docked Ledger column, so a sheet opening
+// down-and-left from it covers the Ledger entirely — its "Event list" row
+// included, which is a control hiding its own target. [LYR-2]'s binding clause
+// is "over the month, never over the Ledger column", and anchoring to the month
+// satisfies it BY CONSTRUCTION at every tier rather than by a nudged offset. At
+// std, where no Ledger is docked, it changes nothing.
+//
+// It is per-INSTANCE and carried in a `style` attribute rather than the
+// stylesheet because the stylesheet cannot know how many Blocks a page has: two
+// Blocks sharing one anchor-name make the anchor ambiguous, and the Bench
+// routinely renders four. The stylesheet supplies the insets under @supports;
+// this supplies the identity. A browser without anchor positioning ignores both
+// custom-ident declarations and lands the sheet viewport-centred, which is
+// [LYR-9] item 3's pre-authorised fallback and is honest — a centred sheet still
+// reads as a disclosure the viewer opened.
+func layerAnchorName(d BlockData) string {
+	return "--calv4-layers-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+func layerAnchorStyle(d BlockData) string { return "anchor-name:" + layerAnchorName(d) }
+
+func layerSheetAnchorStyle(d BlockData) string { return "position-anchor:" + layerAnchorName(d) }
+
+// layerOnCount is the switchboard's numerator. The DENOMINATOR IS ALWAYS
+// len(LayerRows) AND NEVER VARIES BY ROLE (dispatch §5.1): same eight rows and
+// the same "of 8" for owner, co-DM and player, because a layer is a per-viewer
+// display preference and not a permission. Only the on-set differs.
+func layerOnCount(l LayerState) int {
+	n := 0
+	for _, r := range LayerRows {
+		if hasLayer(l, r.Key) {
+			n++
+		}
+	}
+	return n
+}
+
+// layerSheetHeading is the sheet's own title line: "Layers · N of 8 on".
+func layerSheetHeading(l LayerState) string {
+	return "Layers · " + strconv.Itoa(layerOnCount(l)) + " of " + strconv.Itoa(len(LayerRows)) + " on"
+}
+
+// layerRowsInside / layerRowsBelow split the registry into the sheet's two
+// groups ([LYR-10] SIGNED: the two-group revision ships).
+//
+// The split is canon A8's two laws written where the viewer meets them. The
+// INSIDE three change the month's own geometry, so they apply instantly and
+// silently — "instant · no confirm, no animation". The other five open a
+// section beside or below the month. Grouping is the one distinction the pinned
+// registry actually carries, and the flat signed list hides it.
+func layerRowsInside() []LayerRow { return layerRowsWhere(true) }
+
+func layerRowsBelow() []LayerRow { return layerRowsWhere(false) }
+
+func layerRowsWhere(inside bool) []LayerRow {
+	out := make([]LayerRow, 0, len(LayerRows))
+	for _, r := range LayerRows {
+		if r.Inside == inside {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// layerToggleVals is the hx-vals payload for ONE row: the whole layer set that
+// results from toggling that row, as a comma-joined list.
+//
+// THE ROW POSTS THE RESULTING SET, NOT A DELTA. Three reasons, and the third is
+// the one that decides it: a set write is idempotent under a double click; the
+// route needs no read-modify-write and therefore no transaction; and the SET is
+// what the seam test can compare against what renders, which is the whole
+// falsifiability argument that barred a CSS-only reveal.
+//
+// Order follows LayerRows so the stored string is stable — a viewer toggling
+// two layers back and forth does not rewrite the row with a permuted list.
+//
+// It is plain JSON, never `js:`-prefixed: htmx JSON.parses a plain hx-vals and
+// only the js: form needs eval, which boot.js:167 has disabled globally.
+func layerToggleVals(l LayerState, key string) string {
+	next := make([]string, 0, len(LayerRows))
+	for _, r := range LayerRows {
+		on := hasLayer(l, r.Key)
+		if r.Key == key {
+			on = !on
+		}
+		if on {
+			next = append(next, r.Key)
+		}
+	}
+	return `{"layers":"` + strings.Join(next, ",") + `"}`
+}
+
+// layerRowPressed is the row's aria-pressed value. The switch IS the state; it
+// is not a thing that travels between positions (canon A6).
+func layerRowPressed(l LayerState, key string) string {
+	if hasLayer(l, key) {
+		return "true"
+	}
+	return "false"
+}
+
+// switchboardLive is the ONE gate both the ⋯ invoker and the sheet read, and it
+// is r54's invariant enforced at the surface rather than only asserted in a
+// test.
+//
+// HasSwitchboard alone would be enough IF the producers could never disagree
+// with themselves — but the failure mode is silent and ugly: a true flag with
+// an empty PersistURL renders eight rows that post to the page they are already
+// on, which is a control that looks enabled and does nothing. Reading BOTH here
+// means a producer that breaks the invariant loses the switchboard rather than
+// shipping a dead one, and the dedicated test still fails so the producer gets
+// fixed rather than hidden.
+func switchboardLive(l LayerState) bool { return l.HasSwitchboard && l.PersistURL != "" }
+
+// ── the legend (C-CALV4-LAYERS-P9) ──────────────────────────────────────────
+
+// legendEntry is one axis value's swatch, label and count.
+type legendEntry struct {
+	Axis    string
+	Pattern string
+	Label   string
+	Count   int
+}
+
+// buildLegend walks the month's marks ONCE and groups them by axis label.
+//
+// ONE PASS OVER THE SAME STRUCTURE THE GRID DREW, which is r52 §5's whole
+// argument for putting marks on the cells rather than in a parallel row list:
+// the Ledger, the grid and now the legend cannot drift, because there is only
+// one place a mark lives. Intercalary marks are included for the same reason
+// totalMarks includes them — an intercalary day is a day of this month.
+//
+// THE COUNTS ARE VIEWER-FILTERED BY CONSTRUCTION. Nothing here filters
+// anything: the producer already emitted exactly the marks this viewer may see
+// (permission is ABSENCE — a player's dm_only rows were never in the slice), so
+// summing them cannot leak. That is also why the legend joins the count oracle:
+// the sum of its counts must equal the viewer's own visible mark total, for GM,
+// Nissa and Bryn on the signed fixture. A count with no denominator behind it is
+// the shape `needs backend` exists to replace.
+//
+// ONLY THE `type` AXIS EXISTS, and that is a data fact rather than a choice.
+// There is no Mark.OwnerLabel (r52 §5 refused it; CTS-5 SIGNED "omit for wave
+// 2") and no per-calendar label, so two of the signed picker's three options
+// cannot be built at all. The owner and calendar branches are therefore NOT
+// built and NOT stubbed — they are booked to C-CALV4-AXIS-P11, which carries the
+// pin amendment for both labels.
+//
+// ORDER IS FIRST APPEARANCE IN THE MONTH, not alphabetical and not a second
+// declaration of the type list: the swatch a reader meets first in the grid is
+// the swatch they meet first in the legend.
+//
+// A mark with no AxisLabel contributes to NOTHING. Its label is the campaign's
+// data and an empty one means the type has no display name — inventing "Other"
+// would be exactly the fabrication the wave-1 chip refused.
+func buildLegend(d BlockData) []legendEntry {
+	out := make([]legendEntry, 0, 8)
+	idx := map[string]int{}
+
+	add := func(m Mark) {
+		if m.AxisLabel == "" {
+			return
+		}
+		if i, ok := idx[m.AxisLabel]; ok {
+			out[i].Count++
+			return
+		}
+		idx[m.AxisLabel] = len(out)
+		out = append(out, legendEntry{
+			Axis:    m.Axis,
+			Pattern: m.Pattern,
+			Label:   m.AxisLabel,
+			Count:   1,
+		})
+	}
+
+	for _, r := range d.Month.Rows {
+		for _, c := range r.Cells {
+			for _, m := range c.Marks {
+				add(m)
+			}
+		}
+	}
+	for _, ic := range d.Month.Intercalary {
+		for _, m := range ic.Marks {
+			add(m)
+		}
+	}
+	return out
+}
+
+// legendSwatchStyle carries the entry's own hue, exactly as every other mark
+// surface does. --axis is the mark's channel and it is FORBIDDEN from
+// referencing --accent.
+func legendSwatchStyle(e legendEntry) string { return "--axis:" + axisToken(e.Axis) }
+
+// legendSwatchClass pairs the hue with its locked stroke pattern. Colour is
+// never load-bearing: the (hue, pattern) pair must still resolve with the hue
+// removed, which is what makes the legend readable in greyscale.
+func legendSwatchClass(e legendEntry) string { return "lr " + patternClass(e.Pattern) }
+
+// ── the illumination graph (C-CALV4-LAYERS-P9) ──────────────────────────────
+//
+// The `moongraph` layer's section, at the foot of the month. EVERY NUMBER COMES
+// FROM MonthGeometry.Almanac (r53) and this zone adds NO pin field: the bars are
+// AlmanacDay.Illum, the ticks are AlmanacDay.Turn, the lanes are the drawn
+// bodies, and the "+N more" tail is MoonsDeclared against them.
+
+// graphMoons is the lanes the graph draws: ONE LANE PER DRAWN BODY.
+//
+// L19/L24: THERE IS NO COMPOSITE. No summed "how bright is tonight" figure
+// appears in this zone at any density. Three independent attempts at one
+// disagreed about the same five nights, which is exactly why the composite is
+// dead and the graph is per-body.
+func graphMoons(d BlockData) []AlmanacMoon {
+	out := make([]AlmanacMoon, 0, len(d.Month.Almanac))
+	for _, m := range d.Month.Almanac {
+		if m.Drawn {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// graphExtraMoons is how many DECLARED bodies the graph does not draw.
+//
+// L30: THE CEILING IS DECLARED ONCE, IN THE NAMEPLATE ("3 of 4 moons"). The
+// graph's foot may say "+N more in the almanac" because that names a
+// DESTINATION rather than a ceiling — and the destination is real, because the
+// Almanac register is deliberately uncapped by MoonCap ([S5], signed). There is
+// never a per-cell "+1".
+func graphExtraMoons(d BlockData) int {
+	n := d.Month.MoonsDeclared - len(graphMoons(d))
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+// graphBarStyle is one day's bar height: max(1, round(illum × 14))px, the
+// signed builder's own arithmetic. The floor of 1px is load-bearing — a new moon
+// is 0% lit and a zero-height bar would read as MISSING DATA rather than as
+// darkness.
+func graphBarStyle(a AlmanacDay) string {
+	h := int(a.Illum*14 + 0.5)
+	if h < 1 {
+		h = 1
+	}
+	return "height:" + strconv.Itoa(h) + "px"
+}
+
+// graphCellClass carries the every-fifth / every-tenth day rules, which are the
+// same counting aid the month grid's five-column rule is: humans cannot count to
+// thirty across identical columns.
+func graphCellClass(day int) string {
+	switch {
+	case day%10 == 0:
+		return "sfcell t10"
+	case day%5 == 0:
+		return "sfcell t5"
+	}
+	return "sfcell"
+}
+
+// graphCellTitle names the body, the day and the illumination as a percentage —
+// the readout L19/L24 relocated the vetoed composite INTO: a magnitude stated
+// explicitly, never a glanceable claim.
+func graphCellTitle(m AlmanacMoon, a AlmanacDay) string {
+	return m.Name + " " + strconv.Itoa(int(a.Illum*100+0.5)) + "% · day " + strconv.Itoa(a.Day)
+}
+
+// graphAxisLabel labels the day rule at day 1 and every fifth day after it.
+func graphAxisLabel(day int) string {
+	if day == 1 || day%5 == 0 {
+		return strconv.Itoa(day)
+	}
+	return ""
+}
+
+// graphFoot is the signed footnote: "illumination across <month> · filled marks
+// are turns", plus the destination tail when the calendar declares more bodies
+// than the graph draws.
+//
+// THE NODE-WINDOW CLAUSE IS NOT PRINTED. calendar.Moon has no orbital-node
+// column, so AlmanacDay.Node is false everywhere and "<moon> in shadow 12–17"
+// would be an interval with nothing behind it — the same refusal the Almanac's
+// month lane already records for the .abr bracket.
+func graphFoot(d BlockData) string {
+	s := "illumination across " + d.Month.Name + " · filled marks are turns"
+	if n := graphExtraMoons(d); n > 0 {
+		s += " · +" + strconv.Itoa(n) + " more in the almanac"
+	}
+	return s
+}
+
+// graphTurnClass is the turn marker: the signed square-ended structural mark,
+// "new" a hairline and "full" a 4px block. ACHROMATIC BY LAW — the sky may never
+// borrow the event colour axis.
+func graphTurnClass(a AlmanacDay) string { return "tn " + a.Turn }

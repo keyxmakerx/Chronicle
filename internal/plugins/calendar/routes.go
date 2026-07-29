@@ -187,6 +187,26 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendar/v2/switch", h.SwitchActiveCalendarAPI, campaigns.RequireRole(campaigns.RolePlayer))
 	cg.POST("/calendar/v2/sidebar-pin", h.SidebarPinAPI, campaigns.RequireRole(campaigns.RolePlayer))
 
+	// The calendar-v4 Block's per-viewer LAYER preference (C-CALV4-LAYERS-P9
+	// [LYR-4 SIGNED]) — the one new route the whole calendar-v4 wave takes.
+	//
+	// NOT under /calendar/v2/…, deliberately. Its two nearest siblings live in
+	// the FROZEN V2 shell's namespace (calendar_v2.templ and friends are frozen
+	// and C-CALV4-SHELF-P7 confirmed the freeze held). The Block outlives that
+	// shell, so its preference endpoint is not named after it.
+	//
+	// LITERAL PATH, on purpose: wire_contract_test.go skips and logs a route
+	// registered through a variable, so a non-literal path would be silently
+	// absent from routes_snapshot.txt — an auth surface outside the oracle.
+	//
+	// Player floor: a layer is a per-viewer DISPLAY PREFERENCE and every
+	// campaign member has one. It rides the identical `cg` stack as the
+	// sidebar-pin sibling (RequireAuth → RequireCampaignAccess →
+	// RequireAddon("calendar")), which is what puts user_id in the session and
+	// campaign_id behind an authorisation check. See handler_v2.go's
+	// BlockPrefsAPI for why the response has no body.
+	cg.POST("/calendar/prefs", h.BlockPrefsAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// V2 sub-resource card grids (Wave 1 PR 2 / C-CAL-V2-SUBRESOURCE-CARDS-A).
 	// Read-only render is Player+ (the cards display data anyone with
 	// campaign access can see). Edit affordances (drawer + add + dnd)

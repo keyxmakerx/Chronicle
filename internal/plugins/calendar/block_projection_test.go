@@ -389,16 +389,70 @@ func TestBlockRealTimeCalendarPausesTheSyncPill(t *testing.T) {
 }
 
 // TestBlockLayersAreDefOnlyInWave1 pins ruling on LayerState: the default
-// surface is a month with its moon phases and nothing else, and the switchboard
-// (which needs a per-viewer persisted store that does not exist) is off.
+// surface is a month with its moon phases and nothing else, and — from wave 3 —
+// the viewer can leave it.
+//
+// THE HasSwitchboard HALF IS INVERTED HERE, DELIBERATELY, AND NOT DELETED
+// (C-CALV4-LAYERS-P9, W-F). It is a wave-3 EDIT rather than a break, and it
+// follows the precedent this same file already set twice for the two
+// NeedsBackend halves below: the slice that turns an honesty flag over names
+// itself and states the new claim.
+//
+// The old claim was "HasSwitchboard must be false in wave 1 — the per-viewer
+// store is W-F's", and it was worth having: a producer that raised the flag
+// with no store would have rendered a switchboard whose every toggle vanished
+// on the next page load. W-F built the store (migration 014, POST
+// /campaigns/:id/calendar/prefs), so the flag now tracks whether THIS VIEWER
+// has somewhere to persist to — which is a fact about the request, not about
+// the wave.
+//
+// THE NEW CLAIM, in three parts, and the inverted statement is worth exactly as
+// much as the original:
+//
+//  1. DEF IS STILL ["moons"] for a viewer with no stored row. Wave 3 shipped
+//     the mechanism to LEAVE the default, which is the opposite of changing it.
+//  2. No store reachable (the zero blockLayerPrefs — an anonymous viewer, or a
+//     Block composed outside a campaign) → HasSwitchboard false and PersistURL
+//     empty, exactly the wave-1/2 surface.
+//  3. A store reachable → HasSwitchboard TRUE, always together with PersistURL,
+//     because r54 pins them as one fact.
 func TestBlockLayersAreDefOnlyInWave1(t *testing.T) {
 	got := projectBlock(BlockProjectionInput{Calendar: blockTenDayCal(),
 		Viewer: BlockViewer{Role: permissions.RoleOwner}, MonthIndex: 0, Year: 1523})
 	if len(got.Layers.Enabled) != 1 || got.Layers.Enabled[0] != "moons" {
 		t.Fatalf("layers = %v, want DEF = [moons]", got.Layers.Enabled)
 	}
-	if got.Layers.HasSwitchboard {
-		t.Fatal("HasSwitchboard must be false in wave 1 — the per-viewer store is W-F's")
+	if got.Layers.HasSwitchboard || got.Layers.PersistURL != "" {
+		t.Fatalf("with nowhere to persist the switchboard must stay off; got "+
+			"HasSwitchboard=%v PersistURL=%q", got.Layers.HasSwitchboard, got.Layers.PersistURL)
+	}
+
+	// THE INVERSION. Same projection, same DEF, and now a live switchboard.
+	live := projectBlock(BlockProjectionInput{Calendar: blockTenDayCal(),
+		Viewer: BlockViewer{Role: permissions.RoleOwner}, MonthIndex: 0, Year: 1523,
+		LayerPrefs: blockLayerPrefs{PersistURL: blockPrefsPath("camp-1")}})
+	if len(live.Layers.Enabled) != 1 || live.Layers.Enabled[0] != "moons" {
+		t.Fatalf("DEF changed under a live store: %v — wave 3 ships the way OUT of the "+
+			"default, not a different default", live.Layers.Enabled)
+	}
+	if !live.Layers.HasSwitchboard {
+		t.Fatal("HasSwitchboard must be TRUE once the viewer has somewhere to persist to — " +
+			"W-F built the store this flag was waiting for")
+	}
+	if live.Layers.PersistURL != "/campaigns/camp-1/calendar/prefs" {
+		t.Fatalf("PersistURL = %q; the producer builds it because the widget has no router",
+			live.Layers.PersistURL)
+	}
+
+	// THE VIEWER'S OWN SET WINS OVER DEF, and an EMPTY stored set is a real
+	// choice — a bare month — not a fall back to the seed.
+	chosen := projectBlock(BlockProjectionInput{Calendar: blockTenDayCal(),
+		Viewer: BlockViewer{Role: permissions.RoleOwner}, MonthIndex: 0, Year: 1523,
+		LayerPrefs: blockLayerPrefs{Stored: []string{}, PersistURL: blockPrefsPath("camp-1")}})
+	if len(chosen.Layers.Enabled) != 0 {
+		t.Errorf("a viewer who turned everything off got %v — NULL means 'never chosen' and "+
+			"'' means 'chose nothing'; collapsing them makes the bare month unreachable",
+			chosen.Layers.Enabled)
 	}
 	// INVERTED IN TWO STEPS, NEVER DELETED, and both halves are wave-2 EDITS
 	// rather than breaks. Each half asserted the wave-1 honesty state — the

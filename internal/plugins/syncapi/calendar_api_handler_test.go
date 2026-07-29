@@ -137,6 +137,12 @@ func (s *stubCalendarSvc) GetSidebarPinned(context.Context, string, string) (boo
 func (s *stubCalendarSvc) SetSidebarPinned(context.Context, string, string, bool) error {
 	return nil
 }
+func (s *stubCalendarSvc) GetBlockLayers(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) SetBlockLayers(context.Context, string, string, []string) error {
+	return nil
+}
 func (s *stubCalendarSvc) GetCycles(context.Context, string) ([]calendar.Cycle, error) {
 	return nil, nil
 }

@@ -81,15 +81,25 @@ type BlockProjectionInput struct {
 	// MoonCap bounds the per-day discs; the ceiling is announced once in the
 	// Nameplate, never per cell.
 	MoonCap int
+	// LayerPrefs is the VIEWER's stored layer set and their persistence
+	// endpoint, resolved once per page by the caller (C-CALV4-LAYERS-P9).
+	// The zero value is "no stored row, nowhere to persist", which renders DEF
+	// with the ⋯ invoker inert — the wave-1/2 behaviour exactly.
+	LayerPrefs blockLayerPrefs
 }
 
 // blockDefaultLayers is DEF — the default surface is a month with its moon
-// phases and nothing else (L29). HasSwitchboard is false in wave 1: layer
-// preferences are per-viewer and PERSISTED (L20/L26/L29) and that store does
-// not exist yet, so the Block renders DEF and emits the ⋯ invoker while W-F
-// builds the switchboard.
-func blockDefaultLayers() calblock.LayerState {
-	return calblock.LayerState{Enabled: []string{"moons"}, HasSwitchboard: false}
+// phases and nothing else (L29).
+//
+// DEF DID NOT CHANGE IN WAVE 3, and that is the point. C-CALV4-LAYERS-P9 built
+// the per-viewer store that L20/L26/L29 always required, so this function is now
+// a SEED rather than a verdict: a viewer with no stored row still gets exactly
+// ["moons"], and a viewer who has chosen gets their own set. "Bare mode is not a
+// degraded view; for reading a month it is the better one" is only defensible if
+// the viewer can leave it and have the leaving stick — shipping the mechanism to
+// leave a default is the opposite of changing it.
+func blockDefaultLayers(prefs blockLayerPrefs) calblock.LayerState {
+	return resolveBlockLayers([]string{"moons"}, prefs)
 }
 
 // projectBlock turns a calendar + its candidate events into one BlockData.
@@ -145,7 +155,7 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		IsActive:     in.IsActive,
 		Month:        geo,
 		Sync:         blockSyncForCalendar(in.Sync, cal),
-		Layers:       blockDefaultLayers(),
+		Layers:       blockDefaultLayers(in.LayerPrefs),
 		// BOTH ZONES ARE FILLED, and both signed `needs backend` chips retire
 		// here — by a producer flag, without a template edit, which is the
 		// promise the flags existed to keep. W-B filled the Ledger

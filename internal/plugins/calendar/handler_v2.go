@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -294,6 +295,91 @@ func (h *Handler) SidebarPinAPI(c echo.Context) error {
 		"status": "ok",
 		"pinned": req.Pinned,
 	})
+}
+
+// BlockPrefsAPI persists the viewer's calendar-v4 Block layer set.
+// POST /campaigns/:id/calendar/prefs   body: layers=moons,eras,weeknums
+//
+// C-CALV4-LAYERS-P9 [LYR-1 / LYR-4 SIGNED]. It is the only new Echo route the
+// whole calendar-v4 wave takes, and its shape is chosen to make the security
+// review as small as it can possibly be.
+//
+// IT ANSWERS 204 WITH `HX-Refresh: true` AND HAS NO RESPONSE BODY AT ALL. The
+// hosting page re-renders through its OWN handler, which is already downstream
+// of requireVisibleCalendar and the W5a ListVisibleCalendars split. That is the
+// whole point: a Block's render depends on host facts (entity id, bound
+// calendar id, MoonCap, LedgerHidden/ShelfHidden, the widget-binding resolution
+// layer), and under HX-Refresh not one of them is ever taken from a request
+// body — because there is no response to build. Returning a re-rendered
+// fragment instead would mean re-authorising every one of those fields in a new
+// handler, and that is exactly where a leak hides.
+//
+// The honest cost, stated rather than minimised: the popover closes on each
+// toggle, so setting three layers re-opens the sheet three times and each
+// toggle costs a full page render. The switchboard is a set-once control and
+// this is survivable — but it is the downside, and it is why the sheet's rubric
+// line ("instant · no confirm, no animation") is about ANIMATION, not latency.
+// The month does not slide, grow, stagger or fade; it is simply different.
+// Canon A8/L-M2 is satisfied because a server re-render animates nothing at all.
+//
+// WHAT IT ACCEPTS is one comma-joined layer key list and NOTHING ELSE — no
+// calendar_id, no entity_id, no host descriptor, and therefore no IDOR surface.
+// user_id comes from the session; campaign_id comes from :id, which
+// RequireCampaignAccess has already authorised. The primary key it writes is
+// (session user, authorised campaign) and there is no parameter that can move
+// it.
+//
+// An unknown key REJECTS the whole write with 400 rather than being dropped —
+// see SetBlockLayers. A missing `layers` parameter is also a 400: the empty set
+// is a real choice ("a bare month") and it is spelled `layers=`, so silently
+// treating an absent field as an empty set would make a malformed request
+// indistinguishable from a deliberate one.
+//
+// CSRF rides the global wiring: boot.js attaches X-CSRF-Token from the cookie
+// to every HTMX mutating request, so nothing is carried on BlockData (r54 §5).
+func (h *Handler) BlockPrefsAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return apperror.NewUnauthorized("authentication required")
+	}
+
+	params, err := c.FormParams()
+	if err != nil {
+		return apperror.NewBadRequest("invalid request")
+	}
+	raw, ok := params["layers"]
+	if !ok {
+		return apperror.NewBadRequest("layers is required (send `layers=` for a bare month)")
+	}
+
+	keys := splitLayerKeys(raw[0])
+	if err := h.svc.SetBlockLayers(ctx, userID, cc.Campaign.ID, keys); err != nil {
+		return err
+	}
+
+	// The host page rebuilds every Block through the handler that already owns
+	// its visibility decisions. Nothing is rendered here, in either direction.
+	c.Response().Header().Set("HX-Refresh", "true")
+	return c.NoContent(http.StatusNoContent)
+}
+
+// splitLayerKeys turns the wire's comma-joined list into keys.
+//
+// An EMPTY string is an empty NON-NIL slice: the viewer chose a bare month, and
+// that is a persisted choice rather than a reset. Blank segments are dropped so
+// a trailing comma is not an unknown key — but a genuinely unrecognised key is
+// left alone for SetBlockLayers to reject, because dropping it here would
+// reintroduce exactly the silent half-apply the validation exists to prevent.
+func splitLayerKeys(raw string) []string {
+	out := []string{}
+	for _, part := range strings.Split(raw, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // SwitchActiveCalendarAPI persists the user's calendar choice.

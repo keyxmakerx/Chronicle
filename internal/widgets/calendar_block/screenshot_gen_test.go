@@ -31,8 +31,19 @@ type shot struct {
 	caption string
 	dark    bool
 	grey    bool
-	w, h    int
-	body    func(t *testing.T) string
+	// openSheet shows every [popover] on the harness page before the shot.
+	//
+	// THE BLOCK STILL HAS NO JS AND THIS DOES NOT CHANGE THAT. The one line
+	// below lives in the EVIDENCE PAGE, never in the Block's markup, and it is
+	// the only way to photograph the real state: a popover is in the TOP LAYER
+	// only after showPopover(), and the whole point of the [LYR-2] gate is
+	// whether the sheet in the top layer occludes the docked Ledger. Forcing
+	// `display:block` with CSS instead would photograph a box that is not in
+	// the top layer and is not anchor-positioned — evidence of a state the
+	// product never reaches, which is worse than no evidence.
+	openSheet bool
+	w, h      int
+	body      func(t *testing.T) string
 }
 
 // fxLedgerFull is the signed month with BOTH docked zones switched on — the
@@ -346,6 +357,112 @@ func TestGenerateScreenshots(t *testing.T) {
 			grey: true, w: 1320, h: 1000,
 			body: func(t *testing.T) string { return host(1232, fxShotAlmanac(t, true)) },
 		},
+		// ── C-CALV4-LAYERS-P9 (W-F): the layer system ──────────────────────
+		//
+		// §15's gate is the WORST CASE A SWITCHBOARD CAN PRODUCE, which is a new
+		// measurement rather than an inherited one: the std-tier arithmetic that
+		// kept moongraph and horizon out of both host seeds was taken against
+		// STUBS, then against a filled Shelf, and never with a REAL legend and a
+		// REAL illumination graph under the month. That is what a viewer can now
+		// switch on, so that is what is photographed.
+		{
+			file: "33-layers-sheet-full-light.png",
+			title: "The switchboard · full tier · GM · light · Ledger docked",
+			caption: "[LYR-2] — a JS-free [popover] in the TOP LAYER, and the ANCHOR IS THE MONTH rather than the ⋯. That is this gate's own finding: the ⋯ sits at the far right of the Nameplate, directly ABOVE the docked Ledger, so the ruling's sketched block-end / span-inline-start placement covered the Ledger entirely — its \"Event list\" row included, which is a control hiding its own target and an explicit STOP-AND-FLAG. Anchoring to the instrument satisfies the ruling's binding clause (\"over the month, never over the Ledger column\") by construction at every tier. Eight rows and \"of 8\" for every role — the denominator never varies; only the on-set does.",
+			openSheet: true, w: 1320, h: 1000,
+			body: func(t *testing.T) string { return host(1232, fxShotSwitchboard(t, true, false)) },
+		},
+		{
+			file: "34-layers-sheet-full-dark.png",
+			title: "The switchboard · full tier · GM · dark · Ledger docked",
+			caption: "the same placement in dark, with the Ledger's head and every row unoccluded. Nothing about the sheet animates open: the signed popover fades, scales and draws its own bar, and every one of those is outside the four-property motion budget — the section simply exists, which is the branch the design notes already wrote for reduced motion, shipped for everyone.",
+			openSheet: true, dark: true, w: 1320, h: 1000,
+			body: func(t *testing.T) string { return host(1232, fxShotSwitchboard(t, true, false)) },
+		},
+		{
+			file: "35-layers-sheet-full-player.png",
+			title: "The switchboard · full tier · PLAYER · light",
+			caption: "SAME EIGHT ROWS, SAME \"of 8\". A layer is a per-viewer DISPLAY PREFERENCE, not a permission and not a promise of content — filtering the row set by what a viewer would actually get reintroduces `gmOnly` under another name, which the review killed by name. The horizon row is here and does nothing for this viewer, exactly as an `eras` row does nothing on a calendar with no eras.",
+			openSheet: true, w: 1320, h: 1000,
+			body: func(t *testing.T) string { return host(1232, fxShotSwitchboard(t, false, false)) },
+		},
+		{
+			file: "36-layers-sheet-std-420-light.png",
+			title: "The switchboard · std tier · 420px entity host · light",
+			caption: "the entity host's width, where the sheet is wider than the Block. The un-anchored fallback is pre-authorised ([LYR-9] item 3) and is honest: a centred sheet still reads as a disclosure the viewer opened, and the alternative is JS, which this package may not have at any price.",
+			openSheet: true, w: 480, h: 1200,
+			body: func(t *testing.T) string { return host(420, fxShotSwitchboard(t, true, false)) },
+		},
+		{
+			file: "37-layers-sheet-std-420-dark.png",
+			title: "The switchboard · std tier · 420px entity host · dark",
+			caption: "the same, dark.",
+			openSheet: true, dark: true, w: 480, h: 1200,
+			body: func(t *testing.T) string { return host(420, fxShotSwitchboard(t, true, false)) },
+		},
+		{
+			file: "38-layers-worst-case-full-light.png",
+			title: "§15's gate · full tier · GM · legend + moongraph + horizon ALL ON",
+			caption: "the worst case a switchboard can produce, and the first time this measurement has been taken with a REAL legend and a REAL illumination graph under the month. The legend's counts come from ONE pass over the same marks the grid drew; the graph is one lane per DRAWN body with no composite (L19/L24) and its ceiling declared once, in the Nameplate (L30); `horizon` keeps its chip, because there is still no queryable fog horizon for anybody.",
+			w: 1320, h: 1200,
+			body: func(t *testing.T) string { return host(1232, fxShotSwitchboard(t, true, true)) },
+		},
+		{
+			file: "39-layers-worst-case-full-dark.png",
+			title: "§15's gate · full tier · GM · all three below-month zones · dark",
+			caption: "the same in dark. The graph is ACHROMATIC by law — the sky never borrows the event colour axis — so it is the one surface here that loses nothing at all with the colour removed.",
+			dark: true, w: 1320, h: 1200,
+			body: func(t *testing.T) string { return host(1232, fxShotSwitchboard(t, true, true)) },
+		},
+		{
+			file: "40-layers-worst-case-420-light.png",
+			title: "§15's gate · std tier · 420px entity host · all three zones · light",
+			caption: "THE COLLISION MEASUREMENT, re-taken — and it FIRED. HOST-P3 measured that an extra needzone row at this width collides the Ledger and Shelf headers; with a real legend and a real three-lane graph it collided outright, drawing the Ledger's head over the Shelf's strip. The fix is CTS-8's precedent taken literally: inside the Block's own std geometry, the zone that can yield yields, and NO layer key is dropped — the body scrolls. The month keeps every week row, the Shelf's strip stays pinned at the foot, and the Ledger is reachable by scroll rather than clipped away. Shrinking the month, clipping the Ledger and bounding the stack with a literal were all considered and refused; the stylesheet records why.",
+			w: 480, h: 1500,
+			body: func(t *testing.T) string { return host(420, fxShotSwitchboard(t, true, true)) },
+		},
+		{
+			file: "41-layers-worst-case-420-dark.png",
+			title: "§15's gate · std tier · 420px entity host · all three zones · dark",
+			caption: "the same, dark.",
+			dark: true, w: 480, h: 1500,
+			body: func(t *testing.T) string { return host(420, fxShotSwitchboard(t, true, true)) },
+		},
+		{
+			file: "42-layers-worst-case-358-light.png",
+			title: "§15's gate · bench mobile · 358px · all three zones · light",
+			caption: "the tightest production width the Block ships at.",
+			w: 390, h: 1600,
+			body: func(t *testing.T) string { return host(358, fxShotSwitchboard(t, true, true)) },
+		},
+		{
+			file: "43-layers-worst-case-358-dark.png",
+			title: "§15's gate · bench mobile · 358px · all three zones · dark",
+			caption: "the same, dark.",
+			dark: true, w: 390, h: 1600,
+			body: func(t *testing.T) string { return host(358, fxShotSwitchboard(t, true, true)) },
+		},
+		{
+			file: "44-layers-player-no-chip.png",
+			title: "A player turns every layer on",
+			caption: "THE OBLIGATION THE SWITCHBOARD CREATED. `needs backend` is GM-facing honesty copy and never renders to a player. That was safe for three waves only because no player could enable these keys; the switchboard makes every key reachable by everybody, so the gate had to exist BEFORE the reachability did. A player who toggles `horizon` gets NOTHING — no zone, no greyed panel, no explanatory note. Permission is ABSENCE, and display:none is not absence. The legend and the graph are here in full, because real content is for everybody under the viewer filter that already produced it.",
+			w: 1320, h: 1200,
+			body: func(t *testing.T) string { return host(1232, fxShotSwitchboard(t, false, true)) },
+		},
+		{
+			file: "45-layers-bare-month.png",
+			title: "The default, and the way out of it",
+			caption: "LEFT: DEF — a month with its moon phases and nothing else, which is what a viewer with no stored row still gets. RIGHT: the same Block for a viewer who turned every layer OFF. That state is only reachable because NULL (\"never chosen\") and '' (\"chose nothing\") are different answers all the way down from the column — collapse them and the bare month becomes unreachable, which turns the default into a floor.",
+			w: 1320, h: 900,
+			body: func(t *testing.T) string {
+				def := fxShotSwitchboard(t, true, false)
+				def.Layers.Enabled = []string{"moons"}
+				bare := fxShotSwitchboard(t, true, false)
+				bare.Layers.Enabled = []string{}
+				return `<p class="shot-sub">DEF — no stored row</p>` + host(1232, def) +
+					`<p class="shot-sub">the viewer chose nothing — every layer off</p>` + host(1232, bare)
+			},
+		},
 		{
 			file: "09-fault-and-stubs.png", title: "Honesty states",
 			caption: "the fault prints WHERE THE DATE WOULD GO and no date element is emitted. Both docked zones now carry CONTENT rather than the signed `needs backend` chip — W-B filled the Ledger and W-E the Shelf — and the Ledger still LISTS in the fault case, because listing by ordinal day needs no era, no epoch and no reckoning",
@@ -401,6 +518,10 @@ func shotPage(s shot, css, body string) string {
 	if s.grey {
 		grey = `.shot-body{filter:grayscale(1)}`
 	}
+	open := ""
+	if s.openSheet {
+		open = `<script>document.querySelectorAll("[popover]").forEach(p=>p.showPopover())</script>`
+	}
 	return `<!doctype html><html` + cls + `><head><meta charset="utf-8"><style>` +
 		`html,body{margin:0;padding:0}` +
 		`body{background:#f9fafb;color:#111827;` +
@@ -416,7 +537,7 @@ func shotPage(s shot, css, body string) string {
 		`</style></head><body><div class="shot-wrap">` +
 		`<h1>` + s.title + `</h1><p class="shot-cap">` + s.caption + `</p>` +
 		`<div class="shot-body">` + body + `</div>` +
-		`</div></body></html>`
+		`</div>` + open + `</body></html>`
 }
 
 // fxShotAlmanac is fxLedgerFull with the Almanac register attached, so the
@@ -470,6 +591,30 @@ func fxShotAlmanac(t *testing.T, gm bool) BlockData {
 				m.TurnsThisMonth++
 			}
 		}
+	}
+	return d
+}
+
+// fxShotSwitchboard is the P9 evidence fixture: a Block whose producer resolved
+// a LIVE store, so the ⋯ invoker is enabled and the sheet exists.
+//
+// The flag and the endpoint are set TOGETHER, because r54 pins them as one
+// fact and a shot of a half-set LayerState would be a picture of a state the
+// producers cannot emit.
+//
+// allZones switches on the three below-month layers — the worst case §15 gates,
+// and a case no host SEED produces ([LYR-7]: neither seed gained a key).
+func fxShotSwitchboard(t *testing.T, gm, allZones bool) BlockData {
+	t.Helper()
+	d := fxShotAlmanac(t, gm)
+	enabled := []string{"moons", "eras", "weeknums", "ledger", "shelf"}
+	if allZones {
+		enabled = []string{"moons", "eras", "weeknums", "ledger", "moongraph", "legend", "horizon", "shelf"}
+	}
+	d.Layers = LayerState{
+		Enabled:        enabled,
+		HasSwitchboard: true,
+		PersistURL:     "/campaigns/camp-1/calendar/prefs",
 	}
 	return d
 }

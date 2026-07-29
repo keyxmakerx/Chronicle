@@ -413,7 +413,18 @@ var seamLayerSurfaces = []struct {
 	{"legend", `data-layer="legend"`},
 	{"horizon", `data-layer="horizon"`},
 	{"shelf", `data-zone="shelf"`},       // zone D
+	// THE SWITCHBOARD'S OWN ROW (C-CALV4-LAYERS-P9). Every key has a surface
+	// in the sheet as well as in the month, and the sheet's row is the ONE
+	// marker that must be present whatever the on-set is — a switchboard that
+	// only listed the layers already on would be a control you cannot use to
+	// turn anything on. It is therefore checked separately, below, rather than
+	// being a ninth row here: this table's contract is "enabled ⇒ present,
+	// absent ⇒ absent", and the row obeys the opposite rule on purpose.
 }
+
+// seamSwitchboardRowMarker is the sheet row for one key. Deliberately NOT in
+// seamLayerSurfaces: see the note there.
+func seamSwitchboardRowMarker(key string) string { return `data-layer-pick="` + key + `"` }
 
 // TestSeam_EnabledLayerSetMatchesWhatRenders pins the dispatch §1 acceptance
 // line at the only level that can see both halves at once: the producer's
@@ -427,11 +438,22 @@ var seamLayerSurfaces = []struct {
 // matched the registry that claims to govern it.
 //
 // The second half flips the registry to every key EXCEPT moons and re-renders
-// the SAME projection. The producer has no layer input to vary — the
-// per-viewer layer store is W-F (data.go) — so overriding Layers.Enabled on
-// the projected BlockData is standing in for exactly that store and nothing
-// else; every other field is the producer's real output. Each surface must
-// appear, and the moon discs must leave.
+// the SAME projection.
+//
+// THE STAND-IN IS GONE (C-CALV4-LAYERS-P9). This comment used to say the
+// producer had no layer input to vary and that overriding Layers.Enabled was
+// "standing in for exactly that store". W-F built the store, so the second half
+// now drives the REAL resolution: a viewer whose stored set is those seven keys,
+// handed to the producer as BlockProjectionInput.LayerPrefs, exactly the way the
+// route and the repository hand it over in production. Every other field is
+// still the producer's own output. Each surface must appear, and the moon discs
+// must leave.
+//
+// A THIRD HALF NOW EXISTS, and it is the one the switchboard made necessary:
+// the SHEET must list all eight keys whatever the on-set is, because a
+// switchboard that only listed the layers already on could never turn one on.
+// That is the opposite rule from the one seamLayerSurfaces encodes, which is
+// why it is asserted here rather than as a ninth table row.
 func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
 	// The fixture must CARRY every layer-owned surface's data, or an absence
 	// is unfalsifiable: a missing era band could mean "gated off" or "this
@@ -439,7 +461,19 @@ func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
 	cal := blockTenDayCal()
 	cal.Eras = []Era{{ID: 1, CalendarID: cal.ID, Name: "Reckoning of Wards", StartYear: 1, Color: "#8b5cf6"}}
 	cal.Moons = []Moon{{ID: 1, CalendarID: cal.ID, Name: "Selune", CycleDays: 30.4}}
-	events := []Event{blockEvent("layered-1", 4, "everyone")}
+	// The event carries a DECLARED CATEGORY as of C-CALV4-LAYERS-P9, and the
+	// fixture note above is why: the legend is built from Mark.AxisLabel, which
+	// resolves only through the calendar's declared categories. An uncategorised
+	// event yields no label, the legend renders nothing, and "the legend layer
+	// is off" would be indistinguishable from "this month has no types" — the
+	// unfalsifiable absence this whole test exists to refuse.
+	cal.EventCategories = []EventCategory{
+		{ID: 1, CalendarID: cal.ID, Slug: "quest", Name: "Quest", Icon: "▲", Color: "#ef4444"},
+	}
+	quest := "quest"
+	layered := blockEvent("layered-1", 4, "everyone")
+	layered.Category = &quest
+	events := []Event{layered}
 
 	in := BlockProjectionInput{
 		Calendar:   cal,
@@ -461,10 +495,17 @@ func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
 			"DEF is a month with its moon phases and NOTHING else; the "+s.key+" layer is off")
 	}
 
-	// The complement: every key except moons.
+	// The complement: every key except moons — through the REAL store, not an
+	// override. This is the resolution production runs.
 	in.Events = blockCopyEvents(events)
+	in.LayerPrefs = blockLayerPrefs{
+		Stored:     []string{"eras", "weeknums", "ledger", "moongraph", "legend", "horizon", "shelf"},
+		PersistURL: blockPrefsPath("camp-1"),
+	}
 	d := projectBlock(in)
-	d.Layers.Enabled = []string{"eras", "weeknums", "ledger", "moongraph", "legend", "horizon", "shelf"}
+	if d.Layers.Enabled == nil || len(d.Layers.Enabled) != 7 {
+		t.Fatalf("the producer did not honour the viewer's stored set: %v", d.Layers.Enabled)
+	}
 	inverse := seamRenderBlockData(t, d)
 	for _, s := range seamLayerSurfaces {
 		if s.key == "moons" {
@@ -478,6 +519,30 @@ func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
 	// The weeknums gutter label, beyond the grid's data attribute.
 	seamContain(t, inverse, `class="wknum"`,
 		"the weeknums layer labels the gutter, not just the grid")
+
+	// THE SHEET LISTS EVERY KEY IN BOTH HALVES. `moons` is OFF in this render
+	// and its row must still be there, or the viewer could never turn it back
+	// on; the seven that are on must be there too, or they could never be
+	// turned off.
+	for _, s := range seamLayerSurfaces {
+		seamContain(t, inverse, seamSwitchboardRowMarker(s.key),
+			"the switchboard must list "+s.key+" whether it is on or off — a sheet that "+
+				"listed only the enabled layers would be a control you cannot use")
+	}
+
+	// And in the DEF half, where seven of the eight are off, through a
+	// projection whose store is live.
+	in.Events = blockCopyEvents(events)
+	in.LayerPrefs = blockLayerPrefs{PersistURL: blockPrefsPath("camp-1")}
+	defLive := seamRenderBlockData(t, projectBlock(in))
+	for _, s := range seamLayerSurfaces {
+		seamContain(t, defLive, seamSwitchboardRowMarker(s.key),
+			"DEF's sheet must still list "+s.key+" — the whole point of the default is "+
+				"that a viewer can leave it")
+	}
+	seamContain(t, defLive, "Layers · 1 of 8 on",
+		"the denominator is the registry's length for every role, and the numerator is "+
+			"the viewer's own on-set")
 }
 
 // ── r51 acceptance: the declared-moon total reaches the Nameplate ───────────

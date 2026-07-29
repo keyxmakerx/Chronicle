@@ -47,9 +47,33 @@ templ Block(d BlockData) {
 				@skybandPlaceholder()
 			}
 			<div class="body">
-				<div class="inst">
+				// THE SWITCHBOARD'S ANCHOR IS THE MONTH, NOT THE ⋯ BUTTON, and
+				// that is a SCREENSHOT FINDING rather than a preference. The ⋯
+				// sits at the far right of the Nameplate, directly ABOVE the
+				// docked Ledger column, so a sheet opening down-and-left from it
+				// lands squarely on the Ledger — including the Ledger's own
+				// "Event list" row, which is the control hiding its own target.
+				// [LYR-2]'s binding clause is "over the month, never over the
+				// Ledger column"; anchoring to the instrument satisfies it by
+				// construction at every tier, and at std (where there is no
+				// Ledger) it changes nothing.
+				<div class="inst" style={ layerAnchorStyle(d) }>
 					@instrument(d)
-					@belowMonthLayers(d)
+					// THE BELOW-MONTH SECTIONS SCROLL; THE MONTH NEVER DOES.
+					// A §15 screenshot finding: with legend + moongraph +
+					// horizon all switched on, the sections pushed .inst past
+					// the Block's 520px ceiling at 420px and 358px, and the
+					// docked Ledger's head and the Shelf's strip drew over one
+					// another. CTS-8's precedent is that the answer is taken
+					// inside the Block's own std geometry and THE ZONE THAT CAN
+					// YIELD YIELDS — with no layer key dropped, because the
+					// viewer asked for the key. This wrapper is that zone: the
+					// grid keeps its intrinsic height, these sections scroll
+					// inside whatever the month leaves, and the Ledger and Shelf
+					// keep their strips intact.
+					<div class="belowzones">
+						@belowMonthLayers(d)
+					</div>
 				</div>
 				if ledgerDocked(d) {
 					<div class="layer-col">
@@ -63,6 +87,14 @@ templ Block(d BlockData) {
 			}
 			@blockFoot(d)
 		</div>
+		// The switchboard, a SIBLING of .block and still inside
+		// .cal-block-host. That placement is load-bearing three ways:
+		// `.block { overflow: hidden }` plus the host's inline-size container
+		// would clip an absolutely-positioned box inside the Nameplate; every
+		// CSS test requires the scoping root; and the `.layer.is-target` hover
+		// preview needs one common ancestor it can :has() from, because a
+		// popover in the top layer cannot be reached from inside itself.
+		@layerSheet(d)
 	</div>
 }
 
@@ -89,32 +121,63 @@ templ skybandPlaceholder() {
 // each as its correctly-placed zone carrying the signed `needs backend` chip
 // rather than fabricating content it cannot derive:
 //
-//   - legend    every mark's axis LABEL ("Quest", "Festival") is not in
-//     BlockData — Mark carries a hue, a pattern and a glyph, but no
-//     axis name — so a legend built here would be invented.
+// EVERY `needs backend` CHIP HERE IS ROLE-GATED as of C-CALV4-LAYERS-P9. The
+// rule is not per-zone: `needs backend` is GM-FACING HONESTY COPY and never
+// renders to a player, full stop. It was a passive rule while no player could
+// enable any of these keys; the switchboard makes it an active gate. The two
+// zones this slice FILLS lose the gate when they stop being chips — real
+// content is for everybody, subject to the viewer filter that already governs
+// it.
+//
+//   - legend    FILLED by C-CALV4-LAYERS-P9. The blocker was real and is
+//     gone: r52 added Mark.AxisLabel for the Ledger's meta line and
+//     said in terms that it "incidentally unblocks W-F's legend".
+//     Its chip retired the way the wave-1 chips were designed to —
+//     the data arrived, so the zone renders content. TYPE AXIS ONLY:
+//     there is still no Mark.OwnerLabel (r52 §5 refused it, CTS-5
+//     SIGNED) and no per-calendar label, so the picker's other two
+//     options are booked to C-CALV4-AXIS-P11 rather than stubbed.
+//     Being GM-gated ended with the chip: real content is for
+//     everybody, under the viewer filter that already produced it.
 //   - horizon   ruling 1: there is no queryable fog horizon on main. DayCell
 //     .Fogged stays false and this renders the chip the operator signed.
-//   - moongraph the whole-month illumination curve. Derivable from the per-cell
-//     MoonDisc series, but it is the `moongraph` layer and W-F owns the
-//     layer system; wave 1 reserves the zone instead of half-shipping it.
+//
+//     ITS CHIP IS NOW ROLE-GATED, AND THAT IS AN OBLIGATION W-F CREATED
+//     (C-CALV4-LAYERS-P9 §8.4). The chip rendered unconditionally for three
+//     waves and was safe only because NO PLAYER COULD ENABLE THE KEY: DEF is
+//     moons-only and neither host seed carries `horizon`. The switchboard
+//     makes every key reachable by every viewer, so the moment it goes live a
+//     player can turn `horizon` on — and `needs backend` never renders to a
+//     player (decisions/2026-07-27-needs-backend-audience.md: "For a player
+//     the zone simply does not appear"). A player who toggles it gets nothing:
+//     no zone, no greyed panel, no explanatory note. The row itself stays in
+//     the sheet ([LYR-6a]) because a layer is a display preference, not a
+//     promise of content — the same way a calendar with no eras gives an
+//     empty `eras` row.
+//
+//     THE DISTINCTION TO KEEP LEGIBLE, because this is the first surface where
+//     one control produces both: permission-is-absence hides data that EXISTS
+//     from a viewer not entitled to it; the needs-backend omission hides data
+//     that exists FOR NOBODY. Identical in the DOM, different rules.
+//   - moongraph FILLED by C-CALV4-LAYERS-P9, and with NO new pin field: r53's
+//     MonthGeometry.Almanac closed the data dependency completely on
+//     its way past for the wave-2 Shelf. One lane per DRAWN body — no
+//     composite, ever (L19/L24) — and the ceiling stays declared once,
+//     in the Nameplate (L30). The foot's "+N more in the almanac"
+//     names a destination rather than a ceiling, and the destination
+//     is real because the register is uncapped by MoonCap.
 templ belowMonthLayers(d BlockData) {
 	if hasLayer(d.Layers, "legend") {
-		<div class="layer needzone" data-layer="legend">
-			<span class="cap">Legend</span>
-			<span class="badge need">needs backend</span>
-		</div>
+		@legendZone(d)
 	}
-	if hasLayer(d.Layers, "horizon") {
+	if hasLayer(d.Layers, "horizon") && d.Viewer.IsGM {
 		<div class="layer needzone" data-layer="horizon">
 			<span class="cap">Knowledge horizon</span>
 			<span class="badge need">needs backend</span>
 		</div>
 	}
 	if hasLayer(d.Layers, "moongraph") {
-		<div class="layer needzone" data-layer="moongraph">
-			<span class="cap">Illumination graph</span>
-			<span class="badge need">needs backend</span>
-		</div>
+		@moongraphZone(d)
 	}
 }
 

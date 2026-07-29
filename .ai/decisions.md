@@ -2423,13 +2423,192 @@ whose load-bearing case is **one departed member holding a stored
 `calendar_event_rsvps` row**, because that is the one case a screenshot cannot
 reconstruct.
 
+**20. A TOGGLE APPLIES BY WRITING A ROW AND RELOADING THE PAGE — AND THAT IS
+THE SHAPE THAT KEEPS THE SECURITY REVIEW SMALL.** (C-CALV4-LAYERS-P9, wave 3 /
+W-F, [LYR-1] SIGNED.)
+
+Four facts fenced the mechanism before any of it was written, and all four are
+properties of this package rather than preferences: there is **no JS and there
+cannot be** (`boot.js` sets `allowScriptTags = false`, so a `<script>` inside an
+HTMX-swapped fragment never runs, and `allowEval = false` kills `hx-on` too);
+the Block renders under **`context.Background()`** and performs no queries, so a
+preference can only be resolved by the PRODUCER and handed in on `BlockData`;
+**CSS-only reveal was unavailable**; and a **server-rendered `checked` cannot
+vary by container query** (§13).
+
+The third deserves its own sentence, because it is the one a later hand will
+want to undo. Rendering all eight layer surfaces and hiding seven with CSS fails
+twice over, and either failure alone is fatal.
+`TestSeam_EnabledLayerSetMatchesWhatRenders` asserts that an ABSENT layer key
+produces an ABSENT surface — its header calls the alternative *"the
+set-and-ignored defect class this file exists to kill"* — and a CSS reveal makes
+that test unfalsifiable. And `needs backend` never renders to a player, so
+emitting the horizon zone always and hiding it would put GM-facing honesty copy
+into a player's markup. **Permission is ABSENCE, and `display: none` is not
+absence.**
+
+So the row is an `hx-post` that persists and answers **204 No Content with
+`HX-Refresh: true`**, and the hosting page re-renders through its own handler.
+No HTML crosses the route in either direction. The consequence that matters:
+**a Block's host context is never client-supplied.** Its render depends on the
+entity id, the bound calendar id, `MoonCap`, `LedgerHidden`/`ShelfHidden` and
+the widget-binding resolution layer; under `HX-Refresh` the host page rebuilds
+every Block through the handler that already owns those decisions, including
+`requireVisibleCalendar` and the W5a `ListVisibleCalendars` split. A fragment
+response would mean re-authorising every one of those fields inside a new
+handler — a whole resolution layer reproduced, which is exactly where a leak
+hides. The route therefore accepts a layer key list and nothing else: no
+`calendar_id`, no `entity_id`, no host descriptor, no `user_id` (it comes from
+the session), and there is no IDOR surface because the primary key it writes is
+`(session user, authorised campaign)`.
+
+**THE A8 READING THIS SHIPPED, stated so the next hand finds it argued rather
+than assumed:** L-M2's *"a layer that changes the MONTH's geometry applies
+instantly and silently"* is about **ANIMATION, not latency**. A server re-render
+animates nothing at all — the month does not slide, grow, stagger or fade; it is
+simply different. The honest cost is that the popover closes on each toggle, so
+a viewer setting three layers re-opens the sheet three times. The switchboard is
+a set-once control and that is survivable, but it is the downside and it is not
+hidden.
+
+And the branch Chronicle ships that the mockup does not: **no section animates
+open, for anyone.** L-M1 permits it and the signed contract does it
+(`.layer.opening` → `@keyframes m-open`), but the motion budget is four
+properties and one keyframe inside a reduced-motion guard, and `height`,
+`interpolate-size` and that keyframe are all outside it. The design notes
+already wrote the branch — *"Under `prefers-reduced-motion` the section simply
+exists"* — and Chronicle ships it for everyone rather than widening a budget
+signed nine days earlier by the slice that rewrote its test. The only motion the
+switchboard adds is the row's switch, and it lives inside the guard, which is
+itself the proof that the switch is a STATE and not an animation.
+
+**21. THE STORE IS ONE COLUMN ON A ROW THAT ALREADY EXISTED, AND `NULL` IS NOT
+THE EMPTY SET.** (C-CALV4-LAYERS-P9, [LYR-3] SIGNED.)
+
+Three waves ended by writing the same sentence into the same files: *"no
+preference store of any kind exists in the repo."* It was true —
+`db/migrations` ended at `000030`, the calendar plugin at `013`, and
+`widgetbindings.WidgetBinding` had no config column and no user dimension.
+
+Calendar migration `014` adds `block_layers VARCHAR(255) NULL` to
+`calendar_active` rather than minting a table, and that is not a convenience:
+migration `007` made the identical call under a live coordinator decision (PR
+#368 stop-and-flag #3) — *"simpler; reuses the existing (user_id, campaign_id)
+PK + FK cascade + index discipline"* — and an executor may not quietly reverse a
+signed decision. The grain is therefore per-VIEWER per-CAMPAIGN: L20 describes a
+viewer's preference for how they read calendars, and a viewer who turns eras off
+almost certainly means "off, everywhere".
+
+**The host's layer set became a SEED rather than a verdict.** With no stored row
+the Block renders the host's set exactly as before — which is what kept every
+wave-1/2 screenshot valid on day one, because a fresh viewer has no row. The
+first switchboard write persists the viewer's set, and from then on the store
+wins at every host in that campaign.
+
+**`NULL` means "never chosen" and `''` means "chose nothing", and the difference
+is load-bearing at every layer** — column, repository (`sql.NullString` → `nil`
+vs an empty non-nil slice), service, producer and renderer. Collapse them and
+the bare month becomes unreachable, which turns the default into a floor. *"Bare
+mode is not a degraded view; for reading a month it is the better one"* is only
+defensible if the viewer can leave it and have the leaving stick — so shipping
+the mechanism to leave DEF is the opposite of changing DEF, and DEF is still
+`["moons"]`.
+
+`VARCHAR` and not JSON: the repo has no JSON-preference precedent, a
+comma-joined key list stays greppable in a production incident, and the
+validation belongs in Go beside the eight-key registry that defines the
+vocabulary. It **rejects an unknown key with 400 on the way in** — a silently
+dropped key half-applies a choice the viewer cannot audit — and **filters an
+unknown key with a log line on the way out**, because a registry that shrank
+after a write is a deploy rather than a caller and must not brick a calendar.
+
+**22. THE SWITCHBOARD IS THE FIRST SURFACE WHERE ONE CONTROL PRODUCES BOTH
+KINDS OF ABSENCE, AND THE TWO ARE DIFFERENT RULES.** (C-CALV4-LAYERS-P9 §8.4 /
+§10.)
+
+*Permission-is-absence* hides data that **exists** from a viewer not entitled to
+it. The *needs-backend* omission hides data that exists **for nobody**. They are
+identical in the DOM and they are governed by different rules, and until wave 3
+nothing let a viewer produce both from one place.
+
+`belowMonthLayers` rendered its `needs backend` chip unconditionally for three
+waves, and that was safe **only because no player could enable the keys**: DEF
+is moons-only and neither host seed carries `legend`, `horizon` or `moongraph`.
+The switchboard makes every key reachable by everybody, so the passive rule
+became an active gate — and the gate landed one commit BEFORE the reachability
+rather than in the same breath as it, because a gate that lags its exposure by
+one commit is a gate that was not there. **A player who toggles `horizon` gets
+nothing: no zone, no greyed panel, no explanatory note.**
+
+**The ROW stays in the sheet, though, and that is the other half of the
+ruling** ([LYR-6a]). The denominator never varies by role — eight rows and "of
+8" for owner, co-DM and player — because a layer is a per-viewer DISPLAY
+PREFERENCE and not a promise of content, exactly as a calendar with no eras
+gives an empty `eras` row. Filtering the row set by what a viewer would actually
+get reintroduces a permission dimension inside a display-preference registry,
+which the design review killed by name as *"a struct field invented to make a
+narrative work"*.
+
+**23. A PER-VIEWER STORE DOES NOT BEAT THE CONTAINER-QUERY BOUND, AND THAT IS A
+FINDING.** (C-CALV4-LAYERS-P9 §11, [LYR-8] SIGNED.)
+
+§13 records that *a server-rendered `checked` attribute cannot vary by container
+query*. W-F was told it might re-open the `.ltabs` question **only with a
+mechanism that beats that bound**, and the per-viewer store was the candidate,
+on the theory that it moves the default out of the container query.
+
+**It does not.** A store changes WHERE the single value comes from. It is still
+one value, rendered once, into one `checked` attribute, for a Block that may be
+at std on one host and full on another **in the same page render**. Nothing
+about a store makes one attribute two. A second, independent reason landed after
+the ADR: Chronicle's Block renders the Shelf zone at std as well, unlike the
+signed std construction where `block()` emits no `.shelf` element at all — so
+the three Shelf tabs already have exactly one home per tier, and a second copy
+inside `.ltabs` would be two controls for one piece of state. The open item is
+STRUCK rather than re-booked, because carrying it means three slices in a row
+re-deriving the same answer.
+
+**24. THE SCREENSHOT GATE FIRED TWICE, ON TWO THINGS NO ASSERTION COULD SEE.**
+(C-CALV4-LAYERS-P9 §15 / [LYR-2].)
+
+The sheet's placement and the below-month collision were both gated on renders
+rather than on reasoning, and both gates caught a real defect on the first pass.
+
+The popover was anchored to the ⋯ invoker, which is what the ruling's sketch
+reads like. The ⋯ sits at the far right of the Nameplate, **directly above the
+docked Ledger column**, so opening down-and-left from it covered the Ledger
+entirely — its own "Event list" row included, which is a control hiding its own
+target. The ruling's binding clause is *"over the month, never over the Ledger
+column"*, so the anchor moved to the INSTRUMENT: it satisfies the clause by
+construction at every tier instead of by an offset nudged until it looked right.
+
+And the collision HOST-P3 predicted happened. That measurement was taken against
+stubs, then against a filled Shelf, and never with a real legend and a real
+three-lane illumination graph under the month — which is exactly what a
+switchboard can now produce. At 420px and 358px the instrument pushed past the
+Block's 520px ceiling and the docked Ledger's head drew over the Shelf's strip.
+
+CTS-8's precedent supplied the fix and the bound on it: the answer is taken
+**inside the Block's own std geometry**, the zone that can yield yields, and
+**no layer key is dropped — the viewer asked for the key**. The body scrolls.
+Three alternatives were built and measured before that one was kept, and each is
+recorded in the stylesheet with its reason: shrinking the month was refused
+because it inverts the Block's priorities AND changes every std Block nowhere
+near the ceiling (a shrinkable instrument hands the Ledger space the month had);
+clipping the Ledger was refused because a zone that silently vanishes is worse
+than one that scrolls; and bounding the stack with a literal was refused because
+at 420px any honest bound is near zero, so the sections the viewer just switched
+on would render as a scrollbar. Scrolling is already this Block's idiom for a
+zone that cannot fit — `.lrows` and the Shelf's panels both use it — so this is
+CTS-8 applied one level up.
+
 ### Sections inside this ADR rather than beside it
 
-W-F's layer switchboard and preference store become sections HERE when they
-land. calendar-v4 is one architecture decision; competing ADRs for its later
-waves would fragment the rationale that a future re-litigation needs in one
-place. W-E followed this rule: its Almanac decisions are §10-§14 above rather
-than an ADR-049.
+W-F's layer switchboard and preference store became sections HERE when they
+landed — §20-§24 above, and there is no ADR-049. calendar-v4 is one architecture
+decision; competing ADRs for its later waves would fragment the rationale that a
+future re-litigation needs in one place. W-E followed this rule first (its
+Almanac decisions are §10-§14) and W-G's RSVP decisions are §15-§19.
 
 ### References
 
