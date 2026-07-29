@@ -650,12 +650,71 @@
 }
 
 /* ── Zone B · INSTRUMENT ─────────────────────────────────────────────────── */
+/* THE BODY SCROLLS AT STD, AND THAT IS THE §15 ANSWER
+   (C-CALV4-LAYERS-P9 screenshot finding).
+
+   Wave 1/2 needed nothing here: the only thing under the month was at most
+   three one-line `needs backend` chips, and both host seeds omitted the keys
+   that produce them precisely BECAUSE HOST-P3 measured the collision. W-F fills
+   two of those zones with real content and the switchboard lets any viewer
+   switch all three on, so the collision is now reachable — and at 420px and
+   358px it drew the docked Ledger's head and the Shelf's strip on top of one
+   another.
+
+   THE CANDIDATES, and why each of the other three was refused:
+     · shrink the month — refused. It is the primary surface, and a Block that
+       loses week rows to make room for a legend has its priorities inverted.
+       Measured: it also changes every std Block NOWHERE NEAR the ceiling,
+       because a shrinkable instrument hands the Ledger space the month had.
+     · clip the Ledger — refused. A zone that silently vanishes is worse than
+       one that scrolls; the viewer has no way to learn it is still there.
+     · bound the below-month stack with a literal — refused. At 420px the month
+       is already most of the Block's height, so any honest bound is ~0 and the
+       sections the viewer just switched on would be a scrollbar.
+     · SCROLL THE BODY — taken. Everything stays in DOM order, nothing overlaps,
+       no layer key is dropped (the viewer ASKED for the key), the month keeps
+       every week row, and the Shelf's strip stays pinned at the foot because it
+       is the Block's child rather than the body's. Scrolling is already this
+       Block's own idiom for a zone that cannot fit — .lrows and the Shelf's
+       panels both use it — which is CTS-8's precedent applied one level up.
+
+   It costs nothing when the content fits, which is every Block that renders the
+   default surface. */
 .cal-block-host .body {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
+/* THE INSTRUMENT SCROLLS RATHER THAN PUSHING ITS SIBLINGS OUT, and that is a
+   §15 SCREENSHOT FINDING from C-CALV4-LAYERS-P9 rather than a tidy-up.
+
+   Wave 1/2 could leave this `flex: none`, because the only thing under the
+   month was at most three one-line `needs backend` chips. W-F fills two of
+   those zones with REAL content — a legend and an eight-lane illumination graph
+   — and a viewer can switch all three on at once. At the 420px entity host and
+   the 358px bench, that pushed .inst past the Block's 520px ceiling, and its
+   siblings (the docked Ledger's head and strip, the Shelf's tab strip) drew on
+   top of one another.
+
+   THE FIX IS CTS-8's PRECEDENT, EXACTLY: the answer is taken inside the Block's
+   own std geometry, THE ZONE THAT CAN YIELD YIELDS, and NO LAYER KEY IS
+   DROPPED — the viewer asked for the key. The month keeps its intrinsic height
+   because the grid has one; what scrolls is the stack of sections BELOW it,
+   which is the only part that can grow without bound. The Ledger and the Shelf
+   keep their strips intact, which is the invariance promise the whole std tier
+   is written against.
+
+   `overflow-y: auto` and not `hidden`: hiding it would silently drop a section
+   the viewer switched on, which is the same defect one direction over. */
+/* UNCHANGED SINCE WAVE 1, and deliberately so: `flex: none` is what makes the
+   MONTH the thing that decides the Block's height. C-CALV4-LAYERS-P9 tried
+   letting this shrink and the screenshots caught it immediately — a shrinkable
+   instrument hands the docked Ledger space the month had, and every std Block
+   nowhere near the ceiling redraws with fewer week rows. The yielding happens
+   one level down, in .belowzones. */
 .cal-block-host .inst {
   flex: none;
   min-height: 0;
@@ -663,6 +722,31 @@
   flex-direction: column;
   padding: 0 12px 8px;
   overflow: hidden;
+}
+/* THE STACK OF SECTIONS BELOW THE MONTH — legend, knowledge horizon,
+   illumination graph — AND IT IS THE ZONE THAT YIELDS.
+   (C-CALV4-LAYERS-P9 §15 screenshot finding; see block.templ.)
+
+   Wave 1/2 needed no bound here, because the only thing under the month was at
+   most three one-line `needs backend` chips. W-F fills two of those zones with
+   real content and a viewer can switch all three on at once, which at 420px and
+   358px pushed the instrument past the Block's 520px ceiling and drew the
+   docked Ledger's head and the Shelf's strip over one another.
+
+   CTS-8's precedent is the fix: the answer is taken INSIDE the Block's own std
+   geometry, THE ZONE THAT CAN YIELD YIELDS, and NO LAYER KEY IS DROPPED —
+   the viewer asked for the key. The month keeps every week row; the Ledger and
+   the Shelf keep their heads and strips; the sections the viewer added scroll
+   inside a bounded stack.
+
+   It carries no bound of its own: the yielding happens in .body, which is the
+   only place that can see how much room is actually left. A literal here would
+   have to be ~0 at 420px, and a section the viewer just switched on rendering
+   as a scrollbar is the same defect one direction over. */
+.cal-block-host .belowzones {
+  display: flex;
+  flex-direction: column;
+  flex: none;
 }
 
 /* THE GRID. The week-number gutter is column 1 of the SAME grid and every row
@@ -2140,6 +2224,12 @@
     grid-template-columns: minmax(0, 1fr) auto;
     flex: 1;
     min-height: 0;
+    /* At full tier the docked Ledger is ABSOLUTELY POSITIONED inside its own
+       300px column (see below), and a scrolling body would make that column a
+       containing block for scroll rather than for position. There is also room
+       here: the §15 worst case renders whole at 1232px. So the std scroller is
+       explicitly OFF, not merely inherited-away. */
+    overflow: visible;
   }
   .cal-block-host .inst {
     flex: 1;
@@ -2481,15 +2571,26 @@
 }
 
 @supports (anchor-name: --calv4) {
-  /* The sheet opens DOWN and LEFT from the ⋯, which sits at the far right of
-     the Nameplate: block-end puts it under the invoker, span-inline-start makes
-     it grow leftwards over the month. The docked Ledger is to the RIGHT of the
-     month at full tier, so the sheet never covers the "Event list" row it
-     contains — an occlusion there would be a control hiding its own target. */
+  /* THE ANCHOR IS THE MONTH, AND THAT IS A SCREENSHOT FINDING.
+     [LYR-2]'s sketch anchors to the ⋯ and opens block-end / span-inline-start.
+     The ⋯ sits at the far right of the Nameplate, directly ABOVE the docked
+     Ledger column, so that placement covers the Ledger entirely — including the
+     Ledger's own "Event list" row, which is a control hiding its own target and
+     an explicit STOP-AND-FLAG. The binding clause of the ruling is "over the
+     month, never over the Ledger column"; anchoring to the INSTRUMENT satisfies
+     it by construction at every tier, rather than by an offset nudged until it
+     looked right. At std, where no Ledger is docked, it changes nothing.
+
+     The sheet's top-right corner meets the month's top-right corner and it
+     grows leftwards and downwards over the month — still "down and left from
+     the ⋯" to a reader, since the ⋯ is the nearest thing above it. */
   .cal-block-host .lsheet {
-    position-area: block-end span-inline-start;
-    position-try-fallbacks: block-start span-inline-start, block-end span-inline-end;
-    margin-block-start: 4px;
+    position-area: none;
+    inset: auto;
+    top: anchor(top);
+    right: anchor(right);
+    margin: 4px;
+    position-try-fallbacks: flip-block, flip-inline;
   }
 }
 

@@ -142,7 +142,6 @@ templ layersInvoker(d BlockData) {
 		data-open-layers
 		if switchboardLive(d.Layers) {
 			popovertarget={ layerSheetID(d) }
-			style={ layerAnchorStyle(d) }
 		}
 		disabled?={ !switchboardLive(d.Layers) }
 		aria-haspopup="dialog"

@@ -226,8 +226,12 @@ func TestSwitchboard_InstanceIdentityIsPerBlock(t *testing.T) {
 			"on a Bench, which routinely renders four")
 	}
 	body := flatten(render(t, a))
-	if !strings.Contains(body, "anchor-name:"+layerAnchorName(a)) {
-		t.Error("the invoker must carry its per-instance anchor-name")
+	// THE ANCHOR IS THE MONTH, not the ⋯ — a screenshot finding, not a
+	// preference: the ⋯ sits directly above the docked Ledger, so anchoring to
+	// it covers the Ledger's own "Event list" row.
+	if !strings.Contains(body, `class="inst" style="anchor-name:`+layerAnchorName(a)) {
+		t.Error("the instrument must carry the per-instance anchor-name — anchoring to the " +
+			"⋯ button occludes the docked Ledger, which is a STOP-AND-FLAG")
 	}
 	if !strings.Contains(body, "position-anchor:"+layerAnchorName(a)) {
 		t.Error("the sheet must point at its own invoker's anchor")

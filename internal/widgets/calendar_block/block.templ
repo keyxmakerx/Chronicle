@@ -47,9 +47,33 @@ templ Block(d BlockData) {
 				@skybandPlaceholder()
 			}
 			<div class="body">
-				<div class="inst">
+				// THE SWITCHBOARD'S ANCHOR IS THE MONTH, NOT THE ⋯ BUTTON, and
+				// that is a SCREENSHOT FINDING rather than a preference. The ⋯
+				// sits at the far right of the Nameplate, directly ABOVE the
+				// docked Ledger column, so a sheet opening down-and-left from it
+				// lands squarely on the Ledger — including the Ledger's own
+				// "Event list" row, which is the control hiding its own target.
+				// [LYR-2]'s binding clause is "over the month, never over the
+				// Ledger column"; anchoring to the instrument satisfies it by
+				// construction at every tier, and at std (where there is no
+				// Ledger) it changes nothing.
+				<div class="inst" style={ layerAnchorStyle(d) }>
 					@instrument(d)
-					@belowMonthLayers(d)
+					// THE BELOW-MONTH SECTIONS SCROLL; THE MONTH NEVER DOES.
+					// A §15 screenshot finding: with legend + moongraph +
+					// horizon all switched on, the sections pushed .inst past
+					// the Block's 520px ceiling at 420px and 358px, and the
+					// docked Ledger's head and the Shelf's strip drew over one
+					// another. CTS-8's precedent is that the answer is taken
+					// inside the Block's own std geometry and THE ZONE THAT CAN
+					// YIELD YIELDS — with no layer key dropped, because the
+					// viewer asked for the key. This wrapper is that zone: the
+					// grid keeps its intrinsic height, these sections scroll
+					// inside whatever the month leaves, and the Ledger and Shelf
+					// keep their strips intact.
+					<div class="belowzones">
+						@belowMonthLayers(d)
+					</div>
 				</div>
 				if ledgerDocked(d) {
 					<div class="layer-col">

@@ -1836,14 +1836,24 @@ func layerSheetID(d BlockData) string {
 
 // layerAnchorName is this Block's CSS anchor-positioning name.
 //
+// IT IS ON THE INSTRUMENT — THE MONTH — AND NOT ON THE ⋯ BUTTON. The first
+// build anchored to the invoker, which is what [LYR-2]'s sketch reads like, and
+// the screenshot gate failed it immediately: the ⋯ sits at the far right of the
+// Nameplate, directly ABOVE the docked Ledger column, so a sheet opening
+// down-and-left from it covers the Ledger entirely — its "Event list" row
+// included, which is a control hiding its own target. [LYR-2]'s binding clause
+// is "over the month, never over the Ledger column", and anchoring to the month
+// satisfies it BY CONSTRUCTION at every tier rather than by a nudged offset. At
+// std, where no Ledger is docked, it changes nothing.
+//
 // It is per-INSTANCE and carried in a `style` attribute rather than the
 // stylesheet because the stylesheet cannot know how many Blocks a page has: two
 // Blocks sharing one anchor-name make the anchor ambiguous, and the Bench
-// routinely renders four. The stylesheet supplies the position-area under
-// @supports; this supplies the identity. A browser without anchor positioning
-// ignores both custom-ident declarations and lands the sheet viewport-centred,
-// which is [LYR-9] item 3's pre-authorised fallback and is honest — a centred
-// sheet still reads as a disclosure the viewer opened.
+// routinely renders four. The stylesheet supplies the insets under @supports;
+// this supplies the identity. A browser without anchor positioning ignores both
+// custom-ident declarations and lands the sheet viewport-centred, which is
+// [LYR-9] item 3's pre-authorised fallback and is honest — a centred sheet still
+// reads as a disclosure the viewer opened.
 func layerAnchorName(d BlockData) string {
 	return "--calv4-layers-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
 }
