@@ -2334,14 +2334,22 @@ names the migration or the route it checked.** Copy that asserts an absence
 without naming what was looked at is not an honesty state, it is a guess with a
 badge on it.
 
-Three things in the panel genuinely are unbacked and keep their state, all
-GM-tier so a player receives none of them: the **propose** write
+Three things in the panel genuinely were unbacked and kept their state, all
+GM-tier so a player received none of them: the **propose** write
 (`routes_snapshot.txt` carries no propose-from-window path), the
-**reminder/nudge** endpoint (the fan-out fires only on the `collect_rsvps`
+**reminder/nudge** endpoint (the fan-out fired only on the `collect_rsvps`
 OFF→ON transition; booked as C-CALV4-RSVP-P8B, "the asking email"), and a
 server-side **recommender** — which WG-3 retires by *deriving* the window
 arithmetically from the overlay's own per-hour free counts rather than storing
 it, under a permanent `derived · not stored` chip.
+
+**AMENDED 2026-07-29, and the sentence above is left standing rather than
+edited, because §15 is the RETRACTION section** — quietly rewriting it to hide
+that one of the three has since been built would be the same class of error it
+was written about. **The count is now TWO.** C-CALV4-RSVP-P8B shipped the
+reminder endpoint (`POST /campaigns/:id/calendar/ask`), so the Nudge chip came
+off and the control went live in one place; §25 below records what was built and
+why. Propose and the recommender's status are unchanged.
 
 **16. RSVP ANSWERS ARE PARTY-VISIBLE; AVAILABILITY LANES ARE NOT.** (WG-4 /
 C-CALV4-RSVP-P8 §4.) Two artefacts openly disagreed — the unsigned W-G spec
@@ -2602,10 +2610,138 @@ on would render as a scrollbar. Scrolling is already this Block's idiom for a
 zone that cannot fit — `.lrows` and the Shelf's panels both use it — so this is
 CTS-8 applied one level up.
 
+**25. THE ASKING EMAIL: FOUR DECISIONS, AND ONE OF THEM CORRECTS THE BOOKING.**
+(C-CALV4-RSVP-P8B, wave 3 TAIL; rulings [PB-1] [PB-2] [PB-4] [PB-8].)
+
+The operator asked, in his own words, for *"an email sent to them asking for
+what their schedule is, having them set like their 'normal' hours … or they
+could just type everything in."* **The second half was already built and nobody
+had told him**: the shipped availability page is a painted 7×24 weekly grid
+whose header says *"Paint the hours you can play — it repeats every week"*, with
+a per-day exceptions editor beneath it. The missing piece was never an entry
+surface. It was the sentence that asks.
+
+**(a) The booking was two emails wearing one sentence, and it ships as one
+([PB-1]).** `.ai/todo.md`'s line — *"one endpoint, one template, a rate limit
+and a tokened link"* — silently merged the **schedule ask** (audience: every
+member; landing: the grid; needs no session) with the **RSVP nudge** (audience:
+members who have not answered a specific event; landing: the token pages; needs
+a collecting event). Shipping only the first would not flip ledger item 10;
+shipping only the second would not satisfy the directive. It ships as ONE email
+with two sections: the schedule ask is the subject and the primary CTA, and the
+five EXISTING RSVP action links ride along when a collecting session is
+resolvable **and this recipient may see it**, re-minted through the unchanged
+`MintActionTokens`. That flips item 10 truthfully, because the re-send makes
+exactly the same promises with the same expiry and the same single-use property
+as the OFF→ON fan-out — nothing new had to be invented for the nudge half. It
+also matches what a Director actually does: *"we're picking a date — tell me
+when you're free, and say yes or no to the one on the books"* is one message,
+and two emails four seconds apart is the fastest way to teach a table to filter
+Chronicle into a folder.
+
+**(b) "A TOKENED LINK TO THE GRID" IS NOT BUILDABLE, AND THIS IS THE SECTION A
+FUTURE SLICE WILL NEED MOST ([PB-2]).** The booking was written before anyone
+had opened `availability.templ`. That file is an 82-line SHELL — a breadcrumb, a
+heading, a tab pair and two empty `<section>`s. The grid is drawn client-side by
+`static/js/availability.js` (1,318 lines) over **six authenticated JSON routes**
+(`GET|PUT /availability/mine`, `GET|POST|PUT|DELETE /availability/exceptions`,
+`GET /availability/overlay`). So "a tokened link to the grid" is not one tokened
+page: it is token-authenticating six member-data endpoints, or minting a session
+from an emailed link. That is the largest authorisation-surface change anyone
+has proposed in calendar-v4, and it is emphatically not *"one endpoint, one
+template, a rate limit"*.
+
+It therefore ships as **a plain deep link plus destination preservation**, and
+the directive's *"existing one-time-token pattern"* is honoured **elsewhere in
+the same email**: the RSVP action links ARE that pattern, they DO work from a
+logged-out inbox, and they are unchanged. The part that cannot use it is the
+grid, because the grid is an authenticated SPA and always was. A token bridge
+was considered and refused for a second reason worth recording: such a token
+**cannot be single-use** — a mail scanner's prefetch would burn it, which is the
+entire reason the RSVP flow has a GET-confirm / POST-apply split — so it would
+be a *different* security shape from the one the directive names, bought for
+click telemetry alone. Session-less access to the six endpoints was refused
+outright.
+
+What makes the deep link land is not a credential but a repair. Three defects
+in `internal/plugins/auth` made a deep link useless from a cold inbox, and the
+third was a latent open redirect: `handleUnauthenticated` threw the destination
+away; `LoginPage`/`LoginForm_` took no redirect parameter, so `Login`'s
+query-string read could never fire (register's own comment states the mechanism
+— *"the query param is not present on the HTMX form POST"*); and `Login`
+validated with `strings.HasPrefix(redir, "/")` while `sanitizeRedirect`, which
+rejects `//` and `/\`, sat 120 lines above it. **The third was unreachable ONLY
+because of the second**, so the slice that repairs the plumbing is the slice
+that opens the hole — and it was fixed first, in its own commit, behind a fence
+of destination preservation and sanitisation only.
+
+**(c) THE RATE LIMIT IS PERSISTED, AND THAT BUYS THE READOUT ([PB-4]).** This
+endpoint mails other people's inboxes on demand; it is the only control in
+calendar-v4 whose abuse cannot be retracted. Three layers: a per-campaign
+cooldown (6h) and a per-recipient floor (24h), both PERSISTED in
+`calendar/migrations/015_schedule_asks`, plus a per-USER in-memory limiter
+(10/h) on the route. In-memory-only was refused for two reasons and the second
+is the one that matters: a cooldown that resets on every deploy is not a
+cooldown, **and it costs the operator the "last asked" readout that is the only
+thing making the control honest**. The Bench prints *"Asked 2 hours ago. You can
+ask again in 4 hours"* and disables the button with that reason visible, because
+a limit whose only expression is an error page is a limit the operator hits
+blind. The gate and the readout are the SAME predicate, so the control and the
+endpoint cannot disagree.
+
+Two shapes fall out of the two persisted limits, and they are deliberately
+different: the campaign cooldown REFUSES the whole send; the per-recipient floor
+SKIPS that member and lets the rest proceed, so a legitimate second ask after
+somebody joins mails the new member and nobody else. And a standing invariant:
+**nothing is recorded when nothing was sent** — SMTP unconfigured, no address on
+file, or a send error writes no row, because a cooldown must never lock out a
+campaign that received no mail.
+
+The per-user limiter was LIFTED rather than imported, and the reason is worth
+recording because the obvious homes are both closed. `bestiary.UserRateLimit` is
+the same algorithm, but importing it is a plugin-to-plugin edge
+`internal/wire/plugin_import_guard_test.go` forbids outright. `internal/middleware`,
+beside `RateLimit`, is closed for a harder reason than taste: a per-user limiter
+must read the session, `auth.GetUserID` lives in the auth plugin, and
+`auth/handler.go` already imports `internal/middleware` — it would be an import
+cycle. So it lives in the plugin that needs it.
+
+**(d) DEPLOYMENT STATUS IS NOT BUILD STATUS ([PB-8]).** The unconfigured-mail
+state renders `.badge.warn` reading `email not configured`, NOT `.badge.need`.
+WG-8 ruled that `.badge.need`'s text is always the literal `needs backend` and
+that the class is not diluted; an unconfigured mail server is not a build gap —
+the endpoint exists, the template exists, the operator has not configured SMTP.
+That is the same register as the `zone not set` repair, and the fix is an admin
+action rather than a Chronicle release. Using `.badge.need` here would leave a
+`needs backend` chip over a backend that had just been built, which is the
+inversion WG-8 retired. **For AUDIENCE purposes, though, deployment status IS
+build status**: all three of the control's states are GM-tier and a player
+receives none of them, because a player has no control to explain and telling
+them this instance has no mail server is telling them about Chronicle's
+operations rather than about their game.
+
+One sentence is shared as a single package-level constant across the Bench and
+the endpoint — *"Email is not configured on this server — answers still work
+in-app; nobody was emailed."* — so a future edit cannot make the two surfaces
+disagree about what an unconfigured mail server means. It is spec ledger item
+11's own wording, and Part B's drawing renders it too: one fact, one sentence,
+every surface.
+
+**What this slice made necessary and did NOT build.** The asking email is the
+first Chronicle email a member can receive **repeatedly because somebody else
+pressed a button** — every prior one was transactional and self-triggered
+(password reset, invite accept, "you were invited to this event"). Chronicle has
+no notification preferences, no email opt-out and no unsubscribe anywhere
+(`grep notification_pref|email_opt|unsubscribe` over `internal/` and `db/`
+returns nothing). That is defensible at a 6-hour campaign cooldown and it is not
+defensible forever, so it is booked as **C-NOTIFY-PREFS**. No unsubscribe link
+was invented in the meantime: a dead link would be worse than the email's honest
+*"you received this because you are a member of this campaign."*
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they
-landed — §20-§24 above, and there is no ADR-049. calendar-v4 is one architecture
+landed — §20-§24 above, and W-G's tail is §25. There is no ADR-049. calendar-v4 is one architecture
 decision; competing ADRs for its later waves would fragment the rationale that a
 future re-litigation needs in one place. W-E followed this rule first (its
 Almanac decisions are §10-§14) and W-G's RSVP decisions are §15-§19.

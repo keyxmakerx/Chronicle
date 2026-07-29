@@ -984,12 +984,43 @@ NOT take, each with the reason it was left.
   link). `tools/check-calendar-v4-lints.sh`'s B4 glob already covers
   `*schedule*`, and its self-test proves the resolution, so the file will be
   guarded on the day it is created.
-- [ ] **`C-CALV4-RSVP-P8B` — "the asking email".** One endpoint, one template, a
+- [x] ~~**`C-CALV4-RSVP-P8B` — "the asking email".** One endpoint, one template, a
   rate limit and a tokened link to the availability grid. It is what flips the
   `no reminder endpoint` honesty state and un-chips the Bench's `Nudge`, and it
   is the operator's own directive
   (`decisions/2026-07-28-operator-directive-availability-solicitation.md`). The
-  RSVP fan-out today fires ONLY on the `collect_rsvps` OFF→ON transition.
+  RSVP fan-out today fires ONLY on the `collect_rsvps` OFF→ON transition.~~
+  **DONE 2026-07-29** — struck rather than deleted, so the record shows what was
+  booked beside what shipped. Shipped: `POST /campaigns/:id/calendar/ask`
+  (Scribe+, snapshot 721→722), one email template with two sections, migration
+  `015_schedule_asks` behind a persisted 6h campaign cooldown + 24h
+  per-recipient floor plus a per-user 10/h in-memory limiter, and the panel's
+  `Nudge` LIVE with both tile Nudges retired. **One correction to the booking,
+  signed as [PB-2]:** *"a tokened link to the availability grid"* is not
+  buildable — the grid is a 1,318-line client SPA over SIX authed JSON routes
+  (`sessions/routes.go:43-49`), so a token would have to authenticate all six
+  or mint a session from an emailed link. It ships as a plain deep link plus
+  destination preservation through `/login`, and the directive's one-time-token
+  pattern is honoured by the RSVP action links in the SAME email, unchanged.
+- [ ] **`C-NOTIFY-PREFS` — per-user, per-channel notification preferences, plus
+  the admin surface.** **NEWLY BOOKED 2026-07-29 by C-CALV4-RSVP-P8B, which is
+  what made it necessary.** `grep notification_pref|email_opt|unsubscribe` over
+  `internal/` and `db/` returns NOTHING. Until the asking email, every Chronicle
+  email was transactional and self-triggered — password reset, invite accept,
+  "you were invited to this event". **`POST /campaigns/:id/calendar/ask` is the
+  first email a member can receive repeatedly because somebody ELSE pressed a
+  button.** That is defensible at a 6-hour per-campaign cooldown plus a 24-hour
+  per-recipient floor, and it is not defensible forever. P8B deliberately
+  invented no unsubscribe link in the meantime: a dead link is worse than the
+  email's honest *"you received this because you are a member of this
+  campaign."*
+- [ ] **A plain Scribe has the ask capability and no button.** `POST
+  /campaigns/:id/calendar/ask` is `RequireRole(RoleScribe)` (matching the
+  `rsvp-collection` toggle it re-sends), but the Bench renders the control under
+  `IsGM` — `permissions.CanSeeDmOnly`, i.e. Owner **or** DM-granted. So a Scribe
+  without a DM grant can call the endpoint and has no affordance for it. That is
+  deliberate: WG-8 signed the panel's `.side` as GM-tier and P8B did not reopen
+  it. **Booked, not fixed** — and the same shape `rsvp-collection` already has.
 - [ ] **The propose-from-window write path.** `routes_snapshot.txt` carries no
   such route; `POST /campaigns/:id/proposals` is Scribe+ and takes explicit
   options. The derived window is real and Propose is inert beside it — the gap
