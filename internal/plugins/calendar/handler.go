@@ -33,6 +33,9 @@ type Handler struct {
 	// of the Bench is untouched.
 	schedule BenchScheduleReader
 	rsvpRead RSVPService
+	// mailStatus answers the ONE email question the Bench asks: is a mail
+	// server configured (C-CALV4-RSVP-P8B §8). Nil-safe like the two above.
+	mailStatus MailStatusReader
 }
 
 // TierDefinitionsLister surfaces the campaign-aware tier vocabulary

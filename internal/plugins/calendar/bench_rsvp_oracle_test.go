@@ -36,6 +36,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ── assertion 1 ────────────────────────────────────────────────────────────
@@ -206,6 +207,58 @@ func TestRsvpOracle_PlayerReceivesNoLanesButTheFullDenominator(t *testing.T) {
 	for _, ctl := range []string{">Propose<", ">Nudge<"} {
 		if strings.Contains(html, ctl) {
 			t.Errorf("a player's DOM carries the Director control %q — absent, not greyed", ctl)
+		}
+	}
+}
+
+// ── assertion 4b (C-CALV4-RSVP-P8B) ────────────────────────────────────────
+//
+// THE THREE ASK-CONTROL STATES ARE GM-TIER, ALL THREE, and a player receives
+// none of them — not the live control, not the cooldown line, not the SMTP
+// sentence. Deployment status is build status for audience purposes
+// (decisions/2026-07-27-needs-backend-audience.md): a player has no control to
+// explain, so telling them this instance has no mail server is telling them
+// about Chronicle's operations, not about their game.
+//
+// ASSERTED, NOT MERELY RENDERED THAT WAY: the payload is checked first, so the
+// permission is an absence in the data rather than a template branch one
+// refactor away from being lost.
+
+func TestRsvpOracle_PlayerReceivesNoAskControlInAnyState(t *testing.T) {
+	for _, mailConfigured := range []bool{true, false} {
+		player := benchRsvpBuild(benchFxAskInput(false, mailConfigured, time.Now().UTC().Add(-2*time.Hour)))
+		if player.Ask != nil {
+			t.Errorf("mailConfigured=%v: a player received the ask control (%+v); "+
+				"permission is ABSENCE and the absence is in the payload", mailConfigured, player.Ask)
+		}
+		for _, c := range player.Captions {
+			if strings.Contains(c, "You can ask again") || strings.Contains(c, "Email is not configured") {
+				t.Errorf("mailConfigured=%v: a player received an ask-control caption: %q", mailConfigured, c)
+			}
+		}
+		// The GM in the SAME state does get both, so this is a role gate and not
+		// a state that simply never happens.
+		gm := benchRsvpBuild(benchFxAskInput(true, mailConfigured, time.Now().UTC().Add(-2*time.Hour)))
+		if gm.Ask == nil {
+			t.Fatalf("mailConfigured=%v: the Director must receive the control", mailConfigured)
+		}
+	}
+
+	// And the rendered DOM agrees, in both states.
+	for _, mailConfigured := range []bool{true, false} {
+		d := benchFxDataRsvp(false, false)
+		d.Rsvp = benchRsvpBuild(benchFxAskInput(false, mailConfigured, time.Now().UTC().Add(-2*time.Hour)))
+		html := renderBench(t, d)
+		for _, forbidden := range []string{
+			"/calendar/ask",                          // the control's target
+			"email not configured",                   // the [PB-8] badge
+			"Email is not configured on this server", // the verbatim sentence
+			"You can ask again in",                   // the cooldown line
+			`class="badge need"`,                     // and still no build-state chip
+		} {
+			if strings.Contains(html, forbidden) {
+				t.Errorf("mailConfigured=%v: a player's DOM carries %q", mailConfigured, forbidden)
+			}
 		}
 	}
 }

@@ -2695,6 +2695,13 @@ func (a *App) RegisterRoutes() {
 	// routes write through (C-CALV4-RSVP-P8 §6): one arithmetic, not a Bench one
 	// and an API one. Hoisted to a variable for exactly that reason.
 	calendarHandler.SetRSVPReader(calendarRSVPService)
+	// The Bench's ONE email question: is a mail server configured on this
+	// instance (C-CALV4-RSVP-P8B §8). The concrete smtp service satisfies the
+	// calendar-declared MailStatusReader exactly as it already satisfies
+	// MailSender, so this adds no plugin edge — the interface is declared on the
+	// consuming side (house rule 8). Nil-safe: without it the panel renders its
+	// ask control live and the endpoint's own refusal is the backstop.
+	calendarHandler.SetMailStatus(smtpService)
 
 	// NW-2.2 Chunk F: register calendar in the App's metadata registry +
 	// expose its embedded static assets for serving at /static/plugins/calendar/.
