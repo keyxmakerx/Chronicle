@@ -36,6 +36,10 @@ type mockRSVPRepo struct {
 	createTokenFn func(ctx context.Context, t *EventRSVPToken) error
 	findTokenFn   func(ctx context.Context, token string) (*EventRSVPToken, error)
 	markUsedFn    func(ctx context.Context, token string) error
+	// Schedule-ask send bookkeeping (C-CALV4-RSVP-P8B).
+	recordAskFn func(ctx context.Context, a *ScheduleAsk) error
+	lastAskFn   func(ctx context.Context, campaignID string) (time.Time, error)
+	recentAskFn func(ctx context.Context, campaignID string, since time.Time) ([]string, error)
 }
 
 func (m *mockRSVPRepo) UpsertRSVP(ctx context.Context, r *EventRSVP) error {
@@ -85,6 +89,27 @@ func (m *mockRSVPRepo) MarkRSVPTokenUsed(ctx context.Context, token string) erro
 		return m.markUsedFn(ctx, token)
 	}
 	return nil
+}
+func (m *mockRSVPRepo) RecordScheduleAsk(ctx context.Context, a *ScheduleAsk) error {
+	if m.recordAskFn != nil {
+		return m.recordAskFn(ctx, a)
+	}
+	return nil
+}
+
+// LastScheduleAskAt defaults to the zero time — "nobody has ever been asked" —
+// so every pre-existing fixture behaves as a campaign with no send history.
+func (m *mockRSVPRepo) LastScheduleAskAt(ctx context.Context, campaignID string) (time.Time, error) {
+	if m.lastAskFn != nil {
+		return m.lastAskFn(ctx, campaignID)
+	}
+	return time.Time{}, nil
+}
+func (m *mockRSVPRepo) ScheduleAskRecipientsSince(ctx context.Context, campaignID string, since time.Time) ([]string, error) {
+	if m.recentAskFn != nil {
+		return m.recentAskFn(ctx, campaignID, since)
+	}
+	return nil, nil
 }
 
 type mockEventLookup struct {

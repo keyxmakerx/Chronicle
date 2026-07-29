@@ -47,6 +47,23 @@ type RSVPService interface {
 	// recipient, returned as action → token.
 	MintActionTokens(ctx context.Context, eventID, userID string) (map[string]string, error)
 
+	// --- schedule-ask rate limit, the two PERSISTED layers (C-CALV4-RSVP-P8B) ---
+
+	// ScheduleAskState is the per-campaign cooldown, read for the send AND for
+	// the Bench's "last asked" readout — one predicate, so the control and the
+	// endpoint can never disagree about whether an ask is allowed.
+	ScheduleAskState(ctx context.Context, campaignID string) (ScheduleAskState, error)
+
+	// RecentlyAskedRecipients is the per-recipient floor: the members this
+	// campaign has emailed inside the floor window, as a skip set. It SKIPS
+	// those members rather than refusing the send, so a second ask after
+	// somebody joins mails the new member and nobody else.
+	RecentlyAskedRecipients(ctx context.Context, campaignID string) (map[string]bool, error)
+
+	// RecordScheduleAsk appends one send row, called by the fan-out goroutine as
+	// each send succeeds — never optimistically up front.
+	RecordScheduleAsk(ctx context.Context, campaignID, eventID, recipientUserID, actorUserID string) error
+
 	// ValidateToken resolves a token WITHOUT consuming it — the GET confirm
 	// interstitial's pure read, so a mail scanner's prefetch changes nothing.
 	ValidateToken(ctx context.Context, token string) (*EventRSVPToken, error)
@@ -470,4 +487,104 @@ func rsvpWeekDates(cal *Calendar, evt *Event, now time.Time) (monday string, dat
 		dates = append(dates, start.AddDate(0, 0, i).Format("2006-01-02"))
 	}
 	return start.Format("2006-01-02"), dates
+}
+
+// --- the schedule ask's persisted rate limit (C-CALV4-RSVP-P8B, [PB-4]) -----
+
+// scheduleAskCampaignCooldown is the minimum gap between two asking sends to
+// the SAME campaign. Six hours: long enough that a table cannot be mailed twice
+// in one evening's fiddling, short enough that a Director who genuinely needs
+// to re-ask after a scheduling collapse can do so the same day.
+const scheduleAskCampaignCooldown = 6 * time.Hour
+
+// scheduleAskRecipientFloor is the minimum gap between two asking emails to the
+// same PERSON, across sends. Deliberately longer than the campaign cooldown:
+// the campaign limit protects the roster from a burst, this one protects an
+// individual inbox from being the collateral of a legitimate re-ask.
+const scheduleAskRecipientFloor = 24 * time.Hour
+
+// ScheduleAskState is everything the caller needs to decide — and to EXPLAIN —
+// whether this campaign may be asked right now.
+//
+// It exists because a limit whose only expression is an error page is a limit
+// the operator hits blind. The Bench renders the same three fields as a
+// sentence ("Asked 2 hours ago. You can ask again in 4 hours.") and disables
+// the control, so the refusal is visible before the click rather than after it.
+type ScheduleAskState struct {
+	// LastAskedAt is when this campaign's roster was last mailed. The ZERO
+	// VALUE means nobody has ever been asked, which is a different fact from
+	// "asked a long time ago" and is printed differently.
+	LastAskedAt time.Time
+	// Ready is whether a send is permitted now.
+	Ready bool
+	// RetryAfter is how long until Ready flips true. Zero when Ready.
+	RetryAfter time.Duration
+}
+
+// ScheduleAskState reads the campaign cooldown.
+//
+// FAIL-CLOSED. A read failure refuses the send rather than falling through to
+// "askable": if we cannot tell whether this roster was mailed twenty minutes
+// ago, an unretractable email is the wrong thing to guess about.
+func (s *rsvpService) ScheduleAskState(ctx context.Context, campaignID string) (ScheduleAskState, error) {
+	last, err := s.repo.LastScheduleAskAt(ctx, campaignID)
+	if err != nil {
+		return ScheduleAskState{}, apperror.NewInternal(err)
+	}
+	st := ScheduleAskState{LastAskedAt: last}
+	if last.IsZero() {
+		st.Ready = true
+		return st, nil
+	}
+	if elapsed := time.Since(last); elapsed < scheduleAskCampaignCooldown {
+		st.RetryAfter = scheduleAskCampaignCooldown - elapsed
+		return st, nil
+	}
+	st.Ready = true
+	return st, nil
+}
+
+// RecentlyAskedRecipients reads the per-recipient floor as a skip set.
+//
+// The window is measured back from NOW, not from the campaign's last send: the
+// question is "has this person heard from us lately", and it has to give the
+// same answer whether or not somebody else was mailed in between.
+func (s *rsvpService) RecentlyAskedRecipients(ctx context.Context, campaignID string) (map[string]bool, error) {
+	ids, err := s.repo.ScheduleAskRecipientsSince(ctx, campaignID,
+		time.Now().UTC().Add(-scheduleAskRecipientFloor))
+	if err != nil {
+		return nil, apperror.NewInternal(err)
+	}
+	skip := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		skip[id] = true
+	}
+	return skip, nil
+}
+
+// RecordScheduleAsk appends one send row.
+//
+// eventID is optional — "" records an ask that mentioned no session, which is
+// the normal case in a campaign that has scheduled nothing. The campaign and
+// the recipient are not optional: a row that cannot say who was mailed is not
+// bookkeeping, it is a cooldown with no subject, so it is refused here rather
+// than written and puzzled over later.
+func (s *rsvpService) RecordScheduleAsk(ctx context.Context, campaignID, eventID, recipientUserID, actorUserID string) error {
+	if campaignID == "" || recipientUserID == "" {
+		return apperror.NewInternal(fmt.Errorf("schedule ask row needs a campaign and a recipient"))
+	}
+	row := &ScheduleAsk{
+		ID:              generateRSVPID(),
+		CampaignID:      campaignID,
+		RecipientUserID: recipientUserID,
+		ActorUserID:     actorUserID,
+		SentAt:          time.Now().UTC(),
+	}
+	if eventID != "" {
+		row.EventID = &eventID
+	}
+	if err := s.repo.RecordScheduleAsk(ctx, row); err != nil {
+		return apperror.NewInternal(err)
+	}
+	return nil
 }
