@@ -2,6 +2,8 @@ package auth
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -59,14 +61,46 @@ func handleUnauthenticated(c echo.Context) error {
 		})
 	}
 
+	target := loginRedirectTarget(c)
+
 	// HTMX requests get a redirect header so the full page navigates.
 	if isHTMXRequest(c) {
-		c.Response().Header().Set("HX-Redirect", "/login")
+		c.Response().Header().Set("HX-Redirect", target)
 		return c.NoContent(http.StatusNoContent)
 	}
 
 	// Regular browser requests get a 303 redirect to login.
-	return c.Redirect(http.StatusSeeOther, "/login")
+	return c.Redirect(http.StatusSeeOther, target)
+}
+
+// loginRedirectTarget builds the /login destination for an unauthenticated
+// browser navigation, carrying where the visitor was actually going so the
+// login form can send them back there afterwards. Without this a member who
+// clicks a deep link from their inbox — the schedule-solicitation email is the
+// first Chronicle mail that contains one — signs in and lands on /dashboard,
+// several navigations from the page they were asked to visit.
+//
+// Two deliberate narrowings:
+//
+//   - Only GET (and HEAD) navigations carry a destination. Replaying a POST
+//     target as a post-login GET would either 405 or, worse, look like the
+//     write succeeded.
+//   - The destination goes through sanitizeRedirect, so a request line of
+//     "//evil.example" or "/\evil.example" — the protocol-relative
+//     open-redirect vectors — degrades to a bare /login instead of becoming a
+//     Location the login handler would later honour.
+func loginRedirectTarget(c echo.Context) string {
+	const bare = "/login"
+	req := c.Request()
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		return bare
+	}
+	dest := sanitizeRedirect(req.URL.RequestURI())
+	// Bouncing /login back to itself would nest the parameter on every retry.
+	if dest == "" || strings.HasPrefix(dest, "/login") {
+		return bare
+	}
+	return bare + "?redirect=" + url.QueryEscape(dest)
 }
 
 // OptionalAuth returns middleware that loads the session if a valid cookie

@@ -109,7 +109,11 @@ func (h *Handler) LoginForm(c echo.Context) error {
 		errMsg = middleware.CSRFFriendlyMessage
 	}
 
-	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg))
+	// Post-login destination, carried into the form as a hidden field because
+	// the query param does not survive the HTMX form POST.
+	redirect := sanitizeRedirect(c.QueryParam("redirect"))
+
+	return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, "", errMsg, successMsg, redirect))
 }
 
 // Login processes the login form submission (POST /login).
@@ -121,6 +125,17 @@ func (h *Handler) Login(c echo.Context) error {
 
 	ip := c.RealIP()
 	ua := c.Request().UserAgent()
+
+	// Post-login destination. The hidden form field is the live path (the query
+	// param does not survive the HTMX form POST); the query param is kept as a
+	// fallback for a plain GET-then-POST without the field. Both go through
+	// sanitizeRedirect, so "//evil.example" and "/\evil.example" — the
+	// protocol-relative open-redirect vectors — can never reach a Location
+	// header, whether they came from the form or were forged onto the request.
+	redirect := sanitizeRedirect(c.FormValue("redirect"))
+	if redirect == "" {
+		redirect = sanitizeRedirect(c.QueryParam("redirect"))
+	}
 
 	input := LoginInput{
 		Email:     req.Email,
@@ -139,9 +154,9 @@ func (h *Handler) Login(c echo.Context) error {
 		errMsg := apperror.UserMessage(err, "invalid email or password")
 
 		if middleware.IsHTMX(c) {
-			return middleware.Render(c, http.StatusOK, LoginForm_(csrfToken, req.Email, errMsg))
+			return middleware.Render(c, http.StatusOK, LoginForm_(csrfToken, req.Email, errMsg, redirect))
 		}
-		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, ""))
+		return middleware.Render(c, http.StatusOK, LoginPage(csrfToken, req.Email, errMsg, "", redirect))
 	}
 
 	// Log successful login as a security event.
@@ -150,10 +165,12 @@ func (h *Handler) Login(c echo.Context) error {
 	// Set the session cookie.
 	setSessionCookie(c, token, h.sessionTTL)
 
-	// Redirect to the requested page (e.g., invite accept), or dashboard.
+	// Redirect to the requested page (e.g., invite accept, or the availability
+	// grid a solicitation email deep-linked to), or dashboard. The value is
+	// already sanitized above.
 	redirectTo := "/dashboard"
-	if redir := c.QueryParam("redirect"); redir != "" && strings.HasPrefix(redir, "/") {
-		redirectTo = redir
+	if redirect != "" {
+		redirectTo = redirect
 	}
 
 	// HTMX requests get a redirect header; browser forms get a 303 redirect.
