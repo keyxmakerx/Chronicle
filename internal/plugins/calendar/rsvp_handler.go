@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -303,6 +304,198 @@ func (h *RSVPHandler) SetRSVPCollectionAPI(c echo.Context) error {
 		h.startInviteFanOut(cc.Campaign.ID, cc.Campaign.Name, cal, evt)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"collect_rsvps": req.Enabled})
+}
+
+// mailNotConfiguredLine is spec ledger item 11's own wording, VERBATIM and
+// SHARED. It is the one sentence Chronicle says when a mail server has not been
+// configured, and it is a single package-level constant precisely so a future
+// edit cannot make the Bench and this endpoint disagree about what an
+// unconfigured mail server means. Never a silent success; never "we emailed
+// them" when nothing was sent.
+const mailNotConfiguredLine = "Email is not configured on this server — answers still work in-app; nobody was emailed."
+
+// AskAvailabilityAPI mails the campaign's roster the schedule question.
+// POST /campaigns/:id/calendar/ask — RoleScribe ([PB-3]).
+//
+// ── IT IS A WRITE, SO IT IS A POST ─────────────────────────────────────────
+// Sending mail to a roster from a GET is one link prefetcher away from a
+// fan-out nobody clicked. It rides the global CSRF middleware (not under /api/
+// or /ws), accepting either the header or the csrf_token field the Bench's form
+// sends.
+//
+// ── THE CALLER NAMES NOBODY ────────────────────────────────────────────────
+// The audience is derived server-side from ListMembers(campaignID), full stop.
+// There is no wire shape by which a caller names a recipient, an actor or a
+// campaign: the campaign comes from :id (already authorised by
+// RequireCampaignAccess) and the actor from the session. The single accepted
+// parameter is an optional event_id — the session the panel already resolved —
+// and it is RE-RESOLVED through EventContext, which is the existing
+// campaign-scoping check, so an event id from another campaign 404s.
+//
+// ── ONE EMAIL, TWO SECTIONS ([PB-1]) ───────────────────────────────────────
+// The schedule ask leads and needs no session. The five existing RSVP action
+// links ride along only when the event is collecting AND this recipient may see
+// it, re-minted through the EXISTING MintActionTokens — so both emails make the
+// same promises with the same expiry and the same single-use property.
+//
+// ── THE RESPONSE IS A COUNT ────────────────────────────────────────────────
+// "asking N members; M have no email address on file" — a number, never a list.
+// It carries no member identities, no addresses and no per-recipient outcome,
+// and it cannot: the send is backgrounded, so per-recipient results do not exist
+// yet when this returns.
+func (h *RSVPHandler) AskAvailabilityAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	campaignID := cc.Campaign.ID
+	actorID := auth.GetUserID(c)
+
+	if h.members == nil {
+		return apperror.NewConflict("this campaign's roster is unavailable, so nobody was emailed")
+	}
+
+	// THE CAMPAIGN COOLDOWN, and it is checked before anything is resolved or
+	// minted. 429 with the human sentence rather than a bare code: the Bench
+	// disables the control with the same words, so a caller who gets here has
+	// bypassed the UI and still deserves to be told why.
+	state, err := h.svc.ScheduleAskState(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+	if !state.Ready {
+		return apperror.NewTooManyRequests(scheduleAskCooldownLine(state))
+	}
+
+	// NEVER A SILENT SUCCESS. With no mail server there is nothing to send, and
+	// saying so is the whole point of ledger item 11. 409 rather than 500: the
+	// server is working correctly and is simply not configured to do this — an
+	// admin action, not a Chronicle failure.
+	if h.mailer == nil || !h.mailer.IsConfigured(ctx) {
+		return apperror.NewConflict(mailNotConfiguredLine)
+	}
+
+	// The optional session, re-resolved through the existing campaign-scoping
+	// check. A cross-campaign id 404s here, exactly as it does everywhere else
+	// in this plugin, and a non-collecting event simply carries no RSVP half.
+	var evt *Event
+	var cal *Calendar
+	if eid := strings.TrimSpace(c.FormValue("event_id")); eid != "" {
+		evt, cal, err = h.svc.EventContext(ctx, eid, campaignID)
+		if err != nil {
+			return err
+		}
+		if !evt.CollectRSVPs {
+			evt, cal = nil, nil
+		}
+	}
+
+	members, err := h.members.ListMembers(ctx, campaignID)
+	if err != nil {
+		return apperror.NewInternal(err)
+	}
+	// The per-recipient floor SKIPS, it does not refuse: a second ask after
+	// somebody joins mails the new member and nobody else.
+	skip, err := h.svc.RecentlyAskedRecipients(ctx, campaignID)
+	if err != nil {
+		return err
+	}
+
+	// THE AUDIENCE IS THE WHOLE ROSTER — not "people who have not saved
+	// availability", because OverlayMember has no has-pattern signal and
+	// "never told us" is indistinguishable from "busy all week". A
+	// solicitation must not become an accusation.
+	recipients := make([]scheduleAskRecipient, 0, len(members))
+	noAddress := 0
+	for _, m := range members {
+		if m.Email == "" {
+			noAddress++ // counted, never named.
+			continue
+		}
+		if skip[m.UserID] {
+			continue
+		}
+		recipients = append(recipients, scheduleAskRecipient{
+			Member:      m,
+			MaySeeEvent: evt != nil && h.memberMaySeeEvent(ctx, campaignID, m, evt),
+		})
+	}
+
+	h.startScheduleAskFanOut(scheduleAskEmailInput{
+		CampaignID:   campaignID,
+		CampaignName: cc.Campaign.Name,
+		ActorName:    h.displayName(ctx, campaignID, actorID),
+		Event:        evt,
+		Calendar:     cal,
+	}, actorID, recipients)
+
+	line := scheduleAskSentLine(len(recipients), noAddress)
+	if middleware.IsHTMX(c) {
+		// THE FRAGMENT IS NOT RICHER THAN THE DATA. It is the same sentence the
+		// JSON carries, rendered where the control was, so the Director sees the
+		// outcome without the page having to reload to learn the cooldown began.
+		return middleware.Render(c, http.StatusOK, benchAskResultView(line))
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"asking":   len(recipients),
+		"no_email": noAddress,
+		"message":  line,
+	})
+}
+
+// scheduleAskSentLine states the outcome as NUMBERS. Members with no address on
+// file are counted and never named (§5): the actor is a Scribe+ who can see the
+// roster page anyway, but this endpoint is not the place that hands out a list
+// of who can and cannot be reached by email.
+func scheduleAskSentLine(asking, noAddress int) string {
+	line := fmt.Sprintf("Asking %s now.", pluralMembers(asking))
+	if asking == 0 {
+		line = "Nobody was emailed."
+	}
+	if noAddress > 0 {
+		line += fmt.Sprintf(" %s no email address on file.", pluralHave(noAddress))
+	}
+	return line
+}
+
+// scheduleAskCooldownLine is the campaign cooldown's refusal, in words. The
+// Bench prints the same sentence beside a disabled control, so the limit is
+// visible BEFORE the click rather than discovered by hitting it.
+func scheduleAskCooldownLine(state ScheduleAskState) string {
+	hours := int(math.Ceil(state.RetryAfter.Hours()))
+	if hours < 1 {
+		hours = 1
+	}
+	return fmt.Sprintf("Asked %s ago. You can ask again in %s.",
+		humanAgo(time.Since(state.LastAskedAt)), pluralHours(hours))
+}
+
+// humanAgo renders an elapsed duration the way a person would say it. Coarse on
+// purpose: this is a cooldown readout, not a timestamp.
+func humanAgo(d time.Duration) string {
+	if d < time.Hour {
+		mins := int(d.Minutes())
+		if mins < 1 {
+			return "less than a minute"
+		}
+		return pluralUnit(mins, "minute")
+	}
+	return pluralUnit(int(d.Hours()), "hour")
+}
+
+func pluralMembers(n int) string { return pluralUnit(n, "member") }
+func pluralHours(n int) string   { return pluralUnit(n, "hour") }
+
+func pluralHave(n int) string {
+	if n == 1 {
+		return "1 member has"
+	}
+	return fmt.Sprintf("%d members have", n)
+}
+
+func pluralUnit(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
 }
 
 // decorateResponders fills display names on a detail summary.

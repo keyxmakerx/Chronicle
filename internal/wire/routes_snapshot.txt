@@ -452,6 +452,7 @@ POST	/calendar	internal/plugins/syncapi/routes.go
 POST	/calendar-rsvp/:token	internal/plugins/calendar/routes.go
 POST	/calendar/advance	internal/plugins/syncapi/routes.go
 POST	/calendar/advance-time	internal/plugins/syncapi/routes.go
+POST	/calendar/ask	internal/plugins/calendar/routes.go
 POST	/calendar/date/confirm	internal/plugins/syncapi/routes.go
 POST	/calendar/events	internal/plugins/syncapi/routes.go
 POST	/calendar/import	internal/plugins/syncapi/routes.go

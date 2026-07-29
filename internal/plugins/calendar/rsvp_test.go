@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -135,15 +136,35 @@ func (m *mockMemberDir) IsUserDmGranted(_ context.Context, _, userID string) (bo
 	return m.dmGrant[userID], nil
 }
 
+// mockMailer records what was handed to it. The mutex is not decoration: the
+// schedule-ask fan-out is deliberately backgrounded (C-CALV4-RSVP-P8B §6), so
+// its tests read these slices while a goroutine writes them.
 type mockMailer struct {
+	mu         sync.Mutex
 	configured bool
 	sent       []string // one entry per recipient address
+	subjects   []string
+	plains     []string
 	bodies     []string
+	// attempts counts every call, successful or not, so a test can wait for a
+	// fan-out whose sends all FAIL (the "nothing is recorded when nothing was
+	// sent" case) as well as one whose sends land.
+	attempts int
+	// sendErr, when set, makes every send fail.
+	sendErr error
 }
 
 func (m *mockMailer) IsConfigured(_ context.Context) bool { return m.configured }
-func (m *mockMailer) SendHTMLMail(_ context.Context, to []string, _, _, htmlBody string) error {
+func (m *mockMailer) SendHTMLMail(_ context.Context, to []string, subject, plain, htmlBody string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.attempts++
+	if m.sendErr != nil {
+		return m.sendErr
+	}
 	m.sent = append(m.sent, to...)
+	m.subjects = append(m.subjects, subject)
+	m.plains = append(m.plains, plain)
 	m.bodies = append(m.bodies, htmlBody)
 	return nil
 }

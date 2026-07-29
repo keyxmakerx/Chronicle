@@ -800,3 +800,10 @@ func benchNextUpSubtitle(u BenchNextUp) string {
 func benchNextUpTail(u BenchNextUp) string {
 	return fmt.Sprintf("all %d →", u.Total)
 }
+
+// benchAskResultView is what replaces the control after a send: one .cap line,
+// carrying the count and nothing else. No identities, no per-recipient outcome
+// — the send is backgrounded, so per-recipient outcomes do not exist yet.
+templ benchAskResultView(line string) {
+	<div class="cap" data-bench-ask-result>{ line }</div>
+}
