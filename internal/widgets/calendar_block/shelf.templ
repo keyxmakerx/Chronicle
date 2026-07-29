@@ -140,21 +140,28 @@ templ shelfUpcomingPanel(d BlockData) {
 
 // shelfFiltersPanel is the Filters body, and it is one chip.
 //
-// [S2], SIGNED: THE TAB SHIPS AND THE ENGINE DOES NOT. Preflight-verified —
-// nothing in Chronicle backs a filter: no filter state, no query, no
-// persistence, and no preference store of any kind exists in the repo
-// (db/migrations ends at 000030; widgetbindings.WidgetBinding has no config
-// column). This is the same gap that keeps LayerState.HasSwitchboard false.
+// [S2], SIGNED: THE TAB SHIPS AND THE ENGINE DOES NOT.
 //
-// So: no filter controls, no inert chips, no fabricated state, and NO PIN
-// FIELD — the unconditional chip inside an enabled layer is the honest state,
-// exactly as the 2026-07-28 DEF/zone-chip ruling §2 sanctions, and W-E mints no
-// speculative flag for a wave that has not been named.
+// HALF OF THIS BLOCKER IS NOW FALSE, AND THE SENTENCE IS REWRITTEN RATHER THAN
+// DELETED. W-E wrote here that "no preference store of any kind exists in the
+// repo … the same gap that keeps LayerState.HasSwitchboard false", and it was
+// exactly right at the time. C-CALV4-LAYERS-P9 (W-F) built that store: calendar
+// migration 014's block_layers column on calendar_active, POST
+// /campaigns/:id/calendar/prefs, and a live switchboard. HasSwitchboard is true.
 //
-// THE FILLING WAVE IS NAMED: W-F. It owns the per-viewer preference store
-// (L20/L26/L29), and filter axes are per-viewer display preferences by the same
-// argument that made the colour-by axis W-F's. "One wave, one field, one owner"
-// is therefore satisfied prospectively rather than left open.
+// WHAT IS STILL MISSING IS THE ENGINE, not the store. There is still no filter
+// state on BlockData, no filter query anywhere in the plugin, and no
+// ViewerContext.Filters pin field — the amendment refused one by name, because
+// golangci's `unused` turns a field added ahead of its consumer into a red
+// build. So: no filter controls, no inert chips, no fabricated state, and no
+// pin field. The unconditional chip inside an enabled layer is still the honest
+// state, exactly as the 2026-07-28 DEF/zone-chip ruling §2 sanctions.
+//
+// THE FILLING SLICE IS NAMED: C-CALV4-FILTERS-P10. Filter axes are per-viewer
+// display preferences by the same argument that made the colour-by axis W-F's,
+// and the store they need is designed to grow one more COLUMN rather than one
+// more table. The `filters N` badge stays withheld ([S4]) until the engine
+// ships and joins the count oracle with it.
 //
 // The panel renders for a GM only, because a `needs backend` chip never renders
 // to a player (decisions/2026-07-27-needs-backend-audience.md) — and a player
@@ -162,6 +169,6 @@ templ shelfUpcomingPanel(d BlockData) {
 templ shelfFiltersPanel() {
 	<div class="spane spane-filters" data-spane="filters">
 		<span class="badge need">needs backend</span>
-		<span class="sneed">Filter axes need a per-viewer store; W-F builds it.</span>
+		<span class="sneed">Filter axes need an engine; the per-viewer store is built.</span>
 	</div>
 }

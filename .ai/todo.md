@@ -237,12 +237,27 @@ divergences".
   which is what makes the grid's three-moon ceiling legitimate. Pin amendment
   r53 landed the celestial register. Three CSS-only radio groups now, still no
   JS and still no route. See ADR-048's Almanac section.
-- **Wave-3 (W-F), the layer system:** the `⋯` switchboard popover (the invoker
-  ships inert), the per-viewer layer/sky/moon preference store, and the three
-  zones wave 1 reserved with the chip — `legend`, `horizon`, `moongraph`. The
-  **"colour by: type | owner | calendar"** segment belongs here too: it is a
-  per-viewer preference with no field in the pinned `BlockData`, so wave 1
-  omitted it rather than fabricating a pressed state.
+- **Wave-3 (W-F), the layer system: DONE** (`C-CALV4-LAYERS-P9`, 2026-07-29).
+  The `⋯` invoker is LIVE and opens a top-layer `[popover]` switchboard with no
+  JS at all; the per-viewer store is calendar migration 014's `block_layers`
+  column on `calendar_active` plus `POST /campaigns/:id/calendar/prefs` (204 +
+  `HX-Refresh`, no body in either direction — the wave's only new route, 721
+  total); `LayerState` gained `PersistURL` under signed pin amendment **r54**
+  with `HasSwitchboard == (PersistURL != "")` pinned; `HasSwitchboard` is true
+  at all three producers. TWO of the three chipped zones are FILLED — `legend`
+  (r52's `Mark.AxisLabel`, type axis only) and `moongraph` (r53's Almanac
+  register, **no new pin field**) — and `SKY_ON()` is restored in one place.
+  **DEF is still `["moons"]`:** the slice shipped the mechanism to LEAVE the
+  default, which is the opposite of changing it.
+  **Split OUT, each under its named follow-on:** the Filters engine
+  (**C-CALV4-FILTERS-P10**), the colour-by axis picker and the legend's other
+  two axes (**C-CALV4-AXIS-P11**, blocked on DATA — there is no
+  `Mark.OwnerLabel` and no per-calendar label), the horizon data and the
+  `Reveal through` write (**C-CALV4-HORIZON-P12**, with its own security
+  review), the Tonight retarget and the `.sp2`/`.almgrid` ladder extension
+  (**C-CALV4-ANSWER-EXT**, in W-B's files), and `moonstyle=words` (un-numbered:
+  three of L20's four sky values reduce to layer keys; `words` names a register
+  that exists nowhere in Chronicle).
 - **`BlockData` field gaps** (each needs a coordinator pin change, so each is a
   stop-and-flag until then): a lead/trail label on `DayCell` (out-of-range cells
   render empty because `Day == 0` IS the out-of-range marker, while the signed
@@ -825,27 +840,46 @@ NOT do; each is named in its report and in the widget's `.ai.md`.
   the Almanac"* tail — gated, so a Block with no reachable Almanac (noShelf, or
   the shelf layer off) still withholds it. It did NOT add its three tabs to
   `.ltabs`: see the new open item below.
-- [ ] **W-F now owns four things the Ledger touched and did not take:** the
-  `colour: <axis> ⌄` picker and the std legend (both left OUT rather than
-  shipped inert — `Mark.AxisLabel` incidentally unblocks the legend, which does
-  NOT transfer it); the per-day overflow popovers (CTS-6 — `+N more` stays a
-  count, not a control, because the docked Ledger already gives the day's full
-  list a home; W-F's own *"a top-layer popover must not occlude the docked
-  Ledger"* argument belongs with the switchboard); and the horizon, where it
-  must add the **GRID-side** fog split only — **the Ledger is never
-  horizon-filtered**, and that is the argument that let the week-scale fog
-  reversal be withdrawn.
-- [ ] **`.ltabs` still carries `Month` alone, and [S9] expected four.** The
-  ruling assumed the signed std construction, where `block()` emits NO `.shelf`
-  element and the three Shelf panels live under the Ledger head's tab strip.
-  Chronicle's shipped Block renders the Shelf zone at std as well, so the three
-  tabs already have exactly one home per tier and a second copy in `.ltabs`
-  would be two controls for one piece of state. It is also **not buildable
-  under [S7]**: the pressed tab is a server-rendered `checked` attribute and one
-  radio group cannot carry two tier-dependent defaults (Month at std, Almanac at
-  full), so folding the Ledger's Month tab into the group would make the std
-  Block open on the Almanac with its Ledger hidden. Re-book with the wave that
-  gives the tabs a per-viewer store, or overrule and re-sign the std still.
+- [x] **W-F took ONE of the four things the Ledger left it, and re-booked the
+  rest** (`C-CALV4-LAYERS-P9`). **The legend SHIPPED** — `Mark.AxisLabel` was
+  exactly the missing datum, type axis only, joined to the count oracle with the
+  GM/Nissa/Bryn fixture. The other three did not:
+  - the `colour: <axis> ⌄` picker → **C-CALV4-AXIS-P11**, and it is blocked on
+    DATA rather than on a decision: there is no `Mark.OwnerLabel` (r52 §5
+    refused it, CTS-5 SIGNED "omit") and no per-calendar label, so two of the
+    picker's three options cannot be built. P9 omitted them rather than
+    fabricate a pressed state, exactly as waves 1 and 2 did. That slice carries
+    the pin amendment for both labels.
+  - the per-day overflow popovers (CTS-6) → **RE-BOOK OR CLOSE, no owner.** P9
+    answered the shared argument (a top-layer popover need not occlude the
+    docked Ledger — and its own screenshot gate proved the point twice over),
+    but P6's reasoning has since strengthened AGAINST the feature: `+N more` is
+    a count, `MoreCount` is overlapping rather than additive, and the docked
+    Ledger plus the ANSWER ladder already give the day's full list a home.
+    Promoting it would add up to 40 popovers per Block for a list already on
+    screen.
+  - the horizon → **C-CALV4-HORIZON-P12**, with its own security review and a
+    player render at the horizon gating it. `Reveal through` is an owner-only
+    WRITE to authored campaign state, on the product's most leak-sensitive axis;
+    when it lands it adds the **GRID-side** fog split only — **the Ledger is
+    never horizon-filtered**, and that is the argument that let the week-scale
+    fog reversal be withdrawn.
+- [x] **STRUCK — `.ltabs` keeps `Month` alone, and the bound STANDS** ([LYR-8]
+  SIGNED, `C-CALV4-LAYERS-P9`). The candidate mechanism for re-opening ADR-048
+  §13 was the per-viewer store, on the theory that it moves the default out of
+  the container query. **It does not, and that is a finding rather than an
+  opinion:** a store changes WHERE the single value comes from; it is still one
+  value, rendered once, into one `checked` attribute, for a Block that may be at
+  std on one host and full on another in the same page render. Nothing about the
+  store makes one attribute two. And the second, independent reason still holds:
+  Chronicle's Block renders the Shelf zone at std as well, so the three tabs
+  already have exactly one home per tier and a second copy in `.ltabs` would be
+  two controls for one piece of state. [S9] expected four tabs on an assumption
+  Chronicle's Block does not satisfy; P7 reported that honestly rather than
+  forcing it, and the item is STRUCK rather than re-booked to a fourth wave that
+  would re-derive the same answer. If the operator would rather re-sign the std
+  still to match what Chronicle actually renders, that is a coordinator drawing
+  task, not a Block change.
 - [ ] **The std-tier Shelf is a strip plus ~36px of scroller.** At 420px and
   358px the Block cannot afford a month, a filled Ledger and a 166px Shelf at
   once, so Zone D yields (its body scrolls; the Ledger's head and strip cannot)
@@ -904,16 +938,32 @@ the widget's `.ai.md`.
 - [ ] **The `filters N` badge is withheld** ([S4]) and returns WITH the filter
   engine, joining the per-viewer count oracle at that point. A count with no
   denominator behind it is the shape `needs backend` exists to replace.
-- [ ] **W-F now also owns the Filters engine** ([S2], named prospectively): the
-  filter axes are per-viewer display preferences by the same argument that made
-  the colour-by axis W-F's, and they need the per-viewer store W-F is building.
-  The Filters TAB and its `needs backend` chip ship now; the engine does not.
-- [ ] **W-F's `moongraph`/`horizon` re-add is still one line each**, and it is
-  reported rather than acted on ([S11]). `benchBlockLayers()` and
-  `entityBlockLayers()` are unchanged, DEF is still `["moons"]`, and no zone
-  flag was minted. The std tier is TIGHTER than it was, though — see the
-  std-Shelf item above — so the re-add needs its own measurement rather than
-  inheriting this slice's.
+- [ ] **RE-BOOKED to `C-CALV4-FILTERS-P10`: the Filters engine** ([S2]). W-F
+  built the store the engine needs — calendar migration 014's `block_layers`
+  column, designed to grow one more COLUMN rather than one more table — and
+  built nothing of the engine itself: there is still no filter state on
+  `BlockData`, no filter query, and deliberately no `ViewerContext.Filters` pin
+  field (r54 §5 refused one by name; `unused` reds a field added ahead of its
+  consumer). `shelf.templ`'s panel comment is rewritten accordingly — the store
+  exists, the engine does not, and the named slice owns it. The Filters TAB and
+  its `needs backend` chip still ship; the `filters N` badge stays withheld
+  ([S4]) until the engine joins the count oracle with it.
+- [x] **CLOSED AS SUPERSEDED — the `moongraph`/`horizon` host-seed re-add**
+  ([S11], and the HOST-P3 §4.2 / BENCH-P4 §5.7 bookings with it; [LYR-7]
+  SIGNED). W-F filled both zones and DELIBERATELY DID NOT add either key to
+  either seed. The booking's stated purpose was REACHABILITY, and the
+  switchboard supplies reachability directly; L29 says the illumination graph's
+  default is OFF, so seeding it would contradict the law that put it in W-F; and
+  `horizon` is still chipped, so seeding it would ship a `needs backend` chip
+  into a default view — the exact inverse of the DEF ruling. `benchBlockLayers()`
+  and `entityBlockLayers()` still carry their five keys, DEF is still
+  `["moons"]`, and no zone flag was minted.
+  **[S11]'s caveat was honoured and it FIRED.** The re-add measurement was taken
+  fresh rather than inherited, at 420px and 358px with a REAL legend and a REAL
+  three-lane graph, and it COLLIDED: the docked Ledger's head drew over the
+  Shelf's strip. Fixed per CTS-8's precedent inside the Block's own std geometry
+  — the body scrolls, the month keeps every week row, the Shelf's strip stays
+  pinned, and no layer key was dropped. See the P9 report §"the gate fired".
 - [ ] **"Owner/scribe-configurable" is struck for wave 2** ([S3]). No signed
   artefact contains a Shelf configuration surface, and building one would be the
   fifth authoring surface L5 forbids. Re-book "who configures the Shelf, and

@@ -20,7 +20,65 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
-### calendar-v4 — WAVE 3 IN FLIGHT · W-G PART A LANDED (2026-07-28)
+### calendar-v4 — WAVE 3 · W-F LANDED, THE LAYER SYSTEM IS REAL (2026-07-29)
+
+**A default nobody can leave is not a default — and for three waves, nobody
+could leave DEF.** `C-CALV4-LAYERS-P9` (W-F) built the per-viewer preference
+store that `block_projection.go`, `entity_calendar_block.go`, `bench.go` and
+`shelf.templ` had all been writing "does not exist" about, in the same words,
+since wave 1.
+
+**The store:** calendar migration `014` adds `block_layers VARCHAR(255) NULL` to
+`calendar_active` — extending the row migration 007 already chose to extend
+under PR #368 stop-and-flag #3, rather than minting a table. `NULL` means "never
+chosen" and renders the HOST'S SEED, so every wave-1/2 screenshot stayed valid
+on day one; `''` means "chose nothing" and renders a bare month. **The two are
+different answers at every layer**, because collapsing them makes the bare month
+unreachable and turns the default into a floor.
+
+**The route:** `POST /campaigns/:id/calendar/prefs`, the calendar-v4 wave's ONLY
+new route — **720 → 721, one addition, zero removals**. It answers **204 with
+`HX-Refresh: true` and no body at all**, so the host page rebuilds every Block
+through the handler that already owns `requireVisibleCalendar` and the W5a
+split. Nothing about which calendar or whose entity is ever taken from a request
+body, because there is no response to build. That single choice is why §12.1's
+security review is short by construction rather than by argument.
+
+**The switchboard is a top-layer `[popover]` with NO JS ANYWHERE** — opened
+declaratively by `popovertarget`, eight rows, "of 8" for every role. Pin
+amendment **r54** adds `LayerState.PersistURL` with
+`HasSwitchboard == (PersistURL != "")` pinned rather than assumed, and both
+failure modes are silent, which is why it is pinned.
+
+**Two of the three chipped zones are FILLED, neither needing a new pin field:**
+`legend` from r52's `Mark.AxisLabel` (type axis only; it JOINS the count oracle,
+and a type whose every event is hidden from a viewer is absent from their legend
+— not even a zero), and `moongraph` from r53's `MonthGeometry.Almanac` (one lane
+per drawn body, no composite ever, the ceiling still declared once in the
+Nameplate). `horizon` keeps its chip and the chip is now **role-gated** — a
+player who enables the key gets nothing at all, because `needs backend` is
+GM-facing copy and `display:none` is not absence.
+
+**The screenshot gate fired twice and both were real.** The sheet anchored to
+the ⋯ covered the docked Ledger's own "Event list" row (a control hiding its own
+target — re-anchored to the instrument); and HOST-P3's predicted std collision
+happened with a real legend and a real graph, answered per CTS-8 inside the
+Block's own std geometry with the body scrolling and **no layer key dropped**.
+
+**DEF is still `["moons"]` and neither host seed gained a key** ([LYR-7] — the
+HOST-P3/BENCH-P4 bookings close as SUPERSEDED, because the switchboard IS the
+reachability they wanted). **ADR-048 gains §20-§24**, and there is no ADR-049.
+
+**Split out under named follow-ons:** the Filters engine
+(`C-CALV4-FILTERS-P10`), the colour-by picker and the legend's other two axes
+(`C-CALV4-AXIS-P11`, blocked on DATA — no `Mark.OwnerLabel`, no per-calendar
+label), the horizon data and the `Reveal through` write
+(`C-CALV4-HORIZON-P12`, with its own security review), and the Tonight retarget
+plus the `.sp2`/`.almgrid` ladder extension (`C-CALV4-ANSWER-EXT`, W-B's files).
+`moonstyle=words` is deferred un-numbered: three of L20's four sky values reduce
+to layer keys, and `words` names a register that exists nowhere in Chronicle.
+
+### calendar-v4 — WAVE 3 · W-G PART A LANDED (2026-07-28)
 
 **The operator's #1 feature is backed, and the slice began by retracting a
 claim we had signed.** `C-CALV4-RSVP-P8` **Part A** filled the Bench's signed
@@ -45,15 +103,15 @@ and a departed member's stored row changes no number.
 **Zero new routes, zero migrations, zero JS.** `internal/wire/routes_snapshot.txt`
 is byte-identical at 720 lines: the trio posts form-encoded to the existing
 Player+ RSVP endpoint and the handler branches on `middleware.IsHTMX`.
-`014_` in the calendar plugin is still free for W-F.
+`014_` in the calendar plugin was still free for W-F, which took it.
 
 **ADR-048 gains §15-§19**: the preflight miss, the permission law (answers are
 party-visible, lanes are not), the retired two-value role vocabulary and
 `.badge.gm`'s third signed string `co-DM`, the zone-abbreviation ruling and the
 zone-less clock, and the no-stored-aggregate rule.
 
-**Still open in wave 3:** W-F (`C-CALV4-LAYERS-P9`) takes the route lane after
-P8 seals. **W-G Part B** (`/campaigns/:id/schedule` — the Verdict, the
+**Still open in wave 3:** W-F (`C-CALV4-LAYERS-P9`) took the route lane after
+P8 sealed and is **DONE** — see the section above. **W-G Part B** (`/campaigns/:id/schedule` — the Verdict, the
 Director's matrix, the Roster, the Painter) is GATED on a coordinator drawing
 pass and is NOT built; `C-CALV4-RSVP-P8B` ("the asking email") is booked for the
 reminder endpoint the Nudge control still lacks.
