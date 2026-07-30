@@ -437,6 +437,20 @@ func (m *mockCalendarRepo) SetBlockLayers(ctx context.Context, userID, campaignI
 	return nil
 }
 
+// GetBenchSections / SetBenchSections — the C-CALV4-BENCH-R2 per-viewer Bench
+// disclosure store. The zero-value mock answers nil, which is the "never
+// chosen" branch: every pre-existing test keeps meeting the ruled default.
+// bench_section_prefs_test.go's benchSectionRepo overrides both with real state,
+// because the flip is a read-modify-write and a nil stub cannot show that the
+// read and the write agree.
+func (m *mockCalendarRepo) GetBenchSections(ctx context.Context, userID, campaignID string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockCalendarRepo) SetBenchSections(ctx context.Context, userID, campaignID string, keys []string) error {
+	return nil
+}
+
 func (m *mockCalendarRepo) GetCycles(ctx context.Context, calendarID string) ([]Cycle, error) {
 	return nil, nil
 }

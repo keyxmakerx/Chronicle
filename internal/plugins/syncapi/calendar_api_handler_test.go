@@ -143,6 +143,16 @@ func (s *stubCalendarSvc) GetBlockLayers(context.Context, string, string) ([]str
 func (s *stubCalendarSvc) SetBlockLayers(context.Context, string, string, []string) error {
 	return nil
 }
+
+// The Bench disclosure store (C-CALV4-BENCH-R2). Interface satisfaction only —
+// syncapi is a Foundry-facing JSON surface and per-viewer display state is not
+// part of any payload it serves.
+func (s *stubCalendarSvc) GetBenchSections(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
+func (s *stubCalendarSvc) ToggleBenchSection(context.Context, string, string, string) error {
+	return nil
+}
 func (s *stubCalendarSvc) GetCycles(context.Context, string) ([]calendar.Cycle, error) {
 	return nil, nil
 }

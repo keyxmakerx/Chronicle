@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -297,8 +298,9 @@ func (h *Handler) SidebarPinAPI(c echo.Context) error {
 	})
 }
 
-// BlockPrefsAPI persists the viewer's calendar-v4 Block layer set.
+// BlockPrefsAPI persists one calendar-v4 per-viewer display preference.
 // POST /campaigns/:id/calendar/prefs   body: layers=moons,eras,weeknums
+//                                        or: section=rsvp
 //
 // C-CALV4-LAYERS-P9 [LYR-1 / LYR-4 SIGNED]. It is the only new Echo route the
 // whole calendar-v4 wave takes, and its shape is chosen to make the security
@@ -335,8 +337,49 @@ func (h *Handler) SidebarPinAPI(c echo.Context) error {
 // treating an absent field as an empty set would make a malformed request
 // indistinguishable from a deliberate one.
 //
+// ── THE SECOND FIELD (C-CALV4-BENCH-R2 slice R2-1, [BR2-5] SIGNED) ──────────
+//
+// `section=<key>` FLIPS one Bench disclosure's closed bit. It is a SECOND FIELD
+// ON THIS ROUTE, not a sibling route, and that is a signed decision rather than
+// a shortcut: the shape is identical, the security review below is identical,
+// and a second route would cost a routes_snapshot regeneration plus a wire
+// contract event for nothing. The route is named /calendar/prefs, not
+// /calendar/layers, so the name is not a lie.
+//
+// EXACTLY ONE OF `layers` OR `section` IS REQUIRED. Both present is a 400: one
+// write per request, so a partial failure cannot half-apply. Neither present is
+// a 400 for the reason above.
+//
+// THE TWO BRANCHES ANSWER DIFFERENTLY AND THE DIFFERENCE IS LOAD-BEARING. Read
+// as an oversight it looks like one; it is not.
+//
+//	layers=…   → 204 + HX-Refresh: true.  The Block genuinely must re-render:
+//	                                      a layer change alters what the month
+//	                                      draws, and only the host handler may
+//	                                      re-authorise the facts that render
+//	                                      needs ([LYR-1]).
+//	section=…  → 204, NO HX-Refresh.      The <details> has ALREADY changed
+//	                                      state client-side, natively. A page
+//	                                      refresh per chevron would fight the
+//	                                      disclosure register's own animation,
+//	                                      re-run every Block's render, and undo
+//	                                      the thing the viewer just did before
+//	                                      they saw it happen.
+//
+// The section registry is CLOSED and four keys wide (bench_sections.go). An
+// unknown key is rejected 400 HERE, at the request boundary, because that is
+// where a malformed field belongs; the service rejects it a second time because
+// a service may not trust its caller, and because ToggleBenchSection has
+// non-HTTP callers in tests.
+//
+// EGRESS: bench_sections is display state on a member-scoped row. It enters no
+// export DTO and no AI-workspace payload — the construction the availability
+// precedent established.
+//
 // CSRF rides the global wiring: boot.js attaches X-CSRF-Token from the cookie
 // to every HTMX mutating request, so nothing is carried on BlockData (r54 §5).
+// The <details> disclosures rely on that same wiring — a 403 on the first
+// toggle would be the symptom if boot.js:150-155 ever stopped attaching it.
 func (h *Handler) BlockPrefsAPI(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
 	ctx := c.Request().Context()
@@ -349,20 +392,40 @@ func (h *Handler) BlockPrefsAPI(c echo.Context) error {
 	if err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
-	raw, ok := params["layers"]
-	if !ok {
-		return apperror.NewBadRequest("layers is required (send `layers=` for a bare month)")
-	}
+	rawLayers, hasLayers := params["layers"]
+	rawSection, hasSection := params["section"]
 
-	keys := splitLayerKeys(raw[0])
-	if err := h.svc.SetBlockLayers(ctx, userID, cc.Campaign.ID, keys); err != nil {
-		return err
-	}
+	switch {
+	case hasLayers && hasSection:
+		return apperror.NewBadRequest("send exactly one of `layers` or `section`, never both")
 
-	// The host page rebuilds every Block through the handler that already owns
-	// its visibility decisions. Nothing is rendered here, in either direction.
-	c.Response().Header().Set("HX-Refresh", "true")
-	return c.NoContent(http.StatusNoContent)
+	case hasSection:
+		key := rawSection[0]
+		if !slices.Contains(benchSectionKeys, key) {
+			return apperror.NewBadRequest("unknown bench section")
+		}
+		if err := h.svc.ToggleBenchSection(ctx, userID, cc.Campaign.ID, key); err != nil {
+			return err
+		}
+		// NO HX-Refresh, deliberately — see the doc comment. The disclosure has
+		// already opened or closed in the browser; the server's only job was to
+		// remember it.
+		return c.NoContent(http.StatusNoContent)
+
+	case hasLayers:
+		keys := splitLayerKeys(rawLayers[0])
+		if err := h.svc.SetBlockLayers(ctx, userID, cc.Campaign.ID, keys); err != nil {
+			return err
+		}
+		// The host page rebuilds every Block through the handler that already
+		// owns its visibility decisions. Nothing is rendered here, in either
+		// direction.
+		c.Response().Header().Set("HX-Refresh", "true")
+		return c.NoContent(http.StatusNoContent)
+
+	default:
+		return apperror.NewBadRequest("exactly one of `layers` or `section` is required (send `layers=` for a bare month)")
+	}
 }
 
 // splitLayerKeys turns the wire's comma-joined list into keys.
