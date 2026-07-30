@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1017,20 +1018,156 @@ func benchCSS(t *testing.T) string {
 
 var benchCommentRe = regexp.MustCompile(`(?s)/\*.*?\*/`)
 
-// TestBenchCSS_NoMotionAtAll is the sibling of the Block's
-// TestCSS_NoMotionAtAll, for the same reason and with the same wording: COMMON
-// §6.5 forbids motion inside the Block in wave 1, and a Bench that animated the
-// chrome AROUND a motionless Block would break the same rule from the outside.
+// TestBenchCSS_NoMotionAtAll was a BLANKET SUBSTRING BAN in wave 1 — "nothing
+// on the Bench moves" — and it is now an ALLOWLIST.
+//
+// IT WAS INVERTED, NEVER DELETED, by C-CALV4-BENCH-R2 slice R2-1 under [BR2-2]
+// SIGNED, following the precedent the Block's own sheet set when
+// TestCSS_NoMotionAtAll became an allowlist in LEDGER-P6 stage 5. The name is
+// kept on purpose: a reader who greps for the wave-1 rule must land on the
+// document that changed it, not on a hole where it used to be.
+//
+// THE NEW CLAIM, in one sentence: the Bench moves in exactly one way, for
+// exactly one reason, and every part of that way is enumerated here.
+// decisions/2026-07-29-motion-disclosure-register.md is the signed law — one
+// grammar (clip-reveal + opacity), two durations with close faster than open,
+// reduced motion INSTANT rather than shortened, and the Block's interior still.
+//
+// Widening this allowlist widens EVERYTHING, because
+// tools/check-v2-motion-discipline.sh does not police static/css/ at all (its
+// scope is *.templ / *.css INSIDE internal/plugins/{calendar,timeline,
+// ai_workspace,campaigns}, and it bans only `transition: all`). This test is the
+// only thing standing here.
 func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 	code := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
+
+	// STILL REFUSED, exactly as the Block refuses them. The register is a
+	// TRANSITION family; a keyframe here would be a second grammar.
 	for _, bad := range []string{
-		"transition", "animation", "@keyframes", "will-change",
-		"@starting-style", "view-transition",
+		"animation", "@keyframes", "will-change", "@starting-style", "view-transition",
 	} {
 		if strings.Contains(code, bad) {
-			t.Errorf("calendar-bench.css contains %q — nothing on the Bench moves in wave 1", bad)
+			t.Errorf("calendar-bench.css contains %q — the register is a transition family "+
+				"and a second grammar is a signature, not a tuning", bad)
 		}
 	}
+
+	// CLAUSE 3 IS STRUCTURAL, not a shortened duration: the whole motion block
+	// lives inside ONE `prefers-reduced-motion: no-preference` wrapper, so
+	// outside it there is no rule at all and native <details> behaviour stands —
+	// instant and complete. Same construction the Block's clause 2 demands.
+	const guard = "@media (prefers-reduced-motion: no-preference)"
+	if n := strings.Count(code, guard); n != 1 {
+		t.Fatalf("%d `%s` blocks, want exactly 1 — clause 3 is proven by there being "+
+			"nowhere else for a transition to live", n, guard)
+	}
+	motion := benchCSSBlock(t, code, guard)
+	if outside := strings.Count(code, "transition") - strings.Count(motion, "transition"); outside != 0 {
+		t.Errorf("%d `transition` declarations sit OUTSIDE the reduced-motion wrapper; "+
+			"under prefers-reduced-motion they would still run", outside)
+	}
+
+	// THE ALLOWLIST: three properties, and no fourth. Guard B1 in particular —
+	// --dash and --gap are the greyscale identity channel and are NEVER animated.
+	allowed := map[string]bool{"block-size": true, "opacity": true, "content-visibility": true}
+	for _, decl := range benchTransitionDecls(motion) {
+		for _, prop := range decl {
+			if !allowed[prop] {
+				t.Errorf("transitioned property %q is not on the allowlist "+
+					"(block-size · opacity · content-visibility) — [BR2-2] SIGNED", prop)
+			}
+		}
+	}
+
+	// CLAUSE 2, ENFORCEABLE RATHER THAN DECORATIVE: exactly two durations, and
+	// CLOSE IS FASTER THAN OPEN. Leaving must never feel slower than arriving.
+	// A third duration anywhere is a signature and a STOP-AND-FLAG.
+	open, ok := benchCSSDurationMS(code, "--disc-open")
+	if !ok {
+		t.Fatal("--disc-open is not defined")
+	}
+	closeMS, ok := benchCSSDurationMS(code, "--disc-close")
+	if !ok {
+		t.Fatal("--disc-close is not defined")
+	}
+	if closeMS >= open {
+		t.Errorf("--disc-close (%dms) is not faster than --disc-open (%dms) — "+
+			"register clause 2: leaving must never feel slower than arriving", closeMS, open)
+	}
+	if n := len(regexp.MustCompile(`--disc-(open|close|ease)\s*:`).FindAllString(code, -1)); n != 3 {
+		t.Errorf("the register declares %d --disc-* tokens; want exactly 3 "+
+			"(--disc-open, --disc-close, --disc-ease). A third DURATION is a signature", n)
+	}
+}
+
+// benchCSSBlock returns the body of the at-rule that starts with `prelude`,
+// brace-matched. The index is checked before it is used as a bound: a bare
+// strings.Index slice bound PANICS on a rename instead of failing cleanly
+// (COMMON §3).
+func benchCSSBlock(t *testing.T, code, prelude string) string {
+	t.Helper()
+	i := strings.Index(code, prelude)
+	if i < 0 {
+		t.Fatalf("no %q block in calendar-bench.css", prelude)
+	}
+	rest := code[i:]
+	open := strings.Index(rest, "{")
+	if open < 0 {
+		t.Fatalf("%q has no body", prelude)
+	}
+	depth := 0
+	for j := open; j < len(rest); j++ {
+		switch rest[j] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return rest[open+1 : j]
+			}
+		}
+	}
+	t.Fatalf("%q body is unterminated", prelude)
+	return ""
+}
+
+var benchTransitionRe = regexp.MustCompile(`transition\s*:\s*([^;}]*)`)
+
+// benchTransitionDecls returns, per `transition:` declaration, the property
+// names it names. A transition's first token is the property; `allow-discrete`
+// and duration/easing values are not properties and are skipped.
+func benchTransitionDecls(css string) [][]string {
+	var out [][]string
+	for _, m := range benchTransitionRe.FindAllStringSubmatch(css, -1) {
+		var props []string
+		for _, part := range strings.Split(m[1], ",") {
+			fields := strings.Fields(strings.TrimSpace(part))
+			if len(fields) == 0 {
+				continue
+			}
+			props = append(props, fields[0])
+		}
+		out = append(out, props)
+	}
+	return out
+}
+
+var benchDurationRe = regexp.MustCompile(`(--disc-(?:open|close))\s*:\s*(\d+)ms`)
+
+// benchCSSDurationMS reads one --disc-* duration token as a number, so the
+// close < open clause is asserted arithmetically rather than by eye.
+func benchCSSDurationMS(css, token string) (int, bool) {
+	for _, m := range benchDurationRe.FindAllStringSubmatch(css, -1) {
+		if m[1] != token {
+			continue
+		}
+		n, err := strconv.Atoi(m[2])
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	}
+	return 0, false
 }
 
 // Every selector is scoped under .cal-bench. An unlayered sheet outranks the
@@ -1075,11 +1212,32 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 		".cal-bench .rsvp .mrow", ".cal-bench .rsvp .mrow .lt.small",
 		".cal-bench .rsvp .side", ".cal-bench .rsvp .inert",
 		"--own-1", "--own-8",
+		// The disclosure register and the measure (C-CALV4-BENCH-R2 slice R2-1).
+		// bench.templ names .disc, <summary> and the four data-bench-disc keys;
+		// this is the pin that stops the sheet dropping what that markup depends
+		// on — the #568 gap, and the reason .disc and summary are exactly the
+		// generic nouns TestBenchCSS_EverySelectorIsScoped exists for.
+		".cal-bench .disc", ".cal-bench .disc > summary", ".cal-bench .bsurf",
+		".cal-bench .disc::details-content",
+		"--disc-open", "--disc-close", "--disc-ease",
+		"--bench-measure",
+		// The §8 two-column RSVP treatment.
+		".cal-bench .rsvp .mtable",
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("calendar-bench.css does not define %q", want)
 		}
 	}
+	// THE INNER MEASURES SURVIVE THE PAGE CAP. .note's 88ch and .caption's 104ch
+	// are measures on RUNNING TEXT and the page cap does not subsume them — at
+	// 1180px, 104ch is still the tighter bound. A tidying hand that reads them as
+	// redundant after --bench-measure landed would widen both back out.
+	for _, want := range []string{"max-width: 88ch", "max-width: 104ch"} {
+		if !strings.Contains(code, want) {
+			t.Errorf("calendar-bench.css lost %q — the page cap does not subsume an inner text measure", want)
+		}
+	}
+
 	// The proportion rule, in geometry: .stack is a column at EVERY width, so no
 	// media query may hand it a row direction or a multi-column grid.
 	for _, forbidden := range []string{"flex-direction: row", "flex-direction:row"} {

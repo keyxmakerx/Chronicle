@@ -24,14 +24,35 @@
       why .stack is a column and .rowgrid is a row grid, and why no media query
       below promotes a row into a panel or demotes a Block into a row.
 
-   2. NO MOTION, AT ALL, IN WAVE 1 (COMMON §6.5). Not one transition, not one
-      animation, not one @keyframes. The Block's own sheet is pinned against
-      this by TestCSS_NoMotionAtAll; this sheet is pinned by the sibling test in
-      bench_test.go, for the same reason and with the same wording.
+   2. MOTION IS AN ALLOWLIST, AND THE LIST IS THREE PROPERTIES LONG.
 
-      Corollary (canon guard B1): --dash and --gap are NEVER animated or
-      transitioned. Morphing a dash pattern destroys the greyscale identity
-      channel the signed greyscale render promises.
+      This law READ "NO MOTION, AT ALL, IN WAVE 1" (COMMON §6.5) until
+      C-CALV4-BENCH-R2 slice R2-1 inverted it under [BR2-2] SIGNED, following
+      the precedent the Block's own sheet set when TestCSS_NoMotionAtAll became
+      an allowlist in LEDGER-P6 stage 5. It was INVERTED, NEVER DELETED: a
+      reader who greps for the wave-1 rule must land on the document that
+      changed it rather than on a hole where it used to be.
+
+      THE LAW NOW: this sheet may transition `block-size`, `opacity` and
+      `content-visibility`, and NOTHING ELSE — once, on
+      `.cal-bench .disc::details-content`, inside ONE
+      `@media (prefers-reduced-motion: no-preference)` block, with exactly two
+      durations (`--disc-open` 200ms, `--disc-close` 160ms; close is always
+      faster than open) and one easing read from the Block's existing ladder.
+      Zero @keyframes. `will-change`, `@starting-style` and `view-transition`
+      stay REFUSED exactly as the Block refuses them. `interpolate-size` and
+      `transition-behavior: allow-discrete` are the only two additions to the
+      vocabulary. The signed law is
+      decisions/2026-07-29-motion-disclosure-register.md and the enforcement is
+      bench_test.go's TestBenchCSS_NoMotionAtAll, which asserts close < open
+      arithmetically and asserts the single reduced-motion wrapper — because
+      widening this allowlist carelessly widens everything
+      (tools/check-v2-motion-discipline.sh does not police static/css/ at all).
+
+      Corollary (canon guard B1), UNCHANGED and untouched by the inversion:
+      --dash and --gap are NEVER animated or transitioned. Morphing a dash
+      pattern destroys the greyscale identity channel the signed greyscale
+      render promises — and neither is on the allowlist above.
 
    3. COLOUR IS NEVER LOAD-BEARING ALONE. Every identity here carries a locked
       stroke PATTERN as well as a hue (.p1..p8 below), so a row still resolves
@@ -423,8 +444,16 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   §RSVP — the design-ahead session panel. Header and chip only; see
-   bench.go's BenchRsvp for why no lane, density or member row is drawn.
+   §RSVP — the panel's SHELL tokens. (This header read "the design-ahead session
+   panel. Header and chip only" until C-CALV4-RSVP-P8 built the body; the
+   sentence had been false since then and C-CALV4-BENCH-R2's two-column
+   treatment made it conspicuously so.)
+
+   The panel is BACKED: lanes, density, the derived-window bracket and the
+   member table are all real, and the panel-level `needs backend` chip retired
+   with them (WG-8). The body's own rules live in §RSVP PANEL further down; the
+   two-column geometry at ≥1024px lives in §THE RSVP PANEL STOPS BEING A BAND at
+   the foot of this file.
    ═══════════════════════════════════════════════════════════════════════════ */
 .cal-bench .rsvp {
   border-radius: var(--r-panel);
@@ -1027,4 +1056,270 @@
      what is the one thing here that must never be abbreviated. */
   .cal-bench .rsvp .mrow .nm { width: auto; flex: 1; min-width: 9ch; }
   .cal-bench .rsvp .mrow .lt { width: auto; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §THE MEASURE — C-CALV4-BENCH-R2 slice R2-1, [BR2-6] SIGNED.
+
+   Before this slice `.cal-bench` had NO max-width at all: the page took
+   whatever the app shell gave it, which on a 1440px or 1920px display is the
+   "so stretched out" the operator met on a live client.
+
+   THE BINDING CONSTRAINT IS A PIXEL FLOOR, NOT A TEXT MEASURE. The Block's full
+   tier is `@container cal-block (min-width: 900px)` (calendar-block.css:2192) —
+   the docked Ledger beside the month, the 60px nameplate, the full sync pill.
+   A cap that left `.benchblock` under 900px would SILENTLY DEMOTE the primary
+   Block, and the operator would read a vanished Ledger as a bug report rather
+   than as a design improvement. That is why the number is in px and not in ch:
+   a ch value drifts with the font, and a floor you cannot prove is not a floor.
+
+   MEASURED, at a 1440px viewport with the shipped shell:
+     1440 viewport − 256 sidebar (w-64, md:static md:shrink-0, pinned by
+     default) − 40 <main> padding (md:px-5 = 20px each side)  = 1144px
+   `.cal-bench` has no padding of its own, `.stack` is a gapless flex column and
+   `.benchblock` is `display:block`, so `.benchblock` measures **1144px** — and
+   1144 ≥ 900, comfortably. At 1920px the cap binds instead and `.benchblock`
+   measures **1180px**, also ≥ 900. The Block stays at full tier at every width
+   the cap can produce.
+
+   1180px is also close enough to `.rowgrid`'s natural three-column resolution
+   (`repeat(auto-fit, minmax(300px, 1fr))`) that the subordinate rows keep their
+   shape rather than reflowing to two.
+
+   `.note`'s 88ch and `.caption`'s 104ch STAY. They are inner measures on
+   RUNNING TEXT and this cap does not subsume them — at 1180px, 104ch is still
+   the tighter bound. Do not delete them as redundant.
+
+   THE PROPORTION RULE (law 1 above) IS UNAFFECTED AND SLIGHTLY HELPED: "there
+   is no width at which this becomes four identical panels." A cap REMOVES
+   widths, so it cannot break a law that quantifies over them.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench {
+  --bench-measure: 1180px;
+  max-width: var(--bench-measure);
+  margin-inline: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §THE DISCLOSURE REGISTER — C-CALV4-BENCH-R2 slice R2-1, [BR2-1] / [BR2-2]
+   SIGNED, under decisions/2026-07-29-motion-disclosure-register.md.
+
+   FOUR SECTIONS COLLAPSE: ribbon · rsvp · nextup · rows. The two Blocks, the
+   .phead, the "The bench" .sechead and the .caption NEVER do — [BR2-3] SIGNED.
+
+   The register's five clauses, and where each one lives:
+
+   1  ONE GRAMMAR — clip-reveal + opacity. The height resolves first and the
+      content reveals INSIDE its own box. No `transform` on the section, no
+      margin animation, no neighbour displacement mid-flight, nothing bounces.
+   2  TWO DURATIONS, ONE EASING, CLOSE FASTER THAN OPEN. --disc-open: 200ms,
+      --disc-close: 160ms. THE EASING IS READ FROM THE BLOCK'S EXISTING LADDER
+      and reused rather than invented: calendar-block.css:133 declares
+      `--ease: cubic-bezier(0.2, 0, 0, 1)` and that is the curve below. It is
+      copied as a VALUE rather than referenced as a token because the Block's
+      token is declared on `.cal-block-host`, which is not an ancestor of
+      `.cal-bench` — the two sheets are scope-separate by design. A THIRD
+      duration anywhere is a signature, not a tuning, and bench_test.go's
+      allowlist fails on it.
+   3  REDUCED MOTION IS INSTANT, NEVER SHORTENED. The whole rule block lives
+      inside ONE `@media (prefers-reduced-motion: no-preference)`. Outside it
+      there is NO RULE AT ALL, so native <details> behaviour stands: instant and
+      complete. This is structural, not a duration choice, and it is the same
+      construction TestCSS_NoMotionAtAll's clause 2 already demands of the Block.
+   4  THE BLOCK'S INTERIOR STAYS STILL. Nothing here selects `.benchblock`,
+      `.cal-block-host` or anything inside them; the Block's stylesheet is not
+      opened by this slice at all.
+   5  STATE IS HONEST AND REMEMBERED. The summary lines (bench.go's
+      benchDisclosureFor) and the store (migration 016) carry that half.
+
+   THE TWISTY IS RESTYLED, NOT REMOVED. A summary with no visible "there is more
+   here" cue is exactly the clause-5 failure — so `list-style: none` is paired
+   with an explicit ▸ that rotates to ▾, drawn as a rotation of a static glyph
+   rather than as a transition (guard: `transform` is NOT on the motion
+   allowlist, so the marker SNAPS while the panel reveals).
+
+   EVERY PRELUDE NAMES .cal-bench, WITHOUT EXCEPTION. This sheet is unlayered
+   and outranks the whole layered app cascade, so a bare `details`, `summary`,
+   `.disc` or `::details-content` rule here would restyle EVERY disclosure in
+   the product. `.disc` and `summary` are exactly the generic nouns
+   TestBenchCSS_EverySelectorIsScoped exists to catch.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench {
+  --disc-open: 200ms;
+  --disc-close: 160ms;
+  /* calendar-block.css:133's --ease, copied by value; see clause 2 above. */
+  --disc-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.cal-bench .disc {
+  margin-bottom: 22px;
+}
+.cal-bench .disc > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 2px;
+  cursor: pointer;
+  list-style: none;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-bench .disc > summary::-webkit-details-marker { display: none; }
+/* The affordance, drawn rather than inherited. It is BEFORE the label so the
+   control reads left to right as "there is more here → about this". */
+.cal-bench .disc > summary::before {
+  content: "▸";
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+.cal-bench .disc[open] > summary::before { content: "▾"; }
+.cal-bench .disc > summary:hover {
+  background: color-mix(in oklch, transparent 96%, var(--text-primary));
+}
+.cal-bench .disc > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* The summary's own title takes the .sechead treatment, because that is what it
+   replaced: this IS the section head now, not a label above one. */
+.cal-bench .disc > summary .cap {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* The panel's own bottom margin is carried by .disc now; a doubled gap between
+   a closed section and the next one reads as a missing section. */
+.cal-bench .disc > .ribbon,
+.cal-bench .disc > .rsvp,
+.cal-bench .disc > .nextup { margin-bottom: 0; }
+.cal-bench .disc > summary + * { margin-top: 12px; }
+
+/* interpolate-size is what lets `block-size: auto` be an animatable endpoint.
+   Where it is unsupported the transition simply does not run and the disclosure
+   is instant — which is clause 3's own branch, so the fallback is the signed
+   behaviour rather than a degraded one. */
+@supports (interpolate-size: allow-keywords) {
+  .cal-bench { interpolate-size: allow-keywords; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cal-bench .disc::details-content {
+    block-size: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      block-size var(--disc-close) var(--disc-ease),
+      opacity var(--disc-close) var(--disc-ease),
+      content-visibility var(--disc-close) allow-discrete;
+  }
+  .cal-bench .disc[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+    transition-duration: var(--disc-open);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §THE RSVP PANEL STOPS BEING A BAND — C-CALV4-BENCH-R2 slice R2-1, [BR2-7]
+   SIGNED. TWO CHANGES, BOTH CSS-ONLY.
+
+   The operator's words were "so stretched out, especially the RSVP menu", and
+   at 1180px+ that is TWO different problems:
+
+     (a) `.mtable` is a FULL-WIDTH BAND. It is the roster — twelve fixed-width
+         cells and one `.sp { flex: 1 }` — so every extra pixel of page width
+         becomes void between a member's role and their zone chip.
+     (b) `.ovgrid` stretches from its 520px minimum to whatever `.ov`'s `flex:1`
+         hands it, until the availability pills stop reading as a matrix.
+
+   (a) AT ≥1024px THE PANEL IS A TWO-COLUMN GRID and the roster sits BESIDE the
+   overlay instead of under it. `.top` becomes `display: contents` so `.ov` and
+   `.side` are laid out as siblings of `.mtable` — WITHOUT MOVING A SINGLE
+   ELEMENT. THE DOM IS BYTE-IDENTICAL to the signed panel order, and that
+   matters more than it looks: the panel's audience law lives IN THE DATA, not
+   in the template (bench.templ — "a permission expressed as a template branch
+   is one refactor away from being lost"), and restructuring the template to get
+   a layout is exactly how such a branch gets introduced by accident.
+
+   `display: contents` A11Y, and it is a CONDITION of the ruling: it removes the
+   BOX, and on an element with a semantic role it historically removed the role
+   too. `.top` is a plain <div> with no role, no label and no aria-* — verified
+   in this slice's Step 0. If anyone gives `.top` a role, this rule does not
+   ship as written.
+
+   THE LITERAL READING — `"ov mtable" / "side mtable"`, roster as a tall right
+   column — IS REFUSED ON ARITHMETIC, not on taste: `.ovgrid`'s floor is 520px
+   and `.mrow`'s fixed cells total ~430px before gaps; with `.side`'s 290px that
+   is ~1240px of content inside an 1180px measure minus padding. It does not
+   fit, and a three-column panel that reflows to two at the one width the
+   measure allows is a layout with no resting state.
+
+   (b) THE MEMBER ROW GETS A MEASURE OF ITS OWN, independently of (a). This is
+   what actually kills the void: (a) narrows the column, (b) stops the row
+   sprawling inside whatever column it gets. BOTH ship — either alone leaves
+   half the complaint standing.
+
+   BELOW 1024px NOTHING CHANGES. The existing `@media (max-width: 900px)`
+   `.side { width: 100% }` rule and the 640px `.mrow` wrap rule stand untouched;
+   the phone reading is signed and measured. AND THE `zone not set` + `Ask →`
+   PAIR STAYS AT EVERY WIDTH — no track set below drops it, because the repair
+   may never be the thing that disappears on the smallest screen.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-bench .rsvp .mtable { max-width: 76ch; }
+
+@media (min-width: 1024px) {
+  .cal-bench .rsvp {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 290px;
+    grid-template-areas:
+      "lhead lhead"
+      "ov    side"
+      "mtable side";
+    column-gap: 16px;
+    align-items: start;
+  }
+  .cal-bench .rsvp > .lhead { grid-area: lhead; }
+  /* .ov and .side become grid items of .rsvp without the DOM moving. */
+  .cal-bench .rsvp .top { display: contents; }
+  .cal-bench .rsvp .ov { grid-area: ov; min-width: 0; }
+  .cal-bench .rsvp .side { grid-area: side; }
+  .cal-bench .rsvp .mtable { grid-area: mtable; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §THE PHONE PUTS THE CALENDAR FIRST — [BR2-4] SIGNED, Option C.
+
+   The operator's literal instruction was "desktop defaults open, MOBILE
+   DEFAULTS CLOSED", and one server-rendered `open` attribute cannot be two
+   values (ADR-048 §13, met here for the second time). Option A answers the
+   state half — closed at every width, one click from open forever. THIS is the
+   other half, and it is the only thing that literally puts the calendar first
+   on a phone: it needs no state, no script and no attribute.
+
+   THE COST, NAMED AND BOUNDED rather than arriving as a side effect: DOM order
+   and visual order diverge for EXACTLY ONE ADJACENCY (WCAG 1.3.2, meaningful
+   sequence) — a keyboard or screen-reader user meets the ribbon disclosure
+   before the Blocks while a sighted user meets the Blocks first. It applies
+   only below 640px, and the alternative (reordering the DOM) moves the same
+   divergence onto desktop, where more people would meet it.
+
+   The .phead and the "The bench" .sechead keep their natural order; only the
+   ribbon/stack pair swaps.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .cal-bench .bsurf { display: flex; flex-direction: column; }
+  /* Exactly THREE order values, and the result is §11's promise measured: the
+     count of things between the top of the page and the calendar goes from six
+     to ONE. The .phead keeps the top (a page that hides its name is not
+     compact, it is anonymous) and the "The bench" .sechead travels with the
+     stack it labels — a label separated from its subject is a worse defect than
+     the one this rule fixes. Everything else keeps DOM order at the default 0. */
+  .cal-bench .bsurf > .phead { order: -3; }
+  .cal-bench .bsurf > .sechead { order: -2; }
+  .cal-bench .bsurf > .stack { order: -1; }
 }

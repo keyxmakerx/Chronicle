@@ -45,7 +45,17 @@ templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 				{Label: "Apps", Href: fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)},
 				{Label: "Calendars"},
 			})
-			@benchSurface(data)
+			// THE SURFACE IS ITS OWN ELEMENT (C-CALV4-BENCH-R2 slice R2-1,
+			// [BR2-4] SIGNED Option C). It exists so that at ≤640px the
+			// surface's children can become a flex column and CSS `order` can
+			// lift the calendar above the ribbon — the only mechanism that
+			// literally puts the calendar first on a phone with no state, no
+			// script and no attribute. `.cal-bench` itself could not be that
+			// container: it also holds the stylesheet link and the breadcrumbs,
+			// and reordering against those would move the page's own nav.
+			<div class="bsurf" data-bench-surface>
+				@benchSurface(data)
+			</div>
 		</div>
 		// W5b: the per-calendar permissions editor. Owners only — players never
 		// receive the editor DOM nor the PUT route. Retained verbatim from the
