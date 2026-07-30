@@ -2738,10 +2738,121 @@ defensible forever, so it is booked as **C-NOTIFY-PREFS**. No unsubscribe link
 was invented in the meantime: a dead link would be worse than the email's honest
 *"you received this because you are a member of this campaign."*
 
+### Section: round 2 — a surface is allowed to be closed (R2-1, C-CALV4-BENCH-R2, 2026-07-30)
+
+Three calendar-v4 waves optimised the Bench's **content** — the ribbon's honesty
+chips, the panel's audience law, the index's viewer-filtered counts — and not
+one of them asked how much of it a person should meet at once. The operator used
+the product on a live client on 2026-07-29 and named the result in three
+sentences: *"so stretched out, especially the RSVP menu"*, *"where are the
+menus" / "5-6 blocks of data before you get to the calendar"*, and *"on the
+entity it scrolls"*. The page was correct at every line and exhausting as a
+whole. Round 2 adds no data, no zone and no engine; it decides what a viewer
+meets first, how wide it is allowed to be, and what a surface says when it is
+closed.
+
+**The disclosure mechanism, and why it is `<details>`.** Four Bench sections
+collapse — ribbon (whole, not per tile), rsvp, nextup, rows — as native
+`<details>`/`<summary>`. It is the only primitive that is honest with JavaScript
+off: the section opens and closes natively and only the *remembering* needs
+HTMX, so a viewer with a broken script tag gets a working page that forgets.
+`aria-expanded`, the disclosure role, keyboard operation and screen-reader
+announcement come free and correct — a hand-rolled `<div role="button">` would
+reintroduce the class of defect WG-5 caught once already. And it sidesteps the
+checkbox trap: copying the Block's hidden-radio + `:has()` shape would re-meet
+§13's bound for no gain. The flip rides on the `<details>` **itself**, because
+`toggle` does not bubble and a click handler on `<summary>` fires *before* the
+state changes, which would invert every write.
+
+**§13, met a second time, which is what makes it a pattern rather than an
+incident.** §13 says a server-rendered attribute cannot vary by viewport. It was
+written about `checked`; it is equally true of `open`. LAYERS-P9 §11 already
+tested a per-viewer store against that bound and found the store does not beat
+it — it changes *where the single value comes from*, not how many values one
+attribute can be. R2-1 met the identical wall from the other side: the
+operator's instruction was "desktop defaults open, mobile defaults closed", and
+one render cannot be both. **Twice is a pattern worth naming.** The way out is
+never a smarter store; it is either accepting one value, or moving the decision
+into CSS where viewport lives. R2-1 did both — one closed default at every
+width, plus `order` lifting the calendar above the ribbon at ≤640px — and the
+CSS half is the one that literally answered the request. The state half was
+accepted with an honest summary line on every closed section, which is what
+makes closed-by-default liveable rather than merely defensible.
+
+**`calendar_active` grows a third column, and a table is refused a third time.**
+`bench_sections VARCHAR(255) NULL` (migration 016) joins `sidebar_pinned` (007)
+and `block_layers` (014). 007 made that choice under a live coordinator decision
+(PR #368 stop-and-flag #3) — "simpler; reuses the existing (user_id,
+campaign_id) PK + FK cascade + index discipline" — and 014 followed it. A prefs
+table at this point would be an executor quietly reversing a signed decision
+twice over. The grain is (viewer, campaign), the same grain a layer preference
+has, for the same reason: these describe how a *person* reads calendars.
+
+**The column stores the CLOSED set, not the open one**, and that is the
+non-obvious half. Because the ruled default is closed, storing the *open* set
+would make `''` mean "all four closed" — byte-identical to the default, and
+therefore unable to record "I opened nothing on purpose". Storing the closed set
+keeps `NULL` and `''` genuinely distinct, which is the entire point 014's header
+argues at length. `NULL` is the ruled default; `''` is all four open; a list is
+the sections that are shut.
+
+**Zero new routes.** The existing `POST /campaigns/:id/calendar/prefs` grows one
+optional field, `section=<key>`, drawn from a four-key closed registry and
+rejected 400 when unknown. A sibling route would have had an identical shape and
+an identical security review and cost a `routes_snapshot.txt` regeneration plus
+a wire-contract event for nothing. **The two branches answer differently and the
+difference is load-bearing:** `layers=` keeps `HX-Refresh: true` because a Block
+genuinely must re-render for a layer change; `section=` returns 204 with **no**
+refresh, because the `<details>` has already changed state client-side and a
+page refresh per chevron would fight the disclosure animation, re-run every
+Block's render, and visibly undo what the viewer just did. The next hand will
+read that asymmetry as an oversight, so the handler says so in a comment.
+
+**The third member of the "why is there less here" family.** Two distinctions
+were already named in this ADR's neighbourhood: *permission-is-absence* (a
+player's ribbon has three tiles because they were never sent three others — the
+GM tiles are not in their DOM at all) and *needs-backend-omission* (a surface
+prints a chip instead of a zero because Chronicle cannot compute the fact).
+R2-1 adds *compactness-is-a-choice*: a GM's ribbon may be closed because they
+closed it. **All three render as "less", and in a screenshot they are
+indistinguishable.** They are told apart by their mechanism, and the product
+keeps them apart in three different places: permission by *absence from the
+payload*, needs-backend by a *visible `.badge.need` chip*, compactness by a
+*summary line that states what is inside*. A closed section that said nothing
+would collapse the third into the first, which is why the summary line is a
+ruling and not a styling note, and why `.badge.need` is explicitly barred from a
+summary — four visually identical grey chips meaning three different things was
+caught once already.
+
+**The entity seed drops two keys, and the seed rule is why that was cheap.** The
+entity embed seeded five layer keys; it now seeds three. The two removed —
+`ledger` and `shelf` — are exactly the two that add a **zone**; the three kept
+are all inside the month. Under [LYR-3] the host's set is a SEED, not an
+override, so this is a producer decision with a designed mechanism behind it and
+**no widget file was edited**. The honest cost is stated rather than minimised:
+opting `ledger` back on persists, and because the store's grain is (viewer,
+campaign) it also turns the Ledger on for the Bench. That is the signed grain,
+not a bug. Depth returns properly through R2-3's Block theater and R2-1 ships no
+substitute for it, because a stopgap becomes the thing R2-3 has to delete.
+
+**A three-wave-old warning was measured out rather than inherited.** The entity
+producer warned that dropping `ledger` would break the full-tier column
+arithmetic. Measured: `ColWidth` / `IsNamed` / `IsNamedCSS` have zero non-test
+callers anywhere under `internal/` (the density flip is a
+`@container cal-cell (min-width: 84px)` query against real layout), and the
+full-tier body track is `minmax(0, 1fr) auto`, so an absent Ledger collapses its
+own track rather than leaving a hole. The warning's premise was false in every
+clause. The one real consequence is the opposite of the fear: without the Ledger
+beside it the month's cells are wider at the same host width, so named columns
+flip on at a **narrower** host — 1198px → 898px for a ten-day week, a shift of
+exactly the dock's own 300px. The entity month became richer.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they
-landed — §20-§24 above, and W-G's tail is §25. There is no ADR-049. calendar-v4 is one architecture
+landed — §20-§24 above, and W-G's tail is §25. Round 2's reveal pass (R2-1) is
+the section immediately above this one, and R2-2…R2-5 will land the same way.
+There is no ADR-049. calendar-v4 is one architecture
 decision; competing ADRs for its later waves would fragment the rationale that a
 future re-litigation needs in one place. W-E followed this rule first (its
 Almanac decisions are §10-§14) and W-G's RSVP decisions are §15-§19.

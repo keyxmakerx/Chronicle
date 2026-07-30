@@ -20,6 +20,74 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — ROUND 2 OPEN · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
+
+**`C-CALV4-BENCH-R2` slice R2-1 closed the operator's three 2026-07-29 live-client
+complaints.** Round 2 adds no data, no zone and no engine: it decides what a
+viewer meets first, how wide it is allowed to be, and what a surface says when it
+is closed.
+
+- *"where are the menus" / "5-6 blocks of data before you get to the calendar"* →
+  four Bench sections (`ribbon` · `rsvp` · `nextup` · `rows`) are now native
+  `<details>`/`<summary>` disclosures, **closed by default at every width**, each
+  stating one true line computed from the VIEWER's own payload. The two Blocks,
+  `.phead`, `.sechead` and `.caption` never collapse — the subject of the page may
+  not be inside a disclosure.
+- *"so stretched out, especially the RSVP menu"* → `--bench-measure: 1180px` on a
+  page that had no `max-width` at all, and the RSVP panel becomes a two-column
+  grid at ≥1024px via `display: contents` with a **byte-identical DOM**. The
+  `.benchblock` measures **1144px @1440 / 1180px @1920**, both clear of the
+  Block's 900px full-tier floor: no silent demotion.
+- *"on the entity it scrolls"* → the entity embed's seed drops from five keys to
+  `["moons","eras","weeknums"]` — exactly the two keys that add a ZONE leave, the
+  three inside the month stay. No widget file was edited; that is what [LYR-3]'s
+  seed rule bought.
+
+**Store:** migration 016 `bench_sections` on `calendar_active` — the THIRD
+extension of that row, under the same PR #368 decision 007 and 014 both cite. It
+holds the **CLOSED** set so `NULL` (never chosen) stays distinguishable from `''`
+(closed nothing). **ZERO new routes:** the existing `POST
+/campaigns/:id/calendar/prefs` grew one optional `section=` field and
+`routes_snapshot.txt` is byte-identical. That branch answers 204 with **no**
+`HX-Refresh` while `layers=` keeps it, and the asymmetry is documented where the
+next hand will misread it.
+
+**Motion:** the product's first signed animation family ships —
+`cordinator decisions/2026-07-29-motion-disclosure-register.md`. Clip-reveal +
+opacity on `::details-content`, 200ms open / 160ms close, easing READ from the
+Block's own `--ease` ladder, and the whole rule block inside ONE
+`@media (prefers-reduced-motion: no-preference)` so reduced motion is instant and
+complete rather than shortened. `TestBenchCSS_NoMotionAtAll` was **inverted to an
+allowlist, never deleted**, and now asserts `close < open` arithmetically.
+
+**A three-wave-old warning was measured out.** The entity producer claimed
+dropping `ledger` would break the full-tier column arithmetic. `ColWidth` /
+`IsNamed` / `IsNamedCSS` have zero non-test callers, the density flip is a
+`@container cal-cell` query, and the full-tier track is `minmax(0, 1fr) auto` —
+an absent Ledger collapses its own track. The one real consequence is the
+opposite of the fear: named columns now flip on at a **narrower** host
+(1198px → 898px for a ten-day week). Pinned by
+`entity_ledger_geometry_test.go`.
+
+ADR-048 gained a **section** (there is no ADR-049) covering the disclosure
+mechanism, §13 met for the SECOND time (a pattern, not an incident), the third
+extension of `calendar_active`, and the three-way distinction between
+permission-is-absence, needs-backend-omission and **compactness-is-a-choice** —
+all three render as "less" and are indistinguishable in a screenshot.
+
+**⚠️ Operator, and it is flagged at the PR gate:** [BR2-4] diverges from the
+literal instruction "desktop defaults open, mobile defaults closed". One
+server-rendered `open` cannot vary by viewport (ADR-048 §13). What shipped is
+closed-everywhere + CSS `order` putting the calendar above the ribbon at ≤640px.
+It is cut-able at the gate.
+
+**⚠️ No screenshots.** The §13 measurement gate could not be executed: this
+environment has no browser and the Playwright chromium download failed. Every
+geometric claim above is derived arithmetically from the shipped stylesheet and
+shell, and pinned by tests. See the slice report for the full list of what a
+live client should still confirm by eye.
+
+
 ### calendar-v4 — WAVE 3 TAIL · THE ASKING EMAIL SHIPPED (2026-07-29)
 
 **`C-CALV4-RSVP-P8B` closed the operator's own 28 July directive and the last

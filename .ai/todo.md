@@ -9,6 +9,41 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0. calendar-v4 round 2 — the reveal pass (open)
+
+Round 2 adds no data, no zone and no engine. Five slices; R2-1 has landed.
+
+| slice | what it owns | state |
+|---|---|---|
+| **R2-1** — `C-CALV4-BENCH-R2` | the disclosure primitive + register, the page measure, the two-column RSVP panel, the glanceable entity seed | **[x] shipped 2026-07-30** |
+| **R2-2** — the day card | click a day, unfold a card, edit an event. **Reuses R2-1's disclosure register** — R2-1 shipped it ONCE, in `calendar-bench.css`; moving it to a shared sheet is R2-2's move when R2-2 needs it, not a speculative pre-factor. | [ ] |
+| **R2-3** — the Block theater | expand any embed to a full-tier overlay. **This is where the depth R2-1 removed from the entity embed comes back.** R2-1 deliberately shipped NO substitute — no expand chip, no "show more", no second embed — because a stopgap becomes the thing R2-3 has to delete. | [ ] |
+| **R2-4** — V2 sunset / the anonymous-public route move | the frozen V2 shell. R2-1 did not open `calendar_v2*` for any reason. | [ ] |
+| **R2-5** — the sky header | the dashed skyband placeholder in the real-world Block. Drawing pass FIRST. Reuses R2-1's register as its base motion. | [ ] |
+
+Carried out of R2-1, not closed:
+
+- [ ] **`C-CALV4-RIBBON-R2b`** — the PER-TILE ribbon grain. [BR2-3] refused it and
+  took the ribbon whole: six controls is the sky directive's count-3 failure, and
+  the mobile fold is caused by the stacked tiles rather than by their detail
+  lines. It is cheap now if the operator still wants it after seeing R2-1
+  shipped, because the register and the store already exist.
+- [!] **The two `_tokens.css` defects, booked a FOURTH time, not patched** — the
+  `color-mix(… var(--surface-card) …, var(--accent))` pink drift in light, and
+  `.badge.need` at 2.59:1. They belong to the `_tokens.css` re-sign pass; patching
+  per-file is what keeps them alive. R2-1's disclosure summaries use the
+  `transparent 96%` form and carry no `.badge.need` at all.
+- [ ] **The §13 screenshot gate for R2-1 was NOT executed** — no browser in the
+  build environment (Playwright chromium download failed). Every geometric claim
+  is derived arithmetically from the shipped sheet and pinned by tests, but the
+  following want an eye on a live client: the four closed sections at 1440 / 1024
+  / 640 / 390 in light and dark, GM and player; the RSVP panel's two-column
+  treatment at 1440 and 1024; the `zone not set` + `Ask →` pair still present at
+  390; the calendar above the ribbon at 390 plus a keyboard-tab trace of what the
+  reading-order divergence costs; the reduced-motion still proving the disclosure
+  is instant AND complete; and the entity embed before/after at host 420px and at
+  full tier.
+
 ## 1. Bugfixes & Problems
 
 Known broken or missing things, ordered by severity.
