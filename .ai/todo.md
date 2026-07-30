@@ -33,6 +33,12 @@ Carried out of R2-1, not closed:
   `.badge.need` at 2.59:1. They belong to the `_tokens.css` re-sign pass; patching
   per-file is what keeps them alive. R2-1's disclosure summaries use the
   `transparent 96%` form and carry no `.badge.need` at all.
+- [x] **Verifier findings 1–3, fixed forward in stages 6–8 (2026-07-30).** The
+  inherited `hx-vals` (the key moved to the POST URL), the closed ribbon's
+  missing session clause, and a twisty comment that described a rotation the
+  sheet never shipped. Each carries its own pin, and the inheritance rule is
+  now written into `bench.templ`, `handler_v2.go` and the plugin's `.ai.md`
+  rather than living in one reviewer's head.
 - [ ] **The §13 screenshot gate for R2-1 was NOT executed** — no browser in the
   build environment (Playwright chromium download failed). Every geometric claim
   is derived arithmetically from the shipped sheet and pinned by tests, but the

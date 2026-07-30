@@ -75,6 +75,31 @@ extension of `calendar_active`, and the three-way distinction between
 permission-is-absence, needs-backend-omission and **compactness-is-a-choice** —
 all three render as "less" and are indistinguishable in a screenshot.
 
+**Verifier round, fixed forward (2026-07-30, stages 6–8; the history was
+pushed, so nothing was amended).** Three findings, all in what the slice had
+already shipped:
+
+1. **The disclosure flip was speaking for the eight controls inside it.** htmx
+   resolves `hx-vals` by WALKING ANCESTORS (`bn()` recurses to `parentElement`
+   in `static/vendor/htmx.min.js`), and the flip has to ride on the `<details>`
+   because `toggle` does not bubble — so `section=<key>` was silently appended
+   to the player's RSVP trio, the owner's `Ask →` form and all five sort links.
+   Benign (their handlers ignore unknown fields) and a live trap: a control
+   inside a disclosure posting `layers=` would inherit `section=` and be
+   rejected 400 by this slice's own "exactly one of" guard. **The key now rides
+   the POST URL**, which nothing inherits; Echo reads it either way because
+   `FormParams` → `ParseForm` merges query and body on a POST.
+2. **The closed ribbon did not name the session it was holding.** A player
+   receives three tiles and their ONLY RSVP answer control is inside that
+   disclosure; the summary was built from the Today tile alone. A `session`
+   clause now prints the tile's headline and the viewer's own standing
+   ("Session 41 · You: in"), gated on the existing `NeedsBackend` marker so
+   build status never becomes a sentence.
+3. **A twisty comment described a rotation the sheet never shipped** — the same
+   defect stage 4 existed to delete, arriving fresh. The mechanism is a content
+   swap (▸ / ▾ on `[open]`); the comment now says so and `bench_test.go` asserts
+   no rule naming `.disc`/`summary` declares `transform`.
+
 **⚠️ Operator, and it is flagged at the PR gate:** [BR2-4] diverges from the
 literal instruction "desktop defaults open, mobile defaults closed". One
 server-rendered `open` cannot vary by viewport (ADR-048 §13). What shipped is

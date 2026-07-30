@@ -2764,6 +2764,24 @@ checkbox trap: copying the Block's hidden-radio + `:has()` shape would re-meet
 `toggle` does not bubble and a click handler on `<summary>` fires *before* the
 state changes, which would invert every write.
 
+**And because it rides there, everything it declares is INHERITED — the cost of
+that primitive, found in review and stated here so it is not re-found.** htmx
+resolves `hx-vals`, `hx-swap` and their siblings by walking ancestors (`bn()`
+recurses to `parentElement` in `static/vendor/htmx.min.js`), not by reading the
+element. So a `<details>` wrapping a section is an attribute broadcast over
+every HTMX control inside it: shipped as `hx-vals`, the flip's `section=<key>`
+was appended to the player's RSVP trio, the owner's `Ask →` form and all five
+sort links — eight requests that never asked for it. Harmless on the day (their
+handlers ignore unknown fields) and a trap immediately after, because the field
+it broadcasts is one the same route rejects when paired with `layers=`. **The
+general rule: a disclosure may not carry request state that its contents do not
+share.** State that belongs to the disclosure alone goes on the request URL,
+which is an element's own attribute and is inherited by nothing; state that must
+be inherited (`hx-swap="none"`, so an error page is never swapped into the
+section) is declared once and every control inside re-declares its own, asserted
+rather than trusted. This is the same shape as the audience law — make it
+structural, not remembered.
+
 **§13, met a second time, which is what makes it a pattern rather than an
 incident.** §13 says a server-rendered attribute cannot vary by viewport. It was
 written about `checked`; it is equally true of `open`. LAYERS-P9 §11 already

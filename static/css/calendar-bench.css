@@ -1134,9 +1134,15 @@
 
    THE TWISTY IS RESTYLED, NOT REMOVED. A summary with no visible "there is more
    here" cue is exactly the clause-5 failure — so `list-style: none` is paired
-   with an explicit ▸ that rotates to ▾, drawn as a rotation of a static glyph
-   rather than as a transition (guard: `transform` is NOT on the motion
-   allowlist, so the marker SNAPS while the panel reveals).
+   with TWO GLYPHS SWAPPED BY THE [open] STATE: `content: "▸"` on
+   `summary::before`, `content: "▾"` when the section is open. It is a CONTENT
+   SWAP, NOT A ROTATION — no rule whose prelude names `.disc` or `summary`
+   declares `transform` at all, and bench_test.go asserts that rather than
+   trusting this sentence. (The sheet's one `transform` is a static
+   `translateX(-50%)` centring the RSVP bracket label, wave 1, never
+   transitioned.) The marker therefore changes instantly while the panel
+   reveals: `transform` is not on the motion allowlist, and nothing here wanted
+   it.
 
    EVERY PRELUDE NAMES .cal-bench, WITHOUT EXCEPTION. This sheet is unlayered
    and outranks the whole layered app cascade, so a bare `details`, `summary`,

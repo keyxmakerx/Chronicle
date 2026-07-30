@@ -1052,6 +1052,41 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 		}
 	}
 
+	// CLAUSE 1, AND THE SENTENCE THAT DESCRIBES THE TWISTY. The register bans
+	// `transform` on a disclosure (nothing slides, nothing bounces, the content
+	// reveals inside its own box), and the shipped twisty is a CONTENT SWAP —
+	// `content: "▸"` / `content: "▾"` on [open] — rather than a rotated glyph.
+	//
+	// This assertion exists because the sheet's own comment claimed a rotation
+	// for one wave while the rules were a swap (verifier finding 3, R2-1
+	// follow-up), which is the same defect stage 4 of this slice existed to
+	// delete from entity_calendar_block.go — a prose claim nothing could
+	// contradict. It is now enforceable.
+	//
+	// SCOPED TO THE DISCLOSURE, not to the sheet. A blanket ban would be a
+	// false claim: `text-transform` is typography and appears throughout, and
+	// `.rsvp .recbr b` carries a static `translateX(-50%)` from wave 1 that
+	// centres a label and is never transitioned. What clause 1 forbids is a
+	// transform ON THE SECTION, and that is what is checked.
+	for _, rule := range benchCSSRules(code) {
+		if !strings.Contains(rule[0], ".disc") && !strings.Contains(rule[0], "summary") {
+			continue
+		}
+		if benchTransformRe.MatchString(rule[1]) {
+			t.Errorf("`%s` declares `transform` — the register's clause 1 forbids it on a "+
+				"disclosure, and the twisty is a CONTENT SWAP (▸ / ▾ on [open]), not a "+
+				"rotation. The sheet's own comment says so.", rule[0])
+		}
+	}
+	// …and the swap it is instead of is present, so the assertion above is
+	// proving a mechanism rather than an absence.
+	for _, want := range []string{`content: "▸"`, `content: "▾"`} {
+		if !strings.Contains(code, want) {
+			t.Errorf("the twisty's %s is gone; a summary with no visible "+
+				"\"there is more here\" cue is the clause-5 failure", want)
+		}
+	}
+
 	// CLAUSE 3 IS STRUCTURAL, not a shortened duration: the whole motion block
 	// lives inside ONE `prefers-reduced-motion: no-preference` wrapper, so
 	// outside it there is no rule at all and native <details> behaviour stands —
@@ -1129,6 +1164,38 @@ func benchCSSBlock(t *testing.T, code, prelude string) string {
 	}
 	t.Fatalf("%q body is unterminated", prelude)
 	return ""
+}
+
+// benchTransformRe matches a `transform:` declaration and NOT `text-transform:`
+// — the character before the word must not be a hyphen or a word character.
+var benchTransformRe = regexp.MustCompile(`(^|[^-\w])transform\s*:`)
+
+// benchCSSRules yields (prelude, body) for every brace-delimited rule in the
+// sheet, including rules nested inside at-rules.
+//
+// It is exact for LEAF rules, which is what every caller wants: the prelude is
+// the text since the previous brace, and the body is that rule's own
+// declarations. An at-rule's own "body" comes out as the tail after its last
+// nested rule, which is harmless here because at-rule preludes
+// (@media, @supports) never name a selector this test asks about.
+func benchCSSRules(code string) [][2]string {
+	var out [][2]string
+	var stack []string
+	start := 0
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '{':
+			stack = append(stack, strings.TrimSpace(code[start:i]))
+			start = i + 1
+		case '}':
+			if len(stack) > 0 {
+				out = append(out, [2]string{stack[len(stack)-1], code[start:i]})
+				stack = stack[:len(stack)-1]
+			}
+			start = i + 1
+		}
+	}
+	return out
 }
 
 var benchTransitionRe = regexp.MustCompile(`transition\s*:\s*([^;}]*)`)
