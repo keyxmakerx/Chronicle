@@ -43,14 +43,66 @@ import (
 //	eras       the per-week-row era bands, "RECKONING OF WARDS" / "AGE OF THE
 //	           EMBERFALL"
 //	weeknums   the W1 / W2 / W3 gutter
-//	ledger     the docked LEDGER panel. Also the one key with a GEOMETRIC
-//	           consequence: the full-tier column arithmetic subtracts the
-//	           Ledger's 300px unconditionally (sizing.go), so an entity Block
-//	           that skipped the zone would measure its own columns wrong and
-//	           flip density at the wrong host width.
-//	shelf      the Month / Upcoming / Filters / Almanac foot
+//	ledger     the docked LEDGER panel — REMOVED FROM THE SEED, see below.
+//	shelf      the Month / Upcoming / Filters / Almanac foot — REMOVED, see below.
 //
 // Absent, because the renders do not show them here: legend, horizon.
+//
+// THE SEED IS NOW THREE KEYS, NOT FIVE (C-CALV4-BENCH-R2 slice R2-1, [BR2-8]
+// SIGNED). The operator used the product on a live client and said "on the
+// entity it scrolls". The two keys removed are exactly the two that add a ZONE:
+// `ledger` docks a 300px column beside the month at full tier and stacks UNDER
+// it at std (which is where an entity embed lives, host 420px), and `shelf`
+// adds a tabbed foot. The three kept are all INSIDE the month — discs in the
+// dates, era bands above the week rows, the W1/W2/W3 gutter — and none of them
+// adds a section. The tighter variant ["moons"] (= DEF) was refused: `eras` and
+// `weeknums` carry the FICTION, and reducing this embed to DEF would erase the
+// distinction three waves have maintained on purpose.
+//
+// THE CONSEQUENCE, STATED HONESTLY INCLUDING THE PART NOBODY WILL LIKE. A
+// viewer who wants the Ledger back turns it on in the switchboard, once, and it
+// PERSISTS — resolveBlockLayers + blockLayerPrefsFor already do this and this
+// slice adds nothing to make it true. But the store's grain is
+// (user_id, campaign_id) ([LYR-3] SIGNED), so turning `ledger` back on for the
+// entity page ALSO TURNS IT ON FOR THE BENCH. That is the signed grain, not a
+// bug, and it is written here so it is met in a document before it is met in a
+// browser. Depth returns properly through R2-3's Block theater; this slice
+// ships NO substitute — no expand chip, no "show more", no link to the Bench,
+// no second embed — because a stopgap becomes the thing R2-3 has to delete.
+//
+// THE GEOMETRY WARNING THIS COMMENT USED TO CARRY WAS STALE, AND IT WAS
+// MEASURED RATHER THAN ASSUMED. It read: "the full-tier column arithmetic
+// subtracts the Ledger's 300px unconditionally (sizing.go), so an entity Block
+// that skipped the zone would measure its own columns wrong and flip density at
+// the wrong host width." Every clause of its premise is false in the render
+// path, on three independent legs measured in entity_ledger_geometry_test.go:
+//
+//	1. ColWidth / IsNamed / IsNamedCSS have ZERO non-test callers anywhere under
+//	   internal/ — the file walk in that test proves it, and a new caller fails
+//	   it loudly. Nothing in the render path ever evaluates that arithmetic. The
+//	   density decision is made by a CONTAINER QUERY against real layout,
+//	   `@container cal-cell (min-width: 84px)`.
+//	2. The full-tier body grid is `grid-template-columns: minmax(0, 1fr) auto`,
+//	   so an ABSENT Ledger COLLAPSES ITS OWN TRACK rather than leaving a 300px
+//	   hole. There is nothing to measure wrong.
+//	3. A Block rendered without the key emits no Ledger DOM at all — the render
+//	   is strictly shorter, not the same length with a placeholder in it.
+//
+// ONE REAL BEHAVIOUR CHANGE IS TRUE EITHER WAY, and it is a good one: without
+// the Ledger beside it the month's cells are WIDER at the same host width, so
+// the cal-cell container query flips NAMED COLUMNS ON at a NARROWER host. For a
+// ten-day week that moves the flip from 1198px of host to 898px — a shift of
+// exactly the dock's own 300px. The entity month becomes RICHER, not poorer.
+//
+// THE MOON CEILING STILL HAS A DESTINATION, checked rather than assumed. [S5]'s
+// argument for the nameplate's "3 of 4 moons" chip is that a ceiling is only
+// legitimate if the overflow goes somewhere, and the somewhere was the Shelf's
+// almanac — which this seed removes. calendar_block/moons_badge_test.go already
+// contemplates the no-Shelf state and asserts the honest behaviour:
+// "all of them are in the Almanac" is NOT printed when the Shelf is gone, while
+// "4 moons declared; the grid draws 3" still is. The ceiling keeps explaining
+// itself and only the pointer drops. Nothing is owed, and no Block file is
+// opened.
 //
 // ONE KEY THE RENDERS SHOW AND THIS SET DELIBERATELY OMITS: `moongraph`, the
 // illumination strip. It is MEASURED, not assumed — with it enabled the std
@@ -81,13 +133,18 @@ import (
 // overflow goes somewhere. It is the one place a host-passed parameter is
 // deliberately non-authoritative for a zone.
 //
-// THE SET IS NOW A SEED, NOT A VERDICT (C-CALV4-LAYERS-P9, [LYR-3] SIGNED).
-// The five keys below are what a viewer who has NEVER opened the switchboard
-// sees — byte-for-byte what wave 1 and wave 2 rendered, which is why every
-// signed entity render stays valid on day one. The first explicit switchboard
-// write persists the viewer's own set, and from then on the store wins here and
-// on the Bench alike, because L20 describes a viewer's preference for how they
-// read calendars and "eras off" almost certainly means "off, everywhere".
+// THE SET IS NOW A SEED, NOT A VERDICT (C-CALV4-LAYERS-P9, [LYR-3] SIGNED),
+// AND THAT IS PRECISELY WHY R2-1'S CHANGE WAS CHEAP. The keys below are what a
+// viewer who has NEVER opened the switchboard sees. Until R2-1 they were
+// byte-for-byte what wave 1 and wave 2 rendered, which is what kept every
+// signed entity render valid on day one; R2-1 changed them deliberately, and
+// the signed renders' five-key embed is now a NAMED DIVERGENCE rather than a
+// contract (dispatch §14 item 4). Changing a seed is a producer decision with a
+// designed mechanism behind it and it touches NO WIDGET FILE — which is the
+// whole of what [LYR-3] bought. The first explicit switchboard write persists
+// the viewer's own set, and from then on the store wins here and on the Bench
+// alike, because L20 describes a viewer's preference for how they read
+// calendars and "eras off" almost certainly means "off, everywhere".
 //
 // THE SET ITSELF DID NOT GAIN A KEY ([LYR-7] SIGNED). The HOST-P3/BENCH-P4
 // bookings that reserved `moongraph` and `horizon` for this slice close as
@@ -96,8 +153,13 @@ import (
 // default is OFF, so seeding it would contradict the law that put it in W-F;
 // and `horizon` is still chipped, so seeding it would ship a `needs backend`
 // chip into a default view — the exact inverse of the DEF ruling.
+// THE TWO SEEDS NOW DIFFER ON PURPOSE. benchBlockLayers (bench.go) and this
+// function were byte-identical five-key lists from wave 1 until R2-1. The next
+// reader's instinct will be to re-unify them; do not. The Bench is a COCKPIT
+// and depth is its job; the entity page is an EMBED beside somebody's prose and
+// glanceability is its job. blockDefaultLayers (DEF = ["moons"]) is untouched.
 func entityBlockLayers(prefs blockLayerPrefs) calblock.LayerState {
-	return resolveBlockLayers([]string{"moons", "eras", "weeknums", "ledger", "shelf"}, prefs)
+	return resolveBlockLayers([]string{"moons", "eras", "weeknums"}, prefs)
 }
 
 // entityBlockMoonCap matches the renderer's own ceiling (calendar_block's

@@ -355,23 +355,57 @@ func TestEntityCalendarBlock_TieToggleIsHostedAndDefaultsTied(t *testing.T) {
 // TestEntityCalendarBlock_HostLayerSet is the A4 ruling made testable.
 //
 // Producer DEF is ["moons"] and stays there (cordinator ruling 2026-07-28 §1).
-// The entity page is a HOST that passes its own layer set, and the set it passes
-// is the one the signed entity renders show — eras, week numbers, the docked
-// Ledger and the Shelf — minus the one key that is measurably premature
-// (moongraph, below) and minus the two those renders do not show at all
-// (legend, horizon).
+// The entity page is a HOST that passes its own layer set.
+//
+// ── THIS TEST WAS RE-PINNED, DELIBERATELY, BY C-CALV4-BENCH-R2 slice R2-1 ────
+//
+// It asserted `data-zone="ledger"` and `data-zone="shelf"` PRESENT. Those two
+// rows moved from the want list to the MUST-NOT list under [BR2-8] SIGNED. The
+// assertions were INVERTED, NEVER DELETED and NEVER SOFTENED — the precedent
+// this exact file already set at the moongraph paragraph below, when [LYR-7]
+// left that one uninverted and said why.
+//
+// THE NEW CLAIM: the entity seed is GLANCEABLE. The two keys removed are the
+// two that add a ZONE (ledger docks a 300px column at full tier and stacks
+// under the month at std, which is where an entity embed lives; shelf adds a
+// tabbed foot); the three kept are all inside the month and add no section.
+// The operator's words were "on the entity it scrolls". The two zones are ONE
+// SWITCHBOARD CLICK AWAY AND THE CLICK PERSISTS, and depth returns properly via
+// R2-3's Block theater — this slice ships no substitute for it.
+//
+// The `legend` / `horizon` negatives and the DEF check below are UNCHANGED.
 func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 	svc := entityHostSpine(t, blockTenDayCal())
 	html := renderEntityCal(t, svc, campaigns.RoleOwner, false)
 
+	for _, gone := range []struct{ needle, why string }{
+		{`data-zone="ledger"`, "the docked Ledger adds a ZONE — 300px beside the month at full tier, stacked UNDER it at the std tier an entity embed actually lives at"},
+		{`data-zone="shelf"`, "the Shelf adds a tabbed FOOT"},
+	} {
+		if strings.Contains(html, gone.needle) {
+			t.Errorf("the entity seed still renders %s (%s) — R2-1 [BR2-8] SIGNED took it out; "+
+				"it is one switchboard click away and the click persists", gone.needle, gone.why)
+		}
+	}
 	for _, want := range []struct{ needle, why string }{
-		{`data-zone="ledger"`, "the docked Ledger — the full-tier column arithmetic subtracts its 300px unconditionally"},
-		{`data-zone="shelf"`, "the Shelf foot"},
-		{"data-weeknums", "the W1/W2/W3 gutter"},
+		{"data-weeknums", "the W1/W2/W3 gutter — inside the month, adds no section"},
 	} {
 		if !strings.Contains(html, want.needle) {
 			t.Errorf("entity host layer set is missing %s (%s)", want.needle, want.why)
 		}
+	}
+	// The seed itself, asserted directly rather than only through the DOM, so a
+	// fourth key cannot arrive without this test saying so.
+	if got := entityBlockLayers(blockLayerPrefs{}).Enabled; len(got) != 3 ||
+		got[0] != "moons" || got[1] != "eras" || got[2] != "weeknums" {
+		t.Errorf("entity seed = %v, want [moons eras weeknums] ([BR2-8] SIGNED)", got)
+	}
+	// And the BENCH's seed is untouched and now differs on purpose: the Bench is
+	// a cockpit and depth is its job. §9(f) — the divergence is explained in
+	// both functions, and re-unifying them is the instinct this pin exists to
+	// interrupt.
+	if got := benchBlockLayers(blockLayerPrefs{}).Enabled; len(got) != 5 {
+		t.Errorf("the Bench seed changed to %v; R2-1 leaves benchBlockLayers alone", got)
 	}
 	for _, bad := range []string{`data-layer="legend"`, `data-layer="horizon"`} {
 		if strings.Contains(html, bad) {

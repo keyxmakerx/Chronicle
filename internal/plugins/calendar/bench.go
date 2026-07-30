@@ -961,10 +961,26 @@ func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Cale
 // silhouettes and their "3 OF 4 MOONS" nameplate badge, the docked LEDGER and
 // the Month/Upcoming/Filters/Almanac Shelf. Those five keys are this set.
 //
-// `ledger` also has a GEOMETRIC consequence and cannot simply be dropped: the
-// full-tier column arithmetic subtracts the Ledger's 300px unconditionally
-// (calendar_block/sizing.go), so a Block that skipped the zone would measure its
-// own columns wrong and flip density at the wrong host width.
+// THIS SEED IS UNCHANGED BY C-CALV4-BENCH-R2 slice R2-1, and it now DIFFERS
+// from entityBlockLayers on purpose ([BR2-8] SIGNED). R2-1 took the entity
+// embed's seed down to ["moons","eras","weeknums"] because "on the entity it
+// scrolls"; the Bench keeps all five because THE BENCH IS A COCKPIT AND DEPTH
+// IS ITS JOB, while the entity page is an embed beside somebody's prose where
+// glanceability is the job. The two functions were byte-identical from wave 1
+// until that slice, so the next reader's instinct will be to re-unify them —
+// this paragraph is why not. blockDefaultLayers (DEF = ["moons"]) is untouched.
+//
+// A NOTE ON `ledger`, corrected here as well as at its source. This comment
+// used to say the key "cannot simply be dropped" because "the full-tier column
+// arithmetic subtracts the Ledger's 300px unconditionally (sizing.go), so a
+// Block that skipped the zone would measure its own columns wrong". THAT WAS
+// STALE, and R2-1 measured it: ColWidth / IsNamed / IsNamedCSS have zero
+// non-test callers, the density flip is a `@container cal-cell (min-width:
+// 84px)` query against real layout, and the full-tier body track is
+// `minmax(0, 1fr) auto`, so an absent Ledger collapses its own track. See
+// entity_calendar_block.go's rewritten paragraph and
+// entity_ledger_geometry_test.go. The Bench keeps `ledger` for the reason above
+// — because it is a cockpit — and not because it is pinned there by geometry.
 //
 // TWO KEYS THE SIGNED BENCH SHOWS AND THIS SET DELIBERATELY OMITS — `moongraph`
 // (the illumination strip) and `horizon` (the knowledge ribbon). Both are
