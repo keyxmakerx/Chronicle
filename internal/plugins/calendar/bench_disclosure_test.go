@@ -345,6 +345,86 @@ func TestBenchDisclosure_PlayerRibbonSummaryNamesNoGMTile(t *testing.T) {
 	}
 }
 
+// THE CLOSED RIBBON MUST TRACE THE ANSWER CONTROL IT IS HIDING (verifier
+// finding 2, R2-1 follow-up).
+//
+// A player receives exactly three tiles — today · nextup · session — and their
+// ONLY RSVP answer control is the trio on that session tile, inside this
+// disclosure. The `rsvp` disclosure below it carries roster and density markup
+// and no answer control for a player at all. So with [BR2-4]'s closed-at-every-
+// width default, a summary built from the Today tile alone means a player meets
+// a session awaiting their answer behind a chevron that gives no trace of it —
+// precisely the register's clause 5 / §10 case, and the one place
+// compactness-is-a-choice becomes indistinguishable from the section not
+// existing.
+func TestBenchDisclosure_RibbonSummaryTracesTheSessionTheViewerWasSent(t *testing.T) {
+	for _, role := range []struct {
+		name string
+		gm   bool
+	}{{"gm", true}, {"player", false}} {
+		_, line := benchSummaryParts(t, renderBench(t, benchFxDataRsvp(role.gm, role.gm)), "ribbon")
+		if !strings.Contains(line, "Session 41") {
+			t.Errorf("%s: the closed ribbon says %q and never names the session it is hiding", role.name, line)
+		}
+		if !strings.Contains(line, "You:") {
+			t.Errorf("%s: the closed ribbon says %q without the viewer's own standing — "+
+				"the trio behind this chevron is where they answer", role.name, line)
+		}
+	}
+	// The player's ONLY answer control really is inside this disclosure, which
+	// is what makes the assertion above load-bearing rather than decorative.
+	player := renderBench(t, benchFxDataRsvp(false, false))
+	i := strings.Index(player, `name="status"`)
+	if i < 0 {
+		t.Fatal("the player render carries no RSVP answer control at all")
+	}
+	if !benchInsideDisclosure(player, i) {
+		t.Error("the player's RSVP answer control is no longer inside a disclosure; " +
+			"if it moved, this summary clause needs re-arguing rather than keeping")
+	}
+}
+
+// The clause is the viewer's OWN standing, and build status is never a summary
+// line (§4.2 item 3). The four states are driven through the REAL tile
+// builders, so the audience marker doing the gating is the shipped one.
+func TestBenchRibbonSummary_SessionClauseIsTheViewersOwnStanding(t *testing.T) {
+	live := func(isGM bool, my string) BenchTile {
+		return benchSessionTileLive(benchSessionTileInput{
+			IsGM: isGM, CampaignID: "camp-1", CalendarID: "cal-real", EventID: "evt-41",
+			Name: "Session 41", When: "today", Answered: 3, Total: 5, MyStatus: my,
+		})
+	}
+	for _, tc := range []struct {
+		name  string
+		tile  BenchTile
+		want  string
+		never string
+	}{
+		{"player-answered", live(false, RSVPYes), "Session 41 · You: in", "store"},
+		{"player-unanswered", live(false, ""), "Session 41 · You: no answer", "store"},
+		{"gm-answered", live(true, RSVPYes), "Session 41 · You: in", "store"},
+		// The not-yet-reading tile states the FACT and stops. A GM's foot line
+		// there is build status ("this tile does not read the RSVP store yet"),
+		// marked by the same NeedsBackend the chip is, and build status never
+		// renders as a sentence a player could read either.
+		{"player-stub", benchSessionTile(false), "Not scheduled here yet", "store"},
+		{"gm-stub", benchSessionTile(true), "Not scheduled here yet", "store"},
+	} {
+		got := benchRibbonSummary([]BenchTile{tc.tile})
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("%s: summary = %q, want it to contain %q", tc.name, got, tc.want)
+		}
+		if strings.Contains(got, tc.never) {
+			t.Errorf("%s: summary = %q leaks build status", tc.name, got)
+		}
+	}
+	// A viewer who was sent NO session tile still gets no session clause — the
+	// audience law by construction, not by a role check.
+	if got := benchRibbonSummary([]BenchTile{{Key: "today", Eyebrow: "Today", Headline: "14 Deepwinter"}}); strings.Contains(got, "Session") {
+		t.Errorf("a ribbon with no session tile produced %q", got)
+	}
+}
+
 // §4.2 item 2: a player's rsvp summary is built from the panel a player
 // receives. No lane exists in their payload at all, so a summary that counted
 // free slots would be inventing a fact from data they were deliberately not

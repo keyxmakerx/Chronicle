@@ -221,8 +221,9 @@ func benchDisclosurePersistURL(base, key string) string {
 	return base + sep + "section=" + url.QueryEscape(key)
 }
 
-// benchRibbonSummary states the two facts that justify opening the ribbon: what
-// day it is, and how much needs a hand.
+// benchRibbonSummary states the facts that justify opening the ribbon: what day
+// it is, what the session is and where the viewer stands on it, and how much
+// needs a hand.
 //
 // IT IS BUILT BY WALKING THE TILES THE VIEWER ACTUALLY RECEIVED. benchRibbon
 // returns three tiles for a player and six for a GM, and the three GM tiles are
@@ -235,6 +236,31 @@ func benchRibbonSummary(tiles []BenchTile) string {
 		switch t.Key {
 		case "today":
 			parts = append(parts, strings.TrimSpace(t.Eyebrow+" · "+t.Headline))
+		case "session":
+			// THE ONE CLAUSE THAT TRACES A CONTROL RATHER THAN A FACT
+			// (verifier finding 2, R2-1 follow-up). A player's ONLY RSVP
+			// answer control is the trio on this tile, inside this
+			// disclosure — the panel below carries roster and density markup
+			// and no answer control for them at all. With the ruled
+			// closed-at-every-width default, a summary that omitted it would
+			// hide a session awaiting their answer behind a chevron that gave
+			// no trace of it: the register's clause 5 / §10 case, and the one
+			// place compactness-is-a-choice reads exactly like the section not
+			// existing.
+			part := t.Headline
+			// Detail here is the viewer's OWN standing ("You: in", "You: no
+			// answer") or a degraded-write notice — both viewer-facing, and
+			// both worth reading while closed. On the not-yet-reading tile a
+			// GM's Detail is build status instead, and NeedsBackend is the
+			// shipped marker for exactly that: build status never renders to a
+			// player (2026-07-27-needs-backend-audience.md) and a summary line
+			// is a sentence, not a status surface (§4.2 item 3). So the gate is
+			// the existing audience marker rather than a new field or a copy
+			// match.
+			if t.Detail != "" && !t.NeedsBackend {
+				part = strings.TrimSpace(part + " · " + t.Detail)
+			}
+			parts = append(parts, part)
 		case "attention":
 			// GM-only, and present here only because this viewer was sent it.
 			// "all clear" is as much a reason to leave the ribbon closed as a
