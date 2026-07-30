@@ -16,10 +16,41 @@ package calendar
 import (
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/labstack/echo/v4"
+
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
+
+// servePrefsQuery is servePrefs with the field on the POST's QUERY STRING and
+// an empty body — the shape the <details> actually sends.
+func servePrefsQuery(h *Handler, query, userID string) (*httptest.ResponseRecorder, error) {
+	return servePrefsBoth(h, query, "", userID)
+}
+
+// servePrefsBoth drives the route with a query string AND a body, so the two
+// carriers can be exercised together (and against each other).
+func servePrefsBoth(h *Handler, query, body, userID string) (*httptest.ResponseRecorder, error) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost,
+		"/campaigns/camp-1/calendar/prefs?"+query, strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("camp-1")
+	c.Set("campaign_context", &campaigns.CampaignContext{
+		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RolePlayer, IsMember: true,
+	})
+	if userID != "" {
+		c.Set("auth_user_id", userID)
+	}
+	return rec, h.BlockPrefsAPI(c)
+}
 
 // assertStatus proves the REJECTION CODE, not merely that something failed.
 // "400, not dropped" is an acceptance item and a 422 would satisfy a bare
@@ -121,6 +152,47 @@ func TestBenchSectionPrefs_EveryRegistryKeyIsAccepted(t *testing.T) {
 			t.Errorf("section=%s: status = %d, want 204", key, rec.Code)
 		}
 	}
+}
+
+// THE WIRE SHAPE THE PAGE ACTUALLY SENDS: the key on the POST's QUERY STRING,
+// with an empty body (verifier finding 1, R2-1 follow-up).
+//
+// The disclosure carries `?section=<key>` on its hx-post URL rather than in an
+// hx-vals literal, because hx-vals is inherited by every control inside the
+// section (benchDisclosurePersistURL). This route is unchanged by that: Echo's
+// FormParams calls ParseForm, and on a POST `r.Form` merges the query string
+// with the body. The assertion exists so a later "tidy" from FormParams to
+// PostFormValue reds HERE instead of silently costing every viewer their
+// remembered state.
+func TestBenchSectionPrefs_AcceptsTheKeyOnTheQueryString(t *testing.T) {
+	for _, key := range benchSectionKeys {
+		h := NewHandler(NewCalendarService(&mockCalendarRepo{}))
+		rec, err := servePrefsQuery(h, "section="+key, "user-1")
+		if err != nil {
+			t.Errorf("?section=%s: %v — the page sends the field on the URL, so this "+
+				"is the shape production posts", key, err)
+			continue
+		}
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("?section=%s: status = %d, want 204", key, rec.Code)
+		}
+		if got := rec.Header().Get("HX-Refresh"); got != "" {
+			t.Errorf("?section=%s: HX-Refresh = %q, want absent", key, got)
+		}
+	}
+}
+
+// …and "exactly one of" still holds across the two carriers: `layers=` in the
+// body and `section=` on the URL is BOTH FIELDS, not one each, because r.Form
+// merges them. A half-applied write cannot hide in the seam between them.
+func TestBenchSectionPrefs_BothFieldsRejectsAcrossCarriers(t *testing.T) {
+	h := NewHandler(NewCalendarService(&mockCalendarRepo{}))
+	rec, err := servePrefsBoth(h, "section=rsvp", "layers=moons", "user-1")
+	if err == nil {
+		t.Fatalf("layers in the body + section on the query was accepted (status %d); "+
+			"one write per request is the rule and the carrier does not change it", rec.Code)
+	}
+	assertStatus(t, err, http.StatusBadRequest)
 }
 
 // §12.1, inherited: user_id comes from the SESSION and nowhere else. With no

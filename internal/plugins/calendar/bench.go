@@ -33,6 +33,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -147,12 +148,15 @@ type BenchDisclosure struct {
 	Summary string
 	// Closed is the resolved state for THIS viewer.
 	Closed bool
-	// PersistURL is empty when there is nowhere to remember this.
+	// PersistURL is where this disclosure posts its flip, WITH ITS SECTION KEY
+	// ALREADY ON THE URL (".../calendar/prefs?section=ribbon"). Empty when
+	// there is nowhere to remember this.
+	//
+	// The key rides the URL rather than an hx-vals literal because hx-vals is
+	// INHERITED by every control inside the section — benchDisclosurePersistURL
+	// is where that reasoning lives, and it is a correctness argument, not a
+	// stylistic one.
 	PersistURL string
-	// Vals is the static hx-vals JSON literal. STATIC, never `js:…`:
-	// htmx.config.allowEval is false (static/js/boot.js:168), so a js: form
-	// would be silently dead, and §12 forbids it outright.
-	Vals string
 }
 
 // benchDisclosureFor resolves one section for one viewer.
@@ -164,8 +168,7 @@ func benchDisclosureFor(data BenchData, key string) BenchDisclosure {
 	d := BenchDisclosure{
 		Key:        key,
 		Closed:     resolveBenchSections(data.SectionsClosed)[key],
-		PersistURL: data.SectionsPersistURL,
-		Vals:       fmt.Sprintf(`{"section":%q}`, key),
+		PersistURL: benchDisclosurePersistURL(data.SectionsPersistURL, key),
 	}
 	switch key {
 	case "ribbon":
@@ -178,6 +181,44 @@ func benchDisclosureFor(data BenchData, key string) BenchDisclosure {
 		d.Label, d.Summary = "Other calendars", benchRowsSummary(data)
 	}
 	return d
+}
+
+// benchDisclosurePersistURL puts the section key ON THE POST URL rather than in
+// an hx-vals literal, and that is a correctness fix rather than a style choice
+// (verifier finding 1, R2-1 follow-up).
+//
+// HTMX RESOLVES hx-vals BY WALKING ANCESTORS. The vendored runtime is explicit:
+// `bn(r,e,o,i)` recurses to `parentElement` when the attribute is absent, and
+// `Sn(e,t){return bn(e,"hx-vals",false,t)}` is what every request builds its
+// parameters through (static/vendor/htmx.min.js). The flip HAS to ride on the
+// <details> itself — `toggle` does not bubble — so anything declared there is
+// inherited by every HTMX control inside the section: the player's RSVP trio,
+// the owner's `Ask →` form, all five sort links. Shipped as an hx-vals, the key
+// was silently appended to eight requests that never asked for it. Benign on
+// the day it shipped (their handlers ignore unknown fields) and a live trap
+// afterwards: a control placed inside a disclosure that posts `layers=` would
+// inherit `section=` and be rejected 400 by BlockPrefsAPI's "exactly one of"
+// branch — this slice's own guard firing on this slice's own markup.
+//
+// A URL is an element's OWN attribute and nothing inherits it. Echo reads the
+// field either way: FormParams calls ParseForm, and on a POST `r.Form` merges
+// the query string with the body, so the handler needs no branch and does not
+// know the difference. THAT IS LOAD-BEARING — a hand that "tidies" FormParams
+// into PostFormValue would silently stop seeing every disclosure flip;
+// handler_v2.go's comment says so at the read site.
+//
+// The refused alternative was `hx-vals="unset"` on every descendant control.
+// It works, and it makes correctness something each future control has to
+// remember — which is how this defect arrives a second time.
+func benchDisclosurePersistURL(base, key string) string {
+	if base == "" {
+		return ""
+	}
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+	return base + sep + "section=" + url.QueryEscape(key)
 }
 
 // benchRibbonSummary states the two facts that justify opening the ribbon: what

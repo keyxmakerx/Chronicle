@@ -366,6 +366,17 @@ func (h *Handler) SidebarPinAPI(c echo.Context) error {
 //	                                      the thing the viewer just did before
 //	                                      they saw it happen.
 //
+// `section` ARRIVES ON THE POST'S QUERY STRING, not in its body, and the read
+// below must keep working either way. The disclosure carries its key on the URL
+// (".../calendar/prefs?section=ribbon") because hx-vals is INHERITED by every
+// control inside the section it is declared on — bench.go's
+// benchDisclosurePersistURL argues that in full. `c.FormParams()` calls
+// `ParseForm`, and on a POST `r.Form` merges the query string with the body, so
+// this handler needs no branch and cannot tell the two apart. TIDYING IT INTO
+// `PostFormValue` WOULD SILENTLY STOP SEEING EVERY DISCLOSURE FLIP — the write
+// would 400 with "exactly one of", the chevron would still move, and nothing
+// would be remembered.
+//
 // The section registry is CLOSED and four keys wide (bench_sections.go). An
 // unknown key is rejected 400 HERE, at the request boundary, because that is
 // where a malformed field belongs; the service rejects it a second time because

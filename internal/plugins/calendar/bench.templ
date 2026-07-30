@@ -133,7 +133,21 @@ templ benchSurface(data BenchData) {
 // THE FLIP RIDES ON THE <details> ITSELF, not on the <summary>. `toggle` does
 // not bubble, so the listener has to be on the target; and a click handler on
 // the summary would fire BEFORE the state changed, which would invert every
-// write. hx-vals is a STATIC JSON literal — `hx-vals='js:…'` is dead under
+// write.
+//
+// AND BECAUSE IT RIDES THERE, EVERYTHING IT DECLARES IS INHERITED. htmx
+// resolves hx-vals, hx-swap and their siblings by WALKING ANCESTORS — see
+// benchDisclosurePersistURL in bench.go for the runtime's own recursion — so
+// every control inside a section reads whatever this element carries. That is
+// why the section key travels on the POST URL, which is the flipping element's
+// own attribute and is inherited by nothing: `hx-vals` here appended
+// `section=<key>` to the player's RSVP trio, the owner's `Ask →` form and all
+// five sort links (verifier finding 1, R2-1 follow-up). `hx-swap="none"` is
+// still declared here and IS inherited — every HTMX control inside a
+// disclosure therefore declares its own, and bench_disclosure_test.go asserts
+// it rather than trusting it.
+//
+// No `hx-vals='js:…'` at any price either: it is dead under
 // htmx.config.allowEval = false (static/js/boot.js:168) and §12 forbids it.
 //
 // NO ENDPOINT, NO ATTRIBUTES. An anonymous viewer, or a Bench outside a
@@ -153,7 +167,6 @@ templ benchDisclosureView(d BenchDisclosure) {
 			hx-post={ d.PersistURL }
 			hx-trigger="toggle"
 			hx-swap="none"
-			hx-vals={ d.Vals }
 		}
 	>
 		<summary data-disc-pick={ d.Key }>

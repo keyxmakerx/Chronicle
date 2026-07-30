@@ -83,8 +83,10 @@ func TestBenchDisclosure_StoredSetClosesExactlyThoseSections(t *testing.T) {
 
 // --- the wire ---------------------------------------------------------------
 
-// The flip rides on the <details> ITSELF, because `toggle` does not bubble.
-// hx-vals is a STATIC JSON literal: hx-vals='js:…' is dead under
+// The flip rides on the <details> ITSELF, because `toggle` does not bubble —
+// and it carries its key on the POST URL, because everything declared on that
+// element is inherited by every control inside the section (see the next test).
+// No hx-vals at all: hx-vals='js:…' is additionally dead under
 // htmx.config.allowEval = false (static/js/boot.js:168) and §12 forbids it.
 func TestBenchDisclosure_PostsTheFlipFromTheDetailsElement(t *testing.T) {
 	d := benchFxData(true, true)
@@ -93,10 +95,9 @@ func TestBenchDisclosure_PostsTheFlipFromTheDetailsElement(t *testing.T) {
 	for _, key := range benchSectionKeys {
 		el := benchDisclosureElement(t, html, key)
 		for _, want := range []string{
-			`hx-post="/campaigns/camp-1/calendar/prefs"`,
+			`hx-post="/campaigns/camp-1/calendar/prefs?section=` + key + `"`,
 			`hx-trigger="toggle"`,
 			`hx-swap="none"`,
-			`hx-vals="{&#34;section&#34;:&#34;` + key + `&#34;}"`,
 		} {
 			if !strings.Contains(el, want) {
 				t.Errorf("section %q: the <details> open tag is missing %s\ngot: %s", key, want, el)
@@ -105,6 +106,85 @@ func TestBenchDisclosure_PostsTheFlipFromTheDetailsElement(t *testing.T) {
 	}
 	if strings.Contains(html, "hx-vals='js:") || strings.Contains(html, `hx-vals="js:`) {
 		t.Error("hx-vals='js:…' is DEAD under allowEval=false and is forbidden by §12")
+	}
+}
+
+// HTMX RESOLVES hx-vals BY WALKING ANCESTORS, and this is the assertion that
+// keeps the flip from riding on that walk (verifier finding 1, R2-1 follow-up).
+//
+// The vendored runtime is explicit: `bn(r,e,o,i)` recurses to `parentElement`
+// when the attribute is absent, and `Sn(e,t){return bn(e,"hx-vals",false,t)}`
+// is what every request uses to build its parameters. So an hx-vals on the
+// <details> is inherited by EVERY HTMX control inside the section — the
+// player's RSVP trio, the owner's `Ask →` form, all five sort links. It was
+// benign only by luck (their targets ignore unknown fields), and the concrete
+// failure it set up is this slice's OWN guard: a control inside a disclosure
+// posting `layers=` would inherit `section=` and be rejected 400 by
+// BlockPrefsAPI's "exactly one of" branch.
+//
+// The fix is structural rather than defensive: the key rides the POST URL, an
+// element's own attribute, which nothing inherits. `hx-vals="unset"` on every
+// descendant was refused — it makes correctness a thing every future control
+// has to remember.
+func TestBenchDisclosure_NoDescendantInheritsTheSectionField(t *testing.T) {
+	for _, role := range []struct {
+		name string
+		gm   bool
+	}{{"gm", true}, {"player", false}} {
+		d := benchFxDataRsvp(role.gm, role.gm)
+		d.SectionsPersistURL = "/campaigns/camp-1/calendar/prefs"
+		html := renderBench(t, d)
+
+		// (1) No disclosure carries hx-vals at all, so there is nothing on the
+		// ancestor chain for a descendant to inherit.
+		for _, key := range benchSectionKeys {
+			if el := benchDisclosureElement(t, html, key); strings.Contains(el, "hx-vals") {
+				t.Errorf("%s/%s: the <details> carries hx-vals, which htmx inherits down the "+
+					"whole section:\n%s", role.name, key, el)
+			}
+		}
+		// (2) …and the key is on the POST URL instead, where it is the flipping
+		// element's own attribute.
+		for _, key := range benchSectionKeys {
+			el := benchDisclosureElement(t, html, key)
+			if !strings.Contains(el, `hx-post="/campaigns/camp-1/calendar/prefs?section=`+key+`"`) {
+				t.Errorf("%s/%s: the flip does not carry its key on the POST URL\ngot: %s", role.name, key, el)
+			}
+		}
+		// (3) The whole surface: no `section` field is smuggled through any
+		// hx-vals anywhere inside a disclosure either.
+		for _, el := range benchHTMXInsideDisclosures(html) {
+			if strings.Contains(el, "hx-vals") && strings.Contains(el, "section") {
+				t.Errorf("%s: a control inside a disclosure declares a section field: %s", role.name, el)
+			}
+		}
+	}
+}
+
+// The SECOND inherited attribute, pinned rather than assumed. hx-swap="none"
+// on the <details> is load-bearing for the flip (a 204 swaps nothing in this
+// runtime, but an error page must not be swapped into the section either) and
+// it is inherited by the same ancestor walk. Every HTMX control inside a
+// disclosure therefore declares its OWN hx-swap; the day one does not, its
+// response is silently dropped and nothing else would say so.
+func TestBenchDisclosure_EveryControlInsideADisclosureDeclaresItsOwnSwap(t *testing.T) {
+	for _, role := range []struct {
+		name string
+		gm   bool
+	}{{"gm", true}, {"player", false}} {
+		d := benchFxDataRsvp(role.gm, role.gm)
+		d.SectionsPersistURL = "/campaigns/camp-1/calendar/prefs"
+		controls := benchHTMXInsideDisclosures(renderBench(t, d))
+		if len(controls) == 0 {
+			t.Fatalf("%s: no HTMX controls found inside any disclosure — the scanner is "+
+				"broken and the assertion below proves nothing", role.name)
+		}
+		for _, el := range controls {
+			if !strings.Contains(el, "hx-swap=") {
+				t.Errorf("%s: an HTMX control inside a disclosure declares no hx-swap, so it "+
+					"inherits the flip's hx-swap=\"none\" and drops its own response:\n%s", role.name, el)
+			}
+		}
 	}
 }
 
@@ -443,6 +523,34 @@ func benchSurfaceHTML(t *testing.T, html string) string {
 		return rest[:end+close]
 	}
 	return rest
+}
+
+var benchTagRe = regexp.MustCompile(`<[^>]+>`)
+
+// benchHTMXInsideDisclosures returns the open tag of every element carrying an
+// hx-post or hx-get that sits INSIDE a <details> — i.e. every control that
+// inherits whatever the flip declares on its section.
+//
+// The <details> elements themselves are excluded: depth is counted before the
+// tag is judged, and disclosures never nest ([BR2-3]: four sections, no
+// sub-sections), so a disclosure is always at depth 0 when it is met.
+func benchHTMXInsideDisclosures(html string) []string {
+	var out []string
+	depth := 0
+	for _, tag := range benchTagRe.FindAllString(html, -1) {
+		switch {
+		case strings.HasPrefix(tag, "</details"):
+			depth--
+			continue
+		case strings.HasPrefix(tag, "<details"):
+			depth++
+			continue
+		}
+		if depth > 0 && (strings.Contains(tag, "hx-post=") || strings.Contains(tag, "hx-get=")) {
+			out = append(out, tag)
+		}
+	}
+	return out
 }
 
 // benchInsideDisclosure answers whether byte offset i sits inside a <details>.
