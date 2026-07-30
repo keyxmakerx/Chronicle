@@ -104,6 +104,175 @@ type BenchData struct {
 	Rows []BenchRow
 	// ShowNewSlot renders the New-calendar slot. Owner-only — see benchRowGrid.
 	ShowNewSlot bool
+
+	// SectionsClosed is the viewer's STORED closed-disclosure set, carried raw
+	// rather than resolved (C-CALV4-BENCH-R2 [BR2-5]).
+	//
+	// It is raw on purpose. nil is "never chosen", which resolves to ALL FOUR
+	// CLOSED — the ruled default — so a zero-value BenchData renders exactly
+	// what production renders for a fresh viewer, and a fixture cannot silently
+	// diverge from the page by forgetting to populate a map. []string{} is
+	// "closed nothing"; the two are never interchangeable.
+	SectionsClosed []string
+	// SectionsPersistURL is where a disclosure posts its flip. Empty means
+	// nowhere to persist, and a disclosure with no endpoint emits NO hx-* at
+	// all rather than a dead control.
+	SectionsPersistURL string
+}
+
+// BenchDisclosure is one collapsible section, resolved for one viewer
+// (C-CALV4-BENCH-R2 slice R2-1, [BR2-1] / [BR2-3] SIGNED).
+//
+// THE SUMMARY IS THE POINT, not the chevron. A closed section is not a hidden
+// one, and the difference is entirely carried by Label + Summary: the register's
+// clause 5 says a closed disclosure renders "a real summary line (count, next
+// item, or title — never a bare chevron)". A summary that says nothing is worse
+// than no disclosure at all, so every producer below has a truthful floor and
+// bench_disclosure_test.go asserts non-emptiness in every viewer state.
+//
+// EVERY SUMMARY IS BUILT FROM THE VIEWER'S OWN PAYLOAD, never from campaign
+// totals — the rule benchNextUpTail already follows deliberately ("the mockup's
+// hardcoded 'all 11' tail is not ported") and benchSectionSubtitle already
+// GM-gates. The producers below take viewer-filtered slices (data.Ribbon,
+// data.Rows) rather than the campaign's, so the audience law is structural
+// rather than remembered.
+type BenchDisclosure struct {
+	// Key is one of benchSectionKeys. It is the state marker (data-bench-disc)
+	// AND the control key (data-disc-pick) AND the wire field.
+	Key string
+	// Label is the section's title — the summary's floor, and the reason a
+	// summary can never be a bare chevron.
+	Label string
+	// Summary is the one true line a viewer reads instead of the section.
+	Summary string
+	// Closed is the resolved state for THIS viewer.
+	Closed bool
+	// PersistURL is empty when there is nowhere to remember this.
+	PersistURL string
+	// Vals is the static hx-vals JSON literal. STATIC, never `js:…`:
+	// htmx.config.allowEval is false (static/js/boot.js:168), so a js: form
+	// would be silently dead, and §12 forbids it outright.
+	Vals string
+}
+
+// benchDisclosureFor resolves one section for one viewer.
+//
+// It is a pure function of BenchData rather than a precomputed field so the
+// production page and every test fixture cannot drift apart: there is exactly
+// one place a summary line is built.
+func benchDisclosureFor(data BenchData, key string) BenchDisclosure {
+	d := BenchDisclosure{
+		Key:        key,
+		Closed:     resolveBenchSections(data.SectionsClosed)[key],
+		PersistURL: data.SectionsPersistURL,
+		Vals:       fmt.Sprintf(`{"section":%q}`, key),
+	}
+	switch key {
+	case "ribbon":
+		d.Label, d.Summary = "At a glance", benchRibbonSummary(data.Ribbon)
+	case "rsvp":
+		d.Label, d.Summary = "Session & availability", benchRsvpSummary(data.Rsvp)
+	case "nextup":
+		d.Label, d.Summary = "Next up", benchNextUpSummary(data.NextUp)
+	case "rows":
+		d.Label, d.Summary = "Other calendars", benchRowsSummary(data)
+	}
+	return d
+}
+
+// benchRibbonSummary states the two facts that justify opening the ribbon: what
+// day it is, and how much needs a hand.
+//
+// IT IS BUILT BY WALKING THE TILES THE VIEWER ACTUALLY RECEIVED. benchRibbon
+// returns three tiles for a player and six for a GM, and the three GM tiles are
+// absent from a player's slice rather than filtered out of it — so a player's
+// summary cannot name a GM tile even by accident. That is the audience law
+// enforced by construction rather than by a role check the next hand can drop.
+func benchRibbonSummary(tiles []BenchTile) string {
+	var parts []string
+	for _, t := range tiles {
+		switch t.Key {
+		case "today":
+			parts = append(parts, strings.TrimSpace(t.Eyebrow+" · "+t.Headline))
+		case "attention":
+			// GM-only, and present here only because this viewer was sent it.
+			// "all clear" is as much a reason to leave the ribbon closed as a
+			// count is a reason to open it, so both readings print.
+			parts = append(parts, strings.ToLower(t.Headline)+" needs attention")
+		}
+	}
+	if len(parts) == 0 {
+		// The floor: a ribbon with neither tile still says what it is.
+		return "the campaign's headline facts"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// benchRsvpSummary needs NO new producer field, which is the strongest evidence
+// the section inventory is right: BenchRsvp.Headline is already
+// "Session 41 · today · 3 / 5" and BenchRsvp.Note is already the unfilled
+// state's one sentence. Both are built by benchRsvpBuild, which is where the
+// panel's audience law lives — a player's payload contains no lane at all, so
+// this line cannot leak one.
+func benchRsvpSummary(r BenchRsvp) string {
+	if r.Filled && strings.TrimSpace(r.Headline) != "" {
+		return r.Headline
+	}
+	if strings.TrimSpace(r.Note) != "" {
+		return r.Note
+	}
+	return "no session scheduled yet"
+}
+
+// benchNextUpSummary is the index's breadth plus its soonest row — the two
+// things you would open the section to learn. Both are post-filter and
+// per-viewer (UpcomingAcrossCalendars filters at the source), never a
+// campaign-wide "next event" a player may not see.
+func benchNextUpSummary(u BenchNextUp) string {
+	s := benchNextUpSubtitle(u)
+	if len(u.Rows) == 0 {
+		return s + " · nothing upcoming"
+	}
+	r := u.Rows[0]
+	next := strings.TrimSpace(r.DateLabel)
+	if r.Name != "" {
+		next = strings.TrimSpace(next + " — " + r.Name)
+	}
+	if next == "" {
+		return s
+	}
+	return s + " · next: " + next
+}
+
+// benchRowsSummary counts what is INSIDE this disclosure — the subordinate
+// rows — rather than re-printing the page-level "4 calendars" line, which is
+// already on the .sechead above the stack and never collapses.
+//
+// THE SETUP HALF IS GM-ONLY and it is gated by construction, exactly as
+// benchSectionSubtitle gates it: benchRows never builds a warnrow for a player,
+// so counting r.Warn cannot tell a player that a calendar they cannot fix is
+// broken. A player is not told about a repair they do not own.
+func benchRowsSummary(data BenchData) string {
+	n := len(data.Rows)
+	var s string
+	switch n {
+	case 0:
+		s = "no other calendars"
+	case 1:
+		s = "1 other calendar"
+	default:
+		s = fmt.Sprintf("%d other calendars", n)
+	}
+	warn := 0
+	for _, r := range data.Rows {
+		if r.Warn {
+			warn++
+		}
+	}
+	if warn > 0 {
+		s += fmt.Sprintf(" · %d needs setup", warn)
+	}
+	return s
 }
 
 // BenchTile is one ribbon tile. The ribbon is six tiles for a GM and THREE for
@@ -627,6 +796,13 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	// would be four identical queries for one answer — and the Bench is the
 	// surface where that difference is visible.
 	layerPrefs := blockLayerPrefsFor(ctx, h.svc, in.UserID, in.Campaign.ID)
+
+	// The viewer's disclosure state, read once for the whole page for the same
+	// reason: it is per-(user, campaign), so a per-section read would be four
+	// identical queries for one answer.
+	sectionPrefs := benchSectionPrefsFor(ctx, h.svc, in.UserID, in.Campaign.ID)
+	data.SectionsClosed = sectionPrefs.Stored
+	data.SectionsPersistURL = sectionPrefs.PersistURL
 
 	// Hydrate every listed calendar in a fixed number of queries, then apply the
 	// viewer's active-calendar marker.

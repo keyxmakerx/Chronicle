@@ -20,7 +20,11 @@
 // open.
 package calendar
 
-import "slices"
+import (
+	"context"
+	"log/slog"
+	"slices"
+)
 
 // benchSectionKeys is the CLOSED registry of collapsible Bench sections, IN THE
 // PAGE'S CONTRACT ORDER (benchSurface's child order, bench.templ).
@@ -75,4 +79,52 @@ func resolveBenchSections(stored []string) map[string]bool {
 		}
 	}
 	return closed
+}
+
+// benchSectionPrefs is what a producer needs from the request to render the
+// disclosures, carried as one value so a caller cannot supply half of it — the
+// same construction blockLayerPrefs uses, for the same reason.
+//
+// Stored is the viewer's own CLOSED set, or nil when they have never chosen.
+// PersistURL is empty when there is nowhere to persist: an anonymous viewer, or
+// a Bench composed outside a campaign. A disclosure with an empty PersistURL
+// emits NO hx-* at all rather than a dead control — it still opens and closes
+// natively, it simply forgets, and that is the correct degradation.
+type benchSectionPrefs struct {
+	Stored     []string
+	PersistURL string
+}
+
+// benchSectionsPath is the campaign-scoped endpoint a <details> posts its flip
+// to. It is the SAME endpoint the Block's switchboard already posts to — the
+// route grows one optional field rather than a sibling ([BR2-5] SIGNED), which
+// is why internal/wire/routes_snapshot.txt is byte-identical after this slice.
+func benchSectionsPath(campaignID string) string {
+	return blockPrefsPath(campaignID)
+}
+
+// benchSectionPrefsFor reads the viewer's stored closed set and builds the
+// endpoint, ONCE per page.
+//
+// A read failure is NOT fatal and NOT a fallback to "no disclosures": the
+// preference is display state, and a degraded read should give the viewer the
+// ruled default with working controls rather than a page of dead chevrons. Same
+// shape as blockLayerPrefsFor and the sync pill's degraded probe, for the same
+// reason — a degraded read must never blank a surface.
+func benchSectionPrefsFor(ctx context.Context, svc CalendarService, userID, campaignID string) benchSectionPrefs {
+	if svc == nil || userID == "" || campaignID == "" {
+		// Nowhere to persist: the ruled default renders (nil → all four closed)
+		// and no hx-* is emitted.
+		return benchSectionPrefs{}
+	}
+	p := benchSectionPrefs{PersistURL: benchSectionsPath(campaignID)}
+	if stored, err := svc.GetBenchSections(ctx, userID, campaignID); err == nil {
+		p.Stored = stored
+	} else {
+		slog.Warn("calendar: Bench disclosure preference read failed; falling back to the ruled default",
+			slog.String("user_id", userID),
+			slog.String("campaign_id", campaignID),
+			slog.Any("error", err))
+	}
+	return p
 }
