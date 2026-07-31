@@ -617,6 +617,29 @@ func TestDayCardCSS_DefinesWhatTheModuleNames(t *testing.T) {
 	}
 }
 
+// TestDayCardCSS_NeverStylesTheOcclusionReport pins the other half of
+// DC-CLEAR-1's fix.
+//
+// `data-dc-clear` is a REPORT, not a state. [DC-3] SIGNED makes an occluded
+// Ledger a STOP-AND-FLAG — a build-time refusal — and the module writes the
+// attribute so §12's screenshot gate can read a rendered fact instead of
+// re-deriving two rects. The moment a sheet styles it, the condition acquires a
+// look, a look reads as a designed state, and a designed state is a thing
+// somebody decided to ship rather than a thing somebody must fix. Nobody signed
+// that. The attribute is measured and never painted.
+func TestDayCardCSS_NeverStylesTheOcclusionReport(t *testing.T) {
+	for _, name := range []string{"calendar-daycard.css", "calendar-bench.css"} {
+		body := readRepoFile(t, filepath.Join("static", "css", name))
+		code := benchCommentRe.ReplaceAllString(body, " ")
+		if strings.Contains(code, "data-dc-clear") {
+			t.Errorf("%s selects on data-dc-clear — the occlusion report is a "+
+				"measurement for the §12 gate, not a UI state anybody designed "+
+				"([DC-3] makes it a STOP-AND-FLAG, which is a thing to fix and not "+
+				"a thing to paint)", name)
+		}
+	}
+}
+
 // TestDayCardModule_KeepsTheHouseShape asserts the seams that cannot be
 // exercised headlessly but must not silently regress (the QA2 source-level
 // pattern the drag suite uses).
@@ -631,6 +654,14 @@ func TestDayCardModule_KeepsTheHouseShape(t *testing.T) {
 		"--disc-close", // the register's own token, read rather than copied
 		"prefers-reduced-motion: reduce",
 		"input.daypick[data-day-pick=", // the second opener ([DC-4])
+		// DC-CLEAR-1: placeCard's `clear` has a READER. The first cut computed
+		// it, promised in a comment that an unclearable geometry would be
+		// "visible rather than silent", and then dropped the value — so the one
+		// condition [DC-3] signed as a STOP-AND-FLAG shipped as the quietest
+		// thing on the page. Both names below are the reader.
+		"occlusionReporter",
+		"applyPlacement",
+		"data-dc-clear",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("calendar_daycard.js is missing %q", want)

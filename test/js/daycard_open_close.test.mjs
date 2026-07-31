@@ -183,3 +183,58 @@ test('re-init after a boosted navigation cannot double-bind', () => {
   assert.equal(fx.document._listeners['click'].length, clickHandlers,
     'a re-init added a second click handler — the QA2 listener-leak class of bug');
 });
+
+// --- DC-CLEAR-1: the occlusion report, end to end ---------------------------
+
+test('an opened card records on its own root whether it cleared the Ledger', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  assert.equal(fx.card.getAttribute('data-dc-clear'), '1',
+    'the Bench geometry clears the column and the card must say so');
+});
+
+test('a card that cannot clear the Ledger records it AND says it once', () => {
+  const said = [];
+  // The pathological geometry: a wide docked column starting 300px in, so the
+  // 340px card has nowhere to its left to go. This is the condition [DC-3]
+  // signed as a STOP-AND-FLAG, and before this fix it reached no consumer at
+  // all — the flag was computed in placeCard and dropped on the floor.
+  const fx = boot({ console: { warn: (m) => said.push(m) } });
+  fx.ledger.rect = { left: 300, top: 200, right: 1200, bottom: 800, width: 900, height: 600 };
+
+  fx.fire('click', fx.cells[3]);
+  assert.equal(fx.card.getAttribute('data-dc-clear'), '0',
+    'an occluded Ledger must be recorded on the DOM, not swallowed');
+  assert.equal(said.length, 1, 'an occluded Ledger must be reported exactly once');
+  assert.match(said[0], /DC-3/);
+
+  // Reopening on another day re-measures but does not re-announce.
+  fx.fire('click', fx.cells[5]);
+  assert.equal(fx.card.getAttribute('data-dc-clear'), '0');
+  assert.equal(said.length, 1, 'one warning per session, not one per placement');
+});
+
+test('the mobile bottom sheet records the overlap and stays silent about it', () => {
+  const said = [];
+  // 390px, the measured Bench: the sheet is full-width at the foot and the
+  // narrow layout has stacked the Ledger below the grid. DC-3's own bullet 4
+  // signs the bottom sheet and §12 scopes the STOP-AND-FLAG row to 1232px, so
+  // this is the signed treatment — recorded, never announced.
+  const fx = boot({ viewportW: 390, viewportH: 799, console: { warn: (m) => said.push(m) } });
+  fx.ledger.rect = { left: 9, top: 594, right: 381, bottom: 740, width: 372, height: 146 };
+
+  fx.fire('click', fx.cells[3]);
+  assert.equal(fx.card.classList.contains('dcsheet'), true, 'below the breakpoint the card is a sheet');
+  assert.equal(fx.card.getAttribute('data-dc-clear'), '0',
+    'the overlap is real and the DOM records it at every width');
+  assert.equal(said.length, 0,
+    'warning on the signed mobile treatment would train the next hand to ignore the warning that matters');
+});
+
+test('the editor is placed through the same reader as the card', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+  assert.equal(fx.editor.getAttribute('data-dc-clear'), '1',
+    'the editor covers the same column and reports through the same path');
+});

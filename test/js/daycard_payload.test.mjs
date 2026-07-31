@@ -101,6 +101,113 @@ test('below the mobile breakpoint the card is a full-width bottom sheet', () => 
   assert.equal(at.top, 700 - 240);
 });
 
+// --- DC-CLEAR-1 / DC-MOBILE-4: `clear` is measured, and it has a reader ------
+
+test('the bottom sheet measures the Ledger it covers instead of declaring itself clear', () => {
+  // The measured 390px geometry: the sheet is the full width at the foot of the
+  // viewport and the narrow layout has stacked the Ledger below the grid, so
+  // the two really do intersect (54,260 px² on the shipped Bench). The first cut
+  // returned `clear: true` here without ever looking at the rect.
+  const at = P.placeCard(
+    { left: 40, top: 300, right: 90, bottom: 350, width: 50, height: 50 },
+    { w: 390, h: 799 }, { w: 390, h: 799 },
+    { left: 9, top: 594, width: 372, height: 146 }, {});
+  assert.equal(at.sheet, true);
+  assert.equal(at.clear, false, 'a sheet sitting over the docked Ledger must say so');
+});
+
+test('a bottom sheet that clears the Ledger reports clear', () => {
+  const at = P.placeCard(
+    { left: 40, top: 300, right: 90, bottom: 350, width: 50, height: 50 },
+    { w: 340, h: 200 }, { w: 390, h: 800 },
+    { left: 9, top: 100, width: 372, height: 146 }, {});
+  assert.equal(at.sheet, true);
+  assert.equal(at.clear, true);
+});
+
+test('clear is measured AFTER the dodge, from the box that actually landed', () => {
+  // A day under the column, with room to dodge left: the pre-dodge Y-overlap is
+  // true and the post-dodge intersection is false, and only the second is the
+  // truth about what the viewer sees.
+  const at = P.placeCard(
+    { left: 860, top: 300, right: 944, bottom: 384, width: 84, height: 84 },
+    { w: 340, h: 200 }, { w: 1232, h: 900 },
+    { left: 900, top: 200, width: 300, height: 600 }, {});
+  assert.equal(at.clear, true);
+  assert.ok(at.left + 340 <= 900);
+});
+
+test('a Ledger the card misses on the Y axis alone is not an occlusion', () => {
+  const at = P.placeCard(
+    { left: 860, top: 40, right: 944, bottom: 124, width: 84, height: 84 },
+    { w: 340, h: 100 }, { w: 1232, h: 900 },
+    { left: 900, top: 600, width: 300, height: 200 }, {});
+  assert.equal(at.clear, true, 'the column is 400px below the card');
+});
+
+test('no docked Ledger is not an occlusion — it is the card being the only answer', () => {
+  for (const ledger of [null, undefined, { left: 900, top: 0, width: 0, height: 600 }]) {
+    const at = P.placeCard(
+      { left: 400, top: 300, right: 484, bottom: 384, width: 84, height: 84 },
+      { w: 340, h: 200 }, { w: 1232, h: 900 }, ledger, {});
+    assert.equal(at.clear, true);
+  }
+});
+
+test('the occlusion reporter speaks exactly once, and never for the signed bottom sheet', () => {
+  const said = [];
+  const report = P.occlusionReporter((m) => said.push(m));
+
+  assert.equal(report({ clear: true, sheet: false }), false, 'a clear placement says nothing');
+  assert.equal(report({ clear: false, sheet: true }), false,
+    'the mobile bottom sheet is the SIGNED treatment (DC-3 bullet 4, §12 scopes the ' +
+    'STOP-AND-FLAG to 1232px) and must not train the next hand to ignore the warning');
+  assert.equal(said.length, 0);
+
+  assert.equal(report({ clear: false, sheet: false }), true, 'a covered Ledger must speak');
+  assert.equal(said.length, 1);
+  assert.match(said[0], /Open in the Ledger/);
+
+  // One per session, not one per placement: the card repositions on every open.
+  assert.equal(report({ clear: false, sheet: false }), false);
+  assert.equal(said.length, 1);
+});
+
+test('applyPlacement writes the report onto the box — the flag has a reader', () => {
+  const el = { style: {}, _cls: new Set(), _attr: {} };
+  el.classList = {
+    toggle: (c, on) => { if (on) el._cls.add(c); else el._cls.delete(c); },
+  };
+  el.setAttribute = (k, v) => { el._attr[k] = v; };
+
+  P.applyPlacement(el, { left: 12, top: 34, width: 0, sheet: false, clear: true }, null);
+  assert.equal(el.style.left, '12px');
+  assert.equal(el.style.top, '34px');
+  assert.equal(el._attr['data-dc-clear'], '1');
+  assert.equal(el._cls.has('dcsheet'), false);
+  assert.equal(el.style.width, '', 'a non-sheet must not keep a sheet width');
+
+  P.applyPlacement(el, { left: 0, top: 500, width: 390, sheet: true, clear: false }, null);
+  assert.equal(el._attr['data-dc-clear'], '0', 'the occlusion is recorded on the DOM at every width');
+  assert.equal(el._cls.has('dcsheet'), true);
+  assert.equal(el.style.width, '390px');
+
+  // Crossing the breakpoint back up clears the sheet width rather than pinning
+  // a desktop card to the phone's.
+  P.applyPlacement(el, { left: 20, top: 40, width: 0, sheet: false, clear: true }, null);
+  assert.equal(el.style.width, '');
+  assert.equal(el._cls.has('dcsheet'), false);
+  assert.equal(el._attr['data-dc-clear'], '1');
+});
+
+test('applyPlacement hands every placement to the reporter, clear or not', () => {
+  const seen = [];
+  const el = { style: {}, classList: { toggle() {} }, setAttribute() {} };
+  P.applyPlacement(el, { left: 0, top: 0, width: 0, sheet: false, clear: true }, (at) => seen.push(at.clear));
+  P.applyPlacement(el, { left: 0, top: 0, width: 0, sheet: false, clear: false }, (at) => seen.push(at.clear));
+  assert.deepEqual(seen, [true, false]);
+});
+
 test('the one interpolated selector value is gated to the two key namespaces', () => {
   assert.equal(P.ordIsSafe('12'), true);
   assert.equal(P.ordIsSafe('i1'), true);

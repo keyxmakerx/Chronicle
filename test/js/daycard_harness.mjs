@@ -210,7 +210,9 @@ export function boot(opts) {
 
   const winListeners = {};
   const sandbox = {
-    console,
+    // opts.console lets a test capture the module's ONE per-session occlusion
+    // warning (DC-CLEAR-1). Real console otherwise, so nothing else goes quiet.
+    console: opts.console || console,
     document,
     setTimeout: (fn, ms) => { const id = nextTimer++; timers.push({ id, fn, ms }); return id; },
     clearTimeout: (id) => {

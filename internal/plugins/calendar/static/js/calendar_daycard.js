@@ -138,8 +138,25 @@
   // THE LEDGER IS NEVER OCCLUDED. The card's own `Open in the Ledger` door
   // points AT that column, so covering it would be the card contradicting
   // itself. When the docked Ledger's rect is known the card is kept entirely to
-  // its left; `clear` reports whether that succeeded, so a geometry in which it
-  // cannot is visible rather than silent.
+  // its left.
+  //
+  // `clear` IS MEASURED, NEVER ASSERTED, AND IT IS MEASURED THE SAME WAY IN
+  // BOTH BRANCHES (fix-forward, DC-CLEAR-1 / DC-MOBILE-4). The first cut
+  // computed it only on the desktop path, from a Y-overlap test taken BEFORE
+  // the left clamp, and hard-coded `clear: true` on the sheet path without ever
+  // consulting the Ledger's rect — which was wrong by 54,260 px² at 390px,
+  // where the sheet sits over a Ledger the narrow layout has stacked below the
+  // grid. Both branches now finish by intersecting the PLACED box against the
+  // Ledger's actual rect, so the flag reports where the box landed rather than
+  // what the placement intended.
+  //
+  // `sheet` travels with it because the two facts get different treatments and
+  // the caller is the only place that can tell them apart. At desktop widths an
+  // occluded Ledger is [DC-3]'s STOP-AND-FLAG. Below the breakpoint the
+  // full-width bottom sheet is [DC-3]'s OWN next bullet ("Mobile = bottom
+  // sheet, full-width") and §12 scopes the STOP-AND-FLAG row to 1232px, so the
+  // overlap there is the signed treatment rather than a defect. Both are
+  // recorded on the DOM; only the unsigned one speaks.
   //
   // MOBILE IS A BOTTOM SHEET, still [popover], still the register's motion.
   function placeCard(anchor, size, view, ledger, opts) {
@@ -148,9 +165,10 @@
     var breakpoint = opts.breakpoint === undefined ? 640 : opts.breakpoint;
 
     if (view.w <= breakpoint) {
+      var sTop = Math.max(0, view.h - size.h);
       return {
-        left: 0, top: Math.max(0, view.h - size.h),
-        width: view.w, sheet: true, clear: true,
+        left: 0, top: sTop, width: view.w, sheet: true,
+        clear: !hitsLedger({ left: 0, top: sTop, width: view.w, height: size.h }, ledger),
       };
     }
 
@@ -163,19 +181,96 @@
     var left = anchor.left;
     if (left + size.w > view.w - pad) left = view.w - pad - size.w;
 
-    var clear = true;
+    // The dodge: keep the box entirely left of the column it links to, when
+    // there is room. When there is not, the box stays where the viewport put it
+    // and the measurement below tells the truth about it.
     if (ledger && ledger.width > 0 && overlapsY(top, size.h, ledger)) {
       var limit = ledger.left - pad - size.w;
       if (limit >= pad) left = Math.min(left, limit);
-      else clear = false;
     }
     if (left < pad) left = pad;
 
-    return { left: left, top: top, width: 0, sheet: false, clear: clear };
+    return {
+      left: left, top: top, width: 0, sheet: false,
+      clear: !hitsLedger({ left: left, top: top, width: size.w, height: size.h }, ledger),
+    };
   }
 
   function overlapsY(top, height, rect) {
     return top < rect.top + rect.height && top + height > rect.top;
+  }
+
+  // hitsLedger is the one intersection test, shared by both branches so the two
+  // placements cannot drift into two different definitions of "clear". No
+  // Ledger rect, or a zero-width one, is not an occlusion — it is the case
+  // where the card is the ONLY answer, which is the half of the operator's
+  // complaint the CSS-only ladder cannot serve at all.
+  function hitsLedger(box, ledger) {
+    if (!ledger || !(ledger.width > 0) || !(ledger.height > 0)) return false;
+    return box.left < ledger.left + ledger.width &&
+      box.left + box.width > ledger.left &&
+      box.top < ledger.top + ledger.height &&
+      box.top + box.height > ledger.top;
+  }
+
+  // ── the occlusion report, and its consumer ─────────────────────────────
+  //
+  // placeCard's `clear` had no reader in the first cut (DC-CLEAR-1). The
+  // comment above it and the stage-1 commit body both said an unclearable
+  // geometry would be "visible rather than silent", and neither position() nor
+  // edPosition() so much as looked at the flag — so the one condition [DC-3]
+  // signed as a STOP-AND-FLAG shipped as the quietest thing on the page. These
+  // two functions are the reader. A sentence promising a guard that never ran
+  // is the exact defect the previous slice's stage 9 existed to kill, and it
+  // does not get to reappear one slice later.
+  //
+  // TWO MECHANISMS, DELIBERATELY, because the condition has two audiences:
+  //
+  //   data-dc-clear="0|1" on the card's own root — the MEASURABLE fact, always
+  //   written, on every placement, at every width. §12's screenshot gate reads
+  //   a rendered attribute rather than re-deriving geometry from two rects, and
+  //   a regression that starts covering the Ledger flips a value a test can see.
+  //   It is a report, not a state: no stylesheet may style it, because [DC-3]
+  //   makes occlusion a build-time flag and not a UI mode somebody designed.
+  //
+  //   ONE console warning per session, desktop only — the DEVELOPER-facing half.
+  //   Scoped to `!sheet` because below the breakpoint the full-width bottom
+  //   sheet covering a stacked Ledger is [DC-3]'s own next bullet and §12 scopes
+  //   the STOP-AND-FLAG row to 1232px (DC-MOBILE-4). Warning there would train
+  //   the next hand to ignore the warning that matters. One per session, not one
+  //   per placement: the card repositions on every open, and a warning that
+  //   fires sixty times is a warning nobody reads.
+  function occlusionReporter(sink) {
+    var fired = false;
+    return function (at) {
+      if (!at || at.clear || at.sheet || fired) return false;
+      fired = true;
+      if (sink) {
+        sink('calendar day card [C-CALV4-DAYCARD/DC-3]: this geometry cannot ' +
+          'place the card clear of the docked Ledger, so the card is covering ' +
+          'the column its own "Open in the Ledger" door points at.');
+      }
+      return true;
+    };
+  }
+
+  // applyPlacement writes a placement onto a box. Both the card and the editor
+  // go through it so the two cannot acquire two different ideas of what a
+  // placement means — the editor's own occlusion was invisible for exactly the
+  // reason the card's was, and one writer fixes both.
+  //
+  // The width is CLEARED when the box is not a sheet. A viewport that crosses
+  // the breakpoint downward and back left the sheet's inline `width` behind,
+  // pinning a desktop card to the phone's width until reload.
+  function applyPlacement(el, at, report) {
+    if (!el || !at) return at;
+    el.style.left = at.left + 'px';
+    el.style.top = at.top + 'px';
+    el.style.width = at.sheet ? at.width + 'px' : '';
+    el.classList.toggle('dcsheet', !!at.sheet);
+    el.setAttribute('data-dc-clear', at.clear ? '1' : '0');
+    if (report) report(at);
+    return at;
   }
 
   // ordIsSafe gates the one attribute-selector interpolation in this module.
@@ -260,6 +355,8 @@
       durationMS: durationMS,
       closeDelayMS: closeDelayMS,
       placeCard: placeCard,
+      occlusionReporter: occlusionReporter,
+      applyPlacement: applyPlacement,
       ordIsSafe: ordIsSafe,
       numOrNull: numOrNull,
       buildEventBody: buildEventBody,
@@ -283,6 +380,15 @@
     var foot = card.querySelector('[data-dc-foot]');
     var box = card.querySelector('[data-dc-box]');
     var state = { open: false, key: '', calId: '', host: null, timer: 0, suppress: false };
+
+    // ONE reporter for the page, shared by the card and the editor: the
+    // condition is a property of the layout, not of which box happened to meet
+    // it first, so a second warning from the editor about the same geometry
+    // would be noise. Built here rather than at module scope so a re-init on a
+    // fresh page gets a fresh one-shot.
+    var reportOcclusion = occlusionReporter(function (msg) {
+      if (typeof console !== 'undefined' && console && console.warn) console.warn(msg);
+    });
 
     // THE AUTHORING GATES ARE READ, NEVER DECIDED. Both facts below were
     // decided by the PRODUCER and rendered into the markup ([DC-9] SIGNED):
@@ -517,11 +623,7 @@
         h: (box ? box.scrollHeight || 0 : 0) + (chrome > 0 ? chrome : 0),
       };
       var ledger = ledgerRect(state.host);
-      var at = placeCard(anchor, size, view, ledger, {});
-      card.style.left = at.left + 'px';
-      card.style.top = at.top + 'px';
-      if (at.sheet) card.style.width = at.width + 'px';
-      card.classList.toggle('dcsheet', !!at.sheet);
+      applyPlacement(card, placeCard(anchor, size, view, ledger, {}), reportOcclusion);
     }
 
     function ledgerRect(host) {
@@ -667,11 +769,9 @@
         w: ed.root.offsetWidth || 0,
         h: (ed.box ? ed.box.scrollHeight || 0 : 0) + (chrome > 0 ? chrome : 0),
       };
-      var at = placeCard(anchor.getBoundingClientRect(), size, view, ledgerRect(state.host), {});
-      ed.root.style.left = at.left + 'px';
-      ed.root.style.top = at.top + 'px';
-      if (at.sheet) ed.root.style.width = at.width + 'px';
-      ed.root.classList.toggle('dcsheet', !!at.sheet);
+      applyPlacement(ed.root,
+        placeCard(anchor.getBoundingClientRect(), size, view, ledgerRect(state.host), {}),
+        reportOcclusion);
     }
 
     function api() {
