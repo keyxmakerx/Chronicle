@@ -100,6 +100,22 @@ already shipped:
    swap (▸ / ▾ on `[open]`); the comment now says so and `bench_test.go` asserts
    no rule naming `.disc`/`summary` declares `transform`.
 
+**Second verifier round (2026-07-31, stage 9; also fixed forward).** The same
+class a third and fourth time, which is why the fix is now a PIN over prose and
+not another rewrite. `bench.templ`'s header still read "calendar-bench.css
+defines no transition, no animation and no @keyframes, and its contract test
+says so" — both clauses died in stage 3 — and `calendar-bench.css`'s RSVP header
+read "the Bench sheet is under tools/check-v2-motion-discipline.sh". **That
+second one is the dangerous half**: the guard scopes to
+`internal/plugins/{calendar,timeline,ai_workspace,campaigns}` and filters to
+`${scope}/*.templ` / `${scope}/*.css`, so it has never seen `static/css/` — and
+line :50 of the SAME FILE says so correctly. The sheet contradicted itself, and
+the false half named a CI net under the one allowlist [BR2-2] warned has no net.
+`TestBenchProse_MotionClaimsMatchTheSheet` now derives both facts: it fails if
+any sheet-wide motion denial survives while the sheet declares a `transition:`,
+if the guard is named anywhere near this sheet without "does not police", or if
+`bench.templ`'s header stops citing the register and the test that enforces it.
+
 **⚠️ Operator, and it is flagged at the PR gate:** [BR2-4] diverges from the
 literal instruction "desktop defaults open, mobile defaults closed". One
 server-rendered `open` cannot vary by viewport (ADR-048 §13). What shipped is

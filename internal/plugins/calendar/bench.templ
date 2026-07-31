@@ -19,9 +19,29 @@
 // exist. When the Block grows them, they arrive inside the Block, where their
 // invokers are.
 //
-// NO MOTION. COMMON §6.5: no transitions inside the Block, at all, in wave 1.
-// The Bench's own chrome keeps the same discipline — calendar-bench.css defines
-// no transition, no animation and no @keyframes, and its contract test says so.
+// MOTION — AND THE ONE PLACE IT NOW LIVES. COMMON §6.5 is unchanged INSIDE the
+// Block: no transitions there, at all, in wave 1, and this slice touched no file
+// under internal/widgets/calendar_block/. The Bench's own chrome no longer keeps
+// that discipline absolutely, and this header used to say it did.
+//
+// C-CALV4-BENCH-R2 [BR2-2] SIGNED opened a THREE-PROPERTY ALLOWLIST for the
+// disclosures this file emits: calendar-bench.css transitions `block-size`,
+// `opacity` and `content-visibility` on `.cal-bench .disc::details-content`,
+// once, inside a single `@media (prefers-reduced-motion: no-preference)` block,
+// with --disc-open 200ms and --disc-close 160ms (close always faster than open)
+// and zero @keyframes. Under reduced motion there is no rule at all, so the
+// reveal is instant and complete. The signed law is
+// decisions/2026-07-29-motion-disclosure-register.md.
+//
+// THE ENFORCEMENT IS A TEST, AND ONLY A TEST. bench_test.go's
+// TestBenchCSS_NoMotionAtAll was INVERTED from a blanket ban into that
+// allowlist (it keeps its wave-1 name so a reader who greps for the old rule
+// lands on the document that changed it). Nothing in CI backs it up:
+// tools/check-v2-motion-discipline.sh does not police static/css/ at all — its
+// scope is internal/plugins/{calendar,timeline,ai_workspace,campaigns}. Widening
+// the allowlist therefore widens everything, which is why
+// TestBenchProse_MotionClaimsMatchTheSheet pins these two paragraphs to the
+// sheet rather than trusting them.
 
 package calendar
 

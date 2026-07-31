@@ -1135,6 +1135,84 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 	}
 }
 
+// TestBenchProse_MotionClaimsMatchTheSheet pins the two SENTENCES that describe
+// this slice's motion budget to the sheet they describe.
+//
+// WHY A TEST FOR PROSE. Stage 8 of R2-1 rewrote a comment that had described the
+// twisty as a rotation the rules never shipped, and pinned it — and the verifier
+// then found TWO MORE claims of the same class, in files this slice had edited
+// three times: bench.templ's header still said "calendar-bench.css defines no
+// transition, no animation and no @keyframes, and its contract test says so"
+// (both clauses died in stage 3), and calendar-bench.css's RSVP header said "the
+// Bench sheet is under tools/check-v2-motion-discipline.sh" (it never has been).
+// The second is worse than a stale sentence: it names a guard as the safety net
+// under the exact allowlist that [BR2-2] warned has no guard, so a reader
+// widening the allowlist would believe CI was watching. This test derives both
+// facts instead of trusting either sentence.
+func TestBenchProse_MotionClaimsMatchTheSheet(t *testing.T) {
+	css := benchCSS(t)
+	templ := readRepoFile(t, "internal/plugins/calendar/bench.templ")
+	sources := map[string]string{"static/css/calendar-bench.css": css, "internal/plugins/calendar/bench.templ": templ}
+
+	// THE DERIVED FACT, not an assumption: the sheet really does transition
+	// something. If a later slice removes the disclosure motion entirely, this
+	// fails FIRST and tells the reader the blanket denials below are allowed
+	// back — the test never silently forbids a true sentence.
+	if !benchTransitionRe.MatchString(benchCommentRe.ReplaceAllString(css, " ")) {
+		t.Fatal("calendar-bench.css declares no `transition:` at all — the register was " +
+			"removed, and the wave-1 blanket denials this test forbids would now be TRUE. " +
+			"Re-read decisions/2026-07-29-motion-disclosure-register.md before deleting this.")
+	}
+
+	// (a) NO SHEET-WIDE DENIAL. Scoped denials stay legal and are used just
+	// below the line this caught ("this panel adds no transition…" is true of
+	// that panel); what is banned is a claim about the SHEET, which is false.
+	denial := regexp.MustCompile(`(?is)(calendar-bench\.css|the bench sheet|this sheet)[^.]{0,160}?\bno (transition|animation|@keyframes)`)
+	for path, src := range sources {
+		if m := denial.FindString(src); m != "" {
+			t.Errorf("%s claims the SHEET has no motion — %q — but it transitions "+
+				"block-size/opacity/content-visibility on `.cal-bench .disc::details-content` "+
+				"under [BR2-2] SIGNED. Scope the sentence or delete it", path, strings.Join(strings.Fields(m), " "))
+		}
+	}
+
+	// (b) THE GUARD IS NAMED HONESTLY OR NOT AT ALL. tools/check-v2-motion-
+	// discipline.sh scopes to internal/plugins/{calendar,timeline,ai_workspace,
+	// campaigns} and filters to `${scope}/*.templ` / `${scope}/*.css`, so
+	// static/css/ has never been inside it. Any mention of it near this sheet
+	// must carry the negation; the sanctioned phrasing is "does not police",
+	// deliberately one string so a new mention has to come here and read this.
+	guard := regexp.MustCompile(`does not police`)
+	for path, src := range sources {
+		for _, idx := range regexp.MustCompile(`check-v2-motion-discipline`).FindAllStringIndex(src, -1) {
+			lo, hi := idx[0]-240, idx[1]+240
+			if lo < 0 {
+				lo = 0
+			}
+			if hi > len(src) {
+				hi = len(src)
+			}
+			if !guard.MatchString(src[lo:hi]) {
+				t.Errorf("%s names check-v2-motion-discipline.sh without saying it DOES NOT "+
+					"POLICE static/css/ — the guard's scope is internal/plugins/*, so naming it "+
+					"here promises an enforcement that has never run. The enforcement is "+
+					"TestBenchCSS_NoMotionAtAll", path)
+			}
+		}
+	}
+
+	// (c) MECHANISM, NOT ABSENCE. The header that used to deny motion must now
+	// point at the document that authorised it, so the next reader lands on the
+	// law rather than on a hole where the wave-1 rule used to be — the same
+	// reason TestBenchCSS_NoMotionAtAll kept its name when it was inverted.
+	for _, want := range []string{"2026-07-29-motion-disclosure-register.md", "TestBenchCSS_NoMotionAtAll"} {
+		if !strings.Contains(templ, want) {
+			t.Errorf("bench.templ's header does not cite %q — a header that describes the "+
+				"motion budget must name the law and the enforcement, or it decays again", want)
+		}
+	}
+}
+
 // benchCSSBlock returns the body of the at-rule that starts with `prelude`,
 // brace-matched. The index is checked before it is used as a bound: a bare
 // strings.Index slice bound PANICS on a rename instead of failing cleanly

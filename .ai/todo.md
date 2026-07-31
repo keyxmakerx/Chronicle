@@ -39,6 +39,14 @@ Carried out of R2-1, not closed:
   sheet never shipped. Each carries its own pin, and the inheritance rule is
   now written into `bench.templ`, `handler_v2.go` and the plugin's `.ai.md`
   rather than living in one reviewer's head.
+- [x] **Verifier findings 2–3 of the second round, fixed forward in stage 9
+  (2026-07-31).** Two false motion claims — `bench.templ`'s header denying the
+  sheet has any transition, and `calendar-bench.css`:733 naming
+  `tools/check-v2-motion-discipline.sh` as this sheet's enforcement when the
+  guard's scope has never included `static/css/` (and :50 of the same file said
+  the opposite). Both rewritten, and pinned by
+  `TestBenchProse_MotionClaimsMatchTheSheet`, which derives the facts rather than
+  matching a sentence.
 - [ ] **The §13 screenshot gate for R2-1 was NOT executed** — no browser in the
   build environment (Playwright chromium download failed). Every geometric claim
   is derived arithmetically from the shipped sheet and pinned by tests, but the

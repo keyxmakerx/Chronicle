@@ -727,13 +727,25 @@
    — is achieved MORE strongly by root-scoping, because no rule can escape
    .cal-bench at all. The sheet stays unlayered and self-contained.
 
-   NOTHING HERE MOVES. cv4:998,1015 give .lane:hover and .mrow:hover a
+   NOTHING IN THIS PANEL MOVES. cv4:998,1015 give .lane:hover and .mrow:hover a
    background-colour wash and nothing else, and that is shipped exactly. The
    mockup's `transition:background-color` on .mrow is deliberately NOT ported:
-   the Bench sheet is under tools/check-v2-motion-discipline.sh and this panel
-   adds no transition, animation, @keyframes, will-change, @starting-style or
-   view-transition. Guard B1 in particular: --dash / --gap are identity, never
-   animated.
+   this panel adds no transition, animation, @keyframes, will-change,
+   @starting-style or view-transition of its own. Guard B1 in particular:
+   --dash / --gap are identity, never animated.
+
+   THE CLAIM IS SCOPED TO THIS PANEL, AND WHAT ENFORCES IT IS THE TEST. Since
+   [BR2-2] SIGNED the sheet as a whole DOES move in exactly one place — the
+   disclosure reveal at §THE DISCLOSURES, three properties on
+   `.cal-bench .disc::details-content` — so a sheet-wide denial here would be
+   false; see the register header at :36. And the guard this header used to name
+   never covered it: tools/check-v2-motion-discipline.sh does not police
+   static/css/ at all (it scopes to internal/plugins/{calendar,timeline,
+   ai_workspace,campaigns} and filters to `${scope}/*.templ` / `${scope}/*.css`),
+   which is exactly why bench_test.go's TestBenchCSS_NoMotionAtAll is the whole
+   of the enforcement standing here. Naming a guard that never ran is worse than
+   naming none: it invites the next reader to widen the allowlist believing CI
+   would stop them. TestBenchProse_MotionClaimsMatchTheSheet now pins that.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── member identity hues, keyed to the stable roster index ───────────────── */
