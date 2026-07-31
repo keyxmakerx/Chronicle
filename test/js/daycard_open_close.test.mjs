@@ -193,25 +193,46 @@ test('an opened card records on its own root whether it cleared the Ledger', () 
     'the Bench geometry clears the column and the card must say so');
 });
 
-test('a card that cannot clear the Ledger records it AND says it once', () => {
+test('a geometry that cannot clear the Ledger falls back to the sheet AND says so once', () => {
   const said = [];
-  // The pathological geometry: a wide docked column starting 300px in, so the
-  // 340px card has nowhere to its left to go. This is the condition [DC-3]
-  // signed as a STOP-AND-FLAG, and before this fix it reached no consumer at
-  // all — the flag was computed in placeCard and dropped on the floor.
+  // A Ledger that fills most of the Bench in both axes, so neither below nor
+  // above its day can clear it. Before DC3-STACKED-LEDGER-OCCLUSION-1 the card
+  // was placed as a popover ON TOP of the column its own `Open in the Ledger`
+  // door points at, and the only symptom was one console line. Now the card
+  // degrades to [DC-3] bullet 4's signed sheet — and the warning survives,
+  // because the geometry still ran out and that is the signed STOP-AND-FLAG.
   const fx = boot({ console: { warn: (m) => said.push(m) } });
   fx.ledger.rect = { left: 300, top: 200, right: 1200, bottom: 800, width: 900, height: 600 };
 
   fx.fire('click', fx.cells[3]);
+  assert.equal(fx.card.classList.contains('dcsheet'), true,
+    'the desktop last resort is the SHEET, never an occluding popover');
   assert.equal(fx.card.getAttribute('data-dc-clear'), '0',
     'an occluded Ledger must be recorded on the DOM, not swallowed');
-  assert.equal(said.length, 1, 'an occluded Ledger must be reported exactly once');
+  assert.equal(said.length, 1, 'the geometry running out must be reported exactly once');
   assert.match(said[0], /DC-3/);
 
   // Reopening on another day re-measures but does not re-announce.
   fx.fire('click', fx.cells[5]);
   assert.equal(fx.card.getAttribute('data-dc-clear'), '0');
   assert.equal(said.length, 1, 'one warning per session, not one per placement');
+});
+
+test('the STACKED Ledger no longer gets covered: the card flips above its day', () => {
+  const said = [];
+  // The shipped stacked-Ledger layout, measured at a ~884px .cal-bench content
+  // width: the Ledger is a full-width band BELOW the grid, so the old
+  // horizontal-only dodge had nowhere to go and the card sat on the band for
+  // every day and every viewer. The vertical dodge clears it, and because the
+  // card ends up clear there is nothing to warn about.
+  const fx = boot({ viewportW: 1180, viewportH: 800, console: { warn: (m) => said.push(m) } });
+  fx.ledger.rect = { left: 9, top: 595, right: 891, bottom: 751, width: 882, height: 156 };
+
+  fx.fire('click', fx.cells[3]);
+  assert.equal(fx.card.classList.contains('dcsheet'), false, 'a desktop width keeps the popover');
+  assert.equal(fx.card.getAttribute('data-dc-clear'), '1',
+    'the stacked band must be dodged, not covered and confessed to');
+  assert.equal(said.length, 0, 'a clear placement has nothing to say');
 });
 
 test('the mobile bottom sheet records the overlap and stays silent about it', () => {

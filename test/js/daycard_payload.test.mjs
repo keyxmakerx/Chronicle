@@ -73,14 +73,62 @@ test('a day under the Ledger pushes the card left rather than over it', () => {
   assert.ok(at.left + 340 <= 900, 'the card must be clamped clear of the column it links to');
 });
 
-test('a card that cannot clear the Ledger says so rather than covering it silently', () => {
-  // A pathological geometry: the column starts 40px in, so nothing 340px wide
-  // fits beside it. The rule is that this is VISIBLE, not that it is impossible.
+// --- DC3-STACKED-LEDGER-OCCLUSION-1: the STACKED Ledger is the product's own
+// layout, not a pathological case -------------------------------------------
+//
+// The case below used to be labelled "a pathological geometry: the column
+// starts 40px in, so nothing 340px wide fits beside it", and it asserted only
+// that the module SAID SO. That label is what let the hole survive two reviews:
+// a Ledger that starts ~9px in and spans the whole Bench is not pathological,
+// it is what the Bench renders at every .cal-bench content width from ~625px to
+// ~884px, where the Ledger stacks FULL-WIDTH BELOW the grid instead of docking
+// as a right-hand column. The horizontal dodge cannot work there by
+// construction, and the card covered the Ledger deterministically, for every
+// day and every viewer, in the DESKTOP treatment. These are now POSITIVE
+// regression cases: the dodge must actually clear the band.
+
+test('the STACKED Ledger is an exclusion zone: the card flips ABOVE its day', () => {
+  // The measured ~884px .cal-bench content geometry, GM, day 5: the Ledger is a
+  // full-width band below the grid ({x:9,y:595,w:882,h:156}) and the 227px card
+  // fits below its day, so the old code placed it there and overlapped the band
+  // by 23,131 px² — 16.8% of the Ledger — with sheet=false and no signed
+  // treatment covering it.
+  const at = P.placeCard(
+    { left: 460, top: 344, right: 544, bottom: 428, width: 84, height: 84 },
+    { w: 340, h: 227 }, { w: 1180, h: 800 },
+    { left: 9, top: 595, width: 882, height: 156 }, {});
+  assert.equal(at.sheet, false, 'a desktop width keeps the popover treatment');
+  assert.equal(at.clear, true, 'the vertical dodge must clear the stacked band');
+  assert.ok(at.top + 227 <= 595, 'the card must sit entirely above the stacked Ledger');
+  assert.ok(at.top < 344, 'clearing the band means opening above the day');
+});
+
+test('at the ~944px boundary the Ledger docks again and the card opens BELOW its day', () => {
+  // One size class up, the Ledger is a right-hand column again ({x:651,w:300}).
+  // The horizontal dodge is the right answer there and must not be traded away
+  // for the vertical one: the card still opens below the day it was clicked.
+  const at = P.placeCard(
+    { left: 420, top: 364, right: 504, bottom: 448, width: 84, height: 84 },
+    { w: 340, h: 227 }, { w: 1240, h: 800 },
+    { left: 651, top: 365, width: 300, height: 242 }, {});
+  assert.equal(at.sheet, false);
+  assert.equal(at.clear, true);
+  assert.ok(at.top >= 448, 'the preferred placement is still below the day');
+  assert.ok(at.left + 340 <= 651, 'and the horizontal dodge still keeps it left of the column');
+});
+
+test('when NEITHER position clears at popover width the card falls back to the signed sheet', () => {
+  // A Ledger that spans nearly the whole viewport in both axes: there is no
+  // above and no below. [DC-3] bullet 4's sheet is the answer, and it is the
+  // ONLY other geometry — the card is never resized to fit.
   const at = P.placeCard(
     { left: 0, top: 300, right: 84, bottom: 384, width: 84, height: 84 },
     { w: 340, h: 200 }, { w: 1232, h: 900 },
-    { left: 40, top: 200, width: 300, height: 600 }, {});
-  assert.equal(at.clear, false, 'an occluded Ledger must be reported, not hidden');
+    { left: 40, top: 20, width: 300, height: 860 }, {});
+  assert.equal(at.sheet, true, 'the last resort is the sheet, not an occluding popover');
+  assert.equal(at.left, 0);
+  assert.equal(at.width, 1232);
+  assert.equal(at.clear, false, 'and `clear` stays honest about what the sheet covers');
 });
 
 test('the card flips above its day when there is no room below', () => {
@@ -159,7 +207,7 @@ test('the occlusion reporter speaks exactly once, and never for the signed botto
   const report = P.occlusionReporter((m) => said.push(m));
 
   assert.equal(report({ clear: true, sheet: false }), false, 'a clear placement says nothing');
-  assert.equal(report({ clear: false, sheet: true }), false,
+  assert.equal(report({ clear: false, sheet: true, fallback: false }), false,
     'the mobile bottom sheet is the SIGNED treatment (DC-3 bullet 4, §12 scopes the ' +
     'STOP-AND-FLAG to 1232px) and must not train the next hand to ignore the warning');
   assert.equal(said.length, 0);
@@ -171,6 +219,23 @@ test('the occlusion reporter speaks exactly once, and never for the signed botto
   // One per session, not one per placement: the card repositions on every open.
   assert.equal(report({ clear: false, sheet: false }), false);
   assert.equal(said.length, 1);
+});
+
+test('the DESKTOP sheet fallback speaks; the mobile sheet does not', () => {
+  // The two sheets are different facts. Below the breakpoint the full-width
+  // treatment is the LAYOUT and DC2-MOBILE-6 accepted its overlap as signed. At
+  // desktop width the sheet is what the two-axis dodge FELL BACK to, i.e. the
+  // geometry ran out — which is the condition [DC-3] signed as a STOP-AND-FLAG.
+  // Retiring the warning along with the harm would quietly un-sign it.
+  const mobile = [];
+  P.occlusionReporter((m) => mobile.push(m))({ clear: false, sheet: true, fallback: false });
+  assert.equal(mobile.length, 0);
+
+  const desktop = [];
+  const spoke = P.occlusionReporter((m) => desktop.push(m))({ clear: false, sheet: true, fallback: true });
+  assert.equal(spoke, true);
+  assert.equal(desktop.length, 1);
+  assert.match(desktop[0], /DC-3/);
 });
 
 test('applyPlacement writes the report onto the box — the flag has a reader', () => {

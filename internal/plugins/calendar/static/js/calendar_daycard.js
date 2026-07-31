@@ -137,8 +137,29 @@
   //
   // THE LEDGER IS NEVER OCCLUDED. The card's own `Open in the Ledger` door
   // points AT that column, so covering it would be the card contradicting
-  // itself. When the docked Ledger's rect is known the card is kept entirely to
-  // its left.
+  // itself. The LEDGER'S SETTLED RECT IS A HARD EXCLUSION ZONE for the desktop
+  // popover, whether that rect is a docked right-hand column or a full-width
+  // band the narrow layout has STACKED BELOW THE GRID.
+  //
+  // THE DODGE IS BOTH AXES (fix-forward, DC3-STACKED-LEDGER-OCCLUSION-1). The
+  // first two cuts dodged HORIZONTALLY ONLY — `limit = ledger.left - pad -
+  // size.w`, taken when the box shared a Y band with the column — and that
+  // dodge is structurally impossible against a STACKED Ledger, because a band
+  // that starts at x≈9 and spans the whole Bench leaves no left of it to move
+  // to (`limit` came out at ≈-339 and the clamp no-opped). The `top` branch
+  // above it only ever flipped for VIEWPORT room, never for the Ledger, so the
+  // 227px card — which always fits below its day — landed squarely on the band
+  // for EVERY day, EVERY viewer, at every .cal-bench content width from ~625px
+  // to ~884px. Measured: 23,131 px² over the GM's Ledger at 884px, sheet=false.
+  // The editor escaped only by accident (it is 400px tall, does not fit below,
+  // and its viewport flip happened to clear the band) — which is the proof that
+  // a vertical dodge was available at those widths and simply not attempted.
+  //
+  // So the order is: BELOW the day (preferred), then ABOVE it when below cannot
+  // clear, then — if neither position clears at popover width — the SHEET, which
+  // is [DC-3] bullet 4's own signed answer. THERE IS NO THIRD GEOMETRY and the
+  // card is never resized to fit: a card that shrank to dodge would be a
+  // different card, and [DC-3] signed one card and one sheet.
   //
   // `clear` IS MEASURED, NEVER ASSERTED, AND IT IS MEASURED THE SAME WAY IN
   // BOTH BRANCHES (fix-forward, DC-CLEAR-1 / DC-MOBILE-4). The first cut
@@ -151,12 +172,12 @@
   // what the placement intended.
   //
   // `sheet` travels with it because the two facts get different treatments and
-  // the caller is the only place that can tell them apart. At desktop widths an
-  // occluded Ledger is [DC-3]'s STOP-AND-FLAG. Below the breakpoint the
-  // full-width bottom sheet is [DC-3]'s OWN next bullet ("Mobile = bottom
-  // sheet, full-width") and §12 scopes the STOP-AND-FLAG row to 1232px, so the
-  // overlap there is the signed treatment rather than a defect. Both are
-  // recorded on the DOM; only the unsigned one speaks.
+  // the caller is the only place that can tell them apart. A POPOVER over the
+  // Ledger is [DC-3]'s STOP-AND-FLAG and it speaks. A SHEET over the Ledger is
+  // [DC-3] bullet 4's own signed treatment — below the breakpoint because that
+  // is the layout, and above it because the sheet is what the dodge falls back
+  // to — and §12 scopes the STOP-AND-FLAG row to 1232px, so it is recorded and
+  // stays quiet. Both are on the DOM; only the unsigned one warns.
   //
   // MOBILE IS A BOTTOM SHEET, still [popover], still the register's motion.
   function placeCard(anchor, size, view, ledger, opts) {
@@ -164,35 +185,67 @@
     var pad = opts.pad === undefined ? 8 : opts.pad;
     var breakpoint = opts.breakpoint === undefined ? 640 : opts.breakpoint;
 
-    if (view.w <= breakpoint) {
-      var sTop = Math.max(0, view.h - size.h);
-      return {
-        left: 0, top: sTop, width: view.w, sheet: true,
-        clear: !hitsLedger({ left: 0, top: sTop, width: view.w, height: size.h }, ledger),
-      };
-    }
+    if (view.w <= breakpoint) return sheetPlacement(size, view, ledger, false);
 
-    var top = anchor.bottom + pad;
-    if (top + size.h > view.h - pad) {
-      var above = anchor.top - pad - size.h;
-      top = above >= pad ? above : Math.max(pad, view.h - pad - size.h);
-    }
+    // The two vertical candidates, in preference order, each filtered on
+    // VIEWPORT room first — a position that leaves the card half off-screen is
+    // not a candidate no matter how clear of the Ledger it is.
+    var tops = [];
+    var below = anchor.bottom + pad;
+    var above = anchor.top - pad - size.h;
+    if (below + size.h <= view.h - pad) tops.push(below);
+    if (above >= pad) tops.push(above);
+    // NEITHER fits the viewport: the pre-existing clamp, kept so a short window
+    // still gets a placed card rather than being tipped into the sheet by a
+    // condition that has nothing to do with the Ledger.
+    if (!tops.length) tops.push(Math.max(pad, view.h - pad - size.h));
 
+    for (var i = 0; i < tops.length; i++) {
+      var at = desktopPlacement(tops[i], anchor, size, view, ledger, pad);
+      if (at.clear) return at;
+    }
+    return sheetPlacement(size, view, ledger, true);
+  }
+
+  // desktopPlacement resolves the horizontal axis for one vertical candidate and
+  // measures the result. The left dodge stays exactly as it was — it is the
+  // right answer for a DOCKED column and it is what keeps the card beside the
+  // Ledger rather than above the day at ordinary widths.
+  function desktopPlacement(top, anchor, size, view, ledger, pad) {
     var left = anchor.left;
     if (left + size.w > view.w - pad) left = view.w - pad - size.w;
-
-    // The dodge: keep the box entirely left of the column it links to, when
-    // there is room. When there is not, the box stays where the viewport put it
-    // and the measurement below tells the truth about it.
     if (ledger && ledger.width > 0 && overlapsY(top, size.h, ledger)) {
       var limit = ledger.left - pad - size.w;
       if (limit >= pad) left = Math.min(left, limit);
     }
     if (left < pad) left = pad;
-
     return {
       left: left, top: top, width: 0, sheet: false,
       clear: !hitsLedger({ left: left, top: top, width: size.w, height: size.h }, ledger),
+    };
+  }
+
+  // sheetPlacement is the full-width bottom sheet — [DC-3] bullet 4's signed
+  // treatment. It is reached from TWO conditions and they are different facts,
+  // which is what `fallback` carries:
+  //
+  //   below the mobile breakpoint the sheet is THE LAYOUT. §12 scopes the
+  //   STOP-AND-FLAG row to 1232px and DC2-MOBILE-6 accepted the overlap there as
+  //   signed, so it is recorded and stays quiet.
+  //
+  //   at desktop width the sheet is the LAST RESORT, taken because neither
+  //   vertical candidate could clear the Ledger. The card no longer covers the
+  //   column as a popover — but the geometry still RAN OUT, and that is exactly
+  //   the condition [DC-3] signed as a STOP-AND-FLAG. Retiring the warning along
+  //   with the harm would quietly un-sign it, so the fallback speaks.
+  //
+  // `clear` is measured the same way in both, so the report never flatters the
+  // placement.
+  function sheetPlacement(size, view, ledger, fallback) {
+    var top = Math.max(0, view.h - size.h);
+    return {
+      left: 0, top: top, width: view.w, sheet: true, fallback: !!fallback,
+      clear: !hitsLedger({ left: 0, top: top, width: view.w, height: size.h }, ledger),
     };
   }
 
@@ -233,17 +286,22 @@
   //   It is a report, not a state: no stylesheet may style it, because [DC-3]
   //   makes occlusion a build-time flag and not a UI mode somebody designed.
   //
-  //   ONE console warning per session, desktop only — the DEVELOPER-facing half.
-  //   Scoped to `!sheet` because below the breakpoint the full-width bottom
-  //   sheet covering a stacked Ledger is [DC-3]'s own next bullet and §12 scopes
-  //   the STOP-AND-FLAG row to 1232px (DC-MOBILE-4). Warning there would train
-  //   the next hand to ignore the warning that matters. One per session, not one
-  //   per placement: the card repositions on every open, and a warning that
-  //   fires sixty times is a warning nobody reads.
+  //   ONE console warning per session — the DEVELOPER-facing half. It fires for
+  //   a POPOVER that could not clear (which, after
+  //   DC3-STACKED-LEDGER-OCCLUSION-1's two-axis dodge, placeCard no longer
+  //   produces — it is kept as the alarm if a future placement path
+  //   reintroduces one) and for the DESKTOP SHEET FALLBACK, which is the
+  //   geometry-ran-out condition [DC-3] actually signed. It stays SILENT for the
+  //   mobile sheet, where the full-width treatment is the layout rather than a
+  //   fallback and §12 scopes the STOP-AND-FLAG row to 1232px (DC-MOBILE-4);
+  //   warning there would train the next hand to ignore the one that matters.
+  //   One per session, not one per placement: the card repositions on every
+  //   open, and a warning that fires sixty times is a warning nobody reads.
   function occlusionReporter(sink) {
     var fired = false;
     return function (at) {
-      if (!at || at.clear || at.sheet || fired) return false;
+      if (!at || at.clear || fired) return false;
+      if (at.sheet && !at.fallback) return false;
       fired = true;
       if (sink) {
         sink('calendar day card [C-CALV4-DAYCARD/DC-3]: this geometry cannot ' +
