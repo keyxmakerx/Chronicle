@@ -46,12 +46,30 @@ Carried out of R2-2a, not closed:
 - [x] **CTS-6, the per-day `+N more` popover — CLOSED as SUPERSEDED.** The day
   card IS the day's full list, which is the feature that booking wanted. Closed
   with the reason rather than quietly dropped.
-- [ ] **The §12 screenshot gate for R2-2a was NOT executed** — same reason as
-  R2-1's. Every row of it needs a browser: the card open at 1232px light+dark
-  NOT occluding the Ledger (a collision there is a STOP-AND-FLAG), at 420px and
-  358px, with the `ledger` layer switched OFF, the editor in create and edit
-  mode, the full player set checked for ABSENCE, and the reduced-motion capture
-  showing the completed state with no partial frame.
+- [ ] **The §12 screenshot gate for R2-2a is PART-EXECUTED — the geometry rows
+      are measured, the live-session rows are not.** Stated in two halves so the
+      row is not read as either "done" or "untouched".
+
+  **Measured headlessly** (fix-forward round 1, and independently by the slice's
+  verifier before it): the REAL `BenchPage` output for the signed GM / Nissa /
+  Bryn fixture, served with the real stylesheets and the real module, driven in
+  Chromium. At **1232px the card does not occlude the docked Ledger** — 0 px²
+  for every viewer × theme × reduced-motion — so [DC-3]'s STOP-AND-FLAG row
+  measures clean. The `ledger`-layer-off render, the editor in create and edit
+  mode, the player set checked for ABSENCE, and the reduced-motion capture were
+  all driven the same way. At **390px the bottom sheet does overlap the stacked
+  Ledger** (8.5k–54k px² depending on card height); that is [DC-3]'s own
+  "Mobile = bottom sheet, full-width" bullet and §12 scopes the STOP-AND-FLAG
+  row to 1232px, so it is the signed treatment — now RECORDED on the DOM as
+  `data-dc-clear="0"` rather than silently reported as clear (DC-CLEAR-1).
+
+  **Still open, and it needs a live authed server:** this environment has no
+  Docker daemon (`make docker-up` cannot reach `/var/run/docker.sock`), so there
+  is no seeded DB and no session. Two rows genuinely cannot be closed without
+  one — **a real CSRF-bearing write** (the dispatch names a 403 on the first
+  Save as the expected failure mode if the `apiFetch` path is wrong, and asks
+  that it be verified live) and **any layout difference between the fixture
+  month and real seeded data**. Close those on the operator's client.
 
 Carried out of R2-1, not closed:
 

@@ -65,9 +65,37 @@ and calendar-v4 had no way to create or edit an event anywhere.
 **Known gap, stated rather than papered over:** where the Ledger is NOT docked a
 day has no focusable control at all, so the card is pointer-only for that
 viewer. No `tabindex` was injected (that is a Block mutation and a control the
-server never rendered). Booked as **C-CALV4-DAYPICK-A11Y**. The §12 screenshot
-gate was not executed — no browser in this environment; every row of it is in
-`.ai/todo.md`.
+server never rendered). Booked as **C-CALV4-DAYPICK-A11Y**.
+
+**Fix-forward round 1 (stages 3-5), against the slice's adversarial review:**
+
+- **The occlusion report reached no consumer** (DC-CLEAR-1). `placeCard`
+  computed a `clear` flag; two comments and a commit body promised an
+  unclearable geometry would be "visible rather than silent"; nothing read it.
+  The one condition [DC-3] signs as a STOP-AND-FLAG shipped as the quietest
+  thing on the page — the "sentence promising a guard that never ran" class
+  R2-1's stage 9 existed to kill. The mobile branch was additionally returning
+  `clear: true` without ever consulting the Ledger's rect, while measuring
+  8.5k-54k px² of overlap. `clear` is now MEASURED the same way in both
+  branches, from the box that actually landed, and it has two readers:
+  `data-dc-clear` on the card's root at every width (a report, guarded against
+  ever being styled) and ONE console warning per session at desktop widths only.
+- **The intercalary payload path was 0% covered** (DC-ICAL-2) while daycard.go
+  claimed the mirrored key helpers were pinned "in either direction" — true of
+  `slug-N`, false of `slug-iN`, because the signed fixture declares no
+  intercalary month. Five tests against real intercalary months spliced into the
+  oracle fixture, including two of UNEQUAL length, which is the shape the coords
+  zip fails on. The shipped code was correct; the guard and the comment were not.
+- **Two listeners reached `edSave` with no in-flight guard** (DC-SAVE-6). Single
+  -fire rested entirely on `preventDefault` beating the submit button's
+  activation; a capture-phase move or a branch reorder would have made every
+  Save write twice, and a double-click did it already. Guarded at the WRITE, not
+  the listener.
+
+**The §12 screenshot gate is PART-EXECUTED** — the geometry rows are measured
+headlessly against the real render (1232px clears the Ledger at 0 px²; 390px is
+the signed bottom sheet, now recorded rather than mis-reported); the rows that
+need a live authed session are still open. Both halves are in `.ai/todo.md`.
 
 ### calendar-v4 — ROUND 2 · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
 
