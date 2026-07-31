@@ -232,6 +232,92 @@ test('a row Edit door GETs the one new read route, then PUTs the update', async 
     'the update dropped the audience the editor never showed anybody');
 });
 
+// --- EDIT-MODE-ID-FALLBACK-3: the door's id decides PUT-vs-POST -------------
+
+test('an edit session with no id REFUSES; it never falls through to create', () => {
+  // Primitive fields only: the mappers run in a vm realm, so their objects
+  // carry a foreign prototype and deepEqual would compare identities.
+  assert.equal(P.writeTarget('create', '').method, 'POST');
+  assert.equal(P.writeTarget('create', '').eventID, '');
+  assert.equal(P.writeTarget('edit', 'ev-2').method, 'PUT');
+  assert.equal(P.writeTarget('edit', 'ev-2').eventID, 'ev-2');
+  // THE FORBIDDEN FALL-THROUGH: `mode === 'edit' && eventID` used to collapse to
+  // falsy here and send a POST, creating a DUPLICATE event whose only symptom is
+  // a second row nobody connects to the Save they pressed.
+  for (const missing of ['', null, undefined, 0]) {
+    assert.equal(P.writeTarget('edit', missing), null,
+      'an edit with no id must refuse, not create');
+  }
+  // A create never inherits a stale id either.
+  assert.equal(P.writeTarget('create', 'ev-9').eventID, '');
+});
+
+test('EDIT mode writes to the id on the DOOR, not to the id the server echoed back', async () => {
+  // The server's record used to win the single line that decides PUT-vs-POST,
+  // which was correct by luck rather than by design: the write went wherever
+  // the response said, not to the row the viewer clicked.
+  const fx = boot({
+    responses: {
+      'GET /campaigns/camp-1/calendars/cal-1/events/ev-2': {
+        ok: true,
+        json: () => Promise.resolve({
+          id: 'ev-5', calendar_id: 'cal-1', name: 'Barrow scouting',
+          year: 1523, month: 1, day: 3, all_day: true, visibility: 'everyone',
+        }),
+      },
+    },
+  });
+  fx.fire('click', fx.cells[3]);
+  fx.fire('click', fx.card.querySelector('[data-dc-edit="ev-2"]'));
+  await new Promise((r) => setImmediate(r));
+
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  await new Promise((r) => setImmediate(r));
+  const put = fx.calls.find((c) => c.method === 'PUT');
+  assert.ok(put, 'an edit must PUT');
+  assert.equal(put.url, '/campaigns/camp-1/calendars/cal-1/events/ev-2',
+    'the write targets the row that was clicked');
+});
+
+test('DELETE follows the same door id as the save, so the two cannot disagree', async () => {
+  const fx = boot({
+    responses: {
+      'GET /campaigns/camp-1/calendars/cal-1/events/ev-2': {
+        ok: true,
+        json: () => Promise.resolve({
+          id: 'ev-5', calendar_id: 'cal-1', name: 'Barrow scouting',
+          year: 1523, month: 1, day: 3, all_day: true, visibility: 'everyone',
+        }),
+      },
+    },
+  });
+  fx.fire('click', fx.cells[3]);
+  fx.fire('click', fx.card.querySelector('[data-dc-edit="ev-2"]'));
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(fx.editor.querySelector('[data-de-delete]').hidden, false);
+  fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fx.calls.find((c) => c.method === 'DELETE').url,
+    '/campaigns/camp-1/calendars/cal-1/events/ev-2');
+});
+
+test('an EDIT session with no id REFUSES the save rather than POSTing a duplicate', async () => {
+  // A row whose door carries no id never reaches the read route at all — and if
+  // an edit session somehow arrives without one, Save must stop. The failure it
+  // forbids is silent: a POST creates a SECOND event and the only symptom is an
+  // extra row nobody connects to the Save they pressed.
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  const door = fx.card.querySelector('[data-dc-edit]');
+  door.setAttribute('data-dc-edit', '');
+  fx.fire('click', door);
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(fx.calls.length, 0, 'an id-less door does not even read');
+  assert.equal(fx.editor.popoverOpen !== true, true, 'and it opens no editor');
+});
+
 test('the edit door round-trips the recurrence the route now hands it', async () => {
   // The whole chain, on the wire: the record carries recurrence (handler.go's
   // eventEditorRecord), the module stores it, and the PUT sends it back. The

@@ -425,8 +425,23 @@
     return body;
   }
 
+  // writeTarget is the ONE place that decides PUT-vs-POST
+  // (EDIT-MODE-ID-FALLBACK-3). It is pure and exported so the decision can be
+  // pinned directly rather than inferred from whichever request happened to
+  // reach a stub: an edit session that has lost its id must REFUSE, because the
+  // alternative — falling through to the create branch — silently duplicates
+  // the event and shows nothing but an extra row.
+  function writeTarget(mode, eventID) {
+    if (mode === 'edit') {
+      if (!eventID) return null;
+      return { method: 'PUT', eventID: String(eventID) };
+    }
+    return { method: 'POST', eventID: '' };
+  }
+
   if (typeof window !== 'undefined') {
     window.__calDayCard = {
+      writeTarget: writeTarget,
       indexPayload: indexPayload,
       headText: headText,
       durationMS: durationMS,
@@ -831,7 +846,19 @@
       edError('');
     }
 
-    function edOpen(mode, cal, day, rec, anchor) {
+    // edOpen's `doorID` is THE ID OF THE ROW THAT WAS CLICKED, and in edit mode
+    // it is the only id the editor will act on (EDIT-MODE-ID-FALLBACK-3).
+    //
+    // It used to take the id from the SERVER's record — `rec && rec.id ?
+    // rec.id : ''` — and edSave then computed `edit = mode === 'edit' &&
+    // eventID`. A GET that returned a record without an `id` would therefore
+    // make an EDIT-mode Save fall through to the CREATE branch and POST a
+    // DUPLICATE event instead of PUTting the original, whose only symptom is a
+    // second row appearing. Unreachable today (newEventEditorRecord always sets
+    // ID on a non-omitempty json:"id"), and a probe confirmed the server's id
+    // also silently WINS over the door's — correct by luck on both counts, on
+    // the single line that decides PUT-vs-POST.
+    function edOpen(mode, cal, day, rec, anchor, doorID) {
       // A fresh editor session is a fresh write. The flag survives a failed
       // save so the failing one cannot be double-submitted; it must not survive
       // the box being closed and opened again, or a network blip would leave the
@@ -840,10 +867,13 @@
       edState.mode = mode;
       edState.calId = cal.id;
       edState.day = day;
-      edState.eventID = rec && rec.id ? rec.id : '';
+      edState.eventID = mode === 'edit' ? String(doorID || '') : '';
       edState.prev = mode === 'edit' ? rec : null;
       seedCategories(cal);
       edFill(rec);
+      // Delete targets the same id the save does, so the two can never disagree
+      // about which event this editor session is holding.
+      if (ed.del) ed.del.hidden = !edState.eventID;
       if (ed.head) {
         ed.head.textContent = (mode === 'edit' ? 'Edit event · ' : 'New event · ') + (day.label || '');
         ed.head.setAttribute('data-day', day.key || '');
@@ -917,12 +947,21 @@
         edError('This day has no resolvable date; pick one before saving.');
         return;
       }
+      // EDIT MODE REFUSES RATHER THAN FALLING THROUGH TO CREATE
+      // (EDIT-MODE-ID-FALLBACK-3). An edit session that has lost its id is a
+      // bug, and the one thing it must never do is quietly become a POST — a
+      // duplicated event is silent data corruption whose only symptom is a
+      // second row, days later.
+      var target = writeTarget(edState.mode, edState.eventID);
+      if (!target) {
+        edError('This editor lost the event it was holding. Close it and click the row again.');
+        return;
+      }
       var body = buildEventBody(form, edState.prev, { canOfferGMOnly: !!ed.gmOnly });
-      var edit = edState.mode === 'edit' && edState.eventID;
       // Set AFTER validation, so a rejected title does not lock the editor.
       edState.busy = true;
-      fetcher(edit ? eventsBase() + '/' + edState.eventID : eventsBase(), {
-        method: edit ? 'PUT' : 'POST', body: body,
+      fetcher(target.eventID ? eventsBase() + '/' + target.eventID : eventsBase(), {
+        method: target.method, body: body,
       }).then(function (resp) {
         if (resp && resp.ok) { window.location.reload(); return; }
         edFailed('That did not save. Check the date and try again.');
@@ -950,7 +989,9 @@
     // visibility_rules and no recurrence.
     function edLoad(cal, day, eventID, anchor) {
       var fetcher = api();
-      if (!fetcher) return;
+      // A door with no id is not an edit; it is a malformed row, and reading
+      // `/events/` would be a request for the collection rather than a record.
+      if (!fetcher || !eventID) return;
       fetcher('/campaigns/' + campaignID + '/calendars/' + cal.id + '/events/' + eventID, { method: 'GET' })
         .then(function (resp) {
           if (!resp || !resp.ok) return;
@@ -958,7 +999,7 @@
         })
         .then(function (rec) {
           if (!rec) return;
-          edOpen('edit', cal, day, rec, anchor);
+          edOpen('edit', cal, day, rec, anchor, eventID);
         })
         .catch(function () { /* a refused read is a closed card, not a broken page */ });
     }
