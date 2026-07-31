@@ -110,16 +110,57 @@ test('a RESTRICTED event keeps its audience even for a viewer who can set dm_onl
   assert.equal(body.visibility_rules, rules);
 });
 
+test('a RECURRING event keeps repeating after a title-only save', () => {
+  // DC2-RECUR-DATALOSS. `is_recurring` is a value-typed bool on the shipped
+  // PUT and the service writes it UNGUARDED by design ("false IS the value,
+  // not 'absent'"), so an omitted key is not a preserved field — it is a WRITE
+  // of false. The pointer siblings around it ARE nil-preserved, so the row
+  // would be left is_recurring=false with recurrence_type still populated:
+  // the exact half-state C-CAL-RECURRING-PARTIAL-STATE-CLEANUP cleaned up once.
+  const body = P.buildEventBody(
+    { name: 'Renamed', year: '1523', month: '1', day: '3', allDay: true },
+    {
+      id: 'ev-9', visibility: 'everyone',
+      is_recurring: true, recurrence_type: 'yearly', recurrence_interval: 1,
+    },
+    { canOfferGMOnly: true });
+  assert.equal(body.is_recurring, true,
+    'the save un-repeated a recurring event the editor never offered a control for');
+  assert.equal(body.recurrence_type, 'yearly');
+  assert.equal(body.recurrence_interval, 1);
+});
+
+test('a NON-recurring event is sent as non-recurring, explicitly', () => {
+  const body = P.buildEventBody(
+    { name: 'x', year: '1', month: '1', day: '1', allDay: true },
+    { id: 'ev-9', visibility: 'everyone', is_recurring: false }, {});
+  assert.equal(body.is_recurring, false);
+  assert.ok(!('recurrence_type' in body), 'a nil stored type must not become an empty one');
+  assert.ok(!('recurrence_interval' in body));
+});
+
+test('CREATE mode sends no recurrence at all — false is then the true value', () => {
+  const body = P.buildEventBody({ name: 'x', year: '1', month: '1', day: '1', allDay: true }, null, {});
+  assert.ok(!('is_recurring' in body), 'a new event has no stored recurrence to preserve');
+  assert.ok(!('recurrence_type' in body));
+});
+
 test('the body carries no field the shipped request struct does not bind', () => {
   const body = P.buildEventBody(
     { name: 'x', year: '1', month: '1', day: '1', allDay: true },
-    { id: 'ev-9', visibility: 'everyone', description_html: '<p>x</p>', entity_id: 'e-1' }, {});
+    {
+      id: 'ev-9', visibility: 'everyone', description_html: '<p>x</p>', entity_id: 'e-1',
+      is_recurring: true, recurrence_type: 'weekly', recurrence_interval: 2,
+    }, {});
   const allowed = new Set([
     'name', 'description', 'description_html', 'entity_id',
     'year', 'month', 'day', 'all_day', 'category',
     'start_hour', 'start_minute', 'end_hour', 'end_minute',
     'end_year', 'end_month', 'end_day',
     'visibility', 'visibility_rules',
+    // Bound by PUT …/events/:eid and by POST …/events alike; carried because
+    // an ABSENT is_recurring is a write of false (DC2-RECUR-DATALOSS).
+    'is_recurring', 'recurrence_type', 'recurrence_interval',
   ]);
   for (const k of Object.keys(JSON.parse(JSON.stringify(body)))) {
     assert.ok(allowed.has(k), 'unexpected request field ' + k + ' — a route that grows a ' +
@@ -189,6 +230,36 @@ test('a row Edit door GETs the one new read route, then PUTs the update', async 
   assert.equal(put.url, '/campaigns/camp-1/calendars/cal-1/events/ev-1');
   assert.equal(put.body.visibility_rules, '{"allowed_users":["u-gm"]}',
     'the update dropped the audience the editor never showed anybody');
+});
+
+test('the edit door round-trips the recurrence the route now hands it', async () => {
+  // The whole chain, on the wire: the record carries recurrence (handler.go's
+  // eventEditorRecord), the module stores it, and the PUT sends it back. The
+  // pure-builder tests above pin the body; this pins that the record's keys
+  // actually reach the builder rather than being dropped on the way in.
+  const stored = {
+    id: 'ev-1', calendar_id: 'cal-1', name: 'Midsummer', year: 1523, month: 1, day: 3,
+    all_day: true, visibility: 'everyone',
+    is_recurring: true, recurrence_type: 'yearly', recurrence_interval: 1,
+  };
+  const fx = boot({
+    responses: { 'GET /campaigns/camp-1/calendars/cal-1/events/ev-1': { ok: true, json: () => Promise.resolve(stored) } },
+  });
+  fx.fire('click', fx.cells[3]);
+  fx.fire('click', fx.card.querySelector('[data-dc-edit]'));
+  await new Promise((r) => setImmediate(r));
+
+  fx.editor.querySelector('[data-de-name]').value = 'Midsummer Renamed';
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  await new Promise((r) => setImmediate(r));
+
+  const put = fx.calls[1];
+  assert.equal(put.method, 'PUT');
+  assert.equal(put.body.name, 'Midsummer Renamed');
+  assert.equal(put.body.is_recurring, true,
+    'renaming a recurring event through the day-card editor un-repeated it');
+  assert.equal(put.body.recurrence_type, 'yearly');
+  assert.equal(put.body.recurrence_interval, 1);
 });
 
 test('Delete uses the shipped DELETE and nothing else', async () => {

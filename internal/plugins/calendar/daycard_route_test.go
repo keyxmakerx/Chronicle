@@ -116,6 +116,100 @@ func TestGetEvent_ReturnsTheEditorsFieldsAndNothingElse(t *testing.T) {
 	}
 }
 
+// ── DC2-RECUR-DATALOSS — the round-2 fix-forward, both halves ───────────────
+//
+// The defect the two tests below exist to keep dead: renaming a RECURRING event
+// through the day-card editor silently un-repeated it. The editor authors no
+// recurrence in this stage (§5's table marks it PARTIAL), so its body carried
+// no `is_recurring` key — and on this route OMISSION IS A WRITE, because the
+// shipped PUT binds `is_recurring` into a value-typed bool and the service
+// writes it unguarded on purpose. Worse, the nil-guarded siblings survive, so
+// the row lands in the exact half-state C-CAL-RECURRING-PARTIAL-STATE-CLEANUP
+// already had to clean up once: is_recurring=false with recurrence_type,
+// recurrence_interval and recurrence_end_* all still populated.
+//
+// The fix is the record + the client, together, and neither half works alone:
+// the record hands the editor what it does not offer, and the editor sends it
+// back. Half one is pinned here; half two is pinned on the wire in
+// test/js/daycard_editor_requests.test.mjs ("a RECURRING event keeps repeating
+// after a title-only save" and "the edit door round-trips the recurrence the
+// route now hands it").
+
+// TestGetEvent_TheRecordCarriesRecurrenceSoTheEditorCanRoundTripIt.
+func TestGetEvent_TheRecordCarriesRecurrenceSoTheEditorCanRoundTripIt(t *testing.T) {
+	evt := dayCardRouteEvent("everyone", nil)
+	evt.IsRecurring = true
+	evt.RecurrenceType = blockStrPtr("yearly")
+	evt.RecurrenceInterval = intPtr(1)
+
+	h := dayCardRouteHandler(dayCardRouteCal("everyone"), evt)
+	rec, err := serveGetEvent(h, campaigns.RoleScribe, "u-scribe", "cal-1", "ev-1")
+	if err != nil {
+		t.Fatalf("GetEventAPI: %v", err)
+	}
+	var body struct {
+		IsRecurring        *bool   `json:"is_recurring"`
+		RecurrenceType     *string `json:"recurrence_type"`
+		RecurrenceInterval *int    `json:"recurrence_interval"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not JSON: %v", err)
+	}
+	if body.IsRecurring == nil || !*body.IsRecurring {
+		t.Error("the record drops `is_recurring`. The editor cannot round-trip a field it " +
+			"was never given, and an omitted key on the shipped PUT is a WRITE of false")
+	}
+	if body.RecurrenceType == nil || *body.RecurrenceType != "yearly" {
+		t.Error("the record drops `recurrence_type`")
+	}
+	if body.RecurrenceInterval == nil || *body.RecurrenceInterval != 1 {
+		t.Error("the record drops `recurrence_interval`")
+	}
+}
+
+// TestUpdateEvent_AnOmittedIsRecurringIsAWriteOfFalse pins the SERVICE fact the
+// fix above is built on, in the voice null_preserve_test.go's
+// TestUpdateEvent_EntityIDStillClearsOnNil uses: this is a deliberate non-fix,
+// pinned so a future sweep cannot quietly change it without revisiting why the
+// client round-trips.
+//
+// C-CAL-NULL-PRESERVE excluded value-typed fields ON PURPOSE — "IsRecurring —
+// bool: false IS the value, not 'absent'" — so the write path has no way to
+// tell an author clearing a repeat from a client that never mentioned it. That
+// is why the obligation lives in the client and why the record carries the
+// field. If this test ever goes red because the bool was nil-guarded, the
+// client's round-trip becomes redundant rather than wrong; read the comment on
+// eventEditorRecord before deleting anything.
+func TestUpdateEvent_AnOmittedIsRecurringIsAWriteOfFalse(t *testing.T) {
+	var written *Event
+	repo := &mockCalendarRepo{
+		getEventFn: func(_ context.Context, _ string) (*Event, error) { return seededEvent(), nil },
+		updateEventFn: func(_ context.Context, evt *Event) error {
+			written = evt
+			return nil
+		},
+	}
+	svc := newTestCalendarService(repo)
+	// Exactly what a title-only save binds to when the body omits the key.
+	if err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
+		Name: "Renamed Title", Year: 1492, Month: 7, Day: 15,
+		Visibility: "everyone", IsRecurring: false,
+	}); err != nil {
+		t.Fatalf("UpdateEvent: %v", err)
+	}
+	if written == nil {
+		t.Fatal("repo.UpdateEvent not called")
+	}
+	if written.IsRecurring {
+		t.Fatal("IsRecurring is now nil-guarded — see this test's comment before " +
+			"simplifying the client's round-trip away")
+	}
+	if written.RecurrenceType == nil || *written.RecurrenceType != "yearly" {
+		t.Fatal("recurrence_type stopped surviving the write; the half-state this fix " +
+			"is about no longer forms the way the comment describes")
+	}
+}
+
 // §8 + [DC-9]: the ROLE FLOOR IS NOT THE SECURITY BOUNDARY. A player may read
 // an event they can already see — the card lists it and the Ledger prints it —
 // but `visibility_rules` NAMES OTHER USERS and neither audience field is theirs.

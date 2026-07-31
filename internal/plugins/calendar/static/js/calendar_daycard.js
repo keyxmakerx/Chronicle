@@ -340,9 +340,28 @@
       body.visibility_rules = null;
     }
 
-    // The editor does not author recurrence in this stage, so it preserves it
-    // rather than clearing it: is_recurring defaults false in the request
-    // struct, and sending false over a recurring event would un-repeat it.
+    // RECURRENCE IS SENT BACK, NOT LEFT OUT. The editor does not author it in
+    // this stage, and OMISSION IS NOT PRESERVATION here: `is_recurring` is a
+    // value-typed bool on the shipped PUT and service.UpdateEvent writes it
+    // unguarded on purpose ("false IS the value, not 'absent'"), so a body
+    // without the key un-repeats the event — and the nil-guarded
+    // recurrence_type/interval/end_* survive, leaving exactly the half-state
+    // C-CAL-RECURRING-PARTIAL-STATE-CLEANUP already had to clean up once.
+    // A title-only save is the likeliest way to hit it.
+    //
+    // This is the same round-trip discipline the visibility pair above rides,
+    // applied to the one field where an ABSENT key is a WRITE. Create mode
+    // sends nothing: a new event has no stored recurrence and false is then
+    // the true value rather than a silent clear.
+    if (prev) {
+      body.is_recurring = !!prev.is_recurring;
+      if (prev.recurrence_type !== undefined && prev.recurrence_type !== null) {
+        body.recurrence_type = prev.recurrence_type;
+      }
+      if (prev.recurrence_interval !== undefined && prev.recurrence_interval !== null) {
+        body.recurrence_interval = prev.recurrence_interval;
+      }
+    }
     if (prev && prev.entity_id) body.entity_id = prev.entity_id;
     if (prev && prev.description_html !== undefined) body.description_html = prev.description_html;
     return body;

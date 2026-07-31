@@ -629,6 +629,39 @@ type eventEditorRecord struct {
 	Category        *string `json:"category,omitempty"`
 	Visibility      string  `json:"visibility,omitempty"`
 	VisibilityRules *string `json:"visibility_rules,omitempty"`
+	// RECURRENCE RIDES BECAUSE THE EDITOR MUST SEND IT BACK, and this is the
+	// R2 fix-forward (DC2-RECUR-DATALOSS): the record shipped without it and
+	// the editor therefore could not round-trip it even in principle.
+	//
+	// `is_recurring` is the field that makes this load-bearing rather than
+	// tidy. It is a VALUE-typed bool on the shipped PUT's request struct and
+	// service.UpdateEvent writes it UNGUARDED, deliberately — "IsRecurring —
+	// bool: false IS the value, not 'absent'" (service.go, C-CAL-NULL-PRESERVE).
+	// So a body that OMITS the key sends false, and a title-only save through
+	// this editor would un-repeat a recurring event AND leave the row in the
+	// half-state C-CAL-RECURRING-PARTIAL-STATE-CLEANUP already had to clean up
+	// once: is_recurring=false with recurrence_type/interval/end_* still
+	// populated. The nil-guarded pointer siblings around it cannot save it,
+	// because they preserve exactly the fields that make the half-state.
+	//
+	// This is the SAME discipline the two audience fields above are gated
+	// under, stated once more in the direction that bites: the editor
+	// round-trips what it does not offer, and it can only do that with what it
+	// was given. It authors none of these three in this stage (§5's table marks
+	// recurrence PARTIAL, and the exotic units are chipped GM-side) — carrying
+	// them is what makes NOT authoring them lossless instead of destructive.
+	//
+	// The three END/MAX fields are NOT here on purpose: the shipped PUT does
+	// not bind them at all, so the service's nil-guard preserves them without
+	// the client's help, and a field the editor cannot write back has no
+	// business on a record whose law is "only fields the editor writes back".
+	//
+	// UNGATED, unlike the audience pair: a recurrence rule names no user and
+	// resolves no audience. It is the same class as `description`, which is
+	// also ungated, and a player has no editor to feed it to in any case.
+	IsRecurring        bool    `json:"is_recurring"`
+	RecurrenceType     *string `json:"recurrence_type,omitempty"`
+	RecurrenceInterval *int    `json:"recurrence_interval,omitempty"`
 }
 
 // newEventEditorRecord projects one event for one viewer's authoring floor.
@@ -642,6 +675,8 @@ func newEventEditorRecord(e Event, canAuthor bool) eventEditorRecord {
 		EndYear: e.EndYear, EndMonth: e.EndMonth, EndDay: e.EndDay,
 		EndHour: e.EndHour, EndMinute: e.EndMinute,
 		AllDay:  e.AllDay, Category: e.Category,
+		IsRecurring:    e.IsRecurring,
+		RecurrenceType: e.RecurrenceType, RecurrenceInterval: e.RecurrenceInterval,
 	}
 	if canAuthor {
 		rec.Visibility = e.Visibility
