@@ -103,13 +103,57 @@ func TestGetEvent_ReturnsTheEditorsFieldsAndNothingElse(t *testing.T) {
 			t.Errorf("the editor cannot open without %q", want)
 		}
 	}
-	// The route's own bound: no campaign data, no member list, no roster, no
-	// audience resolution, no calendar structure, no authorship, no timestamps.
+
+	// THE RECORD'S OWN INVENTORY, READ OFF THE TYPE BY REFLECTION
+	// (GETEVENT-FIELD-BOUND-IS-A-DENYLIST, round-4 fix-forward). The bound below
+	// used to be a hand-written list of fifteen forbidden names, and a deny-list
+	// only catches what whoever wrote it thought of: an `owner_id`, a `notes`, a
+	// future `attendees` added to eventEditorRecord would have passed it in
+	// silence. That is the exact shape the PAYLOAD's equivalent law was
+	// fix-forwarded away from one round earlier (DC2-PAYLOAD-OMITEMPTY), and the
+	// two halves of one field law should not be guarded to two standards.
+	//
+	// Every optional field on the record is `omitempty`, so marshalling a
+	// populated literal would have the same blind spot reflection does not: a
+	// field cannot be added to the type without appearing here, whatever its tag.
+	//
+	// The fixture cross-check below is the OTHER half and it stays: reflection
+	// catches a field ADDED to the type, the fixture catches a key LEAKING onto
+	// the wire that the type does not declare — a raw Event marshalled by mistake,
+	// say. Neither subsumes the other.
+	wantRecord := []string{
+		"all_day", "calendar_id", "category", "day", "description", "description_html",
+		"end_day", "end_hour", "end_minute", "end_month", "end_year", "entity_id",
+		"id", "is_recurring", "month", "name", "recurrence_interval",
+		"recurrence_type", "start_hour", "start_minute", "visibility",
+		"visibility_rules", "year",
+	}
+	declared := jsonKeySet(t, eventEditorRecord{})
+	if got := sortedKeys(declared); !equalStrings(got, wantRecord) {
+		t.Errorf("eventEditorRecord declares JSON keys %v, want exactly %v — §8 fixes "+
+			"this route at ONLY FIELDS THE EDITOR WRITES BACK. A new field here is a "+
+			"deliberate widening of the wave's one new read route and belongs in this "+
+			"list with a reason, not in the struct alone", got, wantRecord)
+	}
+	for k := range body {
+		if !declared[k] {
+			t.Errorf("the response carries the key %q, which eventEditorRecord does not "+
+				"declare — this is not a general-purpose event API", k)
+		}
+	}
+
+	// The named refusals stay under the reflection assertion rather than instead
+	// of it. They cost nothing, and each one names a thing somebody genuinely
+	// reached for: no campaign data, no member list, no roster, no calendar
+	// structure, no authorship, no timestamps, no collect_rsvps.
 	for _, bad := range []string{
 		"campaign_id", "members", "roster", "months", "weekdays", "moons",
 		"created_by", "created_at", "updated_at", "collect_rsvps",
 		"entity_name", "entity_icon", "entity_color", "color", "icon",
 	} {
+		if declared[bad] {
+			t.Errorf("the record declares %q — this is not a general-purpose event API", bad)
+		}
 		if _, ok := body[bad]; ok {
 			t.Errorf("the record carries %q — this is not a general-purpose event API", bad)
 		}
