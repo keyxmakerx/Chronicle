@@ -162,14 +162,49 @@ server never rendered). Booked as **C-CALV4-DAYPICK-A11Y**.
   added to the scope glob with two self-test rows — coverage widening only,
   mutation-verified in both directions.
 
+**Fix-forward round 4 (stages 14-15), against the fourth adversarial review:**
+
+- **The round-3 fix closed the short-box case and opened a larger one on the same
+  code path** (DC3-DESKTOP-SHEET-OCCLUSION-R4, the blocker). The two-candidate
+  dodge admitted the ABOVE position only when it fitted the viewport outright and
+  sent everything else to a clamp that pins the box to the BOTTOM of the
+  viewport — where the stacked band is. A box taller than the room above its day
+  therefore never flipped, failed both candidates and took the DESKTOP SHEET,
+  covering **100% of the Ledger** across the same 625-884px band, while warning
+  that the geometry was impossible. It was not impossible, it was not attempted:
+  a 481px box at top=8 ends at 489 and the band starts at 595. Reachable two
+  ways with ordinary data — `+ New event` (a 420x400 editor: 107,604 px² at
+  884px, a REGRESSION against the pre-round-3 module, which placed the same
+  editor clear) and a day with 12+ events (≈379px). `above` is now CLAMPED into
+  the viewport rather than dropped: the same clamping the below-candidate always
+  had, in the direction this one prefers. Still two anchored candidates and one
+  sheet; the card is still never resized; the sheet fallback is unweakened and
+  is now the only thing its STOP-AND-FLAG speaks about. **The lesson is not
+  round 3's:** the round-3 fix was verified on the case it was written for and
+  not on the surface that case hands off to, and the module's own comment
+  ("THERE IS NO THIRD GEOMETRY") foreclosed the placement that fixes both.
+- **A harness fidelity gap hid the editor half for three rounds.** `daycard_dom`'s
+  rect is a static all-zero and the card is the EDITOR's anchor, so every editor
+  in the JS suite was placed at the viewport origin, where nothing can be
+  occluded. The card's rect is now derived from the placement the module wrote,
+  and the editor regression goes red without it.
+- **The route record's field law was a deny-list**
+  (GETEVENT-FIELD-BOUND-IS-A-DENYLIST). §8's "only fields the editor writes
+  back" is pinned twice; the payload's half reads the type by REFLECTION, the
+  route's half asserted six required keys and fifteen hand-written forbidden
+  names, so an `owner_id` or an `attendees` would have passed in silence — the
+  exact shape the payload's own guard was fix-forwarded away from one round
+  earlier. Both halves now read the definition.
+
 **The §12 screenshot gate is PART-EXECUTED** — the geometry rows are measured
 headlessly against the real render (1232px clears the Ledger at 0 px²; the
-625-884px stacked band clears it after round 3; 390px is the signed bottom
-sheet, recorded rather than mis-reported); the rows that need a live authed
-session are still open. Both halves are in `.ai/todo.md`. Round 3's disclosure
-lesson rides with it: **a geometry claim is a claim about the widths it was
-taken at**, and the widths where the layout changes shape are exactly the ones a
-two-point measurement omits.
+625-884px stacked band clears it after rounds 3 and 4, for short boxes and tall
+ones; 390px is the signed bottom sheet, recorded rather than mis-reported); the
+rows that need a live authed session are still open. Both halves are in
+`.ai/todo.md`. Round 3's disclosure lesson rides with it — **a geometry claim is
+a claim about the widths it was taken at** — and round 4 adds the second axis:
+it is also a claim about the BOX HEIGHTS it was taken at, and the surface the
+card hands off to has a different one.
 
 ### calendar-v4 — ROUND 2 · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
 

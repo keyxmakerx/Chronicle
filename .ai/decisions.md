@@ -3064,6 +3064,45 @@ geometry "a pathological geometry", so two reviews read the product's own layout
 as an impossible one. It is now a positive regression case at the ~884px and
 ~944px boundaries.
 
+**A CANDIDATE THAT IS DROPPED IS A GEOMETRY THAT WAS NEVER ATTEMPTED, AND A
+FALLBACK CANNOT TELL THE DIFFERENCE.** The fix above shipped with the ABOVE
+candidate admitted only when it fitted the viewport outright, and everything
+else falling to a clamp that pins the box to the BOTTOM of the viewport — which
+is where the stacked band lives. So the fix closed the case it was written for,
+the 227px card, and opened a larger one on the same code path: a box TALLER than
+the room above its day never flipped at all, failed both candidates and took the
+desktop sheet, covering 100% of the Ledger across the same band. It reached that
+with no unusual data at either end — `+ New event` produces a 420x400 editor,
+and twelve events on a festival day produce a ≈379px card — and the pre-fix
+module had placed that same editor CLEAR, by accident, at the same widths. The
+correction is a clamp on the existing flip rather than a new position: `above`
+still means "start the box above the day", and a box too tall for the room above
+its day starts at the viewport's top edge instead of off-screen. Two anchored
+candidates and one sheet, unchanged.
+
+Two further things are worth recording, and both are about what a fix costs
+elsewhere.
+
+**Four: a warning that fires on a fallback is asserting that the fallback was
+necessary.** "This geometry cannot place the card clear of the Ledger" is a
+claim about the world, and it was false for every one of those boxes — a 481px
+card at top=8 ends at 489 above a band that starts at 595. A STOP-AND-FLAG that
+can be raised by an un-attempted placement is worse than none, because it
+retires the question. Point three above (retiring a flag with its harm un-signs
+it) has a mirror: raising a flag in place of an attempt un-signs it too. The
+module's own comment was the mechanism — "THERE IS NO THIRD GEOMETRY", written
+to fence off invention, read by the next hand as a reason not to look at the
+candidate set at all.
+
+**Five: a stub's default is an assertion, and an all-zero rect asserts that
+nothing can be occluded.** The editor half of this was invisible to the JS suite
+for three rounds because `daycard_dom`'s rect defaults to zeros and the card is
+the editor's ANCHOR — so every editor in the suite was placed at the viewport
+origin. The card's rect is now DERIVED from the placement the module just wrote,
+never assigned, so a test cannot pin it to a value the placer did not produce.
+Where a harness supplies a value the real DOM computes, the harness is making a
+claim, and it should be made where it can be seen.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they

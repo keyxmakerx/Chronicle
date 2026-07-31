@@ -117,6 +117,33 @@ Carried out of R2-2a, not closed:
   is the reporting one:** a geometry row measured at two widths is a claim about
   two widths, and the layout changes shape between them.
 
+  **AND THE SAME BAND AGAIN, FOR TALL BOXES, WHICH THE ROUND-3 FIX OPENED WHILE
+  CLOSING THE SHORT-BOX CASE** (DC3-DESKTOP-SHEET-OCCLUSION-R4, the round-4
+  blocker; FIXED 2026-07-31, stage 14). Stage 9's two-candidate dodge admitted
+  the ABOVE position only when it fitted the viewport outright, and sent
+  everything else to a clamp that pins the box to the BOTTOM of the viewport —
+  which is where the stacked band is. So a box taller than the room above its day
+  never flipped at all: it failed both candidates and took the DESKTOP SHEET,
+  covering **100% of the Ledger** at every content width from ~625px to ~884px,
+  while raising a warning that said the geometry was impossible. It was not
+  impossible, it was not attempted. Two reachable ways in, neither exotic: the
+  **editor** (`+ New event` at 884px → a 944px sheet over the whole band,
+  107,604 px², a straight regression against the pre-stage-9 module, which placed
+  the same editor clear at y=28) and **a busy day** (12 events ≈ 379px, past the
+  point the unclamped flip can fit; 100% at 884/804/752/684/644). The fix is a
+  CLAMP on the existing flip, not a third geometry: `above` now starts at the
+  viewport's top edge rather than off-screen, which is where those boxes measure
+  clear (a 481px box at top=8 ends at 489; the band starts at 595). The sheet
+  fallback is unweakened and is now the only thing its STOP-AND-FLAG speaks
+  about. **The lesson, and it is a different one from round 3's:** the round-3
+  fix was verified on the case it was written for and not on the surface that
+  case hands off to — and the module's own comment ("THERE IS NO THIRD
+  GEOMETRY") was what foreclosed the placement that fixes both. A JS-suite
+  fidelity gap kept the editor half invisible for three rounds: the DOM stub's
+  rect is a static all-zero and the card is the editor's anchor, so every editor
+  in the suite was placed at the viewport origin where nothing can be occluded.
+  The card's rect now follows the placement the module wrote.
+
   **Still open, and it needs a live authed server:** this environment has no
   Docker daemon (`make docker-up` cannot reach `/var/run/docker.sock`), so there
   is no seeded DB and no session. Two rows genuinely cannot be closed without
