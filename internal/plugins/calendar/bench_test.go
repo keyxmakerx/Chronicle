@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1017,20 +1018,301 @@ func benchCSS(t *testing.T) string {
 
 var benchCommentRe = regexp.MustCompile(`(?s)/\*.*?\*/`)
 
-// TestBenchCSS_NoMotionAtAll is the sibling of the Block's
-// TestCSS_NoMotionAtAll, for the same reason and with the same wording: COMMON
-// §6.5 forbids motion inside the Block in wave 1, and a Bench that animated the
-// chrome AROUND a motionless Block would break the same rule from the outside.
+// TestBenchCSS_NoMotionAtAll was a BLANKET SUBSTRING BAN in wave 1 — "nothing
+// on the Bench moves" — and it is now an ALLOWLIST.
+//
+// IT WAS INVERTED, NEVER DELETED, by C-CALV4-BENCH-R2 slice R2-1 under [BR2-2]
+// SIGNED, following the precedent the Block's own sheet set when
+// TestCSS_NoMotionAtAll became an allowlist in LEDGER-P6 stage 5. The name is
+// kept on purpose: a reader who greps for the wave-1 rule must land on the
+// document that changed it, not on a hole where it used to be.
+//
+// THE NEW CLAIM, in one sentence: the Bench moves in exactly one way, for
+// exactly one reason, and every part of that way is enumerated here.
+// decisions/2026-07-29-motion-disclosure-register.md is the signed law — one
+// grammar (clip-reveal + opacity), two durations with close faster than open,
+// reduced motion INSTANT rather than shortened, and the Block's interior still.
+//
+// Widening this allowlist widens EVERYTHING, because
+// tools/check-v2-motion-discipline.sh does not police static/css/ at all (its
+// scope is *.templ / *.css INSIDE internal/plugins/{calendar,timeline,
+// ai_workspace,campaigns}, and it bans only `transition: all`). This test is the
+// only thing standing here.
 func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 	code := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
+
+	// STILL REFUSED, exactly as the Block refuses them. The register is a
+	// TRANSITION family; a keyframe here would be a second grammar.
 	for _, bad := range []string{
-		"transition", "animation", "@keyframes", "will-change",
-		"@starting-style", "view-transition",
+		"animation", "@keyframes", "will-change", "@starting-style", "view-transition",
 	} {
 		if strings.Contains(code, bad) {
-			t.Errorf("calendar-bench.css contains %q — nothing on the Bench moves in wave 1", bad)
+			t.Errorf("calendar-bench.css contains %q — the register is a transition family "+
+				"and a second grammar is a signature, not a tuning", bad)
 		}
 	}
+
+	// CLAUSE 1, AND THE SENTENCE THAT DESCRIBES THE TWISTY. The register bans
+	// `transform` on a disclosure (nothing slides, nothing bounces, the content
+	// reveals inside its own box), and the shipped twisty is a CONTENT SWAP —
+	// `content: "▸"` / `content: "▾"` on [open] — rather than a rotated glyph.
+	//
+	// This assertion exists because the sheet's own comment claimed a rotation
+	// for one wave while the rules were a swap (verifier finding 3, R2-1
+	// follow-up), which is the same defect stage 4 of this slice existed to
+	// delete from entity_calendar_block.go — a prose claim nothing could
+	// contradict. It is now enforceable.
+	//
+	// SCOPED TO THE DISCLOSURE, not to the sheet. A blanket ban would be a
+	// false claim: `text-transform` is typography and appears throughout, and
+	// `.rsvp .recbr b` carries a static `translateX(-50%)` from wave 1 that
+	// centres a label and is never transitioned. What clause 1 forbids is a
+	// transform ON THE SECTION, and that is what is checked.
+	for _, rule := range benchCSSRules(code) {
+		if !strings.Contains(rule[0], ".disc") && !strings.Contains(rule[0], "summary") {
+			continue
+		}
+		if benchTransformRe.MatchString(rule[1]) {
+			t.Errorf("`%s` declares `transform` — the register's clause 1 forbids it on a "+
+				"disclosure, and the twisty is a CONTENT SWAP (▸ / ▾ on [open]), not a "+
+				"rotation. The sheet's own comment says so.", rule[0])
+		}
+	}
+	// …and the swap it is instead of is present, so the assertion above is
+	// proving a mechanism rather than an absence.
+	for _, want := range []string{`content: "▸"`, `content: "▾"`} {
+		if !strings.Contains(code, want) {
+			t.Errorf("the twisty's %s is gone; a summary with no visible "+
+				"\"there is more here\" cue is the clause-5 failure", want)
+		}
+	}
+
+	// CLAUSE 3 IS STRUCTURAL, not a shortened duration: the whole motion block
+	// lives inside ONE `prefers-reduced-motion: no-preference` wrapper, so
+	// outside it there is no rule at all and native <details> behaviour stands —
+	// instant and complete. Same construction the Block's clause 2 demands.
+	const guard = "@media (prefers-reduced-motion: no-preference)"
+	if n := strings.Count(code, guard); n != 1 {
+		t.Fatalf("%d `%s` blocks, want exactly 1 — clause 3 is proven by there being "+
+			"nowhere else for a transition to live", n, guard)
+	}
+	motion := benchCSSBlock(t, code, guard)
+	if outside := strings.Count(code, "transition") - strings.Count(motion, "transition"); outside != 0 {
+		t.Errorf("%d `transition` declarations sit OUTSIDE the reduced-motion wrapper; "+
+			"under prefers-reduced-motion they would still run", outside)
+	}
+
+	// THE ALLOWLIST: three properties, and no fourth. Guard B1 in particular —
+	// --dash and --gap are the greyscale identity channel and are NEVER animated.
+	allowed := map[string]bool{"block-size": true, "opacity": true, "content-visibility": true}
+	for _, decl := range benchTransitionDecls(motion) {
+		for _, prop := range decl {
+			if !allowed[prop] {
+				t.Errorf("transitioned property %q is not on the allowlist "+
+					"(block-size · opacity · content-visibility) — [BR2-2] SIGNED", prop)
+			}
+		}
+	}
+
+	// CLAUSE 2, ENFORCEABLE RATHER THAN DECORATIVE: exactly two durations, and
+	// CLOSE IS FASTER THAN OPEN. Leaving must never feel slower than arriving.
+	// A third duration anywhere is a signature and a STOP-AND-FLAG.
+	open, ok := benchCSSDurationMS(code, "--disc-open")
+	if !ok {
+		t.Fatal("--disc-open is not defined")
+	}
+	closeMS, ok := benchCSSDurationMS(code, "--disc-close")
+	if !ok {
+		t.Fatal("--disc-close is not defined")
+	}
+	if closeMS >= open {
+		t.Errorf("--disc-close (%dms) is not faster than --disc-open (%dms) — "+
+			"register clause 2: leaving must never feel slower than arriving", closeMS, open)
+	}
+	if n := len(regexp.MustCompile(`--disc-(open|close|ease)\s*:`).FindAllString(code, -1)); n != 3 {
+		t.Errorf("the register declares %d --disc-* tokens; want exactly 3 "+
+			"(--disc-open, --disc-close, --disc-ease). A third DURATION is a signature", n)
+	}
+}
+
+// TestBenchProse_MotionClaimsMatchTheSheet pins the two SENTENCES that describe
+// this slice's motion budget to the sheet they describe.
+//
+// WHY A TEST FOR PROSE. Stage 8 of R2-1 rewrote a comment that had described the
+// twisty as a rotation the rules never shipped, and pinned it — and the verifier
+// then found TWO MORE claims of the same class, in files this slice had edited
+// three times: bench.templ's header still said "calendar-bench.css defines no
+// transition, no animation and no @keyframes, and its contract test says so"
+// (both clauses died in stage 3), and calendar-bench.css's RSVP header said "the
+// Bench sheet is under tools/check-v2-motion-discipline.sh" (it never has been).
+// The second is worse than a stale sentence: it names a guard as the safety net
+// under the exact allowlist that [BR2-2] warned has no guard, so a reader
+// widening the allowlist would believe CI was watching. This test derives both
+// facts instead of trusting either sentence.
+func TestBenchProse_MotionClaimsMatchTheSheet(t *testing.T) {
+	css := benchCSS(t)
+	templ := readRepoFile(t, "internal/plugins/calendar/bench.templ")
+	sources := map[string]string{"static/css/calendar-bench.css": css, "internal/plugins/calendar/bench.templ": templ}
+
+	// THE DERIVED FACT, not an assumption: the sheet really does transition
+	// something. If a later slice removes the disclosure motion entirely, this
+	// fails FIRST and tells the reader the blanket denials below are allowed
+	// back — the test never silently forbids a true sentence.
+	if !benchTransitionRe.MatchString(benchCommentRe.ReplaceAllString(css, " ")) {
+		t.Fatal("calendar-bench.css declares no `transition:` at all — the register was " +
+			"removed, and the wave-1 blanket denials this test forbids would now be TRUE. " +
+			"Re-read decisions/2026-07-29-motion-disclosure-register.md before deleting this.")
+	}
+
+	// (a) NO SHEET-WIDE DENIAL. Scoped denials stay legal and are used just
+	// below the line this caught ("this panel adds no transition…" is true of
+	// that panel); what is banned is a claim about the SHEET, which is false.
+	denial := regexp.MustCompile(`(?is)(calendar-bench\.css|the bench sheet|this sheet)[^.]{0,160}?\bno (transition|animation|@keyframes)`)
+	for path, src := range sources {
+		if m := denial.FindString(src); m != "" {
+			t.Errorf("%s claims the SHEET has no motion — %q — but it transitions "+
+				"block-size/opacity/content-visibility on `.cal-bench .disc::details-content` "+
+				"under [BR2-2] SIGNED. Scope the sentence or delete it", path, strings.Join(strings.Fields(m), " "))
+		}
+	}
+
+	// (b) THE GUARD IS NAMED HONESTLY OR NOT AT ALL. tools/check-v2-motion-
+	// discipline.sh scopes to internal/plugins/{calendar,timeline,ai_workspace,
+	// campaigns} and filters to `${scope}/*.templ` / `${scope}/*.css`, so
+	// static/css/ has never been inside it. Any mention of it near this sheet
+	// must carry the negation; the sanctioned phrasing is "does not police",
+	// deliberately one string so a new mention has to come here and read this.
+	guard := regexp.MustCompile(`does not police`)
+	for path, src := range sources {
+		for _, idx := range regexp.MustCompile(`check-v2-motion-discipline`).FindAllStringIndex(src, -1) {
+			lo, hi := idx[0]-240, idx[1]+240
+			if lo < 0 {
+				lo = 0
+			}
+			if hi > len(src) {
+				hi = len(src)
+			}
+			if !guard.MatchString(src[lo:hi]) {
+				t.Errorf("%s names check-v2-motion-discipline.sh without saying it DOES NOT "+
+					"POLICE static/css/ — the guard's scope is internal/plugins/*, so naming it "+
+					"here promises an enforcement that has never run. The enforcement is "+
+					"TestBenchCSS_NoMotionAtAll", path)
+			}
+		}
+	}
+
+	// (c) MECHANISM, NOT ABSENCE. The header that used to deny motion must now
+	// point at the document that authorised it, so the next reader lands on the
+	// law rather than on a hole where the wave-1 rule used to be — the same
+	// reason TestBenchCSS_NoMotionAtAll kept its name when it was inverted.
+	for _, want := range []string{"2026-07-29-motion-disclosure-register.md", "TestBenchCSS_NoMotionAtAll"} {
+		if !strings.Contains(templ, want) {
+			t.Errorf("bench.templ's header does not cite %q — a header that describes the "+
+				"motion budget must name the law and the enforcement, or it decays again", want)
+		}
+	}
+}
+
+// benchCSSBlock returns the body of the at-rule that starts with `prelude`,
+// brace-matched. The index is checked before it is used as a bound: a bare
+// strings.Index slice bound PANICS on a rename instead of failing cleanly
+// (COMMON §3).
+func benchCSSBlock(t *testing.T, code, prelude string) string {
+	t.Helper()
+	i := strings.Index(code, prelude)
+	if i < 0 {
+		t.Fatalf("no %q block in calendar-bench.css", prelude)
+	}
+	rest := code[i:]
+	open := strings.Index(rest, "{")
+	if open < 0 {
+		t.Fatalf("%q has no body", prelude)
+	}
+	depth := 0
+	for j := open; j < len(rest); j++ {
+		switch rest[j] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return rest[open+1 : j]
+			}
+		}
+	}
+	t.Fatalf("%q body is unterminated", prelude)
+	return ""
+}
+
+// benchTransformRe matches a `transform:` declaration and NOT `text-transform:`
+// — the character before the word must not be a hyphen or a word character.
+var benchTransformRe = regexp.MustCompile(`(^|[^-\w])transform\s*:`)
+
+// benchCSSRules yields (prelude, body) for every brace-delimited rule in the
+// sheet, including rules nested inside at-rules.
+//
+// It is exact for LEAF rules, which is what every caller wants: the prelude is
+// the text since the previous brace, and the body is that rule's own
+// declarations. An at-rule's own "body" comes out as the tail after its last
+// nested rule, which is harmless here because at-rule preludes
+// (@media, @supports) never name a selector this test asks about.
+func benchCSSRules(code string) [][2]string {
+	var out [][2]string
+	var stack []string
+	start := 0
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '{':
+			stack = append(stack, strings.TrimSpace(code[start:i]))
+			start = i + 1
+		case '}':
+			if len(stack) > 0 {
+				out = append(out, [2]string{stack[len(stack)-1], code[start:i]})
+				stack = stack[:len(stack)-1]
+			}
+			start = i + 1
+		}
+	}
+	return out
+}
+
+var benchTransitionRe = regexp.MustCompile(`transition\s*:\s*([^;}]*)`)
+
+// benchTransitionDecls returns, per `transition:` declaration, the property
+// names it names. A transition's first token is the property; `allow-discrete`
+// and duration/easing values are not properties and are skipped.
+func benchTransitionDecls(css string) [][]string {
+	var out [][]string
+	for _, m := range benchTransitionRe.FindAllStringSubmatch(css, -1) {
+		var props []string
+		for _, part := range strings.Split(m[1], ",") {
+			fields := strings.Fields(strings.TrimSpace(part))
+			if len(fields) == 0 {
+				continue
+			}
+			props = append(props, fields[0])
+		}
+		out = append(out, props)
+	}
+	return out
+}
+
+var benchDurationRe = regexp.MustCompile(`(--disc-(?:open|close))\s*:\s*(\d+)ms`)
+
+// benchCSSDurationMS reads one --disc-* duration token as a number, so the
+// close < open clause is asserted arithmetically rather than by eye.
+func benchCSSDurationMS(css, token string) (int, bool) {
+	for _, m := range benchDurationRe.FindAllStringSubmatch(css, -1) {
+		if m[1] != token {
+			continue
+		}
+		n, err := strconv.Atoi(m[2])
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	}
+	return 0, false
 }
 
 // Every selector is scoped under .cal-bench. An unlayered sheet outranks the
@@ -1075,11 +1357,32 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 		".cal-bench .rsvp .mrow", ".cal-bench .rsvp .mrow .lt.small",
 		".cal-bench .rsvp .side", ".cal-bench .rsvp .inert",
 		"--own-1", "--own-8",
+		// The disclosure register and the measure (C-CALV4-BENCH-R2 slice R2-1).
+		// bench.templ names .disc, <summary> and the four data-bench-disc keys;
+		// this is the pin that stops the sheet dropping what that markup depends
+		// on — the #568 gap, and the reason .disc and summary are exactly the
+		// generic nouns TestBenchCSS_EverySelectorIsScoped exists for.
+		".cal-bench .disc", ".cal-bench .disc > summary", ".cal-bench .bsurf",
+		".cal-bench .disc::details-content",
+		"--disc-open", "--disc-close", "--disc-ease",
+		"--bench-measure",
+		// The §8 two-column RSVP treatment.
+		".cal-bench .rsvp .mtable",
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("calendar-bench.css does not define %q", want)
 		}
 	}
+	// THE INNER MEASURES SURVIVE THE PAGE CAP. .note's 88ch and .caption's 104ch
+	// are measures on RUNNING TEXT and the page cap does not subsume them — at
+	// 1180px, 104ch is still the tighter bound. A tidying hand that reads them as
+	// redundant after --bench-measure landed would widen both back out.
+	for _, want := range []string{"max-width: 88ch", "max-width: 104ch"} {
+		if !strings.Contains(code, want) {
+			t.Errorf("calendar-bench.css lost %q — the page cap does not subsume an inner text measure", want)
+		}
+	}
+
 	// The proportion rule, in geometry: .stack is a column at EVERY width, so no
 	// media query may hand it a row direction or a multi-column grid.
 	for _, forbidden := range []string{"flex-direction: row", "flex-direction:row"} {

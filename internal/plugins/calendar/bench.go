@@ -33,6 +33,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -104,6 +105,241 @@ type BenchData struct {
 	Rows []BenchRow
 	// ShowNewSlot renders the New-calendar slot. Owner-only — see benchRowGrid.
 	ShowNewSlot bool
+
+	// SectionsClosed is the viewer's STORED closed-disclosure set, carried raw
+	// rather than resolved (C-CALV4-BENCH-R2 [BR2-5]).
+	//
+	// It is raw on purpose. nil is "never chosen", which resolves to ALL FOUR
+	// CLOSED — the ruled default — so a zero-value BenchData renders exactly
+	// what production renders for a fresh viewer, and a fixture cannot silently
+	// diverge from the page by forgetting to populate a map. []string{} is
+	// "closed nothing"; the two are never interchangeable.
+	SectionsClosed []string
+	// SectionsPersistURL is where a disclosure posts its flip. Empty means
+	// nowhere to persist, and a disclosure with no endpoint emits NO hx-* at
+	// all rather than a dead control.
+	SectionsPersistURL string
+}
+
+// BenchDisclosure is one collapsible section, resolved for one viewer
+// (C-CALV4-BENCH-R2 slice R2-1, [BR2-1] / [BR2-3] SIGNED).
+//
+// THE SUMMARY IS THE POINT, not the chevron. A closed section is not a hidden
+// one, and the difference is entirely carried by Label + Summary: the register's
+// clause 5 says a closed disclosure renders "a real summary line (count, next
+// item, or title — never a bare chevron)". A summary that says nothing is worse
+// than no disclosure at all, so every producer below has a truthful floor and
+// bench_disclosure_test.go asserts non-emptiness in every viewer state.
+//
+// EVERY SUMMARY IS BUILT FROM THE VIEWER'S OWN PAYLOAD, never from campaign
+// totals — the rule benchNextUpTail already follows deliberately ("the mockup's
+// hardcoded 'all 11' tail is not ported") and benchSectionSubtitle already
+// GM-gates. The producers below take viewer-filtered slices (data.Ribbon,
+// data.Rows) rather than the campaign's, so the audience law is structural
+// rather than remembered.
+type BenchDisclosure struct {
+	// Key is one of benchSectionKeys. It is the state marker (data-bench-disc)
+	// AND the control key (data-disc-pick) AND the wire field.
+	Key string
+	// Label is the section's title — the summary's floor, and the reason a
+	// summary can never be a bare chevron.
+	Label string
+	// Summary is the one true line a viewer reads instead of the section.
+	Summary string
+	// Closed is the resolved state for THIS viewer.
+	Closed bool
+	// PersistURL is where this disclosure posts its flip, WITH ITS SECTION KEY
+	// ALREADY ON THE URL (".../calendar/prefs?section=ribbon"). Empty when
+	// there is nowhere to remember this.
+	//
+	// The key rides the URL rather than an hx-vals literal because hx-vals is
+	// INHERITED by every control inside the section — benchDisclosurePersistURL
+	// is where that reasoning lives, and it is a correctness argument, not a
+	// stylistic one.
+	PersistURL string
+}
+
+// benchDisclosureFor resolves one section for one viewer.
+//
+// It is a pure function of BenchData rather than a precomputed field so the
+// production page and every test fixture cannot drift apart: there is exactly
+// one place a summary line is built.
+func benchDisclosureFor(data BenchData, key string) BenchDisclosure {
+	d := BenchDisclosure{
+		Key:        key,
+		Closed:     resolveBenchSections(data.SectionsClosed)[key],
+		PersistURL: benchDisclosurePersistURL(data.SectionsPersistURL, key),
+	}
+	switch key {
+	case "ribbon":
+		d.Label, d.Summary = "At a glance", benchRibbonSummary(data.Ribbon)
+	case "rsvp":
+		d.Label, d.Summary = "Session & availability", benchRsvpSummary(data.Rsvp)
+	case "nextup":
+		d.Label, d.Summary = "Next up", benchNextUpSummary(data.NextUp)
+	case "rows":
+		d.Label, d.Summary = "Other calendars", benchRowsSummary(data)
+	}
+	return d
+}
+
+// benchDisclosurePersistURL puts the section key ON THE POST URL rather than in
+// an hx-vals literal, and that is a correctness fix rather than a style choice
+// (verifier finding 1, R2-1 follow-up).
+//
+// HTMX RESOLVES hx-vals BY WALKING ANCESTORS. The vendored runtime is explicit:
+// `bn(r,e,o,i)` recurses to `parentElement` when the attribute is absent, and
+// `Sn(e,t){return bn(e,"hx-vals",false,t)}` is what every request builds its
+// parameters through (static/vendor/htmx.min.js). The flip HAS to ride on the
+// <details> itself — `toggle` does not bubble — so anything declared there is
+// inherited by every HTMX control inside the section: the player's RSVP trio,
+// the owner's `Ask →` form, all five sort links. Shipped as an hx-vals, the key
+// was silently appended to eight requests that never asked for it. Benign on
+// the day it shipped (their handlers ignore unknown fields) and a live trap
+// afterwards: a control placed inside a disclosure that posts `layers=` would
+// inherit `section=` and be rejected 400 by BlockPrefsAPI's "exactly one of"
+// branch — this slice's own guard firing on this slice's own markup.
+//
+// A URL is an element's OWN attribute and nothing inherits it. Echo reads the
+// field either way: FormParams calls ParseForm, and on a POST `r.Form` merges
+// the query string with the body, so the handler needs no branch and does not
+// know the difference. THAT IS LOAD-BEARING — a hand that "tidies" FormParams
+// into PostFormValue would silently stop seeing every disclosure flip;
+// handler_v2.go's comment says so at the read site.
+//
+// The refused alternative was `hx-vals="unset"` on every descendant control.
+// It works, and it makes correctness something each future control has to
+// remember — which is how this defect arrives a second time.
+func benchDisclosurePersistURL(base, key string) string {
+	if base == "" {
+		return ""
+	}
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+	return base + sep + "section=" + url.QueryEscape(key)
+}
+
+// benchRibbonSummary states the facts that justify opening the ribbon: what day
+// it is, what the session is and where the viewer stands on it, and how much
+// needs a hand.
+//
+// IT IS BUILT BY WALKING THE TILES THE VIEWER ACTUALLY RECEIVED. benchRibbon
+// returns three tiles for a player and six for a GM, and the three GM tiles are
+// absent from a player's slice rather than filtered out of it — so a player's
+// summary cannot name a GM tile even by accident. That is the audience law
+// enforced by construction rather than by a role check the next hand can drop.
+func benchRibbonSummary(tiles []BenchTile) string {
+	var parts []string
+	for _, t := range tiles {
+		switch t.Key {
+		case "today":
+			parts = append(parts, strings.TrimSpace(t.Eyebrow+" · "+t.Headline))
+		case "session":
+			// THE ONE CLAUSE THAT TRACES A CONTROL RATHER THAN A FACT
+			// (verifier finding 2, R2-1 follow-up). A player's ONLY RSVP
+			// answer control is the trio on this tile, inside this
+			// disclosure — the panel below carries roster and density markup
+			// and no answer control for them at all. With the ruled
+			// closed-at-every-width default, a summary that omitted it would
+			// hide a session awaiting their answer behind a chevron that gave
+			// no trace of it: the register's clause 5 / §10 case, and the one
+			// place compactness-is-a-choice reads exactly like the section not
+			// existing.
+			part := t.Headline
+			// Detail here is the viewer's OWN standing ("You: in", "You: no
+			// answer") or a degraded-write notice — both viewer-facing, and
+			// both worth reading while closed. On the not-yet-reading tile a
+			// GM's Detail is build status instead, and NeedsBackend is the
+			// shipped marker for exactly that: build status never renders to a
+			// player (2026-07-27-needs-backend-audience.md) and a summary line
+			// is a sentence, not a status surface (§4.2 item 3). So the gate is
+			// the existing audience marker rather than a new field or a copy
+			// match.
+			if t.Detail != "" && !t.NeedsBackend {
+				part = strings.TrimSpace(part + " · " + t.Detail)
+			}
+			parts = append(parts, part)
+		case "attention":
+			// GM-only, and present here only because this viewer was sent it.
+			// "all clear" is as much a reason to leave the ribbon closed as a
+			// count is a reason to open it, so both readings print.
+			parts = append(parts, strings.ToLower(t.Headline)+" needs attention")
+		}
+	}
+	if len(parts) == 0 {
+		// The floor: a ribbon with neither tile still says what it is.
+		return "the campaign's headline facts"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// benchRsvpSummary needs NO new producer field, which is the strongest evidence
+// the section inventory is right: BenchRsvp.Headline is already
+// "Session 41 · today · 3 / 5" and BenchRsvp.Note is already the unfilled
+// state's one sentence. Both are built by benchRsvpBuild, which is where the
+// panel's audience law lives — a player's payload contains no lane at all, so
+// this line cannot leak one.
+func benchRsvpSummary(r BenchRsvp) string {
+	if r.Filled && strings.TrimSpace(r.Headline) != "" {
+		return r.Headline
+	}
+	if strings.TrimSpace(r.Note) != "" {
+		return r.Note
+	}
+	return "no session scheduled yet"
+}
+
+// benchNextUpSummary is the index's breadth plus its soonest row — the two
+// things you would open the section to learn. Both are post-filter and
+// per-viewer (UpcomingAcrossCalendars filters at the source), never a
+// campaign-wide "next event" a player may not see.
+func benchNextUpSummary(u BenchNextUp) string {
+	s := benchNextUpSubtitle(u)
+	if len(u.Rows) == 0 {
+		return s + " · nothing upcoming"
+	}
+	r := u.Rows[0]
+	next := strings.TrimSpace(r.DateLabel)
+	if r.Name != "" {
+		next = strings.TrimSpace(next + " — " + r.Name)
+	}
+	if next == "" {
+		return s
+	}
+	return s + " · next: " + next
+}
+
+// benchRowsSummary counts what is INSIDE this disclosure — the subordinate
+// rows — rather than re-printing the page-level "4 calendars" line, which is
+// already on the .sechead above the stack and never collapses.
+//
+// THE SETUP HALF IS GM-ONLY and it is gated by construction, exactly as
+// benchSectionSubtitle gates it: benchRows never builds a warnrow for a player,
+// so counting r.Warn cannot tell a player that a calendar they cannot fix is
+// broken. A player is not told about a repair they do not own.
+func benchRowsSummary(data BenchData) string {
+	n := len(data.Rows)
+	var s string
+	switch n {
+	case 0:
+		s = "no other calendars"
+	case 1:
+		s = "1 other calendar"
+	default:
+		s = fmt.Sprintf("%d other calendars", n)
+	}
+	warn := 0
+	for _, r := range data.Rows {
+		if r.Warn {
+			warn++
+		}
+	}
+	if warn > 0 {
+		s += fmt.Sprintf(" · %d needs setup", warn)
+	}
+	return s
 }
 
 // BenchTile is one ribbon tile. The ribbon is six tiles for a GM and THREE for
@@ -628,6 +864,13 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	// surface where that difference is visible.
 	layerPrefs := blockLayerPrefsFor(ctx, h.svc, in.UserID, in.Campaign.ID)
 
+	// The viewer's disclosure state, read once for the whole page for the same
+	// reason: it is per-(user, campaign), so a per-section read would be four
+	// identical queries for one answer.
+	sectionPrefs := benchSectionPrefsFor(ctx, h.svc, in.UserID, in.Campaign.ID)
+	data.SectionsClosed = sectionPrefs.Stored
+	data.SectionsPersistURL = sectionPrefs.PersistURL
+
 	// Hydrate every listed calendar in a fixed number of queries, then apply the
 	// viewer's active-calendar marker.
 	hydrated := benchHydrate(ctx, spine, cals)
@@ -785,10 +1028,26 @@ func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Cale
 // silhouettes and their "3 OF 4 MOONS" nameplate badge, the docked LEDGER and
 // the Month/Upcoming/Filters/Almanac Shelf. Those five keys are this set.
 //
-// `ledger` also has a GEOMETRIC consequence and cannot simply be dropped: the
-// full-tier column arithmetic subtracts the Ledger's 300px unconditionally
-// (calendar_block/sizing.go), so a Block that skipped the zone would measure its
-// own columns wrong and flip density at the wrong host width.
+// THIS SEED IS UNCHANGED BY C-CALV4-BENCH-R2 slice R2-1, and it now DIFFERS
+// from entityBlockLayers on purpose ([BR2-8] SIGNED). R2-1 took the entity
+// embed's seed down to ["moons","eras","weeknums"] because "on the entity it
+// scrolls"; the Bench keeps all five because THE BENCH IS A COCKPIT AND DEPTH
+// IS ITS JOB, while the entity page is an embed beside somebody's prose where
+// glanceability is the job. The two functions were byte-identical from wave 1
+// until that slice, so the next reader's instinct will be to re-unify them —
+// this paragraph is why not. blockDefaultLayers (DEF = ["moons"]) is untouched.
+//
+// A NOTE ON `ledger`, corrected here as well as at its source. This comment
+// used to say the key "cannot simply be dropped" because "the full-tier column
+// arithmetic subtracts the Ledger's 300px unconditionally (sizing.go), so a
+// Block that skipped the zone would measure its own columns wrong". THAT WAS
+// STALE, and R2-1 measured it: ColWidth / IsNamed / IsNamedCSS have zero
+// non-test callers, the density flip is a `@container cal-cell (min-width:
+// 84px)` query against real layout, and the full-tier body track is
+// `minmax(0, 1fr) auto`, so an absent Ledger collapses its own track. See
+// entity_calendar_block.go's rewritten paragraph and
+// entity_ledger_geometry_test.go. The Bench keeps `ledger` for the reason above
+// — because it is a cockpit — and not because it is pinned there by geometry.
 //
 // TWO KEYS THE SIGNED BENCH SHOWS AND THIS SET DELIBERATELY OMITS — `moongraph`
 // (the illumination strip) and `horizon` (the knowledge ribbon). Both are

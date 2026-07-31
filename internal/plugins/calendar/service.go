@@ -73,6 +73,8 @@ type CalendarService interface {
 	// than dropping it.
 	GetBlockLayers(ctx context.Context, userID, campaignID string) ([]string, error)
 	SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error
+	GetBenchSections(ctx context.Context, userID, campaignID string) ([]string, error)
+	ToggleBenchSection(ctx context.Context, userID, campaignID, key string) error
 
 	// Sub-resource bulk updates (replace all).
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
@@ -1225,6 +1227,99 @@ func (s *calendarService) SetBlockLayers(ctx context.Context, userID, campaignID
 		clean = append(clean, k)
 	}
 	return s.repo.SetBlockLayers(ctx, userID, campaignID, clean)
+}
+
+// GetBenchSections returns the viewer's stored set of CLOSED Bench sections, or
+// nil when they have never chosen one (C-CALV4-BENCH-R2 [BR2-5]).
+//
+// Anonymous viewers (empty user_id) get nil — there is nowhere to persist a
+// per-anonymous preference — and nil is the ruled default, four closed
+// sections, which is exactly what an anonymous viewer should meet.
+//
+// A STORED KEY THAT HAS CEASED TO EXIST IS FILTERED HERE, WITH A LOG LINE,
+// NEVER A 500 — the block_layers rule verbatim, for the same reason. The route
+// validates on the way IN and rejects an unknown key outright, so the only way
+// an unknown key reaches this read is a registry that SHRANK after the write: a
+// deploy, not a caller.
+func (s *calendarService) GetBenchSections(ctx context.Context, userID, campaignID string) ([]string, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	stored, err := s.repo.GetBenchSections(ctx, userID, campaignID)
+	if err != nil || stored == nil {
+		return nil, err
+	}
+	kept := make([]string, 0, len(stored))
+	var dropped []string
+	for _, k := range stored {
+		if slices.Contains(benchSectionKeys, k) {
+			kept = append(kept, k)
+			continue
+		}
+		dropped = append(dropped, k)
+	}
+	if len(dropped) > 0 {
+		slog.Warn("calendar: stored Bench section key(s) no longer in the registry; filtering at read",
+			slog.Any("dropped", dropped),
+			slog.Any("kept", kept),
+			slog.String("user_id", userID),
+			slog.String("campaign_id", campaignID))
+	}
+	// Still non-nil even when everything was dropped: the viewer HAS chosen,
+	// and what they chose no longer exists. That is "all four open", not a fall
+	// back to the ruled default.
+	return kept, nil
+}
+
+// ToggleBenchSection flips ONE section's closed bit and persists the result.
+//
+// WHY A FLIP RATHER THAN A STATE. The wire carries only the section key, never
+// "open" or "closed", because the client cannot be trusted to tell us its own
+// state without JavaScript: htmx.config.allowEval is false
+// (static/js/boot.js:168), so hx-vals='js:…' is dead, and reading the
+// <details>'s live `open` property is the only way to know it. The server
+// render is therefore the SOLE source of truth for the initial state, and a
+// flip against that truth is exactly correct. This is the coupling that made
+// [BR2-4] Option A (one closed default) the only safe choice — a script that
+// mutated `open` after paint would desynchronise the flip on the very first
+// interaction.
+//
+// The read-modify-write is not racy in any way that matters: the row is
+// (this session's user, one campaign), the value is display state, and two
+// simultaneous toggles from one viewer's two tabs is not a scenario the product
+// owes an answer to. A lost update costs one click.
+//
+// VALIDATION REJECTS, IT DOES NOT DROP. An unknown key fails the whole write,
+// the same rule SetBlockLayers follows: a silently-dropped key half-applies a
+// choice the viewer made and they cannot tell from the result which half
+// landed. Empty user_id rejects for the reason SetSidebarPinned does — an
+// anonymous toggle would report success and persist nothing.
+//
+// THE STORED ORDER IS THE REGISTRY'S ORDER, not click order, so two viewers in
+// the same state store the same bytes.
+func (s *calendarService) ToggleBenchSection(ctx context.Context, userID, campaignID, key string) error {
+	if userID == "" {
+		return apperror.NewValidation("user_id required to toggle a Bench section")
+	}
+	if !slices.Contains(benchSectionKeys, key) {
+		return apperror.NewValidation(fmt.Sprintf("unknown bench section key %q", key))
+	}
+	stored, err := s.repo.GetBenchSections(ctx, userID, campaignID)
+	if err != nil {
+		return err
+	}
+	closed := resolveBenchSections(stored)
+	closed[key] = !closed[key]
+
+	next := make([]string, 0, len(benchSectionKeys))
+	for _, k := range benchSectionKeys {
+		if closed[k] {
+			next = append(next, k)
+		}
+	}
+	// next is ALWAYS non-nil (make with a length of 0), which is what makes
+	// "I opened all four" reachable as '' rather than collapsing to NULL.
+	return s.repo.SetBenchSections(ctx, userID, campaignID, next)
 }
 
 // SetMonths replaces all months. Validates at least one month exists.

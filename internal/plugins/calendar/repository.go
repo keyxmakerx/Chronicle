@@ -48,6 +48,8 @@ type CalendarRepository interface {
 	// len()==0 would make a bare month unreachable.
 	GetBlockLayers(ctx context.Context, userID, campaignID string) ([]string, error)
 	SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error
+	GetBenchSections(ctx context.Context, userID, campaignID string) ([]string, error)
+	SetBenchSections(ctx context.Context, userID, campaignID string, keys []string) error
 
 	// Months.
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
@@ -402,6 +404,68 @@ func (r *calendarRepo) SetBlockLayers(ctx context.Context, userID, campaignID st
 		`INSERT INTO calendar_active (user_id, campaign_id, calendar_id, block_layers)
 		 VALUES (?, ?, '', ?)
 		 ON DUPLICATE KEY UPDATE block_layers = VALUES(block_layers)`,
+		userID, campaignID, val)
+	return err
+}
+
+// GetBenchSections returns the viewer's stored set of CLOSED Bench sections for
+// a campaign, or nil when they have never chosen one (C-CALV4-BENCH-R2
+// [BR2-5], migration 016).
+//
+// NULL AND EMPTY ARE DIFFERENT ANSWERS, exactly as they are for block_layers,
+// and the sql.NullString is again what keeps them apart:
+//
+//	no row / NULL  → (nil, nil)         the ruled default: all four CLOSED
+//	''             → ([]string{}, nil)  the viewer closed nothing: all four OPEN
+//	'rsvp,rows'    → ([...], nil)       those two closed, the rest open
+//
+// The list is the CLOSED set rather than the open one because the ruled default
+// is closed; storing the open set would make '' byte-identical to the default
+// and there would be no way to record "I opened everything". See the migration
+// header, which argues it at length.
+//
+// No validation happens here. A repository owns SQL; the four-key registry
+// lives in bench_sections.go and the filtering happens where it can log — see
+// calendarService.GetBenchSections.
+func (r *calendarRepo) GetBenchSections(ctx context.Context, userID, campaignID string) ([]string, error) {
+	var stored sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT bench_sections FROM calendar_active WHERE user_id = ? AND campaign_id = ?`,
+		userID, campaignID).Scan(&stored)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !stored.Valid {
+		return nil, nil
+	}
+	if stored.String == "" {
+		// Deliberately non-nil and empty: "nothing is closed", not "unchosen".
+		return []string{}, nil
+	}
+	return strings.Split(stored.String, ","), nil
+}
+
+// SetBenchSections persists the viewer's closed set. Upserts through the same
+// calendar_active row as the pin and layer preferences, with the identical
+// empty-calendar_id fallback on first write, so a viewer who collapses a
+// section before ever picking a calendar still gets a row.
+//
+// A nil keys slice writes NULL — "forget my choice", which returns the viewer
+// to the ruled default. An empty non-nil slice writes '', which is all four
+// open. The two are not interchangeable and this method must never collapse
+// them.
+func (r *calendarRepo) SetBenchSections(ctx context.Context, userID, campaignID string, keys []string) error {
+	var val any
+	if keys != nil {
+		val = strings.Join(keys, ",")
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO calendar_active (user_id, campaign_id, calendar_id, bench_sections)
+		 VALUES (?, ?, '', ?)
+		 ON DUPLICATE KEY UPDATE bench_sections = VALUES(bench_sections)`,
 		userID, campaignID, val)
 	return err
 }

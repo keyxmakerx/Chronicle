@@ -20,6 +20,115 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — ROUND 2 OPEN · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
+
+**`C-CALV4-BENCH-R2` slice R2-1 closed the operator's three 2026-07-29 live-client
+complaints.** Round 2 adds no data, no zone and no engine: it decides what a
+viewer meets first, how wide it is allowed to be, and what a surface says when it
+is closed.
+
+- *"where are the menus" / "5-6 blocks of data before you get to the calendar"* →
+  four Bench sections (`ribbon` · `rsvp` · `nextup` · `rows`) are now native
+  `<details>`/`<summary>` disclosures, **closed by default at every width**, each
+  stating one true line computed from the VIEWER's own payload. The two Blocks,
+  `.phead`, `.sechead` and `.caption` never collapse — the subject of the page may
+  not be inside a disclosure.
+- *"so stretched out, especially the RSVP menu"* → `--bench-measure: 1180px` on a
+  page that had no `max-width` at all, and the RSVP panel becomes a two-column
+  grid at ≥1024px via `display: contents` with a **byte-identical DOM**. The
+  `.benchblock` measures **1144px @1440 / 1180px @1920**, both clear of the
+  Block's 900px full-tier floor: no silent demotion.
+- *"on the entity it scrolls"* → the entity embed's seed drops from five keys to
+  `["moons","eras","weeknums"]` — exactly the two keys that add a ZONE leave, the
+  three inside the month stay. No widget file was edited; that is what [LYR-3]'s
+  seed rule bought.
+
+**Store:** migration 016 `bench_sections` on `calendar_active` — the THIRD
+extension of that row, under the same PR #368 decision 007 and 014 both cite. It
+holds the **CLOSED** set so `NULL` (never chosen) stays distinguishable from `''`
+(closed nothing). **ZERO new routes:** the existing `POST
+/campaigns/:id/calendar/prefs` grew one optional `section=` field and
+`routes_snapshot.txt` is byte-identical. That branch answers 204 with **no**
+`HX-Refresh` while `layers=` keeps it, and the asymmetry is documented where the
+next hand will misread it.
+
+**Motion:** the product's first signed animation family ships —
+`cordinator decisions/2026-07-29-motion-disclosure-register.md`. Clip-reveal +
+opacity on `::details-content`, 200ms open / 160ms close, easing READ from the
+Block's own `--ease` ladder, and the whole rule block inside ONE
+`@media (prefers-reduced-motion: no-preference)` so reduced motion is instant and
+complete rather than shortened. `TestBenchCSS_NoMotionAtAll` was **inverted to an
+allowlist, never deleted**, and now asserts `close < open` arithmetically.
+
+**A three-wave-old warning was measured out.** The entity producer claimed
+dropping `ledger` would break the full-tier column arithmetic. `ColWidth` /
+`IsNamed` / `IsNamedCSS` have zero non-test callers, the density flip is a
+`@container cal-cell` query, and the full-tier track is `minmax(0, 1fr) auto` —
+an absent Ledger collapses its own track. The one real consequence is the
+opposite of the fear: named columns now flip on at a **narrower** host
+(1198px → 898px for a ten-day week). Pinned by
+`entity_ledger_geometry_test.go`.
+
+ADR-048 gained a **section** (there is no ADR-049) covering the disclosure
+mechanism, §13 met for the SECOND time (a pattern, not an incident), the third
+extension of `calendar_active`, and the three-way distinction between
+permission-is-absence, needs-backend-omission and **compactness-is-a-choice** —
+all three render as "less" and are indistinguishable in a screenshot.
+
+**Verifier round, fixed forward (2026-07-30, stages 6–8; the history was
+pushed, so nothing was amended).** Three findings, all in what the slice had
+already shipped:
+
+1. **The disclosure flip was speaking for the eight controls inside it.** htmx
+   resolves `hx-vals` by WALKING ANCESTORS (`bn()` recurses to `parentElement`
+   in `static/vendor/htmx.min.js`), and the flip has to ride on the `<details>`
+   because `toggle` does not bubble — so `section=<key>` was silently appended
+   to the player's RSVP trio, the owner's `Ask →` form and all five sort links.
+   Benign (their handlers ignore unknown fields) and a live trap: a control
+   inside a disclosure posting `layers=` would inherit `section=` and be
+   rejected 400 by this slice's own "exactly one of" guard. **The key now rides
+   the POST URL**, which nothing inherits; Echo reads it either way because
+   `FormParams` → `ParseForm` merges query and body on a POST.
+2. **The closed ribbon did not name the session it was holding.** A player
+   receives three tiles and their ONLY RSVP answer control is inside that
+   disclosure; the summary was built from the Today tile alone. A `session`
+   clause now prints the tile's headline and the viewer's own standing
+   ("Session 41 · You: in"), gated on the existing `NeedsBackend` marker so
+   build status never becomes a sentence.
+3. **A twisty comment described a rotation the sheet never shipped** — the same
+   defect stage 4 existed to delete, arriving fresh. The mechanism is a content
+   swap (▸ / ▾ on `[open]`); the comment now says so and `bench_test.go` asserts
+   no rule naming `.disc`/`summary` declares `transform`.
+
+**Second verifier round (2026-07-31, stage 9; also fixed forward).** The same
+class a third and fourth time, which is why the fix is now a PIN over prose and
+not another rewrite. `bench.templ`'s header still read "calendar-bench.css
+defines no transition, no animation and no @keyframes, and its contract test
+says so" — both clauses died in stage 3 — and `calendar-bench.css`'s RSVP header
+read "the Bench sheet is under tools/check-v2-motion-discipline.sh". **That
+second one is the dangerous half**: the guard scopes to
+`internal/plugins/{calendar,timeline,ai_workspace,campaigns}` and filters to
+`${scope}/*.templ` / `${scope}/*.css`, so it has never seen `static/css/` — and
+line :50 of the SAME FILE says so correctly. The sheet contradicted itself, and
+the false half named a CI net under the one allowlist [BR2-2] warned has no net.
+`TestBenchProse_MotionClaimsMatchTheSheet` now derives both facts: it fails if
+any sheet-wide motion denial survives while the sheet declares a `transition:`,
+if the guard is named anywhere near this sheet without "does not police", or if
+`bench.templ`'s header stops citing the register and the test that enforces it.
+
+**⚠️ Operator, and it is flagged at the PR gate:** [BR2-4] diverges from the
+literal instruction "desktop defaults open, mobile defaults closed". One
+server-rendered `open` cannot vary by viewport (ADR-048 §13). What shipped is
+closed-everywhere + CSS `order` putting the calendar above the ribbon at ≤640px.
+It is cut-able at the gate.
+
+**⚠️ No screenshots.** The §13 measurement gate could not be executed: this
+environment has no browser and the Playwright chromium download failed. Every
+geometric claim above is derived arithmetically from the shipped stylesheet and
+shell, and pinned by tests. See the slice report for the full list of what a
+live client should still confirm by eye.
+
+
 ### calendar-v4 — WAVE 3 TAIL · THE ASKING EMAIL SHIPPED (2026-07-29)
 
 **`C-CALV4-RSVP-P8B` closed the operator's own 28 July directive and the last

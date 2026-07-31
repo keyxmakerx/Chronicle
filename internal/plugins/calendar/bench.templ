@@ -19,9 +19,29 @@
 // exist. When the Block grows them, they arrive inside the Block, where their
 // invokers are.
 //
-// NO MOTION. COMMON §6.5: no transitions inside the Block, at all, in wave 1.
-// The Bench's own chrome keeps the same discipline — calendar-bench.css defines
-// no transition, no animation and no @keyframes, and its contract test says so.
+// MOTION — AND THE ONE PLACE IT NOW LIVES. COMMON §6.5 is unchanged INSIDE the
+// Block: no transitions there, at all, in wave 1, and this slice touched no file
+// under internal/widgets/calendar_block/. The Bench's own chrome no longer keeps
+// that discipline absolutely, and this header used to say it did.
+//
+// C-CALV4-BENCH-R2 [BR2-2] SIGNED opened a THREE-PROPERTY ALLOWLIST for the
+// disclosures this file emits: calendar-bench.css transitions `block-size`,
+// `opacity` and `content-visibility` on `.cal-bench .disc::details-content`,
+// once, inside a single `@media (prefers-reduced-motion: no-preference)` block,
+// with --disc-open 200ms and --disc-close 160ms (close always faster than open)
+// and zero @keyframes. Under reduced motion there is no rule at all, so the
+// reveal is instant and complete. The signed law is
+// decisions/2026-07-29-motion-disclosure-register.md.
+//
+// THE ENFORCEMENT IS A TEST, AND ONLY A TEST. bench_test.go's
+// TestBenchCSS_NoMotionAtAll was INVERTED from a blanket ban into that
+// allowlist (it keeps its wave-1 name so a reader who greps for the old rule
+// lands on the document that changed it). Nothing in CI backs it up:
+// tools/check-v2-motion-discipline.sh does not police static/css/ at all — its
+// scope is internal/plugins/{calendar,timeline,ai_workspace,campaigns}. Widening
+// the allowlist therefore widens everything, which is why
+// TestBenchProse_MotionClaimsMatchTheSheet pins these two paragraphs to the
+// sheet rather than trusting them.
 
 package calendar
 
@@ -45,7 +65,17 @@ templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 				{Label: "Apps", Href: fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)},
 				{Label: "Calendars"},
 			})
-			@benchSurface(data)
+			// THE SURFACE IS ITS OWN ELEMENT (C-CALV4-BENCH-R2 slice R2-1,
+			// [BR2-4] SIGNED Option C). It exists so that at ≤640px the
+			// surface's children can become a flex column and CSS `order` can
+			// lift the calendar above the ribbon — the only mechanism that
+			// literally puts the calendar first on a phone with no state, no
+			// script and no attribute. `.cal-bench` itself could not be that
+			// container: it also holds the stylesheet link and the breadcrumbs,
+			// and reordering against those would move the page's own nav.
+			<div class="bsurf" data-bench-surface>
+				@benchSurface(data)
+			</div>
 		</div>
 		// W5b: the per-calendar permissions editor. Owners only — players never
 		// receive the editor DOM nor the PUT route. Retained verbatim from the
@@ -70,7 +100,9 @@ templ benchSurface(data BenchData) {
 	} else if data.CalendarCount == 0 {
 		@calendarAppDashboardEmpty(data.CampaignID, data.IsOwner)
 	} else {
-		@benchRibbonView(data)
+		@benchDisclosureView(benchDisclosureFor(data, "ribbon")) {
+			@benchRibbonView(data)
+		}
 		<div class="sechead">
 			<span class="cap">The bench</span>
 			<span class="c">{ benchSectionSubtitle(data) }</span>
@@ -83,11 +115,86 @@ templ benchSurface(data BenchData) {
 				@benchBlockView(*data.RealWorld, data, "real-world")
 			}
 		</div>
-		@benchRsvpView(data)
-		@benchNextUpView(data)
-		@benchRowGridSection(data)
+		@benchDisclosureView(benchDisclosureFor(data, "rsvp")) {
+			@benchRsvpView(data)
+		}
+		@benchDisclosureView(benchDisclosureFor(data, "nextup")) {
+			@benchNextUpView(data)
+		}
+		// THE TRAP, and it is a real one. The pre-existing owner sort control
+		// hx-GETs #cal-dash-grid and swaps it. The <details> therefore WRAPS
+		// that id FROM OUTSIDE, with .sortrow inside the disclosure body: render
+		// it inside and every sort would destroy and recreate the disclosure,
+		// snapping the section shut (or open) on each sort and desynchronising
+		// the store from the DOM. The sort handler's own fragment template is a
+		// wave-0 surface and is NOT touched — a swap replaces the disclosure's
+		// contents, never the disclosure.
+		@benchDisclosureView(benchDisclosureFor(data, "rows")) {
+			@benchRowGridSection(data)
+		}
 		@benchCaption()
 	}
+}
+
+// benchDisclosureView is THE disclosure primitive ([BR2-1] SIGNED): native
+// <details> + <summary>, and nothing else.
+//
+// WHY NATIVE, in the order that decides it. (1) It is the only primitive that
+// is honest with JavaScript off — the section opens and closes natively and
+// only the REMEMBERING needs HTMX, so a viewer with a broken script tag gets a
+// working page that forgets, which is the correct degradation and it is free.
+// (2) aria-expanded, the disclosure role, keyboard operation and screen-reader
+// announcement are native and correct; a hand-rolled <div role="button"> would
+// reintroduce the exact class of defect WG-5 already caught once. (3) It
+// sidesteps the checkbox trap: copying the Block's hidden-radio + :has() shape
+// would re-meet ADR-048 §13's bound (a server-rendered attribute cannot vary by
+// container query) for no gain.
+//
+// THE FLIP RIDES ON THE <details> ITSELF, not on the <summary>. `toggle` does
+// not bubble, so the listener has to be on the target; and a click handler on
+// the summary would fire BEFORE the state changed, which would invert every
+// write.
+//
+// AND BECAUSE IT RIDES THERE, EVERYTHING IT DECLARES IS INHERITED. htmx
+// resolves hx-vals, hx-swap and their siblings by WALKING ANCESTORS — see
+// benchDisclosurePersistURL in bench.go for the runtime's own recursion — so
+// every control inside a section reads whatever this element carries. That is
+// why the section key travels on the POST URL, which is the flipping element's
+// own attribute and is inherited by nothing: `hx-vals` here appended
+// `section=<key>` to the player's RSVP trio, the owner's `Ask →` form and all
+// five sort links (verifier finding 1, R2-1 follow-up). `hx-swap="none"` is
+// still declared here and IS inherited — every HTMX control inside a
+// disclosure therefore declares its own, and bench_disclosure_test.go asserts
+// it rather than trusting it.
+//
+// No `hx-vals='js:…'` at any price either: it is dead under
+// htmx.config.allowEval = false (static/js/boot.js:168) and §12 forbids it.
+//
+// NO ENDPOINT, NO ATTRIBUTES. An anonymous viewer, or a Bench outside a
+// campaign, gets a disclosure that works and forgets rather than a control that
+// posts into the void.
+//
+// GUARD B3: `data-disc-pick` on the <summary> is the CONTROL and ends in
+// `-pick`; `data-bench-disc` on the <details> is a STATE MARKER and reuses none
+// of STATE_MARKERS' six nouns (data-theme / view / role / colour / moonstyle /
+// ready — verified against tools/check-calendar-v4-lints.sh:66).
+templ benchDisclosureView(d BenchDisclosure) {
+	<details
+		class="disc"
+		data-bench-disc={ d.Key }
+		open?={ !d.Closed }
+		if d.PersistURL != "" {
+			hx-post={ d.PersistURL }
+			hx-trigger="toggle"
+			hx-swap="none"
+		}
+	>
+		<summary data-disc-pick={ d.Key }>
+			<span class="cap">{ d.Label }</span>
+			<span class="c">{ d.Summary }</span>
+		</summary>
+		{ children... }
+	</details>
 }
 
 // benchHead is .phead: the title, the count line, and the control cluster.
@@ -488,11 +595,14 @@ templ benchRsvpMemberView(m BenchRsvpMember) {
 // viewer-filtered at the source (UpcomingAcrossCalendars) and every count is
 // computed post-filter — the mockup's hardcoded "all 11" tail is not ported.
 templ benchNextUpView(data BenchData) {
+	// THE SECTION HEAD MOVED UP INTO THE DISCLOSURE'S <summary>
+	// (C-CALV4-BENCH-R2 slice R2-1). It carried exactly this .cap + .c pair
+	// — "Next up" and benchNextUpSubtitle — and the summary carries both PLUS
+	// the soonest row, so this is a strict information gain rather than a
+	// relocation. Leaving it here as well would print the same heading twice
+	// whenever the section is open, which is precisely the "correct at every
+	// line and exhausting as a whole" failure this slice exists to fix.
 	<div class="nextup" data-bench-nextup>
-		<div class="sechead">
-			<span class="cap">Next up</span>
-			<span class="c">{ benchNextUpSubtitle(data.NextUp) }</span>
-		</div>
 		if len(data.NextUp.Rows) == 0 {
 			<p class="note" data-bench-nextup-empty>Nothing upcoming on the calendars you can see.</p>
 		} else {

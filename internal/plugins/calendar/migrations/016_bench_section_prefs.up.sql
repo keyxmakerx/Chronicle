@@ -1,0 +1,53 @@
+-- C-CALV4-BENCH-R2 slice R2-1 [BR2-5 SIGNED]: the per-viewer BENCH DISCLOSURE
+-- state — which of the four collapsible sections a viewer has closed.
+--
+-- THE THIRD EXTENSION OF calendar_active, AND DELIBERATELY SO. Migration 007
+-- (sidebar_pinned) chose to grow this row rather than mint a prefs table under
+-- a live coordinator decision (PR #368 stop-and-flag #3) — "simpler; reuses the
+-- existing (user_id, campaign_id) PK + FK cascade + index discipline" — and
+-- migration 014 (block_layers) followed it under [LYR-3 SIGNED]. A third
+-- column is the consistent answer; a table here would be an executor quietly
+-- reversing a signed decision twice over. The grain is therefore
+-- (user_id, campaign_id): one disclosure state per VIEWER per CAMPAIGN.
+--
+-- THE COLUMN STORES THE **CLOSED** SET, NOT THE OPEN ONE, and that is the one
+-- non-obvious thing about it. [BR2-4 SIGNED] makes the ruled default CLOSED at
+-- every width (one server-rendered `open` attribute cannot vary by viewport —
+-- ADR-048 §13), so storing the OPEN set would make '' mean "all four closed",
+-- which is byte-identical to the default and therefore unable to record "I
+-- opened nothing on purpose". Storing the closed set keeps NULL and '' genuinely
+-- distinct, which is the whole point of the 014 discipline:
+--
+--   NULL          the viewer has never chosen. All four sections render CLOSED,
+--                 which is the ruled default, and the honest summary line on
+--                 each is what makes that liveable ([BR2-3], register clause 5).
+--   ''            the viewer closed NOTHING: all four open. A real, reachable
+--                 state — four clicks from a fresh row — and the reason a
+--                 NOT NULL DEFAULT '' would have been a bug rather than a
+--                 tidier schema.
+--   'rsvp,rows'   those sections are CLOSED; every other key is OPEN.
+--
+-- VARCHAR, NOT JSON, for 014's stated reasons verbatim: the repo has no
+-- precedent for JSON preference blobs; a comma-joined key list stays greppable
+-- in a production incident; and the validation belongs in Go beside the
+-- four-key registry (bench_sections.go's benchSectionKeys) that actually
+-- defines the vocabulary. Keys are validated on the way IN (the route rejects
+-- an unknown key with 400 rather than dropping it silently) and filtered on the
+-- way OUT with a log line, so a registry change can never brick a viewer's
+-- Bench. Four keys of at most six characters cannot approach 255; the bound
+-- that matters is the Go validation, not the column.
+--
+-- IDEMPOTENT DDL (`ADD COLUMN IF NOT EXISTS`) per CLAUDE.md and ADR-044/045.
+-- Migration 007's bare `ADD COLUMN` predates that rule and is immutable under
+-- tools/check-migration-immutability.sh — it is NOT the shape to copy.
+--
+-- Plugin-scoped: calendar_active is a calendar-plugin table, so this lives in
+-- internal/plugins/calendar/migrations/. A core migration referencing it would
+-- crash a fresh DB, because core migrations run BEFORE plugin ones.
+--
+-- EGRESS: this is display state on a member-scoped row. It enters no export
+-- DTO and no AI-workspace payload — the construction the availability
+-- precedent (002_availability.up.sql, rsvp_egress_test.go) established.
+
+ALTER TABLE calendar_active
+  ADD COLUMN IF NOT EXISTS bench_sections VARCHAR(255) DEFAULT NULL;
