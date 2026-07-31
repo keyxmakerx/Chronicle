@@ -290,3 +290,109 @@ test('opening the editor leaves the Block byte-identical too', () => {
   fx.flush();
   assert.equal(fx.blockHost.outerHTML, before);
 });
+
+// --- DC-SAVE-6: one Save, one write ------------------------------------------
+//
+// edSave is reachable from TWO independent listeners — the delegated document
+// click on [data-de-save] and the form's own submit. A real user click fires
+// only one, because the click branch's preventDefault cancels the button's
+// activation behaviour. That is a true fact about the browser and a terrible
+// thing to rest a write on: an early return, a move to the capture phase, or a
+// reorder of the branch chain would turn every Save into two events, and
+// nothing would fail. A double-click before the reload lands does it today.
+// The guard is therefore at the WRITE, not at the listener.
+
+const filled = (fx) => setForm(fx, { name: 'Council', year: '1523', month: '1', day: '3' });
+
+test('both listeners firing on one Save still produce exactly one write', async () => {
+  const fx = boot();
+  openEditorOn(fx, 3);
+  filled(fx);
+
+  // The synthetic case the browser does NOT protect: click and submit both
+  // reaching edSave for a single user gesture. The submit listener is bound to
+  // the form ELEMENT, not delegated, so it is dispatched on the node.
+  const form = fx.editor.querySelector('[data-de-form]');
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  form.dispatch('submit', { target: form, preventDefault() {} });
+  await new Promise((r) => setImmediate(r));
+
+  const writes = fx.calls.filter((c) => c.method === 'POST');
+  assert.equal(writes.length, 1, 'two listeners must not produce two events');
+});
+
+test('a double-click on Save before the reload lands writes once', async () => {
+  const fx = boot();
+  openEditorOn(fx, 3);
+  filled(fx);
+  const save = fx.editor.querySelector('[data-de-save]');
+  fx.fire('click', save);
+  fx.fire('click', save);
+  fx.fire('click', save);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fx.calls.filter((c) => c.method === 'POST').length, 1);
+});
+
+test('a repeated Delete before the reload lands deletes once', async () => {
+  const stored = {
+    id: 'ev-1', name: 'Council of Wards', year: 1523, month: 1, day: 3,
+    visibility: 'everyone', visibility_rules: null, all_day: true,
+  };
+  const fx = boot({
+    responses: { 'GET /campaigns/camp-1/calendars/cal-1/events/ev-1': { ok: true, json: () => Promise.resolve(stored) } },
+  });
+  fx.fire('click', fx.cells[3]);
+  fx.fire('click', fx.card.querySelector('[data-dc-edit]'));
+  await new Promise((r) => setImmediate(r));
+  const del = fx.editor.querySelector('[data-de-delete]');
+  fx.fire('click', del);
+  fx.fire('click', del);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fx.calls.filter((c) => c.method === 'DELETE').length, 1);
+});
+
+test('a REFUSED save can be retried — the guard must not lock the editor', async () => {
+  const fx = boot({ responses: { POST: { ok: false, json: () => Promise.resolve({}) } } });
+  openEditorOn(fx, 3);
+  filled(fx);
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fx.calls.filter((c) => c.method === 'POST').length, 1);
+
+  // The server said no and the editor is still open. A second attempt must
+  // reach the wire, or a network blip would leave the editor unable to save.
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fx.calls.filter((c) => c.method === 'POST').length, 2);
+});
+
+test('a REJECTED title does not consume the write, so the fixed title saves', async () => {
+  const fx = boot();
+  openEditorOn(fx, 3);
+  setForm(fx, { name: '  ', year: '1523', month: '1', day: '3' });
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fx.calls.length, 0, 'a titleless save never reaches the wire');
+
+  filled(fx);
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fx.calls.filter((c) => c.method === 'POST').length, 1,
+    'the in-flight flag is set AFTER validation, so a rejected title cannot lock the editor');
+});
+
+test('reopening the editor clears an in-flight flag left by a failed save', async () => {
+  const fx = boot({ responses: { POST: { ok: false, json: () => Promise.resolve({}) } } });
+  openEditorOn(fx, 3);
+  filled(fx);
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  await new Promise((r) => setImmediate(r));
+  fx.fire('click', fx.editor.querySelector('[data-de-cancel]'));
+
+  openEditorOn(fx, 5);
+  filled(fx);
+  fx.fire('click', fx.editor.querySelector('[data-de-save]'));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(fx.calls.filter((c) => c.method === 'POST').length, 2,
+    'a fresh editor session is a fresh write');
+});

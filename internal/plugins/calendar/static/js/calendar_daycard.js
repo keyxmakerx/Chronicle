@@ -423,7 +423,21 @@
       err: editor.querySelector('[data-de-err]'),
       del: editor.querySelector('[data-de-delete]'),
     } : null;
-    var edState = { open: false, timer: 0, mode: '', calId: '', eventID: '', day: null, prev: null };
+    // `busy` is the WRITE IN FLIGHT flag (DC-SAVE-6). Two independent
+    // listeners reach edSave — the delegated document click on [data-de-save]
+    // and the form's own submit — and a real user click only fires one of them
+    // because the click branch's preventDefault cancels the submit button's
+    // activation behaviour. That is a true fact about the browser and a terrible
+    // thing to rest a write on: an early return, a move to the capture phase, or
+    // a reorder of the branch chain above it would silently turn every Save into
+    // two events, and the symptom would read as a server bug. A double-click
+    // before the reload lands does it today with nothing refactored at all.
+    //
+    // So the guard is at the WRITE, not at the listener. It covers both entry
+    // points, both verbs, and the delete path, and it is cleared on failure so a
+    // refused save can be retried — but never on success, because success ends
+    // in a reload and clearing it would open a window for a second POST.
+    var edState = { open: false, timer: 0, mode: '', calId: '', eventID: '', day: null, prev: null, busy: false };
 
     function reduced() {
       return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -741,6 +755,11 @@
     }
 
     function edOpen(mode, cal, day, rec, anchor) {
+      // A fresh editor session is a fresh write. The flag survives a failed
+      // save so the failing one cannot be double-submitted; it must not survive
+      // the box being closed and opened again, or a network blip would leave the
+      // editor permanently unable to save.
+      edState.busy = false;
       edState.mode = mode;
       edState.calId = cal.id;
       edState.day = day;
@@ -802,7 +821,17 @@
       };
     }
 
+    // edFailed re-opens the editor for another attempt. The busy flag is
+    // cleared HERE and only here: every success path ends in a reload, and
+    // clearing on success would leave a live Save button on a page that is
+    // already navigating.
+    function edFailed(msg) {
+      edState.busy = false;
+      edError(msg);
+    }
+
     function edSave() {
+      if (edState.busy) return;
       var fetcher = api();
       if (!fetcher) { edError('Cannot reach Chronicle right now.'); return; }
       var form = edFormValues();
@@ -813,25 +842,29 @@
       }
       var body = buildEventBody(form, edState.prev, { canOfferGMOnly: !!ed.gmOnly });
       var edit = edState.mode === 'edit' && edState.eventID;
+      // Set AFTER validation, so a rejected title does not lock the editor.
+      edState.busy = true;
       fetcher(edit ? eventsBase() + '/' + edState.eventID : eventsBase(), {
         method: edit ? 'PUT' : 'POST', body: body,
       }).then(function (resp) {
         if (resp && resp.ok) { window.location.reload(); return; }
-        edError('That did not save. Check the date and try again.');
+        edFailed('That did not save. Check the date and try again.');
       }).catch(function () {
-        edError('That did not save. Check your connection and try again.');
+        edFailed('That did not save. Check your connection and try again.');
       });
     }
 
     function edDelete() {
+      if (edState.busy) return;
       var fetcher = api();
       if (!fetcher || !edState.eventID) return;
+      edState.busy = true;
       fetcher(eventsBase() + '/' + edState.eventID, { method: 'DELETE' })
         .then(function (resp) {
           if (resp && resp.ok) { window.location.reload(); return; }
-          edError('That event could not be deleted.');
+          edFailed('That event could not be deleted.');
         })
-        .catch(function () { edError('That event could not be deleted.'); });
+        .catch(function () { edFailed('That event could not be deleted.'); });
     }
 
     // edLoad fetches the full record for EDIT mode. It is the one read this
