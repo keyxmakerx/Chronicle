@@ -58,23 +58,21 @@ Carried out of R2-2a, not closed:
       any API consumer; the fix is per-client (send the stored value back), not a
       service change — nil-guarding the bools would take "clear this repeat" away
       from an author who means it.
-- [ ] **Guard B4's scope glob does not match `daycard.templ`, and the coordinator
-      should rule rather than discover.** `b4_scope_for`
-      (`tools/check-calendar-v4-lints.sh:89-94`) matches
-      `*calendar_block*|*bench*|*Bench*|*schedule*|*Schedule*`;
-      `internal/plugins/calendar/daycard.templ` matches none of them, so B4 does
-      not read the newest dated surface in the arc. The script's own header calls
-      this out as the failure mode to avoid — *"a surface whose filename it does
-      not match is silently unguarded … a missing glob is invisible in review"* —
-      which is why `*schedule*` is in the list before the file exists. **Nothing
-      is wrong today**: the card head, the editor head and every row carry
-      `data-day` from `day.key`, pinned against the rendered Block's own
-      attributes in BOTH namespaces by
-      `TestDayCard_{,Intercalary}KeysAgreeWithTheRenderedBlock`, and B1–B3 still
-      run repo-wide over the file. R2-2a did not extend the glob unilaterally
-      because the dispatch's bound reads "B1–B4 unchanged and green". **The ask
-      is one word — `*daycard*` — with a comment naming the slice and the new
-      claim.**
+- [x] **Guard B4's scope glob did not match `daycard.templ`. RULED and CLOSED
+      2026-07-31** (DC2-B4-GLOB-4, R2-2a fix-forward round 3 stage 12).
+      `b4_scope_for` matched `*calendar_block*|*bench*|*Bench*|*schedule*|
+      *Schedule*` and the arc's two newest DATED surfaces matched none of them,
+      so B4 read them not at all — the invisible coverage hole the function's own
+      header says it exists to prevent, and the reason `*schedule*` was in the
+      list before the file existed. Nothing was wrong in the file (the keys are
+      pinned by `TestDayCard_{,Intercalary}KeysAgreeWithTheRenderedBlock`), and
+      the previous round was right not to widen a signed guard unilaterally.
+      **`*daycard*` is now in the list**, with a comment naming the ruling and
+      two new `expect_scope` self-test rows. Coverage WIDENING only: no glob
+      removed, no rule relaxed. Mutation-verified — a `data-cell` marker without
+      a `data-day` key on the card's head now fires B4 at
+      `daycard.templ:56` and exits 1; before the widening the same mutation was
+      invisible.
 - [ ] **The single-line blind spot in `TestBenchCSS_EverySelectorIsScoped` is a
       HOUSE pattern, not this slice's.** Both scope guards only inspected lines
       ENDING in `{`, so a rule written entirely on one line was never examined.
@@ -100,6 +98,24 @@ Carried out of R2-2a, not closed:
   "Mobile = bottom sheet, full-width" bullet and §12 scopes the STOP-AND-FLAG
   row to 1232px, so it is the signed treatment — now RECORDED on the DOM as
   `data-dc-clear="0"` rather than silently reported as clear (DC-CLEAR-1).
+
+  **AND THE BAND BETWEEN THEM, WHICH THE FIRST TWO ROUNDS DID NOT MEASURE AND
+  DID NOT DISCLOSE** (DC3-STACKED-LEDGER-OCCLUSION-1, the round-3 blocker;
+  FIXED 2026-07-31, stage 9). Reporting "1232px = 0 px²" and "390px = the signed
+  sheet" left the sizes in between unstated, and that is exactly where the
+  Bench stops docking the Ledger as a right-hand column and STACKS it
+  full-width below the grid. The card's dodge was horizontal only, so from
+  roughly **625px to 884px of `.cal-bench` CONTENT width** the desktop popover
+  landed on the band deterministically — every day, every viewer, no signed
+  treatment covering it. Reproduced against the real render at 227px card
+  height: 884px → 21,080 px², 804px → 21,080, 752px → 21,080, each with
+  `data-dc-clear="0"` and one console warning. `placeCard` now dodges on BOTH
+  axes (below → above → the signed sheet), and the same three widths measure
+  0 px², `data-dc-clear="1"`, zero warnings, with the card flipped above its
+  day; 1008/944px (docked column) and 684/644/625px (horizontal dodge already
+  sufficed) are byte-identical before and after. **The lesson for the next gate
+  is the reporting one:** a geometry row measured at two widths is a claim about
+  two widths, and the layout changes shape between them.
 
   **Still open, and it needs a live authed server:** this environment has no
   Docker daemon (`make docker-up` cannot reach `/var/run/docker.sock`), so there

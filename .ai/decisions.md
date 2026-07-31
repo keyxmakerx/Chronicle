@@ -3017,6 +3017,53 @@ and a brace-scanner over the sheet instead of a line filter. Where a guard's
 subject can be enumerated mechanically, enumerating it by hand is a guard that
 proves what its author remembered.
 
+**A DODGE ON ONE AXIS IS A RULE ABOUT ONE LAYOUT.** [DC-3] signs that the card
+may never occlude the Ledger, and the first two cuts implemented that as a
+single left-clamp: when the card's box shared a Y band with the Ledger, keep it
+entirely left of `ledger.left`. That is the correct answer, and it is complete
+only while the Ledger IS a right-hand column. The Bench stacks it FULL-WIDTH
+BELOW the grid at narrower sizes, and a band starting at x≈9 that spans the
+whole Bench leaves no left to move to — the clamp computed a negative limit and
+no-opped, the vertical branch above it only ever flipped for VIEWPORT room, and
+a card that always fits below its day therefore landed on the band for every day
+and every viewer between roughly 625px and 884px of `.cal-bench` content width.
+The editor escaped only by accident: it is tall enough not to fit below, so its
+viewport flip happened to clear the band — which is the proof that the missing
+dodge was available all along.
+
+Three things are worth recording past the fix itself.
+
+**One: the exclusion zone is the Ledger's SETTLED RECT, not its role in the
+layout.** Docked column and stacked band are the same obligation, and the rule
+is now written that way — the placer asks "does the box intersect this rect",
+never "is the Ledger to my right". A rule expressed in terms of one layout is a
+rule that silently stops applying when the layout changes, and this arc changes
+layout by breakpoint on purpose.
+
+**Two: the degradation is an EXISTING signed treatment, not a new one.** The
+order is below → above → the bottom sheet, and the sheet is [DC-3] bullet 4's
+own answer. There is no third geometry and the card is never resized to fit: a
+card that shrank to dodge would be a different card, and the sign-off covered
+one card and one sheet. Reaching for a novel geometry under pressure is how a
+product acquires a shape nobody signed.
+
+**Three: retiring a flag with its harm un-signs it.** The desktop sheet fallback
+means the geometry RAN OUT, which is the condition [DC-3] named a STOP-AND-FLAG;
+the card simply no longer covers anything while it happens. So the placement
+carries whether the sheet was a fallback or the layout, and the reporter speaks
+for the first and stays silent for the second. `data-dc-clear` is written
+honestly in every mode either way.
+
+The reporting lesson is the one the arc should keep. The gate was measured at
+1232px and at 390px and reported as "clear" and "the signed mobile treatment" —
+both true, and the sizes between them were never named. **A geometry claim is a
+claim about the widths it was taken at**, and the widths where a layout changes
+shape are precisely the ones a two-point measurement omits. The mislabel
+compounded it: the JS suite's one negative case called the stacked-Ledger
+geometry "a pathological geometry", so two reviews read the product's own layout
+as an impossible one. It is now a positive regression case at the ~884px and
+~944px boundaries.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they

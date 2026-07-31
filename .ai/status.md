@@ -122,10 +122,54 @@ server never rendered). Booked as **C-CALV4-DAYPICK-A11Y**.
   cannot". Sixth row added, with both calendars resolvable inside the campaign
   so the ownership check is what actually fires.
 
+**Fix-forward round 3 (stages 9-13), against the third adversarial review:**
+
+- **The card covered the STACKED Ledger, deterministically, in the DESKTOP
+  treatment** (DC3-STACKED-LEDGER-OCCLUSION-1, the blocker — [DC-3]'s own
+  STOP-AND-FLAG). `placeCard`'s dodge was HORIZONTAL only, which is complete
+  while the Ledger is a right-hand column and structurally impossible once the
+  Bench stacks it full-width BELOW the grid: the clamp computed a negative limit
+  and no-opped, and the vertical branch above it only ever flipped for viewport
+  room. Between roughly **625px and 884px of `.cal-bench` content width** the
+  card therefore landed on the band for every day and every viewer, measured at
+  21,080 px² against the real render. The editor escaped only by accident — too
+  tall to fit below, so its viewport flip happened to clear the band, which is
+  the proof the missing dodge was available. `placeCard` now treats the Ledger's
+  SETTLED RECT as an exclusion zone whatever its role in the layout, and tries
+  below → above → the bottom sheet ([DC-3] bullet 4's own signed answer; no
+  third geometry, no resizing). Same three widths now measure 0 px²,
+  `data-dc-clear="1"`, zero warnings. The desktop sheet FALLBACK still warns,
+  because the geometry running out is the signed condition even when the card no
+  longer covers anything; the mobile sheet stays silent, as DC2-MOBILE-4 set it.
+- **The suite had mislabelled the product's own layout as pathological.** The one
+  negative placement case called the stacked-Ledger geometry "a pathological
+  geometry: the column starts 40px in", which is why the hole survived two
+  reviews. It is now positive regression coverage at the ~884px and ~944px
+  boundaries, plus a case for the sheet fallback.
+- **A driver was mounted without the global it reads** (PERM-JS-HARD-DEP-2).
+  [DC-10]'s extraction left `calendar_permissions.js` depending hard on
+  `window.ChronicleCalVisibility` with no fallback — correct, but it means the
+  driver mounted alone wires nothing, and `app_dashboard.templ` mounted it alone
+  on a page that is retained-but-unrouted. Mount dropped; absence pinned against
+  the page that renders it; and a source-level guard now requires any template
+  mounting the driver to mount `cal_visibility.js` FIRST.
+- **The editor wrote to the id the SERVER echoed, not the door that was clicked**
+  (EDIT-MODE-ID-FALLBACK-3). The same line decided PUT-vs-POST, so a record
+  without an `id` would have turned an edit into a duplicate-creating POST.
+  Edit mode now carries the door's id, Delete follows it, and one pure
+  `writeTarget()` REFUSES an edit with no id rather than creating.
+- **Guard B4 did not read the day card** (DC2-B4-GLOB-4, ruled). `*daycard*`
+  added to the scope glob with two self-test rows — coverage widening only,
+  mutation-verified in both directions.
+
 **The §12 screenshot gate is PART-EXECUTED** — the geometry rows are measured
-headlessly against the real render (1232px clears the Ledger at 0 px²; 390px is
-the signed bottom sheet, now recorded rather than mis-reported); the rows that
-need a live authed session are still open. Both halves are in `.ai/todo.md`.
+headlessly against the real render (1232px clears the Ledger at 0 px²; the
+625-884px stacked band clears it after round 3; 390px is the signed bottom
+sheet, recorded rather than mis-reported); the rows that need a live authed
+session are still open. Both halves are in `.ai/todo.md`. Round 3's disclosure
+lesson rides with it: **a geometry claim is a claim about the widths it was
+taken at**, and the widths where the layout changes shape are exactly the ones a
+two-point measurement omits.
 
 ### calendar-v4 — ROUND 2 · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
 
