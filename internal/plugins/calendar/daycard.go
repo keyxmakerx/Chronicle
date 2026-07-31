@@ -180,9 +180,20 @@ type dayCardPayload struct {
 // internal/widgets/calendar_block (helpers.go:590-604, :913-917) and this slice
 // opens NO file in that package — the Block's interior law is the bound this
 // dispatch is fenced by, and exporting a helper to satisfy a consumer would be
-// an edit to it. They are therefore mirrored here, byte-for-byte, and
-// daycard_test.go pins the mirror against the RENDERED Block's own attributes
-// rather than against these functions, so a drift in either direction fails.
+// an edit to it. They are therefore mirrored here, byte-for-byte, and pinned
+// against the RENDERED Block's own attributes rather than against these
+// functions, so a drift in either direction fails.
+//
+// BOTH NAMESPACES ARE PINNED, and saying so is the point (DC-ICAL-2). The first
+// cut of this comment claimed the mirror was guarded in either direction while
+// only TestDayCard_KeysAgreeWithTheRenderedBlock existed — and that test walks
+// ordinary days only, because the signed oracle fixture declares no
+// is_intercalary month. So `slug-iN` / `iN` were minted by nobody's guard while
+// a comment said otherwise, which is worse than an unguarded mirror: it is the
+// sentence that stops the next hand from adding the test.
+// TestDayCard_IntercalaryKeysAgreeWithTheRenderedBlock is the missing half, and
+// it splices real intercalary months into the oracle fixture rather than
+// asserting against a hand-built payload.
 
 func dayCardKey(slug string, day int) string {
 	if slug == "" {
@@ -304,7 +315,10 @@ func buildDayCardCalendar(d calblock.BlockData, cal *Calendar, canAuthor bool) d
 	// The intercalary days, with their OWN month resolved. The walk mirrors
 	// blockIntercalary's exactly — every following is_intercalary Month, in
 	// order, each day 1..MonthDays — so the two lists are positionally
-	// identical and the zip below cannot slip. It is a zip rather than a
+	// identical and the zip below cannot slip. That assumption is now CHECKED
+	// rather than asserted: TestDayCard_IntercalaryDaysResolveTheirOWNMonth
+	// zips two intercalary months of UNEQUAL length, which is the shape a
+	// positional zip fails on. It is a zip rather than a
 	// re-derivation because block_geometry.go's own comment says
 	// blockIntercalaryMonths is the SINGLE definition of that adjacency rule
 	// and "two independent copies of which months hang off this one is exactly

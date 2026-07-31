@@ -236,6 +236,287 @@ func TestDayCard_KeysAgreeWithTheRenderedBlock(t *testing.T) {
 	}
 }
 
+// --- 2b. the SECOND key namespace: intercalary days -------------------------
+//
+// DC-ICAL-2. The mirror guard above only ever iterated ORDINARY days, because
+// the signed oracle fixture declares no is_intercalary month — so
+// dayCardIntercalaryKey, dayCardIntercalaryOrd, dayCardIntercalaryCoords and
+// dayCardIntercalaryLabel were 0.0% covered while daycard.go's header claimed
+// the mirror was pinned "in either direction". The claim was true of one
+// namespace and false of the other, which is the worse of the two failure modes:
+// a comment that stops a later hand from adding the test.
+//
+// These fixtures exist because the intercalary path is the ONE place the card's
+// payload does arithmetic. An intercalary day is not "day N of the rendered
+// month" — Midwinter 1 is not Deepwinter 1 — so the editor pre-fills a month
+// resolved by walking the adjacency rule, and getting that wrong writes the
+// event to the wrong date silently. On any fantasy calendar with festival days
+// that is most of them.
+
+// dayCardIntercalarySpec is one intercalary month: its name and its length.
+type dayCardIntercalarySpec struct {
+	name string
+	days int
+}
+
+// dayCardIntercalaryFixture splices intercalary months in AFTER the rendered
+// month, which is the adjacency rule blockIntercalaryMonths defines, and
+// projects the result exactly as dayCardFixture does — same viewer, same Bench
+// layer set, same single filtered pass.
+func dayCardIntercalaryFixture(t *testing.T, v BlockViewer, extra []Event, specs ...dayCardIntercalarySpec) (calblock.BlockData, *Calendar) {
+	t.Helper()
+	cal, events := oracleLedgerFixture()
+
+	months := make([]Month, 0, len(cal.Months)+len(specs))
+	months = append(months, cal.Months[0])
+	for i, s := range specs {
+		months = append(months, Month{
+			ID: 900 + i, CalendarID: cal.ID, Name: s.name, Days: s.days,
+			SortOrder: 1 + i, IsIntercalary: true,
+		})
+	}
+	months = append(months, cal.Months[1:]...)
+	cal.Months = months
+
+	d := projectBlock(BlockProjectionInput{
+		Calendar: cal, Events: append(blockCopyEvents(events), extra...),
+		Viewer: v, MonthIndex: 0, Year: 1523,
+	})
+	d.Layers = benchBlockLayers(blockLayerPrefs{})
+	return d, cal
+}
+
+// TestDayCard_IntercalaryKeysAgreeWithTheRenderedBlock is the other half of the
+// mirror guard, and the half that was missing.
+//
+// It asserts what the ordinary-day test asserts, against the SAME rendered
+// Block: every intercalary key and ordinal the payload mints appears on a node
+// the widget rendered. A drift in either direction — here, or in the widget's
+// own unexported intercalaryKey / intercalaryOrdKey — fails, and it fails
+// loudly rather than as "the card never opens on a festival day".
+func TestDayCard_IntercalaryKeysAgreeWithTheRenderedBlock(t *testing.T) {
+	d, cal := dayCardIntercalaryFixture(t,
+		BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}, nil,
+		dayCardIntercalarySpec{name: "Midwinter", days: 2})
+
+	if len(d.Month.Intercalary) != 2 {
+		t.Fatalf("the fixture rendered %d intercalary days, want 2 — the guard would "+
+			"pass vacuously, which is how this gap opened in the first place",
+			len(d.Month.Intercalary))
+	}
+
+	body := seamRenderBlockData(t, d)
+	rendered := map[string]bool{}
+	for _, m := range dayCardAttrRe.FindAllStringSubmatch(body, -1) {
+		rendered[m[1]] = true
+	}
+	renderedOrd := map[string]bool{}
+	for _, m := range dayCardOrdRe.FindAllStringSubmatch(body, -1) {
+		renderedOrd[m[1]] = true
+	}
+
+	card := buildDayCardCalendar(d, cal, true)
+	seenKeys, seenOrds := 0, 0
+	for _, day := range card.Days {
+		if !strings.Contains(day.Ord, "i") {
+			continue
+		}
+		seenKeys++
+		seenOrds++
+		if !rendered[day.Key] {
+			t.Errorf("the payload's intercalary day key %q appears on no node of the "+
+				"rendered Block — the mirrored intercalaryKey namespace has drifted and "+
+				"the card would never open on a festival day", day.Key)
+		}
+		if !renderedOrd[day.Ord] {
+			t.Errorf("the payload's intercalary ladder key %q appears on no node of the "+
+				"rendered Block — the mirrored intercalaryOrdKey namespace has drifted "+
+				"and the `Open in the Ledger` door would find no radio", day.Ord)
+		}
+	}
+	if seenKeys != 2 || seenOrds != 2 {
+		t.Fatalf("the payload carried %d intercalary days, want 2", seenKeys)
+	}
+	// The two namespaces must stay APART. `cal-harptos-1` is Deepwinter 1 and
+	// `cal-harptos-i1` is Midwinter 1; a mirror that collapsed them would open
+	// the card on the wrong day and look completely normal doing it.
+	if rendered["cal-harptos-i1"] == rendered["cal-harptos-1"] && !rendered["cal-harptos-i1"] {
+		t.Fatal("neither namespace rendered at all")
+	}
+	for _, k := range []string{"cal-harptos-i1", "cal-harptos-i2"} {
+		if !rendered[k] {
+			t.Errorf("the rendered Block carries no %q — the fixture is not exercising "+
+				"the second namespace", k)
+		}
+	}
+}
+
+// TestDayCard_IntercalaryDaysResolveTheirOWNMonth is the correctness claim the
+// key guard cannot make.
+//
+// An intercalary day's editor pre-fill is (year, its own 1-based month), NOT
+// the rendered month's index. dayCardIntercalaryCoords derives it by zipping
+// the payload's flat intercalary position against blockIntercalaryMonths, on
+// the assumption that the two lists are positionally identical — an assumption
+// nothing checked. Two intercalary months of unequal length is the shape that
+// breaks a zip, so that is the shape this test uses.
+func TestDayCard_IntercalaryDaysResolveTheirOWNMonth(t *testing.T) {
+	// Deepwinter (index 0, month 1), then Midwinter (2 days, month 2), then
+	// Highharvest (1 day, month 3), then the eleven ordinary months.
+	d, cal := dayCardIntercalaryFixture(t,
+		BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}, nil,
+		dayCardIntercalarySpec{name: "Midwinter", days: 2},
+		dayCardIntercalarySpec{name: "Highharvest", days: 1})
+
+	card := buildDayCardCalendar(d, cal, true)
+	type coord struct{ year, month, day int }
+	got := map[string]coord{}
+	for _, day := range card.Days {
+		if strings.Contains(day.Ord, "i") {
+			got[day.Label] = coord{day.Year, day.Month, day.Day}
+		}
+	}
+
+	// The labels are the festival days' OWN names — blockIntercalary suffixes
+	// the ordinal when a month runs longer than a day — never "1 Deepwinter".
+	want := map[string]coord{
+		"Midwinter 1": {1523, 2, 1},
+		"Midwinter 2": {1523, 2, 2},
+		"Highharvest": {1523, 3, 1},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("intercalary days = %+v, want %d entries", got, len(want))
+	}
+	for label, w := range want {
+		g, ok := got[label]
+		if !ok {
+			t.Errorf("no intercalary day labelled %q — dayCardIntercalaryLabel must print "+
+				"the festival's own name, not its ordinal in the rendered month", label)
+			continue
+		}
+		if g != w {
+			t.Errorf("%s resolved to (year %d, month %d, day %d), want (%d, %d, %d) — "+
+				"pre-filling the RENDERED month's index writes the event to the wrong "+
+				"date on every calendar that has festival days",
+				label, g.year, g.month, g.day, w.year, w.month, w.day)
+		}
+	}
+
+	// And the rendered month is NOT month 2 or 3, so a coords implementation
+	// that simply returned d.Month.Index+1 would have failed above rather than
+	// coincidentally agreeing.
+	if d.Month.Index+1 == 2 {
+		t.Fatal("the fixture's rendered month collides with Midwinter's — the assertion " +
+			"above would pass for the wrong reason")
+	}
+}
+
+// TestDayCard_IntercalaryCoordsRefuseRatherThanGuess pins the degraded branch.
+//
+// Month 0 is not a fallback, it is a refusal: an editor pre-filled with a month
+// the day does not live in would write the event to the wrong date, so a spine
+// the adjacency rule can no longer explain returns a value the module can
+// decline to open on.
+func TestDayCard_IntercalaryCoordsRefuseRatherThanGuess(t *testing.T) {
+	cal, _ := oracleLedgerFixture()
+	if _, m := dayCardIntercalaryCoords(nil, 0, 1523, 0); m != 0 {
+		t.Errorf("a nil calendar resolved month %d, want 0 (a refusal, not a guess)", m)
+	}
+	// No intercalary month hangs off month 0 in the signed fixture, so any
+	// position is past the end of the walk.
+	if _, m := dayCardIntercalaryCoords(cal, 0, 1523, 0); m != 0 {
+		t.Errorf("a calendar with no intercalary months resolved month %d, want 0", m)
+	}
+	// And a position past the end of a real walk refuses too.
+	d, ical := dayCardIntercalaryFixture(t,
+		BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}, nil,
+		dayCardIntercalarySpec{name: "Midwinter", days: 2})
+	if _, m := dayCardIntercalaryCoords(ical, d.Month.Index, 1523, 99); m != 0 {
+		t.Errorf("position 99 of a 2-day walk resolved month %d, want 0", m)
+	}
+}
+
+// TestDayCard_IntercalaryDegradedInputsMirrorTheWidgetsOwnFallbacks covers the
+// two branches a rendered fixture cannot reach through the Bench, and it is
+// pinned against a RENDERED Block for the same reason everything else here is.
+//
+// An unslugged calendar keys as `cal-iN` because the widget's intercalaryKey
+// does (helpers.go:599-604); an unnamed festival day falls back to its ordinal
+// because there is nothing else honest to print. Both are one `if` in a
+// mirrored function, and one `if` is exactly the size of drift that ships.
+func TestDayCard_IntercalaryDegradedInputsMirrorTheWidgetsOwnFallbacks(t *testing.T) {
+	d, cal := dayCardIntercalaryFixture(t,
+		BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}, nil,
+		dayCardIntercalarySpec{name: "  ", days: 1}) // whitespace-only: no name at all
+	d.CalendarSlug = ""
+
+	body := seamRenderBlockData(t, d)
+	if !strings.Contains(body, `data-day="cal-i1"`) {
+		t.Fatal("the rendered Block does not key an unslugged calendar as `cal-i1`; " +
+			"the mirror's fallback is being measured against the wrong thing")
+	}
+
+	card := buildDayCardCalendar(d, cal, true)
+	var ical *dayCardDay
+	for i := range card.Days {
+		if card.Days[i].Ord == "i1" {
+			ical = &card.Days[i]
+			break
+		}
+	}
+	if ical == nil {
+		t.Fatal("the payload carries no intercalary day")
+	}
+	if ical.Key != "cal-i1" {
+		t.Errorf("an unslugged calendar keyed its festival day %q, want %q — the widget's "+
+			"own fallback is `cal`", ical.Key, "cal-i1")
+	}
+	if ical.Label != "1" {
+		t.Errorf("an unnamed festival day labelled %q, want its ordinal %q — there is "+
+			"nothing else honest to print", ical.Label, "1")
+	}
+}
+
+// TestDayCard_IntercalaryDaysCarryTheirMarks closes the loop: the agreement law
+// applies to the second namespace too.
+//
+// An event on an intercalary day reaches the payload through the SAME viewer
+// filter as a grid event, from the same single pass, so a dm_only festival is
+// absent from a player's payload for the same reason it is absent from their
+// Ledger — the producer never sent it, not because the card hid it.
+func TestDayCard_IntercalaryDaysCarryTheirMarks(t *testing.T) {
+	vigil := Event{ID: "ev-vigil", CalendarID: "cal-harptos", Name: "Midwinter Vigil",
+		Year: 1523, Month: 2, Day: 1, Visibility: "everyone"}
+	rite := Event{ID: "ev-rite", CalendarID: "cal-harptos", Name: "The pale rite",
+		Year: 1523, Month: 2, Day: 1, Visibility: "dm_only"}
+
+	ids := func(v BlockViewer) []string {
+		d, cal := dayCardIntercalaryFixture(t, v, []Event{vigil, rite},
+			dayCardIntercalarySpec{name: "Midwinter", days: 2})
+		var out []string
+		for _, day := range buildDayCardCalendar(d, cal, true).Days {
+			if day.Ord != "i1" {
+				continue
+			}
+			for _, e := range day.Events {
+				out = append(out, e.ID)
+			}
+		}
+		sort.Strings(out)
+		return out
+	}
+
+	gm := ids(BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
+	if len(gm) != 2 {
+		t.Fatalf("the GM's Midwinter 1 carries %v, want both events", gm)
+	}
+	player := ids(BlockViewer{UserID: "u-bryn", Role: permissions.RolePlayer})
+	if len(player) != 1 || player[0] != "ev-vigil" {
+		t.Fatalf("the player's Midwinter 1 carries %v, want just the public vigil — "+
+			"permission is ABSENCE and the producer is where it happens", player)
+	}
+}
+
 // TestDayCard_LedgerDockedMirrorsTheWidgetsOwnPredicate. Absence has TWO
 // causes and the card's Ledger door depends on telling them apart, so both are
 // exercised: a host that never docked the zone (no `ledger` layer) and a viewer
