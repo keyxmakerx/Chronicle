@@ -92,6 +92,36 @@ server never rendered). Booked as **C-CALV4-DAYPICK-A11Y**.
   Save write twice, and a double-click did it already. Guarded at the WRITE, not
   the listener.
 
+**Fix-forward round 2 (stages 7-8), against the second adversarial review:**
+
+- **A rename un-repeated the event** (DC2-RECUR-DATALOSS, the blocker). The
+  editor authors no recurrence in this stage and "preserved" it by saying
+  nothing about it — but `is_recurring` is a VALUE-typed bool on the shipped
+  `PUT` and the service assigns it unguarded ON PURPOSE ("false IS the value,
+  not 'absent'"), so omission was a write of false. The nil-guarded
+  `recurrence_type` / `interval` / `end_*` around it then survived, leaving the
+  exact half-state C-CAL-RECURRING-PARTIAL-STATE-CLEANUP cleaned up once. The
+  read route now HANDS BACK the three fields the write path clobbers and the
+  editor sends them home; create mode still sends none, because for a new event
+  false is the true value. The lesson is in ADR-048: *"the client round-trips
+  what it does not offer" is true field-by-field, and its truth depends on the
+  field's TYPE on the wire.* The remaining partial clients of that PUT are
+  booked for the same sweep.
+- **Two guards were green-but-blind, both by enumerating from a SAMPLE**
+  (DC2-PAYLOAD-OMITEMPTY, DC2-SCOPEGUARD-LINEFORM). The payload law's key
+  inventory came from marshalling a hand-written literal, so a ninth field
+  tagged `omitempty` would have been invisible to "want exactly these eight
+  keys"; the stylesheet's scope guard read only lines ENDING in `{`, so the
+  sheet's 21 single-line rules were never examined. Both now derive from the
+  definition — reflection over the type's json tags, a brace-scanner over the
+  sheet — and both go red on the verifier's own mutations.
+- **The W5a same-answer table was missing the ownership row**
+  (DC2-W5A-OWNERSHIP). `GetEventAPI`'s header claims FOUR refusals are
+  indistinguishable; only three were pinned, and the unpinned one is the branch
+  that separates "this event is on a calendar you can see" from "one you
+  cannot". Sixth row added, with both calendars resolvable inside the campaign
+  so the ownership check is what actually fires.
+
 **The §12 screenshot gate is PART-EXECUTED** — the geometry rows are measured
 headlessly against the real render (1232px clears the Ledger at 0 px²; 390px is
 the signed bottom sheet, now recorded rather than mis-reported); the rows that

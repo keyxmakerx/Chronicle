@@ -2974,6 +2974,49 @@ mockup is mid-fix and un-re-reviewed, so it is a REFERENCE for fields, states
 and vocabulary and NOT a fidelity gate, and only the chrome pass waits on the
 operator's stills.
 
+**AN ABSENT KEY CAN BE A WRITE, AND ROUND 2's VERIFIER FOUND WHERE.** The
+round-trip discipline above was applied to `entity_id`, `description_html`,
+`visibility` and `visibility_rules` — every one of them a POINTER on the shipped
+`PUT`, where nil genuinely means "unchanged" because C-CAL-NULL-PRESERVE
+nil-guards them. It was NOT applied to `is_recurring`, and that field is a
+value-typed bool whose guard was left off ON PURPOSE: *"IsRecurring — bool:
+false IS the value, not 'absent'."* On such a field there is no such thing as
+saying nothing. The editor's body carried no key, the bind produced `false`, and
+renaming a recurring event through the day card un-repeated it — while the
+nil-guarded `recurrence_type`, `recurrence_interval` and `recurrence_end_*`
+around it all survived, leaving precisely the half-state
+C-CAL-RECURRING-PARTIAL-STATE-CLEANUP already had to clean up once. The module's
+own comment asserted the opposite in so many words.
+
+The lesson generalises past this slice and is why it is written here rather than
+in a commit message: **"the client round-trips what it does not offer" is only
+true field-by-field, and its truth depends on the field's TYPE on the wire.**
+For a pointer, omission preserves; for a value, omission overwrites. A partial
+editor is therefore lossless only against a request struct whose optional fields
+are all pointers, and the two fixes are (a) the read route must HAND BACK
+everything the write path will clobber — the record could not round-trip a field
+it was never given — and (b) the guard must be a request-body assertion over a
+stored record that HAS the field set, because a suite that only ever builds
+bodies from empty prevs proves nothing about preservation. Both halves are now
+pinned, in Go and on the JS wire, and the service's deliberate non-fix is pinned
+too, in the voice `TestUpdateEvent_EntityIDStillClearsOnNil` uses, so a later
+sweep reads why the client's round-trip exists before deleting it.
+
+**A GUARD THAT ENUMERATES BY EXAMPLE ENUMERATES YESTERDAY.** Two of the slice's
+own guards were found green-but-blind by the same pass, and both had the same
+shape: they described the thing they guarded using a *sample* of it. The payload
+law's inventory was taken by marshalling a hand-written `dayCardEvent` literal —
+but every optional field is `omitempty`, so a ninth field would simply be absent
+from that marshal and "want exactly these eight keys" would still pass. The
+stylesheet's scope guard read only lines ENDING in `{`, so the sheet's 21
+single-line rules were never examined at all. Neither was wrong today; both
+would have gone on being green while the thing they claimed stopped being true.
+The fixes are the same fix in two languages: **derive the inventory from the
+DEFINITION, not from an instance of it** — reflection over the type's json tags,
+and a brace-scanner over the sheet instead of a line filter. Where a guard's
+subject can be enumerated mechanically, enumerating it by hand is a guard that
+proves what its author remembered.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they

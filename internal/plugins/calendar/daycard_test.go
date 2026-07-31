@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"sort"
@@ -58,9 +59,19 @@ func dayCardFixture(t *testing.T, v BlockViewer) (calblock.BlockData, *Calendar)
 // --- 1. the payload law -----------------------------------------------------
 
 // TestDayCard_PayloadCarriesTheLedgerRowFieldSetAndNothingMore is [DC-1]'s
-// enforcement, and it asserts on the SHIPPED JSON KEYS rather than on the Go
-// struct: a field added with a `json:"-"` tag would pass a struct assertion and
-// a field added to the struct is exactly how this grows.
+// enforcement, and it asserts on the SHIPPED JSON KEYS — the names that reach
+// a viewer's DOM — in three independent ways, because a field added to the
+// struct is exactly how this law gets broken:
+//
+//	the TYPE's declared key set   (reflection; catches a field ADDED, even one
+//	                               tagged omitempty that no fixture populates)
+//	the RENDERED fixture's keys   (catches a key LEAKING that the type does not
+//	                               declare, and keeps the two in agreement)
+//	the forbidden-NAME scan       (the named temptations, on the raw string)
+//
+// The first is round-2's fix-forward (DC2-PAYLOAD-OMITEMPTY): it used to be a
+// hand-written literal, which enumerated only the fields whoever wrote it
+// remembered, so a ninth `omitempty` field was invisible to it.
 //
 // The forbidden list is named explicitly because each entry is a real
 // temptation with a real cost: description/description_html are the prose the
@@ -116,38 +127,42 @@ func TestDayCard_PayloadCarriesTheLedgerRowFieldSetAndNothingMore(t *testing.T) 
 		t.Fatal("the fixture produced no events; every assertion below would be vacuous")
 	}
 
-	// THE STRUCT'S OWN INVENTORY, from a fully-populated value: `omitempty`
-	// means the fixture's own rows can never enumerate the whole shape (the
-	// signed month declares no times), so the shape is read off the type and
-	// the fixture is then checked to stay inside it. Both halves are needed —
-	// the first catches a field ADDED, the second catches a field LEAKING.
-	full, err := json.Marshal(dayCardEvent{
-		ID: "e", Title: "t", Time: "1:00", Axis: "var(--own-1)",
-		Pattern: "p1", Glyph: "◆", Gold: true, Audience: "GM only",
-	})
-	if err != nil {
-		t.Fatalf("marshal a populated row: %v", err)
-	}
-	var fullKeys map[string]json.RawMessage
-	if err := json.Unmarshal(full, &fullKeys); err != nil {
-		t.Fatalf("decode a populated row: %v", err)
-	}
-	declared := map[string]bool{}
-	for k := range fullKeys {
-		declared[k] = true
-	}
+	// THE STRUCT'S OWN INVENTORY, READ OFF THE TYPE BY REFLECTION — never by
+	// marshalling a hand-written literal (DC2-PAYLOAD-OMITEMPTY, round-2
+	// fix-forward). EVERY OPTIONAL FIELD HERE IS `omitempty`, so a literal is
+	// "fully populated" only for the fields that existed when it was written:
+	// a NINTH field added with `omitempty` would simply be absent from that
+	// marshal and this comparison would stay green while the payload grew. The
+	// literal also had no mechanism forcing anyone to update it. Reflection has
+	// no such blind spot — a field cannot be added to the type without
+	// appearing here.
+	//
+	// The fixture cross-check below is the OTHER half and it stays: reflection
+	// catches a field ADDED, the fixture catches a rendered key LEAKING that
+	// the type does not declare. Neither half subsumes the other, and the
+	// forbidden-name list under them catches nothing on its own — a leak under
+	// an unlisted name is invisible to it, which is exactly why the two
+	// enumerations above it are the real guard.
+	declaredEvent := jsonKeySet(t, dayCardEvent{})
+	declaredDay := jsonKeySet(t, dayCardDay{})
 
 	wantDay := []string{"day", "events", "key", "label", "month", "ord", "weekday", "year"}
-	if got := sortedKeys(dayKeys); !equalStrings(got, wantDay) {
-		t.Errorf("day object keys = %v, want exactly %v", got, wantDay)
+	if got := sortedKeys(declaredDay); !equalStrings(got, wantDay) {
+		t.Errorf("dayCardDay declares JSON keys %v, want exactly %v — [DC-1] SIGNED "+
+			"fixes the payload at the Ledger row's field set and NOTHING more", got, wantDay)
+	}
+	for _, k := range sortedKeys(dayKeys) {
+		if !declaredDay[k] {
+			t.Errorf("a rendered day carries the key %q, which the type does not declare", k)
+		}
 	}
 	wantEvent := []string{"audience", "axis", "glyph", "gold", "id", "pattern", "time", "title"}
-	if got := sortedKeys(declared); !equalStrings(got, wantEvent) {
+	if got := sortedKeys(declaredEvent); !equalStrings(got, wantEvent) {
 		t.Errorf("dayCardEvent declares JSON keys %v, want exactly %v — [DC-1] SIGNED "+
 			"fixes the payload at the Ledger row's field set and NOTHING more", got, wantEvent)
 	}
 	for _, k := range sortedKeys(eventKeys) {
-		if !declared[k] {
+		if !declaredEvent[k] {
 			t.Errorf("a rendered row carries the key %q, which the type does not declare", k)
 		}
 	}
@@ -852,22 +867,53 @@ func TestDayCardCSS_CarriesNoMotionOfItsOwn(t *testing.T) {
 // whole layered app cascade, and it deliberately reuses the LEDGER ROW's
 // vocabulary — .rail, .nm, .tm, .badge, .gr, .tok — so the two surfaces read
 // alike. That makes an unscoped rule here more dangerous than usual, not less.
+// It reads the sheet BY BRACE, not by line (DC2-SCOPEGUARD-LINEFORM, round-2
+// fix-forward). The line-form version only inspected lines ENDING in `{`, so
+// every rule written entirely on one line — `.x { color: red }` — was never
+// examined at all, and this sheet has 20-odd of them. All were correctly scoped,
+// which is precisely why the hole would have stayed invisible until it wasn't.
 func TestDayCardCSS_EverySelectorIsScoped(t *testing.T) {
-	code := benchCommentRe.ReplaceAllString(dayCardCSS(t), " ")
-	for _, line := range strings.Split(code, "\n") {
-		l := strings.TrimSpace(line)
-		if l == "" || !strings.HasSuffix(l, "{") || strings.HasPrefix(l, "@") || strings.HasPrefix(l, "}") {
-			continue
-		}
-		sel := strings.TrimSpace(strings.TrimSuffix(l, "{"))
+	sels := cssSelectors(benchCommentRe.ReplaceAllString(dayCardCSS(t), " "))
+	if len(sels) < 20 {
+		t.Fatalf("only %d selectors found; the parser stopped reading the sheet", len(sels))
+	}
+	for _, sel := range sels {
 		// TWO ROOTS, BOTH THIS SHEET'S OWN, and the amendment is named rather
 		// than silent: stage 2 added .cal-dayeditor because the card CLOSES as
 		// the editor OPENS ([DC-7]) and one box cannot be in two places. Any
 		// THIRD root here is a surface that has escaped its sheet.
-		if sel != "" && !strings.Contains(sel, ".cal-daycard") && !strings.Contains(sel, ".cal-dayeditor") {
+		if !strings.Contains(sel, ".cal-daycard") && !strings.Contains(sel, ".cal-dayeditor") {
 			t.Errorf("unscoped selector in calendar-daycard.css: %q", sel)
 		}
 	}
+}
+
+// cssSelectors returns every RULE selector in a comment-stripped stylesheet,
+// whatever line form it was written in.
+//
+// A selector is the text between the previous delimiter (`{`, `}` or `;`) and
+// the `{` that opens its block, which is true of a one-liner, a multi-line
+// selector list and a rule nested inside an at-rule alike; a declaration can
+// never precede a `{`, so declarations cannot be mistaken for selectors.
+// At-rule preludes (`@media …`) are skipped — they are not selectors — but the
+// rules INSIDE them are returned, which is the point: a responsive branch is
+// exactly where an unscoped rule likes to hide.
+func cssSelectors(code string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '{':
+			sel := strings.Join(strings.Fields(code[start:i]), " ")
+			if sel != "" && !strings.HasPrefix(sel, "@") {
+				out = append(out, sel)
+			}
+			start = i + 1
+		case '}', ';':
+			start = i + 1
+		}
+	}
+	return out
 }
 
 // TestDayCardCSS_DefinesWhatTheModuleNames closes the #568 gap for this surface:
@@ -975,6 +1021,38 @@ func TestDayCardModule_KeepsTheHouseShape(t *testing.T) {
 // the module has no string literal containing `//`, and asserting that is
 // cheaper than shipping a JS tokeniser into a test.
 var dayCardJSLineComment = regexp.MustCompile(`(?m)^\s*//.*$`)
+
+// jsonKeySet is the payload types' inventory, taken from the TYPE rather than
+// from any value of it (DC2-PAYLOAD-OMITEMPTY).
+//
+// The whole point is that it cannot be fooled by `omitempty`: marshalling a
+// literal enumerates only the fields whoever wrote the literal remembered to
+// populate, so a new optional field is invisible to it and the payload's own
+// law goes unenforced. A field tagged `json:"-"` is deliberately EXCLUDED —
+// it never reaches the wire, and the law is about the wire.
+func jsonKeySet(t *testing.T, v any) map[string]bool {
+	t.Helper()
+	typ := reflect.TypeOf(v)
+	if typ == nil || typ.Kind() != reflect.Struct {
+		t.Fatalf("jsonKeySet wants a struct, got %v", typ)
+	}
+	out := map[string]bool{}
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		if f.PkgPath != "" {
+			continue // unexported: never marshalled
+		}
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = f.Name
+		}
+		out[name] = true
+	}
+	return out
+}
 
 func sortedKeys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))

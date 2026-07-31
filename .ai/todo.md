@@ -16,7 +16,7 @@ Round 2 adds no data, no zone and no engine. Five slices; R2-1 has landed.
 | slice | what it owns | state |
 |---|---|---|
 | **R2-1** — `C-CALV4-BENCH-R2` | the disclosure primitive + register, the page measure, the two-column RSVP panel, the glanceable entity seed | **[x] shipped 2026-07-30** |
-| **R2-2a** — the day card + the editor's mechanism | click a day, unfold a card, create/edit an event against the SHIPPED event API. **Consumed R2-1's disclosure register in place** — it stayed in `calendar-bench.css` and the card's two rules were added by name inside the same reduced-motion wrapper, reusing all three `--disc-*` tokens; the speculative shared sheet was never built ([DC-6] SIGNED, first-lander clause). **[x] shipped 2026-07-31** |
+| **R2-2a** — the day card + the editor's mechanism | click a day, unfold a card, create/edit an event against the SHIPPED event API. **Consumed R2-1's disclosure register in place** — it stayed in `calendar-bench.css` and the card's two rules were added by name inside the same reduced-motion wrapper, reusing all three `--disc-*` tokens; the speculative shared sheet was never built ([DC-6] SIGNED, first-lander clause). **Round-2 fix-forward (stages 7-8):** the editor's PUT now round-trips `is_recurring` / `recurrence_type` / `recurrence_interval` — omitting a VALUE-typed bool is a write of false, so a title-only save was un-repeating recurring events; and the payload + stylesheet guards now derive their inventories from the type and the braces rather than from a hand-written sample. **[x] shipped 2026-07-31** |
 | **R2-2b** — `C-CALV4-EDITOR-R2b` | the editor's full §5 chrome pass (the type rail's locked hue+pattern+glyph triple, the restricted-audience chip row, the recurrence block with its GM-side chips, the live preview column) **and drag-create**. Split from R2-2a at a stage boundary with everything green, under the dispatch's pre-authorised split. **Gated on the operator's editor stills signature ([DC-5]).** | [ ] |
 | **R2-3** — the Block theater | expand any embed to a full-tier overlay. **This is where the depth R2-1 removed from the entity embed comes back.** R2-1 deliberately shipped NO substitute — no expand chip, no "show more", no second embed — because a stopgap becomes the thing R2-3 has to delete. | [ ] |
 | **R2-4** — V2 sunset / the anonymous-public route move | the frozen V2 shell. R2-1 did not open `calendar_v2*` for any reason. | [ ] |
@@ -46,6 +46,44 @@ Carried out of R2-2a, not closed:
 - [x] **CTS-6, the per-day `+N more` popover — CLOSED as SUPERSEDED.** The day
   card IS the day's full list, which is the feature that booking wanted. Closed
   with the reason rather than quietly dropped.
+- [ ] **Audit the OTHER partial clients of `PUT …/events/:eid` for the same
+      absent-key-is-a-write hazard.** R2-2a's fix-forward closed it for the day
+      card. The hazard is structural, not local: `is_recurring` and `all_day` are
+      the request struct's two VALUE-typed booleans and the service assigns both
+      unguarded by design (C-CAL-NULL-PRESERVE excluded them deliberately —
+      "false IS the value, not 'absent'"), so ANY client that sends a partial
+      body writes false into them. Every other optional field on that struct is a
+      pointer and is nil-preserved, which is exactly why this is easy to miss.
+      Sweep the V2 quick-edit, the drawer, the Foundry module's calendar push and
+      any API consumer; the fix is per-client (send the stored value back), not a
+      service change — nil-guarding the bools would take "clear this repeat" away
+      from an author who means it.
+- [ ] **Guard B4's scope glob does not match `daycard.templ`, and the coordinator
+      should rule rather than discover.** `b4_scope_for`
+      (`tools/check-calendar-v4-lints.sh:89-94`) matches
+      `*calendar_block*|*bench*|*Bench*|*schedule*|*Schedule*`;
+      `internal/plugins/calendar/daycard.templ` matches none of them, so B4 does
+      not read the newest dated surface in the arc. The script's own header calls
+      this out as the failure mode to avoid — *"a surface whose filename it does
+      not match is silently unguarded … a missing glob is invisible in review"* —
+      which is why `*schedule*` is in the list before the file exists. **Nothing
+      is wrong today**: the card head, the editor head and every row carry
+      `data-day` from `day.key`, pinned against the rendered Block's own
+      attributes in BOTH namespaces by
+      `TestDayCard_{,Intercalary}KeysAgreeWithTheRenderedBlock`, and B1–B3 still
+      run repo-wide over the file. R2-2a did not extend the glob unilaterally
+      because the dispatch's bound reads "B1–B4 unchanged and green". **The ask
+      is one word — `*daycard*` — with a comment naming the slice and the new
+      claim.**
+- [ ] **The single-line blind spot in `TestBenchCSS_EverySelectorIsScoped` is a
+      HOUSE pattern, not this slice's.** Both scope guards only inspected lines
+      ENDING in `{`, so a rule written entirely on one line was never examined.
+      R2-2a fix-forward fixed **its own** (`TestDayCardCSS_EverySelectorIsScoped`
+      now scans by brace via `cssSelectors`, and the sheet's 21 single-line rules
+      are read); it did NOT amend R2-1's signed Bench guard. Measured for the
+      ruling: `calendar-bench.css` has **67** single-line rules and **all 67 are
+      correctly scoped** under `.cal-bench`, so the fix is free today and is a
+      strict strengthening. Whoever next opens `bench_test.go` should take it.
 - [ ] **The §12 screenshot gate for R2-2a is PART-EXECUTED — the geometry rows
       are measured, the live-session rows are not.** Stated in two halves so the
       row is not read as either "done" or "untouched".

@@ -258,6 +258,9 @@ func TestGetEvent_HiddenFilteredAndMissingAreTheSameAnswer(t *testing.T) {
 		evt   *Event
 		calID string
 		eid   string
+		// handler overrides the default two-fixture repo for the one case that
+		// needs a SECOND resolvable calendar. Nil means the default.
+		handler func() *Handler
 	}{
 		{
 			name: "the event does not exist",
@@ -284,12 +287,55 @@ func TestGetEvent_HiddenFilteredAndMissingAreTheSameAnswer(t *testing.T) {
 			cal:  dayCardRouteCal("everyone"), evt: dayCardRouteEvent("everyone", nil),
 			calID: "cal-other", eid: "ev-1",
 		},
+		{
+			// THE OWNERSHIP BRANCH, and it is the row this table was missing
+			// (DC2-W5A-OWNERSHIP, round-2 fix-forward). The handler's own
+			// header claims FOUR conditions answer alike; only three were
+			// pinned here, and the unpinned one is the branch that separates
+			// "this event exists on a calendar you can see" from "this event
+			// exists on one you cannot" — the exact distinction a pairing
+			// attack is looking for. TestGetEvent_TheCalIdMustOwnTheEvent
+			// asserts the branch REFUSES; this asserts it refuses THE SAME WAY.
+			//
+			// It needs both calendars resolvable and both inside camp-1, so
+			// that requireEventInCampaign passes and the ownership check is
+			// what actually fires — otherwise the case silently re-tests the
+			// cross-campaign gate above.
+			name:  "the :calId is visible but does not own the event",
+			calID: "cal-1", eid: "ev-1",
+			handler: func() *Handler {
+				visible := dayCardRouteCal("everyone")
+				sibling := &Calendar{ID: "cal-sibling", CampaignID: "camp-1", Visibility: "everyone"}
+				evt := dayCardRouteEvent("everyone", nil)
+				evt.CalendarID = sibling.ID
+				return NewHandler(NewCalendarService(&mockCalendarRepo{
+					getByIDFn: func(_ context.Context, id string) (*Calendar, error) {
+						switch id {
+						case visible.ID:
+							return visible, nil
+						case sibling.ID:
+							return sibling, nil
+						}
+						return nil, apperror.NewNotFound("calendar not found")
+					},
+					getEventFn: func(_ context.Context, id string) (*Event, error) {
+						if id == evt.ID {
+							return evt, nil
+						}
+						return nil, apperror.NewNotFound("event not found")
+					},
+				}))
+			},
+		},
 	}
 
 	var first string
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := dayCardRouteHandler(tc.cal, tc.evt)
+			if tc.handler != nil {
+				h = tc.handler()
+			}
 			rec, err := serveGetEvent(h, campaigns.RolePlayer, "u-bryn", tc.calID, tc.eid)
 			if err == nil {
 				t.Fatalf("the route answered %d instead of refusing", rec.Code)
