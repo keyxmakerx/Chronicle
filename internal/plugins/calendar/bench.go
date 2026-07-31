@@ -119,6 +119,17 @@ type BenchData struct {
 	// nowhere to persist, and a disclosure with no endpoint emits NO hx-* at
 	// all rather than a dead control.
 	SectionsPersistURL string
+
+	// DayCardJSON is the day card's whole payload for this viewer
+	// (C-CALV4-DAYCARD, R2-2a, [DC-1] SIGNED — see daycard.go).
+	//
+	// It is built from the SAME viewer-filtered BlockData the two Blocks
+	// render from, so the card and the docked Ledger cannot disagree about a
+	// day. EMPTY MEANS NO CARD IS MOUNTED AT ALL: a page with no Block has no
+	// day to open on, and emitting the scaffold anyway would be orphan DOM
+	// keyed to invokers that do not exist — the same reason bench.templ's
+	// header gives for not emitting popovers() in wave 1.
+	DayCardJSON string
 }
 
 // BenchDisclosure is one collapsible section, resolved for one viewer
@@ -912,6 +923,14 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		}
 	}
 	data.Rows = benchRows(rows, activeID, data.CampaignID, data.IsGM)
+
+	// THE DAY CARD'S PAYLOAD, BESIDE THE BLOCK PROJECTION AND FROM NOTHING ELSE
+	// (C-CALV4-DAYCARD, R2-2a). It re-serialises the two Blocks this viewer just
+	// received — no second repository read, no second filter pass — which is the
+	// only construction under which the agreement law ([DC-2]) is provable at
+	// the producer rather than asserted in JS about DOM that may not be there.
+	data.DayCardJSON = dayCardPayloadJSON(data.Primary, data.RealWorld)
+
 	data.Ribbon = benchRibbon(benchRibbonInput{
 		IsGM:       data.IsGM,
 		CampaignID: data.CampaignID,

@@ -33,6 +33,14 @@
 // reveal is instant and complete. The signed law is
 // decisions/2026-07-29-motion-disclosure-register.md.
 //
+// C-CALV4-DAYCARD slice R2-2a CONSUMES that register rather than opening a
+// second one ([DC-6] SIGNED, resolved by the first-lander clause): the day card
+// this file now mounts transitions `block-size` and `opacity` on
+// `.cal-bench .cal-daycard .dcbox`, inside the SAME single no-preference
+// wrapper, on the SAME two durations and the SAME easing. It declares no token
+// and no grammar of its own — a surface that wanted a different feel would be
+// asking to leave the register, which is a signature and not a tuning.
+//
 // THE ENFORCEMENT IS A TEST, AND ONLY A TEST. bench_test.go's
 // TestBenchCSS_NoMotionAtAll was INVERTED from a blanket ban into that
 // allowlist (it keeps its wave-1 name so a reader who greps for the old rule
@@ -58,8 +66,25 @@ import (
 // BenchPage renders the full Bench at GET /campaigns/:id/apps/calendar.
 templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 	@layouts.App("Calendar") {
-		<div class="cal-bench" data-cal-bench data-cal-dashboard>
+		// THE DAY CARD'S PAYLOAD rides this wrapper (C-CALV4-DAYCARD, R2-2a,
+		// [DC-1] SIGNED). One page attribute, built in Go from the same
+		// viewer-filtered BlockData the Blocks below render from — the shipped
+		// house precedent (event_grid.js:137 reads dataset.calV2Events the same
+		// way) and NO new authorisation surface, because it is a
+		// re-serialisation of what this viewer's page already carries. Absent
+		// entirely when there is no Block: see BenchData.DayCardJSON.
+		<div
+			class="cal-bench"
+			data-cal-bench
+			data-cal-dashboard
+			if data.DayCardJSON != "" {
+				data-cal-daycard-payload={ data.DayCardJSON }
+			}
+		>
 			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-bench.css") }/>
+			if data.DayCardJSON != "" {
+				<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-daycard.css") }/>
+			}
 			@components.Breadcrumbs([]components.BreadcrumbItem{
 				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
 				{Label: "Apps", Href: fmt.Sprintf("/campaigns/%s/extensions", cc.Campaign.ID)},
@@ -76,6 +101,17 @@ templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 			<div class="bsurf" data-bench-surface>
 				@benchSurface(data)
 			</div>
+			// THE DAY CARD, mounted ONCE, as a sibling of the surface and
+			// OUTSIDE every .cal-block-host (C-CALV4-DAYCARD, R2-2a, [DC-3]
+			// SIGNED). It sits inside .cal-bench on purpose: the register's
+			// motion rules live in calendar-bench.css and every prelude there
+			// names .cal-bench, so a card mounted outside this element would
+			// need a second register sheet — which [DC-6] refuses as
+			// laundering. Top-layer promotion does not change DOM ancestry,
+			// so the scoping survives the popover.
+			if data.DayCardJSON != "" {
+				@dayCardScaffold()
+			}
 		</div>
 		// W5b: the per-calendar permissions editor. Owners only — players never
 		// receive the editor DOM nor the PUT route. Retained verbatim from the
@@ -85,6 +121,20 @@ templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 		if data.IsOwner {
 			@calendarPermissionsModal()
 			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_permissions.js") } defer></script>
+		}
+		// The day card's driver. PAGE-SIDE JS IS LEGAL HERE AND ALWAYS WAS: the
+		// no-JS law is a statement about internal/widgets/calendar_block/**
+		// (boot.js:163 disables script tags inside HTMX-swapped FRAGMENTS, and
+		// boot.js:168 kills hx-on), and it says nothing about a <script> in a
+		// PAGE templ. The block just above is the precedent this copies —
+		// AssetURL + defer, mounted beside its own scaffold.
+		//
+		// It is NOT role-gated, and that is deliberate rather than an omission:
+		// a PLAYER gets the card (reading a day is a Player affordance, [DC-9]),
+		// they simply get no authoring controls in it, because the producer
+		// never rendered any.
+		if data.DayCardJSON != "" {
+			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_daycard.js") } defer></script>
 		}
 	}
 }

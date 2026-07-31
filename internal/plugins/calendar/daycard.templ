@@ -1,0 +1,63 @@
+// daycard.templ — C-CALV4-DAYCARD (calendar-v4 round 2, slice R2-2a): the day
+// card's SCAFFOLD.
+//
+// ONE CARD PER PAGE, NOT ONE PER BLOCK ([DC-3] SIGNED). The Bench stacks N
+// Blocks; N cards would be N popovers, N listeners and N payload copies, and
+// "the card and the Ledger cannot disagree" would stop being checkable in one
+// place. This is the singleton, positioned per click from the clicked cell's
+// getBoundingClientRect() — CSS anchor positioning would need a unique
+// anchor-name on every day cell, i.e. an edit to instrument.templ, which is the
+// one thing this slice's §1 forbids.
+//
+// [popover] IS THE MECHANISM, AND IT IS LOAD-BEARING. `.cal-block-host .block`
+// clips (calendar-block.css:493-501), so a positioned box inside the grid is
+// cut off by the Block's own overflow. The top layer escapes that WITHOUT
+// touching the Block — which is the whole shape of this slice: read the Block's
+// DOM, listen to it, mount beside it, mutate nothing inside it.
+//
+// THE SCAFFOLD IS EMPTY ON THE WIRE. Every row is built by
+// calendar_daycard.js from the page payload (BenchData.DayCardJSON), because
+// the card's contents change per click and a server-rendered card would be N
+// days × N calendars of markup for one day's worth of reading. What the SERVER
+// decides is exactly what a producer must: which viewer gets which controls
+// ([DC-9] — markup-level, never CSS, never JS).
+//
+// THE FOOT CARRIES ONE DOOR IN THIS STAGE. `Open in the Ledger` is the honest
+// bridge to the shipped CSS-only answer: it activates the day's own radio (so
+// the generated ladder fires) and scrolls the Ledger column into view. It is
+// emitted by the MODULE only when the payload says the Ledger is actually
+// docked for this viewer — absence has two causes (a host that never docked the
+// zone, and a viewer who switched the layer off) and a link to a column that is
+// not on the page is the class of dishonesty this arc keeps killing.
+//
+// GUARD B4: every dated node here carries `data-day` in the dayKey namespace.
+// The head carries it empty on the wire and the module fills it at open, which
+// is the same contract the rows are built under.
+
+package calendar
+
+// dayCardScaffold is the page-level card. Rendered once by bench.templ, outside
+// every .cal-block-host, and only when there is a payload to open it on.
+//
+// popover="manual", NOT "auto", AND THE REASON IS THE REGISTER. `auto` gives
+// light-dismiss and Escape for free, but both close the popover SYNCHRONOUSLY
+// through the UA — the hiding `beforetoggle` is not cancelable — so the
+// register's 160ms close would run on the button path and be skipped on every
+// other one. One grammar means one close, so the module owns dismissal (Escape,
+// and a pointerdown outside the card) and every path leaves the same way.
+templ dayCardScaffold() {
+	<div
+		id="cal-daycard"
+		class="cal-daycard"
+		popover="manual"
+		data-cal-daycard
+		aria-labelledby="cal-daycard-head"
+	>
+		<div class="dcbox" data-dc-box>
+			<h2 class="dc-h" id="cal-daycard-head" data-dc-head data-day=""></h2>
+			<div class="dc-rows" data-dc-rows></div>
+			<p class="dc-empty" data-dc-empty hidden>No events on this day.</p>
+			<div class="dc-f" data-dc-foot></div>
+		</div>
+	</div>
+}

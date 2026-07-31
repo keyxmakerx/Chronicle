@@ -297,6 +297,12 @@ func benchFxData(isGM, isOwner bool) BenchData {
 		data.RealWorld = benchFxBlock(realWorld, viewer, true)
 	}
 	data.Rows = benchRows(rows, "cal-harptos", "camp-1", isGM)
+	// The day card's payload, exactly where buildBench puts it — beside the
+	// Block projection and from nothing else (C-CALV4-DAYCARD, R2-2a). The
+	// fixture carries it so every assertion in this file judges the DOM
+	// production renders, card and all, rather than a Bench that quietly
+	// predates it.
+	data.DayCardJSON = dayCardPayloadJSON(data.Primary, data.RealWorld)
 	data.Ribbon = benchRibbon(benchRibbonInput{
 		IsGM: isGM, CampaignID: "camp-1", Primary: primary, Block: data.Primary,
 		NextUp:    data.NextUp,
@@ -1133,6 +1139,37 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 		t.Errorf("the register declares %d --disc-* tokens; want exactly 3 "+
 			"(--disc-open, --disc-close, --disc-ease). A third DURATION is a signature", n)
 	}
+
+	// ── THE DAYCARD CLAUSE — amended deliberately, by name ─────────────────
+	//
+	// C-CALV4-DAYCARD slice R2-2a, [DC-6] SIGNED. The allowlist above was not
+	// widened by a byte to admit the day card: the card reuses the same three
+	// transitionable properties, the same two durations and the same easing,
+	// inside the same single no-preference wrapper. What is added here is the
+	// claim that it DOES — because "the card consumes the register" is exactly
+	// the kind of sentence that decays into a second grammar the moment nothing
+	// checks it, and DC-6's own words are that a second register section
+	// anywhere is laundering and is refused.
+	//
+	// A guard nudged until green stops proving anything, so this clause fails
+	// in BOTH directions: if the card's rules vanish (the reveal was quietly
+	// deleted) and if they appear outside the wrapper (reduced motion would
+	// then animate).
+	const cardRule = ".cal-bench .cal-daycard .dcbox"
+	if !strings.Contains(motion, cardRule) {
+		t.Errorf("the day card's reveal is not inside %q — R2-2a consumes THIS register, "+
+			"and a card that animated anywhere else would be the second grammar [DC-6] "+
+			"refuses", guard)
+	}
+	if strings.Count(code, cardRule) != strings.Count(motion, cardRule) {
+		t.Errorf("a `%s` rule sits OUTSIDE the reduced-motion wrapper; under "+
+			"prefers-reduced-motion the card must open INSTANTLY AND COMPLETELY, which "+
+			"is structural (no rule at all) and never a shortened duration", cardRule)
+	}
+	if !strings.Contains(motion, ".cal-bench .cal-daycard.dcopen .dcbox") {
+		t.Error("the card declares a closed state and no open one — the reveal has no " +
+			"endpoint and the register's 200ms open cannot run")
+	}
 }
 
 // TestBenchProse_MotionClaimsMatchTheSheet pins the two SENTENCES that describe
@@ -1366,6 +1403,12 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 		".cal-bench .disc::details-content",
 		"--disc-open", "--disc-close", "--disc-ease",
 		"--bench-measure",
+		// The day card's reveal (C-CALV4-DAYCARD, R2-2a). bench.templ mounts
+		// the scaffold and calendar_daycard.js toggles .dcopen on it; without
+		// these two rules the card would appear instantly at every motion
+		// setting and the register would have one consumer fewer than its own
+		// comment claims.
+		".cal-bench .cal-daycard .dcbox", ".cal-bench .cal-daycard.dcopen .dcbox",
 		// The §8 two-column RSVP treatment.
 		".cal-bench .rsvp .mtable",
 	} {
