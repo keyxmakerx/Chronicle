@@ -36,10 +36,15 @@ import (
 	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
 )
 
-// dayCardFixtureBlock projects the signed oracle month for one viewer, with the
+// dayCardFixture projects the signed oracle month for one viewer, with the
 // Bench's own layer set, so the payload under test is built from the DOM the
 // Bench actually renders.
-func dayCardFixtureBlock(t *testing.T, v BlockViewer) calblock.BlockData {
+//
+// It returns the projected Block AND the calendar it came from — the pair the
+// payload builder takes, because two of the payload's facts (the type palette
+// and the intercalary months' adjacency) are calendar-level and BlockData
+// deliberately does not carry them.
+func dayCardFixture(t *testing.T, v BlockViewer) (calblock.BlockData, *Calendar) {
 	t.Helper()
 	cal, events := oracleLedgerFixture()
 	d := projectBlock(BlockProjectionInput{
@@ -47,7 +52,7 @@ func dayCardFixtureBlock(t *testing.T, v BlockViewer) calblock.BlockData {
 		Viewer: v, MonthIndex: 0, Year: 1523,
 	})
 	d.Layers = benchBlockLayers(blockLayerPrefs{})
-	return d
+	return d, cal
 }
 
 // --- 1. the payload law -----------------------------------------------------
@@ -64,8 +69,8 @@ func dayCardFixtureBlock(t *testing.T, v BlockViewer) calblock.BlockData {
 // the editor's route under the editor's role floor, never from a page attribute
 // every viewer's browser receives.
 func TestDayCard_PayloadCarriesTheLedgerRowFieldSetAndNothingMore(t *testing.T) {
-	d := dayCardFixtureBlock(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
-	raw := dayCardPayloadJSON(&BenchBlock{Data: d})
+	d, cal := dayCardFixture(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
+	raw := dayCardPayloadJSON(true, dayCardSource{Block: &BenchBlock{Data: d}, Calendar: cal})
 	if raw == "" {
 		t.Fatal("the GM fixture produced no payload at all")
 	}
@@ -132,7 +137,7 @@ func TestDayCard_PayloadCarriesTheLedgerRowFieldSetAndNothingMore(t *testing.T) 
 		declared[k] = true
 	}
 
-	wantDay := []string{"day", "events", "key", "label", "ord", "weekday"}
+	wantDay := []string{"day", "events", "key", "label", "month", "ord", "weekday", "year"}
 	if got := sortedKeys(dayKeys); !equalStrings(got, wantDay) {
 		t.Errorf("day object keys = %v, want exactly %v", got, wantDay)
 	}
@@ -166,17 +171,15 @@ func TestDayCard_PayloadCarriesTheLedgerRowFieldSetAndNothingMore(t *testing.T) 
 // construction rather than trusting it, because the card is the first v4
 // surface where a player opens something adjacent to authoring.
 func TestDayCard_APlayerPayloadCarriesNoGMMarkInAnyForm(t *testing.T) {
-	gm := dayCardPayloadJSON(&BenchBlock{
-		Data: dayCardFixtureBlock(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner}),
-	})
+	gmData, gmCal := dayCardFixture(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
+	gm := dayCardPayloadJSON(true, dayCardSource{Block: &BenchBlock{Data: gmData}, Calendar: gmCal})
 	if !strings.Contains(gm, `"gold":true`) {
 		t.Fatal("the GM payload carries no gold rail at all; the player assertion below " +
 			"would be vacuous")
 	}
 	for _, name := range []string{"u-nissa", "u-bryn"} {
-		raw := dayCardPayloadJSON(&BenchBlock{
-			Data: dayCardFixtureBlock(t, BlockViewer{UserID: name, Role: permissions.RolePlayer}),
-		})
+		pd, pcal := dayCardFixture(t, BlockViewer{UserID: name, Role: permissions.RolePlayer})
+		raw := dayCardPayloadJSON(false, dayCardSource{Block: &BenchBlock{Data: pd}, Calendar: pcal})
 		for _, bad := range []string{`"gold"`, `"audience"`, "GM only", "Restricted"} {
 			if strings.Contains(raw, bad) {
 				t.Errorf("%s's payload contains %q — permission is ABSENCE, and a "+
@@ -200,7 +203,7 @@ var dayCardOrdRe = regexp.MustCompile(`data-day-ord="([^"]+)"`)
 // original complaint, which is why it is pinned against the RENDERED Block's
 // own attributes and not against the mirror's source.
 func TestDayCard_KeysAgreeWithTheRenderedBlock(t *testing.T) {
-	d := dayCardFixtureBlock(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
+	d, cal := dayCardFixture(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
 	body := seamRenderBlockData(t, d)
 
 	rendered := map[string]bool{}
@@ -215,7 +218,7 @@ func TestDayCard_KeysAgreeWithTheRenderedBlock(t *testing.T) {
 		t.Fatal("the rendered Block carries no day keys at all")
 	}
 
-	card := buildDayCardCalendar(d)
+	card := buildDayCardCalendar(d, cal, true)
 	if len(card.Days) == 0 {
 		t.Fatal("the payload carries no days")
 	}
@@ -238,7 +241,7 @@ func TestDayCard_KeysAgreeWithTheRenderedBlock(t *testing.T) {
 // exercised: a host that never docked the zone (no `ledger` layer) and a viewer
 // whose host docked it hidden (LedgerHidden).
 func TestDayCard_LedgerDockedMirrorsTheWidgetsOwnPredicate(t *testing.T) {
-	base := dayCardFixtureBlock(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
+	base, baseCal := dayCardFixture(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
 	if !dayCardLedgerDocked(base) {
 		t.Fatal("the Bench's own layer set should dock the Ledger")
 	}
@@ -248,7 +251,7 @@ func TestDayCard_LedgerDockedMirrorsTheWidgetsOwnPredicate(t *testing.T) {
 	if dayCardLedgerDocked(off) {
 		t.Error("a viewer who switched the `ledger` layer off has no docked Ledger")
 	}
-	if buildDayCardCalendar(off).LedgerDocked {
+	if buildDayCardCalendar(off, baseCal, true).LedgerDocked {
 		t.Error("the payload must carry the layer-off state, so the module never offers " +
 			"a door onto a column that is not on the page")
 	}
@@ -263,7 +266,7 @@ func TestDayCard_LedgerDockedMirrorsTheWidgetsOwnPredicate(t *testing.T) {
 	// operator hit hardest — dayPick emits no radio and no label at all
 	// (instrument.templ:213), so the click is not quiet, it is absent — and it
 	// is the case a card built from the rendered Ledger DOM could not serve.
-	if len(buildDayCardCalendar(off).Days) == 0 {
+	if len(buildDayCardCalendar(off, baseCal, true).Days) == 0 {
 		t.Error("with the Ledger switched off the card is the ONLY answer, and it must " +
 			"still carry every day")
 	}
@@ -274,12 +277,12 @@ func TestDayCard_LedgerDockedMirrorsTheWidgetsOwnPredicate(t *testing.T) {
 // weekday on every calendar in the product that is not Gregorian, and the
 // failure reads as a cosmetic typo rather than as a broken rule.
 func TestDayCard_WeekdayComesFromTheCalendarAndNotFromASeven(t *testing.T) {
-	d := dayCardFixtureBlock(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
+	d, cal := dayCardFixture(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
 	if d.Month.WeekLen != 10 {
 		t.Fatalf("the fixture's week is %d days; this assertion needs the ten-day one",
 			d.Month.WeekLen)
 	}
-	card := buildDayCardCalendar(d)
+	card := buildDayCardCalendar(d, cal, true)
 	byDay := map[int]string{}
 	for _, day := range card.Days {
 		byDay[day.Day] = day.Weekday
@@ -393,12 +396,15 @@ func TestDayCard_APlayerBenchCarriesNoAuthoringDOMAndNoHonestyChip(t *testing.T)
 			"a player", n)
 	}
 
-	// The card's own DOM carries no authoring affordance in this stage at all —
-	// the editor and its `+ New event` door are stage 2 — so the absence is
-	// asserted on the markers a later stage will introduce, and this assertion
-	// is what stops them appearing on a player's page.
+	// A PLAYER'S CARD IS READ-ONLY AND COMPLETE. It lists the day's events —
+	// the same set the Ledger would — with no `+ New event`, no row-click into
+	// an editor, no disabled controls, no `title` explaining an absence and no
+	// count of anything hidden. The editor's whole scaffold is gone, not
+	// greyed: every field name, every marker, every route string.
 	for _, bad := range []string{
-		"data-dc-new", "data-cal-dayeditor", "New event", "needs backend</span>",
+		"data-dc-new", "data-dc-can-edit", "data-cal-dayeditor", "New event",
+		"data-de-form", "data-de-name", "data-de-gmonly", "data-de-delete",
+		"data-de-category", "needs backend</span>",
 	} {
 		if strings.Contains(player, bad) {
 			t.Errorf("a player's Bench contains %q — a control the viewer may not use is "+
@@ -411,6 +417,111 @@ func TestDayCard_APlayerBenchCarriesNoAuthoringDOMAndNoHonestyChip(t *testing.T)
 	if !strings.Contains(player, "Tiles marked") {
 		t.Error("the Bench's caption is gone; the chip-count assertion above no longer " +
 			"distinguishes a chip from a page that stopped rendering")
+	}
+}
+
+// TestDayCard_TheEditorIsRenderedExactlyAtItsFloors is [DC-9]'s markup-level
+// enforcement, and it is asserted THREE WAYS because the three gates are three
+// different axes:
+//
+//	the card and its rows      Player   — reading a day is a Player affordance
+//	+ New event, edit, Save    Scribe   — the shipped create/update floor
+//	dm_only                    CanAuthorDmOnly() — the CAPABILITY, not the role
+//	Delete                     Owner    — the shipped DELETE floor
+//
+// Reading the mockup's owner / co-DM / player as one ladder would ship a Scribe
+// the co-DM's powers, which is the exact failure the ruling was signed to stop.
+func TestDayCard_TheEditorIsRenderedExactlyAtItsFloors(t *testing.T) {
+	base := benchFxData(true, true)
+
+	for _, tc := range []struct {
+		name    string
+		mount   DayCardMount
+		present []string
+		absent  []string
+	}{
+		{
+			name:    "a plain Scribe authors, but not as a co-DM and not as an Owner",
+			mount:   DayCardMount{CanCreate: true, CampaignID: "camp-1"},
+			present: []string{"data-dc-can-edit", "data-dc-new", "data-cal-dayeditor", "data-de-save"},
+			absent:  []string{"data-de-gmonly", "data-de-delete"},
+		},
+		{
+			name:    "a co-DM Scribe gains dm_only and nothing else",
+			mount:   DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CampaignID: "camp-1"},
+			present: []string{"data-de-gmonly"},
+			absent:  []string{"data-de-delete"},
+		},
+		{
+			name:    "an Owner gains Delete",
+			mount:   DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanDelete: true, CampaignID: "camp-1"},
+			present: []string{"data-de-gmonly", "data-de-delete"},
+		},
+		{
+			name:   "a player receives the card and no editor at all",
+			mount:  DayCardMount{CampaignID: "camp-1"},
+			absent: []string{"data-dc-can-edit", "data-dc-new", "data-cal-dayeditor", "data-de-save"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := base
+			data.DayCard = tc.mount
+			body := renderBench(t, data)
+			// The card itself mounts at every floor — that is the Player half.
+			if !strings.Contains(body, "data-cal-daycard") {
+				t.Fatal("the card did not mount; every assertion below would be vacuous")
+			}
+			for _, want := range tc.present {
+				if !strings.Contains(body, want) {
+					t.Errorf("missing %q at this floor", want)
+				}
+			}
+			for _, bad := range tc.absent {
+				if strings.Contains(body, bad) {
+					t.Errorf("%q is rendered above this viewer's floor — permission is "+
+						"ABSENCE, not a disabled control", bad)
+				}
+			}
+		})
+	}
+}
+
+// TestDayCard_TheEditorShipsNoRationaleAndNoUnbackedChip. Two REVIEW findings
+// bound as build law ([DC-5] part 2): design rationale addressed to a reviewer
+// must not render inside the product, and `.badge.need` means literally "needs
+// backend" and nothing else. The mockup's ten `.hint` strings and its two WRONG
+// chips (over in-world time and "Lasts N days", both of which the API has
+// always had) are the subjects.
+func TestDayCard_TheEditorShipsNoRationaleAndNoUnbackedChip(t *testing.T) {
+	data := benchFxData(true, true)
+	data.DayCard = DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanDelete: true, CampaignID: "camp-1"}
+	body := renderBench(t, data)
+
+	i := strings.Index(body, "cal-dayeditor")
+	if i < 0 {
+		t.Fatal("the editor did not render")
+	}
+	editor := body[i:]
+	if j := strings.Index(editor, "</form>"); j > 0 {
+		editor = editor[:j]
+	}
+	for _, bad := range []string{
+		`class="hint"`, "needs backend", "badge need",
+		// The audience builder and the change-owner row do not exist.
+		"add tag or member", "resolves to", "Owner\u003c/span\u003e",
+		// The exotic recurrence units are invention against Chronicle's model.
+		"tenday", "Umber", "moon phase",
+	} {
+		if strings.Contains(editor, bad) {
+			t.Errorf("the editor renders %q — see this file's header and [DC-5] part 2", bad)
+		}
+	}
+	// …and the two fields whose mockup chips were WRONG are really here.
+	for _, want := range []string{"data-de-starth", "data-de-endday"} {
+		if !strings.Contains(editor, want) {
+			t.Errorf("the editor is missing %q — the columns and the binding exist, so "+
+				"the mockup's `needs backend` chip came off and the FIELD stayed", want)
+		}
 	}
 }
 
@@ -468,7 +579,11 @@ func TestDayCardCSS_EverySelectorIsScoped(t *testing.T) {
 			continue
 		}
 		sel := strings.TrimSpace(strings.TrimSuffix(l, "{"))
-		if sel != "" && !strings.Contains(sel, ".cal-daycard") {
+		// TWO ROOTS, BOTH THIS SHEET'S OWN, and the amendment is named rather
+		// than silent: stage 2 added .cal-dayeditor because the card CLOSES as
+		// the editor OPENS ([DC-7]) and one box cannot be in two places. Any
+		// THIRD root here is a surface that has escaped its sheet.
+		if sel != "" && !strings.Contains(sel, ".cal-daycard") && !strings.Contains(sel, ".cal-dayeditor") {
 			t.Errorf("unscoped selector in calendar-daycard.css: %q", sel)
 		}
 	}
@@ -488,6 +603,13 @@ func TestDayCardCSS_DefinesWhatTheModuleNames(t *testing.T) {
 		".cal-daycard .dc-row .audchip", ".cal-daycard .dc-row .tm",
 		".cal-daycard .dc-empty", ".cal-daycard .dc-f", ".cal-daycard .dc-f .dc-door",
 		".cal-daycard .dc-row .rail.p1", ".cal-daycard .dc-row .rail.p8",
+		".cal-daycard .dc-row .dc-edit",
+		// The editor (stage 2, the MECHANISM).
+		".cal-dayeditor", ".cal-dayeditor[data-dc-shown]", ".cal-dayeditor .dcbox",
+		".cal-dayeditor .de-form", ".cal-dayeditor .de-row", ".cal-dayeditor .de-lab",
+		".cal-dayeditor .de-fields", ".cal-dayeditor .de-err",
+		".cal-dayeditor .de-f", ".cal-dayeditor .de-f .dc-door",
+		".cal-dayeditor .de-f .de-danger",
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("calendar-daycard.css does not define %q", want)
@@ -523,6 +645,10 @@ func TestDayCardModule_KeepsTheHouseShape(t *testing.T) {
 	code := dayCardJSLineComment.ReplaceAllString(src, "")
 	for _, bad := range []string{
 		"@starting-style", "tabindex", "innerHTML =",
+		// A LOCAL COPY OF THE VISIBILITY MAPPING would be its third
+		// ([DC-10] SIGNED refuses one), and it is the copy nobody notices
+		// going stale.
+		"visibility_rules: json", "allowed_users",
 	} {
 		if strings.Contains(code, bad) {
 			t.Errorf("calendar_daycard.js contains %q — see the module header's boundary "+

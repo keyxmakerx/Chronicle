@@ -1283,10 +1283,17 @@
      layer; the Block's interior stays still, and this slice opened no file in
      its package.
 
+     THE EDITOR RIDES THE SAME RULE, IN THE SAME DECLARATION. The card closes
+     as the editor opens and the two share an origin, so the pair reads as ONE
+     motion ([DC-7] SIGNED). The richer shared-element MORPH the operator asked
+     for is escalated as a named carve-out for their signature rather than
+     invented here — per-surface motion invention is what produced the skypane
+     verdict, and it does not restart on this surface.
+
      CLAUSE 5 HAS NO SUBJECT HERE. The card is not a remembered disclosure —
      it is a transient answer to a click, with no closed state to summarise
      and nothing to persist. */
-  .cal-bench .cal-daycard .dcbox {
+  .cal-bench .cal-daycard .dcbox, .cal-bench .cal-dayeditor .dcbox {
     block-size: 0;
     overflow: hidden;
     opacity: 0;
@@ -1294,7 +1301,7 @@
       block-size var(--disc-close) var(--disc-ease),
       opacity var(--disc-close) var(--disc-ease);
   }
-  .cal-bench .cal-daycard.dcopen .dcbox {
+  .cal-bench .cal-daycard.dcopen .dcbox, .cal-bench .cal-dayeditor.dcopen .dcbox {
     block-size: auto;
     opacity: 1;
     transition-duration: var(--disc-open);

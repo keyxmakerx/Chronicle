@@ -35,6 +35,29 @@
 //   `needs backend` — data that does not exist FOR ANYBODY yet. It is a
 //   visible chip, it is never shown to a player, and this module renders none.
 //
+// ── THE EDITOR IS A CLIENT OF THE SHIPPED EVENT API ────────────────────────
+//
+// ZERO NEW WRITE ROUTES ([DC-8] SIGNED). Create is POST
+// /campaigns/:id/calendars/:calId/events (Scribe), update is PUT
+// .../events/:eid (Scribe), delete is DELETE .../events/:eid (Owner). All three
+// shipped before this slice, all three are IDOR-closed at
+// requireEventInCampaign / requireCalendarInCampaign, and all three ride
+// Chronicle.apiFetch, which attaches X-CSRF-Token on every mutating method and
+// sets credentials: same-origin. This module widens no request body: a route
+// that grew a field it was not named for is a lie in a route name.
+//
+// THE ONE READ IT NEEDS is GET .../events/:eid, which this slice added and
+// which is the whole route budget spent. Edit mode needs the event's full
+// record — description, times, end date, category, visibility — and the card's
+// page payload deliberately carries none of it.
+//
+// LOSSLESS BY CONSTRUCTION. The update path re-sends what it was given for
+// every field it does not offer a control for. That is not tidiness: PUT
+// re-writes the whole record, so an editor that dropped `visibility_rules`
+// because it has no chip row yet would DESTROY an event's audience on the first
+// save, silently, and the only visible symptom would be players seeing
+// something they should not.
+//
 // ── MOTION IS THE REGISTER'S, AND ONLY THE REGISTER'S ──────────────────────
 //
 // decisions/2026-07-29-motion-disclosure-register.md, consumed from the
@@ -71,6 +94,9 @@
         id: cal.id,
         slug: cal.slug || '',
         ledgerDocked: !!cal.ledgerDocked,
+        // Scribe+ only, and absent entirely below that floor — the producer
+        // simply does not emit it, so there is nothing here to gate.
+        categories: Array.isArray(cal.categories) ? cal.categories : [],
         days: days,
       };
     });
@@ -160,6 +186,73 @@
     return typeof ord === 'string' && /^i?[0-9]+$/.test(ord);
   }
 
+  // numOrNull turns a form field into an API value. EMPTY IS NULL, NOT ZERO:
+  // hour 0 is midnight and "no time" is the absence of a value, so a blank
+  // field that resolved to 0 would silently schedule every untimed event at
+  // midnight.
+  function numOrNull(raw) {
+    if (raw === null || raw === undefined) return null;
+    var s = String(raw).trim();
+    if (s === '') return null;
+    var n = Number(s);
+    return isFinite(n) ? n : null;
+  }
+
+  // buildEventBody assembles the create/update body from the form's own values
+  // plus the record the editor opened on.
+  //
+  // `prev` is the stored record in EDIT mode and null in CREATE mode, and it is
+  // what makes the write lossless: every field the editor has no control for is
+  // sent back exactly as it arrived. In create mode there is nothing to
+  // preserve, so those fields are simply absent.
+  //
+  // VISIBILITY IS THE SHARED MAPPER'S ([DC-10] SIGNED), never a local copy.
+  // When the GM-only control is not rendered — the viewer lacks
+  // CanAuthorDmOnly, or the event carries an audience restriction this stage
+  // has no chip row for — the stored pair round-trips untouched.
+  function buildEventBody(form, prev, opts) {
+    opts = opts || {};
+    var body = {
+      name: form.name || '',
+      description: form.description ? form.description : null,
+      year: numOrNull(form.year),
+      month: numOrNull(form.month),
+      day: numOrNull(form.day),
+      all_day: !!form.allDay,
+      category: form.category ? form.category : null,
+      start_hour: form.allDay ? null : numOrNull(form.startHour),
+      start_minute: form.allDay ? null : numOrNull(form.startMinute),
+      end_hour: form.allDay ? null : numOrNull(form.endHour),
+      end_minute: form.allDay ? null : numOrNull(form.endMinute),
+      end_year: numOrNull(form.endYear),
+      end_month: numOrNull(form.endMonth),
+      end_day: numOrNull(form.endDay),
+    };
+
+    var V = (typeof window !== 'undefined' && window.ChronicleCalVisibility) || null;
+    var storedMode = prev && V ? V.modeFor(prev.visibility, prev.visibility_rules) : 'public';
+    if (opts.canOfferGMOnly && storedMode !== 'specific' && V) {
+      var mapped = V.buildVisibilityPayload(form.gmOnly ? 'gmonly' : 'public', []);
+      body.visibility = mapped.visibility;
+      body.visibility_rules = mapped.visibility_rules;
+    } else if (prev) {
+      // ROUND-TRIP, NOT DEFAULT. Anything else rewrites an audience the editor
+      // never showed anybody.
+      body.visibility = prev.visibility || 'everyone';
+      body.visibility_rules = prev.visibility_rules === undefined ? null : prev.visibility_rules;
+    } else {
+      body.visibility = 'everyone';
+      body.visibility_rules = null;
+    }
+
+    // The editor does not author recurrence in this stage, so it preserves it
+    // rather than clearing it: is_recurring defaults false in the request
+    // struct, and sending false over a recurring event would un-repeat it.
+    if (prev && prev.entity_id) body.entity_id = prev.entity_id;
+    if (prev && prev.description_html !== undefined) body.description_html = prev.description_html;
+    return body;
+  }
+
   if (typeof window !== 'undefined') {
     window.__calDayCard = {
       indexPayload: indexPayload,
@@ -168,6 +261,8 @@
       closeDelayMS: closeDelayMS,
       placeCard: placeCard,
       ordIsSafe: ordIsSafe,
+      numOrNull: numOrNull,
+      buildEventBody: buildEventBody,
     };
   }
 
@@ -188,6 +283,41 @@
     var foot = card.querySelector('[data-dc-foot]');
     var box = card.querySelector('[data-dc-box]');
     var state = { open: false, key: '', calId: '', host: null, timer: 0, suppress: false };
+
+    // THE AUTHORING GATES ARE READ, NEVER DECIDED. Both facts below were
+    // decided by the PRODUCER and rendered into the markup ([DC-9] SIGNED):
+    // `data-dc-can-edit` is the Scribe floor, and the editor scaffold's very
+    // EXISTENCE is the same gate expressed as absence. This module executes
+    // them; it does not compute them, and there is no branch here that could
+    // turn a control on for a viewer the server did not render it for.
+    var editor = document.querySelector('[data-cal-dayeditor]');
+    var canEdit = card.hasAttribute('data-dc-can-edit') && !!editor;
+    var campaignID = card.getAttribute('data-campaign-id') || '';
+    var ed = editor ? {
+      root: editor,
+      box: editor.querySelector('[data-dc-box]'),
+      head: editor.querySelector('[data-de-head]'),
+      form: editor.querySelector('[data-de-form]'),
+      name: editor.querySelector('[data-de-name]'),
+      desc: editor.querySelector('[data-de-desc]'),
+      category: editor.querySelector('[data-de-category]'),
+      year: editor.querySelector('[data-de-year]'),
+      month: editor.querySelector('[data-de-month]'),
+      day: editor.querySelector('[data-de-day]'),
+      allDay: editor.querySelector('[data-de-allday]'),
+      timeRow: editor.querySelector('[data-de-timerow]'),
+      startH: editor.querySelector('[data-de-starth]'),
+      startM: editor.querySelector('[data-de-startm]'),
+      endH: editor.querySelector('[data-de-endh]'),
+      endM: editor.querySelector('[data-de-endm]'),
+      endYear: editor.querySelector('[data-de-endyear]'),
+      endMonth: editor.querySelector('[data-de-endmonth]'),
+      endDay: editor.querySelector('[data-de-endday]'),
+      gmOnly: editor.querySelector('[data-de-gmonly]'),
+      err: editor.querySelector('[data-de-err]'),
+      del: editor.querySelector('[data-de-delete]'),
+    } : null;
+    var edState = { open: false, timer: 0, mode: '', calId: '', eventID: '', day: null, prev: null };
 
     function reduced() {
       return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -268,6 +398,20 @@
         tm.textContent = ev.time;
         row.appendChild(tm);
       }
+
+      // A ROW IS A DOOR — FOR SCRIBE+ ONLY. A player's rows are read-only text,
+      // which is the V2 quick-edit's own server-gated shape
+      // (calendar_v2_quickedit.templ:9-14). There is no disabled twin and no
+      // title explaining the absence: the button is either here or it is not.
+      if (canEdit && ev.id) {
+        var edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'dc-edit';
+        edit.setAttribute('data-dc-edit', ev.id);
+        edit.setAttribute('aria-label', 'Edit ' + (ev.title || 'event'));
+        edit.textContent = 'Edit';
+        row.appendChild(edit);
+      }
       return row;
     }
 
@@ -276,15 +420,21 @@
     // the payload rather than inferred from the DOM's absence — absence has two
     // causes (a host that never docked the zone, and a viewer who switched the
     // layer off) and a link to a column that is not on the page is a lie.
+    // IT NEVER TOUCHES THE `+ New event` BUTTON, WHICH IS THE PRODUCER'S. Only
+    // the Ledger door is managed here, and it is inserted BEFORE whatever the
+    // server rendered rather than replacing the foot — a module that cleared
+    // this container would be deciding a role gate by omission.
     function renderFoot(cal) {
-      while (foot.firstChild) foot.removeChild(foot.firstChild);
+      var existing = foot.querySelector('[data-dc-ledger]');
+      if (existing) foot.removeChild(existing);
       if (!cal || !cal.ledgerDocked) return;
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dc-door';
       btn.setAttribute('data-dc-ledger', '');
       btn.textContent = 'Open in the Ledger';
-      foot.appendChild(btn);
+      if (foot.firstChild) foot.insertBefore(btn, foot.firstChild);
+      else foot.appendChild(btn);
     }
 
     // --- opening and closing ----------------------------------------------
@@ -402,6 +552,207 @@
       closeCard();
     }
 
+    // --- the editor --------------------------------------------------------
+    //
+    // THE CARD CLOSES AS THE EDITOR OPENS ([DC-7] SIGNED). The two share an
+    // origin, so the pair reads as ONE motion under the register's grammar —
+    // no new keyframe, no view-transition, no third signature. The richer
+    // shared-element MORPH the operator asked for is ESCALATED as a named
+    // carve-out for their signature, not invented here: per-surface motion
+    // invention is what produced the skypane verdict.
+
+    function edShow() {
+      if (edState.timer) { clearTimeout(edState.timer); edState.timer = 0; }
+      ed.root.setAttribute('data-dc-shown', '');
+      if (typeof ed.root.showPopover === 'function') {
+        try { ed.root.showPopover(); } catch (e) { /* already open */ }
+      }
+    }
+
+    function edHide() {
+      edState.timer = 0;
+      ed.root.removeAttribute('data-dc-shown');
+      ed.root.removeAttribute('style');
+      if (typeof ed.root.hidePopover === 'function') {
+        try { ed.root.hidePopover(); } catch (e) { /* already closed */ }
+      }
+    }
+
+    function edClose() {
+      if (!edState.open) return;
+      edState.open = false;
+      ed.root.classList.remove('dcopen');
+      var wait = closeDelayMS(cssVar('--disc-close'), reduced());
+      if (wait <= 0) { edHide(); return; }
+      if (edState.timer) clearTimeout(edState.timer);
+      edState.timer = setTimeout(edHide, wait);
+    }
+
+    function edError(msg) {
+      if (!ed.err) return;
+      ed.err.textContent = msg || '';
+      ed.err.hidden = !msg;
+    }
+
+    // seedCategories fills the type picker from THE PAGE PAYLOAD, per calendar.
+    // The categories route is Owner-only, so a Scribe could not fetch this —
+    // [DC-8](c) resolved to answering it from the producer rather than widening
+    // that GET's floor.
+    function seedCategories(cal) {
+      if (!ed.category) return;
+      while (ed.category.children.length > 1) {
+        ed.category.removeChild(ed.category.children[ed.category.children.length - 1]);
+      }
+      (cal && cal.categories ? cal.categories : []).forEach(function (cat) {
+        var opt = document.createElement('option');
+        opt.setAttribute('value', cat.slug);
+        opt.textContent = cat.glyph ? cat.glyph + ' ' + cat.name : cat.name;
+        ed.category.appendChild(opt);
+      });
+    }
+
+    function setValue(node, v) {
+      if (!node) return;
+      node.value = (v === null || v === undefined) ? '' : String(v);
+    }
+
+    function edFill(rec) {
+      setValue(ed.name, rec.name || '');
+      setValue(ed.desc, rec.description || '');
+      setValue(ed.category, rec.category || '');
+      setValue(ed.year, rec.year);
+      setValue(ed.month, rec.month);
+      setValue(ed.day, rec.day);
+      setValue(ed.startH, rec.start_hour);
+      setValue(ed.startM, rec.start_minute);
+      setValue(ed.endH, rec.end_hour);
+      setValue(ed.endM, rec.end_minute);
+      setValue(ed.endYear, rec.end_year);
+      setValue(ed.endMonth, rec.end_month);
+      setValue(ed.endDay, rec.end_day);
+      var allDay = rec.all_day || rec.start_hour === null || rec.start_hour === undefined;
+      if (ed.allDay) ed.allDay.checked = !!allDay;
+      if (ed.timeRow) ed.timeRow.hidden = !!allDay;
+      if (ed.gmOnly) ed.gmOnly.checked = rec.visibility === 'dm_only';
+      if (ed.del) ed.del.hidden = !rec.id;
+      edError('');
+    }
+
+    function edOpen(mode, cal, day, rec, anchor) {
+      edState.mode = mode;
+      edState.calId = cal.id;
+      edState.day = day;
+      edState.eventID = rec && rec.id ? rec.id : '';
+      edState.prev = mode === 'edit' ? rec : null;
+      seedCategories(cal);
+      edFill(rec);
+      if (ed.head) {
+        ed.head.textContent = (mode === 'edit' ? 'Edit event · ' : 'New event · ') + (day.label || '');
+        ed.head.setAttribute('data-day', day.key || '');
+      }
+      // The card leaves first, so the two boxes are never on screen together.
+      closeCard();
+      edState.open = true;
+      edShow();
+      if (anchor) edPosition(anchor);
+      void ed.root.offsetHeight;
+      ed.root.classList.add('dcopen');
+    }
+
+    function edPosition(anchor) {
+      if (!anchor.getBoundingClientRect) return;
+      var view = { w: window.innerWidth || 0, h: window.innerHeight || 0 };
+      var chrome = (ed.root.offsetHeight || 0) - (ed.box ? ed.box.offsetHeight || 0 : 0);
+      var size = {
+        w: ed.root.offsetWidth || 0,
+        h: (ed.box ? ed.box.scrollHeight || 0 : 0) + (chrome > 0 ? chrome : 0),
+      };
+      var at = placeCard(anchor.getBoundingClientRect(), size, view, ledgerRect(state.host), {});
+      ed.root.style.left = at.left + 'px';
+      ed.root.style.top = at.top + 'px';
+      if (at.sheet) ed.root.style.width = at.width + 'px';
+      ed.root.classList.toggle('dcsheet', !!at.sheet);
+    }
+
+    function api() {
+      return (window.Chronicle && window.Chronicle.apiFetch) ? window.Chronicle.apiFetch : null;
+    }
+
+    function eventsBase() {
+      return '/campaigns/' + campaignID + '/calendars/' + edState.calId + '/events';
+    }
+
+    function edFormValues() {
+      return {
+        name: ed.name ? ed.name.value : '',
+        description: ed.desc ? ed.desc.value : '',
+        category: ed.category ? ed.category.value : '',
+        year: ed.year ? ed.year.value : '',
+        month: ed.month ? ed.month.value : '',
+        day: ed.day ? ed.day.value : '',
+        allDay: ed.allDay ? !!ed.allDay.checked : true,
+        startHour: ed.startH ? ed.startH.value : '',
+        startMinute: ed.startM ? ed.startM.value : '',
+        endHour: ed.endH ? ed.endH.value : '',
+        endMinute: ed.endM ? ed.endM.value : '',
+        endYear: ed.endYear ? ed.endYear.value : '',
+        endMonth: ed.endMonth ? ed.endMonth.value : '',
+        endDay: ed.endDay ? ed.endDay.value : '',
+        gmOnly: ed.gmOnly ? !!ed.gmOnly.checked : false,
+      };
+    }
+
+    function edSave() {
+      var fetcher = api();
+      if (!fetcher) { edError('Cannot reach Chronicle right now.'); return; }
+      var form = edFormValues();
+      if (!String(form.name).trim()) { edError('An event needs a title.'); return; }
+      if (form.month === '' || form.day === '' || form.year === '') {
+        edError('This day has no resolvable date; pick one before saving.');
+        return;
+      }
+      var body = buildEventBody(form, edState.prev, { canOfferGMOnly: !!ed.gmOnly });
+      var edit = edState.mode === 'edit' && edState.eventID;
+      fetcher(edit ? eventsBase() + '/' + edState.eventID : eventsBase(), {
+        method: edit ? 'PUT' : 'POST', body: body,
+      }).then(function (resp) {
+        if (resp && resp.ok) { window.location.reload(); return; }
+        edError('That did not save. Check the date and try again.');
+      }).catch(function () {
+        edError('That did not save. Check your connection and try again.');
+      });
+    }
+
+    function edDelete() {
+      var fetcher = api();
+      if (!fetcher || !edState.eventID) return;
+      fetcher(eventsBase() + '/' + edState.eventID, { method: 'DELETE' })
+        .then(function (resp) {
+          if (resp && resp.ok) { window.location.reload(); return; }
+          edError('That event could not be deleted.');
+        })
+        .catch(function () { edError('That event could not be deleted.'); });
+    }
+
+    // edLoad fetches the full record for EDIT mode. It is the one read this
+    // slice added, and it is the only thing the editor genuinely cannot get
+    // from the page: the card's payload deliberately carries no description, no
+    // visibility_rules and no recurrence.
+    function edLoad(cal, day, eventID, anchor) {
+      var fetcher = api();
+      if (!fetcher) return;
+      fetcher('/campaigns/' + campaignID + '/calendars/' + cal.id + '/events/' + eventID, { method: 'GET' })
+        .then(function (resp) {
+          if (!resp || !resp.ok) return;
+          return resp.json();
+        })
+        .then(function (rec) {
+          if (!rec) return;
+          edOpen('edit', cal, day, rec, anchor);
+        })
+        .catch(function () { /* a refused read is a closed card, not a broken page */ });
+    }
+
     // --- wiring ------------------------------------------------------------
     //
     // DELEGATED, so an HTMX re-settle of the row grid cannot orphan a listener,
@@ -424,6 +775,32 @@
         openInLedger();
         return;
       }
+      if (canEdit && e.target && e.target.closest) {
+        var newBtn = e.target.closest('[data-dc-new]');
+        if (newBtn) {
+          e.preventDefault();
+          var calNew = index[state.calId];
+          var dayNew = calNew && calNew.days[state.key];
+          if (calNew && dayNew) {
+            edOpen('create', calNew, dayNew, {
+              year: dayNew.year, month: dayNew.month, day: dayNew.day, all_day: true,
+            }, card);
+          }
+          return;
+        }
+        var editBtn = e.target.closest('[data-dc-edit]');
+        if (editBtn) {
+          e.preventDefault();
+          var calEd = index[state.calId];
+          var dayEd = calEd && calEd.days[state.key];
+          if (calEd && dayEd) edLoad(calEd, dayEd, editBtn.getAttribute('data-dc-edit'), card);
+          return;
+        }
+        if (e.target.closest('[data-de-cancel]')) { e.preventDefault(); edClose(); return; }
+        if (e.target.closest('[data-de-delete]')) { e.preventDefault(); edDelete(); return; }
+        if (e.target.closest('[data-de-save]')) { e.preventDefault(); edSave(); return; }
+        if (e.target.closest('[data-cal-dayeditor]')) return;
+      }
       var hit = cellFrom(e.target);
       if (hit) { openCard(hit.host, hit.cell); return; }
       // Outside the card and outside a day: dismiss. The module owns dismissal
@@ -433,6 +810,19 @@
         closeCard();
       }
     });
+
+    // The all-day toggle reveals the in-world time row. It is a display switch
+    // on a field the API has ALWAYS had — the mockup's `needs backend` chip
+    // over start_hour/start_minute was simply wrong and it comes off rather
+    // than being ported.
+    if (ed && ed.allDay) {
+      ed.allDay.addEventListener('change', function () {
+        if (ed.timeRow) ed.timeRow.hidden = !!ed.allDay.checked;
+      });
+    }
+    if (ed && ed.form) {
+      ed.form.addEventListener('submit', function (e) { e.preventDefault(); edSave(); });
+    }
 
     // THE SECOND OPENER ([DC-4] SIGNED): the day radio's `change`. Where the
     // Ledger is docked the day HAS a real focusable control, so keyboard
@@ -455,7 +845,9 @@
     });
 
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && state.open) closeCard();
+      if (e.key !== 'Escape') return;
+      if (edState.open) { edClose(); return; }
+      if (state.open) closeCard();
     });
 
     window.addEventListener('resize', function () {

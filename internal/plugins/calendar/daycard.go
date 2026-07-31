@@ -103,12 +103,48 @@ type dayCardEvent struct {
 // find the day's radio, so carrying one and deriving the other would put the
 // widget's two key namespaces in a second place.
 type dayCardDay struct {
-	Key     string         `json:"key"`
-	Ord     string         `json:"ord"`
-	Day     int            `json:"day"`
-	Label   string         `json:"label"`
-	Weekday string         `json:"weekday,omitempty"`
-	Events  []dayCardEvent `json:"events"`
+	Key     string `json:"key"`
+	Ord     string `json:"ord"`
+	Day     int    `json:"day"`
+	Label   string `json:"label"`
+	Weekday string `json:"weekday,omitempty"`
+	// Year / Month are the day's REAL calendar coordinates — the ones
+	// POST/PUT .../events take — and they are NOT derivable from Day.
+	//
+	// An intercalary day is the reason. Midwinter 1 is not Deepwinter 1: it
+	// lives in its own is_intercalary Month that hangs off the rendered one,
+	// and its Day is an ordinal WITHIN that month. An editor that pre-filled
+	// the rendered month's index for it would create the event on the wrong
+	// date, silently, on the calendars that have festival days — which is
+	// most fantasy calendars. The producer resolves the coordinates through
+	// blockIntercalaryMonths, which block_geometry.go names as the SINGLE
+	// definition of that adjacency rule.
+	//
+	// Month is 1-BASED, matching the API's month number rather than the
+	// geometry's 0-based index.
+	Year   int            `json:"year"`
+	Month  int            `json:"month"`
+	Events []dayCardEvent `json:"events"`
+}
+
+// dayCardCategory is one entry of the event-type palette.
+//
+// IT RIDES THE PAGE PAYLOAD BECAUSE THE ROUTE IS OWNER-ONLY ([DC-8](c),
+// resolved to option ii). `GET /calendars/:calId/event-categories` sits behind
+// RequireRole(RoleOwner) (routes.go:131), so the palette a SCRIBE needs to pick
+// a type on a new event is out of their reach. The two ways out were widening
+// that GET's floor or answering from the producer; the arc's standing
+// preference is not to widen an auth surface when a producer can answer, so
+// this is the producer answering. No route moved and routes_snapshot.txt is
+// untouched by it.
+//
+// IT IS SCRIBE+ ONLY. A player has no editor and therefore no type picker, so
+// carrying the palette to them would be payload with no consumer.
+type dayCardCategory struct {
+	Slug  string `json:"slug"`
+	Name  string `json:"name"`
+	Glyph string `json:"glyph,omitempty"`
+	Axis  string `json:"axis,omitempty"`
 }
 
 // dayCardCalendar is one Block's worth of days.
@@ -120,10 +156,11 @@ type dayCardDay struct {
 // link to a column that is not on the page is the exact class of dishonesty
 // this arc keeps killing, so the producer states the fact.
 type dayCardCalendar struct {
-	CalendarID   string       `json:"id"`
-	Slug         string       `json:"slug"`
-	LedgerDocked bool         `json:"ledgerDocked"`
-	Days         []dayCardDay `json:"days"`
+	CalendarID   string            `json:"id"`
+	Slug         string            `json:"slug"`
+	LedgerDocked bool              `json:"ledgerDocked"`
+	Categories   []dayCardCategory `json:"categories,omitempty"`
+	Days         []dayCardDay      `json:"days"`
 }
 
 // dayCardPayload is the whole page attribute: every Block on the surface.
@@ -225,11 +262,12 @@ func dayCardLedgerDocked(d calblock.BlockData) bool {
 // exact complaint this slice answers. Days past the ANSWER ladder's bound are
 // included too: the ladder cannot reach them (no radio is emitted) but the
 // POINTER can, which is the card being the only answer there.
-func buildDayCardCalendar(d calblock.BlockData) dayCardCalendar {
+func buildDayCardCalendar(d calblock.BlockData, cal *Calendar, canAuthor bool) dayCardCalendar {
 	out := dayCardCalendar{
 		CalendarID:   d.CalendarID,
 		Slug:         d.CalendarSlug,
 		LedgerDocked: dayCardLedgerDocked(d),
+		Categories:   dayCardCategories(cal, canAuthor),
 	}
 
 	// One pass over the grid, indexed by day so lead/trail cells (Day == 0)
@@ -257,11 +295,22 @@ func buildDayCardCalendar(d calblock.BlockData) dayCardCalendar {
 			Day:     day,
 			Label:   dayCardLabel(d, day),
 			Weekday: dayCardWeekday(d.Month, c),
+			Year:    d.Month.Year,
+			Month:   d.Month.Index + 1,
 			Events:  dayCardEvents(c.Marks),
 		})
 	}
 
-	for _, ic := range d.Month.Intercalary {
+	// The intercalary days, with their OWN month resolved. The walk mirrors
+	// blockIntercalary's exactly — every following is_intercalary Month, in
+	// order, each day 1..MonthDays — so the two lists are positionally
+	// identical and the zip below cannot slip. It is a zip rather than a
+	// re-derivation because block_geometry.go's own comment says
+	// blockIntercalaryMonths is the SINGLE definition of that adjacency rule
+	// and "two independent copies of which months hang off this one is exactly
+	// how a row and its events end up disagreeing".
+	for i, ic := range d.Month.Intercalary {
+		year, month := dayCardIntercalaryCoords(cal, d.Month.Index, d.Month.Year, i)
 		out.Days = append(out.Days, dayCardDay{
 			Key: dayCardIntercalaryKey(d.CalendarSlug, ic.Day),
 			Ord: dayCardIntercalaryOrd(ic.Day),
@@ -270,8 +319,65 @@ func buildDayCardCalendar(d calblock.BlockData) dayCardCalendar {
 			// not Deepwinter 1, which is why the widget keeps two namespaces at
 			// all. Its own name is the honest label.
 			Label:  dayCardIntercalaryLabel(ic),
+			Year:   year,
+			Month:  month,
 			Events: dayCardEvents(ic.Marks),
 		})
+	}
+	return out
+}
+
+// dayCardIntercalaryCoords resolves the (year, 1-based month) of the nth
+// intercalary day hanging off monthIdx.
+//
+// It returns month 0 when the calendar cannot be walked — a degraded spine, or
+// a geometry the adjacency rule no longer explains. THAT IS THE HONEST ANSWER,
+// not a fallback to the rendered month: an editor pre-filled with a month the
+// day does not live in would write the event to the wrong date, and a zero
+// month is a value the module can refuse to open on.
+func dayCardIntercalaryCoords(cal *Calendar, monthIdx, year, nth int) (int, int) {
+	if cal == nil {
+		return year, 0
+	}
+	seen := 0
+	for _, i := range blockIntercalaryMonths(cal, monthIdx) {
+		days := cal.MonthDays(i, year)
+		if nth < seen+days {
+			return year, i + 1
+		}
+		seen += days
+	}
+	return year, 0
+}
+
+// dayCardCategories is the event-type palette, for an authoring viewer only.
+//
+// THE HUE IS NORMALISED AND THE GLYPH IS NOT INVENTED. A category with no icon
+// emits none, and the card's row draws the pattern alone — every hue pairs with
+// a pattern or a glyph, which is the rule the type rail hangs on, and the
+// pattern channel is always there.
+func dayCardCategories(cal *Calendar, canAuthor bool) []dayCardCategory {
+	if cal == nil || !canAuthor || len(cal.EventCategories) == 0 {
+		return nil
+	}
+	out := make([]dayCardCategory, 0, len(cal.EventCategories))
+	for _, ec := range cal.EventCategories {
+		slug := strings.TrimSpace(ec.Slug)
+		if slug == "" {
+			continue
+		}
+		cat := dayCardCategory{
+			Slug:  slug,
+			Name:  strings.TrimSpace(ec.Name),
+			Glyph: strings.TrimSpace(ec.Icon),
+		}
+		if hue := strings.TrimSpace(ec.Color); hue != "" {
+			cat.Axis = dayCardAxis(hue)
+		}
+		if cat.Name == "" {
+			cat.Name = slug
+		}
+		out = append(out, cat)
 	}
 	return out
 }
@@ -355,6 +461,17 @@ func sortAscending(xs []int) {
 	}
 }
 
+// dayCardSource pairs a rendered Block with the Calendar it was projected from.
+//
+// The CALENDAR is needed for two facts BlockData deliberately does not carry:
+// the event-type palette ([DC-8](c) option ii) and the intercalary months'
+// adjacency. Both are producer-side chrome rather than event data, so neither
+// touches the payload law that governs dayCardEvent.
+type dayCardSource struct {
+	Block    *BenchBlock
+	Calendar *Calendar
+}
+
 // dayCardPayloadJSON serialises the surface's Blocks into the page attribute.
 //
 // It returns "" when there is nothing to carry, and the mount emits no
@@ -364,13 +481,13 @@ func sortAscending(xs []int) {
 // MARSHAL CANNOT FAIL HERE (every field is a string, bool, int or a slice of
 // those), and a swallowed error would be a silent blank card, so the error is
 // folded into the empty return rather than logged per render.
-func dayCardPayloadJSON(cals ...*BenchBlock) string {
+func dayCardPayloadJSON(canAuthor bool, sources ...dayCardSource) string {
 	p := dayCardPayload{}
-	for _, b := range cals {
-		if b == nil {
+	for _, src := range sources {
+		if src.Block == nil {
 			continue
 		}
-		p.Calendars = append(p.Calendars, buildDayCardCalendar(b.Data))
+		p.Calendars = append(p.Calendars, buildDayCardCalendar(src.Block.Data, src.Calendar, canAuthor))
 	}
 	if len(p.Calendars) == 0 {
 		return ""

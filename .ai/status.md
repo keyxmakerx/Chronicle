@@ -20,7 +20,56 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
-### calendar-v4 — ROUND 2 OPEN · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
+### calendar-v4 — ROUND 2 OPEN · R2-2a (THE DAY ANSWERS ITS CLICK) SHIPPED (2026-07-31)
+
+**`C-CALV4-DAYCARD` stages 1-2 closed the operator's loudest live-client
+complaint:** *"I'm unable to click and do anything, it just selects the date and
+nothing happens."* Both halves were mechanically true — the click sets a
+visually-hidden radio and the CSS-only ANSWER ladder filters the docked Ledger
+(quiet by design; where the `ledger` layer is off it emits no control at all),
+and calendar-v4 had no way to create or edit an event anywhere.
+
+- **The card** is the pointer-first answer ON TOP of the CSS-only one. One
+  page-level `[popover]`, positioned from the clicked cell's rect, listing the
+  day with the LEDGER ROW's own field set. **The shipped ladder is untouched.**
+- **The agreement law is pinned in Go, at the producer, joined to the count
+  oracle** (GM / Nissa / Bryn): the card's event-id set per day EQUALS the set
+  the ladder leaves visible. One source, one viewer-filtered pass. A card
+  showing one more event than the Ledger is a permission leak wearing a UI
+  change's clothes.
+- **The editor's MECHANISM** ships against the shipped, IDOR-closed event API:
+  **zero new write routes.** Create/edit are `POST`/`PUT` (Scribe), delete is
+  `DELETE` (Owner), all through `Chronicle.apiFetch`. Its full §5 chrome pass
+  and drag-create split out as **C-CALV4-EDITOR-R2b** at a stage boundary,
+  under the dispatch's pre-authorised split.
+- **ONE new read route**, the whole budget: `GET
+  /campaigns/:id/calendars/:calId/events/:eid`, authed `cg`, `RolePlayer` floor,
+  literal path, the grid's own viewer filter inside. Hidden / filtered /
+  `:calId`-mismatched / missing are **one branch, one body**.
+  `routes_snapshot.txt` **722 → 723**, one addition, zero removals.
+- **Motion CONSUMES R2-1's register rather than opening a second one**
+  ([DC-6], first-lander clause). Two rules added by name inside
+  `calendar-bench.css`'s existing register section and inside its single
+  `prefers-reduced-motion: no-preference` wrapper, reusing all three `--disc-*`
+  tokens. The allowlist was widened by zero bytes; what was added is the CLAIM
+  that the card is inside it, failing in both directions.
+- **The visibility mapper was EXTRACTED, not copied a third time** — `mode ↔
+  {visibility, visibility_rules}` now lives once in
+  `internal/plugins/calendar/static/js/cal_visibility.js`, and both the
+  permissions modal and the day-card editor read it.
+- **Permission is absence, mechanically.** Every role gate is markup-level from
+  the producer; a player's Bench contains no editor scaffold, no field name and
+  no route string. The Block's DOM is asserted byte-identical before and after
+  open + close.
+
+**Known gap, stated rather than papered over:** where the Ledger is NOT docked a
+day has no focusable control at all, so the card is pointer-only for that
+viewer. No `tabindex` was injected (that is a Block mutation and a control the
+server never rendered). Booked as **C-CALV4-DAYPICK-A11Y**. The §12 screenshot
+gate was not executed — no browser in this environment; every row of it is in
+`.ai/todo.md`.
+
+### calendar-v4 — ROUND 2 · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
 
 **`C-CALV4-BENCH-R2` slice R2-1 closed the operator's three 2026-07-29 live-client
 complaints.** Round 2 adds no data, no zone and no engine: it decides what a

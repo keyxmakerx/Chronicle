@@ -1,5 +1,5 @@
 // daycard.templ — C-CALV4-DAYCARD (calendar-v4 round 2, slice R2-2a): the day
-// card's SCAFFOLD.
+// card's SCAFFOLD and the event editor's.
 //
 // ONE CARD PER PAGE, NOT ONE PER BLOCK ([DC-3] SIGNED). The Bench stacks N
 // Blocks; N cards would be N popovers, N listeners and N payload copies, and
@@ -15,24 +15,19 @@
 // touching the Block — which is the whole shape of this slice: read the Block's
 // DOM, listen to it, mount beside it, mutate nothing inside it.
 //
-// THE SCAFFOLD IS EMPTY ON THE WIRE. Every row is built by
-// calendar_daycard.js from the page payload (BenchData.DayCardJSON), because
-// the card's contents change per click and a server-rendered card would be N
-// days × N calendars of markup for one day's worth of reading. What the SERVER
-// decides is exactly what a producer must: which viewer gets which controls
-// ([DC-9] — markup-level, never CSS, never JS).
-//
-// THE FOOT CARRIES ONE DOOR IN THIS STAGE. `Open in the Ledger` is the honest
-// bridge to the shipped CSS-only answer: it activates the day's own radio (so
-// the generated ladder fires) and scrolls the Ledger column into view. It is
-// emitted by the MODULE only when the payload says the Ledger is actually
-// docked for this viewer — absence has two causes (a host that never docked the
-// zone, and a viewer who switched the layer off) and a link to a column that is
-// not on the page is the class of dishonesty this arc keeps killing.
+// THE ROWS ARE BUILT BY THE MODULE; THE CONTROLS ARE BUILT HERE. That split is
+// [DC-9] SIGNED, not a convenience. A day's rows change per click and rendering
+// N days x N calendars of markup for one day's reading is what the page payload
+// exists to avoid — but EVERY ROLE GATE IS MARKUP-LEVEL, decided by the
+// producer, never by CSS and never by JS. So `+ New event`, the GM-only
+// control, the type picker and `Delete` are either IN THIS FILE for this viewer
+// or they are absent from their DOM entirely. There is no disabled state and no
+// `title` explaining an absence: permission is ABSENCE (WG-spec V18, and P9's
+// LYR-9 item 5 adopting it product-wide where a wave already touches).
 //
 // GUARD B4: every dated node here carries `data-day` in the dayKey namespace.
-// The head carries it empty on the wire and the module fills it at open, which
-// is the same contract the rows are built under.
+// The card head carries it empty on the wire and the module fills it at open,
+// which is the same contract the rows are built under.
 
 package calendar
 
@@ -45,19 +40,151 @@ package calendar
 // register's 160ms close would run on the button path and be skipped on every
 // other one. One grammar means one close, so the module owns dismissal (Escape,
 // and a pointerdown outside the card) and every path leaves the same way.
-templ dayCardScaffold() {
+templ dayCardScaffold(m DayCardMount) {
 	<div
 		id="cal-daycard"
 		class="cal-daycard"
 		popover="manual"
 		data-cal-daycard
+		data-campaign-id={ m.CampaignID }
+		if m.CanCreate {
+			data-dc-can-edit
+		}
 		aria-labelledby="cal-daycard-head"
 	>
 		<div class="dcbox" data-dc-box>
 			<h2 class="dc-h" id="cal-daycard-head" data-dc-head data-day=""></h2>
 			<div class="dc-rows" data-dc-rows></div>
 			<p class="dc-empty" data-dc-empty hidden>No events on this day.</p>
-			<div class="dc-f" data-dc-foot></div>
+			<div class="dc-f" data-dc-foot>
+				// The module inserts `Open in the Ledger` before this button when
+				// the payload says the column is docked; the button itself is
+				// server-gated and the module never creates or removes it.
+				if m.CanCreate {
+					<button type="button" class="dc-door" data-dc-new>+ New event</button>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// dayCardEditor is the event editor, and in this stage it is the MECHANISM: the
+// fields the shipped API already writes, wired to the routes that already ship.
+//
+// ZERO NEW WRITE ROUTES ([DC-8] SIGNED). Save is POST
+// /campaigns/:id/calendars/:calId/events (Scribe) or PUT .../events/:eid
+// (Scribe); Delete is DELETE .../events/:eid (Owner). All three are IDOR-closed
+// at requireEventInCampaign / requireCalendarInCampaign and all three ride
+// Chronicle.apiFetch, which attaches X-CSRF-Token on every mutating method.
+// This file adds nothing to that surface and widens no request body.
+//
+// WHAT IS HERE IS §5's TABLE, NOT THE MOCKUP. Title, description, type, date,
+// in-world time, end date, GM-only, delete — every one of them a row the
+// shipped create/update structs already bind. What is deliberately NOT here:
+//
+//   - the mockup's `needs backend` chips on in-world time and "Lasts N days".
+//     The columns and the binding EXIST; the chips were wrong and they come off
+//     rather than being ported.
+//   - the audience builder ("+ add tag or member", "resolves to 3 of 5
+//     members"). There is no member_tags table; the composed audience is W-G's.
+//   - the Owner row (change the event's owner). There is no API field and no
+//     signed design — that is not a `needs backend` promise, it is a thing
+//     nobody has decided to build, so it is ABSENT rather than chipped.
+//   - the ten `.hint` rationale strings. Design rationale addressed to a
+//     reviewer, rendered inside the product, is a REVIEW [POLICY] finding and
+//     none of them ship.
+//   - the exotic recurrence units (tenday, moon-phase, day-of-tenday). They are
+//     invention against Chronicle's model and they belong to the chrome pass.
+//
+// The full §5 chrome pass — including the restricted-audience chip row and the
+// recurrence block with its GM-side chips — is C-CALV4-EDITOR-R2b, gated on the
+// operator's stills signature ([DC-5]). NOTHING here renders a `needs backend`
+// chip, so the player rule is satisfied by construction as well as by absence.
+//
+// THE EDITOR IS NOT RENDERED AT ALL BELOW THE SCRIBE FLOOR. bench.templ gates
+// the whole component, so a player's page contains no editor scaffold, no field
+// names and no route strings.
+templ dayCardEditor(m DayCardMount) {
+	<div
+		id="cal-dayeditor"
+		class="cal-dayeditor"
+		popover="manual"
+		data-cal-dayeditor
+		data-campaign-id={ m.CampaignID }
+		aria-labelledby="cal-dayeditor-head"
+	>
+		<div class="dcbox" data-dc-box>
+			<h2 class="dc-h" id="cal-dayeditor-head" data-de-head data-day=""></h2>
+			<form class="de-form" data-de-form>
+				<label class="de-row">
+					<span class="de-lab">Title</span>
+					<input type="text" name="name" data-de-name required maxlength="200"/>
+				</label>
+				<label class="de-row">
+					<span class="de-lab">Description</span>
+					<textarea name="description" data-de-desc rows="3"></textarea>
+				</label>
+				<label class="de-row">
+					<span class="de-lab">Type</span>
+					// Seeded from the page payload, per-calendar, because
+					// GET /calendars/:calId/event-categories sits behind an OWNER
+					// floor and a Scribe cannot reach it ([DC-8](c), option ii).
+					<select name="category" data-de-category>
+						<option value="">No type</option>
+					</select>
+				</label>
+				<div class="de-row de-date">
+					<span class="de-lab">Date</span>
+					<span class="de-fields">
+						<input type="number" name="year" data-de-year aria-label="Year" step="1"/>
+						<input type="number" name="month" data-de-month aria-label="Month" min="1" step="1"/>
+						<input type="number" name="day" data-de-day aria-label="Day" min="1" step="1"/>
+					</span>
+				</div>
+				<label class="de-row de-inline">
+					<input type="checkbox" data-de-allday checked/>
+					<span class="de-lab">All day</span>
+				</label>
+				<div class="de-row de-time" data-de-timerow hidden>
+					<span class="de-lab">In-world time</span>
+					<span class="de-fields">
+						<input type="number" data-de-starth aria-label="Start hour" min="0" step="1"/>
+						<input type="number" data-de-startm aria-label="Start minute" min="0" step="1"/>
+						<span class="de-sep">to</span>
+						<input type="number" data-de-endh aria-label="End hour" min="0" step="1"/>
+						<input type="number" data-de-endm aria-label="End minute" min="0" step="1"/>
+					</span>
+				</div>
+				<div class="de-row de-date">
+					<span class="de-lab">Ends on</span>
+					<span class="de-fields">
+						<input type="number" data-de-endyear aria-label="End year" step="1"/>
+						<input type="number" data-de-endmonth aria-label="End month" min="1" step="1"/>
+						<input type="number" data-de-endday aria-label="End day" min="1" step="1"/>
+					</span>
+				</div>
+				// THE dm_only CONTROL IS THE CAPABILITY'S, NOT THE ROLE'S
+				// ([DC-9] SIGNED). The server downgrades dm_only to everyone for
+				// anyone without CanAuthorDmOnly, so offering the switch to a
+				// plain Scribe would be offering one the server silently ignores.
+				if m.CanAuthorDmOnly {
+					<label class="de-row de-inline">
+						<input type="checkbox" data-de-gmonly/>
+						<span class="de-lab">GM only</span>
+					</label>
+				}
+				<p class="de-err" data-de-err hidden></p>
+				<div class="de-f">
+					<button type="submit" class="dc-door" data-de-save>Save</button>
+					<button type="button" class="dc-door" data-de-cancel>Cancel</button>
+					// Delete rides the shipped DELETE's OWNER floor and nothing
+					// else. The module reveals it only in edit mode; a viewer
+					// below the floor never receives the element.
+					if m.CanDelete {
+						<button type="button" class="dc-door de-danger" data-de-delete hidden>Delete</button>
+					}
+				</div>
+			</form>
 		</div>
 	</div>
 }

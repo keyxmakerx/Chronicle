@@ -110,7 +110,15 @@ templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 			// laundering. Top-layer promotion does not change DOM ancestry,
 			// so the scoping survives the popover.
 			if data.DayCardJSON != "" {
-				@dayCardScaffold()
+				@dayCardScaffold(data.DayCard)
+				// THE EDITOR IS SCRIBE+ AND ITS ABSENCE IS THE GATE ([DC-9]
+				// SIGNED). A player's page contains no editor scaffold at all —
+				// no field names, no route strings, no disabled control, no
+				// title explaining anything. The card above still mounts for
+				// them, because READING A DAY IS A PLAYER AFFORDANCE.
+				if data.DayCard.CanCreate {
+					@dayCardEditor(data.DayCard)
+				}
 			}
 		</div>
 		// W5b: the per-calendar permissions editor. Owners only — players never
@@ -118,6 +126,17 @@ templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 		// card grid this surface replaces: the Bench moved the trigger onto the
 		// Block's management strip and the subordinate rows, and the modal +
 		// its driver are unchanged.
+		// THE ONE VISIBILITY MAPPER, MOUNTED BEFORE BOTH ITS CONSUMERS
+		// (C-CALV4-DAYCARD, R2-2a, [DC-10] SIGNED). cal_visibility.js owns the
+		// mode <-> {visibility, visibility_rules} mapping that the permissions
+		// modal and the day card's editor both write through; it was duplicated
+		// once already and a third copy would have made "who can see this" have
+		// three answers. `defer` scripts execute in DOCUMENT ORDER, so this tag
+		// must precede both — which is why it sits above the owner branch rather
+		// than inside either consumer's own block.
+		if data.IsOwner || data.DayCardJSON != "" {
+			<script src={ layouts.AssetURL("/static/plugins/calendar/js/cal_visibility.js") } defer></script>
+		}
 		if data.IsOwner {
 			@calendarPermissionsModal()
 			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_permissions.js") } defer></script>

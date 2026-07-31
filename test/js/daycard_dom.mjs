@@ -110,6 +110,13 @@ export class El {
   set type(v) { this.setAttribute('type', v); }
   get hidden() { return this.hasAttribute('hidden'); }
   set hidden(v) { if (v) this.setAttribute('hidden', ''); else this.removeAttribute('hidden'); }
+  // Form-control state. `value` and `checked` are IDL properties, not content
+  // attributes — which is exactly why they do not appear in outerHTML, and why
+  // the Block-immutability assertion survives a radio being activated.
+  get value() { return this._value === undefined ? (this.getAttribute('value') || '') : this._value; }
+  set value(v) { this._value = String(v); }
+  get checked() { return !!this._checked; }
+  set checked(v) { this._checked = !!v; }
 
   get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); }
   set textContent(v) { this.children = []; this._text = String(v); }
@@ -117,6 +124,13 @@ export class El {
   // --- tree ---------------------------------------------------------------
   get firstChild() { return this.children[0] || null; }
   appendChild(c) { c.parentNode = this; this.children.push(c); return c; }
+  insertBefore(c, ref) {
+    c.parentNode = this;
+    const i = ref ? this.children.indexOf(ref) : -1;
+    if (i < 0) this.children.push(c);
+    else this.children.splice(i, 0, c);
+    return c;
+  }
   removeChild(c) {
     const i = this.children.indexOf(c);
     if (i >= 0) this.children.splice(i, 1);
@@ -160,10 +174,13 @@ export class El {
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
 
   // --- layout / behaviour the module calls --------------------------------
+  addEventListener(type, fn) { (this._on = this._on || {})[type] = ((this._on || {})[type] || []).concat(fn); }
+  removeEventListener() {}
+  dispatch(type, ev) { ((this._on || {})[type] || []).forEach((fn) => fn(ev || { target: this })); }
   getBoundingClientRect() { return this.rect; }
   showPopover() { this.popoverOpen = true; }
   hidePopover() { this.popoverOpen = false; }
-  click() { this.clicks++; }
+  click() { this.clicks++; this.dispatch('click', { target: this, preventDefault() {} }); }
   scrollIntoView() { this.scrolled++; }
 
   // --- serialisation ------------------------------------------------------

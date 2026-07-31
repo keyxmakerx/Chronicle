@@ -154,6 +154,28 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendars/:calId/import", h.ImportCalendarAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/:calId/import/preview", h.ImportPreviewAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// ONE READ, AND THE WHOLE ROUTE BUDGET OF C-CALV4-DAYCARD SPENT ON IT
+	// ([DC-8] SIGNED, R2-2a). The v4 event editor needs the event's full record
+	// in EDIT mode — description, times, end date, category, visibility — and
+	// the day card's page payload deliberately does not carry any of it
+	// ([DC-1]: the Ledger row's field set and nothing more, because a payload
+	// that carried every event's prose would ship it to every viewer's DOM).
+	// No GET for a single event existed: the calendar group's GETs cover
+	// event-categories, entities, rsvps and the upcoming fragment, and none
+	// returns an event record.
+	//
+	// LITERAL PATH, on the SAME cg stack its siblings ride (RequireAuth →
+	// RequireCampaignAccess → RequireAddon("calendar")). A route registered
+	// through a variable is silently skipped by the wire snapshot
+	// (wire_contract_test.go:180-188), so the path is written out.
+	//
+	// THE ROLE FLOOR IS NOT THE SECURITY BOUNDARY and RolePlayer is deliberate:
+	// a player may legitimately read an event they can already see — the card
+	// lists it and the Ledger prints it. What gates the body is the SAME viewer
+	// filter the grid uses, applied inside the handler, plus a second gate on
+	// the two audience fields. See GetEventAPI.
+	cg.GET("/calendars/:calId/events/:eid", h.GetEventAPI, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// Events CRUD (Scribe+ can create/edit, Owner can delete/set visibility).
 	cg.POST("/calendars/:calId/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 	cg.PUT("/calendars/:calId/events/:eid", h.UpdateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))

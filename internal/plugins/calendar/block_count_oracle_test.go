@@ -596,7 +596,7 @@ func TestOracle_TheDayCardListsExactlyWhatTheLadderLeavesVisible(t *testing.T) {
 			}
 
 			// The CARD's answer, from the payload the Bench would emit.
-			card := buildDayCardCalendar(d)
+			card := buildDayCardCalendar(d, cal, true)
 			seen := map[string]bool{}
 			for _, day := range card.Days {
 				ids := map[string]bool{}

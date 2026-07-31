@@ -2865,6 +2865,115 @@ beside it the month's cells are wider at the same host width, so named columns
 flip on at a **narrower** host — 1198px → 898px for a ten-day week, a shift of
 exactly the dock's own 300px. The entity month became richer.
 
+### Section: round 2 — the day answers its click (R2-2a, C-CALV4-DAYCARD, 2026-07-31)
+
+**The complaint was two sentences and both were mechanically true.** *"I'm
+unable to click and do anything, it just selects the date and nothing
+happens."* Clicking a day checks a visually-hidden radio and the generated
+ANSWER ladder filters the docked Ledger to that day — the one sanctioned
+content change in the Block, deliberately quiet because L-M2 forbids the month
+from moving, so the answer had to land somewhere else and landed in a column
+the operator was not looking at. And where a viewer has switched the `ledger`
+layer off, `dayPick` emits **no radio and no label at all**, so the click is not
+quiet, it is absent. The second half was worse: in the whole of calendar-v4
+there was no way to create or edit an event, because v4 replaced the *reading*
+surface and never replaced the *writing* one.
+
+**THE AGREEMENT LAW IS THE RULING, AND IT IS PINNED IN GO AT THE PRODUCER.**
+For any day, the set of events the card lists is EXACTLY the set of `.lrow`
+elements the ladder leaves visible for that day. Not a superset, not a subset.
+The card's payload is built from the SAME viewer-filtered `BlockData` the Block
+renders from — one pass, no second repository read, no second filter — which is
+the discipline r52 §5 chose for the count oracle, for the same reason, and it is
+why the two surfaces cannot drift. The assertion is **joined to
+`block_count_oracle_test.go`** (GM / Nissa / Bryn on the signed fixture) rather
+than forked, because a card that showed one more event than the Ledger would be
+a permission leak wearing a UI change's clothes, and the difference between the
+two sets is exactly the count of events the viewer is not allowed to know about.
+Asserted in JS instead, it would have been a claim about DOM that — for a viewer
+with the Ledger switched off, which is the viewer the card exists for — is not
+there at all.
+
+**THE PAYLOAD LAW IS A TYPE, NOT A CONVENTION.** The page attribute carries the
+Ledger row's own field set and nothing more: id, the day's two keys, title,
+time, the (axis, pattern, glyph) triple, the `dm_only` rail flag, the audience
+label. `dayCardEvent` has no field for a description, for `visibility_rules` or
+for recurrence — so the growth path is a code change with a failing test rather
+than a judgement call. The cost of getting this wrong is specific: a payload
+that grew a description body would put every event's prose into every viewer's
+DOM for a card that never displays it. Those fields arrive instead over one new
+`GET`, under the editor's own floor, for the one viewer who is about to write
+them back.
+
+**"READ AND LISTEN, NEVER MUTATE" IS THE MECHANICAL FORM OF THE BLOCK'S
+INTERIOR LAW.** Round 2 works AROUND the Block; this slice opened no file in
+`internal/widgets/calendar_block`. That is a claim about a diff, and
+diff-shaped claims decay — the next hand adds "just a class" from the page and
+nothing fails. So the rule is asserted at RUNTIME: a JS test boots the module
+against a Block-shaped fixture and requires the host's serialised DOM to be
+byte-identical before and after open + close. The one path that looks like an
+exception is not: the `Open in the Ledger` door calls `.click()` on the day's
+own radio, which changes CHECKEDNESS — IDL state, not a content attribute — so
+the serialisation is unchanged, and the alternative would have been the module
+simulating the browser instead of using it.
+
+**THE CARD IS A PAGE-LEVEL SINGLETON IN THE TOP LAYER, AND BOTH HALVES ARE
+LOAD-BEARING.** N Blocks would otherwise mean N popovers, N listeners and N
+payload copies, and "the card and the Ledger cannot disagree" would stop being
+checkable in one place. `[popover]` is what escapes `.cal-block-host .block`'s
+own `overflow` clip WITHOUT touching the Block; CSS anchor positioning would
+have needed a unique `anchor-name` on every day cell, i.e. an edit to
+`instrument.templ`. It is `popover="manual"` rather than `auto` for a motion
+reason: the UA's light-dismiss and Escape close a popover SYNCHRONOUSLY and the
+hiding `beforetoggle` is not cancelable, so `auto` would have run the register's
+160ms close on the button path and skipped it on every other one. One grammar
+means one close, so the module owns dismissal.
+
+**THE GUARD AMENDMENT, AND WHY IT IS AN AMENDMENT.**
+`TestBenchCSS_NoMotionAtAll` was already an allowlist — R2-1 inverted it when
+the register landed. This slice widened it by **zero bytes**: the card reuses
+the same transitionable properties, the same two durations and the same easing,
+inside the same single `prefers-reduced-motion: no-preference` wrapper. What was
+added is the CLAIM that it does, failing in both directions — if the card's
+rules vanish, and if they appear outside the wrapper. "The card consumes the
+register" is exactly the kind of sentence that decays into a second grammar the
+moment nothing checks it, and a second register section anywhere is laundering.
+The card's own sheet gained its own monopoly guard for the same reason: a second
+file, out of reach of the Bench guard, is where a second grammar would actually
+grow.
+
+**A ROUTE FLOOR IS NOT A SECURITY BOUNDARY, AND THE BODY IS GATED TWICE.** The
+one new read is `RolePlayer` because a player may legitimately read an event
+they can already see — the card lists it and the Ledger prints it. What gates
+the body is the grid's own viewer filter, plus a second gate on the two audience
+fields. Those two are gated TOGETHER at the Scribe floor rather than split
+Scribe/Owner, and the reason is worth recording because the instinct is the
+opposite: `PUT` re-writes the whole record, so withholding `visibility_rules`
+from the person who is about to overwrite it does not protect the audience — it
+DESTROYS it, silently, on the first save of a restricted event, with players
+seeing something they should not as the only symptom, days later. The editor
+round-trips every field it has no control for, and it can only do that with what
+it was given.
+
+**THE A11Y GAP IS STATED RATHER THAN PAPERED OVER.** Both openers are wired —
+the cell's `click` and the day radio's `change` — so the keyboard path exists
+wherever the radio does. Where the Ledger is not docked the radio does not
+exist, and the card is pointer-only for that viewer. Injecting `tabindex` would
+have been both the mutation the boundary forbids and a focusable control the
+server never rendered, so the gap is BOOKED (**C-CALV4-DAYPICK-A11Y**) as the
+widget change it actually is. A slice that quietly shipped a pointer-only
+affordance and said nothing would be the failure mode this arc's honesty rules
+exist to prevent.
+
+**WHAT SPLIT OUT, AND THAT THE SPLIT WAS PRE-AUTHORISED.** Stages 1-2 — the card
+and the editor's MECHANISM against the shipped API — answer the operator's
+complaint on their own. Stages 3-4, the editor's full chrome pass and
+drag-create, became **C-CALV4-EDITOR-R2b**, taken at a stage boundary with
+everything green. The editor's visual gate was never the card's to wait on: the
+mockup is mid-fix and un-re-reviewed, so it is a REFERENCE for fields, states
+and vocabulary and NOT a fidelity gate, and only the chrome pass waits on the
+operator's stills.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they

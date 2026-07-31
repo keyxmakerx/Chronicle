@@ -30,9 +30,14 @@ export const PAYLOAD = {
     id: 'cal-1',
     slug: 'harptos',
     ledgerDocked: true,
+    categories: [
+      { slug: 'quest', name: 'Quest', glyph: '▲', axis: '#ef4444' },
+      { slug: 'social', name: 'Social', glyph: '◆', axis: '#3b82f6' },
+    ],
     days: [
       {
         key: 'harptos-3', ord: '3', day: 3, label: '3 Deepwinter 1523', weekday: 'Thirdday',
+        year: 1523, month: 1,
         events: [
           { id: 'ev-1', title: 'Council of Wards', axis: 'var(--own-1)', pattern: 'p3', glyph: '◆' },
           {
@@ -41,9 +46,10 @@ export const PAYLOAD = {
           },
         ],
       },
-      { key: 'harptos-4', ord: '4', day: 4, label: '4 Deepwinter 1523', weekday: 'Fourthday', events: [] },
+      { key: 'harptos-4', ord: '4', day: 4, label: '4 Deepwinter 1523', weekday: 'Fourthday', year: 1523, month: 1, events: [] },
       {
         key: 'harptos-5', ord: '5', day: 5, label: '5 Deepwinter 1523', weekday: 'Fifthday',
+        year: 1523, month: 1,
         events: [{ id: 'ev-3', title: 'Caravan due', time: '18:00', axis: 'var(--own-4)', pattern: 'p2' }],
       },
     ],
@@ -121,6 +127,62 @@ export function buildBenchFixture(opts) {
   card.querySelector('[data-dc-box]').offsetHeight = 0;
   card.querySelector('[data-dc-box]').scrollHeight = 176;
 
+  // THE EDITOR IS RENDERED ONLY FOR A VIEWER THE PRODUCER GATED IN. `canEdit`
+  // here IS bench.templ's `if data.DayCard.CanCreate` — the fixture reproduces
+  // the gate rather than simulating it, so a player fixture genuinely has no
+  // editor DOM to find.
+  const canEdit = opts.canEdit !== false;
+  const canDelete = opts.canDelete !== false;
+  const canGMOnly = opts.canGMOnly !== false;
+  if (canEdit) card.setAttribute('data-dc-can-edit', '');
+  card.setAttribute('data-campaign-id', 'camp-1');
+  if (canEdit) {
+    card.querySelector('[data-dc-foot]').appendChild(
+      el('button', { type: 'button', class: 'dc-door', 'data-dc-new': '' }, [], '+ New event')
+    );
+  }
+
+  const editor = canEdit ? el('div', {
+    id: 'cal-dayeditor', class: 'cal-dayeditor', popover: 'manual',
+    'data-cal-dayeditor': '', 'data-campaign-id': 'camp-1',
+    'aria-labelledby': 'cal-dayeditor-head',
+  }, [
+    el('div', { class: 'dcbox', 'data-dc-box': '' }, [
+      el('h2', { class: 'dc-h', id: 'cal-dayeditor-head', 'data-de-head': '', 'data-day': '' }),
+      el('form', { class: 'de-form', 'data-de-form': '' }, [
+        el('input', { type: 'text', 'data-de-name': '' }),
+        el('textarea', { 'data-de-desc': '' }),
+        el('select', { 'data-de-category': '' }, [el('option', { value: '' }, [], 'No type')]),
+        el('input', { type: 'number', 'data-de-year': '' }),
+        el('input', { type: 'number', 'data-de-month': '' }),
+        el('input', { type: 'number', 'data-de-day': '' }),
+        el('input', { type: 'checkbox', 'data-de-allday': '' }),
+        el('div', { 'data-de-timerow': '', hidden: '' }, [
+          el('input', { type: 'number', 'data-de-starth': '' }),
+          el('input', { type: 'number', 'data-de-startm': '' }),
+          el('input', { type: 'number', 'data-de-endh': '' }),
+          el('input', { type: 'number', 'data-de-endm': '' }),
+        ]),
+        el('input', { type: 'number', 'data-de-endyear': '' }),
+        el('input', { type: 'number', 'data-de-endmonth': '' }),
+        el('input', { type: 'number', 'data-de-endday': '' }),
+        ...(canGMOnly ? [el('input', { type: 'checkbox', 'data-de-gmonly': '' })] : []),
+        el('p', { class: 'de-err', 'data-de-err': '', hidden: '' }),
+        el('div', { class: 'de-f' }, [
+          el('button', { type: 'submit', class: 'dc-door', 'data-de-save': '' }, [], 'Save'),
+          el('button', { type: 'button', class: 'dc-door', 'data-de-cancel': '' }, [], 'Cancel'),
+          ...(canDelete ? [el('button', { type: 'button', class: 'dc-door de-danger', 'data-de-delete': '', hidden: '' }, [], 'Delete')] : []),
+        ]),
+      ]),
+    ]),
+  ]) : null;
+  if (editor) {
+    editor.offsetWidth = 420;
+    editor.offsetHeight = 24;
+    editor.querySelector('[data-dc-box]').offsetHeight = 0;
+    editor.querySelector('[data-dc-box]').scrollHeight = 320;
+  }
+
   const rootAttrs = { class: 'cal-bench', 'data-cal-bench': '', 'data-cal-dashboard': '' };
   if (payload !== null) rootAttrs['data-cal-daycard-payload'] = JSON.stringify(payload);
   const root = el('div', rootAttrs, [
@@ -128,9 +190,10 @@ export function buildBenchFixture(opts) {
       el('div', { class: 'stack', 'data-bench-stack': '' }, [host]),
     ]),
     card,
+    ...(editor ? [editor] : []),
   ]);
 
-  return { root, card, host, cells, ledger, blockHost };
+  return { root, card, editor, host, cells, ledger, blockHost };
 }
 
 // boot runs the module against a fresh fixture.
@@ -167,7 +230,28 @@ export function boot(opts) {
   sandbox.addEventListener = (t, fn) => { (winListeners[t] = winListeners[t] || []).push(fn); };
   sandbox.removeEventListener = () => {};
 
+  // THE WRITE SPY. Every mutating call the editor makes goes through
+  // Chronicle.apiFetch — which is what attaches X-CSRF-Token and
+  // credentials: same-origin in the browser — so recording it here records
+  // exactly what would go on the wire.
+  const calls = [];
+  let reloads = 0;
+  sandbox.location = { pathname: '/campaigns/camp-1/apps/calendar', reload: () => { reloads++; } };
+  sandbox.Chronicle = {
+    apiFetch: (url, o) => {
+      const call = { url, method: (o && o.method) || 'GET', body: o && o.body };
+      calls.push(call);
+      const canned = (opts.responses || {})[call.method + ' ' + url] || (opts.responses || {})[call.method];
+      return Promise.resolve(canned || { ok: true, json: () => Promise.resolve({}) });
+    },
+  };
+
+  // The shared visibility mapper, loaded exactly as bench.templ mounts it:
+  // BEFORE its consumer, in document order.
+  const sharedPath = join(here, '..', '..', 'internal', 'plugins', 'calendar', 'static', 'js', 'cal_visibility.js');
+
   vm.createContext(sandbox);
+  vm.runInContext(readFileSync(sharedPath, 'utf8'), sandbox, { filename: 'cal_visibility.js' });
   vm.runInContext(SRC, sandbox, { filename: 'calendar_daycard.js' });
 
   const api = {
@@ -175,6 +259,8 @@ export function boot(opts) {
     document,
     timers,
     pure: sandbox.window.__calDayCard,
+    calls,
+    reloads: () => reloads,
     fire: (type, target, extra) => document._fire(type, { target, preventDefault() {}, ...(extra || {}) }),
     flush: () => { const q = timers.splice(0, timers.length); q.forEach((t) => t.fn()); },
     winFire: (type) => (winListeners[type] || []).forEach((fn) => fn({})),

@@ -302,7 +302,13 @@ func benchFxData(isGM, isOwner bool) BenchData {
 	// fixture carries it so every assertion in this file judges the DOM
 	// production renders, card and all, rather than a Bench that quietly
 	// predates it.
-	data.DayCardJSON = dayCardPayloadJSON(data.Primary, data.RealWorld)
+	data.DayCard = DayCardMount{
+		CanCreate: isOwner, CanAuthorDmOnly: isOwner, CanDelete: isOwner,
+		CampaignID: "camp-1",
+	}
+	data.DayCardJSON = dayCardPayloadJSON(data.DayCard.CanCreate,
+		dayCardSource{Block: data.Primary, Calendar: primary},
+		dayCardSource{Block: data.RealWorld, Calendar: realWorld})
 	data.Ribbon = benchRibbon(benchRibbonInput{
 		IsGM: isGM, CampaignID: "camp-1", Primary: primary, Block: data.Primary,
 		NextUp:    data.NextUp,

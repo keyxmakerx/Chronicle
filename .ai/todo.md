@@ -16,10 +16,42 @@ Round 2 adds no data, no zone and no engine. Five slices; R2-1 has landed.
 | slice | what it owns | state |
 |---|---|---|
 | **R2-1** — `C-CALV4-BENCH-R2` | the disclosure primitive + register, the page measure, the two-column RSVP panel, the glanceable entity seed | **[x] shipped 2026-07-30** |
-| **R2-2** — the day card | click a day, unfold a card, edit an event. **Reuses R2-1's disclosure register** — R2-1 shipped it ONCE, in `calendar-bench.css`; moving it to a shared sheet is R2-2's move when R2-2 needs it, not a speculative pre-factor. | [ ] |
+| **R2-2a** — the day card + the editor's mechanism | click a day, unfold a card, create/edit an event against the SHIPPED event API. **Consumed R2-1's disclosure register in place** — it stayed in `calendar-bench.css` and the card's two rules were added by name inside the same reduced-motion wrapper, reusing all three `--disc-*` tokens; the speculative shared sheet was never built ([DC-6] SIGNED, first-lander clause). **[x] shipped 2026-07-31** |
+| **R2-2b** — `C-CALV4-EDITOR-R2b` | the editor's full §5 chrome pass (the type rail's locked hue+pattern+glyph triple, the restricted-audience chip row, the recurrence block with its GM-side chips, the live preview column) **and drag-create**. Split from R2-2a at a stage boundary with everything green, under the dispatch's pre-authorised split. **Gated on the operator's editor stills signature ([DC-5]).** | [ ] |
 | **R2-3** — the Block theater | expand any embed to a full-tier overlay. **This is where the depth R2-1 removed from the entity embed comes back.** R2-1 deliberately shipped NO substitute — no expand chip, no "show more", no second embed — because a stopgap becomes the thing R2-3 has to delete. | [ ] |
 | **R2-4** — V2 sunset / the anonymous-public route move | the frozen V2 shell. R2-1 did not open `calendar_v2*` for any reason. | [ ] |
 | **R2-5** — the sky header | the dashed skyband placeholder in the real-world Block. Drawing pass FIRST. Reuses R2-1's register as its base motion. | [ ] |
+
+Carried out of R2-2a, not closed:
+
+- [ ] **`C-CALV4-DAYPICK-A11Y`** — a day cell needs a focusable control that is
+  NOT gated on the docked Ledger. Where the `ledger` layer is off, `dayPick`
+  (`instrument.templ:213`) emits no radio and no `.dsel` label, so the day has
+  no focusable control at all and the card is POINTER-ONLY for that viewer.
+  R2-2a wired both openers (cell `click` + the radio's `change`) and refused to
+  inject `tabindex` — that is a Block mutation and it would ship a focusable
+  control the server never rendered. This is a WIDGET change with its own
+  screen-reader pass.
+- [ ] **The editor MORPH** — a shared-element growth from the card's box into
+  the editor's, which is more than the register's clip-reveal gives. R2-2a ships
+  the register-only version (card closes as editor opens, both from one origin)
+  and ESCALATES the morph as a NAMED motion carve-out for the operator to sign,
+  alongside the sky header's. Per-surface motion invention is what produced the
+  skypane verdict.
+- [ ] **`C-CALV4-DAYMENU`** (only if wanted at all) — the day `⋯` overflow menu's
+  contents: *Copy link to this date*, *Open Almanac*, *Set campaign date*, and
+  the GM `1 hidden here` row. Each needs its own audience or scope ruling; the
+  hidden-count row in particular is a hidden-content count on a
+  player-adjacent surface.
+- [x] **CTS-6, the per-day `+N more` popover — CLOSED as SUPERSEDED.** The day
+  card IS the day's full list, which is the feature that booking wanted. Closed
+  with the reason rather than quietly dropped.
+- [ ] **The §12 screenshot gate for R2-2a was NOT executed** — same reason as
+  R2-1's. Every row of it needs a browser: the card open at 1232px light+dark
+  NOT occluding the Ledger (a collision there is a STOP-AND-FLAG), at 420px and
+  358px, with the `ledger` layer switched OFF, the editor in create and edit
+  mode, the full player set checked for ABSENCE, and the reduced-motion capture
+  showing the completed state with no partial frame.
 
 Carried out of R2-1, not closed:
 
