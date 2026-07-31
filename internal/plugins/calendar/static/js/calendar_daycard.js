@@ -157,9 +157,34 @@
   //
   // So the order is: BELOW the day (preferred), then ABOVE it when below cannot
   // clear, then — if neither position clears at popover width — the SHEET, which
-  // is [DC-3] bullet 4's own signed answer. THERE IS NO THIRD GEOMETRY and the
-  // card is never resized to fit: a card that shrank to dodge would be a
-  // different card, and [DC-3] signed one card and one sheet.
+  // is [DC-3] bullet 4's own signed answer. There are TWO ANCHORED CANDIDATES
+  // AND ONE SHEET, and the card is never resized to fit: a card that shrank to
+  // dodge would be a different card, and [DC-3] signed one card and one sheet.
+  //
+  // THE ABOVE CANDIDATE IS CLAMPED INTO THE VIEWPORT, NEVER DROPPED
+  // (fix-forward, DC3-DESKTOP-SHEET-OCCLUSION-R4). The cut that added the
+  // vertical dodge admitted `above` only `if (above >= pad)` and pushed
+  // everything else onto a `view.h - pad - size.h` clamp that pins the box to
+  // the BOTTOM of the viewport — which is precisely where a STACKED Ledger band
+  // lives. So a TALL box never flipped at all: the 400px editor under a mid-grid
+  // day computes `above` at ≈-64, was dropped, was bottom-pinned, failed the
+  // clear test in both candidates and fell to the desktop SHEET — 107,604 px²,
+  // 100% of the Ledger, at 884px, on `+ New event` with no unusual data at all.
+  // A card with 12+ events on one day (≈379px, ordinary festival data) reached
+  // the identical fallback. In every one of those cases A CLEAR POPOVER POSITION
+  // EXISTED: a 481px box at top=8 ends at 489, entirely above a band whose top
+  // is 595. The module's warning therefore said the placement was impossible
+  // when it had merely not been ATTEMPTED, which is the one thing [DC-3]'s
+  // STOP-AND-FLAG must never say falsely.
+  //
+  // The fix is a CLAMP ON THE EXISTING FLIP, not a third geometry: `above` still
+  // means "start the box above the day", and where the box is taller than the
+  // room above its day it starts at the viewport's top edge instead of
+  // off-screen. That is the same clamping the below-candidate has always had,
+  // applied in the direction the above-candidate actually prefers — UPWARD. It
+  // is also, exactly, the accidental placement the pre-dodge code produced for
+  // the editor at y=28 and which measured clear at every width. The sheet
+  // fallback stays, unweakened, for the geometry that genuinely runs out.
   //
   // `clear` IS MEASURED, NEVER ASSERTED, AND IT IS MEASURED THE SAME WAY IN
   // BOTH BRANCHES (fix-forward, DC-CLEAR-1 / DC-MOBILE-4). The first cut
@@ -187,18 +212,24 @@
 
     if (view.w <= breakpoint) return sheetPlacement(size, view, ledger, false);
 
-    // The two vertical candidates, in preference order, each filtered on
-    // VIEWPORT room first — a position that leaves the card half off-screen is
-    // not a candidate no matter how clear of the Ledger it is.
+    // The two vertical candidates, in preference order.
+    //
+    // BELOW keeps its viewport FILTER: a card that would hang off the bottom of
+    // the window is not "below its day" in any useful sense, and dropping it
+    // here is what lets the flip take over at the foot of the grid.
+    //
+    // ABOVE takes a viewport CLAMP instead of a filter, for the reason in the
+    // header comment: dropping it is what sent every tall box to the sheet while
+    // a clear position existed. `lowClamp` is the lowest a box of this height may
+    // sit and still fit; `pad` is the highest. A box taller than the whole
+    // viewport collapses both to `pad`, which is top-pinned — the right end to
+    // pin against a Ledger the narrow layout stacks BELOW the grid.
     var tops = [];
     var below = anchor.bottom + pad;
-    var above = anchor.top - pad - size.h;
+    var lowClamp = Math.max(pad, view.h - pad - size.h);
+    var above = Math.min(Math.max(anchor.top - pad - size.h, pad), lowClamp);
     if (below + size.h <= view.h - pad) tops.push(below);
-    if (above >= pad) tops.push(above);
-    // NEITHER fits the viewport: the pre-existing clamp, kept so a short window
-    // still gets a placed card rather than being tipped into the sheet by a
-    // condition that has nothing to do with the Ledger.
-    if (!tops.length) tops.push(Math.max(pad, view.h - pad - size.h));
+    if (!tops.length || above !== tops[0]) tops.push(above);
 
     for (var i = 0; i < tops.length; i++) {
       var at = desktopPlacement(tops[i], anchor, size, view, ledger, pad);

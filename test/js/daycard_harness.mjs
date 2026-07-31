@@ -127,6 +127,27 @@ export function buildBenchFixture(opts) {
   card.querySelector('[data-dc-box]').offsetHeight = 0;
   card.querySelector('[data-dc-box]').scrollHeight = 176;
 
+  // THE CARD'S RECT FOLLOWS THE PLACEMENT THE MODULE JUST WROTE
+  // (DC3-DESKTOP-SHEET-OCCLUSION-R4). The card is the EDITOR's anchor — the
+  // editor unfolds from where the card was ([DC-7]) — and the stub's default is
+  // a static all-zero rect, which anchored every editor in this suite at the
+  // viewport origin where nothing can be occluded. That is why the editor half
+  // of a blocker measured at 107,604 px² in a real browser was invisible here
+  // while the card half was not. Derived, never assigned, so a test cannot set
+  // it to a value the placement did not produce.
+  Object.defineProperty(card, 'rect', {
+    configurable: true,
+    get() {
+      const box = this.querySelector('[data-dc-box]');
+      const left = parseFloat(this.style.left) || 0;
+      const top = parseFloat(this.style.top) || 0;
+      const w = parseFloat(this.style.width) || this.offsetWidth || 0;
+      const chrome = Math.max(0, (this.offsetHeight || 0) - ((box && box.offsetHeight) || 0));
+      const h = ((box && box.scrollHeight) || 0) + chrome;
+      return { left, top, right: left + w, bottom: top + h, width: w, height: h };
+    },
+  });
+
   // THE EDITOR IS RENDERED ONLY FOR A VIEWER THE PRODUCER GATED IN. `canEdit`
   // here IS bench.templ's `if data.DayCard.CanCreate` — the fixture reproduces
   // the gate rather than simulating it, so a player fixture genuinely has no

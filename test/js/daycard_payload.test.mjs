@@ -117,10 +117,81 @@ test('at the ~944px boundary the Ledger docks again and the card opens BELOW its
   assert.ok(at.left + 340 <= 651, 'and the horizontal dodge still keeps it left of the column');
 });
 
+// --- DC3-DESKTOP-SHEET-OCCLUSION-R4: a TALL box flips too --------------------
+//
+// The dodge above shipped with the above-candidate admitted only when it fitted
+// the viewport outright (`if (above >= pad)`). Everything else fell to a clamp
+// that pins the box to the BOTTOM of the viewport — where the stacked band is —
+// failed the clear test twice and took the DESKTOP SHEET, covering 100% of the
+// Ledger while a clear popover position provably existed. Two reachable ways in,
+// both measured on the shipped Bench, both below:
+//
+//   the EDITOR, with no unusual data at all — a 420x400 box under a mid-grid day
+//   computes `above` at ≈-64, so it never flipped;
+//   the CARD on a busy day — 12 events is ≈379px and 16 is ≈481px, and
+//   `.dc-rows` caps at min(52vh,420px), so the whole band is reachable.
+//
+// These are the regression cases. The assertion that matters in each is not
+// "not a sheet" but "clear at popover width": the sheet is only ever wrong when
+// an anchored candidate would have worked.
+
+test('the EDITOR box flips above the stacked band instead of sheeting over it', () => {
+  // 884px .cal-bench content width, GM, day 5, `+ New event`. Measured before
+  // the fix: the editor landed as a 944px-wide sheet over the whole Ledger band,
+  // 107,604 px² = 100.0% of the column, data-dc-clear="0", one warning.
+  const at = P.placeCard(
+    { left: 460, top: 344, right: 544, bottom: 428, width: 84, height: 84 },
+    { w: 420, h: 400 }, { w: 944, h: 900 },
+    { left: 31, top: 595, width: 882, height: 122 }, {});
+  assert.equal(at.sheet, false, 'a desktop width keeps the popover treatment');
+  assert.equal(at.clear, true, 'and the flip must actually clear the band');
+  assert.ok(at.top + 400 <= 595, 'the editor sits entirely above the stacked Ledger');
+  assert.ok(at.top >= 0, 'and entirely inside the viewport');
+});
+
+test('a busy day flips too: the card clears the band at every height the rows can reach', () => {
+  // .dc-rows caps at min(52vh,420px), so a card runs from ~200px (a quiet day)
+  // to ~520px (the cap plus head and footer). 12 events is ≈379px and 16 is
+  // ≈481px — ordinary festival data, not a stress case. EVERY height in that
+  // band used to sheet; every one of them must now flip.
+  for (const view of [{ w: 944, h: 900 }, { w: 864, h: 900 }, { w: 812, h: 900 },
+    { w: 744, h: 900 }, { w: 704, h: 900 }]) {
+    const ledger = { left: 31, top: 595, width: view.w - 62, height: 122 };
+    for (let h = 200; h <= 520; h += 20) {
+      const at = P.placeCard(
+        { left: 460, top: 344, right: 544, bottom: 428, width: 84, height: 84 },
+        { w: 340, h }, view, ledger, {});
+      const where = 'view ' + view.w + ', card height ' + h;
+      assert.equal(at.sheet, false, 'the desktop sheet was taken at ' + where +
+        ' — a popover position exists and the sheet covers 100% of the Ledger');
+      assert.equal(at.clear, true, 'the placement does not clear the band at ' + where);
+      assert.ok(at.top + h <= ledger.top, 'the card overlaps the band at ' + where);
+    }
+  }
+});
+
+test('a box taller than the room above its day starts at the viewport edge, not off it', () => {
+  // The clamp, stated directly: `above` computes to ≈-64 here. Dropping it is
+  // what produced the blocker; clamping it to `pad` is the whole fix, and it is
+  // the same placement the pre-dodge code accidentally produced at y=28.
+  const at = P.placeCard(
+    { left: 460, top: 344, right: 544, bottom: 428, width: 84, height: 84 },
+    { w: 340, h: 481 }, { w: 944, h: 900 },
+    { left: 31, top: 595, width: 882, height: 122 }, {});
+  assert.equal(at.sheet, false);
+  assert.equal(at.clear, true);
+  assert.equal(at.top, 8, 'clamped to the pad, not dropped and not bottom-pinned');
+});
+
 test('when NEITHER position clears at popover width the card falls back to the signed sheet', () => {
   // A Ledger that spans nearly the whole viewport in both axes: there is no
   // above and no below. [DC-3] bullet 4's sheet is the answer, and it is the
   // ONLY other geometry — the card is never resized to fit.
+  //
+  // This is now the ONLY route to a desktop sheet, and that is the point: the
+  // geometry here really has run out, so the STOP-AND-FLAG the fallback raises
+  // is telling the truth. The three cases above are what it used to say it
+  // about when it was not.
   const at = P.placeCard(
     { left: 0, top: 300, right: 84, bottom: 384, width: 84, height: 84 },
     { w: 340, h: 200 }, { w: 1232, h: 900 },

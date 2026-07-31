@@ -259,3 +259,47 @@ test('the editor is placed through the same reader as the card', () => {
   assert.equal(fx.editor.getAttribute('data-dc-clear'), '1',
     'the editor covers the same column and reports through the same path');
 });
+
+// ── DC3-DESKTOP-SHEET-OCCLUSION-R4, at the DOM ────────────────────────────────
+//
+// The two reachable ways a TALL box used to reach the desktop sheet and cover
+// 100% of the stacked Ledger. The placement rule is pinned as a pure function in
+// daycard_payload.test.mjs; these two run the whole path — click, measure, place,
+// write the attribute, decide whether to warn — because the blocker was only
+// visible end to end: the box's height comes from the rendered rows, and a pure
+// test that is handed the height cannot notice that the rows produce it.
+
+test('a tall EDITOR clears the stacked band instead of sheeting over it', () => {
+  const said = [];
+  const fx = boot({ viewportW: 944, viewportH: 900, console: { warn: (m) => said.push(m) } });
+  // The measured ~884px content geometry: the Ledger is a full-width band
+  // stacked below the grid, not a docked right-hand column.
+  fx.ledger.rect = { left: 31, top: 595, right: 913, bottom: 717, width: 882, height: 122 };
+  fx.editor.querySelector('[data-dc-box]').scrollHeight = 376; // a 400px editor
+
+  fx.fire('click', fx.cells[3]);
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+
+  assert.equal(fx.editor.classList.contains('dcsheet'), false,
+    'a 944px viewport is nowhere near the mobile breakpoint — the desktop sheet ' +
+    'here covered the whole Ledger while a clear popover position existed');
+  assert.equal(fx.editor.getAttribute('data-dc-clear'), '1',
+    'the flip must actually clear the band it dodged');
+  assert.equal(said.length, 0,
+    'and a placement that succeeded must not raise [DC-3]s STOP-AND-FLAG');
+});
+
+test('a BUSY day card clears the stacked band instead of sheeting over it', () => {
+  const said = [];
+  const fx = boot({ viewportW: 944, viewportH: 900, console: { warn: (m) => said.push(m) } });
+  fx.ledger.rect = { left: 31, top: 595, right: 913, bottom: 717, width: 882, height: 122 };
+  // 16 rows against `.dc-rows`s min(52vh,420px) cap — a festival day, not a
+  // stress case.
+  fx.card.querySelector('[data-dc-box]').scrollHeight = 457;
+
+  fx.fire('click', fx.cells[3]);
+
+  assert.equal(fx.card.classList.contains('dcsheet'), false);
+  assert.equal(fx.card.getAttribute('data-dc-clear'), '1');
+  assert.equal(said.length, 0);
+});
