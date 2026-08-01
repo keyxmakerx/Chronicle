@@ -1,0 +1,395 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   calendar-daycard.css — C-CALV4-DAYCARD (calendar-v4 round 2, slice R2-2a).
+
+   THE CARD'S LOOK, AND NOTHING THAT MOVES.
+
+   This sheet declares NO motion of any kind, and that is a structural decision
+   rather than an omission. The disclosure register (cordinator
+   decisions/2026-07-29-motion-disclosure-register.md) is owned by
+   C-CALV4-BENCH-R2, which landed first and put it in ONE named section of
+   static/css/calendar-bench.css under the amended Bench motion guard. Splitting
+   the card's reveal into a second sheet would keep that guard green while
+   defeating its purpose, and laundering a guard is not something this arc does
+   ([DC-6] SIGNED). So the card's open/close lives THERE, beside the
+   disclosures' own, sharing --disc-open / --disc-close / --disc-ease, and this
+   sheet carries only what the card looks like when it is still.
+
+   TestDayCardCSS_CarriesNoMotionOfItsOwn is the enforcement, and it is the
+   register's monopoly guard reaching one file further. Nothing in CI backs it
+   up — tools/check-v2-motion-discipline.sh does not police static/css/ at all,
+   its scope is internal/plugins/{calendar,timeline,ai_workspace,campaigns} —
+   so that test is the only thing standing here.
+
+   TWO ROOTS, BOTH THIS SHEET'S OWN: .cal-daycard (the card) and .cal-dayeditor
+   (the event editor). They are separate popovers because the card CLOSES as the
+   editor OPENS ([DC-7] SIGNED) — one box cannot be in two places — and they
+   share an origin so the pair reads as one motion under the register's grammar.
+
+   EVERY SELECTOR IS SCOPED UNDER ONE OF THOSE TWO ROOTS. This sheet is unlayered and
+   outranks the whole layered app cascade, so a bare `.rail`, `.nm`, `.tm` or
+   `.badge` rule here would restyle every one of those nouns product-wide —
+   and they are the Ledger row's own vocabulary, deliberately reused so the two
+   surfaces read alike, which makes the leak far more likely than usual.
+   TestDayCardCSS_EverySelectorIsScoped asserts it.
+
+   THE ACCENT NEVER COLOURS EVENT DATA (canon A7, and the REVIEW finding this
+   surface inherits as build law): a row's rail takes the event's own --axis
+   hue, the gold rail and the GM badge take the permission gold, and
+   var(--accent) appears in this sheet only on a focus ring.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The popover box. `display:none` is the closed state in EVERY browser: where
+   [popover] is supported the UA already hides it and the module's own
+   data-dc-shown re-shows it at higher specificity; where it is not, this pair
+   is the whole mechanism and the card still opens. */
+.cal-daycard {
+  display: none;
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 24%);
+  inline-size: min(340px, calc(100vw - 16px));
+  font-size: 12px;
+  line-height: 1.35;
+}
+.cal-daycard[data-dc-shown] { display: block; }
+
+/* The mobile treatment is a BOTTOM SHEET, full width, still the same popover
+   and still the register's motion. The module sets the width; this is the
+   shape. */
+.cal-daycard.dcsheet {
+  inline-size: 100vw;
+  border-inline: 0;
+  border-block-end: 0;
+  border-start-start-radius: 12px;
+  border-start-end-radius: 12px;
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.cal-daycard .dcbox {
+  padding: 10px 12px 12px;
+}
+
+/* The head: the day, named, with its weekday. It is the card's accessible name
+   (aria-labelledby), so it is a real heading and not a decorated span. */
+.cal-daycard .dc-h {
+  margin: 0 0 8px;
+  font-weight: 650;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.cal-daycard .dc-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-block-size: min(52vh, 420px);
+  overflow-y: auto;
+}
+
+/* One row, and its field set is the Ledger row's own (ledger.templ:155-190):
+   rail + pattern · the gold rail for dm_only · glyph · title · GM badge ·
+   audience chip · time. */
+.cal-daycard .dc-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 2px;
+  border-radius: 4px;
+}
+.cal-daycard .dc-row:hover {
+  background: color-mix(in oklch, transparent 94%, var(--text-primary));
+}
+
+/* The rail is the (hue, pattern) pair: the hue is the EVENT's --axis and the
+   pattern is the greyscale channel that carries it when colour cannot. Both,
+   always — a hue never travels alone. */
+.cal-daycard .dc-row .rail {
+  flex: none;
+  inline-size: 3px;
+  align-self: stretch;
+  min-block-size: 14px;
+  border-radius: 2px;
+  background: var(--axis, var(--own-none));
+}
+.cal-daycard .dc-row .rail.p1 { opacity: 1; }
+.cal-daycard .dc-row .rail.p2 { opacity: 0.92; }
+.cal-daycard .dc-row .rail.p3 { opacity: 0.84; }
+.cal-daycard .dc-row .rail.p4 { opacity: 0.76; }
+.cal-daycard .dc-row .rail.p5 { opacity: 0.68; }
+.cal-daycard .dc-row .rail.p6 { opacity: 0.6; }
+.cal-daycard .dc-row .rail.p7 { opacity: 0.52; }
+.cal-daycard .dc-row .rail.p8 { opacity: 0.44; }
+
+/* The gold rail is dm_only and ONLY dm_only. A visibility_rules restriction
+   gets the audience chip alone — Audience.Restricted is the discriminator, not
+   a synonym for "hidden", and drawing the rail on both would delete the dogear
+   from the product one layer down. */
+.cal-daycard .dc-row .gr {
+  flex: none;
+  inline-size: 2px;
+  align-self: stretch;
+  min-block-size: 14px;
+  border-radius: 2px;
+  background: var(--gm-gold, #c8a24a);
+}
+
+.cal-daycard .dc-row .tok {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.cal-daycard .dc-row .mid {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+}
+.cal-daycard .dc-row .nm {
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.cal-daycard .dc-row .badge {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--rule-hairline);
+  color: var(--text-secondary);
+}
+.cal-daycard .dc-row .badge.gm {
+  border-color: var(--gm-gold, #c8a24a);
+  color: var(--gm-gold, #c8a24a);
+}
+
+.cal-daycard .dc-row .audchip {
+  flex: none;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.cal-daycard .dc-row .tm {
+  flex: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* THE ROW'S OWN DOOR. Scribe+ only, and the module adds it only when the
+   producer said so — a player's rows carry no button, not a disabled one. */
+.cal-daycard .dc-row .dc-edit {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.cal-daycard .dc-row .dc-edit:hover { color: var(--text-primary); }
+.cal-daycard .dc-row .dc-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A REAL EMPTY STATE, never a blank card. A card that opened onto nothing would
+   teach the operator the click is dead again, which is the complaint this whole
+   slice answers. */
+.cal-daycard .dc-empty {
+  margin: 4px 2px;
+  color: var(--text-muted);
+}
+.cal-daycard .dc-empty[hidden] { display: none; }
+
+/* The foot holds the doors. It collapses to nothing when the module emits none
+   — a viewer with no docked Ledger and no authoring floor gets a card that is
+   list and head, with no empty strip under it. */
+.cal-daycard .dc-f {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-block-start: 8px;
+}
+.cal-daycard .dc-f:empty { display: none; }
+
+.cal-daycard .dc-f .dc-door {
+  padding: 3px 8px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cal-daycard .dc-f .dc-door:hover {
+  background: color-mix(in oklch, transparent 92%, var(--text-primary));
+  color: var(--text-primary);
+}
+.cal-daycard .dc-f .dc-door:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE EVENT EDITOR — C-CALV4-DAYCARD stage 2, the MECHANISM.
+
+   Its chrome pass (the type rail's locked hue+pattern+glyph triple, the
+   restricted-audience chip row, the recurrence block with its GM-side chips,
+   the live preview column) is C-CALV4-EDITOR-R2b, gated on the operator's
+   stills signature ([DC-5] SIGNED). What is here is what the shipped API
+   already writes, laid out plainly enough to be used.
+
+   NO MOTION HERE EITHER. The editor's open/close is the SAME register rule as
+   the card's, declared once in calendar-bench.css against both roots.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-dayeditor {
+  display: none;
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 24%);
+  inline-size: min(420px, calc(100vw - 16px));
+  font-size: 12px;
+  line-height: 1.35;
+}
+.cal-dayeditor[data-dc-shown] { display: block; }
+.cal-dayeditor.dcsheet {
+  inline-size: 100vw;
+  border-inline: 0;
+  border-block-end: 0;
+  border-start-start-radius: 12px;
+  border-start-end-radius: 12px;
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.cal-dayeditor .dcbox { padding: 10px 12px 12px; }
+
+.cal-dayeditor .dc-h {
+  margin: 0 0 8px;
+  font-weight: 650;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.cal-dayeditor .de-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-block-size: min(64vh, 520px);
+  overflow-y: auto;
+}
+
+.cal-dayeditor .de-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cal-dayeditor .de-row.de-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.cal-dayeditor .de-row[hidden] { display: none; }
+
+.cal-dayeditor .de-lab {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.cal-dayeditor .de-fields {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.cal-dayeditor .de-sep { color: var(--text-muted); }
+
+.cal-dayeditor input[type="text"],
+.cal-dayeditor input[type="number"],
+.cal-dayeditor textarea,
+.cal-dayeditor select {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--surface-inset);
+  border: 1px solid var(--rule-hairline);
+  border-radius: 4px;
+  padding: 3px 6px;
+  min-inline-size: 0;
+}
+.cal-dayeditor input[type="number"] { inline-size: 5.5em; }
+.cal-dayeditor textarea { resize: vertical; }
+.cal-dayeditor input:focus-visible,
+.cal-dayeditor textarea:focus-visible,
+.cal-dayeditor select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The error line is the honest failure state: a save that did not happen says
+   so, in the editor, rather than closing and pretending. */
+.cal-dayeditor .de-err {
+  margin: 0;
+  color: var(--tone-bad, #b91c1c);
+}
+.cal-dayeditor .de-err[hidden] { display: none; }
+
+.cal-dayeditor .de-f {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-block-start: 2px;
+}
+.cal-dayeditor .de-f .dc-door {
+  padding: 3px 8px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cal-dayeditor .de-f .dc-door:hover {
+  background: color-mix(in oklch, transparent 92%, var(--text-primary));
+  color: var(--text-primary);
+}
+.cal-dayeditor .de-f .dc-door:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.cal-dayeditor .de-f .de-danger { color: var(--tone-bad, #b91c1c); }
+.cal-dayeditor .de-f .de-danger[hidden] { display: none; }

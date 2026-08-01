@@ -1115,9 +1115,16 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    §THE DISCLOSURE REGISTER — C-CALV4-BENCH-R2 slice R2-1, [BR2-1] / [BR2-2]
    SIGNED, under decisions/2026-07-29-motion-disclosure-register.md.
+   EXTENDED by C-CALV4-DAYCARD slice R2-2a under [DC-6] SIGNED — see the day
+   card's own block at the foot of this section. THE REGISTER IS SINGULAR: this
+   section is the ONLY place motion is declared for this surface family, and a
+   second register section anywhere in the product is refused.
 
    FOUR SECTIONS COLLAPSE: ribbon · rsvp · nextup · rows. The two Blocks, the
    .phead, the "The bench" .sechead and the .caption NEVER do — [BR2-3] SIGNED.
+   THE DAY CARD OPENS AND CLOSES UNDER THE SAME GRAMMAR (R2-2a) and is not a
+   fifth section: it is a transient answer to a click, in the top layer, with no
+   remembered state.
 
    The register's five clauses, and where each one lives:
 
@@ -1236,6 +1243,65 @@
       content-visibility var(--disc-close) allow-discrete;
   }
   .cal-bench .disc[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+    transition-duration: var(--disc-open);
+  }
+
+  /* ── THE DAY CARD, AS A NAMED ADDITION TO THIS REGISTER ────────────────
+     C-CALV4-DAYCARD (slice R2-2a), [DC-6] SIGNED: the register's ownership
+     was resolved by the first-lander clause — BENCH-R2 landed it here, and
+     DAYCARD CONSUMES it rather than shipping a second one. A second sheet or
+     a second register section anywhere is laundering and is refused.
+
+     THE CARD BUYS NO NEW TOKEN AND NO NEW GRAMMAR. It reuses --disc-open,
+     --disc-close and --disc-ease unchanged, which is clause 2's own rule: a
+     surface that wants a different feel is asking to LEAVE the register, and
+     that is a signature, not a style choice. Same two properties as the
+     disclosures (block-size + opacity); the third, content-visibility, is a
+     <details> concern and the card has no use for it.
+
+     THE SUBJECT IS THE INNER BOX, NOT THE POPOVER. The card itself is
+     display:none until it opens, and an element that was not rendered in the
+     previous style change has no before-change style to transition FROM —
+     which is what @starting-style exists for, and @starting-style is a
+     standing refusal here. So the reveal runs on .dcbox, which is rendered
+     the whole time, and the module forces one layout flush between showing
+     the popover and adding .dcopen. Mechanism, not decoration: without that
+     flush the reveal silently would not run, and the reader who deletes it as
+     a stray `void` needs this sentence.
+
+     CLAUSE 3 IS STRUCTURAL HERE TOO. These two rules live inside the SAME
+     single no-preference wrapper as the disclosures — there is nowhere else
+     for a transition to live in this sheet, and bench_test.go counts the
+     wrapper. Under prefers-reduced-motion .dcbox therefore carries no rule at
+     all: the card opens instantly, at full height and full opacity, which is
+     the register's "instant and complete" rather than a shortened reveal.
+
+     CLAUSE 4 IS UNTOUCHED. Nothing here selects .benchblock, .cal-block-host
+     or anything inside them. The card is a page-level sibling in the top
+     layer; the Block's interior stays still, and this slice opened no file in
+     its package.
+
+     THE EDITOR RIDES THE SAME RULE, IN THE SAME DECLARATION. The card closes
+     as the editor opens and the two share an origin, so the pair reads as ONE
+     motion ([DC-7] SIGNED). The richer shared-element MORPH the operator asked
+     for is escalated as a named carve-out for their signature rather than
+     invented here — per-surface motion invention is what produced the skypane
+     verdict, and it does not restart on this surface.
+
+     CLAUSE 5 HAS NO SUBJECT HERE. The card is not a remembered disclosure —
+     it is a transient answer to a click, with no closed state to summarise
+     and nothing to persist. */
+  .cal-bench .cal-daycard .dcbox, .cal-bench .cal-dayeditor .dcbox {
+    block-size: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      block-size var(--disc-close) var(--disc-ease),
+      opacity var(--disc-close) var(--disc-ease);
+  }
+  .cal-bench .cal-daycard.dcopen .dcbox, .cal-bench .cal-dayeditor.dcopen .dcbox {
     block-size: auto;
     opacity: 1;
     transition-duration: var(--disc-open);

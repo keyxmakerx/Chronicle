@@ -5,6 +5,8 @@ package calendar
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -181,5 +183,75 @@ func TestCalendarVisibilityRouteGate(t *testing.T) {
 	}
 	if !owner.CanControlWorldState() || !coDM.CanControlWorldState() {
 		t.Error("owner and co-DM must pass the calendar-visibility gate")
+	}
+}
+
+// --- C-CALV4-DAYCARD/R2-2a, PERM-JS-HARD-DEP-2 ------------------------------
+//
+// THE ANCHOR MOVED, AND IT IS WORTH SAYING SO. The finding cited
+// app_dashboard_w5b_test.go:152 as the line pinning the orphan mount. That line
+// lives in TestDashboard_OwnerGetsPermissionsEditor, which renders the BENCH
+// (renderBench), not the card-grid page — and the Bench mount is correct: it
+// ships cal_visibility.js first and calendar_permissions.js after it. So that
+// assertion STAYS; weakening it would retire a live, correct guarantee to make
+// a finding pass. The mount that had no cal_visibility.js beside it was
+// app_dashboard.templ's, and its absence is pinned here, against the page that
+// actually renders it.
+
+// TestDashboardPage_DoesNotMountThePermissionsDriverAlone: the card-grid page
+// no longer mounts calendar_permissions.js. The driver has a hard dependency on
+// window.ChronicleCalVisibility and no fallback, so a mount without
+// cal_visibility.js beside it wires nothing — a dead modal waiting for the page
+// to be re-routed or copied.
+func TestDashboardPage_DoesNotMountThePermissionsDriverAlone(t *testing.T) {
+	html := renderDashboardPage(t, sampleDashboardData())
+	if strings.Contains(html, "calendar_permissions.js") {
+		t.Error("the card-grid page mounts calendar_permissions.js without cal_visibility.js — " +
+			"the driver's init() returns immediately and the modal never wires")
+	}
+}
+
+// TestPermissionsDriverIsNeverMountedWithoutItsDependency is the durable form of
+// the same rule, over SOURCE rather than over one render: any template that
+// mounts calendar_permissions.js must also mount cal_visibility.js, and must
+// mount it FIRST — the driver reads window.ChronicleCalVisibility at parse time,
+// so order is part of the contract, not a detail.
+//
+// This is a coverage WIDENING, not an amendment to a signed guard: it forbids
+// something no template should ever have done, and it pins the fix against the
+// copy-paste that would otherwise reintroduce it on the next surface.
+func TestPermissionsDriverIsNeverMountedWithoutItsDependency(t *testing.T) {
+	files, err := filepath.Glob("*.templ")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no .templ files found — the guard would pass vacuously")
+	}
+	checked := 0
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		driver := strings.Index(string(src), "calendar_permissions.js\"")
+		if driver < 0 {
+			continue
+		}
+		checked++
+		dep := strings.Index(string(src), "cal_visibility.js\"")
+		if dep < 0 {
+			t.Errorf("%s mounts calendar_permissions.js with no cal_visibility.js anywhere in the file: "+
+				"the driver's init() returns immediately and the modal silently never wires", f)
+			continue
+		}
+		if dep > driver {
+			t.Errorf("%s mounts cal_visibility.js AFTER calendar_permissions.js: the driver reads "+
+				"window.ChronicleCalVisibility as it parses, so the dependency must come first", f)
+		}
+	}
+	if checked == 0 {
+		t.Error("no template mounts calendar_permissions.js — the driver is orphaned entirely, " +
+			"or the mount string changed and this guard stopped reading anything")
 	}
 }

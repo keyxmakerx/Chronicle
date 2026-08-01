@@ -86,9 +86,21 @@ STATE_MARKERS="data-theme,data-view,data-role,data-colour,data-moonstyle,data-re
 # (C-CALV4-RSVP-P8 §11: Part B's /schedule page is drawn on the coordinator
 # lane, and a missing glob is invisible in review). Extracted from the main loop
 # so the self-test can exercise the RESOLUTION and not just the rules.
+#
+# AMENDED 2026-07-31 — coverage WIDENING, C-CALV4-DAYCARD/R2-2a, ruling on
+# DC2-B4-GLOB-4. `*daycard*` joins the list. The day card and the event editor
+# (internal/plugins/calendar/daycard.templ, static/css/calendar-daycard.css) are
+# new DATED surfaces — the card head, the editor head and every module-built row
+# name a day — and their filenames matched none of the five existing globs, so
+# B4 resolved to 0 and read them not at all. The keys were in fact correct and
+# are pinned elsewhere (TestDayCard_KeysAgreeWithTheRenderedBlock goes red on a
+# separator change), but a surface that is silently OUT of scope is the exact
+# invisible coverage hole this function's header says it exists to prevent, and
+# `*schedule*` is already here for a file that does not exist yet on the same
+# reasoning. Nothing is loosened: no glob is removed and no rule is relaxed.
 b4_scope_for() {
   case "$1" in
-    *calendar_block*|*bench*|*Bench*|*schedule*|*Schedule*) echo 1 ;;
+    *calendar_block*|*bench*|*Bench*|*daycard*|*schedule*|*Schedule*) echo 1 ;;
     *) echo 0 ;;
   esac
 }
@@ -386,6 +398,10 @@ FIXTURE
   # Part B's file, which lands in a later slice. In scope BEFORE it exists.
   expect_scope "internal/plugins/calendar/schedule.templ"      1
   expect_scope "static/css/calendar-schedule.css"              1
+  # R2-2a's dated surfaces (DC2-B4-GLOB-4). Both matched nothing before the
+  # glob was widened, so the resolution is self-tested rather than assumed.
+  expect_scope "internal/plugins/calendar/daycard.templ"       1
+  expect_scope "static/css/calendar-daycard.css"               1
   expect_scope "internal/plugins/calendar/calendar_v2.templ"   0
 
   expect() { # expect <label> <file> <b4scope> <want-rules|NONE>

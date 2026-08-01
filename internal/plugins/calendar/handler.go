@@ -582,6 +582,153 @@ func (h *Handler) requireEventInCampaign(c echo.Context, eventID, campaignID str
 	return evt, nil
 }
 
+// eventEditorRecord is what GET .../events/:eid returns, and it is a DELIBERATE
+// SUBSET of Event rather than the aggregate (C-CALV4-DAYCARD, R2-2a, [DC-8]).
+//
+// ONLY FIELDS THE EDITOR WRITES BACK. No campaign data, no member list, no
+// roster, no audience resolution, no calendar structure, no created_by, no
+// timestamps, no collect_rsvps (that flag is deliberately OFF the shared update
+// path so a lossless quick-save cannot clobber it, and handing it to the editor
+// is the first step towards it being sent back). This is not a general-purpose
+// event API and it must not become one — returning Event directly is exactly
+// how it would.
+//
+// THE TWO AUDIENCE FIELDS ARE GATED A SECOND TIME, INSIDE THE BODY. The route's
+// floor is RolePlayer because a player may read an event they can see, but
+// `visibility_rules` NAMES OTHER USERS. Both ride the floor that WRITES the
+// event — Scribe, which is the shipped PUT …/events/:eid floor and which
+// already accepts both fields in its request body. A PLAYER RECEIVES NEITHER
+// KEY AT ALL: permission is absence, applied to a route body rather than to
+// markup.
+//
+// THEY ARE GATED TOGETHER RATHER THAN SPLIT, and that is a deliberate choice
+// with a stated reason. A Scribe may edit an event, and the shipped PUT
+// re-writes the whole record — so withholding `visibility_rules` from the
+// person who is about to overwrite it does not protect the audience, it
+// DESTROYS it, silently, on the first save of a restricted event. The editor
+// round-trips what it does not offer, and it can only do that with what it was
+// given.
+type eventEditorRecord struct {
+	ID              string  `json:"id"`
+	CalendarID      string  `json:"calendar_id"`
+	Name            string  `json:"name"`
+	Description     *string `json:"description,omitempty"`
+	DescriptionHTML *string `json:"description_html,omitempty"`
+	EntityID        *string `json:"entity_id,omitempty"`
+	Year            int     `json:"year"`
+	Month           int     `json:"month"`
+	Day             int     `json:"day"`
+	StartHour       *int    `json:"start_hour,omitempty"`
+	StartMinute     *int    `json:"start_minute,omitempty"`
+	EndYear         *int    `json:"end_year,omitempty"`
+	EndMonth        *int    `json:"end_month,omitempty"`
+	EndDay          *int    `json:"end_day,omitempty"`
+	EndHour         *int    `json:"end_hour,omitempty"`
+	EndMinute       *int    `json:"end_minute,omitempty"`
+	AllDay          bool    `json:"all_day"`
+	Category        *string `json:"category,omitempty"`
+	Visibility      string  `json:"visibility,omitempty"`
+	VisibilityRules *string `json:"visibility_rules,omitempty"`
+	// RECURRENCE RIDES BECAUSE THE EDITOR MUST SEND IT BACK, and this is the
+	// R2 fix-forward (DC2-RECUR-DATALOSS): the record shipped without it and
+	// the editor therefore could not round-trip it even in principle.
+	//
+	// `is_recurring` is the field that makes this load-bearing rather than
+	// tidy. It is a VALUE-typed bool on the shipped PUT's request struct and
+	// service.UpdateEvent writes it UNGUARDED, deliberately — "IsRecurring —
+	// bool: false IS the value, not 'absent'" (service.go, C-CAL-NULL-PRESERVE).
+	// So a body that OMITS the key sends false, and a title-only save through
+	// this editor would un-repeat a recurring event AND leave the row in the
+	// half-state C-CAL-RECURRING-PARTIAL-STATE-CLEANUP already had to clean up
+	// once: is_recurring=false with recurrence_type/interval/end_* still
+	// populated. The nil-guarded pointer siblings around it cannot save it,
+	// because they preserve exactly the fields that make the half-state.
+	//
+	// This is the SAME discipline the two audience fields above are gated
+	// under, stated once more in the direction that bites: the editor
+	// round-trips what it does not offer, and it can only do that with what it
+	// was given. It authors none of these three in this stage (§5's table marks
+	// recurrence PARTIAL, and the exotic units are chipped GM-side) — carrying
+	// them is what makes NOT authoring them lossless instead of destructive.
+	//
+	// The three END/MAX fields are NOT here on purpose: the shipped PUT does
+	// not bind them at all, so the service's nil-guard preserves them without
+	// the client's help, and a field the editor cannot write back has no
+	// business on a record whose law is "only fields the editor writes back".
+	//
+	// UNGATED, unlike the audience pair: a recurrence rule names no user and
+	// resolves no audience. It is the same class as `description`, which is
+	// also ungated, and a player has no editor to feed it to in any case.
+	IsRecurring        bool    `json:"is_recurring"`
+	RecurrenceType     *string `json:"recurrence_type,omitempty"`
+	RecurrenceInterval *int    `json:"recurrence_interval,omitempty"`
+}
+
+// newEventEditorRecord projects one event for one viewer's authoring floor.
+func newEventEditorRecord(e Event, canAuthor bool) eventEditorRecord {
+	rec := eventEditorRecord{
+		ID: e.ID, CalendarID: e.CalendarID, Name: e.Name,
+		Description: e.Description, DescriptionHTML: e.DescriptionHTML,
+		EntityID: e.EntityID,
+		Year:     e.Year, Month: e.Month, Day: e.Day,
+		StartHour: e.StartHour, StartMinute: e.StartMinute,
+		EndYear: e.EndYear, EndMonth: e.EndMonth, EndDay: e.EndDay,
+		EndHour: e.EndHour, EndMinute: e.EndMinute,
+		AllDay:  e.AllDay, Category: e.Category,
+		IsRecurring:    e.IsRecurring,
+		RecurrenceType: e.RecurrenceType, RecurrenceInterval: e.RecurrenceInterval,
+	}
+	if canAuthor {
+		rec.Visibility = e.Visibility
+		rec.VisibilityRules = e.VisibilityRules
+	}
+	return rec
+}
+
+// GetEventAPI returns ONE event record for the v4 event editor.
+// GET /campaigns/:id/calendars/:calId/events/:eid
+//
+// HIDDEN, FILTERED AND MISSING ARE THE SAME ANSWER, FROM ONE BRANCH AND ONE
+// BODY. The W5a split (app_dashboard.go:96 — "UNIFYING THE TWO REOPENS THE W5a
+// LEAK") applies here in its strictest form: an event on a calendar this viewer
+// cannot see, an event their own filter removes, an event whose :calId does not
+// own it, and an event id that does not exist must be INDISTINGUISHABLE. Not
+// 403-vs-404, not a different message, not a different shape. Every refusal
+// below returns this one value, deliberately constructed once.
+//
+// IDOR IS CLOSED TWICE, exactly as UpdateEventAPI closes it once:
+// requireVisibleCalendar resolves :calId inside this campaign AND applies the
+// per-calendar visibility gate, and requireEventInCampaign resolves :eid inside
+// this campaign. The route must not trust a :calId that does not own :eid, so
+// the ownership is then checked directly rather than inferred.
+func (h *Handler) GetEventAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil || cc.Campaign == nil {
+		return apperror.NewMissingContext()
+	}
+	// The ONE refusal. Built here so every path below returns the same value.
+	notFound := apperror.NewNotFound("event not found")
+
+	cal, err := h.requireVisibleCalendar(c, c.Param("calId"), cc.Campaign.ID)
+	if err != nil {
+		return notFound
+	}
+	evt, err := h.requireEventInCampaign(c, c.Param("eid"), cc.Campaign.ID)
+	if err != nil {
+		return notFound
+	}
+	if evt.CalendarID != cal.ID {
+		return notFound
+	}
+	// THE SAME VIEWER FILTER THE GRID USES. filterEventsByUser compacts IN
+	// PLACE, so it is handed a fresh one-element slice and the result is read
+	// rather than the input (the COMMON §7 slice trap, in miniature).
+	if len(filterEventsByUser([]Event{*evt}, cc.VisibilityRole(), auth.GetUserID(c))) == 0 {
+		return notFound
+	}
+	return c.JSON(http.StatusOK, newEventEditorRecord(*evt, cc.MemberRole >= campaigns.RoleScribe))
+}
+
 // UpdateEventAPI updates an existing event.
 // PUT /campaigns/:id/calendar/events/:eid
 func (h *Handler) UpdateEventAPI(c echo.Context) error {

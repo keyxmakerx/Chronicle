@@ -20,7 +20,193 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
-### calendar-v4 — ROUND 2 OPEN · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
+### calendar-v4 — ROUND 2 OPEN · R2-2a (THE DAY ANSWERS ITS CLICK) SHIPPED (2026-07-31)
+
+**`C-CALV4-DAYCARD` stages 1-2 closed the operator's loudest live-client
+complaint:** *"I'm unable to click and do anything, it just selects the date and
+nothing happens."* Both halves were mechanically true — the click sets a
+visually-hidden radio and the CSS-only ANSWER ladder filters the docked Ledger
+(quiet by design; where the `ledger` layer is off it emits no control at all),
+and calendar-v4 had no way to create or edit an event anywhere.
+
+- **The card** is the pointer-first answer ON TOP of the CSS-only one. One
+  page-level `[popover]`, positioned from the clicked cell's rect, listing the
+  day with the LEDGER ROW's own field set. **The shipped ladder is untouched.**
+- **The agreement law is pinned in Go, at the producer, joined to the count
+  oracle** (GM / Nissa / Bryn): the card's event-id set per day EQUALS the set
+  the ladder leaves visible. One source, one viewer-filtered pass. A card
+  showing one more event than the Ledger is a permission leak wearing a UI
+  change's clothes.
+- **The editor's MECHANISM** ships against the shipped, IDOR-closed event API:
+  **zero new write routes.** Create/edit are `POST`/`PUT` (Scribe), delete is
+  `DELETE` (Owner), all through `Chronicle.apiFetch`. Its full §5 chrome pass
+  and drag-create split out as **C-CALV4-EDITOR-R2b** at a stage boundary,
+  under the dispatch's pre-authorised split.
+- **ONE new read route**, the whole budget: `GET
+  /campaigns/:id/calendars/:calId/events/:eid`, authed `cg`, `RolePlayer` floor,
+  literal path, the grid's own viewer filter inside. Hidden / filtered /
+  `:calId`-mismatched / missing are **one branch, one body**.
+  `routes_snapshot.txt` **722 → 723**, one addition, zero removals.
+- **Motion CONSUMES R2-1's register rather than opening a second one**
+  ([DC-6], first-lander clause). Two rules added by name inside
+  `calendar-bench.css`'s existing register section and inside its single
+  `prefers-reduced-motion: no-preference` wrapper, reusing all three `--disc-*`
+  tokens. The allowlist was widened by zero bytes; what was added is the CLAIM
+  that the card is inside it, failing in both directions.
+- **The visibility mapper was EXTRACTED, not copied a third time** — `mode ↔
+  {visibility, visibility_rules}` now lives once in
+  `internal/plugins/calendar/static/js/cal_visibility.js`, and both the
+  permissions modal and the day-card editor read it.
+- **Permission is absence, mechanically.** Every role gate is markup-level from
+  the producer; a player's Bench contains no editor scaffold, no field name and
+  no route string. The Block's DOM is asserted byte-identical before and after
+  open + close.
+
+**Known gap, stated rather than papered over:** where the Ledger is NOT docked a
+day has no focusable control at all, so the card is pointer-only for that
+viewer. No `tabindex` was injected (that is a Block mutation and a control the
+server never rendered). Booked as **C-CALV4-DAYPICK-A11Y**.
+
+**Fix-forward round 1 (stages 3-5), against the slice's adversarial review:**
+
+- **The occlusion report reached no consumer** (DC-CLEAR-1). `placeCard`
+  computed a `clear` flag; two comments and a commit body promised an
+  unclearable geometry would be "visible rather than silent"; nothing read it.
+  The one condition [DC-3] signs as a STOP-AND-FLAG shipped as the quietest
+  thing on the page — the "sentence promising a guard that never ran" class
+  R2-1's stage 9 existed to kill. The mobile branch was additionally returning
+  `clear: true` without ever consulting the Ledger's rect, while measuring
+  8.5k-54k px² of overlap. `clear` is now MEASURED the same way in both
+  branches, from the box that actually landed, and it has two readers:
+  `data-dc-clear` on the card's root at every width (a report, guarded against
+  ever being styled) and ONE console warning per session at desktop widths only.
+- **The intercalary payload path was 0% covered** (DC-ICAL-2) while daycard.go
+  claimed the mirrored key helpers were pinned "in either direction" — true of
+  `slug-N`, false of `slug-iN`, because the signed fixture declares no
+  intercalary month. Five tests against real intercalary months spliced into the
+  oracle fixture, including two of UNEQUAL length, which is the shape the coords
+  zip fails on. The shipped code was correct; the guard and the comment were not.
+- **Two listeners reached `edSave` with no in-flight guard** (DC-SAVE-6). Single
+  -fire rested entirely on `preventDefault` beating the submit button's
+  activation; a capture-phase move or a branch reorder would have made every
+  Save write twice, and a double-click did it already. Guarded at the WRITE, not
+  the listener.
+
+**Fix-forward round 2 (stages 7-8), against the second adversarial review:**
+
+- **A rename un-repeated the event** (DC2-RECUR-DATALOSS, the blocker). The
+  editor authors no recurrence in this stage and "preserved" it by saying
+  nothing about it — but `is_recurring` is a VALUE-typed bool on the shipped
+  `PUT` and the service assigns it unguarded ON PURPOSE ("false IS the value,
+  not 'absent'"), so omission was a write of false. The nil-guarded
+  `recurrence_type` / `interval` / `end_*` around it then survived, leaving the
+  exact half-state C-CAL-RECURRING-PARTIAL-STATE-CLEANUP cleaned up once. The
+  read route now HANDS BACK the three fields the write path clobbers and the
+  editor sends them home; create mode still sends none, because for a new event
+  false is the true value. The lesson is in ADR-048: *"the client round-trips
+  what it does not offer" is true field-by-field, and its truth depends on the
+  field's TYPE on the wire.* The remaining partial clients of that PUT are
+  booked for the same sweep.
+- **Two guards were green-but-blind, both by enumerating from a SAMPLE**
+  (DC2-PAYLOAD-OMITEMPTY, DC2-SCOPEGUARD-LINEFORM). The payload law's key
+  inventory came from marshalling a hand-written literal, so a ninth field
+  tagged `omitempty` would have been invisible to "want exactly these eight
+  keys"; the stylesheet's scope guard read only lines ENDING in `{`, so the
+  sheet's 21 single-line rules were never examined. Both now derive from the
+  definition — reflection over the type's json tags, a brace-scanner over the
+  sheet — and both go red on the verifier's own mutations.
+- **The W5a same-answer table was missing the ownership row**
+  (DC2-W5A-OWNERSHIP). `GetEventAPI`'s header claims FOUR refusals are
+  indistinguishable; only three were pinned, and the unpinned one is the branch
+  that separates "this event is on a calendar you can see" from "one you
+  cannot". Sixth row added, with both calendars resolvable inside the campaign
+  so the ownership check is what actually fires.
+
+**Fix-forward round 3 (stages 9-13), against the third adversarial review:**
+
+- **The card covered the STACKED Ledger, deterministically, in the DESKTOP
+  treatment** (DC3-STACKED-LEDGER-OCCLUSION-1, the blocker — [DC-3]'s own
+  STOP-AND-FLAG). `placeCard`'s dodge was HORIZONTAL only, which is complete
+  while the Ledger is a right-hand column and structurally impossible once the
+  Bench stacks it full-width BELOW the grid: the clamp computed a negative limit
+  and no-opped, and the vertical branch above it only ever flipped for viewport
+  room. Between roughly **625px and 884px of `.cal-bench` content width** the
+  card therefore landed on the band for every day and every viewer, measured at
+  21,080 px² against the real render. The editor escaped only by accident — too
+  tall to fit below, so its viewport flip happened to clear the band, which is
+  the proof the missing dodge was available. `placeCard` now treats the Ledger's
+  SETTLED RECT as an exclusion zone whatever its role in the layout, and tries
+  below → above → the bottom sheet ([DC-3] bullet 4's own signed answer; no
+  third geometry, no resizing). Same three widths now measure 0 px²,
+  `data-dc-clear="1"`, zero warnings. The desktop sheet FALLBACK still warns,
+  because the geometry running out is the signed condition even when the card no
+  longer covers anything; the mobile sheet stays silent, as DC2-MOBILE-4 set it.
+- **The suite had mislabelled the product's own layout as pathological.** The one
+  negative placement case called the stacked-Ledger geometry "a pathological
+  geometry: the column starts 40px in", which is why the hole survived two
+  reviews. It is now positive regression coverage at the ~884px and ~944px
+  boundaries, plus a case for the sheet fallback.
+- **A driver was mounted without the global it reads** (PERM-JS-HARD-DEP-2).
+  [DC-10]'s extraction left `calendar_permissions.js` depending hard on
+  `window.ChronicleCalVisibility` with no fallback — correct, but it means the
+  driver mounted alone wires nothing, and `app_dashboard.templ` mounted it alone
+  on a page that is retained-but-unrouted. Mount dropped; absence pinned against
+  the page that renders it; and a source-level guard now requires any template
+  mounting the driver to mount `cal_visibility.js` FIRST.
+- **The editor wrote to the id the SERVER echoed, not the door that was clicked**
+  (EDIT-MODE-ID-FALLBACK-3). The same line decided PUT-vs-POST, so a record
+  without an `id` would have turned an edit into a duplicate-creating POST.
+  Edit mode now carries the door's id, Delete follows it, and one pure
+  `writeTarget()` REFUSES an edit with no id rather than creating.
+- **Guard B4 did not read the day card** (DC2-B4-GLOB-4, ruled). `*daycard*`
+  added to the scope glob with two self-test rows — coverage widening only,
+  mutation-verified in both directions.
+
+**Fix-forward round 4 (stages 14-15), against the fourth adversarial review:**
+
+- **The round-3 fix closed the short-box case and opened a larger one on the same
+  code path** (DC3-DESKTOP-SHEET-OCCLUSION-R4, the blocker). The two-candidate
+  dodge admitted the ABOVE position only when it fitted the viewport outright and
+  sent everything else to a clamp that pins the box to the BOTTOM of the
+  viewport — where the stacked band is. A box taller than the room above its day
+  therefore never flipped, failed both candidates and took the DESKTOP SHEET,
+  covering **100% of the Ledger** across the same 625-884px band, while warning
+  that the geometry was impossible. It was not impossible, it was not attempted:
+  a 481px box at top=8 ends at 489 and the band starts at 595. Reachable two
+  ways with ordinary data — `+ New event` (a 420x400 editor: 107,604 px² at
+  884px, a REGRESSION against the pre-round-3 module, which placed the same
+  editor clear) and a day with 12+ events (≈379px). `above` is now CLAMPED into
+  the viewport rather than dropped: the same clamping the below-candidate always
+  had, in the direction this one prefers. Still two anchored candidates and one
+  sheet; the card is still never resized; the sheet fallback is unweakened and
+  is now the only thing its STOP-AND-FLAG speaks about. **The lesson is not
+  round 3's:** the round-3 fix was verified on the case it was written for and
+  not on the surface that case hands off to, and the module's own comment
+  ("THERE IS NO THIRD GEOMETRY") foreclosed the placement that fixes both.
+- **A harness fidelity gap hid the editor half for three rounds.** `daycard_dom`'s
+  rect is a static all-zero and the card is the EDITOR's anchor, so every editor
+  in the JS suite was placed at the viewport origin, where nothing can be
+  occluded. The card's rect is now derived from the placement the module wrote,
+  and the editor regression goes red without it.
+- **The route record's field law was a deny-list**
+  (GETEVENT-FIELD-BOUND-IS-A-DENYLIST). §8's "only fields the editor writes
+  back" is pinned twice; the payload's half reads the type by REFLECTION, the
+  route's half asserted six required keys and fifteen hand-written forbidden
+  names, so an `owner_id` or an `attendees` would have passed in silence — the
+  exact shape the payload's own guard was fix-forwarded away from one round
+  earlier. Both halves now read the definition.
+
+**The §12 screenshot gate is PART-EXECUTED** — the geometry rows are measured
+headlessly against the real render (1232px clears the Ledger at 0 px²; the
+625-884px stacked band clears it after rounds 3 and 4, for short boxes and tall
+ones; 390px is the signed bottom sheet, recorded rather than mis-reported); the
+rows that need a live authed session are still open. Both halves are in
+`.ai/todo.md`. Round 3's disclosure lesson rides with it — **a geometry claim is
+a claim about the widths it was taken at** — and round 4 adds the second axis:
+it is also a claim about the BOX HEIGHTS it was taken at, and the surface the
+card hands off to has a different one.
+
+### calendar-v4 — ROUND 2 · R2-1 (THE REVEAL PASS) SHIPPED (2026-07-30)
 
 **`C-CALV4-BENCH-R2` slice R2-1 closed the operator's three 2026-07-29 live-client
 complaints.** Round 2 adds no data, no zone and no engine: it decides what a

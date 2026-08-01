@@ -5,56 +5,38 @@
 // opens the modal for a card, seeds the chip-row from the card's level+rules,
 // and saves via PUT /campaigns/:id/calendars/:calId/visibility.
 //
-// Editor modes ↔ stored model (mirrors the W5a resolver):
-//   public  → visibility "everyone", no rules
-//   gmonly  → visibility "dm_only"  (hard GM gate; allow-list does NOT admit)
-//   specific→ visibility "everyone" + {allowed_users,denied_users} whitelist/deny
+// Editor modes ↔ stored model: THE MAPPING NOW LIVES IN ONE PLACE.
+//
+// C-CALV4-DAYCARD [DC-10] SIGNED extracted buildVisibilityPayload / rulesToChips
+// into cal_visibility.js, because the day card's editor would have been the
+// THIRD copy and three copies of a permission mapping drift into three different
+// answers to "who can see this". This driver is now a consumer, not an owner.
+// bench.templ mounts cal_visibility.js immediately before this file, and both
+// are `defer`, so document order is load order.
 (function () {
   'use strict';
 
-  // --- Pure mappers (exposed for tests) ----------------------------------
+  // --- The shared mappers (re-exported under this file's historical test
+  // handle, so the pin on the mapping keeps working through the move) --------
 
-  // buildVisibilityPayload maps the editor mode + chip rules to the PUT body.
-  // Only user-kind rules persist (the calendar visibility_rules model is
-  // user-scoped, identical to events' allowed_users/denied_users).
-  function buildVisibilityPayload(mode, chipRules) {
-    if (mode === 'gmonly') return { visibility: 'dm_only', visibility_rules: null };
-    if (mode === 'public') return { visibility: 'everyone', visibility_rules: null };
-    // specific
-    var allowed = [], denied = [];
-    (chipRules || []).forEach(function (r) {
-      if (!r || r.kind !== 'user' || !r.target) return;
-      if (r.mode === 'allow') allowed.push(r.target);
-      else if (r.mode === 'deny') denied.push(r.target);
-    });
-    var rules = {};
-    if (allowed.length) rules.allowed_users = allowed;
-    if (denied.length) rules.denied_users = denied;
-    var json = (allowed.length || denied.length) ? JSON.stringify(rules) : null;
-    return { visibility: 'everyone', visibility_rules: json };
+  var V = (typeof window !== 'undefined' && window.ChronicleCalVisibility) || null;
+
+  if (typeof window !== 'undefined' && V) {
+    window.__calPerm = { buildVisibilityPayload: V.buildVisibilityPayload, rulesToChips: V.rulesToChips };
   }
 
-  // rulesToChips converts a stored {allowed_users,denied_users} JSON string into
-  // the chip-row rule array the editor renders.
-  function rulesToChips(rulesStr) {
-    if (!rulesStr) return [];
-    var r;
-    try { r = JSON.parse(rulesStr); } catch (e) { return []; }
-    if (!r || typeof r !== 'object') return [];
-    var chips = [];
-    (r.allowed_users || []).forEach(function (u) { chips.push({ mode: 'allow', kind: 'user', target: u, label: u }); });
-    (r.denied_users || []).forEach(function (u) { chips.push({ mode: 'deny', kind: 'user', target: u, label: u }); });
-    return chips;
-  }
-
-  if (typeof window !== 'undefined') {
-    window.__calPerm = { buildVisibilityPayload: buildVisibilityPayload, rulesToChips: rulesToChips };
-  }
+  // NO LOCAL FALLBACK, DELIBERATELY. A "just in case" copy of the mapping here
+  // would be the third copy this extraction exists to delete, and it would be
+  // the one nobody notices going stale. If the shared module is missing the
+  // modal simply does not wire — a visible failure beats a silently divergent
+  // permission write.
+  function buildVisibilityPayload(mode, chipRules) { return V.buildVisibilityPayload(mode, chipRules); }
+  function rulesToChips(rulesStr) { return V.rulesToChips(rulesStr); }
 
   // --- DOM driver --------------------------------------------------------
 
   function init() {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined' || !V) return;
     var modal = document.getElementById('cal-permissions-modal');
     if (!modal || modal.dataset.calPermWired === '1') return;
     modal.dataset.calPermWired = '1';

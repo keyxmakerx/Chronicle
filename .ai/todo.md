@@ -16,10 +16,141 @@ Round 2 adds no data, no zone and no engine. Five slices; R2-1 has landed.
 | slice | what it owns | state |
 |---|---|---|
 | **R2-1** — `C-CALV4-BENCH-R2` | the disclosure primitive + register, the page measure, the two-column RSVP panel, the glanceable entity seed | **[x] shipped 2026-07-30** |
-| **R2-2** — the day card | click a day, unfold a card, edit an event. **Reuses R2-1's disclosure register** — R2-1 shipped it ONCE, in `calendar-bench.css`; moving it to a shared sheet is R2-2's move when R2-2 needs it, not a speculative pre-factor. | [ ] |
+| **R2-2a** — the day card + the editor's mechanism | click a day, unfold a card, create/edit an event against the SHIPPED event API. **Consumed R2-1's disclosure register in place** — it stayed in `calendar-bench.css` and the card's two rules were added by name inside the same reduced-motion wrapper, reusing all three `--disc-*` tokens; the speculative shared sheet was never built ([DC-6] SIGNED, first-lander clause). **Round-2 fix-forward (stages 7-8):** the editor's PUT now round-trips `is_recurring` / `recurrence_type` / `recurrence_interval` — omitting a VALUE-typed bool is a write of false, so a title-only save was un-repeating recurring events; and the payload + stylesheet guards now derive their inventories from the type and the braces rather than from a hand-written sample. **[x] shipped 2026-07-31** |
+| **R2-2b** — `C-CALV4-EDITOR-R2b` | the editor's full §5 chrome pass (the type rail's locked hue+pattern+glyph triple, the restricted-audience chip row, the recurrence block with its GM-side chips, the live preview column) **and drag-create**. Split from R2-2a at a stage boundary with everything green, under the dispatch's pre-authorised split. **Gated on the operator's editor stills signature ([DC-5]).** | [ ] |
 | **R2-3** — the Block theater | expand any embed to a full-tier overlay. **This is where the depth R2-1 removed from the entity embed comes back.** R2-1 deliberately shipped NO substitute — no expand chip, no "show more", no second embed — because a stopgap becomes the thing R2-3 has to delete. | [ ] |
 | **R2-4** — V2 sunset / the anonymous-public route move | the frozen V2 shell. R2-1 did not open `calendar_v2*` for any reason. | [ ] |
 | **R2-5** — the sky header | the dashed skyband placeholder in the real-world Block. Drawing pass FIRST. Reuses R2-1's register as its base motion. | [ ] |
+
+Carried out of R2-2a, not closed:
+
+- [ ] **`C-CALV4-DAYPICK-A11Y`** — a day cell needs a focusable control that is
+  NOT gated on the docked Ledger. Where the `ledger` layer is off, `dayPick`
+  (`instrument.templ:213`) emits no radio and no `.dsel` label, so the day has
+  no focusable control at all and the card is POINTER-ONLY for that viewer.
+  R2-2a wired both openers (cell `click` + the radio's `change`) and refused to
+  inject `tabindex` — that is a Block mutation and it would ship a focusable
+  control the server never rendered. This is a WIDGET change with its own
+  screen-reader pass.
+- [ ] **The editor MORPH** — a shared-element growth from the card's box into
+  the editor's, which is more than the register's clip-reveal gives. R2-2a ships
+  the register-only version (card closes as editor opens, both from one origin)
+  and ESCALATES the morph as a NAMED motion carve-out for the operator to sign,
+  alongside the sky header's. Per-surface motion invention is what produced the
+  skypane verdict.
+- [ ] **`C-CALV4-DAYMENU`** (only if wanted at all) — the day `⋯` overflow menu's
+  contents: *Copy link to this date*, *Open Almanac*, *Set campaign date*, and
+  the GM `1 hidden here` row. Each needs its own audience or scope ruling; the
+  hidden-count row in particular is a hidden-content count on a
+  player-adjacent surface.
+- [x] **CTS-6, the per-day `+N more` popover — CLOSED as SUPERSEDED.** The day
+  card IS the day's full list, which is the feature that booking wanted. Closed
+  with the reason rather than quietly dropped.
+- [ ] **Audit the OTHER partial clients of `PUT …/events/:eid` for the same
+      absent-key-is-a-write hazard.** R2-2a's fix-forward closed it for the day
+      card. The hazard is structural, not local: `is_recurring` and `all_day` are
+      the request struct's two VALUE-typed booleans and the service assigns both
+      unguarded by design (C-CAL-NULL-PRESERVE excluded them deliberately —
+      "false IS the value, not 'absent'"), so ANY client that sends a partial
+      body writes false into them. Every other optional field on that struct is a
+      pointer and is nil-preserved, which is exactly why this is easy to miss.
+      Sweep the V2 quick-edit, the drawer, the Foundry module's calendar push and
+      any API consumer; the fix is per-client (send the stored value back), not a
+      service change — nil-guarding the bools would take "clear this repeat" away
+      from an author who means it.
+- [x] **Guard B4's scope glob did not match `daycard.templ`. RULED and CLOSED
+      2026-07-31** (DC2-B4-GLOB-4, R2-2a fix-forward round 3 stage 12).
+      `b4_scope_for` matched `*calendar_block*|*bench*|*Bench*|*schedule*|
+      *Schedule*` and the arc's two newest DATED surfaces matched none of them,
+      so B4 read them not at all — the invisible coverage hole the function's own
+      header says it exists to prevent, and the reason `*schedule*` was in the
+      list before the file existed. Nothing was wrong in the file (the keys are
+      pinned by `TestDayCard_{,Intercalary}KeysAgreeWithTheRenderedBlock`), and
+      the previous round was right not to widen a signed guard unilaterally.
+      **`*daycard*` is now in the list**, with a comment naming the ruling and
+      two new `expect_scope` self-test rows. Coverage WIDENING only: no glob
+      removed, no rule relaxed. Mutation-verified — a `data-cell` marker without
+      a `data-day` key on the card's head now fires B4 at
+      `daycard.templ:56` and exits 1; before the widening the same mutation was
+      invisible.
+- [ ] **The single-line blind spot in `TestBenchCSS_EverySelectorIsScoped` is a
+      HOUSE pattern, not this slice's.** Both scope guards only inspected lines
+      ENDING in `{`, so a rule written entirely on one line was never examined.
+      R2-2a fix-forward fixed **its own** (`TestDayCardCSS_EverySelectorIsScoped`
+      now scans by brace via `cssSelectors`, and the sheet's 21 single-line rules
+      are read); it did NOT amend R2-1's signed Bench guard. Measured for the
+      ruling: `calendar-bench.css` has **67** single-line rules and **all 67 are
+      correctly scoped** under `.cal-bench`, so the fix is free today and is a
+      strict strengthening. Whoever next opens `bench_test.go` should take it.
+- [ ] **The §12 screenshot gate for R2-2a is PART-EXECUTED — the geometry rows
+      are measured, the live-session rows are not.** Stated in two halves so the
+      row is not read as either "done" or "untouched".
+
+  **Measured headlessly** (fix-forward round 1, and independently by the slice's
+  verifier before it): the REAL `BenchPage` output for the signed GM / Nissa /
+  Bryn fixture, served with the real stylesheets and the real module, driven in
+  Chromium. At **1232px the card does not occlude the docked Ledger** — 0 px²
+  for every viewer × theme × reduced-motion — so [DC-3]'s STOP-AND-FLAG row
+  measures clean. The `ledger`-layer-off render, the editor in create and edit
+  mode, the player set checked for ABSENCE, and the reduced-motion capture were
+  all driven the same way. At **390px the bottom sheet does overlap the stacked
+  Ledger** (8.5k–54k px² depending on card height); that is [DC-3]'s own
+  "Mobile = bottom sheet, full-width" bullet and §12 scopes the STOP-AND-FLAG
+  row to 1232px, so it is the signed treatment — now RECORDED on the DOM as
+  `data-dc-clear="0"` rather than silently reported as clear (DC-CLEAR-1).
+
+  **AND THE BAND BETWEEN THEM, WHICH THE FIRST TWO ROUNDS DID NOT MEASURE AND
+  DID NOT DISCLOSE** (DC3-STACKED-LEDGER-OCCLUSION-1, the round-3 blocker;
+  FIXED 2026-07-31, stage 9). Reporting "1232px = 0 px²" and "390px = the signed
+  sheet" left the sizes in between unstated, and that is exactly where the
+  Bench stops docking the Ledger as a right-hand column and STACKS it
+  full-width below the grid. The card's dodge was horizontal only, so from
+  roughly **625px to 884px of `.cal-bench` CONTENT width** the desktop popover
+  landed on the band deterministically — every day, every viewer, no signed
+  treatment covering it. Reproduced against the real render at 227px card
+  height: 884px → 21,080 px², 804px → 21,080, 752px → 21,080, each with
+  `data-dc-clear="0"` and one console warning. `placeCard` now dodges on BOTH
+  axes (below → above → the signed sheet), and the same three widths measure
+  0 px², `data-dc-clear="1"`, zero warnings, with the card flipped above its
+  day; 1008/944px (docked column) and 684/644/625px (horizontal dodge already
+  sufficed) are byte-identical before and after. **The lesson for the next gate
+  is the reporting one:** a geometry row measured at two widths is a claim about
+  two widths, and the layout changes shape between them.
+
+  **AND THE SAME BAND AGAIN, FOR TALL BOXES, WHICH THE ROUND-3 FIX OPENED WHILE
+  CLOSING THE SHORT-BOX CASE** (DC3-DESKTOP-SHEET-OCCLUSION-R4, the round-4
+  blocker; FIXED 2026-07-31, stage 14). Stage 9's two-candidate dodge admitted
+  the ABOVE position only when it fitted the viewport outright, and sent
+  everything else to a clamp that pins the box to the BOTTOM of the viewport —
+  which is where the stacked band is. So a box taller than the room above its day
+  never flipped at all: it failed both candidates and took the DESKTOP SHEET,
+  covering **100% of the Ledger** at every content width from ~625px to ~884px,
+  while raising a warning that said the geometry was impossible. It was not
+  impossible, it was not attempted. Two reachable ways in, neither exotic: the
+  **editor** (`+ New event` at 884px → a 944px sheet over the whole band,
+  107,604 px², a straight regression against the pre-stage-9 module, which placed
+  the same editor clear at y=28) and **a busy day** (12 events ≈ 379px, past the
+  point the unclamped flip can fit; 100% at 884/804/752/684/644). The fix is a
+  CLAMP on the existing flip, not a third geometry: `above` now starts at the
+  viewport's top edge rather than off-screen, which is where those boxes measure
+  clear (a 481px box at top=8 ends at 489; the band starts at 595). The sheet
+  fallback is unweakened and is now the only thing its STOP-AND-FLAG speaks
+  about. **The lesson, and it is a different one from round 3's:** the round-3
+  fix was verified on the case it was written for and not on the surface that
+  case hands off to — and the module's own comment ("THERE IS NO THIRD
+  GEOMETRY") was what foreclosed the placement that fixes both. A JS-suite
+  fidelity gap kept the editor half invisible for three rounds: the DOM stub's
+  rect is a static all-zero and the card is the editor's anchor, so every editor
+  in the suite was placed at the viewport origin where nothing can be occluded.
+  The card's rect now follows the placement the module wrote.
+
+  **Still open, and it needs a live authed server:** this environment has no
+  Docker daemon (`make docker-up` cannot reach `/var/run/docker.sock`), so there
+  is no seeded DB and no session. Two rows genuinely cannot be closed without
+  one — **a real CSRF-bearing write** (the dispatch names a 403 on the first
+  Save as the expected failure mode if the `apiFetch` path is wrong, and asks
+  that it be verified live) and **any layout difference between the fixture
+  month and real seeded data**. Close those on the operator's client.
 
 Carried out of R2-1, not closed:
 

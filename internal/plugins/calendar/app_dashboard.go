@@ -106,6 +106,13 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 		IsOwner:   cc.MemberRole >= campaigns.RoleOwner,
 		CSRFToken: middleware.GetCSRFToken(c),
 		Sort:      c.QueryParam("sort"),
+		// The day card's two authoring gates, resolved HERE because this is
+		// where the request context is (C-CALV4-DAYCARD, R2-2a, [DC-9]).
+		// CanCreateEvents mirrors RequireRole(RoleScribe)'s own comparison —
+		// cc.MemberRole, not VisibilityRole — and CanAuthorDmOnly is the
+		// orthogonal co-DM capability the server already enforces.
+		CanCreateEvents: cc.MemberRole >= campaigns.RoleScribe,
+		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
 	})
 	return h.renderAppDashboard(c, cc, data)
 }

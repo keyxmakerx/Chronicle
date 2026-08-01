@@ -119,6 +119,53 @@ type BenchData struct {
 	// nowhere to persist, and a disclosure with no endpoint emits NO hx-* at
 	// all rather than a dead control.
 	SectionsPersistURL string
+
+	// DayCardJSON is the day card's whole payload for this viewer
+	// (C-CALV4-DAYCARD, R2-2a, [DC-1] SIGNED — see daycard.go).
+	//
+	// It is built from the SAME viewer-filtered BlockData the two Blocks
+	// render from, so the card and the docked Ledger cannot disagree about a
+	// day. EMPTY MEANS NO CARD IS MOUNTED AT ALL: a page with no Block has no
+	// day to open on, and emitting the scaffold anyway would be orphan DOM
+	// keyed to invokers that do not exist — the same reason bench.templ's
+	// header gives for not emitting popovers() in wave 1.
+	DayCardJSON string
+
+	// DayCard is what the PRODUCER decides about the card's authoring
+	// affordances (C-CALV4-DAYCARD, R2-2a, [DC-9] SIGNED).
+	//
+	// EVERY GATE IN IT IS MARKUP-LEVEL. A control the viewer may not use is not
+	// rendered — not disabled, not greyed, not title-explained. The V2
+	// quick-edit's own header states the same rule for the same reason
+	// (calendar_v2_quickedit.templ:9-14: "server-gated ... markup-level gate,
+	// not CSS"), and it is what makes the player assertion provable.
+	DayCard DayCardMount
+}
+
+// DayCardMount carries the day-card editor's role gates and its API base.
+//
+// THE THREE FLOORS ARE THREE DIFFERENT AXES AND THEY ARE NOT COLLAPSED.
+// Chronicle has Owner / Scribe / Player PLUS an orthogonal co-DM capability
+// (CanAuthorDmOnly / CanControlWorldState). Reading them as one ladder would
+// ship a Scribe the co-DM's powers, which is exactly what [DC-9] was signed to
+// prevent.
+type DayCardMount struct {
+	// CanCreate is the create/edit floor: RoleScribe, read off cc.MemberRole
+	// because that is the field campaigns.RequireRole compares — VisibilityRole
+	// would let a DM-granted player through a gate the server then refuses.
+	CanCreate bool
+	// CanAuthorDmOnly is the CAPABILITY, not the role. The server already
+	// downgrades dm_only to everyone for anyone without it (CreateEventAPI /
+	// UpdateEventAPI), so a client that offered the control anyway would be
+	// offering a switch the server silently ignores - a lie the viewer cannot
+	// see, which is the precise failure [DC-9] names.
+	CanAuthorDmOnly bool
+	// CanDelete is the Owner floor of DELETE .../events/:eid.
+	CanDelete bool
+	// CampaignID is the API base the editor writes to. It is emitted rather
+	// than parsed out of window.location, because a surface that is not at
+	// /campaigns/:id/... would parse a wrong id and write to another campaign.
+	CampaignID string
 }
 
 // BenchDisclosure is one collapsible section, resolved for one viewer
@@ -801,6 +848,14 @@ type benchInput struct {
 	IsOwner   bool
 	CSRFToken string
 	Sort      string
+	// CanCreateEvents / CanAuthorDmOnly are the day-card editor's two extra
+	// gates (C-CALV4-DAYCARD, R2-2a). They are passed in rather than derived
+	// from Role because Role is the VISIBILITY role — a DM-granted player reads
+	// as Owner there, and the create/edit route compares cc.MemberRole. Two
+	// different questions, two different fields; collapsing them would offer a
+	// control the server refuses.
+	CanCreateEvents bool
+	CanAuthorDmOnly bool
 }
 
 // buildBench assembles the Bench.
@@ -833,6 +888,12 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		Sort:         normalizeCalendarSort(in.Sort),
 		ShowNewSlot:  in.IsOwner,
 		Rsvp:         benchRsvpPanel(),
+		DayCard: DayCardMount{
+			CanCreate:       in.CanCreateEvents,
+			CanAuthorDmOnly: in.CanAuthorDmOnly,
+			CanDelete:       in.IsOwner,
+			CampaignID:      in.Campaign.ID,
+		},
 	}
 
 	var (
@@ -912,6 +973,16 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		}
 	}
 	data.Rows = benchRows(rows, activeID, data.CampaignID, data.IsGM)
+
+	// THE DAY CARD'S PAYLOAD, BESIDE THE BLOCK PROJECTION AND FROM NOTHING ELSE
+	// (C-CALV4-DAYCARD, R2-2a). It re-serialises the two Blocks this viewer just
+	// received — no second repository read, no second filter pass — which is the
+	// only construction under which the agreement law ([DC-2]) is provable at
+	// the producer rather than asserted in JS about DOM that may not be there.
+	data.DayCardJSON = dayCardPayloadJSON(data.DayCard.CanCreate,
+		dayCardSource{Block: data.Primary, Calendar: primary},
+		dayCardSource{Block: data.RealWorld, Calendar: realWorld})
+
 	data.Ribbon = benchRibbon(benchRibbonInput{
 		IsGM:       data.IsGM,
 		CampaignID: data.CampaignID,

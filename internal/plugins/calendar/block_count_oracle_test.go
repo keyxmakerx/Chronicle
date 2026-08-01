@@ -27,6 +27,7 @@ package calendar
 // render helper is what forking the suite means, and it is forbidden.
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -539,3 +540,102 @@ func TestOracle_LegendOmitsATypeTheViewerCannotSeeAtAll(t *testing.T) {
 		}
 	}
 }
+
+// ── the DAY CARD joins the oracle (C-CALV4-DAYCARD, R2-2a, [DC-2] SIGNED) ───
+
+// TestOracle_TheDayCardListsExactlyWhatTheLadderLeavesVisible is THE AGREEMENT
+// LAW, and it is here rather than in a suite of its own because [DC-2] says so
+// in as many words: joined to the count oracle, never forked.
+//
+// THE LAW, verbatim: *for any day, the set of events the card lists is EXACTLY
+// the set of .lrow elements the ladder leaves visible for that day. Not a
+// superset, not a subset, not "close enough."*
+//
+// WHY IT IS A GO ASSERTION AND NOT A JS ONE. The card's payload and the
+// Ledger's rows are two serialisations of ONE viewer-filtered pass, and the
+// only place both exist at once is here, at the producer. Asserted in JS it
+// would be a claim about DOM that, for a viewer with the `ledger` layer off, is
+// not there at all — and that is precisely the viewer the card exists for.
+//
+// WHAT A FAILURE WOULD MEAN. A card listing one MORE event than the Ledger is a
+// permission leak wearing a UI change's clothes: the extra row is, by
+// construction, an event this viewer's filter removed. A card listing one FEWER
+// is the operator's complaint returning in a new place. Neither is cosmetic.
+//
+// THE LADDER'S OWN MECHANISM IS WHAT "VISIBLE FOR THAT DAY" MEANS. Choosing day
+// N takes every `.lrows .lrow` that is not day N out of the flow (helpers.go's
+// answerLadderCSS rule 1), so the surviving set is exactly the rows carrying
+// data-lday="N" inside the Ledger zone. That is what is compared, per day, per
+// viewer, against the payload the card would open with.
+func TestOracle_TheDayCardListsExactlyWhatTheLadderLeavesVisible(t *testing.T) {
+	cal, events := oracleLedgerFixture()
+
+	for _, w := range oracleViewers() {
+		t.Run(w.name, func(t *testing.T) {
+			d := projectBlock(BlockProjectionInput{
+				Calendar: cal, Events: blockCopyEvents(events),
+				Viewer: w.v, MonthIndex: 0, Year: 1523,
+			})
+			d.Layers = benchBlockLayers(blockLayerPrefs{})
+			body := seamRenderBlockData(t, d)
+
+			// The LADDER's answer: rows inside the Ledger zone, by day. Scoped
+			// to the zone because the Shelf's Upcoming panel reuses the SAME
+			// row primitive, and an unscoped read would count a subset of these
+			// rows twice (the C-CALV4-SHELF-P7 lesson, one layer over).
+			ladder := map[string]map[string]bool{}
+			for _, m := range oracleLedgerRowRe.FindAllStringSubmatch(oracleZone(t, body, "ledger"), -1) {
+				day, id := m[1], m[2]
+				if ladder[day] == nil {
+					ladder[day] = map[string]bool{}
+				}
+				ladder[day][id] = true
+			}
+			if len(ladder) == 0 {
+				t.Fatal("the Ledger listed no rows at all; the comparison below is vacuous")
+			}
+
+			// The CARD's answer, from the payload the Bench would emit.
+			card := buildDayCardCalendar(d, cal, true)
+			seen := map[string]bool{}
+			for _, day := range card.Days {
+				ids := map[string]bool{}
+				for _, ev := range day.Events {
+					ids[ev.ID] = true
+				}
+				seen[day.Ord] = true
+				want := ladder[day.Ord]
+				if want == nil {
+					want = map[string]bool{}
+				}
+				for id := range ids {
+					if !want[id] {
+						t.Errorf("day %s: the card lists event %s and the ladder does not — "+
+							"a card that shows one more event than the Ledger is a permission "+
+							"leak wearing a UI change's clothes", day.Ord, id)
+					}
+				}
+				for id := range want {
+					if !ids[id] {
+						t.Errorf("day %s: the ladder leaves event %s visible and the card "+
+							"omits it — the two answers disagree", day.Ord, id)
+					}
+				}
+			}
+			// …and no day the ladder answers is missing from the card entirely.
+			for day := range ladder {
+				if !seen[day] {
+					t.Errorf("day %s has Ledger rows and no card entry at all", day)
+				}
+			}
+		})
+	}
+}
+
+// oracleLedgerRowRe reads (data-lday, data-event-id) off one rendered Ledger
+// row. The two attributes are adjacent in ledgerRow's own emission order
+// (ledger.templ:157-165) and the pattern tolerates the attributes between them
+// so a templ reformat cannot quietly stop matching — a regex that stopped
+// matching would make the assertion above pass by finding nothing, which is why
+// the caller fails loudly on an empty result.
+var oracleLedgerRowRe = regexp.MustCompile(`data-lday="([^"]+)"[^>]*?data-event-id="([^"]+)"`)

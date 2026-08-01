@@ -64,9 +64,27 @@ templ CalendarAppDashboardPage(cc *campaigns.CampaignContext, data CalendarAppDa
 		</div>
 		// W5b: the per-calendar permissions editor (owners only — players never
 		// receive the editor DOM nor the PUT route).
+		//
+		// THE DRIVER SCRIPT IS DELIBERATELY NOT MOUNTED HERE
+		// (C-CALV4-DAYCARD/R2-2a, PERM-JS-HARD-DEP-2). [DC-10]'s extraction left
+		// calendar_permissions.js with a HARD dependency on
+		// window.ChronicleCalVisibility and no local fallback — init() opens
+		// `if (typeof document === 'undefined' || !V) return;` — which is the
+		// right call (a third copy of the visibility mapper is the copy that goes
+		// stale unnoticed), but it means the driver mounted WITHOUT
+		// cal_visibility.js wires nothing at all. This page mounted it alone.
+		// Nothing was broken, because the card-grid view is retained but NO
+		// LONGER ROUTED (see app_dashboard.go) — which is exactly why the mount
+		// had to go rather than be repaired: pinning a script mount that becomes
+		// a dead modal the moment the page is re-routed or copied is how the next
+		// hand inherits a silent failure. bench.templ mounts both, in order, and
+		// is the live surface.
+		//
+		// The modal scaffold stays: it is shared with the Bench, and here it
+		// renders `hidden` with nothing to open it, so it shows the viewer
+		// nothing rather than a control that does not work.
 		if data.IsOwner {
 			@calendarPermissionsModal()
-			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_permissions.js") } defer></script>
 		}
 		// D3 backs the timeline-viz previews (timeline_viz.js is already global
 		// in base.templ; D3 is page-loaded, same CDN the timeline page uses /

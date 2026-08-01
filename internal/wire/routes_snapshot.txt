@@ -172,6 +172,7 @@ GET	/calendars/:calId	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/day	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/embed	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/event-categories	internal/plugins/calendar/routes.go
+GET	/calendars/:calId/events/:eid	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/events/:eid/entities	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/events/:eid/rsvps	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/export	internal/plugins/calendar/routes.go

@@ -2865,6 +2865,244 @@ beside it the month's cells are wider at the same host width, so named columns
 flip on at a **narrower** host — 1198px → 898px for a ten-day week, a shift of
 exactly the dock's own 300px. The entity month became richer.
 
+### Section: round 2 — the day answers its click (R2-2a, C-CALV4-DAYCARD, 2026-07-31)
+
+**The complaint was two sentences and both were mechanically true.** *"I'm
+unable to click and do anything, it just selects the date and nothing
+happens."* Clicking a day checks a visually-hidden radio and the generated
+ANSWER ladder filters the docked Ledger to that day — the one sanctioned
+content change in the Block, deliberately quiet because L-M2 forbids the month
+from moving, so the answer had to land somewhere else and landed in a column
+the operator was not looking at. And where a viewer has switched the `ledger`
+layer off, `dayPick` emits **no radio and no label at all**, so the click is not
+quiet, it is absent. The second half was worse: in the whole of calendar-v4
+there was no way to create or edit an event, because v4 replaced the *reading*
+surface and never replaced the *writing* one.
+
+**THE AGREEMENT LAW IS THE RULING, AND IT IS PINNED IN GO AT THE PRODUCER.**
+For any day, the set of events the card lists is EXACTLY the set of `.lrow`
+elements the ladder leaves visible for that day. Not a superset, not a subset.
+The card's payload is built from the SAME viewer-filtered `BlockData` the Block
+renders from — one pass, no second repository read, no second filter — which is
+the discipline r52 §5 chose for the count oracle, for the same reason, and it is
+why the two surfaces cannot drift. The assertion is **joined to
+`block_count_oracle_test.go`** (GM / Nissa / Bryn on the signed fixture) rather
+than forked, because a card that showed one more event than the Ledger would be
+a permission leak wearing a UI change's clothes, and the difference between the
+two sets is exactly the count of events the viewer is not allowed to know about.
+Asserted in JS instead, it would have been a claim about DOM that — for a viewer
+with the Ledger switched off, which is the viewer the card exists for — is not
+there at all.
+
+**THE PAYLOAD LAW IS A TYPE, NOT A CONVENTION.** The page attribute carries the
+Ledger row's own field set and nothing more: id, the day's two keys, title,
+time, the (axis, pattern, glyph) triple, the `dm_only` rail flag, the audience
+label. `dayCardEvent` has no field for a description, for `visibility_rules` or
+for recurrence — so the growth path is a code change with a failing test rather
+than a judgement call. The cost of getting this wrong is specific: a payload
+that grew a description body would put every event's prose into every viewer's
+DOM for a card that never displays it. Those fields arrive instead over one new
+`GET`, under the editor's own floor, for the one viewer who is about to write
+them back.
+
+**"READ AND LISTEN, NEVER MUTATE" IS THE MECHANICAL FORM OF THE BLOCK'S
+INTERIOR LAW.** Round 2 works AROUND the Block; this slice opened no file in
+`internal/widgets/calendar_block`. That is a claim about a diff, and
+diff-shaped claims decay — the next hand adds "just a class" from the page and
+nothing fails. So the rule is asserted at RUNTIME: a JS test boots the module
+against a Block-shaped fixture and requires the host's serialised DOM to be
+byte-identical before and after open + close. The one path that looks like an
+exception is not: the `Open in the Ledger` door calls `.click()` on the day's
+own radio, which changes CHECKEDNESS — IDL state, not a content attribute — so
+the serialisation is unchanged, and the alternative would have been the module
+simulating the browser instead of using it.
+
+**THE CARD IS A PAGE-LEVEL SINGLETON IN THE TOP LAYER, AND BOTH HALVES ARE
+LOAD-BEARING.** N Blocks would otherwise mean N popovers, N listeners and N
+payload copies, and "the card and the Ledger cannot disagree" would stop being
+checkable in one place. `[popover]` is what escapes `.cal-block-host .block`'s
+own `overflow` clip WITHOUT touching the Block; CSS anchor positioning would
+have needed a unique `anchor-name` on every day cell, i.e. an edit to
+`instrument.templ`. It is `popover="manual"` rather than `auto` for a motion
+reason: the UA's light-dismiss and Escape close a popover SYNCHRONOUSLY and the
+hiding `beforetoggle` is not cancelable, so `auto` would have run the register's
+160ms close on the button path and skipped it on every other one. One grammar
+means one close, so the module owns dismissal.
+
+**THE GUARD AMENDMENT, AND WHY IT IS AN AMENDMENT.**
+`TestBenchCSS_NoMotionAtAll` was already an allowlist — R2-1 inverted it when
+the register landed. This slice widened it by **zero bytes**: the card reuses
+the same transitionable properties, the same two durations and the same easing,
+inside the same single `prefers-reduced-motion: no-preference` wrapper. What was
+added is the CLAIM that it does, failing in both directions — if the card's
+rules vanish, and if they appear outside the wrapper. "The card consumes the
+register" is exactly the kind of sentence that decays into a second grammar the
+moment nothing checks it, and a second register section anywhere is laundering.
+The card's own sheet gained its own monopoly guard for the same reason: a second
+file, out of reach of the Bench guard, is where a second grammar would actually
+grow.
+
+**A ROUTE FLOOR IS NOT A SECURITY BOUNDARY, AND THE BODY IS GATED TWICE.** The
+one new read is `RolePlayer` because a player may legitimately read an event
+they can already see — the card lists it and the Ledger prints it. What gates
+the body is the grid's own viewer filter, plus a second gate on the two audience
+fields. Those two are gated TOGETHER at the Scribe floor rather than split
+Scribe/Owner, and the reason is worth recording because the instinct is the
+opposite: `PUT` re-writes the whole record, so withholding `visibility_rules`
+from the person who is about to overwrite it does not protect the audience — it
+DESTROYS it, silently, on the first save of a restricted event, with players
+seeing something they should not as the only symptom, days later. The editor
+round-trips every field it has no control for, and it can only do that with what
+it was given.
+
+**THE A11Y GAP IS STATED RATHER THAN PAPERED OVER.** Both openers are wired —
+the cell's `click` and the day radio's `change` — so the keyboard path exists
+wherever the radio does. Where the Ledger is not docked the radio does not
+exist, and the card is pointer-only for that viewer. Injecting `tabindex` would
+have been both the mutation the boundary forbids and a focusable control the
+server never rendered, so the gap is BOOKED (**C-CALV4-DAYPICK-A11Y**) as the
+widget change it actually is. A slice that quietly shipped a pointer-only
+affordance and said nothing would be the failure mode this arc's honesty rules
+exist to prevent.
+
+**WHAT SPLIT OUT, AND THAT THE SPLIT WAS PRE-AUTHORISED.** Stages 1-2 — the card
+and the editor's MECHANISM against the shipped API — answer the operator's
+complaint on their own. Stages 3-4, the editor's full chrome pass and
+drag-create, became **C-CALV4-EDITOR-R2b**, taken at a stage boundary with
+everything green. The editor's visual gate was never the card's to wait on: the
+mockup is mid-fix and un-re-reviewed, so it is a REFERENCE for fields, states
+and vocabulary and NOT a fidelity gate, and only the chrome pass waits on the
+operator's stills.
+
+**AN ABSENT KEY CAN BE A WRITE, AND ROUND 2's VERIFIER FOUND WHERE.** The
+round-trip discipline above was applied to `entity_id`, `description_html`,
+`visibility` and `visibility_rules` — every one of them a POINTER on the shipped
+`PUT`, where nil genuinely means "unchanged" because C-CAL-NULL-PRESERVE
+nil-guards them. It was NOT applied to `is_recurring`, and that field is a
+value-typed bool whose guard was left off ON PURPOSE: *"IsRecurring — bool:
+false IS the value, not 'absent'."* On such a field there is no such thing as
+saying nothing. The editor's body carried no key, the bind produced `false`, and
+renaming a recurring event through the day card un-repeated it — while the
+nil-guarded `recurrence_type`, `recurrence_interval` and `recurrence_end_*`
+around it all survived, leaving precisely the half-state
+C-CAL-RECURRING-PARTIAL-STATE-CLEANUP already had to clean up once. The module's
+own comment asserted the opposite in so many words.
+
+The lesson generalises past this slice and is why it is written here rather than
+in a commit message: **"the client round-trips what it does not offer" is only
+true field-by-field, and its truth depends on the field's TYPE on the wire.**
+For a pointer, omission preserves; for a value, omission overwrites. A partial
+editor is therefore lossless only against a request struct whose optional fields
+are all pointers, and the two fixes are (a) the read route must HAND BACK
+everything the write path will clobber — the record could not round-trip a field
+it was never given — and (b) the guard must be a request-body assertion over a
+stored record that HAS the field set, because a suite that only ever builds
+bodies from empty prevs proves nothing about preservation. Both halves are now
+pinned, in Go and on the JS wire, and the service's deliberate non-fix is pinned
+too, in the voice `TestUpdateEvent_EntityIDStillClearsOnNil` uses, so a later
+sweep reads why the client's round-trip exists before deleting it.
+
+**A GUARD THAT ENUMERATES BY EXAMPLE ENUMERATES YESTERDAY.** Two of the slice's
+own guards were found green-but-blind by the same pass, and both had the same
+shape: they described the thing they guarded using a *sample* of it. The payload
+law's inventory was taken by marshalling a hand-written `dayCardEvent` literal —
+but every optional field is `omitempty`, so a ninth field would simply be absent
+from that marshal and "want exactly these eight keys" would still pass. The
+stylesheet's scope guard read only lines ENDING in `{`, so the sheet's 21
+single-line rules were never examined at all. Neither was wrong today; both
+would have gone on being green while the thing they claimed stopped being true.
+The fixes are the same fix in two languages: **derive the inventory from the
+DEFINITION, not from an instance of it** — reflection over the type's json tags,
+and a brace-scanner over the sheet instead of a line filter. Where a guard's
+subject can be enumerated mechanically, enumerating it by hand is a guard that
+proves what its author remembered.
+
+**A DODGE ON ONE AXIS IS A RULE ABOUT ONE LAYOUT.** [DC-3] signs that the card
+may never occlude the Ledger, and the first two cuts implemented that as a
+single left-clamp: when the card's box shared a Y band with the Ledger, keep it
+entirely left of `ledger.left`. That is the correct answer, and it is complete
+only while the Ledger IS a right-hand column. The Bench stacks it FULL-WIDTH
+BELOW the grid at narrower sizes, and a band starting at x≈9 that spans the
+whole Bench leaves no left to move to — the clamp computed a negative limit and
+no-opped, the vertical branch above it only ever flipped for VIEWPORT room, and
+a card that always fits below its day therefore landed on the band for every day
+and every viewer between roughly 625px and 884px of `.cal-bench` content width.
+The editor escaped only by accident: it is tall enough not to fit below, so its
+viewport flip happened to clear the band — which is the proof that the missing
+dodge was available all along.
+
+Three things are worth recording past the fix itself.
+
+**One: the exclusion zone is the Ledger's SETTLED RECT, not its role in the
+layout.** Docked column and stacked band are the same obligation, and the rule
+is now written that way — the placer asks "does the box intersect this rect",
+never "is the Ledger to my right". A rule expressed in terms of one layout is a
+rule that silently stops applying when the layout changes, and this arc changes
+layout by breakpoint on purpose.
+
+**Two: the degradation is an EXISTING signed treatment, not a new one.** The
+order is below → above → the bottom sheet, and the sheet is [DC-3] bullet 4's
+own answer. There is no third geometry and the card is never resized to fit: a
+card that shrank to dodge would be a different card, and the sign-off covered
+one card and one sheet. Reaching for a novel geometry under pressure is how a
+product acquires a shape nobody signed.
+
+**Three: retiring a flag with its harm un-signs it.** The desktop sheet fallback
+means the geometry RAN OUT, which is the condition [DC-3] named a STOP-AND-FLAG;
+the card simply no longer covers anything while it happens. So the placement
+carries whether the sheet was a fallback or the layout, and the reporter speaks
+for the first and stays silent for the second. `data-dc-clear` is written
+honestly in every mode either way.
+
+The reporting lesson is the one the arc should keep. The gate was measured at
+1232px and at 390px and reported as "clear" and "the signed mobile treatment" —
+both true, and the sizes between them were never named. **A geometry claim is a
+claim about the widths it was taken at**, and the widths where a layout changes
+shape are precisely the ones a two-point measurement omits. The mislabel
+compounded it: the JS suite's one negative case called the stacked-Ledger
+geometry "a pathological geometry", so two reviews read the product's own layout
+as an impossible one. It is now a positive regression case at the ~884px and
+~944px boundaries.
+
+**A CANDIDATE THAT IS DROPPED IS A GEOMETRY THAT WAS NEVER ATTEMPTED, AND A
+FALLBACK CANNOT TELL THE DIFFERENCE.** The fix above shipped with the ABOVE
+candidate admitted only when it fitted the viewport outright, and everything
+else falling to a clamp that pins the box to the BOTTOM of the viewport — which
+is where the stacked band lives. So the fix closed the case it was written for,
+the 227px card, and opened a larger one on the same code path: a box TALLER than
+the room above its day never flipped at all, failed both candidates and took the
+desktop sheet, covering 100% of the Ledger across the same band. It reached that
+with no unusual data at either end — `+ New event` produces a 420x400 editor,
+and twelve events on a festival day produce a ≈379px card — and the pre-fix
+module had placed that same editor CLEAR, by accident, at the same widths. The
+correction is a clamp on the existing flip rather than a new position: `above`
+still means "start the box above the day", and a box too tall for the room above
+its day starts at the viewport's top edge instead of off-screen. Two anchored
+candidates and one sheet, unchanged.
+
+Two further things are worth recording, and both are about what a fix costs
+elsewhere.
+
+**Four: a warning that fires on a fallback is asserting that the fallback was
+necessary.** "This geometry cannot place the card clear of the Ledger" is a
+claim about the world, and it was false for every one of those boxes — a 481px
+card at top=8 ends at 489 above a band that starts at 595. A STOP-AND-FLAG that
+can be raised by an un-attempted placement is worse than none, because it
+retires the question. Point three above (retiring a flag with its harm un-signs
+it) has a mirror: raising a flag in place of an attempt un-signs it too. The
+module's own comment was the mechanism — "THERE IS NO THIRD GEOMETRY", written
+to fence off invention, read by the next hand as a reason not to look at the
+candidate set at all.
+
+**Five: a stub's default is an assertion, and an all-zero rect asserts that
+nothing can be occluded.** The editor half of this was invisible to the JS suite
+for three rounds because `daycard_dom`'s rect defaults to zeros and the card is
+the editor's ANCHOR — so every editor in the suite was placed at the viewport
+origin. The card's rect is now DERIVED from the placement the module just wrote,
+never assigned, so a test cannot pin it to a value the placer did not produce.
+Where a harness supplies a value the real DOM computes, the harness is making a
+claim, and it should be made where it can be seen.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they
