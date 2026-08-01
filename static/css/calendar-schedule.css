@@ -1252,7 +1252,15 @@
     gap: 3px;
   }
   .cal-schedule .sc-row .lt { font-size: 11.5px; }
-  .cal-schedule .sc-row .rs { min-width: 0; font-size: 11px; }
+  /* `width: auto` is the drawing's own declaration here, and it is a NO-OP by
+     design: no `width` is set at base, so its whole effect is to LEAVE the base
+     `min-width: 30px` standing and keep the five answers right-aligned as a
+     column. Substituting `min-width: 0` collapses that well to ~11px and
+     `19:00` and `in` collide into `19:00 in`. */
+  .cal-schedule .sc-row .rs { width: auto; font-size: 11px; }
+  /* the say lane's chips shrink with the lane; without this every `+1d`,
+     `no zone` and `on the hour` renders ~27% oversized at 390 */
+  .cal-schedule .sc-row .say .badge { font-size: 8.5px; padding: 1px 3px; letter-spacing: 0; }
   .cal-schedule .sc-row .who .cap { font-size: 8.5px; letter-spacing: 0.02em; }
   .cal-schedule .sc-off { top: 14px; height: 12px; }
   .cal-schedule .sc-head-row .hd { font-size: 9px; letter-spacing: 0.02em; }

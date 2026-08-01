@@ -664,3 +664,40 @@ func TestScheduleStills_TheSelectedSegmentIsTheDrawnRingNotAHueMix(t *testing.T)
 		t.Errorf("a disabled rung is an OFF control, not a non-control; got:\n%s", dis)
 	}
 }
+
+// 10 · THE PHONE KEEPS THE DRAWN BADGE AND THE ANSWER WELL. Two rules from the
+// drawing's 640 block did not survive transcription into the sheet's, and both
+// land on the surface whose 390 arithmetic this slice re-derived by hand.
+//
+//   - `.sc-row .say .badge{font-size:8.5px;padding:1px 3px;letter-spacing:0}` is
+//     simply ABSENT. It sits in the drawing BETWEEN two rules the sheet DID
+//     carry (`.sc-row .rs` and `.sc-row .who .cap`), so it was dropped, not
+//     decided against. Every `.say` badge renders ~27% oversized at 390: the
+//     `+1d` chip measures 34.5x19.0 against the drawing's 27.1x16.8.
+//
+//   - `.sc-row .rs{width:auto}` was rewritten as `min-width: 0`. The drawn
+//     declaration is a NO-OP by design — no `width` is set at base — and its
+//     whole effect is to LEAVE the base `min-width: 30px` alone, so the five
+//     answers right-align as a column. `min-width: 0` collapses that well to
+//     11.6px and `19:00` and `in` collide into `19:00 in`.
+func TestScheduleStills_ThePhoneKeepsTheDrawnBadgeAndTheAnswerWell(t *testing.T) {
+	css := scheduleStrip(scheduleCSS(t, "calendar-schedule.css"))
+	narrow := scheduleMediaBlock(t, css, "max-width: 640px")
+
+	badge := scheduleRuleFor(t, narrow, ".cal-schedule .sc-row .say .badge")
+	for _, want := range []string{"font-size: 8.5px", "padding: 1px 3px", "letter-spacing: 0"} {
+		if !strings.Contains(badge, want) {
+			t.Errorf("the narrow `.say` badge is missing the drawn %q; got:\n%s", want, badge)
+		}
+	}
+
+	rs := scheduleRuleFor(t, narrow, ".cal-schedule .sc-row .rs")
+	if strings.Contains(rs, "min-width") {
+		t.Errorf("the narrow answer well must keep the base `min-width: 30px` the drawing "+
+			"leaves standing, or `19:00` and `in` collide; got:\n%s", rs)
+	}
+	base := scheduleRuleFor(t, css, ".cal-schedule .sc-row .rs")
+	if !strings.Contains(base, "min-width: 30px") {
+		t.Errorf("the base answer well is no longer 30px, so the narrow rule guards nothing; got:\n%s", base)
+	}
+}
