@@ -482,7 +482,7 @@ type SchedulePaintForm struct {
 	ScopeOptions []ScheduleToggle
 	// ScopeNote says what THIS scope's marks mean, in one sentence, beside the
 	// control that sets it.
-	ScopeNote string
+	ScopeNote ScheduleCaption
 
 	Summary string
 	Hours   []ScheduleHourHead
@@ -491,14 +491,14 @@ type SchedulePaintForm struct {
 	// sanctioned open/close on this page, on the viewer's own explicit act.
 	PrefDays []SchedulePaintDay
 	PrefOpen bool
-	PrefNote string
+	PrefNote ScheduleCaption
 
 	Empty string
 	// CopyWeek is the Director-only unbuilt affordance. ABSENT for a player,
 	// not disabled: scaffolding for a gap nobody is asking that player about is
 	// Director-tier, and permission is absence.
 	CopyWeek *BenchAction
-	Foot     string
+	Foot     ScheduleCaption
 	// Reserve is the ONE dashed band on this whole page and it is reserved for
 	// external-calendar import (ledger #21). Director-only, same rule.
 	Reserve *ScheduleReserve
@@ -599,7 +599,7 @@ type ScheduleAnswerForm struct {
 	OutWeekPopID string
 	SuggestHref  string
 	SuggestOpen  bool
-	SuggestNote  string
+	SuggestNote  ScheduleCaption
 }
 
 // ScheduleAnswerOption is one word of the tri-state. WORDS, NEVER GLYPHS.

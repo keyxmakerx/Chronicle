@@ -228,7 +228,7 @@
   align-items: center;
   justify-content: center;
   height: 20px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
   border-radius: var(--r-chip);
   background: transparent;

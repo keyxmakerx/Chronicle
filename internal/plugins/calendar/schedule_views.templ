@@ -38,6 +38,23 @@ templ scheduleCaptionView(c ScheduleCaption) {
 	}
 }
 
+// scheduleRunsView draws a run sequence with NO block of its own — for the three
+// emphasised sentences the drawing puts outside a `.caption`: the Painter's
+// scope note (which bolds the TABLE the marks land in), its foot (which bolds
+// the compose rule's claim) and the suggest dock's note. Same model, same
+// escaping; only the container differs, because these already have one.
+templ scheduleRunsView(c ScheduleCaption) {
+	for _, r := range c {
+		if r.Em == "b" {
+			<b>{ r.Text }</b>
+		} else if r.Em == "i" {
+			<i>{ r.Text }</i>
+		} else {
+			{ r.Text }
+		}
+	}
+}
+
 // scheduleWidthTextView prints a sentence that has to be SHORTER on a phone.
 //
 // The sealed mockup's producer re-runs on resize and simply swaps the string; a
@@ -556,7 +573,7 @@ templ schedulePaintFormView(f SchedulePaintForm) {
 		<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
 		<div class="sc-scope">
 			@scheduleSegView("What this week's marks mean", f.ScopeOptions)
-			<span class="lb">{ f.ScopeNote }</span>
+			<span class="lb">@scheduleRunsView(f.ScopeNote)</span>
 		</div>
 		<div class="sc-sum">{ f.Summary }</div>
 		<span class="lband">Can play</span>
@@ -570,7 +587,7 @@ templ schedulePaintFormView(f SchedulePaintForm) {
 				<span class="lband">Would prefer</span>
 			</summary>
 			@schedulePaintGridView(f, f.PrefDays)
-			<div class="caption">{ f.PrefNote }</div>
+			@scheduleCaptionView(f.PrefNote)
 		</details>
 		if f.Empty != "" {
 			<div class="lzero">{ f.Empty }</div>
@@ -583,7 +600,7 @@ templ schedulePaintFormView(f SchedulePaintForm) {
 			}
 		</div>
 		<div class="sc-status" data-schedule-status role="status" aria-live="polite"></div>
-		<div class="sc-foot">{ f.Foot }</div>
+		<div class="sc-foot">@scheduleRunsView(f.Foot)</div>
 		if f.Reserve != nil {
 			<div class="skyband">
 				<span class="a">{ f.Reserve.Head }</span>
@@ -747,7 +764,7 @@ templ scheduleAnswerFormView(f ScheduleAnswerForm) {
 				<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
 				<input type="hidden" name="status" value="maybe"/>
 				<textarea name="note" maxlength="500" placeholder="Sunday after 20:00 would work better."></textarea>
-				<div class="sc-foot">{ f.SuggestNote }</div>
+				<div class="sc-foot">@scheduleRunsView(f.SuggestNote)</div>
 				<button class="btn fill" type="submit">Send suggestion</button>
 			</form>
 		</div>

@@ -922,8 +922,14 @@ func scheduleBuildAnswer(in scheduleBuildInput) ScheduleAnswer {
 			OutWeekPopID: "sc-pop-outweek",
 			SuggestHref:  scheduleHref(in.CampaignID, in.Base, "sug", "open"),
 			SuggestOpen:  in.SugOpen,
-			SuggestNote: "0 / 500 · or tick the windows in My availability below; an offer " +
-				"only ever adds.",
+			SuggestNote: ScheduleCaption{
+				scheduleSay("0 / 500 · or tick the windows in "),
+				// THE OTHER WAY TO SAY THE SAME THING, named where a member
+				// reading the dock can act on it — the drawing bolds it for
+				// exactly that reason.
+				scheduleLead("My availability"),
+				scheduleSay(" below; an offer only ever adds."),
+			},
 		}
 	}
 	if !in.MailConfigured {

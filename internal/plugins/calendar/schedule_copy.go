@@ -94,8 +94,9 @@ func schedulePaintForm(in scheduleBuildInput) *SchedulePaintForm {
 		Pattern:       me.Pattern,
 		Scope:         in.Scope,
 		PrefOpen:      in.PrefOpen,
-		PrefNote: "Preferred always sits inside available — the server composes them, so " +
-			"marking an hour preferred also marks it playable.",
+		PrefNote: ScheduleCaption{scheduleSay(
+			"Preferred always sits inside available — the server composes them, so " +
+				"marking an hour preferred also marks it playable.")},
 		Foot: schedulePaintFoot(in.Scope),
 	}
 	f.ScopeNote = schedulePaintScopeNote(in.Scope)
@@ -187,23 +188,40 @@ func schedulePaintDays(in scheduleBuildInput, me scheduleMember, kind string) []
 
 // schedulePaintScopeNote says what THIS scope's marks mean, in one sentence,
 // beside the control that sets it. Two scopes, two tables, two sentences.
-func schedulePaintScopeNote(scope string) string {
+//
+// THE BOLD PHRASE NAMES THE TABLE. `date exception` and `normal hours` are the
+// entire distinction the segment exists to make, and they are what a reader
+// scans this sentence for — which is why the drawing sets them as the lead-in
+// rather than leaving them in the middle of a line of grey.
+func schedulePaintScopeNote(scope string) ScheduleCaption {
 	if scope == "recurring" {
-		return "sets your normal hours — every week from now on, until you change them"
+		return ScheduleCaption{
+			scheduleSay("sets your "),
+			scheduleLead("normal hours"),
+			scheduleSay(" — every week from now on, until you change them"),
+		}
 	}
-	return "marks a date exception — it replaces that day's usual pattern"
+	return ScheduleCaption{
+		scheduleSay("marks a "),
+		scheduleLead("date exception"),
+		scheduleSay(" — it replaces that day's usual pattern"),
+	}
 }
 
 // schedulePaintFoot is the compose rule, printed. It is the one thing a member
-// cannot work out by looking at the grid.
-func schedulePaintFoot(scope string) string {
-	s := "Offering a window only ever adds. It can never take away a time you already gave, " +
-		"and it never downgrades an hour you already marked preferred."
-	if scope == "week" {
-		s += " A window you set on a specific date replaces that day's usual pattern. Clearing " +
-			"it puts the usual pattern back."
+// cannot work out by looking at the grid — so the claim itself is the lead-in
+// and the consequences follow it.
+func schedulePaintFoot(scope string) ScheduleCaption {
+	c := ScheduleCaption{
+		scheduleLead("Offering a window only ever adds."),
+		scheduleSay(" It can never take away a time you already gave, " +
+			"and it never downgrades an hour you already marked preferred."),
 	}
-	return s
+	if scope == "week" {
+		c = append(c, scheduleSay(" A window you set on a specific date replaces that day's usual "+
+			"pattern. Clearing it puts the usual pattern back."))
+	}
+	return c
 }
 
 // --- the printed sentences --------------------------------------------------

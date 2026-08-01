@@ -514,3 +514,79 @@ func TestScheduleStills_TheNarrowMatrixShortensItsWordsInsteadOfClippingThem(t *
 		}
 	}
 }
+
+// 12 · THE EMPHASIS SWEEP — the three the caption pass did not reach, and one
+// control that is 4px wider than the drawing.
+//
+// Stage 8 fixed the CAPTIONS. A full inventory of every `<b>` and `<i>` the
+// sealed mockup emits inside its surface producers (as opposed to inside its own
+// explanatory notes) then found three more, all outside a `.caption`: the
+// Painter's scope note bolds WHICH TABLE the marks land in
+// (`marks a <b>date exception</b>` / `sets your <b>normal hours</b>`), the
+// Painter's foot bolds the compose rule's claim
+// (`<b>Offering a window only ever adds.</b>`), and the suggest dock bolds the
+// other way to say the same thing (`tick the windows in <b>My availability</b>
+// below`). Each is a lead-in doing the same job as the caption lead-ins: it is
+// the phrase a reader scans the sentence FOR.
+//
+// The `.seg` rung is a plain arithmetic miss — the mockup pads its buttons
+// `0 8px` and the sheet shipped `0 10px`, so the Painter's scope control is 8px
+// wider than the drawing at every width.
+func TestScheduleStills_TheRemainingEmphasisAndTheSegRung(t *testing.T) {
+	html := scheduleRenderBody(t, false)
+	for _, want := range []string{
+		"<b>date exception</b>",
+		"<b>Offering a window only ever adds.</b>",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the rendered page is missing the drawn emphasis %q", want)
+		}
+	}
+
+	// The suggest dock is only drawn once a player opens it, so it is asserted
+	// on the builder rather than on the default page.
+	sug := scheduleOracleInput(false)
+	sug.ViewerID, sug.SugOpen = "u-tam", true
+	sug.EventID, sug.CalendarID = "ev-41", "cal-1"
+	form := scheduleBuildAnswer(sug).Form
+	if form == nil {
+		t.Fatal("no answer form for a player")
+	}
+	var dock bool
+	for _, r := range form.SuggestNote {
+		if r.Em == "b" && strings.Contains(r.Text, "My availability") {
+			dock = true
+		}
+	}
+	if !dock {
+		t.Errorf("the suggest dock does not name `My availability` as the drawing does: %q",
+			form.SuggestNote.Text())
+	}
+	// The other scope wording carries its own bold, and it names the other
+	// table — which is the entire distinction the segment exists to make.
+	rec := scheduleOracleInput(false)
+	rec.ViewerID, rec.Scope = "u-tam", "recurring"
+	rec.OwnLanes = scheduleOracleAvail().Lanes["u-tam"]
+	paint := scheduleBuildPainter(rec).Form
+	if paint == nil {
+		t.Fatal("no paint form on the recurring scope")
+	}
+	if got := paint.ScopeNote.Text(); !strings.Contains(got, "normal hours") {
+		t.Errorf("the recurring scope note = %q", got)
+	}
+	var bold bool
+	for _, r := range paint.ScopeNote {
+		if r.Em == "b" && strings.Contains(r.Text, "normal hours") {
+			bold = true
+		}
+	}
+	if !bold {
+		t.Error("`normal hours` is the phrase the sentence is scanned for, and it is not the lead-in")
+	}
+
+	css := scheduleStrip(scheduleCSS(t, "calendar-schedule.css"))
+	rule := scheduleRuleFor(t, css, ".cal-schedule .seg button")
+	if !strings.Contains(rule, "padding: 0 8px") {
+		t.Errorf("the `.seg` rung must pad the sealed mockup's `0 8px`; got:\n%s", rule)
+	}
+}
