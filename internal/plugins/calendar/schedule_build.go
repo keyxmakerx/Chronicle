@@ -397,14 +397,18 @@ func scheduleBuildMatrix(in scheduleBuildInput) ScheduleMatrix {
 	members := scheduleMembers(in)
 	total := len(members)
 	m := ScheduleMatrix{
-		Title:    "Who is free when",
-		Frame:    scheduleMatrixFrame(in),
-		IdentCap: "everyone",
-		SayCap:   "time",
-		Scope:    "anonymous totals only — your own week is in “My availability” above",
+		Title:         "Who is free when",
+		Frame:         scheduleMatrixFrame(in),
+		IdentCap:      "everyone",
+		IdentCapShort: "everyone",
+		SayCap:        "time",
+		Scope:         "anonymous totals only — your own week is in “My availability” above",
 	}
 	if in.IsGM {
-		m.IdentCap = "who is free"
+		// The phone's word for the same column is the drawing's own `who`: at
+		// 390 the identity column is 76px and "who is free" wraps to two lines,
+		// which pushes the header band taller than every row under it.
+		m.IdentCap, m.IdentCapShort = "who is free", "who"
 		m.Scope = "per-member lanes · owner / co-DM only"
 	}
 	// THE SAY COLUMN NAMES WHOSE CLOCK IT IS. Once a window is chosen the column
@@ -415,6 +419,7 @@ func scheduleBuildMatrix(in scheduleBuildInput) ScheduleMatrix {
 		m.SayCap = "their time"
 	}
 	m.Denominator = fmt.Sprintf("free of %d in the campaign", total)
+	m.DenominatorShort = fmt.Sprintf("free of %d", total)
 	m.Zero = "Nobody has filled in a week yet. The grid works the moment one person does — " +
 		"one marked window is worth more than none."
 	// THE COUNT LANE WEARS ITS SAMPLING RULE PERMANENTLY. It disagrees with the
@@ -507,6 +512,7 @@ func scheduleLaneFor(in scheduleBuildInput, m scheduleMember, cols []ScheduleCol
 	// NEUTRAL register — the tool does not know, and an unknown is not a fault.
 	if !scheduleHasAny(m) {
 		lane.Note = "no availability saved — this cannot be told apart from “busy all week” yet"
+		lane.NoteShort = "nothing saved"
 		lane.NoteChip = scheduleNeed(in.IsGM, "no pattern")
 		return lane
 	}

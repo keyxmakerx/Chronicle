@@ -75,6 +75,32 @@ func scheduleShotData(isGM bool) ScheduleData {
 	return data
 }
 
+// THE HARNESS'S SHELL IS THE PRODUCT'S SHELL, TO THE PIXEL.
+//
+// These four numbers are `<main class="flex-1 overflow-y-auto px-3 py-3 md:px-5
+// md:py-4">` in internal/templates/layouts/app.templ, read in the units Tailwind
+// actually emits: px-3 = 12px, px-5 = 20px, md = 768px. The harness cannot
+// render layouts.App (it needs a request), so it renders this instead — and a
+// stand-in that pads differently from the thing it stands in for produces a shot
+// that is a picture of the harness.
+//
+// It cost this slice a false defect: at a flat 20px the phone shot handed the
+// matrix 330px where the product hands it 346px, the panel dragged sideways
+// inside its own scroll container, and the SUN column clipped in a still that
+// fits all seven days. Eight pixels, entirely invented by the measuring
+// instrument.
+const (
+	schedulePagePadNarrow = 12
+	schedulePagePadWide   = 20
+	schedulePagePadBreak  = 768
+	// schedulePhoneViewport is the mockup's own phone key, and the width every
+	// piece of narrow arithmetic on this surface is stated against.
+	schedulePhoneViewport = 390
+	// scheduleHairline is one structural border — the panel's and the scroll
+	// container's, which are the two the grid has to fit inside.
+	scheduleHairline = 1
+)
+
 // scheduleShotPage wraps the rendered surface in a standalone document with both
 // stylesheets INLINED, because a file:// page cannot reach /static.
 const scheduleShotPage = `<!doctype html>
@@ -88,7 +114,8 @@ body{margin:0}
    colour the product does not have. Setting them on <body> instead would leave
    the page head inheriting a light-mode ink on the dark shot — a harness
    artefact that would read as a real contrast defect. */
-.shotwrap{padding:20px;background:var(--surface-page);color:var(--text-primary);min-height:100vh}
+.shotwrap{padding: 12px;background:var(--surface-page);color:var(--text-primary);min-height:100vh}
+@media (min-width: 768px){.shotwrap{padding: 20px}}
 .shotwrap h1{color:var(--text-primary)}
 {{.BenchCSS}}
 {{.ScheduleCSS}}

@@ -214,9 +214,11 @@ type ScheduleMatrix struct {
 	// inside repeat() and no CSS on this surface writes a week length or an hour
 	// count.
 	Cols []ScheduleCol
-	// IdentCap / SayCap are the two sticky ends' headers.
-	IdentCap string
-	SayCap   string
+	// IdentCap / SayCap are the two sticky ends' headers. IdentCapShort is the
+	// PHONE's word for the same column — see the note on Denominator below.
+	IdentCap      string
+	IdentCapShort string
+	SayCap        string
 
 	// Lanes are the per-member rows. EMPTY FOR A PLAYER — including their own —
 	// because OverlayMember is omitted wholesale from a player's payload. Their
@@ -230,8 +232,16 @@ type ScheduleMatrix struct {
 	// "free of 5 in the campai…": it is the sentence that stops the number being
 	// read as "of 5 players", which it is not — it includes the Director and
 	// everyone who never answered.
-	Denominator string
-	CountChip   []scheduleChip
+	//
+	// DenominatorShort is the SAME SENTENCE, SHORTER, for the phone — the
+	// drawing's own `free of 5`. The mockup's producer re-runs on resize and can
+	// simply swap the string; a page rendered once on the server cannot, so it
+	// emits both and one media query chooses. Duplicated words are the price of a
+	// width-dependent sentence, and they are cheaper than a truncation that turns
+	// this one into the misreading it exists to prevent.
+	Denominator      string
+	DenominatorShort string
+	CountChip        []scheduleChip
 
 	Bracket *ScheduleBracket
 
@@ -273,9 +283,15 @@ type ScheduleLane struct {
 	// Note is the printed sentence that stands where the marks would be.
 	// NoteChip rides beside it; NoteWarn switches the register from neutral
 	// (an unknown) to warn (a band that is hiding real data).
-	Note     string
-	NoteWarn string
-	NoteChip []scheduleChip
+	//
+	// NoteShort is the phone's form. The lane is a single nowrap line, so at 390
+	// the long sentence does not merely clip — it clips its own CHIP out of the
+	// row with it, and an honesty chip that vanishes on a phone is the one thing
+	// this page forbids everywhere it forbids anything.
+	Note      string
+	NoteShort string
+	NoteWarn  string
+	NoteChip  []scheduleChip
 
 	// The SAY column: the member's own local clock and their answer.
 	LocalTime  string

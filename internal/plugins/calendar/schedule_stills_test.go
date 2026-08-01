@@ -17,6 +17,9 @@ package calendar
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -356,5 +359,158 @@ func TestScheduleStills_TheMatrixMissingZoneIsGreyNotAmber(t *testing.T) {
 	roster := scheduleSectionHTML(t, html, "sc-roster")
 	if !strings.Contains(roster, `<span class="badge warn">zone not set</span>`) {
 		t.Error("the roster's amber `zone not set` must stay — it is the one with the repair")
+	}
+}
+
+// 10 · THE MATRIX FITS THE PHONE THE PRODUCT ACTUALLY GIVES IT — AND THE SHOT
+// HAS TO BE TAKEN IN THAT PHONE.
+//
+// The built mobile shot dragged sideways inside the matrix panel and clipped the
+// SUN column, where `wg-schedule-gm-mobile-light.png` fits all seven days. The
+// page was not the liar: the HARNESS was. `.shotwrap` padded 20px at every
+// width, and the product's own `<main class="px-3 py-3 md:px-5 md:py-4">` pads
+// 12px below 768px — so the stand-in shell handed the surface 8px less than the
+// page it stands in for, and 8px is exactly the margin the drawn geometry has.
+//
+// TWO CLAIMS, BOTH ARITHMETIC, BOTH HERE. First: the drawn narrow geometry
+// (76 + 94 + 7 × 24) fits the width the shipping page gives it at 390. Second:
+// the harness's shell gives the SAME width, so a shot can never again report a
+// drag the product does not have — or, worse, hide one it does.
+//
+// A `documentElement.scrollWidth == clientWidth` check cannot see any of this: a
+// nested `overflow-x:auto` container never contributes to the document's own
+// scrollable overflow, so the page was honestly not dragging while the panel
+// inside it was. The measurement that catches it is per-element, and it is now
+// in the shooter's report; this is the same fact stated where it can be re-run
+// without a browser.
+func TestScheduleStills_TheMatrixFitsThePhoneTheProductActuallyGives(t *testing.T) {
+	css := scheduleStrip(scheduleCSS(t, "calendar-schedule.css"))
+	narrow := scheduleMediaBlock(t, css, "max-width: 640px")
+
+	idw := schedulePxDecl(t, scheduleRuleFor(t, narrow, ".cal-schedule .sc-grid"), "--idw")
+	sayw := schedulePxDecl(t, scheduleRuleFor(t, narrow, ".cal-schedule .sc-grid"), "--sayw")
+	colmin := schedulePxDecl(t, scheduleRuleFor(t, narrow, ".cal-schedule .sc-grid"), "--colmin")
+	bodyPad := schedulePxDecl(t, scheduleRuleFor(t, narrow, ".cal-schedule .sc-body"), "padding")
+
+	// The grid's own declared floor, for the Gregorian seven the still shows.
+	grid := idw + sayw + 7*colmin
+
+	// What the page gives it: the viewport, less the app shell's own padding,
+	// less the panel's hairline, less the body's padding, less the scroll
+	// container's hairline. Every term is a real box on the way down.
+	budget := schedulePhoneViewport - 2*schedulePagePadNarrow -
+		2*scheduleHairline - 2*bodyPad - 2*scheduleHairline
+	if grid > budget {
+		t.Errorf("the narrow matrix needs %dpx (%d ident + %d say + 7 × %d) and the page "+
+			"gives it %dpx at %dpx — the panel drags sideways and the last day clips",
+			grid, idw, sayw, colmin, budget, schedulePhoneViewport)
+	}
+
+	// The fidelity harness must stand in the same phone. A shot taken in a
+	// narrower shell than the product's is not a picture of the product.
+	if !strings.Contains(scheduleShotPage, fmt.Sprintf("padding: %dpx", schedulePagePadNarrow)) {
+		t.Errorf("the harness page does not pad %dpx at phone width — it cannot stand in "+
+			"for <main class=\"px-3 …\"> and its mobile shot is not the product's",
+			schedulePagePadNarrow)
+	}
+	if !strings.Contains(scheduleShotPage, fmt.Sprintf("min-width: %dpx", schedulePagePadBreak)) {
+		t.Errorf("the harness page does not switch shells at the product's own %dpx "+
+			"breakpoint", schedulePagePadBreak)
+	}
+}
+
+// scheduleMediaBlock returns the body of the first @media rule whose query
+// contains q, with its own nesting intact.
+func scheduleMediaBlock(t *testing.T, css, q string) string {
+	t.Helper()
+	i := strings.Index(css, q)
+	if i < 0 {
+		t.Fatalf("no @media rule mentioning %q", q)
+	}
+	open := strings.Index(css[i:], "{")
+	if open < 0 {
+		t.Fatalf("@media %q has no body", q)
+	}
+	open += i
+	depth := 0
+	for j := open; j < len(css); j++ {
+		switch css[j] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return css[open+1 : j]
+			}
+		}
+	}
+	t.Fatalf("@media %q is unterminated", q)
+	return ""
+}
+
+// schedulePxDecl reads one `prop: <n>px` out of a declaration body.
+func schedulePxDecl(t *testing.T, rule, prop string) int {
+	t.Helper()
+	m := regexp.MustCompile(regexp.QuoteMeta(prop) + `:\s*(\d+)px`).FindStringSubmatch(rule)
+	if m == nil {
+		t.Fatalf("no %q declaration in:\n%s", prop, rule)
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		t.Fatalf("%q is not a pixel count: %v", prop, err)
+	}
+	return n
+}
+
+// 11 · TWO STRINGS THAT VANISH ON THE PHONE, ONE OF THEM AGAINST THIS SHEET'S
+// OWN WRITTEN RULE.
+//
+// Shot at a true 390 the matrix loses two things the still keeps. Rell's empty
+// lane is a `nowrap` + ellipsis box, so its sentence clips mid-word AND TAKES
+// THE `NO PATTERN` CHIP WITH IT — an honesty chip that disappears at the
+// smallest width, which is the one thing this page forbids anywhere it forbids
+// anything. And the count lane's denominator clips into `FREE OF 5 …`: the exact
+// string the sheet's own comment says may never be clipped, because "free of 5"
+// with the rest cut off is precisely the "of 5 players" misreading the sentence
+// exists to prevent.
+//
+// THE MOCKUP SOLVES BOTH BY SHORTENING THE WORDS, not by shrinking them: at
+// NARROW it prints `nothing saved`, `free of 5` and `who`. Its producer re-runs
+// on resize; a server-rendered page cannot, so it emits BOTH strings and lets
+// one media query choose. Duplicated text is the price of a width-dependent
+// sentence on a page that renders once, and it is cheaper than either a clipped
+// honesty chip or a sentence that means something different truncated.
+func TestScheduleStills_TheNarrowMatrixShortensItsWordsInsteadOfClippingThem(t *testing.T) {
+	html := scheduleRenderBody(t, true)
+	matrix := scheduleSectionHTML(t, html, "sc-matrix")
+	for _, pair := range []struct{ long, short string }{
+		{"free of 5 in the campaign", "free of 5"},
+		{"no availability saved", "nothing saved"},
+		{"who is free", "who"},
+	} {
+		if !strings.Contains(matrix, pair.long) {
+			t.Errorf("the wide matrix lost %q", pair.long)
+		}
+		if !strings.Contains(matrix, ">"+pair.short+"<") {
+			t.Errorf("the matrix carries no narrow form of %q — at 390 the wide one clips",
+				pair.long)
+		}
+	}
+	if !strings.Contains(matrix, `class="sc-narrow"`) || !strings.Contains(matrix, `class="sc-wide"`) {
+		t.Error("the width-dependent strings are not marked for the media query to choose between")
+	}
+
+	// The swap itself: hidden by default, shown in the phone block, and the
+	// wide one hidden there. A pair where both are visible prints the sentence
+	// twice, which is worse than either failure it repairs.
+	css := scheduleStrip(scheduleCSS(t, "calendar-schedule.css"))
+	if !strings.Contains(css, ".cal-schedule .sc-narrow") {
+		t.Fatal("no .sc-narrow rule at all")
+	}
+	narrow := scheduleMediaBlock(t, css, "max-width: 640px")
+	for _, want := range []string{".cal-schedule .sc-wide", ".cal-schedule .sc-narrow"} {
+		if !strings.Contains(narrow, want) {
+			t.Errorf("the phone block does not swap %s", want)
+		}
 	}
 }

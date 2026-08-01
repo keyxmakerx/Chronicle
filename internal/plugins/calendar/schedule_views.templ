@@ -38,6 +38,21 @@ templ scheduleCaptionView(c ScheduleCaption) {
 	}
 }
 
+// scheduleWidthTextView prints a sentence that has to be SHORTER on a phone.
+//
+// The sealed mockup's producer re-runs on resize and simply swaps the string; a
+// page rendered once on the server cannot, so it emits both and one media query
+// chooses. Both are in the DOM, which means both are in the accessibility tree —
+// so this is only ever used where the two forms say the SAME thing in different
+// numbers of words, never to hide a fact from one width.
+templ scheduleWidthTextView(wide, short string) {
+	if short == "" || short == wide {
+		{ wide }
+	} else {
+		<span class="sc-wide">{ wide }</span><span class="sc-narrow">{ short }</span>
+	}
+}
+
 // scheduleVerdictView is S1 · THE VERDICT.
 templ scheduleVerdictView(data ScheduleData) {
 	<section class="sc-verdict sc-panel surf" data-schedule-verdict>
@@ -224,7 +239,11 @@ templ scheduleMatrixView(data ScheduleData) {
 				<div class="sc-wrap">
 					<div class="sc-grid" data-region="grid" style={ scheduleGridStyle(len(data.Matrix.Cols)) }>
 						<div class="sc-head-row">
-							<span class="who"><span class="cap">{ data.Matrix.IdentCap }</span></span>
+							<span class="who">
+								<span class="cap">
+									@scheduleWidthTextView(data.Matrix.IdentCap, data.Matrix.IdentCapShort)
+								</span>
+							</span>
 							for _, c := range data.Matrix.Cols {
 								<span class={ "hd", templ.KV("major", c.Major) }>
 									{ c.Head }
@@ -274,7 +293,7 @@ templ scheduleLaneView(l ScheduleLane) {
 				if l.NoteWarn != "" {
 					<span class="badge warn">{ l.NoteWarn }</span>
 				}
-				{ l.Note }
+				@scheduleWidthTextView(l.Note, l.NoteShort)
 				for _, ch := range l.NoteChip {
 					<span class="badge need">{ ch.Text }</span>
 				}
@@ -365,7 +384,11 @@ templ scheduleDensityView(m ScheduleMatrix) {
 // branch is on PopID, which the builder only ever sets for a Director.
 templ scheduleCountView(m ScheduleMatrix) {
 	<div class="sc-row cnt">
-		<span class="who"><span class="cap">{ m.Denominator }</span></span>
+		<span class="who">
+			<span class="cap">
+				@scheduleWidthTextView(m.Denominator, m.DenominatorShort)
+			</span>
+		</span>
 		for _, c := range m.Counts {
 			if c.PopID != "" {
 				<button
