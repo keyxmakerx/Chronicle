@@ -278,3 +278,83 @@ func scheduleSectionHTML(t *testing.T, html, class string) string {
 	}
 	return html[start : start+end]
 }
+
+// 7 · THE COUNT LANE'S NUMERAL AND ITS PEAK HOUR ARE STACKED, NOT SIDE BY SIDE.
+// The sealed mockup's cell is `display:grid;place-items:center` and nothing
+// else, so grid's own row auto-flow puts `1` above `@ 19`, both centred — which
+// is what the still shows in all seven columns. The build added
+// `grid-auto-flow: column; gap: 4px`, two declarations the mockup does not have,
+// and every cell rendered `1   @ 19` on one line.
+//
+// It is a two-property diff and it changes what the lane IS: stacked, the
+// numeral is the datum and the hour is its footnote; inline, they read as a pair
+// of equal facts and the count stops being the thing you can see from across the
+// room.
+func TestScheduleStills_TheCountLaneStacksItsNumeralOverItsHour(t *testing.T) {
+	css := scheduleStrip(scheduleCSS(t, "calendar-schedule.css"))
+	rule := scheduleRuleFor(t, css, ".cal-schedule .sc-row.cnt .sc-cell")
+	if !strings.Contains(rule, "place-items: center") {
+		t.Errorf("the count cell lost the mockup's centring; got:\n%s", rule)
+	}
+	for _, forbidden := range []string{"grid-auto-flow", "gap:"} {
+		if strings.Contains(rule, forbidden) {
+			t.Errorf("the count cell declares %q, which the sealed mockup does not — "+
+				"it is what turns the drawn stack into a row; got:\n%s", forbidden, rule)
+		}
+	}
+}
+
+// 8 · THE MATRIX HEAD NAMES THE DAYS AND THE HOURS IT IS SHOWING. The drawing
+// prints `Mon 20 – Sun 26 Jul · 16:00–24:00 · times in …`; the build reused the
+// page's generic frame line and printed `week of 20 Jul 2026 · times in …`.
+//
+// Both name the week. Only one names the BAND — and this is the one surface
+// whose entire subject is which hours are on screen. A member whose windows all
+// fall outside the band gets a lane that says so; a reader who cannot see what
+// the band IS has no way to act on that.
+func TestScheduleStills_TheMatrixHeadNamesItsDaysAndItsHours(t *testing.T) {
+	m := scheduleBuildMatrix(scheduleOracleInput(true))
+	for _, want := range []string{"Mon 20 – Sun 26 Jul", "16:00–24:00", "times in Chicago"} {
+		if !strings.Contains(m.Frame, want) {
+			t.Errorf("matrix head = %q, missing %q", m.Frame, want)
+		}
+	}
+
+	// A campaign with no zone still names its days and its band — the missing
+	// zone is a named absence, never a reason to drop the two facts that do not
+	// depend on it.
+	in := scheduleOracleInput(true)
+	in.Zone, in.ZoneLeaf = "", ""
+	nz := scheduleBuildMatrix(in)
+	for _, want := range []string{"Mon 20 – Sun 26 Jul", "16:00–24:00", "no time zone is set"} {
+		if !strings.Contains(nz.Frame, want) {
+			t.Errorf("zone-less matrix head = %q, missing %q", nz.Frame, want)
+		}
+	}
+}
+
+// 9 · A MEMBER WITH NO ZONE IS AN UNKNOWN, NOT A FAULT — IN THE MATRIX TOO. The
+// drawing's lane emits `NEED('no zone')`, the grey "not known" vocabulary, and
+// the still renders it grey. The build emitted `.badge.warn` and rendered it
+// amber, i.e. as something broken.
+//
+// The ROSTER's amber `zone not set` is correct and stays: that row carries the
+// repair beside it (`Ask →`) and is where the campaign is asked to do something
+// about it. The matrix lane carries no repair and is not asking — it is
+// reporting that this member's clock cannot be computed. Same fact, two
+// registers, and the register is chosen by whether there is an action attached.
+func TestScheduleStills_TheMatrixMissingZoneIsGreyNotAmber(t *testing.T) {
+	html := scheduleRenderBody(t, true)
+	matrix := scheduleSectionHTML(t, html, "sc-matrix")
+	if !strings.Contains(matrix, `<span class="badge need">no zone</span>`) {
+		t.Error("the matrix lane's missing-zone chip is not the grey NEED chip the drawing emits")
+	}
+	if strings.Contains(matrix, `<span class="badge warn">no zone</span>`) {
+		t.Error("the matrix lane still prints a missing zone as an amber fault")
+	}
+	// …and the roster's amber pair is untouched, repair and all.
+	roster := scheduleSectionHTML(t, html, "sc-roster")
+	if !strings.Contains(roster, `<span class="badge warn">zone not set</span>`) {
+		t.Error("the roster's amber `zone not set` must stay — it is the one with the repair")
+	}
+}

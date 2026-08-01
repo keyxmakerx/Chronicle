@@ -217,6 +217,48 @@ func scheduleFrameLine(in scheduleBuildInput) string {
 	return week + " · times in " + in.ZoneLeaf
 }
 
+// scheduleMatrixFrame is the matrix head's frame: WHICH DAYS, WHICH HOURS, and
+// in whose zone — `Mon 20 – Sun 26 Jul · 16:00–24:00 · times in Chicago`.
+//
+// IT IS NOT scheduleFrameLine, AND THE DIFFERENCE IS THE BAND. Every other panel
+// on this page is about a week and the generic "week of 20 Jul 2026" says
+// everything they need. This one is a grid of HOURS, its lanes can report "3
+// windows outside 16–24", and a reader who cannot see what the band is has no
+// way to act on that sentence. The drawing prints both; so does this.
+func scheduleMatrixFrame(in scheduleBuildInput) string {
+	line := scheduleDaySpan(in) + " · " +
+		fmt.Sprintf("%02d:00–%02d:00", in.BandFrom, in.BandTo)
+	if in.ZoneLeaf == "" {
+		// A missing zone is a NAMED absence, never a reason to drop the two
+		// facts that do not depend on it.
+		return line + " · no time zone is set"
+	}
+	return line + " · times in " + in.ZoneLeaf
+}
+
+// scheduleDaySpan names the columns' own first and last day.
+//
+// IT READS THE OVERLAY, never a literal seven: a calendar's week length is its
+// own business, and this line is the one place a reader would notice the page
+// disagreeing with the grid beneath it. The month is printed once when both ends
+// share one and twice when they do not, because "Mon 28 – Sun 3 Aug" is a date
+// range nobody can parse.
+func scheduleDaySpan(in scheduleBuildInput) string {
+	days := scheduleDayCount(in)
+	first, ferr := timeParseISO(scheduleDayDate(in, 0))
+	last, lerr := timeParseISO(scheduleDayDate(in, days-1))
+	if ferr != nil || lerr != nil {
+		return "week of " + in.WeekStart.Format("2 Jan 2006")
+	}
+	if first.Equal(last) {
+		return first.Format("Mon 2 Jan")
+	}
+	if first.Month() == last.Month() && first.Year() == last.Year() {
+		return first.Format("Mon 2") + " – " + last.Format("Mon 2 Jan")
+	}
+	return first.Format("Mon 2 Jan") + " – " + last.Format("Mon 2 Jan")
+}
+
 // schedulePainterFrame states which zone the viewer's OWN marks are stored in.
 func schedulePainterFrame(in scheduleBuildInput) string {
 	if in.ZoneLeaf == "" {

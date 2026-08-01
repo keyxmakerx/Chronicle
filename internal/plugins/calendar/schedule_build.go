@@ -398,7 +398,7 @@ func scheduleBuildMatrix(in scheduleBuildInput) ScheduleMatrix {
 	total := len(members)
 	m := ScheduleMatrix{
 		Title:    "Who is free when",
-		Frame:    scheduleFrameLine(in),
+		Frame:    scheduleMatrixFrame(in),
 		IdentCap: "everyone",
 		SayCap:   "time",
 		Scope:    "anonymous totals only — your own week is in “My availability” above",

@@ -755,6 +755,12 @@
 /* THE EXACT NUMBER, WHERE IT CAN BE READ AS A NUMBER — at --text-body, because
    this is the datum, not an annotation. */
 .cal-schedule .sc-row.cnt { height: 20px; border-bottom: 0; }
+/* THE NUMERAL SITS OVER ITS HOUR, NEVER BESIDE IT. `display:grid` with grid's
+   own row auto-flow is the whole rule the mockup has: `1` above `@ 19`, both
+   centred. Flowing them into a column instead makes them a pair of equal facts
+   on one line, and the count stops being the thing that can be read from across
+   the room — which is the one job this lane has, and why it is set at
+   --text-body rather than at an annotation's size. */
 .cal-schedule .sc-row.cnt .sc-cell {
   font-weight: 650;
   font-size: 11px;
@@ -762,11 +768,13 @@
   color: var(--text-body);
   text-align: center;
   display: grid;
-  grid-auto-flow: column;
-  gap: 4px;
   place-items: center;
 }
 .cal-schedule .sc-row.cnt .sc-cell.peak { color: var(--text-primary); }
+/* `<b>` is the numeral's ELEMENT, not a second weight: the cell already sets
+   650 and the user-agent's `bolder` would take it to 700, one step heavier than
+   the drawing anywhere the numeral happens to be the peak. */
+.cal-schedule .sc-row.cnt .sc-cell b { font-weight: 650; }
 /* THE DENOMINATOR MAY NEVER BE CLIPPED into "free of 5 in the campai…". It is
    the sentence that stops the count being read as "of 5 players", which it is
    not — it includes the Director and everyone who never answered — so the label

@@ -288,7 +288,14 @@ templ scheduleLaneView(l ScheduleLane) {
 				}
 			</span>
 			if l.ZoneMissing {
-				<span class="badge warn">no zone</span>
+				// AN UNKNOWN, NOT A FAULT — the grey NEED vocabulary, exactly as
+				// the drawing emits it. The ROSTER prints the same fact in amber
+				// with `Ask →` beside it, and that is the difference: the roster
+				// row is asking the campaign to do something, this lane is
+				// reporting that a clock cannot be computed. The register follows
+				// whether there is a repair attached, never the severity of the
+				// word.
+				<span class="badge need">no zone</span>
 			}
 			<span class={ "rs", benchToneClass(l.Tone) }>{ l.Answer }</span>
 		</span>
