@@ -1,0 +1,340 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   calendar-builder.css — THE BUILDER WIZARD's sheet (calendar-v4 wave 4, W-H,
+   C-CALV4-WIZARD-P13). The surface behind "New calendar": nine stations, a
+   preset gallery, the front door for the 4-format importer, and a live month
+   preview that is the SHIPPED Block and not a second renderer.
+
+   UNLAYERED AND SELF-CONTAINED, exactly as calendar-block.css and
+   calendar-bench.css are, per the rendering-canvas CSS exemption (cordinator
+   decisions/2026-06-05-rendering-canvas-css-exemption.md). input.css's content
+   is layered; an unlayered standalone sheet beats every layer, which is why the
+   two cascade regimes never fight. Nothing here is @apply'd, nothing reads a
+   Tailwind theme() value, nothing is emitted by the Tailwind build, and it is
+   linked ONLY through layouts.AssetURL (a bare href="/static/…" in any .templ
+   fails TestTemplatesUseAssetURL repo-wide).
+
+   ── THE THREE LAWS THIS FILE IS GRADED AGAINST ─────────────────────────────
+
+   1. EVERY SELECTOR IS ROOTED AT .cal-builder AND EVERY CLASS IS `wz-`-PREFIXED
+      (dispatch §1.1). Root-scoping ALONE is not enough, and that is the whole
+      finding: the Block renders INSIDE .cal-builder, so a rule like
+      `.cal-builder .badge{…}` would restyle every badge inside the embedded
+      Block through a descendant combinator that reaches straight through the
+      Block's own scoping root. `.badge` is a live product class. The prefix is a
+      CONTAINMENT requirement, not tidiness — and it is checked in one regex by
+      builder_css_contract_test.go.
+
+   2. THE MOTION BUDGET IS FIVE PASSES AND FOUR KEYFRAMES, AND THAT IS ALL.
+      L6 (plans/2026-07-24-calendar-v4-design-notes.md:52-54) is the wizard's
+      named carve-out — "new capability is explicitly not the point; style,
+      animation and finish are" — and canon A2 names "builder step → builder
+      step" in its ALLOWED column while forbidding interior rearrangement in the
+      same breath. The carve-out buys the wizard's CHROME. It buys NOTHING
+      inside the month.
+
+        1 · w-in-fine on the station title + subtitle  (information never waits)
+        2 · w-in       on the panel's rows, on the --m-step delay ladder
+        3 · m-latch    on the rail's current ring       (a latch, not a traveller)
+        4 · pv-swap    on .wz-pv — THE WHOLE PREVIEW SURFACE, opacity only
+        5 · m-latch    on the chosen preset card's ring + pass 4 on the preview
+
+      Hover and press are COLOUR AND ELEVATION ONLY (motion policy §4, canon D5
+      unamended): nothing grows and nothing moves on hover. A control that
+      changes size on hover makes a dense surface feel unstable, and this
+      surface is dense.
+
+   3. THE LEAK GUARD (dispatch §5.4). The design ASKS for a preview that
+      cross-fades and the Block sits inside it, so this is the single most
+      likely place the Block's austerity is violated. Four mechanisms:
+        (a) file separation — wizard motion lives HERE and nowhere else.
+            calendar-block.css's four-property motionBudget and
+            calendar-bench.css's three-property register are UNCHANGED and not
+            widened by this wave; putting one wizard rule in either reds CI.
+        (b) the wz- prefix — a rule can never match a Block-internal node.
+        (c) THE FORBIDDEN LITERAL: the Block's own scoping-root class name
+            appears in this file ZERO times — the budget test names it and
+            counts it, so that this comment does not have to. The preview
+            cross-fades by animating the WIZARD's own wrapper (.wz-pv) with the
+            Block inert inside it. Naming the Block's scoping root is the only
+            way the leak can happen, so the name is simply absent.
+        (d) builder_css_contract_test.go asserts (a)-(c) mechanically. Canon A8
+            L-M2 — "a layer that changes the MONTH's geometry applies instantly
+            and silently" — is what (c) protects: a preset swap re-renders the
+            month INSTANTLY; the cross-fade is on the wrapper, and the cells,
+            numerals, today pill, moon marks, weekday headers and era bands
+            repaint in place.
+
+   ── REDUCED MOTION (dispatch §5.3, [WZ-9] SIGNED) ──────────────────────────
+
+   The whole motion block below sits inside
+   `@media (prefers-reduced-motion: no-preference)`, matching
+   calendar-block.css. The mockup's token-zeroing `(reduce)` block is
+   DELIBERATELY NOT PORTED: static/css/input.css:31-47 already ships a global
+   total-disable OUTSIDE every cascade layer, so the port would be a second,
+   weaker, contradictory policy in a product that has exactly one. Under the
+   global guard every station change, preset pick and preview repaint lands
+   INSTANTLY AND COMPLETELY — with no layout shift and no lost content — which
+   is a behavioural claim, not a stylistic one.
+
+   ── NO CAPTURE CLASS, AND WHY ──────────────────────────────────────────────
+
+   The mockup fires its passes from `.anim-*` classes a script adds. This sheet
+   has no such trigger and needs none: a station change is an HTMX swap of the
+   panel and a data change is an HTMX swap of the preview, and a CSS animation
+   on freshly inserted elements runs on insertion. The swap IS the trigger. That
+   is what keeps the register JS-free, and it is why canon A2's View Transition
+   permission for "builder step → builder step" is NOTED AND DELIBERATELY
+   UNSPENT (dispatch §5.5): passes 1-3 already ARE that transition, in CSS, with
+   no view-transition-name and with reduced-motion correctness inherited from
+   the global guard.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TOKENS — light. Lifted verbatim from the signed contract's _tokens.css
+   (cordinator mockups/v4-proposed/_tokens.css), the same set calendar-bench.css
+   carries. No new colour, radius or duration value is invented here.
+
+   THE DURATION LITERALS BELOW ARE DEFINITIONS, AND THEY ARE THE ONLY ONES.
+   Dispatch §5.2: "no literal `ms` value exists anywhere in the wizard's
+   stylesheet". Every RULE composes --t-fast / --t-base / --t-long or the
+   --m-* family; the four lines that give those tokens their values are their
+   definition site and cannot themselves be composed from anything. The budget
+   test enforces exactly that split — a literal duration outside a --t-*/--m-*
+   custom-property declaration fails it.
+   ─────────────────────────────────────────────────────────────────────────── */
+.cal-builder {
+  color-scheme: light dark;
+
+  --surface-page: oklch(0.985 0.002 260);
+  --surface-card: oklch(1 0 0);
+  --surface-inset: oklch(0.965 0.003 260);
+  --text-primary: oklch(0.22 0.015 265);
+  --text-body: oklch(0.38 0.014 265);
+  --text-secondary: oklch(0.55 0.012 265);
+  --text-muted: oklch(0.68 0.010 265);
+
+  --rule-hairline: oklch(0.915 0.004 265);
+  --rule-structural: oklch(0.855 0.006 265);
+  --rule-structural-strong: oklch(0.775 0.008 265);
+  --rule-editorial: oklch(0.72 0.010 265);
+
+  /* the ONE token inherited from the host page, because the campaign accent IS
+     chrome. It never touches calendar identity or event data (canon A7). */
+  --accent: var(--color-accent, oklch(0.58 0.20 270));
+  --accent-action: var(--accent);
+  --accent-action-ink: oklch(0.99 0 0);
+
+  --ok: oklch(0.60 0.15 150);
+  --warn: oklch(0.65 0.15 65);
+  --bad: oklch(0.58 0.19 25);
+
+  /* CALENDAR IDENTITY — the four CLOSED hues (dispatch §2.1). There is no
+     --cal-blank and inventing one is forbidden; Blank falls back to a NEUTRAL
+     RULE token ([WZ-7d]), never to --own-none, because crossing the OWNER axis
+     into calendar identity is the same category error. */
+  --cal-harptos: oklch(0.55 0.12 200);
+  --cal-real: oklch(0.55 0.18 270);
+  --cal-elven: oklch(0.58 0.15 300);
+  --cal-dwarven: oklch(0.62 0.10 70);
+
+  --r-badge: 2px;
+  --r-chip: 4px;
+  --r-ctl: 6px;
+  --r-card: 8px;
+  --r-panel: 12px;
+  --r-full: 9999px;
+
+  /* elevation: rest is ALWAYS none */
+  --elev-1: 0 1px 2px oklch(0.2 0.02 260/.06), 0 1px 3px oklch(0.2 0.02 260/.08);
+
+  /* MOTION — three durations, composed; no fourth value exists. */
+  --t-fast: 100ms;
+  --t-base: 150ms;
+  --t-long: 400ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-dec: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-acc: cubic-bezier(0.3, 0, 0.8, 0.15);
+  /* weight without springs: engage fast on an accelerating curve, release
+     slower on a decelerating one — a part meeting its stop and returning under
+     load. Canon D5 rejects spring physics; this is the sanctioned substitute. */
+  --m-engage: var(--t-fast) var(--ease-acc);
+  --m-release: var(--t-base) var(--ease-dec);
+  --m-state: var(--t-fast) linear;
+  --m-exit: var(--t-fast) var(--ease-acc);
+  /* orchestration. --m-step is a DELAY unit and is ILLEGAL as a duration, and
+     it is legal in exactly one prelude — the step panel's ladder, below. */
+  --m-step: calc(var(--t-fast) / 3);
+  --m-cap: 4;
+  --m-travel: 3px;
+  --m-travel-fine: 2px;
+
+  /* channel defaults, so a card whose producer omits one still renders */
+  --axis: var(--rule-structural-strong);
+  --bandhue: var(--rule-structural);
+
+  display: block;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+.cal-builder *,
+.cal-builder *::before,
+.cal-builder *::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TOKENS — dark. Chronicle switches themes with a `.dark` class on <html>
+   (tailwind.config.js darkMode:'class', static/js/theme.js).
+   ─────────────────────────────────────────────────────────────────────────── */
+.dark .cal-builder {
+  --surface-page: oklch(0.165 0.010 265);
+  --surface-card: oklch(0.215 0.012 265);
+  --surface-inset: oklch(0.255 0.013 265);
+  --text-primary: oklch(0.975 0.002 265);
+  --text-body: oklch(0.855 0.008 265);
+  --text-secondary: oklch(0.705 0.012 265);
+  --text-muted: oklch(0.565 0.012 265);
+
+  --rule-hairline: oklch(0.295 0.012 265);
+  --rule-structural: oklch(0.375 0.014 265);
+  --rule-structural-strong: oklch(0.475 0.014 265);
+  --rule-editorial: oklch(0.475 0.014 265);
+
+  --accent: var(--color-accent, oklch(0.72 0.16 272));
+  --accent-action-ink: oklch(0.16 0.012 265);
+
+  --ok: oklch(0.72 0.16 150);
+  --warn: oklch(0.78 0.15 70);
+  --bad: oklch(0.68 0.18 25);
+
+  --elev-1: 0 1px 2px oklch(0 0 0/.28), 0 1px 3px oklch(0 0 0/.34);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §MOTION — THE WHOLE BUDGET, AND NOTHING ELSE MOVES.
+
+   Everything below is inside the no-preference guard. Under reduced motion
+   there is no rule at all here, so every state is simply present — instantly,
+   completely, in final position, with nothing lost.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: no-preference) {
+  /* ── the four keyframes. There is no fifth. ─────────────────────────────
+     m-latch is the ONE place clip-path appears in this sheet, and it is never
+     a transition-property: canon A6 forbids a travelling indicator, and a latch
+     that closes centre→corners is the sanctioned substitute — it is already the
+     Block's own single permitted keyframe, so the wizard borrows a grammar
+     rather than inventing one. */
+  @keyframes m-latch {
+    from { clip-path: inset(0 50% 0 50%); }
+    to { clip-path: inset(0); }
+  }
+  @keyframes w-in {
+    from { opacity: 0; transform: translateY(var(--m-travel)); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes w-in-fine {
+    from { opacity: 0; transform: translateY(var(--m-travel-fine)); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pv-swap {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* ── THE DELAY LADDER, and the only prelude --m-step may appear in.
+     --m-i is set inline per row by the producer and capped at --m-cap, so a
+     forty-month structure adds ≤132ms and no pass exceeds ~282ms. It exists
+     ONLY inside the step panel: never inside the preview, never on the rail,
+     never on the gallery after Start's own entrance. */
+  .cal-builder .wz-panel [style*="--m-i"] {
+    animation-delay: calc(min(var(--m-i, 0), var(--m-cap)) * var(--m-step));
+  }
+
+  /* ── PASS 1 · the station names itself first.
+     INFORMATION NEVER WAITS: no animation-delay is declared at all, so the
+     title and subtitle start at 0 while the rows behind them are still on the
+     ladder. 2px, --t-fast. */
+  .cal-builder .wz-panel .wz-ph,
+  .cal-builder .wz-panel .wz-ps {
+    animation: w-in-fine var(--t-fast) var(--ease-dec) both;
+  }
+
+  /* ── PASS 2 · the station's content arrives in reading order.
+     3px toward its own rest, --t-base, on the ladder above. The HTMX swap that
+     replaces the panel is the trigger; there is no capture class. */
+  .cal-builder .wz-panel .wz-frow,
+  .cal-builder .wz-panel .wz-pgal,
+  .cal-builder .wz-panel .wz-igrid,
+  .cal-builder .wz-panel .wz-note,
+  .cal-builder .wz-panel .wz-sum,
+  .cal-builder .wz-panel .wz-chipswrap,
+  .cal-builder .wz-panel .wz-impdoor,
+  .cal-builder .wz-panel .wz-dropz,
+  .cal-builder .wz-panel .wz-maptable,
+  .cal-builder .wz-panel .wz-stepper.wz-big {
+    animation: w-in var(--t-base) var(--ease-dec) both;
+  }
+
+  /* ── PASS 3 · "you are here" is drawn as ONE state change.
+     The current ring is a pseudo so the latch can close it centre→corners
+     rather than sliding an indicator between stations. */
+  .cal-builder .wz-step.wz-cur::after {
+    animation: m-latch var(--t-fast) var(--ease-dec) both;
+  }
+
+  /* ── PASS 4 · THE PREVIEW IS REPLACED, NOT REARRANGED.
+     opacity only. No transform, no ladder, no clip-path, no delay. The
+     declaration changed, so the SURFACE is replaced — a calendar is read by
+     comparison and motion inside a data grid destroys comparison (motion policy
+     §5). This rule names the wizard's OWN wrapper; the Block inside it is
+     inert, and this sheet never names the Block's scoping root. */
+  .cal-builder .wz-pv {
+    animation: pv-swap var(--t-base) var(--ease) both;
+  }
+
+  /* ── PASS 5 · selection is identity, not elevation.
+     The chosen card's ring latches — card CHROME, outside the preview — and the
+     new calendar's preview takes pass 4. D9's surviving clause: accent border +
+     tint + NO shadow change, which is why .wz-sel drops the hover shadow. */
+  .cal-builder .wz-pcard.wz-sel::after {
+    animation: m-latch var(--t-fast) var(--ease-dec) both;
+  }
+
+  /* ── HOVER AND PRESS — COLOUR AND ELEVATION ONLY.
+     Nothing grows and nothing moves. "Weight without springs" is the
+     engage/release duration pair, not a scale. */
+  .cal-builder .wz-pcard,
+  .cal-builder .wz-icard {
+    transition: background-color var(--m-release), box-shadow var(--m-release),
+      border-color var(--m-release);
+  }
+  .cal-builder .wz-pcard:hover,
+  .cal-builder .wz-icard:hover {
+    transition: background-color var(--m-engage), box-shadow var(--m-engage),
+      border-color var(--m-engage);
+  }
+  .cal-builder .wz-pcard:active,
+  .cal-builder .wz-icard:active {
+    transition-duration: var(--t-fast);
+  }
+
+  .cal-builder .wz-btn {
+    transition: background-color var(--t-base) var(--ease),
+      border-color var(--t-base) var(--ease), color var(--t-base) var(--ease);
+  }
+  .cal-builder .wz-step,
+  .cal-builder .wz-stepper button,
+  .cal-builder .wz-wash,
+  .cal-builder .wz-icb {
+    transition: background-color var(--m-state), color var(--m-state);
+  }
+  .cal-builder .wz-wash:active {
+    transition-duration: var(--t-fast);
+  }
+}
