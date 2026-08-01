@@ -786,6 +786,36 @@
   border: 0;
   padding: 0 0 8px;
 }
+
+/* THE DOOR TO THE SCHEDULE — the panel title as a link (C-CALV4-RSVP-P8 §10).
+   THE SIGNED RENDER DOES NOT MOVE. `.cal-bench .lhead .t` is element-agnostic,
+   so the anchor inherits the signed weight, size, tracking, case and ink
+   already; the only thing to undo is the user agent's underline, and the only
+   thing to add is getting it back under the pointer and the keyboard. Nothing
+   here changes a metric, so the panel occupies the same pixels it was signed
+   at, in both the filled and the unfilled state.
+
+   NO TRANSITION, deliberately: this sheet has NO motion at all and
+   `TestBenchCSS_NoMotionAtAll` holds it that way. The schedule page's
+   sanctioned colour/opacity register is that page's, declared in that page's
+   sheet, and a door is not the place to spend the first frame of motion the
+   Bench has ever had. */
+.cal-bench .rsvp > .lhead a.t {
+  text-decoration: none;
+}
+.cal-bench .rsvp > .lhead a.t:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* Canon focus: the 2px accent outline this product uses everywhere, never a
+   shadow change — and `:focus-visible` rather than `:focus`, so a pointer
+   click on the title does not leave a ring behind it. */
+.cal-bench .rsvp > .lhead a.t:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .cal-bench .rsvp .top {
   display: flex;
   gap: 16px;

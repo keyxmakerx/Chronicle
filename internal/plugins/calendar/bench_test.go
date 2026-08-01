@@ -887,16 +887,86 @@ func TestBenchRsvp_DerivedWindowShipsChippedAndProposeStaysInert(t *testing.T) {
 	}
 }
 
-// PART B IS NOT BUILT. No `.sc-` class, no /schedule link, no Verdict, Matrix,
-// Roster or Painter. This is a bound, so it is pinned rather than trusted.
-func TestBenchRsvp_PartBIsNotBuilt(t *testing.T) {
+// PART B TOUCHES THE BENCH ONLY AS THE DOOR — the INVERTED form of Part A's
+// `TestBenchRsvp_PartBIsNotBuilt`, which asserted that no `.sc-` class, no
+// `/schedule` link and no `cal-schedule` root had leaked back here.
+//
+// THE TRIPWIRE IS INVERTED RATHER THAN DELETED, which is the standing rule: it
+// held a real bound in Part A (a link to a 404 is worse than no link) and it
+// holds the REMAINING half of that bound now that the page exists. Exactly one
+// of the four forbidden strings became legal — the href — and the other three
+// are MORE load-bearing than before, not less: the Bench does not load
+// calendar-schedule.css, so an `.sc-` class or a `cal-schedule` root appearing
+// in this DOM would be markup styled by a sheet that is not on the page.
+func TestBenchRsvp_PartBTouchesTheBenchOnlyAsTheDoor(t *testing.T) {
 	for _, gm := range []bool{true, false} {
 		html := renderBench(t, benchFxDataRsvp(gm, gm))
-		for _, forbidden := range []string{`class="sc-`, ` sc-`, `/schedule`, "cal-schedule"} {
+		for _, forbidden := range []string{`class="sc-`, ` sc-`, "cal-schedule"} {
 			if strings.Contains(html, forbidden) {
-				t.Errorf("gm=%v Part B leaked into Part A: %q", gm, forbidden)
+				t.Errorf("gm=%v Part B's namespace leaked onto the Bench: %q", gm, forbidden)
 			}
 		}
+	}
+}
+
+// THE DOOR TO THE SCHEDULE. Part B ships `GET /campaigns/:id/schedule`, and the
+// dispatch (§10) puts its entrance here rather than in the nav: WG-2's signed
+// ruling keeps the nav pointing at `/availability` and books the retirement as
+// its own slice, so the ONE way into the new page is the panel that has been
+// called `RSVP · Schedule` since the signed contract drew it (cv4:2233).
+//
+// THE TITLE IS THE LINK, and that is why the signed render does not move: the
+// anchor keeps the signed class, the signed words and the signed ink, and only
+// grows an underline under the pointer. Part A could not do this because the
+// page 404'd; the page exists now.
+//
+// IT IS A DOOR AT EVERY ROLE. The route's floor is Player+, so gating the link
+// to a Director would hide the painter from the exact people whose availability
+// the panel is complaining it does not have.
+func TestBenchRsvp_PanelTitleIsTheDoorToTheSchedule(t *testing.T) {
+	const door = `href="/campaigns/camp-1/schedule"`
+	for _, tc := range []struct {
+		name string
+		data BenchData
+	}{
+		// BOTH STATES, and the unfilled one is the load-bearing case: a
+		// campaign where nobody has saved availability is precisely the
+		// campaign that needs the painter, and its panel is the one with
+		// nothing else in it to click.
+		{"director · filled", benchFxDataRsvp(true, true)},
+		{"player · filled", benchFxDataRsvp(false, false)},
+		{"director · unfilled", benchFxData(true, true)},
+		{"player · unfilled", benchFxData(false, false)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			html := renderBench(t, tc.data)
+			if n := strings.Count(html, door); n != 1 {
+				t.Fatalf("the panel opens %d doors to /schedule, want exactly 1", n)
+			}
+			// The signed words and the signed class survive the element change.
+			if !strings.Contains(html, `class="t"`+" "+door) &&
+				!strings.Contains(html, door+` class="t"`) {
+				t.Error("the door is not the panel's own `.t` title")
+			}
+			if !strings.Contains(html, "RSVP · Schedule") {
+				t.Error("the signed title words did not survive becoming a link")
+			}
+		})
+	}
+}
+
+// A DOOR WITH NO CAMPAIGN IS NOT A DOOR. `/campaigns//schedule` is a 404 with a
+// friendlier shape, so the title degrades to the span it has always been rather
+// than to a broken link.
+func TestBenchRsvp_TheDoorNeedsACampaignToOpenOnto(t *testing.T) {
+	data := benchFxDataRsvp(true, true)
+	data.CampaignID = ""
+	html := renderBench(t, data)
+	if strings.Contains(html, "/schedule") {
+		t.Error("a campaign-less Bench still printed a link to /schedule")
+	}
+	if !strings.Contains(html, "RSVP · Schedule") {
+		t.Error("the title vanished with the link — it must degrade to a span")
 	}
 }
 
