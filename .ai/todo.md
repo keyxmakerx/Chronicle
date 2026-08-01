@@ -1164,20 +1164,27 @@ NOT take, each with the reason it was left.
   **DONE 2026-08-01** — struck rather than deleted, so the booking stands beside
   what shipped. The gate closed the way it was written: the operator signed the
   mockup on 2026-07-29 and **the mockup, not the spec, is the contract** (the
-  spec now carries a supersession note). Shipped in **twelve stages** (`da2bda1b`
-  … `2026-08-01`, stages 8–12 a fix round): ONE route
+  spec now carries a supersession note). Shipped in **fifteen stages**
+  (`da2bda1b` … `2026-08-01`, stages 8–15 across TWO fix rounds; 13 and 16 are
+  book-keeping): ONE route
   (snapshot **723 → 724**), **no migration**, **no new write path** — the
   Painter writes through the scheduler's own two availability PUTs, the Answer
   through P8A's event RSVP POST, the Nudge through P8B's `/calendar/ask`. Rank 1
   is the Bench's derived window by construction (`benchRsvpPeakRun` extracted
   and shared, joined in the oracle). The panel head IS the link now, and it is
-  the only door — WG-2's ruling keeps the nav where it is. **Sixteen defects were
-  caught by the pixel gate that every string assertion had passed** — four in the
+  the only door — WG-2's ruling keeps the nav where it is. **Twenty-two defects
+  were caught by gates that every string assertion had passed** — four in the
   second comparison, six more in the third, four found by the fix round's own
-  sweep, and two that were only ever disclosure gaps. Three of them would have shipped silently: a false player
-  sentence, an invalid `font:` shorthand, and five captions that said the right
-  words with none of the drawn emphasis that makes two named honesty claims
-  findable.
+  sweep, two that were only ever disclosure gaps, and **six found by the SECOND
+  fix round's declaration-by-declaration diff of the sealed `<style>` against the
+  shipped sheets**, which is the only instrument that sees a rule dropped from
+  the middle of a run that is otherwise carried in order. Four would have shipped
+  silently: a false player sentence, an invalid `font:` shorthand, five captions
+  that said the right words with none of the drawn emphasis that makes two named
+  honesty claims findable, and **every segmented control on the page rendering
+  its selected rung PINK** — an achromatic surface mixed toward the accent in
+  oklch takes the short arc and drifts 349.2deg, where the drawing mixes into
+  `transparent` precisely so it cannot.
 - [x] ~~**`C-CALV4-RSVP-P8B` — "the asking email".** One endpoint, one template, a
   rate limit and a tokened link to the availability grid. It is what flips the
   `no reminder endpoint` honesty state and un-chips the Bench's `Nudge`, and it

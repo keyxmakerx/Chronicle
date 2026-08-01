@@ -50,8 +50,8 @@ spec now carries a supersession note naming the sections it overrules.
   since the signed contract drew it. Not the nav — WG-2's ruling keeps that
   pointing at `/availability` and books the retirement as its own slice. The
   Bench's 23 shot keys are byte-identical with the link in place.
-- **The fidelity gate is pixels and it paid for itself three times**, catching
-  twelve defects every string assertion had passed. The third pass was mostly
+- **The fidelity gate is pixels and it paid for itself four times**, catching
+  twenty-two defects every string assertion had passed. The third pass was mostly
   about SHAPE rather than words: every caption on the page shipped with the right
   sentences and none of the drawing's emphasis — five bold lead-ins gone, two of
   which ARE this surface's named honesty claims. Captions are a `[]ScheduleRun`
@@ -59,6 +59,22 @@ spec now carries a supersession note naming the sections it overrules.
   where the drawing returns one, the count lane ran its numeral beside its hour
   instead of over it, the matrix head named the week but not the visible band,
   and a member with no zone was drawn amber where the drawing draws it grey.
+- **The fourth pass was not pixels at all — it was a PARSER**, and it found six
+  the eye had signed off four times. Diffing the sealed `<style>` against the
+  shipped sheets declaration by declaration (normalising the `.cal-schedule`
+  scoping and whitespace) caught: every segmented control rendering its selected
+  rung **PINK**, because `color-mix(in oklch, var(--surface-card) …, var(--accent))`
+  mixes from an ACHROMATIC surface and oklch resolves the missing hue by the
+  short arc — 349.2deg the wrong way round the wheel — where the drawing mixes
+  into `transparent` precisely so it cannot; a `.say .badge` rule dropped from
+  the MIDDLE of a run of narrow rules the sheet otherwise carries in order,
+  leaving every chip ~27% oversized at 390; a drawn `width:auto` "tidied" into
+  `min-width:0`, which is a no-op replaced by a real effect and collapsed the
+  answer well until `19:00` and `in` collided; and a missing `gap`, a missing
+  `:hover` and a `cursor: default` where the drawing writes `not-allowed`.
+  **Screenshots show a page that looks plausible — a 27% oversized chip still
+  looks like a chip, and a pink pill still looks like a selected pill.** Only a
+  mechanical diff sees a rule that is simply absent.
 - **A measuring instrument that differs from its subject reports its own
   defects as the subject's.** The harness padded 20px at every width where the
   product's `<main>` pads 12px below 768 — 8px, and the drawn narrow matrix has

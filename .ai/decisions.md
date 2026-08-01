@@ -3219,6 +3219,50 @@ them is the one that should have followed the first finding: an inventory of
 every `<b>` and `<i>` the mockup emits inside its SURFACE producers, checked
 one by one against the build. A findings list is a sample, not the population.
 
+**A COLOUR MIX NEEDS A HUE TO MIX WITH, AND `transparent` IS THE ONLY SAFE
+SECOND TERM.** The drawing tints a pressed segment rung
+`color-mix(in oklch, transparent 96%, var(--accent))`. The sheet shipped
+`color-mix(in oklch, var(--surface-card) 88%, var(--accent))` — which reads as
+the same idea said differently and is not. `--surface-card` is achromatic, and
+oklch resolves a missing hue by the SHORT ARC: 0deg toward the accent's 270deg
+travels 349.2deg the other way round the wheel and lands on PINK. Measured
+`rgb(252,232,241)` (R>B>G) against the sealed still's `rgb(248,249,254)`
+(B>G>R), on every segment on the page, at both widths and both themes, for four
+stages before anyone looked. Mixing into `transparent` has no hue to interpolate
+and cannot drift, which is exactly why the drawing does it. **Substituting a
+surface for `transparent` in an oklch mix is a hue decision, not a syntax
+preference** — and it is invisible in review because the diff looks like a
+refactor. The one surface-toward-accent mix the sheet is allowed is `.surf.sel`,
+which the drawing writes itself and annotates `D-T1: this tint drifts rose in
+light. Booked upstream, not fixed here.` The pin therefore COUNTS the sanctioned
+mix rather than forbidding the shape, so the drawn exception cannot be deleted
+to make the rule pass.
+
+**A NO-OP DECLARATION CAN BE LOAD-BEARING, AND "TIDYING" IT IS A CHANGE.** The
+drawing's narrow rule writes `.sc-row .rs{width:auto}`. Nothing sets `width` at
+base, so the declaration does nothing — and that is its entire function: it
+occupies the slot without disturbing the base `min-width: 30px`, which is what
+right-aligns the five answers into a column. It was transcribed as
+`min-width: 0`, a different declaration with a real effect: the well collapses
+30px → ~11px and `19:00` and `in` collide into `19:00 in` where the still spaces
+them. **A declaration that appears to do nothing in a signed artifact is a
+question, not a redundancy.** It is restored as written, with a comment saying
+why, so the next reader does not tidy it away again.
+
+**DIFF THE SEALED SHEET DECLARATION BY DECLARATION, NOT BY EYE.** Both defects
+above, plus a missing `gap: 5px`, a missing `:hover` state (the segment gave a
+pointer no feedback at all) and a `cursor: default` where the drawing writes
+`not-allowed`, survived four fidelity passes and a targeted sweep that claimed
+this exact rule block — the sweep fixed `padding: 0 10px` → `0 8px` two lines
+above and stopped. What found them was a parser that normalises the
+`.cal-schedule ` scoping and whitespace and then compares the drawing's `<style>`
+to the shipped sheets declaration by declaration. The tell is positional: the
+missing `.sc-row .say .badge` rule sits in the drawing BETWEEN two rules the
+sheet carries in order, so it was dropped in transcription, not decided against.
+**A rule missing from the middle of a carried run is a transcription defect, and
+only a mechanical diff sees it** — screenshots show you a page that looks
+plausible, because a 27% oversized chip looks like a chip.
+
 **A STAND-IN SHELL MUST PAD LIKE THE SHELL IT STANDS IN FOR.** The fidelity
 harness cannot render `layouts.App` (it needs a request), so it renders its own
 wrapper — and that wrapper padded a flat 20px where the product's `<main
