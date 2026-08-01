@@ -79,13 +79,27 @@ func TestScheduleCSS_EverySelectorIsScoped(t *testing.T) {
 	}
 }
 
-// scheduleBenchSelectors are the class names calendar-bench.css defines. The
-// list is READ OFF THE SHEET rather than hand-written, because a hand-written
-// list only catches what whoever wrote it thought of.
-func scheduleBenchSelectors(t *testing.T) map[string]bool {
+// scheduleBenchSelectors are the class names calendar-bench.css styles AT A
+// SCOPE THE SCHEDULE PAGE ACTUALLY INHERITS — that is, under a bare `.cal-bench`
+// with no further scope the schedule page never emits.
+//
+// The distinction is the whole point. The schedule page carries `.cal-bench`, so
+// `.cal-bench .badge` and `.cal-bench .calrow` are live on it and redefining
+// either would detach a signed primitive. But `.cal-bench .rsvp .mrow` is behind
+// a `.rsvp` element this page does not have, so `.mrow` arrives here UNSTYLED
+// and declaring it is not an override — there is nothing to override. The same
+// is true of `.cal-block-host .surf` and its siblings.
+//
+// The list is READ OFF THE SHEET rather than hand-written, because a
+// hand-written list only catches what whoever wrote it thought of.
+func scheduleBenchSelectors(t *testing.T) map[string][][]string {
 	t.Helper()
 	code := scheduleStrip(scheduleCSS(t, "calendar-bench.css"))
-	out := map[string]bool{}
+	// Scopes the schedule page never emits. A Bench rule behind one of these
+	// cannot be reached from this surface, so the same class name here is a new
+	// declaration and not a redefinition.
+	unreachable := []string{".rsvp", ".tile", ".nextup", ".bench-note", ".disc", ".bsurf"}
+	out := map[string][][]string{}
 	classRe := regexp.MustCompile(`\.[a-zA-Z][\w-]*`)
 	for _, m := range scheduleSelectorRe.FindAllStringSubmatch(code, -1) {
 		sel := strings.TrimSpace(m[1])
@@ -98,15 +112,53 @@ func scheduleBenchSelectors(t *testing.T) map[string]bool {
 				continue
 			}
 			// The LAST class in the selector is the one being styled; a
-			// descendant prefix is scope, not subject.
+			// descendant prefix is SCOPE, not subject.
 			classes := classRe.FindAllString(one, -1)
 			if len(classes) == 0 {
 				continue
 			}
-			out[classes[len(classes)-1]] = true
+			parents := []string{}
+			reachable := true
+			for _, c := range classes[:len(classes)-1] {
+				if slicesContains(unreachable, c) {
+					reachable = false
+					break
+				}
+				if c != ".cal-bench" {
+					parents = append(parents, c)
+				}
+			}
+			if reachable {
+				subject := classes[len(classes)-1]
+				out[subject] = append(out[subject], parents)
+			}
 		}
 	}
 	return out
+}
+
+// scheduleParentsCover reports whether a Bench rule's parent chain is satisfied
+// by a schedule rule's parent chain — i.e. whether the Bench rule can actually
+// match the same element. `.cal-bench .calrow .nm` does NOT reach
+// `.cal-schedule .mrow .nm`, because there is no `.calrow` in that chain; a bare
+// `.cal-bench .cap` DOES reach `.cal-schedule .cap`, and that would be a real
+// redefinition.
+func scheduleParentsCover(benchParents, schedParents []string) bool {
+	for _, p := range benchParents {
+		if !slicesContains(schedParents, p) {
+			return false
+		}
+	}
+	return true
+}
+
+func slicesContains(hay []string, needle string) bool {
+	for _, h := range hay {
+		if h == needle {
+			return true
+		}
+	}
+	return false
 }
 
 // TestScheduleCSS_RedefinesNoSignedBenchClass — THE CASCADE LAW, asserted.
@@ -157,22 +209,32 @@ func TestScheduleCSS_RedefinesNoSignedBenchClass(t *testing.T) {
 			if strings.HasPrefix(subject, ".sc-") || allowed[strings.TrimPrefix(subject, ".")] {
 				continue
 			}
-			if !bench[subject] {
-				continue
-			}
-			// A Bench-owned subject is legal ONLY inside this surface's own
-			// markup, which means an `sc-` ancestor earlier in the selector.
-			qualified := false
+			parents := []string{}
+			scoped := false
 			for _, c := range classes[:len(classes)-1] {
+				if c != ".cal-schedule" {
+					parents = append(parents, c)
+				}
 				if strings.HasPrefix(c, ".sc-") {
-					qualified = true
-					break
+					scoped = true
 				}
 			}
-			if !qualified {
-				t.Errorf("selector %q styles %s, which calendar-bench.css also styles, without "+
-					"an `sc-` ancestor to keep it off Bench markup — qualify it or add a new "+
-					"`sc-` class beside the signed one", one, subject)
+			// An `sc-` ANCESTOR is the legal way to reuse a signed primitive in
+			// a NEW CONTEXT: the rule can then only ever land on markup this
+			// surface emits. It is what `.sc-head .btns .badge` does, and what
+			// the Bench's own sheet does when it writes `.cal-bench .tile .hl`
+			// rather than a bare `.hl`.
+			if scoped {
+				continue
+			}
+			for _, benchParents := range bench[subject] {
+				if scheduleParentsCover(benchParents, parents) {
+					t.Errorf("selector %q REDEFINES %s — calendar-bench.css already styles it at "+
+						"a scope this page inherits (%v), so this rule overrides a signed "+
+						"primitive. Add a new `sc-` class beside it instead.",
+						one, subject, benchParents)
+					break
+				}
 			}
 		}
 	}

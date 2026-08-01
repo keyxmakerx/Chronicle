@@ -19,9 +19,16 @@ package calendar
 // change to the seam's contract and is caught where seams are caught.
 const scheduleAvailPreferred = "preferred"
 
-// AvailPreferred is the name the builders read. Aliased so the arithmetic in
-// schedule_sections.go reads like the domain rather than like a string compare.
-const AvailPreferred = scheduleAvailPreferred
+// scheduleAvailAvailable is the same for the plain-available lane state.
+const scheduleAvailAvailable = "available"
+
+// AvailPreferred / AvailAvailable are the names the builders read. Aliased so
+// the arithmetic in schedule_sections.go reads like the domain rather than like
+// a string compare.
+const (
+	AvailPreferred = scheduleAvailPreferred
+	AvailAvailable = scheduleAvailAvailable
+)
 
 // --- S1 · THE VERDICT -------------------------------------------------------
 

@@ -159,6 +159,213 @@
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
+   THE SHARED VOCABULARY THIS PAGE NEEDS AND DOES NOT INHERIT.
+
+   The page carries `.cal-bench`, so everything calendar-bench.css declares at
+   THAT scope is already here: .badge, .btn, .calrow (+ .warnrow), .phead,
+   .lhead, .stack, .rowgrid, .sechead, .caption, .pill, .sp, .p1–.p8. Nothing
+   below re-declares one of those.
+
+   What is NOT inherited is the vocabulary the two shipped sheets keep behind
+   scopes this page does not emit: calendar-bench.css declares .mtable, .mrow,
+   .swatch and .badge.tz only under `.rsvp`, and calendar-block.css declares
+   .surf, .seg, .lband, .lzero and .tok only under `.cal-block-host`. On this
+   page those nouns are therefore UNSTYLED, and declaring them here is NOT an
+   override — there is nothing to override.
+
+   THIS IS THE DAY CARD'S PRECEDENT, DELIBERATELY FOLLOWED. calendar-daycard.css
+   re-declares the Ledger row's own vocabulary under its own roots for exactly
+   this reason and states exactly this risk: the names are reused so the two
+   surfaces read alike, which makes a leak likelier than usual, which is why
+   every selector is scoped. `.cal-schedule` appears on ONE page, so nothing in
+   this file can reach the Bench, the Block or anything else.
+
+   THE VALUES ARE MIRRORED, NOT INVENTED. Each one is the signed value from the
+   sheet that owns it, so the three surfaces read as one product; where a value
+   is deliberately different it says so on the line.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* the resting surface — 1px rule, card surface, NO shadow. Selection is
+   identity, not elevation: `.sel` gains an accent border and an inset ring and
+   still has no shadow. */
+.cal-schedule .surf {
+  background: var(--surface-card);
+  border: 1px solid var(--rule-structural);
+  box-shadow: none;
+}
+.cal-schedule .surf.act:hover {
+  background: color-mix(in oklch, var(--surface-card) 95%, var(--text-primary));
+  box-shadow: 0 0 0 0.5px var(--rule-structural-strong), var(--elev-1);
+}
+/* elevation DECREASES on press */
+.cal-schedule .surf.act:active {
+  background: color-mix(in oklch, var(--surface-card) 88%, var(--text-primary));
+  box-shadow: none;
+}
+.cal-schedule .surf.sel,
+.cal-schedule .surf.sel:hover {
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--surface-card) 96%, var(--accent));
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* the segmented control — NO travelling thumb: selection is state ON the
+   selected rung, never a thing that moves between rungs. */
+.cal-schedule .seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  height: 26px;
+  align-items: center;
+  border: 1px solid var(--rule-structural);
+  border-radius: var(--r-ctl);
+  background: var(--surface-card);
+  flex: none;
+}
+.cal-schedule .seg button,
+.cal-schedule .seg a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-chip);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+.cal-schedule .seg button[aria-pressed="true"],
+.cal-schedule .seg a[aria-current="true"] {
+  background: color-mix(in oklch, var(--surface-card) 88%, var(--accent));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.cal-schedule .seg button:disabled { color: var(--text-muted); cursor: default; }
+.cal-schedule .seg button:focus-visible,
+.cal-schedule .seg a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* the sticky group header and the empty state */
+.cal-schedule .lband {
+  position: sticky;
+  top: 0;
+  background: var(--surface-inset);
+  padding: 4px 10px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--rule-hairline);
+  display: block;
+}
+.cal-schedule .lzero {
+  padding: 14px 10px;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* the member table */
+.cal-schedule .mtable { margin-top: 12px; border-top: 1px solid var(--rule-hairline); }
+.cal-schedule .mrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  border-bottom: 1px solid var(--rule-hairline);
+  padding: 0 4px;
+}
+.cal-schedule .mrow:hover { background: color-mix(in oklch, transparent 96%, var(--text-primary)); }
+.cal-schedule .mrow .nm {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  width: 150px;
+  flex: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-schedule .mrow .ro {
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted);
+  width: 64px;
+  flex: none;
+}
+.cal-schedule .mrow .nm .ro { width: auto; }
+.cal-schedule .mrow .lt {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  text-align: right;
+  width: 96px;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.cal-schedule .mrow .lt.small { color: var(--warn); }
+.cal-schedule .mrow .rs {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  width: 52px;
+  text-align: right;
+  flex: none;
+}
+.cal-schedule .mrow .rs.ok { color: var(--ok); }
+.cal-schedule .mrow .rs.bad { color: var(--bad); }
+.cal-schedule .mrow .mt {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-schedule .badge.tz { font-variant-numeric: tabular-nums; letter-spacing: 0; }
+
+/* IDENTITY SWATCH: hue AND pattern, because colour is never load-bearing
+   alone. The pattern is a repeating gradient driven by the same --dash / --gap
+   channel every other identity mark in the product uses, so p1 renders the flat
+   dot and every other index renders a distinguishable one under grayscale(1).
+   Guard B1: --dash / --gap are NEVER animated. */
+.cal-schedule .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-full);
+  flex: none;
+  background-color: var(--axis);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--axis) 0 var(--dash),
+    color-mix(in oklch, transparent 55%, var(--axis)) var(--dash) calc(var(--dash) + var(--gap))
+  );
+}
+/* HOLLOW means "never answered", which is not the same fact as "out". It is a
+   different SHAPE, not a paler hue, so it survives greyscale. */
+.cal-schedule .swatch.hollow {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--text-muted);
+}
+.cal-schedule .tok {
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--axis);
+  flex: none;
+}
+/* ───────────────────────────────────────────────────────────────────────────
    S1 · THE VERDICT
    ─────────────────────────────────────────────────────────────────────────── */
 
@@ -325,6 +532,498 @@
   color: var(--text-body);
   margin-top: 4px;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   S2 · THE MATRIX
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.cal-schedule .sc-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 6px;
+}
+
+/* --cols is emitted SERVER-SIDE as days × slots. CSS never multiplies inside
+   repeat(), and no rule on this surface writes a week length or an hour count —
+   a calendar's week length is its own business.
+
+   SAY budget: 8 pad + the answer word + 8 gap + (36 clock + 26 `+1d` badge + 4).
+   The column grew rather than the word shrinking, because a clipped answer is
+   worse than a wider column. */
+.cal-schedule .sc-grid {
+  --idw: 170px;
+  --sayw: 136px;
+  --colmin: 64px;
+  --cols: 7;
+  display: grid;
+  grid-template-columns: var(--idw) repeat(var(--cols), minmax(var(--colmin), 1fr)) var(--sayw);
+  min-width: calc(var(--idw) + var(--sayw) + var(--cols) * var(--colmin));
+}
+.cal-schedule .sc-grid > * {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.cal-schedule .sc-head-row {
+  height: 24px;
+  border-bottom: 1px solid var(--rule-hairline);
+  background: var(--surface-inset);
+}
+.cal-schedule .sc-head-row .hd {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 0 2px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.cal-schedule .sc-head-row .hd.major { border-left: 1px solid var(--rule-structural-strong); }
+
+/* FIXED HEIGHT, ALWAYS. Six offered windows do not make a lane taller —
+   overflow goes to a popover. Otherwise one new availability entry reflows the
+   matrix, which is motion caused by DATA, and that is forbidden twice. */
+.cal-schedule .sc-row {
+  height: 34px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+/* TWO STICKY ENDS: identity never leaves, the verdict never leaves, time scrolls
+   between. Pure CSS, so it survives inside any swapped fragment. */
+.cal-schedule .sc-row .who,
+.cal-schedule .sc-head-row .who {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface-card);
+  border-right: 1px solid var(--rule-structural-strong);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 8px;
+  min-width: 0;
+  height: 100%;
+}
+.cal-schedule .sc-head-row .who { background: var(--surface-inset); }
+.cal-schedule .sc-row .say,
+.cal-schedule .sc-head-row .say {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--surface-card);
+  border-left: 1px solid var(--rule-structural-strong);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-right: 8px;
+  height: 100%;
+}
+.cal-schedule .sc-head-row .say { background: var(--surface-inset); }
+
+/* the sticky ends are OPAQUE, so they must repaint WITH the row */
+.cal-schedule .sc-row:hover { background: color-mix(in oklch, transparent 96%, var(--text-primary)); }
+.cal-schedule .sc-row:hover .who,
+.cal-schedule .sc-row:hover .say {
+  background: color-mix(in oklch, var(--surface-card) 96%, var(--text-primary));
+}
+
+.cal-schedule .sc-row .tok {
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--axis);
+  flex: none;
+  width: 16px;
+}
+.cal-schedule .sc-row .nm {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The denominator is the whole point of this label and may never be clipped into
+   "free of 5 in the campai…" — it is the sentence that stops the count being
+   read as "of 5 players", which it is not: it includes the Director and everyone
+   who never answered. */
+.cal-schedule .sc-row .who .cap {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 9.5px;
+}
+.cal-schedule .sc-row .lt {
+  font-weight: 650;
+  font-size: 13px;
+  line-height: 1;
+  flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cal-schedule .sc-row .lt.small { color: var(--warn); }
+.cal-schedule .sc-row .rs {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+  min-width: 30px;
+  text-align: right;
+}
+
+/* The sentence that stands where the marks would be. NEUTRAL ink for an unknown
+   — the tool does not know, and an unknown is not a fault. */
+.cal-schedule .sc-none {
+  grid-column: 2 / -2;
+  padding-left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* THE AGGREGATE: thinner, achromatic, ONE bar. Never a stack, never a heat cell.
+   The floor is deliberate — a column where nobody is free still draws a bar, at
+   the lowest step, because a vanished bar reads as "no data" and this lane's
+   whole job is to tell "nobody can make it" from "nobody has said". */
+.cal-schedule .sc-row.dens { height: 18px; }
+.cal-schedule .sc-row.dens .sc-cell { display: grid; place-items: center; }
+.cal-schedule .sc-row.dens i {
+  width: calc(100% - 8px);
+  height: 3px;
+  border-radius: 9999px;
+  background: var(--text-secondary);
+  opacity: calc(0.22 + 0.72 * var(--f) / var(--t));
+}
+
+/* THE EXACT NUMBER, WHERE IT CAN BE READ AS A NUMBER — at --text-body, because
+   this is the datum, not an annotation. */
+.cal-schedule .sc-row.cnt { height: 20px; border-bottom: 0; }
+.cal-schedule .sc-row.cnt .sc-cell {
+  font-weight: 650;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-body);
+  text-align: center;
+  display: grid;
+  grid-auto-flow: column;
+  gap: 4px;
+  place-items: center;
+}
+.cal-schedule .sc-row.cnt .sc-cell.peak { color: var(--text-primary); }
+.cal-schedule .sc-row.cnt .sc-cell u {
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 9.5px;
+  color: var(--text-secondary);
+}
+
+/* THE COMPUTED SPAN = ACCENT (the tool talking). A human-offered or proposed
+   span takes --rule-editorial instead; the accent never colours event data
+   (canon A7). Its own borderless lane, so it can never disturb a person row. */
+.cal-schedule .sc-row.br { height: 20px; border-bottom: 0; margin-top: 13px; }
+/* the bracket is the only EXPLICITLY placed child in this grid, so its two
+   sticky siblings must be placed too or auto-flow drops .say into column 2 */
+.cal-schedule .sc-row.br .who { grid-column: 1 / 2; }
+.cal-schedule .sc-row.br .say { grid-column: -2 / -1; }
+.cal-schedule .sc-br {
+  grid-column: var(--from) / var(--to);
+  height: 100%;
+  position: relative;
+  border-left: 1.5px solid var(--accent);
+  border-right: 1.5px solid var(--accent);
+  border-top: 1.5px solid var(--accent);
+}
+.cal-schedule .sc-br b {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-card);
+  padding: 0 5px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.cal-schedule .sc-br.human { border-color: var(--rule-editorial); }
+.cal-schedule .sc-br.human b { color: var(--text-secondary); }
+
+/* THE CELL IS THE TARGET (>=24x24 at every width); the OUTLINE is a mark inside
+   it. That is what fixes an 8px-tall interactive lozenge. */
+.cal-schedule .sc-cell {
+  position: relative;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-left: 1px solid var(--rule-hairline);
+}
+.cal-schedule .sc-cell.major { border-left: 1px solid var(--rule-structural-strong); }
+/* the thing under the pointer takes the NEUTRAL wash. A hue wash here would be
+   indistinguishable from "preferred". */
+.cal-schedule .sc-cell:hover { background: color-mix(in oklch, transparent 95%, var(--text-primary)); }
+.cal-schedule .sc-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   THE SPAN MARK — the one new primitive this surface introduces.
+
+   A hollow, pattern-carrying, MINUTE-POSITIONED lozenge. --m0/--m1 are
+   percentages the SERVER computes from the payload's real resolution. End caps
+   are SOLID because the start and the finish ARE the datum and must not blink
+   out at a sparse pattern. The long edges carry the member's locked dash, so the
+   mark survives filter:grayscale(1) with no second hue.
+   ─────────────────────────────────────────────────────────────────────────── */
+.cal-schedule .sc-off {
+  position: absolute;
+  top: 11px;
+  height: 12px;
+  left: var(--m0, 0%);
+  right: calc(100% - var(--m1, 100%));
+  border-radius: 9999px;
+  border-left: 1.5px solid var(--axis);
+  border-right: 1.5px solid var(--axis);
+  background-color: transparent;
+  background-image:
+    repeating-linear-gradient(to right, var(--axis) 0 var(--dash), transparent var(--dash) calc(var(--dash) + var(--gap))),
+    repeating-linear-gradient(to right, var(--axis) 0 var(--dash), transparent var(--dash) calc(var(--dash) + var(--gap)));
+  background-size: 100% 1.5px, 100% 1.5px;
+  background-position: left top, left bottom;
+  background-repeat: no-repeat;
+}
+/* A window that CONTINUES past this column's edge grows no end cap and no
+   radius there — otherwise every hour boundary would print a false start and a
+   false finish. */
+.cal-schedule .sc-off.contl {
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.cal-schedule .sc-off.contr {
+  border-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+/* PREFERRED = the same outline, filled at 18% of the member's own hue. A
+   LUMINANCE step, orthogonal to pattern — so it survives greyscale and costs no
+   identity channel. Pattern is already spent on WHO and may never also mean
+   WHAT. */
+.cal-schedule .sc-off.pref { background-color: color-mix(in oklch, transparent 82%, var(--axis)); }
+/* a 4th+ window in one cell turns neutral; the exact list is in the popover */
+.cal-schedule .sc-off.rest { --axis: var(--own-none, var(--text-muted)); background-image: none; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   THE POPOVERS — TOP LAYER, so they escape .sc-wrap's overflow-x:auto, which is
+   the whole reason a cell's detail is a popover and not an inline expansion.
+
+   `@starting-style` IS REFUSED, product-wide, in calendar-block.css and
+   calendar-bench.css alike, so the ENTRY is discrete here rather than
+   interpolated — this sheet does not get to break a refusal two sheets deep just
+   because a drawing used one. The shadow is STATIC (present in frame one, never
+   interpolated), which is the part that actually reads as jank when it is not.
+   ─────────────────────────────────────────────────────────────────────────── */
+.cal-schedule .sc-pop {
+  position: fixed;
+  margin: auto;
+  border: 1px solid var(--rule-structural);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  padding: 0;
+  min-width: 220px;
+  max-width: 320px;
+  box-shadow: 0 6px 16px oklch(0.2 0.02 260 / 10%), 0 16px 36px oklch(0.2 0.02 260 / 16%);
+  opacity: 0;
+}
+.cal-schedule .sc-pop:popover-open { opacity: 1; }
+.cal-schedule .sc-pop::backdrop { background: transparent; }
+.cal-schedule .pop-bar { height: 3px; border-radius: 8px 8px 0 0; background-color: var(--axis, var(--accent)); }
+.cal-schedule .pop-h {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 8px 10px 4px;
+}
+.cal-schedule .pop-r {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.35;
+  border-top: 1px solid var(--rule-hairline);
+}
+.cal-schedule .pop-r .mt { font-weight: 500; font-size: 11px; line-height: 1.3; color: var(--text-muted); }
+.cal-schedule .sc-pop .pop-r .sp { flex: 1; }
+.cal-schedule .pop-f {
+  padding: 7px 10px;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  border-top: 1px solid var(--rule-hairline);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   S3 · THE ROSTER · S5 · THE ANSWER
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.cal-schedule .sc-roster .mtable { margin-top: 2px; }
+.cal-schedule .sc-roster .mrow .tok,
+.cal-schedule .sc-answer .mrow .tok {
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--axis);
+  flex: none;
+  width: 18px;
+}
+.cal-schedule .sc-roster .mrow .lt { font-variant-numeric: tabular-nums; }
+.cal-schedule .sc-roster .mrow .nm b { font-weight: 650; }
+.cal-schedule .sc-roster .mrow .nm .ro { margin-left: 5px; color: var(--text-muted); font-weight: 500; }
+
+/* The roster's `.mrow` carries the signed Bench column widths, which were drawn
+   for a full-width table; in a rank-2 panel the `zone not set` + `Ask →` repair
+   pair overruns them. THE REPAIR MAY NEVER BE THE THING THAT DISAPPEARS, so the
+   row wraps instead — the signed 390px reflow applied wherever it is needed
+   rather than only at one viewport. The clock keeps a fixed column so several
+   members' times still form a real column, which is the point of the row. */
+.cal-schedule .sc-roster .mrow,
+.cal-schedule .sc-answer .mrow {
+  height: auto;
+  min-height: 38px;
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.cal-schedule .sc-roster .mrow .nm,
+.cal-schedule .sc-answer .mrow .nm { width: auto; flex: 1 1 130px; }
+
+.cal-schedule .sc-you {
+  font-weight: 650;
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  padding: 0 0 8px;
+}
+.cal-schedule .sc-you.warnink { color: var(--warn); }
+.cal-schedule .sc-you.okink { color: var(--ok); }
+.cal-schedule .sc-arow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 0 10px;
+}
+/* .seg.lg — a SIZE VARIANT of the signed segmented control, not a new mechanic.
+   The signed rung is a 20px target and this surface puts the most-used player
+   control in the product into one. One new rung, no travelling thumb. */
+.cal-schedule .seg.lg { height: 34px; }
+.cal-schedule .seg.lg button { height: 28px; padding: 0 14px; font-size: 12px; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   RESPONSIVE · the matrix at 390px.
+   WEEK zoom is forced by geometry rather than by a server guess: the arithmetic
+   is 390 host → 358 page → 340 panel → 76 identity + 94 say + 7 × 24 = 338, so
+   nothing scrolls sideways and every cell clears the 24px target floor. The
+   caption PRINTS that arithmetic rather than merely obeying it.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .cal-schedule .sc-body { padding: 8px; }
+  .cal-schedule .sc-grid { --idw: 76px; --sayw: 94px; --colmin: 24px; }
+  .cal-schedule .sc-row { height: 40px; }
+  .cal-schedule .sc-row.dens { height: 18px; }
+  .cal-schedule .sc-row.cnt { height: 22px; }
+  .cal-schedule .sc-row .nm { display: none; }
+  .cal-schedule .sc-row .who { padding-left: 6px; gap: 4px; }
+  .cal-schedule .sc-row .say {
+    flex-wrap: wrap;
+    row-gap: 0;
+    justify-content: flex-end;
+    align-content: center;
+    padding-right: 5px;
+    gap: 3px;
+  }
+  .cal-schedule .sc-row .lt { font-size: 11.5px; }
+  .cal-schedule .sc-row .rs { min-width: 0; font-size: 11px; }
+  .cal-schedule .sc-row .who .cap { font-size: 8.5px; letter-spacing: 0.02em; }
+  .cal-schedule .sc-off { top: 14px; height: 12px; }
+  .cal-schedule .sc-head-row .hd { font-size: 9px; letter-spacing: 0.02em; }
+  .cal-schedule .sc-head-row .hd .dnum { display: none; }
+
+  /* the candidate card wraps to two rows: [rank][when + zone][tally] /
+     [outs][why]. The whole card is the target, so the arrow goes away. */
+  .cal-schedule .sc-cands .calrow {
+    height: auto;
+    min-height: 96px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    row-gap: 6px;
+  }
+  .cal-schedule .sc-cands .calrow .sc-when { flex: 1 1 60%; }
+  .cal-schedule .sc-cands .calrow .sc-why { flex-basis: 100%; }
+  .cal-schedule .sc-tally { width: auto; text-align: left; }
+  .cal-schedule .sc-outs { flex-basis: 100%; }
+  .cal-schedule .sc-cands .calrow .ar { display: none; }
+  .cal-schedule .sc-head .hl { font-size: 18px; }
+  .cal-schedule .sc-head .btns { width: 100%; flex-direction: column; align-items: stretch; }
+  .cal-schedule .seg.lg { width: 100%; }
+  .cal-schedule .seg.lg button { flex: 1; justify-content: center; padding: 0 6px; }
+}
+
+/* MID-RANGE REFLOW · the page-scroll repair.
+   `.calrow > *{flex:none}` is a SIGNED Bench rule, so the when-column sits at
+   its own max-content width and cannot shrink; between the 640 breakpoint and
+   the width where the page is simply wide enough, the DOCUMENT scrolled
+   sideways. The repair is the same reflow 640 already proves out, driven by
+   AVAILABLE SPACE rather than by one more magic number: the when-column becomes
+   SHRINKABLE (never `1 1`, so every printed width above the breakpoint is
+   unchanged), the card may WRAP so the out column drops to a second line rather
+   than pushing the page, and `height` becomes `min-height` so a second line
+   grows the card instead of being clipped by the signed 76px. */
+@media (max-width: 1148px) {
+  .cal-schedule .sc-cands .calrow {
+    height: auto;
+    min-height: 96px;
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .cal-schedule .sc-cands .calrow .sc-when { flex: 1 1 60%; min-width: 0; }
+  .cal-schedule .sc-cands .calrow .sc-outs { flex-basis: 100%; min-width: 0; flex-wrap: wrap; row-gap: 3px; }
+  .cal-schedule .sc-cands .calrow .ar { display: none; }
+}
+
+/* The signed `.lhead` is `flex-wrap:nowrap`, and in a rank-2 column the
+   Painter's "Change your zone →" repair cannot fit beside the title, so the
+   header band pushed past the panel. A repair is the one thing that may never be
+   the thing that shrinks away. */
+.cal-schedule .sc-panel > .lhead { flex-wrap: wrap; row-gap: 4px; }
+.cal-schedule .sc-panel > .lhead .btn { flex: none; }
 
 /* ───────────────────────────────────────────────────────────────────────────
    TARGET FLOOR · 24×24, HIT AREA ONLY.

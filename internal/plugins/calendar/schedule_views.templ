@@ -4,6 +4,12 @@
 // chip row beneath it, then `.sc-body` carrying the padding. `.lhead` is reused
 // UNCHANGED and `.sc-body` exists precisely so this surface never has to
 // redefine it — see the rename note at the top of schedule.go.
+//
+// THERE IS NO `if IsGM` IN THIS FILE, and that is deliberate rather than an
+// omission. A player's ScheduleData carries no member lane, no out column, no
+// Director control and no `needs backend` chip, so every loop below simply has
+// nothing to walk. A permission expressed as a template branch is one refactor
+// away from being lost; a permission expressed as an empty slice cannot be.
 package calendar
 
 // scheduleVerdictView is S1 · THE VERDICT.
@@ -35,8 +41,27 @@ templ scheduleVerdictView(data ScheduleData) {
 						<div class="rec mute">{ data.Verdict.MailLine }</div>
 					}
 				</div>
+				if data.Verdict.Propose != nil || data.Verdict.Ask != nil {
+					// ONE `.btns` ROW. The page's single filled control lives
+					// here and is bound to the chosen window, because the single
+					// filled control IS the answer.
+					<div class="btns">
+						if data.Verdict.Propose != nil {
+							@benchActionView(*data.Verdict.Propose)
+						}
+						if data.Verdict.Ask != nil {
+							@benchAskFormView(data.Verdict.Ask)
+						}
+					</div>
+				}
 			</div>
 			@scheduleCandidatesView(data.Verdict)
+			if data.Verdict.MoreLabel != "" {
+				<button class="btn ghost sc-more" type="button" popovertarget={ data.Verdict.MoreID }>
+					{ data.Verdict.MoreLabel }
+				</button>
+				@scheduleMorePopView(data.Verdict)
+			}
 			<div class="caption">{ data.Verdict.Caption }</div>
 		</div>
 	</section>
@@ -60,6 +85,101 @@ templ scheduleCandidatesView(v ScheduleVerdict) {
 				}
 			</div>
 		}
+		for _, c := range v.Candidates {
+			@scheduleCandidateView(c)
+		}
+	</div>
+}
+
+// scheduleCandidateView is one ranked window card.
+//
+// The card is a LINK carrying the whole page state with `cand` overridden, so
+// choosing a window reloads the same three cards in the same three places with a
+// different numeral inked. No card ever moves.
+templ scheduleCandidateView(c ScheduleCandidate) {
+	<a
+		class={ "calrow", "surf", "act", templ.KV("sel", c.Selected) }
+		href={ templ.SafeURL(c.Href) }
+		data-day={ c.DayKey }
+		if c.Selected {
+			aria-current="true"
+		}
+	>
+		<span class="sc-rk">
+			{ scheduleItoa(c.Rank) }
+			<i>rank</i>
+		</span>
+		<span class="sc-when">
+			<span class="nm">
+				{ c.When }
+				if c.Zone != "" {
+					<span class="z">{ c.Zone }</span>
+				}
+			</span>
+			<span class="sc-why">{ c.Why }</span>
+		</span>
+		<span class="sp"></span>
+		<span class="sc-tally">
+			<b>{ c.TallyFree }</b>
+			<i>{ c.TallyPrefer }</i>
+		</span>
+		if c.EveryoneFree || len(c.Outs) > 0 || len(c.Unknowns) > 0 {
+			<span class="sc-outs">
+				if c.EveryoneFree {
+					<span class="cap">out</span>
+					<em>everyone free</em>
+				}
+				if len(c.Outs) > 0 {
+					<span class="cap">out</span>
+					for _, s := range c.Outs {
+						@scheduleStampView(s)
+					}
+					if c.OutsExtra > 0 {
+						<span>{ "+" + scheduleItoa(c.OutsExtra) }</span>
+					}
+				}
+				if len(c.Unknowns) > 0 {
+					<span class="cap">no answer</span>
+					for _, s := range c.Unknowns {
+						@scheduleStampView(s)
+					}
+					if c.UnknownsExtra > 0 {
+						<span>{ "+" + scheduleItoa(c.UnknownsExtra) }</span>
+					}
+				}
+			</span>
+		}
+		<span class="ar">&rarr;</span>
+	</a>
+}
+
+// scheduleStampView is one member's swatch + initials in the out column. A
+// HOLLOW swatch means "never answered", which is not the same fact as "out".
+templ scheduleStampView(s ScheduleStamp) {
+	if s.Hollow {
+		<span class="swatch hollow"></span>
+		<span class="tok">{ s.Token }</span>
+	} else {
+		<span class={ "swatch", s.Pattern } style={ benchAxisStyle(s.Axis) }></span>
+		<span class="tok" style={ benchAxisStyle(s.Axis) }>{ s.Token }</span>
+	}
+}
+
+// scheduleMorePopView is the lower-scoring tail. Ordered BY DATE with the score
+// on the right — a list ordered by score would put the ranking's own tail in a
+// second, competing order.
+templ scheduleMorePopView(v ScheduleVerdict) {
+	<div popover id={ v.MoreID } class="sc-pop">
+		<div class="pop-bar"></div>
+		<div class="pop-h">Lower-scoring windows</div>
+		for _, r := range v.More {
+			<div class="pop-r">
+				{ r.When }
+				<span class="sp"></span>
+				<span class="mt">{ r.Score }</span>
+			</div>
+		}
+		<div class="pop-f">ordered by date, not by score — the score is the number on the right</div>
 	</div>
 }
 
@@ -74,14 +194,213 @@ templ scheduleMatrixView(data ScheduleData) {
 		</div>
 		@scheduleChipRow(data.Matrix.Chips)
 		<div class="sc-body">
-			if len(data.Matrix.Cols) == 0 {
+			if len(data.Matrix.Cols) > 0 {
+				<div class="sc-wrap">
+					<div class="sc-grid" data-region="grid" style={ scheduleGridStyle(len(data.Matrix.Cols)) }>
+						<div class="sc-head-row">
+							<span class="who"><span class="cap">{ data.Matrix.IdentCap }</span></span>
+							for _, c := range data.Matrix.Cols {
+								<span class={ "hd", templ.KV("major", c.Major) }>
+									{ c.Head }
+									if c.Sub != "" {
+										<span class="dnum">{ " " + c.Sub }</span>
+									}
+								</span>
+							}
+							<span class="say"><span class="cap">{ data.Matrix.SayCap }</span></span>
+						</div>
+						for _, l := range data.Matrix.Lanes {
+							@scheduleLaneView(l)
+						}
+						@scheduleDensityView(data.Matrix)
+						@scheduleCountView(data.Matrix)
+						@scheduleBracketView(data.Matrix)
+					</div>
+				</div>
+			}
+			if data.Matrix.Zero != "" {
 				<div class="lzero">{ data.Matrix.Zero }</div>
 			}
 			for _, c := range data.Matrix.Captions {
 				<p class="caption">{ c }</p>
 			}
 		</div>
+		for _, p := range data.Matrix.Pops {
+			@schedulePopView(p)
+		}
 	</section>
+}
+
+// scheduleLaneView is one member's row. FIXED HEIGHT, ALWAYS: six offered
+// windows do not make a lane taller — overflow goes to a popover. Otherwise one
+// new availability entry reflows the matrix, which is motion caused by data.
+templ scheduleLaneView(l ScheduleLane) {
+	<div class="sc-row" style={ benchAxisStyle(l.Axis) } data-schedule-lane>
+		<span class="who">
+			<span class={ "swatch", l.Pattern } style={ benchAxisStyle(l.Axis) }></span>
+			<span class="tok">{ l.Token }</span>
+			<span class="nm">{ l.Name }</span>
+		</span>
+		if len(l.Cells) > 0 {
+			for _, c := range l.Cells {
+				@scheduleCellView(c)
+			}
+		} else {
+			<span class="sc-none">
+				if l.NoteWarn != "" {
+					<span class="badge warn">{ l.NoteWarn }</span>
+				}
+				{ l.Note }
+				for _, ch := range l.NoteChip {
+					<span class="badge need">{ ch.Text }</span>
+				}
+			</span>
+		}
+		<span class="say">
+			<span class={ "lt", templ.KV("small", l.Antisocial) }>
+				{ l.LocalTime }
+				if l.NextDay {
+					<span class="badge warn tz">+1d</span>
+				}
+			</span>
+			if l.ZoneMissing {
+				<span class="badge warn">no zone</span>
+			}
+			<span class={ "rs", benchToneClass(l.Tone) }>{ l.Answer }</span>
+		</span>
+	</div>
+}
+
+// scheduleCellView is one matrix cell. THE CELL IS THE TARGET (>=24x24 at every
+// width); the outline inside it is a MARK, not a control.
+templ scheduleCellView(c ScheduleCell) {
+	if c.PopID != "" {
+		<button
+			class={ "sc-cell", templ.KV("major", c.Major) }
+			type="button"
+			data-day={ c.DayKey }
+			style={ benchAxisStyle(c.Axis) }
+			popovertarget={ c.PopID }
+			aria-label={ c.Label }
+		>
+			for _, m := range c.Marks {
+				@scheduleMarkView(m)
+			}
+		</button>
+	} else {
+		<span
+			class={ "sc-cell", templ.KV("major", c.Major) }
+			data-day={ c.DayKey }
+			style={ benchAxisStyle(c.Axis) }
+			aria-label={ c.Label }
+		>
+			for _, m := range c.Marks {
+				@scheduleMarkView(m)
+			}
+		</span>
+	}
+}
+
+// scheduleMarkView is the minute-positioned lozenge. The PATTERN rides as a
+// class, never as a style: it is the greyscale identity channel, and a channel
+// that lives in a style attribute is one CSP tightening from vanishing.
+templ scheduleMarkView(m ScheduleMark) {
+	<i
+		class={ "sc-off", m.Pattern, templ.KV("pref", m.Prefer), templ.KV("rest", m.Rest),
+			templ.KV("contl", m.ContLeft), templ.KV("contr", m.ContRight) }
+		style={ scheduleMarkStyle(m) }
+	></i>
+}
+
+// scheduleDensityView is the anonymous aggregate — EVERYONE'S, at every role.
+// ONE achromatic bar per column: never a stack, never a heat cell. Each bar's
+// own denominator rides in `title`, so opacity is never the only carrier.
+templ scheduleDensityView(m ScheduleMatrix) {
+	<div class="sc-row dens">
+		<span class="who"><span class="cap">free</span></span>
+		for _, d := range m.Density {
+			<span class={ "sc-cell", templ.KV("major", d.Major) } style={ scheduleDensityStyle(d) } title={ d.Title } data-day={ d.DayKey }>
+				<i></i>
+			</span>
+		}
+		<span class="say"></span>
+	</div>
+}
+
+// scheduleCountView is the exact number, WHERE IT CAN BE READ AS A NUMBER.
+//
+// Director: each numeral is a button naming who is free and who is missing.
+// Player: a plain span — the names are ABSENT from their DOM, not greyed. The
+// branch is on PopID, which the builder only ever sets for a Director.
+templ scheduleCountView(m ScheduleMatrix) {
+	<div class="sc-row cnt">
+		<span class="who"><span class="cap">{ m.Denominator }</span></span>
+		for _, c := range m.Counts {
+			if c.PopID != "" {
+				<button
+					class={ "sc-cell", templ.KV("major", c.Major), templ.KV("peak", c.Peak) }
+					type="button"
+					data-day={ c.DayKey }
+					popovertarget={ c.PopID }
+					aria-label={ c.Label }
+				>
+					<b>{ scheduleItoa(c.Free) }</b>
+					<u>{ c.PeakHour }</u>
+				</button>
+			} else {
+				<span
+					class={ "sc-cell", templ.KV("major", c.Major), templ.KV("peak", c.Peak) }
+					data-day={ c.DayKey }
+					title={ c.Label }
+				>
+					<b>{ scheduleItoa(c.Free) }</b>
+					<u>{ c.PeakHour }</u>
+				</span>
+			}
+		}
+		<span class="say">
+			for _, ch := range m.CountChip {
+				<span class="badge need">{ ch.Text }</span>
+			}
+		</span>
+	</div>
+}
+
+// scheduleBracketView draws the derived window's bracket. --accent is legal here
+// precisely because it is the TOOL talking, not an event (canon A7).
+templ scheduleBracketView(m ScheduleMatrix) {
+	if m.Bracket != nil {
+		<div class="sc-row br">
+			// The bracket is the only EXPLICITLY placed child in this grid, so
+			// its two sticky siblings must be placed too or auto-flow drops the
+			// SAY end into column 2.
+			<span class="who"></span>
+			<span class={ "sc-br", templ.KV("human", m.Bracket.Human) } style={ scheduleBracketStyle(m.Bracket) }>
+				<b>{ m.Bracket.Label }</b>
+			</span>
+			<span class="say"></span>
+		</div>
+	}
+}
+
+// schedulePopView is one popover. TOP LAYER, so it escapes the matrix's own
+// horizontal scroll container.
+templ schedulePopView(p SchedulePop) {
+	<div popover id={ p.ID } class="sc-pop" style={ benchAxisStyle(p.Axis) }>
+		<div class="pop-bar"></div>
+		<div class="pop-h">{ p.Head }</div>
+		for _, r := range p.Rows {
+			<div class="pop-r">
+				{ r.Text }
+				if r.Note != "" {
+					<span class="mt">{ r.Note }</span>
+				}
+			</div>
+		}
+		if p.Foot != "" {
+			<div class="pop-f">{ p.Foot }</div>
+		}
+	</div>
 }
 
 // scheduleRosterView is S3 · THE ROSTER.
@@ -185,18 +504,21 @@ templ scheduleAnswerView(data ScheduleData) {
 		@scheduleChipRow(data.Answer.Chips)
 		<div class="sc-body">
 			if data.Answer.Headline != "" {
-				<div class={ "hl", scheduleInkClass(data.Answer.HeadlineTone) }>{ data.Answer.Headline }</div>
+				<div class={ "sc-you", scheduleInkClass(data.Answer.HeadlineTone) }>{ data.Answer.Headline }</div>
+			}
+			if data.Answer.Form != nil {
+				@scheduleAnswerFormView(*data.Answer.Form)
 			}
 			if data.Answer.Director {
 				<div class="mtable" data-region="mtable">
 					for _, r := range data.Answer.Rows {
-						@scheduleAnswerRowView(r, data.Answer.Notes, false)
+						@scheduleAnswerRowView(r, false)
 					}
 				</div>
 				if len(data.Answer.Awaiting) > 0 {
 					<span class="lband">Awaiting reply</span>
 					for _, r := range data.Answer.Awaiting {
-						@scheduleAnswerRowView(r, data.Answer.Notes, true)
+						@scheduleAnswerRowView(r, true)
 					}
 				}
 			}
@@ -208,14 +530,39 @@ templ scheduleAnswerView(data ScheduleData) {
 	</section>
 }
 
+// scheduleAnswerFormView is the player's tri-state.
+//
+// WORDS, NEVER GLYPHS, and it posts to the EXISTING Player+ RSVP route as a
+// form — the same shape P8A gave the Bench's session tile, which is why this
+// slice adds no answer route. The CSRF token rides as a hidden field:
+// internal/middleware/csrf.go accepts either the header or the field, and this
+// path is not under /api/.
+templ scheduleAnswerFormView(f ScheduleAnswerForm) {
+	<form class="sc-arow" method="post" action={ templ.SafeURL(f.Action) }>
+		<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
+		<div class="seg lg" role="group" aria-label="Your answer">
+			for _, o := range f.Options {
+				<button type="submit" name="status" value={ o.Value } aria-pressed={ scheduleBool(o.Pressed) }>
+					{ o.Label }
+				</button>
+			}
+		</div>
+		if f.OutWeekPopID != "" {
+			<button class="btn" type="button" popovertarget={ f.OutWeekPopID }>Out just this week</button>
+		}
+		if f.SuggestHref != "" {
+			<a class="btn ghost" href={ templ.SafeURL(f.SuggestHref) }>Suggest a better time</a>
+		}
+	</form>
+}
+
 // scheduleAnswerRowView is one responder row on the Director's half.
-templ scheduleAnswerRowView(r ScheduleRosterRow, notes map[string]string, ask bool) {
+templ scheduleAnswerRowView(r ScheduleRosterRow, ask bool) {
 	<div class="mrow" data-schedule-answer-row>
 		<span class={ "swatch", r.Pattern } style={ benchAxisStyle(r.Axis) }></span>
 		<span class="tok" style={ benchAxisStyle(r.Axis) }>{ r.Token }</span>
 		<span class="nm">{ r.Name }</span>
 		<span class={ "rs", benchToneClass(r.Tone) }>{ r.Answer }</span>
-		<span class="mt">{ notes[r.Name] }</span>
 		<span class="sp"></span>
 		if ask && r.AskHref != "" {
 			<a class="btn xs ghost" href={ templ.SafeURL(r.AskHref) }>Ask →</a>
