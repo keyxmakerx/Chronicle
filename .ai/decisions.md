@@ -3211,6 +3211,14 @@ sites the first time one of them takes a campaign's name. `Text()` joins them
 back for every assertion about WORDING, so a test about what a caption says
 never has to know where the eye is meant to land.
 
+**FIX THE CLASS, NOT THE INSTANCES.** The verification pass named five missing
+bold lead-ins; repairing exactly those five and stopping left three more on the
+page, outside a `.caption` — the Painter's scope note (which bolds WHICH TABLE
+the marks land in), its foot, and the suggest dock's note. The sweep that found
+them is the one that should have followed the first finding: an inventory of
+every `<b>` and `<i>` the mockup emits inside its SURFACE producers, checked
+one by one against the build. A findings list is a sample, not the population.
+
 **A STAND-IN SHELL MUST PAD LIKE THE SHELL IT STANDS IN FOR.** The fidelity
 harness cannot render `layouts.App` (it needs a request), so it renders its own
 wrapper — and that wrapper padded a flat 20px where the product's `<main
