@@ -294,6 +294,24 @@ func scheduleWhy(in scheduleBuildInput, members []scheduleMember, w scheduleWind
 		bits = append(bits, fmt.Sprintf("%d %s it", w.Prefer, schedulePlural(w.Prefer, "prefers", "prefer")))
 	}
 
+	// ── EVERYTHING BELOW THIS LINE NEEDS LANE DATA, AND A PLAYER HAS NONE ──
+	//
+	// "who is out", "how many never answered" and "whose local start is 01:00"
+	// are all facts about INDIVIDUAL members, and a player's payload carries no
+	// member at all. Deriving them anyway from an absent map does not produce a
+	// vaguer sentence — it produces a FALSE one: every member reads as
+	// never-having-answered, and the card would tell a player that five of five
+	// people ignored the question.
+	//
+	// So the clauses are gated on the lane data EXISTING, not on IsGM. The
+	// numbers a player keeps (free, preferred) are aggregates and are true; the
+	// sentences they lose are the ones their payload cannot support. That is the
+	// same rule that removes the out column and the per-member lanes, applied to
+	// prose — where it matters most, because prose reads as innocuous.
+	if in.Avail == nil || in.Avail.Lanes == nil {
+		return strings.Join(bits, " · ")
+	}
+
 	busy, unknown := []string{}, 0
 	for _, m := range members {
 		if scheduleFreeAt(m, w.Day, w.Hour) {
@@ -389,13 +407,20 @@ func scheduleBuildMatrix(in scheduleBuildInput) ScheduleMatrix {
 		m.IdentCap = "who is free"
 		m.Scope = "per-member lanes · owner / co-DM only"
 	}
+	// THE SAY COLUMN NAMES WHOSE CLOCK IT IS. Once a window is chosen the column
+	// holds each member's OWN local start, so calling it "time" would invite the
+	// reader to think it is the page's zone — the one confusion this column
+	// exists to prevent.
+	if in.Session != nil && in.Session.Anchored {
+		m.SayCap = "their time"
+	}
 	m.Denominator = fmt.Sprintf("free of %d in the campaign", total)
 	m.Zero = "Nobody has filled in a week yet. The grid works the moment one person does — " +
 		"one marked window is worth more than none."
 	// THE COUNT LANE WEARS ITS SAMPLING RULE PERMANENTLY. It disagrees with the
 	// minute-accurate lanes above it, and the chip is how it says so in plain
 	// sight rather than hoping nobody notices (ledger #7).
-	m.CountChip = scheduleNeed(in.IsGM, "counted on the hour")
+	m.CountChip = scheduleNeed(in.IsGM, "on the hour")
 
 	if in.Avail == nil || len(in.Avail.Days) == 0 {
 		m.Captions = scheduleMatrixCaptions(in, false)
@@ -472,6 +497,9 @@ func scheduleLaneFor(in scheduleBuildInput, m scheduleMember, cols []ScheduleCol
 	if m.TZ == "" {
 		lane.ZoneMissing = true
 		lane.AskHref = benchRsvpAskHref(in.CampaignID)
+	} else if clock, next, ok := scheduleLocalHourAt(in, m); ok {
+		lane.LocalTime, lane.NextDay = clock, next
+		lane.Antisocial = scheduleAntisocialClock(clock)
 	}
 
 	// HONESTY, WHERE THE SHAPE WOULD BE. An empty lane cannot say whether this

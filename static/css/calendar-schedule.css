@@ -298,7 +298,7 @@
   font-size: 11px;
   line-height: 1;
   color: var(--text-muted);
-  width: 64px;
+  min-width: 48px;
   flex: none;
 }
 .cal-schedule .mrow .nm .ro { width: auto; }
@@ -307,7 +307,11 @@
   font-size: 13px;
   line-height: 1;
   text-align: right;
-  width: 96px;
+  /* a MINIMUM, not a fixed column: five members' clocks still line up, and the
+     `zone not set` + `Ask →` repair pair no longer forces the row to wrap. The
+     repair may never be the thing that disappears, so the numbers give way
+     first. */
+  min-width: 52px;
   flex: none;
   font-variant-numeric: tabular-nums;
 }
@@ -316,7 +320,7 @@
   font-weight: 600;
   font-size: 12px;
   line-height: 1;
-  width: 52px;
+  min-width: 40px;
   text-align: right;
   flex: none;
 }
@@ -728,6 +732,11 @@
   place-items: center;
 }
 .cal-schedule .sc-row.cnt .sc-cell.peak { color: var(--text-primary); }
+/* THE DENOMINATOR MAY NEVER BE CLIPPED into "free of 5 in the campai…". It is
+   the sentence that stops the count being read as "of 5 players", which it is
+   not — it includes the Director and everyone who never answered — so the label
+   gives up its tracking before it gives up a word. */
+.cal-schedule .sc-row.cnt .who .cap { font-size: 8.5px; letter-spacing: 0; }
 .cal-schedule .sc-row.cnt .sc-cell u {
   text-decoration: none;
   font-weight: 500;
@@ -1110,7 +1119,16 @@
   border: 1px solid var(--rule-structural);
   background: var(--surface-card);
   color: var(--text-primary);
-  font: 500 12px/1.5 inherit;
+  /* SPLIT, not the `font:` shorthand. `font: 500 12px/1.5 inherit` names
+     `inherit` as the FAMILY, which is invalid CSS and is dropped in its
+     entirety — silently, so the textarea would fall back to the UA's monospace
+     and nobody would know why. Guard B2 caught it; the sealed mockup carries the
+     shorthand and this is the one place the mockup's CSS could not be copied
+     verbatim. */
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: inherit;
 }
 .cal-schedule .sc-suggest .sc-foot { border-top: 0; padding: 6px 0 8px; margin-top: 0; }
 .cal-schedule .sc-pop .pop-btns {
@@ -1183,9 +1201,58 @@
   .cal-schedule .seg.lg { width: 100%; }
   .cal-schedule .seg.lg button { flex: 1; justify-content: center; padding: 0 6px; }
 
-  /* THE PAINTER AT 390: the tick grows to a 40px target and the grid scrolls
-     inside its own wrap. No pinch, no drag, real touch targets. */
-  .cal-schedule .sc-pk { height: 40px; }
+  /* ── THE PAINTER AT 390 · DAY-STACKED ────────────────────────────────────
+     Seven sticky day headers, one row of hour ticks each, 40px targets,
+     scrolled VERTICALLY inside the panel. No horizontal scroll, no pinch, real
+     touch targets — and the sticky band is what makes the vertical scroll
+     legible instead of turning the page into 5,000px of ticks.
+
+     IT IS THE SAME DOM. The wide grid and the stacked one are one markup tree
+     restyled, not two renderings: the server cannot see a viewport, and a
+     surface whose structure depends on a width the producer had to guess is a
+     surface that renders wrong for whoever guessed wrong. Subgrid is dropped
+     here, the day label becomes the sticky band, and the ticks become a flex
+     row — every one of them a real element that was already there. */
+  .cal-schedule .sc-paint .sc-wrap { overflow-x: hidden; max-height: 440px; overflow-y: auto; }
+  .cal-schedule .sc-paintgrid { display: block; min-width: 0; }
+  .cal-schedule .sc-paintgrid > * { display: block; grid-template-columns: none; grid-column: auto; }
+  .cal-schedule .sc-paintgrid .sc-head-row { display: none; }
+  .cal-schedule .sc-paintgrid .sc-row {
+    height: auto;
+    display: flex;
+    flex-wrap: wrap;
+    border-bottom: 0;
+    padding: 0 0 6px;
+  }
+  .cal-schedule .sc-paintgrid .sc-row .who {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    flex-basis: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule-hairline);
+    background: var(--surface-inset);
+    padding: 4px 10px;
+    height: auto;
+    font-weight: 650;
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  /* the day's own name is the whole point of the band, so it comes back */
+  .cal-schedule .sc-paintgrid .sc-row .who .nm { display: block; }
+  .cal-schedule .sc-paintgrid .sc-row .say { display: none; }
+  .cal-schedule .sc-paintgrid .sc-pk {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 40px;
+    border-left: 0;
+    border-radius: var(--r-chip);
+    margin: 0 1px;
+  }
   .cal-schedule .sc-paint .btns { flex-direction: column; align-items: stretch; }
   .cal-schedule .sc-paint .btns .btn { width: 100%; height: 40px; justify-content: center; }
 }

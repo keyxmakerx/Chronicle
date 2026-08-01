@@ -78,12 +78,20 @@ func schedulePaintForm(in scheduleBuildInput) *SchedulePaintForm {
 			me.Axis, me.Pattern, me.Token = m.Axis, m.Pattern, m.Token
 		}
 	}
+	// A member with no roster row still paints — the identity channel simply
+	// falls back to the neutral one rather than the grid losing its marks.
+	if me.Pattern == "" {
+		me.Axis, me.Pattern = benchRsvpIdentity(0)
+	}
 
 	f := &SchedulePaintForm{
 		SaveURL:       "/campaigns/" + in.CampaignID + "/availability/mine",
 		ExceptionsURL: "/campaigns/" + in.CampaignID + "/availability/exceptions",
 		CSRFToken:     in.CSRFToken,
 		Zone:          in.Zone,
+		WeekLabel:     "week of " + in.WeekStart.Format("2 Jan"),
+		Axis:          me.Axis,
+		Pattern:       me.Pattern,
 		Scope:         in.Scope,
 		PrefOpen:      in.PrefOpen,
 		PrefNote: "Preferred always sits inside available — the server composes them, so " +
@@ -228,7 +236,17 @@ func scheduleSlotLabel(in scheduleBuildInput) string {
 		// refuses to make.
 		return in.Session.Name + " · no time set"
 	}
-	return in.Session.Name
+	if in.Zone == "" {
+		return in.Session.Name
+	}
+	loc, err := time.LoadLocation(in.Zone)
+	if err != nil {
+		return in.Session.Name
+	}
+	// THE SLOT IS NAMED WITH ITS CLOCK AND ITS ZONE, because "which slot are we
+	// answering" is the question every row underneath is an answer to.
+	return in.Session.Name + " · slot " + in.Session.Instant.In(loc).Format("15:04") +
+		" " + in.ZoneLeaf
 }
 
 // scheduleAnswerSub is the player's answer header.

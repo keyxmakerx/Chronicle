@@ -546,17 +546,20 @@ templ schedulePaintGridView(f SchedulePaintForm, days []SchedulePaintDay) {
 	<div class="sc-wrap">
 		<div class="sc-grid sc-paintgrid" style={ schedulePaintGridStyle(len(f.Hours)) }>
 			<div class="sc-head-row">
-				<span class="who"><span class="cap">week of { f.Zone }</span></span>
+				<span class="who"><span class="cap">{ f.WeekLabel }</span></span>
 				for _, h := range f.Hours {
 					<span class={ "hd", templ.KV("major", h.Major) }>{ h.Label }</span>
 				}
 				<span class="say"></span>
 			</div>
 			for _, d := range days {
-				<div class="sc-row" data-day={ d.DayKey } data-weekday={ scheduleItoa(d.Weekday) }>
-					<span class="who"><span class="nm">{ d.Label }</span></span>
+				<div class="sc-row" style={ benchAxisStyle(f.Axis) } data-day={ d.DayKey } data-weekday={ scheduleItoa(d.Weekday) }>
+					<span class="who">
+						<span class={ "swatch", f.Pattern } style={ benchAxisStyle(f.Axis) }></span>
+						<span class="nm">{ d.Label }</span>
+					</span>
 					for _, c := range d.Cells {
-						@schedulePaintCellView(c)
+						@schedulePaintCellView(c, f.Pattern)
 					}
 					<span class="say"></span>
 				</div>
@@ -566,7 +569,7 @@ templ schedulePaintGridView(f SchedulePaintForm, days []SchedulePaintDay) {
 }
 
 // schedulePaintCellView is one hour tick.
-templ schedulePaintCellView(c SchedulePaintCell) {
+templ schedulePaintCellView(c SchedulePaintCell, pattern string) {
 	<input
 		type="checkbox"
 		class="sc-pick"
@@ -578,7 +581,7 @@ templ schedulePaintCellView(c SchedulePaintCell) {
 		checked?={ c.Checked }
 	/>
 	<label class={ "sc-pk", templ.KV("major", c.Major) } for={ c.ID } data-day={ c.DayKey }>
-		<i class="sc-off"></i>
+		<i class={ "sc-off", pattern }></i>
 		<span class="vh">{ c.Label }</span>
 	</label>
 }

@@ -404,6 +404,15 @@ type SchedulePaintForm struct {
 	ExceptionsURL string
 	CSRFToken     string
 	Zone          string
+	// WeekLabel heads the identity column. It is the WEEK, not the zone: the
+	// zone is already stated once in the panel frame, and stating it twice in
+	// two registers is how a reader starts checking whether they agree.
+	WeekLabel string
+	// Axis / Pattern are the VIEWER'S OWN identity, so a mark they paint is the
+	// same mark the Director reads in the matrix above — same hue, same locked
+	// dash. Colour is never load-bearing alone here either.
+	Axis    string
+	Pattern string
 
 	Scope        string
 	ScopeOptions []ScheduleToggle

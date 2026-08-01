@@ -412,3 +412,38 @@ func TestScheduleOracle_QuorumRefusesRatherThanGuessing(t *testing.T) {
 		t.Errorf("the quorum refusal does not say why: %q", v.Fault.Detail)
 	}
 }
+
+// TestScheduleOracle_PlayerReasonSentenceClaimsNothingItCannotKnow — the
+// sneakiest failure this page could ship.
+//
+// A player's payload carries no member, so "N never answered", "X out" and
+// "01:00 for someone" are not merely unavailable to them — deriving them anyway
+// from an absent lane map produces a CONFIDENT LIE: every member reads as
+// never-having-answered, and the card tells a player that five of five people
+// ignored the question. The numbers that survive are aggregates and are true.
+func TestScheduleOracle_PlayerReasonSentenceClaimsNothingItCannotKnow(t *testing.T) {
+	v := scheduleBuildVerdict(scheduleOracleInput(false))
+	if len(v.Candidates) == 0 {
+		t.Fatal("the player's Verdict printed no cards")
+	}
+	for _, c := range v.Candidates {
+		for _, forbidden := range []string{"never answered", "out", "local start"} {
+			if strings.Contains(c.Why, forbidden) {
+				t.Errorf("a player's reason sentence claims %q from a payload with no lanes: %q",
+					forbidden, c.Why)
+			}
+		}
+		if !strings.Contains(c.Why, "free") {
+			t.Errorf("a player's reason sentence lost the aggregate it CAN state: %q", c.Why)
+		}
+	}
+	// The Director, over the same fixture, keeps all of it.
+	gm := scheduleBuildVerdict(scheduleOracleInput(true))
+	joined := ""
+	for _, c := range gm.Candidates {
+		joined += c.Why + " | "
+	}
+	if !strings.Contains(joined, "never answered") {
+		t.Errorf("the Director lost the clause the lane data supports: %q", joined)
+	}
+}
