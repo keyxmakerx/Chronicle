@@ -337,7 +337,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cal-schedule .badge.tz { font-variant-numeric: tabular-nums; letter-spacing: 0; }
+/* THE ZONE CHIP KEEPS THE IDENTIFIER'S OWN CASE. `.badge` is uppercase because
+   it is a LABEL vocabulary — `NEEDS BACKEND`, `CO-DM`, `ZONE NOT SET` are words
+   about the tool. This one is not a word: it is the last segment of an IANA
+   identifier, and `America/New_York` has no member spelled `NEW_YORK`. The
+   sealed mockup carves both zone-bearing badges out of the uppercase rule by
+   name, and the roll-over badge rides the same exemption — `+1d`, never `+1D`.
+   Uppercasing it would be this surface faking an identifier three lines under a
+   caption promising it never fakes one. */
+.cal-schedule .badge.tz {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* …and the identifier is set in the IDENTIFIER FACE, which is the other half of
+   why `New_York` cannot be misread as prose. The face is declared here rather
+   than by adding the Bench's `mono` class to the markup, because that class
+   carries a font-SIZE (12px) as well as a family, and the badge's 10px is a
+   signed metric — importing a class to get one property and silently taking the
+   other is how a chip grows two points taller than the row it sits in. */
+.cal-schedule .sc-roster .badge.tz,
+.cal-schedule .sc-answer .badge.tz {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
 
 /* IDENTITY SWATCH: hue AND pattern, because colour is never load-bearing
    alone. The pattern is a repeating gradient driven by the same --dash / --gap
@@ -449,6 +471,19 @@
   gap: 3px;
   min-width: 0;
   flex: 1;
+}
+/* THE CARD'S ZONE IS A MUTED SIBLING, NEVER PART OF THE NUMERAL — the second of
+   the two places the sealed mockup styles `.z`, and the one that was missed.
+   The card's `.nm` is the Bench's signed 14px/650 primary ink (consumed, never
+   redefined), so an unstyled `.z` inherits it and `Sat 25 Jul · 19:00–22:00
+   Chicago` reads as ONE typographic unit — a zone wearing the weight of a time,
+   which is exactly the confusion the four-renderings rule exists to prevent. */
+.cal-schedule .sc-cands .calrow .sc-when .nm .z {
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+  margin-left: 5px;
 }
 
 /* THE WHY SENTENCE — the written reason a window ranks where it does, and the
@@ -1300,7 +1335,15 @@
 .cal-schedule .seg button,
 .cal-schedule .seg a { position: relative; }
 .cal-schedule .seg button::after,
-.cal-schedule .seg a::after {
+.cal-schedule .seg a::after,
+/* THE COUNT LANE'S NUMERALS ARE CONTROLS TOO, and they were the half of the
+   mockup's target-floor block that did not get carried. They print inside the
+   matrix's fixed 20px lane rhythm — a height that is load-bearing, because the
+   lane pitch is what makes a minute-accurate mark legible — so the floor is met
+   the same way the `.seg` meets it: a transparent pad centred on the box, which
+   moves no border, no ink and no metric. Measured at the pointer with
+   `elementFromPoint`, these went 20px → 24px and nothing on the page moved. */
+.cal-schedule .sc-row.cnt .sc-cell::after {
   content: "";
   position: absolute;
   left: 0;

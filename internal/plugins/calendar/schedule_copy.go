@@ -243,18 +243,68 @@ func scheduleSlotLabel(in scheduleBuildInput) string {
 	if err != nil {
 		return in.Session.Name
 	}
-	// THE SLOT IS NAMED WITH ITS CLOCK AND ITS ZONE, because "which slot are we
-	// answering" is the question every row underneath is an answer to.
-	return in.Session.Name + " · slot " + in.Session.Instant.In(loc).Format("15:04") +
+	// THE SLOT IS NAMED WITH ITS WEEKDAY, ITS CLOCK AND ITS ZONE, because "which
+	// slot are we answering" is the question every row underneath is an answer
+	// to — and on a page whose other four surfaces are all about a WEEK, an hour
+	// with no day attached is the one ambiguity this head cannot afford. The
+	// drawing prints `slot Sat 19:00 Chicago` and the weekday is the half a
+	// reader checks first.
+	return in.Session.Name + " · slot " + in.Session.Instant.In(loc).Format("Mon 15:04") +
 		" " + in.ZoneLeaf
 }
 
 // scheduleAnswerSub is the player's answer header.
+//
+// IT NAMES THE EVENT, ITS SLOT, AND — WHEN THEY DIFFER — THE VIEWER'S OWN CLOCK.
+// The whole subject of this page is that one instant is a different clock for
+// each person reading it, so a player's own clock for the slot they are being
+// asked about is the single fact they came for; the drawn head prints it as
+// `· your 01:00`.
+//
+// IT NAMES THE EVENT AND NOT THE HIGHLIGHTED CANDIDATE, which is where this
+// parts from the drawing on purpose: the tri-state below posts to an EVENT's
+// RSVP, and this panel's own chip reads `RSVP answers an event, not a week`. A
+// head naming the selected window would contradict the chip directly under it.
+//
+// The clause appears only when the viewer's clock DIFFERS from the printed one.
+// `19:00 Chicago · your 19:00` is not a second fact, it is the same fact twice,
+// and a head that repeats itself teaches the reader to stop reading it.
 func scheduleAnswerSub(in scheduleBuildInput) string {
 	if in.Session == nil {
 		return "no slot chosen yet"
 	}
-	return in.Session.Name
+	// An unanchored session HAS no clock, and inventing one here would be the
+	// same error the zone-less member's literally empty clock refuses to make.
+	if !in.Session.Anchored || in.Zone == "" {
+		return in.Session.Name
+	}
+	loc, err := time.LoadLocation(in.Zone)
+	if err != nil {
+		return in.Session.Name
+	}
+	slot := in.Session.Instant.In(loc).Format("15:04")
+	sub := in.Session.Name + " · " + slot + " " + in.ZoneLeaf
+
+	// The viewer's own clock comes from the SAME helper the roster row prints
+	// from, so the head and the row can never disagree about what time it is
+	// for the person reading them.
+	for _, m := range scheduleMembers(in) {
+		if m.UserID != in.ViewerID {
+			continue
+		}
+		clock, nextDay, ok := scheduleLocalHourAt(in, m)
+		if !ok || clock == slot {
+			break
+		}
+		sub += " · your " + clock
+		if nextDay {
+			// The roster marks the roll-over beside the same clock; a head that
+			// dropped it would print an hour on the wrong day.
+			sub += " +1d"
+		}
+		break
+	}
+	return sub
 }
 
 // scheduleVerdictCaption states what the score is and — more importantly — what
