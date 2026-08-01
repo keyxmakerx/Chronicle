@@ -1154,16 +1154,26 @@ the widget's `.ai.md`.
 Part A filled the Bench's signed RSVP panel. These are what it deliberately did
 NOT take, each with the reason it was left.
 
-- [ ] **W-G PART B — `GET /campaigns/:id/schedule`.** The Verdict, the
+- [x] ~~**W-G PART B — `GET /campaigns/:id/schedule`.** The Verdict, the
   Director's matrix, the Roster, the Painter and the Answer panel, in a new
   `.cal-schedule`-scoped stylesheet. **GATED on a coordinator drawing pass**:
   `mockups/calendar-v4-schedule.html` and the 17 starred stills do not exist,
   and the design spec's own header forbids building from it. Part A left it
-  clean — **no `.sc-`-prefixed class ships, no `/schedule` route is reserved,
-  and the panel head is not yet a link** (a link to a 404 is worse than no
-  link). `tools/check-calendar-v4-lints.sh`'s B4 glob already covers
-  `*schedule*`, and its self-test proves the resolution, so the file will be
-  guarded on the day it is created.
+  clean — no `.sc-`-prefixed class ships, no `/schedule` route is reserved, and
+  the panel head is not yet a link (a link to a 404 is worse than no link).~~
+  **DONE 2026-08-01** — struck rather than deleted, so the booking stands beside
+  what shipped. The gate closed the way it was written: the operator signed the
+  mockup on 2026-07-29 and **the mockup, not the spec, is the contract** (the
+  spec now carries a supersession note). Shipped in six stages: ONE route
+  (snapshot **723 → 724**), **no migration**, **no new write path** — the
+  Painter writes through the scheduler's own two availability PUTs, the Answer
+  through P8A's event RSVP POST, the Nudge through P8B's `/calendar/ask`. Rank 1
+  is the Bench's derived window by construction (`benchRsvpPeakRun` extracted
+  and shared, joined in the oracle). The panel head IS the link now, and it is
+  the only door — WG-2's ruling keeps the nav where it is. Six defects were
+  caught by the pixel gate that every string assertion had passed; two of them
+  (a false player sentence, an invalid `font:` shorthand) would have shipped
+  silently.
 - [x] ~~**`C-CALV4-RSVP-P8B` — "the asking email".** One endpoint, one template, a
   rate limit and a tokened link to the availability grid. It is what flips the
   `no reminder endpoint` honesty state and un-chips the Bench's `Nudge`, and it
@@ -1205,11 +1215,30 @@ NOT take, each with the reason it was left.
   such route; `POST /campaigns/:id/proposals` is Scribe+ and takes explicit
   options. The derived window is real and Propose is inert beside it — the gap
   is stated in the panel's caption, not hidden.
-- [ ] **Ledger #3 stays open and is Part B's.** `OverlayMember` has no
-  `HasPattern`, so *"never answered"* is still indistinguishable from *"busy all
-  week"*. It is the W-G spec's own single most important gap and the Bench panel
-  cannot close it — the lanes have one mark, and a second one needs the mark
-  vocabulary the drawing pass settles.
+- [ ] **Ledger #3 stays open, and Part B enforced it in the INK instead.**
+  `OverlayMember` still has no `HasPattern`, so *"never answered"* remains
+  indistinguishable from *"busy all week"* in the DATA. Part B refused to guess:
+  a known-busy member gets a filled swatch under `out`, a never-answered member
+  a hollow one under `no answer`, and an empty lane prints the sentence saying
+  exactly what is not known, in neutral ink — an unknown is not a fault. The
+  field itself is still the fix, and it is still nobody's.
+- [ ] **A player cannot be told the anonymous per-member aggregates.** The
+  drawing's player card carries `1 out · 1 never answered · 01:00 for someone`
+  — anonymised, and legitimately a player's to know. P8A's seam builds `Lanes`
+  inside its `includeDetail` branch, so a player's request receives no
+  per-member data at all and Part B could not compute them; computing them
+  anyway from an absent lane map produced a FALSE sentence, not a vague one
+  (every member read as never-having-answered). Closing it is a seam change with
+  a permission question attached, not a copy change.
+- [ ] **Two calendar-v4 primitives diverge from the signed register,
+  product-wide.** `.btn.fill` uses `--accent` (production indigo) where every
+  calendar-v4 mockup uses a dedicated `--accent-action` (amber), and
+  `.btn:disabled` keeps the fill at 0.5 opacity with a dashed border where the
+  register neutralises it to `--surface-inset`. Both predate Part B — the
+  Bench's own `+ New calendar` ships indigo under renders that draw it amber —
+  and Part B consumed the shared primitives rather than forking them on one
+  surface, which is the rule. The disabled case is the one that costs meaning: a
+  pale-indigo disabled primary reads more clickable than a grey one.
 - [ ] **"Out just this week" is not a fourth status and did not ship.**
   `RSVPAction` already carries `out_week` and `rsvpWeekDates` resolves it, but
   the control needs a confirm popover naming the resolved week and the
@@ -1218,12 +1247,17 @@ NOT take, each with the reason it was left.
   a degraded response the panel must print *"only the RSVP was recorded — your
   availability was not changed"* in `--warn`.
 - [ ] **The `.mtable` head's slot picker is a NON-INTERACTIVE label.** The
-  mockup draws a `popovertarget` there; same reason as above.
+  mockup draws a `popovertarget` there; same reason as above. **Part B did not
+  build it on `/schedule` either** — the schedule mockup makes it a live
+  Director popover ("Which slot are we answering?"), and the same choice is
+  already reachable from the three candidate cards, so a second entrance to one
+  choice was not worth a second popover. Stated as a known omission in the shot
+  index, not quietly dropped.
 - [ ] **Availability ENTRY stays where it is.** `GET /campaigns/:id/availability`
   and its 1,310 lines of `static/js/availability.js` are untouched and the nav
-  still points at them. When Part B's Painter ships it is reached ONLY from the
-  Bench panel, and **retiring `/availability` is its own slice with its own
-  fidelity gate** — `internal/app/routes.go` documents that the calendar's
+  still points at them. **Part B's Painter has shipped and is reached ONLY from
+  the Bench panel's title link**, exactly as booked, and **retiring
+  `/availability` is its own slice with its own fidelity gate** — `internal/app/routes.go` documents that the calendar's
   out-week adapter deliberately mirrors `availability.js`'s `fireOutWeek`, so
   that retirement owns the comment's referent too.
 - [ ] **WG-5's chip-beside-every-disabled-control rule is product-wide but only

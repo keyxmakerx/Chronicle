@@ -3103,6 +3103,109 @@ never assigned, so a test cannot pin it to a value the placer did not produce.
 Where a harness supplies a value the real DOM computes, the harness is making a
 claim, and it should be made where it can be seen.
 
+### Section: W-G Part B — the page that answers "when do we play" (C-CALV4-RSVP-P8 Part B, 2026-08-01)
+
+**The gate was the drawing, and the drawing changed the build.** Part B of
+`C-CALV4-RSVP-P8` could not be pasted until `mockups/calendar-v4-schedule.html`
+existed and its stills were signed — the spec's own condition, restated in the
+dispatch (*"Do not build the Verdict, the Matrix, the Roster or the Painter from
+§2–§3 prose"*). The operator signed the mockup on 2026-07-29
+(`decisions/2026-07-29-schedule-mockup-signed.md`), and the drawing pass had by
+then discovered ten resolutions the prose could not have: **the load-bearing one
+is a cascade fact.** The sheet declares `@layer …, schedule, motion, block,
+bench, …`, so `schedule` sorts BEFORE `bench` and a schedule rule can never
+override a signed Bench rule at any specificity. Three places where the spec
+reused a signed class became NEW classes — `.sc-why` (the reason sentence needs
+`--text-secondary`; `.dt` is `--text-muted`, below the floor for a word read in
+order to ACT), `.sc-foot`, `.sc-body`. **Production ships unlayered**, so the
+guarantee is obtained by CONSTRUCTION instead: a Bench-owned subject needs an
+`sc-` ancestor, and a test reads BOTH sheets, because "this file redefines
+nothing that file defines" is a claim about a relationship and a relationship
+asserted from one side is not asserted at all.
+
+**ONE ROUTE IS THE WHOLE BUDGET.** `GET /campaigns/:id/schedule`, Player+, on
+the identical `cg` stack every other calendar route rides;
+`routes_snapshot.txt` 723 → 724, no migration. Everything this page WRITES rides
+a route that already shipped: the scheduler's own availability PUTs
+(`member_availability` for normal hours, `availability_exceptions` for a date
+override — two endpoints because the `[This week only | Every week]` segment
+means two different things and already has two tables), P8A's Player+ event RSVP
+POST, and P8B's Scribe+ `/calendar/ask`. A second availability write path would
+have been a second place to get the composition invariant wrong, and *"an offer
+only ever adds, and never downgrades an hour already marked preferred"* is the
+scheduler's own rule, enforced in the scheduler's own service.
+
+**RANK 1 IS THE BENCH'S DERIVED WINDOW, BY CONSTRUCTION.** The Bench's RSVP
+panel and this page's head candidate are one click apart and may not derive
+"when to play" from two implementations of one idea, so `benchRsvpPeakRun` was
+EXTRACTED and both callers read it; the oracle drives both public builders over
+one `BenchAvailability` and asserts they name the same day and the same hour.
+The Bench's printed sentence is byte-identical to what it was.
+
+**PERMISSION IS ABSENCE, AND IT IS ASSERTED ABOUT THE PAYLOAD.** There is no
+`if IsGM` in this page's markup at all: a player's `ScheduleData` carries no
+lane, no out column, no other member's name, no awaiting-reply group and no
+chip, so every loop simply has nothing to walk. The two role orders are SOURCE
+order (Director: Verdict → Matrix → Roster · Painter → Answer; player: Answer ·
+Painter → Verdict → Matrix), never CSS `order:` — a page whose tab sequence
+disagrees with its reading sequence is unusable for exactly the people who most
+need the reading sequence to be right.
+
+**ONE NEW SEAM, BECAUSE IT ANSWERS A DIFFERENT QUESTION.**
+`ScheduleOwnWeekReader` is the viewer's OWN composed week. It is deliberately
+not a method on `BenchScheduleReader`: adding one would break every existing
+implementation of a seam P8A shipped, and it would fuse two permission questions
+into one contract. `BenchAvailability` answers *"may this viewer see EVERYONE'S
+lanes"* and is gated by role; this answers *"may I read back what I saved"*,
+whose answer is always yes. Without it a player's Painter would render an empty
+grid over availability they had already entered.
+
+**PROSE INHERITS PERMISSION, AND THAT IS WHERE IT IS EASIEST TO GET WRONG.** The
+candidate cards' reason sentence computes clauses like *"N never answered"* and
+*"X out"* from the lane map. A player has no lane map — so the clauses were
+computing over an absent one and every member read as never-having-answered: the
+card told a player that five of five people had ignored the question. The
+clauses are now gated on the lane data EXISTING rather than on `IsGM`, and the
+aggregates a player CAN state survive. A false sentence is worse than a missing
+one, and prose is where a permission bug reads as innocuous.
+
+**A NEVER-ANSWERED MEMBER IS NOT AN ABSENT ONE.** The honesty ledger's item 3
+stays open (there is still no `HasPattern` signal), so it is enforced in the INK
+instead: a known-busy member gets a filled swatch under `out`, a never-answered
+member a hollow one under `no answer`, and an empty lane prints the sentence
+saying exactly what is not known, in neutral ink — an unknown is not a fault.
+
+**THE DOOR IS THE PANEL'S OWN TITLE.** The Bench's RSVP panel has been called
+`RSVP · Schedule` since the signed contract drew it, so in Part B that title
+becomes the link. It could not in Part A because the page 404'd. It is not in
+the nav because WG-2's signed ruling keeps the nav pointing at `/availability`
+and books the retirement as its own slice. All 23 stills from the Bench's own
+shot harness are byte-identical before and after the link landed.
+
+**THE FIDELITY GATE IS PIXELS, AND IT EARNED ITS COST TWICE.** Holding the built
+page beside the signed stills found six defects across two passes that every
+string assertion had passed: the player's false reason sentence and an invalid
+`font:` shorthand copied off the mockup (`font: 500 12px/1.5 inherit` names
+`inherit` as the FAMILY, which is invalid and dropped silently), then an
+uppercased zone chip (`NEW_YORK` is not a member of `America/New_York` — a
+`.badge` is uppercase because it is a LABEL vocabulary, and an identifier is not
+a label), a candidate card whose zone wore the weight of a time, seven count-lane
+numerals below the signed 24px pointer floor, and two heads that under-named the
+slot. **Measure the page with a driver, never with `chrome --headless
+--window-size`:** the CLI clamps the window to a 500px minimum, so a "390px"
+shot is a 485px layout cropped to 390 and reads as a phone defect that does not
+exist. And scroll a control into view before probing it — `elementFromPoint`
+returns null outside the visual viewport, so a page-length surface probed in one
+pass reports its own below-the-fold controls as unpadded.
+
+**WHAT IS DELIBERATELY NOT BUILT, AND SAYS SO.** `Propose` and `Copy last week`
+remain chipped Director-tier scaffolding — and are ABSENT from a player's DOM
+rather than disabled, because the Director is the person being asked to sign off
+on what is missing and a player is not. Conflict detection against booked events
+(ledger #16) stays out of scope with the caption saying so permanently: this
+grid shows availability only, and a window may collide with something already on
+the calendar.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they
