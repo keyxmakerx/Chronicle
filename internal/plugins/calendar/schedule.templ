@@ -146,11 +146,37 @@ templ scheduleSegView(label string, opts []ScheduleToggle) {
 	<div class="seg" role="group" aria-label={ label }>
 		for _, o := range opts {
 			if o.Disabled {
-				<button type="button" disabled title={ o.Title }>{ o.Label }</button>
+				// THE ONE CONTROL THIS PAGE EVER REFUSES, and it is reachable:
+				// scheduleZoomOptions sets Disabled on the narrow twin of the
+				// Day rung, `.sc-rung-narrow` shows it at 640 and below, and the
+				// `:disabled` rule in calendar-schedule.css is what it looks
+				// like. It carries no href — a disabled control that is still a
+				// link is a control a keyboard follows anyway.
+				<button
+					type="button"
+					disabled
+					title={ o.Title }
+					if o.Gate != "" {
+						class={ scheduleRungGate(o) }
+					}
+				>{ o.Label }</button>
 			} else if o.Pressed {
-				<a href={ templ.SafeURL(o.Href) } aria-current="true" title={ o.Title }>{ o.Label }</a>
+				<a
+					href={ templ.SafeURL(o.Href) }
+					aria-current="true"
+					title={ o.Title }
+					if o.Gate != "" {
+						class={ scheduleRungGate(o) }
+					}
+				>{ o.Label }</a>
 			} else {
-				<a href={ templ.SafeURL(o.Href) } title={ o.Title }>{ o.Label }</a>
+				<a
+					href={ templ.SafeURL(o.Href) }
+					title={ o.Title }
+					if o.Gate != "" {
+						class={ scheduleRungGate(o) }
+					}
+				>{ o.Label }</a>
 			}
 		}
 	</div>

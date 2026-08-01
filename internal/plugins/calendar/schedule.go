@@ -114,8 +114,29 @@ type ScheduleToggle struct {
 	Pressed    bool
 	// Disabled + Title carry the one control the page ever refuses: DAY zoom
 	// below the width where a day column can still clear the 24px target floor.
+	// It is set on exactly one rung — the narrow twin of the Day rung minted by
+	// scheduleZoomOptions — and Title is the drawing's own sentence, verbatim.
 	Disabled bool
 	Title    string
+	// Gate is "", "wide" or "narrow", and it is how a SERVER-RENDERED page
+	// carries a refusal that depends on the VIEWPORT.
+	//
+	// The sealed sheet reads `window.innerWidth` at render time and writes
+	// `disabled title="week zoom is forced at this width"` onto the Day rung
+	// below 640. A page rendered once, on a server, has no viewport to read and
+	// never will — so the two states are BOTH emitted and one media query
+	// chooses, which is the mechanism this surface already ships for the three
+	// sentences that have to be shorter on a phone (`.sc-wide` / `.sc-narrow`,
+	// see scheduleWidthTextView). Exactly one of the pair is `display:none` at
+	// any width, so exactly one is in the accessibility tree and a screen reader
+	// never meets two Day controls.
+	//
+	// It is the SAME BOUND ADR-048 §13 records for CSS-only selection — "a
+	// server-rendered `checked` attribute cannot vary by container query" — and
+	// it is answered the same way §13's own surfaces answer it: emit both
+	// readings, let CSS pick. No JS is added; this page's one script is the
+	// Painter's write driver and it does not touch the zoom.
+	Gate string
 }
 
 // ScheduleFault is the `.sc-faultbox` — a NAMED, REPAIRABLE refusal drawn where
@@ -496,10 +517,17 @@ func scheduleResolveBand(key string) struct {
 	return scheduleBands[0]
 }
 
-// scheduleResolveZoom clamps ?zoom. WEEK is the default and the only value a
-// narrow viewport ever gets — but the SERVER cannot see a viewport, so the
-// narrow rule is expressed in CSS (the day columns collapse) and the control
-// carries its own explanation rather than the server guessing a width.
+// scheduleResolveZoom clamps ?zoom to a value the builder knows.
+//
+// WEEK is the default, and WEEK is what the phone's own Day rung refuses its way
+// back to (scheduleZoomOptions) — but an EXPLICIT `?zoom=day` is still honoured
+// at every width, and that is a decision rather than an omission. The server
+// cannot see a viewport; silently ignoring a parameter a reader typed, or a link
+// they were sent, would make this surface's state-addressability a lie in the
+// one place it is easiest to tell. What a narrow reader gets instead is the day
+// grid inside the matrix's own horizontal scroller — the container that exists
+// for exactly this — rather than a page that answers a different question from
+// the one the URL asked.
 func scheduleResolveZoom(z string) string {
 	if z == "day" {
 		return "day"
@@ -633,14 +661,48 @@ func scheduleBandOptions(campaignID string, base url.Values, active string) []Sc
 	return out
 }
 
+// scheduleZoomOptions builds the Zoom segment — and it is THREE rungs for two
+// controls, because the second control has two states and the server cannot
+// choose between them.
+//
+// Above 640 the Day rung is a live link. At 640 and below the drawing REFUSES
+// it: `<button disabled>` in --text-muted with `cursor:not-allowed` and the
+// title "week zoom is forced at this width", because at 390 the panel is 340px,
+// the identity and answer columns take 170 of it, and eight hour columns cannot
+// clear the 24px target floor in what is left. Both rungs are emitted and one
+// media query shows one — see ScheduleToggle.Gate for why a viewport-dependent
+// refusal cannot be resolved server-side, and why this page already ships that
+// mechanism for its width-dependent sentences.
 func scheduleZoomOptions(campaignID string, base url.Values, active string) []ScheduleToggle {
 	return []ScheduleToggle{
 		{Key: "week", Label: "Week", Pressed: active == "week",
 			Href: scheduleHref(campaignID, base, "zoom", "week")},
-		{Key: "day", Label: "Day", Pressed: active == "day",
+		{Key: "day", Label: "Day", Pressed: active == "day", Gate: "wide",
 			Href:  scheduleHref(campaignID, base, "zoom", "day"),
 			Title: "one day at full width; the week view is forced on a narrow screen"},
+		// THE REFUSAL. It carries no Href on purpose: a disabled control that is
+		// still a link is a control that a keyboard reaches and follows.
+		{Key: "day", Label: "Day", Gate: "narrow", Disabled: true,
+			Title: scheduleNarrowZoomRefusal},
 	}
+}
+
+// scheduleNarrowZoomRefusal is the drawing's own sentence, VERBATIM
+// (mockups/calendar-v4-schedule.html:2092). It is the only thing this page ever
+// says no to, and it says why rather than going quiet.
+const scheduleNarrowZoomRefusal = "week zoom is forced at this width"
+
+// scheduleRungGate names the media-query class one gated rung wears. It is a
+// PAIR — never one class with a default — because the base rule and the phone
+// rule then read as one decision in one place in the stylesheet.
+func scheduleRungGate(o ScheduleToggle) string {
+	switch o.Gate {
+	case "wide":
+		return "sc-rung-wide"
+	case "narrow":
+		return "sc-rung-narrow"
+	}
+	return ""
 }
 
 // scheduleHour renders an hour-of-day as a clock time. The end hour of a window

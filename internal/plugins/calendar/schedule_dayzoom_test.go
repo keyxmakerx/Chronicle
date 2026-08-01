@@ -340,3 +340,168 @@ func TestScheduleOracle_FixtureCountsAgreeWithItsOwnLanes(t *testing.T) {
 		}
 	}
 }
+
+// ── THE 390 REFUSAL ────────────────────────────────────────────────────────
+
+// TestScheduleZoom_NarrowRefusalIsBuiltAndReachable. The comment on
+// ScheduleToggle claimed a refusal for four stages while `Disabled` was set
+// nowhere, the templ branch that renders it was unreachable, and the `:disabled`
+// CSS repair styled a control this surface never rendered. These assertions are
+// what makes the claim checkable.
+func TestScheduleZoom_NarrowRefusalIsBuiltAndReachable(t *testing.T) {
+	opts := scheduleZoomOptions("camp-1", nil, "week")
+	if len(opts) != 3 {
+		t.Fatalf("Zoom segment has %d rungs, want 3 (Week, the live Day, its "+
+			"narrow refusal)", len(opts))
+	}
+
+	var refusal *ScheduleToggle
+	live := 0
+	for i := range opts {
+		if opts[i].Disabled {
+			refusal = &opts[i]
+			continue
+		}
+		live++
+	}
+	if refusal == nil {
+		t.Fatal("no rung is Disabled — the page refuses nothing, and the doc " +
+			"comment, the templ branch and the :disabled rule all describe a " +
+			"control that does not exist")
+	}
+	if live != 2 {
+		t.Errorf("%d live rungs, want 2", live)
+	}
+	if refusal.Key != "day" || refusal.Label != "Day" {
+		t.Errorf("the refusal is on %q/%q, want the Day rung", refusal.Key, refusal.Label)
+	}
+	// The drawing's own sentence, verbatim.
+	if refusal.Title != "week zoom is forced at this width" {
+		t.Errorf("refusal title = %q, want the drawing's own sentence", refusal.Title)
+	}
+	if refusal.Href != "" {
+		t.Errorf("the refused rung carries href %q — a disabled control that is "+
+			"still a link is one a keyboard follows anyway", refusal.Href)
+	}
+	if refusal.Pressed {
+		t.Error("the refused rung is inked as pressed")
+	}
+	if refusal.Gate != "narrow" {
+		t.Errorf("refusal gate = %q, want %q", refusal.Gate, "narrow")
+	}
+
+	// And its live twin is gated the other way, or both would show at once.
+	var wide *ScheduleToggle
+	for i := range opts {
+		if opts[i].Key == "day" && !opts[i].Disabled {
+			wide = &opts[i]
+		}
+	}
+	if wide == nil || wide.Gate != "wide" {
+		t.Fatalf("the live Day rung is not gated wide: %+v", wide)
+	}
+	if wide.Href == "" {
+		t.Error("the live Day rung has no href")
+	}
+}
+
+// TestScheduleZoom_RefusalRendersAsADisabledButton walks the templ branch that
+// was dead code, and checks the classes the media query keys on.
+func TestScheduleZoom_RefusalRendersAsADisabledButton(t *testing.T) {
+	var sb strings.Builder
+	err := scheduleSegView("Zoom", scheduleZoomOptions("camp-1", nil, "week")).
+		Render(t.Context(), &sb)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := sb.String()
+	for _, want := range []string{
+		`<button type="button" disabled`,
+		`week zoom is forced at this width`,
+		`class="sc-rung-narrow"`,
+		`class="sc-rung-wide"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the Zoom segment does not contain %q:\n%s", want, html)
+		}
+	}
+	// Exactly one disabled control, and exactly one of each gate.
+	if n := strings.Count(html, "disabled"); n != 1 {
+		t.Errorf("%d disabled attributes in one segment, want 1", n)
+	}
+	for _, cls := range []string{"sc-rung-wide", "sc-rung-narrow"} {
+		if n := strings.Count(html, cls); n != 1 {
+			t.Errorf("%d occurrences of %q, want 1", n, cls)
+		}
+	}
+	// The hour band is NOT gated: it has no refusal and must carry no class.
+	var bs strings.Builder
+	if err := scheduleSegView("Hour band", scheduleBandOptions("camp-1", nil, "evening")).
+		Render(t.Context(), &bs); err != nil {
+		t.Fatalf("render band: %v", err)
+	}
+	if strings.Contains(bs.String(), "sc-rung-") || strings.Contains(bs.String(), "disabled") {
+		t.Errorf("the hour band grew a gate or a refusal:\n%s", bs.String())
+	}
+}
+
+// TestScheduleZoom_TheRefusalHasItsOwnCSSPairAndIsScopedToTheSegment. The bare
+// `.sc-wide` / `.sc-narrow` pair is 0,2,0 and `.cal-schedule .seg a` is 0,2,1,
+// so reusing it would leave the wide anchor visible at 390 beside its own
+// disabled twin — two Day controls at once, which is worse than the defect.
+func TestScheduleZoom_TheRefusalHasItsOwnCSSPairAndIsScopedToTheSegment(t *testing.T) {
+	css := scheduleCSS(t, "calendar-schedule.css")
+	for _, want := range []string{
+		".cal-schedule .seg .sc-rung-narrow { display: none; }",
+		".cal-schedule .seg .sc-rung-wide { display: inline-flex; }",
+		".cal-schedule .seg .sc-rung-wide { display: none; }",
+		".cal-schedule .seg .sc-rung-narrow { display: inline-flex; }",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("calendar-schedule.css is missing %q", want)
+		}
+	}
+	// The phone half must live inside the 640 block, or it applies everywhere.
+	narrow := strings.Index(css, "@media (max-width: 640px)")
+	if narrow < 0 {
+		t.Fatal("no 640 block in the stylesheet")
+	}
+	hide := strings.Index(css, ".cal-schedule .seg .sc-rung-wide { display: none; }")
+	if hide < narrow {
+		t.Error("the Day rung is refused OUTSIDE the phone block — it would be " +
+			"refused at every width")
+	}
+	// And the repair the fourth pass landed now styles something real.
+	if !strings.Contains(css, ".cal-schedule .seg button:disabled { color: var(--text-muted); cursor: not-allowed; }") {
+		t.Error("the :disabled rung repair is gone")
+	}
+}
+
+// TestScheduleHead_ControlsGrowToTouchTargetsAt390. Four declarations the
+// drawing writes in its own 640 block and the sheets did not carry, found while
+// measuring the refused Day rung against the still — the rung is one of them.
+// Measured before the repair: the Zoom segment 94px against the drawing's 175,
+// its rungs 20px tall against 26, the stepper 141px against 358.
+func TestScheduleHead_ControlsGrowToTouchTargetsAt390(t *testing.T) {
+	css := scheduleCSS(t, "calendar-schedule.css")
+	narrow := strings.Index(css, "@media (max-width: 640px)")
+	if narrow < 0 {
+		t.Fatal("no 640 block in the stylesheet")
+	}
+	for _, want := range []string{
+		".cal-schedule .phead .ctl .seg { flex: 1; }",
+		".cal-schedule .phead .ctl .seg a { flex: 1; justify-content: center; height: 26px; }",
+		".cal-schedule .phead .ctl .stepper { width: 100%; justify-content: space-between; }",
+		".cal-schedule .phead .ctl .btn.sm { height: 34px; }",
+	} {
+		i := strings.Index(css, want)
+		if i < 0 {
+			t.Errorf("calendar-schedule.css is missing %q", want)
+			continue
+		}
+		if i < narrow {
+			t.Errorf("%q sits OUTSIDE the phone block — it would grow the head's "+
+				"controls at every width", want)
+		}
+	}
+}

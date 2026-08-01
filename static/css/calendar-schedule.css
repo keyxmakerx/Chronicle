@@ -262,6 +262,24 @@
 /* a disabled rung is an OFF control, not a non-control */
 .cal-schedule .seg button:disabled { color: var(--text-muted); cursor: not-allowed; }
 .cal-schedule .seg button:disabled:hover { background: transparent; color: var(--text-muted); }
+
+/* ── THE ONE REFUSAL, AND WHY IT TAKES TWO ELEMENTS ──────────────────────────
+   The drawing reads `window.innerWidth` at render time and writes `disabled
+   title="week zoom is forced at this width"` onto the Day rung below 640,
+   because at 390 the panel is 340px and eight hour columns cannot clear the
+   24px target floor in what is left after the identity and answer columns. A
+   page rendered ONCE, ON A SERVER, has no viewport to read — the same bound
+   ADR-048 §13 records for CSS-only selection — so the builder emits BOTH rungs
+   and this pair shows one. Exactly one is `display:none` at any width, which is
+   what keeps it out of the accessibility tree: a screen reader never meets two
+   Day controls.
+
+   It needs its own pair rather than the sheet's `.sc-wide` / `.sc-narrow`:
+   those are 0,2,0 and `.cal-schedule .seg a` is 0,2,1, so the bare pair would
+   lose the `display` cascade to the rung's own rule and the wide anchor would
+   never hide. Scoping the pair under `.seg` (0,3,0) is the whole fix. */
+.cal-schedule .seg .sc-rung-narrow { display: none; }
+.cal-schedule .seg .sc-rung-wide { display: inline-flex; }
 .cal-schedule .seg button:focus-visible,
 .cal-schedule .seg a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -1236,6 +1254,36 @@
      prevent. */
   .cal-schedule .sc-wide { display: none; }
   .cal-schedule .sc-narrow { display: inline; }
+  /* THE Day RUNG IS REFUSED HERE, exactly as the drawing draws it: the live
+     anchor goes away and its disabled twin takes the slot, in --text-muted with
+     `cursor: not-allowed` and the title that says why. This is the ONE control
+     this page ever says no to. */
+  .cal-schedule .seg .sc-rung-wide { display: none; }
+  .cal-schedule .seg .sc-rung-narrow { display: inline-flex; }
+
+  /* ── THE PAGE HEAD'S CONTROLS GROW ON A PHONE ─────────────────────────────
+     Four declarations the drawing writes in this same block and the sheets did
+     not carry — found while measuring the refused Day rung against the still,
+     because the rung it is measured on is one of them. The drawing hands the
+     stepper the full width with its two arrows pushed to the ends, and it
+     grows every head control to a real touch target: 34px arrows and 26px
+     segment rungs instead of the desktop's 20px. Measured at 390 before the
+     repair: the Zoom segment was 94px against the drawing's 175, its rungs
+     20px tall against 26, and the stepper 141px against 358.
+
+     They are `.cal-schedule`-scoped rather than `.cal-bench`-scoped even
+     though `.phead` is a signed BENCH primitive: the schedule page carries
+     both classes, the Bench page carries only one, and a responsive rule for a
+     segmented control inside a page head is this surface's business — the
+     Bench has no segment there to grow. `.phead .ctl { width: 100% }` is NOT
+     repeated here: calendar-bench.css already carries it in its own 640 block,
+     and restating it would be this sheet redefining a signed primitive — which
+     TestScheduleCSS_RedefinesNoSignedBenchClass catches, and caught. */
+  .cal-schedule .phead .ctl .seg { flex: 1; }
+  .cal-schedule .phead .ctl .seg button,
+  .cal-schedule .phead .ctl .seg a { flex: 1; justify-content: center; height: 26px; }
+  .cal-schedule .phead .ctl .stepper { width: 100%; justify-content: space-between; }
+  .cal-schedule .phead .ctl .btn.sm { height: 34px; }
   .cal-schedule .sc-body { padding: 8px; }
   .cal-schedule .sc-grid { --idw: 76px; --sayw: 94px; --colmin: 24px; }
   .cal-schedule .sc-row { height: 40px; }
