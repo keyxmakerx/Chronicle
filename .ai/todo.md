@@ -1164,9 +1164,11 @@ NOT take, each with the reason it was left.
   **DONE 2026-08-01** — struck rather than deleted, so the booking stands beside
   what shipped. The gate closed the way it was written: the operator signed the
   mockup on 2026-07-29 and **the mockup, not the spec, is the contract** (the
-  spec now carries a supersession note). Shipped in **nineteen stages**
-  (`da2bda1b` … `2026-08-01`: stages 8–15 across two fix rounds and 17–19 across
-  a third, the verdict-and-close round; 13, 16 and 19 are book-keeping): ONE
+  spec now carries a supersession note). Shipped in **twenty-one stages**
+  (`da2bda1b` … `2026-08-01`: stages 8–15 across two fix rounds and 17–21 across
+  a third, the verdict-and-close round; 13, 16, 19 and 21 are book-keeping —
+  **and this sentence counts the stage that writes it**, which is the off-by-one
+  the stage-16 version of it got wrong): ONE
   route
   (snapshot **723 → 724**), **no migration**, **no new write path** — the
   Painter writes through the scheduler's own two availability PUTs, the Answer
