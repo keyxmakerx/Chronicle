@@ -20,6 +20,97 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — W-G PART B SHIPPED: `/campaigns/:id/schedule` (2026-08-01)
+
+**The operator's #1 feature has a page.** `C-CALV4-RSVP-P8` Part B was gated on
+a drawing pass — the spec forbade building the Verdict, the Matrix, the Roster
+or the Painter from its own prose — and the gate closed when the operator signed
+`mockups/calendar-v4-schedule.html` on 2026-07-29 against the `wg-schedule-*`
+stills. **Where that mockup and the W-G spec disagree, the mockup wins**; the
+spec now carries a supersession note naming the sections it overrules.
+
+- **Five surfaces, two role orders, one route.** Director: Verdict → Matrix →
+  (Roster · Painter) → Answer. Player: (Answer · Painter) → Verdict → Matrix.
+  SOURCE order, never CSS `order:`. `GET /campaigns/:id/schedule` at Player+ is
+  the whole route budget — `routes_snapshot.txt` **723 → 724**, no migration.
+- **No new write path.** The Painter writes through the scheduler's shipped
+  availability PUTs (two of them, because `[This week only | Every week]` means
+  two things and already has two tables), the Answer through P8A's event RSVP
+  POST, the Nudge through P8B's `/calendar/ask`. Forking a second availability
+  write would fork the composition invariant with it.
+- **Rank 1 IS the Bench's derived window**, by construction: `benchRsvpPeakRun`
+  is extracted and shared, and the oracle asserts both surfaces name the same
+  day and the same hour.
+- **Permission is absence, including in the prose.** A player's payload carries
+  no lane, no other member's name, no chip — so there is no `if IsGM` in the
+  markup at all. The one real bug the shots found was a SENTENCE: reason clauses
+  computed over an absent lane map told a player that five of five people had
+  ignored the question.
+- **The door is the Bench's RSVP panel title**, which has read `RSVP · Schedule`
+  since the signed contract drew it. Not the nav — WG-2's ruling keeps that
+  pointing at `/availability` and books the retirement as its own slice. The
+  Bench's 23 shot keys are byte-identical with the link in place.
+- **The fidelity gate is pixels and it paid for itself five times**, catching
+  twenty-two defects every string assertion had passed before the verdict round
+  found three more (below). The third pass was mostly
+  about SHAPE rather than words: every caption on the page shipped with the right
+  sentences and none of the drawing's emphasis — five bold lead-ins gone, two of
+  which ARE this surface's named honesty claims. Captions are a `[]ScheduleRun`
+  model now, never a markup string. Also: the matrix caption was three paragraphs
+  where the drawing returns one, the count lane ran its numeral beside its hour
+  instead of over it, the matrix head named the week but not the visible band,
+  and a member with no zone was drawn amber where the drawing draws it grey.
+- **The fourth pass was not pixels at all — it was a PARSER**, and it found six
+  the eye had signed off four times. Diffing the sealed `<style>` against the
+  shipped sheets declaration by declaration (normalising the `.cal-schedule`
+  scoping and whitespace) caught: every segmented control rendering its selected
+  rung **PINK**, because `color-mix(in oklch, var(--surface-card) …, var(--accent))`
+  mixes from an ACHROMATIC surface and oklch resolves the missing hue by the
+  short arc — 349.2deg the wrong way round the wheel — where the drawing mixes
+  into `transparent` precisely so it cannot; a `.say .badge` rule dropped from
+  the MIDDLE of a run of narrow rules the sheet otherwise carries in order,
+  leaving every chip ~27% oversized at 390; a drawn `width:auto` "tidied" into
+  `min-width:0`, which is a no-op replaced by a real effect and collapsed the
+  answer well until `19:00` and `in` collided; and a missing `gap`, a missing
+  `:hover` and a `cursor: default` where the drawing writes `not-allowed`.
+  **Screenshots show a page that looks plausible — a 27% oversized chip still
+  looks like a chip, and a pink pill still looks like a selected pill.** Only a
+  mechanical diff sees a rule that is simply absent.
+- **A measuring instrument that differs from its subject reports its own
+  defects as the subject's.** The harness padded 20px at every width where the
+  product's `<main>` pads 12px below 768 — 8px, and the drawn narrow matrix has
+  exactly 8px to spare, so the phone shot clipped a column the shipping page does
+  not. Three harness lessons are now written down in
+  `internal/plugins/calendar/.ai.md`: shoot with a driver (the Chrome CLI clamps
+  `--window-size` to a 500px minimum), scroll a control into view before
+  measuring its target, and **measure horizontal overflow per ELEMENT** — a
+  nested `overflow-x:auto` container never contributes to
+  `documentElement.scrollWidth`, so "the page does not drag sideways" was true
+  while the matrix dragged inside its own panel.
+- **The fifth round found a whole VIEW, and the parser found it again.**
+  `.sc-ruler` and `.sc-head-row b` were absent from the shipped sheet; pulling
+  that thread found that **`?zoom=day` was a live control that changed nothing** —
+  it round-tripped the query and inked `aria-current` while `scheduleColumns` and
+  `scheduleDayCount` never read it, so the Day rung returned the identical week
+  matrix. At 390 the same rung is DISABLED in the drawing (`--text-muted`,
+  `cursor: not-allowed`, `title="week zoom is forced at this width"`) and the
+  build shipped a live link at every width, while `ScheduleToggle.Disabled` was
+  set NOWHERE — leaving a doc comment, a templ branch and a CSS `:disabled`
+  repair all describing a refusal that did not exist. All three are closed: the
+  day view is built out of the week payload the Matrix already ships (no route,
+  no query, no seam), and the refusal is a real disabled rung that a media query
+  chooses between — the server cannot see a viewport, which is ADR-048 §13's own
+  bound, so both rungs ship and exactly one is ever displayed. Two footnotes
+  worth keeping: the sealed sheet DECLARES `.sc-ruler` and never renders it
+  (`const ruler = DAYZOOM ? '' : '';`), so those 21 declarations are deliberately
+  still not carried — a rule matching nothing is the defect that was just fixed,
+  not its repair; and measuring the refused rung turned up four more drawn
+  declarations the sheets never carried, growing every page-head control to a
+  real touch target at 390.
+- Report: cordinator `reports/chronicle/2026-08-01-C-CALV4-SCHEDULE-PARTB.md` ·
+  ADR-048 gained a Part B section · shots in
+  `reports/chronicle/screenshots/2026-08-01-c-calv4-schedule-partb/`.
+
 ### calendar-v4 — ROUND 2 OPEN · R2-2a (THE DAY ANSWERS ITS CLICK) SHIPPED (2026-07-31)
 
 **`C-CALV4-DAYCARD` stages 1-2 closed the operator's loudest live-client

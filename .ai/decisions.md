@@ -3103,6 +3103,201 @@ never assigned, so a test cannot pin it to a value the placer did not produce.
 Where a harness supplies a value the real DOM computes, the harness is making a
 claim, and it should be made where it can be seen.
 
+### Section: W-G Part B — the page that answers "when do we play" (C-CALV4-RSVP-P8 Part B, 2026-08-01)
+
+**The gate was the drawing, and the drawing changed the build.** Part B of
+`C-CALV4-RSVP-P8` could not be pasted until `mockups/calendar-v4-schedule.html`
+existed and its stills were signed — the spec's own condition, restated in the
+dispatch (*"Do not build the Verdict, the Matrix, the Roster or the Painter from
+§2–§3 prose"*). The operator signed the mockup on 2026-07-29
+(`decisions/2026-07-29-schedule-mockup-signed.md`), and the drawing pass had by
+then discovered ten resolutions the prose could not have: **the load-bearing one
+is a cascade fact.** The sheet declares `@layer …, schedule, motion, block,
+bench, …`, so `schedule` sorts BEFORE `bench` and a schedule rule can never
+override a signed Bench rule at any specificity. Three places where the spec
+reused a signed class became NEW classes — `.sc-why` (the reason sentence needs
+`--text-secondary`; `.dt` is `--text-muted`, below the floor for a word read in
+order to ACT), `.sc-foot`, `.sc-body`. **Production ships unlayered**, so the
+guarantee is obtained by CONSTRUCTION instead: a Bench-owned subject needs an
+`sc-` ancestor, and a test reads BOTH sheets, because "this file redefines
+nothing that file defines" is a claim about a relationship and a relationship
+asserted from one side is not asserted at all.
+
+**ONE ROUTE IS THE WHOLE BUDGET.** `GET /campaigns/:id/schedule`, Player+, on
+the identical `cg` stack every other calendar route rides;
+`routes_snapshot.txt` 723 → 724, no migration. Everything this page WRITES rides
+a route that already shipped: the scheduler's own availability PUTs
+(`member_availability` for normal hours, `availability_exceptions` for a date
+override — two endpoints because the `[This week only | Every week]` segment
+means two different things and already has two tables), P8A's Player+ event RSVP
+POST, and P8B's Scribe+ `/calendar/ask`. A second availability write path would
+have been a second place to get the composition invariant wrong, and *"an offer
+only ever adds, and never downgrades an hour already marked preferred"* is the
+scheduler's own rule, enforced in the scheduler's own service.
+
+**RANK 1 IS THE BENCH'S DERIVED WINDOW, BY CONSTRUCTION.** The Bench's RSVP
+panel and this page's head candidate are one click apart and may not derive
+"when to play" from two implementations of one idea, so `benchRsvpPeakRun` was
+EXTRACTED and both callers read it; the oracle drives both public builders over
+one `BenchAvailability` and asserts they name the same day and the same hour.
+The Bench's printed sentence is byte-identical to what it was.
+
+**PERMISSION IS ABSENCE, AND IT IS ASSERTED ABOUT THE PAYLOAD.** There is no
+`if IsGM` in this page's markup at all: a player's `ScheduleData` carries no
+lane, no out column, no other member's name, no awaiting-reply group and no
+chip, so every loop simply has nothing to walk. The two role orders are SOURCE
+order (Director: Verdict → Matrix → Roster · Painter → Answer; player: Answer ·
+Painter → Verdict → Matrix), never CSS `order:` — a page whose tab sequence
+disagrees with its reading sequence is unusable for exactly the people who most
+need the reading sequence to be right.
+
+**ONE NEW SEAM, BECAUSE IT ANSWERS A DIFFERENT QUESTION.**
+`ScheduleOwnWeekReader` is the viewer's OWN composed week. It is deliberately
+not a method on `BenchScheduleReader`: adding one would break every existing
+implementation of a seam P8A shipped, and it would fuse two permission questions
+into one contract. `BenchAvailability` answers *"may this viewer see EVERYONE'S
+lanes"* and is gated by role; this answers *"may I read back what I saved"*,
+whose answer is always yes. Without it a player's Painter would render an empty
+grid over availability they had already entered.
+
+**PROSE INHERITS PERMISSION, AND THAT IS WHERE IT IS EASIEST TO GET WRONG.** The
+candidate cards' reason sentence computes clauses like *"N never answered"* and
+*"X out"* from the lane map. A player has no lane map — so the clauses were
+computing over an absent one and every member read as never-having-answered: the
+card told a player that five of five people had ignored the question. The
+clauses are now gated on the lane data EXISTING rather than on `IsGM`, and the
+aggregates a player CAN state survive. A false sentence is worse than a missing
+one, and prose is where a permission bug reads as innocuous.
+
+**A NEVER-ANSWERED MEMBER IS NOT AN ABSENT ONE.** The honesty ledger's item 3
+stays open (there is still no `HasPattern` signal), so it is enforced in the INK
+instead: a known-busy member gets a filled swatch under `out`, a never-answered
+member a hollow one under `no answer`, and an empty lane prints the sentence
+saying exactly what is not known, in neutral ink — an unknown is not a fault.
+
+**THE DOOR IS THE PANEL'S OWN TITLE.** The Bench's RSVP panel has been called
+`RSVP · Schedule` since the signed contract drew it, so in Part B that title
+becomes the link. It could not in Part A because the page 404'd. It is not in
+the nav because WG-2's signed ruling keeps the nav pointing at `/availability`
+and books the retirement as its own slice. All 23 stills from the Bench's own
+shot harness are byte-identical before and after the link landed.
+
+**THE FIDELITY GATE IS PIXELS, AND IT EARNED ITS COST TWICE.** Holding the built
+page beside the signed stills found six defects across two passes that every
+string assertion had passed: the player's false reason sentence and an invalid
+`font:` shorthand copied off the mockup (`font: 500 12px/1.5 inherit` names
+`inherit` as the FAMILY, which is invalid and dropped silently), then an
+uppercased zone chip (`NEW_YORK` is not a member of `America/New_York` — a
+`.badge` is uppercase because it is a LABEL vocabulary, and an identifier is not
+a label), a candidate card whose zone wore the weight of a time, seven count-lane
+numerals below the signed 24px pointer floor, and two heads that under-named the
+slot. **Measure the page with a driver, never with `chrome --headless
+--window-size`:** the CLI clamps the window to a 500px minimum, so a "390px"
+shot is a 485px layout cropped to 390 and reads as a phone defect that does not
+exist. And scroll a control into view before probing it — `elementFromPoint`
+returns null outside the visual viewport, so a page-length surface probed in one
+pass reports its own below-the-fold controls as unpadded.
+
+**A THIRD PASS FOUND SIX MORE, AND FIVE OF THEM WERE ABOUT SHAPE RATHER THAN
+WORDS.** Every caption on the surface shipped with the right sentences and none
+of the drawing's emphasis — five bold lead-ins and its italic vocabulary words,
+gone. That is not decoration: two of those lead-ins ARE this page's named
+honesty claims (*"What the score cannot include"*, *"Fine and coarse disagree,
+on purpose"*), and a claim nobody can find in a wall of grey prose is honesty as
+decoration. Captions are therefore a MODEL now — `ScheduleCaption` is a slice of
+`{Text, Em}` runs and the view draws `<b>` / `<i>` / bare text per run — never a
+markup string, because five prose constants rendered raw would be five injection
+sites the first time one of them takes a campaign's name. `Text()` joins them
+back for every assertion about WORDING, so a test about what a caption says
+never has to know where the eye is meant to land.
+
+**FIX THE CLASS, NOT THE INSTANCES.** The verification pass named five missing
+bold lead-ins; repairing exactly those five and stopping left three more on the
+page, outside a `.caption` — the Painter's scope note (which bolds WHICH TABLE
+the marks land in), its foot, and the suggest dock's note. The sweep that found
+them is the one that should have followed the first finding: an inventory of
+every `<b>` and `<i>` the mockup emits inside its SURFACE producers, checked
+one by one against the build. A findings list is a sample, not the population.
+
+**A COLOUR MIX NEEDS A HUE TO MIX WITH, AND `transparent` IS THE ONLY SAFE
+SECOND TERM.** The drawing tints a pressed segment rung
+`color-mix(in oklch, transparent 96%, var(--accent))`. The sheet shipped
+`color-mix(in oklch, var(--surface-card) 88%, var(--accent))` — which reads as
+the same idea said differently and is not. `--surface-card` is achromatic, and
+oklch resolves a missing hue by the SHORT ARC: 0deg toward the accent's 270deg
+travels 349.2deg the other way round the wheel and lands on PINK. Measured
+`rgb(252,232,241)` (R>B>G) against the sealed still's `rgb(248,249,254)`
+(B>G>R), on every segment on the page, at both widths and both themes, for four
+stages before anyone looked. Mixing into `transparent` has no hue to interpolate
+and cannot drift, which is exactly why the drawing does it. **Substituting a
+surface for `transparent` in an oklch mix is a hue decision, not a syntax
+preference** — and it is invisible in review because the diff looks like a
+refactor. The one surface-toward-accent mix the sheet is allowed is `.surf.sel`,
+which the drawing writes itself and annotates `D-T1: this tint drifts rose in
+light. Booked upstream, not fixed here.` The pin therefore COUNTS the sanctioned
+mix rather than forbidding the shape, so the drawn exception cannot be deleted
+to make the rule pass.
+
+**A NO-OP DECLARATION CAN BE LOAD-BEARING, AND "TIDYING" IT IS A CHANGE.** The
+drawing's narrow rule writes `.sc-row .rs{width:auto}`. Nothing sets `width` at
+base, so the declaration does nothing — and that is its entire function: it
+occupies the slot without disturbing the base `min-width: 30px`, which is what
+right-aligns the five answers into a column. It was transcribed as
+`min-width: 0`, a different declaration with a real effect: the well collapses
+30px → ~11px and `19:00` and `in` collide into `19:00 in` where the still spaces
+them. **A declaration that appears to do nothing in a signed artifact is a
+question, not a redundancy.** It is restored as written, with a comment saying
+why, so the next reader does not tidy it away again.
+
+**DIFF THE SEALED SHEET DECLARATION BY DECLARATION, NOT BY EYE.** Both defects
+above, plus a missing `gap: 5px`, a missing `:hover` state (the segment gave a
+pointer no feedback at all) and a `cursor: default` where the drawing writes
+`not-allowed`, survived four fidelity passes and a targeted sweep that claimed
+this exact rule block — the sweep fixed `padding: 0 10px` → `0 8px` two lines
+above and stopped. What found them was a parser that normalises the
+`.cal-schedule ` scoping and whitespace and then compares the drawing's `<style>`
+to the shipped sheets declaration by declaration. The tell is positional: the
+missing `.sc-row .say .badge` rule sits in the drawing BETWEEN two rules the
+sheet carries in order, so it was dropped in transcription, not decided against.
+**A rule missing from the middle of a carried run is a transcription defect, and
+only a mechanical diff sees it** — screenshots show you a page that looks
+plausible, because a 27% oversized chip looks like a chip.
+
+**A STAND-IN SHELL MUST PAD LIKE THE SHELL IT STANDS IN FOR.** The fidelity
+harness cannot render `layouts.App` (it needs a request), so it renders its own
+wrapper — and that wrapper padded a flat 20px where the product's `<main
+class="px-3 py-3 md:px-5 md:py-4">` pads 12px below 768. Eight pixels, and the
+drawn narrow matrix has exactly eight to spare, so the phone shot clipped a
+column the shipping page does not clip. A measuring instrument that differs from
+its subject reports its own defects as the subject's. The paddings are named
+constants now and a test asserts the harness's budget equals the product's.
+
+**A DOCUMENT-LEVEL SCROLL CHECK CANNOT SEE A PANEL THAT DRAGS.** A nested
+`overflow-x:auto` container never contributes to `documentElement.scrollWidth`,
+so *"the page does not drag sideways in any role, theme or width"* was TRUE
+while the matrix dragged inside its own panel. Any surface with a scroll
+container inside it needs a per-element measurement, and this one's now records
+every offender with its panel and its drag in pixels.
+
+**A WIDTH-DEPENDENT STRING ON A SERVER-RENDERED PAGE IS TWO STRINGS.** The
+mockup's producer re-runs on resize and simply swaps three sentences for shorter
+ones at 640 (`who`, `free of 5`, `nothing saved`). Rendered once on the server,
+the page emits both and one media query chooses. It is used ONLY where the two
+forms say the same thing in a different number of words — both are in the
+accessibility tree, so it can never be a way to hide a fact from one width — and
+it was worth the duplication because the wide forms did not merely clip: the
+empty lane's sentence clipped its own `no pattern` chip out of the row, and an
+honesty chip that vanishes on a phone is the one thing this page forbids
+everywhere it forbids anything.
+
+**WHAT IS DELIBERATELY NOT BUILT, AND SAYS SO.** `Propose` and `Copy last week`
+remain chipped Director-tier scaffolding — and are ABSENT from a player's DOM
+rather than disabled, because the Director is the person being asked to sign off
+on what is missing and a player is not. Conflict detection against booked events
+(ledger #16) stays out of scope with the caption saying so permanently: this
+grid shows availability only, and a window may collide with something already on
+the calendar.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they

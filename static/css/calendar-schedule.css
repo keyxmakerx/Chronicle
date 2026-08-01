@@ -228,7 +228,7 @@
   align-items: center;
   justify-content: center;
   height: 20px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
   border-radius: var(--r-chip);
   background: transparent;
@@ -238,14 +238,48 @@
   line-height: 1;
   text-decoration: none;
   cursor: pointer;
+  gap: 5px;
 }
+.cal-schedule .seg button:hover,
+.cal-schedule .seg a:hover {
+  background: color-mix(in oklch, transparent 90%, var(--accent));
+  color: var(--text-primary);
+}
+/* THE TINT MIXES FROM `transparent`, NOT FROM THE SURFACE — and that is the
+   whole rule, not a stylistic preference. `--surface-card` is achromatic, so
+   oklch resolves its missing hue by the SHORT ARC: 0deg toward the accent's
+   270deg travels 349.2deg the other way round the wheel and lands on PINK
+   (measured rgb(252,232,241) against the sealed still's rgb(248,249,254)).
+   Mixing into `transparent` has no hue to interpolate and cannot drift.
+   The one surface-toward-accent mix this sheet is allowed is `.surf.sel`
+   above, which the drawing writes itself and annotates D-T1. */
 .cal-schedule .seg button[aria-pressed="true"],
 .cal-schedule .seg a[aria-current="true"] {
-  background: color-mix(in oklch, var(--surface-card) 88%, var(--accent));
+  background: color-mix(in oklch, transparent 96%, var(--accent));
   color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
-.cal-schedule .seg button:disabled { color: var(--text-muted); cursor: default; }
+/* a disabled rung is an OFF control, not a non-control */
+.cal-schedule .seg button:disabled { color: var(--text-muted); cursor: not-allowed; }
+.cal-schedule .seg button:disabled:hover { background: transparent; color: var(--text-muted); }
+
+/* ── THE ONE REFUSAL, AND WHY IT TAKES TWO ELEMENTS ──────────────────────────
+   The drawing reads `window.innerWidth` at render time and writes `disabled
+   title="week zoom is forced at this width"` onto the Day rung below 640,
+   because at 390 the panel is 340px and eight hour columns cannot clear the
+   24px target floor in what is left after the identity and answer columns. A
+   page rendered ONCE, ON A SERVER, has no viewport to read — the same bound
+   ADR-048 §13 records for CSS-only selection — so the builder emits BOTH rungs
+   and this pair shows one. Exactly one is `display:none` at any width, which is
+   what keeps it out of the accessibility tree: a screen reader never meets two
+   Day controls.
+
+   It needs its own pair rather than the sheet's `.sc-wide` / `.sc-narrow`:
+   those are 0,2,0 and `.cal-schedule .seg a` is 0,2,1, so the bare pair would
+   lose the `display` cascade to the rung's own rule and the wide anchor would
+   never hide. Scoping the pair under `.seg` (0,3,0) is the whole fix. */
+.cal-schedule .seg .sc-rung-narrow { display: none; }
+.cal-schedule .seg .sc-rung-wide { display: inline-flex; }
 .cal-schedule .seg button:focus-visible,
 .cal-schedule .seg a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -298,7 +332,7 @@
   font-size: 11px;
   line-height: 1;
   color: var(--text-muted);
-  width: 64px;
+  min-width: 48px;
   flex: none;
 }
 .cal-schedule .mrow .nm .ro { width: auto; }
@@ -307,7 +341,11 @@
   font-size: 13px;
   line-height: 1;
   text-align: right;
-  width: 96px;
+  /* a MINIMUM, not a fixed column: five members' clocks still line up, and the
+     `zone not set` + `Ask →` repair pair no longer forces the row to wrap. The
+     repair may never be the thing that disappears, so the numbers give way
+     first. */
+  min-width: 52px;
   flex: none;
   font-variant-numeric: tabular-nums;
 }
@@ -316,7 +354,7 @@
   font-weight: 600;
   font-size: 12px;
   line-height: 1;
-  width: 52px;
+  min-width: 40px;
   text-align: right;
   flex: none;
 }
@@ -333,7 +371,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cal-schedule .badge.tz { font-variant-numeric: tabular-nums; letter-spacing: 0; }
+/* THE ZONE CHIP KEEPS THE IDENTIFIER'S OWN CASE. `.badge` is uppercase because
+   it is a LABEL vocabulary — `NEEDS BACKEND`, `CO-DM`, `ZONE NOT SET` are words
+   about the tool. This one is not a word: it is the last segment of an IANA
+   identifier, and `America/New_York` has no member spelled `NEW_YORK`. The
+   sealed mockup carves both zone-bearing badges out of the uppercase rule by
+   name, and the roll-over badge rides the same exemption — `+1d`, never `+1D`.
+   Uppercasing it would be this surface faking an identifier three lines under a
+   caption promising it never fakes one. */
+.cal-schedule .badge.tz {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* …and the identifier is set in the IDENTIFIER FACE, which is the other half of
+   why `New_York` cannot be misread as prose. The face is declared here rather
+   than by adding the Bench's `mono` class to the markup, because that class
+   carries a font-SIZE (12px) as well as a family, and the badge's 10px is a
+   signed metric — importing a class to get one property and silently taking the
+   other is how a chip grows two points taller than the row it sits in. */
+.cal-schedule .sc-roster .badge.tz,
+.cal-schedule .sc-answer .badge.tz {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
 
 /* IDENTITY SWATCH: hue AND pattern, because colour is never load-bearing
    alone. The pattern is a repeating gradient driven by the same --dash / --gap
@@ -445,6 +505,19 @@
   gap: 3px;
   min-width: 0;
   flex: 1;
+}
+/* THE CARD'S ZONE IS A MUTED SIBLING, NEVER PART OF THE NUMERAL — the second of
+   the two places the sealed mockup styles `.z`, and the one that was missed.
+   The card's `.nm` is the Bench's signed 14px/650 primary ink (consumed, never
+   redefined), so an unstyled `.z` inherits it and `Sat 25 Jul · 19:00–22:00
+   Chicago` reads as ONE typographic unit — a zone wearing the weight of a time,
+   which is exactly the confusion the four-renderings rule exists to prevent. */
+.cal-schedule .sc-cands .calrow .sc-when .nm .z {
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+  margin-left: 5px;
 }
 
 /* THE WHY SENTENCE — the written reason a window ranks where it does, and the
@@ -681,6 +754,16 @@
   text-align: right;
 }
 
+/* ── THE TWO WIDTHS OF ONE SENTENCE ───────────────────────────────────────────
+   The sealed mockup's producer re-runs on resize and swaps three strings for
+   shorter ones at 640 (`who`, `free of 5`, `nothing saved`). A page rendered
+   once on the server cannot, so it emits both and this pair chooses. Wide is the
+   default because it is the reading the surface is designed around; the phone
+   block below flips them. Never `display:none` on a fact — only ever on the
+   longer wording of a fact that is also present. */
+.cal-schedule .sc-narrow { display: none; }
+.cal-schedule .sc-wide { display: inline; }
+
 /* The sentence that stands where the marks would be. NEUTRAL ink for an unknown
    — the tool does not know, and an unknown is not a fault. */
 .cal-schedule .sc-none {
@@ -716,6 +799,12 @@
 /* THE EXACT NUMBER, WHERE IT CAN BE READ AS A NUMBER — at --text-body, because
    this is the datum, not an annotation. */
 .cal-schedule .sc-row.cnt { height: 20px; border-bottom: 0; }
+/* THE NUMERAL SITS OVER ITS HOUR, NEVER BESIDE IT. `display:grid` with grid's
+   own row auto-flow is the whole rule the mockup has: `1` above `@ 19`, both
+   centred. Flowing them into a column instead makes them a pair of equal facts
+   on one line, and the count stops being the thing that can be read from across
+   the room — which is the one job this lane has, and why it is set at
+   --text-body rather than at an annotation's size. */
 .cal-schedule .sc-row.cnt .sc-cell {
   font-weight: 650;
   font-size: 11px;
@@ -723,11 +812,18 @@
   color: var(--text-body);
   text-align: center;
   display: grid;
-  grid-auto-flow: column;
-  gap: 4px;
   place-items: center;
 }
 .cal-schedule .sc-row.cnt .sc-cell.peak { color: var(--text-primary); }
+/* `<b>` is the numeral's ELEMENT, not a second weight: the cell already sets
+   650 and the user-agent's `bolder` would take it to 700, one step heavier than
+   the drawing anywhere the numeral happens to be the peak. */
+.cal-schedule .sc-row.cnt .sc-cell b { font-weight: 650; }
+/* THE DENOMINATOR MAY NEVER BE CLIPPED into "free of 5 in the campai…". It is
+   the sentence that stops the count being read as "of 5 players", which it is
+   not — it includes the Director and everyone who never answered — so the label
+   gives up its tracking before it gives up a word. */
+.cal-schedule .sc-row.cnt .who .cap { font-size: 8.5px; letter-spacing: 0; }
 .cal-schedule .sc-row.cnt .sc-cell u {
   text-decoration: none;
   font-weight: 500;
@@ -1110,7 +1206,16 @@
   border: 1px solid var(--rule-structural);
   background: var(--surface-card);
   color: var(--text-primary);
-  font: 500 12px/1.5 inherit;
+  /* SPLIT, not the `font:` shorthand. `font: 500 12px/1.5 inherit` names
+     `inherit` as the FAMILY, which is invalid CSS and is dropped in its
+     entirety — silently, so the textarea would fall back to the UA's monospace
+     and nobody would know why. Guard B2 caught it; the sealed mockup carries the
+     shorthand and this is the one place the mockup's CSS could not be copied
+     verbatim. */
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: inherit;
 }
 .cal-schedule .sc-suggest .sc-foot { border-top: 0; padding: 6px 0 8px; margin-top: 0; }
 .cal-schedule .sc-pop .pop-btns {
@@ -1142,6 +1247,43 @@
    caption PRINTS that arithmetic rather than merely obeying it.
    ─────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
+  /* THE SHORTER WORDING WINS ON THE PHONE. Both forms ship; this is where the
+     one that fits is chosen. Without it the empty lane's sentence clips its own
+     `no pattern` chip out of the row, and the count lane's denominator
+     truncates into "free of 5 …" — the exact misreading that sentence exists to
+     prevent. */
+  .cal-schedule .sc-wide { display: none; }
+  .cal-schedule .sc-narrow { display: inline; }
+  /* THE Day RUNG IS REFUSED HERE, exactly as the drawing draws it: the live
+     anchor goes away and its disabled twin takes the slot, in --text-muted with
+     `cursor: not-allowed` and the title that says why. This is the ONE control
+     this page ever says no to. */
+  .cal-schedule .seg .sc-rung-wide { display: none; }
+  .cal-schedule .seg .sc-rung-narrow { display: inline-flex; }
+
+  /* ── THE PAGE HEAD'S CONTROLS GROW ON A PHONE ─────────────────────────────
+     Four declarations the drawing writes in this same block and the sheets did
+     not carry — found while measuring the refused Day rung against the still,
+     because the rung it is measured on is one of them. The drawing hands the
+     stepper the full width with its two arrows pushed to the ends, and it
+     grows every head control to a real touch target: 34px arrows and 26px
+     segment rungs instead of the desktop's 20px. Measured at 390 before the
+     repair: the Zoom segment was 94px against the drawing's 175, its rungs
+     20px tall against 26, and the stepper 141px against 358.
+
+     They are `.cal-schedule`-scoped rather than `.cal-bench`-scoped even
+     though `.phead` is a signed BENCH primitive: the schedule page carries
+     both classes, the Bench page carries only one, and a responsive rule for a
+     segmented control inside a page head is this surface's business — the
+     Bench has no segment there to grow. `.phead .ctl { width: 100% }` is NOT
+     repeated here: calendar-bench.css already carries it in its own 640 block,
+     and restating it would be this sheet redefining a signed primitive — which
+     TestScheduleCSS_RedefinesNoSignedBenchClass catches, and caught. */
+  .cal-schedule .phead .ctl .seg { flex: 1; }
+  .cal-schedule .phead .ctl .seg button,
+  .cal-schedule .phead .ctl .seg a { flex: 1; justify-content: center; height: 26px; }
+  .cal-schedule .phead .ctl .stepper { width: 100%; justify-content: space-between; }
+  .cal-schedule .phead .ctl .btn.sm { height: 34px; }
   .cal-schedule .sc-body { padding: 8px; }
   .cal-schedule .sc-grid { --idw: 76px; --sayw: 94px; --colmin: 24px; }
   .cal-schedule .sc-row { height: 40px; }
@@ -1158,7 +1300,15 @@
     gap: 3px;
   }
   .cal-schedule .sc-row .lt { font-size: 11.5px; }
-  .cal-schedule .sc-row .rs { min-width: 0; font-size: 11px; }
+  /* `width: auto` is the drawing's own declaration here, and it is a NO-OP by
+     design: no `width` is set at base, so its whole effect is to LEAVE the base
+     `min-width: 30px` standing and keep the five answers right-aligned as a
+     column. Substituting `min-width: 0` collapses that well to ~11px and
+     `19:00` and `in` collide into `19:00 in`. */
+  .cal-schedule .sc-row .rs { width: auto; font-size: 11px; }
+  /* the say lane's chips shrink with the lane; without this every `+1d`,
+     `no zone` and `on the hour` renders ~27% oversized at 390 */
+  .cal-schedule .sc-row .say .badge { font-size: 8.5px; padding: 1px 3px; letter-spacing: 0; }
   .cal-schedule .sc-row .who .cap { font-size: 8.5px; letter-spacing: 0.02em; }
   .cal-schedule .sc-off { top: 14px; height: 12px; }
   .cal-schedule .sc-head-row .hd { font-size: 9px; letter-spacing: 0.02em; }
@@ -1183,9 +1333,58 @@
   .cal-schedule .seg.lg { width: 100%; }
   .cal-schedule .seg.lg button { flex: 1; justify-content: center; padding: 0 6px; }
 
-  /* THE PAINTER AT 390: the tick grows to a 40px target and the grid scrolls
-     inside its own wrap. No pinch, no drag, real touch targets. */
-  .cal-schedule .sc-pk { height: 40px; }
+  /* ── THE PAINTER AT 390 · DAY-STACKED ────────────────────────────────────
+     Seven sticky day headers, one row of hour ticks each, 40px targets,
+     scrolled VERTICALLY inside the panel. No horizontal scroll, no pinch, real
+     touch targets — and the sticky band is what makes the vertical scroll
+     legible instead of turning the page into 5,000px of ticks.
+
+     IT IS THE SAME DOM. The wide grid and the stacked one are one markup tree
+     restyled, not two renderings: the server cannot see a viewport, and a
+     surface whose structure depends on a width the producer had to guess is a
+     surface that renders wrong for whoever guessed wrong. Subgrid is dropped
+     here, the day label becomes the sticky band, and the ticks become a flex
+     row — every one of them a real element that was already there. */
+  .cal-schedule .sc-paint .sc-wrap { overflow-x: hidden; max-height: 440px; overflow-y: auto; }
+  .cal-schedule .sc-paintgrid { display: block; min-width: 0; }
+  .cal-schedule .sc-paintgrid > * { display: block; grid-template-columns: none; grid-column: auto; }
+  .cal-schedule .sc-paintgrid .sc-head-row { display: none; }
+  .cal-schedule .sc-paintgrid .sc-row {
+    height: auto;
+    display: flex;
+    flex-wrap: wrap;
+    border-bottom: 0;
+    padding: 0 0 6px;
+  }
+  .cal-schedule .sc-paintgrid .sc-row .who {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    flex-basis: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule-hairline);
+    background: var(--surface-inset);
+    padding: 4px 10px;
+    height: auto;
+    font-weight: 650;
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  /* the day's own name is the whole point of the band, so it comes back */
+  .cal-schedule .sc-paintgrid .sc-row .who .nm { display: block; }
+  .cal-schedule .sc-paintgrid .sc-row .say { display: none; }
+  .cal-schedule .sc-paintgrid .sc-pk {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 40px;
+    border-left: 0;
+    border-radius: var(--r-chip);
+    margin: 0 1px;
+  }
   .cal-schedule .sc-paint .btns { flex-direction: column; align-items: stretch; }
   .cal-schedule .sc-paint .btns .btn { width: 100%; height: 40px; justify-content: center; }
 }
@@ -1233,7 +1432,15 @@
 .cal-schedule .seg button,
 .cal-schedule .seg a { position: relative; }
 .cal-schedule .seg button::after,
-.cal-schedule .seg a::after {
+.cal-schedule .seg a::after,
+/* THE COUNT LANE'S NUMERALS ARE CONTROLS TOO, and they were the half of the
+   mockup's target-floor block that did not get carried. They print inside the
+   matrix's fixed 20px lane rhythm — a height that is load-bearing, because the
+   lane pitch is what makes a minute-accurate mark legible — so the floor is met
+   the same way the `.seg` meets it: a transparent pad centred on the box, which
+   moves no border, no ink and no metric. Measured at the pointer with
+   `elementFromPoint`, these went 20px → 24px and nothing on the page moved. */
+.cal-schedule .sc-row.cnt .sc-cell::after {
   content: "";
   position: absolute;
   left: 0;
@@ -1268,5 +1475,14 @@
   }
   .cal-schedule .sc-pk .sc-off {
     transition: opacity 100ms linear;
+  }
+  /* the segmented control's hover/press tint — the drawing declares this on
+     `.seg button` itself at `var(--t-fast)` (100ms) linear; it lives here
+     instead because this sheet keeps its entire motion budget inside the one
+     provable guard. Colour only, so the reduced-motion reading is the same
+     control with the same states, arrived at instantly. */
+  .cal-schedule .seg button,
+  .cal-schedule .seg a {
+    transition: background-color 100ms linear, color 100ms linear;
   }
 }

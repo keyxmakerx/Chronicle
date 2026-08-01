@@ -79,6 +79,16 @@ type scheduleBuildInput struct {
 	BandFrom  int
 	BandTo    int
 
+	// Zoom is "week" or "day" and it decides what a COLUMN IS — a day or an
+	// hour of one day. It is carried into the builder rather than read off
+	// ScheduleData because every surface derived from the columns (the
+	// aggregates, the bracket, the popover ids, the head's own frame) has to
+	// agree with them, and a zoom that only the template knew about is a zoom
+	// half the page does not obey. Day is the selected ISO date, already clamped
+	// into the week by scheduleResolveDay.
+	Zoom string
+	Day  string
+
 	// OwnLanes is the VIEWER'S OWN composed week, read through
 	// ScheduleOwnWeekReader. The Painter is built from THIS and never from
 	// Avail.Lanes, so a Director and a player paint from one path: a player's
@@ -329,6 +339,38 @@ func scheduleDayCount(in scheduleBuildInput) int {
 		return len(in.Avail.Days)
 	}
 	return 7
+}
+
+// scheduleDayZoom reports whether THIS render draws one day's hours rather than
+// the week's days.
+//
+// It is a function of the request and the overlay together, never of ?zoom
+// alone: a day view needs a day that is actually IN the week the overlay
+// returned, and a ?day the overlay cannot place is a query for a column that
+// does not exist. scheduleSelectedDay resolves that index, so the two can never
+// disagree about which day is on screen.
+func scheduleDayZoom(in scheduleBuildInput) bool {
+	return in.Zoom == "day" && scheduleSelectedDay(in) >= 0
+}
+
+// scheduleSelectedDay is the index of ?day among the overlay's own days, or -1
+// when it names no day this week.
+//
+// IT MATCHES ON THE OVERLAY'S DATES, not on arithmetic from the Monday: the
+// overlay is the authority on what days this week HAS (a calendar's week length
+// is its own business), and deriving the index by subtraction would put the day
+// view one column off on any calendar whose week is not seven Gregorian days.
+func scheduleSelectedDay(in scheduleBuildInput) int {
+	want := strings.TrimSpace(in.Day)
+	if want == "" {
+		return -1
+	}
+	for d, n := 0, scheduleDayCount(in); d < n; d++ {
+		if scheduleDayDate(in, d) == want {
+			return d
+		}
+	}
+	return -1
 }
 
 // scheduleLocalHour converts the page's hour into a member's own local hour,

@@ -496,7 +496,28 @@ templ benchVisibilityBadge(m BenchManage) {
 templ benchRsvpView(data BenchData) {
 	<div class="rsvp surf" data-bench-rsvp>
 		<div class="lhead">
-			<span class="t">{ data.Rsvp.Title }</span>
+			// THE DOOR TO THE SCHEDULE (C-CALV4-RSVP-P8 §10). The panel has been
+			// called `RSVP · Schedule` since the signed contract drew it
+			// (cv4:2233); Part B built the page behind that noun, so the noun
+			// becomes the way in. It could not in Part A — a link to a 404 is
+			// worse than no link — and it is not in the nav, because WG-2's
+			// signed ruling keeps the nav pointing at `/availability` and books
+			// the retirement as its own slice.
+			//
+			// A DOOR AT EVERY ROLE: the route's floor is Player+, and hiding it
+			// from players would hide the painter from exactly the people whose
+			// availability this panel is reporting it does not have. The
+			// campaign-less branch is not defensive noise — `/campaigns//schedule`
+			// is a 404 with a friendlier shape.
+			if data.CampaignID != "" {
+				<a
+					class="t"
+					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/schedule", data.CampaignID)) }
+					title="Open the schedule — the ranked windows, the week grid, the roster and your own hours"
+				>{ data.Rsvp.Title }</a>
+			} else {
+				<span class="t">{ data.Rsvp.Title }</span>
+			}
 			if data.Rsvp.Filled {
 				<span class="c" title={ data.Rsvp.FrameTitle }>{ data.Rsvp.Frame }</span>
 				<span class="sp"></span>

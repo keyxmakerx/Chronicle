@@ -50,7 +50,7 @@ func serveSchedule(h *Handler, role campaigns.Role, userID string, query string)
 	c.SetParamNames("id")
 	c.SetParamValues("camp-1")
 	c.Set("campaign_context", &campaigns.CampaignContext{
-		Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Embers of the Reach"},
+		Campaign:   &campaigns.Campaign{ID: "camp-1", Name: "Embers of the Reach"},
 		MemberRole: role, IsMember: true,
 	})
 	if userID != "" {
@@ -148,4 +148,65 @@ func TestSchedulePage_RefusesWithoutCampaignContext(t *testing.T) {
 		t.Fatal("SchedulePage accepted a request with no campaign context")
 	}
 	_ = rec
+}
+
+// §8.3 "What it accepts", the zoom half: `?zoom` reaches the BUILDER, not just
+// the toggle's own Pressed flag.
+//
+// This is asserted at the ROUTE and not only in the builder because that is
+// exactly where the defect lived: `data.Zoom` round-tripped the query and inked
+// `aria-current="true"` while nothing downstream read it, so the two zooms were
+// asserted apart and shipped identical. The handler runs on the DEGRADED floor
+// here (no schedule seam, so no overlay and no grid), which is why the claim is
+// about the resolved display state and the rendered rung rather than about
+// column counts — the surfaces that carry columns are proved in
+// schedule_dayzoom_test.go.
+func TestSchedulePage_ZoomReachesTheBuilderAndTheRungs(t *testing.T) {
+	h := scheduleRouteHandler()
+
+	for _, tc := range []struct {
+		zoom, want string
+	}{
+		{"", "week"},
+		{"week", "week"},
+		{"day", "day"},
+		// An unknown zoom is CLAMPED, never passed through: the builder switches
+		// on it and an unrecognised value must not become a third column set.
+		{"hour", "week"},
+		{"DAY", "week"},
+	} {
+		data := h.buildSchedule(context.Background(), scheduleInput{
+			Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Embers of the Reach"},
+			UserID:   "u-1",
+			Zoom:     tc.zoom,
+		})
+		if data.Zoom != tc.want {
+			t.Errorf("?zoom=%q resolved to %q, want %q", tc.zoom, data.Zoom, tc.want)
+		}
+		// ?day is always resolved to a real date in the resolved week, whichever
+		// zoom is on — the day view has to have a day before it can be asked for.
+		if data.Day == "" {
+			t.Errorf("?zoom=%q left Day empty", tc.zoom)
+		}
+	}
+
+	// And the refusal is in the served HTML at every zoom, because the media
+	// query — not the server — decides which rung a reader sees.
+	for _, q := range []string{"", "zoom=day"} {
+		rec, err := serveSchedule(h, campaigns.RoleOwner, "u-1", q)
+		if err != nil {
+			t.Fatalf("?%s: SchedulePage: %v", q, err)
+		}
+		body := rec.Body.String()
+		for _, want := range []string{
+			`week zoom is forced at this width`,
+			`sc-rung-narrow`,
+			`sc-rung-wide`,
+			`disabled`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("?%s: the served page does not contain %q", q, want)
+			}
+		}
+	}
 }

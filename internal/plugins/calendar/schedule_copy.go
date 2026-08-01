@@ -78,16 +78,25 @@ func schedulePaintForm(in scheduleBuildInput) *SchedulePaintForm {
 			me.Axis, me.Pattern, me.Token = m.Axis, m.Pattern, m.Token
 		}
 	}
+	// A member with no roster row still paints — the identity channel simply
+	// falls back to the neutral one rather than the grid losing its marks.
+	if me.Pattern == "" {
+		me.Axis, me.Pattern = benchRsvpIdentity(0)
+	}
 
 	f := &SchedulePaintForm{
 		SaveURL:       "/campaigns/" + in.CampaignID + "/availability/mine",
 		ExceptionsURL: "/campaigns/" + in.CampaignID + "/availability/exceptions",
 		CSRFToken:     in.CSRFToken,
 		Zone:          in.Zone,
+		WeekLabel:     "week of " + in.WeekStart.Format("2 Jan"),
+		Axis:          me.Axis,
+		Pattern:       me.Pattern,
 		Scope:         in.Scope,
 		PrefOpen:      in.PrefOpen,
-		PrefNote: "Preferred always sits inside available — the server composes them, so " +
-			"marking an hour preferred also marks it playable.",
+		PrefNote: ScheduleCaption{scheduleSay(
+			"Preferred always sits inside available — the server composes them, so " +
+				"marking an hour preferred also marks it playable.")},
 		Foot: schedulePaintFoot(in.Scope),
 	}
 	f.ScopeNote = schedulePaintScopeNote(in.Scope)
@@ -179,23 +188,40 @@ func schedulePaintDays(in scheduleBuildInput, me scheduleMember, kind string) []
 
 // schedulePaintScopeNote says what THIS scope's marks mean, in one sentence,
 // beside the control that sets it. Two scopes, two tables, two sentences.
-func schedulePaintScopeNote(scope string) string {
+//
+// THE BOLD PHRASE NAMES THE TABLE. `date exception` and `normal hours` are the
+// entire distinction the segment exists to make, and they are what a reader
+// scans this sentence for — which is why the drawing sets them as the lead-in
+// rather than leaving them in the middle of a line of grey.
+func schedulePaintScopeNote(scope string) ScheduleCaption {
 	if scope == "recurring" {
-		return "sets your normal hours — every week from now on, until you change them"
+		return ScheduleCaption{
+			scheduleSay("sets your "),
+			scheduleLead("normal hours"),
+			scheduleSay(" — every week from now on, until you change them"),
+		}
 	}
-	return "marks a date exception — it replaces that day's usual pattern"
+	return ScheduleCaption{
+		scheduleSay("marks a "),
+		scheduleLead("date exception"),
+		scheduleSay(" — it replaces that day's usual pattern"),
+	}
 }
 
 // schedulePaintFoot is the compose rule, printed. It is the one thing a member
-// cannot work out by looking at the grid.
-func schedulePaintFoot(scope string) string {
-	s := "Offering a window only ever adds. It can never take away a time you already gave, " +
-		"and it never downgrades an hour you already marked preferred."
-	if scope == "week" {
-		s += " A window you set on a specific date replaces that day's usual pattern. Clearing " +
-			"it puts the usual pattern back."
+// cannot work out by looking at the grid — so the claim itself is the lead-in
+// and the consequences follow it.
+func schedulePaintFoot(scope string) ScheduleCaption {
+	c := ScheduleCaption{
+		scheduleLead("Offering a window only ever adds."),
+		scheduleSay(" It can never take away a time you already gave, " +
+			"and it never downgrades an hour you already marked preferred."),
 	}
-	return s
+	if scope == "week" {
+		c = append(c, scheduleSay(" A window you set on a specific date replaces that day's usual "+
+			"pattern. Clearing it puts the usual pattern back."))
+	}
+	return c
 }
 
 // --- the printed sentences --------------------------------------------------
@@ -207,6 +233,57 @@ func scheduleFrameLine(in scheduleBuildInput) string {
 		return week + " · no time zone is set"
 	}
 	return week + " · times in " + in.ZoneLeaf
+}
+
+// scheduleMatrixFrame is the matrix head's frame: WHICH DAYS, WHICH HOURS, and
+// in whose zone — `Mon 20 – Sun 26 Jul · 16:00–24:00 · times in Chicago`.
+//
+// IT IS NOT scheduleFrameLine, AND THE DIFFERENCE IS THE BAND. Every other panel
+// on this page is about a week and the generic "week of 20 Jul 2026" says
+// everything they need. This one is a grid of HOURS, its lanes can report "3
+// windows outside 16–24", and a reader who cannot see what the band is has no
+// way to act on that sentence. The drawing prints both; so does this.
+func scheduleMatrixFrame(in scheduleBuildInput) string {
+	line := scheduleDaySpan(in) + " · " +
+		fmt.Sprintf("%02d:00–%02d:00", in.BandFrom, in.BandTo)
+	if in.ZoneLeaf == "" {
+		// A missing zone is a NAMED absence, never a reason to drop the two
+		// facts that do not depend on it.
+		return line + " · no time zone is set"
+	}
+	return line + " · times in " + in.ZoneLeaf
+}
+
+// scheduleDaySpan names the columns' own first and last day.
+//
+// IT READS THE OVERLAY, never a literal seven: a calendar's week length is its
+// own business, and this line is the one place a reader would notice the page
+// disagreeing with the grid beneath it. The month is printed once when both ends
+// share one and twice when they do not, because "Mon 28 – Sun 3 Aug" is a date
+// range nobody can parse.
+func scheduleDaySpan(in scheduleBuildInput) string {
+	// DAY ZOOM names ONE day, because that is what the columns are. The frame is
+	// the only line on this panel that says which dates are on screen, so a week
+	// range printed over eight hour columns would be the head contradicting the
+	// grid directly beneath it.
+	if scheduleDayZoom(in) {
+		if t, err := timeParseISO(scheduleDayDate(in, scheduleSelectedDay(in))); err == nil {
+			return t.Format("Mon 2 Jan")
+		}
+	}
+	days := scheduleDayCount(in)
+	first, ferr := timeParseISO(scheduleDayDate(in, 0))
+	last, lerr := timeParseISO(scheduleDayDate(in, days-1))
+	if ferr != nil || lerr != nil {
+		return "week of " + in.WeekStart.Format("2 Jan 2006")
+	}
+	if first.Equal(last) {
+		return first.Format("Mon 2 Jan")
+	}
+	if first.Month() == last.Month() && first.Year() == last.Year() {
+		return first.Format("Mon 2") + " – " + last.Format("Mon 2 Jan")
+	}
+	return first.Format("Mon 2 Jan") + " – " + last.Format("Mon 2 Jan")
 }
 
 // schedulePainterFrame states which zone the viewer's OWN marks are stored in.
@@ -228,15 +305,75 @@ func scheduleSlotLabel(in scheduleBuildInput) string {
 		// refuses to make.
 		return in.Session.Name + " · no time set"
 	}
-	return in.Session.Name
+	if in.Zone == "" {
+		return in.Session.Name
+	}
+	loc, err := time.LoadLocation(in.Zone)
+	if err != nil {
+		return in.Session.Name
+	}
+	// THE SLOT IS NAMED WITH ITS WEEKDAY, ITS CLOCK AND ITS ZONE, because "which
+	// slot are we answering" is the question every row underneath is an answer
+	// to — and on a page whose other four surfaces are all about a WEEK, an hour
+	// with no day attached is the one ambiguity this head cannot afford. The
+	// drawing prints `slot Sat 19:00 Chicago` and the weekday is the half a
+	// reader checks first.
+	return in.Session.Name + " · slot " + in.Session.Instant.In(loc).Format("Mon 15:04") +
+		" " + in.ZoneLeaf
 }
 
 // scheduleAnswerSub is the player's answer header.
+//
+// IT NAMES THE EVENT, ITS SLOT, AND — WHEN THEY DIFFER — THE VIEWER'S OWN CLOCK.
+// The whole subject of this page is that one instant is a different clock for
+// each person reading it, so a player's own clock for the slot they are being
+// asked about is the single fact they came for; the drawn head prints it as
+// `· your 01:00`.
+//
+// IT NAMES THE EVENT AND NOT THE HIGHLIGHTED CANDIDATE, which is where this
+// parts from the drawing on purpose: the tri-state below posts to an EVENT's
+// RSVP, and this panel's own chip reads `RSVP answers an event, not a week`. A
+// head naming the selected window would contradict the chip directly under it.
+//
+// The clause appears only when the viewer's clock DIFFERS from the printed one.
+// `19:00 Chicago · your 19:00` is not a second fact, it is the same fact twice,
+// and a head that repeats itself teaches the reader to stop reading it.
 func scheduleAnswerSub(in scheduleBuildInput) string {
 	if in.Session == nil {
 		return "no slot chosen yet"
 	}
-	return in.Session.Name
+	// An unanchored session HAS no clock, and inventing one here would be the
+	// same error the zone-less member's literally empty clock refuses to make.
+	if !in.Session.Anchored || in.Zone == "" {
+		return in.Session.Name
+	}
+	loc, err := time.LoadLocation(in.Zone)
+	if err != nil {
+		return in.Session.Name
+	}
+	slot := in.Session.Instant.In(loc).Format("15:04")
+	sub := in.Session.Name + " · " + slot + " " + in.ZoneLeaf
+
+	// The viewer's own clock comes from the SAME helper the roster row prints
+	// from, so the head and the row can never disagree about what time it is
+	// for the person reading them.
+	for _, m := range scheduleMembers(in) {
+		if m.UserID != in.ViewerID {
+			continue
+		}
+		clock, nextDay, ok := scheduleLocalHourAt(in, m)
+		if !ok || clock == slot {
+			break
+		}
+		sub += " · your " + clock
+		if nextDay {
+			// The roster marks the roll-over beside the same clock; a head that
+			// dropped it would print an hour on the wrong day.
+			sub += " +1d"
+		}
+		break
+	}
+	return sub
 }
 
 // scheduleVerdictCaption states what the score is and — more importantly — what
@@ -245,64 +382,117 @@ func scheduleAnswerSub(in scheduleBuildInput) string {
 // detection is ledger #16 and explicitly out of scope for this slice; the
 // caption is how the surface stays honest about it rather than implying
 // otherwise).
-func scheduleVerdictCaption(ranked bool) string {
-	key := ""
+func scheduleVerdictCaption(ranked bool) ScheduleCaption {
+	c := ScheduleCaption{}
 	if ranked {
-		key = "How it ranks: heads free at the top of the hour first, then how many marked the " +
-			"hour preferred, then how many people it wakes before 08:00 or keeps up past 23:00 in " +
-			"their own zone. Ties break toward the later date, so an earlier window is never " +
-			"dropped by a coin flip. "
+		c = append(c,
+			scheduleLead("How it ranks:"),
+			scheduleSay(" heads free at the top of the hour first, then how many marked the "+
+				"hour "),
+			scheduleWord("preferred"),
+			scheduleSay(", then how many people it wakes before 08:00 or keeps up past 23:00 in "+
+				"their own zone. Ties break toward the later date, so an earlier window is never "+
+				"dropped by a coin flip. "),
+		)
 	}
-	return key + "What the score cannot include: this grid shows availability only — it does not " +
-		"know what is already on the calendar, so a window may collide with something already " +
-		"booked. One week at a time: the schedule reads a week, not a month. Cards sit in date " +
-		"order and never move; the number on the left is the rank."
+	return append(c,
+		scheduleLead("What the score cannot include:"),
+		scheduleSay(" this grid shows availability only — it does not "+
+			"know what is already on the calendar, so a window may collide with something already "+
+			"booked. One week at a time: the schedule reads a week, not a month. Cards sit in date "+
+			"order and never move; the number on the left is the rank."),
+	)
 }
 
-// scheduleMatrixCaptions are the marks' key and the two disagreements the
-// numbers cannot state about themselves.
-func scheduleMatrixCaptions(in scheduleBuildInput, wrapped bool) []string {
-	caps := []string{
-		"The marks: a hollow outline is an hour someone can play; the same outline filled is an " +
-			"hour they'd prefer; nothing at all means no free time saved. Every outline carries " +
-			"that person's own dash pattern, so the grid reads with the colour off.",
-		"Fine and coarse disagree, on purpose: the outlines are minute-accurate, and the count " +
-			"lane samples the top of the hour. Someone free from 18:30 raises their own lane at " +
-			"18:30 but does not raise the 18:00 count.",
-		"This grid shows availability only — it does not know what is already on the calendar.",
+// scheduleMatrixCaption is the marks' key and the two disagreements the numbers
+// cannot state about themselves — ONE flowing paragraph, as the drawing returns
+// one. Three notes in three blocks read as three unrelated remarks; the mockup's
+// own producer joins them, and it is one key to one grid.
+func scheduleMatrixCaption(in scheduleBuildInput, wrapped bool) ScheduleCaption {
+	c := ScheduleCaption{
+		scheduleLead("The marks:"),
+		scheduleSay(" a hollow outline is an hour someone can play; the same outline filled is an "+
+			"hour they'd "),
+		scheduleWord("prefer"),
+		scheduleSay("; nothing at all means no free time saved. Every outline carries "+
+			"that person's own dash pattern, so the grid reads with the colour off. "),
+		scheduleLead("Fine and coarse disagree, on purpose:"),
+		scheduleSay(" the outlines are minute-accurate, and the count "+
+			"lane samples the top of the hour. Someone free from 18:30 raises their own lane at "+
+			"18:30 but does not raise the 18:00 count. "),
+		scheduleLead("This grid shows availability only"),
+		scheduleSay(" — it does not know what is already on the calendar."),
 	}
 	if wrapped {
-		caps = append(caps, "Identity wraps after eight — the ninth lane reuses the first hue "+
-			"with a different pattern, and the roster below is the authority on who is who.")
+		c = append(c,
+			scheduleSay(" "),
+			scheduleLead("Identity wraps after eight"),
+			scheduleSay(" — the ninth lane reuses the first hue "+
+				"with a different pattern, and the roster below is the authority on who is who."))
 	}
 	_ = in
-	return caps
+	return c
 }
 
 // scheduleRosterCaption names why the counts are recomputed, which is the one
 // fact the numbers cannot state about themselves.
-func scheduleRosterCaption() string {
-	return "Counts are recomputed from these rows, not from the stored tally, because the stored " +
-		"tally still counts people who have left the campaign. Zone names print the last part of " +
-		"the IANA identifier — hover for the full one. Chronicle has no abbreviation helper, so " +
-		"nothing here will ever say “CDT” until it does. An answer of in, maybe or out " +
-		"answers an event, not a week — the two only line up when the calendar is anchored to " +
-		"real time."
+func scheduleRosterCaption() ScheduleCaption {
+	return ScheduleCaption{
+		scheduleLead("Counts are recomputed from these rows"),
+		scheduleSay(", not from the stored tally, because the stored "+
+			"tally still counts people who have left the campaign. Zone names print the last part of "+
+			"the IANA identifier — hover for the full one. Chronicle has no abbreviation helper, so "+
+			"nothing here will ever say “CDT” until it does. An answer of "),
+		scheduleWord("in"),
+		scheduleSay(", "),
+		scheduleWord("maybe"),
+		scheduleSay(" or "),
+		scheduleWord("out"),
+		scheduleSay(" answers "),
+		scheduleLead("an event"),
+		scheduleSay(", not a week — the two only line up when the calendar is anchored to "+
+			"real time."),
+	}
 }
 
-func scheduleAnswerDirectorCaption() string {
-	return "A Director never sets someone else's answer. “Awaiting reply” is this roster " +
-		"minus the people who replied — there is no invitee table, so on a player's page this " +
-		"group does not exist at all."
+func scheduleAnswerDirectorCaption() ScheduleCaption {
+	return ScheduleCaption{scheduleSay(
+		"A Director never sets someone else's answer. “Awaiting reply” is this roster " +
+			"minus the people who replied — there is no invitee table, so on a player's page this " +
+			"group does not exist at all.")}
 }
 
-func scheduleAnswerPlayerCaption() string {
-	return "All five are words, not glyphs. Out just this week writes two things: it records your " +
-		"RSVP as no and marks you unavailable for this whole real-world week — days you already " +
-		"set by hand are left alone. Suggest a better time records your answer as maybe, never " +
-		"yes and never no, because a note without a status would otherwise be counted as a " +
-		"decision you did not make."
+func scheduleAnswerPlayerCaption() ScheduleCaption {
+	return ScheduleCaption{
+		scheduleSay("All five are words, not glyphs. "),
+		scheduleLead("Out just this week"),
+		scheduleSay(" writes two things: it records your RSVP as "),
+		scheduleWord("no"),
+		scheduleSay(" and marks you unavailable for this whole real-world week — days you already "+
+			"set by hand are left alone. "),
+		scheduleLead("Suggest a better time"),
+		scheduleSay(" records your answer as "),
+		scheduleWord("maybe"),
+		scheduleSay(", never yes and never no, because a note without a status would otherwise be "+
+			"counted as a decision you did not make."),
+	}
 }
+
+// --- the caption runs -------------------------------------------------------
+//
+// Three constructors, so a caption reads on the page of source the way it reads
+// on the screen and the emphasis cannot drift into a markup string.
+
+// scheduleSay is plain prose.
+func scheduleSay(s string) ScheduleRun { return ScheduleRun{Text: s} }
+
+// scheduleLead is the drawn BOLD lead-in — the phrase a reader scans for.
+func scheduleLead(s string) ScheduleRun { return ScheduleRun{Text: s, Em: "b"} }
+
+// scheduleWord is a vocabulary word the caption QUOTES rather than uses:
+// `preferred`, `in`, `maybe`, `out`, `no`. Drawn italic so "an answer of in,
+// maybe or out" cannot be read as a sentence that is itself simply in.
+func scheduleWord(s string) ScheduleRun { return ScheduleRun{Text: s, Em: "i"} }
 
 // --- small shared helpers ---------------------------------------------------
 

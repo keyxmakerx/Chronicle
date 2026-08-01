@@ -30,6 +30,49 @@ const (
 	AvailAvailable = scheduleAvailAvailable
 )
 
+// --- the captions -----------------------------------------------------------
+
+// ScheduleCaption is one caption paragraph, carried as RUNS so the sealed
+// drawing's emphasis survives the trip from copy to page.
+//
+// THE BOLD LEAD-IN IS NOT DECORATION. The mockup writes every caption with one —
+// `<b>How it ranks:</b>`, `<b>What the score cannot include:</b>`,
+// `<b>Fine and coarse disagree, on purpose:</b>` — and it is the mechanism by
+// which a reader FINDS a named honesty claim inside a paragraph of grey prose.
+// Two of this surface's own honesty claims ARE lead-ins; shipping them flat
+// leaves the page saying the same words and admitting nothing findable.
+//
+// RUNS, NEVER A MARKUP STRING. templ escapes text and must go on escaping it:
+// the emphasis is a property of the copy, declared beside the words, and never a
+// fragment of trusted HTML smuggled past the escaper.
+type ScheduleCaption []ScheduleRun
+
+// ScheduleRun is one span of caption prose and the emphasis drawn on it.
+//
+// Em is "" for plain prose, "b" for the drawn lead-in, and "i" for a vocabulary
+// word the caption is QUOTING rather than using — `preferred`, `maybe`, `no`.
+// The distinction matters: "an answer of in, maybe or out" is a sentence about
+// three words, and the drawing italicises them so it cannot be misread as a
+// sentence that is simply in.
+type ScheduleRun struct {
+	Text string
+	Em   string
+}
+
+// Text joins the runs back into the plain sentence.
+//
+// Every assertion about WHAT a caption says reads this: the wording is the
+// caption's contract with the arithmetic above it, and a test about wording has
+// no business knowing where the eye is meant to land. Runs carry their own
+// spacing, so the join is a concatenation and never inserts one.
+func (c ScheduleCaption) Text() string {
+	out := ""
+	for _, r := range c {
+		out += r.Text
+	}
+	return out
+}
+
 // --- S1 · THE VERDICT -------------------------------------------------------
 
 // ScheduleVerdict is the page's lead: the ANSWER, with the evidence beneath it.
@@ -83,7 +126,7 @@ type ScheduleVerdict struct {
 	MoreID    string
 	More      []ScheduleMoreRow
 
-	Caption string
+	Caption ScheduleCaption
 }
 
 // ScheduleCandidate is one ranked window card.
@@ -171,9 +214,11 @@ type ScheduleMatrix struct {
 	// inside repeat() and no CSS on this surface writes a week length or an hour
 	// count.
 	Cols []ScheduleCol
-	// IdentCap / SayCap are the two sticky ends' headers.
-	IdentCap string
-	SayCap   string
+	// IdentCap / SayCap are the two sticky ends' headers. IdentCapShort is the
+	// PHONE's word for the same column — see the note on Denominator below.
+	IdentCap      string
+	IdentCapShort string
+	SayCap        string
 
 	// Lanes are the per-member rows. EMPTY FOR A PLAYER — including their own —
 	// because OverlayMember is omitted wholesale from a player's payload. Their
@@ -187,24 +232,52 @@ type ScheduleMatrix struct {
 	// "free of 5 in the campai…": it is the sentence that stops the number being
 	// read as "of 5 players", which it is not — it includes the Director and
 	// everyone who never answered.
-	Denominator string
-	CountChip   []scheduleChip
+	//
+	// DenominatorShort is the SAME SENTENCE, SHORTER, for the phone — the
+	// drawing's own `free of 5`. The mockup's producer re-runs on resize and can
+	// simply swap the string; a page rendered once on the server cannot, so it
+	// emits both and one media query chooses. Duplicated words are the price of a
+	// width-dependent sentence, and they are cheaper than a truncation that turns
+	// this one into the misreading it exists to prevent.
+	Denominator      string
+	DenominatorShort string
+	CountChip        []scheduleChip
 
 	Bracket *ScheduleBracket
 
-	Zero     string
-	Captions []string
-	Pops     []SchedulePop
+	Zero string
+	// Caption is ONE flowing paragraph, exactly as the mockup's own
+	// `bits.join(' ')` returns one: the marks' key, the two disagreements the
+	// numbers cannot state about themselves, and the identity-wrap note when
+	// there is one. Split across separate blocks they read as unrelated notes
+	// rather than as one key to one grid.
+	Caption ScheduleCaption
+	Pops    []SchedulePop
 }
 
-// ScheduleCol is one matrix column.
+// ScheduleCol is one matrix column: a DAY in week zoom, an HOUR in day zoom.
 type ScheduleCol struct {
 	Head string
 	Sub  string
 	// Major draws the heavier structural rule — the week's own emphasis, not a
-	// decoration.
+	// decoration. In week zoom it is the weekend's leading edge; in day zoom it
+	// is every sixth hour after the band's first, which is the drawing's own
+	// `(h - lo) % 6 === 0 && h !== lo`.
 	Major  bool
 	DayKey string
+	// Key is the column's IDENTITY, and it is NOT DayKey once the columns are
+	// hours: eight hour columns of one Saturday all carry the same DayKey (they
+	// are all that date — the ANSWER key guard B4 reads), so a popover id minted
+	// from DayKey would repeat eight times and `popovertarget` would open the
+	// 16:00 detail from every cell in the row. The drawing keys its own ids on
+	// `${iso}T${h}` for exactly this reason.
+	Key string
+	// When is the column's human "when" phrase, and it is what the accessible
+	// name and the popover heads are built from: `Sat 25` in week zoom,
+	// `Sat 25, 16:00` in day zoom. DayLabel is the DAY part alone, which is what
+	// a popover head wants beside a separately printed hour.
+	When     string
+	DayLabel string
 	// StartMinute / EndMinute are the column's span in minutes from midnight,
 	// which is what the marks inside it are positioned against.
 	StartMinute int
@@ -225,9 +298,15 @@ type ScheduleLane struct {
 	// Note is the printed sentence that stands where the marks would be.
 	// NoteChip rides beside it; NoteWarn switches the register from neutral
 	// (an unknown) to warn (a band that is hiding real data).
-	Note     string
-	NoteWarn string
-	NoteChip []scheduleChip
+	//
+	// NoteShort is the phone's form. The lane is a single nowrap line, so at 390
+	// the long sentence does not merely clip — it clips its own CHIP out of the
+	// row with it, and an honesty chip that vanishes on a phone is the one thing
+	// this page forbids everywhere it forbids anything.
+	Note      string
+	NoteShort string
+	NoteWarn  string
+	NoteChip  []scheduleChip
 
 	// The SAY column: the member's own local clock and their answer.
 	LocalTime  string
@@ -289,7 +368,9 @@ type ScheduleDensity struct {
 type ScheduleCount struct {
 	Free int
 	// PeakHour is the hour the count was taken at in WEEK zoom, printed beside
-	// the number so the reader knows WHEN.
+	// the number so the reader knows WHEN. It is EMPTY in day zoom, where the
+	// column head already IS the hour and printing `@ 19` under a column headed
+	// `19` is the same fact twice — the drawing emits `<b>${n}</b>` alone there.
 	PeakHour  string
 	Peak      bool
 	DayKey    string
@@ -343,7 +424,7 @@ type ScheduleRoster struct {
 	// player — no "awaiting reply" column (not derivable for them), no other
 	// names, no greyed placeholders.
 	Rows    []ScheduleRosterRow
-	Caption string
+	Caption ScheduleCaption
 }
 
 // ScheduleRosterRow is one member row.
@@ -404,12 +485,21 @@ type SchedulePaintForm struct {
 	ExceptionsURL string
 	CSRFToken     string
 	Zone          string
+	// WeekLabel heads the identity column. It is the WEEK, not the zone: the
+	// zone is already stated once in the panel frame, and stating it twice in
+	// two registers is how a reader starts checking whether they agree.
+	WeekLabel string
+	// Axis / Pattern are the VIEWER'S OWN identity, so a mark they paint is the
+	// same mark the Director reads in the matrix above — same hue, same locked
+	// dash. Colour is never load-bearing alone here either.
+	Axis    string
+	Pattern string
 
 	Scope        string
 	ScopeOptions []ScheduleToggle
 	// ScopeNote says what THIS scope's marks mean, in one sentence, beside the
 	// control that sets it.
-	ScopeNote string
+	ScopeNote ScheduleCaption
 
 	Summary string
 	Hours   []ScheduleHourHead
@@ -418,14 +508,14 @@ type SchedulePaintForm struct {
 	// sanctioned open/close on this page, on the viewer's own explicit act.
 	PrefDays []SchedulePaintDay
 	PrefOpen bool
-	PrefNote string
+	PrefNote ScheduleCaption
 
 	Empty string
 	// CopyWeek is the Director-only unbuilt affordance. ABSENT for a player,
 	// not disabled: scaffolding for a gap nobody is asking that player about is
 	// Director-tier, and permission is absence.
 	CopyWeek *BenchAction
-	Foot     string
+	Foot     ScheduleCaption
 	// Reserve is the ONE dashed band on this whole page and it is reserved for
 	// external-calendar import (ledger #21). Director-only, same rule.
 	Reserve *ScheduleReserve
@@ -508,7 +598,7 @@ type ScheduleAnswer struct {
 	Awaiting []ScheduleRosterRow
 	Notes    map[string]string
 
-	Caption string
+	Caption ScheduleCaption
 	Foot    string
 }
 
@@ -526,7 +616,7 @@ type ScheduleAnswerForm struct {
 	OutWeekPopID string
 	SuggestHref  string
 	SuggestOpen  bool
-	SuggestNote  string
+	SuggestNote  ScheduleCaption
 }
 
 // ScheduleAnswerOption is one word of the tri-state. WORDS, NEVER GLYPHS.

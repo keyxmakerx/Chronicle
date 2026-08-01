@@ -36,19 +36,21 @@ func TestSchedulePainter_ScopeSegmentNamesWhatItWrites(t *testing.T) {
 	if week.Form == nil {
 		t.Fatal("the Painter built no form")
 	}
-	if !strings.Contains(week.Form.ScopeNote, "date exception") {
+	// The note is a run sequence — its WORDS are what this asserts; the drawn
+	// emphasis on the table's name is pinned in schedule_stills_test.go.
+	if !strings.Contains(week.Form.ScopeNote.Text(), "date exception") {
 		t.Errorf("the `this week only` note does not say it replaces that day's usual "+
-			"pattern: %q", week.Form.ScopeNote)
+			"pattern: %q", week.Form.ScopeNote.Text())
 	}
 
 	in := schedulePainterInput(false)
 	in.Scope = "recurring"
 	every := scheduleBuildPainter(in)
-	if !strings.Contains(every.Form.ScopeNote, "normal hours") {
+	if !strings.Contains(every.Form.ScopeNote.Text(), "normal hours") {
 		t.Errorf("the `every week` note does not say it sets the member's normal hours: %q",
-			every.Form.ScopeNote)
+			every.Form.ScopeNote.Text())
 	}
-	if week.Form.ScopeNote == every.Form.ScopeNote {
+	if week.Form.ScopeNote.Text() == every.Form.ScopeNote.Text() {
 		t.Error("both scopes print the same sentence — the control would be decorative")
 	}
 }
@@ -163,8 +165,8 @@ func TestSchedulePainter_UnbuiltScaffoldingIsDirectorOnly(t *testing.T) {
 // out from the grid: offering a window only ever ADDS.
 func TestSchedulePainter_PrintsTheComposeRule(t *testing.T) {
 	p := scheduleBuildPainter(schedulePainterInput(false))
-	if !strings.Contains(p.Form.Foot, "only ever adds") {
-		t.Errorf("the Painter does not print the compose rule: %q", p.Form.Foot)
+	if !strings.Contains(p.Form.Foot.Text(), "only ever adds") {
+		t.Errorf("the Painter does not print the compose rule: %q", p.Form.Foot.Text())
 	}
 	if !strings.Contains(p.Form.Summary, "8 windows") {
 		t.Errorf("the Painter does not print the offer-path cap: %q", p.Form.Summary)

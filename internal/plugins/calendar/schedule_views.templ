@@ -12,6 +12,64 @@
 // away from being lost; a permission expressed as an empty slice cannot be.
 package calendar
 
+// scheduleCaptionView draws one caption paragraph WITH the drawing's emphasis.
+//
+// ONE BLOCK, ALWAYS — the mockup's own producers return one joined string, and a
+// caption split across sibling blocks reads as several unrelated notes rather
+// than as one key to one instrument.
+//
+// The runs are TEXT, escaped exactly as every other string on this page is: the
+// emphasis rides as a field beside the words and never as markup inside them, so
+// no caption can ever become an injection site by someone later making it
+// data-driven.
+templ scheduleCaptionView(c ScheduleCaption) {
+	if len(c) > 0 {
+		<div class="caption">
+			for _, r := range c {
+				if r.Em == "b" {
+					<b>{ r.Text }</b>
+				} else if r.Em == "i" {
+					<i>{ r.Text }</i>
+				} else {
+					{ r.Text }
+				}
+			}
+		</div>
+	}
+}
+
+// scheduleRunsView draws a run sequence with NO block of its own — for the three
+// emphasised sentences the drawing puts outside a `.caption`: the Painter's
+// scope note (which bolds the TABLE the marks land in), its foot (which bolds
+// the compose rule's claim) and the suggest dock's note. Same model, same
+// escaping; only the container differs, because these already have one.
+templ scheduleRunsView(c ScheduleCaption) {
+	for _, r := range c {
+		if r.Em == "b" {
+			<b>{ r.Text }</b>
+		} else if r.Em == "i" {
+			<i>{ r.Text }</i>
+		} else {
+			{ r.Text }
+		}
+	}
+}
+
+// scheduleWidthTextView prints a sentence that has to be SHORTER on a phone.
+//
+// The sealed mockup's producer re-runs on resize and simply swaps the string; a
+// page rendered once on the server cannot, so it emits both and one media query
+// chooses. Both are in the DOM, which means both are in the accessibility tree —
+// so this is only ever used where the two forms say the SAME thing in different
+// numbers of words, never to hide a fact from one width.
+templ scheduleWidthTextView(wide, short string) {
+	if short == "" || short == wide {
+		{ wide }
+	} else {
+		<span class="sc-wide">{ wide }</span><span class="sc-narrow">{ short }</span>
+	}
+}
+
 // scheduleVerdictView is S1 · THE VERDICT.
 templ scheduleVerdictView(data ScheduleData) {
 	<section class="sc-verdict sc-panel surf" data-schedule-verdict>
@@ -62,7 +120,7 @@ templ scheduleVerdictView(data ScheduleData) {
 				</button>
 				@scheduleMorePopView(data.Verdict)
 			}
-			<div class="caption">{ data.Verdict.Caption }</div>
+			@scheduleCaptionView(data.Verdict.Caption)
 		</div>
 	</section>
 }
@@ -198,7 +256,11 @@ templ scheduleMatrixView(data ScheduleData) {
 				<div class="sc-wrap">
 					<div class="sc-grid" data-region="grid" style={ scheduleGridStyle(len(data.Matrix.Cols)) }>
 						<div class="sc-head-row">
-							<span class="who"><span class="cap">{ data.Matrix.IdentCap }</span></span>
+							<span class="who">
+								<span class="cap">
+									@scheduleWidthTextView(data.Matrix.IdentCap, data.Matrix.IdentCapShort)
+								</span>
+							</span>
 							for _, c := range data.Matrix.Cols {
 								<span class={ "hd", templ.KV("major", c.Major) }>
 									{ c.Head }
@@ -221,9 +283,7 @@ templ scheduleMatrixView(data ScheduleData) {
 			if data.Matrix.Zero != "" {
 				<div class="lzero">{ data.Matrix.Zero }</div>
 			}
-			for _, c := range data.Matrix.Captions {
-				<p class="caption">{ c }</p>
-			}
+				@scheduleCaptionView(data.Matrix.Caption)
 		</div>
 		for _, p := range data.Matrix.Pops {
 			@schedulePopView(p)
@@ -250,7 +310,7 @@ templ scheduleLaneView(l ScheduleLane) {
 				if l.NoteWarn != "" {
 					<span class="badge warn">{ l.NoteWarn }</span>
 				}
-				{ l.Note }
+				@scheduleWidthTextView(l.Note, l.NoteShort)
 				for _, ch := range l.NoteChip {
 					<span class="badge need">{ ch.Text }</span>
 				}
@@ -264,7 +324,14 @@ templ scheduleLaneView(l ScheduleLane) {
 				}
 			</span>
 			if l.ZoneMissing {
-				<span class="badge warn">no zone</span>
+				// AN UNKNOWN, NOT A FAULT — the grey NEED vocabulary, exactly as
+				// the drawing emits it. The ROSTER prints the same fact in amber
+				// with `Ask →` beside it, and that is the difference: the roster
+				// row is asking the campaign to do something, this lane is
+				// reporting that a clock cannot be computed. The register follows
+				// whether there is a repair attached, never the severity of the
+				// word.
+				<span class="badge need">no zone</span>
 			}
 			<span class={ "rs", benchToneClass(l.Tone) }>{ l.Answer }</span>
 		</span>
@@ -332,9 +399,18 @@ templ scheduleDensityView(m ScheduleMatrix) {
 // Director: each numeral is a button naming who is free and who is missing.
 // Player: a plain span — the names are ABSENT from their DOM, not greyed. The
 // branch is on PopID, which the builder only ever sets for a Director.
+//
+// The `@ h` sub says WHEN the day's peak was taken, and it is EMPTY in day zoom,
+// where the column head already is the hour. The branch is on the string rather
+// than on a zoom flag: the template does not know what a column is, and it is
+// the builder's business to decide.
 templ scheduleCountView(m ScheduleMatrix) {
 	<div class="sc-row cnt">
-		<span class="who"><span class="cap">{ m.Denominator }</span></span>
+		<span class="who">
+			<span class="cap">
+				@scheduleWidthTextView(m.Denominator, m.DenominatorShort)
+			</span>
+		</span>
 		for _, c := range m.Counts {
 			if c.PopID != "" {
 				<button
@@ -345,7 +421,9 @@ templ scheduleCountView(m ScheduleMatrix) {
 					aria-label={ c.Label }
 				>
 					<b>{ scheduleItoa(c.Free) }</b>
-					<u>{ c.PeakHour }</u>
+					if c.PeakHour != "" {
+						<u>{ c.PeakHour }</u>
+					}
 				</button>
 			} else {
 				<span
@@ -354,7 +432,9 @@ templ scheduleCountView(m ScheduleMatrix) {
 					title={ c.Label }
 				>
 					<b>{ scheduleItoa(c.Free) }</b>
-					<u>{ c.PeakHour }</u>
+					if c.PeakHour != "" {
+						<u>{ c.PeakHour }</u>
+					}
 				</span>
 			}
 		}
@@ -418,7 +498,7 @@ templ scheduleRosterView(data ScheduleData) {
 					@scheduleRosterRowView(r)
 				}
 			</div>
-			<div class="caption">{ data.Roster.Caption }</div>
+				@scheduleCaptionView(data.Roster.Caption)
 		</div>
 	</section>
 }
@@ -502,7 +582,7 @@ templ schedulePaintFormView(f SchedulePaintForm) {
 		<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
 		<div class="sc-scope">
 			@scheduleSegView("What this week's marks mean", f.ScopeOptions)
-			<span class="lb">{ f.ScopeNote }</span>
+			<span class="lb">@scheduleRunsView(f.ScopeNote)</span>
 		</div>
 		<div class="sc-sum">{ f.Summary }</div>
 		<span class="lband">Can play</span>
@@ -516,7 +596,7 @@ templ schedulePaintFormView(f SchedulePaintForm) {
 				<span class="lband">Would prefer</span>
 			</summary>
 			@schedulePaintGridView(f, f.PrefDays)
-			<div class="caption">{ f.PrefNote }</div>
+			@scheduleCaptionView(f.PrefNote)
 		</details>
 		if f.Empty != "" {
 			<div class="lzero">{ f.Empty }</div>
@@ -529,7 +609,7 @@ templ schedulePaintFormView(f SchedulePaintForm) {
 			}
 		</div>
 		<div class="sc-status" data-schedule-status role="status" aria-live="polite"></div>
-		<div class="sc-foot">{ f.Foot }</div>
+		<div class="sc-foot">@scheduleRunsView(f.Foot)</div>
 		if f.Reserve != nil {
 			<div class="skyband">
 				<span class="a">{ f.Reserve.Head }</span>
@@ -546,17 +626,20 @@ templ schedulePaintGridView(f SchedulePaintForm, days []SchedulePaintDay) {
 	<div class="sc-wrap">
 		<div class="sc-grid sc-paintgrid" style={ schedulePaintGridStyle(len(f.Hours)) }>
 			<div class="sc-head-row">
-				<span class="who"><span class="cap">week of { f.Zone }</span></span>
+				<span class="who"><span class="cap">{ f.WeekLabel }</span></span>
 				for _, h := range f.Hours {
 					<span class={ "hd", templ.KV("major", h.Major) }>{ h.Label }</span>
 				}
 				<span class="say"></span>
 			</div>
 			for _, d := range days {
-				<div class="sc-row" data-day={ d.DayKey } data-weekday={ scheduleItoa(d.Weekday) }>
-					<span class="who"><span class="nm">{ d.Label }</span></span>
+				<div class="sc-row" style={ benchAxisStyle(f.Axis) } data-day={ d.DayKey } data-weekday={ scheduleItoa(d.Weekday) }>
+					<span class="who">
+						<span class={ "swatch", f.Pattern } style={ benchAxisStyle(f.Axis) }></span>
+						<span class="nm">{ d.Label }</span>
+					</span>
 					for _, c := range d.Cells {
-						@schedulePaintCellView(c)
+						@schedulePaintCellView(c, f.Pattern)
 					}
 					<span class="say"></span>
 				</div>
@@ -566,7 +649,7 @@ templ schedulePaintGridView(f SchedulePaintForm, days []SchedulePaintDay) {
 }
 
 // schedulePaintCellView is one hour tick.
-templ schedulePaintCellView(c SchedulePaintCell) {
+templ schedulePaintCellView(c SchedulePaintCell, pattern string) {
 	<input
 		type="checkbox"
 		class="sc-pick"
@@ -578,7 +661,7 @@ templ schedulePaintCellView(c SchedulePaintCell) {
 		checked?={ c.Checked }
 	/>
 	<label class={ "sc-pk", templ.KV("major", c.Major) } for={ c.ID } data-day={ c.DayKey }>
-		<i class="sc-off"></i>
+		<i class={ "sc-off", pattern }></i>
 		<span class="vh">{ c.Label }</span>
 	</label>
 }
@@ -625,7 +708,7 @@ templ scheduleAnswerView(data ScheduleData) {
 					}
 				}
 			}
-			<div class="caption">{ data.Answer.Caption }</div>
+				@scheduleCaptionView(data.Answer.Caption)
 			if data.Answer.Foot != "" {
 				<div class="sc-foot">{ data.Answer.Foot }</div>
 			}
@@ -690,7 +773,7 @@ templ scheduleAnswerFormView(f ScheduleAnswerForm) {
 				<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
 				<input type="hidden" name="status" value="maybe"/>
 				<textarea name="note" maxlength="500" placeholder="Sunday after 20:00 would work better."></textarea>
-				<div class="sc-foot">{ f.SuggestNote }</div>
+				<div class="sc-foot">@scheduleRunsView(f.SuggestNote)</div>
 				<button class="btn fill" type="submit">Send suggestion</button>
 			</form>
 		</div>
