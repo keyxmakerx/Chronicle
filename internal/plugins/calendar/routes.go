@@ -286,6 +286,36 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// player's list is ListVisibleCalendars and a hidden ?calId is not loaded).
 	cg.GET("/apps/calendar", h.AppDashboard, campaigns.RequireRole(campaigns.RolePlayer))
 
+	// THE SCHEDULE (calendar-v4 W-G Part B, C-CALV4-RSVP-P8 §10) — the door the
+	// dispatch names, and the ONE route the whole of Part B takes.
+	//
+	// Everything this page WRITES rides a route that already shipped: the
+	// scheduler's own availability PUTs (sessions/routes.go), the Player+ event
+	// RSVP POST (P8A), and P8B's Scribe+ POST /calendar/ask. Reuse, not a fork
+	// — a second availability write path would fork the composition invariant
+	// ("an offer only ever adds") along with it, and that invariant is the
+	// scheduler's, not this surface's.
+	//
+	// PLAYER FLOOR, and it is the correct one: this page's whole subject is
+	// "when can WE play", every member has an answer to give and a week to
+	// paint, and the Director-only halves (the per-member lanes, the reason
+	// sentence's names, the inert scaffolding) are absent from a player's
+	// PAYLOAD rather than gated by a second route. Permission is absence, and
+	// absence is decided in buildSchedule from cc.VisibilityRole().
+	//
+	// LITERAL PATH, on purpose: wire_contract_test.go skips and logs a route
+	// registered through a variable, so a non-literal path would be silently
+	// absent from routes_snapshot.txt — an auth surface outside the oracle.
+	//
+	// It rides the identical `cg` stack as every other calendar route
+	// (RequireAuth → RequireCampaignAccess → RequireAddon("calendar")). ONE
+	// CONSEQUENCE IS WORTH NAMING: the sealed mockup draws a `?back=addonoff`
+	// state in which the Painter prints a fault box because the calendar addon
+	// is off. Behind this guard that state is unreachable — the addon middleware
+	// answers before the page does — so the drawn box carries the DEGRADED-SEAM
+	// refusal instead, which is the condition that can actually occur here.
+	cg.GET("/schedule", h.SchedulePage, campaigns.RequireRole(campaigns.RolePlayer))
+
 	// V2 calendar shell mutating / per-user routes (C-CAL-V2-SHELL-FOUNDATION).
 	// The READ views (GET …/calendar/v2[/:calId[/:view]]) are public-capable and
 	// registered in the pub group above (cordinator#30); these POSTs persist

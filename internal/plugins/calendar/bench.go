@@ -1855,6 +1855,15 @@ type BenchAvailability struct {
 	// FreeDays is the LANE data: user id → seven booleans. NIL when the viewer
 	// is not entitled to it. Absence is in the payload (§4).
 	FreeDays map[string][]bool
+	// Lanes is the SAME lane data at the payload's real resolution: user id →
+	// minute-accurate runs. NIL under exactly the same condition as FreeDays,
+	// from the same `includeDetail` branch in the adapter — one gate, two
+	// projections, so a player can never receive one without the other.
+	//
+	// Added by Part B. The Bench never reads it, so this is an additive
+	// widening: no method moved on BenchScheduleReader and no existing
+	// implementation of that interface had to change.
+	Lanes map[string][]BenchLaneSegment
 }
 
 // BenchAvailabilityDay is one column's per-hour aggregate.
@@ -1862,6 +1871,32 @@ type BenchAvailabilityDay struct {
 	Date string
 	// Free[h] is how many members are free at the top of hour h, 24 entries.
 	Free []int
+	// Prefer[h] is the subset of Free who actively PREFER that hour, 24
+	// entries. Added ADDITIVELY by Part B: it is an aggregate — a count with no
+	// identity in it — so it is safe at every role, and it is the second key of
+	// the ranked window the /schedule page prints. The Bench ignores it, which
+	// is why widening the DTO cost that surface nothing.
+	Prefer []int
+}
+
+// BenchLaneSegment is one contiguous availability run for one member on one
+// column, already projected into the page's zone.
+//
+// MINUTE-ACCURATE, on purpose, and that is the whole reason Part B widened this
+// seam. BenchAvailability.FreeDays collapses a member's week to seven booleans,
+// which is everything the Bench's 7-cell lane needs and nothing the Matrix's
+// minute-positioned marks can be drawn from: "free from 18:30" and "free from
+// 16:00" are the same boolean and different marks, and the difference is the
+// subject of the surface.
+type BenchLaneSegment struct {
+	// DayIndex is the column offset from WeekStart.
+	DayIndex int
+	// StartMinute / EndMinute are minutes from local midnight in the projected
+	// zone; the range is half-open [start, end).
+	StartMinute int
+	EndMinute   int
+	// State is available | preferred (sessions' AvailAvailable / AvailPreferred).
+	State string
 }
 
 // SetScheduleReader wires the sessions availability + roster reads.
@@ -2345,21 +2380,25 @@ func benchRsvpWhen(days int) string {
 // members with saved availability the function refuses to rank and says so —
 // a ranking from two people's data is a guess wearing a number, and a number is
 // exactly what this panel must not invent.
-func benchRsvpWindow(in benchRsvpInput) (rec string, derived bool, why string, bracket *BenchRsvpBracket) {
-	const cannot = "This ranks availability only — it does not know what is already on the calendar."
-	if in.Avail == nil || len(in.Avail.Days) == 0 {
-		return "", false, "", nil
+// benchRsvpPeakRun finds the peak free count anywhere in the week and then the
+// longest contiguous run of hours holding it. Earliest day and earliest hour win
+// ties, so the answer is stable across renders.
+//
+// EXTRACTED, NOT REWRITTEN (C-CALV4-RSVP-P8 Part B). It was inline in
+// benchRsvpWindow and the /schedule page needs the identical answer for the head
+// of its ranked list. Two surfaces one click apart may not derive "when to play"
+// from two implementations of one idea — re-implementation is precisely how they
+// come to disagree — so the arithmetic moved out into a shared helper and BOTH
+// callers now read it. The Bench's printed sentence is byte-identical to what it
+// was; bench_rsvp_oracle_test.go is the proof.
+//
+// Returns day = -1 when there is nothing to rank.
+func benchRsvpPeakRun(a *BenchAvailability) (day, start, length, free int) {
+	if a == nil || len(a.Days) == 0 {
+		return -1, 0, 0, 0
 	}
-	if in.Avail.WithPattern < benchRsvpQuorum {
-		return fmt.Sprintf("Not enough saved availability to rank — %d of %d members have entered any.",
-			in.Avail.WithPattern, len(in.Roster)), false, "", nil
-	}
-
-	// The peak free count anywhere in the week, then the longest contiguous run
-	// of hours holding it. Earliest day and earliest hour win ties, so the
-	// answer is stable across renders.
 	best := 0
-	for _, d := range in.Avail.Days {
+	for _, d := range a.Days {
 		for _, n := range d.Free {
 			if n > best {
 				best = n
@@ -2367,10 +2406,10 @@ func benchRsvpWindow(in benchRsvpInput) (rec string, derived bool, why string, b
 		}
 	}
 	if best == 0 {
-		return "Nobody is free at any hour this week.", false, cannot, nil
+		return -1, 0, 0, 0
 	}
 	bestDay, bestStart, bestLen := -1, 0, 0
-	for di, d := range in.Avail.Days {
+	for di, d := range a.Days {
 		run := 0
 		for h := 0; h <= len(d.Free); h++ {
 			if h < len(d.Free) && d.Free[h] >= best {
@@ -2384,6 +2423,23 @@ func benchRsvpWindow(in benchRsvpInput) (rec string, derived bool, why string, b
 		}
 	}
 	if bestDay < 0 {
+		return -1, 0, 0, 0
+	}
+	return bestDay, bestStart, bestLen, best
+}
+
+func benchRsvpWindow(in benchRsvpInput) (rec string, derived bool, why string, bracket *BenchRsvpBracket) {
+	const cannot = "This ranks availability only — it does not know what is already on the calendar."
+	if in.Avail == nil || len(in.Avail.Days) == 0 {
+		return "", false, "", nil
+	}
+	if in.Avail.WithPattern < benchRsvpQuorum {
+		return fmt.Sprintf("Not enough saved availability to rank — %d of %d members have entered any.",
+			in.Avail.WithPattern, len(in.Roster)), false, "", nil
+	}
+
+	bestDay, bestStart, bestLen, best := benchRsvpPeakRun(in.Avail)
+	if best == 0 || bestDay < 0 {
 		return "Nobody is free at any hour this week.", false, cannot, nil
 	}
 

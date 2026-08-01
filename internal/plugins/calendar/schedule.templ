@@ -1,0 +1,183 @@
+// schedule.templ — THE SCHEDULE's markup (C-CALV4-RSVP-P8 Part B).
+//
+// TWO templ BRANCHES, TWO DOM ORDERS. This is SOURCE ORDER, never CSS `order:` —
+// flex order breaks focus order, and a page whose tab sequence disagrees with
+// its reading sequence is unusable exactly for the people who most need the
+// reading sequence to be right.
+//
+//	Director   Verdict → Matrix → (Roster · Painter) → Answer
+//	Player     (Answer · Painter) → Verdict → Matrix
+//
+// THE PROPORTION RULE is structural here, not cosmetic: the Verdict and the
+// Matrix are the two rank-1 surfaces and live in a column `.stack` — they can
+// NEVER sit side by side, exactly as the Bench's primary Block and real-world
+// Block cannot. The Roster and the Painter are rank 2 and live in `.rowgrid`;
+// they can never grow into rank 1. There is no width at which these four become
+// peers, and the page prints that sentence at the bottom so the rule survives
+// the next person to touch it.
+//
+// THE PAGE CARRIES BOTH SCOPE ROOTS, `cal-bench cal-schedule`, and that is the
+// production form of the mockup's cascade law. calendar-bench.css holds the
+// SIGNED primitives this surface reuses unchanged (.calrow, .mrow, .lhead,
+// .lband, .stack, .rowgrid, .badge, .btn, .seg, .surf, .swatch) and
+// calendar-schedule.css adds only `sc-`-prefixed rules beside them. Neither
+// sheet redefines one of the other's selectors — which is the same guarantee the
+// mockup's `@layer schedule` (declared BEFORE `bench`) gives, obtained here by
+// construction rather than by ordering, because production sheets are unlayered.
+package calendar
+
+import (
+	"fmt"
+
+	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
+	"github.com/keyxmakerx/chronicle/internal/templates/components"
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+)
+
+// SchedulePageView renders the full page at GET /campaigns/:id/schedule.
+templ SchedulePageView(cc *campaigns.CampaignContext, data ScheduleData) {
+	@layouts.App("Schedule") {
+		<div class="cal-bench cal-schedule" data-cal-schedule>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-bench.css") }/>
+			<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-schedule.css") }/>
+			@components.Breadcrumbs([]components.BreadcrumbItem{
+				{Label: cc.Campaign.Name, Href: fmt.Sprintf("/campaigns/%s", cc.Campaign.ID), Icon: "fa-dice-d20"},
+				{Label: "Calendar", Href: fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)},
+				{Label: "Schedule"},
+			})
+			<div class="bsurf sc-page" data-schedule-surface>
+				@scheduleHead(data)
+				if data.LoadError {
+					<div class="bench-note" data-schedule-error>
+						<i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+						Couldn&#39;t load the schedule right now. Try reloading the page.
+					</div>
+				} else {
+					@scheduleBody(data)
+				}
+				<div class="sc-proportion">
+					<b>How this page is proportioned.</b>
+					{ data.Proportion }
+				</div>
+				<p class="sc-motion" data-schedule-motion>{ data.MotionLine }</p>
+			</div>
+			// THE PAINTER'S WRITE DRIVER, and the ONLY script on this page.
+			//
+			// It is mounted ONLY when there is a form for it to drive, so a
+			// zone-less member, a degraded scheduler seam and the fault box all
+			// ship no script at all. It writes through the scheduler's own
+			// shipped PUT routes — see the file header — because those endpoints
+			// take JSON and a <form> cannot send it; every other control on this
+			// page is a link or a plain form and needs nothing.
+			if data.Painter.Form != nil {
+				<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_schedule.js") } defer></script>
+			}
+		</div>
+	}
+}
+
+// scheduleBody is the role-ordered surface set. The two branches differ ONLY in
+// the order they emit the same four builders' output — there is no second code
+// path, which is what makes "a player's DOM contains no other person's lane"
+// provable at the producer rather than asserted about a stylesheet.
+templ scheduleBody(data ScheduleData) {
+	if data.IsGM {
+		<div class="stack">
+			@scheduleVerdictView(data)
+			@scheduleMatrixView(data)
+		</div>
+		<div class="rowgrid sc-rank2">
+			@scheduleRosterView(data)
+			@schedulePainterView(data)
+		</div>
+		<div class="rowgrid sc-rank2">
+			@scheduleAnswerView(data)
+		</div>
+	} else {
+		<div class="rowgrid sc-rank2">
+			@scheduleAnswerView(data)
+			@schedulePainterView(data)
+		</div>
+		<div class="stack">
+			@scheduleVerdictView(data)
+			@scheduleMatrixView(data)
+		</div>
+	}
+}
+
+// scheduleHead is the page head and its three controls: the week STEPPER (never
+// a range — no multi-week payload exists), the zoom segment and the hour band.
+//
+// THERE IS NO `.btn.fill` HERE. The page's one filled control lives in the
+// Verdict and is bound to the chosen window, because the single filled control
+// IS the answer.
+templ scheduleHead(data ScheduleData) {
+	<div class="phead">
+		<div>
+			<h1>When do we play</h1>
+			<p>
+				Week of { data.WeekLabel }
+				if data.ZoneFrame != "" {
+					{ " · " + data.ZoneFrame }
+				}
+			</p>
+		</div>
+		<div class="sp"></div>
+		<div class="ctl">
+			<span class="stepper sc-stepper">
+				<a class="btn sm ghost" href={ templ.SafeURL(data.PrevHref) } aria-label="Previous week">&lsaquo;</a>
+				<span class="pill">{ data.WeekRange }</span>
+				<a class="btn sm ghost" href={ templ.SafeURL(data.NextHref) } aria-label="Next week">&rsaquo;</a>
+			</span>
+			@scheduleSegView("Zoom", data.ZoomOptions)
+			@scheduleSegView("Hour band", data.BandOptions)
+		</div>
+	</div>
+}
+
+// scheduleSegView is the signed segmented control, as LINKS.
+//
+// Every control on this page is a GET against the page's own route carrying the
+// whole display state, which is what makes the surface state-addressable, JS-
+// free and reproducible in a render harness. `aria-pressed` is not available to
+// an anchor, so the pressed rung carries `aria-current="true"` — the same
+// semantic, on the element type that is actually a link.
+templ scheduleSegView(label string, opts []ScheduleToggle) {
+	<div class="seg" role="group" aria-label={ label }>
+		for _, o := range opts {
+			if o.Disabled {
+				<button type="button" disabled title={ o.Title }>{ o.Label }</button>
+			} else if o.Pressed {
+				<a href={ templ.SafeURL(o.Href) } aria-current="true" title={ o.Title }>{ o.Label }</a>
+			} else {
+				<a href={ templ.SafeURL(o.Href) } title={ o.Title }>{ o.Label }</a>
+			}
+		}
+	</div>
+}
+
+// scheduleChipRow is the honesty chips' own row, directly UNDER the signed
+// `.lhead` rather than inside it.
+//
+// DIVERGENCE FROM SPEC §2.1/§2.2/§2.3, named where it happens: the spec puts
+// them in `.lhead`, and `.lhead` is `flex-wrap:nowrap` (signed, and not
+// overridable from this surface). At full width that is fine; in a rank-2 panel
+// five chips squeeze the title to one word per line. Chips below the rule read
+// the same and cost the title nothing.
+//
+// A PLAYER NEVER REACHES THIS LOOP WITH ANYTHING IN IT: scheduleNeed returns nil
+// for them, so the row is empty and collapses. The gate is in the builder, not
+// here.
+templ scheduleChipRow(chips []scheduleChip) {
+	if len(chips) > 0 {
+		<div class="sc-chiprow">
+			for _, c := range chips {
+				if c.Warn {
+					<span class="badge warn">{ c.Text }</span>
+				} else {
+					<span class="badge need">{ c.Text }</span>
+				}
+			}
+		</div>
+	}
+}

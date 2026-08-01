@@ -748,10 +748,17 @@ func (a *calendarBenchScheduleAdapter) BenchAvailability(ctx context.Context, ca
 	out := &calendar.BenchAvailability{WeekStart: ov.WeekStart}
 	for _, d := range ov.Days {
 		free := make([]int, len(d.Hours))
+		prefer := make([]int, len(d.Hours))
 		for h, cell := range d.Hours {
 			free[h] = cell.Free
+			// PREFER IS AN AGGREGATE, exactly as Free is — a count with no
+			// identity in it — so it crosses this seam at every role. It is the
+			// /schedule Verdict's second ranking key (C-CALV4-RSVP-P8 Part B).
+			prefer[h] = cell.Prefer
 		}
-		out.Days = append(out.Days, calendar.BenchAvailabilityDay{Date: d.Date, Free: free})
+		out.Days = append(out.Days, calendar.BenchAvailabilityDay{
+			Date: d.Date, Free: free, Prefer: prefer,
+		})
 	}
 	// WithPattern is an AGGREGATE — a count with no identity in it — so it is
 	// safe at every role. Derived from the per-hour counts rather than from the
@@ -766,19 +773,86 @@ func (a *calendarBenchScheduleAdapter) BenchAvailability(ctx context.Context, ca
 		}
 	}
 	out.WithPattern = seen
+	// ONE GATE, TWO PROJECTIONS. FreeDays (the Bench's seven booleans) and Lanes
+	// (the /schedule Matrix's minute-accurate runs) are built from the same
+	// overlay.Members inside the same `includeDetail` branch, so a viewer can
+	// never receive one without the other and a player receives neither. The
+	// absence is in the payload, not in a template downstream (§4).
 	if includeDetail && len(ov.Members) > 0 {
 		out.FreeDays = make(map[string][]bool, len(ov.Members))
+		out.Lanes = make(map[string][]calendar.BenchLaneSegment, len(ov.Members))
 		for _, m := range ov.Members {
 			days := make([]bool, len(out.Days))
+			lanes := make([]calendar.BenchLaneSegment, 0, len(m.Lanes))
 			for _, seg := range m.Lanes {
 				if seg.DayIndex >= 0 && seg.DayIndex < len(days) {
 					days[seg.DayIndex] = true
 				}
+				lanes = append(lanes, calendar.BenchLaneSegment{
+					DayIndex:    seg.DayIndex,
+					StartMinute: seg.StartMinute,
+					EndMinute:   seg.EndMinute,
+					State:       seg.State,
+				})
 			}
 			out.FreeDays[m.UserID] = days
+			out.Lanes[m.UserID] = lanes
 		}
 	}
 	return out, nil
+}
+
+// calendarOwnWeekAdapter implements calendar.ScheduleOwnWeekReader — the
+// /schedule Painter's read of the VIEWER'S OWN composed week
+// (C-CALV4-RSVP-P8 Part B).
+//
+// ── WHY includeDetail IS TRUE HERE, AND WHY THAT IS NOT AN ESCALATION ──────
+//
+// CampaignWeekOverlay's detail flag decides whether overlay.Members is
+// populated at all; there is no narrower read that composes a member's
+// recurring pattern with their date exceptions for one week, which is exactly
+// what a member has to see in order to edit it. So the overlay is asked for
+// detail and this adapter then returns ONE member's lanes — the one whose id it
+// was given — and discards the rest before returning.
+//
+// That is safe because of where the id comes from: the calendar handler passes
+// auth.GetUserID(c), the /schedule route accepts no identity parameter of any
+// kind, and this adapter is reachable from nowhere else. A member reading back
+// their own saved availability is the same permission
+// GET /campaigns/:id/availability/mine already grants every Player+.
+//
+// THE FILTER IS THE GATE, so it is written as a single early-continue with no
+// second branch that could ever append a foreign row.
+type calendarOwnWeekAdapter struct {
+	sessions *sessions.Handler
+}
+
+// OwnWeekLanes returns only userID's own lane segments for the week.
+func (a *calendarOwnWeekAdapter) OwnWeekLanes(ctx context.Context, campaignID, userID,
+	weekStart, viewerTZ string) ([]calendar.BenchLaneSegment, error) {
+	if a.sessions == nil || userID == "" {
+		return nil, nil
+	}
+	ov, err := a.sessions.CampaignWeekOverlay(ctx, campaignID, weekStart, viewerTZ, true)
+	if err != nil || ov == nil {
+		return nil, err
+	}
+	for _, m := range ov.Members {
+		if m.UserID != userID {
+			continue
+		}
+		out := make([]calendar.BenchLaneSegment, 0, len(m.Lanes))
+		for _, seg := range m.Lanes {
+			out = append(out, calendar.BenchLaneSegment{
+				DayIndex:    seg.DayIndex,
+				StartMinute: seg.StartMinute,
+				EndMinute:   seg.EndMinute,
+				State:       seg.State,
+			})
+		}
+		return out, nil
+	}
+	return nil, nil
 }
 
 // calendarEventListerAdapter wraps calendar.CalendarService to implement the
@@ -2806,6 +2880,11 @@ func (a *App) RegisterRoutes() {
 	// constructed earlier — and nil-safe on the calendar side, so a degraded
 	// sessions schema costs the panel its body and nothing else on the page.
 	calendarHandler.SetScheduleReader(&calendarBenchScheduleAdapter{sessions: sessionsHandler})
+	// The /schedule Painter's own read (C-CALV4-RSVP-P8 Part B): the VIEWER'S
+	// OWN composed week. A separate seam from the one above because it answers a
+	// different permission question — "may I read back what I saved" — and the
+	// adapter enforces that by returning only the named member's lanes.
+	calendarHandler.SetOwnWeekReader(&calendarOwnWeekAdapter{sessions: sessionsHandler})
 	if a.PluginHealth.IsHealthy("sessions") {
 		sessions.RegisterRoutes(e, sessionsHandler, campaignService, authService, addonService)
 	} else {
