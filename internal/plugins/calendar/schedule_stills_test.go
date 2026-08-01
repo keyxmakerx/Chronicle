@@ -16,6 +16,7 @@ package calendar
 // beside the other three rather than in a list of scoping assertions.
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -167,4 +168,113 @@ func scheduleRuleFor(t *testing.T, css, sel string) string {
 	}
 	t.Fatalf("no rule found for selector %q", sel)
 	return ""
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIDELITY PASS 3 — what the third comparison caught. Every item below is a
+// difference between the sealed drawing and the built page that no string
+// assertion could see, because the strings were RIGHT and their SHAPE was not.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 5 · THE CAPTIONS CARRY THE DRAWING'S EMPHASIS. The sealed mockup writes every
+// caption with a BOLD LEAD-IN and italic vocabulary words —
+// `<b>How it ranks:</b>`, `<b>What the score cannot include:</b>`,
+// `<b>The marks:</b>`, `<b>Fine and coarse disagree, on purpose:</b>`,
+// `<b>Counts are recomputed from these rows</b>` — and the built page shipped
+// all of them as flat, unemphasised prose.
+//
+// THIS IS NOT DECORATION. The lead-ins are how a reader FINDS "what the score
+// cannot include" and "fine and coarse disagree, on purpose": two of this
+// surface's own named honesty claims, drawn as the first thing the eye lands on
+// in their paragraph and shipped as the middle of a grey wall. A page whose
+// honesty is unfindable is a page whose honesty is decorative.
+func TestScheduleStills_CaptionsCarryTheDrawnEmphasis(t *testing.T) {
+	for _, role := range []struct {
+		name string
+		isGM bool
+		want []string
+	}{
+		{"director", true, []string{
+			"<b>How it ranks:</b>",
+			"<i>preferred</i>",
+			"<b>What the score cannot include:</b>",
+			"<b>The marks:</b>",
+			"<i>prefer</i>",
+			"<b>Fine and coarse disagree, on purpose:</b>",
+			"<b>This grid shows availability only</b>",
+			"<b>Counts are recomputed from these rows</b>",
+			"<b>an event</b>",
+		}},
+		// A player sees the same emphasis on the surfaces they get. The
+		// Answer's caption is theirs alone and the drawing bolds both control
+		// names inside it, because those two words are the ones a reader
+		// scanning for "what does this button do" is looking for.
+		{"player", false, []string{
+			"<b>What the score cannot include:</b>",
+			"<b>The marks:</b>",
+			"<b>Out just this week</b>",
+			"<i>no</i>",
+			"<b>Suggest a better time</b>",
+			"<i>maybe</i>",
+		}},
+	} {
+		t.Run(role.name, func(t *testing.T) {
+			html := scheduleRenderBody(t, role.isGM)
+			for _, want := range role.want {
+				if !strings.Contains(html, want) {
+					t.Errorf("the rendered page is missing the drawn emphasis %q", want)
+				}
+			}
+		})
+	}
+}
+
+// 6 · THE MATRIX CAPTION IS ONE FLOWING PARAGRAPH. The mockup's `matrixCaption()`
+// builds its bits in a slice and returns `bits.join(' ')` — ONE block of prose
+// under the grid. The build emitted one `<p class="caption">` per bit, so the
+// still's single paragraph rendered as three separated ones (four once identity
+// wraps), which reads as three unrelated notes rather than one key.
+func TestScheduleStills_TheMatrixCaptionIsOneParagraph(t *testing.T) {
+	html := scheduleRenderBody(t, true)
+	matrix := scheduleSectionHTML(t, html, "sc-matrix")
+	if n := strings.Count(matrix, `class="caption"`); n != 1 {
+		t.Errorf("the matrix drew %d caption blocks; the sealed mockup draws exactly 1", n)
+	}
+	// …and it is still every sentence, joined — not one sentence kept and the
+	// rest dropped, which would trade a shape defect for a content one.
+	for _, want := range []string{"The marks:", "Fine and coarse disagree", "availability only"} {
+		if !strings.Contains(matrix, want) {
+			t.Errorf("the joined matrix caption lost %q", want)
+		}
+	}
+}
+
+// scheduleRenderBody renders the real producer for one role, from the oracle's
+// own fixture — the same assembly the fidelity harness shoots.
+func scheduleRenderBody(t *testing.T, isGM bool) string {
+	t.Helper()
+	var sb strings.Builder
+	if err := scheduleBody(scheduleShotData(isGM)).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	return sb.String()
+}
+
+// scheduleSectionHTML slices out one `<section class="… <class> …">` and its
+// contents, so a per-panel assertion cannot accidentally read a neighbour's.
+func scheduleSectionHTML(t *testing.T, html, class string) string {
+	t.Helper()
+	i := strings.Index(html, class)
+	if i < 0 {
+		t.Fatalf("no section carrying %q in the rendered page", class)
+	}
+	start := strings.LastIndex(html[:i], "<section")
+	if start < 0 {
+		t.Fatalf("%q is not inside a <section>", class)
+	}
+	end := strings.Index(html[start:], "</section>")
+	if end < 0 {
+		t.Fatalf("section carrying %q is unterminated", class)
+	}
+	return html[start : start+end]
 }

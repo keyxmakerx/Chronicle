@@ -12,6 +12,32 @@
 // away from being lost; a permission expressed as an empty slice cannot be.
 package calendar
 
+// scheduleCaptionView draws one caption paragraph WITH the drawing's emphasis.
+//
+// ONE BLOCK, ALWAYS — the mockup's own producers return one joined string, and a
+// caption split across sibling blocks reads as several unrelated notes rather
+// than as one key to one instrument.
+//
+// The runs are TEXT, escaped exactly as every other string on this page is: the
+// emphasis rides as a field beside the words and never as markup inside them, so
+// no caption can ever become an injection site by someone later making it
+// data-driven.
+templ scheduleCaptionView(c ScheduleCaption) {
+	if len(c) > 0 {
+		<div class="caption">
+			for _, r := range c {
+				if r.Em == "b" {
+					<b>{ r.Text }</b>
+				} else if r.Em == "i" {
+					<i>{ r.Text }</i>
+				} else {
+					{ r.Text }
+				}
+			}
+		</div>
+	}
+}
+
 // scheduleVerdictView is S1 · THE VERDICT.
 templ scheduleVerdictView(data ScheduleData) {
 	<section class="sc-verdict sc-panel surf" data-schedule-verdict>
@@ -62,7 +88,7 @@ templ scheduleVerdictView(data ScheduleData) {
 				</button>
 				@scheduleMorePopView(data.Verdict)
 			}
-			<div class="caption">{ data.Verdict.Caption }</div>
+			@scheduleCaptionView(data.Verdict.Caption)
 		</div>
 	</section>
 }
@@ -221,9 +247,7 @@ templ scheduleMatrixView(data ScheduleData) {
 			if data.Matrix.Zero != "" {
 				<div class="lzero">{ data.Matrix.Zero }</div>
 			}
-			for _, c := range data.Matrix.Captions {
-				<p class="caption">{ c }</p>
-			}
+				@scheduleCaptionView(data.Matrix.Caption)
 		</div>
 		for _, p := range data.Matrix.Pops {
 			@schedulePopView(p)
@@ -418,7 +442,7 @@ templ scheduleRosterView(data ScheduleData) {
 					@scheduleRosterRowView(r)
 				}
 			</div>
-			<div class="caption">{ data.Roster.Caption }</div>
+				@scheduleCaptionView(data.Roster.Caption)
 		</div>
 	</section>
 }
@@ -628,7 +652,7 @@ templ scheduleAnswerView(data ScheduleData) {
 					}
 				}
 			}
-			<div class="caption">{ data.Answer.Caption }</div>
+				@scheduleCaptionView(data.Answer.Caption)
 			if data.Answer.Foot != "" {
 				<div class="sc-foot">{ data.Answer.Foot }</div>
 			}

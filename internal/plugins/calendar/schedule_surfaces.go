@@ -30,6 +30,49 @@ const (
 	AvailAvailable = scheduleAvailAvailable
 )
 
+// --- the captions -----------------------------------------------------------
+
+// ScheduleCaption is one caption paragraph, carried as RUNS so the sealed
+// drawing's emphasis survives the trip from copy to page.
+//
+// THE BOLD LEAD-IN IS NOT DECORATION. The mockup writes every caption with one —
+// `<b>How it ranks:</b>`, `<b>What the score cannot include:</b>`,
+// `<b>Fine and coarse disagree, on purpose:</b>` — and it is the mechanism by
+// which a reader FINDS a named honesty claim inside a paragraph of grey prose.
+// Two of this surface's own honesty claims ARE lead-ins; shipping them flat
+// leaves the page saying the same words and admitting nothing findable.
+//
+// RUNS, NEVER A MARKUP STRING. templ escapes text and must go on escaping it:
+// the emphasis is a property of the copy, declared beside the words, and never a
+// fragment of trusted HTML smuggled past the escaper.
+type ScheduleCaption []ScheduleRun
+
+// ScheduleRun is one span of caption prose and the emphasis drawn on it.
+//
+// Em is "" for plain prose, "b" for the drawn lead-in, and "i" for a vocabulary
+// word the caption is QUOTING rather than using — `preferred`, `maybe`, `no`.
+// The distinction matters: "an answer of in, maybe or out" is a sentence about
+// three words, and the drawing italicises them so it cannot be misread as a
+// sentence that is simply in.
+type ScheduleRun struct {
+	Text string
+	Em   string
+}
+
+// Text joins the runs back into the plain sentence.
+//
+// Every assertion about WHAT a caption says reads this: the wording is the
+// caption's contract with the arithmetic above it, and a test about wording has
+// no business knowing where the eye is meant to land. Runs carry their own
+// spacing, so the join is a concatenation and never inserts one.
+func (c ScheduleCaption) Text() string {
+	out := ""
+	for _, r := range c {
+		out += r.Text
+	}
+	return out
+}
+
 // --- S1 · THE VERDICT -------------------------------------------------------
 
 // ScheduleVerdict is the page's lead: the ANSWER, with the evidence beneath it.
@@ -83,7 +126,7 @@ type ScheduleVerdict struct {
 	MoreID    string
 	More      []ScheduleMoreRow
 
-	Caption string
+	Caption ScheduleCaption
 }
 
 // ScheduleCandidate is one ranked window card.
@@ -192,9 +235,14 @@ type ScheduleMatrix struct {
 
 	Bracket *ScheduleBracket
 
-	Zero     string
-	Captions []string
-	Pops     []SchedulePop
+	Zero string
+	// Caption is ONE flowing paragraph, exactly as the mockup's own
+	// `bits.join(' ')` returns one: the marks' key, the two disagreements the
+	// numbers cannot state about themselves, and the identity-wrap note when
+	// there is one. Split across separate blocks they read as unrelated notes
+	// rather than as one key to one grid.
+	Caption ScheduleCaption
+	Pops    []SchedulePop
 }
 
 // ScheduleCol is one matrix column.
@@ -343,7 +391,7 @@ type ScheduleRoster struct {
 	// player — no "awaiting reply" column (not derivable for them), no other
 	// names, no greyed placeholders.
 	Rows    []ScheduleRosterRow
-	Caption string
+	Caption ScheduleCaption
 }
 
 // ScheduleRosterRow is one member row.
@@ -517,7 +565,7 @@ type ScheduleAnswer struct {
 	Awaiting []ScheduleRosterRow
 	Notes    map[string]string
 
-	Caption string
+	Caption ScheduleCaption
 	Foot    string
 }
 

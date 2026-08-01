@@ -423,7 +423,7 @@ func scheduleBuildMatrix(in scheduleBuildInput) ScheduleMatrix {
 	m.CountChip = scheduleNeed(in.IsGM, "on the hour")
 
 	if in.Avail == nil || len(in.Avail.Days) == 0 {
-		m.Captions = scheduleMatrixCaptions(in, false)
+		m.Caption = scheduleMatrixCaption(in, false)
 		return m
 	}
 
@@ -451,7 +451,7 @@ func scheduleBuildMatrix(in scheduleBuildInput) ScheduleMatrix {
 	if total > len(benchRsvpHues) {
 		m.Chips = append(m.Chips, scheduleNeed(in.IsGM, "identity wraps after 8")...)
 	}
-	m.Captions = scheduleMatrixCaptions(in, total > len(benchRsvpHues))
+	m.Caption = scheduleMatrixCaption(in, total > len(benchRsvpHues))
 	if scheduleSavedCount(in, members) > 0 {
 		m.Zero = ""
 	}

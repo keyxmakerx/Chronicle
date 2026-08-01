@@ -389,9 +389,11 @@ func TestScheduleOracle_CountLaneWearsItsSamplingRule(t *testing.T) {
 	if !strings.Contains(m.CountChip[0].Text, "hour") {
 		t.Errorf("the count lane's chip does not name its sampling rule: %q", m.CountChip[0].Text)
 	}
-	joined := strings.Join(m.Captions, " ")
+	// The caption is ONE paragraph and this assertion reads its words, not its
+	// emphasis — where the eye lands is the stills' business, not the oracle's.
+	joined := m.Caption.Text()
 	if !strings.Contains(joined, "18:30") {
-		t.Errorf("the captions do not state the fine/coarse disagreement: %q", joined)
+		t.Errorf("the caption does not state the fine/coarse disagreement: %q", joined)
 	}
 }
 

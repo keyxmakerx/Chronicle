@@ -313,64 +313,117 @@ func scheduleAnswerSub(in scheduleBuildInput) string {
 // detection is ledger #16 and explicitly out of scope for this slice; the
 // caption is how the surface stays honest about it rather than implying
 // otherwise).
-func scheduleVerdictCaption(ranked bool) string {
-	key := ""
+func scheduleVerdictCaption(ranked bool) ScheduleCaption {
+	c := ScheduleCaption{}
 	if ranked {
-		key = "How it ranks: heads free at the top of the hour first, then how many marked the " +
-			"hour preferred, then how many people it wakes before 08:00 or keeps up past 23:00 in " +
-			"their own zone. Ties break toward the later date, so an earlier window is never " +
-			"dropped by a coin flip. "
+		c = append(c,
+			scheduleLead("How it ranks:"),
+			scheduleSay(" heads free at the top of the hour first, then how many marked the "+
+				"hour "),
+			scheduleWord("preferred"),
+			scheduleSay(", then how many people it wakes before 08:00 or keeps up past 23:00 in "+
+				"their own zone. Ties break toward the later date, so an earlier window is never "+
+				"dropped by a coin flip. "),
+		)
 	}
-	return key + "What the score cannot include: this grid shows availability only — it does not " +
-		"know what is already on the calendar, so a window may collide with something already " +
-		"booked. One week at a time: the schedule reads a week, not a month. Cards sit in date " +
-		"order and never move; the number on the left is the rank."
+	return append(c,
+		scheduleLead("What the score cannot include:"),
+		scheduleSay(" this grid shows availability only — it does not "+
+			"know what is already on the calendar, so a window may collide with something already "+
+			"booked. One week at a time: the schedule reads a week, not a month. Cards sit in date "+
+			"order and never move; the number on the left is the rank."),
+	)
 }
 
-// scheduleMatrixCaptions are the marks' key and the two disagreements the
-// numbers cannot state about themselves.
-func scheduleMatrixCaptions(in scheduleBuildInput, wrapped bool) []string {
-	caps := []string{
-		"The marks: a hollow outline is an hour someone can play; the same outline filled is an " +
-			"hour they'd prefer; nothing at all means no free time saved. Every outline carries " +
-			"that person's own dash pattern, so the grid reads with the colour off.",
-		"Fine and coarse disagree, on purpose: the outlines are minute-accurate, and the count " +
-			"lane samples the top of the hour. Someone free from 18:30 raises their own lane at " +
-			"18:30 but does not raise the 18:00 count.",
-		"This grid shows availability only — it does not know what is already on the calendar.",
+// scheduleMatrixCaption is the marks' key and the two disagreements the numbers
+// cannot state about themselves — ONE flowing paragraph, as the drawing returns
+// one. Three notes in three blocks read as three unrelated remarks; the mockup's
+// own producer joins them, and it is one key to one grid.
+func scheduleMatrixCaption(in scheduleBuildInput, wrapped bool) ScheduleCaption {
+	c := ScheduleCaption{
+		scheduleLead("The marks:"),
+		scheduleSay(" a hollow outline is an hour someone can play; the same outline filled is an "+
+			"hour they'd "),
+		scheduleWord("prefer"),
+		scheduleSay("; nothing at all means no free time saved. Every outline carries "+
+			"that person's own dash pattern, so the grid reads with the colour off. "),
+		scheduleLead("Fine and coarse disagree, on purpose:"),
+		scheduleSay(" the outlines are minute-accurate, and the count "+
+			"lane samples the top of the hour. Someone free from 18:30 raises their own lane at "+
+			"18:30 but does not raise the 18:00 count. "),
+		scheduleLead("This grid shows availability only"),
+		scheduleSay(" — it does not know what is already on the calendar."),
 	}
 	if wrapped {
-		caps = append(caps, "Identity wraps after eight — the ninth lane reuses the first hue "+
-			"with a different pattern, and the roster below is the authority on who is who.")
+		c = append(c,
+			scheduleSay(" "),
+			scheduleLead("Identity wraps after eight"),
+			scheduleSay(" — the ninth lane reuses the first hue "+
+				"with a different pattern, and the roster below is the authority on who is who."))
 	}
 	_ = in
-	return caps
+	return c
 }
 
 // scheduleRosterCaption names why the counts are recomputed, which is the one
 // fact the numbers cannot state about themselves.
-func scheduleRosterCaption() string {
-	return "Counts are recomputed from these rows, not from the stored tally, because the stored " +
-		"tally still counts people who have left the campaign. Zone names print the last part of " +
-		"the IANA identifier — hover for the full one. Chronicle has no abbreviation helper, so " +
-		"nothing here will ever say “CDT” until it does. An answer of in, maybe or out " +
-		"answers an event, not a week — the two only line up when the calendar is anchored to " +
-		"real time."
+func scheduleRosterCaption() ScheduleCaption {
+	return ScheduleCaption{
+		scheduleLead("Counts are recomputed from these rows"),
+		scheduleSay(", not from the stored tally, because the stored "+
+			"tally still counts people who have left the campaign. Zone names print the last part of "+
+			"the IANA identifier — hover for the full one. Chronicle has no abbreviation helper, so "+
+			"nothing here will ever say “CDT” until it does. An answer of "),
+		scheduleWord("in"),
+		scheduleSay(", "),
+		scheduleWord("maybe"),
+		scheduleSay(" or "),
+		scheduleWord("out"),
+		scheduleSay(" answers "),
+		scheduleLead("an event"),
+		scheduleSay(", not a week — the two only line up when the calendar is anchored to "+
+			"real time."),
+	}
 }
 
-func scheduleAnswerDirectorCaption() string {
-	return "A Director never sets someone else's answer. “Awaiting reply” is this roster " +
-		"minus the people who replied — there is no invitee table, so on a player's page this " +
-		"group does not exist at all."
+func scheduleAnswerDirectorCaption() ScheduleCaption {
+	return ScheduleCaption{scheduleSay(
+		"A Director never sets someone else's answer. “Awaiting reply” is this roster " +
+			"minus the people who replied — there is no invitee table, so on a player's page this " +
+			"group does not exist at all.")}
 }
 
-func scheduleAnswerPlayerCaption() string {
-	return "All five are words, not glyphs. Out just this week writes two things: it records your " +
-		"RSVP as no and marks you unavailable for this whole real-world week — days you already " +
-		"set by hand are left alone. Suggest a better time records your answer as maybe, never " +
-		"yes and never no, because a note without a status would otherwise be counted as a " +
-		"decision you did not make."
+func scheduleAnswerPlayerCaption() ScheduleCaption {
+	return ScheduleCaption{
+		scheduleSay("All five are words, not glyphs. "),
+		scheduleLead("Out just this week"),
+		scheduleSay(" writes two things: it records your RSVP as "),
+		scheduleWord("no"),
+		scheduleSay(" and marks you unavailable for this whole real-world week — days you already "+
+			"set by hand are left alone. "),
+		scheduleLead("Suggest a better time"),
+		scheduleSay(" records your answer as "),
+		scheduleWord("maybe"),
+		scheduleSay(", never yes and never no, because a note without a status would otherwise be "+
+			"counted as a decision you did not make."),
+	}
 }
+
+// --- the caption runs -------------------------------------------------------
+//
+// Three constructors, so a caption reads on the page of source the way it reads
+// on the screen and the emphasis cannot drift into a markup string.
+
+// scheduleSay is plain prose.
+func scheduleSay(s string) ScheduleRun { return ScheduleRun{Text: s} }
+
+// scheduleLead is the drawn BOLD lead-in — the phrase a reader scans for.
+func scheduleLead(s string) ScheduleRun { return ScheduleRun{Text: s, Em: "b"} }
+
+// scheduleWord is a vocabulary word the caption QUOTES rather than uses:
+// `preferred`, `in`, `maybe`, `out`, `no`. Drawn italic so "an answer of in,
+// maybe or out" cannot be read as a sentence that is itself simply in.
+func scheduleWord(s string) ScheduleRun { return ScheduleRun{Text: s, Em: "i"} }
 
 // --- small shared helpers ---------------------------------------------------
 
