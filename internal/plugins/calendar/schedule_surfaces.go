@@ -255,14 +255,29 @@ type ScheduleMatrix struct {
 	Pops    []SchedulePop
 }
 
-// ScheduleCol is one matrix column.
+// ScheduleCol is one matrix column: a DAY in week zoom, an HOUR in day zoom.
 type ScheduleCol struct {
 	Head string
 	Sub  string
 	// Major draws the heavier structural rule — the week's own emphasis, not a
-	// decoration.
+	// decoration. In week zoom it is the weekend's leading edge; in day zoom it
+	// is every sixth hour after the band's first, which is the drawing's own
+	// `(h - lo) % 6 === 0 && h !== lo`.
 	Major  bool
 	DayKey string
+	// Key is the column's IDENTITY, and it is NOT DayKey once the columns are
+	// hours: eight hour columns of one Saturday all carry the same DayKey (they
+	// are all that date — the ANSWER key guard B4 reads), so a popover id minted
+	// from DayKey would repeat eight times and `popovertarget` would open the
+	// 16:00 detail from every cell in the row. The drawing keys its own ids on
+	// `${iso}T${h}` for exactly this reason.
+	Key string
+	// When is the column's human "when" phrase, and it is what the accessible
+	// name and the popover heads are built from: `Sat 25` in week zoom,
+	// `Sat 25, 16:00` in day zoom. DayLabel is the DAY part alone, which is what
+	// a popover head wants beside a separately printed hour.
+	When     string
+	DayLabel string
 	// StartMinute / EndMinute are the column's span in minutes from midnight,
 	// which is what the marks inside it are positioned against.
 	StartMinute int
@@ -353,7 +368,9 @@ type ScheduleDensity struct {
 type ScheduleCount struct {
 	Free int
 	// PeakHour is the hour the count was taken at in WEEK zoom, printed beside
-	// the number so the reader knows WHEN.
+	// the number so the reader knows WHEN. It is EMPTY in day zoom, where the
+	// column head already IS the hour and printing `@ 19` under a column headed
+	// `19` is the same fact twice — the drawing emits `<b>${n}</b>` alone there.
 	PeakHour  string
 	Peak      bool
 	DayKey    string

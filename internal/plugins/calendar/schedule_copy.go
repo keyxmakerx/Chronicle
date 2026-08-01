@@ -262,6 +262,15 @@ func scheduleMatrixFrame(in scheduleBuildInput) string {
 // share one and twice when they do not, because "Mon 28 – Sun 3 Aug" is a date
 // range nobody can parse.
 func scheduleDaySpan(in scheduleBuildInput) string {
+	// DAY ZOOM names ONE day, because that is what the columns are. The frame is
+	// the only line on this panel that says which dates are on screen, so a week
+	// range printed over eight hour columns would be the head contradicting the
+	// grid directly beneath it.
+	if scheduleDayZoom(in) {
+		if t, err := timeParseISO(scheduleDayDate(in, scheduleSelectedDay(in))); err == nil {
+			return t.Format("Mon 2 Jan")
+		}
+	}
 	days := scheduleDayCount(in)
 	first, ferr := timeParseISO(scheduleDayDate(in, 0))
 	last, lerr := timeParseISO(scheduleDayDate(in, days-1))

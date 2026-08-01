@@ -32,7 +32,7 @@ import (
 
 // scheduleShotData assembles a full ScheduleData from the oracle fixture,
 // mirroring buildSchedule's assembly without its reads.
-func scheduleShotData(isGM bool) ScheduleData {
+func scheduleShotData(isGM bool, zoom string) ScheduleData {
 	in := scheduleOracleInput(isGM)
 	in.ViewerID = "u-kael"
 	if !isGM {
@@ -59,14 +59,20 @@ func scheduleShotData(isGM bool) ScheduleData {
 		BandLabel:  "Evening 16–24",
 		BandFrom:   16,
 		BandTo:     24,
-		Zoom:       "week",
+		Zoom:       scheduleResolveZoom(zoom),
 		MotionLine: scheduleMotionLine,
 		Proportion: scheduleProportionLine,
 	}
-	base := scheduleQuery(scheduleInput{Band: "evening", Zoom: "week", Scope: "week"}, data)
+	// DAY zoom points at the week's Saturday, which is what scheduleResolveDay
+	// defaults to and what the sealed sheet draws. The builder is handed the
+	// SAME resolvers the route hands it, so a shot cannot be of a state the
+	// route cannot produce.
+	data.Day = scheduleResolveDay("", week)
+	in.Zoom, in.Day = data.Zoom, data.Day
+	base := scheduleQuery(scheduleInput{Band: "evening", Zoom: data.Zoom, Scope: "week"}, data)
 	in.Base = base
 	data.BandOptions = scheduleBandOptions("camp-1", base, "evening")
-	data.ZoomOptions = scheduleZoomOptions("camp-1", base, "week")
+	data.ZoomOptions = scheduleZoomOptions("camp-1", base, data.Zoom)
 	data.Verdict = scheduleBuildVerdict(in)
 	data.Matrix = scheduleBuildMatrix(in)
 	data.Roster = scheduleBuildRoster(in)
@@ -138,8 +144,16 @@ func TestScheduleFidelityShots(t *testing.T) {
 	for _, role := range []struct {
 		key  string
 		isGM bool
-	}{{"gm", true}, {"player", false}} {
-		data := scheduleShotData(role.isGM)
+		zoom string
+	}{
+		{"gm", true, "week"}, {"player", false, "week"},
+		// THE DAY VIEW IS A SHOT KEY OF ITS OWN, because it is a different
+		// column set over the same data and the sealed sheet has a still for it
+		// (mockups/renders/wg-matrix-day-gm-light-1440.png). A zoom that is only
+		// ever asserted in Go strings is a zoom nobody has looked at.
+		{"gm-day", true, "day"}, {"player-day", false, "day"},
+	} {
+		data := scheduleShotData(role.isGM, role.zoom)
 		var body strings.Builder
 		if err := scheduleBody(data).Render(context.Background(), &body); err != nil {
 			t.Fatalf("render %s: %v", role.key, err)

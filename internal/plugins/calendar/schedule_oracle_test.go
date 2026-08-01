@@ -54,6 +54,22 @@ func scheduleOracleAnswers() map[string]string {
 // (day index 5) at 19:00 and lesser peaks elsewhere, plus minute-accurate lanes
 // for four of the five members. Rell has NONE — which is ledger #3's case and
 // must read as an unknown, never as a refusal.
+//
+// ── THE PER-HOUR COUNTS ARE DERIVED FROM THE LANES, NOT HAND-WRITTEN ───────
+//
+// They used to be a hand-written stub that filled in only the peak hours,
+// because WEEK zoom reads nothing else: a column is a whole day and the lane
+// prints that day's maximum. DAY zoom reads EVERY hour of one day, and the stub
+// disagreed with its own lanes at four of them — most visibly Saturday 21:00,
+// where the stub said 4 and the lanes say 3 (Nissa's window closes at 21:00).
+// A fixture that can draw a page saying "nobody is free at 17:00" directly above
+// a lane showing an outline at 17:00 is an instrument that manufactures defects,
+// which is the failure this slice already hit once with the harness's own
+// padding. Production's overlay computes both from one source; so does this now.
+//
+// It is BEHAVIOUR-PRESERVING for every week-zoom reading: each day's peak, and
+// the hour it falls at, are identical before and after (checked by
+// TestScheduleOracle_FixtureCountsAgreeWithItsOwnLanes).
 func scheduleOracleAvail() *BenchAvailability {
 	day := func(date string, free, prefer map[int]int) BenchAvailabilityDay {
 		f := make([]int, 24)
@@ -69,7 +85,7 @@ func scheduleOracleAvail() *BenchAvailability {
 	seg := func(d, s, e int, state string) BenchLaneSegment {
 		return BenchLaneSegment{DayIndex: d, StartMinute: s, EndMinute: e, State: state}
 	}
-	return &BenchAvailability{
+	av := &BenchAvailability{
 		WeekStart: "2026-07-20",
 		Days: []BenchAvailabilityDay{
 			day("2026-07-20", map[int]int{19: 1}, nil),
@@ -118,6 +134,44 @@ func scheduleOracleAvail() *BenchAvailability {
 			// Rell: NOTHING. Ledger #3's case.
 			"u-rell": {},
 		},
+	}
+	scheduleOracleDeriveCounts(av)
+	return av
+}
+
+// scheduleOracleDeriveCounts recomputes every day's per-hour Free/Prefer arrays
+// from the fixture's own lanes, at the TOP OF THE HOUR — the same coarse read
+// the count lane advertises and the same one production's overlay performs.
+func scheduleOracleDeriveCounts(av *BenchAvailability) {
+	for d := range av.Days {
+		free := make([]int, 24)
+		prefer := make([]int, 24)
+		for _, lanes := range av.Lanes {
+			seenFree := make([]bool, 24)
+			seenPref := make([]bool, 24)
+			for _, g := range lanes {
+				if g.DayIndex != d {
+					continue
+				}
+				for h := 0; h < 24; h++ {
+					if g.StartMinute > h*60 || h*60 >= g.EndMinute {
+						continue
+					}
+					// One member counts ONCE per hour however many of their own
+					// windows cover it, and a preferred hour is also a free one
+					// — preferred sits inside available by construction.
+					if !seenFree[h] {
+						seenFree[h] = true
+						free[h]++
+					}
+					if g.State == AvailPreferred && !seenPref[h] {
+						seenPref[h] = true
+						prefer[h]++
+					}
+				}
+			}
+		}
+		av.Days[d].Free, av.Days[d].Prefer = free, prefer
 	}
 }
 

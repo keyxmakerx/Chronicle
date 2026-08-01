@@ -256,8 +256,14 @@ func TestScheduleStills_TheMatrixCaptionIsOneParagraph(t *testing.T) {
 // own fixture — the same assembly the fidelity harness shoots.
 func scheduleRenderBody(t *testing.T, isGM bool) string {
 	t.Helper()
+	return scheduleRenderBodyZoom(t, isGM, "week")
+}
+
+// scheduleRenderBodyZoom is the same render at a named zoom.
+func scheduleRenderBodyZoom(t *testing.T, isGM bool, zoom string) string {
+	t.Helper()
 	var sb strings.Builder
-	if err := scheduleBody(scheduleShotData(isGM)).Render(context.Background(), &sb); err != nil {
+	if err := scheduleBody(scheduleShotData(isGM, zoom)).Render(context.Background(), &sb); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	return sb.String()

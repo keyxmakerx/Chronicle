@@ -448,7 +448,7 @@ func scheduleBuildMatrix(in scheduleBuildInput) ScheduleMatrix {
 	}
 
 	m.Density, m.Counts = scheduleAggregateLanes(in, members, m.Cols, total)
-	m.Bracket = scheduleBracketFor(in, members)
+	m.Bracket = scheduleBracketFor(in, members, m.Cols)
 	if in.IsGM {
 		m.Pops = schedulePopovers(in, members, m.Cols, total)
 	}
@@ -463,13 +463,27 @@ func scheduleBuildMatrix(in scheduleBuildInput) ScheduleMatrix {
 	return m
 }
 
-// scheduleColumns builds the column set.
+// scheduleColumns builds the column set — THE ONE PLACE THE ZOOM IS DECIDED.
 //
 // --cols is emitted SERVER-SIDE as days × slots. The stylesheet never multiplies
 // inside repeat() and no CSS on this surface writes a week length or an hour
 // count — a calendar's week length is its own business and this page does not
 // assume the Gregorian one.
+//
+// ── WEEK ZOOM: the cell is the DAY, and the outline inside it is still
+// minute-positioned across the whole visible band, so *where in the evening*
+// survives the compression.
+//
+// ── DAY ZOOM: the cell is the HOUR of ONE day, at full size. NOTHING ELSE
+// CHANGES — the same overlay, the same lanes, the same minute-accurate marks,
+// the same aggregates, narrowed to one date and re-sliced by hour. That is why
+// the day view needs no route, no query and no new seam: every fact it draws is
+// already in the week payload the Matrix ships, and the only thing this function
+// does differently is decide what a column MEANS.
 func scheduleColumns(in scheduleBuildInput) []ScheduleCol {
+	if scheduleDayZoom(in) {
+		return scheduleHourColumns(in)
+	}
 	days := scheduleDayCount(in)
 	out := []ScheduleCol{}
 	for d := 0; d < days; d++ {
@@ -478,13 +492,48 @@ func scheduleColumns(in scheduleBuildInput) []ScheduleCol {
 		if t, err := timeParseISO(date); err == nil {
 			head, sub = t.Format("Mon"), scheduleItoa(t.Day())
 		}
+		when := strings.TrimSpace(head + " " + sub)
 		out = append(out, ScheduleCol{
 			Head: head, Sub: sub, Day: d, DayKey: date,
+			Key: date, When: when, DayLabel: when,
 			// The weekend's leading edge takes the heavier structural rule —
 			// the week's own emphasis, not a decoration.
 			Major:       d == days-2,
 			StartMinute: in.BandFrom * 60,
 			EndMinute:   in.BandTo * 60,
+		})
+	}
+	return out
+}
+
+// scheduleHourColumns is DAY zoom's column set: one column per hour of the
+// visible band, all on the selected date.
+//
+// EVERY COLUMN KEEPS `data-day`. Guard B4's rule is that a dated node carries
+// the ANSWER key, and an hour of Saturday is still Saturday — so DayKey stays
+// the date on all eight columns and `Key` (date + hour) carries the identity the
+// popover ids need. Losing data-day here would make the day view the one part of
+// this page that stops answering.
+func scheduleHourColumns(in scheduleBuildInput) []ScheduleCol {
+	d := scheduleSelectedDay(in)
+	date := scheduleDayDate(in, d)
+	dayLabel := date
+	if t, err := timeParseISO(date); err == nil {
+		dayLabel = t.Format("Mon 2")
+	}
+	out := []ScheduleCol{}
+	for h := in.BandFrom; h < in.BandTo; h++ {
+		out = append(out, ScheduleCol{
+			Head: scheduleItoa(h), Sub: "", Day: d, DayKey: date,
+			Key:      date + "T" + scheduleItoa(h),
+			When:     dayLabel + ", " + scheduleHour(h),
+			DayLabel: dayLabel,
+			// The drawing's own rule: every sixth hour after the band's first
+			// takes the heavier rule, and the band's first never does — an
+			// emphasis on the leading edge would just be a second panel border.
+			Major:       (h-in.BandFrom)%6 == 0 && h != in.BandFrom,
+			StartMinute: h * 60,
+			EndMinute:   (h + 1) * 60,
 		})
 	}
 	return out
@@ -594,7 +643,7 @@ func scheduleCellFor(in scheduleBuildInput, m scheduleMember, c ScheduleCol) Sch
 	}
 	cell.Label = scheduleCellLabel(m, c, segs)
 	if len(segs) > 0 && in.IsGM {
-		cell.PopID = schedulePopID("pc", m.UserID, c.DayKey)
+		cell.PopID = schedulePopID("pc", m.UserID, c.Key)
 	}
 	return cell
 }
@@ -603,10 +652,7 @@ func scheduleCellFor(in scheduleBuildInput, m scheduleMember, c ScheduleCol) Sch
 // resolution the mark carries, so a screen-reader user gets the minute-accurate
 // truth the sighted reader gets from the outline's position.
 func scheduleCellLabel(m scheduleMember, c ScheduleCol, segs []BenchLaneSegment) string {
-	when := c.Head
-	if c.Sub != "" {
-		when += " " + c.Sub
-	}
+	when := c.When
 	if len(segs) == 0 {
 		return fmt.Sprintf("%s, %s: no free time saved", m.First, when)
 	}
@@ -626,14 +672,31 @@ func scheduleCellLabel(m scheduleMember, c ScheduleCol, segs []BenchLaneSegment)
 
 // scheduleAggregateLanes builds the two lanes EVERYONE gets: the achromatic
 // density bar and the exact number.
+//
+// THE HOUR THE COUNT IS TAKEN AT IS THE ONE THING THE ZOOM CHANGES. In week zoom
+// a column is a whole day, so the number is that day's PEAK inside the band and
+// the lane prints `@ 19` beside it, because a count with no hour is unreadable.
+// In day zoom a column already IS an hour: the number is the count AT that hour
+// and the `@ h` sub is dropped, since a `@ 19` under a column headed `19` is the
+// same fact printed twice. Both readings come from scheduleFreeCount, so the two
+// zooms cannot disagree about how many people are free.
 func scheduleAggregateLanes(in scheduleBuildInput, members []scheduleMember, cols []ScheduleCol,
 	total int) ([]ScheduleDensity, []ScheduleCount) {
+	dayZoom := scheduleDayZoom(in)
 	dens := make([]ScheduleDensity, 0, len(cols))
 	counts := make([]ScheduleCount, 0, len(cols))
 	top := 0
 	peaks := make([]int, len(cols))
 	free := make([]int, len(cols))
 	for i, c := range cols {
+		if dayZoom {
+			h := c.StartMinute / 60
+			peaks[i], free[i] = h, scheduleFreeCount(in, members, c.Day, h)
+			if free[i] > top {
+				top = free[i]
+			}
+			continue
+		}
 		bestH, bestN := in.BandFrom, -1
 		for h := in.BandFrom; h < in.BandTo; h++ {
 			if n := scheduleFreeCount(in, members, c.Day, h); n > bestN {
@@ -654,15 +717,18 @@ func scheduleAggregateLanes(in scheduleBuildInput, members []scheduleMember, col
 			Title: fmt.Sprintf("%d of %d free at %s", free[i], total, scheduleHour(peaks[i])),
 		})
 		cnt := ScheduleCount{
-			Free: free[i], PeakHour: fmt.Sprintf("@ %d", peaks[i]),
+			Free: free[i],
 			Peak: free[i] == top && top > 0, DayKey: c.DayKey, Major: c.Major,
 			Label: fmt.Sprintf("%d of %d free at %s", free[i], total, scheduleHour(peaks[i])),
+		}
+		if !dayZoom {
+			cnt.PeakHour = fmt.Sprintf("@ %d", peaks[i])
 		}
 		// DIRECTOR: each numeral is a button naming who is free and who is
 		// missing. PLAYER: a plain number — the names are ABSENT from their DOM,
 		// not greyed.
 		if in.IsGM {
-			cnt.PopID = schedulePopID("pn", "", c.DayKey)
+			cnt.PopID = schedulePopID("pn", "", c.Key)
 		}
 		counts = append(counts, cnt)
 	}
@@ -674,7 +740,7 @@ func scheduleAggregateLanes(in scheduleBuildInput, members []scheduleMember, col
 // ACCENT IS THE TOOL TALKING (canon A7): the computed span takes --accent, and a
 // human-offered or human-proposed span would take --rule-editorial instead. The
 // accent never colours event data.
-func scheduleBracketFor(in scheduleBuildInput, members []scheduleMember) *ScheduleBracket {
+func scheduleBracketFor(in scheduleBuildInput, members []scheduleMember, cols []ScheduleCol) *ScheduleBracket {
 	if scheduleSavedCount(in, members) < scheduleQuorum {
 		return nil
 	}
@@ -687,6 +753,35 @@ func scheduleBracketFor(in scheduleBuildInput, members []scheduleMember) *Schedu
 		sel = n
 	}
 	w := windows[sel-1]
+
+	// DAY ZOOM: the bracket spans the window's HOURS, and it is drawn only when
+	// the chosen window is on the day that is on screen.
+	//
+	// The drawing finds its start column by hour alone, which on its own default
+	// state (the ranked window and the day view both land on Saturday) is the
+	// same answer. It is not the same answer once a reader steps the day: an
+	// hour-only match would print the accent bracket — the TOOL saying "play
+	// here" — across a Wednesday whose numbers never produced it. The bracket is
+	// the page's answer, and an answer drawn over the wrong day is worse than no
+	// bracket, so this one refuses instead.
+	if scheduleDayZoom(in) {
+		if w.Day != scheduleSelectedDay(in) {
+			return nil
+		}
+		lo := w.Hour - in.BandFrom
+		if lo < 0 || lo >= len(cols) {
+			return nil
+		}
+		hi := lo + w.Length
+		if hi > len(cols) {
+			hi = len(cols)
+		}
+		return &ScheduleBracket{
+			Start: lo + 2, End: hi + 2,
+			Label: scheduleHour(w.Hour) + "–" + scheduleHour(w.Hour+w.Length),
+		}
+	}
+
 	date := scheduleDayDate(in, w.Day)
 	label := scheduleHour(w.Hour)
 	if t, err := timeParseISO(date); err == nil {
@@ -708,7 +803,14 @@ func schedulePopovers(in scheduleBuildInput, members []scheduleMember, cols []Sc
 		for _, c := range cols {
 			rows := []SchedulePopRow{}
 			for _, g := range m.Lanes {
-				if g.DayIndex != c.Day || g.State == AvailPreferred {
+				// THE POPOVER BELONGS TO THE COLUMN, NOT TO THE DAY. Filtering
+				// on the day alone was indistinguishable from filtering on the
+				// column while a column WAS a day; once it is an hour, the 16:00
+				// detail would list a 17:00–24:00 window the 16:00 cell draws
+				// nothing for — and would mint a popover for every empty cell
+				// in the row. The drawing filters on the span in both zooms.
+				if g.DayIndex != c.Day || g.State == AvailPreferred ||
+					g.EndMinute <= c.StartMinute || g.StartMinute >= c.EndMinute {
 					continue
 				}
 				rows = append(rows, SchedulePopRow{
@@ -720,25 +822,33 @@ func schedulePopovers(in scheduleBuildInput, members []scheduleMember, cols []Sc
 				continue
 			}
 			for _, g := range m.Lanes {
-				if g.DayIndex == c.Day && g.State == AvailPreferred {
+				if g.DayIndex == c.Day && g.State == AvailPreferred &&
+					g.EndMinute > c.StartMinute && g.StartMinute < c.EndMinute {
 					rows = append(rows, SchedulePopRow{Text: "preferred"})
 					break
 				}
 			}
 			out = append(out, SchedulePop{
-				ID:   schedulePopID("pc", m.UserID, c.DayKey),
+				ID:   schedulePopID("pc", m.UserID, c.Key),
 				Axis: m.Axis,
-				Head: m.First + " · " + c.Head + " " + c.Sub,
+				Head: m.First + " · " + c.DayLabel,
 				Rows: rows,
 				Foot: "outlines are minute-accurate; the count below samples the top of the hour",
 			})
 		}
 	}
+	dayZoom := scheduleDayZoom(in)
 	for _, c := range cols {
-		bestH, bestN := in.BandFrom, -1
-		for h := in.BandFrom; h < in.BandTo; h++ {
-			if n := scheduleFreeCount(in, members, c.Day, h); n > bestN {
-				bestH, bestN = h, n
+		// In day zoom the column IS the hour, so there is no peak to search
+		// for: the popover names the same hour the numeral was counted at.
+		bestH := c.StartMinute / 60
+		if !dayZoom {
+			bestN := -1
+			bestH = in.BandFrom
+			for h := in.BandFrom; h < in.BandTo; h++ {
+				if n := scheduleFreeCount(in, members, c.Day, h); n > bestN {
+					bestH, bestN = h, n
+				}
 			}
 		}
 		freeNames, missNames := []string{}, []string{}
@@ -750,8 +860,8 @@ func schedulePopovers(in scheduleBuildInput, members []scheduleMember, cols []Sc
 			}
 		}
 		out = append(out, SchedulePop{
-			ID:   schedulePopID("pn", "", c.DayKey),
-			Head: c.Head + " " + c.Sub + " · " + scheduleHour(bestH),
+			ID:   schedulePopID("pn", "", c.Key),
+			Head: c.DayLabel + " · " + scheduleHour(bestH),
 			Rows: []SchedulePopRow{
 				{Text: fmt.Sprintf("%d free", len(freeNames)), Note: scheduleNamesOr(freeNames)},
 				{Text: fmt.Sprintf("%d not free", len(missNames)), Note: scheduleNamesOr(missNames)},

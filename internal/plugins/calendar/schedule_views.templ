@@ -399,6 +399,11 @@ templ scheduleDensityView(m ScheduleMatrix) {
 // Director: each numeral is a button naming who is free and who is missing.
 // Player: a plain span — the names are ABSENT from their DOM, not greyed. The
 // branch is on PopID, which the builder only ever sets for a Director.
+//
+// The `@ h` sub says WHEN the day's peak was taken, and it is EMPTY in day zoom,
+// where the column head already is the hour. The branch is on the string rather
+// than on a zoom flag: the template does not know what a column is, and it is
+// the builder's business to decide.
 templ scheduleCountView(m ScheduleMatrix) {
 	<div class="sc-row cnt">
 		<span class="who">
@@ -416,7 +421,9 @@ templ scheduleCountView(m ScheduleMatrix) {
 					aria-label={ c.Label }
 				>
 					<b>{ scheduleItoa(c.Free) }</b>
-					<u>{ c.PeakHour }</u>
+					if c.PeakHour != "" {
+						<u>{ c.PeakHour }</u>
+					}
 				</button>
 			} else {
 				<span
@@ -425,7 +432,9 @@ templ scheduleCountView(m ScheduleMatrix) {
 					title={ c.Label }
 				>
 					<b>{ scheduleItoa(c.Free) }</b>
-					<u>{ c.PeakHour }</u>
+					if c.PeakHour != "" {
+						<u>{ c.PeakHour }</u>
+					}
 				</span>
 			}
 		}

@@ -429,6 +429,8 @@ func (h *Handler) buildSchedule(ctx context.Context, in scheduleInput) ScheduleD
 		WeekStart:  weekStart,
 		BandFrom:   band.From,
 		BandTo:     band.To,
+		Zoom:       data.Zoom,
+		Day:        data.Day,
 		Cand:       in.Cand,
 		Scope:      scheduleResolveScope(in.Scope),
 		PrefOpen:   in.Pref == "open",
