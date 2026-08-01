@@ -590,3 +590,77 @@ func TestScheduleStills_TheRemainingEmphasisAndTheSegRung(t *testing.T) {
 		t.Errorf("the `.seg` rung must pad the sealed mockup's `0 8px`; got:\n%s", rule)
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIDELITY PASS 4 — what a declaration-by-declaration diff of the sealed
+// drawing against the shipped sheets caught, after every by-eye comparison had
+// already passed. These are not "the strings were right and the shape was
+// wrong"; these are declarations that were SUBSTITUTED for near-neighbours in
+// transcription, where the near-neighbour is not neutral.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 9 · THE SELECTED SEGMENT IS A RING, NOT A HUE MIX. The drawing tints the
+// pressed rung by mixing the accent into `transparent`:
+//
+//	background: color-mix(in oklch, transparent 96%, var(--accent))
+//
+// The sheet shipped `color-mix(in oklch, var(--surface-card) 88%, var(--accent))`
+// instead. Those look interchangeable and are not. `--surface-card` is
+// ACHROMATIC, so it carries no hue of its own, and oklch interpolation resolves
+// a missing hue by taking the SHORT ARC — 0deg toward the accent's 270deg is
+// 349.2deg the other way round the wheel, which is PINK. The pressed
+// `Evening 16-24` pill measures rgb(252,232,241) on the built page against the
+// still's rgb(248,249,254). Mixing into `transparent` — which is what the
+// drawing does, deliberately — has no hue to interpolate and cannot drift.
+//
+// The drawing DOES write one surface-toward-accent mix, on `.surf.sel`, and
+// annotates it "D-T1: this tint drifts rose in light. Booked upstream, not
+// fixed here." That one is drawn as-is and stays. It is also the reason this
+// test counts rather than forbids: exactly one such mix is sanctioned, and it
+// is not this one.
+//
+// The same rule block lost three more drawn declarations while it was being
+// written: the rung's `gap: 5px`, the whole `:hover` feedback state, and
+// `cursor: not-allowed` on the disabled `Day` rung (the sheet said `default`,
+// which reads as "this is not a control" rather than "this control is off").
+func TestScheduleStills_TheSelectedSegmentIsTheDrawnRingNotAHueMix(t *testing.T) {
+	css := scheduleStrip(scheduleCSS(t, "calendar-schedule.css"))
+
+	sel := scheduleRuleFor(t, css, `.cal-schedule .seg button[aria-pressed="true"]`)
+	if !strings.Contains(sel, "color-mix(in oklch, transparent 96%, var(--accent))") {
+		t.Errorf("the pressed rung must tint from `transparent`, which has no hue to "+
+			"interpolate; got:\n%s", sel)
+	}
+	if strings.Contains(sel, "--surface-card") {
+		t.Errorf("the pressed rung mixes an achromatic surface toward the accent — that is "+
+			"the short-arc hue drift that renders pink; got:\n%s", sel)
+	}
+	if !strings.Contains(sel, "inset 0 0 0 1.5px var(--accent)") {
+		t.Errorf("the drawn ring is 1.5px, not 1px; got:\n%s", sel)
+	}
+
+	// Exactly one surface-toward-accent mix is sanctioned product-wide on this
+	// sheet, and it is the drawing's own annotated `.surf.sel`.
+	if n := strings.Count(css, "var(--surface-card) 96%, var(--accent)"); n != 1 {
+		t.Errorf("the sanctioned `.surf.sel` tint appears %d times; the drawing writes it once", n)
+	}
+	if n := strings.Count(css, "var(--surface-card) 88%, var(--accent)"); n != 0 {
+		t.Errorf("%d unsanctioned surface-toward-accent mixes survive", n)
+	}
+
+	rung := scheduleRuleFor(t, css, ".cal-schedule .seg button")
+	if !strings.Contains(rung, "gap: 5px") {
+		t.Errorf("the drawn rung sets `gap: 5px` for the rungs that carry a glyph; got:\n%s", rung)
+	}
+
+	hov := scheduleRuleFor(t, css, ".cal-schedule .seg button:hover")
+	if !strings.Contains(hov, "color-mix(in oklch, transparent 90%, var(--accent))") ||
+		!strings.Contains(hov, "var(--text-primary)") {
+		t.Errorf("the segment gives no drawn hover feedback; got:\n%s", hov)
+	}
+
+	dis := scheduleRuleFor(t, css, ".cal-schedule .seg button:disabled")
+	if !strings.Contains(dis, "cursor: not-allowed") {
+		t.Errorf("a disabled rung is an OFF control, not a non-control; got:\n%s", dis)
+	}
+}
