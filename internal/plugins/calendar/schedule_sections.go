@@ -79,6 +79,13 @@ type scheduleBuildInput struct {
 	BandFrom  int
 	BandTo    int
 
+	// OwnLanes is the VIEWER'S OWN composed week, read through
+	// ScheduleOwnWeekReader. The Painter is built from THIS and never from
+	// Avail.Lanes, so a Director and a player paint from one path: a player's
+	// overlay carries no member at all, and their own week has to come from a
+	// read that is about them rather than about everybody.
+	OwnLanes []BenchLaneSegment
+
 	Cand     string
 	Scope    string
 	PrefOpen bool

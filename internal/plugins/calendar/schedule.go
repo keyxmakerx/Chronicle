@@ -199,6 +199,40 @@ type ScheduleData struct {
 	Proportion string
 }
 
+// ScheduleOwnWeekReader is the ONE read Part B adds to the sessions seam: the
+// viewer's OWN composed week, at the payload's real resolution.
+//
+// ── WHY IT IS A SEPARATE INTERFACE ─────────────────────────────────────────
+//
+// It could have been a method on BenchScheduleReader, and that would have been
+// worse twice over: it would break every existing implementation of a seam that
+// P8A shipped and P8B validated (a compile error in files this slice has no
+// business touching), and it would fuse two different permission questions into
+// one contract. BenchAvailability answers "may this viewer see EVERYONE'S
+// lanes", gated by role. This answers "may this viewer see THEIR OWN", and the
+// answer is always yes — a member may always read back what they themselves
+// saved.
+//
+// So it is declared HERE, injected by a post-construction setter from
+// internal/app/routes.go (house rule 8), and NIL-SAFE: a host that has not wired
+// it gets a Painter that says it cannot reach the scheduler, which is true.
+//
+// ── THE USER ID IS THE SESSION'S, NEVER A PARAMETER ────────────────────────
+//
+// The handler passes auth.GetUserID(c) and nothing else can reach this call.
+// The route accepts no identity parameter at all (schedule_route_test.go's IDOR
+// probe has nothing to attack), so there is no path by which a caller could ask
+// this seam about somebody else.
+type ScheduleOwnWeekReader interface {
+	// OwnWeekLanes returns ONLY the named member's own lane segments for the
+	// week, projected into viewerTZ. An implementation MUST NOT return another
+	// member's lanes under any circumstances.
+	OwnWeekLanes(ctx context.Context, campaignID, userID, weekStart, viewerTZ string) ([]BenchLaneSegment, error)
+}
+
+// SetOwnWeekReader wires the viewer's-own-week read behind the Painter.
+func (h *Handler) SetOwnWeekReader(r ScheduleOwnWeekReader) { h.ownWeek = r }
+
 // scheduleInput is everything buildSchedule needs from the request, resolved by
 // the handler. Keeping it a struct rather than eight parameters means the
 // handler stays thin and the builder stays testable.
@@ -350,6 +384,20 @@ func (h *Handler) buildSchedule(ctx context.Context, in scheduleInput) ScheduleD
 		avail = a
 	}
 
+	// THE VIEWER'S OWN WEEK, through the read that is about THEM. It is a
+	// separate call because it answers a different question from the overlay:
+	// a player's overlay carries no member at all, so without this their own
+	// Painter would show an empty grid over availability they had already saved.
+	var ownLanes []BenchLaneSegment
+	if h.ownWeek != nil && in.UserID != "" {
+		lanes, oerr := h.ownWeek.OwnWeekLanes(ctx, in.Campaign.ID, in.UserID, data.WeekStart, projectZone)
+		if oerr != nil {
+			slog.Warn("schedule: own-week read failed",
+				slog.String("campaign_id", in.Campaign.ID), slog.Any("error", oerr))
+		}
+		ownLanes = lanes
+	}
+
 	var answers map[string]string
 	eventID, calendarID := "", ""
 	if row != nil {
@@ -375,6 +423,7 @@ func (h *Handler) buildSchedule(ctx context.Context, in scheduleInput) ScheduleD
 		Session:    session,
 		EventID:    eventID,
 		CalendarID: calendarID,
+		OwnLanes:   ownLanes,
 		Zone:       data.Zone,
 		ZoneLeaf:   data.ZoneLeaf,
 		WeekStart:  weekStart,

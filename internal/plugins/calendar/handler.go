@@ -36,6 +36,11 @@ type Handler struct {
 	// mailStatus answers the ONE email question the Bench asks: is a mail
 	// server configured (C-CALV4-RSVP-P8B §8). Nil-safe like the two above.
 	mailStatus MailStatusReader
+	// ownWeek is the /schedule Painter's read: the VIEWER'S OWN composed week
+	// (C-CALV4-RSVP-P8 Part B). Separate from `schedule` because it answers a
+	// different permission question — "may I read back what I saved", whose
+	// answer is always yes — and nil-safe for the same reason as the rest.
+	ownWeek ScheduleOwnWeekReader
 }
 
 // TierDefinitionsLister surfaces the campaign-aware tier vocabulary

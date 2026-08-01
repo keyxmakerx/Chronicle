@@ -945,6 +945,196 @@
 .cal-schedule .seg.lg button { height: 28px; padding: 0 14px; font-size: 12px; }
 
 /* ───────────────────────────────────────────────────────────────────────────
+   S4 · THE PAINTER
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.cal-schedule .sc-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 0 8px;
+}
+.cal-schedule .sc-scope .lb {
+  font-weight: 600;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+.cal-schedule .sc-sum {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-weight: 600;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-body);
+  padding: 6px 0 8px;
+}
+.cal-schedule .sc-paint .lband { margin-top: 4px; border-radius: var(--r-chip) var(--r-chip) 0 0; }
+.cal-schedule .sc-paint .sc-wrap { border-radius: 0 0 6px 6px; border-top: 0; }
+/* `contain:paint` is NOT decoration and NOT a perf tweak. `overflow-x:auto`
+   already promises to clip, but a subgrid row inside a scroll container that is
+   itself a GRID ITEM leaks its width into the ROOT element's scrollable
+   overflow in Chromium — the document drags sideways even though the wrap does
+   not. Paint containment makes the clip binding rather than advisory.
+   It is scoped to the PAINTER on purpose: the Matrix's identical wrap sits in a
+   flex column, does not leak, and must NOT be contained — paint containment also
+   clips HIT-TESTING to the padding box, which would eat the bottom of the count
+   lane's target pad. */
+.cal-schedule .sc-paint .sc-wrap { contain: paint; }
+
+/* PER-CELL TOGGLES ARE THE ONLY PATH. The checkbox is the STATE and is visually
+   hidden but never display:none — it stays focusable, so the grid is walkable
+   with a keyboard, which a drag-select could never be. */
+.cal-schedule .sc-pick {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.cal-schedule .sc-pk {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  cursor: pointer;
+  border-left: 1px solid var(--rule-hairline);
+}
+.cal-schedule .sc-pk.major { border-left: 1px solid var(--rule-structural-strong); }
+.cal-schedule .sc-pk:hover { background: color-mix(in oklch, transparent 94%, var(--text-primary)); }
+.cal-schedule .sc-pk .sc-off {
+  position: static;
+  height: 12px;
+  width: calc(100% - 6px);
+  max-width: 26px;
+  opacity: 0;
+}
+.cal-schedule .sc-pick:checked + .sc-pk .sc-off { opacity: 1; }
+.cal-schedule .sc-pref .sc-pick:checked + .sc-pk .sc-off {
+  background-color: color-mix(in oklch, transparent 82%, var(--axis));
+}
+/* canon focus: a 2px outline on the element's own radius, NO shadow change */
+.cal-schedule .sc-pick:focus-visible + .sc-pk { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* THE ONE SANCTIONED OPEN/CLOSE: a section BELOW the grid, on the viewer's own
+   explicit act. Its MOTION is the disclosure register's, in calendar-bench.css —
+   there is exactly one, product-wide, and this sheet does not open a second. */
+.cal-schedule .sc-pref { margin-top: 10px; }
+.cal-schedule .sc-pref summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--r-chip);
+}
+.cal-schedule .sc-pref summary::-webkit-details-marker { display: none; }
+.cal-schedule .sc-pref summary .lband { flex: 1; }
+.cal-schedule .sc-pref summary::after {
+  content: "open";
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.cal-schedule .sc-pref[open] summary::after { content: "close"; }
+
+.cal-schedule .sc-paint .btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 0 0;
+}
+.cal-schedule .sc-status {
+  font-weight: 600;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  padding: 6px 0 0;
+  min-height: 1.4em;
+}
+.cal-schedule .sc-status[data-tone="bad"] { color: var(--bad); }
+.cal-schedule .sc-status[data-tone="ok"] { color: var(--ok); }
+
+/* THE ONE DASHED IDIOM ON THIS PAGE, and it means "not built yet" and NOTHING
+   else. An unavailable feature prints a fault box, never a dashed reserve. */
+.cal-schedule .skyband {
+  margin: 12px 0 0;
+  height: 40px;
+  border-radius: 6px;
+  flex: none;
+  background: var(--surface-inset);
+  border: 1px dashed var(--rule-structural);
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 1px;
+}
+.cal-schedule .skyband .a {
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cal-schedule .skyband .b {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+/* the suggestion dock */
+.cal-schedule .sc-suggest {
+  margin-top: 2px;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--surface-inset);
+  border: 1px solid var(--rule-hairline);
+}
+.cal-schedule .sc-suggest textarea {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  padding: 7px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--rule-structural);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: 500 12px/1.5 inherit;
+}
+.cal-schedule .sc-suggest .sc-foot { border-top: 0; padding: 6px 0 8px; margin-top: 0; }
+.cal-schedule .sc-pop .pop-btns {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--rule-hairline);
+}
+
+/* the visually-hidden accessible name on every tick. NEVER display:none — the
+   label's name is the only thing a screen reader has to work with here. */
+.cal-schedule .vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
    RESPONSIVE · the matrix at 390px.
    WEEK zoom is forced by geometry rather than by a server guess: the arithmetic
    is 390 host → 358 page → 340 panel → 76 identity + 94 say + 7 × 24 = 338, so
@@ -992,6 +1182,12 @@
   .cal-schedule .sc-head .btns { width: 100%; flex-direction: column; align-items: stretch; }
   .cal-schedule .seg.lg { width: 100%; }
   .cal-schedule .seg.lg button { flex: 1; justify-content: center; padding: 0 6px; }
+
+  /* THE PAINTER AT 390: the tick grows to a 40px target and the grid scrolls
+     inside its own wrap. No pinch, no drag, real touch targets. */
+  .cal-schedule .sc-pk { height: 40px; }
+  .cal-schedule .sc-paint .btns { flex-direction: column; align-items: stretch; }
+  .cal-schedule .sc-paint .btns .btn { width: 100%; height: 40px; justify-content: center; }
 }
 
 /* MID-RANGE REFLOW · the page-scroll repair.

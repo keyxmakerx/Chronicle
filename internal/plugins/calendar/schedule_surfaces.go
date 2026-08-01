@@ -441,7 +441,15 @@ type ScheduleHourHead struct {
 type SchedulePaintDay struct {
 	Label  string
 	DayKey string
-	Cells  []SchedulePaintCell
+	// Weekday is 0=Sun..6=Sat, the scheduler's OWN index, emitted server-side.
+	//
+	// It rides on the row rather than being derived in the driver, and that is
+	// not a convenience: the recurring path writes a WEEKDAY and the exception
+	// path writes a DATE, and re-deriving either from a printed label ("Mon 20
+	// Jul") in JS is precisely how a Monday becomes a Sunday at a locale or
+	// timezone boundary.
+	Weekday int
+	Cells   []SchedulePaintCell
 }
 
 // SchedulePaintCell is one hour tick. PER-CELL TOGGLES ARE THE ONLY PATH: no
@@ -455,7 +463,11 @@ type SchedulePaintCell struct {
 	Checked bool
 	Major   bool
 	DayKey  string
-	Label   string
+	// Hour is the tick's hour-of-day. Emitted for the same reason Weekday is:
+	// the driver composes [start,end) MINUTES from it and must not parse them
+	// out of the printed value.
+	Hour  int
+	Label string
 }
 
 // ScheduleReserve is the dashed "not built yet" band.

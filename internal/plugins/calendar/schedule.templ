@@ -61,6 +61,17 @@ templ SchedulePageView(cc *campaigns.CampaignContext, data ScheduleData) {
 				</div>
 				<p class="sc-motion" data-schedule-motion>{ data.MotionLine }</p>
 			</div>
+			// THE PAINTER'S WRITE DRIVER, and the ONLY script on this page.
+			//
+			// It is mounted ONLY when there is a form for it to drive, so a
+			// zone-less member, a degraded scheduler seam and the fault box all
+			// ship no script at all. It writes through the scheduler's own
+			// shipped PUT routes — see the file header — because those endpoints
+			// take JSON and a <form> cannot send it; every other control on this
+			// page is a link or a plain form and needs nothing.
+			if data.Painter.Form != nil {
+				<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_schedule.js") } defer></script>
+			}
 		</div>
 	}
 }

@@ -476,8 +476,111 @@ templ schedulePainterView(data ScheduleData) {
 			if data.Painter.Fault != nil {
 				@scheduleFaultView(*data.Painter.Fault)
 			}
+			if data.Painter.Form != nil {
+				@schedulePaintFormView(*data.Painter.Form)
+			}
 		</div>
 	</section>
+}
+
+// schedulePaintFormView is the painted weekly grid and its controls.
+//
+// PER-CELL TOGGLES ARE THE ONLY PATH. No drag-select, at any width, on any
+// surface: a drag gesture cannot be the primary control here, and a "fallback"
+// primary is a fiction. The checkbox is the state, the label is the target, and
+// the mark inside the label is a mark.
+templ schedulePaintFormView(f SchedulePaintForm) {
+	<form
+		class="sc-paint-form"
+		data-region="paint"
+		data-schedule-paint
+		data-save-url={ f.SaveURL }
+		data-exceptions-url={ f.ExceptionsURL }
+		data-scope={ f.Scope }
+		data-zone={ f.Zone }
+	>
+		<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
+		<div class="sc-scope">
+			@scheduleSegView("What this week's marks mean", f.ScopeOptions)
+			<span class="lb">{ f.ScopeNote }</span>
+		</div>
+		<div class="sc-sum">{ f.Summary }</div>
+		<span class="lband">Can play</span>
+		@schedulePaintGridView(f, f.Days)
+		// THE ONE SANCTIONED OPEN/CLOSE ON THIS PAGE: a section BELOW the grid,
+		// on the viewer's own explicit act. Its motion comes from the disclosure
+		// register in calendar-bench.css — there is exactly one, product-wide,
+		// and this surface does not open a second.
+		<details class="sc-pref disc" open?={ f.PrefOpen }>
+			<summary>
+				<span class="lband">Would prefer</span>
+			</summary>
+			@schedulePaintGridView(f, f.PrefDays)
+			<div class="caption">{ f.PrefNote }</div>
+		</details>
+		if f.Empty != "" {
+			<div class="lzero">{ f.Empty }</div>
+		}
+		<div class="btns">
+			<button class="btn fill" type="button" data-schedule-save>Save my week</button>
+			<button class="btn" type="button" data-schedule-clear>Clear this week</button>
+			if f.CopyWeek != nil {
+				@benchActionView(*f.CopyWeek)
+			}
+		</div>
+		<div class="sc-status" data-schedule-status role="status" aria-live="polite"></div>
+		<div class="sc-foot">{ f.Foot }</div>
+		if f.Reserve != nil {
+			<div class="skyband">
+				<span class="a">{ f.Reserve.Head }</span>
+				<span class="b">{ f.Reserve.Body }</span>
+			</div>
+		}
+	</form>
+}
+
+// schedulePaintGridView draws one painted grid — days down, the band's hours
+// across, at the SAME geometry as the matrix above, so what you paint is
+// literally what the Director reads.
+templ schedulePaintGridView(f SchedulePaintForm, days []SchedulePaintDay) {
+	<div class="sc-wrap">
+		<div class="sc-grid sc-paintgrid" style={ schedulePaintGridStyle(len(f.Hours)) }>
+			<div class="sc-head-row">
+				<span class="who"><span class="cap">week of { f.Zone }</span></span>
+				for _, h := range f.Hours {
+					<span class={ "hd", templ.KV("major", h.Major) }>{ h.Label }</span>
+				}
+				<span class="say"></span>
+			</div>
+			for _, d := range days {
+				<div class="sc-row" data-day={ d.DayKey } data-weekday={ scheduleItoa(d.Weekday) }>
+					<span class="who"><span class="nm">{ d.Label }</span></span>
+					for _, c := range d.Cells {
+						@schedulePaintCellView(c)
+					}
+					<span class="say"></span>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// schedulePaintCellView is one hour tick.
+templ schedulePaintCellView(c SchedulePaintCell) {
+	<input
+		type="checkbox"
+		class="sc-pick"
+		id={ c.ID }
+		name={ c.Name }
+		value={ c.Value }
+		data-day={ c.DayKey }
+		data-hour={ scheduleItoa(c.Hour) }
+		checked?={ c.Checked }
+	/>
+	<label class={ "sc-pk", templ.KV("major", c.Major) } for={ c.ID } data-day={ c.DayKey }>
+		<i class="sc-off"></i>
+		<span class="vh">{ c.Label }</span>
+	</label>
 }
 
 // scheduleFaultView is the `.sc-faultbox`: a NAMED, REPAIRABLE refusal drawn
@@ -554,6 +657,44 @@ templ scheduleAnswerFormView(f ScheduleAnswerForm) {
 			<a class="btn ghost" href={ templ.SafeURL(f.SuggestHref) }>Suggest a better time</a>
 		}
 	</form>
+	if f.OutWeekPopID != "" {
+		// THE CONFIRM POPOVER — the same GET-confirm hygiene the token flow has,
+		// and it is here because this control writes TWO things and the reader is
+		// entitled to know both before it does either.
+		<div popover id={ f.OutWeekPopID } class="sc-pop">
+			<div class="pop-bar"></div>
+			<div class="pop-h">Out this week?</div>
+			<div class="pop-r">records your RSVP as <b>no</b></div>
+			<div class="pop-r">marks you unavailable for this whole real-world week</div>
+			<div class="pop-r">
+				<span class="mt">days you already set by hand are left alone</span>
+			</div>
+			<div class="pop-f">when the scheduler cannot be reached, only the RSVP is recorded</div>
+			<div class="pop-btns">
+				<button class="btn xs fill" type="button" data-schedule-outweek>Confirm</button>
+				<button
+					class="btn xs ghost"
+					type="button"
+					popovertarget={ f.OutWeekPopID }
+					popovertargetaction="hide"
+				>Cancel</button>
+			</div>
+		</div>
+	}
+	if f.SuggestOpen {
+		// THE SUGGEST DOCK. It records the answer as MAYBE, never yes and never
+		// no, because a note without a status would otherwise be counted as a
+		// decision the member did not make.
+		<div class="sc-suggest">
+			<form method="post" action={ templ.SafeURL(f.Action) }>
+				<input type="hidden" name="csrf_token" value={ f.CSRFToken }/>
+				<input type="hidden" name="status" value="maybe"/>
+				<textarea name="note" maxlength="500" placeholder="Sunday after 20:00 would work better."></textarea>
+				<div class="sc-foot">{ f.SuggestNote }</div>
+				<button class="btn fill" type="submit">Send suggestion</button>
+			</form>
+		</div>
+	}
 }
 
 // scheduleAnswerRowView is one responder row on the Director's half.

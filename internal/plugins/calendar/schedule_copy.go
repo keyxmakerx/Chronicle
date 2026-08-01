@@ -10,6 +10,7 @@
 package calendar
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -47,8 +48,154 @@ func scheduleBuildPainter(in scheduleBuildInput) SchedulePainter {
 				"is set for you or for this calendar — so there is nothing to save it against " +
 				"yet. Set yours in your profile and this grid fills in.",
 		}
+		return p
 	}
+	p.Form = schedulePaintForm(in)
 	return p
+}
+
+// schedulePaintForm builds the painted grid and its controls.
+//
+// ── THE WRITE PATH IS THE SCHEDULER'S, AND IT IS TWO ROUTES BECAUSE THE
+//    SEGMENT MEANS TWO THINGS ────────────────────────────────────────────────
+//
+//	Every week      → PUT …/availability/mine        the member's NORMAL HOURS
+//	This week only  → PUT …/availability/exceptions  a DATE EXCEPTION
+//
+// Both already ship, both are Player+, and both enforce the composition
+// invariant in the scheduler's own service — "an offer only ever adds, and never
+// downgrades an hour already marked preferred". Part B writes through them and
+// adds neither a route nor a migration: a second writer would be a second place
+// to get that invariant wrong.
+func schedulePaintForm(in scheduleBuildInput) *SchedulePaintForm {
+	// THE VIEWER'S OWN WEEK, FROM THE READ THAT IS ABOUT THEM. Not from
+	// Avail.Lanes: a player's overlay carries no member at all, so seeding the
+	// Painter from it would leave every player staring at an empty grid over
+	// their own saved availability. One path, both roles.
+	me := scheduleMember{Lanes: in.OwnLanes}
+	for _, m := range scheduleMembers(in) {
+		if m.UserID == in.ViewerID {
+			me.Axis, me.Pattern, me.Token = m.Axis, m.Pattern, m.Token
+		}
+	}
+
+	f := &SchedulePaintForm{
+		SaveURL:       "/campaigns/" + in.CampaignID + "/availability/mine",
+		ExceptionsURL: "/campaigns/" + in.CampaignID + "/availability/exceptions",
+		CSRFToken:     in.CSRFToken,
+		Zone:          in.Zone,
+		Scope:         in.Scope,
+		PrefOpen:      in.PrefOpen,
+		PrefNote: "Preferred always sits inside available — the server composes them, so " +
+			"marking an hour preferred also marks it playable.",
+		Foot: schedulePaintFoot(in.Scope),
+	}
+	f.ScopeNote = schedulePaintScopeNote(in.Scope)
+	f.ScopeOptions = []ScheduleToggle{
+		{Key: "week", Label: "This week only", Pressed: in.Scope == "week",
+			Href: scheduleHref(in.CampaignID, in.Base, "scope", "week")},
+		{Key: "recurring", Label: "Every week", Pressed: in.Scope == "recurring",
+			Href: scheduleHref(in.CampaignID, in.Base, "scope", "recurring")},
+	}
+
+	for h := in.BandFrom; h < in.BandTo; h++ {
+		f.Hours = append(f.Hours, ScheduleHourHead{
+			Label: strconv.Itoa(h),
+			Major: (h-in.BandFrom)%6 == 0 && h != in.BandFrom,
+		})
+	}
+	f.Days = schedulePaintDays(in, me, "free")
+	f.PrefDays = schedulePaintDays(in, me, "pref")
+
+	windows, minutes := 0, 0
+	for _, g := range me.Lanes {
+		if g.State == AvailPreferred {
+			continue
+		}
+		windows++
+		minutes += g.EndMinute - g.StartMinute
+	}
+	f.Summary = fmt.Sprintf("%d %s this week · %d h %d m · cap is 8 windows per week on the offer path",
+		windows, schedulePlural(windows, "window", "windows"), minutes/60, minutes%60)
+	if windows == 0 {
+		f.Empty = "You have not marked any hours. The schedule cannot tell “never answered” " +
+			"from “busy all week”, so one marked window is worth more than none."
+	}
+
+	// AN UNBUILT AFFORDANCE IS DIRECTOR-TIER. For a player it is ABSENT, not
+	// disabled: a dead button whose only explanation is a hover is the same
+	// failure the disabled primary button exists to avoid, and scaffolding for a
+	// gap nobody is asking that player about is the Director's business.
+	// Permission is absence, and it binds scaffolding too.
+	if in.IsGM {
+		f.CopyWeek = &BenchAction{
+			Label: "Copy last week", NeedsBackend: true,
+			Title: "there is no copy-week write path",
+		}
+		// THE ONE DASHED BAND ON THIS WHOLE PAGE. Dashed means "not built yet"
+		// and NOTHING else — an unavailable feature prints a fault, never a
+		// dashed reserve (ledger #21).
+		f.Reserve = &ScheduleReserve{
+			Head: "Not built yet",
+			Body: "importing from an external calendar lands here",
+		}
+	}
+	return f
+}
+
+// schedulePaintDays builds the seven day rows, seeded from the viewer's own
+// saved week so what they see is what they already told the campaign.
+func schedulePaintDays(in scheduleBuildInput, me scheduleMember, kind string) []SchedulePaintDay {
+	out := []SchedulePaintDay{}
+	for d := 0; d < scheduleDayCount(in); d++ {
+		date := scheduleDayDate(in, d)
+		day := SchedulePaintDay{DayKey: date, Label: date}
+		if t, err := timeParseISO(date); err == nil {
+			day.Label = t.Format("Mon 2 Jan")
+			day.Weekday = int(t.Weekday())
+		}
+		for h := in.BandFrom; h < in.BandTo; h++ {
+			on := scheduleFreeAt(me, d, h)
+			what := "I can play"
+			if kind == "pref" {
+				on = schedulePrefAt(me, d, h)
+				what = "I would prefer this"
+			}
+			day.Cells = append(day.Cells, SchedulePaintCell{
+				ID:      kind + "-" + date + "-" + strconv.Itoa(h),
+				Name:    kind,
+				Value:   date + "T" + scheduleHour(h),
+				Checked: on,
+				Major:   (h-in.BandFrom)%6 == 0 && h != in.BandFrom,
+				DayKey:  date,
+				Hour:    h,
+				Label:   day.Label + ", " + scheduleHour(h) + " — " + what,
+			})
+		}
+		out = append(out, day)
+	}
+	return out
+}
+
+// schedulePaintScopeNote says what THIS scope's marks mean, in one sentence,
+// beside the control that sets it. Two scopes, two tables, two sentences.
+func schedulePaintScopeNote(scope string) string {
+	if scope == "recurring" {
+		return "sets your normal hours — every week from now on, until you change them"
+	}
+	return "marks a date exception — it replaces that day's usual pattern"
+}
+
+// schedulePaintFoot is the compose rule, printed. It is the one thing a member
+// cannot work out by looking at the grid.
+func schedulePaintFoot(scope string) string {
+	s := "Offering a window only ever adds. It can never take away a time you already gave, " +
+		"and it never downgrades an hour you already marked preferred."
+	if scope == "week" {
+		s += " A window you set on a specific date replaces that day's usual pattern. Clearing " +
+			"it puts the usual pattern back."
+	}
+	return s
 }
 
 // --- the printed sentences --------------------------------------------------
@@ -264,4 +411,11 @@ func scheduleBool(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// schedulePaintGridStyle sizes the painted grid. The identity column is the day
+// label and the SAY end is zero-width — the Painter has no verdict column,
+// because the member painting it is not being told anything.
+func schedulePaintGridStyle(hours int) string {
+	return "--cols:" + strconv.Itoa(hours) + ";--idw:118px;--sayw:0px;--colmin:34px"
 }
