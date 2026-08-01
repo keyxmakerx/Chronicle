@@ -3198,6 +3198,46 @@ exist. And scroll a control into view before probing it — `elementFromPoint`
 returns null outside the visual viewport, so a page-length surface probed in one
 pass reports its own below-the-fold controls as unpadded.
 
+**A THIRD PASS FOUND SIX MORE, AND FIVE OF THEM WERE ABOUT SHAPE RATHER THAN
+WORDS.** Every caption on the surface shipped with the right sentences and none
+of the drawing's emphasis — five bold lead-ins and its italic vocabulary words,
+gone. That is not decoration: two of those lead-ins ARE this page's named
+honesty claims (*"What the score cannot include"*, *"Fine and coarse disagree,
+on purpose"*), and a claim nobody can find in a wall of grey prose is honesty as
+decoration. Captions are therefore a MODEL now — `ScheduleCaption` is a slice of
+`{Text, Em}` runs and the view draws `<b>` / `<i>` / bare text per run — never a
+markup string, because five prose constants rendered raw would be five injection
+sites the first time one of them takes a campaign's name. `Text()` joins them
+back for every assertion about WORDING, so a test about what a caption says
+never has to know where the eye is meant to land.
+
+**A STAND-IN SHELL MUST PAD LIKE THE SHELL IT STANDS IN FOR.** The fidelity
+harness cannot render `layouts.App` (it needs a request), so it renders its own
+wrapper — and that wrapper padded a flat 20px where the product's `<main
+class="px-3 py-3 md:px-5 md:py-4">` pads 12px below 768. Eight pixels, and the
+drawn narrow matrix has exactly eight to spare, so the phone shot clipped a
+column the shipping page does not clip. A measuring instrument that differs from
+its subject reports its own defects as the subject's. The paddings are named
+constants now and a test asserts the harness's budget equals the product's.
+
+**A DOCUMENT-LEVEL SCROLL CHECK CANNOT SEE A PANEL THAT DRAGS.** A nested
+`overflow-x:auto` container never contributes to `documentElement.scrollWidth`,
+so *"the page does not drag sideways in any role, theme or width"* was TRUE
+while the matrix dragged inside its own panel. Any surface with a scroll
+container inside it needs a per-element measurement, and this one's now records
+every offender with its panel and its drag in pixels.
+
+**A WIDTH-DEPENDENT STRING ON A SERVER-RENDERED PAGE IS TWO STRINGS.** The
+mockup's producer re-runs on resize and simply swaps three sentences for shorter
+ones at 640 (`who`, `free of 5`, `nothing saved`). Rendered once on the server,
+the page emits both and one media query chooses. It is used ONLY where the two
+forms say the same thing in a different number of words — both are in the
+accessibility tree, so it can never be a way to hide a fact from one width — and
+it was worth the duplication because the wide forms did not merely clip: the
+empty lane's sentence clipped its own `no pattern` chip out of the row, and an
+honesty chip that vanishes on a phone is the one thing this page forbids
+everywhere it forbids anything.
+
 **WHAT IS DELIBERATELY NOT BUILT, AND SAYS SO.** `Propose` and `Copy last week`
 remain chipped Director-tier scaffolding — and are ABSENT from a player's DOM
 rather than disabled, because the Director is the person being asked to sign off

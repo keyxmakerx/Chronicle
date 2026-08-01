@@ -50,11 +50,26 @@ spec now carries a supersession note naming the sections it overrules.
   since the signed contract drew it. Not the nav — WG-2's ruling keeps that
   pointing at `/availability` and books the retirement as its own slice. The
   Bench's 23 shot keys are byte-identical with the link in place.
-- **The fidelity gate is pixels and it paid for itself twice**, catching six
-  defects every string assertion had passed. Two harness lessons are written
-  down in `internal/plugins/calendar/.ai.md`: shoot with a driver (the Chrome CLI
-  clamps `--window-size` to a 500px minimum, so a "390px" shot is a cropped
-  485px layout), and scroll a control into view before measuring its target.
+- **The fidelity gate is pixels and it paid for itself three times**, catching
+  twelve defects every string assertion had passed. The third pass was mostly
+  about SHAPE rather than words: every caption on the page shipped with the right
+  sentences and none of the drawing's emphasis — five bold lead-ins gone, two of
+  which ARE this surface's named honesty claims. Captions are a `[]ScheduleRun`
+  model now, never a markup string. Also: the matrix caption was three paragraphs
+  where the drawing returns one, the count lane ran its numeral beside its hour
+  instead of over it, the matrix head named the week but not the visible band,
+  and a member with no zone was drawn amber where the drawing draws it grey.
+- **A measuring instrument that differs from its subject reports its own
+  defects as the subject's.** The harness padded 20px at every width where the
+  product's `<main>` pads 12px below 768 — 8px, and the drawn narrow matrix has
+  exactly 8px to spare, so the phone shot clipped a column the shipping page does
+  not. Three harness lessons are now written down in
+  `internal/plugins/calendar/.ai.md`: shoot with a driver (the Chrome CLI clamps
+  `--window-size` to a 500px minimum), scroll a control into view before
+  measuring its target, and **measure horizontal overflow per ELEMENT** — a
+  nested `overflow-x:auto` container never contributes to
+  `documentElement.scrollWidth`, so "the page does not drag sideways" was true
+  while the matrix dragged inside its own panel.
 - Report: cordinator `reports/chronicle/2026-08-01-C-CALV4-SCHEDULE-PARTB.md` ·
   ADR-048 gained a Part B section · shots in
   `reports/chronicle/screenshots/2026-08-01-c-calv4-schedule-partb/`.
