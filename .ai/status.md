@@ -50,8 +50,9 @@ spec now carries a supersession note naming the sections it overrules.
   since the signed contract drew it. Not the nav — WG-2's ruling keeps that
   pointing at `/availability` and books the retirement as its own slice. The
   Bench's 23 shot keys are byte-identical with the link in place.
-- **The fidelity gate is pixels and it paid for itself four times**, catching
-  twenty-two defects every string assertion had passed. The third pass was mostly
+- **The fidelity gate is pixels and it paid for itself five times**, catching
+  twenty-two defects every string assertion had passed before the verdict round
+  found three more (below). The third pass was mostly
   about SHAPE rather than words: every caption on the page shipped with the right
   sentences and none of the drawing's emphasis — five bold lead-ins gone, two of
   which ARE this surface's named honesty claims. Captions are a `[]ScheduleRun`
@@ -86,6 +87,26 @@ spec now carries a supersession note naming the sections it overrules.
   nested `overflow-x:auto` container never contributes to
   `documentElement.scrollWidth`, so "the page does not drag sideways" was true
   while the matrix dragged inside its own panel.
+- **The fifth round found a whole VIEW, and the parser found it again.**
+  `.sc-ruler` and `.sc-head-row b` were absent from the shipped sheet; pulling
+  that thread found that **`?zoom=day` was a live control that changed nothing** —
+  it round-tripped the query and inked `aria-current` while `scheduleColumns` and
+  `scheduleDayCount` never read it, so the Day rung returned the identical week
+  matrix. At 390 the same rung is DISABLED in the drawing (`--text-muted`,
+  `cursor: not-allowed`, `title="week zoom is forced at this width"`) and the
+  build shipped a live link at every width, while `ScheduleToggle.Disabled` was
+  set NOWHERE — leaving a doc comment, a templ branch and a CSS `:disabled`
+  repair all describing a refusal that did not exist. All three are closed: the
+  day view is built out of the week payload the Matrix already ships (no route,
+  no query, no seam), and the refusal is a real disabled rung that a media query
+  chooses between — the server cannot see a viewport, which is ADR-048 §13's own
+  bound, so both rungs ship and exactly one is ever displayed. Two footnotes
+  worth keeping: the sealed sheet DECLARES `.sc-ruler` and never renders it
+  (`const ruler = DAYZOOM ? '' : '';`), so those 21 declarations are deliberately
+  still not carried — a rule matching nothing is the defect that was just fixed,
+  not its repair; and measuring the refused rung turned up four more drawn
+  declarations the sheets never carried, growing every page-head control to a
+  real touch target at 390.
 - Report: cordinator `reports/chronicle/2026-08-01-C-CALV4-SCHEDULE-PARTB.md` ·
   ADR-048 gained a Part B section · shots in
   `reports/chronicle/screenshots/2026-08-01-c-calv4-schedule-partb/`.
