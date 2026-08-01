@@ -1,0 +1,224 @@
+// schedule_views.templ — the five surfaces' markup (C-CALV4-RSVP-P8 Part B).
+//
+// EVERY PANEL IS THE SAME SHAPE: the signed `.lhead` band verbatim, then the
+// chip row beneath it, then `.sc-body` carrying the padding. `.lhead` is reused
+// UNCHANGED and `.sc-body` exists precisely so this surface never has to
+// redefine it — see the rename note at the top of schedule.go.
+package calendar
+
+// scheduleVerdictView is S1 · THE VERDICT.
+templ scheduleVerdictView(data ScheduleData) {
+	<section class="sc-verdict sc-panel surf" data-schedule-verdict>
+		<div class="lhead">
+			<span class="t">{ data.Verdict.Title }</span>
+			<span class="c">{ data.Verdict.Frame }</span>
+			<span class="sp"></span>
+			<span class="c">{ data.Verdict.Mode }</span>
+		</div>
+		@scheduleChipRow(data.Verdict.Chips)
+		<div class="sc-body">
+			<div class="sc-head">
+				<div class="col">
+					<div class="hl">
+						{ data.Verdict.Headline }
+						if data.Verdict.HeadlineZone != "" {
+							<span class="z" title={ data.Verdict.HeadlineTitle }>{ data.Verdict.HeadlineZone }</span>
+						}
+					</div>
+					if data.Verdict.Rec != "" {
+						<div class="rec">{ data.Verdict.Rec }</div>
+					}
+					if data.Verdict.WarnLine != "" {
+						<div class={ "rec", scheduleToneClass(data.Verdict.WarnTone) }>{ data.Verdict.WarnLine }</div>
+					}
+					if data.Verdict.MailLine != "" {
+						<div class="rec mute">{ data.Verdict.MailLine }</div>
+					}
+				</div>
+			</div>
+			@scheduleCandidatesView(data.Verdict)
+			<div class="caption">{ data.Verdict.Caption }</div>
+		</div>
+	</section>
+}
+
+// scheduleCandidatesView draws the ranked cards, or the signed refusal row that
+// replaces them. THE INSTRUMENT DOES NOT VANISH: no fabricated card, no zeros,
+// no em-dashes standing in for data.
+templ scheduleCandidatesView(v ScheduleVerdict) {
+	<div class="sc-cands" data-region="cands">
+		if v.Fault != nil {
+			<div class="calrow warnrow">
+				<span class="sc-rk"></span>
+				<span class="sc-when">
+					<span class="fault">{ v.Fault.Headline }</span>
+					<span class="sc-why fault-dt">{ v.Fault.Detail }</span>
+				</span>
+				<span class="sp"></span>
+				if v.Fault.Chip != "" {
+					<span class="badge need">{ v.Fault.Chip }</span>
+				}
+			</div>
+		}
+	</div>
+}
+
+// scheduleMatrixView is S2 · THE MATRIX.
+templ scheduleMatrixView(data ScheduleData) {
+	<section class="sc-matrix sc-panel surf" data-schedule-matrix>
+		<div class="lhead">
+			<span class="t">{ data.Matrix.Title }</span>
+			<span class="c">{ data.Matrix.Frame }</span>
+			<span class="sp"></span>
+			<span class="c">{ data.Matrix.Scope }</span>
+		</div>
+		@scheduleChipRow(data.Matrix.Chips)
+		<div class="sc-body">
+			if len(data.Matrix.Cols) == 0 {
+				<div class="lzero">{ data.Matrix.Zero }</div>
+			}
+			for _, c := range data.Matrix.Captions {
+				<p class="caption">{ c }</p>
+			}
+		</div>
+	</section>
+}
+
+// scheduleRosterView is S3 · THE ROSTER.
+templ scheduleRosterView(data ScheduleData) {
+	<section class="sc-roster sc-panel surf" data-schedule-roster>
+		<div class="lhead">
+			<span class="t">{ data.Roster.SlotLabel }</span>
+			<span class="c">{ data.Roster.Sub }</span>
+			<span class="sp"></span>
+		</div>
+		@scheduleChipRow(data.Roster.Chips)
+		<div class="sc-body">
+			<div class="mtable" data-region="mtable">
+				for _, r := range data.Roster.Rows {
+					@scheduleRosterRowView(r)
+				}
+			</div>
+			<div class="caption">{ data.Roster.Caption }</div>
+		</div>
+	</section>
+}
+
+// scheduleRosterRowView is one member row.
+//
+// The `zone not set` + `Ask →` pair STAYS AT EVERY WIDTH — the repair may never
+// be the thing that disappears on the smallest screen — and the clock beside it
+// is LITERALLY EMPTY rather than a dash or a UTC guess.
+templ scheduleRosterRowView(r ScheduleRosterRow) {
+	<div class="mrow" data-schedule-roster-row>
+		<span class={ "swatch", r.Pattern } style={ benchAxisStyle(r.Axis) }></span>
+		<span class="tok" style={ benchAxisStyle(r.Axis) }>{ r.Token }</span>
+		<span class="nm">
+			<b>{ r.Name }</b>
+			if r.Host {
+				<span class="ro">(host)</span>
+			}
+		</span>
+		<span class="ro">{ r.Role }</span>
+		if r.IsCoDM {
+			<span class="badge gm">co-DM</span>
+		}
+		<span class="sp"></span>
+		if r.Zone == "" {
+			<span class="badge warn">zone not set</span>
+			if r.AskHref != "" {
+				<a class="btn xs ghost" href={ templ.SafeURL(r.AskHref) }>Ask →</a>
+			}
+		} else {
+			<span class="badge tz" title={ r.ZoneTitle }>{ r.Zone }</span>
+		}
+		<span class={ "lt", templ.KV("small", r.Antisocial) }>
+			{ r.LocalTime }
+			if r.NextDay {
+				<span class="badge warn tz">+1d</span>
+			}
+		</span>
+		<span class={ "rs", benchToneClass(r.Tone) }>{ r.Answer }</span>
+	</div>
+}
+
+// schedulePainterView is S4 · THE PAINTER.
+templ schedulePainterView(data ScheduleData) {
+	<section class="sc-paint sc-panel surf" data-schedule-painter>
+		<div class="lhead">
+			<span class="t">{ data.Painter.Title }</span>
+			<span class="c">{ data.Painter.Frame }</span>
+			<span class="sp"></span>
+			if data.Painter.ZoneHref != "" {
+				<a class="btn xs ghost" href={ templ.SafeURL(data.Painter.ZoneHref) }>Change your zone →</a>
+			}
+		</div>
+		<div class="sc-body">
+			if data.Painter.Fault != nil {
+				@scheduleFaultView(*data.Painter.Fault)
+			}
+		</div>
+	</section>
+}
+
+// scheduleFaultView is the `.sc-faultbox`: a NAMED, REPAIRABLE refusal drawn
+// where a body would be. Never a dashed reserve — dashed means "not built yet"
+// and only that.
+templ scheduleFaultView(f ScheduleFault) {
+	<div class="sc-faultbox" data-schedule-fault>
+		<div class="fault">{ f.Headline }</div>
+		<div class="dt">{ f.Detail }</div>
+	</div>
+}
+
+// scheduleAnswerView is S5 · THE ANSWER, in its two role shapes.
+templ scheduleAnswerView(data ScheduleData) {
+	<section class="sc-answer sc-panel surf" data-schedule-answer>
+		<div class="lhead">
+			<span class="t">{ data.Answer.Title }</span>
+			<span class="c">{ data.Answer.Sub }</span>
+			if data.Answer.Unanswered {
+				<span class="badge warn">you haven&rsquo;t answered</span>
+			}
+			<span class="sp"></span>
+		</div>
+		@scheduleChipRow(data.Answer.Chips)
+		<div class="sc-body">
+			if data.Answer.Headline != "" {
+				<div class={ "hl", scheduleInkClass(data.Answer.HeadlineTone) }>{ data.Answer.Headline }</div>
+			}
+			if data.Answer.Director {
+				<div class="mtable" data-region="mtable">
+					for _, r := range data.Answer.Rows {
+						@scheduleAnswerRowView(r, data.Answer.Notes, false)
+					}
+				</div>
+				if len(data.Answer.Awaiting) > 0 {
+					<span class="lband">Awaiting reply</span>
+					for _, r := range data.Answer.Awaiting {
+						@scheduleAnswerRowView(r, data.Answer.Notes, true)
+					}
+				}
+			}
+			<div class="caption">{ data.Answer.Caption }</div>
+			if data.Answer.Foot != "" {
+				<div class="sc-foot">{ data.Answer.Foot }</div>
+			}
+		</div>
+	</section>
+}
+
+// scheduleAnswerRowView is one responder row on the Director's half.
+templ scheduleAnswerRowView(r ScheduleRosterRow, notes map[string]string, ask bool) {
+	<div class="mrow" data-schedule-answer-row>
+		<span class={ "swatch", r.Pattern } style={ benchAxisStyle(r.Axis) }></span>
+		<span class="tok" style={ benchAxisStyle(r.Axis) }>{ r.Token }</span>
+		<span class="nm">{ r.Name }</span>
+		<span class={ "rs", benchToneClass(r.Tone) }>{ r.Answer }</span>
+		<span class="mt">{ notes[r.Name] }</span>
+		<span class="sp"></span>
+		if ask && r.AskHref != "" {
+			<a class="btn xs ghost" href={ templ.SafeURL(r.AskHref) }>Ask →</a>
+		}
+	</div>
+}

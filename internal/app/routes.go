@@ -748,10 +748,17 @@ func (a *calendarBenchScheduleAdapter) BenchAvailability(ctx context.Context, ca
 	out := &calendar.BenchAvailability{WeekStart: ov.WeekStart}
 	for _, d := range ov.Days {
 		free := make([]int, len(d.Hours))
+		prefer := make([]int, len(d.Hours))
 		for h, cell := range d.Hours {
 			free[h] = cell.Free
+			// PREFER IS AN AGGREGATE, exactly as Free is — a count with no
+			// identity in it — so it crosses this seam at every role. It is the
+			// /schedule Verdict's second ranking key (C-CALV4-RSVP-P8 Part B).
+			prefer[h] = cell.Prefer
 		}
-		out.Days = append(out.Days, calendar.BenchAvailabilityDay{Date: d.Date, Free: free})
+		out.Days = append(out.Days, calendar.BenchAvailabilityDay{
+			Date: d.Date, Free: free, Prefer: prefer,
+		})
 	}
 	// WithPattern is an AGGREGATE — a count with no identity in it — so it is
 	// safe at every role. Derived from the per-hour counts rather than from the
@@ -766,16 +773,30 @@ func (a *calendarBenchScheduleAdapter) BenchAvailability(ctx context.Context, ca
 		}
 	}
 	out.WithPattern = seen
+	// ONE GATE, TWO PROJECTIONS. FreeDays (the Bench's seven booleans) and Lanes
+	// (the /schedule Matrix's minute-accurate runs) are built from the same
+	// overlay.Members inside the same `includeDetail` branch, so a viewer can
+	// never receive one without the other and a player receives neither. The
+	// absence is in the payload, not in a template downstream (§4).
 	if includeDetail && len(ov.Members) > 0 {
 		out.FreeDays = make(map[string][]bool, len(ov.Members))
+		out.Lanes = make(map[string][]calendar.BenchLaneSegment, len(ov.Members))
 		for _, m := range ov.Members {
 			days := make([]bool, len(out.Days))
+			lanes := make([]calendar.BenchLaneSegment, 0, len(m.Lanes))
 			for _, seg := range m.Lanes {
 				if seg.DayIndex >= 0 && seg.DayIndex < len(days) {
 					days[seg.DayIndex] = true
 				}
+				lanes = append(lanes, calendar.BenchLaneSegment{
+					DayIndex:    seg.DayIndex,
+					StartMinute: seg.StartMinute,
+					EndMinute:   seg.EndMinute,
+					State:       seg.State,
+				})
 			}
 			out.FreeDays[m.UserID] = days
+			out.Lanes[m.UserID] = lanes
 		}
 	}
 	return out, nil
