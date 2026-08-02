@@ -3496,8 +3496,15 @@ list inherits that list's honesty.**
 *And a motion deliverable cannot be gated on stills.* §12.1(ii) required a clip
 per shipped pass and the evidence directory held zero; the still set was itself
 non-deterministic, six of forty-two differing between runs purely on the frame
-they landed. Stills are now captured at rest and reproduce byte-for-byte, and
-the motion is gated by five built clips — each frame a separate headless load
+they landed. Stills are now captured at rest and reproduce **content-identically,
+caption-glyph rasterisation aside** — 39 of 42 byte-identical across two full
+regenerations, with `importer--dark`, `presets--mobile-light` and
+`step-eras--dark` differing only inside rendered text runs and the membership of
+that trio varying between run pairs. (This sentence read "byte-for-byte" for one
+round longer than it was true; §26's tail corrects it below and this is the same
+correction at the point of claim, because a fix that lives only in the retraction
+leaves the assertion standing.) The motion is gated by five built clips — each
+frame a separate headless load
 with the register paused at an exact time through the Web Animations API, so the
 film is reproducible and its time base is the register's own. Splitting the two
 is the point: a still proves the resting state, a clip proves the transition,
@@ -3524,7 +3531,9 @@ choices about what the product means and not about whether the code matches it.
 
 *A rule that is present is not a mechanism that runs.* §5.2 pass 2 and [WZ-8]
 SIGNED tabulate a delay ladder — "the station's content arrives in reading
-order", `calc(min(--m-i, --m-cap) * --m-step)`, ≤132ms added. The rule was in
+order", `calc(min(--m-i, --m-cap) * --m-step)`, ≤132ms added — 133.3ms once
+`--m-step` is divided rather than rounded (`--t-fast`/3 = 33.333ms × `--m-cap` 4),
+which is what the sheet and the probe now both say. The rule was in
 the sheet, in the one prelude it is legal in, composing the right tokens, and it
 did nothing: it was declared BEFORE pass 2's `animation:` shorthand at identical
 specificity, and a shorthand resets `animation-delay` to `0s`. Every static
@@ -3567,12 +3576,26 @@ drawn, went with it.
 
 *An acceptance item is either met or open; "neither" is the worst of the three.*
 The list required each preset to round-trip against `export.go:BuildExport` and
-no test referenced it. It does now, through four shipped hops with no restated
-mapping, and it found exactly one asymmetry: a moon's colour, because
-`builderImportResult` stamps import.go's default swatch and `draftCalendar`
-leaves it empty. The test asserts the shape of the disagreement precisely rather
-than exempting the field, so a future drift in cycle length or phase offset
-cannot hide inside the same exemption.
+no test referenced it. It does now, through the shipped hops with no restated
+mapping — **and its first edition was a tautology**, which is the lesson worth
+keeping. It compared `builderImportResult(d)` against `BuildExport(draftCalendar
+(d))`: two derivations of ONE `*builderDraft`, so any payload change propagates
+identically to both and they cannot disagree. Eleven distinct fields of
+`presets/harptos.json` were mutated and it stayed green on every one. It was
+green, it was honest about the export path, and it could not see the payload at
+all.
+
+A fourth round anchored it to hop 0 — the authored bytes — and two authored-data
+drops came straight out: a moon's colour is not defaulted but **replaced**
+(`builderMoon` has no colour field, so the wizard's front door discards colours
+the plain importer preserves and stamps `#c0c0c0` over them), and an era's
+**code** is dropped at Create (`builderDraftFromImport` reads it, the station
+shows it, `builderImportResult` never writes it back). The second was invisible
+because every preset's code happens to equal its epoch name, which does round
+trip — a coincidence, now asserted by name so the day a payload separates the two
+this reds. Six payload mutations were demonstrated red-then-green. **A round trip
+compared only with itself proves the comparison, not the trip**; the anchor has to
+be the thing nobody in the pipeline wrote.
 
 *And the evidence's own arithmetic must describe the photograph.* Eighteen of
 forty-two stills printed the 390px chain under a 500px capture; the tier

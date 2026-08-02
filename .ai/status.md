@@ -71,10 +71,22 @@ are exercised by tests rather than asserted by a test's name. Also closed: the
 fault sheet now draws the composition [WZ-15] item 5 ratified (the anchor stays,
 the fault goes where the grid would be) instead of a headline claiming the date
 cannot resolve above a Nameplate resolving it; the fidelity index lists
-twenty-four differences instead of nine "exhaustive" ones; §12.1(ii)'s five
-motion clips exist and the stills are captured at rest and reproduce
-byte-for-byte; and the importer, which had been parsing the dropped file and
-then discarding it, now adopts it as the draft. ADR-048 §26 carries all of it.
+twenty-six differences instead of nine "exhaustive" ones (twenty-four when this
+paragraph was first written; the third round added the one the second missed and
+the one it created deliberately); §12.1(ii)'s five motion clips exist and the
+stills are captured at rest and reproduce **content-identically, caption-glyph
+rasterisation aside** — re-measured across two full regenerations, 39 of 42
+byte-identical with `importer--dark`, `presets--mobile-light` and
+`step-eras--dark` differing only inside rendered text runs, and WHICH three land
+in that set varies between run pairs; and the importer, which had been parsing
+the dropped file and then discarding it, now adopts it as the draft. ADR-048 §26
+carries all of it.
+
+*This sentence said "byte-for-byte" and "twenty-four" for one round longer than
+it was true*, in the very entry whose round claimed every false evidence claim
+had been corrected. The evidence index and the report were fixed and Chronicle's
+own books were not, which is the same failure at a smaller scale: a correction
+that does not travel to every place the claim was made has not been made.
 
 **A THIRD ROUND CLOSED IT, ON FIVE COORDINATOR RULINGS.** Two of the five were
 decisions rather than repairs, which is why they came from the coordinator and
@@ -82,7 +94,9 @@ not the executor. **The delay ladder [WZ-8] tabulates had never run**: the rule
 sat before pass 2's `animation:` shorthand at equal specificity, the shorthand
 reset `animation-delay` to `0s`, and every static guard passed because every
 static guard asks whether the rule exists. It runs now (0 / 33.3 / 66.7 / 100 /
-133.3ms, measured in Chromium), pinned by a byte-ORDER assertion and a browser
+133.3ms, measured in Chromium — the dispatch's tabulated "≤132ms" is the same
+rule with `--m-step` rounded to 33ms in prose, and the sheet now carries the
+division rather than the rounding), pinned by a byte-ORDER assertion and a browser
 probe, and it **deliberately diverges from the sealed mockup**, which carries the
 identical defect — the written signed mechanism outranks the drawing's accident,
 and the mockup's own one-line fix is booked, not taken. **The wizard's host layer

@@ -306,7 +306,18 @@
 
   /* ── THE DELAY LADDER, and the only prelude --m-step may appear in.
      --m-i is set inline per row by the producer and capped at --m-cap, so a
-     forty-month structure adds ≤132ms and no pass exceeds ~282ms. It exists
+     forty-month structure adds at most 4 × --m-step and no pass exceeds
+     --t-base plus that.
+
+     THE ARITHMETIC, STATED RATHER THAN ROUNDED. --m-step is --t-fast/3 =
+     33.333ms and --m-cap is 4, so the real ceiling is 133.3ms and the longest
+     pass lands at 283.3ms. Dispatch §5.2 and [WZ-8] tabulate "≤132ms", which
+     is the same rule with --m-step rounded to 33ms in the prose; the tokens
+     three lines below compute 133.3ms and the browser probe measures exactly
+     that. The signed bound is not being widened here — it is being quoted with
+     its own division carried out, because a sheet that states a bound one
+     millisecond tighter than the rule beneath it computes teaches a reader to
+     stop checking. It exists
      ONLY inside the step panel: never inside the preview, never on the rail,
      never on the gallery after Start's own entrance.
 
@@ -322,7 +333,8 @@
      THIS DELIBERATELY DIVERGES FROM THE SEALED MOCKUP, WHICH HAS THE SAME
      CASCADE DEFECT and therefore lands its .frow/.impdoor rows flat. The
      written, signed mechanism ([WZ-8] / dispatch §5.2 pass 2: "the station's
-     content arrives in reading order", "≤132ms added") outranks the mockup's
+     content arrives in reading order", "≤132ms added" — 133.3ms as the tokens
+     actually divide it, see above) outranks the mockup's
      accidental flat arrival. The mockup's own one-line fix is BOOKED, not
      taken from this slice — the mockup is a sealed artifact and this build
      does not edit it (coordinator ruling R1, 2026-08-02).

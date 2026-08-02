@@ -1191,8 +1191,11 @@ func TestBuilderCaptions_DescribeThePhotographedWidth(t *testing.T) {
 //	(1) the ladder is not flat — the delays actually differ;
 //	(2) they are non-decreasing in DOM order, which is reading order, and
 //	    each step is one --m-step (≈33.3ms) per --m-i;
-//	(3) nothing waits longer than --m-cap steps, ≈132ms, so no pass exceeds
-//	    ~282ms with --t-base's 150 on top;
+//	(3) nothing waits longer than --m-cap steps — 4 × 33.333ms = 133.3ms, so no
+//	    pass exceeds 283.3ms with --t-base's 150 on top. The dispatch tabulates
+//	    "≤132ms" and "~282ms", which is the same rule with --m-step rounded to
+//	    33ms in prose; the assertion below divides --t-fast by 3 rather than
+//	    quoting the rounded figure, so it measures what the tokens compute;
 //	(4) the station's own title and subtitle (pass 1) still start at 0 —
 //	    information never waits, even now that the ladder is live.
 //
