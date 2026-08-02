@@ -2069,9 +2069,42 @@
         { getBoundingClientRect: function () { return fromRect; } },
         placed.size, placed.at) : false;
       if (morphing) {
+        // ── THE ORDER IS THE MORPH, AND GETTING IT WRONG COSTS THE WHOLE
+        //    OPEN DIRECTION ─────────────────────────────────────────────────
+        //
+        // SEED → FLUSH → CLASS → FLUSH → FINAL WRITE. Every arrow is load
+        // bearing and the FIRST one is the one this shipped without.
+        //
+        // WHAT WENT WRONG WITHOUT IT, MEASURED IN REAL CHROMIUM RATHER THAN
+        // REASONED. The seeded geometry and `.edmorph` used to arrive in the
+        // SAME style recalc. CSS Transitions start a transition from the
+        // AFTER-change style, so that single recalc read `transition-property:
+        // inline-size, block-size, translate, opacity` for the first time
+        // WHILE the values were changing — and started 160ms transitions
+        // running AWAY from the resting box and TOWARD the seed. The seed
+        // therefore never became the settled before-change style:
+        // getComputedStyle answered the RESTING box at opacity 1, the
+        // final write that followed in the same task saw nothing to change,
+        // and no transition to the placed geometry was ever created. The
+        // editor POPPED IN at full size and animated only on the way out. The
+        // one animation the page really had was a no-op `height` CSSTransition
+        // from `calc-size(fit-content, 0px + size)` to itself, which is
+        // exactly what the capture rig kept reporting and nobody believed.
+        //
+        // WITH THE FLUSH the seed lands as a settled style with NO transition
+        // declared on it (there is no `.edmorph` yet, so nothing can start),
+        // the class then declares the four properties over values that are not
+        // changing, and only the final write — the third recalc — has both a
+        // declared transition and a changed value. That is the one that runs.
+        //
+        // THIS IS BROWSER-GENERAL. It follows from the after-change-style rule,
+        // not from anything Chromium does on its own, and
+        // TestDayCardMorphInterpolates samples the flight frame by frame in a
+        // real browser so the ordering cannot silently come apart again.
+        void ed.root.offsetHeight;
         // THE CLASS GOES ON AFTER THE START GEOMETRY, so the browser records
         // the card's rect as the transition's from-value rather than animating
-        // the box INTO the card on the way in. The flush between is what makes
+        // the box INTO the card on the way in. The flush after it is what makes
         // that recording happen at all — a transition started in the same
         // frame as the style that declared it does not run.
         ed.root.classList.add('edmorph');
