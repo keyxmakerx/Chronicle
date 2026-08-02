@@ -20,6 +20,38 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — W-H SHIPPED: the builder wizard, the last wave (2026-08-02)
+
+**The remodel's last wave, and the only one whose gate was *finish*.**
+`C-CALV4-WIZARD-P13` shipped `GET /campaigns/:id/calendars/builder` — nine
+stations presented as Start plus eight steps, a five-card preset gallery, the
+front door for the 4-format importer, and a live month preview that IS the
+shipped Block rendered from an in-memory `*Calendar` that is never persisted.
+Operator signature: `decisions/2026-08-01-operator-signatures-wz1-sky-editor.md`
+("Signed — build P13"); the dispatch was 16/16 signed.
+
+**Almost none of it is new capability, by design (L6).** The preset gallery is
+the importer with four embedded payloads read through the SAME `DetectAndParse`
+an upload meets — no preset table, no migration, no new parser, no second apply
+path. The importer front door is the existing parser behind a route with no
+`:calId`. What is new is the shell, the honesty states, and the motion.
+
+**The three-card V1 setup chooser is RETIRED.** `GET /calendars/new` resolves to
+the wizard, so every link across the product and every external bookmark lands
+on the designed surface with no href edited in a file the wave did not own —
+including the frozen `calendar_v2` helper. Three pins refreshed, none deleted.
+
+**W-H's durable deliverable is a guard the motion policy asked for on
+2026-07-27 and nobody had built**: a property/keyframe/reduced-motion/duration
+budget over `static/css/calendar-builder.css`, landed BEFORE a line of that
+sheet existed. Read ADR-048 §26 for what it can and cannot see — a comment
+terminator inside prose silently disabled the entire motion register while all
+six assertion families stayed green, and only a browser probe caught it.
+
+Books: ADR-048 §26 · `reports/chronicle/2026-08-02-C-CALV4-WIZARD-P13.md` ·
+screenshots + measurements under
+`reports/chronicle/screenshots/2026-08-02-c-calv4-wizard-p13/`.
+
 ### calendar-v4 — W-G PART B SHIPPED: `/campaigns/:id/schedule` (2026-08-01)
 
 **The operator's #1 feature has a page.** `C-CALV4-RSVP-P8` Part B was gated on

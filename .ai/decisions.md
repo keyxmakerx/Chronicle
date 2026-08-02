@@ -3298,11 +3298,118 @@ on what is missing and a player is not. Conflict detection against booked events
 grid shows availability only, and a window may collide with something already on
 the calendar.
 
+### §26 — W-H: the builder wizard, and why the preview is the Block
+
+**C-CALV4-WIZARD-P13, wave 4.** The last wave of the remodel and the only one
+whose stated gate is *finish* rather than capability. L6: "Builder wizard wraps,
+it does not replace. New capability is explicitly not the point; style, animation
+and finish are."
+
+**THE PREVIEW IS THE SHIPPED BLOCK, AND A SECOND PRODUCER WAS REFUSED.** Wizard
+form state becomes an in-memory `*Calendar` — never persisted — that is fed to
+the EXISTING `projectBlock` and rendered by `calblock.Block`. Every link was
+already pure: `Block` performs no queries and reads no request state,
+`projectBlock` takes no context and no repository, and the only DB work in the
+Block path (`requireVisibleCalendar` → `candidateEvents` → `tiedEventIDs` →
+`CalendarLinkStatus`) happens BEFORE it and a draft skips all four. `projectBlock`'s
+`*Calendar` had only ever come from the DB; W-H WIDENS ITS PROVENANCE, NOT ITS
+CONTRACT.
+
+Two alternatives were refused on evidence. A second pure `wizardState → BlockData`
+producer would double the geometry surface, so the next geometry change — leap-aware
+day counts, the five-column rule, the era-band Half/Edge semantics, the moon cap —
+would have to be made twice. A client-side re-render would create a FOURTH counter
+against `TestBlockCounterDivergencePin`, which is the exact class of bug the whole
+spine exists to prevent.
+
+Three consequences fall out for free and are the reason this is the cheap answer:
+the draft carries `ID: "draft"` so DOM tokens and the identity triple are
+deterministic and the fidelity gate is reproducible; `CampaignID` is empty so
+`blockPrefsPath` returns `""` and the draft gets no switchboard, which makes r54's
+`HasSwitchboard == (PersistURL != "")` hold BY CONSTRUCTION rather than by an
+assignment somebody must remember; and a wizard with no months renders
+`blockDateLine`'s OWN shipped fault text, so no bespoke "nothing to preview yet"
+placeholder exists anywhere in the diff.
+
+**THE LEAK GUARD, AND WHY THE STYLESHEET IS ITS OWN FILE.** The design asks for a
+preview that cross-fades and the Block sits inside it, so this is where the
+Block's austerity is most likely to be violated. Four mechanisms, each mechanical:
+wizard motion lives in `static/css/calendar-builder.css` and nowhere else (the
+Block's four-property `motionBudget` and the Bench's three-property register are
+byte-unchanged); every wizard class is `wz-`-prefixed, because ROOT-SCOPING ALONE
+DOES NOT STOP THE LEAK — `.badge`, `.field`, `.frow` and `.cell` are live product
+classes and a descendant combinator reaches straight through the Block's own
+scoping root; that scoping root's name appears in the wizard's sheet ZERO times;
+and `builder_css_contract_test.go` asserts all three in one regex.
+
+**THE BUDGET GUARD IS THE WAVE'S MOST DURABLE DELIVERABLE.** A wizard stylesheet
+would have been governed by nothing — the shell guard does not police `static/css/`
+at all. The motion policy asked for the property allowlist on 2026-07-27 ("this is
+the durable part — everything above is advice until a guard enforces it") and it
+was never built. It landed in stage 1, before a line of wizard CSS existed, so the
+wizard was written INSIDE a guard rather than retro-fitted to one.
+
+Its limits are also now known, and that is worth recording. A comment terminator
+written by accident inside prose closed a comment early, CSS error recovery
+discarded the token prelude that followed, and the ENTIRE motion register silently
+stopped running — while all six assertion families stayed green, because they read
+the sheet through the same comment regex a parser uses and every rule they check
+was still present in the text. A browser probe found it in one reading. **A source-
+text guard cannot see a cascade outcome; that is what the browser probes are for,
+and it is why this wave's gate is not stills alone.**
+
+**BUILD ON SUBMIT — NO DRAFT STORE, NO MIGRATION.** Draft state lives in the form
+and the `?step=` URL; every preview POST rebuilds it from the posted body; the
+terminal POST creates and applies atomically. It is the ONLY option under which
+"nothing is written until Create" is literally true rather than advertised, and
+the only one with no abandoned-draft cleanup story and no egress question — a
+draft is not campaign content and never becomes a row, so it enters no export and
+no AI-workspace DTO by construction. A `calendar_drafts` table would have bought a
+migration, a TTL reconciler, an egress assertion and an IDOR review to solve a
+problem the form already solves.
+
+The pairing that makes it work is the carry/read pair, and its failure mode is
+severe and silent: the month name list was initially split between the carry and
+the owning station, which concatenated two groups in submission order instead of
+interleaving them, so every month took its neighbour's name — the right month
+count with the wrong month names, and nothing to notice it by. Either month
+station now emits the WHOLE ordered list, hidden in place for the family it does
+not show. A round-trip test over all nine stations is what caught it and what
+keeps it caught.
+
+**THE NEEDS-BACKEND AUDIENCE GATE ON THIS SURFACE IS THE ROLE FLOOR.** Every route
+carries `RequireRole(RoleOwner)`, so every viewer of the builder is an owner and
+the GM-facing chip can never reach a player — satisfied BY CONSTRUCTION rather
+than by a branch. That is a finding rather than a free pass: if a later slice
+lowers the floor to Player+ "so co-DMs can look", it ships four `needs backend`
+chips into a player's markup. The reason is written into the handler's header and
+the templ's, and the rule is that the floor and the chips are re-audited together.
+
+**THE ERA GATE IS WIZARD-LOCAL POLICY, AND THE COPY SAYS SO.** Chronicle has no
+era-relative year numbering — a zero-era calendar resolves "Deepwinter 14, 1523"
+perfectly well — which is why wave 1 examined the era fault, refused to synthesise
+it, and left a coordinator flag in `block_projection.go`. **That flag is closed
+here.** The wizard may decline to CREATE what would read ambiguously, even where
+the Block would render it; what it may not do is misdescribe why. So the copy
+reads "this calendar has no era — Create waits", a claim about the wizard, and a
+test asserts both that the copy is that claim and that the Block itself resolves a
+zero-era date without a fault — which is the evidence the gate is policy and not
+physics.
+
+**THE CHOOSER IS RETIRED, AND THE ROUTE IS WHAT MOVED.** `GET /calendars/new` now
+resolves to the wizard. A dozen surfaces link to that path and one of them is in
+the frozen `calendar_v2` set, so re-pointing the handler lands every one of them —
+and every external bookmark — on the designed surface with no href edited in a
+file this wave does not own. The path is unchanged, so the snapshot is unchanged.
+Three pins were refreshed rather than deleted; the banner pin's `t.Fatalf` fired
+exactly as its dispatch predicted, which was the pin doing its job.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they
-landed — §20-§24 above, and W-G's tail is §25. Round 2's reveal pass (R2-1) is
-the section immediately above this one, and R2-2…R2-5 will land the same way.
+landed — §20-§24 above, W-G's tail is §25, and W-H's builder wizard is §26.
+Round 2's reveal pass (R2-1) is a section here too, and R2-2…R2-5 will land the
+same way.
 There is no ADR-049. calendar-v4 is one architecture
 decision; competing ADRs for its later waves would fragment the rationale that a
 future re-litigation needs in one place. W-E followed this rule first (its

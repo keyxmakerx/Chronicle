@@ -498,7 +498,10 @@ Phase B, W-D: the nav Calendar tab's landing surface.
   "colour by: type ⌄" is a per-viewer preference with no store (the Block books
   the identical control for the identical reason, `nameplate.templ`) and
   "+ New event" has no create route outside the V2 shell, which wave 1 may not
-  add. The cluster ships Open calendar / Builder / + New calendar. W-F and the
+  add. The cluster ships Open calendar / Builder / + New calendar — and since
+  C-CALV4-WIZARD-P13 (W-H) both doors point at designed surfaces: `Builder →` at
+  the 10-tab structure editor, `+ New calendar` at the builder wizard. CLOSED as
+  to the doors; what remains of this item is the cluster's own layout. W-F and the
   event-editor slice own the other two.
 
 ### calendar-v4 remodel — booked follow-ups from C-CALV4-HOST-P3 (2026-07-28)
