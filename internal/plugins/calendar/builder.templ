@@ -754,9 +754,10 @@ templ builderSeasonsPanel(data BuilderViewData) {
 templ builderErasPanel(data BuilderViewData) {
 	<div class="wz-ph">Eras</div>
 	<p class="wz-ps">
-		The era names the year readout and labels the week band. The wizard holds Create until one
-		exists — that is this surface's own policy, not a limit of the model: a calendar with no
-		era still resolves its dates perfectly well.
+		The era names the year readout — "1523 RoW" — and labels the week band on any surface that
+		turns the eras layer on. The wizard holds Create until one exists: that is this surface's
+		own policy, not a limit of the model, because a calendar with no era still resolves its
+		dates perfectly well.
 	</p>
 	if len(data.Draft.Eras) == 0 {
 		<div class="wz-frow" style={ builderLadder(0) }>
@@ -821,7 +822,9 @@ templ builderErasPanel(data BuilderViewData) {
 		<span>
 			An era boundary is a <b>year</b>, not a date: Create writes the year an era begins and
 			the band changes at the year's turn. A boundary part-way through a month is not
-			something Chronicle can store today.
+			something Chronicle can store today. The preview beside you passes the default layer
+			set, which is moons only — so no band is drawn <i>here</i>, and the note under the
+			month says so.
 		</span>
 	</div>
 }
@@ -973,6 +976,32 @@ templ builderPreview(data BuilderViewData) {
 		<div class="wz-pvrule"></div>
 		// ── THE SHIPPED BLOCK. There is no second month renderer in this diff.
 		@calblock.Block(data.Block)
+		// WHAT THIS COLUMN DOES NOT DRAW, SAID OUT LOUD.
+		//
+		// Reusing the shipped Block ([WZ-2a]) means inheriting its size classes and
+		// its layer set, and both are narrower here than on a calendar's own page:
+		// the column resolves to TierStd (the dispatch's own §3.3 arithmetic), where
+		// the phase marks and the intercalary band row are not painted, and the
+		// wizard is a HOST passing DEF — ["moons"] — so the era bands have no layer
+		// to ride ([WZ-2c]).
+		//
+		// The mockup drew all three, because the mockup drew its own month. A
+		// preview that quietly under-draws while the readout beside it lists eras
+		// and festival days is the surface contradicting itself, which is the one
+		// thing this wizard's honesty states exist to prevent. So it is stated
+		// where it happens, in the surface's own fact-chip grammar, rather than
+		// only in a report.
+		<div class="wz-note wz-pvnote">
+			<span class="wz-g" aria-hidden="true">▦</span>
+			<span>
+				This column is narrower than a calendar's own page, and it carries the default
+				layer set — a month with its moon phases and nothing else. Three things the
+				finished calendar draws are therefore absent here: the <b>moon phase marks</b> and
+				the <b>intercalary band row</b>, which the Block paints at its full width, and the
+				<b>era bands</b>, which ride the eras layer. The preview under-states the result.
+				It never invents one.
+			</span>
+		</div>
 		<dl class="wz-stats">
 			for _, s := range data.Stats {
 				<dt>{ s.Label }</dt>

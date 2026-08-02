@@ -1248,8 +1248,13 @@ func builderPreviewSub(d *builderDraft) string {
 		year = "year incomplete"
 	}
 	out := fmt.Sprintf("%s · %s · %d-day week", builderPlural(months, "month"), year, len(d.Weekdays))
+	// "N of M moons DRAWN" was a claim about paint, and at the preview column's
+	// width the Block does not paint a phase mark at all — so the line read
+	// "3 of 4 moons drawn" over a month with none. The count is about the
+	// grid's CEILING, which is true at every width, and what the column does
+	// and does not paint is stated under the month where it happens.
 	if n := len(d.Moons); n > builderMoonCap {
-		out += fmt.Sprintf(" · %d of %d moons drawn", builderMoonCap, n)
+		out += fmt.Sprintf(" · %d moons, %d within the grid's ceiling", n, builderMoonCap)
 	} else if n > 0 {
 		out += " · " + builderPlural(n, "moon")
 	}

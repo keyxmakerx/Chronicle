@@ -610,3 +610,68 @@ func TestBuilderMoonTurns_TheStationAndTheMonthCannotDisagree(t *testing.T) {
 		t.Errorf("an index past the sky reads as nothing; got %v", got)
 	}
 }
+
+// TestBuilderPreview_SaysWhatItDoesNotDraw pins the wave's most consequential
+// DISCLOSED divergence so it can never become an undisclosed one.
+//
+// Reusing the shipped Block ([WZ-2a]) means inheriting its size classes and its
+// layer set, and both are narrower in a 620px preview column than on a
+// calendar's own page. Three features the signed stills draw prominently are
+// therefore absent from the shipped preview, and none of the three is a bug:
+//
+//	era bands      — gated on the "eras" layer, and the wizard passes DEF,
+//	                 ["moons"], because [WZ-2c] signed exactly that.
+//	phase marks    — the Block paints .phrow at its FULL tier only.
+//	intercalary row — likewise full tier only.
+//
+// What WAS a bug is a surface that under-draws in silence while the readout
+// beside it lists eras and festival days and the identity line claims moons are
+// "drawn". This test asserts the three facts that keep the disclosure honest:
+// the DATA is present (nothing was lost on the way in), the layer set is
+// exactly DEF (nothing was quietly widened to paper over it), and the surface
+// states the absence in its own words.
+func TestBuilderPreview_SaysWhatItDoesNotDraw(t *testing.T) {
+	d, err := builderPresetDraft("harptos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := builderView("camp-1", "tok", d, 7, false, 0)
+
+	// The layer set is DEF and nothing more. If a later hand turns "eras" on to
+	// make the bands appear, that is a HOST decision [WZ-2c] reserved to the
+	// coordinator — and this line is where it must be argued, not assumed.
+	if got := data.Block.Layers.Enabled; len(got) != 1 || got[0] != "moons" {
+		t.Errorf("the wizard is a host passing DEF; got layers %v", got)
+	}
+
+	// The band DATA is there. The bands are absent from the paint because of
+	// the layer set, not because the projection dropped them — which is what
+	// makes "the preview under-states the result" true rather than a euphemism.
+	bands := 0
+	for _, row := range data.Block.Month.Rows {
+		bands += len(row.Bands)
+	}
+	if bands == 0 {
+		t.Error("the projection must still CARRY the era bands — if the data is gone, " +
+			"the divergence is a loss and not a layer choice")
+	}
+
+	// And the surface says so, under the month, in its own words.
+	var sb strings.Builder
+	if err := BuilderPreviewFragment(data).Render(context.Background(), &sb); err != nil {
+		t.Fatal(err)
+	}
+	html := sb.String()
+	for _, want := range []string{"wz-pvnote", "moon phase marks", "intercalary band row",
+		"era bands", "under-states the result"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the preview must disclose what it does not draw; missing %q", want)
+		}
+	}
+
+	// The identity line no longer claims paint it does not produce.
+	if strings.Contains(html, "moons drawn") {
+		t.Error(`"N of M moons drawn" is a claim about paint, and at this column's width ` +
+			`the Block paints no phase mark at all — the count is about the ceiling`)
+	}
+}
