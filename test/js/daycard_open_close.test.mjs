@@ -565,3 +565,55 @@ test('reopening INSIDE the close window measures the box, not its last morph', (
   assert.equal(fx.editor.style.getPropertyValue('inline-size'), '760px');
   assert.equal(fx.editor.style.getPropertyValue('opacity'), '1');
 });
+
+// ── THE OTHER STALE GEOMETRY: THE PREVIOUS PLACEMENT'S SHEET — stage 19 ──────
+//
+// `applyPlacement` is the only writer of `.dcsheet` and of the `style.width`
+// that goes with it, and it writes them AFTER `edPosition` has measured the box.
+// Nothing used to clear them in between — `edHide` drops the style attribute but
+// not the class, and it runs on a --disc-close timer this path cancels — so a
+// reopen after a SHEETED placement handed `edPosition` a box still wearing the
+// sheet. `ed.root.offsetWidth` then answers the full viewport width for a box
+// that is about to render at `--de-w`, and the placement law reasons about a
+// rectangle that does not exist. Same shape as the round-3 blocker, arriving
+// through a class instead of an inline style.
+//
+// IT WAS INVISIBLE UNTIL THE MORPH RAN. With the open morph inert the box was
+// never sized from that measurement, so every rendered frame looked right and
+// only the PLACEMENT was wrong. The [ER-5] geometry probe's own stale-geometry
+// assertion went red the moment stage 18 made the morph animate to it.
+//
+// THE ORDERING IS THE CLAIM, exactly as in the test above: both must be cleared
+// BEFORE the placement writes `left`, because `left` comes from a size measured
+// a moment earlier.
+test('reopening after a SHEETED placement measures the box, not the sheet', () => {
+  // A Ledger that fills the Bench, so the editor's first placement has nowhere
+  // clear to go and takes [DC-3] bullet 4's signed desktop sheet.
+  const fx = boot({ console: { warn: () => {} } });
+  fx.ledger.rect = { left: 300, top: 200, right: 1200, bottom: 800, width: 900, height: 600 };
+  openEditorFromCard(fx, 3);
+  assert.equal(fx.editor.classList.contains('dcsheet'), true,
+    'the first placement did not sheet, so this test is not reproducing the ' +
+    'condition it claims to');
+  fx.flush();
+
+  // The geometry opens up, and the next day is placed as a popover.
+  fx.ledger.rect = { left: 1400, top: 900, right: 1500, bottom: 1000, width: 100, height: 100 };
+  fx.fire('keydown', fx.editor, { key: 'Escape' });
+  fx.editor._ops.length = 0;
+  openEditorFromCard(fx, 5);
+
+  const ops = fx.editor._ops;
+  const unsheeted = ops.findIndex((o) => o.startsWith('class:') && !o.includes('dcsheet'));
+  const widthCleared = ops.indexOf('style:width=');
+  const placed = ops.findIndex((o) => o.startsWith('style:left='));
+  assert.ok(unsheeted >= 0, 'the stale sheet class was never taken off on reopen');
+  assert.ok(widthCleared >= 0, 'the stale sheet width was never cleared on reopen');
+  assert.ok(placed >= 0, 'the reopen never placed the box');
+  assert.ok(unsheeted < placed && widthCleared < placed,
+    'the box was measured and placed while it still wore the previous ' +
+    'placement’s sheet — placeCard is reasoning about a rectangle that does ' +
+    'not render');
+  assert.equal(fx.editor.classList.contains('dcsheet'), false,
+    'and the reopened editor must not still be a sheet');
+});

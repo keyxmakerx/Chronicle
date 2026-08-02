@@ -1332,9 +1332,39 @@
     // means. `placeCard` IS NOT TOUCHED BY ANY OF THIS ([ER-5]: a fourth
     // geometry would be the round-4 lesson unlearned) — the law was always
     // right, it was being handed a lie about the box.
+    // AND THE SAME LIE ARRIVES A SECOND WAY, THROUGH THE PREVIOUS PLACEMENT'S
+    // SHEET — stage 19, found by the [ER-5] probe's own MeasuredW guard.
+    //
+    // `applyPlacement` is the only writer of `.dcsheet` and of the `style.width`
+    // that goes with it, and it writes them AFTER `edPosition` has measured the
+    // box. Nothing clears them in between: `edHide` drops the whole style
+    // attribute but not the class, and it runs on a --disc-close timer this path
+    // has already cancelled. So opening a day whose editor SHEETS and then
+    // opening one whose editor does not hands `edPosition` a box still wearing
+    // the sheet — `ed.root.offsetWidth` answers the full viewport width for a
+    // box that is about to render at `--de-w`, and placeCard reasons about a
+    // rectangle that does not exist. That is the round-3 blocker's exact shape
+    // arriving through a class instead of an inline style.
+    //
+    // IT IS PRE-EXISTING AND IT WAS INVISIBLE UNTIL THE MORPH RAN. With the open
+    // morph inert the box was never actually sized from that measurement, so
+    // every rendered frame looked right and only the PLACEMENT was computed from
+    // the wrong number. The stage-18 reorder made the morph animate to that
+    // number, the probe read it, and its stale-geometry assertion went red
+    // naming the full viewport width. The guard did its job; this is the answer,
+    // not an excuse for it.
+    //
+    // CLEARED, NOT RE-MEASURED, for the reason above — and `placeCard` is still
+    // not touched.
     function edShow() {
       if (edState.timer) { clearTimeout(edState.timer); edState.timer = 0; }
       edMorphSettle();
+      // BOTH HALVES, AND THROUGH THE SAME WRITER `applyPlacement` USES.
+      // `el.style.width = ''` is how the placement law itself clears the sheet's
+      // width for a popover placement; using `removeProperty` here instead would
+      // be a second idea of what "no sheet" means.
+      ed.root.classList.remove('dcsheet');
+      if (ed.root.style) ed.root.style.width = '';
       edState.morph = null;
       ed.root.setAttribute('data-dc-shown', '');
       if (typeof ed.root.showPopover === 'function') {

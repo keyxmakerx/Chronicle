@@ -259,7 +259,22 @@ func TestDayCardGeometryProbe(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("  → the largest width holding 0 px² AND costing no clear position is %dpx", best)
+	// THE LINE SAYS WHAT THE CODE CHECKS, AND THAT SENTENCE WAS WRONG.
+	//
+	// It used to read "…AND costing no clear position", which its OWN table two
+	// lines above contradicts: the winning 760px width sheets at four viewports
+	// (720, 820, 900, 1000) and books 120 sheet placements against a baseline of
+	// 60. It demonstrably costs clear positions. The criterion the loop above
+	// actually applies is `daycardProbeSheetsAtOrAbove(…, daycardEditorTwoColumnPx)`
+	// — "does not sheet AT OR ABOVE the two-column breakpoint" — which is the line
+	// the comment beside it and the report have always used. A caption that
+	// outruns its own table is the defect this whole round was written to close,
+	// and a log line is a caption.
+	t.Logf("  → the largest width holding 0 px² AND never sheeting at or above the "+
+		"%dpx two-column breakpoint is %dpx", daycardEditorTwoColumnPx, best)
+	t.Logf("     (it MAY sheet below that breakpoint, and %dpx does — see the sheet "+
+		"column above; below 1080 `.ed-body` is one column anyway and the sheet is "+
+		"[DC-3] bullet 4's signed treatment, recorded and not gated)", best)
 
 	// ── THE CROSS-BLOCK FINDING, WITH ITS CONTROL ──────────────────────────
 	//
@@ -503,6 +518,26 @@ window.addEventListener('load', function () {
       }
       var doorNew = document.querySelector('[data-dc-new]');
       if (doorNew) doorNew.click();
+      // ── LET THE MORPH LAND BEFORE MEASURING, AND THE REASON IS NOT
+      //    COSMETIC ────────────────────────────────────────────────────────
+      //
+      // [ER-5] is about WHERE THE BOX RESTS. The morph is a 200ms transient
+      // that starts the box at the CARD's rect, and this sweep is synchronous:
+      // it opens, measures and closes inside one task, so with the morph
+      // running it reads the transition's t=0 value — the card's 340px — for
+      // every cell at every viewport, and reports a placement no reader ever
+      // sees. Until stage 18 the open morph was inert, so this line was not
+      // needed and its absence was invisible; the moment the morph actually
+      // ran, this probe's own MeasuredW guard went red naming 340px against
+      // every candidate width. That guard working is the reason this is a
+      // one-line fix rather than a silent wrong number.
+      //
+      // It is daycardSettleMorph, the one settle this package has, so the four
+      // rigs that must NOT measure a box in flight cannot drift into four ideas
+      // of what "it has landed" means. The alternative — waiting out
+      // --disc-open per placement — is 4,026 placements x 200ms of virtual time
+      // against an 8,000ms budget, which would measure nothing at all.
+` + daycardSettleMorph + `
       if (editor.hasAttribute('data-dc-shown')) diag.opened++;
       var em = measure(editor, host);
       out.push({

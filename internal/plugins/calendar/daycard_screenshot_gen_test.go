@@ -157,6 +157,38 @@ const daycardFoldDiag = `
   }
 `
 
+// daycardSettleMorph lets the editor's open morph LAND before anything measures
+// or photographs the box, and it is three lines with a long reason.
+//
+// The morph seeds the editor at the CARD's rect and interpolates to the
+// placement law's answer over --disc-open. A driver that opens the box and
+// measures in the same task therefore reads the transition's t=0 value — the
+// card's 340px — and every question asked of that box is answered about a
+// geometry no reader ever sees. It is not hypothetical: the moment stage 18
+// made the open morph actually run, the [ER-5] geometry probe read 340px at
+// every candidate width and the floors probe found the date picker's day
+// buttons at 15px wide, under the 24px floor, because they were being measured
+// inside a 340px box.
+//
+// `finish()` IS THE ANIMATION API'S OWN "IT IS OVER". Nothing here removes a
+// class, clears an inline style or calls anything private to the module; the
+// alternative — waiting out --disc-open per placement — is thousands of
+// placements against a fixed virtual-time budget.
+//
+// IT BELONGS BESIDE THE MEASUREMENT, NOT INSIDE THE OPENER. Edit mode opens
+// from a PROMISE — edLoad fetches and edOpen runs in a `.then` — so a settle
+// emitted in the opener's own task runs before the editor exists and settles
+// nothing. Every consumer therefore emits it immediately before it measures or
+// shoots.
+//
+// THE MORPH CAPTURE RIG DOES NOT USE THIS, and must not: photographing the
+// flight is the whole of its job. See daycard_morph_shots_test.go.
+const daycardSettleMorph = `
+  document.getAnimations().forEach(function (a) {
+    try { a.finish(); } catch (e) { /* a discrete step has nothing to finish */ }
+  });
+`
+
 // daycardOpenEditor drives the two clicks a user makes — a day, then a door —
 // through the module's own listeners, after the load event so the module is
 // actually wired. Nothing here reaches past the doors the producer rendered.
@@ -350,89 +382,6 @@ func daycardDragScript(fromOrd, toOrd int, why string) string {
 `, fromOrd, toOrd, why, fromOrd, toOrd)
 }
 
-// daycardPauseAt pauses EVERY running animation and parks it at an exact
-// fraction of the open duration. It is the difference between a measurement and
-// a screenshot that happened to land somewhere.
-// daycardPauseAt parks every animation at an EXACT fraction of --disc-open, and
-// it does so from a `transitionrun` listener registered BEFORE the doors are
-// clicked. It is emitted ahead of the open script, not after it.
-//
-// TWO EARLIER CUTS OF THIS FUNCTION WERE WRONG AND BOTH ARE WORTH RECORDING,
-// because they are the failure §10 names in terms — "do not race a setTimeout
-// and call the result a measurement":
-//
-//  1. PAUSING IN THE SAME TASK AS THE CLICK. A transition does not EXIST until
-//     the style change it reacts to has been recalculated, so getAnimations()
-//     saw nothing, parked nothing, and produced five byte-similar stills of a
-//     finished editor.
-//  2. PAUSING ON A DOUBLE requestAnimationFrame. Better, and still wrong under
-//     `--virtual-time-budget`: virtual time FAST-FORWARDS between frames, so
-//     the 200ms transition had already finished by the second callback. The
-//     probe that caught this counted one running animation where four were
-//     expected; the images looked plausible either way, which is the point.
-//
-// `transitionrun` fires when the transition is CREATED, before any time has
-// passed on it — virtual or otherwise — so pausing there is the only hook that
-// cannot be outrun. The count and the parked time are written onto the caption
-// so a reader can see on the still itself what was actually frozen.
-//
-//  3. PARKING ONLY ONCE, ON THE FIRST transitionrun — fixed at stage 9. The
-//     handler used to set a `parked` latch and return on every later event, so
-//     any transition Chromium created in a LATER style update ran free to
-//     completion while its siblings sat paused. That is exactly what the
-//     morph frames showed: the box grew vertically at a fixed left edge and a
-//     fixed width, because `height` was parked and `width` / `translate` /
-//     `opacity` had already arrived. The frames were honest about being
-//     frames; they were not honest about being the morph. Parking is now
-//     IDEMPOTENT and runs on EVERY transitionrun — pausing an already-paused
-//     animation and re-writing the same currentTime is a no-op, and the
-//     union of parked property names is printed on the caption so the scope
-//     of the claim is on the image itself.
-func daycardPauseAt(fraction float64) string {
-	return fmt.Sprintf(`
-  var edBox = document.querySelector('[data-cal-dayeditor]');
-  var parkedProps = {};
-  if (edBox) edBox.addEventListener('transitionrun', function () {
-    // PARK ON A MICROTASK, NOT INSIDE THE FIRST transitionrun EVENT. It
-    // fires once per PROPERTY as each transition is created, so a handler that
-    // parks immediately parks only the first one and lets its three siblings
-    // run free — which is how a capture ends up showing a box that has already
-    // arrived. A microtask does not advance time, virtual or otherwise, so by
-    // the time it runs every transition of that style recalc exists and none
-    // has progressed.
-    Promise.resolve().then(function () {
-    var open = parseFloat(getComputedStyle(document.querySelector('.cal-bench'))
-      .getPropertyValue('--disc-open')) || 200;
-    var at = %f * open;
-    var live = document.getAnimations();
-    live.forEach(function (a) {
-      a.pause();
-      try { a.currentTime = at; } catch (e) {}
-      parkedProps[a.transitionProperty || '?'] = true;
-    });
-    if (window.__report) window.__report('parked');
-    // THE CAPTION IS REWRITTEN, NOT APPENDED TO, because this handler runs on
-    // EVERY transitionrun rather than only the first — see the header. It
-    // prints the UNION of everything parked so far, so the last write is the
-    // complete list and the reader is not looking at a partial one.
-    var names = Object.keys(parkedProps).sort();
-    // THE DIAGNOSTIC GOES IN THE FIXED BOTTOM STRIP, NOT THE FLOWED CAPTION.
-    // The editor is a top-layer popover placed at the top of the viewport and
-    // it covers the caption — which is how the previous cut's park report ended
-    // up written somewhere no reader could see it.
-    var tag = document.getElementById('shot-diag');
-    if (tag) {
-      var r = edBox.getBoundingClientRect();
-      tag.textContent = 'RIG: parked ' + names.length + ' transition(s)' +
-        (names.length ? ' — ' + names.join(' · ') : '') +
-        ' · currentTime ' + Math.round(at) + 'ms of --disc-open ' + Math.round(open) + 'ms' +
-        ' · EDITOR BOX ' + Math.round(r.width) + '×' + Math.round(r.height) +
-        ' at (' + Math.round(r.left) + ',' + Math.round(r.top) + ')';
-    }
-    });
-  }, true);
-`, fraction)
-}
 
 // daycardEdBody is the scroll container the fold lives on. It is named once so
 // the rig, the diag and the caption guard cannot drift apart.
@@ -553,14 +502,15 @@ func daycardShotList() []daycardShot {
 			caption: "the ◈ diamond and the allow/deny ✓/✕ in dark, hue removed, roster rendered"},
 
 		// ── §10 item 6: reduced motion — instant AND COMPLETE ───────────────
-		{file: "13-editor-gm-reduced-motion.png", mount: gm, w: 1440, h: 900, reduced: true,
-			script:  daycardPauseAt(0.5) + daycardOpenEditor,
-			title:   "Event editor · REDUCED MOTION · the END state",
-			caption: "the same click sequence and the same pause call under prefers-reduced-motion: the editor is at FULL SIZE, FULL OPACITY, correctly placed and interactive. The page title carries getAnimations().length, which is 0 — pair this with 14"},
-		{file: "14-editor-gm-no-preference-50pct.png", mount: gm, w: 1440, h: 900,
-			script:  daycardPauseAt(0.5) + daycardOpenEditor,
-			title:   "Event editor · NO PREFERENCE · the same pause, at 50%",
-			caption: "the counterfactual for 13: identical script, reduced-motion off. The animation count in the page title comes back non-zero, which is what proves the branch is doing the work rather than the capture being inert"},
+		//
+		// 13 AND 14 MOVED TO `daycard_morph_shots_test.go` ALONG WITH THE MORPH
+		// FRAMES, and for the same reason. The pair is a COUNTERFACTUAL — the same
+		// click sequence and the same pause call, reduced motion on and off — and
+		// under this generator's virtual clock neither half could park anything,
+		// so "the same pause, at 50%" was a caption over a frame that had never
+		// been paused. On the real clock 14 is a genuine 50% frame and 13 is a
+		// genuine zero-animation one, which is what makes the pair prove the
+		// branch rather than assert it.
 
 		// ── §10 item 8: the card with the Ledger layer OFF ──────────────────
 		{file: "15-editor-gm-no-ledger.png", mount: gm, w: 1440, h: 900, script: daycardOpenEditor,
@@ -636,63 +586,26 @@ func daycardShotList() []daycardShot {
 			caption: "the same run in dark; the overlay's ink is its own and reads on both grounds"},
 	}
 
-	// ── §10 item 5: THE MORPH, MID-FLIGHT — AND WHAT THIS RIG CANNOT DO ─────
+	// ── §10 item 5: THE MORPH, MID-FLIGHT — CAPTURED, BUT NOT HERE ─────────
 	//
-	// STATED FLATLY, BECAUSE THE PREVIOUS CUT OF THIS BLOCK CLAIMED MORE THAN
-	// THE IMAGES SHOWED. §10 item 5 asks for start / ~50% / end with
-	// getAnimations()-driven pausing. The rig does exactly that. The frames come
-	// back showing a FINISHED EDITOR at every fraction, and the reason is
-	// MEASURED and is the rig's:
+	// The five morph frames used to be built by this list, with `daycardPauseAt`
+	// and this generator's `--virtual-time-budget` capture. That mechanism CANNOT
+	// photograph a transition: virtual time does not run the document's rendering
+	// lifecycle, so no transition is ever created and there is nothing for
+	// getAnimations() to park. The frames came back showing a finished editor at
+	// every fraction, and the rig said so on the images — under captions that
+	// argued with their own strips.
 	//
-	//   · the park hook (`transitionrun`, idempotent, on every event) reports
-	//     PARKED 0 transitions at 0% and, non-deterministically, 1 (`height`) at
-	//     other fractions; the editor's box measures its FINAL geometry in every
-	//     frame, and the strip burned onto each image says so in those words;
-	//   · under `--dump-dom --virtual-time-budget`, getComputedStyle returns
-	//     STALE values after a forced `offsetHeight` — writing `inline-size:
-	//     340px` to the root and reading it back yields `760px`, across a
-	//     requestAnimationFrame as well. The document's rendering lifecycle is
-	//     not being run, so there is nothing to park.
+	// THEY ARE NOW SHOT BY `daycard_morph_shots_test.go`, on a REAL CLOCK, with
+	// the `load` event held past the flight by a slow subresource. Ten frames,
+	// both directions, each one reporting its own parked count and measured boxes
+	// back to a generator that REFUSES to write a set whose frames cannot be told
+	// apart. It shares this generator's `DAYCARD_SHOTS` variable, so one command
+	// still produces the whole directory.
 	//
-	// A rig that cannot create the transition cannot photograph it, and five
-	// identical images captioned "25%" would be worse than no images. So THE
-	// FRAMES ARE KEPT AND RELABELLED as what they are — the attempt, with the
-	// rig's own report on them — and the claim is made where it CAN be made:
-	//
-	//   · daycard_morph_trace_test.go (DAYCARD_MORPH_TRACE=1) traces the four
-	//     properties through a MutationObserver in REAL Chromium and proves the
-	//     box is seeded at the card's measured rect, offset by `translate`, at
-	//     opacity 0, with the carve-out class on — and lands at translate 0, the
-	//     sheet's own --de-w and opacity 1, with no transform / scale / zoom
-	//     anywhere in the sequence.
-	//   · test/js/daycard_open_close.test.mjs pins the state machine: the start
-	//     geometry, the end geometry, the reverse onto the same rect, the
-	//     ordering of the duration override, and the reduced-motion end state.
-	//
-	// WHAT REMAINS UNPROVEN HERE is that the compositor interpolated between the
-	// two geometries. That is carried in the report as the one §10 item this
-	// environment could not close, alongside DAYCARD's own live-authed CSRF
-	// case, and it is a live-client check rather than a claim.
-	fractions := []float64{0.0, 0.25, 0.5, 0.75, 1.0}
-	for i, f := range fractions {
-		shots = append(shots, daycardShot{
-			file: fmt.Sprintf("morph-open-%02d.png", i), mount: gm, w: 1440, h: 900,
-			script: daycardPauseAt(f) + daycardOpenEditor,
-			title: fmt.Sprintf("THE MORPH · open · park attempted at %.0f%% of --disc-open "+
-				"— THE RIG COULD NOT CREATE THE TRANSITION", f*100),
-			caption: "READ THE BLACK STRIP AT THE FOOT OF THIS IMAGE BEFORE READING THE " +
-				"IMAGE. It reports how many transitions this capture actually parked and " +
-				"what the editor's box measured at that instant. Headless Chromium under " +
-				"--virtual-time-budget does not run the document's rendering lifecycle, so " +
-				"the morph's transitions are never created and there is nothing to pause: " +
-				"every frame here shows the editor at its FINAL geometry. This is the rig's " +
-				"limit, not the morph's — the four-property path is traced in real Chromium " +
-				"by daycard_morph_trace_test.go and pinned by daycard_open_close.test.mjs. " +
-				"What no artefact in this directory proves is that the compositor " +
-				"interpolated between the two geometries; that is a live-client check and " +
-				"the report names it as open",
-		})
-	}
+	// The capture path is different enough — served page, held shutter, frozen
+	// timers — that folding it into `daycardShot` would have meant four new fields
+	// used by twelve rows and ignored by forty.
 	return shots
 }
 
@@ -912,7 +825,8 @@ func daycardShotPage(t *testing.T, s daycardShot, css, body string) string {
 		// the box being measured is the placed one.
 		`<script>window.addEventListener('load', function () {` +
 		s.script + pickIf(s.pickRestricted) +
-		`setTimeout(function () {` + daycardScrollTo(s.scroll) + daycardFoldDiag + `}, 250);` +
+		`setTimeout(function () {` + daycardSettleMorph +
+			daycardScrollTo(s.scroll) + daycardFoldDiag + `}, 250);` +
 		`});</script>` +
 		`</body></html>`
 }

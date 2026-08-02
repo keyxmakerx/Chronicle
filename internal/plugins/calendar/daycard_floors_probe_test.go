@@ -338,7 +338,13 @@ func daycardFloorPage(t *testing.T, mount DayCardMount, dark bool, script string
 		// opens from a promise, so a measurement in the click's own task would
 		// measure an editor that does not exist yet — and would report a
 		// spotless zero for every control on it.
-		`setTimeout(function () {` + daycardFloorScript + `}, 300);` +
+		// AND THE MORPH IS LET LAND FIRST. The editor is seeded at the CARD's
+		// rect for --disc-open, so a measurement taken mid-flight measures every
+		// control inside a 340px box — which is exactly what this probe reported
+		// the moment stage 18 made the open morph actually run: the date
+		// picker's day buttons came back 15px wide, under the 24px floor, in a
+		// box that renders at 760. See daycardSettleMorph.
+		`setTimeout(function () {` + daycardSettleMorph + daycardFloorScript + `}, 300);` +
 		`});</script>` +
 		`</body></html>`
 }
