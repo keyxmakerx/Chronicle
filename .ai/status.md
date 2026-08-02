@@ -102,11 +102,42 @@ the ordering is now a real assertion. A guard nudged until green stops proving
 anything; a guard that was never able to see its subject never proved anything
 at all.
 
+**THE SECOND FIX ROUND WAS ENTIRELY ABOUT THE EVIDENCE, AND IT TOUCHED NO
+PRODUCT CODE.** Three blockers, all of the same family: a picture and the
+sentence beside it were not the same claim. (1) `.ed-body` is
+`max-block-size: min(70vh, 620px); overflow-y:auto`, so at 1440 the two-column
+body FOLDS and the ◈ Restricted card, the allow/deny roster and `Tied to` fell
+below it — four captions and two index rows named marks their frames did not
+contain. Desktop shots are now upper/lower PAIRS, the lower half scrolled as a
+wheel would scroll it with no geometry overridden, and every shot burns a fold
+report saying what is VISIBLE IN THIS FRAME. (2) Every shot ran `+ New event`
+while **21 of the 22 gating stills are EDIT mode** — and the cause was one layer
+back: the shared Bench fixture projects with NO events, so no card ever had a
+row to Edit and create mode was the only editor the rig could reach. A
+capture-only evented fixture and a stubbed single GET fixed it; nine edit-mode
+shots followed, including the Delete axis, which create mode cannot make because
+a draft has no id to delete. (3) `daycard_test.go` handed the 24px floor and the
+horizontal fold to "the screenshot gate" and the gate carried two CAPTION
+STRINGS; `daycard_floors_probe_test.go` now MEASURES both over 12 runs, and the
+drag row is captured rather than described.
+
+**THE 390px VIEWPORT WAS NEVER REAL, IN ANY ARTEFACT, UNTIL NOW.** Headless
+Chromium here **clamps the window to a 500px minimum width** — measured, in old
+headless and `--headless=new` alike. Three files were named `-390x844` and were
+500px wide, and two of the three did not say so, so the fold had never been
+checked at 390 in any form. A nested browsing context has its own viewport;
+both the probe and the shot rig use one, the probe asserts the width it actually
+measured in, and the shot burns the substitution onto the image. **A later hand
+should not have to rediscover this.**
+
 **Carried, not closed:** `C-CALV4-DAYMENU` (the 10 `menus-*` stills travel with
 it — a 22-of-32 fidelity split, never a shortfall); `C-CALV4-DAYPICK-A11Y`, now
 also holding drag-create's missing keyboard equivalent; `C-CALV4-TOKENS-RESIGN`,
 booked a **sixth** time, with two of the seven defects now visible in stills the
-operator has signed; the live-authed CSRF case DAYCARD could not measure.
+operator has signed; the live-authed CSRF case DAYCARD could not measure; **the
+day-of-week wrap at 390**, which is performed by no test and no image and is now
+named as unperformed in `daycard_test.go`'s own handoff comment rather than
+pointed at a gate that does not do it.
 
 Books: ADR-048 §27 · `reports/chronicle/2026-08-02-C-CALV4-EDITOR-R2b.md` ·
 `reports/chronicle/screenshots/2026-08-02-c-calv4-editor-r2b/`.
