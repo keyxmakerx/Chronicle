@@ -20,6 +20,49 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### HOTFIX — two independent defects the operator hit at once (2026-08-02)
+
+Branch `claude/hotfix-boost-scripts-prefs-fk`, off the #584 merge. Both were
+reported as one symptom ("the calendar page does nothing"), and both were
+reproduced before anything was changed.
+
+1. **Boosted navigation deleted the Bench's page scripts.** The App layout puts
+   `{children...}` inside `<main id="main-content">`; every sidebar link is
+   `hx-boost="true" hx-select="#main-content" hx-swap="innerHTML"`; `boot.js`
+   sets `htmx.config.allowScriptTags = false`, at which point htmx's
+   `makeFragment` REMOVES script tags from the swapped fragment rather than
+   skipping them. `bench.templ` mounted `cal_visibility.js`,
+   `calendar_permissions.js` and `calendar_daycard.js` at exactly that depth, so
+   the Bench wired on a direct load and silently did not through the sidebar —
+   dead day card, dead Permissions button, and nothing looking wrong, because
+   `<link rel=stylesheet>` in the same region survives the same code path. Fixed
+   by moving all three into the plugin body-script registry
+   (`internal/app/routes.go` → `layouts.SetPluginBodyScripts` → `base.templ`),
+   which emits outside the swapped region. **Class defect:** 29 more page-side
+   `<script src>` tags across 16 templs remain; `tools/check-page-scripts.sh` +
+   `tools/page-script-allowlist.txt` is a whole-tree ratchet (wired into CI,
+   self-testing) that lets the count only shrink, and the sweep is booked as
+   **C-HTMX-SCRIPT-SWEEP**.
+
+2. **Every calendar preference write was a guaranteed FK violation.**
+   `SetSidebarPinned` / `SetBlockLayers` / `SetBenchSections` inserted an empty
+   `calendar_active.calendar_id`, which migration 006 declares NOT NULL and
+   foreign-keyed to `calendars(id)` → errno 1452 → 500 → no `HX-Refresh` → a
+   switch that visibly did nothing. InnoDB checks the FK on the attempted
+   insert, so `ON DUPLICATE KEY UPDATE` never rescued it and this failed for
+   every viewer. Invisible to CI because all existing tests mock the repository.
+   The service now resolves a real calendar (reusing `resolveActiveCalendar`'s
+   ladder) and passes it down; the conflict clause still touches only the
+   preference column, so a preference write cannot move a chosen active
+   calendar. Failures now map to a named `apperror` instead of an anonymous 500.
+   **Real-DB proof is booked, not claimed** — no database runs in the build
+   environment; see **C-PREFS-FK-INTEGRATION** in `.ai/todo.md`. The operator's
+   instance is the live confirmation.
+
+Both entries, with the full reasoning, are in `.ai/todo.md` §1 Critical; the FK
+correction also amends `internal/plugins/calendar/.ai.md`'s C-CALV4-LAYERS-P9
+section, which described the empty-string seed approvingly.
+
 ### calendar-v4 — W-G PART B SHIPPED: `/campaigns/:id/schedule` (2026-08-01)
 
 **The operator's #1 feature has a page.** `C-CALV4-RSVP-P8` Part B was gated on
