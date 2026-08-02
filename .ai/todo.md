@@ -159,11 +159,26 @@ Carried out of R2-1, not closed:
   the mobile fold is caused by the stacked tiles rather than by their detail
   lines. It is cheap now if the operator still wants it after seeing R2-1
   shipped, because the register and the store already exist.
-- [!] **The two `_tokens.css` defects, booked a FOURTH time, not patched** — the
-  `color-mix(… var(--surface-card) …, var(--accent))` pink drift in light, and
-  `.badge.need` at 2.59:1. They belong to the `_tokens.css` re-sign pass; patching
-  per-file is what keeps them alive. R2-1's disclosure summaries use the
-  `transparent 96%` form and carry no `.badge.need` at all.
+- [!] **The `_tokens.css` defects, booked a FIFTH time, not patched — THE SCOPE
+  OF `C-CALV4-TOKENS-RESIGN`** (the re-sign lane task [ER-9] SIGNED into
+  existence). Three now, not two:
+  the `color-mix(… var(--surface-card) …, var(--accent))` pink drift in light;
+  `.badge.need` at 2.59:1; and **`--accent-action`: amber in the contract,
+  aliased to the campaign accent (indigo) in every shipped sheet**. The signed
+  set gives the primary action its own hue — `--accent-action: oklch(0.78 0.16
+  78)` on `--accent-action-ink: oklch(0.30 0.09 60)` — and both
+  `calendar-bench.css` and `calendar-builder.css` alias it to `--accent`, so
+  every filled CTA the v4 surfaces ship ("+ New calendar", "Continue ·
+  Structure ›", "Create calendar") renders indigo-on-white under stills that
+  draw it amber. **The question the re-sign must answer is which one the product
+  means**: an action hue distinct from the campaign accent is a real design
+  claim (the primary action does not change colour when a campaign picks a new
+  accent), and the shipped alias silently denies it. It is product-wide and
+  predates all of these surfaces; patching per-file is what keeps it alive.
+  Disclosed in-place at `static/css/calendar-builder.css` and in the P13 and
+  Part B evidence indices (coordinator ruling R2, 2026-08-02). R2-1's
+  disclosure summaries use the `transparent 96%` form and carry no
+  `.badge.need` at all.
 - [x] **Verifier findings 1–3, fixed forward in stages 6–8 (2026-07-30).** The
   inherited `hx-vals` (the key moved to the POST URL), the closed ribbon's
   missing session clause, and a twisty comment that described a rotation the

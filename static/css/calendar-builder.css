@@ -130,6 +130,25 @@
   /* the ONE token inherited from the host page, because the campaign accent IS
      chrome. It never touches calendar identity or event data (canon A7). */
   --accent: var(--color-accent, oklch(0.58 0.20 270));
+
+  /* THE FILLED CTA IS INDIGO HERE AND AMBER IN EVERY SIGNED STILL, AND THAT IS
+     AN UPSTREAM DIVERGENCE THIS SHEET INHERITS RATHER THAN DECIDES.
+     The signed contract gives the primary action its own hue
+     (`_tokens.css`: --accent-action oklch(0.78 0.16 78) on
+     --accent-action-ink oklch(0.30 0.09 60)); the shipped sheets alias it to
+     the campaign accent, and production's --color-accent is indigo-500. So
+     "Continue · Structure ›" and "Create calendar" render indigo-on-white on
+     every station in both themes, where the drawing renders them amber.
+
+     IT IS PRODUCT-WIDE AND PREDATES THIS SLICE — calendar-bench.css does the
+     same, and the Bench's own "+ New calendar" already ships indigo under
+     signed renders that draw it amber. This surface consumes the shared
+     primitive rather than forking it, which is the rule; a per-file patch is
+     exactly what keeps an inherited defect alive. The divergence is DISCLOSED
+     (the wave's INDEX difference list) and BOOKED against C-CALV4-TOKENS-RESIGN
+     in .ai/todo.md, alongside the light-mode tint drift and .badge.need's
+     sub-AA ink. Coordinator ruling R2, 2026-08-02: disclose and book, do not
+     patch the colour. */
   --accent-action: var(--accent);
   --accent-action-ink: oklch(0.99 0 0);
 
