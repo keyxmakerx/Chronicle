@@ -93,8 +93,12 @@ type daycardShot struct {
 const daycardFoldDiag = `
   var fold = document.getElementById('shot-fold');
   var edb = document.querySelector('.cal-dayeditor .ed-body');
+  var edroot = document.querySelector('[data-cal-dayeditor]');
   if (fold) {
-    if (!edb) { fold.textContent = 'RIG: no .ed-body on this page (card-only shot)'; }
+    if (!edroot || !edroot.hasAttribute('data-dc-shown')) {
+      fold.textContent = 'RIG: the editor is not open in this shot (card or drag capture) — ' +
+        'there is no fold to report';
+    } else if (!edb) { fold.textContent = 'RIG: no .ed-body on this page'; }
     else {
       var vis = Math.round(edb.clientHeight), all = Math.round(edb.scrollHeight);
       var below = Math.max(0, all - vis - Math.round(edb.scrollTop));
@@ -250,6 +254,55 @@ const daycardOpenEditRow = `
     if (door) door.click();
   }
 `
+
+// ── §10 ITEM 12: THE DRAG PREVIEW, PHOTOGRAPHED ───────────────────────────
+//
+// The row asks for "the drag preview at a 1-cell, 3-cell and month-spanning
+// drag; the single-day click unregressed; and the Block's DOM byte-identical
+// before and after." The behaviour is pinned by
+// test/js/daycard_drag_create.test.mjs (11 tests, green) — but the row is a
+// CAPTURE row and the rejected set neither performed it nor disclosed it as
+// skipped, which is the same silence finding 3 is about.
+//
+// daycardDragScript drives the shipped pointer path — pointerdown on a cell,
+// pointermove across the run — and STOPS THERE. There is no pointerup, so the
+// overlay stays painted and the frame is the preview mid-drag rather than the
+// editor the drag would have opened.
+//
+// IT CARRIES ITS OWN BLOCK-IMMUTABILITY VERDICT ONTO THE IMAGE. The Block's
+// innerHTML is captured before the first pointer event and re-compared after
+// the last one, and the strip prints IDENTICAL or DIFFERS with the byte
+// lengths. [ER-8] and bound 4 both turn on the preview being a page-level
+// overlay that never touches a cell; a photograph of a highlight cannot show
+// you which mechanism drew it, and this can.
+func daycardDragScript(fromOrd, toOrd int, why string) string {
+	return fmt.Sprintf(`
+  var host = document.querySelector('[data-bench-block]');
+  var cells = Array.prototype.slice.call(
+    host.querySelectorAll('[data-day][data-day-ord]'));
+  var before = host.innerHTML;
+  function pev(el, type) {
+    el.dispatchEvent(new PointerEvent(type,
+      { bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true }));
+  }
+  var from = %d, to = %d;
+  if (cells[from]) {
+    pev(cells[from], 'pointerdown');
+    for (var i = from + 1; i <= to && cells[i]; i++) { pev(cells[i], 'pointermove'); }
+  }
+  var layer = document.querySelector('[data-dc-drag]');
+  var boxes = layer && !layer.hidden ? layer.children.length : 0;
+  var same = host.innerHTML === before;
+  var tag = document.getElementById('shot-diag');
+  if (tag) {
+    tag.textContent = 'RIG: DRAG PREVIEW, MID-DRAG (pointerdown + pointermove, NO pointerup). ' +
+      %q + ' · cells %d→%d · preview boxes drawn: ' + boxes +
+      ' · the Block DOM is ' + (same ? 'BYTE-IDENTICAL' : 'DIFFERENT') +
+      ' before and after (' + before.length + ' vs ' + host.innerHTML.length + ' chars) — ' +
+      'the preview is a page-level overlay and never touches a cell ([ER-8], bound 4).';
+  }
+`, fromOrd, toOrd, why, fromOrd, toOrd)
+}
 
 // daycardPauseAt pauses EVERY running animation and parks it at an exact
 // fraction of the open duration. It is the difference between a measurement and
@@ -517,6 +570,24 @@ func daycardShotList() []daycardShot {
 			script: daycardStubEditRecord + daycardOpenEditRow, scroll: daycardEdBody,
 			title:   "Event editor · EDIT · GM · 390×844 · light — LOWER BAND",
 			caption: "the phone's lower band in edit mode: the selected ◈ card, the roster, the tie pill and the footer"},
+
+		// ── §10 item 12: drag-create, the three spans it names ──────────────
+		{file: "22-drag-1cell-1440x900-light.png", mount: gm, w: 1440, h: 900,
+			script: daycardDragScript(3, 3, "a ONE-CELL press: a drag of zero cells is a click"),
+			title:  "Drag-create · ONE CELL · 1440×900 · light — THE UNREGRESSED CLICK",
+			caption: "pointerdown on a day and no move. `drag.moved` never becomes true, `dragPaint` returns before drawing anything, and NO preview box exists — which is [DC-11] term 5 as a picture: a drag of zero cells is a click and still opens the card. The strip counts the boxes (0) and re-compares the Block's innerHTML"},
+		{file: "23-drag-3cell-1440x900-light.png", mount: gm, w: 1440, h: 900,
+			script: daycardDragScript(3, 5, "a THREE-CELL run inside one week row"),
+			title:  "Drag-create · THREE CELLS · 1440×900 · light",
+			caption: "three contiguous days in one row: ONE preview box, drawn by the page-level overlay from the cells' own rects. The Block is not marked, not classed and not entered — the strip says so with the byte lengths"},
+		{file: "24-drag-monthspan-1440x900-light.png", mount: gm, w: 1440, h: 900,
+			script: daycardDragScript(0, 29, "a MONTH-SPANNING run, day 1 to day 30"),
+			title:  "Drag-create · MONTH-SPANNING · 1440×900 · light",
+			caption: "day 1 to day 30 across every row of a ten-day-week month: ONE BOX PER CONTIGUOUS ROW, never a union box over the whole span. A union would paint days that ARE in the run and days that are not with the same ink, which is a preview lying about what it is about to create"},
+		{file: "25-drag-monthspan-1440x900-dark.png", mount: gm, w: 1440, h: 900, dark: true,
+			script: daycardDragScript(0, 29, "a MONTH-SPANNING run, day 1 to day 30"),
+			title:   "Drag-create · MONTH-SPANNING · 1440×900 · dark",
+			caption: "the same run in dark; the overlay's ink is its own and reads on both grounds"},
 	}
 
 	// ── §10 item 5: THE MORPH, MID-FLIGHT — AND WHAT THIS RIG CANNOT DO ─────
@@ -1132,6 +1203,45 @@ func TestDayCardShotSetCoversEditMode(t *testing.T) {
 	if !strings.Contains(daycardStubEditRecord, "STUBBED for this capture") {
 		t.Error("the edit-mode stub no longer discloses itself on the shot's diagnostic " +
 			"strip — the one fabrication in this directory must say so on the image")
+	}
+}
+
+// TestDayCardShotSetPerformsTheDragRow is ALWAYS ON. §10 item 12 is a CAPTURE
+// row and the rejected set neither performed it nor disclosed it as skipped —
+// the behaviour was pinned in test/js/daycard_drag_create.test.mjs and the row
+// was simply not mentioned again. A row that is neither done nor named is the
+// same silence finding 3 is about.
+func TestDayCardShotSetPerformsTheDragRow(t *testing.T) {
+	spans := map[string]bool{}
+	for _, s := range daycardShotList() {
+		if !strings.Contains(s.script, "'pointerdown'") {
+			continue
+		}
+		switch {
+		case strings.Contains(s.script, "ONE-CELL"):
+			spans["1"] = true
+		case strings.Contains(s.script, "THREE-CELL"):
+			spans["3"] = true
+		case strings.Contains(s.script, "MONTH-SPANNING"):
+			spans["month"] = true
+		}
+		// Every drag shot must carry its own Block-immutability verdict, or it
+		// is a photograph of a highlight with no way to tell which mechanism
+		// drew it — which is the whole of [ER-8] and of bound 4.
+		if !strings.Contains(s.script, "BYTE-IDENTICAL") {
+			t.Errorf("drag shot %s does not re-compare the Block's innerHTML; a picture of a "+
+				"highlight cannot show whether a cell was marked", s.file)
+		}
+		if strings.Contains(s.script, "'pointerup'") {
+			t.Errorf("drag shot %s dispatches pointerup; the run would be committed and the "+
+				"frame would be the editor rather than the PREVIEW", s.file)
+		}
+	}
+	for _, want := range []string{"1", "3", "month"} {
+		if !spans[want] {
+			t.Errorf("§10 item 12 names a 1-cell, a 3-cell and a month-spanning drag; the "+
+				"%q span is captured nowhere and disclosed nowhere", want)
+		}
 	}
 }
 
