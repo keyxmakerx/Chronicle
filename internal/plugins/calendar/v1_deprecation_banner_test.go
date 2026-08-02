@@ -88,15 +88,31 @@ func liveTemplBlocks(t *testing.T, file string) map[string]string {
 }
 
 // TestV1DeprecationBanner_MountedOnLiveV1Pages inverts the former "banner
-// pulled" guard (C-CAL-V1-BANNER-PULL). After C-CAL-V1-SUNSET the banner is
+// pulled" guard (C-CAL-V1-BANNER-PULL). After C-CAL-V1-SUNSET the banner was
 // reinstated on exactly the two still-live V1 pages — the setup chooser and the
-// per-calendar timeline — and must appear nowhere else in calendar.templ (the
-// Month/Week/Day pages that formerly carried it were deleted).
+// per-calendar timeline — and must appear nowhere else in calendar.templ.
+//
+// PIN REFRESHED, NOT DELETED, by C-CALV4-WIZARD-P13 [WZ-13] SIGNED. THE LIST IS
+// NOW ONE PAGE LONG: the three-card setup chooser was retired and its
+// CalendarSetupPage deleted, so W-H did not only ship a wizard — it retired a
+// V1 surface, which is why this list shrank rather than this test being
+// deleted. The old assertion t.Fatalf'd the moment CalendarSetupPage
+// disappeared, exactly as its dispatch predicted; that Fatal was the pin doing
+// its job and this is the refresh it demanded.
+//
+// If the timeline is ever retired too, this test does not become vacuous: the
+// second half below still forbids the banner appearing anywhere else in the
+// file, so a banner mounted on a NEW page would still fail.
 func TestV1DeprecationBanner_MountedOnLiveV1Pages(t *testing.T) {
 	blocks := liveTemplBlocks(t, "calendar.templ")
 	const mount = "@V1DeprecationBanner("
 
-	for _, page := range []string{"CalendarSetupPage", "TimelinePage"} {
+	if _, gone := blocks["CalendarSetupPage"]; gone {
+		t.Error("CalendarSetupPage is back in calendar.templ — [WZ-13] retired the " +
+			"three-card chooser, and a second create door is the incoherence L6 removes")
+	}
+
+	for _, page := range []string{"TimelinePage"} {
 		body, ok := blocks[page]
 		if !ok {
 			t.Fatalf("calendar.templ no longer defines templ %s", page)
@@ -108,7 +124,7 @@ func TestV1DeprecationBanner_MountedOnLiveV1Pages(t *testing.T) {
 
 	// No OTHER component in calendar.templ may mount it (the dead pages are gone).
 	for name, body := range blocks {
-		if name == "CalendarSetupPage" || name == "TimelinePage" {
+		if name == "TimelinePage" {
 			continue
 		}
 		if strings.Contains(body, mount) {

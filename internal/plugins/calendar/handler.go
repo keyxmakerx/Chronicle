@@ -135,9 +135,15 @@ func (h *Handler) requireVisibleCalendar(c echo.Context, calendarID, campaignID 
 }
 
 // Index is the V1 calendar entry point. If no calendars exist it shows the
-// setup chooser (the create flow); otherwise it 301s to the V2 shell, which
+// BUILDER WIZARD (the create flow); otherwise it 301s to the V2 shell, which
 // owns the active-calendar + multi-cal switcher views that replaced the V1
 // single/list pages (C-CAL-V1-V2-CUTOVER).
+//
+// The zero-calendar branch used to render the three-card V1 setup chooser.
+// C-CALV4-WIZARD-P13 [WZ-13] SIGNED retired it: a campaign's FIRST calendar is
+// exactly the case the wizard was designed for, and landing a first-run on the
+// un-designed surface is the one outcome that would have made the whole wave
+// pointless.
 // GET /campaigns/:id/calendars
 func (h *Handler) Index(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -148,9 +154,9 @@ func (h *Handler) Index(c echo.Context) error {
 		return err
 	}
 
-	// No calendars: show the setup chooser (the create flow).
+	// No calendars: show the builder wizard (the create flow).
 	if len(cals) == 0 {
-		return h.renderSetup(c, cc)
+		return h.ShowBuilder(c)
 	}
 
 	// C-CAL-V1-V2-CUTOVER: any campaign WITH calendars goes to V2 — the active
@@ -160,26 +166,6 @@ func (h *Handler) Index(c echo.Context) error {
 	// follow-on.
 	return c.Redirect(http.StatusMovedPermanently,
 		"/campaigns/"+cc.Campaign.ID+"/calendar/v2")
-}
-
-// ShowSetup renders the calendar setup chooser — the stable create-a-calendar
-// entry point. Before the V1→V2 cutover this surface was only reachable via
-// Index when a campaign had zero calendars; now that Index 301s to V2 for any
-// campaign WITH calendars, the "New calendar" affordances (and V2's empty
-// state) need a dedicated route to add an ADDITIONAL calendar without bouncing
-// through the redirect. Owner-gated at the route (creation is Owner-only).
-// GET /campaigns/:id/calendars/new
-func (h *Handler) ShowSetup(c echo.Context) error {
-	return h.renderSetup(c, campaigns.GetCampaignContext(c))
-}
-
-// renderSetup renders the setup chooser as an HTMX fragment or a full page.
-func (h *Handler) renderSetup(c echo.Context, cc *campaigns.CampaignContext) error {
-	csrfToken := middleware.GetCSRFToken(c)
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
-	}
-	return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
 }
 
 // EmbedCalendar returns a compact calendar grid fragment for dashboard embedding.

@@ -289,7 +289,7 @@ templ benchHead(data BenchData) {
 				}
 			}
 			if data.IsOwner {
-				<a class="btn fill" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", data.CampaignID)) }>+ New calendar</a>
+				<a class="btn fill" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/builder", data.CampaignID)) }>+ New calendar</a>
 			}
 		</div>
 	</div>
@@ -813,7 +813,7 @@ templ benchRowView(r BenchRow, data BenchData) {
 // rule the empty state already follows ("No calendars shared with you yet",
 // with no create affordance).
 templ benchNewSlot(campaignID string) {
-	<a class="calrow newslot" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) } data-bench-newslot>
+	<a class="calrow newslot" href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/builder", campaignID)) } data-bench-newslot>
 		<span class="plus" aria-hidden="true">＋</span>
 		<div class="grow">
 			<div class="nm">New calendar</div>

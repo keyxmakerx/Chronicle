@@ -12,202 +12,24 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// CalendarSetupPage renders the initial setup when no calendar exists yet.
-// Presents three mode cards: Sync to Real Life, New Custom Calendar, Import.
-templ CalendarSetupPage(cc *campaigns.CampaignContext, csrfToken string) {
-	@layouts.App("Calendar - Setup") {
-		// V1 deprecation banner reinstated by C-CAL-V1-SUNSET: V2 is now the
-		// primary calendar surface (Index/legacyRedirect 301 to it), so the
-		// "Switch to V2" CTA resolves — the C-CAL-V1-BANNER-PULL blocking
-		// condition (V2 unreachable from chrome) no longer holds. This is one
-		// of only two still-live V1 pages after the sunset (setup chooser +
-		// V1 timeline); both carry the banner so lingering V1 traffic is
-		// steered to V2.
-		@V1DeprecationBanner(cc)
-		<div class="max-w-3xl mx-auto py-12 px-4">
-			@calendarSetupChooser(cc, csrfToken)
-		</div>
-	}
-}
+// THE THREE-CARD V1 SETUP CHOOSER WAS RETIRED HERE by C-CALV4-WIZARD-P13
+// [WZ-13] SIGNED. It is gone rather than left quietly reachable: two "create a
+// calendar" doors is exactly the incoherence L6 exists to remove, the builder
+// wizard is a strict superset of its three cards (real-life became a first-class
+// Start card, custom became the preset gallery, import became the importer
+// door), and the chooser carried the V1 deprecation banner — its own admission
+// that it was legacy. GET /calendars/new now resolves to ShowBuilder, so every
+// link across the product and every external bookmark lands on the designed
+// surface with no href edited.
+//
+// WHAT DID NOT GO: POST /campaigns/:id/calendars and
+// POST /campaigns/:id/calendars/import-setup are both still live and still
+// registered. External links, the Foundry flow and V2's empty state reach them.
+//
+// THIS FILE THEREFORE MOUNTS THE V1 DEPRECATION BANNER EXACTLY ONCE, on
+// TimelinePage — the last still-live V1 page after the sunset.
 
-// CalendarSetupFragment renders the setup chooser as an HTMX fragment.
-templ CalendarSetupFragment(cc *campaigns.CampaignContext, csrfToken string) {
-	<div class="max-w-3xl mx-auto py-12 px-4">
-		@calendarSetupChooser(cc, csrfToken)
-	</div>
-}
 
-// calendarSetupChooser renders the mode selection cards and their forms.
-templ calendarSetupChooser(cc *campaigns.CampaignContext, csrfToken string) {
-	<div class="text-center mb-8">
-		<i class="fa-solid fa-calendar-days text-4xl text-accent mb-3"></i>
-		<h1 class="text-xl font-bold text-fg">Create Your Calendar</h1>
-		<p class="text-sm text-fg-secondary mt-1">
-			Choose how you want your calendar to work.
-		</p>
-	</div>
-	<div x-data="{ mode: '' }" class="space-y-6">
-		<!-- Mode selection cards -->
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-			<!-- Real Life -->
-			<button
-				type="button"
-				@click="mode = 'reallife'"
-				:class="mode === 'reallife' ? 'ring-2 ring-accent bg-accent/5' : 'hover:border-accent/30'"
-				class="card p-5 text-left transition-all cursor-pointer"
-			>
-				<div class="flex items-center gap-2 mb-2">
-					<i class="fa-solid fa-globe text-lg text-accent"></i>
-					<h3 class="text-sm font-semibold text-fg">Sync to Real Life</h3>
-				</div>
-				<p class="text-xs text-fg-secondary">
-					Gregorian calendar synced to real-world dates and your timezone.
-					Schedule sessions, track RSVPs.
-				</p>
-			</button>
-			<!-- Custom Fantasy -->
-			<button
-				type="button"
-				@click="mode = 'fantasy'"
-				:class="mode === 'fantasy' ? 'ring-2 ring-accent bg-accent/5' : 'hover:border-accent/30'"
-				class="card p-5 text-left transition-all cursor-pointer"
-			>
-				<div class="flex items-center gap-2 mb-2">
-					<i class="fa-solid fa-hat-wizard text-lg text-purple-400"></i>
-					<h3 class="text-sm font-semibold text-fg">New Custom Calendar</h3>
-				</div>
-				<p class="text-xs text-fg-secondary">
-					Build a fantasy calendar from scratch. Custom months, weekdays,
-					moons, seasons, and time system.
-				</p>
-			</button>
-			<!-- Import -->
-			<button
-				@click="mode = 'import'"
-				:class="mode === 'import' ? 'ring-2 ring-accent bg-accent/5' : 'hover:bg-surface-alt/50'"
-				class="card p-5 text-left transition-all"
-			>
-				<div class="flex items-center gap-2 mb-2">
-					<i class="fa-solid fa-file-import text-lg text-accent"></i>
-					<h3 class="text-sm font-semibold text-fg">Import Calendar</h3>
-				</div>
-				<p class="text-xs text-fg-secondary">
-					Import from Simple Calendar, Calendaria (Foundry VTT), Fantasy-Calendar, or Chronicle.
-				</p>
-			</button>
-		</div>
-		<!-- Real Life form -->
-		<div x-show="mode === 'reallife'" x-transition x-cloak class="card p-6 space-y-4">
-			<h2 class="text-base font-semibold text-fg">Sync to Real Life</h2>
-			<p class="text-xs text-fg-secondary">
-				Uses the Gregorian calendar with real-world dates. Events will use your timezone.
-				You can still add moons and seasons for flavor.
-			</p>
-			<form
-				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
-				class="space-y-4"
-			>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<input type="hidden" name="mode" value="reallife"/>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Calendar Name</label>
-					<input type="text" name="name" value="Session Calendar" class="input w-full"/>
-				</div>
-				<button type="submit" class="btn-primary w-full">
-					<i class="fa-solid fa-globe mr-2"></i> Create Real-Life Calendar
-				</button>
-			</form>
-		</div>
-		<!-- Fantasy form -->
-		<div x-show="mode === 'fantasy'" x-transition x-cloak class="card p-6 space-y-4">
-			<h2 class="text-base font-semibold text-fg">New Custom Calendar</h2>
-			<p class="text-xs text-fg-secondary">
-				Create a fully custom fantasy calendar. You can configure months, weekdays,
-				moons, and seasons after creation.
-			</p>
-			<form
-				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars", cc.Campaign.ID)) }
-				class="space-y-4"
-			>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<input type="hidden" name="mode" value="fantasy"/>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Calendar Name</label>
-					<input type="text" name="name" value="Campaign Calendar" class="input w-full" placeholder="e.g. The Reckoning of Ages"/>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Epoch / Era Name</label>
-					<input type="text" name="epoch_name" class="input w-full" placeholder="e.g. DR, Age of Fire, Third Era"/>
-					<p class="text-xs text-fg-muted mt-1">Optional. Displayed after the year (e.g. "1492 DR").</p>
-				</div>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Starting Year</label>
-					<input type="number" name="start_year" value="1" class="input w-full"/>
-				</div>
-				<button type="submit" class="btn-primary w-full">
-					<i class="fa-solid fa-hat-wizard mr-2"></i> Create Fantasy Calendar
-				</button>
-				<!-- Post-creation setup guidance -->
-				<div class="bg-surface-alt/50 rounded-lg p-3 space-y-1.5">
-					<p class="text-xs font-medium text-fg-secondary">After creation, customize in Settings:</p>
-					<div class="grid grid-cols-2 gap-1 text-[11px] text-fg-muted">
-						<span><i class="fa-solid fa-calendar text-accent/60 mr-1"></i> Months &amp; days</span>
-						<span><i class="fa-solid fa-calendar-week text-accent/60 mr-1"></i> Weekday names</span>
-						<span><i class="fa-solid fa-moon text-accent/60 mr-1"></i> Moons &amp; phases</span>
-						<span><i class="fa-solid fa-leaf text-accent/60 mr-1"></i> Seasons &amp; weather</span>
-						<span><i class="fa-solid fa-landmark text-accent/60 mr-1"></i> Eras &amp; ages</span>
-						<span><i class="fa-solid fa-gear text-accent/60 mr-1"></i> Time &amp; leap years</span>
-					</div>
-				</div>
-			</form>
-		</div>
-		<!-- Import form -->
-		<div x-show="mode === 'import'" x-transition x-cloak class="card p-6 space-y-4">
-			<h2 class="text-base font-semibold text-fg">Import Calendar</h2>
-			<p class="text-xs text-fg-secondary">
-				Upload a JSON file exported from Simple Calendar, Calendaria, Fantasy-Calendar.com,
-				or another Chronicle instance. The file will be auto-detected and imported.
-			</p>
-			<form
-				method="POST"
-				action={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/import-setup", cc.Campaign.ID)) }
-				enctype="multipart/form-data"
-				class="space-y-4"
-			>
-				<input type="hidden" name="csrf_token" value={ csrfToken }/>
-				<div>
-					<label class="block text-sm font-medium text-fg-body mb-1">Calendar File (JSON)</label>
-					<input
-						type="file"
-						name="file"
-						accept=".json,application/json"
-						required
-						class="block w-full text-sm text-fg-secondary file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-accent file:text-white hover:file:bg-accent/80 file:cursor-pointer"
-					/>
-					<p class="text-xs text-fg-muted mt-1">
-						Max 10MB. Supported formats: Simple Calendar (.json), Calendaria (.json),
-						Fantasy-Calendar.com (.json), Chronicle export (.json).
-					</p>
-				</div>
-				<button type="submit" class="btn-primary w-full">
-					<i class="fa-solid fa-file-import mr-2"></i> Import Calendar
-				</button>
-			</form>
-			<!-- Supported format details -->
-			<div class="bg-surface-alt/50 rounded-lg p-3 space-y-1.5">
-				<p class="text-xs font-medium text-fg-secondary">Supported formats:</p>
-				<div class="grid grid-cols-2 gap-1 text-[11px] text-fg-muted">
-					<span><i class="fa-solid fa-dice-d20 text-accent/60 mr-1"></i> Simple Calendar (Foundry VTT)</span>
-					<span><i class="fa-solid fa-calendar-alt text-accent/60 mr-1"></i> Calendaria (Foundry VTT)</span>
-					<span><i class="fa-solid fa-globe text-accent/60 mr-1"></i> Fantasy-Calendar.com</span>
-					<span><i class="fa-solid fa-download text-accent/60 mr-1"></i> Chronicle Export</span>
-				</div>
-			</div>
-		</div>
-	</div>
-}
 
 // calendarGrid renders the weekday headers and day cells.
 templ calendarGrid(cc *campaigns.CampaignContext, data CalendarViewData) {

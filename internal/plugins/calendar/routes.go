@@ -107,12 +107,28 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 
 	// Calendar creation + import from setup (Owner only).
-	// C-CAL-V1-V2-CUTOVER: /calendars/new is the stable setup-chooser route.
-	// Index now 301s any campaign WITH calendars to V2, so the "New calendar"
-	// affordances (+ V2's empty state) need a dedicated GET to add an additional
-	// calendar without bouncing through the redirect. Static segment, so it wins
-	// over /calendars/:calId in Echo's router.
-	cg.GET("/calendars/new", h.ShowSetup, campaigns.RequireRole(campaigns.RoleOwner))
+	//
+	// C-CAL-V1-V2-CUTOVER made /calendars/new the stable create entry point.
+	// C-CALV4-WIZARD-P13 [WZ-13] SIGNED RE-POINTS IT AT THE BUILDER WIZARD and
+	// retires the three-card V1 chooser behind it.
+	//
+	// THE ROUTE MOVES, NOT EVERY LINK. A dozen surfaces across the plugin link
+	// to /calendars/new — the extension dashboard, three entity blocks, the V2
+	// empty state, the Bench — and one of them (calendar_v2_helpers.go) is in
+	// the FROZEN calendar_v2 set. Re-pointing the route lands every one of them
+	// on the designed surface with no edit to a file this wave does not own,
+	// and it is also the only change that catches an external bookmark.
+	//
+	// Two "create a calendar" doors is exactly the incoherence L6 exists to
+	// remove, the wizard is a strict superset of the chooser's three cards once
+	// the real-life card lands, and the chooser carried the V1 deprecation
+	// banner — its own admission that it was legacy. So W-H also retires a V1
+	// surface. POST /calendars and POST /calendars/import-setup STAY LIVE under
+	// this ruling: external links, the Foundry flow and V2's empty state reach
+	// them, and nothing about moving a door changes what a body may post.
+	//
+	// Static segment, so it still wins over /calendars/:calId in Echo's router.
+	cg.GET("/calendars/new", h.ShowBuilder, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars", h.CreateCalendar, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/import-setup", h.ImportFromSetupAPI, campaigns.RequireRole(campaigns.RoleOwner))
 

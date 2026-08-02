@@ -112,7 +112,12 @@ func TestCalendarAppPage_ReachesEveryVisibleCalendar(t *testing.T) {
 		"/campaigns/camp-1/calendar/v2/cal-harptos",        // Open calendar
 		"/campaigns/camp-1/calendars/cal-harptos/settings", // Builder / Settings
 		"/campaigns/camp-1/calendars/cal-elven/settings",   // per-row settings
-		"/campaigns/camp-1/calendars/new",                  // the New-calendar slot
+		// PIN REFRESHED by C-CALV4-WIZARD-P13 [WZ-13] SIGNED. The New-calendar
+		// slot points at the wizard by its own name now. /calendars/new still
+		// resolves to the same handler, so an external bookmark still works;
+		// this slot names the canonical path because the Bench is the door the
+		// operator actually uses.
+		"/campaigns/camp-1/calendars/builder",              // the New-calendar slot
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("bench page missing %q", want)

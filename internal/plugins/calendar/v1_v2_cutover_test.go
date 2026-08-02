@@ -1,6 +1,6 @@
 // v1_v2_cutover_test.go — C-CAL-V1-V2-CUTOVER. The V1 calendar VIEW routes
 // (Index list, Show month, week, day) and the bare /calendar legacy path 301 to
-// the V2 shell; the create flow keeps a stable entry (/calendars/new → setup
+// the V2 shell; the create flow keeps a stable entry (/calendars/new → the
 // chooser); and the TIMELINE + EMBED routes are PRESERVED (no V2 equivalent
 // yet — Timeline V2 is a deferred arc, V2 has no standalone embed). These tests
 // pin the redirect targets and the route-table so a future edit can't silently
@@ -106,8 +106,15 @@ func TestCutover_IndexWithCalendarsRedirectsToV2(t *testing.T) {
 	assertMovedPermanently(t, rec, "/campaigns/camp-1/calendar/v2")
 }
 
-// Index for a campaign with ZERO calendars still renders the setup chooser (the
-// create flow) rather than bouncing to V2.
+// Index for a campaign with ZERO calendars still renders THE CREATE FLOW rather
+// than bouncing to V2 — and since C-CALV4-WIZARD-P13 [WZ-13] SIGNED, the create
+// flow is the BUILDER WIZARD rather than the three-card V1 chooser. A campaign's
+// first calendar is exactly the case the wizard was designed for.
+//
+// PIN REFRESHED, NOT DELETED: the assertion still proves that a zero-calendar
+// campaign gets a create surface at 200 and never a redirect. Only the surface
+// it names changed, and the string it looks for is one the wizard's Start
+// station actually prints.
 func TestCutover_IndexNoCalendarsShowsSetup(t *testing.T) {
 	h := NewHandler(&cutoverStub{})
 	c, rec := ownerCtx(t, "")
@@ -115,20 +122,22 @@ func TestCutover_IndexNoCalendarsShowsSetup(t *testing.T) {
 		t.Fatalf("Index: %v", err)
 	}
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d want 200 (setup chooser)", rec.Code)
+		t.Fatalf("status=%d want 200 (the create flow)", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Sync to Real Life") {
-		t.Errorf("Index with 0 calendars should render the setup chooser")
+	if !strings.Contains(rec.Body.String(), "Start from a shape you know") {
+		t.Errorf("Index with 0 calendars should render the builder wizard")
 	}
 }
 
-// ShowSetup is the stable create entry — it renders the chooser regardless of
-// how many calendars already exist (so "New calendar" can add a second).
-func TestCutover_ShowSetupRendersChooser(t *testing.T) {
+// ShowBuilder is the stable create entry — it renders regardless of how many
+// calendars already exist (so "New calendar" can add a second).
+//
+// PIN REFRESHED from ShowSetup under [WZ-13].
+func TestCutover_ShowBuilderRendersTheWizard(t *testing.T) {
 	h := NewHandler(&cutoverStub{cals: []Calendar{{ID: "cal-1", CampaignID: "camp-1"}}})
 	c, rec := ownerCtx(t, "")
-	if err := h.ShowSetup(c); err != nil {
-		t.Fatalf("ShowSetup: %v", err)
+	if err := h.ShowBuilder(c); err != nil {
+		t.Fatalf("ShowBuilder: %v", err)
 	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d want 200", rec.Code)
@@ -161,7 +170,12 @@ func TestCutover_RouteTablePreservesTimelineAndEmbed(t *testing.T) {
 		"/campaigns/:id/calendars/:calId/day":      "RedirectDayV2",
 		"/campaigns/:id/calendars/:calId/timeline": "ShowTimeline",   // PRESERVE
 		"/campaigns/:id/calendars/:calId/embed":    "EmbedCalendar",  // PRESERVE
-		"/campaigns/:id/calendars/new":             "ShowSetup",      // stable create
+		// PIN REFRESHED by C-CALV4-WIZARD-P13 [WZ-13] SIGNED: the stable create
+		// entry now resolves to the builder wizard. The route is unchanged and
+		// therefore so is the snapshot; only the handler behind it moved, which
+		// is what makes every existing link and every external bookmark land on
+		// the designed surface with no href edited.
+		"/campaigns/:id/calendars/new":             "ShowBuilder",    // stable create
 	}
 	got := map[string]string{}
 	for _, r := range e.Routes() {
