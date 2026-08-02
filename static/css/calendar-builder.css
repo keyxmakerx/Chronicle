@@ -99,8 +99,17 @@
    stylesheet". Every RULE composes --t-fast / --t-base / --t-long or the
    --m-* family; the four lines that give those tokens their values are their
    definition site and cannot themselves be composed from anything. The budget
-   test enforces exactly that split — a literal duration outside a --t-*/--m-*
-   custom-property declaration fails it.
+   test enforces exactly that split — a literal duration outside a `--t-` or
+   `--m-` custom-property declaration fails it.
+
+   (And no line in this file may contain a comment terminator inside prose. One
+   did: a `--t-` / `--m-` glob written with a slash between them closed this
+   comment eight lines early, and CSS error recovery then swallowed the whole
+   `.cal-builder` token prelude that follows — so every duration token resolved
+   to nothing, every `animation` shorthand became invalid at computed-value
+   time, and the ENTIRE motion register silently did not run. Nothing in Go
+   could see it; the browser probe found it in one reading. The budget test now
+   scans for a stray terminator so it cannot happen twice.)
    ─────────────────────────────────────────────────────────────────────────── */
 .cal-builder {
   color-scheme: light dark;
@@ -460,8 +469,14 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cal-builder .wz-field.wz-grow { flex: 1; justify-content: flex-start; }
+/* THE INPUT IS THE HIT TARGET, NOT THE FIELD AROUND IT. A bare input laid out
+   at its line box measured 170×14 — a printed box that clears the 24px floor
+   with a hit area that does not. It stretches to the field's own height, which
+   is what the browser actually hit-tests. Measured by the narrow-lane probe;
+   this rule is that measurement's fix. */
 .cal-builder .wz-in {
   border: 0; background: none; padding: 0; margin: 0; width: 100%; min-width: 0;
+  align-self: stretch; height: auto; min-height: 26px;
   font-family: inherit; font-weight: 600; font-size: 12px; line-height: 1;
   color: var(--text-primary);
 }
@@ -669,6 +684,10 @@
 /* a nowrap button must opt back out of the global min-width:0 or it clips
    mid-word under pressure — the text block wraps instead */
 .cal-builder .wz-impdoor .wz-btn { flex: none; }
+/* …and the text block takes the REMAINDER rather than half of it. `.wz-grow`
+   is flex:1 everywhere else, which here made it compete with the spacer and
+   wrapped a one-line sentence onto four. */
+.cal-builder .wz-impdoor .wz-grow { flex: 0 1 auto; }
 
 /* ── the importer ─────────────────────────────────────────────────────────── */
 .cal-builder .wz-igrid {
@@ -690,7 +709,10 @@
 }
 .cal-builder .wz-dropz .wz-a { font-weight: 650; font-size: 12px; line-height: 1.3; }
 .cal-builder .wz-dropz .wz-b { font-weight: 500; font-size: 11px; line-height: 1.4; color: var(--text-muted); }
-.cal-builder .wz-file { display: block; margin: 6px auto 0; font-size: 11px; max-width: 100%; }
+.cal-builder .wz-file {
+  display: block; margin: 6px auto 0; font-size: 11px; max-width: 100%;
+  height: 32px; line-height: 32px;
+}
 .cal-builder .wz-maprow {
   display: flex; align-items: center; gap: 8px; min-height: 30px;
   border-bottom: 1px solid var(--rule-hairline); font-weight: 600; font-size: 12px;
@@ -745,6 +767,15 @@
 .cal-builder .wz-stats dt { font-weight: 500; font-size: 11px; line-height: 1.5; color: var(--text-muted); }
 .cal-builder .wz-stats dd { margin: 0; font-weight: 600; font-size: 11px; line-height: 1.5; }
 .cal-builder .wz-stats.wz-dl { gap: 6px 12px; align-items: center; }
+/* A DEFINITION ROW WRAPS AT EVERY WIDTH, NOT ONLY THE NARROW ONE. Review's
+   identity row carries a chip and then a sentence explaining it, and at the
+   1100px two-column layout that sentence is the one thing on the surface long
+   enough to leave the viewport. `.wz-lbl` is nowrap by default because most of
+   its uses are one word beside a control; here the label IS the prose, so it
+   wraps and the column bounds it. Measured by the narrow-lane probe at 768px,
+   which is where it showed. */
+.cal-builder .wz-stats dd { min-width: 0; overflow-wrap: anywhere; }
+.cal-builder .wz-stats dd .wz-lbl { white-space: normal; line-height: 1.45; }
 /* an unresolvable number must never print as a confident one */
 .cal-builder .wz-warnink { color: var(--warn); font-weight: 650; }
 .cal-builder .wz-pvfoot {
@@ -832,6 +863,8 @@
   .cal-builder .wz-stepper.wz-big button { width: 44px; font-size: 17px; }
   .cal-builder .wz-stepper.wz-big b { min-width: 56px; }
   .cal-builder .wz-wdchip { height: 32px; }
+  .cal-builder .wz-field { height: 32px; }
+  .cal-builder .wz-in { min-height: 30px; }
 
   /* the house full-width stack. DOM order is kept, which lands the primary
      action at the bottom edge — where the thumb is. */

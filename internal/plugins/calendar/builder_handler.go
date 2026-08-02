@@ -498,12 +498,21 @@ func builderApplyAct(d *builderDraft, act string, pvMonth int) int {
 			d.Eras = append(d.Eras, builderEra{Name: "New era", StartYear: 1})
 		}
 	case "pv-prev", "pv-next":
+		// THE PAGER WALKS MONTHS, NOT ROWS. A festival day is a Month with
+		// IsIntercalary in the same ordered list; the Block draws it as a band
+		// attached to the month it follows, so stopping on one would show the
+		// same month with a different number beside it.
 		if n := len(d.Months); n > 0 {
 			delta := 1
 			if verb == "pv-prev" {
 				delta = -1
 			}
-			pvMonth = ((pvMonth+delta)%n + n) % n
+			for i := 0; i < n; i++ {
+				pvMonth = ((pvMonth+delta)%n + n) % n
+				if !d.Months[pvMonth].Intercalary {
+					break
+				}
+			}
 		}
 	}
 	if pvMonth >= len(d.Months) {

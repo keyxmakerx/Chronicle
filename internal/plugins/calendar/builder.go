@@ -1193,8 +1193,9 @@ func builderPresetMeta(p builderPreset) string {
 	} else if n > 1 {
 		moons = fmt.Sprintf("%d moons", n)
 	}
-	return fmt.Sprintf("%d months · %d days · %d-day week · %s",
-		len(builderMonthIndexes(d, false)), builderYearDays(d), len(d.Weekdays), moons)
+	return fmt.Sprintf("%s · %d days · %d-day week · %s",
+		builderPlural(len(builderMonthIndexes(d, false)), "month"),
+		builderYearDays(d), len(d.Weekdays), moons)
 }
 
 // builderPreviewSub is the preview column's one-line reading of the whole
@@ -1235,12 +1236,20 @@ func builderMonthLenLabel(data BuilderViewData) string {
 	return fmt.Sprintf("%d days", data.Draft.Months[data.PreviewMonth].Days)
 }
 
-// builderPagerLabel is "3 of 12".
+// builderPagerLabel is "3 of 12", and it COUNTS MONTHS RATHER THAN ROWS.
+//
+// A festival day is a Month with IsIntercalary in the same ordered list, which
+// is Chronicle's model and the right one — but it is not a page. The Block
+// draws it as a full-width band attached to the month it follows, so paging TO
+// one would show the same month with a different number beside it. The pager
+// therefore walks the non-intercalary list, and the number it prints is the
+// number the Structure station prints.
 func builderPagerLabel(data BuilderViewData) string {
-	if len(data.Draft.Months) == 0 {
+	months := builderMonthIndexes(data.Draft, false)
+	if len(months) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%d of %d", data.PreviewMonth+1, len(data.Draft.Months))
+	return fmt.Sprintf("%d of %d", builderRowNumber(data.Draft, data.PreviewMonth), len(months))
 }
 
 // builderStatsFor is the preview column's declaration readout.

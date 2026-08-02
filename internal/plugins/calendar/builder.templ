@@ -391,7 +391,7 @@ templ builderStructurePanel(data BuilderViewData) {
 						<span class="wz-badge wz-warn wz-flag">no days</span>
 					}
 				</span>
-				@builderStepper(data, "mdays", i, strconv.Itoa(m.Days), "days")
+				@builderStepper(data, "mdays", i, strconv.Itoa(m.Days), "")
 				<button
 					type="button"
 					class="wz-icb wz-wash"
@@ -967,6 +967,9 @@ templ builderPreview(data BuilderViewData) {
 // stepping, and the bound is enforced on the way in rather than by an attribute
 // a client can ignore.
 templ builderStepper(data BuilderViewData, act string, index int, value, unit string) {
+	if unit != "" {
+		<span class="wz-lbl">{ unit }</span>
+	}
 	<span class="wz-stepper">
 		<button
 			type="button"
@@ -977,12 +980,7 @@ templ builderStepper(data BuilderViewData, act string, index int, value, unit st
 			hx-target="#wz-shell"
 			hx-swap="outerHTML"
 		>−</button>
-		<b>
-			{ value }
-			if unit != "" {
-				<span class="wz-u">{ unit }</span>
-			}
-		</b>
+		<b>{ value }</b>
 		<button
 			type="button"
 			name="wz_act"

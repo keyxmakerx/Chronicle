@@ -479,6 +479,50 @@ func TestBuilderCSS_LeakGuard(t *testing.T) {
 
 // ── ASSERTION FAMILY 6 — unlayered, self-contained, and the refusals ────────
 
+// TestBuilderCSS_CommentsCloseWhereTheyMeanTo — A BUG THIS FILE SHIPPED FOR
+// ONE COMMIT, AND THE ONE CLASS OF DEFECT NO GO ASSERTION ABOVE COULD SEE.
+//
+// A glob written as `--t-` `*` `/` `--m-` `*` inside a prose comment closed that
+// comment EIGHT LINES EARLY. CSS error recovery then discarded everything up to
+// and including the next block — which was the `.cal-builder` token prelude. The
+// result was silent and total: every duration token resolved to nothing, every
+// `animation` shorthand became invalid at computed-value time, and the WHOLE
+// motion register did not run. Every assertion in this file still passed,
+// because they all read the sheet through the same non-greedy comment regex a
+// parser would, and the rules they check were all still present in the text.
+//
+// The browser probe found it in one reading (getComputedStyle reported
+// `animation-name: none` on a rule the CSSOM plainly contained), which is
+// exactly why the dispatch refuses to gate a motion wave on stills alone. This
+// assertion is the cheap half of that lesson: a stray terminator is now a test
+// failure rather than a stylesheet that quietly stops working.
+func TestBuilderCSS_CommentsCloseWhereTheyMeanTo(t *testing.T) {
+	code := builderCSSRaw(t)
+	depth, line := 0, 1
+	for i := 0; i < len(code); {
+		if code[i] == '\n' {
+			line++
+		}
+		if depth == 0 && strings.HasPrefix(code[i:], "/*") {
+			depth, i = 1, i+2
+			continue
+		}
+		if strings.HasPrefix(code[i:], "*/") {
+			if depth == 0 {
+				t.Errorf("line %d: a comment terminator appears OUTSIDE a comment — an "+
+					"earlier comment closed where it did not mean to, and CSS error "+
+					"recovery will silently discard the next rule", line)
+			}
+			depth, i = 0, i+2
+			continue
+		}
+		i++
+	}
+	if depth != 0 {
+		t.Error("the file ends inside an unterminated comment")
+	}
+}
+
 // TestBuilderCSS_UnlayeredAndRefusals. input.css's content is layered; an
 // unlayered standalone sheet beats every layer, which is exactly why the two
 // cascade regimes never fight. Adding @layer here would put this sheet BACK
