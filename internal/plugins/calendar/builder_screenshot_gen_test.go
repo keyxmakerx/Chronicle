@@ -29,9 +29,12 @@
 package calendar
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image/jpeg"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,6 +104,78 @@ func builderRenderShell(t *testing.T, d *builderDraft, step int, importer bool, 
 	return sb.String()
 }
 
+// builderSimpleCalendarExport is a REAL Simple Calendar v1 export of Harptos,
+// assembled from the shipped sc* structs so it cannot drift from the parser,
+// and it exists because the signed `importer` still is the POST-DROP state.
+//
+// The mockup's importer sheet shows "DETECTED · HARPTOS-OF-IMIX.JSON — SIMPLE
+// CALENDAR EXPORT" and the eight-row mapping table beneath it, ending on the
+// blocking `eras · add before create` row — which §1 calls the importer's own
+// honesty mechanism. A generator with no file to drop photographs the pre-drop
+// state instead, so the one sheet the mapping table lives on evidenced
+// everything EXCEPT the mapping table.
+//
+// Simple Calendar genuinely carries no eras (parseSimpleCalendarInner never
+// populates result.Eras), so this payload dead-ends on the era gate for a real
+// reason and the blocking row is a fact rather than a staging.
+func builderSimpleCalendarExport(t *testing.T, d *builderDraft) []byte {
+	t.Helper()
+	cal := scCalendar{
+		Name:     d.Name,
+		LeapYear: scLeapYear{Rule: "custom", CustomMod: d.LeapEvery},
+		Time:     scTime{HoursInDay: 24, MinutesInHour: 60, SecondsInMinute: 60},
+		Year:     scYear{NumericRepresentation: d.Year, Postfix: " " + d.EpochName},
+	}
+	for i, m := range d.Months {
+		cal.Months = append(cal.Months, scMonth{
+			Name: m.Name, NumericRepresentation: i + 1,
+			NumberOfDays: m.Days, NumberOfLeapYearDays: m.Days + m.LeapDays,
+			Intercalary: m.Intercalary,
+		})
+	}
+	for i, w := range d.Weekdays {
+		cal.Weekdays = append(cal.Weekdays, scWeekday{Name: w, NumericRepresentation: i + 1})
+	}
+	for _, m := range d.Moons {
+		cal.Moons = append(cal.Moons, scMoon{Name: m.Name, CycleLength: m.Period})
+	}
+	for _, se := range d.Seasons {
+		cal.Seasons = append(cal.Seasons, scSeason{
+			Name: se.Name, StartingMonth: se.StartMonth - 1, StartingDay: se.StartDay - 1,
+			Color: se.Color,
+		})
+	}
+	body, err := json.Marshal(scData{Calendar: cal})
+	if err != nil {
+		t.Fatalf("marshal the Simple Calendar export: %v", err)
+	}
+	return body
+}
+
+// builderRenderShot renders one shot key's markup, including the importer's
+// post-drop state, which is what the signed importer still actually draws.
+func builderRenderShot(t *testing.T, key string) string {
+	t.Helper()
+	d, step, imp, pv := builderShotState(t, key)
+	data := builderView("camp-1", "tok", d, step, imp, pv)
+	if key == "importer" {
+		// Mirrors BuilderPreviewAPI's upload branch exactly: the file is
+		// parsed, BECOMES the draft, and only then is the mapping read off it.
+		res, err := DetectAndParse(builderSimpleCalendarExport(t, d))
+		if err != nil {
+			t.Fatalf("the importer fixture must parse through the SHIPPED parser: %v", err)
+		}
+		data = builderView("camp-1", "tok", builderDraftFromImport(res), step, imp, 0)
+		data.Detected = fmt.Sprintf("harptos-of-imix.json — %s", builderFormatLabel(res.Format))
+		data.Mapping = builderMappingFor(res, data.Draft)
+	}
+	var sb strings.Builder
+	if err := BuilderShellFragment(data).Render(context.Background(), &sb); err != nil {
+		t.Fatalf("render shell: %v", err)
+	}
+	return sb.String()
+}
+
 var builderLinkRe = regexp.MustCompile(`<link[^>]*>`)
 
 // builderStripLink removes the AssetURL <link>: file:// cannot resolve /static/,
@@ -116,11 +191,42 @@ func builderStripLink(markup string) string { return builderLinkRe.ReplaceAllStr
 // and [WZ-9] refused the port.
 func builderHarness(t *testing.T, title, caption, body string, dark, reduced bool) string {
 	t.Helper()
+	return builderHarnessWith(t, title, caption, body, dark, reduced, builderStillSettle)
+}
+
+// builderStillSettle is the SETTLE the still generator applies, and the reason
+// a still gate is worth anything.
+//
+// A frame taken while the register is mid-flight is not a still of the surface,
+// it is a still of a moment. The verifier reproduced the whole set and found six
+// of forty-two differing from the committed evidence for exactly that reason —
+// same content, caught mid-pv-swap or mid-w-in — and a gate whose frames are
+// non-deterministic is a weak artefact even when it happens to be green.
+//
+// So the stills are captured at REST. The block below is Chronicle's own global
+// reduced-motion guard verbatim (static/css/input.css), minus the media query:
+// every animation finishes in 0.01ms, so every frame is the resting state and
+// two runs produce the same bytes. It suppresses nothing about layout, colour or
+// content, because all four keyframes end at the element's natural state — which
+// builder_css_contract_test.go pins by keeping them to opacity, transform and
+// clip-path.
+//
+// THE MOTION IS NOT GATED BY THESE. It is gated by the five clips
+// (TestGenerateBuilderClips), which is the split §12.1 asks for: "a PNG of a
+// transition is a PNG of nothing".
+const builderStillSettle = `*,*::before,*::after{animation-duration:0.01ms !important;` +
+	`animation-delay:0ms !important;animation-iteration-count:1 !important;` +
+	`transition-duration:0.01ms !important;scroll-behavior:auto !important}`
+
+// builderHarnessWith is builderHarness with the trailing stylesheet named, so
+// the clip generator can pass its own isolation block instead of the settle.
+func builderHarnessWith(t *testing.T, title, caption, body string, dark, reduced bool, extra string) string {
+	t.Helper()
 	cls := ""
 	if dark {
 		cls = ` class="dark"`
 	}
-	reduce := ""
+	reduce := extra
 	if reduced {
 		reduce = `@media (prefers-reduced-motion: reduce){*,*::before,*::after{` +
 			`animation-duration:0.01ms !important;animation-iteration-count:1 !important;` +
@@ -277,6 +383,54 @@ func builderShotCaption(key string, vw int, d *builderDraft) string {
 		key, vw, host, tier, len(d.Weekdays), col)
 }
 
+// builderMaxShotHeight caps a full-page capture. Nothing in the wizard is
+// anywhere near it; it exists so a future station that accidentally grows an
+// unbounded list cannot ask Chromium for a gigapixel PNG.
+const builderMaxShotHeight = 6000
+
+// builderMeasureHeight loads the page once and reads the document's own
+// scrollHeight, so the capture that follows is the WHOLE page rather than the
+// first window-height of it. Returns 0 when the reading cannot be taken, and
+// the caller then keeps its declared height — a shot is better cropped than
+// missing.
+func builderMeasureHeight(t *testing.T, chrome, page, dir string, w int) int {
+	t.Helper()
+	probe := strings.Replace(page, "</body>",
+		`<style>#probe{display:none}</style><pre id="probe"></pre><script>`+
+			`addEventListener('load',function(){var w=document.querySelector('.shot-wrap');`+
+			`var h=w?w.getBoundingClientRect().bottom+16:document.body.scrollHeight;`+
+			`document.getElementById('probe').textContent=String(Math.ceil(h));});`+
+			`</script></body>`, 1)
+	src := filepath.Join(dir, "measure.html")
+	if err := os.WriteFile(src, []byte(probe), 0o644); err != nil {
+		return 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, chrome,
+		"--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
+		// THE MEASURE RUNS AT THE CAPTURE'S OWN SCALE AND A TALL WINDOW.
+		// Measured at a short viewport the reading came back ~40px under, and
+		// the narrow captures lost their foot line to it — sticky offsets and
+		// the device scale both move layout, so the instrument has to match the
+		// photograph. The margin the caller adds is the belt on top of that.
+		fmt.Sprintf("--window-size=%d,%d", w, builderMaxShotHeight),
+		"--force-device-scale-factor=2",
+		"--virtual-time-budget=4000", "--dump-dom", "file://"+src).Output()
+	if err != nil {
+		return 0
+	}
+	m := builderProbeRe.FindSubmatch(out)
+	if m == nil {
+		return 0
+	}
+	h := 0
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(m[1])), "%d", &h); err != nil {
+		return 0
+	}
+	return h
+}
+
 // TestGenerateBuilderScreenshots writes the fidelity set.
 func TestGenerateBuilderScreenshots(t *testing.T) {
 	outDir := os.Getenv("BUILDER_SCREENSHOTS")
@@ -308,8 +462,7 @@ func TestGenerateBuilderScreenshots(t *testing.T) {
 				}(key),
 				body: func(k string) func(*testing.T) string {
 					return func(t *testing.T) string {
-						d, step, imp, pv := builderShotState(t, k)
-						return builderRenderShell(t, d, step, imp, pv)
+						return builderRenderShot(t, k)
 					}
 				}(key),
 			})
@@ -341,8 +494,7 @@ func TestGenerateBuilderScreenshots(t *testing.T) {
 				}(key),
 				body: func(k string) func(*testing.T) string {
 					return func(t *testing.T) string {
-						d, step, imp, pv := builderShotState(t, k)
-						return builderRenderShell(t, d, step, imp, pv)
+						return builderRenderShot(t, k)
 					}
 				}(key),
 			})
@@ -363,8 +515,7 @@ func TestGenerateBuilderScreenshots(t *testing.T) {
 			reduced: true, w: 1440, h: 1100,
 			body: func(k string) func(*testing.T) string {
 				return func(t *testing.T) string {
-					d, step, imp, pv := builderShotState(t, k)
-					return builderRenderShell(t, d, step, imp, pv)
+					return builderRenderShot(t, k)
 				}
 			}(key),
 		})
@@ -381,13 +532,31 @@ func TestGenerateBuilderScreenshots(t *testing.T) {
 			if err := os.WriteFile(src, []byte(page), 0o644); err != nil {
 				t.Fatalf("write page: %v", err)
 			}
+			// FULL PAGE, MEASURED FIRST. Chromium's --screenshot captures the
+			// WINDOW, so a fixed height silently crops — the narrow set was
+			// cut at 1600 CSS px and sliced the preview's divergence note
+			// through "the moon…", losing the stats block, the Year-length
+			// line and the foot line below the fold. The signed mobile stills
+			// are full-page, so a gate below the fold was not a gate at all.
+			// One extra load reads the document's own scrollHeight, and the
+			// capture uses it.
+			shotH := s.h
+			if m := builderMeasureHeight(t, chrome, page, dir, s.w); m > 0 {
+				shotH = m + 64
+			}
+			if shotH < s.h {
+				shotH = s.h
+			}
+			if shotH > builderMaxShotHeight {
+				shotH = builderMaxShotHeight
+			}
 			out := filepath.Join(outDir, s.file)
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, chrome,
 				"--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
 				"--force-device-scale-factor=2",
-				fmt.Sprintf("--window-size=%d,%d", s.w, s.h),
+				fmt.Sprintf("--window-size=%d,%d", s.w, shotH),
 				"--virtual-time-budget=4000",
 				"--screenshot="+out, "file://"+src,
 			)
@@ -400,6 +569,288 @@ func TestGenerateBuilderScreenshots(t *testing.T) {
 			}
 			t.Logf("wrote %s (%d bytes)", out, fi.Size())
 		})
+	}
+}
+
+// --- THE CLIPS — gate item §12.1(ii), and why they are not optional ----------
+//
+// [WZ-16] SIGNED requires "a clip per shipped motion pass, named against
+// motion-policy §3", and §12.2 requires this file to state HOW they were
+// captured, "because a clip with no provenance is not evidence". The reason is
+// in §12.1's own words: the deliverable is partly motion and "a PNG of a
+// transition is a PNG of nothing". A getAnimations() count — which
+// TestBuilderProbe_TheMonthDidNotMove takes, and which is excellent — answers
+// gate item (iv), not (ii). Dropping a signed gate item is a coordinator call.
+//
+// ── HOW THEY ARE CAPTURED, stated because the gate asks ───────────────────
+//
+// Chromium cannot record video, so the clip is BUILT rather than recorded, and
+// that is a strength here: each frame is a separate headless load at a stated
+// VIRTUAL time (--virtual-time-budget=N), so frame N is the register at exactly
+// N milliseconds and two runs produce the same film. There is no wall clock and
+// no dropped frame anywhere in the pipeline.
+//
+//	for N in 0,25,…,400ms:  chromium --virtual-time-budget=N --screenshot
+//	each PNG -> image/jpeg (stdlib) -> ffmpeg -f image2pipe -c:v mjpeg
+//	-> libvpx/webm at 40fps, so 1 frame = 25ms = the film's own time base
+//
+// The JPEG hop is not cosmetic: the ffmpeg this environment ships is Playwright's
+// minimal build, which has a PNG *encoder* but no PNG *decoder* (it decodes
+// mjpeg and nothing else). MJPEG is the only bridge available and it is lossy
+// only in the JPEG sense — geometry, timing and colour placement are untouched.
+//
+// ── WHY EACH CLIP ISOLATES ONE PASS ───────────────────────────────────────
+//
+// A station change fires passes 1, 2 and 3 together, which is what the surface
+// really does and what the mockup's three clips show. But the gate is a clip
+// PER PASS, and three passes overlapping in one film cannot evidence any one of
+// them. So each clip suppresses the other four passes at the harness level
+// (animation:none) and lets one run. The composite is not lost: the register is
+// the sum of these five and the stills show its resting state.
+//
+// Inert unless BUILDER_CLIPS names an output directory.
+
+// builderPass is one shipped motion pass, its §3 pattern, and the selector that
+// carries it — which is also how the other four are suppressed.
+type builderPass struct {
+	// n is the pass number in §5.2's table.
+	n int
+	// key names the file: pass<N>-<keyframe>--<§3 pattern>.
+	key string
+	// pattern is the motion-policy §3 vocabulary word this pass belongs to.
+	pattern string
+	// why is the caption burned into the clip's own page.
+	why string
+	// sel is the pass's prelude, verbatim from calendar-builder.css.
+	sel string
+	// station is the shot key the clip is filmed on.
+	station string
+}
+
+// builderPasses is §5.2's table, in order, with its §3 mapping.
+//
+// ONE MAPPING NOTE, STATED RATHER THAN SMOOTHED OVER: §3's four patterns pair a
+// meaning with a duration — enter is --t-base, exit is --t-fast. Passes 1, 3
+// and 5 are ARRIVALS taken at --t-fast, which is exit's duration. That is not a
+// mis-mapping, it is §5.2's design: pass 1 is "information never waits", and
+// passes 3 and 5 are latches, which are state changes rather than travel and
+// are named as ATTENTION here because that is what they say — "you are here",
+// "this one is chosen". The pattern word names the JOB; the token names the
+// duration; the two are allowed to disagree and the disagreement is the design.
+var builderPasses = []builderPass{
+	{1, "pass1-w-in-fine", "enter", "the station names itself first — 2px, --t-fast, delay 0",
+		".cal-builder .wz-panel .wz-ph,.cal-builder .wz-panel .wz-ps", "step-moons"},
+	{2, "pass2-w-in", "enter", "the station's content arrives in reading order — 3px, --t-base, on the --m-step ladder capped at --m-cap",
+		".cal-builder .wz-panel .wz-frow,.cal-builder .wz-panel .wz-pgal," +
+			".cal-builder .wz-panel .wz-igrid,.cal-builder .wz-panel .wz-note," +
+			".cal-builder .wz-panel .wz-sum,.cal-builder .wz-panel .wz-chipswrap," +
+			".cal-builder .wz-panel .wz-impdoor,.cal-builder .wz-panel .wz-dropz," +
+			".cal-builder .wz-panel .wz-maptable,.cal-builder .wz-panel .wz-stepper.wz-big",
+		"step-structure"},
+	{3, "pass3-m-latch-rail", "attention", "\"you are here\" latches shut centre-to-corners — canon A6 forbids a travelling indicator",
+		".cal-builder .wz-step.wz-cur::after", "step-moons"},
+	{4, "pass4-pv-swap", "enter", "the preview is REPLACED, not rearranged — opacity only, no transform, no ladder; the month's interior never moves",
+		".cal-builder .wz-pv", "step-structure"},
+	{5, "pass5-m-latch-preset", "attention", "selection is identity, not elevation — the ring latches, the shadow does not change",
+		".cal-builder .wz-pcard.wz-sel::after", "presets"},
+}
+
+// builderFFmpeg finds the encoder. Playwright ships one beside its browsers.
+func builderFFmpeg() string {
+	if p := os.Getenv("FFMPEG_BIN"); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		return p
+	}
+	for _, pattern := range []string{
+		"/opt/pw-browsers/ffmpeg-*/ffmpeg-linux",
+		filepath.Join(os.Getenv("HOME"), ".cache/ms-playwright/ffmpeg-*/ffmpeg-linux"),
+	} {
+		if matches, _ := filepath.Glob(pattern); len(matches) > 0 {
+			return matches[len(matches)-1]
+		}
+	}
+	return ""
+}
+
+// builderIsolate suppresses every pass except `keep`, so one clip films one
+// pass. It is `animation: none`, which leaves the element at its natural rest —
+// the same reason the still settle is safe.
+func builderIsolate(keep int) string {
+	var sb strings.Builder
+	for _, p := range builderPasses {
+		if p.n == keep {
+			continue
+		}
+		sb.WriteString(p.sel)
+		sb.WriteString("{animation:none !important}")
+	}
+	return sb.String()
+}
+
+// builderClipFrames is the ladder of virtual times, in milliseconds. It runs
+// past --t-long (400ms) so every clip ends at rest, and its step is the film's
+// frame duration.
+const (
+	builderClipStep  = 25
+	builderClipEnd   = 450
+	builderClipFPS   = 1000 / builderClipStep
+	builderClipW     = 1280
+	builderClipH     = 860
+	builderClipScale = 1
+)
+
+// TestGenerateBuilderClips writes one webm per shipped motion pass.
+func TestGenerateBuilderClips(t *testing.T) {
+	outDir := os.Getenv("BUILDER_CLIPS")
+	if outDir == "" {
+		t.Skip("clip generator: set BUILDER_CLIPS=<dir> to run")
+	}
+	chrome := builderShotChromium()
+	if chrome == "" {
+		t.Skip("clip generator: no Chromium binary found (set CHROMIUM_BIN)")
+	}
+	ff := builderFFmpeg()
+	if ff == "" {
+		t.Skip("clip generator: no ffmpeg found (set FFMPEG_BIN)")
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", outDir, err)
+	}
+
+	for _, p := range builderPasses {
+		t.Run(p.key, func(t *testing.T) {
+			d, step, imp, pv := builderShotState(t, p.station)
+			body := builderRenderShell(t, d, step, imp, pv)
+			title := fmt.Sprintf("pass %d · %s · %s", p.n, p.key, p.pattern)
+			caption := fmt.Sprintf("%s · station <b>%s</b> · motion-policy §3 pattern <b>%s</b> · "+
+				"the other four passes are suppressed so this film is of ONE pass · "+
+				"one frame = %dms of VIRTUAL time, so the film is reproducible",
+				p.why, p.station, p.pattern, builderClipStep)
+			page := builderHarnessWith(t, title, caption, body, false, false, builderIsolate(p.n))
+
+			dir := t.TempDir()
+			var film []byte
+			for at := 0; at <= builderClipEnd; at += builderClipStep {
+				src := filepath.Join(dir, fmt.Sprintf("f%04d.html", at))
+				if err := os.WriteFile(src, []byte(builderSeekTo(page, at)), 0o644); err != nil {
+					t.Fatalf("write frame page: %v", err)
+				}
+				shot := filepath.Join(dir, fmt.Sprintf("f%04d.png", at))
+				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+				cmd := exec.CommandContext(ctx, chrome,
+					"--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
+					fmt.Sprintf("--force-device-scale-factor=%d", builderClipScale),
+					fmt.Sprintf("--window-size=%d,%d", builderClipW, builderClipH),
+					"--virtual-time-budget=3000",
+					"--screenshot="+shot, "file://"+src)
+				out, err := cmd.CombinedOutput()
+				cancel()
+				if err != nil {
+					t.Fatalf("frame at %dms: %v\n%s", at, err, out)
+				}
+				jpg, err := builderPNGToJPEG(shot)
+				if err != nil {
+					t.Fatalf("frame at %dms: %v", at, err)
+				}
+				film = append(film, jpg...)
+			}
+
+			out := filepath.Join(outDir, fmt.Sprintf("wizard--%s--%s.webm", p.key, p.pattern))
+			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+			defer cancel()
+			enc := exec.CommandContext(ctx, ff, "-y",
+				"-f", "image2pipe", "-framerate", fmt.Sprint(builderClipFPS),
+				"-c:v", "mjpeg", "-i", "pipe:",
+				"-c:v", "libvpx", "-b:v", "3M", "-crf", "18", out)
+			enc.Stdin = bytes.NewReader(film)
+			if combined, err := enc.CombinedOutput(); err != nil {
+				t.Fatalf("encode %s: %v\n%s", out, err, combined)
+			}
+			fi, err := os.Stat(out)
+			if err != nil || fi.Size() == 0 {
+				t.Fatalf("clip %s was not written", out)
+			}
+			t.Logf("wrote %s (%d bytes, %d frames at %dfps)",
+				out, fi.Size(), (builderClipEnd/builderClipStep)+1, builderClipFPS)
+		})
+	}
+}
+
+// builderSeekTo returns the clip page with every animation PAUSED at exactly
+// `at` milliseconds, which is what makes a built film reproducible.
+//
+// The first attempt sampled --virtual-time-budget instead, and it was jittery:
+// virtual time also covers load and first style resolution, so the animation's
+// start moved a frame or two between budgets and four sampled positions came
+// back identical. The Web Animations API answers the question directly — pause
+// every running animation and set its currentTime — and currentTime INCLUDES
+// the delay phase, so pass 2's --m-step ladder films correctly: at t=0 a row
+// four steps down the ladder is still in its `both` fill start state, which is
+// exactly what the eye sees.
+//
+// The script is test-harness JS on a file:// page. It reaches no product code
+// and ships nowhere near the widget package.
+func builderSeekTo(page string, at int) string {
+	return strings.Replace(page, "</body>",
+		fmt.Sprintf(`<script>addEventListener('load',function(){`+
+			`document.getAnimations().forEach(function(a){a.pause();a.currentTime=%d;});`+
+			`});</script></body>`, at), 1)
+}
+
+// builderPNGToJPEG re-encodes one captured frame, because the ffmpeg available
+// here decodes mjpeg and nothing else (see the header). Quality 92 — high
+// enough that the 2px and 3px travels the register is made of survive it.
+func builderPNGToJPEG(path string) ([]byte, error) {
+	f, err := os.Open(path) //nolint:gosec // a path this test just wrote
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	img, err := png.Decode(f)
+	if err != nil {
+		return nil, fmt.Errorf("decode %s: %w", path, err)
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 92}); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// TestBuilderClips_CoverEveryShippedPass runs everywhere and is the assertion
+// the clip generator itself cannot make: the roster of clips is exactly the
+// roster of passes in the stylesheet, so a sixth pass cannot ship unfilmed and
+// a retired one cannot leave a stale film behind.
+func TestBuilderClips_CoverEveryShippedPass(t *testing.T) {
+	css := builderCSSRaw(t)
+	if n := len(builderPasses); n != 5 {
+		t.Fatalf("§5.2 tabulates FIVE passes and no sixth; the roster has %d", n)
+	}
+	seen := map[string]bool{}
+	for _, p := range builderPasses {
+		if seen[p.key] {
+			t.Errorf("two clips would share the file name %q", p.key)
+		}
+		seen[p.key] = true
+		// The pass's prelude must be in the sheet, or the clip films nothing.
+		for _, sel := range strings.Split(p.sel, ",") {
+			want := strings.TrimSpace(sel)
+			if !strings.Contains(strings.Join(strings.Fields(css), " "),
+				strings.Join(strings.Fields(want), " ")) {
+				t.Errorf("pass %d names %q, which is not a prelude in the shipped sheet",
+					p.n, want)
+			}
+		}
+		switch p.pattern {
+		case "enter", "exit", "attention", "ambient":
+		default:
+			t.Errorf("pass %d's pattern %q is not one of motion-policy §3's four",
+				p.n, p.pattern)
+		}
 	}
 }
 
@@ -551,7 +1002,7 @@ func TestBuilderProbe_TheMonthDidNotMove(t *testing.T) {
 })();
 </script>`
 
-	page := builderHarness(t, "month-did-not-move", "preset swap", before+script, false, false)
+	page := builderHarnessWith(t, "month-did-not-move", "preset swap", before+script, false, false, "")
 	raw := builderRunProbe(t, chrome, page)
 
 	var got struct {
@@ -688,7 +1139,7 @@ func TestBuilderProbe_NarrowLaneHoldsItsGate(t *testing.T) {
   if (window.parent !== window) window.parent.postMessage(reading, '*');
 })();
 </script>`
-			page := builderHarness(t, "narrow lane", key, body+script, false, false)
+			page := builderHarnessWith(t, "narrow lane", key, body+script, false, false, "")
 
 			for _, w := range widths {
 				raw := builderRunProbeAt(t, chrome, page, w, 1400)

@@ -517,7 +517,7 @@ templ builderIntercalaryPanel(data BuilderViewData) {
 			but no weekday, and the preview draws it as a full-width band below its month's last week.
 		</span>
 	</div>
-	<div class="wz-sum">Year total { strconv.Itoa(builderYearDays(data.Draft)) }</div>
+	<div class="wz-sum">{ builderIntercalarySummary(data.Draft) }</div>
 }
 
 templ builderLeapPanel(data BuilderViewData) {

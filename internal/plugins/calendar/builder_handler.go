@@ -218,12 +218,36 @@ func (h *Handler) BuilderPreviewAPI(c echo.Context) error {
 
 	data := builderView(cc.Campaign.ID, middleware.GetCSRFToken(c), draft, step, importer, pvMonth)
 
-	// An uploaded file carries its own detection line and mapping table. It is
-	// read through the SAME DetectAndParse an existing calendar's import uses,
-	// under the SAME 10 MB cap, on both transports.
+	// AN UPLOADED FILE BECOMES THE DRAFT. It is read through the SAME
+	// DetectAndParse an existing calendar's import uses, under the SAME 10 MB
+	// cap, on both transports, and then through the SAME builderDraftFromImport
+	// a preset goes through — which is what "the gallery and the importer are
+	// one path" means in code rather than in prose (§2.2).
+	//
+	// IT USED TO PARSE THE FILE AND THEN THROW IT AWAY: the detection line and
+	// the mapping table were built and the draft was left as it was, so the
+	// importer's own honesty mechanism reported the facts of whatever was
+	// already on screen while naming a file it had not adopted. A mapping table
+	// that says "12 months, 360 days · Structure · mapped" about a file it did
+	// not read is worse than no mapping table.
+	//
+	// The imported draft is RE-VALIDATED against §7.3's bounds before anything
+	// renders it: an uploaded structure is operator-authored input like any
+	// other and a 10 MB file can declare 500 months.
 	if name, res, ok := builderReadUpload(c); ok {
+		imported := builderDraftFromImport(res)
+		if err := validateBuilderDraft(imported); err != nil {
+			return err
+		}
+		data = builderView(cc.Campaign.ID, middleware.GetCSRFToken(c), imported, step, importer, pvMonth)
 		data.Detected = fmt.Sprintf("%s — %s", name, builderFormatLabel(res.Format))
 		data.Mapping = builderMappingFor(res, data.Draft)
+		// A DROP IS A WHOLE-SHELL EVENT. The drop zone targets #wz-shell, and
+		// the detection line and the mapping table live in the PANEL, so a
+		// preview-only response would have swapped the entire shell out for a
+		// preview column and taken the mapping table with it. builderReadForm
+		// sees no verb in a file POST, so the verb is the file.
+		wholeShell = true
 	}
 
 	if wholeShell {

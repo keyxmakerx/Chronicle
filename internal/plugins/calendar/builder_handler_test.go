@@ -8,6 +8,8 @@ package calendar
 import (
 	"context"
 	"errors"
+	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -630,5 +632,138 @@ func TestBuilderShow_RejectsAnUnknownStationOnTheQuery(t *testing.T) {
 		if !errors.As(err, &appErr) || appErr.Code != http.StatusBadRequest {
 			t.Errorf("?step=%q must be a 400; got %v", bad, err)
 		}
+	}
+}
+
+// TestBuilderImporter_TheFileBECOMESTheDraft is the front door's whole point,
+// and it was not true.
+//
+// BuilderPreviewAPI parsed the upload, printed "detected as Simple Calendar",
+// built the mapping table — and then rendered the draft that was already on
+// screen. The parse result was discarded. So the importer's own honesty
+// mechanism (§1: "an eight-row mapping table"; §6.2: "the importer's mapping
+// table, which the file calls its own honesty mechanism") reported the facts of
+// the PRESET while naming a FILE, and "Continue to Review" carried the preset
+// to Create. A mapping table that describes a file it did not adopt is worse
+// than no mapping table.
+//
+// §2.2 SIGNED is that the gallery and the importer are ONE code path with two
+// front doors — DetectAndParse then builderDraftFromImport — so this asserts
+// the second half actually runs.
+func TestBuilderImporter_TheFileBECOMESTheDraft(t *testing.T) {
+	// A real Simple Calendar export, assembled from the shipped sc* structs, of
+	// a calendar deliberately UNLIKE the wizard's default preset.
+	payload := []byte(`{"calendar":{"name":"Dropped Reckoning","months":[` +
+		`{"name":"Frostmoot","numericRepresentation":1,"numberOfDays":40},` +
+		`{"name":"Sunmoot","numericRepresentation":2,"numberOfDays":40}],` +
+		`"weekdays":[{"name":"Ald","numericRepresentation":1},` +
+		`{"name":"Bel","numericRepresentation":2},{"name":"Cor","numericRepresentation":3}],` +
+		`"year":{"numericRepresentation":77},"leapYear":{"rule":"none"},` +
+		`"time":{"hoursInDay":24,"minutesInHour":60,"secondsInMinute":60}}}`)
+
+	// The upload rides multipart, which is one of the two shipped transports.
+	var body strings.Builder
+	w := multipart.NewWriter(&body)
+	part, err := w.CreateFormFile("file", "dropped.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	// The form still carries the draft the author was on — a full Harptos —
+	// which is exactly the state that used to win.
+	d, err := builderPresetDraft("harptos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, vs := range builderFormFor(d, 0, true) {
+		for _, v := range vs {
+			if err := w.WriteField(k, v); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/campaigns/camp-1/calendars/builder/preview",
+		strings.NewReader(body.String()))
+	req.Header.Set(echo.HeaderContentType, w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(req, rec)
+	c.Set("campaign_context", &campaigns.CampaignContext{
+		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner, IsMember: true,
+	})
+
+	h := &Handler{}
+	if err := h.BuilderPreviewAPI(c); err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	html := rec.Body.String()
+
+	// The DROPPED calendar is what rendered. Its NAME is "Imported Calendar"
+	// rather than "Dropped Reckoning" because that is what the shipped
+	// parseSimpleCalendar produces for this format — import.go's parsers are
+	// not this wave's to change, and asserting what they really do is the point.
+	for _, want := range []string{"Imported Calendar", "Frostmoot", "Sunmoot", "dropped.json"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("the uploaded file must BECOME the draft; %q is absent", want)
+		}
+	}
+	// And the one that was on screen is gone — no month of it survives.
+	for _, gone := range []string{"Harptos of Imix", "Alturiak", "Highharvestide"} {
+		if strings.Contains(html, gone) {
+			t.Errorf("%q survived the import — the parse result was discarded, which is "+
+				"the bug: the mapping table then describes a file it never adopted", gone)
+		}
+	}
+	// The mapping table is read off the FILE's draft, so a format that carries
+	// no eras produces the blocking row rather than a mapped one. Simple
+	// Calendar genuinely carries none (parseSimpleCalendarInner never populates
+	// result.Eras), so this is a fact and not a staging.
+	if !strings.Contains(html, "eras not carried by this format") {
+		t.Error("Simple Calendar carries no eras and the mapping table must say so")
+	}
+	if !strings.Contains(html, "add before Create") {
+		t.Error("the era row is the BLOCKING one — it is where the wizard's gate becomes visible")
+	}
+	// And an over-large uploaded structure is rejected on the way in, at the
+	// same §7.3 bounds a typed one is: adopting the file made it input.
+	huge := `{"calendar":{"name":"Too much","months":[`
+	for i := 0; i < 200; i++ {
+		huge += fmt.Sprintf(`{"name":"M%d","numericRepresentation":%d,"numberOfDays":30},`, i, i+1)
+	}
+	huge = strings.TrimSuffix(huge, ",") + `],"weekdays":[{"name":"A","numericRepresentation":1}],` +
+		`"year":{"numericRepresentation":1},"leapYear":{"rule":"none"}}}`
+	var big strings.Builder
+	bw := multipart.NewWriter(&big)
+	bp, err := bw.CreateFormFile("file", "huge.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bp.Write([]byte(huge)); err != nil {
+		t.Fatal(err)
+	}
+	for k, vs := range builderFormFor(d, 0, true) {
+		for _, v := range vs {
+			if err := bw.WriteField(k, v); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := bw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req2 := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(big.String()))
+	req2.Header.Set(echo.HeaderContentType, bw.FormDataContentType())
+	c2 := echo.New().NewContext(req2, httptest.NewRecorder())
+	c2.Set("campaign_context", &campaigns.CampaignContext{
+		Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: campaigns.RoleOwner, IsMember: true,
+	})
+	if err := h.BuilderPreviewAPI(c2); err == nil {
+		t.Error("a 200-month upload must be REJECTED at §7.3's bounds, not truncated — " +
+			"adopting the file makes it input like any other")
 	}
 }

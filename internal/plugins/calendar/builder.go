@@ -1171,6 +1171,24 @@ func builderMonthSummary(d *builderDraft) string {
 		months, builderMonthDays(d), builderYearDays(d))
 }
 
+// builderIntercalarySummary is the Intercalary station's running sum, and it
+// counts the festival days BEFORE it names the year total — the signed still
+// reads "5 festival days · year total 365", and a bare "Year total 365" makes
+// the station's own subject invisible on the station that owns it. The empty
+// case is a sentence rather than a zero (§1: "the empty state is a sentence,
+// not a greyed row").
+func builderIntercalarySummary(d *builderDraft) string {
+	n := builderIntercalaryDays(d)
+	if n == 0 {
+		return fmt.Sprintf("No festival days · year total %d", builderYearDays(d))
+	}
+	unit := "festival days"
+	if n == 1 {
+		unit = "festival day"
+	}
+	return fmt.Sprintf("%d %s · year total %d", n, unit, builderYearDays(d))
+}
+
 // builderWeekSummary proves the week's arithmetic against a real month.
 func builderWeekSummary(d *builderDraft) string {
 	week := len(d.Weekdays)
