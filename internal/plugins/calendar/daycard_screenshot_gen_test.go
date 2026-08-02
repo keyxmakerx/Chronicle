@@ -49,6 +49,10 @@ type daycardShot struct {
 	mount   DayCardMount
 	// script is the in-page driver: which doors to click, and where to pause.
 	script string
+	// pickRestricted clicks the ◈ Restricted card before the shot, so the
+	// allow/deny roster is RENDERED rather than merely present. See
+	// daycardPickRestricted.
+	pickRestricted bool
 	// scroll is a selector whose element is scrolled to its END before the
 	// shot. It exists because of the fix round's finding 1 — see
 	// daycardFoldDiag's header. Empty means "photograph the resting scroll
@@ -91,6 +95,21 @@ type daycardShot struct {
 // geometry — a capture that overrode it would be photographing a box that no
 // user has. The rig scrolls, exactly as a user would.
 const daycardFoldDiag = `
+  function shown(sel) {
+    var el = document.querySelector(sel);
+    if (!el) return false;
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+  function rendered() {
+    var out = [];
+    if (shown('[data-de-restricted]')) out.push('◈ Restricted card');
+    if (shown('[data-de-audrows]')) out.push('allow/deny roster');
+    if (shown('[data-de-tie]')) out.push('Tied to');
+    if (shown('[data-de-delete]')) out.push('Delete event');
+    if (shown('[data-de-tie] .pill.tie')) out.push('tie pill + ✕');
+    return out.length ? out : ['(none of the below-fold marks)'];
+  }
   var fold = document.getElementById('shot-fold');
   var edb = document.querySelector('.cal-dayeditor .ed-body');
   var edroot = document.querySelector('[data-cal-dayeditor]');
@@ -105,10 +124,13 @@ const daycardFoldDiag = `
       fold.textContent = 'RIG: .ed-body shows ' + vis + 'px of ' + all + 'px' +
         ' · scrollTop ' + Math.round(edb.scrollTop) + 'px' +
         ' · ' + below + 'px BELOW THE FOLD in this frame' +
-        ' · marks present in the DOM: ' +
-        (document.querySelector('[data-de-restricted]') ? '◈ Restricted ' : '') +
-        (document.querySelector('[data-de-audrows]') ? '· allow/deny roster ' : '') +
-        (document.querySelector('[data-de-tie]') ? '· Tied to' : '');
+        // RENDERED, NOT MERELY PRESENT. The first cut of this line reported
+        // "present in the DOM", and data-de-aud is in the DOM on every
+        // editor while being HIDDEN until Restricted is picked — so a create-
+        // mode frame with no roster in it printed a strip saying the roster
+        // was there. That is the same defect one layer down, and it is the
+        // reason this report exists at all.
+        ' · RENDERED in this frame: ' + rendered().join(' · ');
     }
     // RELAYED OUT OF THE FRAME. A sub-500 shot renders inside a nested
     // browsing context (see daycardShotFrame) and the editor is a TOP-LAYER
@@ -236,6 +258,17 @@ const daycardStubEditRecord = `
 // because which fixture day carries an event is not this file's business and a
 // driver that clicked cell zero and found nothing would silently photograph a
 // create-mode editor with an edit-mode caption on it.
+// daycardPickRestricted clicks the ◈ Restricted card — a door the producer
+// rendered, for a viewer who has it. It exists because `data-de-aud` is HIDDEN
+// until Restricted is the chosen mode, so a create-mode capture that scrolled
+// to the roster found a collapsed box and a caption that said otherwise. For a
+// viewer WITHOUT the card the querySelector misses and nothing happens, which
+// is what makes the co-DM pair an axes proof rather than a coincidence.
+const daycardPickRestricted = `
+  var pick = document.querySelector('[data-de-restricted]');
+  if (pick) pick.click();
+`
+
 // It picks the day with the MOST rows rather than the first day with any,
 // because a one-row card photographs a row list that cannot be read as one and
 // the day the fixture loads up is the day worth photographing.
@@ -423,31 +456,31 @@ func daycardShotList() []daycardShot {
 		{file: "01-editor-gm-1440x900-light.png", mount: gm, w: 1440, h: 900, script: daycardOpenEditor,
 			title: "Event editor · CREATE · GM (Owner + grant) · 1440×900 · light — UPPER BAND",
 			caption: "the locked type rail, the real month grid, the corrected recurrence unit list, the live preview, and the FIRST ROW of the visibility cards. `.ed-body` scrolls (see the fold strip at the foot): the ◈ Restricted card, the allow/deny roster and `Tied to` are below this frame and are photographed in 01b. Against editor-gm-1440x900.png: no `year` unit, no ends cycler, no knowledge-horizon chip, and the box is 760px rather than ~1008 — see the report's [ER-5] section"},
-		{file: "01b-editor-gm-1440x900-light-lowerband.png", mount: gm, w: 1440, h: 900,
+		{file: "01b-editor-gm-1440x900-light-lowerband.png", pickRestricted: true, mount: gm, w: 1440, h: 900,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · CREATE · GM · 1440×900 · light — LOWER BAND (`.ed-body` scrolled to its end)",
-			caption: "the SAME capture with `.ed-body` scrolled exactly as a wheel would scroll it — no geometry is overridden. This is where the ◈ Restricted card, the allow/deny roster (5 members, ✓/✕ per row) and the `Tied to` field live at 1440. 01 and 01b together are the desktop GM editor"},
+			caption: "the SAME capture with `.ed-body` scrolled exactly as a wheel would scroll it — no geometry is overridden — and with the ◈ Restricted card CLICKED, because the roster is hidden until Restricted is the chosen mode. This is where the ◈ card, the allow/deny roster (five members, ✓ allow / ✕ deny per row, all five defaulting to allow because a draft carries no rule yet) and the `Tied to` field live at 1440. The fold strip lists what is RENDERED in this frame, not what is merely in the DOM. 01 and 01b together are the desktop GM editor"},
 		{file: "02-editor-gm-1440x900-dark.png", mount: gm, w: 1440, h: 900, dark: true, script: daycardOpenEditor,
 			title: "Event editor · CREATE · GM · 1440×900 · dark — UPPER BAND",
 			caption: "the same DOM in dark, same fold. Inherited defect 6 is visible and BOOKED, not patched: a fogged day still renders lighter than a known one"},
-		{file: "02b-editor-gm-1440x900-dark-lowerband.png", mount: gm, w: 1440, h: 900, dark: true,
+		{file: "02b-editor-gm-1440x900-dark-lowerband.png", pickRestricted: true, mount: gm, w: 1440, h: 900, dark: true,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · CREATE · GM · 1440×900 · dark — LOWER BAND",
-			caption: "the dark half of the pair: ◈ Restricted, the roster and `Tied to`"},
+			caption: "the dark half of the pair, same scroll and same Restricted click: the ◈ card, the roster and `Tied to`"},
 		{file: "03-editor-gm-390x844-light.png", mount: gm, w: 390, h: 844, script: daycardOpenEditor,
 			title: "Event editor · CREATE · GM · 390×844 · light",
 			caption: "the REAL 390 viewport, not a 500px stand-in — the rejected set shot three files named `-390x844` at a 500px window and only one of them said so. Below 1080px `.ed-body` is ONE column and the live preview sits under the form ([ER-5]'s hard requirement). The fold strip reports what is below this frame"},
-		{file: "03b-editor-gm-390x844-light-lowerband.png", mount: gm, w: 390, h: 844,
+		{file: "03b-editor-gm-390x844-light-lowerband.png", pickRestricted: true, mount: gm, w: 390, h: 844,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · CREATE · GM · 390×844 · light — LOWER BAND",
-			caption: "the phone's lower band: the one-column body scrolled to its end"},
+			caption: "the phone's lower band, Restricted clicked: the one-column body scrolled to its end, with the roster stacked for 390"},
 		{file: "04-editor-codm-1440x900-light.png", mount: codm, w: 1440, h: 900, script: daycardOpenEditor,
 			title: "Event editor · co-DM (Scribe WITH the grant) · 1440×900 · light — THE AXES PROOF, UPPER BAND",
-			caption: "read against 01 (upper) — the ◥ DM only card is PRESENT. The absences this pair proves are in 04b, which is the frame the ◈ Restricted card and its roster would occupy if the capability were there. Delete is absent from BOTH 01 and 04 because create mode has no id to delete; the Delete axis is proved in the EDIT-mode pair 16/17, not here"},
-		{file: "04b-editor-codm-1440x900-light-lowerband.png", mount: codm, w: 1440, h: 900,
+			caption: "read against 01 (upper) — the ◥ DM only card is PRESENT. The absences this pair proves are in 04b, which is the frame the ◈ Restricted card and its roster would occupy if the capability were there. Delete is absent from BOTH 01 and 04 because create mode has no id to delete; the Delete axis is proved in the EDIT-mode pair 17/19, not here"},
+		{file: "04b-editor-codm-1440x900-light-lowerband.png", pickRestricted: true, mount: codm, w: 1440, h: 900,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · co-DM · 1440×900 · light — THE AXES PROOF, LOWER BAND",
-			caption: "read against 01b, which is the same scroll position for an Owner. There: ◈ Restricted, the roster, `Tied to`. Here: `Tied to` and NO ◈ Restricted card and NO roster. One capability flipped and exactly the CanRestrict affordances moved"},
+			caption: "read against 01b, which is the same scroll position for an Owner. IDENTICAL SCRIPT, including the click on the ◈ Restricted card — here the click finds nothing, because the card is not rendered for a viewer without CanRestrict. There the strip reads `◈ Restricted card · allow/deny roster · Tied to`; here it reads `Tied to`. One capability flipped and exactly the CanRestrict affordances moved"},
 		{file: "05-editor-scribe-1440x900-light.png", mount: scribe, w: 1440, h: 900, script: daycardOpenEditor,
 			title: "Event editor · Scribe, no grant · 1440×900 · light — THE ABSENCE PROOF",
 			caption: "the whole Visibility fieldset is STRUCTURALLY GONE — not collapsed, not a radio group of one, not narrated. Nothing marks where it was. With the fieldset gone the body is short enough that the fold strip reports 0px below the frame"},
@@ -468,10 +501,10 @@ func daycardShotList() []daycardShot {
 		{file: "07-editor-gm-820-light.png", mount: gm, w: 820, h: 1200, script: daycardOpenEditor,
 			title: "Event editor · GM · 820×1200 · light",
 			caption: "the tablet width: ONE column, and the widest un-scrolled frame the fold allows — `.ed-body` caps at min(70vh, 620px), so the 620px cap binds at every viewport this rig shoots and 122px of the live preview sit below this frame (the strip says so). What IS in this one un-scrolled frame: all three visibility cards and `Tied to`, which is the direct proof that the build renders what 01b has to scroll to reach. Horizontal scroll is measured, not eyeballed — TestDayCardFloorsProbe, see fold-and-floor-probe.txt"},
-		{file: "07b-editor-gm-820-light-lowerband.png", mount: gm, w: 820, h: 1200,
+		{file: "07b-editor-gm-820-light-lowerband.png", pickRestricted: true, mount: gm, w: 820, h: 1200,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · GM · 820×1200 · light — LOWER BAND",
-			caption: "the 122px 07 leaves below its frame: the live-preview column's foot"},
+			caption: "the 122px 07 leaves below its frame, with the ◈ Restricted card clicked so the roster is rendered: the roster and the live-preview column's foot"},
 
 		// ── §10 item 4: the player set, checked for ABSENCE ─────────────────
 		{file: "08-card-player-1440x900-light.png", mount: player, w: 1440, h: 900, script: daycardOpenCard,
@@ -494,17 +527,17 @@ func daycardShotList() []daycardShot {
 		{file: "11-editor-gm-grayscale-light.png", mount: gm, w: 1440, h: 900, gray: true, script: daycardOpenEditor,
 			title: "Event editor · GM · GREYSCALE · light — PERMISSION MARKS, UPPER BAND",
 			caption: "hue removed AT THE TOP LAYER TOO — the card and the editor are [popover] and an ancestor filter on <html> does not reach them, which is why an earlier cut of this pair photographed a grey page with a full-colour editor on it. What must survive IN THIS FRAME: the ◥ dogear on the DM-only card, the GM badge, and every type option's rail-PATTERN + glyph. The other two marks §10 item 10 names — the ◈ diamond and the allow/deny ✓/✕ — are below the fold and are proved in 11b"},
-		{file: "11b-editor-gm-grayscale-light-lowerband.png", mount: gm, w: 1440, h: 900, gray: true,
+		{file: "11b-editor-gm-grayscale-light-lowerband.png", pickRestricted: true, mount: gm, w: 1440, h: 900, gray: true,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · GM · GREYSCALE · light — PERMISSION MARKS, LOWER BAND",
-			caption: "the other half of §10 item 10 with hue removed: the ◈ diamond on the Restricted card and the allow/deny ✓/✕ on every roster row. This is menus-gm-grayscale's rule taken without its surface ([ER-1])"},
+			caption: "the other half of §10 item 10 with hue removed, and with the ◈ Restricted card clicked so the roster is rendered: the ◈ diamond on the Restricted card and the allow/deny ✓/✕ on every roster row, both legible with no hue at all. This is menus-gm-grayscale's rule taken without its surface ([ER-1])"},
 		{file: "12-editor-gm-grayscale-dark.png", mount: gm, w: 1440, h: 900, gray: true, dark: true, script: daycardOpenEditor,
 			title:   "Event editor · GM · GREYSCALE · dark — UPPER BAND",
 			caption: "the same three marks in dark: ◥ dogear, GM badge, rail-pattern + glyph"},
-		{file: "12b-editor-gm-grayscale-dark-lowerband.png", mount: gm, w: 1440, h: 900, gray: true, dark: true,
+		{file: "12b-editor-gm-grayscale-dark-lowerband.png", pickRestricted: true, mount: gm, w: 1440, h: 900, gray: true, dark: true,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · GM · GREYSCALE · dark — LOWER BAND",
-			caption: "the ◈ diamond and the allow/deny ✓/✕ in dark"},
+			caption: "the ◈ diamond and the allow/deny ✓/✕ in dark, hue removed, roster rendered"},
 
 		// ── §10 item 6: reduced motion — instant AND COMPLETE ───────────────
 		{file: "13-editor-gm-reduced-motion.png", mount: gm, w: 1440, h: 900, reduced: true,
@@ -741,6 +774,13 @@ func TestGenerateDayCardScreenshots(t *testing.T) {
 	}
 }
 
+func pickIf(on bool) string {
+	if !on {
+		return ""
+	}
+	return daycardPickRestricted
+}
+
 // daycardShotFrame wraps a shot page in a viewport of an EXACT size, for the
 // widths --window-size will not give. See the runner for the measurement that
 // makes it necessary; the note is burned into the image so the substitution
@@ -858,7 +898,7 @@ func daycardShotPage(t *testing.T, s daycardShot, css, body string) string {
 		// this round is fixing. The timer also lets the morph's settle land, so
 		// the box being measured is the placed one.
 		`<script>window.addEventListener('load', function () {` +
-		s.script +
+		s.script + pickIf(s.pickRestricted) +
 		`setTimeout(function () {` + daycardScrollTo(s.scroll) + daycardFoldDiag + `}, 250);` +
 		`});</script>` +
 		`</body></html>`
