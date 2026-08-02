@@ -76,6 +76,28 @@ motion clips exist and the stills are captured at rest and reproduce
 byte-for-byte; and the importer, which had been parsing the dropped file and
 then discarding it, now adopts it as the draft. ADR-048 §26 carries all of it.
 
+**A THIRD ROUND CLOSED IT, ON FIVE COORDINATOR RULINGS.** Two of the five were
+decisions rather than repairs, which is why they came from the coordinator and
+not the executor. **The delay ladder [WZ-8] tabulates had never run**: the rule
+sat before pass 2's `animation:` shorthand at equal specificity, the shorthand
+reset `animation-delay` to `0s`, and every static guard passed because every
+static guard asks whether the rule exists. It runs now (0 / 33.3 / 66.7 / 100 /
+133.3ms, measured in Chromium), pinned by a byte-ORDER assertion and a browser
+probe, and it **deliberately diverges from the sealed mockup**, which carries the
+identical defect — the written signed mechanism outranks the drawing's accident,
+and the mockup's own one-line fix is booked, not taken. **The wizard's host layer
+set gained `eras`** (ruling R3, a deliberate re-pin of [WZ-2c]): the preview
+draws the era bands the signed stills draw, DEF is unchanged, and the preview's
+disclosure note shrank to the two absences still true — pinned together, with the
+stale phrases asserted gone by name. **The indigo-vs-amber CTA** is disclosed and
+booked to `C-CALV4-TOKENS-RESIGN` rather than patched, the sibling wave's way.
+**The preset ↔ `BuildExport` round trip** the acceptance list required exists and
+found one asymmetry (a moon's colour), asserted exactly and booked. And the
+evidence's own arithmetic now describes the photograph — plus one more defect the
+regeneration surfaced: the two "reduced motion" stills were ordinary renders,
+because the capture never asked Chromium for the preference the harness's media
+query needed.
+
 Books: ADR-048 §26 · `reports/chronicle/2026-08-02-C-CALV4-WIZARD-P13.md` ·
 screenshots, clips + measurements under
 `reports/chronicle/screenshots/2026-08-02-c-calv4-wizard-p13/`.

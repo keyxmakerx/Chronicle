@@ -3516,6 +3516,79 @@ goes through — §2.2's "one code path, two front doors", in code rather than i
 prose — and is re-validated against §7.3's bounds, because an adopted file is
 input like any other.
 
+**THE THIRD FIX ROUND — five coordinator rulings, and the first is a rule that
+existed only on paper.** Adversarial verification rejected the second fix round
+on two blocking findings and three non-blocking ones. The coordinator ruled on
+all five rather than leaving them to the executor, because two of them were
+choices about what the product means and not about whether the code matches it.
+
+*A rule that is present is not a mechanism that runs.* §5.2 pass 2 and [WZ-8]
+SIGNED tabulate a delay ladder — "the station's content arrives in reading
+order", `calc(min(--m-i, --m-cap) * --m-step)`, ≤132ms added. The rule was in
+the sheet, in the one prelude it is legal in, composing the right tokens, and it
+did nothing: it was declared BEFORE pass 2's `animation:` shorthand at identical
+specificity, and a shorthand resets `animation-delay` to `0s`. Every static
+guard passed, because every static guard asks whether the rule EXISTS. Measured
+in Chromium, every `.wz-frow` computed `animation-delay: 0s` while `--m-i`
+resolved 0,1,2,… correctly, and the clip evidence had been read as showing a
+stagger when what it showed was `--t-base` plus one frame of encoder residue.
+The repair is the declaration's position. **It deliberately diverges from the
+sealed mockup**, which has the identical cascade defect and therefore lands its
+own rows flat: the written signed mechanism outranks the drawing's accident
+(coordinator ruling R1), the divergence is disclosed in the wave's evidence
+index, and the mockup's one-line fix is BOOKED rather than taken, because a
+sealed artifact is not edited from a build slice. Two pins now hold it — a
+byte-ORDER assertion, because nothing in the file's shape tells a reader those
+two rules are order-coupled, and a browser probe that measures the delays and
+the reduced-motion silence in a real engine.
+
+*An inherited divergence is disclosed and booked, not patched per surface.* The
+filled CTA renders indigo where all twenty-two signed stills draw amber, because
+both v4 sheets alias the contract's dedicated `--accent-action` to the campaign
+accent. The exhaustive-differences list did not name it. The ruling (R2) is the
+one the sibling wave already took a day earlier: it is product-wide and predates
+the slice, so the remedy is a disclosure line, a comment at the aliasing lines,
+and a real scope item on `C-CALV4-TOKENS-RESIGN` — where the question is not the
+pixel but whether the primary action owns a hue independent of the campaign
+accent. Patching it inside one surface is what has kept the other two token
+defects alive for four waves.
+
+*A host layer set is a coordinator act, and this is what it looks like when the
+coordinator acts.* W-H shipped DEF `["moons"]` per [WZ-2c], disclosed on the
+surface that the era bands the signed stills draw were therefore absent, and
+booked the tension instead of turning a layer on to make a picture match. Ruling
+R3 amends the host's own seed to `["moons", "eras"]` — DEF itself untouched, no
+other producer's seed moved — and the preview's disclosure note SHRANK in the
+same commit to the two absences that remain true. The layer set and the shrunk
+sentence are pinned by one test, and the stale phrases are asserted GONE by
+name: a note that keeps naming a fixed absence is as dishonest as one that hides
+a real one. The Eras station's own copy, which told the author no band was
+drawn, went with it.
+
+*An acceptance item is either met or open; "neither" is the worst of the three.*
+The list required each preset to round-trip against `export.go:BuildExport` and
+no test referenced it. It does now, through four shipped hops with no restated
+mapping, and it found exactly one asymmetry: a moon's colour, because
+`builderImportResult` stamps import.go's default swatch and `draftCalendar`
+leaves it empty. The test asserts the shape of the disagreement precisely rather
+than exempting the field, so a future drift in cycle length or phase offset
+cannot hide inside the same exemption.
+
+*And the evidence's own arithmetic must describe the photograph.* Eighteen of
+forty-two stills printed the 390px chain under a 500px capture; the tier
+conclusion survived and the numbers did not, which is how a reader learns to
+stop checking. The captions now state the photographed width with the 390
+readings on a separate, attributed probe line. The "reproduces byte-for-byte"
+claim became "content-identical, caption rasterisation aside", with the three
+files named. **And the regeneration found one more, which is the argument for
+re-measuring rather than re-asserting:** the two reduced-motion stills were
+ordinary renders. The harness swaps its settle block for a
+`@media (prefers-reduced-motion: reduce)` copy of the global guard, the capture
+never asked Chromium for that preference, so the media query matched nothing and
+the register ran — the pictures were evidence for the opposite of their own
+caption, and they announced it by being the only two that failed to reproduce
+between runs. The capture now passes `--force-prefers-reduced-motion`.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they

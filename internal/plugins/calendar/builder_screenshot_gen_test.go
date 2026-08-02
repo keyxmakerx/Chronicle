@@ -189,6 +189,13 @@ func builderStripLink(markup string) string { return builderLinkRe.ReplaceAllStr
 // CHRONICLE'S OWN global guard verbatim (static/css/input.css:31-47) rather than
 // the mockup's token-zeroing block, because Chronicle's is what actually ships
 // and [WZ-9] refused the port.
+//
+// IT ONLY MEANS ANYTHING WITH THE ENGINE FLAG, and the caller must pass it: the
+// block below is inside `@media (prefers-reduced-motion: reduce)`, so on a
+// browser reporting no-preference it matches nothing and the still is an
+// ordinary render of a moving surface. TestGenerateBuilderScreenshots passes
+// `--force-prefers-reduced-motion` for exactly these two shots — see the capture
+// command, and the note there about how the omission announced itself.
 func builderHarness(t *testing.T, title, caption, body string, dark, reduced bool) string {
 	t.Helper()
 	return builderHarnessWith(t, title, caption, body, dark, reduced, builderStillSettle)
@@ -560,8 +567,10 @@ func TestGenerateBuilderScreenshots(t *testing.T) {
 		shots = append(shots, builderShot{
 			file:  fmt.Sprintf("builder-wizard--%s--reduced-motion.png", key),
 			title: fmt.Sprintf("The builder wizard · %s · prefers-reduced-motion: reduce", key),
-			caption: "under Chronicle's OWN global guard (input.css, outside every cascade layer) " +
-				"the whole register is instant and complete — the still-state loses nothing",
+			caption: "under Chronicle's OWN global guard (input.css, outside every cascade layer), " +
+				"with the preference ASKED OF THE ENGINE (--force-prefers-reduced-motion) rather " +
+				"than simulated: the whole register is instant and complete — the still-state " +
+				"loses nothing",
 			reduced: true, w: 1440, h: 1100,
 			body: func(k string) func(*testing.T) string {
 				return func(t *testing.T) string {
@@ -603,13 +612,29 @@ func TestGenerateBuilderScreenshots(t *testing.T) {
 			out := filepath.Join(outDir, s.file)
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, chrome,
+			args := []string{
 				"--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
 				"--force-device-scale-factor=2",
 				fmt.Sprintf("--window-size=%d,%d", s.w, shotH),
 				"--virtual-time-budget=4000",
-				"--screenshot="+out, "file://"+src,
-			)
+			}
+			if s.reduced {
+				// THE PREFERENCE IS ASKED OF THE ENGINE, NOT SIMULATED.
+				// Without this flag the "reduced motion" stills were ordinary
+				// renders: the harness swaps its settle block for a
+				// `@media (prefers-reduced-motion: reduce)` copy of Chronicle's
+				// global guard, and that media query never matched, so the
+				// register RAN and the frame was whatever moment the capture
+				// landed on. It showed as non-determinism — the two
+				// reduced-motion stills were the only ones that failed to
+				// reproduce between runs, by 667,811 pixels — and the picture
+				// was evidence for the opposite of its own caption. With the
+				// flag the guard matches, nothing animates, and the still is
+				// the resting state it always claimed to be.
+				args = append(args, "--force-prefers-reduced-motion")
+			}
+			args = append(args, "--screenshot="+out, "file://"+src)
+			cmd := exec.CommandContext(ctx, chrome, args...)
 			if combined, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("chromium screenshot: %v\n%s", err, combined)
 			}
