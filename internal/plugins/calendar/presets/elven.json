@@ -1,0 +1,205 @@
+{
+  "name": "Elven Reckoning",
+  "years": {
+    "yearZero": 218,
+    "firstWeekday": 0,
+    "leapYear": null,
+    "resetWeekdays": false,
+    "allowNegativeYears": false,
+    "names": [],
+    "weekStartWeekdayId": ""
+  },
+  "months": {
+    "aevel00000000000": {
+      "name": "Aevel",
+      "abbreviation": "Aev",
+      "days": 45,
+      "leapDays": null,
+      "startingWeekday": null,
+      "ordinal": 1
+    },
+    "sithrel000000000": {
+      "name": "Sithrel",
+      "abbreviation": "Sit",
+      "days": 45,
+      "leapDays": null,
+      "startingWeekday": null,
+      "ordinal": 2
+    },
+    "lethra0000000000": {
+      "name": "Lethra",
+      "abbreviation": "Let",
+      "days": 45,
+      "leapDays": null,
+      "startingWeekday": null,
+      "ordinal": 3
+    },
+    "vanyr00000000000": {
+      "name": "Vanyr",
+      "abbreviation": "Van",
+      "days": 45,
+      "leapDays": null,
+      "startingWeekday": null,
+      "ordinal": 4
+    },
+    "ithil00000000000": {
+      "name": "Ithil",
+      "abbreviation": "Ith",
+      "days": 45,
+      "leapDays": null,
+      "startingWeekday": null,
+      "ordinal": 5
+    },
+    "serel00000000000": {
+      "name": "Serel",
+      "abbreviation": "Ser",
+      "days": 45,
+      "leapDays": null,
+      "startingWeekday": null,
+      "ordinal": 6
+    },
+    "thalor0000000000": {
+      "name": "Thalor",
+      "abbreviation": "Tha",
+      "days": 45,
+      "leapDays": null,
+      "startingWeekday": null,
+      "ordinal": 7
+    },
+    "myrren0000000000": {
+      "name": "Myrren",
+      "abbreviation": "Myr",
+      "days": 45,
+      "leapDays": null,
+      "startingWeekday": null,
+      "ordinal": 8
+    }
+  },
+  "days": {
+    "values": {
+      "sel0000000000000": {
+        "name": "Sel",
+        "ordinal": 1,
+        "abbreviation": "Sel",
+        "isRestDay": false
+      },
+      "vae1000000000000": {
+        "name": "Vae",
+        "ordinal": 2,
+        "abbreviation": "Vae",
+        "isRestDay": false
+      },
+      "ith2000000000000": {
+        "name": "Ith",
+        "ordinal": 3,
+        "abbreviation": "Ith",
+        "isRestDay": false
+      },
+      "rel3000000000000": {
+        "name": "Rel",
+        "ordinal": 4,
+        "abbreviation": "Rel",
+        "isRestDay": false
+      },
+      "ana4000000000000": {
+        "name": "Ana",
+        "ordinal": 5,
+        "abbreviation": "Ana",
+        "isRestDay": false
+      },
+      "sil5000000000000": {
+        "name": "Sil",
+        "ordinal": 6,
+        "abbreviation": "Sil",
+        "isRestDay": false
+      },
+      "tha6000000000000": {
+        "name": "Tha",
+        "ordinal": 7,
+        "abbreviation": "Tha",
+        "isRestDay": false
+      },
+      "yls7000000000000": {
+        "name": "Yls",
+        "ordinal": 8,
+        "abbreviation": "Yls",
+        "isRestDay": false
+      },
+      "mor8000000000000": {
+        "name": "Mor",
+        "ordinal": 9,
+        "abbreviation": "Mor",
+        "isRestDay": false
+      }
+    },
+    "daysPerYear": 360,
+    "hoursPerDay": 24,
+    "minutesPerHour": 60,
+    "secondsPerMinute": 60
+  },
+  "seasons": {
+    "budding000000000": {
+      "name": "Budding",
+      "abbreviation": "Bud",
+      "color": "#8fd6a0",
+      "ordinal": 1,
+      "monthStart": 0,
+      "monthEnd": 2,
+      "dayStart": 0,
+      "dayEnd": 45
+    },
+    "zenith0000000000": {
+      "name": "Zenith",
+      "abbreviation": "Zen",
+      "color": "#e0c070",
+      "ordinal": 2,
+      "monthStart": 3,
+      "monthEnd": 5,
+      "dayStart": 0,
+      "dayEnd": 45
+    },
+    "waning0000000000": {
+      "name": "Waning",
+      "abbreviation": "Wan",
+      "color": "#a894c8",
+      "ordinal": 3,
+      "monthStart": 6,
+      "monthEnd": 7,
+      "dayStart": 0,
+      "dayEnd": 45
+    }
+  },
+  "eras": {
+    "cyclesreturn0000": {
+      "name": "Cycles of the Return",
+      "abbreviation": "Cycle",
+      "startYear": 1,
+      "endYear": null
+    }
+  },
+  "moons": {
+    "sehanine00000000": {
+      "name": "Sehanine",
+      "cycleLength": 54.2,
+      "cycleDayAdjust": 20,
+      "referencePhase": 0,
+      "color": "#d5d0e8",
+      "phaseMode": "fixed"
+    },
+    "lira000000000000": {
+      "name": "Lira",
+      "cycleLength": 27.1,
+      "cycleDayAdjust": 5,
+      "referencePhase": 0,
+      "color": "#cfd8e0",
+      "phaseMode": "fixed"
+    }
+  },
+  "weeks": {},
+  "leapYearConfig": {
+    "enabled": true,
+    "interval": 8,
+    "offset": 0
+  },
+  "metadata": {}
+}

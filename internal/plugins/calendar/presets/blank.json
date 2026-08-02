@@ -1,0 +1,83 @@
+{
+  "format": "chronicle-calendar-v1",
+  "version": 2,
+  "calendar": {
+    "name": "Blank calendar",
+    "mode": "fantasy",
+    "current_year": 1,
+    "current_month": 1,
+    "current_day": 1,
+    "current_hour": 0,
+    "current_minute": 0,
+    "hours_per_day": 24,
+    "minutes_per_hour": 60,
+    "seconds_per_minute": 60,
+    "leap_year_every": 0,
+    "leap_year_offset": 0,
+    "tracks_real_time": false,
+    "months": [
+      {
+        "name": "First Month",
+        "days": 30,
+        "sort_order": 0,
+        "is_intercalary": false,
+        "leap_year_days": 0
+      }
+    ],
+    "weekdays": [
+      {
+        "name": "D1",
+        "sort_order": 0,
+        "is_rest_day": false
+      },
+      {
+        "name": "D2",
+        "sort_order": 1,
+        "is_rest_day": false
+      },
+      {
+        "name": "D3",
+        "sort_order": 2,
+        "is_rest_day": false
+      },
+      {
+        "name": "D4",
+        "sort_order": 3,
+        "is_rest_day": false
+      },
+      {
+        "name": "D5",
+        "sort_order": 4,
+        "is_rest_day": false
+      },
+      {
+        "name": "D6",
+        "sort_order": 5,
+        "is_rest_day": false
+      },
+      {
+        "name": "D7",
+        "sort_order": 6,
+        "is_rest_day": false
+      },
+      {
+        "name": "D8",
+        "sort_order": 7,
+        "is_rest_day": false
+      },
+      {
+        "name": "D9",
+        "sort_order": 8,
+        "is_rest_day": false
+      },
+      {
+        "name": "D10",
+        "sort_order": 9,
+        "is_rest_day": false
+      }
+    ],
+    "moons": [],
+    "seasons": [],
+    "eras": []
+  }
+}
