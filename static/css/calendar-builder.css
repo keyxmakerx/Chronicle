@@ -256,27 +256,22 @@
     to { opacity: 1; }
   }
 
-  /* ── THE DELAY LADDER, and the only prelude --m-step may appear in.
-     --m-i is set inline per row by the producer and capped at --m-cap, so a
-     forty-month structure adds ≤132ms and no pass exceeds ~282ms. It exists
-     ONLY inside the step panel: never inside the preview, never on the rail,
-     never on the gallery after Start's own entrance. */
-  .cal-builder .wz-panel [style*="--m-i"] {
-    animation-delay: calc(min(var(--m-i, 0), var(--m-cap)) * var(--m-step));
-  }
-
   /* ── PASS 1 · the station names itself first.
      INFORMATION NEVER WAITS: no animation-delay is declared at all, so the
      title and subtitle start at 0 while the rows behind them are still on the
-     ladder. 2px, --t-fast. */
+     ladder. 2px, --t-fast. The ladder rule below cannot reach these two even
+     though it is declared later: it selects on the INLINE --m-i the producer
+     writes, and builderLadder() is never called for the header pair. */
   .cal-builder .wz-panel .wz-ph,
   .cal-builder .wz-panel .wz-ps {
     animation: w-in-fine var(--t-fast) var(--ease-dec) both;
   }
 
   /* ── PASS 2 · the station's content arrives in reading order.
-     3px toward its own rest, --t-base, on the ladder above. The HTMX swap that
-     replaces the panel is the trigger; there is no capture class. */
+     3px toward its own rest, --t-base, on the ladder declared immediately
+     BELOW this rule — the shorthand here resets animation-delay, so the ladder
+     must out-rank it by document order. The HTMX swap that replaces the panel
+     is the trigger; there is no capture class. */
   .cal-builder .wz-panel .wz-frow,
   .cal-builder .wz-panel .wz-pgal,
   .cal-builder .wz-panel .wz-igrid,
@@ -288,6 +283,38 @@
   .cal-builder .wz-panel .wz-maptable,
   .cal-builder .wz-panel .wz-stepper.wz-big {
     animation: w-in var(--t-base) var(--ease-dec) both;
+  }
+
+  /* ── THE DELAY LADDER, and the only prelude --m-step may appear in.
+     --m-i is set inline per row by the producer and capped at --m-cap, so a
+     forty-month structure adds ≤132ms and no pass exceeds ~282ms. It exists
+     ONLY inside the step panel: never inside the preview, never on the rail,
+     never on the gallery after Start's own entrance.
+
+     IT IS DECLARED HERE, AFTER PASS 2, AND THE ORDER IS THE MECHANISM.
+     `animation:` is a SHORTHAND: it resets animation-delay to its initial 0s.
+     This rule and pass 2's carry identical specificity (0-3-0), so a ladder
+     declared BEFORE the shorthand is silently overwritten and every row
+     arrives at 0ms — which is exactly what the sheet shipped until this fix,
+     measured in Chromium as `animation-delay: 0s` on every .wz-frow while
+     --m-i resolved 0,1,2,… correctly. Moving the declaration below pass 2 is
+     the whole repair; nothing else about the ladder changes.
+
+     THIS DELIBERATELY DIVERGES FROM THE SEALED MOCKUP, WHICH HAS THE SAME
+     CASCADE DEFECT and therefore lands its .frow/.impdoor rows flat. The
+     written, signed mechanism ([WZ-8] / dispatch §5.2 pass 2: "the station's
+     content arrives in reading order", "≤132ms added") outranks the mockup's
+     accidental flat arrival. The mockup's own one-line fix is BOOKED, not
+     taken from this slice — the mockup is a sealed artifact and this build
+     does not edit it (coordinator ruling R1, 2026-08-02).
+
+     Cascade order here is pinned by TestBuilderCSS_TheLadderOutranksPassTwo
+     and the running delays are measured in a browser by
+     TestBuilderProbe_TheLadderActuallyRuns. Under reduced motion the whole
+     block is off (the @media guard) and Chronicle's global total-disable in
+     input.css zeroes the delay too: instant, complete, in final position. */
+  .cal-builder .wz-panel [style*="--m-i"] {
+    animation-delay: calc(min(var(--m-i, 0), var(--m-cap)) * var(--m-step));
   }
 
   /* ── PASS 3 · "you are here" is drawn as ONE state change.

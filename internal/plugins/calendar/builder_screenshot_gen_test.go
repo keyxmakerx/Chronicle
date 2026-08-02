@@ -866,6 +866,15 @@ const builderMinHeadlessWindow = 500
 // builderRunProbe loads a page in Chromium, lets its in-page script write a JSON
 // reading into #probe, dumps the DOM and returns the JSON.
 func builderRunProbe(t *testing.T, chrome, page string) string {
+	return builderRunProbeFlags(t, chrome, page)
+}
+
+// builderRunProbeFlags is builderRunProbe with extra Chromium switches, so a
+// probe can ask the engine for a different USER PREFERENCE rather than
+// simulating one in CSS. `--force-prefers-reduced-motion` is the only caller
+// today, and simulating reduced motion by injecting a media block would prove
+// the injection worked, not that the shipped guard does.
+func builderRunProbeFlags(t *testing.T, chrome, page string, extra ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	src := filepath.Join(dir, "probe.html")
@@ -874,10 +883,12 @@ func builderRunProbe(t *testing.T, chrome, page string) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, chrome,
+	args := append([]string{
 		"--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
 		"--window-size=1600,1200", "--virtual-time-budget=6000",
-		"--dump-dom", "file://"+src)
+	}, extra...)
+	args = append(args, "--dump-dom", "file://"+src)
+	cmd := exec.CommandContext(ctx, chrome, args...)
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("chromium probe: %v", err)
@@ -1031,6 +1042,173 @@ func TestBuilderProbe_TheMonthDidNotMove(t *testing.T) {
 			t.Errorf("an animation named %q ran, and it is outside the four-keyframe budget", n)
 		}
 	}
+}
+
+// TestBuilderProbe_TheLadderActuallyRuns measures §5.2 pass 2's delay ladder in
+// a real engine, in both motion directions.
+//
+// THE REASON THIS TEST EXISTS. The ladder rule was on disk and dead: declared
+// before pass 2's `animation:` shorthand, at equal specificity, so the
+// shorthand reset animation-delay to 0s and every row arrived together. Every
+// static guard passed — the rule was present, in the right prelude, composing
+// the right tokens — and the clip evidence was read as showing a stagger when
+// it showed --t-base plus encoder residue. A rule that is present is not a
+// mechanism that runs, and only the engine can tell the two apart.
+//
+// WHAT IS ASSERTED, all four of them the bound [WZ-8] signed:
+//
+//	(1) the ladder is not flat — the delays actually differ;
+//	(2) they are non-decreasing in DOM order, which is reading order, and
+//	    each step is one --m-step (≈33.3ms) per --m-i;
+//	(3) nothing waits longer than --m-cap steps, ≈132ms, so no pass exceeds
+//	    ~282ms with --t-base's 150 on top;
+//	(4) the station's own title and subtitle (pass 1) still start at 0 —
+//	    information never waits, even now that the ladder is live.
+//
+// And under `--force-prefers-reduced-motion` the engine reports no animation at
+// all on the same nodes: instant, complete, in final position.
+func TestBuilderProbe_TheLadderActuallyRuns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser probe: skipped under -short (CI's mode); run without -short")
+	}
+	chrome := builderShotChromium()
+	if chrome == "" {
+		t.Skip("browser probe: no Chromium binary found (set CHROMIUM_BIN)")
+	}
+
+	harptos, err := builderPresetDraft("harptos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Station 1 (structure) is the deepest ladder the wizard ever draws: twelve
+	// month rows plus the intercalary rows, so the cap is genuinely exercised.
+	body := builderRenderShell(t, harptos, 1, false, 0)
+
+	script := `<pre id="probe"></pre><script>
+(function(){
+  function ms(v){
+    v = (v || '').trim();
+    if (!v) return 0;
+    if (v.slice(-2) === 'ms') return parseFloat(v);
+    if (v.slice(-1) === 's') return parseFloat(v) * 1000;
+    return parseFloat(v) || 0;
+  }
+  var panel = document.querySelector('.wz-panel');
+  var rows = [].slice.call(panel.querySelectorAll('[style*="--m-i"]'));
+  var read = rows.map(function(n){
+    var cs = getComputedStyle(n);
+    return {
+      cls: (n.className || '').split(' ')[0],
+      i: parseInt(cs.getPropertyValue('--m-i'), 10),
+      delay: ms(cs.animationDelay),
+      name: cs.animationName,
+      dur: ms(cs.animationDuration)
+    };
+  });
+  var head = [].slice.call(panel.querySelectorAll('.wz-ph, .wz-ps')).map(function(n){
+    var cs = getComputedStyle(n);
+    return { cls: (n.className || '').split(' ')[0], delay: ms(cs.animationDelay),
+             name: cs.animationName };
+  });
+  document.getElementById('probe').textContent =
+    JSON.stringify({ rows: read, head: head, animations: document.getAnimations().length });
+})();
+</script>`
+
+	page := builderHarnessWith(t, "the-ladder-actually-runs",
+		"§5.2 pass 2 · computed animation-delay per --m-i", body+script, false, false, "")
+
+	type node struct {
+		Cls   string  `json:"cls"`
+		I     int     `json:"i"`
+		Delay float64 `json:"delay"`
+		Name  string  `json:"name"`
+		Dur   float64 `json:"dur"`
+	}
+	var got struct {
+		Rows       []node `json:"rows"`
+		Head       []node `json:"head"`
+		Animations int    `json:"animations"`
+	}
+	if err := json.Unmarshal([]byte(builderRunProbe(t, chrome, page)), &got); err != nil {
+		t.Fatalf("probe reading: %v", err)
+	}
+	if len(got.Rows) < 4 {
+		t.Fatalf("the structure station laddered only %d nodes — the probe cannot see a "+
+			"ladder that is not drawn", len(got.Rows))
+	}
+
+	// --m-step is ≈33.3ms (--t-fast/3) and --m-cap is 4, so the ceiling is
+	// ≈133ms. The tolerance is one millisecond of the engine's own rounding,
+	// not a slack allowance.
+	const step, cap0, tol = 100.0 / 3.0, 4, 1.0
+	ceiling := step*cap0 + tol
+
+	var flat = true
+	var prev float64 = -1
+	for _, r := range got.Rows {
+		want := step * float64(min(r.I, cap0))
+		if diff := r.Delay - want; diff > tol || diff < -tol {
+			t.Errorf("%s carries --m-i:%d and computes animation-delay %.1fms; the signed "+
+				"ladder is min(--m-i, --m-cap) * --m-step = %.1fms. A delay of 0 on every row "+
+				"means the `animation:` shorthand reset it — declare the ladder AFTER pass 2 "+
+				"(coordinator ruling R1)", r.Cls, r.I, r.Delay, want)
+		}
+		if r.Delay > ceiling {
+			t.Errorf("%s waits %.1fms — [WZ-8] caps the ladder at --m-cap steps, ≈%.1fms, so "+
+				"that no pass exceeds ~282ms", r.Cls, r.Delay, ceiling)
+		}
+		if r.Delay > 0 {
+			flat = false
+		}
+		if r.Delay+tol < prev {
+			t.Errorf("%s waits %.1fms after a row that waited %.1fms — the ladder runs in "+
+				"READING ORDER and never goes backwards", r.Cls, r.Delay, prev)
+		}
+		prev = r.Delay
+	}
+	if flat {
+		t.Fatalf("STOP-AND-FLAG: every laddered row computes animation-delay 0. The rule is "+
+			"on disk and does nothing, which is the state the second fix round shipped and "+
+			"the evidence mis-read as a stagger. Rows seen: %+v", got.Rows)
+	}
+	for _, h := range got.Head {
+		if h.Delay != 0 {
+			t.Errorf("%s waits %.1fms — pass 1 is delay 0 BY DESIGN: information never waits, "+
+				"the station names itself while its rows are still on the ladder", h.Cls, h.Delay)
+		}
+	}
+	t.Logf("ladder measured in Chromium: %d laddered rows, delays %s; pass 1 head pair at 0ms",
+		len(got.Rows), builderDelayList(got.Rows[:min(8, len(got.Rows))]))
+
+	// ── THE OTHER DIRECTION, asked of the engine rather than simulated ───────
+	reduced := builderRunProbeFlags(t, chrome, page, "--force-prefers-reduced-motion")
+	var quiet struct {
+		Rows       []node `json:"rows"`
+		Animations int    `json:"animations"`
+	}
+	if err := json.Unmarshal([]byte(reduced), &quiet); err != nil {
+		t.Fatalf("reduced-motion probe reading: %v", err)
+	}
+	if quiet.Animations != 0 {
+		t.Errorf("under --force-prefers-reduced-motion the engine reports %d running "+
+			"animation(s); the whole register lives inside %s and must be silent",
+			quiet.Animations, builderBudget.guard)
+	}
+	for _, r := range quiet.Rows {
+		if r.Name != "none" || r.Delay != 0 {
+			t.Errorf("under reduced motion %s still has animation-name %q with delay %.1fms — "+
+				"the rows are simply THERE, instantly and completely", r.Cls, r.Name, r.Delay)
+		}
+	}
+	t.Logf("under --force-prefers-reduced-motion: %d animations, %d rows all animation-name "+
+		"none at 0ms delay", quiet.Animations, len(quiet.Rows))
+}
+
+// builderDelayList renders the measured ladder for the log line.
+func builderDelayList[T any](rows []T) string {
+	b, _ := json.Marshal(rows)
+	return string(b)
 }
 
 // TestBuilderProbe_NarrowLaneHoldsItsGate is [WZ-14]'s gate, measured at the

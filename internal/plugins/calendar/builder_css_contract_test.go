@@ -426,6 +426,65 @@ func TestBuilderCSS_DurationDiscipline(t *testing.T) {
 	}
 }
 
+// TestBuilderCSS_TheLadderOutranksPassTwo. The delay ladder is declared AFTER
+// pass 2's `animation:` shorthand, because that is what makes it run.
+//
+// `animation` is a shorthand and it RESETS `animation-delay` to its initial
+// `0s`. The ladder rule and pass 2's rule carry identical specificity (0-3-0:
+// two classes plus one attribute selector against three classes), so between
+// two equally specific rules the LATER one wins — and a ladder declared first
+// is silently overwritten. The sheet shipped in exactly that state: measured
+// in Chromium, every `.wz-panel .wz-frow` computed `animation-delay: 0s`
+// while `--m-i` resolved 0,1,2,… correctly, so §5.2 pass 2's signed mechanism
+// ("the station's content arrives in reading order") did not exist in the
+// build even though the rule was on disk.
+//
+// This is a BYTE-ORDER assertion on purpose. Nothing else in the file's shape
+// tells a reader that these two rules are order-coupled, so a future hand
+// tidying the passes into numerical order would re-break it in a way no
+// property, keyframe or duration guard can see. Coordinator ruling R1,
+// 2026-08-02; the running delays themselves are measured by
+// TestBuilderProbe_TheLadderActuallyRuns.
+func TestBuilderCSS_TheLadderOutranksPassTwo(t *testing.T) {
+	code := builderCSS(t)
+
+	ladder := strings.Index(code, `.cal-builder .wz-panel [style*="--m-i"]`)
+	if ladder < 0 {
+		t.Fatal("the ladder rule `.cal-builder .wz-panel [style*=\"--m-i\"]` is gone — " +
+			"pass 2's reading-order arrival is [WZ-8] SIGNED and cannot be dropped")
+	}
+	// Pass 2's shorthand: find the LAST `animation: w-in ` declaration that is
+	// not w-in-fine, i.e. the rule the ladder must sit below.
+	passTwo := -1
+	for i := 0; ; {
+		j := strings.Index(code[i:], "animation: w-in ")
+		if j < 0 {
+			break
+		}
+		passTwo = i + j
+		i = passTwo + 1
+	}
+	if passTwo < 0 {
+		t.Fatal("pass 2's `animation: w-in …` shorthand is gone — §5.2's five passes are signed")
+	}
+	if ladder < passTwo {
+		t.Errorf("the delay ladder is declared at byte %d, BEFORE pass 2's `animation:` "+
+			"shorthand at byte %d. The shorthand resets animation-delay to 0s and the two "+
+			"rules are equally specific, so every row would arrive at 0ms and the signed "+
+			"ladder would be dead CSS. Declare the ladder after pass 2 (coordinator ruling "+
+			"R1, 2026-08-02).", ladder, passTwo)
+	}
+	// And no LATER shorthand may re-reset it: pass 3/4/5 must not name a node
+	// that carries --m-i. They target the rail, the preview wrapper and a
+	// pseudo-element, none of which the producer ladders.
+	for _, after := range []string{".wz-panel .wz-frow", ".wz-panel .wz-pgal"} {
+		if k := strings.LastIndex(code, "animation: "+after); k > ladder {
+			t.Errorf("a shorthand naming %s is declared after the ladder at byte %d — "+
+				"it would reset the delay again", after, k)
+		}
+	}
+}
+
 // ── ASSERTION FAMILY 5 — THE LEAK ASSERTIONS ────────────────────────────────
 
 // TestBuilderCSS_LeakGuard is the wave's most durable deliverable (dispatch

@@ -508,6 +508,20 @@ Phase B, W-D: the nav Calendar tab's landing surface.
 
 W-H shipped the builder wizard. Three things it deliberately did not decide.
 
+- [ ] **The SEALED MOCKUP carries the same dead delay ladder the build just
+  fixed, and it needs the same one-line move** (cordinator
+  `mockups/v4-proposed/builder-wizard.html`). Its pass-2 rule declares
+  `animation-delay` on `.frow`/`.impdoor` BEFORE the `animation:` shorthand that
+  resets it, at equal specificity, so those rows arrive flat while its `.pcard`
+  nodes — which the shorthand does not name — keep their 0/33/67/100/133ms
+  stagger. The build now runs the ladder as §5.2 pass 2 and [WZ-8] TABULATE it
+  (coordinator ruling R1, 2026-08-02: *the written signed mechanism outranks the
+  mockup's accident*), which means the shipped surface and the sealed drawing
+  now differ in motion — disclosed in the wave's INDEX, not hidden. The mockup
+  is a sealed artifact and this slice does not edit it; the fix is moving its
+  ladder declaration below its pass-2 shorthand, and it belongs to whoever next
+  opens that file.
+
 - [ ] **The preview draws no era bands, and the signed stills do.** The wizard is
   a HOST passing DEF, `["moons"]` ([WZ-2c] SIGNED: "a month with its moon phases
   and nothing else"), so the `eras` layer is not docked and the four bands the
