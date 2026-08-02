@@ -3623,6 +3623,178 @@ decision; competing ADRs for its later waves would fragment the rationale that a
 future re-litigation needs in one place. W-E followed this rule first (its
 Almanac decisions are §10-§14) and W-G's RSVP decisions are §15-§19.
 
+### §27 — R2-2b: the editor's chrome, the signed morph, and drag-create
+
+**ADR-048 GROWS A SECTION; THERE IS NO ADR-049.** C-CALV4-EDITOR-R2b is the
+second half of C-CALV4-DAYCARD, taken at the split point that slice's §11
+pre-authorised, and every ruling below is a decision about the same surface.
+
+**1. THE EDITOR-MORPH CARVE-OUT, AND WHAT IT LIFTS.** The operator signed it on
+2026-08-01 (`decisions/2026-08-01-operator-signatures-wz1-sky-editor.md` §3):
+the day card may visually morph into the editor **as its own named motion
+signature**, the DAYCARD-era register-only constraint is lifted **for R2b only**,
+and the morph must still be instant *and complete* under reduced motion and
+never touch the Block's interior.
+
+It lifts exactly one thing — [DC-7]'s "register-only in this slice" — and it does
+not repeal the register. Clause 4 is what *creates* the category the morph
+occupies: carve-outs are named signatures **on top of** the base. So the block
+lives inside the ONE register section of `static/css/calendar-bench.css`,
+immediately after the day card's, inside the SAME single
+`prefers-reduced-motion: no-preference` wrapper. [DC-6]'s singularity clause
+survives intact.
+
+**THE NAMED CLASS IS `.edmorph`**, and it is present **only in flight** — added
+to seed, removed when the geometry lands, re-added to reverse. A resting editor
+therefore carries no transition at all, which is what keeps a later content
+change (the audience roster opening under Restricted) from animating something
+nobody signed.
+
+**2. WHY THE MORPH IS A TRANSITION FAMILY AND NOT KEYFRAMES.** The five standing
+refusals — `animation` · `@keyframes` · `will-change` · `@starting-style` ·
+`view-transition` — survive the carve-out unchanged. **A signature is a grammar,
+not a licence.** The register is a transition family; a morph built from
+keyframes would be the second grammar [DC-6] refuses, and `view-transition` in
+particular is also the one mechanism capable of animating across the Block's
+subtree, which is precisely what the signature's last clause forbids.
+
+The morph is **geometric and not a scale**: four properties and no fifth —
+`inline-size` · `block-size` · `translate` · `opacity`. A FLIP scale is the cheap
+way and it visibly squashes the text inside a growing box; this surface is a
+*form*. `translate` is named on its own so the guard's allowlist can admit the
+movement without admitting a scale, and `transform`/`scale` are asserted absent.
+**No new token**: `--disc-open`, `--disc-close` and `--disc-ease` unchanged, two
+durations product-wide, and close-faster-than-open is structural in the
+register's own idiom — the base rule carries the close duration and the open
+state overrides it.
+
+**A DETAIL THAT LOOKS LIKE STYLE AND IS NOT.** The module writes the geometry
+with the **logical** properties (`style.setProperty('inline-size', …)`), because
+the carve-out's rule names them: writing `style.width` leaves the declared
+`transition-property` matching nothing, so the box SNAPS while `opacity` alone
+animates — which looks close enough to a morph in a still and is not one. It was
+caught by parking the transitions at 0% and finding the editor already at full
+size, and the same capture caught the deeper one: the morph's TARGET must come
+from the size `placeCard` already measured, never from `getBoundingClientRect()`
+on a box whose inner `.dcbox` is still collapsed to zero.
+
+**3. THE RECURRENCE CORRECTION, IN THREE DIRECTIONS.** `recurrence_type` accepts
+exactly `weekly` · `biweekly` · `monthly` · `custom` (`model.go:214-217`) and
+`OccursOn` sends anything else to `default: return onBase` (`:305-309`). **A
+wrong unit is not an error; it is a silent single occurrence.**
+
+- **The week unit is NOT invention and its chip comes off.** Week-based
+  recurrence strides `WeekLength() × recurrenceWeeks(...)`, so on a ten-day
+  calendar `weekly` **means** every tenday. DAYCARD §5's "tenday is invention"
+  line and the mockup's chip on that unit are **both wrong**, and the drawing
+  lane's record is corrected so it does not re-teach it.
+- **`year` IS invention and the drawing offers it UNCHIPPED.** There is no
+  yearly type; it degrades silently. It does not ship at all — an unbacked unit
+  in a picker is a trap, and the one thing worse than a missing option is one
+  that quietly does nothing.
+- **NEW, and this slice's own finding: `every N months` degrades the same way.**
+  `OccursOn`'s monthly branch ignores `RecurrenceInterval` entirely, so `every 2
+  months` would be stored, accepted, and then expanded **every** month. The
+  interval control is therefore **absent** for the month unit rather than
+  chipped: there is nothing there for a backend to add, the type simply has no
+  interval.
+
+**THE DAY-OF-WEEK MULTI-SELECT STAYS CHIPPED, and so would a single picker.**
+`recurrence_day_of_week` exists as a column (migration 011) but **expansion is
+base-anchored and ignores it** (`calendar/.ai.md:963`), and `eventEditorRecord`
+does not carry it. DAYCARD §5's "Chronicle's model is `recurrence_type` plus a
+single day-of-week" is wrong on main: the weekday is the base date's, full stop.
+
+**THE UNIT LABEL IS DERIVED AND THE DERIVATION IS A NAMED DIVERGENCE.**
+Chronicle's `Calendar` carries `Weekdays` and a `WeekLength()` and **no week
+noun at all**, so "the calendar's own week noun" has nothing to read. The label
+names the cycle's length (`10-day week`), which cannot lie about the stride the
+way a bare "week" does on a ten-day calendar and cannot hardcode "tenday"
+either. The week length itself is derived from the payload's own weekday names —
+there is no literal `7`, no literal `10`, and no `% 7` in the module, the
+template or the sheet.
+
+**4. LOSSLESSNESS BECAME AN AUTHOR-vs-OMIT DISTINCTION.** The chrome now
+*authors* recurrence, so the round trip is no longer pure. Three cases, all
+pinned: **untouched** round-trips (a title-only save on an event whose stored
+type Chronicle does not accept leaves that rule exactly as it found it),
+**authored** sends the mapping, and **explicitly Once** clears the type and the
+interval *together*. The clear uses `""` and not `null`, because
+`service.UpdateEvent` guards the pointer siblings — a JSON `null` **preserves**
+the column, which is exactly the half-state
+`C-CAL-RECURRING-PARTIAL-STATE-CLEANUP` already had to clean up once. The
+`RecurrenceEnd*` / `MaxOccurrences` fields cannot be reached from the client at
+all, because neither shipped write binds them; that is carried, not papered over.
+
+**5. [ER-3]: THE AUDIENCE ROSTER RIDES THE PAGE PAYLOAD, AND WHY THAT DOES NOT
+BREACH [DC-1].** [DC-1]'s payload law governs the **card's per-event field set**
+— "the Ledger row's own field set and NOTHING more". The roster is neither an
+event nor a per-day field; it is **editor seed data on the same wrapper**,
+exactly like the type palette, which rides here for the same shape of reason
+([DC-8](c) option ii). `BenchScheduleReader.BenchRoster` is already called on
+every Bench render, for every viewer, before any role is consulted — so this is
+a re-serialisation of data the page already rendered and it costs **no new read
+and no new route**.
+
+The law is **re-stated rather than widened**: the wrapper's top-level inventory
+is now pinned by name (`calendars` · `members`), the member row's own field set
+beside it, and the identity pair asserted to be the RSVP panel's own index for
+index — two surfaces that draw the same people must not draw them in two
+colours. The gate is a **new explicit `DayCardMount.CanRestrict`**, never
+`CanDelete` borrowed: both read `in.IsOwner` today, the routes behind them are
+genuinely different, and two Owner floors that coincide today are one refactor
+away from not.
+
+**6. [ER-5]: THE EDITOR'S WIDTH IS MEASURED, AND THE MEASUREMENT DISAGREED WITH
+THE PREDICTION.** The stills draw a two-column editor ~1008px wide. The sweep —
+real page, real sheets, real module, 61 day cells × 11 viewport widths × 6
+candidate widths, Ledger stacked and docked — found that **every candidate holds
+0 px² of overlap**. The placement law is doing its job and the round-3 harm does
+not recur at any width. What moves with width is how often the popover falls to
+the signed desktop **sheet**, and at which viewports.
+
+The shipped width is **760px**: the largest that never sheets at or above the
+editor's own two-column breakpoint. Below that breakpoint `.ed-body` is one
+column anyway and the narrow sheet is a treatment the shipped 420px box already
+takes. **The divergence from the drawing is arithmetic, not taste**: `.cal-bench`
+is 1180px at its measure, a docked Ledger column is 300px, and a 1008px editor
+cannot sit beside that column at any viewport this product's measure produces.
+`placeCard` was **not** re-opened — round 4's lesson was that the third geometry
+was already one too many.
+
+**7. [ER-2]: THE PLAYER'S CARD DOES NOT GROW A DETAIL PANEL.** The stills'
+`.card-x` block prints an event's title, description prose, tie pill and date
+pill. [DC-1] forbids description on the payload and §2 rule 3 forbids the card
+rendering a field the Ledger row does not print. The 2026-08-01 signature
+promotes the stills to a gate **"for the chrome stage"** — the *look* — and does
+not restore the file's authority over *which fields exist*, which [DC-5] part 1
+removed and nobody overturned. **The cheap-looking workaround is the expensive
+one**: fetching the description on demand from the Player-floor
+`GET …/events/:eid` needs no route and no payload change, and is refused — it
+turns a read-only card into an authoring-adjacent fetch surface and puts a round
+trip inside a 200ms open. If the operator wants the panel it is an amendment to
+[DC-1] with its own signature: cheap to ask for, impossible to take by inference.
+
+**8. [ER-8]: A DRAG PREVIEW THAT MAY NOT MARK A CELL.** The obvious
+implementation adds a class to the cells under the pointer, and those cells are
+inside `.cal-block-host` where §1 rule 1 forbids it byte for byte. [DC-11] term
+2's "its own drag-highlight rules" reads like a licence to mark cells and is not
+one. The span is therefore a **page-level overlay** the module creates beside the
+card, positioned from the run's own rects, **one box per contiguous row** — a
+union across two weeks would paint days that are not in the run, and a preview
+that lies about what it is about to create is worse than no preview. It declares
+**no motion**: a highlight that follows the pointer is a position update, not a
+transition.
+
+**9. A GUARD THAT CANNOT SEE THE THING IT CLAIMS TO CATCH.** The morph's close
+must remove `.dcopen` **before** writing the reverse geometry, or leaving takes
+exactly as long as arriving. Mutating that order left **every end-state
+assertion green** — it is an ordering claim inside one task. The fixture's DOM
+stub therefore grew an **operation log**, and the ordering is now a real
+assertion rather than a comment. *A guard nudged until green stops proving
+anything; a guard that was never able to see its subject never proved anything
+at all.*
+
 ### References
 
 - Master plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`

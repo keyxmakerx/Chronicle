@@ -293,10 +293,14 @@ export function buildBenchFixture(opts) {
         const box = this.querySelector('[data-dc-box]');
         const left = parseFloat(this.style.left) || 0;
         const top = parseFloat(this.style.top) || 0;
-        const w = parseFloat(this.style.width) || this.offsetWidth || 0;
+        // THE MORPH WRITES THE LOGICAL PROPERTIES, because that is what the
+        // carve-out's rule names — `style.width` would leave the declared
+        // transition matching nothing and the box would SNAP.
+        const w = parseFloat(this.style.getPropertyValue('inline-size')) ||
+          parseFloat(this.style.width) || this.offsetWidth || 0;
         const chrome = Math.max(0, (this.offsetHeight || 0) - ((box && box.offsetHeight) || 0));
         const natural = ((box && box.scrollHeight) || 0) + chrome;
-        const h = parseFloat(this.style.height) || natural;
+        const h = parseFloat(this.style.getPropertyValue('block-size')) || natural;
         return { left, top, right: left + w, bottom: top + h, width: w, height: h };
       },
     });

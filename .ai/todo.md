@@ -17,7 +17,7 @@ Round 2 adds no data, no zone and no engine. Five slices; R2-1 has landed.
 |---|---|---|
 | **R2-1** — `C-CALV4-BENCH-R2` | the disclosure primitive + register, the page measure, the two-column RSVP panel, the glanceable entity seed | **[x] shipped 2026-07-30** |
 | **R2-2a** — the day card + the editor's mechanism | click a day, unfold a card, create/edit an event against the SHIPPED event API. **Consumed R2-1's disclosure register in place** — it stayed in `calendar-bench.css` and the card's two rules were added by name inside the same reduced-motion wrapper, reusing all three `--disc-*` tokens; the speculative shared sheet was never built ([DC-6] SIGNED, first-lander clause). **Round-2 fix-forward (stages 7-8):** the editor's PUT now round-trips `is_recurring` / `recurrence_type` / `recurrence_interval` — omitting a VALUE-typed bool is a write of false, so a title-only save was un-repeating recurring events; and the payload + stylesheet guards now derive their inventories from the type and the braces rather than from a hand-written sample. **[x] shipped 2026-07-31** |
-| **R2-2b** — `C-CALV4-EDITOR-R2b` | the editor's full §5 chrome pass (the type rail's locked hue+pattern+glyph triple, the restricted-audience chip row, the recurrence block with its GM-side chips, the live preview column) **and drag-create**. Split from R2-2a at a stage boundary with everything green, under the dispatch's pre-authorised split. **Gated on the operator's editor stills signature ([DC-5]).** | [ ] |
+| **R2-2b** — `C-CALV4-EDITOR-R2b` | the editor's full §5 chrome pass, **the signed editor-morph carve-out**, and **drag-create**. The stage-2 mechanism kept every `data-de-*` handle and every request body while its controls were replaced ([ER-10]). **The recurrence unit list is corrected in three directions:** the week unit is not invention and its chip came off (`weekly` MEANS every tenday on a ten-day calendar — DAYCARD §5 and the mockup are both wrong); `year` is invention offered unchipped and does not ship; and NEW — `every N months` degrades silently because `OccursOn`'s monthly branch ignores the interval, so that control is ABSENT rather than chipped. **The morph is geometric, one named class, four properties, no new token, no scale**, inside the ONE register section — `TestDayCardCSS_CarriesNoMotionOfItsOwn` is byte-unchanged, which is the proof the register did not fork. **[ER-5]'s width was MEASURED and disagreed with the prediction:** every candidate holds 0 px² overlap, so the shipped 760px is bounded by where the popover survives rather than by where it occludes; the drawing's ~1008px cannot sit beside a 300px docked Ledger inside an 1180px measure. **Drag-create landed, not severed**, on all seven [DC-11] terms with revertibility verified by deleting the commit. **[x] shipped 2026-08-02** |
 | **R2-3** — the Block theater | expand any embed to a full-tier overlay. **This is where the depth R2-1 removed from the entity embed comes back.** R2-1 deliberately shipped NO substitute — no expand chip, no "show more", no second embed — because a stopgap becomes the thing R2-3 has to delete. | [ ] |
 | **R2-4** — V2 sunset / the anonymous-public route move | the frozen V2 shell. R2-1 did not open `calendar_v2*` for any reason. | [ ] |
 | **R2-5** — the sky header | the dashed skyband placeholder in the real-world Block. Drawing pass FIRST. Reuses R2-1's register as its base motion. | [ ] |
@@ -32,13 +32,25 @@ Carried out of R2-2a, not closed:
   inject `tabindex` — that is a Block mutation and it would ship a focusable
   control the server never rendered. This is a WIDGET change with its own
   screen-reader pass.
-- [ ] **The editor MORPH** — a shared-element growth from the card's box into
-  the editor's, which is more than the register's clip-reveal gives. R2-2a ships
-  the register-only version (card closes as editor opens, both from one origin)
-  and ESCALATES the morph as a NAMED motion carve-out for the operator to sign,
-  alongside the sky header's. Per-surface motion invention is what produced the
-  skypane verdict.
-- [ ] **`C-CALV4-DAYMENU`** (only if wanted at all) — the day `⋯` overflow menu's
+- [x] **The editor MORPH — SIGNED 2026-08-01 and SHIPPED in R2-2b.** The
+  carve-out lifts exactly [DC-7]'s "register-only in this slice" and nothing
+  else: it is a GEOMETRIC morph under ONE named class (`.edmorph`) transitioning
+  `inline-size` · `block-size` · `translate` · `opacity`, at the register's
+  existing tokens, with no new duration and no scale, declared inside the ONE
+  register section of `calendar-bench.css`.
+  `TestDayCardCSS_CarriesNoMotionOfItsOwn` stayed byte-unchanged, which is the
+  proof the register did not fork. Closed with its answer rather than quietly
+  dropped.
+- [ ] **`C-CALV4-DRAGCREATE` — CLOSED as UNNEEDED.** R2-2b's stage 4 landed
+  drag-create in place, on all seven [DC-11] terms, with revertibility verified
+  by actually deleting the commit and re-running the battery. The booking
+  existed for the case where the stage had to be dropped; it did not.
+- [ ] **`C-CALV4-DAYPICK-A11Y` also inherits drag-create's missing keyboard
+  equivalent** ([DC-11] term 6). The drag is pointer-only and this slice did not
+  invent a keyboard path for it — a focusable day cell is the same widget change
+  that booking already names, and inventing a second one here would have been
+  the reach term 2 forbids.
+- [ ] **`C-CALV4-DAYMENU`** — the day `⋯` overflow menu's
   contents: *Copy link to this date*, *Open Almanac*, *Set campaign date*, and
   the GM `1 hidden here` row. Each needs its own audience or scope ruling; the
   hidden-count row in particular is a hidden-content count on a
@@ -159,9 +171,16 @@ Carried out of R2-1, not closed:
   the mobile fold is caused by the stacked tiles rather than by their detail
   lines. It is cheap now if the operator still wants it after seeing R2-1
   shipped, because the register and the store already exist.
-- [!] **The `_tokens.css` defects, booked a FIFTH time, not patched — THE SCOPE
+- [!] **The `_tokens.css` defects, booked a SIXTH time, not patched — THE SCOPE
   OF `C-CALV4-TOKENS-RESIGN`** (the re-sign lane task [ER-9] SIGNED into
-  existence). Three now, not two:
+  existence; R2-2b is the sixth consumer and the fifth booking of the editor
+  stills' own seven). **Two of the seven are now visible in stills the operator
+  has SIGNED** — fog rendering lighter than a known day in dark, and
+  `--ev-social` sitting 12-14 degrees from `--accent` so the event bar and the
+  selection ring read as the same blue. The index's disclosure that they are
+  *booked* only stays honest if the booking is eventually paid: a booking
+  renewed indefinitely is a deferral wearing a booking's clothes. Three from the
+  v4 sheets, not two:
   the `color-mix(… var(--surface-card) …, var(--accent))` pink drift in light;
   `.badge.need` at 2.59:1; and **`--accent-action`: amber in the contract,
   aliased to the campaign accent (indigo) in every shipped sheet**. The signed

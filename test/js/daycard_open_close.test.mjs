@@ -345,8 +345,8 @@ test('the editor grows FROM the card’s measured geometry, not from nowhere', (
 
   // THE END STATE, written in the same task: back to no offset, at the box's
   // own measured size, fully opaque.
-  assert.equal(ed.style.width, '760px');
-  assert.equal(ed.style.opacity, '1');
+  assert.equal(ed.style.getPropertyValue('inline-size'), '760px');
+  assert.equal(ed.style.getPropertyValue('opacity'), '1');
   assert.equal(ed.classList.contains('dcopen'), true);
 });
 
@@ -358,7 +358,8 @@ test('the morph does not scale — it writes a size, never a transform', () => {
   // named on its own precisely so this assertion can exist.
   assert.equal(ed.style.getPropertyValue('transform'), '');
   assert.equal(ed.style.getPropertyValue('scale'), '');
-  assert.ok(/px/.test(ed.style.width), 'the box grew by something other than its own size');
+  assert.ok(/px/.test(ed.style.getPropertyValue('inline-size')),
+    'the box grew by something other than its own size');
 });
 
 test('the morph settles and hands the box back its natural sizing', () => {
@@ -375,8 +376,8 @@ test('the morph settles and hands the box back its natural sizing', () => {
   assert.equal(fx.editor.classList.contains('edmorph'), false,
     'a resting editor still carries the carve-out class, so a later content ' +
     'change would animate something nobody signed');
-  assert.equal(fx.editor.style.width, '');
-  assert.equal(fx.editor.style.height, '');
+  assert.equal(fx.editor.style.getPropertyValue('inline-size'), '');
+  assert.equal(fx.editor.style.getPropertyValue('block-size'), '');
   assert.equal(fx.editor.style.getPropertyValue('translate'), '');
   assert.equal(fx.editor.popoverOpen, true, 'the editor closed instead of settling');
 });
@@ -404,7 +405,7 @@ test('close reverses the SAME geometry, and is never slower than open', () => {
   // THE REVERSE IS THE SAME FOUR PROPERTIES ONTO THE SAME MEASURED RECT — not
   // a second signature, and not a fade-out standing in for one.
   assert.equal(fx.editor.classList.contains('edmorph'), true);
-  assert.equal(fx.editor.style.opacity, '0');
+  assert.equal(fx.editor.style.getPropertyValue('opacity'), '0');
   assert.equal(fx.editor.style.getPropertyValue('translate'), want,
     'the reverse morph went somewhere other than the card it came from');
 
@@ -453,8 +454,8 @@ test('REDUCED MOTION: the morph is instant AND COMPLETE, asserted on the END sta
     'the carve-out class is on the box under reduced motion; the sheet declares ' +
     'no rule there, so the seeded start geometry would simply STICK');
   assert.equal(ed.style.getPropertyValue('translate'), '');
-  assert.equal(ed.style.opacity, '');
-  assert.equal(ed.style.height, '');
+  assert.equal(ed.style.getPropertyValue('opacity'), '');
+  assert.equal(ed.style.getPropertyValue('block-size'), '');
 
   // COMPLETE, and this is the half the signature's second word is about: the
   // editor lands at full size, full opacity, correctly placed and open — never

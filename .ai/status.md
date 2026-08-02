@@ -20,6 +20,64 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — R2-2b SHIPPED: the editor earns its chrome (2026-08-02)
+
+**The operator's complaint, closed at last.** 2026-07-29, on the live client:
+*"I'm unable to click and do anything… It should be a small card with a nice
+unfolding animation, and then a bigger editor that forms via some animation."*
+DAYCARD answered the first two thirds and gave one honest reason for the rest —
+[DC-7] refused to invent a motion signature and escalated it. The operator
+signed the carve-out on 2026-08-01, and `C-CALV4-EDITOR-R2b` is the answer to
+the last four words.
+
+**Three things and no fourth.** THE CHROME: the stage-2 mechanism keeps every
+`data-de-*` handle and every request body while its controls are replaced — the
+locked (hue · pattern · glyph) type rail, a real month grid whose week length is
+DERIVED from the payload's own weekday names, the intercalary day as a full-width
+row and a real date, the recurrence block, the visibility cards as real radios
+with an Owner-only allow/deny roster, the tie pill with an entity picker, and a
+live preview. THE MORPH: geometric, ONE named class, four properties
+(`inline-size` · `block-size` · `translate` · `opacity`), the register's existing
+tokens, no new duration, no scale, declared inside the ONE register section.
+DRAG-CREATE: landed rather than severed, on all seven [DC-11] terms.
+
+**THE RECURRENCE UNIT LIST WAS WRONG IN THREE DIRECTIONS AND ALL THREE ARE
+CORRECTED.** The week unit is NOT invention and its chip came off — week-based
+recurrence strides `WeekLength() × recurrenceWeeks(...)`, so `weekly` MEANS
+every tenday on a ten-day calendar, and DAYCARD §5 and the mockup are both
+wrong. `year` IS invention, the drawing offers it UNCHIPPED, and it does not
+ship at all. And new to this slice: `every N months` degrades exactly the same
+way, because `OccursOn`'s monthly branch ignores `RecurrenceInterval` entirely —
+so that control is ABSENT for the month unit rather than chipped. There is
+nothing there for a backend to add.
+
+**[ER-5] WAS MEASURED AND THE MEASUREMENT DISAGREED WITH THE PREDICTION.** The
+ruling expected a wide editor to re-create DAYCARD's occlusion blockers. It does
+not: 61 day cells × 11 viewport widths × 6 candidate box widths, Ledger stacked
+and docked, and **every** candidate holds 0 px² of overlap. What moves with width
+is how often the popover falls to the signed desktop SHEET. The shipped 760px is
+the largest that never sheets at or above the editor's own two-column
+breakpoint, and the divergence from the drawing's ~1008px is arithmetic: a
+1008px box cannot sit beside a 300px docked Ledger inside an 1180px measure.
+`placeCard` was not re-opened.
+
+**A GUARD THAT COULD NOT SEE ITS OWN SUBJECT.** The morph's close must remove
+`.dcopen` before writing the reverse geometry or leaving takes as long as
+arriving. Mutating that order left every end-state assertion green — it is an
+ordering claim inside one task. The fixture's DOM stub grew an operation log and
+the ordering is now a real assertion. A guard nudged until green stops proving
+anything; a guard that was never able to see its subject never proved anything
+at all.
+
+**Carried, not closed:** `C-CALV4-DAYMENU` (the 10 `menus-*` stills travel with
+it — a 22-of-32 fidelity split, never a shortfall); `C-CALV4-DAYPICK-A11Y`, now
+also holding drag-create's missing keyboard equivalent; `C-CALV4-TOKENS-RESIGN`,
+booked a **sixth** time, with two of the seven defects now visible in stills the
+operator has signed; the live-authed CSRF case DAYCARD could not measure.
+
+Books: ADR-048 §27 · `reports/chronicle/2026-08-02-C-CALV4-EDITOR-R2b.md` ·
+`reports/chronicle/screenshots/2026-08-02-c-calv4-editor-r2b/`.
+
 ### calendar-v4 — W-H SHIPPED: the builder wizard, the last wave (2026-08-02)
 
 **The remodel's last wave, and the only one whose gate was *finish*.**

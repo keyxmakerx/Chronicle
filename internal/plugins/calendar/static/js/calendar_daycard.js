@@ -1235,28 +1235,38 @@
       return r;
     }
 
-    // edMorphSeed places the editor at the card's geometry AFTER the placement
+    // edMorphSeed places the editor at the card's geometry once the placement
     // law has decided where it really goes. It returns false when it cannot —
-    // no card rect, no editor rect, or reduced motion — and the caller then
+    // no card rect, no resolved target, or reduced motion — and the caller then
     // opens the editor exactly as stage 2 did.
+    //
+    // THE TARGET SIZE IS THE ONE edPosition ALREADY COMPUTED, NEVER
+    // getBoundingClientRect(). This is the bug the parked capture caught, and
+    // it is worth the paragraph because it looked right in every still: at the
+    // moment the editor is shown, `.cal-dayeditor:not(.edmorph) .dcbox` still
+    // collapses the inner box to block-size 0, so the ROOT measures about two
+    // pixels tall. A morph seeded from that rect animates a 2px target — the
+    // box appears to snap and the frames are stills of nothing. `scrollHeight +
+    // chrome` is the content's real height under `overflow:hidden`, it is what
+    // the placement law is already measuring, and using the same number means
+    // the box lands exactly where placeCard put it.
     //
     // REDUCED MOTION SEEDS NOTHING AT ALL, and that is the second half of
     // "instant AND complete". The sheet declares no rule outside the
     // no-preference wrapper, so a seeded start geometry with no transition to
     // leave it would land the editor INSTANTLY AT A MID-MORPH SIZE — the exact
     // failure mode the signature's two words are guarding against.
-    function edMorphSeed(fromEl) {
+    function edMorphSeed(fromEl, target, at) {
       if (reduced()) return false;
       var from = edMorphRect(fromEl);
-      var to = edMorphRect(ed.root);
-      if (!from || !to) return false;
+      if (!from || !target || !(target.w > 0) || !(target.h > 0)) return false;
       edState.morph = {
-        dx: Math.round(from.left - to.left),
-        dy: Math.round(from.top - to.top),
+        dx: Math.round(from.left - (at ? at.left : 0)),
+        dy: Math.round(from.top - (at ? at.top : 0)),
         w: Math.round(from.width),
         h: Math.round(from.height),
-        toW: Math.round(to.width),
-        toH: Math.round(to.height),
+        toW: Math.round(target.w),
+        toH: Math.round(target.h),
       };
       edMorphWrite(edState.morph, true);
       return true;
@@ -1265,13 +1275,20 @@
     // edMorphWrite is the ONE writer of the four transitioned properties, so
     // the outbound and inbound halves cannot drift into two ideas of what the
     // card's geometry was.
+    // IT WRITES THE LOGICAL PROPERTIES, AND THAT IS NOT A STYLE PREFERENCE.
+    // The carve-out's rule names `inline-size` and `block-size`; writing
+    // `style.width` / `style.height` instead leaves the declared
+    // transition-property matching nothing, so the box SNAPS to its end
+    // geometry while `opacity` alone animates — which looks close enough to a
+    // morph in a still and is not one. It was caught by parking the transitions
+    // at 0% and finding the editor already at full size.
     function edMorphWrite(m, atCard) {
       if (!m || !ed.root || !ed.root.style) return;
       ed.root.style.setProperty('translate',
         atCard ? m.dx + 'px ' + m.dy + 'px' : '0px 0px');
-      ed.root.style.width = (atCard ? m.w : m.toW) + 'px';
-      ed.root.style.height = (atCard ? m.h : m.toH) + 'px';
-      ed.root.style.opacity = atCard ? '0' : '1';
+      ed.root.style.setProperty('inline-size', (atCard ? m.w : m.toW) + 'px');
+      ed.root.style.setProperty('block-size', (atCard ? m.h : m.toH) + 'px');
+      ed.root.style.setProperty('opacity', atCard ? '0' : '1');
     }
 
     // edMorphSettle hands the box back to its own natural sizing once the
@@ -1283,9 +1300,9 @@
       if (!ed.root || !ed.root.style) return;
       ed.root.classList.remove('edmorph');
       ed.root.style.removeProperty('translate');
-      ed.root.style.width = '';
-      ed.root.style.height = '';
-      ed.root.style.opacity = '';
+      ed.root.style.removeProperty('inline-size');
+      ed.root.style.removeProperty('block-size');
+      ed.root.style.removeProperty('opacity');
     }
 
     function edShow() {
@@ -2011,7 +2028,7 @@
       closeCard();
       edState.open = true;
       edShow();
-      if (anchor) edPosition(anchor);
+      var placed = anchor ? edPosition(anchor) : null;
       // FORCED REFLOW, DELIBERATELY, and now it carries two jobs. The editor
       // was display:none a moment ago, so it has no rendered before-change
       // style and a transition started in the same frame would not run at all
@@ -2019,8 +2036,15 @@
       // @starting-style, a standing refusal. The morph's seeded start geometry
       // needs the same flush for the same reason.
       void ed.root.offsetHeight;
-      var morphing = fromRect ? edMorphSeed({ getBoundingClientRect: function () { return fromRect; } }) : false;
+      var morphing = (fromRect && placed) ? edMorphSeed(
+        { getBoundingClientRect: function () { return fromRect; } },
+        placed.size, placed.at) : false;
       if (morphing) {
+        // THE CLASS GOES ON AFTER THE START GEOMETRY, so the browser records
+        // the card's rect as the transition's from-value rather than animating
+        // the box INTO the card on the way in. The flush between is what makes
+        // that recording happen at all — a transition started in the same
+        // frame as the style that declared it does not run.
         ed.root.classList.add('edmorph');
         void ed.root.offsetHeight;
       }
@@ -2037,17 +2061,21 @@
       }
     }
 
+    // edPosition RETURNS what it measured and where it put the box. The morph
+    // needs both, and re-measuring afterwards would read a collapsed inner box
+    // — see edMorphSeed's header for the frames that proved it.
     function edPosition(anchor) {
-      if (!anchor.getBoundingClientRect) return;
+      if (!anchor.getBoundingClientRect) return null;
       var view = { w: window.innerWidth || 0, h: window.innerHeight || 0 };
       var chrome = (ed.root.offsetHeight || 0) - (ed.box ? ed.box.offsetHeight || 0 : 0);
       var size = {
         w: ed.root.offsetWidth || 0,
         h: (ed.box ? ed.box.scrollHeight || 0 : 0) + (chrome > 0 ? chrome : 0),
       };
-      applyPlacement(ed.root,
+      var at = applyPlacement(ed.root,
         placeCard(anchor.getBoundingClientRect(), size, view, ledgerRect(state.host), {}),
         reportOcclusion);
+      return { size: size, at: at };
     }
 
     function api() {
