@@ -494,10 +494,10 @@ func draftCalendar(d *builderDraft) *Calendar {
 // marks, foot total 0. A calendar that does not exist has no events, and the
 // Block says so honestly rather than drawing a fabricated month.
 //
-// LayerPrefs is the zero value, which resolves to DEF — ["moons"], "a month
-// with its moon phases and nothing else" — with HasSwitchboard false and
-// PersistURL "" ([WZ-2c] SIGNED; the 2026-07-28 DEF/zone-chip ruling §1 says
-// choosing the layer set is a HOST decision, and the wizard is a host).
+// LayerPrefs is the zero value, so HasSwitchboard is false and PersistURL is
+// "" — r54's invariant holds by construction here rather than by assignment,
+// because a calendar that does not exist has nowhere to persist a layer set.
+// The SET itself is the host's and is builderBlockLayers below.
 //
 // monthIndex is the PAGER's cursor and is clamped to the month list here rather
 // than rejected: it is a UI position, not authored data, and a structure edit
@@ -507,7 +507,7 @@ func builderPreviewBlock(d *builderDraft, monthIndex int) calblock.BlockData {
 	if monthIndex < 0 || monthIndex >= len(cal.Months) {
 		monthIndex = 0
 	}
-	return projectBlock(BlockProjectionInput{
+	out := projectBlock(BlockProjectionInput{
 		Calendar:   cal,
 		Events:     nil,
 		Viewer:     BlockViewer{Role: builderViewerRole},
@@ -521,6 +521,47 @@ func builderPreviewBlock(d *builderDraft, monthIndex int) calblock.BlockData {
 		LedgerHidden: false,
 		ShelfHidden:  true,
 	})
+	// THE HOST OWNS ITS LAYER SET, and it is assigned here rather than seeded
+	// through the projection for the same reason the Bench assigns its own
+	// (benchBlock → benchBlockLayers): the producer's seed is the product's
+	// DEFAULT, and a host that wants a different set states it in the host's
+	// own file where it can be argued.
+	out.Layers = builderBlockLayers()
+	return out
+}
+
+// builderBlockLayers is THE HOST'S LAYER SET for the wizard's preview:
+// ["moons", "eras"].
+//
+// ── THIS IS A DELIBERATE RE-PIN OF [WZ-2c], AND IT IS AN AMENDMENT ──────────
+//
+// [WZ-2c] signed the wizard as a host passing DEF — `["moons"]`, "a month with
+// its moon phases and nothing else" — and W-H shipped exactly that. The
+// consequence was that the preview drew no era bands while every signed still
+// draws them per week row, while the station beside it lists the calendar's
+// eras, and while the projection carried the band data the whole time. W-H
+// disclosed the tension on the surface and booked it rather than turning a
+// layer on to make a picture match, because choosing a host's layer set is a
+// coordinator act and not an executor's (the 2026-07-28 DEF/zone-chip ruling §1
+// says the same thing from the other side).
+//
+// The coordinator has now made that act: ruling R3, 2026-08-02 — ADD `eras`.
+// The signed stills are the fidelity gate, the band data is already present,
+// and at this column's std tier the band row renders (it is suppressed only
+// below 300px, where a truncated era name would be worse than an absent one).
+//
+// WHAT THIS DOES NOT TOUCH. DEF itself is unchanged: `blockDefaultLayers` still
+// seeds `["moons"]` for every other producer, and no key is added to the
+// Bench's set or the entity host's. This is one host's seed, in one host's
+// file. And it is still a SEED, not an override — `resolveBlockLayers` lets a
+// viewer's stored set win everywhere, though the wizard's preview has no
+// switchboard to write one with.
+//
+// HasSwitchboard/PersistURL stay zero TOGETHER (r54), which is why this
+// composes the zero-value prefs explicitly instead of accepting them from a
+// caller who could pass half of the pair.
+func builderBlockLayers() calblock.LayerState {
+	return resolveBlockLayers([]string{"moons", "eras"}, blockLayerPrefs{})
 }
 
 // builderMoonCap matches the Bench's: the grid draws at most three bodies and

@@ -1012,28 +1012,31 @@ templ builderPreview(data BuilderViewData) {
 		}
 		// WHAT THIS COLUMN DOES NOT DRAW, SAID OUT LOUD.
 		//
-		// Reusing the shipped Block ([WZ-2a]) means inheriting its size classes and
-		// its layer set, and both are narrower here than on a calendar's own page:
-		// the column resolves to TierStd (the dispatch's own §3.3 arithmetic), where
-		// the phase marks and the intercalary band row are not painted, and the
-		// wizard is a HOST passing DEF — ["moons"] — so the era bands have no layer
-		// to ride ([WZ-2c]).
+		// Reusing the shipped Block ([WZ-2a]) means inheriting its size classes, and
+		// this column is narrower than a calendar's own page: it resolves to TierStd
+		// (the dispatch's own §3.3 arithmetic), where the phase marks and the
+		// intercalary band row are not painted. Those two are what remain absent.
+		//
+		// THE NOTE USED TO NAME THREE THINGS. The era bands were the third, because
+		// the wizard passed DEF — ["moons"] — and the bands ride the eras layer. The
+		// coordinator has since amended this host's set to ["moons", "eras"] (ruling
+		// R3, 2026-08-02; see builderBlockLayers), so the bands now DRAW and the
+		// sentence shrank to the absences that are still true. A disclosure that
+		// keeps naming a fixed absence is as dishonest as one that hides a real one.
 		//
 		// The mockup drew all three, because the mockup drew its own month. A
-		// preview that quietly under-draws while the readout beside it lists eras
-		// and festival days is the surface contradicting itself, which is the one
+		// preview that quietly under-draws while the readout beside it lists
+		// festival days is the surface contradicting itself, which is the one
 		// thing this wizard's honesty states exist to prevent. So it is stated
 		// where it happens, in the surface's own fact-chip grammar, rather than
 		// only in a report.
 		<div class="wz-note wz-pvnote">
 			<span class="wz-g" aria-hidden="true">▦</span>
 			<span>
-				This column is narrower than a calendar's own page, and it carries the default
-				layer set — a month with its moon phases and nothing else. Three things the
-				finished calendar draws are therefore absent here: the <b>moon phase marks</b> and
-				the <b>intercalary band row</b>, which the Block paints at its full width, and the
-				<b>era bands</b>, which ride the eras layer. The preview under-states the result.
-				It never invents one.
+				This column is narrower than a calendar's own page. Two things the finished
+				calendar draws are therefore absent here: the <b>moon phase marks</b> and the
+				<b>intercalary band row</b>, which the Block paints at its full width. The era
+				bands are drawn. The preview under-states the result. It never invents one.
 			</span>
 		</div>
 		<dl class="wz-stats">

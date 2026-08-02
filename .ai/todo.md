@@ -537,14 +537,18 @@ W-H shipped the builder wizard. Three things it deliberately did not decide.
   ladder declaration below its pass-2 shorthand, and it belongs to whoever next
   opens that file.
 
-- [ ] **The preview draws no era bands, and the signed stills do.** The wizard is
-  a HOST passing DEF, `["moons"]` ([WZ-2c] SIGNED: "a month with its moon phases
-  and nothing else"), so the `eras` layer is not docked and the four bands the
-  projection still carries have nothing asking for them. The stills
-  `builder-wizard--*` paint them on every sheet. Reconciling the two is a HOST
-  LAYER-SET AMENDMENT and therefore a coordinator act, not an executor's — W-H
-  disclosed it on the surface itself (the preview's note under the month) and
-  here, rather than turning a layer on to make a picture match.
+- [x] **The preview draws no era bands, and the signed stills do — CLOSED by the
+  coordinator, 2026-08-02 (ruling R3).** The wizard was a HOST passing DEF,
+  `["moons"]` ([WZ-2c] SIGNED), so the `eras` layer was not docked and the four
+  bands the projection carried had nothing asking for them; W-H disclosed the
+  tension on the surface and booked it here rather than turning a layer on to
+  make a picture match, because a host layer set is a coordinator act. The
+  coordinator has now made it: the wizard's own seed is `["moons", "eras"]`
+  (`builderBlockLayers`, a deliberate re-pin of [WZ-2c] with the ruling named at
+  the assignment and in both layer tests). **DEF is unchanged** — no other
+  producer's seed moved — and the preview's disclosure note SHRANK in the same
+  commit to the two absences that are still true (phase marks, intercalary band
+  row; both full-tier only, and this column is std).
 - [ ] **Harptos ships ONE era where the mockup ships two, and that goes past the
   letter of [WZ-4].** The ruling struck `eraBands` — a mid-month boundary "is not
   expressible on main" — and the wave also dropped the second era ("Age of the

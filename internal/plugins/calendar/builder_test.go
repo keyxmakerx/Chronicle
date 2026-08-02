@@ -13,6 +13,7 @@ package calendar
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -335,11 +336,19 @@ func TestBuilderPreview_IsTheShippedBlock(t *testing.T) {
 	}
 }
 
-// TestBuilderPreview_HostDecisionsAreZeroTogether pins [WZ-2c] and, through it,
-// r54's invariant: HasSwitchboard == (PersistURL != ""). Both are zero HERE by
-// construction — the draft has an empty campaign, blockPrefsPath returns "" for
-// one, and nothing in the wizard assigns either field. That is the difference
+// TestBuilderPreview_HostDecisionsAreZeroTogether pins the wizard's HOST
+// decisions and, through them, r54's invariant: HasSwitchboard ==
+// (PersistURL != ""). Both are zero HERE by construction — the draft has an
+// empty campaign, blockPrefsPath returns "" for one, and the host composes
+// zero-value prefs rather than accepting half a pair. That is the difference
 // between an invariant that holds and one somebody remembers to hold.
+//
+// THE LAYER SET IS RE-PINNED, NOT DELETED. It read `["moons"]` under [WZ-2c]
+// and now reads `["moons", "eras"]` under the coordinator's ruling R3
+// (2026-08-02), which amends that host decision so the preview draws the era
+// bands the signed stills draw. The assertion stays exact and stays here: a
+// host layer set is a decision somebody has to argue for, and this is the line
+// where the argument is made. See builderBlockLayers for the argument.
 func TestBuilderPreview_HostDecisionsAreZeroTogether(t *testing.T) {
 	got := builderPreviewBlock(fxBuilderDraft(), 0)
 
@@ -350,9 +359,17 @@ func TestBuilderPreview_HostDecisionsAreZeroTogether(t *testing.T) {
 		t.Errorf("PersistURL must be empty with HasSwitchboard false (r54); got %q",
 			got.Layers.PersistURL)
 	}
-	if len(got.Layers.Enabled) != 1 || got.Layers.Enabled[0] != "moons" {
-		t.Errorf("the wizard is a HOST and passes DEF — a month with its moon phases "+
-			"and nothing else; got %v", got.Layers.Enabled)
+	if want := []string{"moons", "eras"}; !slices.Equal(got.Layers.Enabled, want) {
+		t.Errorf("the wizard's HOST layer set is %v (ruling R3 amends [WZ-2c]'s DEF by "+
+			"adding `eras`, so the bands the signed stills draw are drawn); got %v",
+			want, got.Layers.Enabled)
+	}
+	// DEF ITSELF IS UNTOUCHED. One host changing its own seed must not move the
+	// product's default out from under every other producer.
+	if def := blockDefaultLayers(blockLayerPrefs{}); len(def.Enabled) != 1 ||
+		def.Enabled[0] != "moons" {
+		t.Errorf("DEF is still `[\"moons\"]` — the wizard amended ITS OWN seed, not the "+
+			"product's default; got %v", def.Enabled)
 	}
 }
 
@@ -637,23 +654,26 @@ func TestBuilderPreview_SaysWhatItDoesNotDraw(t *testing.T) {
 	}
 	data := builderView("camp-1", "tok", d, 7, false, 0)
 
-	// The layer set is DEF and nothing more. If a later hand turns "eras" on to
-	// make the bands appear, that is a HOST decision [WZ-2c] reserved to the
-	// coordinator — and this line is where it must be argued, not assumed.
-	if got := data.Block.Layers.Enabled; len(got) != 1 || got[0] != "moons" {
-		t.Errorf("the wizard is a host passing DEF; got layers %v", got)
+	// THE HOST'S LAYER SET, AND THE NOTE, RE-PINNED TOGETHER. The set is the
+	// coordinator's amended one — ["moons", "eras"], ruling R3 — and the note
+	// must have SHRUNK to match it in the same commit. Pinning the two in one
+	// test is the point: a layer turned on without the sentence being rewritten
+	// leaves the surface disclosing an absence that is no longer absent, which
+	// is the same defect as the original silence pointing the other way.
+	if got, want := data.Block.Layers.Enabled, []string{"moons", "eras"}; !slices.Equal(got, want) {
+		t.Errorf("the wizard's host layer set is %v; got %v", want, got)
 	}
 
-	// The band DATA is there. The bands are absent from the paint because of
-	// the layer set, not because the projection dropped them — which is what
-	// makes "the preview under-states the result" true rather than a euphemism.
+	// The band DATA is there. It always was — before ruling R3 this assertion
+	// proved the bands were absent by LAYER CHOICE rather than by loss; now it
+	// proves there is something for the layer to draw.
 	bands := 0
 	for _, row := range data.Block.Month.Rows {
 		bands += len(row.Bands)
 	}
 	if bands == 0 {
-		t.Error("the projection must still CARRY the era bands — if the data is gone, " +
-			"the divergence is a loss and not a layer choice")
+		t.Error("the projection must CARRY the era bands — with the eras layer on, no " +
+			"band data means the preview still draws none and the note is wrong again")
 	}
 
 	// And the surface says so, under the month, in its own words.
@@ -663,10 +683,27 @@ func TestBuilderPreview_SaysWhatItDoesNotDraw(t *testing.T) {
 	}
 	html := sb.String()
 	for _, want := range []string{"wz-pvnote", "moon phase marks", "intercalary band row",
-		"era bands", "under-states the result"} {
+		"The era bands are drawn", "under-states the result"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the preview must disclose what it does not draw; missing %q", want)
 		}
+	}
+	// THE SHRUNK NOTE, ASSERTED AS A SHRINKAGE. "Three things … are therefore
+	// absent" is the sentence ruling R3 falsified, and a stale copy of it is
+	// exactly what this test exists to catch.
+	for _, gone := range []string{"Three things", "which ride the eras layer",
+		"a month with its moon phases and nothing else"} {
+		if strings.Contains(html, gone) {
+			t.Errorf("the note still says %q — the eras layer is ON now (ruling R3) and "+
+				"the disclosure must name only the absences that are still true", gone)
+		}
+	}
+	// And the bands must actually be PAINTED, not merely permitted: the layer
+	// gate lives in the Block's own bandRow, so this reads the rendered markup
+	// rather than the layer list.
+	if !strings.Contains(html, `class="bands"`) {
+		t.Error("the eras layer is on and the band data is present, but no band row was " +
+			"painted — the note now promises bands the preview does not draw")
 	}
 
 	// The identity line no longer claims paint it does not produce.
