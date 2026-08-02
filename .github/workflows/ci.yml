@@ -113,6 +113,22 @@ jobs:
         # against embedded fixtures, so "OK" always means the rules can fire.
         run: ./tools/check-calendar-v4-lints.sh
 
+      - name: Page-side script ratchet
+        # A `<script src>` in a page templ sits inside <main id="main-content">,
+        # the region every hx-boost sidebar link swaps; boot.js sets
+        # htmx.config.allowScriptTags=false, at which point htmx DELETES script
+        # tags out of the swapped fragment. The surface then wires on a direct
+        # load and silently does not through the sidebar — invisibly, because
+        # the stylesheets beside it survive. That is how the Calendar Bench
+        # shipped with a dead day card and a dead Permissions button. Scripts
+        # belong in the plugin body-script registry (internal/app/routes.go),
+        # which base.templ emits outside the swapped region.
+        #
+        # Whole-tree ratchet against tools/page-script-allowlist.txt, which may
+        # only shrink. Needs no git history. Every run self-tests first, so "OK"
+        # means the rule can fire. Sweep of the survivors: C-HTMX-SCRIPT-SWEEP.
+        run: ./tools/check-page-scripts.sh
+
       - name: Test
         # Includes M-B2.2 cross-plugin import guard (TestPluginImportGuard in
         # internal/wire/plugin_import_guard_test.go): fails on any NEW
