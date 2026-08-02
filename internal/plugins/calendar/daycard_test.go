@@ -1284,17 +1284,61 @@ func TestDayCardCSS_EverySelectorIsScoped(t *testing.T) {
 		// is the card's, it lives beside the card, and it exists only while a
 		// drag is in flight.
 		//
-		// WHY THE NEW CLAIM IS NOT WEAKER: the admitted root is a LITERAL, not a
-		// pattern. A fourth root still fails, and so does any selector that
-		// merely happens to mention the card — the check below is exact on the
-		// three names this sheet is allowed to own.
+		// WHY THE NEW CLAIM IS NOT WEAKER: the admitted roots are LITERAL CLASS
+		// NAMES, not prefixes. The check below extracts every class token in the
+		// selector and requires one of them to BE one of the three names — so
+		// `.cal-daycard-bogus-fourth-root` fails even though it contains
+		// `.cal-daycard` as a substring, and so does any selector that merely
+		// happens to mention the card inside a longer name.
 		//
-		// MUTATION-TESTED: renaming the overlay's class to `.dragpreview` turns
-		// this red.
-		if !strings.Contains(sel, ".cal-daycard") && !strings.Contains(sel, ".cal-dayeditor") {
-			t.Errorf("unscoped selector in calendar-daycard.css: %q", sel)
+		// FIXED FORWARD AT STAGE 7, AND THE PREVIOUS CUT IS WORTH RECORDING.
+		// This comment was written above a `strings.Contains(sel,
+		// ".cal-daycard")` test, which is a PREFIX check wearing a literal's
+		// clothes: `.cal-daycard-drag` passed it by accident rather than by
+		// admission, and so would `.cal-daycard-anything-at-all`. A guard whose
+		// comment claims a tightening it does not perform is worse than no guard
+		// — it spends the reader's trust and returns nothing.
+		//
+		// MUTATION-TESTED (stage 7): appending
+		// `.cal-daycard-bogus-fourth-root { color: red; }` to
+		// static/css/calendar-daycard.css turns this RED; it was GREEN against
+		// the substring cut. Renaming the overlay's class to `.dragpreview` is
+		// also red. Both restored.
+		if !dayCardSelectorIsRooted(sel) {
+			t.Errorf("unscoped selector in calendar-daycard.css: %q — every selector in this "+
+				"sheet must carry one of the three admitted roots %v as a WHOLE class name; a "+
+				"fourth root is a surface that escaped its sheet",
+				sel, dayCardAdmittedRoots)
 		}
 	}
+}
+
+// dayCardAdmittedRoots are the only class names calendar-daycard.css may own.
+//
+// Three, each admitted by a named ruling: `.cal-daycard` and `.cal-dayeditor`
+// are DAYCARD's two boxes ([DC-7] — the card CLOSES as the editor OPENS, so one
+// box cannot be in two places), and `.cal-daycard-drag` is the drag-create span
+// preview, which [ER-8] SIGNED forces OUT of the Block and out of the card's
+// own subtree (the card is closed for the whole of the drag).
+var dayCardAdmittedRoots = []string{".cal-daycard", ".cal-dayeditor", ".cal-daycard-drag"}
+
+// dayCardSelectorClassRe pulls every CLASS TOKEN out of a selector. The trailing
+// character class is CSS's own identifier set, so `.cal-daycard-drag` reads as
+// one token rather than as `.cal-daycard` plus noise — which is the entire
+// difference between this check and the substring test it replaced.
+var dayCardSelectorClassRe = regexp.MustCompile(`\.[A-Za-z_-][A-Za-z0-9_-]*`)
+
+// dayCardSelectorIsRooted reports whether a selector names one of the admitted
+// roots as a whole class name.
+func dayCardSelectorIsRooted(sel string) bool {
+	for _, tok := range dayCardSelectorClassRe.FindAllString(sel, -1) {
+		for _, root := range dayCardAdmittedRoots {
+			if tok == root {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // cssSelectors returns every RULE selector in a comment-stripped stylesheet,

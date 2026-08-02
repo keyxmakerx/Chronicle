@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -1377,15 +1378,28 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 //  1. THE MORPH'S PROPERTIES APPEAR ONLY UNDER THE CLASS, and only in this
 //     sheet. inline-size and translate are transitioned nowhere else.
 //  2. THE CLASS APPEARS IN EXACTLY TWO FILES PRODUCT-WIDE — the sheet that
-//     declares the transition and the module that adds and removes it. Test
-//     files are excluded by construction: a guard that counted its own
-//     assertions would be counting itself.
+//     declares the transition and the module that adds and removes it —
+//     established by WALKING the repository's authored source, not by
+//     consulting a list of files someone already suspected. Test files are
+//     excluded by construction: a guard that counted its own assertions would
+//     be counting itself, and a test cannot add a transition to a shipped
+//     surface. See benchCarveOutMentions for exactly what is walked and what
+//     is skipped.
 //  3. NO RULE NAMING THE CLASS ALSO NAMES `.benchblock`, `.cal-block-host`,
 //     `.block`, `.lrow` or `[data-cell]`. That is bound 4 of the signature —
 //     "never touch the Block's interior" — checked rather than promised.
 //
-// MUTATION-TESTED: adding `.edmorph` to a third file turns claim 2 red; adding
-// `.cal-block-host` to the morph's prelude turns claim 3 red.
+// MUTATION-TESTED, STAGE 7, EACH REVERTED:
+//   · `el.classList.add("edmorph")` appended to
+//     internal/plugins/calendar/static/js/gm_panel.js — a REAL third consumer
+//     one directory away — turns claim 2 red, BY NAME, on this test. Against
+//     the eight-file allowlist this replaced, the whole calendar package stayed
+//     GREEN, which is why the walk exists.
+//   · `.cal-sched .edmorph { … }` appended to static/css/calendar-schedule.css
+//     turns claim 2 red on THIS test. Against the allowlist it went red only on
+//     that sheet's own scoping guard — the right answer for the wrong reason,
+//     which is indistinguishable from luck.
+//   · `.cal-block-host` added to the morph's prelude turns claim 3 red.
 func TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut(t *testing.T) {
 	const carveOut = ".edmorph"
 	const bare = "edmorph"
@@ -1407,21 +1421,37 @@ func TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut(t *testing.T) {
 		}
 	}
 
-	// (2) exactly two files product-wide.
+	// (2) EXACTLY TWO FILES PRODUCT-WIDE, AND "PRODUCT-WIDE" MEANS THE
+	// REPOSITORY, NOT A LIST.
+	//
+	// FIXED FORWARD AT STAGE 7, AND THE PREVIOUS CUT IS THE REASON THIS
+	// PARAGRAPH IS LONG. This claim used to iterate a HARDCODED EIGHT-FILE
+	// ALLOWLIST while its comment said "product-wide" and "adding `.edmorph` to
+	// a third file turns claim 2 red." It did not: adding the class to
+	// internal/plugins/calendar/static/js/gm_panel.js — a real consumer, one
+	// directory away, outside the list — left the entire calendar package green.
+	// A closed allowlist can only ever find the files someone already thought
+	// of, which is precisely the set that does not need finding.
+	//
+	// [ER-7]'s stated rationale is exactly this risk, in its own words: the
+	// allowlist widening "is only safe if the class itself cannot spread —
+	// otherwise the next surface that wants a geometric transition simply adds
+	// the class to its own rule and the allowlist admits it silently." A guard
+	// that cannot see the next surface cannot enforce that.
+	//
+	// It now WALKS the repository's own source — every .css, .js, .templ and
+	// non-generated .go under the tracked source roots — and names every file
+	// that mentions the class. Vendor, node_modules, .git, build output and
+	// _templ.go generations are skipped because they are not authored here; the
+	// test files that assert ABOUT the carve-out are skipped for the obvious
+	// reason that they must name it to check it.
 	found := map[string]bool{}
-	for _, path := range []string{
-		"static/css/calendar-bench.css",
-		"static/css/calendar-daycard.css",
-		"static/css/calendar-block.css",
-		"internal/plugins/calendar/static/js/calendar_daycard.js",
-		"internal/plugins/calendar/static/js/cal_visibility.js",
-		"internal/plugins/calendar/static/js/event_grid.js",
-		"internal/plugins/calendar/daycard.templ",
-		"internal/plugins/calendar/bench.templ",
-	} {
-		if strings.Contains(readRepoFile(t, filepath.FromSlash(path)), bare) {
-			found[path] = true
-		}
+	for _, path := range benchCarveOutMentions(t, bare) {
+		found[path] = true
+	}
+	if len(found) == 0 {
+		t.Fatal("the repository walk found no mention of the carve-out class at all — " +
+			"the walk is not reading the tree, and every claim below would pass vacuously")
 	}
 	want := map[string]bool{
 		"static/css/calendar-bench.css": true,
@@ -1457,6 +1487,78 @@ func TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut(t *testing.T) {
 			}
 		}
 	}
+}
+
+// benchCarveOutMentions walks the repository's authored source and returns every
+// file that names the carve-out class, repo-relative and slash-separated.
+//
+// WHAT IT READS: the four source roots this product's front end actually lives
+// in — `static/`, `internal/`, `cmd/` and `tools/` — over `.css`, `.js`, `.mjs`,
+// `.templ` and `.go`. WHAT IT SKIPS, and why each skip is safe:
+//
+//   · `node_modules`, `vendor`, `.git`, `dist`, `bin`, `tmp` — not authored here.
+//   · `*_templ.go` — GENERATED from a `.templ` that the walk already reads, so a
+//     class in one is a class in the other and counting both would report two
+//     files for one authoring decision.
+//   · `*_test.go` and `test/js/*.test.mjs` — a test that ASSERTS about the
+//     carve-out must name it. Excluding assertions from a monopoly count is not
+//     a loophole: a test file cannot add a transition to a shipped surface.
+//
+// The point of a walk over a list is that it finds the file nobody thought of.
+// That is the whole difference between this and the eight-name allowlist it
+// replaced.
+func benchCarveOutMentions(t *testing.T, needle string) []string {
+	t.Helper()
+	root := repoRootFrom(t)
+	skipDir := map[string]bool{
+		"node_modules": true, "vendor": true, ".git": true,
+		"dist": true, "bin": true, "tmp": true,
+	}
+	exts := map[string]bool{
+		".css": true, ".js": true, ".mjs": true, ".templ": true, ".go": true,
+	}
+	var out []string
+	for _, top := range []string{"static", "internal", "cmd", "tools", "test"} {
+		base := filepath.Join(root, top)
+		if _, err := os.Stat(base); err != nil {
+			continue
+		}
+		err := filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				if skipDir[info.Name()] {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			name := info.Name()
+			if !exts[strings.ToLower(filepath.Ext(name))] {
+				return nil
+			}
+			if strings.HasSuffix(name, "_templ.go") ||
+				strings.HasSuffix(name, "_test.go") ||
+				strings.HasSuffix(name, ".test.mjs") {
+				return nil
+			}
+			body, rerr := os.ReadFile(path)
+			if rerr != nil {
+				return rerr
+			}
+			if !strings.Contains(string(body), needle) {
+				return nil
+			}
+			rel, _ := filepath.Rel(root, path)
+			out = append(out, filepath.ToSlash(rel))
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", top, err)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // TestBenchProse_MotionClaimsMatchTheSheet pins the two SENTENCES that describe
