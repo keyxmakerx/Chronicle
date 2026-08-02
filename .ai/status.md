@@ -48,6 +48,17 @@ sheet existed. Read ADR-048 §26 for what it can and cannot see — a comment
 terminator inside prose silently disabled the entire motion register while all
 six assertion families stayed green, and only a browser probe caught it.
 
+**A FIX ROUND FOLLOWED, AND IT IS PART OF THE WAVE.** Adversarial verification
+rejected the first pass on five blocking findings, every one of them found in a
+browser against an entirely green suite: a moon-name input rendering 0px wide, a
+"no turn this month" that was unconditional and false, an era name clipped
+mid-word, a blank inside the leap station's flagship sentence, and three preview
+features absent from the build while the copy asserted them. All five are fixed
+and the evidence that missed them is widened — the narrow-lane probe now walks
+all eleven station sheets at all seven widths and measures whether a control can
+show its own value, and the `?step=` reject path is pinned on the GET as well as
+the form. ADR-048 §26 records the three lessons.
+
 Books: ADR-048 §26 · `reports/chronicle/2026-08-02-C-CALV4-WIZARD-P13.md` ·
 screenshots + measurements under
 `reports/chronicle/screenshots/2026-08-02-c-calv4-wizard-p13/`.

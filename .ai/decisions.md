@@ -3404,6 +3404,47 @@ file this wave does not own. The path is unchanged, so the snapshot is unchanged
 Three pins were refreshed rather than deleted; the banner pin's `t.Fatalf` fired
 exactly as its dispatch predicted, which was the pin doing its job.
 
+**THE FIX ROUND, AND THE THREE THINGS IT IS WORTH REMEMBERING FOR.** The wave's
+first pass was rejected by adversarial verification, and every finding came from
+a browser rather than from a suite that was, at the time, entirely green.
+
+*A gate scoped to a subset states a fact about the subset.* The narrow-lane probe
+walked four of the eleven station sheets, and the report stated its 24px floor as
+if it held everywhere. The control that broke — a moon-name input at **0×26**,
+its value in the DOM and nothing on the screen — lived on a station the probe
+never visited. Two exemptions inside it made the same class invisible even where
+it did look: the floor check skipped anything measuring zero wide, so the WORST
+case was the one case it excused, and nothing measured whether a control could
+show its own value, so a field clipping "Reckoning of Wards" to "Reckonir"
+read as passing. The roster is now every shot key, the guard is gone, and the
+probe compares `scrollWidth` against `clientWidth` on every text input.
+
+*A derived readout must name the arithmetic it shares, not the field it hopes is
+filled.* The Moons station read its turn marks out of `Block.Month.Almanac` with
+a comment claiming they "come from the SAME Block data the grid drew" — but
+`buildMonthGeometry` fills that register only when the Shelf zone is docked, and
+the wizard docks neither. The register was empty for every moon of every preset,
+so the station printed "no turn this month" for a 31.4-day moon in a 30-day
+month, unconditionally, under a subtitle promising every turn is derived. The
+comment was true about intent and false about mechanism. The fix calls
+`blockAlmanacRegister` off `monthBaseAbsoluteDay` directly — the same shipped
+functions, asked for rather than hoped for — and the test pins BOTH halves: the
+Block's own register must stay empty, and the station's must carry turns.
+
+*Reuse means inheriting the reused thing's limits, and inheriting them silently
+is a lie.* Three features the signed stills draw prominently are absent from the
+shipped preview, and all three follow from rulings: era bands ride the "eras"
+layer and the wizard passes DEF `["moons"]` ([WZ-2c]); the phase marks and the
+intercalary band row are the Block's full-tier treatment and this column resolves
+to std. None of that is a defect. What was a defect is that the surface asserted
+the opposite in three places at once while drawing none of it. The preview now
+carries a note under the month naming all three absences — *"the preview
+under-states the result; it never invents one"* — and a test pins the layer set,
+the still-present band DATA and the note's words together, so the disclosure
+cannot rot back into silence. **Left open for the coordinator, not resolved
+here:** the signed stills draw the bands and [WZ-2c] signs DEF; reconciling them
+is a host layer-set amendment, which is a coordinator act.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they
