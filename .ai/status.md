@@ -20,6 +20,101 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — W-H SHIPPED: the builder wizard, the last wave (2026-08-02)
+
+**The remodel's last wave, and the only one whose gate was *finish*.**
+`C-CALV4-WIZARD-P13` shipped `GET /campaigns/:id/calendars/builder` — nine
+stations presented as Start plus eight steps, a five-card preset gallery, the
+front door for the 4-format importer, and a live month preview that IS the
+shipped Block rendered from an in-memory `*Calendar` that is never persisted.
+Operator signature: `decisions/2026-08-01-operator-signatures-wz1-sky-editor.md`
+("Signed — build P13"); the dispatch was 16/16 signed.
+
+**Almost none of it is new capability, by design (L6).** The preset gallery is
+the importer with four embedded payloads read through the SAME `DetectAndParse`
+an upload meets — no preset table, no migration, no new parser, no second apply
+path. The importer front door is the existing parser behind a route with no
+`:calId`. What is new is the shell, the honesty states, and the motion.
+
+**The three-card V1 setup chooser is RETIRED.** `GET /calendars/new` resolves to
+the wizard, so every link across the product and every external bookmark lands
+on the designed surface with no href edited in a file the wave did not own —
+including the frozen `calendar_v2` helper. Three pins refreshed, none deleted.
+
+**W-H's durable deliverable is a guard the motion policy asked for on
+2026-07-27 and nobody had built**: a property/keyframe/reduced-motion/duration
+budget over `static/css/calendar-builder.css`, landed BEFORE a line of that
+sheet existed. Read ADR-048 §26 for what it can and cannot see — a comment
+terminator inside prose silently disabled the entire motion register while all
+six assertion families stayed green, and only a browser probe caught it.
+
+**A FIX ROUND FOLLOWED, AND IT IS PART OF THE WAVE.** Adversarial verification
+rejected the first pass on five blocking findings, every one of them found in a
+browser against an entirely green suite: a moon-name input rendering 0px wide, a
+"no turn this month" that was unconditional and false, an era name clipped
+mid-word, a blank inside the leap station's flagship sentence, and three preview
+features absent from the build while the copy asserted them. All five are fixed
+and the evidence that missed them is widened — the narrow-lane probe now walks
+all eleven station sheets at all seven widths and measures whether a control can
+show its own value, and the `?step=` reject path is pinned on the GET as well as
+the form. ADR-048 §26 records the three lessons.
+
+**A SECOND FIX ROUND FOLLOWED IT, AND ITS FIRST FINDING IS THE WAVE'S WORST.**
+An undisclosed edit had re-pointed `Index`'s zero-calendar branch at the wizard —
+and `Index` is on the PUBLIC group behind `RequireViewAccess`, so a player AND an
+anonymous visitor on a public campaign rendered the whole builder at 200, both
+`needs backend` chips and the Create button included. §6.3's "every viewer of the
+wizard is an owner, satisfied BY CONSTRUCTION" had only ever been true of the
+three ROUTE REGISTRATIONS; a Go call does not read the route table. The floor now
+travels with the handlers, a non-owner goes to V2's own empty state, and roles
+are exercised by tests rather than asserted by a test's name. Also closed: the
+fault sheet now draws the composition [WZ-15] item 5 ratified (the anchor stays,
+the fault goes where the grid would be) instead of a headline claiming the date
+cannot resolve above a Nameplate resolving it; the fidelity index lists
+twenty-six differences instead of nine "exhaustive" ones (twenty-four when this
+paragraph was first written; the third round added the one the second missed and
+the one it created deliberately); §12.1(ii)'s five motion clips exist and the
+stills are captured at rest and reproduce **content-identically, caption-glyph
+rasterisation aside** — re-measured across two full regenerations, 39 of 42
+byte-identical with `importer--dark`, `presets--mobile-light` and
+`step-eras--dark` differing only inside rendered text runs, and WHICH three land
+in that set varies between run pairs; and the importer, which had been parsing
+the dropped file and then discarding it, now adopts it as the draft. ADR-048 §26
+carries all of it.
+
+*This sentence said "byte-for-byte" and "twenty-four" for one round longer than
+it was true*, in the very entry whose round claimed every false evidence claim
+had been corrected. The evidence index and the report were fixed and Chronicle's
+own books were not, which is the same failure at a smaller scale: a correction
+that does not travel to every place the claim was made has not been made.
+
+**A THIRD ROUND CLOSED IT, ON FIVE COORDINATOR RULINGS.** Two of the five were
+decisions rather than repairs, which is why they came from the coordinator and
+not the executor. **The delay ladder [WZ-8] tabulates had never run**: the rule
+sat before pass 2's `animation:` shorthand at equal specificity, the shorthand
+reset `animation-delay` to `0s`, and every static guard passed because every
+static guard asks whether the rule exists. It runs now (0 / 33.3 / 66.7 / 100 /
+133.3ms, measured in Chromium — the dispatch's tabulated "≤132ms" is the same
+rule with `--m-step` rounded to 33ms in prose, and the sheet now carries the
+division rather than the rounding), pinned by a byte-ORDER assertion and a browser
+probe, and it **deliberately diverges from the sealed mockup**, which carries the
+identical defect — the written signed mechanism outranks the drawing's accident,
+and the mockup's own one-line fix is booked, not taken. **The wizard's host layer
+set gained `eras`** (ruling R3, a deliberate re-pin of [WZ-2c]): the preview
+draws the era bands the signed stills draw, DEF is unchanged, and the preview's
+disclosure note shrank to the two absences still true — pinned together, with the
+stale phrases asserted gone by name. **The indigo-vs-amber CTA** is disclosed and
+booked to `C-CALV4-TOKENS-RESIGN` rather than patched, the sibling wave's way.
+**The preset ↔ `BuildExport` round trip** the acceptance list required exists and
+found one asymmetry (a moon's colour), asserted exactly and booked. And the
+evidence's own arithmetic now describes the photograph — plus one more defect the
+regeneration surfaced: the two "reduced motion" stills were ordinary renders,
+because the capture never asked Chromium for the preference the harness's media
+query needed.
+
+Books: ADR-048 §26 · `reports/chronicle/2026-08-02-C-CALV4-WIZARD-P13.md` ·
+screenshots, clips + measurements under
+`reports/chronicle/screenshots/2026-08-02-c-calv4-wizard-p13/`.
 ### HOTFIX — two independent defects the operator hit at once (2026-08-02)
 
 Branch `claude/hotfix-boost-scripts-prefs-fk`, off the #584 merge. Both were

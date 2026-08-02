@@ -159,11 +159,26 @@ Carried out of R2-1, not closed:
   the mobile fold is caused by the stacked tiles rather than by their detail
   lines. It is cheap now if the operator still wants it after seeing R2-1
   shipped, because the register and the store already exist.
-- [!] **The two `_tokens.css` defects, booked a FOURTH time, not patched** — the
-  `color-mix(… var(--surface-card) …, var(--accent))` pink drift in light, and
-  `.badge.need` at 2.59:1. They belong to the `_tokens.css` re-sign pass; patching
-  per-file is what keeps them alive. R2-1's disclosure summaries use the
-  `transparent 96%` form and carry no `.badge.need` at all.
+- [!] **The `_tokens.css` defects, booked a FIFTH time, not patched — THE SCOPE
+  OF `C-CALV4-TOKENS-RESIGN`** (the re-sign lane task [ER-9] SIGNED into
+  existence). Three now, not two:
+  the `color-mix(… var(--surface-card) …, var(--accent))` pink drift in light;
+  `.badge.need` at 2.59:1; and **`--accent-action`: amber in the contract,
+  aliased to the campaign accent (indigo) in every shipped sheet**. The signed
+  set gives the primary action its own hue — `--accent-action: oklch(0.78 0.16
+  78)` on `--accent-action-ink: oklch(0.30 0.09 60)` — and both
+  `calendar-bench.css` and `calendar-builder.css` alias it to `--accent`, so
+  every filled CTA the v4 surfaces ship ("+ New calendar", "Continue ·
+  Structure ›", "Create calendar") renders indigo-on-white under stills that
+  draw it amber. **The question the re-sign must answer is which one the product
+  means**: an action hue distinct from the campaign accent is a real design
+  claim (the primary action does not change colour when a campaign picks a new
+  accent), and the shipped alias silently denies it. It is product-wide and
+  predates all of these surfaces; patching per-file is what keeps it alive.
+  Disclosed in-place at `static/css/calendar-builder.css` and in the P13 and
+  Part B evidence indices (coordinator ruling R2, 2026-08-02). R2-1's
+  disclosure summaries use the `transparent 96%` form and carry no
+  `.badge.need` at all.
 - [x] **Verifier findings 1–3, fixed forward in stages 6–8 (2026-07-30).** The
   inherited `hx-vals` (the key moved to the POST URL), the closed ribbon's
   missing session clause, and a twisty comment that described a rotation the
@@ -502,8 +517,105 @@ Phase B, W-D: the nav Calendar tab's landing surface.
   "colour by: type ⌄" is a per-viewer preference with no store (the Block books
   the identical control for the identical reason, `nameplate.templ`) and
   "+ New event" has no create route outside the V2 shell, which wave 1 may not
-  add. The cluster ships Open calendar / Builder / + New calendar. W-F and the
+  add. The cluster ships Open calendar / Builder / + New calendar — and since
+  C-CALV4-WIZARD-P13 (W-H) both doors point at designed surfaces: `Builder →` at
+  the 10-tab structure editor, `+ New calendar` at the builder wizard. CLOSED as
+  to the doors; what remains of this item is the cluster's own layout. W-F and the
   event-editor slice own the other two.
+
+### calendar-v4 remodel — booked follow-ups from C-CALV4-WIZARD-P13 (2026-08-02)
+
+W-H shipped the builder wizard. Three things it deliberately did not decide.
+
+- [ ] **The SEALED MOCKUP carries the same dead delay ladder the build just
+  fixed, and it needs the same one-line move** (cordinator
+  `mockups/v4-proposed/builder-wizard.html`). Its pass-2 rule declares
+  `animation-delay` on `.frow`/`.impdoor` BEFORE the `animation:` shorthand that
+  resets it, at equal specificity, so those rows arrive flat while its `.pcard`
+  nodes — which the shorthand does not name — keep their 0/33/67/100/133ms
+  stagger. The build now runs the ladder as §5.2 pass 2 and [WZ-8] TABULATE it
+  (coordinator ruling R1, 2026-08-02: *the written signed mechanism outranks the
+  mockup's accident*), which means the shipped surface and the sealed drawing
+  now differ in motion — disclosed in the wave's INDEX, not hidden. The mockup
+  is a sealed artifact and this slice does not edit it; the fix is moving its
+  ladder declaration below its pass-2 shorthand, and it belongs to whoever next
+  opens that file.
+
+- [x] **The preview draws no era bands, and the signed stills do — CLOSED by the
+  coordinator, 2026-08-02 (ruling R3).** The wizard was a HOST passing DEF,
+  `["moons"]` ([WZ-2c] SIGNED), so the `eras` layer was not docked and the four
+  bands the projection carried had nothing asking for them; W-H disclosed the
+  tension on the surface and booked it here rather than turning a layer on to
+  make a picture match, because a host layer set is a coordinator act. The
+  coordinator has now made it: the wizard's own seed is `["moons", "eras"]`
+  (`builderBlockLayers`, a deliberate re-pin of [WZ-2c] with the ruling named at
+  the assignment and in both layer tests). **DEF is unchanged** — no other
+  producer's seed moved — and the preview's disclosure note SHRANK in the same
+  commit to the two absences that are still true (phase marks, intercalary band
+  row; both full-tier only, and this column is std).
+- [ ] **Harptos ships ONE era where the mockup ships two, and that goes past the
+  letter of [WZ-4].** The ruling struck `eraBands` — a mid-month boundary "is not
+  expressible on main" — and the wave also dropped the second era ("Age of the
+  Emberfall", authored to begin 18 Hammer 1523), on the reasoning that at year
+  granularity an AE beginning in 1523 would contradict the signed "1523 RoW" year
+  line. That reasoning is recorded in `builder_presets_test.go` and is defensible,
+  but it is a slice judgement rather than the ruling, so it is flagged rather than
+  filed: Review reads "Eras 1", the preview stat reads "RoW", and the signed
+  stills read "Eras 2" / "RoW · AE".
+- [ ] **THE WIZARD'S IMPORTER DOOR DISCARDS TWO AUTHORED FIELDS THE PLAIN
+  IMPORTER KEEPS — a moon's colour and an era's code.** Found by the acceptance
+  item's own round-trip test (`TestBuilderPresets_RoundTripThroughBuildExport`),
+  and only after that test was anchored to the AUTHORED PAYLOAD BYTES on
+  2026-08-02: its first edition compared two derivations of one `*builderDraft`,
+  which is a tautology no payload mutation can red, and both drops below were
+  invisible inside it.
+    - **Moon colour is REPLACED, not defaulted.** `builderMoon` has no `Color`
+      field, so `builderDraftFromImport` drops what the parser read and
+      `builderImportResult` stamps `builderImportMoonSwatch` (`#c0c0c0`) over
+      every moon. `presets/harptos.json` authors `#cfd6dd` / `#d8cbb8` /
+      `#c7cdd4` / `#b9bcc4` and `presets/elven.json` authors `#d5d0e8` /
+      `#cfd8e0`; all six arrive at Create as `#c0c0c0`, while a file dropped on
+      the plain importer keeps its own. The third leg is the export:
+      `draftCalendar` leaves `Moon.Color` empty, so `BuildExport` writes `""`.
+    - **An era's CODE is dropped at Create.** `builderDraftFromImport` reads
+      `Era.Description` (parseCalendaria's `abbreviation`) into `builderEra.Code`
+      and the Eras station displays it; `builderImportResult` never writes it
+      back. It is invisible in all three preset payloads ONLY because each one's
+      code equals its epoch name (`RoW` / `Deep-year` / `Cycle`) and the epoch
+      does round-trip. A Calendaria file with an epoch AND a different era
+      abbreviation loses the abbreviation silently.
+  A third, smaller one rides along: `hours_per_day` / `minutes_per_hour` /
+  `seconds_per_minute` are hardcoded 24/60/60 and `leap_year_offset` is never
+  read, so a payload declaring any of them loses it at Create. Every embedded
+  preset happens to carry exactly those values.
+  Which half of each is right is a question about what a moon's colour and an
+  era's code MEAN in this product (the Block draws phase glyphs, not coloured
+  discs, so the swatch may be storage nobody reads; the reckoning the code names
+  usually IS the epoch) — they belong to whoever owns the sky and the reckoning,
+  not to a round-trip test. The test now asserts all of them EXACTLY, against
+  the bytes, so fixing any one in either direction reds a test that says which
+  way it moved; six distinct payload mutations were demonstrated red-then-green
+  when it landed.
+- [ ] **`parseCalendaria` reads moons, seasons and eras out of JSON OBJECTS and
+  does not fully re-sort them, so two parses of the same bytes can disagree on
+  ORDER.** Go map iteration is randomised; months and weekdays are sorted by
+  ordinal and eras by start year, but **moons are never sorted at all**, and
+  seasons sort on `DayStart` — which `presets/elven.json` ties three ways at 0,
+  so its Budding / Zenith / Waning come out in a different order run to run.
+  Nothing downstream currently depends on the order (the Block keys by name and
+  the wizard's stations are re-orderable), which is why this is a booking and
+  not a bug report — but an import that yields a different `sort_order` on every
+  attempt is a poor foundation for one that ever does. `import.go`'s parsers
+  were outside W-H's scope. Found 2026-08-02 while anchoring the round-trip test
+  to the payload; that test therefore matches moons, seasons and eras BY NAME
+  and says so.
+- [ ] **The Simple Calendar parser names every import "Imported Calendar".**
+  `parseSimpleCalendar` never reads `calendar.name`, so a Simple Calendar file
+  dropped on the wizard's importer front door arrives with a placeholder name the
+  author must retype on Review. `import.go`'s parsers were out of W-H's scope
+  (the dispatch names them in "Files you do NOT own"), and the wizard's tests now
+  assert what the parser really does rather than what it ought to — which is what
+  makes the gap visible. One field in the parser closes it.
 
 ### calendar-v4 remodel — booked follow-ups from C-CALV4-HOST-P3 (2026-07-28)
 

@@ -107,14 +107,59 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	)
 
 	// Calendar creation + import from setup (Owner only).
-	// C-CAL-V1-V2-CUTOVER: /calendars/new is the stable setup-chooser route.
-	// Index now 301s any campaign WITH calendars to V2, so the "New calendar"
-	// affordances (+ V2's empty state) need a dedicated GET to add an additional
-	// calendar without bouncing through the redirect. Static segment, so it wins
-	// over /calendars/:calId in Echo's router.
-	cg.GET("/calendars/new", h.ShowSetup, campaigns.RequireRole(campaigns.RoleOwner))
+	//
+	// C-CAL-V1-V2-CUTOVER made /calendars/new the stable create entry point.
+	// C-CALV4-WIZARD-P13 [WZ-13] SIGNED RE-POINTS IT AT THE BUILDER WIZARD and
+	// retires the three-card V1 chooser behind it.
+	//
+	// THE ROUTE MOVES, NOT EVERY LINK. A dozen surfaces across the plugin link
+	// to /calendars/new — the extension dashboard, three entity blocks, the V2
+	// empty state, the Bench — and one of them (calendar_v2_helpers.go) is in
+	// the FROZEN calendar_v2 set. Re-pointing the route lands every one of them
+	// on the designed surface with no edit to a file this wave does not own,
+	// and it is also the only change that catches an external bookmark.
+	//
+	// Two "create a calendar" doors is exactly the incoherence L6 exists to
+	// remove, the wizard is a strict superset of the chooser's three cards once
+	// the real-life card lands, and the chooser carried the V1 deprecation
+	// banner — its own admission that it was legacy. So W-H also retires a V1
+	// surface. POST /calendars and POST /calendars/import-setup STAY LIVE under
+	// this ruling: external links, the Foundry flow and V2's empty state reach
+	// them, and nothing about moving a door changes what a body may post.
+	//
+	// Static segment, so it still wins over /calendars/:calId in Echo's router.
+	cg.GET("/calendars/new", h.ShowBuilder, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars", h.CreateCalendar, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/import-setup", h.ImportFromSetupAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
+	// THE BUILDER WIZARD — the designed front door (C-CALV4-WIZARD-P13, W-H).
+	// THREE routes and no fourth; §§7.2-7.4 of the dispatch are the security
+	// review for each and are restated verbatim in builder_handler.go's header.
+	//
+	// LITERAL PATHS, ALWAYS. wire_contract_test.go SKIPS AND LOGS a route
+	// registered through a variable, so a non-literal path is silently absent
+	// from the snapshot — an auth surface outside the oracle.
+	//
+	// Owner floor, matching all three creation doors above, and it is what
+	// carries the needs-backend audience rule on this surface: every viewer of
+	// the builder is an owner BY CONSTRUCTION, so the GM-facing chips it renders
+	// can never reach a player. Lowering this floor means re-auditing every chip
+	// in builder.templ in the same commit.
+	//
+	// Route 2 does DOUBLE DUTY on purpose: it accepts either a draft structure
+	// body (the live preview) or an uploaded file (the importer's preview), and
+	// in the file case runs the same DetectAndParse and renders the same
+	// fragment. That is what closes the :calId gap — ImportPreviewAPI below is
+	// mounted under /calendars/:calId/import/preview and therefore requires a
+	// calendar that does not exist yet — WITHOUT a fourth route.
+	//
+	// Route 3 is justified rather than assumed: POST /calendars above reads only
+	// mode/name/epoch_name/start_year and cannot carry months, weekdays, moons,
+	// seasons or eras. Both it and /calendars/import-setup stay live under any
+	// answer — external links, the Foundry flow and V2's empty state reach them.
+	cg.GET("/calendars/builder", h.ShowBuilder, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/builder/preview", h.BuilderPreviewAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/builder", h.BuilderCreateAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
 	// Dashboard widget quick-add: creates event on default calendar (no calId).
 	cg.POST("/calendars/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))

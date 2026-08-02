@@ -3298,11 +3298,326 @@ on what is missing and a player is not. Conflict detection against booked events
 grid shows availability only, and a window may collide with something already on
 the calendar.
 
+### §26 — W-H: the builder wizard, and why the preview is the Block
+
+**C-CALV4-WIZARD-P13, wave 4.** The last wave of the remodel and the only one
+whose stated gate is *finish* rather than capability. L6: "Builder wizard wraps,
+it does not replace. New capability is explicitly not the point; style, animation
+and finish are."
+
+**THE PREVIEW IS THE SHIPPED BLOCK, AND A SECOND PRODUCER WAS REFUSED.** Wizard
+form state becomes an in-memory `*Calendar` — never persisted — that is fed to
+the EXISTING `projectBlock` and rendered by `calblock.Block`. Every link was
+already pure: `Block` performs no queries and reads no request state,
+`projectBlock` takes no context and no repository, and the only DB work in the
+Block path (`requireVisibleCalendar` → `candidateEvents` → `tiedEventIDs` →
+`CalendarLinkStatus`) happens BEFORE it and a draft skips all four. `projectBlock`'s
+`*Calendar` had only ever come from the DB; W-H WIDENS ITS PROVENANCE, NOT ITS
+CONTRACT.
+
+Two alternatives were refused on evidence. A second pure `wizardState → BlockData`
+producer would double the geometry surface, so the next geometry change — leap-aware
+day counts, the five-column rule, the era-band Half/Edge semantics, the moon cap —
+would have to be made twice. A client-side re-render would create a FOURTH counter
+against `TestBlockCounterDivergencePin`, which is the exact class of bug the whole
+spine exists to prevent.
+
+Three consequences fall out for free and are the reason this is the cheap answer:
+the draft carries `ID: "draft"` so DOM tokens and the identity triple are
+deterministic and the fidelity gate is reproducible; `CampaignID` is empty so
+`blockPrefsPath` returns `""` and the draft gets no switchboard, which makes r54's
+`HasSwitchboard == (PersistURL != "")` hold BY CONSTRUCTION rather than by an
+assignment somebody must remember; and a wizard with no months renders
+`blockDateLine`'s OWN shipped fault text, so no bespoke "nothing to preview yet"
+placeholder exists anywhere in the diff.
+
+**THE LEAK GUARD, AND WHY THE STYLESHEET IS ITS OWN FILE.** The design asks for a
+preview that cross-fades and the Block sits inside it, so this is where the
+Block's austerity is most likely to be violated. Four mechanisms, each mechanical:
+wizard motion lives in `static/css/calendar-builder.css` and nowhere else (the
+Block's four-property `motionBudget` and the Bench's three-property register are
+byte-unchanged); every wizard class is `wz-`-prefixed, because ROOT-SCOPING ALONE
+DOES NOT STOP THE LEAK — `.badge`, `.field`, `.frow` and `.cell` are live product
+classes and a descendant combinator reaches straight through the Block's own
+scoping root; that scoping root's name appears in the wizard's sheet ZERO times;
+and `builder_css_contract_test.go` asserts all three in one regex.
+
+**THE BUDGET GUARD IS THE WAVE'S MOST DURABLE DELIVERABLE.** A wizard stylesheet
+would have been governed by nothing — the shell guard does not police `static/css/`
+at all. The motion policy asked for the property allowlist on 2026-07-27 ("this is
+the durable part — everything above is advice until a guard enforces it") and it
+was never built. It landed in stage 1, before a line of wizard CSS existed, so the
+wizard was written INSIDE a guard rather than retro-fitted to one.
+
+Its limits are also now known, and that is worth recording. A comment terminator
+written by accident inside prose closed a comment early, CSS error recovery
+discarded the token prelude that followed, and the ENTIRE motion register silently
+stopped running — while all six assertion families stayed green, because they read
+the sheet through the same comment regex a parser uses and every rule they check
+was still present in the text. A browser probe found it in one reading. **A source-
+text guard cannot see a cascade outcome; that is what the browser probes are for,
+and it is why this wave's gate is not stills alone.**
+
+**BUILD ON SUBMIT — NO DRAFT STORE, NO MIGRATION.** Draft state lives in the form
+and the `?step=` URL; every preview POST rebuilds it from the posted body; the
+terminal POST creates and applies atomically. It is the ONLY option under which
+"nothing is written until Create" is literally true rather than advertised, and
+the only one with no abandoned-draft cleanup story and no egress question — a
+draft is not campaign content and never becomes a row, so it enters no export and
+no AI-workspace DTO by construction. A `calendar_drafts` table would have bought a
+migration, a TTL reconciler, an egress assertion and an IDOR review to solve a
+problem the form already solves.
+
+The pairing that makes it work is the carry/read pair, and its failure mode is
+severe and silent: the month name list was initially split between the carry and
+the owning station, which concatenated two groups in submission order instead of
+interleaving them, so every month took its neighbour's name — the right month
+count with the wrong month names, and nothing to notice it by. Either month
+station now emits the WHOLE ordered list, hidden in place for the family it does
+not show. A round-trip test over all nine stations is what caught it and what
+keeps it caught.
+
+**THE NEEDS-BACKEND AUDIENCE GATE ON THIS SURFACE IS THE ROLE FLOOR.** Every route
+carries `RequireRole(RoleOwner)`, so every viewer of the builder is an owner and
+the GM-facing chip can never reach a player — satisfied BY CONSTRUCTION rather
+than by a branch. That is a finding rather than a free pass: if a later slice
+lowers the floor to Player+ "so co-DMs can look", it ships four `needs backend`
+chips into a player's markup. The reason is written into the handler's header and
+the templ's, and the rule is that the floor and the chips are re-audited together.
+
+**THE ERA GATE IS WIZARD-LOCAL POLICY, AND THE COPY SAYS SO.** Chronicle has no
+era-relative year numbering — a zero-era calendar resolves "Deepwinter 14, 1523"
+perfectly well — which is why wave 1 examined the era fault, refused to synthesise
+it, and left a coordinator flag in `block_projection.go`. **That flag is closed
+here.** The wizard may decline to CREATE what would read ambiguously, even where
+the Block would render it; what it may not do is misdescribe why. So the copy
+reads "this calendar has no era — Create waits", a claim about the wizard, and a
+test asserts both that the copy is that claim and that the Block itself resolves a
+zero-era date without a fault — which is the evidence the gate is policy and not
+physics.
+
+**THE CHOOSER IS RETIRED, AND THE ROUTE IS WHAT MOVED.** `GET /calendars/new` now
+resolves to the wizard. A dozen surfaces link to that path and one of them is in
+the frozen `calendar_v2` set, so re-pointing the handler lands every one of them —
+and every external bookmark — on the designed surface with no href edited in a
+file this wave does not own. The path is unchanged, so the snapshot is unchanged.
+Three pins were refreshed rather than deleted; the banner pin's `t.Fatalf` fired
+exactly as its dispatch predicted, which was the pin doing its job.
+
+**THE FIX ROUND, AND THE THREE THINGS IT IS WORTH REMEMBERING FOR.** The wave's
+first pass was rejected by adversarial verification, and every finding came from
+a browser rather than from a suite that was, at the time, entirely green.
+
+*A gate scoped to a subset states a fact about the subset.* The narrow-lane probe
+walked four of the eleven station sheets, and the report stated its 24px floor as
+if it held everywhere. The control that broke — a moon-name input at **0×26**,
+its value in the DOM and nothing on the screen — lived on a station the probe
+never visited. Two exemptions inside it made the same class invisible even where
+it did look: the floor check skipped anything measuring zero wide, so the WORST
+case was the one case it excused, and nothing measured whether a control could
+show its own value, so a field clipping "Reckoning of Wards" to "Reckonir"
+read as passing. The roster is now every shot key, the guard is gone, and the
+probe compares `scrollWidth` against `clientWidth` on every text input.
+
+*A derived readout must name the arithmetic it shares, not the field it hopes is
+filled.* The Moons station read its turn marks out of `Block.Month.Almanac` with
+a comment claiming they "come from the SAME Block data the grid drew" — but
+`buildMonthGeometry` fills that register only when the Shelf zone is docked, and
+the wizard docks neither. The register was empty for every moon of every preset,
+so the station printed "no turn this month" for a 31.4-day moon in a 30-day
+month, unconditionally, under a subtitle promising every turn is derived. The
+comment was true about intent and false about mechanism. The fix calls
+`blockAlmanacRegister` off `monthBaseAbsoluteDay` directly — the same shipped
+functions, asked for rather than hoped for — and the test pins BOTH halves: the
+Block's own register must stay empty, and the station's must carry turns.
+
+*Reuse means inheriting the reused thing's limits, and inheriting them silently
+is a lie.* Three features the signed stills draw prominently are absent from the
+shipped preview, and all three follow from rulings: era bands ride the "eras"
+layer and the wizard passes DEF `["moons"]` ([WZ-2c]); the phase marks and the
+intercalary band row are the Block's full-tier treatment and this column resolves
+to std. None of that is a defect. What was a defect is that the surface asserted
+the opposite in three places at once while drawing none of it. The preview now
+carries a note under the month naming all three absences — *"the preview
+under-states the result; it never invents one"* — and a test pins the layer set,
+the still-present band DATA and the note's words together, so the disclosure
+cannot rot back into silence. **Left open for the coordinator, not resolved
+here:** the signed stills draw the bands and [WZ-2c] signs DEF; reconciling them
+is a host layer-set amendment, which is a coordinator act.
+
+**THE SECOND FIX ROUND — three more, and the first is the worst thing this wave
+did.** Adversarial verification rejected the first fix round too, on four
+blocking findings and three non-blocking ones. All are closed and the lessons
+are these.
+
+*A role floor that lives on the route table is a property of the route table,
+not of the handler.* §6.3 SIGNED says every viewer of the builder is an owner and
+that the `needs backend` chips' audience gate on this surface IS that floor, and
+the handler's own header asserted the rule was satisfied "BY CONSTRUCTION". It
+was satisfied by three route registrations. Then a stage re-pointed `Index`'s
+zero-calendar branch at `ShowBuilder` — and `Index` lives on the PUBLIC group
+behind `RequireViewAccess`, which admits every role AND, on a public campaign,
+authenticated non-members and logged-out visitors. Measured, not inferred: role
+= player and role = NONE both rendered the whole wizard at 200, 58862 bytes, two
+`wz-badge wz-need` chips and a live Create button at `?step=review`. The
+capability was DISABLED (the POST 403s), not ABSENT, which is exactly the
+distinction `decisions/2026-07-27-needs-backend-audience.md` exists to refuse.
+The floor now travels with the handlers through one predicate byte-identical to
+`RequireRole`'s own, so a Go call reaches the same gate a router does; `Index`
+sends a non-owner to V2, whose `calendarV2EmptyState` is the DESIGNED non-owner
+surface for a campaign with no calendar. **And the test named for the property
+had never had one** — it asserted chip TEXT and exercised no role at all, which
+is why the regression shipped green. A test whose NAME asserts a property its
+BODY does not exercise is worse than no test: it occupies the slot.
+
+*A composition ratified "as drawn" is a composition, not a headline.* [WZ-15]
+item 5 ratified the fault sheet's TWO HONESTY STATES AT ONCE — the anchor
+asserting what today resolves to, beside a Year length in warn ink and a grid
+saying it has nothing to draw. The build replaced the anchor with a warn rail
+reading "Cannot resolve a date" and drew an empty grid box, so the sheet printed
+a false claim about the model a hundred pixels above the Block's own Nameplate
+reading "Hammer 1, RoW 1523" — the very falsehood [WZ-3] was signed to remove
+from the OTHER fault. The cause was scope: the wizard's anchor fault asked "is
+anything in the declaration broken" where the drawing asks "does TODAY resolve".
+Each question now goes to the thing that can answer it, and the Block is not
+asked to draw a month with no days, because an empty grid shape is the
+placeholder §6.2 refuses by name.
+
+*Evidence claiming to be exhaustive is a claim, and it is gated on.* The
+screenshot index listed nine data-forced differences and called them stated, not
+hidden. The verifier found four more by eye in one pass — the month grid's lead
+of six, which is real `monthBaseAbsoluteDay` arithmetic and the most visible
+thing in the preview column; the resolved-date line's FORMAT as well as its day;
+two-letter weekday headers; wrapped delete controls — and this round found
+several more. The list is twenty-four now and says which are rulings, which are
+arithmetic, and which are this slice's own judgement. **A gate that reads off a
+list inherits that list's honesty.**
+
+*And a motion deliverable cannot be gated on stills.* §12.1(ii) required a clip
+per shipped pass and the evidence directory held zero; the still set was itself
+non-deterministic, six of forty-two differing between runs purely on the frame
+they landed. Stills are now captured at rest and reproduce **content-identically,
+caption-glyph rasterisation aside** — 39 of 42 byte-identical across two full
+regenerations, with `importer--dark`, `presets--mobile-light` and
+`step-eras--dark` differing only inside rendered text runs and the membership of
+that trio varying between run pairs. (This sentence read "byte-for-byte" for one
+round longer than it was true; §26's tail corrects it below and this is the same
+correction at the point of claim, because a fix that lives only in the retraction
+leaves the assertion standing.) The motion is gated by five built clips — each
+frame a separate headless load
+with the register paused at an exact time through the Web Animations API, so the
+film is reproducible and its time base is the register's own. Splitting the two
+is the point: a still proves the resting state, a clip proves the transition,
+and asking either to do the other's job is how a signed gate item quietly
+becomes an executor's judgement call.
+
+*One product bug came out of the evidence work, which is the argument for doing
+it properly.* The importer parsed the dropped file and threw it away: the
+detection line and the eight-row mapping table were built while the DRAFT was
+left untouched, so the importer's own honesty mechanism reported the facts of
+whatever was already on screen under the name of a file it had not adopted, and
+"Continue to Review" carried the preset to Create. Nothing in the suite could see
+it, because the still that would have shown it was photographed before the drop.
+The file now BECOMES the draft through the same `builderDraftFromImport` a preset
+goes through — §2.2's "one code path, two front doors", in code rather than in
+prose — and is re-validated against §7.3's bounds, because an adopted file is
+input like any other.
+
+**THE THIRD FIX ROUND — five coordinator rulings, and the first is a rule that
+existed only on paper.** Adversarial verification rejected the second fix round
+on two blocking findings and three non-blocking ones. The coordinator ruled on
+all five rather than leaving them to the executor, because two of them were
+choices about what the product means and not about whether the code matches it.
+
+*A rule that is present is not a mechanism that runs.* §5.2 pass 2 and [WZ-8]
+SIGNED tabulate a delay ladder — "the station's content arrives in reading
+order", `calc(min(--m-i, --m-cap) * --m-step)`, ≤132ms added — 133.3ms once
+`--m-step` is divided rather than rounded (`--t-fast`/3 = 33.333ms × `--m-cap` 4),
+which is what the sheet and the probe now both say. The rule was in
+the sheet, in the one prelude it is legal in, composing the right tokens, and it
+did nothing: it was declared BEFORE pass 2's `animation:` shorthand at identical
+specificity, and a shorthand resets `animation-delay` to `0s`. Every static
+guard passed, because every static guard asks whether the rule EXISTS. Measured
+in Chromium, every `.wz-frow` computed `animation-delay: 0s` while `--m-i`
+resolved 0,1,2,… correctly, and the clip evidence had been read as showing a
+stagger when what it showed was `--t-base` plus one frame of encoder residue.
+The repair is the declaration's position. **It deliberately diverges from the
+sealed mockup**, which has the identical cascade defect and therefore lands its
+own rows flat: the written signed mechanism outranks the drawing's accident
+(coordinator ruling R1), the divergence is disclosed in the wave's evidence
+index, and the mockup's one-line fix is BOOKED rather than taken, because a
+sealed artifact is not edited from a build slice. Two pins now hold it — a
+byte-ORDER assertion, because nothing in the file's shape tells a reader those
+two rules are order-coupled, and a browser probe that measures the delays and
+the reduced-motion silence in a real engine.
+
+*An inherited divergence is disclosed and booked, not patched per surface.* The
+filled CTA renders indigo where all twenty-two signed stills draw amber, because
+both v4 sheets alias the contract's dedicated `--accent-action` to the campaign
+accent. The exhaustive-differences list did not name it. The ruling (R2) is the
+one the sibling wave already took a day earlier: it is product-wide and predates
+the slice, so the remedy is a disclosure line, a comment at the aliasing lines,
+and a real scope item on `C-CALV4-TOKENS-RESIGN` — where the question is not the
+pixel but whether the primary action owns a hue independent of the campaign
+accent. Patching it inside one surface is what has kept the other two token
+defects alive for four waves.
+
+*A host layer set is a coordinator act, and this is what it looks like when the
+coordinator acts.* W-H shipped DEF `["moons"]` per [WZ-2c], disclosed on the
+surface that the era bands the signed stills draw were therefore absent, and
+booked the tension instead of turning a layer on to make a picture match. Ruling
+R3 amends the host's own seed to `["moons", "eras"]` — DEF itself untouched, no
+other producer's seed moved — and the preview's disclosure note SHRANK in the
+same commit to the two absences that remain true. The layer set and the shrunk
+sentence are pinned by one test, and the stale phrases are asserted GONE by
+name: a note that keeps naming a fixed absence is as dishonest as one that hides
+a real one. The Eras station's own copy, which told the author no band was
+drawn, went with it.
+
+*An acceptance item is either met or open; "neither" is the worst of the three.*
+The list required each preset to round-trip against `export.go:BuildExport` and
+no test referenced it. It does now, through the shipped hops with no restated
+mapping — **and its first edition was a tautology**, which is the lesson worth
+keeping. It compared `builderImportResult(d)` against `BuildExport(draftCalendar
+(d))`: two derivations of ONE `*builderDraft`, so any payload change propagates
+identically to both and they cannot disagree. Eleven distinct fields of
+`presets/harptos.json` were mutated and it stayed green on every one. It was
+green, it was honest about the export path, and it could not see the payload at
+all.
+
+A fourth round anchored it to hop 0 — the authored bytes — and two authored-data
+drops came straight out: a moon's colour is not defaulted but **replaced**
+(`builderMoon` has no colour field, so the wizard's front door discards colours
+the plain importer preserves and stamps `#c0c0c0` over them), and an era's
+**code** is dropped at Create (`builderDraftFromImport` reads it, the station
+shows it, `builderImportResult` never writes it back). The second was invisible
+because every preset's code happens to equal its epoch name, which does round
+trip — a coincidence, now asserted by name so the day a payload separates the two
+this reds. Six payload mutations were demonstrated red-then-green. **A round trip
+compared only with itself proves the comparison, not the trip**; the anchor has to
+be the thing nobody in the pipeline wrote.
+
+*And the evidence's own arithmetic must describe the photograph.* Eighteen of
+forty-two stills printed the 390px chain under a 500px capture; the tier
+conclusion survived and the numbers did not, which is how a reader learns to
+stop checking. The captions now state the photographed width with the 390
+readings on a separate, attributed probe line. The "reproduces byte-for-byte"
+claim became "content-identical, caption rasterisation aside", with the three
+files named. **And the regeneration found one more, which is the argument for
+re-measuring rather than re-asserting:** the two reduced-motion stills were
+ordinary renders. The harness swaps its settle block for a
+`@media (prefers-reduced-motion: reduce)` copy of the global guard, the capture
+never asked Chromium for that preference, so the media query matched nothing and
+the register ran — the pictures were evidence for the opposite of their own
+caption, and they announced it by being the only two that failed to reproduce
+between runs. The capture now passes `--force-prefers-reduced-motion`.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they
-landed — §20-§24 above, and W-G's tail is §25. Round 2's reveal pass (R2-1) is
-the section immediately above this one, and R2-2…R2-5 will land the same way.
+landed — §20-§24 above, W-G's tail is §25, and W-H's builder wizard is §26.
+Round 2's reveal pass (R2-1) is a section here too, and R2-2…R2-5 will land the
+same way.
 There is no ADR-049. calendar-v4 is one architecture
 decision; competing ADRs for its later waves would fragment the rationale that a
 future re-litigation needs in one place. W-E followed this rule first (its

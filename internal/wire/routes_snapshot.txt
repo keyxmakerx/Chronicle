@@ -181,6 +181,7 @@ GET	/calendars/:calId/timeline	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/upcoming	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/weather/zones	internal/plugins/calendar/routes.go
 GET	/calendars/:calId/week	internal/plugins/calendar/routes.go
+GET	/calendars/builder	internal/plugins/calendar/routes.go
 GET	/calendars/embed	internal/plugins/calendar/routes.go
 GET	/calendars/new	internal/plugins/calendar/routes.go
 GET	/calendars/upcoming	internal/plugins/calendar/routes.go
@@ -469,6 +470,8 @@ POST	/calendars/:calId/events/:eid/create-entity	internal/plugins/calendar/route
 POST	/calendars/:calId/events/:eid/rsvp	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/import	internal/plugins/calendar/routes.go
 POST	/calendars/:calId/import/preview	internal/plugins/calendar/routes.go
+POST	/calendars/builder	internal/plugins/calendar/routes.go
+POST	/calendars/builder/preview	internal/plugins/calendar/routes.go
 POST	/calendars/events	internal/plugins/calendar/routes.go
 POST	/calendars/import-setup	internal/plugins/calendar/routes.go
 POST	/campaigns	internal/plugins/campaigns/routes.go

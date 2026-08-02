@@ -134,10 +134,39 @@ func (h *Handler) requireVisibleCalendar(c echo.Context, calendarID, campaignID 
 	return cal, nil
 }
 
-// Index is the V1 calendar entry point. If no calendars exist it shows the
-// setup chooser (the create flow); otherwise it 301s to the V2 shell, which
-// owns the active-calendar + multi-cal switcher views that replaced the V1
-// single/list pages (C-CAL-V1-V2-CUTOVER).
+// Index is the V1 calendar entry point. If no calendars exist AND the viewer is
+// an Owner it shows the BUILDER WIZARD (the create flow); everyone else 301/302s
+// to the V2 shell, which owns the active-calendar + multi-cal switcher views
+// that replaced the V1 single/list pages (C-CAL-V1-V2-CUTOVER).
+//
+// The zero-calendar branch used to render the three-card V1 setup chooser.
+// C-CALV4-WIZARD-P13 [WZ-13] SIGNED retired it: a campaign's FIRST calendar is
+// exactly the case the wizard was designed for, and landing a first-run on the
+// un-designed surface is the one outcome that would have made the whole wave
+// pointless.
+//
+// ── WHY THE OWNER TEST IS HERE AND NOT ONLY ON THE BUILDER'S OWN ROUTES ────
+//
+// This route is registered on the PUBLIC group with RequireViewAccess(), which
+// admits any member at any role AND — on a public campaign — an authenticated
+// non-member or a logged-out visitor at RoleNone. The wizard's three own routes
+// carry RequireRole(RoleOwner), so §6.3's "every viewer of the builder is an
+// owner, therefore the `needs backend` chips are gated BY CONSTRUCTION" was true
+// of them and false of this branch the moment it started delegating here: a
+// player — or the public — could render the whole wizard, chips and Create
+// button included, because Index's floor is view access and ShowBuilder is a
+// method call rather than a route.
+//
+// So the floor is restated where the delegation happens. A non-owner with zero
+// calendars falls through to V2, whose own empty state (calendarV2EmptyState)
+// is the DESIGNED non-owner surface for this exact case: "No calendar yet …
+// Ask the campaign owner to add one." It draws no chip and offers no Create.
+// ShowBuilder carries the same floor itself (builder_handler.go) so the property
+// survives the next caller too — this test is the redirect, that one is the law.
+//
+// The non-owner redirect is a 302, not the 301 the with-calendars branch uses:
+// a permanent redirect whose target depends on the requester's ROLE is a cache
+// poisoning waiting to happen, and this one does.
 // GET /campaigns/:id/calendars
 func (h *Handler) Index(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
@@ -148,38 +177,22 @@ func (h *Handler) Index(c echo.Context) error {
 		return err
 	}
 
-	// No calendars: show the setup chooser (the create flow).
+	// No calendars: show the builder wizard (the create flow) — OWNERS ONLY.
 	if len(cals) == 0 {
-		return h.renderSetup(c, cc)
+		if cc.MemberRole >= campaigns.RoleOwner {
+			return h.ShowBuilder(c)
+		}
+		return c.Redirect(http.StatusFound,
+			"/campaigns/"+cc.Campaign.ID+"/calendar/v2")
 	}
 
 	// C-CAL-V1-V2-CUTOVER: any campaign WITH calendars goes to V2 — the active
 	// calendar + the multi-cal switcher replace the V1 single/list views. Only
-	// the 0-calendar setup chooser above stays on V1 (no V2 create flow yet; the
+	// the 0-calendar owner branch above stays on V1 (no V2 create flow yet; the
 	// V2 empty state links back here). The V1 list templates are retired in a
 	// follow-on.
 	return c.Redirect(http.StatusMovedPermanently,
 		"/campaigns/"+cc.Campaign.ID+"/calendar/v2")
-}
-
-// ShowSetup renders the calendar setup chooser — the stable create-a-calendar
-// entry point. Before the V1→V2 cutover this surface was only reachable via
-// Index when a campaign had zero calendars; now that Index 301s to V2 for any
-// campaign WITH calendars, the "New calendar" affordances (and V2's empty
-// state) need a dedicated route to add an ADDITIONAL calendar without bouncing
-// through the redirect. Owner-gated at the route (creation is Owner-only).
-// GET /campaigns/:id/calendars/new
-func (h *Handler) ShowSetup(c echo.Context) error {
-	return h.renderSetup(c, campaigns.GetCampaignContext(c))
-}
-
-// renderSetup renders the setup chooser as an HTMX fragment or a full page.
-func (h *Handler) renderSetup(c echo.Context, cc *campaigns.CampaignContext) error {
-	csrfToken := middleware.GetCSRFToken(c)
-	if middleware.IsHTMX(c) {
-		return middleware.Render(c, http.StatusOK, CalendarSetupFragment(cc, csrfToken))
-	}
-	return middleware.Render(c, http.StatusOK, CalendarSetupPage(cc, csrfToken))
 }
 
 // EmbedCalendar returns a compact calendar grid fragment for dashboard embedding.
@@ -679,7 +692,7 @@ func newEventEditorRecord(e Event, canAuthor bool) eventEditorRecord {
 		StartHour: e.StartHour, StartMinute: e.StartMinute,
 		EndYear: e.EndYear, EndMonth: e.EndMonth, EndDay: e.EndDay,
 		EndHour: e.EndHour, EndMinute: e.EndMinute,
-		AllDay:  e.AllDay, Category: e.Category,
+		AllDay: e.AllDay, Category: e.Category,
 		IsRecurring:    e.IsRecurring,
 		RecurrenceType: e.RecurrenceType, RecurrenceInterval: e.RecurrenceInterval,
 	}
