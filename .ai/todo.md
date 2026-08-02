@@ -558,6 +558,20 @@ W-H shipped the builder wizard. Three things it deliberately did not decide.
   but it is a slice judgement rather than the ruling, so it is flagged rather than
   filed: Review reads "Eras 1", the preview stat reads "RoW", and the signed
   stills read "Eras 2" / "RoW · AE".
+- [ ] **A moon's COLOUR does not survive an export → re-import round trip, and
+  the two shipped mappings out of one draft disagree about it.** Found by the
+  acceptance item's own round-trip test (`TestBuilderPresets_
+  RoundTripThroughBuildExport`, added 2026-08-02): `builderImportResult` stamps
+  every created moon with `builderImportMoonSwatch` (`#c0c0c0`, import.go's
+  default for a format that carries no colour) while `draftCalendar` — the
+  calendar the wizard previews and exports — leaves `Moon.Color` empty, so
+  `BuildExport` writes `""`. Everything else about every preset round-trips
+  field-for-field. Which half is right is a question about what a moon's colour
+  MEANS in this product (the Block draws phase glyphs, not coloured discs, so
+  the swatch may be storage nobody reads), and it belongs to whoever owns the
+  sky rather than to a round-trip test. The test asserts the asymmetry EXACTLY —
+  empty on the export side, the named swatch on the create side — so fixing it
+  in either direction reds a test that then says which way it moved.
 - [ ] **The Simple Calendar parser names every import "Imported Calendar".**
   `parseSimpleCalendar` never reads `calendar.name`, so a Simple Calendar file
   dropped on the wizard's importer front door arrives with a placeholder name the

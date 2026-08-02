@@ -740,7 +740,8 @@ func builderImportResult(d *builderDraft) *ImportResult {
 	}
 	for _, m := range d.Moons {
 		res.Moons = append(res.Moons, MoonInput{
-			Name: m.Name, CycleDays: m.Period, PhaseOffset: m.NewAt, Color: "#c0c0c0",
+			Name: m.Name, CycleDays: m.Period, PhaseOffset: m.NewAt,
+			Color: builderImportMoonSwatch,
 		})
 	}
 	for _, s := range d.Seasons {
@@ -757,6 +758,18 @@ func builderImportResult(d *builderDraft) *ImportResult {
 	}
 	return res
 }
+
+// builderImportMoonSwatch is the colour every moon the wizard CREATES is given.
+//
+// It is import.go's own default for a format that carries no moon colour, and
+// the wizard is such a format: no station asks for one, because the Block draws
+// phase glyphs rather than coloured discs. It is NAMED rather than inlined
+// because it is one half of a real asymmetry — draftCalendar, the calendar the
+// wizard previews and exports, leaves Moon.Color empty — so a moon's colour
+// does not survive an export → re-import round trip even though everything else
+// does. TestBuilderPresets_RoundTripThroughBuildExport asserts that exactly,
+// and .ai/todo.md books the question of which of the two is right.
+const builderImportMoonSwatch = "#c0c0c0"
 
 // builderCreateBlocked returns the reason Create is held, or "".
 //

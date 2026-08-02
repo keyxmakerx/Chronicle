@@ -461,3 +461,171 @@ func TestBuilderPreset_TheLeapDayIsNamedAndTheNameIsChipped(t *testing.T) {
 		}
 	}
 }
+
+// TestBuilderPresets_RoundTripThroughBuildExport closes the acceptance item
+// that had been neither met nor booked: *"each preset round-trips against
+// `export.go:BuildExport`"* (dispatch §2.2 / Acceptance).
+//
+// The previous rounds proved the FIRST half only — every preset loads through
+// the shipped four-format sniffer (TestBuilderPresets_LoadThroughTheShippedParser).
+// Nothing proved that the calendar the wizard then promises can be exported and
+// read back as the same calendar, which is what makes a preset a real payload
+// rather than a fixture that happens to parse.
+//
+// THE FOUR HOPS, ALL SHIPPED CODE. No hop restates a mapping this test could
+// then agree with itself about:
+//
+//	1. the embedded preset bytes → DetectAndParse            (the importer's door)
+//	2. → builderDraftFromImport → builderImportResult        (what Create APPLIES)
+//	   and → draftCalendar                                   (the calendar shape
+//	                                                          the wizard promises)
+//	3. → BuildExport → encoding/json                         (the export door)
+//	4. → DetectAndParse again                                (the importer's door,
+//	                                                          a second time)
+//
+// Hop 4 must also DETECT the export as Chronicle's own format without being
+// told, because an export nobody can re-import is not a round trip.
+//
+// ── THE ONE ASYMMETRY, ASSERTED PRECISELY RATHER THAN TOLERATED ─────────────
+//
+// A moon's COLOUR does not survive, and the reason is that the two shipped
+// mappings out of one draft disagree about it: builderImportResult stamps every
+// moon with the default swatch `#c0c0c0` (import.go's own default for a format
+// that carries no colour), while draftCalendar leaves Moon.Color empty because
+// the preview paints phase glyphs and never a moon's colour. So the export
+// carries "" where the created calendar will carry the swatch.
+//
+// It is a real one-way loss and it is asserted here EXACTLY — every other field
+// of every moon must match, and the colour must be empty on the export side and
+// the default swatch on the create side. Asserting "they differ somehow" would
+// let a future divergence in cycle length or phase offset hide inside the same
+// exemption. It is booked in .ai/todo.md, not patched here: which of the two is
+// right is a question about what a moon's colour MEANS in this product, and the
+// answer belongs with whoever owns the sky, not with a round-trip test.
+func TestBuilderPresets_RoundTripThroughBuildExport(t *testing.T) {
+	for _, p := range builderPresets {
+		t.Run(p.Key, func(t *testing.T) {
+			d, err := builderPresetDraft(p.Key)
+			if err != nil {
+				t.Fatalf("load preset: %v", err)
+			}
+
+			// WHAT CREATE APPLIES — the same *ImportResult the handler hands to
+			// ApplyImport, from the same function.
+			applied := builderImportResult(d)
+
+			// THE CALENDAR THE WIZARD PROMISES, exported and read back.
+			blob, err := json.Marshal(BuildExport(draftCalendar(d), nil, false))
+			if err != nil {
+				t.Fatalf("marshal export: %v", err)
+			}
+			back, err := DetectAndParse(blob)
+			if err != nil {
+				t.Fatalf("the export could not be re-imported by the shipped sniffer: %v", err)
+			}
+			if back.Format != FormatChronicle {
+				t.Errorf("the export re-detects as %q — Chronicle's own export must be "+
+					"recognised by Chronicle's own importer", back.Format)
+			}
+
+			// ── settings ──────────────────────────────────────────────────
+			if back.CalendarName != applied.CalendarName {
+				t.Errorf("name: export %q, create %q", back.CalendarName, applied.CalendarName)
+			}
+			gotEpoch, wantEpoch := "", ""
+			if back.Settings.EpochName != nil {
+				gotEpoch = *back.Settings.EpochName
+			}
+			if applied.Settings.EpochName != nil {
+				wantEpoch = *applied.Settings.EpochName
+			}
+			if gotEpoch != wantEpoch {
+				t.Errorf("epoch: export %q, create %q", gotEpoch, wantEpoch)
+			}
+			for _, f := range []struct {
+				name      string
+				got, want int
+			}{
+				{"current_year", back.Settings.CurrentYear, applied.Settings.CurrentYear},
+				{"hours_per_day", back.Settings.HoursPerDay, applied.Settings.HoursPerDay},
+				{"minutes_per_hour", back.Settings.MinutesPerHour, applied.Settings.MinutesPerHour},
+				{"seconds_per_minute", back.Settings.SecondsPerMinute, applied.Settings.SecondsPerMinute},
+				{"leap_year_every", back.Settings.LeapYearEvery, applied.Settings.LeapYearEvery},
+				{"leap_year_offset", back.Settings.LeapYearOffset, applied.Settings.LeapYearOffset},
+			} {
+				if f.got != f.want {
+					t.Errorf("%s: export %d, create %d", f.name, f.got, f.want)
+				}
+			}
+
+			// ── months, weekdays, seasons, eras: structural equality ──────
+			if len(back.Months) != len(applied.Months) {
+				t.Fatalf("months: export %d, create %d", len(back.Months), len(applied.Months))
+			}
+			for i := range applied.Months {
+				if back.Months[i] != applied.Months[i] {
+					t.Errorf("month %d: export %+v, create %+v", i, back.Months[i], applied.Months[i])
+				}
+			}
+			if len(back.Weekdays) != len(applied.Weekdays) {
+				t.Fatalf("weekdays: export %d, create %d", len(back.Weekdays), len(applied.Weekdays))
+			}
+			for i := range applied.Weekdays {
+				if back.Weekdays[i] != applied.Weekdays[i] {
+					t.Errorf("weekday %d: export %+v, create %+v", i, back.Weekdays[i], applied.Weekdays[i])
+				}
+			}
+			if len(back.Seasons) != len(applied.Seasons) {
+				t.Fatalf("seasons: export %d, create %d", len(back.Seasons), len(applied.Seasons))
+			}
+			for i, w := range applied.Seasons {
+				g := back.Seasons[i]
+				if g.Name != w.Name || g.Color != w.Color || g.StartMonth != w.StartMonth ||
+					g.StartDay != w.StartDay || g.EndMonth != w.EndMonth || g.EndDay != w.EndDay {
+					t.Errorf("season %d: export %+v, create %+v", i, g, w)
+				}
+			}
+			if len(back.Eras) != len(applied.Eras) {
+				t.Fatalf("eras: export %d, create %d", len(back.Eras), len(applied.Eras))
+			}
+			for i, w := range applied.Eras {
+				g := back.Eras[i]
+				if g.Name != w.Name || g.StartYear != w.StartYear || g.Color != w.Color ||
+					g.SortOrder != w.SortOrder {
+					t.Errorf("era %d: export %+v, create %+v", i, g, w)
+				}
+				// THE ERA CODE IS NOT A ROUND-TRIP LOSS, and this is where a
+				// reader would otherwise assume it is. An imported era's code
+				// rides Description (parseCalendaria's `abbreviation`), and the
+				// wizard writes NO era description at Create — but the
+				// reckoning the code names is the calendar's EpochName, which
+				// is written and which the settings assertions above prove
+				// round-trips. Both sides are nil here, and if one day one of
+				// them is not, this says so rather than letting a silent
+				// asymmetry appear inside the equality above.
+				if g.Description != nil || w.Description != nil {
+					t.Errorf("era %d description: export %v, create %v — the wizard writes "+
+						"no era code and the reckoning rides EpochName", i, g.Description, w.Description)
+				}
+			}
+
+			// ── moons: everything but the colour, and the colour EXACTLY ──
+			if len(back.Moons) != len(applied.Moons) {
+				t.Fatalf("moons: export %d, create %d", len(back.Moons), len(applied.Moons))
+			}
+			for i, w := range applied.Moons {
+				g := back.Moons[i]
+				if g.Name != w.Name || g.CycleDays != w.CycleDays || g.PhaseOffset != w.PhaseOffset {
+					t.Errorf("moon %d: export %+v, create %+v — name, cycle and phase must "+
+						"round-trip exactly; only the colour is the known asymmetry", i, g, w)
+				}
+				if g.Color != "" || w.Color != builderImportMoonSwatch {
+					t.Errorf("moon %d colour: the KNOWN asymmetry is export %q / create %q; "+
+						"got export %q / create %q. If this changed, the asymmetry was fixed "+
+						"(delete the exemption) or it moved (say where)",
+						i, "", builderImportMoonSwatch, g.Color, w.Color)
+				}
+			}
+		})
+	}
+}
