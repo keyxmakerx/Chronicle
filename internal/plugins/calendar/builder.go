@@ -762,13 +762,27 @@ func builderImportResult(d *builderDraft) *ImportResult {
 // builderImportMoonSwatch is the colour every moon the wizard CREATES is given.
 //
 // It is import.go's own default for a format that carries no moon colour, and
-// the wizard is such a format: no station asks for one, because the Block draws
-// phase glyphs rather than coloured discs. It is NAMED rather than inlined
-// because it is one half of a real asymmetry — draftCalendar, the calendar the
-// wizard previews and exports, leaves Moon.Color empty — so a moon's colour
-// does not survive an export → re-import round trip even though everything else
-// does. TestBuilderPresets_RoundTripThroughBuildExport asserts that exactly,
-// and .ai/todo.md books the question of which of the two is right.
+// no wizard STATION asks for one, because the Block draws phase glyphs rather
+// than coloured discs.
+//
+// BUT IT IS NOT A DEFAULT WHEN THE PAYLOAD AUTHORS ONE, AND THAT IS THE PART
+// WORTH SAYING OUT LOUD. builderMoon has no Color field, so
+// builderDraftFromImport drops whatever colour the parser read and this
+// constant is stamped over the top — presets/harptos.json authors #cfd6dd /
+// #d8cbb8 / #c7cdd4 / #b9bcc4 and presets/elven.json authors #d5d0e8 / #cfd8e0,
+// and every one of them arrives at Create as #c0c0c0. The plain importer
+// PRESERVES them, so the wizard's front door is lossier than the importer it
+// wraps, which contradicts §2.2's "one code path, two front doors" in the one
+// place a door can quietly differ: what it throws away before the shared path
+// starts.
+//
+// It is NAMED rather than inlined because it is one half of the asymmetry's
+// other end too — draftCalendar, the calendar the wizard previews and exports,
+// leaves Moon.Color empty, so the export writes "".
+// TestBuilderPresets_RoundTripThroughBuildExport asserts all three legs
+// (authored → stamped → empty) against the payload bytes, and .ai/todo.md books
+// the question of which of the three is right. It is not patched here: a moon's
+// colour is a question about what the sky MEANS in this product.
 const builderImportMoonSwatch = "#c0c0c0"
 
 // builderCreateBlocked returns the reason Create is held, or "".

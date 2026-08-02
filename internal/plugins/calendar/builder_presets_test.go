@@ -472,9 +472,12 @@ func TestBuilderPreset_TheLeapDayIsNamedAndTheNameIsChipped(t *testing.T) {
 // read back as the same calendar, which is what makes a preset a real payload
 // rather than a fixture that happens to parse.
 //
-// THE FOUR HOPS, ALL SHIPPED CODE. No hop restates a mapping this test could
+// THE FIVE HOPS, ALL SHIPPED CODE. No hop restates a mapping this test could
 // then agree with itself about:
 //
+//	0. the embedded preset bytes → DetectAndParse            (THE AUTHORED PAYLOAD,
+//	                                                          the anchor everything
+//	                                                          below is measured from)
 //	1. the embedded preset bytes → DetectAndParse            (the importer's door)
 //	2. → builderDraftFromImport → builderImportResult        (what Create APPLIES)
 //	   and → draftCalendar                                   (the calendar shape
@@ -486,22 +489,67 @@ func TestBuilderPreset_TheLeapDayIsNamedAndTheNameIsChipped(t *testing.T) {
 // Hop 4 must also DETECT the export as Chronicle's own format without being
 // told, because an export nobody can re-import is not a round trip.
 //
-// ── THE ONE ASYMMETRY, ASSERTED PRECISELY RATHER THAN TOLERATED ─────────────
+// ── WHY HOP 0 EXISTS, AND WHY THE TEST WAS WEAKER WITHOUT IT ────────────────
 //
-// A moon's COLOUR does not survive, and the reason is that the two shipped
-// mappings out of one draft disagree about it: builderImportResult stamps every
-// moon with the default swatch `#c0c0c0` (import.go's own default for a format
-// that carries no colour), while draftCalendar leaves Moon.Color empty because
-// the preview paints phase glyphs and never a moon's colour. So the export
-// carries "" where the created calendar will carry the swatch.
+// The first edition of this test compared hops 2 and 3 ONLY. Both sides are
+// derived from the SAME *builderDraft, so every payload change propagates
+// identically to both and CANNOT make them disagree: adversarial verification
+// mutated eleven distinct fields of presets/harptos.json — leap_year_every,
+// hours_per_day, a month's days, current_year, epoch_name, a moon's name,
+// cycle_days, phase_offset and colour, an era's colour, start_year and
+// description — and the test stayed green on every one. A round trip measured
+// only against itself is a tautology with assertions in it.
 //
-// It is a real one-way loss and it is asserted here EXACTLY — every other field
-// of every moon must match, and the colour must be empty on the export side and
-// the default swatch on the create side. Asserting "they differ somehow" would
-// let a future divergence in cycle length or phase offset hide inside the same
-// exemption. It is booked in .ai/todo.md, not patched here: which of the two is
-// right is a question about what a moon's colour MEANS in this product, and the
-// answer belongs with whoever owns the sky, not with a round-trip test.
+// Hop 0 is the fix: the assertions below run against the AUTHORED BYTES, so a
+// field the pipeline drops, hardcodes or infers is visible. Three were, and two
+// of them the self-referential comparison hid completely.
+//
+// ── THE THREE ASYMMETRIES, ASSERTED PRECISELY RATHER THAN TOLERATED ─────────
+//
+// (1) A MOON'S AUTHORED COLOUR IS REPLACED, NOT MERELY DEFAULTED. presets/
+// harptos.json and presets/elven.json both AUTHOR moon colours (#cfd6dd,
+// #d8cbb8, #c7cdd4, #b9bcc4 / #d5d0e8, #cfd8e0) and the plain importer
+// preserves them — but builderMoon has no Color field, so builderDraftFromImport
+// drops the authored value on the floor and builderImportResult stamps
+// builderImportMoonSwatch (#c0c0c0) over every moon. draftCalendar meanwhile
+// leaves Moon.Color empty, so the export writes "". The wizard's front door is
+// therefore LOSSIER than the importer it wraps, which is the part worth booking.
+//
+// (2) AN AUTHORED ERA CODE IS DROPPED AT CREATE. builderDraftFromImport reads
+// Era.Description into builderEra.Code (parseCalendaria's `abbreviation`) and
+// the Eras station displays it — builderImportResult never writes it back. It
+// looks harmless in all three preset payloads ONLY because each one's era code
+// happens to equal its epoch name (RoW / Deep-year / Cycle), and the epoch does
+// round-trip. A Calendaria file carrying an epoch AND a different era
+// abbreviation loses the abbreviation silently. The coincidence is asserted
+// below BY NAME, so the day a payload separates the two, this reds instead of
+// staying quiet.
+//
+// (3) HOURS/MINUTES/SECONDS AND THE LEAP OFFSET ARE NOT READ. builderImportResult
+// hardcodes 24/60/60 and never writes LeapYearOffset, because no station asks
+// for any of them. Every embedded preset happens to carry exactly those values,
+// so the equality assertions below hold today AND red the moment a payload says
+// otherwise — which is the only reason they are equality assertions rather than
+// an exemption.
+//
+// All three are asserted EXACTLY, never as "they differ somehow": a vague
+// exemption would let a future divergence in cycle length or phase offset hide
+// inside it. All three are booked in .ai/todo.md rather than patched here —
+// what a moon's colour MEANS, and whether an era owns a code of its own, are
+// questions for whoever owns the sky and the reckoning, not for a round-trip
+// test.
+//
+// ── MATCHING IS BY NAME, NOT BY INDEX, AND THAT IS A FINDING TOO ────────────
+//
+// Moons, seasons and eras are compared against hop 0 BY NAME. parseCalendaria
+// reads them out of JSON OBJECTS (Go map iteration is randomised) and only
+// partly re-sorts: moons are never sorted at all, and seasons sort on DayStart,
+// which presets/elven.json ties three ways at 0. Two independent parses of the
+// same bytes can therefore yield different orders, so an index comparison
+// between hop 0 and hop 2 would be flaky rather than wrong-detecting. Hops 2→3
+// keep their index comparison, because those two share one draft and one order.
+// The parser non-determinism is booked, not fixed here — import.go is outside
+// this slice.
 func TestBuilderPresets_RoundTripThroughBuildExport(t *testing.T) {
 	for _, p := range builderPresets {
 		t.Run(p.Key, func(t *testing.T) {
@@ -594,18 +642,18 @@ func TestBuilderPresets_RoundTripThroughBuildExport(t *testing.T) {
 					g.SortOrder != w.SortOrder {
 					t.Errorf("era %d: export %+v, create %+v", i, g, w)
 				}
-				// THE ERA CODE IS NOT A ROUND-TRIP LOSS, and this is where a
-				// reader would otherwise assume it is. An imported era's code
-				// rides Description (parseCalendaria's `abbreviation`), and the
-				// wizard writes NO era description at Create — but the
-				// reckoning the code names is the calendar's EpochName, which
-				// is written and which the settings assertions above prove
-				// round-trips. Both sides are nil here, and if one day one of
-				// them is not, this says so rather than letting a silent
-				// asymmetry appear inside the equality above.
+				// THE ERA CODE IS A REAL DROP, and both sides being nil here is
+				// the SYMPTOM rather than the proof it is harmless. An imported
+				// era's code rides Description (parseCalendaria's
+				// `abbreviation`), builderDraftFromImport reads it into
+				// builderEra.Code and the Eras station displays it — and
+				// builderImportResult never writes it back, so it is gone by
+				// Create. This equality only says the two derived sides agree;
+				// asymmetry (2) below measures the loss against the AUTHORED
+				// payload, which is where it is visible.
 				if g.Description != nil || w.Description != nil {
 					t.Errorf("era %d description: export %v, create %v — the wizard writes "+
-						"no era code and the reckoning rides EpochName", i, g.Description, w.Description)
+						"no era code (see asymmetry 2)", i, g.Description, w.Description)
 				}
 			}
 
@@ -626,6 +674,215 @@ func TestBuilderPresets_RoundTripThroughBuildExport(t *testing.T) {
 						i, "", builderImportMoonSwatch, g.Color, w.Color)
 				}
 			}
+
+			// ── HOP 0: THE AUTHORED PAYLOAD ───────────────────────────────
+			//
+			// Everything above compares two derivations of one draft. This
+			// compares the round trip to the BYTES, which is the only anchor a
+			// payload mutation can move.
+			if p.File == "" {
+				// The real-life card has no payload BY RULING (see
+				// builderPreset.File): its structure comes from the wall clock
+				// and seedDefaults, so there is nothing authored to anchor to.
+				return
+			}
+			data, err := builderPresetFS.ReadFile(p.File)
+			if err != nil {
+				t.Fatalf("read preset bytes: %v", err)
+			}
+			orig, err := DetectAndParse(data)
+			if err != nil {
+				t.Fatalf("parse preset bytes: %v", err)
+			}
+
+			// ── settings, against the payload ─────────────────────────────
+			if back.CalendarName != orig.CalendarName {
+				t.Errorf("name: payload %q, round trip %q", orig.CalendarName, back.CalendarName)
+			}
+			for _, f := range []struct {
+				name      string
+				got, want int
+			}{
+				{"current_year", back.Settings.CurrentYear, orig.Settings.CurrentYear},
+				{"leap_year_every", back.Settings.LeapYearEvery, orig.Settings.LeapYearEvery},
+				// ASYMMETRY 3, asserted as equality on purpose. The wizard has
+				// no station for any of these four and builderImportResult
+				// hardcodes 24/60/60 and drops the offset. Every embedded
+				// payload happens to carry those values, so equality holds —
+				// and a payload that says otherwise reds here rather than being
+				// silently overwritten at Create.
+				{"hours_per_day", back.Settings.HoursPerDay, orig.Settings.HoursPerDay},
+				{"minutes_per_hour", back.Settings.MinutesPerHour, orig.Settings.MinutesPerHour},
+				{"seconds_per_minute", back.Settings.SecondsPerMinute, orig.Settings.SecondsPerMinute},
+				{"leap_year_offset", back.Settings.LeapYearOffset, orig.Settings.LeapYearOffset},
+			} {
+				if f.got != f.want {
+					t.Errorf("%s: payload %d, round trip %d — the wizard reads no such "+
+						"station, so a payload that declares one loses it at Create",
+						f.name, f.want, f.got)
+				}
+			}
+
+			// THE EPOCH, AND THE ONE DOCUMENTED INFERENCE. A payload with no
+			// epoch but an era code gets the epoch seeded from that code
+			// (builderDraftFromImport, stated there) — Calendaria is exactly
+			// that shape, and elven.json exercises it. Anything else must match
+			// the payload exactly.
+			origEpoch, backEpoch := "", ""
+			if orig.Settings.EpochName != nil {
+				origEpoch = strings.TrimSpace(*orig.Settings.EpochName)
+			}
+			if back.Settings.EpochName != nil {
+				backEpoch = strings.TrimSpace(*back.Settings.EpochName)
+			}
+			wantEpochFromPayload := origEpoch
+			if origEpoch == "" && len(orig.Eras) > 0 {
+				wantEpochFromPayload = eraCodeOf(orig.Eras[0])
+			}
+			if backEpoch != wantEpochFromPayload {
+				t.Errorf("epoch: payload %q (era-code inference → %q), round trip %q",
+					origEpoch, wantEpochFromPayload, backEpoch)
+			}
+
+			// ── months and weekdays, against the payload, BY INDEX ─────────
+			// Both are re-sorted deterministically by every parser (months and
+			// weekdays sort on ordinal), so index is the honest comparison.
+			if len(back.Months) != len(orig.Months) {
+				t.Fatalf("months: payload %d, round trip %d", len(orig.Months), len(back.Months))
+			}
+			for i := range orig.Months {
+				if back.Months[i] != orig.Months[i] {
+					t.Errorf("month %d: payload %+v, round trip %+v", i, orig.Months[i], back.Months[i])
+				}
+			}
+			if len(back.Weekdays) != len(orig.Weekdays) {
+				t.Fatalf("weekdays: payload %d, round trip %d", len(orig.Weekdays), len(back.Weekdays))
+			}
+			for i := range orig.Weekdays {
+				if back.Weekdays[i] != orig.Weekdays[i] {
+					t.Errorf("weekday %d: payload %+v, round trip %+v", i, orig.Weekdays[i], back.Weekdays[i])
+				}
+			}
+
+			// ── seasons, BY NAME ──────────────────────────────────────────
+			backSeasons := map[string]Season{}
+			for _, s := range back.Seasons {
+				backSeasons[s.Name] = s
+			}
+			if len(back.Seasons) != len(orig.Seasons) {
+				t.Errorf("seasons: payload %d, round trip %d", len(orig.Seasons), len(back.Seasons))
+			}
+			for _, w := range orig.Seasons {
+				g, ok := backSeasons[w.Name]
+				if !ok {
+					t.Errorf("season %q is in the payload and not in the round trip", w.Name)
+					continue
+				}
+				if g.Color != w.Color || g.StartMonth != w.StartMonth || g.StartDay != w.StartDay ||
+					g.EndMonth != w.EndMonth || g.EndDay != w.EndDay {
+					t.Errorf("season %q: payload %+v, round trip %+v", w.Name, w, g)
+				}
+			}
+
+			// ── moons, BY NAME — and ASYMMETRY 1 ──────────────────────────
+			backMoons, appliedMoons := map[string]MoonInput{}, map[string]MoonInput{}
+			for _, m := range back.Moons {
+				backMoons[m.Name] = m
+			}
+			for _, m := range applied.Moons {
+				appliedMoons[m.Name] = m
+			}
+			if len(back.Moons) != len(orig.Moons) {
+				t.Errorf("moons: payload %d, round trip %d", len(orig.Moons), len(back.Moons))
+			}
+			for _, w := range orig.Moons {
+				g, ok := backMoons[w.Name]
+				if !ok {
+					t.Errorf("moon %q is in the payload and not in the round trip", w.Name)
+					continue
+				}
+				if g.CycleDays != w.CycleDays || g.PhaseOffset != w.PhaseOffset {
+					t.Errorf("moon %q: payload cycle %v offset %v, round trip cycle %v offset %v",
+						w.Name, w.CycleDays, w.PhaseOffset, g.CycleDays, g.PhaseOffset)
+				}
+				// ASYMMETRY 1, asserted in all three of its parts: the payload
+				// AUTHORS a colour, Create REPLACES it with the swatch, and the
+				// export carries none at all. The "authored" leg is an
+				// assertion and not a guard — if a preset stops authoring moon
+				// colours, this loss stops being demonstrable and the booking
+				// needs re-reading, which is exactly what a red should say.
+				if w.Color == "" {
+					t.Errorf("moon %q: the payload no longer authors a colour, so the "+
+						"replacement asymmetry below is no longer demonstrated by this "+
+						"preset — re-read .ai/todo.md's booking before deleting anything",
+						w.Name)
+				}
+				a := appliedMoons[w.Name]
+				if a.Color != builderImportMoonSwatch {
+					t.Errorf("moon %q colour at Create: the known asymmetry stamps %q over "+
+						"the payload's %q; got %q", w.Name, builderImportMoonSwatch, w.Color, a.Color)
+				}
+				if a.Color == w.Color {
+					t.Errorf("moon %q colour at Create: the payload now authors the swatch "+
+						"%q itself, so the replacement is invisible and this preset no longer "+
+						"demonstrates the loss — pick a different authored colour or re-read "+
+						".ai/todo.md's booking", w.Name, w.Color)
+				}
+				if g.Color != "" {
+					t.Errorf("moon %q colour on export: the known asymmetry writes %q; got %q",
+						w.Name, "", g.Color)
+				}
+			}
+
+			// ── eras, BY NAME — and ASYMMETRY 2 ───────────────────────────
+			backEras := map[string]EraInput{}
+			for _, e := range back.Eras {
+				backEras[e.Name] = e
+			}
+			if len(back.Eras) != len(orig.Eras) {
+				t.Errorf("eras: payload %d, round trip %d", len(orig.Eras), len(back.Eras))
+			}
+			for _, w := range orig.Eras {
+				g, ok := backEras[w.Name]
+				if !ok {
+					t.Errorf("era %q is in the payload and not in the round trip", w.Name)
+					continue
+				}
+				if g.StartYear != w.StartYear || g.Color != w.Color {
+					t.Errorf("era %q: payload start %d colour %q, round trip start %d colour %q",
+						w.Name, w.StartYear, w.Color, g.StartYear, g.Color)
+				}
+				// ASYMMETRY 2. The code is dropped, and it is INVISIBLE in
+				// every embedded payload only because each one's code equals
+				// its epoch. Both halves are asserted: the drop, and the
+				// coincidence that hides it.
+				code := eraCodeOf(w)
+				if code == "" {
+					t.Errorf("era %q: the payload no longer carries a code, so the drop "+
+						"below is no longer demonstrated by this preset", w.Name)
+				}
+				if g.Description != nil {
+					t.Errorf("era %q: the known drop writes no description; got %q",
+						w.Name, *g.Description)
+				}
+				if code != "" && code != backEpoch {
+					t.Errorf("era %q: the payload's code %q is dropped at Create and survives "+
+						"ONLY by coinciding with the epoch — and this payload's epoch is %q. "+
+						"The abbreviation is now lost silently: fix builderImportResult or "+
+						"re-book it, but do not let this stay green", w.Name, code, backEpoch)
+				}
+			}
 		})
 	}
+}
+
+// eraCodeOf reads an era's code out of the ONE place every parser puts it.
+// Chronicle's Era has no code column; parseCalendaria writes an era's
+// `abbreviation` into Description (import.go), and builderDraftFromImport reads
+// the same place. See asymmetry 2 in TestBuilderPresets_RoundTripThroughBuildExport.
+func eraCodeOf(e EraInput) string {
+	if e.Description == nil {
+		return ""
+	}
+	return strings.TrimSpace(*e.Description)
 }

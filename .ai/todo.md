@@ -558,20 +558,53 @@ W-H shipped the builder wizard. Three things it deliberately did not decide.
   but it is a slice judgement rather than the ruling, so it is flagged rather than
   filed: Review reads "Eras 1", the preview stat reads "RoW", and the signed
   stills read "Eras 2" / "RoW · AE".
-- [ ] **A moon's COLOUR does not survive an export → re-import round trip, and
-  the two shipped mappings out of one draft disagree about it.** Found by the
-  acceptance item's own round-trip test (`TestBuilderPresets_
-  RoundTripThroughBuildExport`, added 2026-08-02): `builderImportResult` stamps
-  every created moon with `builderImportMoonSwatch` (`#c0c0c0`, import.go's
-  default for a format that carries no colour) while `draftCalendar` — the
-  calendar the wizard previews and exports — leaves `Moon.Color` empty, so
-  `BuildExport` writes `""`. Everything else about every preset round-trips
-  field-for-field. Which half is right is a question about what a moon's colour
-  MEANS in this product (the Block draws phase glyphs, not coloured discs, so
-  the swatch may be storage nobody reads), and it belongs to whoever owns the
-  sky rather than to a round-trip test. The test asserts the asymmetry EXACTLY —
-  empty on the export side, the named swatch on the create side — so fixing it
-  in either direction reds a test that then says which way it moved.
+- [ ] **THE WIZARD'S IMPORTER DOOR DISCARDS TWO AUTHORED FIELDS THE PLAIN
+  IMPORTER KEEPS — a moon's colour and an era's code.** Found by the acceptance
+  item's own round-trip test (`TestBuilderPresets_RoundTripThroughBuildExport`),
+  and only after that test was anchored to the AUTHORED PAYLOAD BYTES on
+  2026-08-02: its first edition compared two derivations of one `*builderDraft`,
+  which is a tautology no payload mutation can red, and both drops below were
+  invisible inside it.
+    - **Moon colour is REPLACED, not defaulted.** `builderMoon` has no `Color`
+      field, so `builderDraftFromImport` drops what the parser read and
+      `builderImportResult` stamps `builderImportMoonSwatch` (`#c0c0c0`) over
+      every moon. `presets/harptos.json` authors `#cfd6dd` / `#d8cbb8` /
+      `#c7cdd4` / `#b9bcc4` and `presets/elven.json` authors `#d5d0e8` /
+      `#cfd8e0`; all six arrive at Create as `#c0c0c0`, while a file dropped on
+      the plain importer keeps its own. The third leg is the export:
+      `draftCalendar` leaves `Moon.Color` empty, so `BuildExport` writes `""`.
+    - **An era's CODE is dropped at Create.** `builderDraftFromImport` reads
+      `Era.Description` (parseCalendaria's `abbreviation`) into `builderEra.Code`
+      and the Eras station displays it; `builderImportResult` never writes it
+      back. It is invisible in all three preset payloads ONLY because each one's
+      code equals its epoch name (`RoW` / `Deep-year` / `Cycle`) and the epoch
+      does round-trip. A Calendaria file with an epoch AND a different era
+      abbreviation loses the abbreviation silently.
+  A third, smaller one rides along: `hours_per_day` / `minutes_per_hour` /
+  `seconds_per_minute` are hardcoded 24/60/60 and `leap_year_offset` is never
+  read, so a payload declaring any of them loses it at Create. Every embedded
+  preset happens to carry exactly those values.
+  Which half of each is right is a question about what a moon's colour and an
+  era's code MEAN in this product (the Block draws phase glyphs, not coloured
+  discs, so the swatch may be storage nobody reads; the reckoning the code names
+  usually IS the epoch) — they belong to whoever owns the sky and the reckoning,
+  not to a round-trip test. The test now asserts all of them EXACTLY, against
+  the bytes, so fixing any one in either direction reds a test that says which
+  way it moved; six distinct payload mutations were demonstrated red-then-green
+  when it landed.
+- [ ] **`parseCalendaria` reads moons, seasons and eras out of JSON OBJECTS and
+  does not fully re-sort them, so two parses of the same bytes can disagree on
+  ORDER.** Go map iteration is randomised; months and weekdays are sorted by
+  ordinal and eras by start year, but **moons are never sorted at all**, and
+  seasons sort on `DayStart` — which `presets/elven.json` ties three ways at 0,
+  so its Budding / Zenith / Waning come out in a different order run to run.
+  Nothing downstream currently depends on the order (the Block keys by name and
+  the wizard's stations are re-orderable), which is why this is a booking and
+  not a bug report — but an import that yields a different `sort_order` on every
+  attempt is a poor foundation for one that ever does. `import.go`'s parsers
+  were outside W-H's scope. Found 2026-08-02 while anchoring the round-trip test
+  to the payload; that test therefore matches moons, seasons and eras BY NAME
+  and says so.
 - [ ] **The Simple Calendar parser names every import "Imported Calendar".**
   `parseSimpleCalendar` never reads `calendar.name`, so a Simple Calendar file
   dropped on the wizard's importer front door arrives with a placeholder name the
