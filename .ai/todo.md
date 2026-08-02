@@ -190,24 +190,46 @@ Carried out of R2-2a, not closed:
   that it be verified live) and **any layout difference between the fixture
   month and real seeded data**. Close those on the operator's client.
 
-  **A THIRD ROW JOINS THEM after R2-2b's fix round: §10 item 5, THE MORPH
-  MID-FLIGHT.** The capture rig cannot photograph it and the reason is measured
-  rather than assumed — under `--headless --virtual-time-budget` the document's
-  rendering lifecycle is not run, so the morph's transitions are never CREATED:
-  the `transitionrun` park reports 0 transitions at 0% and non-deterministically
-  1 (`height`) elsewhere, the editor's box measures its final geometry in every
-  frame, and `getComputedStyle` returns stale values after a forced
-  `offsetHeight` (write `inline-size: 340px`, read back `760px`, across a rAF
-  too). The `morph-open.gif` / `morph-close.gif` clips are **withdrawn** — five
-  identical frames assembled into a clip is false evidence, not thin evidence.
-  What ships instead is `daycard_morph_trace_test.go`
-  (`DAYCARD_MORPH_TRACE=1`), which traces the four properties through a
-  MutationObserver in real Chromium and proves the box is seeded at the card's
-  measured rect and lands at the placement law's answer with no scale anywhere.
-  **What remains unproven is that the compositor interpolated between the two
-  geometries**, and that is a live-client check: open the editor from a card on
-  the operator's browser and confirm one box grows from the other rather than a
-  box appearing at full size.
+  **THE THIRD ROW IS CLOSED, AND IT WAS NEVER THE RIG'S. §10 item 5, THE
+  MORPH MID-FLIGHT — photographed at R2b stage 19.** This entry used to say
+  the capture rig could not photograph the morph and that the reason was
+  measured: under `--virtual-time-budget` the document's rendering lifecycle is
+  not run, so the transitions are never CREATED and there is nothing to park.
+  The first half of that was a real measurement of the wrong thing and the
+  second half was a false conclusion drawn from it.
+
+  · **THE ENVIRONMENT CAN photograph it.** Drop the virtual clock, SERVE the
+    page so a slow subresource holds the `load` event — which is when
+    `--screenshot` fires — past the flight, and freeze `setTimeout` at the
+    click so the card's hide and the morph's settle cannot fire while the
+    picture is held. `daycard_morph_shots_test.go` does exactly that and writes
+    ten frames, both directions: open 340×96 at opacity 0 → 595×440 → 709×593
+    → 750×648 → 760×662 at opacity 1, and the reverse. The generator REFUSES
+    to write a set whose frames it cannot tell apart.
+  · **THE MORPH REALLY WAS DEAD ON OPEN**, which is what the rig's own "parked
+    1 transition — height" strip had been reporting all along. `edOpen` wrote
+    the seed geometry and added `.edmorph` in the SAME style recalc, so per CSS
+    Transitions' after-change-style rule the transitions started AWAY from the
+    resting box and the seed never settled. One flush between them fixes it
+    (R2b stage 18), and `TestDayCardMorphInterpolates` samples the flight every
+    animation frame in real Chromium so it cannot come apart again.
+
+  The two rows that DO need the operator's client are unchanged: **a real
+  CSRF-bearing write** and **any layout difference between the fixture month
+  and real seeded data**.
+
+- [ ] **`C-CALV4-CARD-REDUCED-ANCHOR` — NEW at R2b stage 19, measured and
+  handed back.** Under `prefers-reduced-motion` the editor opens at the
+  VIEWPORT'S TOP-LEFT corner rather than beside the day it was opened from.
+  Cause, read off the shipped path: `edOpen` calls `closeCard()` before
+  `edPosition(anchor)`, and under reduced motion `closeCard` takes its
+  `wait <= 0` branch and hides the card SYNCHRONOUSLY — so the anchor the
+  placement law is handed is a 0×0 rect. It is PRE-EXISTING (the rejected
+  round's shot 13 shows the same placement) and it is NOT the morph: it is
+  visible in the branch that has no morph at all. R2b was bound by [ER-6]/[ER-7]
+  to the morph's ordering and by [ER-5] to leaving `placeCard` alone, so this is
+  measured, photographed (13-editor-gm-reduced-motion.png discloses it in its
+  own caption) and booked rather than fixed inside a signed carve-out.
 
 Carried out of R2-1, not closed:
 

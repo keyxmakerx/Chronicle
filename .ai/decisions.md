@@ -3833,6 +3833,55 @@ assertion rather than a comment. *A guard nudged until green stops proving
 anything; a guard that was never able to see its subject never proved anything
 at all.*
 
+**10. THE SIGNED MORPH SHIPPED INERT ON OPEN, AND THE ORDERING RULE IS NOW
+WRITTEN DOWN.** SEED → FLUSH → CLASS → FLUSH → FINAL WRITE. `edOpen` wrote the
+seeded start geometry and added `.edmorph` in the SAME style recalc; per CSS
+Transitions a transition starts from the **after-change** style, so that one
+recalc started 160ms transitions running AWAY from the resting box and TOWARD
+the seed. The seed never became the settled before-change style,
+`getComputedStyle` answered the resting box, and the final write saw nothing to
+change. The editor POPPED IN at full size and animated only on the way out —
+`edClose` was correct by accident of shape, because it adds the class and
+flushes BEFORE any value change. The rule is browser-general: it follows from
+the after-change-style rule, not from anything Chromium does on its own.
+
+**11. A GUARD THAT ASSERTS A STATE MACHINE HAS NOT ASSERTED AN ANIMATION.**
+Four guards covered this morph — a layout-less DOM stub reading end-state inline
+styles, a MutationObserver over the style attribute, and two CSS guards reading
+the sheet — and **all four stayed green with the morph completely dead**. Two of
+them said so in their own headers ("by the time this line runs the module has
+already written the END state"; "DOES NOT PROVE that the compositor
+interpolated") and the concession was read as a scope note rather than as a
+hole. *When a guard's own comment tells you what it cannot see, that sentence is
+the specification for the guard you are missing.* The answer is a browser-level,
+rAF-sampled geometry probe in both directions, and it is deliberately NOT
+env-gated.
+
+**12. A RIG'S LIMIT IS A CLAIM, NOT A FACT, AND IT GETS CHECKED LIKE ONE.** The
+evidence carried "this environment cannot photograph the morph… this is the
+rig's limit, not the morph's" onto five images and into two documents. The
+underlying measurement was true — under `--virtual-time-budget` the document's
+rendering lifecycle is not run, so no transition is ever created to park — and
+the conclusion drawn from it was false twice over: the environment can
+photograph it (serve the page, hold the `load` event with a slow subresource,
+freeze `setTimeout` at the click), and the thing it was failing to photograph
+really was not moving. **A negative result about a tool is evidence about the
+tool.** Reaching for a different tool is cheaper than the three rounds spent
+explaining the first one.
+
+**13. A DEAD ANIMATION HIDES EVERYTHING DOWNSTREAM OF IT.** The moment the morph
+ran, three synchronous rigs turned out to have been measuring the box MID-FLIGHT
+— the [ER-5] sweep read the card's 340px at every candidate width, the floors
+probe found the date picker's day buttons at 15px under a 24px floor — and the
+[ER-5] probe's own stale-geometry guard then caught a **pre-existing** placement
+defect it had never been able to see: `applyPlacement` writes `.dcsheet` and its
+`style.width` AFTER `edPosition` measures, and nothing cleared them, so a reopen
+after a sheeted placement handed the placement law the full viewport width for a
+box about to render at `--de-w`. Same shape as the round-3 blocker, arriving
+through a class instead of an inline style. `edShow` clears both, through the
+same writer `applyPlacement` uses; `placeCard` is still not touched. *A rig that
+measures a surface no user sees will report a spotless result about it.*
+
 ### References
 
 - Master plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`

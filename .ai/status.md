@@ -130,9 +130,52 @@ both the probe and the shot rig use one, the probe asserts the width it actually
 measured in, and the shot burns the substitution onto the image. **A later hand
 should not have to rediscover this.**
 
+**THE MORPH DID NOT RUN, AND THE EVIDENCE'S DIAGNOSIS OF WHY IT COULD NOT BE
+PHOTOGRAPHED WAS ITSELF THE DEFECT (R2b stages 18-19).** The signed carve-out
+shipped INERT IN THE OPEN DIRECTION: measured frame by frame in real Chromium,
+the editor's box was at its resting geometry, translate 0, opacity 1 from the
+first sample after the door was clicked through 434ms. It popped in at full
+size and animated only on the way out. Cause: `edOpen` wrote the seeded start
+geometry and added `.edmorph` in the SAME style recalc, and CSS Transitions
+start from the AFTER-change style — so that one recalc started transitions
+running AWAY from the resting box toward the seed, the seed never became the
+settled before-change style, and the final write saw nothing to change.
+`edClose` always worked because it adds the class and flushes BEFORE any value
+change. **The fix is one flush** (seed → flush → class → flush → final write)
+and it is browser-general.
+
+**Three lessons the books should keep, because each one cost a round.**
+
+ 1. **EVERY MORPH GUARD ASSERTED THE STATE MACHINE AND NONE THE RENDERED
+    RESULT** — a DOM-stub test reading end-state inline styles, a
+    MutationObserver over the style attribute whose own header conceded it
+    "DOES NOT PROVE that the compositor interpolated", and two CSS guards that
+    read the sheet. All four stayed green with the morph completely dead.
+    `TestDayCardMorphInterpolates` is the missing one: real Chromium, real
+    timeline, `getBoundingClientRect` + `getComputedStyle` sampled every
+    animation frame in BOTH directions, and it is NOT env-gated.
+ 2. **A RIG'S LIMIT IS A CLAIM, AND CLAIMS GET CHECKED.** "This environment
+    cannot photograph the morph" was a true measurement of
+    `--virtual-time-budget` (which never runs the rendering lifecycle) promoted
+    into a false statement about the environment. Serve the page, hold the
+    `load` event with a slow subresource, freeze `setTimeout` at the click, and
+    the same Chromium photographs the flight in both directions.
+ 3. **A DEAD ANIMATION HIDES THE BUGS DOWNSTREAM OF IT.** The moment the morph
+    ran, three synchronous rigs turned out to have been measuring the box
+    mid-flight, and the [ER-5] probe's own stale-geometry guard then caught a
+    PRE-EXISTING placement defect: `applyPlacement` writes `.dcsheet` and its
+    `style.width` AFTER `edPosition` measures, and nothing cleared them, so a
+    reopen after a sheeted placement handed the placement law the viewport
+    width for a box about to render at `--de-w`. `edShow` now clears both.
+
 **Carried, not closed:** `C-CALV4-DAYMENU` (the 10 `menus-*` stills travel with
 it — a 22-of-32 fidelity split, never a shortfall); `C-CALV4-DAYPICK-A11Y`, now
-also holding drag-create's missing keyboard equivalent; `C-CALV4-TOKENS-RESIGN`,
+also holding drag-create's missing keyboard equivalent; **`C-CALV4-CARD-REDUCED-ANCHOR`
+— NEW at stage 19**, the editor opening at the viewport's top-left under
+`prefers-reduced-motion` because `closeCard` hides the card synchronously and
+the placement law is handed a 0×0 anchor (pre-existing, visible in the branch
+that has no morph at all, disclosed on shot 13's own caption and booked rather
+than fixed inside a signed carve-out); `C-CALV4-TOKENS-RESIGN`,
 booked a **sixth** time, with two of the seven defects now visible in stills the
 operator has signed; the live-authed CSRF case DAYCARD could not measure; **the
 day-of-week wrap at 390**, which is performed by no test and no image and is now
