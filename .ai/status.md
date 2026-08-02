@@ -61,6 +61,39 @@ breakpoint, and the divergence from the drawing's ~1008px is arithmetic: a
 1008px box cannot sit beside a 300px docked Ledger inside an 1180px measure.
 `placeCard` was not re-opened.
 
+**AND THE MEASUREMENT WENT STALE TWO STAGES LATER — the fix round's first
+finding.** It was taken before the morph existed and not re-run. From the morph
+stage the same probe FAILED at every width, up to 70,906 px² over a docked
+Ledger, `clear=true`. Cause: `edClose` writes the reverse morph geometry as an
+INLINE `inline-size` and `edHide` — the only thing that clears it — runs on a
+timer `edShow` cancels, so a reopen inside 160ms measured the CARD's width for a
+box the sheet sizes at 760. `edShow` now clears it before the box is measured;
+`placeCard` is still untouched. The probe's own accounting was separated at the
+same time (popover overlap gates; the signed desktop sheet is recorded; the
+CROSS-BLOCK case is reported with a card control arm and booked as
+`C-CALV4-CARD-CROSSBLOCK-LEDGER`). **A measurement is scoped to the commit it
+was taken on.**
+
+**THE FIX ROUND'S OTHER FIVE, IN ONE PARAGRAPH EACH, because every one of them
+was GREEN and wrong rather than red and obvious.** (1) The greyscale proofs
+declared `html{filter:grayscale(1)}` and the card and editor are `[popover]` —
+top-layer, not painted as descendants of `<html>` — so the filter never reached
+the surface under test; measured at 0.39% of editor pixels above chroma 20 with
+a maximum of 255 while the caption said hue was removed. (2) The editor's
+primary action shipped at **1.0:1**: `.cal-dayeditor .btn.fill` set `color:
+var(--accent)` at the same specificity as the Bench's `background:
+var(--accent)`, with the day card's sheet linked second, so `Create event` was
+painted in its own fill. (3) The capture fixture seeded NO event categories, so
+every shot photographed the module's `No type` fallback while its caption
+claimed "the locked type rail" — and the producer was emitting no pattern
+channel at all, making the type rail's three locked channels two. (4)
+`TestDayCardCSS_EverySelectorIsScoped`'s comment claimed a literal check over a
+`strings.Contains` prefix test; `.cal-daycard-drag` passed by accident and so
+would a fourth root. (5) The carve-out monopoly guard iterated a hardcoded
+eight-file list while claiming "product-wide"; adding `.edmorph` to
+`gm_panel.js` left the whole package green. **Every one of them is now a
+mechanical check with a named mutation that turns it red.**
+
 **A GUARD THAT COULD NOT SEE ITS OWN SUBJECT.** The morph's close must remove
 `.dcopen` before writing the reverse geometry or leaving takes as long as
 arriving. Mutating that order left every end-state assertion green — it is an

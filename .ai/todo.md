@@ -183,6 +183,25 @@ Carried out of R2-2a, not closed:
   that it be verified live) and **any layout difference between the fixture
   month and real seeded data**. Close those on the operator's client.
 
+  **A THIRD ROW JOINS THEM after R2-2b's fix round: §10 item 5, THE MORPH
+  MID-FLIGHT.** The capture rig cannot photograph it and the reason is measured
+  rather than assumed — under `--headless --virtual-time-budget` the document's
+  rendering lifecycle is not run, so the morph's transitions are never CREATED:
+  the `transitionrun` park reports 0 transitions at 0% and non-deterministically
+  1 (`height`) elsewhere, the editor's box measures its final geometry in every
+  frame, and `getComputedStyle` returns stale values after a forced
+  `offsetHeight` (write `inline-size: 340px`, read back `760px`, across a rAF
+  too). The `morph-open.gif` / `morph-close.gif` clips are **withdrawn** — five
+  identical frames assembled into a clip is false evidence, not thin evidence.
+  What ships instead is `daycard_morph_trace_test.go`
+  (`DAYCARD_MORPH_TRACE=1`), which traces the four properties through a
+  MutationObserver in real Chromium and proves the box is seeded at the card's
+  measured rect and lands at the placement law's answer with no scale anywhere.
+  **What remains unproven is that the compositor interpolated between the two
+  geometries**, and that is a live-client check: open the editor from a card on
+  the operator's browser and confirm one box grows from the other rather than a
+  box appearing at full size.
+
 Carried out of R2-1, not closed:
 
 - [ ] **`C-CALV4-RIBBON-R2b`** — the PER-TILE ribbon grain. [BR2-3] refused it and

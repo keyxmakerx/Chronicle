@@ -3762,6 +3762,44 @@ cannot sit beside that column at any viewport this product's measure produces.
 `placeCard` was **not** re-opened — round 4's lesson was that the third geometry
 was already one too many.
 
+**6b. THE MEASUREMENT ABOVE WAS TRUE WHEN IT WAS TAKEN, FALSE WHEN THE MORPH
+LANDED, AND IS TRUE AGAIN — and the two-stage gap is the durable lesson.** The
+sweep was run at stage 2 and not re-run after stage 3 added the morph. From
+stage 3 the same probe FAILED at every candidate width, up to 70,906 px² over a
+docked Ledger, with the module's own occlusion report saying `clear=true`. Two
+causes, and only one of them was the module's:
+
+- **The module's.** `edClose` writes the reverse morph geometry as INLINE
+  `inline-size`/`block-size`/`translate`/`opacity` — the card's rect — and
+  `edHide`, the only thing that clears it, runs on a `--disc-close` timer that
+  `edShow` cancels. Reopening inside that 160ms window handed `edPosition` the
+  card's 420px for a box the sheet sizes at 760px: **placeCard reasoned about,
+  and placed, a rectangle that does not render.** Fixed by clearing the morph
+  geometry in `edShow` before the box is measured. `placeCard` still untouched.
+- **The probe's.** It scored the popover's overlap and the SIGNED DESKTOP SHEET's
+  overlap as the same number, and it measured every cell against the FIRST
+  Ledger on the page rather than the one `ledgerRect(state.host)` actually
+  excludes. Both are now separated, along the line `placeCard`'s own header
+  already draws in words: *"A POPOVER over the Ledger is [DC-3]'s STOP-AND-FLAG
+  and it speaks. A SHEET over the Ledger is [DC-3] bullet 4's own signed
+  treatment… it is recorded and stays quiet."*
+
+**The rule that comes out of it: a measurement is scoped to the commit it was
+taken on.** A number quoted in a report is a claim about HEAD, and a slice that
+changes the geometry has re-opened every geometric measurement it published.
+
+**6c. A THIRD FINDING CAME OUT OF THE RE-MEASUREMENT, and it is a STOP-AND-FLAG
+rather than a fix.** `placeCard` is handed ONE Ledger rect — the host Block's.
+The Bench renders one Block per calendar and each carries its own Ledger, so a
+card or editor opened from the real-world Block's grid can land on the PRIMARY
+Block's Ledger. The probe now runs a **CARD control arm** beside the editor arm
+so the ownership is not a matter of opinion: **the card hits it too** (2,221 px²
+at viewport 720), and the card's box and `placeCard` are byte-unchanged by R2b.
+The editor, being larger, reaches 72,600 px² — 100% of a docked 300×242 Ledger.
+Widening the exclusion means re-opening `placeCard`, which [ER-5] SIGNED makes a
+STOP-AND-FLAG rather than an edit, so it is measured, reported on every probe
+run whether it fires or not, and booked as `C-CALV4-CARD-CROSSBLOCK-LEDGER`.
+
 **7. [ER-2]: THE PLAYER'S CARD DOES NOT GROW A DETAIL PANEL.** The stills'
 `.card-x` block prints an event's title, description prose, tie pill and date
 pill. [DC-1] forbids description on the payload and §2 rule 3 forbids the card
