@@ -719,6 +719,12 @@ type BuilderViewData struct {
 	PreviewMonth int
 	Block        calblock.BlockData
 
+	// MoonAlmanac is the previewed month's celestial register. It is derived
+	// beside Block rather than read out of it because the Block's own copy is
+	// filled only when the Shelf zone is docked, and the wizard docks neither.
+	// See builderMoonAlmanac.
+	MoonAlmanac []calblock.AlmanacMoon
+
 	Presets []builderPreset
 	// Identity is the roster entry the draft started from, or the zero value
 	// for a draft the author has bent past recognition.
@@ -1110,14 +1116,48 @@ func builderSplitNote(d *builderDraft) string {
 	return fmt.Sprintf("— here after %s (%d+%d)", name, half, half)
 }
 
-// builderMoonTurns reads the turn marks a moon makes in the previewed month.
-// Nothing is authored date by date: the marks come from the SAME Block data
-// the grid drew, so the station and the month cannot disagree.
+// builderMoonAlmanac derives the previewed month's celestial register.
+//
+// IT DOES NOT READ Block.Month.Almanac, AND THAT IS THE WHOLE POINT OF THIS
+// FUNCTION EXISTING. buildMonthGeometry fills that field only when the Shelf
+// zone is docked (`if !in.ShelfHidden && len(cal.Moons) > 0`,
+// block_geometry.go), and the wizard docks neither zone — so the register was
+// empty for every preset and the Moons station printed "no turn this month"
+// for a 31.4-day moon in a 30-day month, unconditionally and falsely.
+//
+// It is still not a second producer: blockAlmanacRegister and
+// monthBaseAbsoluteDay are the SHIPPED functions the docked Shelf calls, fed
+// the SAME draft calendar and the SAME month index the grid drew from, so the
+// station and the month cannot disagree. Nothing is authored date by date —
+// period and offset derive every turn.
+func builderMoonAlmanac(d *builderDraft, monthIndex int) []calblock.AlmanacMoon {
+	cal := draftCalendar(d)
+	if len(cal.Moons) == 0 || monthIndex < 0 || monthIndex >= len(cal.Months) {
+		return nil
+	}
+	days := blockMonthDays(cal, monthIndex, cal.CurrentYear)
+	// The anchor is the answered day: today when today lands in this month,
+	// day 1 otherwise — blockAlmanacRegister's own contract.
+	anchor := 1
+	if monthIndex+1 == cal.CurrentMonth && cal.CurrentDay >= 1 && cal.CurrentDay <= days {
+		anchor = cal.CurrentDay
+	}
+	return blockAlmanacRegister(cal.Moons,
+		monthBaseAbsoluteDay(cal, monthIndex, cal.CurrentYear),
+		days, anchor, builderMoonCap)
+}
+
+// builderMoonTurns reads the turn marks one moon makes in the previewed month,
+// off the register builderMoonAlmanac derived.
 func builderMoonTurns(data BuilderViewData, moonIndex int) []string {
+	if moonIndex < 0 || moonIndex >= len(data.Draft.Moons) {
+		return nil
+	}
 	var out []string
-	for _, m := range data.Block.Month.Almanac {
-		if m.Name == "" || moonIndex >= len(data.Draft.Moons) ||
-			m.Name != data.Draft.Moons[moonIndex].Name {
+	for i, m := range data.MoonAlmanac {
+		// Match by POSITION, not by name: two moons may legitimately share a
+		// name, and blockAlmanacRegister walks cal.Moons in draft order.
+		if i != moonIndex {
 			continue
 		}
 		for _, day := range m.Days {

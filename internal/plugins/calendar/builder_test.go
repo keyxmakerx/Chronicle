@@ -546,3 +546,67 @@ func TestBuilderCreateBlocked_TheEraGateIsWizardLocalPolicy(t *testing.T) {
 			"the model's; got fault %q", got.Fault)
 	}
 }
+
+// TestBuilderMoonTurns_TheStationAndTheMonthCannotDisagree pins the fix for a
+// bug that shipped and that no unit test could have caught by reading the
+// station's own output: the Moons station printed "no turn this month" for
+// EVERY moon of EVERY preset, unconditionally and falsely.
+//
+// The cause was a data source that is always empty on this surface.
+// buildMonthGeometry fills MonthGeometry.Almanac only when the Shelf zone is
+// docked; the wizard docks neither zone, so Block.Month.Almanac has zero
+// entries for every draft. Reading the turn marks out of it therefore always
+// produced none — and the station's own subtitle ("every phase, turn and node
+// window is derived") and the §1 Moons contract ("the actual turn marks for the
+// previewed month") both promise otherwise.
+//
+// The test asserts BOTH halves, because the second is what stops the bug
+// coming back: the Block's copy stays empty (nothing was widened to make this
+// work), and the station's copy is derived and non-empty.
+func TestBuilderMoonTurns_TheStationAndTheMonthCannotDisagree(t *testing.T) {
+	d, err := builderPresetDraft("harptos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := builderView("camp-1", "tok", d, 5, false, 0)
+
+	// Half one — the Block's own register is EMPTY, by construction, because
+	// the wizard docks neither zone. If this ever becomes non-empty, the
+	// wizard grew a Shelf and the preview is no longer the drawn one.
+	if n := len(data.Block.Month.Almanac); n != 0 {
+		t.Errorf("the wizard docks no Shelf, so the Block's Almanac register must be "+
+			"empty; got %d entries — the preview grew a zone", n)
+	}
+
+	// Half two — the station's register is derived and it carries turns. Alder
+	// is period 31.4 new at day 12 in a 30-day month: it cannot have none.
+	if len(data.MoonAlmanac) != len(d.Moons) {
+		t.Fatalf("the derived register covers every declared body: got %d for %d moons",
+			len(data.MoonAlmanac), len(d.Moons))
+	}
+	turns := builderMoonTurns(data, 0)
+	if len(turns) == 0 {
+		t.Errorf("moon %q (period %.1f, new at day %.0f) makes no turn in a %d-day "+
+			"month — that is the 'no turn this month' bug, not a calendar",
+			d.Moons[0].Name, d.Moons[0].Period, d.Moons[0].NewAt,
+			data.Block.Month.Days)
+	}
+	for _, k := range turns {
+		if k != "new" && k != "full" {
+			t.Errorf("a turn is new or full; got %q", k)
+		}
+	}
+
+	// Every drawn body reports for itself. A register read by NAME would fold
+	// two same-named moons together; this one is read by position.
+	total := 0
+	for i := range d.Moons {
+		total += len(builderMoonTurns(data, i))
+	}
+	if total == 0 {
+		t.Error("no moon in the whole sky turns this month — the register is not wired")
+	}
+	if got := builderMoonTurns(data, len(d.Moons)); got != nil {
+		t.Errorf("an index past the sky reads as nothing; got %v", got)
+	}
+}

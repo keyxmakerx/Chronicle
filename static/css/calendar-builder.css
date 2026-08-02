@@ -439,11 +439,17 @@
   font-weight: 500; font-size: 12px; line-height: 1.5; color: var(--text-secondary);
   margin: 0 0 14px; max-width: 56ch;
 }
+/* A ROW WRAPS AT EVERY WIDTH, NOT ONLY AT THE NARROW BREAKPOINT. A nowrap row
+   whose growing field carries `flex:1` and `min-width:0` does not overflow — it
+   SILENTLY EATS THE FIELD. The Moons row measured `input[name=moon_name]` at
+   0×26 inside a 20px field, with "Alder" in the DOM and nothing on the screen,
+   because the period and new-at pairs claimed the whole track first. Wrapping is
+   what turns "the name disappears" into "the row takes a second line", which is
+   the honest failure and the one the narrow branch already chose. */
 .cal-builder .wz-frow {
-  display: flex; align-items: center; gap: 8px; min-height: 36px;
-  border-bottom: 1px solid var(--rule-hairline); padding: 3px 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; row-gap: 6px;
+  min-height: 36px; border-bottom: 1px solid var(--rule-hairline); padding: 3px 0;
 }
-.cal-builder .wz-frow.wz-wrap { flex-wrap: wrap; row-gap: 6px; }
 .cal-builder .wz-frow:last-of-type { border-bottom: 0; }
 .cal-builder .wz-ix {
   width: 18px; flex: none; font-weight: 650; font-size: 11px; color: var(--text-muted);
@@ -458,17 +464,27 @@
 .cal-builder .wz-mono {
   font-family: "JetBrains Mono", "DejaVu Sans Mono", ui-monospace, monospace;
 }
-/* a label and its value wrap AS A UNIT once the row wraps. At desktop it is
-   display:contents — it generates no box, so every child stays a direct flex
-   item of the row and the wide geometry is unchanged. */
-.cal-builder .wz-pr { display: contents; }
+/* A LABEL AND ITS VALUE WRAP AS A UNIT, AT EVERY WIDTH. It was `display:contents`
+   at desktop, which kept the pair's two boxes as separate flex items of the row —
+   fine while the row could not wrap, and wrong the moment it can, because "new
+   at" would strand at the end of one line with its `day 12` field on the next.
+   The gap inside the pair is the row's own gap, so the wide geometry is
+   unchanged from the contents form. */
+.cal-builder .wz-pr { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .cal-builder .wz-field {
   display: inline-flex; align-items: center; height: 28px; padding: 0 9px;
   border: 1px solid var(--rule-structural); border-radius: var(--r-ctl);
   background: var(--surface-card); font-weight: 600; font-size: 12px; line-height: 1;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.cal-builder .wz-field.wz-grow { flex: 1; justify-content: flex-start; }
+/* THE GROWING FIELD HAS A FLOOR, AND THE FLOOR IS WHY THE ROW WRAPS. `flex:1`
+   alone is basis 0 with `min-width:0` inherited from .wz-grow, which is a licence
+   to reach zero; a name field at zero prints nothing and hit-tests nothing. The
+   floor is ~13 characters at this size — enough that a name is READ rather than
+   guessed — and a row that cannot afford it takes a second line instead. */
+.cal-builder .wz-field.wz-grow {
+  flex: 1 1 130px; min-width: 112px; justify-content: flex-start;
+}
 /* THE INPUT IS THE HIT TARGET, NOT THE FIELD AROUND IT. A bare input laid out
    at its line box measured 170×14 — a printed box that clears the 24px floor
    with a hit area that does not. It stretches to the field's own height, which

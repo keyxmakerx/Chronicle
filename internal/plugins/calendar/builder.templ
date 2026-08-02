@@ -534,7 +534,7 @@ templ builderLeapPanel(data BuilderViewData) {
 			A sentence, not a form — and the rule proves itself: the next leap years print below,
 			and the preview year picks the day up.
 		</p>
-		<div class="wz-frow wz-wrap" style={ builderLadder(0) }>
+		<div class="wz-frow" style={ builderLadder(0) }>
 			<span class="wz-lbl">Every</span>
 			@builderStepper(data, "leap-every", -1, strconv.Itoa(data.Draft.LeapEvery), "")
 			<span class="wz-lbl">years, add</span>

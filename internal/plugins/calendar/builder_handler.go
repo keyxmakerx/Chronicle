@@ -587,6 +587,7 @@ func builderView(campaignID, csrf string, d *builderDraft, step int, importer bo
 		Checks:       builderChecksFor(d),
 		Stats:        builderStatsFor(d),
 		Block:        builderPreviewBlock(d, pvMonth),
+		MoonAlmanac:  builderMoonAlmanac(d, pvMonth),
 	}
 	if p, ok := builderPresetFor(d.Preset); ok {
 		data.Identity = p
