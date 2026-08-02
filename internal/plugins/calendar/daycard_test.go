@@ -1110,9 +1110,32 @@ func TestDayCard_TheEditorShipsNoRationaleAndNoUnbackedChip(t *testing.T) {
 // Every assertion here restates a number `mockups/stills/event-editor/
 // _measurements.json` asserts about the DRAWING, re-taken against the PRODUCT's
 // own DOM. Where a claim can only be checked in a browser (the 24px floor, the
-// day-of-week wrap, the horizontal fold) it belongs to the screenshot gate and
-// is NOT faked here — a Go test asserting a pixel it cannot see would be worse
-// than no coverage, because it would read as coverage.
+// day-of-week wrap, the horizontal fold) it is NOT faked here — a Go test
+// asserting a pixel it cannot see would be worse than no coverage, because it
+// would read as coverage.
+//
+// ── WHERE THOSE THREE ACTUALLY GO, NAMED, BECAUSE THE HANDOFF USED TO BE
+//    ADDRESSED TO NOBODY ──────────────────────────────────────────────────
+//
+// This header used to say they "belong to the screenshot gate", and the
+// screenshot gate did not measure any of them — it carried two CAPTION STRINGS,
+// "the fold holds" and "no horizontal scroll", which are prose. So §10 item 9
+// rested on `min-block-size: 24px` DECLARATIONS in the sheet and §10 item 11 was
+// asserted by no test and no image, while this sentence read like coverage.
+// That was finding 3 of the fix round, and it is closed by naming the receiver:
+//
+//	· the 24px control floor  → daycard_floors_probe_test.go, DAYCARD_FLOORS=1,
+//	  measured with getBoundingClientRect over every visible control on the card
+//	  and editor surface AND over every ✕/✓ mark's nearest control ancestor, in
+//	  CREATE and EDIT mode (the tie pill's ✕ and the allow/deny pair exist only
+//	  in edit mode), at 390 / 820 / 1440, both themes.
+//	· the horizontal fold     → the same file: scrollWidth === clientWidth plus
+//	  zero nodes of the card/editor subtree crossing the viewport edge, same
+//	  matrix. The 390 arm runs in a real 390px viewport — a nested browsing
+//	  context — because `--window-size` clamps this Chromium to 500px, which is
+//	  why the rejected evidence's three `-390x844` files were 500px wide.
+//	· the day-of-week wrap    → still unperformed here and unperformed there,
+//	  and it is BOOKED as such in the report rather than described as covered.
 func TestDayCard_TheEditorReproducesTheStillsMechanicalClaims(t *testing.T) {
 	data := benchFxData(true, true)
 	data.DayCard = DayCardMount{

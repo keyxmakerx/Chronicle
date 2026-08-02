@@ -106,6 +106,15 @@ const daycardFoldDiag = `
         (document.querySelector('[data-de-audrows]') ? '· allow/deny roster ' : '') +
         (document.querySelector('[data-de-tie]') ? '· Tied to' : '');
     }
+    // RELAYED OUT OF THE FRAME. A sub-500 shot renders inside a nested
+    // browsing context (see daycardShotFrame) and the editor is a TOP-LAYER
+    // popover, so these strips sit underneath it and out of the picture. The
+    // parent prints them below the frame, where they are readable.
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage('FOLD:' + fold.textContent, '*');
+      var dg = document.getElementById('shot-diag');
+      if (dg) window.parent.postMessage('DIAG:' + dg.textContent, '*');
+    }
   }
 `
 
@@ -399,13 +408,13 @@ func daycardShotList() []daycardShot {
 			caption: "the co-DM in dark — the theme leg §10 item 2 names and the rejected set did not have"},
 		{file: "06-editor-scribe-390x844-light.png", mount: scribe, w: 390, h: 844, script: daycardOpenEditor,
 			title: "Event editor · Scribe · 390×844 · light",
-			caption: "the same absence at a REAL 390: the fieldset is still simply not there. Whether anything crosses the horizontal fold is NOT read off this image — it is MEASURED, at 390 and 820, in both themes, by TestDayCardFoldProbe (DAYCARD_FLOORS=1); see fold-and-floor-probe.txt"},
+			caption: "the same absence at a REAL 390 — a nested browsing context, because `--window-size` clamps this Chromium to 500px and the rejected set's three `-390x844` files were 500px wide. Whether anything crosses the horizontal fold is NOT read off this image: it is MEASURED, at 390 / 820 / 1440 in both themes and in both modes, by TestDayCardFloorsProbe (DAYCARD_FLOORS=1); see fold-and-floor-probe.txt"},
 		{file: "06b-editor-codm-390x844-light.png", mount: codm, w: 390, h: 844, script: daycardOpenEditor,
 			title:   "Event editor · co-DM · 390×844 · light",
 			caption: "the co-DM at the phone width — §10 item 2's last matrix cell"},
 		{file: "07-editor-gm-820-light.png", mount: gm, w: 820, h: 1200, script: daycardOpenEditor,
 			title: "Event editor · GM · 820×1200 · light",
-			caption: "the tablet width: ONE column, and the widest un-scrolled frame the fold allows — `.ed-body` caps at min(70vh, 620px), so the 620px cap binds at every viewport this rig shoots and 122px of the live preview sit below this frame (the strip says so). What IS in this one un-scrolled frame: all three visibility cards and `Tied to`, which is the direct proof that the build renders what 01b has to scroll to reach. Horizontal scroll is measured, not eyeballed — see fold-and-floor-probe.txt"},
+			caption: "the tablet width: ONE column, and the widest un-scrolled frame the fold allows — `.ed-body` caps at min(70vh, 620px), so the 620px cap binds at every viewport this rig shoots and 122px of the live preview sit below this frame (the strip says so). What IS in this one un-scrolled frame: all three visibility cards and `Tied to`, which is the direct proof that the build renders what 01b has to scroll to reach. Horizontal scroll is measured, not eyeballed — TestDayCardFloorsProbe, see fold-and-floor-probe.txt"},
 		{file: "07b-editor-gm-820-light-lowerband.png", mount: gm, w: 820, h: 1200,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · GM · 820×1200 · light — LOWER BAND",
@@ -609,15 +618,40 @@ func TestGenerateDayCardScreenshots(t *testing.T) {
 			if err := os.WriteFile(src, []byte(page), 0o644); err != nil {
 				t.Fatalf("write page: %v", err)
 			}
+			// ── A PHONE SHOT IS TAKEN IN A PHONE VIEWPORT, OR IT IS NOT A
+			//    PHONE SHOT ──────────────────────────────────────────────
+			//
+			// This Chromium CLAMPS the headless window to a 500px minimum
+			// width — `--window-size=390,844` yields innerWidth 500, in old
+			// headless and in --headless=new alike. That is why the rejected
+			// set's three `-390x844` files were captured at 500, and only one
+			// of the three said so.
+			//
+			// A nested browsing context has its own viewport: innerWidth,
+			// 100vw, clientWidth and MEDIA QUERIES all resolve against the
+			// frame's box. So a sub-500 shot is framed at its exact size, the
+			// frame's own edge is visible in the image, and a note beside it
+			// says what was done and why. Verified before it was relied on: a
+			// 390px frame reports innerWidth 390 and matchMedia('(max-width:
+			// 500px)') true.
+			target, winW, winH := src, s.w, s.h
+			if s.w < daycardFloorMinWindowPx {
+				outer := filepath.Join(dir, "outer.html")
+				if err := os.WriteFile(outer,
+					[]byte(daycardShotFrame(s.w, s.h)), 0o644); err != nil {
+					t.Fatalf("write frame page: %v", err)
+				}
+				target, winW, winH = outer, daycardFloorMinWindowPx, s.h+420
+			}
 			out := filepath.Join(outDir, s.file)
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
 			args := []string{
 				"--headless", "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
 				"--force-device-scale-factor=2",
-				fmt.Sprintf("--window-size=%d,%d", s.w, s.h),
+				fmt.Sprintf("--window-size=%d,%d", winW, winH),
 				"--virtual-time-budget=6000",
-				"--screenshot=" + out, "file://" + src,
+				"--screenshot=" + out, "file://" + target,
 			}
 			if s.reduced {
 				// THE BRANCH IS DRIVEN AT THE BROWSER, not simulated in the
@@ -634,6 +668,36 @@ func TestGenerateDayCardScreenshots(t *testing.T) {
 			}
 		})
 	}
+}
+
+// daycardShotFrame wraps a shot page in a viewport of an EXACT size, for the
+// widths --window-size will not give. See the runner for the measurement that
+// makes it necessary; the note is burned into the image so the substitution
+// travels with the artefact rather than only with this file.
+func daycardShotFrame(w, h int) string {
+	return `<!doctype html><html><head><meta charset="utf-8"><style>` +
+		`html,body{margin:0;padding:0;background:oklch(0.22 0.02 265)}` +
+		fmt.Sprintf(`iframe{inline-size:%dpx;block-size:%dpx;border:0;display:block}`, w, h) +
+		`.vpnote{font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;` +
+		`padding:8px 10px;background:oklch(0.30 0.09 60);color:oklch(0.99 0 0)}` +
+		`.vpnote.diag{background:oklch(0.18 0.02 265)}` +
+		`.vpnote:empty{display:none}` +
+		`</style></head><body>` +
+		fmt.Sprintf(`<div class="vpnote">RIG: this frame is a REAL %d×%dpx viewport — `+
+			`innerWidth %d, 100vw %dpx, media queries resolved against it. `+
+			`--window-size cannot deliver it: this Chromium clamps the headless window `+
+			`to a %dpx minimum width, which is why three files in the rejected set were `+
+			`named -390x844 and were 500px wide. The dark border is the frame's, not the `+
+			`product's.</div>`, w, h, w, w, daycardFloorMinWindowPx) +
+		`<iframe src="shot.html"></iframe>` +
+		`<div class="vpnote" id="frame-fold">RIG: the framed shot did not report its fold</div>` +
+		`<div class="vpnote diag" id="frame-diag"></div>` +
+		`<script>window.addEventListener('message', function (e) {` +
+		`var d = String(e.data || '');` +
+		`if (d.indexOf('FOLD:') === 0) document.getElementById('frame-fold').textContent = d.slice(5);` +
+		`if (d.indexOf('DIAG:') === 0) document.getElementById('frame-diag').textContent = d.slice(5);` +
+		`});</script>` +
+		`</body></html>`
 }
 
 // daycardShotPage builds the shot page: the REAL Bench surface with the card
