@@ -1240,3 +1240,54 @@
   border-block-start: 1px solid var(--rule-hairline);
 }
 .cal-dayeditor .de-f .sp { flex: 1 1 auto; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DRAG-CREATE'S PREVIEW — C-CALV4-EDITOR-R2b stage 4, [DC-11] / [ER-8] SIGNED.
+
+   THE PREVIEW IS DRAWN OUTSIDE THE BLOCK OR NOT AT ALL. The obvious
+   implementation adds a class to the cells under the pointer, and those cells
+   are inside `.cal-block-host` — where §1 rule 1 forbids adding or removing a
+   class on anything, byte for byte, at runtime. [DC-11] term 2's "its own
+   drag-highlight rules" reads like a licence to mark cells and is not one.
+
+   So this is a PAGE-LEVEL OVERLAY: absolutely-positioned boxes the module
+   creates as a sibling of the card, positioned from the run's own
+   getBoundingClientRect(), one box per contiguous ROW of the span. Never a
+   class on a cell, and never a node inside the Block.
+
+   IT DECLARES NO MOTION AND IT IS NOT MOTION. A highlight that appears and
+   follows the pointer is a POSITION UPDATE, not a transition — it touches
+   neither the register nor the editor-morph carve-out, and
+   TestDayCardCSS_CarriesNoMotionOfItsOwn stays green with these rules exactly
+   where they belong.
+
+   THE THIRD ROOT IS DELIBERATE AND NAMED. TestDayCardCSS_EverySelectorIsScoped
+   is amended by name for it: `.cal-daycard-drag` is the CARD's own family — it
+   is created by the card's module, lives beside the card, and exists only
+   while a drag is in flight — but it cannot be a DESCENDANT of `.cal-daycard`,
+   because the card is a popover that is closed for the whole of the drag.
+   [ER-8] requires the overlay to be page-level; this is the consequence.
+
+   IT IS POINTER-ONLY AND SCRIBE+, and both facts are the producer's: the
+   module attaches no drag listener at all below the authoring floor, so a
+   player's page has neither the overlay nor the code that would draw it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cal-daycard-drag {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+.cal-daycard-drag[hidden] { display: none; }
+
+/* The span itself: the accent RINGS the run the pointer is describing, and it
+   never inks event data — nothing inside this box is an event, it is a
+   statement about dates. */
+.cal-daycard-drag .dragbox {
+  position: fixed;
+  display: block;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in oklch, transparent 88%, var(--accent));
+}

@@ -560,6 +560,27 @@
     return { method: 'POST', eventID: '' };
   }
 
+  // dayRange is STOLEN BY COPY from calendar_v2's event_grid.js:27, with
+  // attribution, exactly as [DC-10] SIGNED sanctions ([DC-11] term 4's
+  // sibling). It is re-expressed over the ordered DATE LIST rather than over
+  // raw day numbers, because this surface has an intercalary day and that day
+  // is not "day 31": on the list it is simply the last entry, so a run that
+  // ends on it is a run like any other.
+  //
+  // COPYING FROM A FROZEN FILE IS NOT OPENING IT. event_grid.js is not edited,
+  // not imported and not depended on in any way — R2-4 sunsets it and a
+  // dependency would die with it.
+  function dayRange(dates, aKey, bKey) {
+    var a = -1, b = -1;
+    for (var i = 0; i < dates.length; i++) {
+      if (dates[i].key === aKey) a = i;
+      if (dates[i].key === bKey) b = i;
+    }
+    if (a < 0 || b < 0) return [];
+    if (a > b) { var t = a; a = b; b = t; }
+    return dates.slice(a, b + 1);
+  }
+
   // ── THE CHROME'S PURE MAPPERS — C-CALV4-EDITOR-R2b stage 2 ──────────────
 
   // isIntercalary reads the ANSWER key's own namespace rather than a flag.
@@ -791,6 +812,7 @@
       isIntercalary: isIntercalary,
       weekShape: weekShape,
       orderedDates: orderedDates,
+      dayRange: dayRange,
       nextDate: nextDate,
       recurrenceUnits: recurrenceUnits,
       recurrenceInterval: recurrenceInterval,
@@ -921,6 +943,17 @@
       // on close. Null under reduced motion and whenever a rect could not be
       // measured, which is what makes the stage-2 open path the fallback.
       morph: null, morphTimer: 0,
+    };
+
+    // DRAG-CREATE'S STATE, declared HERE rather than beside its listeners at
+    // the foot of this function. `var` is function-scoped and hoisted, so the
+    // click handler above would have worked either way — but a reader meeting
+    // `drag.eatClick` two hundred lines before the declaration has to take the
+    // hoisting on trust, and stage 4 is supposed to be readable as a severable
+    // block, not as a puzzle.
+    var drag = {
+      on: false, host: null, cal: null, startKey: '', lastKey: '',
+      moved: false, layer: null, eatClick: false,
     };
 
     function reduced() {
@@ -2150,6 +2183,10 @@
     }
 
     document.addEventListener('click', function (e) {
+      // THE CLICK A REAL DRAG LEAVES BEHIND, consumed exactly once (stage 4,
+      // [DC-11] term 5). A drag of zero cells never sets this, so the
+      // single-day click is untouched — which is the term, stated as code.
+      if (drag.eatClick) { drag.eatClick = false; return; }
       if (e.target && e.target.closest && e.target.closest('[data-dc-ledger]')) {
         e.preventDefault();
         openInLedger();
@@ -2321,6 +2358,213 @@
       if (edState.open) { edClose(); return; }
       if (state.open) closeCard();
     });
+
+    // ── DRAG-CREATE — C-CALV4-EDITOR-R2b stage 4, [DC-11] SIGNED ─────────
+    //
+    // SEVERABLE BY CONSTRUCTION, on the ruling's seven terms, and every one of
+    // them is a property of this block rather than a promise about it:
+    //
+    //  1. IT IS THE LAST STAGE. The chrome and the morph are complete and
+    //     shippable without a line of it.
+    //  2. IT ADDS CODE TO ONE FILE AND ITS OWN TEST. It changes nothing in
+    //     bench.templ, bench.go, routes.go or the handler, and nothing in any
+    //     stylesheet beyond APPENDING its own drag rules.
+    //  3. IT IS REVERTIBLE BY DELETING ONE COMMIT, verified by doing it.
+    //  4. IT CREATES THROUGH THE EXISTING POST. end_year / end_month / end_day
+    //     already ship and the chrome already writes them; this fills the same
+    //     three hidden fields a pointer would. ZERO NEW API.
+    //  5. IT MAY NOT REGRESS THE DAY CLICK, and A DRAG OF ZERO CELLS IS A
+    //     CLICK — not "a drag that opens the editor with one day selected".
+    //     The single-day case falls through untouched to the shipped opener.
+    //  6. IT IS SCRIBE+ AND POINTER-ONLY. `canEdit` is the producer's gate, so
+    //     a player never receives the listener at all. THERE IS NO KEYBOARD
+    //     EQUIVALENT AND THIS SLICE DOES NOT INVENT ONE — it is booked with
+    //     [DC-4]'s a11y follow-on, C-CALV4-DAYPICK-A11Y, because a focusable
+    //     day cell that does not depend on a docked Ledger is a WIDGET change.
+    //  7. TEXT-SELECTION SUPPRESSION IS SCOPED TO THE ACTIVE DRAG and restored
+    //     on pointerup — the V2 implementation learned that one the hard way.
+    //
+    // ── THE PREVIEW IS DRAWN OUTSIDE THE BLOCK OR NOT AT ALL ([ER-8]) ────
+    //
+    // The obvious implementation adds a class to the cells under the pointer.
+    // Those cells are inside `.cal-block-host`, and §1 rule 1 forbids adding or
+    // removing a class on ANY element inside it — a rule
+    // daycard_block_immutability.test.mjs enforces byte for byte. Term 2's "its
+    // own drag-highlight rules" reads like a licence to mark cells and is not
+    // one, and "just a class, just during a drag" is exactly how this bound
+    // would be lost.
+    //
+    // So the preview is a PAGE-LEVEL OVERLAY: absolutely-positioned boxes, a
+    // sibling of the card, created by this module, positioned from the run's
+    // own getBoundingClientRect(). ONE BOX PER CONTIGUOUS ROW, not one union
+    // box over the whole span — a union across two weeks would paint days that
+    // are not in the run, which is a preview lying about what it is about to
+    // create.
+    //
+    // IT DECLARES NO MOTION AND IT IS NOT MOTION. A highlight that appears and
+    // follows the pointer is a POSITION UPDATE, not a transition: it touches
+    // neither the register nor the carve-out, and
+    // TestDayCardCSS_CarriesNoMotionOfItsOwn stays green with the rules in the
+    // card's own sheet where they belong.
+
+
+    function dragLayer() {
+      if (drag.layer && drag.layer.parentNode) return drag.layer;
+      var root = card.parentNode;
+      if (!root) return null;
+      var el = document.createElement('div');
+      el.className = 'cal-daycard-drag';
+      el.setAttribute('data-dc-drag', '');
+      el.setAttribute('aria-hidden', 'true');
+      root.appendChild(el);
+      drag.layer = el;
+      return el;
+    }
+
+    function dragClear() {
+      if (!drag.layer) return;
+      while (drag.layer.firstChild) drag.layer.removeChild(drag.layer.firstChild);
+      drag.layer.hidden = true;
+    }
+
+    // dragPaint draws the run as one box per contiguous ROW, read off the
+    // cells' own rects. It never touches a cell: it reads geometry and draws
+    // beside it.
+    function dragPaint(run) {
+      var layer = dragLayer();
+      if (!layer) return;
+      dragClear();
+      if (run.length < 2) return;
+      var rows = [];
+      run.forEach(function (d) {
+        var cell = drag.host.querySelector('[data-day="' + d.key.replace(/"/g, '') + '"][data-day-ord]');
+        if (!cell || !cell.getBoundingClientRect) return;
+        var r = cell.getBoundingClientRect();
+        if (!(r.width > 0)) return;
+        var row = rows.length ? rows[rows.length - 1] : null;
+        if (row && Math.abs(row.top - r.top) < 1) {
+          row.left = Math.min(row.left, r.left);
+          row.right = Math.max(row.right, r.right);
+          row.bottom = Math.max(row.bottom, r.bottom);
+          return;
+        }
+        rows.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+      });
+      rows.forEach(function (b) {
+        var box = document.createElement('i');
+        box.className = 'dragbox';
+        box.style.left = b.left + 'px';
+        box.style.top = b.top + 'px';
+        box.style.width = (b.right - b.left) + 'px';
+        box.style.height = (b.bottom - b.top) + 'px';
+        layer.appendChild(box);
+      });
+      layer.hidden = rows.length === 0;
+    }
+
+    function dragEnd(restore) {
+      drag.on = false;
+      dragClear();
+      // TERM 7: the suppression is scoped to the ACTIVE drag and restored here,
+      // on every exit path — including the one where the run turned out to be a
+      // single cell and nothing was created.
+      if (restore && document.body && document.body.style) {
+        document.body.style.removeProperty('user-select');
+      }
+    }
+
+    if (canEdit) {
+      document.addEventListener('pointerdown', function (e) {
+        // POINTER ONLY, and PRIMARY pointer only: a right-click or a secondary
+        // button is not a drag, and treating it as one would swallow the
+        // context menu.
+        if (e.button !== undefined && e.button !== 0) return;
+        var hit = cellFrom(e.target);
+        if (!hit) return;
+        var cal = index[hit.host.getAttribute('data-calendar-id') || ''];
+        var key = hit.cell.getAttribute('data-day') || '';
+        if (!cal || !cal.days[key]) return;
+        drag.on = true;
+        drag.moved = false;
+        drag.host = hit.host;
+        drag.cal = cal;
+        drag.startKey = key;
+        drag.lastKey = key;
+      });
+
+      document.addEventListener('pointermove', function (e) {
+        if (!drag.on) return;
+        var hit = cellFrom(e.target);
+        if (!hit || hit.host !== drag.host) return;
+        var key = hit.cell.getAttribute('data-day') || '';
+        if (!key || key === drag.lastKey) return;
+        drag.lastKey = key;
+        // A DRAG OF ZERO CELLS IS A CLICK (term 5). `moved` only becomes true
+        // when the pointer reaches a DIFFERENT day, so a jittery press on one
+        // cell is still a click and still opens the card.
+        if (key !== drag.startKey) {
+          drag.moved = true;
+          if (document.body && document.body.style) {
+            document.body.style.setProperty('user-select', 'none');
+          }
+        }
+        dragPaint(dayRange(orderedDates(drag.cal.list), drag.startKey, drag.lastKey));
+      });
+
+      document.addEventListener('pointerup', function () {
+        if (!drag.on) return;
+        var moved = drag.moved;
+        var run = moved
+          ? dayRange(orderedDates(drag.cal.list), drag.startKey, drag.lastKey) : [];
+        var host = drag.host, cal = drag.cal;
+        var boxes = [];
+        if (drag.layer) {
+          for (var i = 0; i < drag.layer.children.length; i++) {
+            boxes.push(drag.layer.children[i].getBoundingClientRect());
+          }
+        }
+        dragEnd(true);
+        if (!moved || run.length < 2) return;
+        // THE CLICK THAT FOLLOWS A REAL DRAG IS SUPPRESSED, so a span-create
+        // does not also open the card on the last cell.
+        //
+        // IT IS ITS OWN FLAG AND NOT `state.suppress`. That one guards the
+        // RADIO's change while the Ledger door activates it, inside a
+        // try/finally around one synchronous .click(); borrowing it here would
+        // have the door's own finally clear a flag this path had just set, and
+        // the two would clobber each other in a way no test would name.
+        drag.eatClick = true;
+        state.host = host;
+        var start = run[0], end = run[run.length - 1];
+        // TERM 4: the span rides end_year / end_month / end_day, which the
+        // shipped POST already binds and the chrome already writes. ZERO NEW API.
+        var rec = {
+          year: start.year, month: start.month, day: start.day,
+          end_year: end.year, end_month: end.month, end_day: end.day,
+          all_day: true,
+        };
+        // THE EDITOR MORPHS OUT OF THE SPAN THE USER JUST DREW. The card is not
+        // open on this path, so the drawn overlay's own rect is the honest
+        // origin — one box becomes the other, and the box it becomes is the one
+        // the pointer described.
+        var from = boxes.length ? {
+          left: Math.min.apply(null, boxes.map(function (b) { return b.left; })),
+          top: Math.min.apply(null, boxes.map(function (b) { return b.top; })),
+          right: Math.max.apply(null, boxes.map(function (b) { return b.right; })),
+          bottom: Math.max.apply(null, boxes.map(function (b) { return b.bottom; })),
+        } : null;
+        if (from) { from.width = from.right - from.left; from.height = from.bottom - from.top; }
+        edOpen('create', cal, start, rec,
+          from ? { getBoundingClientRect: function () { return from; } } : card);
+      });
+
+      // A CANCELLED POINTER (the OS took it, the window blurred) must not leave
+      // the page unselectable. Same restoration, same exit path.
+      document.addEventListener('pointercancel', function () {
+        if (drag.on) dragEnd(true);
+      });
+
+    }
 
     window.addEventListener('resize', function () {
       if (!state.open || !state.host) return;

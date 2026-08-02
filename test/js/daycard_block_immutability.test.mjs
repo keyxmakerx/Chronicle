@@ -123,3 +123,22 @@ test('the morph carries its class on the EDITOR and never on anything in the Blo
   assert.equal(fx.root.querySelectorAll('.edmorph').length, 1);
   assert.equal(fx.root.querySelectorAll('.edmorph')[0], fx.editor);
 });
+
+test('the DRAG path leaves the Block host byte-identical, start to finish', () => {
+  const fx = boot();
+  const before = fx.blockHost.outerHTML;
+
+  // EXTENDED for stage 4 ([DC-11] / [ER-8] SIGNED). The drag is the first thing
+  // in this arc that follows the pointer ACROSS the Block's own cells, which is
+  // exactly where "just a class, just during a drag" would go.
+  fx.fire('pointerdown', fx.cells[3], { button: 0 });
+  assert.equal(fx.blockHost.outerHTML, before, 'pointerdown mutated the Block');
+  fx.fire('pointermove', fx.cells[4]);
+  assert.equal(fx.blockHost.outerHTML, before, 'the preview marked a cell');
+  fx.fire('pointermove', fx.cells[5]);
+  assert.equal(fx.blockHost.outerHTML, before, 'the growing preview marked a cell');
+  fx.fire('pointerup', fx.cells[5]);
+  assert.equal(fx.blockHost.outerHTML, before, 'release mutated the Block');
+  fx.flush();
+  assert.equal(fx.blockHost.outerHTML, before, 'the editor the drag opened mutated the Block');
+});

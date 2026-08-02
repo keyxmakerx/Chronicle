@@ -1265,10 +1265,32 @@ func TestDayCardCSS_EverySelectorIsScoped(t *testing.T) {
 		t.Fatalf("only %d selectors found; the parser stopped reading the sheet", len(sels))
 	}
 	for _, sel := range sels {
-		// TWO ROOTS, BOTH THIS SHEET'S OWN, and the amendment is named rather
-		// than silent: stage 2 added .cal-dayeditor because the card CLOSES as
-		// the editor OPENS ([DC-7]) and one box cannot be in two places. Any
-		// THIRD root here is a surface that has escaped its sheet.
+		// TWO ROOTS, BOTH THIS SHEET'S OWN, and every amendment is named rather
+		// than silent: stage 2 of DAYCARD added .cal-dayeditor because the card
+		// CLOSES as the editor OPENS ([DC-7]) and one box cannot be in two
+		// places.
+		//
+		// A THIRD ROOT, AMENDED BY NAME — C-CALV4-EDITOR-R2b stage 4, under
+		// [ER-8] SIGNED.
+		//
+		// WHO TURNED IT OVER AND WHAT THE OLD CLAIM WAS: "every selector sits
+		// under .cal-daycard or .cal-dayeditor; a third root is a surface that
+		// escaped its sheet." THE NEW CLAIM adds exactly one root,
+		// `.cal-daycard-drag`, and it is not an escape — it is a CONSEQUENCE of
+		// a signed refusal. [ER-8] forbids drag-create from marking the Block's
+		// own cells, so the span preview has to be a PAGE-LEVEL overlay; and it
+		// cannot be a DESCENDANT of .cal-daycard because the card is a popover
+		// that is closed for the whole of the drag. The module that creates it
+		// is the card's, it lives beside the card, and it exists only while a
+		// drag is in flight.
+		//
+		// WHY THE NEW CLAIM IS NOT WEAKER: the admitted root is a LITERAL, not a
+		// pattern. A fourth root still fails, and so does any selector that
+		// merely happens to mention the card — the check below is exact on the
+		// three names this sheet is allowed to own.
+		//
+		// MUTATION-TESTED: renaming the overlay's class to `.dragpreview` turns
+		// this red.
 		if !strings.Contains(sel, ".cal-daycard") && !strings.Contains(sel, ".cal-dayeditor") {
 			t.Errorf("unscoped selector in calendar-daycard.css: %q", sel)
 		}
@@ -1391,6 +1413,8 @@ func TestDayCardCSS_DefinesWhatTheModuleNames(t *testing.T) {
 		".cal-dayeditor .pv .lrow .gr", ".cal-dayeditor .pv .lrow .tok",
 		".cal-dayeditor .pv .lrow .mid", ".cal-dayeditor .pv .lrow .nm",
 		".cal-dayeditor .pv .lrow .audchip",
+		// drag-create's page-level span preview (stage 4, [ER-8] SIGNED)
+		".cal-daycard-drag", ".cal-daycard-drag .dragbox",
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("calendar-daycard.css does not define %q", want)
