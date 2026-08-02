@@ -860,7 +860,12 @@
   /* rows wrap; a label and its value wrap TOGETHER, never apart */
   .cal-builder .wz-frow { flex-wrap: wrap; row-gap: 6px; padding: 6px 0; min-height: 40px; }
   .cal-builder .wz-pr { display: inline-flex; align-items: center; gap: 6px; flex: none; }
-  .cal-builder .wz-field.wz-grow { flex: 1 1 130px; }
+  /* THE BASIS IS THE WRAP DECISION. At 130px the eras row could still fit its
+     `code` pair on the first line, which squeezed "Reckoning of Wards" to
+     122px of a needed 135 and clipped it mid-word. A 168px basis is wider than
+     the pair can afford beside it, so the pair wraps and the name takes the
+     line — measured, not guessed, by the narrow-lane probe's clip assertion. */
+  .cal-builder .wz-field.wz-grow { flex: 1 1 168px; }
   .cal-builder .wz-lbl { white-space: normal; }
   /* a sentence that follows a status chip wraps IN PLACE beside it rather than
      being pushed to its own line — otherwise Review's longest row strands its

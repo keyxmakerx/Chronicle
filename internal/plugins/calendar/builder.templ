@@ -780,15 +780,20 @@ templ builderErasPanel(data BuilderViewData) {
 				<span class="wz-field wz-grow">
 					<input class="wz-in" type="text" name="era_name" value={ e.Name } aria-label="Era name"/>
 				</span>
+				// THE SIGNED STILL'S OWN LABELS: "code" and "begins", with the unit
+				// inside the field. They are shorter than the "reads" / "begins year"
+				// this shipped with, and on the densest row in the wizard that
+				// difference is the one that lets the era's NAME be read at 390px.
 				<span class="wz-pr">
-					<span class="wz-lbl">reads</span>
+					<span class="wz-lbl">code</span>
 					<span class="wz-field">
 						<input class="wz-in wz-num" type="text" name="era_code" value={ e.Code } aria-label="Era reading"/>
 					</span>
 				</span>
 				<span class="wz-pr">
-					<span class="wz-lbl">begins year</span>
+					<span class="wz-lbl">begins</span>
 					<span class="wz-field">
+						<span class="wz-u">year</span>
 						<input class="wz-in wz-num" type="text" name="era_year" value={ strconv.Itoa(e.StartYear) } aria-label="Era start year"/>
 					</span>
 				</span>

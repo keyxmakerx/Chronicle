@@ -7,6 +7,7 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -447,5 +449,67 @@ func TestBuilderPage_TheNeedsBackendChipsAreOwnerOnlyByConstruction(t *testing.T
 	// clause, and the identity triple that has no columns.
 	if n := strings.Count(html, "wz-badge wz-need"); n < 2 {
 		t.Errorf("expected the leap-exception and identity chips; found %d wz-need chips", n)
+	}
+}
+
+// TestBuilderShow_RejectsAnUnknownStationOnTheQuery closes a hole a mutation
+// found: replacing ShowBuilder's `return apperror.NewBadRequest("unknown wizard
+// step")` with `step = 0` left the ENTIRE package suite green.
+//
+// TestBuilderForm_RejectsAnUnknownStation exercises builderReadForm — the POST
+// body's station key — and nothing covered the GET's `?step=`, which is the
+// half a bookmark, a link or a hand-typed URL actually reaches. §7.2 is
+// explicit that this route "accepts ?step= only, validated against the nine
+// station keys — reject an unknown value with a 400, do not clamp it silently"
+// ([LYR-4]'s reject-don't-drop pattern), and behaviour that is correct but
+// unpinned is behaviour one refactor from being wrong.
+func TestBuilderShow_RejectsAnUnknownStationOnTheQuery(t *testing.T) {
+	h := &Handler{}
+	show := func(query string) (int, error) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/calendars/builder"+query, nil)
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(req, rec)
+		c.Set("campaign_context", &campaigns.CampaignContext{
+			Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Imix"}})
+		return rec.Code, h.ShowBuilder(c)
+	}
+
+	// Every one of the nine station keys is accepted, and so is no key at all.
+	keys := []string{""}
+	for _, s := range builderStations {
+		keys = append(keys, s.Key)
+	}
+	if len(keys) != 10 {
+		t.Fatalf("nine stations (Start + 8) plus the no-key case; got %d", len(keys))
+	}
+	for _, key := range keys {
+		q := ""
+		if key != "" {
+			q = "?step=" + key
+		}
+		code, err := show(q)
+		if err != nil {
+			t.Errorf("station %q is one of the nine and must render; got %v", key, err)
+		}
+		if code != http.StatusOK {
+			t.Errorf("station %q rendered %d, want 200", key, code)
+		}
+	}
+
+	// And anything else is a 400 — never a clamp to Start.
+	// NB "%20" decodes to a trailing space, which is NOT trimmed into a match —
+	// only a wholly blank value means "no station named, open at Start".
+	for _, bad := range []string{"notastation", "9", "-1", "Start", "review%20", "moons/"} {
+		code, err := show("?step=" + bad)
+		if err == nil {
+			t.Errorf("?step=%q rendered %d instead of rejecting — a wrong bookmark must "+
+				"not become a right-looking page", bad, code)
+			continue
+		}
+		var appErr *apperror.AppError
+		if !errors.As(err, &appErr) || appErr.Code != http.StatusBadRequest {
+			t.Errorf("?step=%q must be a 400; got %v", bad, err)
+		}
 	}
 }

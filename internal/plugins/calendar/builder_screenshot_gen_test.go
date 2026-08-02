@@ -587,7 +587,24 @@ func TestBuilderProbe_TheMonthDidNotMove(t *testing.T) {
 //
 // "past the edge" is a visible, non-fixed element whose border box crosses the
 // viewport's right edge by more than 0.6px; a "target" is a visible enabled
-// interactive element measured against 24px on BOTH axes.
+// interactive element measured against 24px on BOTH axes; a "clipped" control
+// is a text input whose own value does not fit inside it.
+//
+// ── IT WALKS ALL ELEVEN SHEETS, AND THAT IS THE POINT ──────────────────────
+//
+// It used to walk four — presets, structure, review, importer — and the report
+// stated the 24px floor as if it held everywhere. The 0×26 moon-name control
+// lived on step-moons, which the probe never visited, which is exactly why that
+// bug shipped. A gate scoped to a subset states a fact about the subset; the
+// claim was about the surface. So the roster IS builderShotKeys, and the two
+// holes that let a zero-width control through are closed with it:
+//
+//	the 24px check skipped anything measuring 0 wide (`r.width > 0 &&`), so
+//	the very worst case — a control with no width at all — was the one case
+//	it exempted; and
+//
+//	nothing measured whether a control's VALUE fits inside it, so a field
+//	clipping "Reckoning of Wards" to "Reckonir" mid-word read as passing.
 func TestBuilderProbe_NarrowLaneHoldsItsGate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser probe: skipped under -short (CI's mode); run without -short")
@@ -595,11 +612,6 @@ func TestBuilderProbe_NarrowLaneHoldsItsGate(t *testing.T) {
 	chrome := builderShotChromium()
 	if chrome == "" {
 		t.Skip("browser probe: no Chromium binary found (set CHROMIUM_BIN)")
-	}
-
-	d, err := builderPresetDraft("harptos")
-	if err != nil {
-		t.Fatal(err)
 	}
 
 	// ONE BROWSER PER WIDTH. Resizing a wrapper inside one 1600px window would
@@ -611,19 +623,14 @@ func TestBuilderProbe_NarrowLaneHoldsItsGate(t *testing.T) {
 	// this headless build will give.
 	widths := []int{390, 500, 640, 768, 1024, 1280, 1440}
 
-	for _, station := range []struct {
-		key  string
-		step int
-		imp  bool
-	}{{"presets", 0, false}, {"step-structure", 1, false},
-		{"step-review", 8, false}, {"importer", 0, true}} {
-
-		t.Run(station.key, func(t *testing.T) {
-			body := builderRenderShell(t, d, station.step, station.imp, 0)
+	for _, key := range builderShotKeys {
+		t.Run(key, func(t *testing.T) {
+			sd, step, imp, pv := builderShotState(t, key)
+			body := builderRenderShell(t, sd, step, imp, pv)
 			script := `<pre id="probe"></pre><script>
 (function(){
   var w = document.documentElement.clientWidth;
-  var over = 0, small = 0, worst = null;
+  var over = 0, small = 0, clipped = 0, worst = null, worstClip = null;
   // AN ELEMENT INSIDE A HORIZONTAL SCROLLER IS NOT OVERFLOW, IT IS CONTENT.
   // The rail becomes a sticky horizontal strip at the narrow breakpoint —
   // nine stations of track inside a 336px port — and the whole point of that
@@ -649,17 +656,31 @@ func TestBuilderProbe_NarrowLaneHoldsItsGate(t *testing.T) {
         ' right=' + r.right.toFixed(1) + ' w=' + r.width.toFixed(1);
     }
     if (el.matches('button,a[href],input,select,textarea') && !el.disabled) {
-      if (r.width > 0 && (r.width < 24 || r.height < 24)) {
+      // NO 'r.width > 0' GUARD. A control measuring zero wide is the WORST
+      // case of an under-floor target, not an exempt one — that guard is why
+      // a 0x26 moon-name input passed this probe on the station it lived on.
+      if (r.width < 24 || r.height < 24) {
         small++;
-        if (!worst) worst = (el.className || el.tagName) + ' ' +
+        if (!worst) worst = (el.name || el.className || el.tagName) + ' ' +
           r.width.toFixed(1) + 'x' + r.height.toFixed(1);
+      }
+      // AND A CONTROL MUST SHOW WHAT IT HOLDS. scrollWidth past clientWidth is
+      // an input whose own value is cut off inside it: "Reckoning of Wards"
+      // rendering as "Reckonir" is a printed lie about authored data, and no
+      // width measurement catches it.
+      if (el.matches('input[type=text]') && el.scrollWidth > el.clientWidth + 1) {
+        clipped++;
+        if (!worstClip) worstClip = (el.name || el.tagName) + ' value=' +
+          JSON.stringify(el.value) + ' needs ' + el.scrollWidth +
+          'px, has ' + el.clientWidth + 'px';
       }
     }
   });
   var reading = JSON.stringify({
     w: w, scrollW: document.documentElement.scrollWidth,
     clientW: document.documentElement.clientWidth,
-    past: over, under24: small, worst: worst});
+    past: over, under24: small, clipped: clipped,
+    worst: worst, worstClip: worstClip});
   var slot = document.getElementById('probe');
   if (slot) slot.textContent = reading;
   // When this page is the instrument's FRAME, the reading rides up to the
@@ -667,17 +688,19 @@ func TestBuilderProbe_NarrowLaneHoldsItsGate(t *testing.T) {
   if (window.parent !== window) window.parent.postMessage(reading, '*');
 })();
 </script>`
-			page := builderHarness(t, "narrow lane", station.key, body+script, false, false)
+			page := builderHarness(t, "narrow lane", key, body+script, false, false)
 
 			for _, w := range widths {
 				raw := builderRunProbeAt(t, chrome, page, w, 1400)
 				var r struct {
-					W       int     `json:"w"`
-					ScrollW int     `json:"scrollW"`
-					ClientW int     `json:"clientW"`
-					Past    int     `json:"past"`
-					Under24 int     `json:"under24"`
-					Worst   *string `json:"worst"`
+					W         int     `json:"w"`
+					ScrollW   int     `json:"scrollW"`
+					ClientW   int     `json:"clientW"`
+					Past      int     `json:"past"`
+					Under24   int     `json:"under24"`
+					Clipped   int     `json:"clipped"`
+					Worst     *string `json:"worst"`
+					WorstClip *string `json:"worstClip"`
 				}
 				if err := json.Unmarshal([]byte(raw), &r); err != nil {
 					t.Fatalf("probe reading %q: %v", raw, err)
@@ -687,21 +710,30 @@ func TestBuilderProbe_NarrowLaneHoldsItsGate(t *testing.T) {
 					worst = " · worst: " + *r.Worst
 				}
 				drag := r.ScrollW - r.ClientW
+				clip := ""
+				if r.WorstClip != nil {
+					clip = " · worst clip: " + *r.WorstClip
+				}
 				t.Logf("%s @%dpx: scrollWidth %d vs clientWidth %d (%dpx of sideways drag) · "+
-					"%d past the edge · %d target(s) under 24px%s",
-					station.key, w, r.ScrollW, r.ClientW, drag, r.Past, r.Under24, worst)
+					"%d past the edge · %d target(s) under 24px · %d clipped value(s)%s%s",
+					key, w, r.ScrollW, r.ClientW, drag, r.Past, r.Under24, r.Clipped,
+					worst, clip)
 
 				if drag > 0 {
 					t.Errorf("%s @%dpx: %dpx of horizontal scroll — the gate is measured ZERO "+
-						"across 390–1440", station.key, w, drag)
+						"across 390–1440", key, w, drag)
 				}
 				if r.Past != 0 {
 					t.Errorf("%s @%dpx: %d element(s) past the viewport's right edge",
-						station.key, w, r.Past)
+						key, w, r.Past)
 				}
 				if r.Under24 != 0 {
 					t.Errorf("%s @%dpx: %d interactive target(s) under the 24px floor%s",
-						station.key, w, r.Under24, worst)
+						key, w, r.Under24, worst)
+				}
+				if r.Clipped != 0 {
+					t.Errorf("%s @%dpx: %d control(s) cannot show their own value%s",
+						key, w, r.Clipped, clip)
 				}
 			}
 		})
