@@ -485,8 +485,16 @@ func TestBenchDisclosure_RowsSummarySetupHalfIsGMOnly(t *testing.T) {
 
 // --- no JavaScript ----------------------------------------------------------
 
-// §12: hx-* attributes are markup and are the whole budget. The one <script>
-// on the page is the pre-existing owner-only calendar_permissions.js link.
+// §12: hx-* attributes are markup and are the whole budget.
+//
+// THE TAIL OF THIS TEST USED TO SAY "the one <script> on the page is the
+// pre-existing owner-only calendar_permissions.js link". That link is gone, and
+// its going is the hotfix: it sat inside <main id="main-content">, which the
+// sidebar's hx-boost/hx-select swaps, and htmx REMOVES script tags from a
+// swapped fragment when allowScriptTags is false. The driver now ships from the
+// plugin body-script registry. So the budget is now zero scripts on the page,
+// not zero-inside-the-surface-plus-one-outside — see
+// TestBenchPageMountsNoPageSideScript, which owns that rule for the whole page.
 func TestBenchDisclosure_AddsNoScript(t *testing.T) {
 	// Scoped to the Bench SURFACE, not to the page: the app shell brings its own
 	// script tags and counting those would be measuring the layout, not this
@@ -504,14 +512,19 @@ func TestBenchDisclosure_AddsNoScript(t *testing.T) {
 			}
 		}
 	}
-	// The one script the page is allowed to link is the PRE-EXISTING owner-only
-	// permissions driver, outside the surface and untouched by this slice.
+	// And nothing between the surface and the edge of the swapped region links a
+	// script either — that gap is exactly where the three drivers used to sit. The
+	// permissions modal still renders for the owner (only its DRIVER moved to the
+	// registry) and is asserted here so this cannot pass vacuously if the owner
+	// branch were ever deleted wholesale.
 	full := renderBench(t, benchFxData(true, true))
-	if !strings.Contains(full, "calendar_permissions.js") {
-		t.Error("the pre-existing owner-only permissions driver link vanished")
+	if !strings.Contains(full, "cal-permissions-modal") {
+		t.Error("the owner-only permissions modal vanished from the Bench page")
 	}
-	if strings.Contains(benchSurfaceHTML(t, full), "calendar_permissions.js") {
-		t.Error("the permissions driver moved INSIDE the Bench surface")
+	if strings.Contains(benchSwappedRegion(t, full), "<script") {
+		t.Error("a <script> tag reappeared inside #main-content on the Bench page: htmx deletes it " +
+			"on a boosted navigation, so it would wire on a direct load only — use the plugin " +
+			"body-script registry")
 	}
 }
 

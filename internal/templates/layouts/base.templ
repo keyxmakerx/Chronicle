@@ -171,9 +171,15 @@ templ Base(title string) {
 		<script src={ AssetURL("/static/js/widgets/timeline_viz.js") } defer></script>
 
 		<!-- Plugin-contributed body scripts (injected at startup; calendar widget
-		     is the canonical first entry — avoids hardcoding plugin paths here). -->
+		     is the canonical first entry — avoids hardcoding plugin paths here).
+		     Emitted IN SLICE ORDER and deferred, so a contributor that depends on
+		     an earlier one may rely on document order (see routes.go).
+		     AssetURL is applied here rather than at registration time so the
+		     digest is resolved after every plugin's static FS has registered;
+		     without it a page-templ script moved into this registry would lose
+		     the cache-busting it used to carry. -->
 		for _, scriptURL := range GetPluginBodyScripts(ctx) {
-			<script src={ scriptURL } defer></script>
+			<script src={ AssetURL(scriptURL) } defer></script>
 		}
 
 		<!-- Timeline widget (interactive timeline preview for dashboard embeds) -->

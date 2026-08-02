@@ -142,16 +142,24 @@ func benchW5bData(isOwner bool) BenchData {
 }
 
 // TestDashboard_OwnerGetsPermissionsEditor: the owner page ships the modal +
-// the reused chip-row editor (with the GM-only mode) + the driver script, and
-// the per-calendar trigger carries its current visibility state for the editor
-// to seed.
+// the reused chip-row editor (with the GM-only mode), and the per-calendar
+// trigger carries its current visibility state for the editor to seed.
+//
+// THE DRIVER SCRIPT IS NO LONGER ASSERTED HERE because the page no longer mounts
+// it. It sat inside <main id="main-content">, the region the sidebar's
+// hx-boost/hx-select swaps, and htmx removes script tags from a swapped fragment
+// (allowScriptTags=false) — so the Permissions button worked on a direct load
+// and was dead when the Bench was reached through the sidebar. The driver moved
+// to the plugin body-script registry; its presence AND its ordering behind
+// cal_visibility.js are pinned by
+// TestPermissionsDriverIsNeverMountedWithoutItsDependency below. What this test
+// owns — the owner-only DOM, which is the actual permission gate — is unchanged.
 func TestDashboard_OwnerGetsPermissionsEditor(t *testing.T) {
 	html := renderBench(t, benchW5bData(true))
 	for _, want := range []string{
 		"cal-permissions-modal",      // the modal
 		"data-visibility-editor",     // the reused Q-V2-7 widget
 		`value="gmonly"`,             // the W5b GM-only mode
-		"calendar_permissions.js",    // the driver
 		`data-cal-vis-mode="gmonly"`, // the trigger seeds the editor with current state
 		`data-cal-visibility="dm_only"`,
 	} {
@@ -212,14 +220,27 @@ func TestDashboardPage_DoesNotMountThePermissionsDriverAlone(t *testing.T) {
 }
 
 // TestPermissionsDriverIsNeverMountedWithoutItsDependency is the durable form of
-// the same rule, over SOURCE rather than over one render: any template that
-// mounts calendar_permissions.js must also mount cal_visibility.js, and must
-// mount it FIRST — the driver reads window.ChronicleCalVisibility at parse time,
-// so order is part of the contract, not a detail.
+// the same rule, over SOURCE rather than over one render: any file that mounts
+// calendar_permissions.js must also mount cal_visibility.js, and must mount it
+// FIRST — the driver reads window.ChronicleCalVisibility as it executes
+// (calendar_permissions.js:22, and init() bails on a nil V), so order is part of
+// the contract, not a detail.
 //
-// This is a coverage WIDENING, not an amendment to a signed guard: it forbids
-// something no template should ever have done, and it pins the fix against the
-// copy-paste that would otherwise reintroduce it on the next surface.
+// THE SEARCH SET NOW INCLUDES THE PLUGIN BODY-SCRIPT REGISTRY, and it has to.
+// The Bench's mount used to be a <script> in bench.templ; that tag lived inside
+// <main id="main-content">, which the sidebar's hx-boost/hx-select swaps, and
+// htmx DELETES script tags from a swapped fragment when allowScriptTags is false
+// (boot.js). The Bench therefore wired on a direct load and silently did not
+// when reached through the sidebar. The mount moved to
+// internal/app/routes.go's pluginBodyScripts, which base.templ emits after
+// {children...} — outside the swapped region. Order there means the same thing
+// it meant in a templ (base.templ emits the slice in order, deferred, so
+// execution follows document order), so the same rule applies to the same
+// strings and this guard simply reads one more file.
+//
+// It is a coverage WIDENING, not an amendment to a signed guard: it forbids
+// something no surface should ever have done, and it pins the fix against the
+// copy-paste that would otherwise reintroduce it.
 func TestPermissionsDriverIsNeverMountedWithoutItsDependency(t *testing.T) {
 	files, err := filepath.Glob("*.templ")
 	if err != nil {
@@ -228,6 +249,14 @@ func TestPermissionsDriverIsNeverMountedWithoutItsDependency(t *testing.T) {
 	if len(files) == 0 {
 		t.Fatal("no .templ files found — the guard would pass vacuously")
 	}
+	// The registry is where the Bench's drivers live now; a guard that only read
+	// templs would have gone quiet the moment they moved there.
+	const registry = "../../app/routes.go"
+	if _, err := os.Stat(registry); err != nil {
+		t.Fatalf("the plugin body-script registry is not at %s any more (%v) — "+
+			"this guard would stop reading the file that actually mounts the driver", registry, err)
+	}
+	files = append(files, registry)
 	checked := 0
 	for _, f := range files {
 		src, err := os.ReadFile(f)
@@ -251,7 +280,54 @@ func TestPermissionsDriverIsNeverMountedWithoutItsDependency(t *testing.T) {
 		}
 	}
 	if checked == 0 {
-		t.Error("no template mounts calendar_permissions.js — the driver is orphaned entirely, " +
-			"or the mount string changed and this guard stopped reading anything")
+		t.Error("nothing mounts calendar_permissions.js — neither a template nor the plugin " +
+			"body-script registry. The driver is orphaned entirely, or the mount string changed " +
+			"and this guard stopped reading anything")
+	}
+}
+
+// TestBenchDriversShipFromThePluginBodyScriptRegistry pins WHERE the Bench's
+// three drivers are mounted, which is the whole of the boosted-navigation fix.
+//
+// A <script src> in a page templ is inside <main id="main-content">; the sidebar
+// navigates with hx-boost + hx-select="#main-content"; boot.js sets
+// htmx.config.allowScriptTags=false, and htmx's makeFragment then REMOVES every
+// script tag in the swapped fragment. The consequence was not a console error —
+// it was a Bench that looked exactly right (the stylesheets in the same region
+// survive) with a dead day card and a dead Permissions button, but only when
+// reached through the sidebar.
+//
+// The registry (internal/app/routes.go → layouts.SetPluginBodyScripts →
+// base.templ) emits after {children...}, outside the swapped region, so both
+// navigation paths deliver the same scripts. This test reads the source because
+// pluginBodyScripts is a local built during startup wiring: there is no exported
+// value to assert against, and a render-level assertion cannot see it either
+// (the page templs render with an empty context in these tests, by design).
+func TestBenchDriversShipFromThePluginBodyScriptRegistry(t *testing.T) {
+	src, err := os.ReadFile("../../app/routes.go")
+	if err != nil {
+		t.Fatalf("read the plugin body-script registry: %v", err)
+	}
+	s := string(src)
+	// Ordered, because base.templ emits the slice in order with `defer` and
+	// deferred scripts execute in document order.
+	want := []string{
+		`/js/cal_visibility.js"`,
+		`/js/calendar_permissions.js"`,
+		`/js/calendar_daycard.js"`,
+	}
+	prev := -1
+	for _, w := range want {
+		at := strings.Index(s, w)
+		if at < 0 {
+			t.Errorf("the plugin body-script registry does not mount %s — a Bench reached through "+
+				"the sidebar would render it with that driver stripped", strings.Trim(w, `"`))
+			continue
+		}
+		if at < prev {
+			t.Errorf("%s is registered out of order: the registry is emitted in slice order and "+
+				"deferred, so cal_visibility.js must precede calendar_permissions.js", strings.Trim(w, `"`))
+		}
+		prev = at
 	}
 }

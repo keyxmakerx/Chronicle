@@ -126,34 +126,33 @@ templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 		// card grid this surface replaces: the Bench moved the trigger onto the
 		// Block's management strip and the subordinate rows, and the modal +
 		// its driver are unchanged.
-		// THE ONE VISIBILITY MAPPER, MOUNTED BEFORE BOTH ITS CONSUMERS
-		// (C-CALV4-DAYCARD, R2-2a, [DC-10] SIGNED). cal_visibility.js owns the
-		// mode <-> {visibility, visibility_rules} mapping that the permissions
-		// modal and the day card's editor both write through; it was duplicated
-		// once already and a third copy would have made "who can see this" have
-		// three answers. `defer` scripts execute in DOCUMENT ORDER, so this tag
-		// must precede both — which is why it sits above the owner branch rather
-		// than inside either consumer's own block.
-		if data.IsOwner || data.DayCardJSON != "" {
-			<script src={ layouts.AssetURL("/static/plugins/calendar/js/cal_visibility.js") } defer></script>
-		}
+		//
+		// THE THREE DRIVERS THAT USED TO MOUNT HERE ARE GONE FROM THIS FILE AND
+		// THAT IS THE HOTFIX. cal_visibility.js, calendar_permissions.js and
+		// calendar_daycard.js were `<script src>` tags at this point in the
+		// page — i.e. INSIDE `@layouts.App{ children... }`, and app.templ puts
+		// `{children...}` inside `<main id="main-content">`. The sidebar's addon
+		// links are `hx-boost="true" hx-select="#main-content"`, and boot.js
+		// sets `htmx.config.allowScriptTags = false`, which makes htmx not
+		// merely skip but DELETE every <script> in the swapped fragment. So a
+		// direct page load wired the day card and the Permissions button, and
+		// REACHING THE SAME PAGE THROUGH THE SIDEBAR SILENTLY DID NOT: the
+		// stylesheets in the same region survived, so the page looked perfect
+		// and the day card simply never opened.
+		//
+		// They now ride the plugin BODY-SCRIPT REGISTRY (routes.go's
+		// pluginBodyScripts → layouts.SetPluginBodyScripts → base.templ), which
+		// emits them after {children...} — OUTSIDE #main-content, therefore
+		// outside the swapped region, therefore present on a boosted navigation
+		// exactly as on a full load. All three already re-init on
+		// htmx:afterSettle / htmx:load and bail cleanly when their mount is
+		// absent, so the registry's unconditional mount costs a page that has no
+		// card and no modal precisely nothing. The registry also fixes the
+		// ordering the old comment relied on document order for: cal_visibility.js
+		// is listed before calendar_permissions.js there, because the latter
+		// captures `window.ChronicleCalVisibility` at execution time.
 		if data.IsOwner {
 			@calendarPermissionsModal()
-			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_permissions.js") } defer></script>
-		}
-		// The day card's driver. PAGE-SIDE JS IS LEGAL HERE AND ALWAYS WAS: the
-		// no-JS law is a statement about internal/widgets/calendar_block/**
-		// (boot.js:163 disables script tags inside HTMX-swapped FRAGMENTS, and
-		// boot.js:168 kills hx-on), and it says nothing about a <script> in a
-		// PAGE templ. The block just above is the precedent this copies —
-		// AssetURL + defer, mounted beside its own scaffold.
-		//
-		// It is NOT role-gated, and that is deliberate rather than an omission:
-		// a PLAYER gets the card (reading a day is a Player affordance, [DC-9]),
-		// they simply get no authoring controls in it, because the producer
-		// never rendered any.
-		if data.DayCardJSON != "" {
-			<script src={ layouts.AssetURL("/static/plugins/calendar/js/calendar_daycard.js") } defer></script>
 		}
 	}
 }
