@@ -95,11 +95,24 @@ type daycardShot struct {
 // geometry — a capture that overrode it would be photographing a box that no
 // user has. The rig scrolls, exactly as a user would.
 const daycardFoldDiag = `
+  // VISIBLE MEANS INSIDE THE FRAME, NOT MERELY LAID OUT. Three cuts of this
+  // helper and each one was a smaller lie than the last:
+  //   1. "present in the DOM" — true of a hidden box on every editor ever
+  //      captured. A sentence that cannot be false is not a report.
+  //   2. "rendered" (rect area > 0) — true of a control that has scrolled 497px
+  //      out of the .ed-body band. The overflow clips it out of the picture and
+  //      its rect goes on describing where it would be.
+  //   3. this one: area > 0 AND the rect INTERSECTS the editor's own visible
+  //      box. A footer control pinned outside .ed-body still passes; a roster
+  //      row scrolled past the fold does not.
   function shown(sel) {
     var el = document.querySelector(sel);
-    if (!el) return false;
-    var r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    var box = document.querySelector('[data-cal-dayeditor]');
+    if (!el || !box) return false;
+    var r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return false;
+    return r.bottom > b.top + 1 && r.top < b.bottom - 1 &&
+           r.right > b.left + 1 && r.left < b.right - 1;
   }
   function rendered() {
     var out = [];
@@ -108,7 +121,7 @@ const daycardFoldDiag = `
     if (shown('[data-de-tie]')) out.push('Tied to');
     if (shown('[data-de-delete]')) out.push('Delete event');
     if (shown('[data-de-tie] .pill.tie')) out.push('tie pill + ✕');
-    return out.length ? out : ['(none of the below-fold marks)'];
+    return out.length ? out : ['(none of them — they are outside this frame)'];
   }
   var fold = document.getElementById('shot-fold');
   var edb = document.querySelector('.cal-dayeditor .ed-body');
@@ -130,7 +143,7 @@ const daycardFoldDiag = `
         // mode frame with no roster in it printed a strip saying the roster
         // was there. That is the same defect one layer down, and it is the
         // reason this report exists at all.
-        ' · RENDERED in this frame: ' + rendered().join(' · ');
+        ' · VISIBLE IN THIS FRAME: ' + rendered().join(' · ');
     }
     // RELAYED OUT OF THE FRAME. A sub-500 shot renders inside a nested
     // browsing context (see daycardShotFrame) and the editor is a TOP-LAYER
@@ -459,7 +472,7 @@ func daycardShotList() []daycardShot {
 		{file: "01b-editor-gm-1440x900-light-lowerband.png", pickRestricted: true, mount: gm, w: 1440, h: 900,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · CREATE · GM · 1440×900 · light — LOWER BAND (`.ed-body` scrolled to its end)",
-			caption: "the SAME capture with `.ed-body` scrolled exactly as a wheel would scroll it — no geometry is overridden — and with the ◈ Restricted card CLICKED, because the roster is hidden until Restricted is the chosen mode. This is where the ◈ card, the allow/deny roster (five members, ✓ allow / ✕ deny per row, all five defaulting to allow because a draft carries no rule yet) and the `Tied to` field live at 1440. The fold strip lists what is RENDERED in this frame, not what is merely in the DOM. 01 and 01b together are the desktop GM editor"},
+			caption: "the SAME capture with `.ed-body` scrolled exactly as a wheel would scroll it — no geometry is overridden — and with the ◈ Restricted card CLICKED, because the roster is hidden until Restricted is the chosen mode. This is where the ◈ card, the allow/deny roster (five members, ✓ allow / ✕ deny per row, all five defaulting to allow because a draft carries no rule yet) and the `Tied to` field live at 1440. The fold strip lists what is VISIBLE IN THIS FRAME — a rect that intersects the editor box — not what is merely in the DOM or merely laid out. 01 and 01b together are the desktop GM editor"},
 		{file: "02-editor-gm-1440x900-dark.png", mount: gm, w: 1440, h: 900, dark: true, script: daycardOpenEditor,
 			title: "Event editor · CREATE · GM · 1440×900 · dark — UPPER BAND",
 			caption: "the same DOM in dark, same fold. Inherited defect 6 is visible and BOOKED, not patched: a fogged day still renders lighter than a known one"},
@@ -480,7 +493,7 @@ func daycardShotList() []daycardShot {
 		{file: "04b-editor-codm-1440x900-light-lowerband.png", pickRestricted: true, mount: codm, w: 1440, h: 900,
 			script: daycardOpenEditor, scroll: daycardEdBody,
 			title:   "Event editor · co-DM · 1440×900 · light — THE AXES PROOF, LOWER BAND",
-			caption: "read against 01b, which is the same scroll position for an Owner. IDENTICAL SCRIPT, including the click on the ◈ Restricted card — here the click finds nothing, because the card is not rendered for a viewer without CanRestrict. There the strip reads `◈ Restricted card · allow/deny roster · Tied to`; here it reads `Tied to`. One capability flipped and exactly the CanRestrict affordances moved"},
+			caption: "read against 01b, which is the same scroll position for an Owner. IDENTICAL SCRIPT, including the click on the ◈ Restricted card — here the click finds nothing, because the card is not rendered for a viewer without CanRestrict. There the strip reads `◈ Restricted card · allow/deny roster · Tied to`; here it reads `Tied to` alone. One capability flipped and exactly the CanRestrict affordances moved"},
 		{file: "05-editor-scribe-1440x900-light.png", mount: scribe, w: 1440, h: 900, script: daycardOpenEditor,
 			title: "Event editor · Scribe, no grant · 1440×900 · light — THE ABSENCE PROOF",
 			caption: "the whole Visibility fieldset is STRUCTURALLY GONE — not collapsed, not a radio group of one, not narrated. Nothing marks where it was. With the fieldset gone the body is short enough that the fold strip reports 0px below the frame"},
