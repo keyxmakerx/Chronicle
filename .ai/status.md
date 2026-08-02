@@ -59,8 +59,25 @@ all eleven station sheets at all seven widths and measures whether a control can
 show its own value, and the `?step=` reject path is pinned on the GET as well as
 the form. ADR-048 §26 records the three lessons.
 
+**A SECOND FIX ROUND FOLLOWED IT, AND ITS FIRST FINDING IS THE WAVE'S WORST.**
+An undisclosed edit had re-pointed `Index`'s zero-calendar branch at the wizard —
+and `Index` is on the PUBLIC group behind `RequireViewAccess`, so a player AND an
+anonymous visitor on a public campaign rendered the whole builder at 200, both
+`needs backend` chips and the Create button included. §6.3's "every viewer of the
+wizard is an owner, satisfied BY CONSTRUCTION" had only ever been true of the
+three ROUTE REGISTRATIONS; a Go call does not read the route table. The floor now
+travels with the handlers, a non-owner goes to V2's own empty state, and roles
+are exercised by tests rather than asserted by a test's name. Also closed: the
+fault sheet now draws the composition [WZ-15] item 5 ratified (the anchor stays,
+the fault goes where the grid would be) instead of a headline claiming the date
+cannot resolve above a Nameplate resolving it; the fidelity index lists
+twenty-four differences instead of nine "exhaustive" ones; §12.1(ii)'s five
+motion clips exist and the stills are captured at rest and reproduce
+byte-for-byte; and the importer, which had been parsing the dropped file and
+then discarding it, now adopts it as the draft. ADR-048 §26 carries all of it.
+
 Books: ADR-048 §26 · `reports/chronicle/2026-08-02-C-CALV4-WIZARD-P13.md` ·
-screenshots + measurements under
+screenshots, clips + measurements under
 `reports/chronicle/screenshots/2026-08-02-c-calv4-wizard-p13/`.
 
 ### calendar-v4 — W-G PART B SHIPPED: `/campaigns/:id/schedule` (2026-08-01)

@@ -3445,6 +3445,77 @@ cannot rot back into silence. **Left open for the coordinator, not resolved
 here:** the signed stills draw the bands and [WZ-2c] signs DEF; reconciling them
 is a host layer-set amendment, which is a coordinator act.
 
+**THE SECOND FIX ROUND — three more, and the first is the worst thing this wave
+did.** Adversarial verification rejected the first fix round too, on four
+blocking findings and three non-blocking ones. All are closed and the lessons
+are these.
+
+*A role floor that lives on the route table is a property of the route table,
+not of the handler.* §6.3 SIGNED says every viewer of the builder is an owner and
+that the `needs backend` chips' audience gate on this surface IS that floor, and
+the handler's own header asserted the rule was satisfied "BY CONSTRUCTION". It
+was satisfied by three route registrations. Then a stage re-pointed `Index`'s
+zero-calendar branch at `ShowBuilder` — and `Index` lives on the PUBLIC group
+behind `RequireViewAccess`, which admits every role AND, on a public campaign,
+authenticated non-members and logged-out visitors. Measured, not inferred: role
+= player and role = NONE both rendered the whole wizard at 200, 58862 bytes, two
+`wz-badge wz-need` chips and a live Create button at `?step=review`. The
+capability was DISABLED (the POST 403s), not ABSENT, which is exactly the
+distinction `decisions/2026-07-27-needs-backend-audience.md` exists to refuse.
+The floor now travels with the handlers through one predicate byte-identical to
+`RequireRole`'s own, so a Go call reaches the same gate a router does; `Index`
+sends a non-owner to V2, whose `calendarV2EmptyState` is the DESIGNED non-owner
+surface for a campaign with no calendar. **And the test named for the property
+had never had one** — it asserted chip TEXT and exercised no role at all, which
+is why the regression shipped green. A test whose NAME asserts a property its
+BODY does not exercise is worse than no test: it occupies the slot.
+
+*A composition ratified "as drawn" is a composition, not a headline.* [WZ-15]
+item 5 ratified the fault sheet's TWO HONESTY STATES AT ONCE — the anchor
+asserting what today resolves to, beside a Year length in warn ink and a grid
+saying it has nothing to draw. The build replaced the anchor with a warn rail
+reading "Cannot resolve a date" and drew an empty grid box, so the sheet printed
+a false claim about the model a hundred pixels above the Block's own Nameplate
+reading "Hammer 1, RoW 1523" — the very falsehood [WZ-3] was signed to remove
+from the OTHER fault. The cause was scope: the wizard's anchor fault asked "is
+anything in the declaration broken" where the drawing asks "does TODAY resolve".
+Each question now goes to the thing that can answer it, and the Block is not
+asked to draw a month with no days, because an empty grid shape is the
+placeholder §6.2 refuses by name.
+
+*Evidence claiming to be exhaustive is a claim, and it is gated on.* The
+screenshot index listed nine data-forced differences and called them stated, not
+hidden. The verifier found four more by eye in one pass — the month grid's lead
+of six, which is real `monthBaseAbsoluteDay` arithmetic and the most visible
+thing in the preview column; the resolved-date line's FORMAT as well as its day;
+two-letter weekday headers; wrapped delete controls — and this round found
+several more. The list is twenty-four now and says which are rulings, which are
+arithmetic, and which are this slice's own judgement. **A gate that reads off a
+list inherits that list's honesty.**
+
+*And a motion deliverable cannot be gated on stills.* §12.1(ii) required a clip
+per shipped pass and the evidence directory held zero; the still set was itself
+non-deterministic, six of forty-two differing between runs purely on the frame
+they landed. Stills are now captured at rest and reproduce byte-for-byte, and
+the motion is gated by five built clips — each frame a separate headless load
+with the register paused at an exact time through the Web Animations API, so the
+film is reproducible and its time base is the register's own. Splitting the two
+is the point: a still proves the resting state, a clip proves the transition,
+and asking either to do the other's job is how a signed gate item quietly
+becomes an executor's judgement call.
+
+*One product bug came out of the evidence work, which is the argument for doing
+it properly.* The importer parsed the dropped file and threw it away: the
+detection line and the eight-row mapping table were built while the DRAFT was
+left untouched, so the importer's own honesty mechanism reported the facts of
+whatever was already on screen under the name of a file it had not adopted, and
+"Continue to Review" carried the preset to Create. Nothing in the suite could see
+it, because the still that would have shown it was photographed before the drop.
+The file now BECOMES the draft through the same `builderDraftFromImport` a preset
+goes through — §2.2's "one code path, two front doors", in code rather than in
+prose — and is re-validated against §7.3's bounds, because an adopted file is
+input like any other.
+
 ### Sections inside this ADR rather than beside it
 
 W-F's layer switchboard and preference store became sections HERE when they

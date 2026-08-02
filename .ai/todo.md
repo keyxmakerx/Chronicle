@@ -504,6 +504,35 @@ Phase B, W-D: the nav Calendar tab's landing surface.
   to the doors; what remains of this item is the cluster's own layout. W-F and the
   event-editor slice own the other two.
 
+### calendar-v4 remodel — booked follow-ups from C-CALV4-WIZARD-P13 (2026-08-02)
+
+W-H shipped the builder wizard. Three things it deliberately did not decide.
+
+- [ ] **The preview draws no era bands, and the signed stills do.** The wizard is
+  a HOST passing DEF, `["moons"]` ([WZ-2c] SIGNED: "a month with its moon phases
+  and nothing else"), so the `eras` layer is not docked and the four bands the
+  projection still carries have nothing asking for them. The stills
+  `builder-wizard--*` paint them on every sheet. Reconciling the two is a HOST
+  LAYER-SET AMENDMENT and therefore a coordinator act, not an executor's — W-H
+  disclosed it on the surface itself (the preview's note under the month) and
+  here, rather than turning a layer on to make a picture match.
+- [ ] **Harptos ships ONE era where the mockup ships two, and that goes past the
+  letter of [WZ-4].** The ruling struck `eraBands` — a mid-month boundary "is not
+  expressible on main" — and the wave also dropped the second era ("Age of the
+  Emberfall", authored to begin 18 Hammer 1523), on the reasoning that at year
+  granularity an AE beginning in 1523 would contradict the signed "1523 RoW" year
+  line. That reasoning is recorded in `builder_presets_test.go` and is defensible,
+  but it is a slice judgement rather than the ruling, so it is flagged rather than
+  filed: Review reads "Eras 1", the preview stat reads "RoW", and the signed
+  stills read "Eras 2" / "RoW · AE".
+- [ ] **The Simple Calendar parser names every import "Imported Calendar".**
+  `parseSimpleCalendar` never reads `calendar.name`, so a Simple Calendar file
+  dropped on the wizard's importer front door arrives with a placeholder name the
+  author must retype on Review. `import.go`'s parsers were out of W-H's scope
+  (the dispatch names them in "Files you do NOT own"), and the wizard's tests now
+  assert what the parser really does rather than what it ought to — which is what
+  makes the gap visible. One field in the parser closes it.
+
 ### calendar-v4 remodel — booked follow-ups from C-CALV4-HOST-P3 (2026-07-28)
 
 Phase B, W-C: the Block's first production caller (the entity-page embed).
