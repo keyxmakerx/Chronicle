@@ -22,21 +22,26 @@ type benchSectionRepo struct {
 	*mockCalendarRepo
 	benchSections        []string
 	benchSectionsWritten bool
+	// The calendar id the write was attached to. The empty string is the value
+	// that used to go into a NOT NULL column foreign-keyed to calendars(id),
+	// which is what made every one of these writes a 500.
+	benchSectionsCalID string
 }
 
 func (r *benchSectionRepo) GetBenchSections(_ context.Context, _, _ string) ([]string, error) {
 	return r.benchSections, nil
 }
 
-func (r *benchSectionRepo) SetBenchSections(_ context.Context, _, _ string, keys []string) error {
+func (r *benchSectionRepo) SetBenchSections(_ context.Context, _, _, calendarID string, keys []string) error {
 	r.benchSections = keys
 	r.benchSectionsWritten = true
+	r.benchSectionsCalID = calendarID
 	return nil
 }
 
 func newBenchSectionSvc(t *testing.T) (CalendarService, *benchSectionRepo) {
 	t.Helper()
-	repo := &benchSectionRepo{mockCalendarRepo: &mockCalendarRepo{}}
+	repo := &benchSectionRepo{mockCalendarRepo: &mockCalendarRepo{getByCampaignIDFn: stockDefaultCalendar}}
 	return NewCalendarService(repo), repo
 }
 
@@ -184,6 +189,13 @@ func TestToggleBenchSection_FirstFlipFromNullOpensExactlyOne(t *testing.T) {
 	}
 	if !slices.Equal(repo.benchSections, []string{"ribbon", "nextup", "rows"}) {
 		t.Errorf("stored %v, want [ribbon nextup rows] — the store holds the CLOSED set, so opening rsvp closes the rest explicitly", repo.benchSections)
+	}
+	// The row this lands on carries calendar_active.calendar_id, which is NOT
+	// NULL and foreign-keyed to calendars(id). Writing an empty one is errno
+	// 1452, and a 1452 here is what made every disclosure flip a silent 500.
+	if repo.benchSectionsCalID != prefsDefaultCalendarID {
+		t.Errorf("wrote calendar_id %q, want the resolved default %q",
+			repo.benchSectionsCalID, prefsDefaultCalendarID)
 	}
 }
 

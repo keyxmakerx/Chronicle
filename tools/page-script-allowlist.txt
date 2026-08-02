@@ -1,0 +1,46 @@
+# tools/page-script-allowlist.txt — the page-side <script src> ratchet.
+#
+# Read tools/check-page-scripts.sh first; it explains the rule this file is the
+# state for. In one line: a `<script src>` in a PAGE templ sits inside
+# <main id="main-content">, which every boosted sidebar navigation swaps, and
+# htmx DELETES script tags out of a swapped fragment (allowScriptTags=false).
+# The surface then wires on a direct load and silently does not through the
+# sidebar. New ones are forbidden; these are the survivors.
+#
+# FORMAT: `<count> <path>`, one per line, blank lines and #-comments ignored.
+# The count is occurrences of the literal `<script src=`, not lines.
+#
+# THIS FILE MAY ONLY SHRINK. Lowering a count (or deleting a line) as you fix a
+# surface is the point. Raising one, or adding a line, is what the guard exists
+# to refuse — and a count that is HIGHER than reality also fails, because slack
+# in a ratchet is a hole you can put a script back through.
+#
+# Exempt by construction and therefore absent below:
+#   internal/templates/layouts/base.templ — the layout itself, which emits
+#   after {children...} and is the outside of the swapped region. It is where
+#   the plugin body-script registry (internal/app/routes.go →
+#   layouts.SetPluginBodyScripts) lands, and it is the place a page-side script
+#   should MOVE to rather than a place to add one.
+#
+# The sweep of everything below is booked as C-HTMX-SCRIPT-SWEEP in .ai/todo.md.
+# Each line is a surface that may be silently dead on boosted navigation today;
+# whether it actually is depends on whether the file renders inside
+# #main-content and whether its module re-inits on htmx:afterSettle. Neither is
+# assumed here — this guard stops the bleeding, the sweep does the diagnosis.
+
+2 internal/plugins/calendar/app_dashboard.templ
+3 internal/plugins/calendar/calendar_v2.templ
+3 internal/plugins/calendar/calendar_v2_sky_strip.templ
+3 internal/plugins/calendar/calendar_v2_worldstate.templ
+1 internal/plugins/calendar/entity_calendar_block.templ
+3 internal/plugins/calendar/entity_skybox_block.templ
+3 internal/plugins/calendar/entity_worldstate_block.templ
+1 internal/plugins/calendar/schedule.templ
+1 internal/plugins/calendar/subresource_v2.templ
+1 internal/plugins/designlab/design_lab.templ
+1 internal/plugins/entities/characters.templ
+3 internal/plugins/maps/maps.templ
+1 internal/plugins/sessions/availability.templ
+1 internal/plugins/timeline/timeline.templ
+1 internal/templates/demo/calendar.templ
+1 internal/templates/demo/calendar_timeline_tuner.templ

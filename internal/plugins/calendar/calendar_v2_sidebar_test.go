@@ -146,11 +146,12 @@ func TestSetSidebarPinned_EmptyUserRejects(t *testing.T) {
 }
 
 func TestSetSidebarPinned_HappyPath(t *testing.T) {
-	var capturedUser, capturedCampaign string
+	var capturedUser, capturedCampaign, capturedCalendar string
 	var capturedPinned bool
 	repo := &mockCalendarRepo{
-		setSidebarPinnedFn: func(_ context.Context, userID, campaignID string, pinned bool) error {
-			capturedUser, capturedCampaign, capturedPinned = userID, campaignID, pinned
+		getByCampaignIDFn: stockDefaultCalendar,
+		setSidebarPinnedFn: func(_ context.Context, userID, campaignID, calendarID string, pinned bool) error {
+			capturedUser, capturedCampaign, capturedCalendar, capturedPinned = userID, campaignID, calendarID, pinned
 			return nil
 		},
 	}
@@ -160,6 +161,12 @@ func TestSetSidebarPinned_HappyPath(t *testing.T) {
 	}
 	if capturedUser != "user-1" || capturedCampaign != "camp-1" || capturedPinned {
 		t.Errorf("repo called with (%q, %q, %v); want (user-1, camp-1, false)", capturedUser, capturedCampaign, capturedPinned)
+	}
+	// calendar_active.calendar_id is NOT NULL and foreign-keyed to calendars(id).
+	// The pin used to be written against an empty one, which MariaDB refuses.
+	if capturedCalendar != prefsDefaultCalendarID {
+		t.Errorf("repo called with calendar_id %q, want the resolved default %q",
+			capturedCalendar, prefsDefaultCalendarID)
 	}
 }
 
