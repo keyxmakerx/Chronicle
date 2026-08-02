@@ -414,14 +414,130 @@ func TestBuilderPage_RendersTheNineStationsAndTheRealBlock(t *testing.T) {
 	}
 }
 
-// TestBuilderPage_TheNeedsBackendChipsAreOwnerOnlyByConstruction.
+// TestBuilderShow_IsOwnerOnly is the test that should have existed from stage 1,
+// and its absence is why a player and the public rendered the whole wizard.
 //
-// The chip is GM-facing honesty copy that never renders to a player. On this
-// surface that is satisfied by the ROLE FLOOR rather than by a branch — so the
-// thing to assert is that the surface HAS no role branch to get wrong, and that
-// the chips it does render are only where the text is literally about a backend
-// gap (LAYERS-P9 §10's rule).
-func TestBuilderPage_TheNeedsBackendChipsAreOwnerOnlyByConstruction(t *testing.T) {
+// §6.3 SIGNED: "every route in §7 has an Owner role floor — every viewer of the
+// wizard is an owner. THERE IS NO PLAYER RENDER OF THE BUILDER AND THERE MUST
+// NEVER BE ONE", and decisions/2026-07-27-needs-backend-audience.md: "for a
+// player the zone simply does not appear". Both were asserted about the ROUTE
+// TABLE and nowhere about the handler, so when Index — which lives on the
+// PUBLIC group behind RequireViewAccess (every role, plus anonymous visitors on
+// a public campaign) — began delegating its zero-calendar branch to
+// ShowBuilder, the guarantee was gone and every test stayed green: MEASURED at
+// role=player and role=NONE, status 200, 58862 bytes, two `wz-badge wz-need`
+// chips and a live Create button.
+//
+// So this exercises ROLES, on the real handler, and it walks every one of them.
+func TestBuilderShow_IsOwnerOnly(t *testing.T) {
+	h := &Handler{}
+	render := func(cc *campaigns.CampaignContext) (int, string, error) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/calendars/builder?step=review", nil)
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(req, rec)
+		if cc != nil {
+			c.Set("campaign_context", cc)
+		}
+		err := h.ShowBuilder(c)
+		return rec.Code, rec.Body.String(), err
+	}
+	ctx := func(role campaigns.Role, member bool) *campaigns.CampaignContext {
+		return &campaigns.CampaignContext{
+			Campaign:   &campaigns.Campaign{ID: "camp-1", Name: "Imix", IsPublic: true},
+			MemberRole: role, IsMember: member, IsAnonymous: !member,
+		}
+	}
+
+	// Every role BELOW Owner is a 403 — including the anonymous visitor of a
+	// PUBLIC campaign, who is RoleNone and reaches Index without a session.
+	for _, tc := range []struct {
+		name string
+		cc   *campaigns.CampaignContext
+	}{
+		{"anonymous visitor, public campaign", ctx(campaigns.RoleNone, false)},
+		{"authenticated non-member", ctx(campaigns.RoleNone, false)},
+		{"player", ctx(campaigns.RolePlayer, true)},
+		{"scribe", ctx(campaigns.RoleScribe, true)},
+	} {
+		code, body, err := render(tc.cc)
+		if err == nil {
+			t.Errorf("%s rendered the builder (%d, %d bytes) — §6.3 says there is no "+
+				"player render of the builder and there must never be one",
+				tc.name, code, len(body))
+			continue
+		}
+		var appErr *apperror.AppError
+		if !errors.As(err, &appErr) || appErr.Code != http.StatusForbidden {
+			t.Errorf("%s must be a 403; got %v", tc.name, err)
+		}
+		// And the refusal is total: not one byte of the shell, and above all not
+		// one `needs backend` chip, reaches a non-owner.
+		if strings.Contains(body, "wz-shell") || strings.Contains(body, "wz-need") {
+			t.Errorf("%s received wizard markup in the refusal body", tc.name)
+		}
+	}
+
+	// The Owner renders, and the chips the audience ruling is about are there —
+	// which is what makes the four refusals above meaningful rather than vacuous.
+	code, body, err := render(ctx(campaigns.RoleOwner, true))
+	if err != nil {
+		t.Fatalf("owner: %v", err)
+	}
+	if code != http.StatusOK {
+		t.Fatalf("owner status=%d want 200", code)
+	}
+	if n := strings.Count(body, "wz-badge wz-need"); n < 2 {
+		t.Errorf("the owner's Review station should carry the two needs-backend chips; got %d", n)
+	}
+
+	// A missing campaign context is a 500, never an accidental render: a handler
+	// reached without the middleware that populates the floor has no floor.
+	if _, _, err := render(nil); err == nil {
+		t.Error("ShowBuilder with no campaign context rendered instead of failing")
+	}
+}
+
+// TestBuilderWriteRoutes_AreOwnerOnly does the same for the two POSTs. A GET
+// that leaks the chips and a POST that creates a calendar are different sizes
+// of failure, and only one of them was measured, so both are pinned.
+func TestBuilderWriteRoutes_AreOwnerOnly(t *testing.T) {
+	d, err := builderPresetDraft("harptos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{}
+	for _, role := range []campaigns.Role{campaigns.RoleNone, campaigns.RolePlayer, campaigns.RoleScribe} {
+		for _, tc := range []struct {
+			name string
+			call func(echo.Context) error
+		}{
+			{"preview", h.BuilderPreviewAPI},
+			{"create", h.BuilderCreateAPI},
+		} {
+			c := builderFormCtx(t, builderFormFor(d, 0, false))
+			c.Set("campaign_context", &campaigns.CampaignContext{
+				Campaign: &campaigns.Campaign{ID: "camp-1"}, MemberRole: role,
+				IsMember: role > campaigns.RoleNone,
+			})
+			err := tc.call(c)
+			var appErr *apperror.AppError
+			if !errors.As(err, &appErr) || appErr.Code != http.StatusForbidden {
+				t.Errorf("%s at role %d must be a 403; got %v", tc.name, role, err)
+			}
+		}
+	}
+}
+
+// TestBuilderPage_TheNeedsBackendChipTextIsOnlyEverNeedsBackend.
+//
+// RENAMED, because the old name — ...AreOwnerOnlyByConstruction — asserted a
+// property this body never touched (it exercises no role and issues no request)
+// while the property itself was broken on the wire. The role is now the subject
+// of TestBuilderShow_IsOwnerOnly, and this keeps the assertion it always
+// actually made: the SIGNED chip is reserved for genuine backend gaps and its
+// text is literally "needs backend" (LAYERS-P9 §10's rule).
+func TestBuilderPage_TheNeedsBackendChipTextIsOnlyEverNeedsBackend(t *testing.T) {
 	d, err := builderPresetDraft("gregorian")
 	if err != nil {
 		t.Fatal(err)
@@ -470,8 +586,11 @@ func TestBuilderShow_RejectsAnUnknownStationOnTheQuery(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/campaigns/camp-1/calendars/builder"+query, nil)
 		rec := httptest.NewRecorder()
 		c := echo.New().NewContext(req, rec)
+		// OWNER, because the wizard has no other audience — see
+		// TestBuilderShow_IsOwnerOnly, which is the test that says so.
 		c.Set("campaign_context", &campaigns.CampaignContext{
-			Campaign: &campaigns.Campaign{ID: "camp-1", Name: "Imix"}})
+			Campaign:   &campaigns.Campaign{ID: "camp-1", Name: "Imix"},
+			MemberRole: campaigns.RoleOwner, IsMember: true})
 		return rec.Code, h.ShowBuilder(c)
 	}
 

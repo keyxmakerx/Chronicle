@@ -5,12 +5,21 @@
 //
 // ── EVERY VIEWER OF THIS SURFACE IS AN OWNER, AND THAT IS THE CHIP GATE ────
 //
-// All three routes carry campaigns.RequireRole(campaigns.RoleOwner). The
+// All three routes carry campaigns.RequireRole(campaigns.RoleOwner) AND every
+// handler re-states the same floor through builderOwnerContext. The
 // `needs backend` chip is GM-FACING HONESTY COPY and never renders to a player
 // (decisions/2026-07-27-needs-backend-audience.md: "for a player the zone
-// simply does not appear"), and on this surface that rule is satisfied BY
-// CONSTRUCTION rather than by a branch — there is no player render of the
-// builder and there must never be one.
+// simply does not appear"), and on this surface that rule is satisfied by the
+// ROLE FLOOR rather than by a branch in this file — there is no player render
+// of the builder and there must never be one.
+//
+// It was once written here as satisfied "BY CONSTRUCTION", and that was too
+// strong: the floor lived on the three route registrations only, so when the
+// PUBLIC Index route began delegating its zero-calendar branch to ShowBuilder,
+// a player — and an anonymous visitor on a public campaign — rendered this
+// whole file, both chips and the Create button, at 200. The floor now travels
+// with the handlers (builder_handler.go) and two tests exercise real roles
+// rather than chip text.
 //
 // THE FAILURE MODE THIS COMMENT EXISTS TO PREVENT: a future slice lowering the
 // role floor to Player+ "so co-DMs can look", and silently shipping four

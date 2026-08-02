@@ -129,6 +129,48 @@ func TestCutover_IndexNoCalendarsShowsSetup(t *testing.T) {
 	}
 }
 
+// TestCutover_IndexNoCalendarsIsOwnerOnly is the pin that was missing when the
+// zero-calendar branch was re-pointed at the wizard.
+//
+// Index is registered on the PUBLIC group — routes.go: pub.GET("/calendars",
+// h.Index, campaigns.RequireViewAccess()) — and RequireViewAccess admits any
+// member at any role AND, on a public campaign, an authenticated non-member or
+// a logged-out visitor at RoleNone. The old zero-calendar branch rendered the
+// V1 chooser, which carried no honesty chips; the new one renders the BUILDER,
+// which carries two `needs backend` chips and a Create button, and
+// decisions/2026-07-27-needs-backend-audience.md is explicit that "for a player
+// the zone simply does not appear".
+//
+// So: a non-owner with zero calendars goes to V2, whose own empty state is the
+// designed surface for exactly this case ("No calendar yet … Ask the campaign
+// owner to add one"). 302 rather than 301 — a PERMANENT redirect whose target
+// depends on the requester's role is a cache poisoning waiting to happen.
+func TestCutover_IndexNoCalendarsIsOwnerOnly(t *testing.T) {
+	for _, role := range []campaigns.Role{campaigns.RoleNone, campaigns.RolePlayer, campaigns.RoleScribe} {
+		h := NewHandler(&cutoverStub{})
+		e := echo.New()
+		rec := httptest.NewRecorder()
+		c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+		c.Set("campaign_context", &campaigns.CampaignContext{
+			Campaign: &campaigns.Campaign{ID: "camp-1", IsPublic: true}, MemberRole: role,
+		})
+		if err := h.Index(c); err != nil {
+			t.Fatalf("Index at role %d: %v", role, err)
+		}
+		if rec.Code != http.StatusFound {
+			t.Errorf("role %d: status=%d want 302 to V2 — a non-owner must never "+
+				"reach the builder", role, rec.Code)
+		}
+		if loc := rec.Header().Get("Location"); loc != "/campaigns/camp-1/calendar/v2" {
+			t.Errorf("role %d: Location=%q want the V2 shell", role, loc)
+		}
+		if body := rec.Body.String(); strings.Contains(body, "wz-shell") ||
+			strings.Contains(body, "wz-need") {
+			t.Errorf("role %d: wizard markup reached a non-owner", role)
+		}
+	}
+}
+
 // ShowBuilder is the stable create entry — it renders regardless of how many
 // calendars already exist (so "New calendar" can add a second).
 //
@@ -168,14 +210,14 @@ func TestCutover_RouteTablePreservesTimelineAndEmbed(t *testing.T) {
 		"/campaigns/:id/calendars/:calId":          "RedirectShowV2",
 		"/campaigns/:id/calendars/:calId/week":     "RedirectWeekV2",
 		"/campaigns/:id/calendars/:calId/day":      "RedirectDayV2",
-		"/campaigns/:id/calendars/:calId/timeline": "ShowTimeline",   // PRESERVE
-		"/campaigns/:id/calendars/:calId/embed":    "EmbedCalendar",  // PRESERVE
+		"/campaigns/:id/calendars/:calId/timeline": "ShowTimeline",  // PRESERVE
+		"/campaigns/:id/calendars/:calId/embed":    "EmbedCalendar", // PRESERVE
 		// PIN REFRESHED by C-CALV4-WIZARD-P13 [WZ-13] SIGNED: the stable create
 		// entry now resolves to the builder wizard. The route is unchanged and
 		// therefore so is the snapshot; only the handler behind it moved, which
 		// is what makes every existing link and every external bookmark land on
 		// the designed surface with no href edited.
-		"/campaigns/:id/calendars/new":             "ShowBuilder",    // stable create
+		"/campaigns/:id/calendars/new": "ShowBuilder", // stable create
 	}
 	got := map[string]string{}
 	for _, r := range e.Routes() {

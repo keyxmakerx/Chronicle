@@ -8,7 +8,16 @@
 // identical floor the three existing creation doors ride. The `needs backend`
 // chip is GM-FACING HONESTY COPY that never renders to a player
 // (decisions/2026-07-27-needs-backend-audience.md), and on this surface that
-// rule is satisfied BY CONSTRUCTION: there is no player render of the builder.
+// rule is satisfied by the ROLE FLOOR: there is no player render of the builder.
+//
+// "BY CONSTRUCTION" WAS TOO STRONG, AND THE WAVE PROVED IT. The floor was a
+// property of the three ROUTE REGISTRATIONS, not of the handlers, and Index —
+// which lives on the PUBLIC group behind RequireViewAccess, admitting every
+// role and, on a public campaign, anonymous visitors — began delegating its
+// zero-calendar branch to ShowBuilder. A player and the public rendered the
+// whole wizard, both `needs backend` chips and the Create button included, at
+// 200. So each handler now takes builderOwnerContext FIRST: one policy, stated
+// where a Go call can reach it, not only where a router can.
 //
 // THE FAILURE MODE THIS COMMENT PREVENTS is a later slice lowering the floor to
 // Player+ "so co-DMs can look", silently shipping those chips into a player's
@@ -108,12 +117,58 @@ import (
 // the surface the wizard exists to replace.
 const builderDefaultPreset = "harptos"
 
+// builderOwnerContext is THE WIZARD'S OWN ROLE FLOOR, restated in the handlers
+// so it travels with them rather than with their route registrations.
+//
+// §6.3 SIGNED: "every route in §7 has an Owner role floor — every viewer of the
+// wizard is an owner. There is no player render of the builder and there must
+// never be one", and the `needs backend` chips' audience gate on this surface IS
+// that floor. The three §7.1 registrations carry RequireRole(RoleOwner) and are
+// the primary gate. This is the same floor expressed where a Go CALL, rather
+// than a route, can reach a handler — which is exactly how the guarantee was
+// broken once already: Index sits on the public group behind RequireViewAccess
+// (any role, plus anonymous visitors on a public campaign) and delegated its
+// zero-calendar branch straight to ShowBuilder.
+//
+// The predicate is deliberately byte-identical to RequireRole's own
+// (`cc.MemberRole < minRole`, campaigns/middleware.go) and returns the same
+// apperror.NewForbidden, so this is one policy restated, never a second one that
+// can drift. IF THE FLOOR EVER MOVES, every chip in builder.templ must be
+// re-audited in the same commit — see this file's header.
+func builderOwnerContext(c echo.Context) (*campaigns.CampaignContext, error) {
+	cc := campaigns.GetCampaignContext(c)
+	if cc == nil {
+		return nil, apperror.NewInternal(
+			fmt.Errorf("builder handler reached without a campaign context"))
+	}
+	if cc.MemberRole < campaigns.RoleOwner {
+		return nil, apperror.NewForbidden("insufficient permissions")
+	}
+	return cc, nil
+}
+
 // ShowBuilder renders the wizard. §7.2.
 //
 // IT READS NOTHING. No calendar row, no campaign row beyond the context the
 // middleware already resolved. A GET that reads nothing cannot leak anything.
+//
+// IT CARRIES ITS OWN OWNER FLOOR, and that is not belt-and-braces. Its route
+// registration carries campaigns.RequireRole(RoleOwner), but a handler is also
+// a Go method, and Index — registered on the PUBLIC group at RequireViewAccess,
+// which admits players, non-members and anonymous visitors on a public campaign
+// — delegates its zero-calendar branch here. That delegation shipped the whole
+// wizard, `needs backend` chips and Create button included, to every viewer of
+// a calendar-less public campaign. §6.3's guarantee is that EVERY VIEWER OF THE
+// BUILDER IS AN OWNER; a guarantee that holds only for two of a handler's three
+// call sites is not a guarantee, so the check lives in the handler where every
+// caller inherits it. The condition is byte-identical to RequireRole(RoleOwner)'s
+// own (`cc.MemberRole < minRole`), so the middleware stays the primary gate and
+// this can never be a SECOND, divergent policy.
 func (h *Handler) ShowBuilder(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
+	cc, err := builderOwnerContext(c)
+	if err != nil {
+		return err
+	}
 
 	step, ok := builderStationIndex(c.QueryParam("step"))
 	if !ok {
@@ -148,7 +203,10 @@ func (h *Handler) ShowBuilder(c echo.Context) error {
 // One route, two fragments, and NOT a fourth route — which is what keeps the
 // wizard's whole route budget at three.
 func (h *Handler) BuilderPreviewAPI(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
+	cc, err := builderOwnerContext(c)
+	if err != nil {
+		return err
+	}
 
 	draft, step, importer, pvMonth, wholeShell, err := builderReadForm(c)
 	if err != nil {
@@ -180,7 +238,10 @@ func (h *Handler) BuilderPreviewAPI(c echo.Context) error {
 // advertised: on a sub-resource failure the half-created calendar is deleted,
 // so a failed Create leaves the campaign exactly as it found it.
 func (h *Handler) BuilderCreateAPI(c echo.Context) error {
-	cc := campaigns.GetCampaignContext(c)
+	cc, err := builderOwnerContext(c)
+	if err != nil {
+		return err
+	}
 	ctx := c.Request().Context()
 
 	draft, _, _, _, _, err := builderReadForm(c)
