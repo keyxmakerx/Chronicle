@@ -206,10 +206,20 @@ func builderHarness(t *testing.T, title, caption, body string, dark, reduced boo
 // So the stills are captured at REST. The block below is Chronicle's own global
 // reduced-motion guard verbatim (static/css/input.css), minus the media query:
 // every animation finishes in 0.01ms, so every frame is the resting state and
-// two runs produce the same bytes. It suppresses nothing about layout, colour or
-// content, because all four keyframes end at the element's natural state — which
-// builder_css_contract_test.go pins by keeping them to opacity, transform and
-// clip-path.
+// two runs produce CONTENT-IDENTICAL images. It suppresses nothing about layout,
+// colour or content, because all four keyframes end at the element's natural
+// state — which builder_css_contract_test.go pins by keeping them to opacity,
+// transform and clip-path.
+//
+// "CONTENT-IDENTICAL", NOT "BYTE-FOR-BYTE", and the difference was measured
+// rather than hedged: regenerating the full set reproduces 39 of 42 files byte
+// for byte, and three — `start--mobile-dark`, `step-structure--mobile-dark`,
+// `step-week--light` — differ by a few hundred to a few thousand bytes, every
+// differing pixel inside the generator's OWN caption line and every one of them
+// glyph antialiasing. The settle fixed the real non-determinism (frames caught
+// mid-pv-swap or mid-w-in); text rasterisation is not something a stylesheet
+// controls, and claiming a byte guarantee the harness cannot give is how a
+// gate's other claims start being read as approximate.
 //
 // THE MOTION IS NOT GATED BY THESE. It is gated by the five clips
 // (TestGenerateBuilderClips), which is the split §12.1 asks for: "a PNG of a
@@ -351,14 +361,60 @@ var builderMobileKeys = []string{
 	"step-review", "importer", "fault", "rail-sticky",
 }
 
-// builderShotCaption prints the arithmetic the coordinator reads off the image.
+// builderShotCaption prints the arithmetic the coordinator reads off the image,
+// FOR THE WIDTH THE IMAGE WAS ACTUALLY PHOTOGRAPHED AT.
 //
-// The preview host chain at 390 is stated once and re-derived here so a caption
-// can never disagree with the sheet: 390 host → 16px gutter each side → 358
-// page → 1px shell border each side → 356 → 10px panel padding each side → 336
-// preview host, and sizeClass(336) is std — the signed threshold is 300, so the
-// month renders exactly as it does at 1280.
+// The narrow captions used to print the 390px chain under a 500px photograph:
+// title said "500px window", caption said "viewport 390px · preview host
+// ≈336px · 10 columns at ≈33.6px", and at the width really in the picture the
+// chain is 500 − 32 − 2 − 20 = 446px and ≈44.6px a column. The tier conclusion
+// survived — both are std — but §12.2's whole point is that the arithmetic is
+// read OFF THE IMAGE, and on eighteen of the forty-two images the arithmetic
+// described a different width than the pixels. A caption that is right about
+// the conclusion and wrong about the numbers teaches a reader to stop checking.
+//
+// So the caption states the photographed width, and the 390px readings ride a
+// SEPARATE probe line (builderProbeCaption) that names where they come from —
+// TestBuilderProbe_NarrowLaneHoldsItsGate, which takes them inside a frame
+// where the viewport really is 390, because headless Chromium will not give a
+// window narrower than 500.
+//
+// The chain is stated once and re-derived here so a caption can never disagree
+// with the sheet: viewport → 16px gutter each side → 1px shell border each side
+// → 10px panel padding each side → preview host. sizeClass ≥300 is std, so the
+// month renders at 390, at 500 and at 1280 the same way.
 func builderShotCaption(key string, vw int, d *builderDraft) string {
+	host, tier := builderPreviewHost(vw)
+	col := 0.0
+	if len(d.Weekdays) > 0 {
+		col = float64(host) / float64(len(d.Weekdays))
+	}
+	return fmt.Sprintf(
+		"station <b>%s</b> · viewport %dpx · preview host ≈%dpx → size class <b>%s</b> · "+
+			"%d columns at ≈%.1fpx · the preview is the SHIPPED Block, not a second renderer",
+		key, vw, host, tier, len(d.Weekdays), col)
+}
+
+// builderProbeCaption is the second caption line the narrow stills carry: the
+// 390px arithmetic, labelled as the PROBE's reading rather than the photograph's.
+func builderProbeCaption(d *builderDraft) string {
+	host, tier := builderPreviewHost(390)
+	col := 0.0
+	if len(d.Weekdays) > 0 {
+		col = float64(host) / float64(len(d.Weekdays))
+	}
+	return fmt.Sprintf(
+		"<br>the 390px readings, MEASURED IN A FRAME by TestBuilderProbe_NarrowLaneHoldsItsGate "+
+			"(headless Chromium will not give a window under %dpx): viewport 390px · "+
+			"preview host ≈%dpx → size class <b>%s</b> · %d columns at ≈%.1fpx — same tier, "+
+			"same treatment",
+		builderMinHeadlessWindow, host, tier, len(d.Weekdays), col)
+}
+
+// builderPreviewHost derives the preview column's width and its size class from
+// the viewport, for both lanes. One derivation, so the two caption lines and the
+// probe cannot drift apart.
+func builderPreviewHost(vw int) (int, string) {
 	host := vw - 32 - 2 - 20
 	if vw >= 1101 {
 		// desktop: 1280 page − 186 rail − 442 panel, then the column's padding
@@ -373,14 +429,7 @@ func builderShotCaption(key string, vw int, d *builderDraft) string {
 	case host >= 240:
 		tier = "mini"
 	}
-	col := 0.0
-	if len(d.Weekdays) > 0 {
-		col = float64(host) / float64(len(d.Weekdays))
-	}
-	return fmt.Sprintf(
-		"station <b>%s</b> · viewport %dpx · preview host ≈%dpx → size class <b>%s</b> · "+
-			"%d columns at ≈%.1fpx · the preview is the SHIPPED Block, not a second renderer",
-		key, vw, host, tier, len(d.Weekdays), col)
+	return host, tier
 }
 
 // builderMaxShotHeight caps a full-page capture. Nothing in the wizard is
@@ -490,7 +539,8 @@ func TestGenerateBuilderScreenshots(t *testing.T) {
 				dark:  dark, w: builderMinHeadlessWindow, h: 1600,
 				caption: func(k string) string {
 					d, _, _, _ := builderShotState(t, k)
-					return builderShotCaption(k, 390, d)
+					return builderShotCaption(k, builderMinHeadlessWindow, d) +
+						builderProbeCaption(d)
 				}(key),
 				body: func(k string) func(*testing.T) string {
 					return func(t *testing.T) string {
@@ -1041,6 +1091,62 @@ func TestBuilderProbe_TheMonthDidNotMove(t *testing.T) {
 		if !builderBudget.keyframes[n] && n != "" {
 			t.Errorf("an animation named %q ran, and it is outside the four-keyframe budget", n)
 		}
+	}
+}
+
+// TestBuilderCaptions_DescribeThePhotographedWidth pins the fix for a caption
+// that was arithmetic about a width the image is not.
+//
+// The narrow set is captured at a 500px window (headless Chromium will not give
+// a narrower one) and its captions printed the 390px chain, so eighteen of the
+// forty-two images stated a host width and a per-column measure for a different
+// viewport than the pixels. §12.2's premise is that the coordinator reads the
+// arithmetic OFF THE IMAGE; a caption that is right about the tier and wrong
+// about the numbers teaches a reader to stop checking.
+//
+// This runs everywhere, needs no browser, and asserts both halves: the
+// photograph's own numbers, and the 390px readings present and LABELLED as the
+// probe's rather than the photograph's.
+func TestBuilderCaptions_DescribeThePhotographedWidth(t *testing.T) {
+	d, err := builderPresetDraft("harptos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shot := builderShotCaption("presets", builderMinHeadlessWindow, d)
+	probe := builderProbeCaption(d)
+
+	host, tier := builderPreviewHost(builderMinHeadlessWindow)
+	if host != 446 || tier != "std" {
+		t.Fatalf("the 500px chain is 500 − 32 − 2 − 20 = 446 → std; got %d → %s", host, tier)
+	}
+	for _, want := range []string{
+		fmt.Sprintf("viewport %dpx", builderMinHeadlessWindow),
+		fmt.Sprintf("preview host ≈%dpx", host),
+		fmt.Sprintf("columns at ≈%.1fpx", float64(host)/float64(len(d.Weekdays))),
+	} {
+		if !strings.Contains(shot, want) {
+			t.Errorf("the narrow caption must state the PHOTOGRAPHED width's arithmetic; "+
+				"missing %q in %q", want, shot)
+		}
+	}
+	if strings.Contains(shot, "viewport 390px") {
+		t.Error("the photograph's own caption line states 390px — that is the probe's " +
+			"reading and it belongs on the probe line, not on the picture's arithmetic")
+	}
+	// And the 390 numbers are still there, attributed.
+	pHost, pTier := builderPreviewHost(390)
+	for _, want := range []string{"viewport 390px",
+		fmt.Sprintf("preview host ≈%dpx", pHost),
+		"<b>" + pTier + "</b>",
+		"TestBuilderProbe_NarrowLaneHoldsItsGate"} {
+		if !strings.Contains(probe, want) {
+			t.Errorf("the probe line must carry the 390px readings and say where they "+
+				"come from; missing %q in %q", want, probe)
+		}
+	}
+	if pTier != tier {
+		t.Errorf("390 resolves to %s and 500 to %s — the narrow stills are only evidence "+
+			"for 390 because both are the same tier", pTier, tier)
 	}
 }
 
