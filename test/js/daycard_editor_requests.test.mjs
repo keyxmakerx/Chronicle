@@ -227,6 +227,21 @@ test('the type picker is seeded from the PAGE payload, not from an Owner-only ro
   assert.equal(quest.querySelector('.g').textContent, '▲');
   assert.equal(quest.querySelector('.nm').textContent, 'Quest');
 
+  // THE PATTERN CHANNEL MUST CARRY INFORMATION, NOT MERELY EXIST — stage 8,
+  // fix-forward. `.rail` used to be asserted for the presence of a class, and
+  // it passed while every option in the rail drew `p1`: the producer emitted no
+  // pattern at all and the module's fallback supplied the same solid stroke for
+  // every type. A channel that says the same thing about everything is not a
+  // channel, and hue was doing the whole job — which is exactly what the build
+  // law forbids. The two categories carry DIFFERENT patterns and the assertion
+  // is that the rail keeps them apart.
+  const social = opts[2];
+  const pat = (o) => (o.querySelector('.rail').className.match(/\bp[1-8]\b/) || [])[0];
+  assert.equal(pat(quest), 'p4', 'the type rail dropped the category\'s own pattern');
+  assert.equal(pat(social), 'p7');
+  assert.notEqual(pat(quest), pat(social),
+    'two types share a stroke pattern, so hue is carrying the identity alone');
+
   // …and the handle the write path reads is still the one it always read.
   assert.equal(fx.editor.querySelector('[data-de-category]').tagName, 'INPUT');
 

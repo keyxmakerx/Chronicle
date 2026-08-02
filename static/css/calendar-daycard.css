@@ -490,11 +490,30 @@
   color: var(--text-primary);
 }
 .cal-dayeditor .btn.ghost { border-color: transparent; }
-.cal-dayeditor .btn.fill {
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 650;
-}
+/* THE PRIMARY ACTION IS THE BENCH'S, AND THIS RULE MAY NOT REPAINT IT.
+   FIX-FORWARD, stage 8.
+
+   This rule used to read `border-color: var(--accent); color: var(--accent)`.
+   `.cal-bench .btn.fill` (calendar-bench.css) paints `background: var(--accent)`
+   with near-white ink, and BOTH selectors have specificity (0,2,0) — so with
+   calendar-daycard.css linked SECOND (bench.templ), `color: var(--accent)` won
+   on cascade order and the editor's `Create event` / `Save changes` shipped as
+   the accent painted on the accent. MEASURED at 1.0:1 on the built page:
+   10,933px of rgb(79,107,239) fill with the glyph strokes at rgb(78,106,239).
+   The label was invisible in every shot, in both themes — the primary submit
+   control of the surface this whole slice exists to build.
+
+   THE FIX IS TO STOP OVERRIDING, NOT TO PICK A SECOND COLOUR. The Bench's fill
+   treatment is the product's shipped primary button and it is legible; the only
+   thing this sheet needs from it is weight. Inventing a token here — the
+   drawing paints gold, from `--accent-action` / `--accent-action-ink`, which
+   this product does not have — would FORK THE SIGNED TOKEN SET from one slice's
+   stylesheet, which is exactly what [ER-9] refuses and what four slices in a
+   row correctly declined to do. The divergence from editor-gm-light.png (accent
+   fill, not gold) is named in the report.
+
+   PINNED BY TestDayCardCSS_TheEditorNeverRepaintsTheBenchsPrimaryAction. */
+.cal-dayeditor .btn.fill { font-weight: 650; }
 .cal-dayeditor .btn.danger { color: var(--tone-bad, #b91c1c); }
 .cal-dayeditor .btn[hidden] { display: none; }
 .cal-dayeditor .btn:focus-visible,

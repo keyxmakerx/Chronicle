@@ -141,10 +141,28 @@ type dayCardDay struct {
 // IT IS SCRIBE+ ONLY. A player has no editor and therefore no type picker, so
 // carrying the palette to them would be payload with no consumer.
 type dayCardCategory struct {
-	Slug  string `json:"slug"`
-	Name  string `json:"name"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+	// Glyph and Axis are two of the locked triple's three channels.
 	Glyph string `json:"glyph,omitempty"`
 	Axis  string `json:"axis,omitempty"`
+	// Pattern is the THIRD, and it is the greyscale identity channel — the one
+	// that survives hue removal, and therefore the one the whole "every hue
+	// pairs with a pattern or a glyph" law actually rests on.
+	//
+	// ADDED AT STAGE 8, FIX-FORWARD, and its absence was a real defect rather
+	// than an omission: the module's type rail falls back to `p1` when a
+	// category carries no pattern, so EVERY option in the rail drew the same
+	// solid stroke and the pattern channel — which is the point of the channel
+	// — carried no information at all. Two types were separable by hue alone,
+	// which is the thing this arc's build law forbids in terms.
+	//
+	// IT IS DERIVED FROM THE SAME KEY THE BLOCK USES, not invented here.
+	// blockPatternFor(slug) is what blockMarkFor already locks a mark's pattern
+	// to (block_projection.go), so the pattern a type wears in the type rail is
+	// the pattern its events wear in the grid and in the Ledger. A second
+	// derivation would have been two identities for one category.
+	Pattern string `json:"pattern,omitempty"`
 }
 
 // dayCardMember is one campaign member as the RESTRICTED-AUDIENCE roster prints
@@ -482,9 +500,15 @@ func dayCardCategories(cal *Calendar, canAuthor bool) []dayCardCategory {
 			continue
 		}
 		cat := dayCardCategory{
-			Slug:  slug,
-			Name:  strings.TrimSpace(ec.Name),
-			Glyph: strings.TrimSpace(ec.Icon),
+			Slug: slug,
+			Name: strings.TrimSpace(ec.Name),
+			// THE SAME KEY THE BLOCK LOCKS ITS MARKS TO. blockEventAxisKey
+			// resolves an event's key to its category slug and blockMarkFor
+			// takes blockPatternFor(key) — so this is the identical
+			// derivation, and a type's rail in the editor wears the pattern
+			// its events wear in the grid.
+			Pattern: dayCardPattern(blockPatternFor(slug)),
+			Glyph:   strings.TrimSpace(ec.Icon),
 		}
 		if hue := strings.TrimSpace(ec.Color); hue != "" {
 			cat.Axis = dayCardAxis(hue)

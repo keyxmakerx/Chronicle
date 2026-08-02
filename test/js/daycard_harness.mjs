@@ -31,8 +31,14 @@ export const PAYLOAD = {
     slug: 'harptos',
     ledgerDocked: true,
     categories: [
-      { slug: 'quest', name: 'Quest', glyph: '▲', axis: '#ef4444' },
-      { slug: 'social', name: 'Social', glyph: '◆', axis: '#3b82f6' },
+      // THE LOCKED TRIPLE, SEEDED AS THE PRODUCER SEEDS IT. `pattern` is the
+      // greyscale identity channel and dayCardCategories derives it from
+      // blockPatternFor(slug) — the same key the Block locks its marks to — so
+      // the two categories here carry DIFFERENT patterns on purpose. A fixture
+      // that gave them both `p1` could not tell a working channel from a
+      // channel that has quietly stopped carrying information.
+      { slug: 'quest', name: 'Quest', glyph: '▲', axis: '#ef4444', pattern: 'p4' },
+      { slug: 'social', name: 'Social', glyph: '◆', axis: '#3b82f6', pattern: 'p7' },
     ],
     days: [
       {

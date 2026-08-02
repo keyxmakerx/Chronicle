@@ -1617,3 +1617,198 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// TestDayCardCSS_TheEditorNeverRepaintsTheBenchsPrimaryAction is NEW with
+// C-CALV4-EDITOR-R2b stage 8, and it exists because the defect it pins shipped
+// in fifteen consecutive screenshots without anyone seeing it — including the
+// person who took them.
+//
+// WHAT WENT WRONG. `.cal-bench .btn.fill` (calendar-bench.css) paints
+// `background: var(--accent)` with near-white ink. `.cal-dayeditor .btn.fill`
+// (calendar-daycard.css) painted `color: var(--accent)`. Both selectors are
+// specificity (0,2,0) and bench.templ links the day card's sheet SECOND, so the
+// later `color` won on cascade order alone and the editor's `Create event` /
+// `Save changes` rendered as the accent ON the accent — 1.0:1, measured at
+// 10,933px of rgb(79,107,239) with the glyph strokes at rgb(78,106,239). The
+// label was not hard to read; it was not there.
+//
+// WHY A GUARD AND NOT JUST A FIX. Cascade-order collisions between two sheets
+// that style the same class are invisible in both files: each one reads
+// correctly on its own, and the bug lives in the `<link>` order in a third.
+// This test reads BOTH sheets and refuses the overlap directly.
+//
+// THE RULE: where calendar-daycard.css styles a class that calendar-bench.css
+// gives a `background`, the day card's sheet may not set `color` to the SAME
+// value without also setting a background of its own. Same token for ink and
+// fill is 1.0:1 by definition, and no measurement is needed to know it.
+//
+// MUTATION-TESTED (stage 8): restoring `color: var(--accent)` to
+// `.cal-dayeditor .btn.fill` turns this RED, naming the class, the token and
+// the two files. Restored.
+func TestDayCardCSS_TheEditorNeverRepaintsTheBenchsPrimaryAction(t *testing.T) {
+	bench := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
+	card := benchCommentRe.ReplaceAllString(dayCardCSS(t), " ")
+
+	// The Bench's fills, by the class they key off: `.btn.fill` → `var(--accent)`.
+	fills := map[string]string{}
+	for _, rule := range benchCSSRules(bench) {
+		bg := dayCardDeclValue(rule[1], "background")
+		if bg == "" {
+			bg = dayCardDeclValue(rule[1], "background-color")
+		}
+		if bg == "" {
+			continue
+		}
+		for _, cls := range dayCardTrailingClasses(rule[0]) {
+			fills[cls] = bg
+		}
+	}
+	if len(fills) == 0 {
+		t.Fatal("calendar-bench.css declares no backgrounds at all; the parser stopped " +
+			"reading and every claim below would pass vacuously")
+	}
+	// `.btn.fill` is the one this was caught on, so its presence is asserted
+	// rather than assumed — a rename that emptied the map would otherwise make
+	// this test green by disappearing.
+	if _, ok := fills[".fill"]; !ok {
+		t.Fatal("calendar-bench.css no longer gives `.fill` a background; the primary " +
+			"action's treatment moved and this guard is pointing at nothing")
+	}
+
+	for _, rule := range benchCSSRules(card) {
+		ink := dayCardDeclValue(rule[1], "color")
+		if ink == "" {
+			continue
+		}
+		if dayCardDeclValue(rule[1], "background") != "" ||
+			dayCardDeclValue(rule[1], "background-color") != "" {
+			// It repaints the fill too, so ink and fill are decided together
+			// and this guard has nothing to say about them.
+			continue
+		}
+		for _, cls := range dayCardTrailingClasses(rule[0]) {
+			bg, shared := fills[cls]
+			if !shared || bg != ink {
+				continue
+			}
+			t.Errorf("`%s` in calendar-daycard.css sets color:%s while calendar-bench.css "+
+				"gives %q background:%s — same specificity, and the day card's sheet is "+
+				"linked SECOND, so this paints the label in the fill it sits on. That is "+
+				"1.0:1 by definition, and it shipped in fifteen screenshots",
+				rule[0], ink, cls, bg)
+		}
+	}
+}
+
+// dayCardDeclValue pulls one declaration's value out of a rule body. It reads
+// the LAST occurrence, because a later declaration in the same block wins.
+func dayCardDeclValue(body, prop string) string {
+	want := ""
+	for _, decl := range strings.Split(body, ";") {
+		parts := strings.SplitN(decl, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if strings.TrimSpace(parts[0]) != prop {
+			continue
+		}
+		want = strings.TrimSpace(parts[1])
+	}
+	return want
+}
+
+// dayCardTrailingClasses returns the class token(s) the LAST compound of each
+// comma-separated selector carries — which is the element the declaration
+// actually paints. `.cal-dayeditor .btn.fill` yields `.btn` and `.fill`.
+func dayCardTrailingClasses(sel string) []string {
+	var out []string
+	for _, one := range strings.Split(sel, ",") {
+		fields := strings.Fields(strings.TrimSpace(one))
+		if len(fields) == 0 {
+			continue
+		}
+		last := fields[len(fields)-1]
+		// Drop pseudo-classes and -elements: `:hover` is a state, not the
+		// resting paint this guard is about.
+		if i := strings.Index(last, ":"); i >= 0 {
+			last = last[:i]
+		}
+		out = append(out, dayCardSelectorClassRe.FindAllString(last, -1)...)
+	}
+	return out
+}
+
+// TestDayCard_TheTypePaletteCarriesTheLockedTriple is NEW with
+// C-CALV4-EDITOR-R2b stage 8.
+//
+// THE DEFECT IT PINS. `dayCardCategory` shipped with Slug, Name, Glyph and Axis
+// and no PATTERN. The module's type rail falls back to `p1` for a category that
+// carries none, so every option in the rail drew the same solid stroke: the
+// greyscale identity channel existed as a class name and carried no
+// information, and two types were separable BY HUE ALONE. That is the one thing
+// this arc's build law forbids in terms — "every hue pairs with a pattern or a
+// glyph" — and it was invisible in review because the markup looked right.
+//
+// WHY THE PATTERN IS DERIVED AND NOT STORED. `blockMarkFor` locks an event's
+// mark to `blockPatternFor(key)` where the key is the category slug
+// (`blockEventAxisKey`). Deriving the palette's pattern from the same call means
+// a type wears ONE identity across the grid, the Ledger and the editor. A second
+// derivation would be a second identity for the same category, which is the
+// defect one layer up.
+//
+// MUTATION-TESTED (stage 8): emitting `Pattern: ""` from dayCardCategories
+// turns this RED on the first category. Restored.
+func TestDayCard_TheTypePaletteCarriesTheLockedTriple(t *testing.T) {
+	cal := benchFxHarptos()
+	cal.EventCategories = []EventCategory{
+		{Slug: "festival", Name: "Festival", Icon: "❋", Color: "#f59e0b"},
+		{Slug: "quest", Name: "Quest", Icon: "▲", Color: "#8b5cf6"},
+		{Slug: "battle", Name: "Battle", Icon: "⚔", Color: "#ef4444"},
+	}
+	cats := dayCardCategories(&cal, true)
+	if len(cats) != 3 {
+		t.Fatalf("the palette lost entries: %d of 3", len(cats))
+	}
+
+	seen := map[string]string{}
+	for _, c := range cats {
+		if c.Pattern == "" {
+			t.Errorf("category %q carries no pattern — the module falls back to p1 for it, "+
+				"so its rail is separable from every other type BY HUE ALONE", c.Slug)
+			continue
+		}
+		if !dayCardPat.MatchString(c.Pattern) {
+			t.Errorf("category %q carries pattern %q, which is not in the closed p1..p8 set "+
+				"the sheet implements", c.Slug, c.Pattern)
+		}
+		// THE IDENTITY IS THE BLOCK'S, NOT A SECOND ONE. Same key, same call,
+		// so a type's rail in the editor is the stroke its events wear in the
+		// grid — asserted by recomputing it here rather than by trusting it.
+		if want := blockPatternFor(c.Slug); c.Pattern != want {
+			t.Errorf("category %q wears %q in the type rail but %q on its marks — one "+
+				"category, two identities", c.Slug, c.Pattern, want)
+		}
+		seen[c.Pattern] = c.Slug
+	}
+
+	// THE CHANNEL MUST SEPARATE, WHICH IS A WEAKER CLAIM THAN "ALL DISTINCT"
+	// AND IS THE HONEST ONE. blockPatternFor is FNV-1a mod 8, so two slugs CAN
+	// collide — `quest` and `festival` both land on p6 in the shipped default
+	// set — and that collision is the Block's own, inherited by locking to it
+	// rather than introduced here. Asserting all-distinct would demand this
+	// slice fork the identity scheme, which is the defect it is fixing, one
+	// layer up. What the defect actually was is that the palette collapsed to
+	// ONE pattern for every type; that is what this refuses.
+	if len(seen) < 2 {
+		t.Errorf("the whole palette wears %d distinct pattern(s) — the greyscale channel "+
+			"has collapsed and hue is carrying the identity alone", len(seen))
+	}
+
+	// …and the other two channels are still there, because the claim is a
+	// TRIPLE and a test that checked only the new leg would let one of the old
+	// ones fall out unnoticed.
+	if cats[0].Axis == "" || cats[0].Glyph == "" {
+		t.Errorf("the locked triple lost a channel: axis=%q glyph=%q",
+			cats[0].Axis, cats[0].Glyph)
+	}
+}
