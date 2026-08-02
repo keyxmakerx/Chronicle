@@ -135,7 +135,7 @@ func TestSetBlockLayers_EmptyUserRejects(t *testing.T) {
 func TestSetBlockLayers_UnknownKeyRejectsWholeWrite(t *testing.T) {
 	called := false
 	svc := NewCalendarService(&mockCalendarRepo{
-		setBlockLayersFn: func(_ context.Context, _, _ string, _ []string) error {
+		setBlockLayersFn: func(_ context.Context, _, _, _ string, _ []string) error {
 			called = true
 			return nil
 		},
@@ -160,11 +160,12 @@ func TestSetBlockLayers_TooManyKeysRejects(t *testing.T) {
 }
 
 func TestSetBlockLayers_DeduplicatesAndPersists(t *testing.T) {
-	var gotUser, gotCampaign string
+	var gotUser, gotCampaign, gotCalendar string
 	var gotKeys []string
 	svc := NewCalendarService(&mockCalendarRepo{
-		setBlockLayersFn: func(_ context.Context, userID, campaignID string, keys []string) error {
-			gotUser, gotCampaign, gotKeys = userID, campaignID, keys
+		getByCampaignIDFn: stockDefaultCalendar,
+		setBlockLayersFn: func(_ context.Context, userID, campaignID, calendarID string, keys []string) error {
+			gotUser, gotCampaign, gotCalendar, gotKeys = userID, campaignID, calendarID, keys
 			return nil
 		},
 	})
@@ -175,6 +176,12 @@ func TestSetBlockLayers_DeduplicatesAndPersists(t *testing.T) {
 	}
 	if gotUser != "user-1" || gotCampaign != "camp-1" {
 		t.Errorf("repo called with (%q, %q); want (user-1, camp-1)", gotUser, gotCampaign)
+	}
+	// The row this lands on is FK'd to calendars(id): an empty id here is the
+	// errno 1452 that made the switchboard inert.
+	if gotCalendar != prefsDefaultCalendarID {
+		t.Errorf("repo called with calendar_id %q, want the resolved default %q",
+			gotCalendar, prefsDefaultCalendarID)
 	}
 	if want := []string{"moons", "eras"}; !reflect.DeepEqual(gotKeys, want) {
 		t.Errorf("persisted keys = %v, want %v (deduplicated, order preserved)", gotKeys, want)
@@ -187,8 +194,13 @@ func TestSetBlockLayers_EmptySetPersistsAsEmptyNotNil(t *testing.T) {
 	var gotKeys []string
 	var called bool
 	svc := NewCalendarService(&mockCalendarRepo{
-		setBlockLayersFn: func(_ context.Context, _, _ string, keys []string) error {
+		getByCampaignIDFn: stockDefaultCalendar,
+		setBlockLayersFn: func(_ context.Context, _, _, calendarID string, keys []string) error {
 			called, gotKeys = true, keys
+			if calendarID == "" {
+				t.Error("the bare-month write went to an empty calendar_id — the column is " +
+					"NOT NULL and foreign-keyed to calendars(id), so MariaDB refuses it")
+			}
 			return nil
 		},
 	})

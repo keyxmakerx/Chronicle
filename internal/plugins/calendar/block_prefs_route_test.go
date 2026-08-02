@@ -50,7 +50,7 @@ func servePrefs(h *Handler, body string, userID string) (*httptest.ResponseRecor
 // visibility decisions — that is what keeps the W5a split intact without this
 // route knowing anything about it.
 func TestBlockPrefs_AnswersNoContentAndRefreshes(t *testing.T) {
-	h := NewHandler(NewCalendarService(&mockCalendarRepo{}))
+	h := NewHandler(NewCalendarService(&mockCalendarRepo{getByCampaignIDFn: stockDefaultCalendar}))
 	rec, err := servePrefs(h, "layers=moons,eras", "user-1")
 	if err != nil {
 		t.Fatalf("BlockPrefsAPI: %v", err)
@@ -79,7 +79,8 @@ func TestBlockPrefs_BodySuppliedIdentityIsIgnored(t *testing.T) {
 	} {
 		var gotUser, gotCampaign string
 		h := NewHandler(NewCalendarService(&mockCalendarRepo{
-			setBlockLayersFn: func(_ context.Context, userID, campaignID string, _ []string) error {
+			getByCampaignIDFn: stockDefaultCalendar,
+			setBlockLayersFn: func(_ context.Context, userID, campaignID, _ string, _ []string) error {
 				gotUser, gotCampaign = userID, campaignID
 				return nil
 			},
@@ -105,7 +106,8 @@ func TestBlockPrefs_BodySuppliedIdentityIsIgnored(t *testing.T) {
 func TestBlockPrefs_HostDescriptorsAreNotAccepted(t *testing.T) {
 	var gotKeys []string
 	h := NewHandler(NewCalendarService(&mockCalendarRepo{
-		setBlockLayersFn: func(_ context.Context, _, _ string, keys []string) error {
+		getByCampaignIDFn: stockDefaultCalendar,
+		setBlockLayersFn: func(_ context.Context, _, _, calendarID string, keys []string) error {
 			gotKeys = keys
 			return nil
 		},
@@ -130,7 +132,7 @@ func TestBlockPrefs_HostDescriptorsAreNotAccepted(t *testing.T) {
 func TestBlockPrefs_UnknownKeyIsRejectedNotDropped(t *testing.T) {
 	called := false
 	h := NewHandler(NewCalendarService(&mockCalendarRepo{
-		setBlockLayersFn: func(_ context.Context, _, _ string, _ []string) error {
+		setBlockLayersFn: func(_ context.Context, _, _, _ string, _ []string) error {
 			called = true
 			return nil
 		},
@@ -151,7 +153,8 @@ func TestBlockPrefs_EmptySetIsAChoiceAndMissingIsAnError(t *testing.T) {
 	var got []string
 	var called bool
 	h := NewHandler(NewCalendarService(&mockCalendarRepo{
-		setBlockLayersFn: func(_ context.Context, _, _ string, keys []string) error {
+		getByCampaignIDFn: stockDefaultCalendar,
+		setBlockLayersFn: func(_ context.Context, _, _, calendarID string, keys []string) error {
 			called, got = true, keys
 			return nil
 		},
@@ -167,7 +170,7 @@ func TestBlockPrefs_EmptySetIsAChoiceAndMissingIsAnError(t *testing.T) {
 		t.Errorf("the bare month persisted as %#v; want an empty non-nil slice", got)
 	}
 
-	h2 := NewHandler(NewCalendarService(&mockCalendarRepo{}))
+	h2 := NewHandler(NewCalendarService(&mockCalendarRepo{getByCampaignIDFn: stockDefaultCalendar}))
 	if _, err := servePrefs(h2, "somethingelse=1", "user-1"); err == nil {
 		t.Error("a request with no `layers` field must be a 400, not a silent bare month")
 	}
@@ -176,7 +179,7 @@ func TestBlockPrefs_EmptySetIsAChoiceAndMissingIsAnError(t *testing.T) {
 // §12.1 "Who may call it." The group stack enforces membership and the addon;
 // the handler's own floor is that an unauthenticated caller is 401, not 500.
 func TestBlockPrefs_UnauthenticatedRejects(t *testing.T) {
-	h := NewHandler(NewCalendarService(&mockCalendarRepo{}))
+	h := NewHandler(NewCalendarService(&mockCalendarRepo{getByCampaignIDFn: stockDefaultCalendar}))
 	if _, err := servePrefs(h, "layers=moons", ""); err == nil {
 		t.Fatal("no session user must reject")
 	}
@@ -187,7 +190,8 @@ func TestBlockPrefs_UnauthenticatedRejects(t *testing.T) {
 func TestBlockPrefs_WholeRegistryRoundTrips(t *testing.T) {
 	var got []string
 	h := NewHandler(NewCalendarService(&mockCalendarRepo{
-		setBlockLayersFn: func(_ context.Context, _, _ string, keys []string) error {
+		getByCampaignIDFn: stockDefaultCalendar,
+		setBlockLayersFn: func(_ context.Context, _, _, calendarID string, keys []string) error {
 			got = keys
 			return nil
 		},

@@ -61,9 +61,9 @@ type mockCalendarRepo struct {
 	setActiveCalendarFn   func(ctx context.Context, userID, campaignID, calendarID string) error
 	// Wave 1.7A §G sidebar pin preference injection.
 	getSidebarPinnedFn func(ctx context.Context, userID, campaignID string) (bool, error)
-	setSidebarPinnedFn func(ctx context.Context, userID, campaignID string, pinned bool) error
+	setSidebarPinnedFn func(ctx context.Context, userID, campaignID, calendarID string, pinned bool) error
 	getBlockLayersFn   func(ctx context.Context, userID, campaignID string) ([]string, error)
-	setBlockLayersFn   func(ctx context.Context, userID, campaignID string, keys []string) error
+	setBlockLayersFn   func(ctx context.Context, userID, campaignID, calendarID string, keys []string) error
 	// C-CAL-ENTITY-TIES-DATA-MODEL: link-table injection.
 	linkEntityEventFn     func(ctx context.Context, entityID, eventID, role string) error
 	unlinkEntityEventFn   func(ctx context.Context, entityID, eventID string) error
@@ -413,9 +413,9 @@ func (m *mockCalendarRepo) GetSidebarPinned(ctx context.Context, userID, campaig
 	return true, nil
 }
 
-func (m *mockCalendarRepo) SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error {
+func (m *mockCalendarRepo) SetSidebarPinned(ctx context.Context, userID, campaignID, calendarID string, pinned bool) error {
 	if m.setSidebarPinnedFn != nil {
-		return m.setSidebarPinnedFn(ctx, userID, campaignID, pinned)
+		return m.setSidebarPinnedFn(ctx, userID, campaignID, calendarID, pinned)
 	}
 	return nil
 }
@@ -430,9 +430,9 @@ func (m *mockCalendarRepo) GetBlockLayers(ctx context.Context, userID, campaignI
 	return nil, nil
 }
 
-func (m *mockCalendarRepo) SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error {
+func (m *mockCalendarRepo) SetBlockLayers(ctx context.Context, userID, campaignID, calendarID string, keys []string) error {
 	if m.setBlockLayersFn != nil {
-		return m.setBlockLayersFn(ctx, userID, campaignID, keys)
+		return m.setBlockLayersFn(ctx, userID, campaignID, calendarID, keys)
 	}
 	return nil
 }
@@ -447,8 +447,31 @@ func (m *mockCalendarRepo) GetBenchSections(ctx context.Context, userID, campaig
 	return nil, nil
 }
 
-func (m *mockCalendarRepo) SetBenchSections(ctx context.Context, userID, campaignID string, keys []string) error {
+func (m *mockCalendarRepo) SetBenchSections(ctx context.Context, userID, campaignID, calendarID string, keys []string) error {
 	return nil
+}
+
+// prefsDefaultCalendarID is the id withDefaultCalendar seeds. Named so an
+// assertion can say what it expects instead of repeating a literal.
+const prefsDefaultCalendarID = "cal-default"
+
+// stockDefaultCalendar is a getByCampaignIDFn giving the campaign one default
+// calendar. Assign it wherever a preference write must actually land.
+//
+// THE THREE PREFERENCE WRITERS NEED A CALENDAR AND THAT IS NOT INCIDENTAL. They
+// upsert the calendar_active row, whose calendar_id is NOT NULL and
+// foreign-keyed to calendars(id); the service therefore resolves a real calendar
+// before writing (calendarService.prefsCalendarID), and a repo whose campaign
+// holds no calendars correctly refuses the write. Tests about validation, or
+// about which keys get persisted, are not tests about that refusal — they seed a
+// calendar with this. The refusal has its own test.
+//
+// It fills the DEFAULT slot rather than the active pointer on purpose: the
+// fallback rung of the resolution ladder is the one a viewer who has never
+// touched the multi-calendar switcher lands on, and that is exactly the viewer
+// the old empty-string calendar_id seed broke.
+func stockDefaultCalendar(_ context.Context, campaignID string) (*Calendar, error) {
+	return &Calendar{ID: prefsDefaultCalendarID, CampaignID: campaignID, Name: "Default"}, nil
 }
 
 func (m *mockCalendarRepo) GetCycles(ctx context.Context, calendarID string) ([]Cycle, error) {
