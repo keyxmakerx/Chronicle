@@ -43,12 +43,27 @@ function camel(name) {
   return name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 }
 
+// THE OPERATION LOG — added with C-CALV4-EDITOR-R2b stage 3.
+//
+// Some claims are about ORDER WITHIN ONE TASK and are invisible to a test that
+// only reads the final state. The one that made this necessary: the editor's
+// close must remove `.dcopen` BEFORE writing the reverse geometry, because the
+// carve-out's open-state rule is the only thing declaring --disc-open — do it
+// the other way round and leaving takes exactly as long as arriving, with every
+// end-state assertion still green. A mutation proved that hole, so the hole is
+// closed rather than described.
+//
+// Every class change and every style write appends to the target element's own
+// `_ops`, in sequence, so a test can assert what happened before what.
 class ClassList {
   constructor(el) { this.el = el; }
   get _set() {
     return new Set((this.el.getAttribute('class') || '').split(/\s+/).filter(Boolean));
   }
-  _write(set) { this.el.setAttribute('class', Array.from(set).join(' ')); }
+  _write(set) {
+    this.el.setAttribute('class', Array.from(set).join(' '));
+    (this.el._ops = this.el._ops || []).push('class:' + Array.from(set).join(' '));
+  }
   contains(c) { return this._set.has(c); }
   add(c) { const s = this._set; s.add(c); this._write(s); }
   remove(c) { const s = this._set; s.delete(c); this._write(s); }
@@ -56,16 +71,25 @@ class ClassList {
 }
 
 class Style {
-  constructor() { this._props = {}; this._css = {}; }
-  setProperty(k, v) { this._props[k] = v; }
+  constructor(el) { this._props = {}; this._css = {}; this._el = el; }
+  _op(k, v) {
+    if (this._el) (this._el._ops = this._el._ops || []).push('style:' + k + '=' + v);
+  }
+  setProperty(k, v) { this._props[k] = v; this._op(k, v); }
+  removeProperty(k) { delete this._props[k]; this._op(k, ''); }
   getPropertyValue(k) { return this._props[k] || ''; }
   get cssText() { return ''; }
 }
 
-for (const p of ['left', 'top', 'width', 'display']) {
+// `height` and `opacity` join the list with C-CALV4-EDITOR-R2b: they are two of
+// the four properties the editor morph writes, and a stub that silently dropped
+// them would let a test assert about a geometry the module never set. This file
+// implements what the module touches and throws on what it does not, which is
+// the only reason its coverage means anything.
+for (const p of ['left', 'top', 'width', 'height', 'opacity', 'display']) {
   Object.defineProperty(Style.prototype, p, {
     get() { return this._css[p] || ''; },
-    set(v) { this._css[p] = v; },
+    set(v) { this._css[p] = v; this._op(p, v); },
   });
 }
 
@@ -77,7 +101,8 @@ export class El {
     this.parentNode = null;
     this._text = '';
     this.classList = new ClassList(this);
-    this.style = new Style();
+    this.style = new Style(this);
+    this._ops = [];
     this.dataset = new Proxy({}, {
       get: (_, k) => {
         if (typeof k !== 'string') return undefined;

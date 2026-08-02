@@ -1323,7 +1323,7 @@
      CLAUSE 5 HAS NO SUBJECT HERE. The card is not a remembered disclosure —
      it is a transient answer to a click, with no closed state to summarise
      and nothing to persist. */
-  .cal-bench .cal-daycard .dcbox, .cal-bench .cal-dayeditor .dcbox {
+  .cal-bench .cal-daycard .dcbox, .cal-bench .cal-dayeditor:not(.edmorph) .dcbox {
     block-size: 0;
     overflow: hidden;
     opacity: 0;
@@ -1331,9 +1331,115 @@
       block-size var(--disc-close) var(--disc-ease),
       opacity var(--disc-close) var(--disc-ease);
   }
-  .cal-bench .cal-daycard.dcopen .dcbox, .cal-bench .cal-dayeditor.dcopen .dcbox {
+  .cal-bench .cal-daycard.dcopen .dcbox, .cal-bench .cal-dayeditor.dcopen:not(.edmorph) .dcbox {
     block-size: auto;
     opacity: 1;
+    transition-duration: var(--disc-open);
+  }
+
+  /* ── THE EDITOR MORPH — A NAMED CARVE-OUT ON TOP OF THIS REGISTER ──────
+     C-CALV4-EDITOR-R2b, under the operator's signature of 2026-08-01
+     (decisions/2026-08-01-operator-signatures-wz1-sky-editor.md §3), recorded
+     by the coordinator in these words:
+
+       "the editor-morph carve-out is SIGNED: the day card may visually morph
+        into the editor as its own named motion signature — resolving [DC-7]'s
+        escalation; the DAYCARD-era register-only constraint is lifted FOR R2b
+        ONLY, and the morph must still be instant/complete under reduced motion
+        and never touch the Block's interior."
+
+     WHAT IT LIFTS, EXACTLY ONE THING: [DC-7]'s "register-only in this slice".
+     IT DOES NOT REPEAL THE REGISTER. Clause 4 of the register is what CREATES
+     the category this block occupies — "the wizard's L6 carve-out and the sky
+     header's richer expansion remain their own named signatures ON TOP OF THIS
+     BASE" — so a carve-out is an ADDITION, never an exemption. Everything else
+     in R2b still moves under the register unchanged, and this is the only
+     morph: the signature names ONE transition, card→editor and back.
+
+     ── WHY IT IS HERE AND NOWHERE ELSE ────────────────────────────────────
+     [DC-6]'s singularity clause survives intact: a second register section
+     anywhere in the product is refused, so this is a named sub-block INSIDE
+     the one section, immediately after the day card's, inside the SAME single
+     `prefers-reduced-motion: no-preference` wrapper. It could not have gone in
+     calendar-daycard.css even if someone wanted it to:
+     TestDayCardCSS_CarriesNoMotionOfItsOwn bans the literal `transition` in
+     that file and R2b did not touch that guard by a byte, which is the
+     cheapest possible proof that the register did not fork.
+
+     ── THE MECHANISM: GEOMETRIC, AND NOT A SCALE ([ER-6] SIGNED) ──────────
+     FOUR PROPERTIES AND NO FIFTH: inline-size · block-size · translate ·
+     opacity. The module measures the CARD's box, places the editor at its
+     final geometry, then seeds inline `translate` + `width` + `height` +
+     `opacity` back onto the card's rect, forces the one layout flush the
+     card's own reveal already relies on, and hands the box to this rule.
+
+       NO `transform: scale`. A FLIP scale is the cheap way and it visibly
+       SQUASHES the text inside the growing box. This surface is a FORM, and a
+       form whose labels stretch during the open is the "badly implemented
+       mostly with the animations" verdict this arc has already earned once.
+
+       `translate` RATHER THAN `transform`, so the property is nameable in the
+       guard's allowlist on its own and cannot be confused with the sheet's one
+       static `translateX(-50%)` (`.rsvp .recbr b`, wave 1, never transitioned).
+
+       NO `content-visibility`. That is a <details> concern; the card's own
+       reveal already declines it for the same reason.
+
+       `--dash` AND `--gap` ARE NEVER IN A TRANSITION LIST — guard B1, absolute,
+       and tools/check-calendar-v4-lints.sh fires on it.
+
+     ── NO NEW TOKEN, AND CLOSE IS STILL FASTER THAN OPEN ─────────────────
+     The morph buys nothing: --disc-open (200ms), --disc-close (160ms) and
+     --disc-ease unchanged, and the product still has TWO durations total.
+     `TestBenchCSS_NoMotionAtAll` asserts exactly three `--disc-*` tokens and
+     says a third DURATION is a signature, so reusing the pair keeps that
+     assertion byte-unchanged.
+
+     CLOSE-FASTER-THAN-OPEN IS STRUCTURAL, in the register's own idiom: the
+     base rule carries --disc-close and the OPEN state overrides the duration,
+     exactly as `.disc::details-content` / `.disc[open]::details-content` do.
+     The module removes `.dcopen` BEFORE reversing the geometry, so leaving
+     runs at 160ms without anyone having to remember it. Clause 2 was not named
+     by the carve-out, so clause 2 binds.
+
+     ── REDUCED MOTION IS INSTANT *AND COMPLETE*, AND IT IS STRUCTURAL ─────
+     Both words are in the signature and both are load-bearing. There is NO
+     RULE AT ALL outside this wrapper, so under prefers-reduced-motion the
+     morph does not exist — and the module does not seed the start geometry
+     either, which is the other half: the failure mode is a box that arrives
+     instantly at a MID-MORPH geometry because the JS skipped the animation and
+     the CSS kept the start state. The editor lands at full size, full opacity,
+     correctly placed and interactive, and both the CSS and the JS are asserted
+     on that END STATE rather than on the absence of a transition.
+
+     ── ZERO BLOCK LEAKAGE ────────────────────────────────────────────────
+     "Never touch the Block's interior." Nothing in this block selects
+     `.benchblock`, `.cal-block-host`, `.block`, `.lrow` or `[data-cell]`, and
+     the monopoly guard in bench_test.go checks that MECHANICALLY rather than
+     trusting this sentence. The morph reads the CARD's rect — a page-level
+     sibling in the top layer — and nothing else.
+
+     ── THE STANDING REFUSALS SURVIVE THE CARVE-OUT ───────────────────────
+     `animation` · `@keyframes` · `will-change` · `@starting-style` ·
+     `view-transition` are still refused, unchanged. A SIGNATURE IS A GRAMMAR,
+     NOT A LICENCE: the register is a TRANSITION family, and a morph built from
+     keyframes would be the second grammar [DC-6] refuses. `view-transition` in
+     particular is also the one mechanism capable of animating across the
+     Block's subtree, which is exactly what the signature's last clause forbids.
+
+     `.edmorph` IS PRESENT ONLY WHILE THE MORPH IS IN FLIGHT. The module adds
+     it to seed, removes it when the geometry has landed, and re-adds it to
+     reverse — so a resting editor carries no transition at all and a later
+     content change (opening the audience list) resizes instantly rather than
+     animating something nobody signed. */
+  .cal-bench .cal-dayeditor.edmorph {
+    transition:
+      inline-size var(--disc-close) var(--disc-ease),
+      block-size var(--disc-close) var(--disc-ease),
+      translate var(--disc-close) var(--disc-ease),
+      opacity var(--disc-close) var(--disc-ease);
+  }
+  .cal-bench .cal-dayeditor.edmorph.dcopen {
     transition-duration: var(--disc-open);
   }
 }

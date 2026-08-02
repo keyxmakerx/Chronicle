@@ -303,3 +303,203 @@ test('a BUSY day card clears the stacked band instead of sheeting over it', () =
   assert.equal(fx.card.getAttribute('data-dc-clear'), '1');
   assert.equal(said.length, 0);
 });
+
+// ── C-CALV4-EDITOR-R2b: THE MORPH'S STATE MACHINE ─────────────────────────
+//
+// EXTENDED per §4 and [ER-6] / [ER-7] SIGNED. What is asserted here is the
+// mechanism the operator signed: ONE BOX BECOMES THE OTHER, growing from the
+// card's measured geometry rather than sliding in from elsewhere, with no
+// scale, reversing faster than it arrived, and landing INSTANT AND COMPLETE
+// under reduced motion.
+
+function openEditorFromCard(fx, day) {
+  fx.fire('click', fx.cells[day]);
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+}
+
+test('the editor grows FROM the card’s measured geometry, not from nowhere', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  const card = fx.card.getBoundingClientRect();
+  assert.ok(card.width > 0 && card.height > 0, 'the card has no rect to morph from');
+
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+
+  // THE START STATE: the editor sits at the card's rect, at the card's size,
+  // transparent. The offset is a `translate`, so the box's own left/top stay
+  // the placement law's answer and the morph never re-decides where it goes.
+  const ed = fx.editor;
+  assert.equal(ed.classList.contains('edmorph'), true, 'the carve-out class is not on the box');
+  // The offset the START state carried, recomputed here from the two rects
+  // rather than read back off the box: by the time this line runs the module
+  // has already written the END state, and asserting on that would be asserting
+  // that a value equals itself.
+  const placedLeft = parseFloat(ed.style.left) || 0;
+  const placedTop = parseFloat(ed.style.top) || 0;
+  assert.ok(Math.round(card.left - placedLeft) !== 0 || Math.round(card.top - placedTop) !== 0,
+    'the card and the editor were placed at the same point, so this fixture ' +
+    'cannot tell a morph from a plain reveal');
+  assert.equal(ed.style.getPropertyValue('translate'), '0px 0px',
+    'the END state must be no offset — the box travels by `translate` and lands ' +
+    'on the placement law\'s own answer, never on a second geometry');
+
+  // THE END STATE, written in the same task: back to no offset, at the box's
+  // own measured size, fully opaque.
+  assert.equal(ed.style.width, '760px');
+  assert.equal(ed.style.opacity, '1');
+  assert.equal(ed.classList.contains('dcopen'), true);
+});
+
+test('the morph does not scale — it writes a size, never a transform', () => {
+  const fx = boot();
+  openEditorFromCard(fx, 3);
+  const ed = fx.editor;
+  // A FLIP SCALE IS THE CHEAP WAY AND IT SQUASHES A FORM'S TEXT. `translate` is
+  // named on its own precisely so this assertion can exist.
+  assert.equal(ed.style.getPropertyValue('transform'), '');
+  assert.equal(ed.style.getPropertyValue('scale'), '');
+  assert.ok(/px/.test(ed.style.width), 'the box grew by something other than its own size');
+});
+
+test('the morph settles and hands the box back its natural sizing', () => {
+  const fx = boot();
+  openEditorFromCard(fx, 3);
+  assert.equal(fx.editor.classList.contains('edmorph'), true);
+
+  fx.flush();
+
+  // ONCE THE GEOMETRY HAS LANDED THE CLASS COMES OFF and the inline sizing goes
+  // with it. Leaving the measured height pinned would make `overflow:hidden`
+  // clip anything the form grew afterwards — the audience roster opening under
+  // Restricted is exactly that case.
+  assert.equal(fx.editor.classList.contains('edmorph'), false,
+    'a resting editor still carries the carve-out class, so a later content ' +
+    'change would animate something nobody signed');
+  assert.equal(fx.editor.style.width, '');
+  assert.equal(fx.editor.style.height, '');
+  assert.equal(fx.editor.style.getPropertyValue('translate'), '');
+  assert.equal(fx.editor.popoverOpen, true, 'the editor closed instead of settling');
+});
+
+test('close reverses the SAME geometry, and is never slower than open', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  // The card's rect, taken while it is still the open box — the same
+  // measurement the module takes, computed INDEPENDENTLY here so the assertion
+  // below is a check rather than an echo of whatever the module stored.
+  const card = fx.card.getBoundingClientRect();
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+  const placedLeft = parseFloat(fx.editor.style.left) || 0;
+  const placedTop = parseFloat(fx.editor.style.top) || 0;
+  const want = Math.round(card.left - placedLeft) + 'px ' +
+    Math.round(card.top - placedTop) + 'px';
+  fx.flush();
+
+  // THE LOG IS SCOPED TO THE CLOSE. It accumulates from the open phase too —
+  // where `.edmorph` is added BEFORE `.dcopen`, which is correct and would make
+  // the ordering assertion below pass vacuously on any implementation.
+  fx.editor._ops.length = 0;
+  fx.fire('keydown', fx.editor, { key: 'Escape' });
+
+  // THE REVERSE IS THE SAME FOUR PROPERTIES ONTO THE SAME MEASURED RECT — not
+  // a second signature, and not a fade-out standing in for one.
+  assert.equal(fx.editor.classList.contains('edmorph'), true);
+  assert.equal(fx.editor.style.opacity, '0');
+  assert.equal(fx.editor.style.getPropertyValue('translate'), want,
+    'the reverse morph went somewhere other than the card it came from');
+
+  // CLOSE FASTER THAN OPEN, READ FROM THE TOKENS RATHER THAN ASSERTED. The
+  // harness reports --disc-close 160ms and --disc-open 200ms, which is what the
+  // sheet declares, and `.dcopen` comes off BEFORE the reverse geometry is
+  // written so the carve-out's open-state duration override is already gone.
+  const P = fx.pure;
+  const open = P.durationMS('200ms', 0);
+  const close = P.durationMS('160ms', 0);
+  assert.ok(close < open, 'leaving must never feel slower than arriving');
+  assert.equal(fx.editor.classList.contains('dcopen'), false,
+    'the open-state duration override is still on the box, so the close would ' +
+    'run at 200ms');
+
+  // THE ORDER IS THE CLAIM, NOT THE END STATE. `.dcopen` must come off BEFORE
+  // the reverse geometry is written: the carve-out's open-state rule is the
+  // only thing declaring --disc-open, so writing the geometry first would run
+  // the close at 200ms with every end-state assertion in this file still green.
+  // A mutation proved exactly that hole, which is why the fixture records an
+  // operation log at all.
+  const ops = fx.editor._ops;
+  const droppedOpen = ops.findIndex((o) => o.startsWith('class:') && !/\bdcopen\b/.test(o));
+  const wroteReverse = ops.findIndex((o) => /^style:translate=-?\d+px/.test(o) && o !== 'style:translate=0px 0px');
+  assert.ok(droppedOpen >= 0, 'the log never recorded `.dcopen` coming off');
+  assert.ok(wroteReverse >= 0, 'the log never recorded the reverse geometry');
+  assert.ok(droppedOpen < wroteReverse,
+    'the reverse geometry was written while `.dcopen` was still on the box, so ' +
+    'the close would run at --disc-open — leaving must never feel slower than ' +
+    'arriving (register clause 2, which the carve-out did not name and therefore ' +
+    'did not lift)');
+
+  fx.flush();
+  assert.equal(fx.editor.popoverOpen, false);
+  assert.equal(fx.editor.classList.contains('edmorph'), false);
+});
+
+test('REDUCED MOTION: the morph is instant AND COMPLETE, asserted on the END state', () => {
+  const fx = boot({ reduced: true });
+  openEditorFromCard(fx, 3);
+  const ed = fx.editor;
+
+  // INSTANT: nothing was seeded, so there is no start geometry for a
+  // transition that will never fire to leave behind.
+  assert.equal(ed.classList.contains('edmorph'), false,
+    'the carve-out class is on the box under reduced motion; the sheet declares ' +
+    'no rule there, so the seeded start geometry would simply STICK');
+  assert.equal(ed.style.getPropertyValue('translate'), '');
+  assert.equal(ed.style.opacity, '');
+  assert.equal(ed.style.height, '');
+
+  // COMPLETE, and this is the half the signature's second word is about: the
+  // editor lands at full size, full opacity, correctly placed and open — never
+  // instantly at a MID-MORPH geometry.
+  assert.equal(ed.popoverOpen, true);
+  assert.equal(ed.hasAttribute('data-dc-shown'), true);
+  assert.equal(ed.classList.contains('dcopen'), true);
+  const r = ed.getBoundingClientRect();
+  assert.equal(r.width, 760, 'the editor did not land at full size');
+  assert.ok(r.height > 0, 'the editor landed with no height');
+  assert.ok(parseFloat(ed.style.left) >= 0 && parseFloat(ed.style.top) >= 0,
+    'the editor landed without a resolved placement');
+
+  // …and it does not WAIT for an animation that will never fire.
+  assert.equal(fx.timers.length, 0,
+    'a timer is queued under reduced motion; the module is waiting on a ' +
+    'transition the sheet does not declare');
+
+  // THE COUNTERFACTUAL: the same fixture WITHOUT the reduced-motion branch
+  // seeds a start geometry and queues the settle. The number comes back, which
+  // is what proves the branch is doing the work rather than the fixture being
+  // inert.
+  const normal = boot();
+  openEditorFromCard(normal, 3);
+  assert.equal(normal.editor.classList.contains('edmorph'), true);
+  assert.match(normal.editor.style.getPropertyValue('translate'), /px/);
+  assert.ok(normal.timers.length > 0,
+    'the no-preference branch queued nothing either, so the zero above proves ' +
+    'the fixture is inert rather than proving the branch');
+});
+
+test('with no measurable card rect the editor opens exactly as stage 2 did', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  // A card with no rect is the degraded case — a browser that has not laid the
+  // popover out yet, or a fixture that never gave it one. The morph DECLINES
+  // rather than seeding a zero box, and the stage-2 open path is the fallback.
+  Object.defineProperty(fx.card, 'rect', {
+    configurable: true,
+    get() { return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
+  });
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+
+  assert.equal(fx.editor.classList.contains('edmorph'), false);
+  assert.equal(fx.editor.classList.contains('dcopen'), true);
+  assert.equal(fx.editor.popoverOpen, true);
+  assert.equal(fx.editor.style.getPropertyValue('translate'), '');
+});

@@ -1443,6 +1443,27 @@ func TestDayCardModule_KeepsTheHouseShape(t *testing.T) {
 		"occlusionReporter",
 		"applyPlacement",
 		"data-dc-clear",
+		// ── EXTENDED, C-CALV4-EDITOR-R2b stage 3 ([ER-7] SIGNED) ──────
+		//
+		// THE CARVE-OUT'S CLASS AND ITS REDUCED-MOTION BRANCH. The morph is the
+		// operator's signed ask and the reason this slice exists in the shape it
+		// does, so its two load-bearing names are pinned the way the register's
+		// own token already was: `edmorph` is the one named signature, and
+		// `edMorphSeed` is where reduced motion DECLINES TO SEED — which is the
+		// half of "instant AND complete" that lives in JS rather than in CSS.
+		//
+		// The failure this catches is specific and it is the one the signature's
+		// second word names: a box that arrives instantly at a MID-MORPH
+		// geometry because the JS wrote a start state and the CSS had no
+		// transition to leave it. Deleting the reduced-motion check turns
+		// test/js/daycard_open_close.test.mjs red on the END state; deleting the
+		// class turns TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut red on its
+		// two-file claim. This is the third leg, at the source level, where the
+		// other two cannot see.
+		"edmorph",
+		"edMorphSeed",
+		"edMorphSettle",
+		"--disc-open", // the settle is scheduled off the sheet's own token
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("calendar_daycard.js is missing %q", want)

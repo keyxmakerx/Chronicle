@@ -1215,16 +1215,73 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 			"under prefers-reduced-motion they would still run", outside)
 	}
 
-	// THE ALLOWLIST: three properties, and no fourth. Guard B1 in particular —
-	// --dash and --gap are the greyscale identity channel and are NEVER animated.
-	allowed := map[string]bool{"block-size": true, "opacity": true, "content-visibility": true}
-	for _, decl := range benchTransitionDecls(motion) {
-		for _, prop := range decl {
-			if !allowed[prop] {
+	// THE ALLOWLIST: three properties, and no fourth — EXCEPT under the one
+	// named carve-out class, which gets four and no fifth.
+	//
+	// Guard B1 in particular — --dash and --gap are the greyscale identity
+	// channel and are NEVER animated, under any prelude.
+	//
+	// ── THE CARVE-OUT CLAUSE — amended deliberately, by name ──────────────
+	//
+	// C-CALV4-EDITOR-R2b, under the OPERATOR's signature of 2026-08-01
+	// (decisions/2026-08-01-operator-signatures-wz1-sky-editor.md §3) and
+	// [ER-6] / [ER-7] SIGNED.
+	//
+	// WHAT IT LIFTS AND WHAT IT DOES NOT. The signature lifts exactly one
+	// thing — [DC-7]'s "register-only in this slice" — so the day card may
+	// morph into the editor as its own NAMED motion signature. It does not
+	// repeal the register: the carve-out is an addition on top of it, the base
+	// grammar is unchanged, and every other surface in R2b still moves under
+	// the three properties above.
+	//
+	// THE OLD CLAIM: every transitioned property in this sheet is one of
+	// block-size · opacity · content-visibility.
+	// THE NEW CLAIM: that is still true of EVERY RULE WHOSE PRELUDE DOES NOT
+	// NAME THE CARVE-OUT CLASS, and rules that do name it may additionally
+	// transition inline-size and translate — the two properties a GEOMETRIC
+	// morph needs and a scale would have avoided.
+	//
+	// WHY THE NEW CLAIM IS NOT WEAKER. The widening is keyed to a class that
+	// TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut independently pins to two
+	// files product-wide, so it cannot be borrowed by a second surface without
+	// that guard going red. `transform` is still refused everywhere, including
+	// under the carve-out — `translate` is named on its own precisely so the
+	// allowlist can admit the movement without admitting a scale. The five
+	// refusal strings and the `--disc-*` count assert UNCHANGED, above and
+	// below this block.
+	//
+	// MUTATION-TESTED: moving the morph's transition onto a rule whose prelude
+	// does not name the class turns this red; adding `transform` under the
+	// class turns this red.
+	const carveOut = ".edmorph"
+	base := map[string]bool{"block-size": true, "opacity": true, "content-visibility": true}
+	morph := map[string]bool{"inline-size": true, "translate": true}
+	for _, rule := range benchCSSRules(motion) {
+		carved := strings.Contains(rule[0], carveOut)
+		for _, decl := range benchTransitionDecls(rule[1]) {
+			for _, prop := range decl {
+				if base[prop] || (carved && morph[prop]) {
+					continue
+				}
+				if carved {
+					t.Errorf("`%s` names the carve-out and transitions %q, which is on "+
+						"neither the base allowlist nor the morph's four "+
+						"(inline-size · block-size · translate · opacity) — [ER-6] SIGNED "+
+						"names four properties and no fifth", rule[0], prop)
+					continue
+				}
 				t.Errorf("transitioned property %q is not on the allowlist "+
-					"(block-size · opacity · content-visibility) — [BR2-2] SIGNED", prop)
+					"(block-size · opacity · content-visibility) — [BR2-2] SIGNED. The "+
+					"editor-morph carve-out widens it ONLY for rules whose prelude names "+
+					"%s", prop, carveOut)
 			}
 		}
+	}
+	// …and the parser really saw the rules, so the loop above is proving a
+	// property set rather than an empty iteration.
+	if n := len(benchTransitionDecls(motion)); n < 3 {
+		t.Fatalf("only %d transition declarations found inside the wrapper; the rule "+
+			"parser stopped reading and every assertion above is vacuous", n)
 	}
 
 	// CLAUSE 2, ENFORCEABLE RATHER THAN DECORATIVE: exactly two durations, and
@@ -1276,6 +1333,129 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 	if !strings.Contains(motion, ".cal-bench .cal-daycard.dcopen .dcbox") {
 		t.Error("the card declares a closed state and no open one — the reveal has no " +
 			"endpoint and the register's 200ms open cannot run")
+	}
+
+	// ── THE MORPH'S OWN TWO-DIRECTIONAL CLAUSE ────────────────────────────
+	//
+	// The same shape the DAYCARD clause above uses, for the same reason: it
+	// fails if the morph's rules VANISH (the carve-out was quietly deleted and
+	// the operator's signed ask stopped shipping) and if they ESCAPE the
+	// wrapper (under prefers-reduced-motion the morph would then run, and the
+	// signature says instant AND complete).
+	const morphRule = ".cal-bench .cal-dayeditor.edmorph"
+	if !strings.Contains(motion, morphRule) {
+		t.Errorf("the editor morph is not inside %q — the carve-out is a named addition "+
+			"INSIDE the one register section ([DC-6]'s singularity clause survives it), "+
+			"and a morph declared anywhere else would be the second grammar", guard)
+	}
+	if strings.Count(code, morphRule) != strings.Count(motion, morphRule) {
+		t.Errorf("a `%s` rule sits OUTSIDE the reduced-motion wrapper; the operator's "+
+			"signature says the morph must be instant AND COMPLETE under reduced motion, "+
+			"which is structural (no rule at all) and never a shortened duration", morphRule)
+	}
+	// CLOSE FASTER THAN OPEN, STRUCTURALLY, in the register's own idiom: the
+	// base rule carries --disc-close and the OPEN state overrides the duration.
+	// Clause 2 was not named by the carve-out, so clause 2 binds.
+	if !strings.Contains(motion, ".cal-bench .cal-dayeditor.edmorph.dcopen") {
+		t.Error("the morph declares no open-state duration override — leaving would " +
+			"then take exactly as long as arriving, which is register clause 2's " +
+			"whole subject")
+	}
+}
+
+// TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut is NEW with
+// C-CALV4-EDITOR-R2b, and it is the carve-out's MONOPOLY guard ([ER-7] SIGNED).
+//
+// WHY A SEPARATE GUARD RATHER THAN ANOTHER CLAUSE. The clause above widens an
+// allowlist for rules that name `.edmorph`. That widening is only safe if the
+// class itself cannot spread — otherwise the next surface that wants a
+// geometric transition simply adds the class to its own rule and the allowlist
+// admits it silently. So the class is pinned as narrowly as the properties are.
+//
+// THREE CLAIMS, and the third is the operator's signature made mechanical:
+//
+//  1. THE MORPH'S PROPERTIES APPEAR ONLY UNDER THE CLASS, and only in this
+//     sheet. inline-size and translate are transitioned nowhere else.
+//  2. THE CLASS APPEARS IN EXACTLY TWO FILES PRODUCT-WIDE — the sheet that
+//     declares the transition and the module that adds and removes it. Test
+//     files are excluded by construction: a guard that counted its own
+//     assertions would be counting itself.
+//  3. NO RULE NAMING THE CLASS ALSO NAMES `.benchblock`, `.cal-block-host`,
+//     `.block`, `.lrow` or `[data-cell]`. That is bound 4 of the signature —
+//     "never touch the Block's interior" — checked rather than promised.
+//
+// MUTATION-TESTED: adding `.edmorph` to a third file turns claim 2 red; adding
+// `.cal-block-host` to the morph's prelude turns claim 3 red.
+func TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut(t *testing.T) {
+	const carveOut = ".edmorph"
+	const bare = "edmorph"
+	css := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
+
+	// (1) the two morph-only properties, only under the class, only here.
+	for _, rule := range benchCSSRules(css) {
+		if strings.Contains(rule[0], carveOut) {
+			continue
+		}
+		for _, decl := range benchTransitionDecls(rule[1]) {
+			for _, prop := range decl {
+				if prop == "inline-size" || prop == "translate" {
+					t.Errorf("`%s` transitions %q without naming the carve-out class — "+
+						"the geometric properties are the MORPH's and a second surface "+
+						"taking them is a second signature nobody signed", rule[0], prop)
+				}
+			}
+		}
+	}
+
+	// (2) exactly two files product-wide.
+	found := map[string]bool{}
+	for _, path := range []string{
+		"static/css/calendar-bench.css",
+		"static/css/calendar-daycard.css",
+		"static/css/calendar-block.css",
+		"internal/plugins/calendar/static/js/calendar_daycard.js",
+		"internal/plugins/calendar/static/js/cal_visibility.js",
+		"internal/plugins/calendar/static/js/event_grid.js",
+		"internal/plugins/calendar/daycard.templ",
+		"internal/plugins/calendar/bench.templ",
+	} {
+		if strings.Contains(readRepoFile(t, filepath.FromSlash(path)), bare) {
+			found[path] = true
+		}
+	}
+	want := map[string]bool{
+		"static/css/calendar-bench.css": true,
+		"internal/plugins/calendar/static/js/calendar_daycard.js": true,
+	}
+	for path := range found {
+		if !want[path] {
+			t.Errorf("%s names %q — the carve-out lives in exactly two places: the sheet "+
+				"that declares the transition and the module that adds and removes the "+
+				"class. A third is a second consumer of a signature that names ONE "+
+				"transition, card→editor and back", path, bare)
+		}
+	}
+	for path := range want {
+		if !found[path] {
+			t.Errorf("%s no longer names %q — the morph is the operator's signed ask and "+
+				"the reason this slice exists in the shape it does", path, bare)
+		}
+	}
+
+	// (3) BOUND 4, MECHANICALLY: the morph reads the CARD's rect and nothing
+	// else, and no rule of it reaches into the Block.
+	for _, rule := range benchCSSRules(css) {
+		if !strings.Contains(rule[0], carveOut) {
+			continue
+		}
+		for _, inside := range []string{".benchblock", ".cal-block-host", ".block", ".lrow", "[data-cell]"} {
+			if strings.Contains(rule[0], inside) {
+				t.Errorf("`%s` names the carve-out AND %q — the signature's last clause is "+
+					"\"never touch the Block's interior\", and a morph that selected into "+
+					"it would be animating the one subtree this whole arc is fenced around",
+					rule[0], inside)
+			}
+		}
 	}
 }
 

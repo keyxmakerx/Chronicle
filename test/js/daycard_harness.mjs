@@ -277,10 +277,29 @@ export function buildBenchFixture(opts) {
     ]),
   ]) : null;
   if (editor) {
-    editor.offsetWidth = 420;
+    editor.offsetWidth = 760;
     editor.offsetHeight = 24;
     editor.querySelector('[data-dc-box]').offsetHeight = 0;
     editor.querySelector('[data-dc-box]').scrollHeight = 320;
+    // THE EDITOR'S RECT FOLLOWS THE PLACEMENT THE MODULE JUST WROTE, exactly
+    // as the card's does (DC3-DESKTOP-SHEET-OCCLUSION-R4) — and with
+    // C-CALV4-EDITOR-R2b it also has to follow the MORPH'S inline width and
+    // height, because the morph's start geometry is written as `style.width` /
+    // `style.height` and a rect that ignored them would report a box the
+    // module never produced. Derived, never assigned.
+    Object.defineProperty(editor, 'rect', {
+      configurable: true,
+      get() {
+        const box = this.querySelector('[data-dc-box]');
+        const left = parseFloat(this.style.left) || 0;
+        const top = parseFloat(this.style.top) || 0;
+        const w = parseFloat(this.style.width) || this.offsetWidth || 0;
+        const chrome = Math.max(0, (this.offsetHeight || 0) - ((box && box.offsetHeight) || 0));
+        const natural = ((box && box.scrollHeight) || 0) + chrome;
+        const h = parseFloat(this.style.height) || natural;
+        return { left, top, right: left + w, bottom: top + h, width: w, height: h };
+      },
+    });
   }
 
   const rootAttrs = { class: 'cal-bench', 'data-cal-bench': '', 'data-cal-dashboard': '' };

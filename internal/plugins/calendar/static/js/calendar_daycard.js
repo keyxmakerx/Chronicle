@@ -914,7 +914,14 @@
     // points, both verbs, and the delete path, and it is cleared on failure so a
     // refused save can be retried — but never on success, because success ends
     // in a reload and clearing it would open a window for a second POST.
-    var edState = { open: false, timer: 0, mode: '', calId: '', eventID: '', day: null, prev: null, busy: false };
+    var edState = {
+      open: false, timer: 0, mode: '', calId: '', eventID: '', day: null,
+      prev: null, busy: false,
+      // THE MORPH'S MEASURED GEOMETRY, taken from the CARD at open and replayed
+      // on close. Null under reduced motion and whenever a rect could not be
+      // measured, which is what makes the stage-2 open path the fallback.
+      morph: null, morphTimer: 0,
+    };
 
     function reduced() {
       return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -1154,6 +1161,100 @@
     // carve-out for their signature, not invented here: per-surface motion
     // invention is what produced the skypane verdict.
 
+    // ── THE EDITOR MORPH — the operator's signed carve-out ───────────────
+    //
+    // decisions/2026-08-01-operator-signatures-wz1-sky-editor.md §3, recorded
+    // as: "the day card may visually morph into the editor as its own named
+    // motion signature — resolving [DC-7]'s escalation; the DAYCARD-era
+    // register-only constraint is lifted FOR R2b ONLY, and the morph must still
+    // be instant/complete under reduced motion and never touch the Block's
+    // interior."
+    //
+    // GROW/MORPH CONTINUITY, WHICH IS THE WHOLE POINT. The card does not vanish
+    // and the editor does not appear: ONE BOX BECOMES THE OTHER. The editor is
+    // placed at its FINAL geometry by the shipped placement law, then seeded
+    // back onto the card's measured rect and handed to the register's carve-out
+    // rule. The card cross-fades out over the same interval on the mechanism it
+    // already had, so at no frame are two full boxes visible — they occupy the
+    // same rect while one ramps up and the other ramps down.
+    //
+    // IT MOVES BY `translate`, NOT BY `left`/`top`, and it does NOT SCALE. A
+    // FLIP scale is the cheap way and it visibly squashes the text inside a
+    // growing box; this surface is a FORM. `translate` is also nameable in the
+    // guard's allowlist on its own, so the allowlist can admit the movement
+    // without admitting a scale.
+    //
+    // `.edmorph` IS PRESENT ONLY IN FLIGHT. It is added to seed, removed when
+    // the geometry has landed, and re-added to reverse — so a resting editor
+    // carries no transition and opening the audience list later resizes
+    // instantly rather than animating something nobody signed.
+    //
+    // ZERO BLOCK LEAKAGE. The only rect this reads is the CARD's, which is a
+    // page-level sibling in the top layer. It inserts no node inside
+    // .cal-block-host, adds and removes no class there, and animates nothing
+    // there — and test/js/daycard_block_immutability.test.mjs drives this path
+    // and re-compares the fixture's innerHTML byte for byte.
+
+    function edMorphRect(el) {
+      if (!el || !el.getBoundingClientRect) return null;
+      var r = el.getBoundingClientRect();
+      if (!(r.width > 0) || !(r.height > 0)) return null;
+      return r;
+    }
+
+    // edMorphSeed places the editor at the card's geometry AFTER the placement
+    // law has decided where it really goes. It returns false when it cannot —
+    // no card rect, no editor rect, or reduced motion — and the caller then
+    // opens the editor exactly as stage 2 did.
+    //
+    // REDUCED MOTION SEEDS NOTHING AT ALL, and that is the second half of
+    // "instant AND complete". The sheet declares no rule outside the
+    // no-preference wrapper, so a seeded start geometry with no transition to
+    // leave it would land the editor INSTANTLY AT A MID-MORPH SIZE — the exact
+    // failure mode the signature's two words are guarding against.
+    function edMorphSeed(fromEl) {
+      if (reduced()) return false;
+      var from = edMorphRect(fromEl);
+      var to = edMorphRect(ed.root);
+      if (!from || !to) return false;
+      edState.morph = {
+        dx: Math.round(from.left - to.left),
+        dy: Math.round(from.top - to.top),
+        w: Math.round(from.width),
+        h: Math.round(from.height),
+        toW: Math.round(to.width),
+        toH: Math.round(to.height),
+      };
+      edMorphWrite(edState.morph, true);
+      return true;
+    }
+
+    // edMorphWrite is the ONE writer of the four transitioned properties, so
+    // the outbound and inbound halves cannot drift into two ideas of what the
+    // card's geometry was.
+    function edMorphWrite(m, atCard) {
+      if (!m || !ed.root || !ed.root.style) return;
+      ed.root.style.setProperty('translate',
+        atCard ? m.dx + 'px ' + m.dy + 'px' : '0px 0px');
+      ed.root.style.width = (atCard ? m.w : m.toW) + 'px';
+      ed.root.style.height = (atCard ? m.h : m.toH) + 'px';
+      ed.root.style.opacity = atCard ? '0' : '1';
+    }
+
+    // edMorphSettle hands the box back to its own natural sizing once the
+    // geometry has landed. Leaving the measured height pinned would make
+    // `overflow:hidden` clip anything the form grew afterwards — the audience
+    // roster opening under Restricted is exactly that case.
+    function edMorphSettle() {
+      if (edState.morphTimer) { clearTimeout(edState.morphTimer); edState.morphTimer = 0; }
+      if (!ed.root || !ed.root.style) return;
+      ed.root.classList.remove('edmorph');
+      ed.root.style.removeProperty('translate');
+      ed.root.style.width = '';
+      ed.root.style.height = '';
+      ed.root.style.opacity = '';
+    }
+
     function edShow() {
       if (edState.timer) { clearTimeout(edState.timer); edState.timer = 0; }
       ed.root.setAttribute('data-dc-shown', '');
@@ -1164,6 +1265,9 @@
 
     function edHide() {
       edState.timer = 0;
+      if (edState.morphTimer) { clearTimeout(edState.morphTimer); edState.morphTimer = 0; }
+      edState.morph = null;
+      ed.root.classList.remove('edmorph');
       ed.root.removeAttribute('data-dc-shown');
       ed.root.removeAttribute('style');
       if (typeof ed.root.hidePopover === 'function') {
@@ -1174,9 +1278,21 @@
     function edClose() {
       if (!edState.open) return;
       edState.open = false;
+      // `.dcopen` COMES OFF FIRST, AND THE ORDER IS THE WHOLE OF CLAUSE 2.
+      // The carve-out's open-state rule is the only thing declaring
+      // --disc-open, so removing the class before writing the reverse geometry
+      // makes leaving run at --disc-close without anyone having to remember it.
       ed.root.classList.remove('dcopen');
       var wait = closeDelayMS(cssVar('--disc-close'), reduced());
       if (wait <= 0) { edHide(); return; }
+      if (edState.morphTimer) { clearTimeout(edState.morphTimer); edState.morphTimer = 0; }
+      if (edState.morph) {
+        // REVERSE, not a second signature: the same four properties, the same
+        // easing, back onto the same measured rect the card occupied.
+        ed.root.classList.add('edmorph');
+        void ed.root.offsetHeight;
+        edMorphWrite(edState.morph, true);
+      }
       if (edState.timer) clearTimeout(edState.timer);
       edState.timer = setTimeout(edHide, wait);
     }
@@ -1853,13 +1969,39 @@
       // absent Delete button on a draft carries.
       if (ed.idOut) ed.idOut.textContent = edState.eventID || 'draft';
       if (ed.save) ed.save.textContent = mode === 'edit' ? 'Save changes' : 'Create event';
-      // The card leaves first, so the two boxes are never on screen together.
+      // THE CARD'S RECT IS MEASURED WHILE IT IS STILL THE OPEN BOX, before
+      // anything closes it — that rect is the morph's start geometry and the
+      // one thing this path reads from outside the editor.
+      var fromRect = edMorphRect(anchor);
+      // The card leaves first: it cross-fades out on the mechanism it already
+      // had, over --disc-close, while the editor grows over --disc-open.
       closeCard();
       edState.open = true;
       edShow();
       if (anchor) edPosition(anchor);
+      // FORCED REFLOW, DELIBERATELY, and now it carries two jobs. The editor
+      // was display:none a moment ago, so it has no rendered before-change
+      // style and a transition started in the same frame would not run at all
+      // — which is what makes the register's reveal fire on a popover without
+      // @starting-style, a standing refusal. The morph's seeded start geometry
+      // needs the same flush for the same reason.
       void ed.root.offsetHeight;
+      var morphing = fromRect ? edMorphSeed({ getBoundingClientRect: function () { return fromRect; } }) : false;
+      if (morphing) {
+        ed.root.classList.add('edmorph');
+        void ed.root.offsetHeight;
+      }
       ed.root.classList.add('dcopen');
+      if (morphing) {
+        edMorphWrite(edState.morph, false);
+        // THE SETTLE IS SCHEDULED OFF --disc-open, READ FROM THE SHEET rather
+        // than carried as a copy of 200 — the same discipline closeDelayMS
+        // already applies to the close.
+        edState.morphTimer = setTimeout(edMorphSettle,
+          durationMS(cssVar('--disc-open'), 200));
+      } else {
+        edState.morph = null;
+      }
     }
 
     function edPosition(anchor) {
