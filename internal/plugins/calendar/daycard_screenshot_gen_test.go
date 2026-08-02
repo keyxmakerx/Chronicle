@@ -34,6 +34,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
 )
 
 type daycardShot struct {
@@ -120,6 +122,124 @@ const daycardOpenEditor = `
 const daycardOpenCard = `
   var cell = document.querySelector('[data-bench-block] [data-day][data-day-ord]');
   if (cell) cell.click();
+`
+
+// ── EDIT MODE, AND WHY THE REJECTED SET HAD NONE OF IT ────────────────────
+//
+// FINDING 2, IN ONE SENTENCE: every shot in the rejected set ran
+// daycardOpenEditor, which is `cell.click()` then `[data-dc-new]`.click() —
+// CREATE mode — and of the 22 gating stills TWENTY-ONE are edit-mode editors
+// or player cards. So the chrome states the stills actually gate were
+// photographed nowhere: the tie pill and its 24px ✕, `Delete event`, the
+// `Save changes` footer, the populated `every [N] [unit]` recurrence row and
+// the Restricted-SELECTED roster. Four of the report's own named divergences
+// (the unit list, the `10-day week` label, `moon phase`, no `+ tie another`)
+// are claims about controls that render only in those states.
+//
+// THE DOOR IS REAL AND SO IS THE PATH. `[data-dc-edit]` is the row door the
+// producer renders for a Scribe, `edLoad` fetches the record through
+// `Chronicle.apiFetch`, and `edOpen('edit', …)` fills the chrome from it.
+// Nothing below reaches past that door.
+//
+// WHAT IS SUBSTITUTED, AND IT IS DISCLOSED ON THE IMAGE. A `file://` capture
+// has no server, so `Chronicle.apiFetch` is stubbed to answer exactly one
+// request — `GET …/events/:eid` — with a canned record. That is the ONLY
+// fabrication in this directory and it is the record, never the render: the
+// chrome that draws it is the shipped chrome, the mapping from record to
+// controls is the shipped `edFill`, and the stub writes what it answered onto
+// the shot's own diagnostic strip. Every other verb is REFUSED by the stub, so
+// a capture cannot accidentally photograph a save it did not make.
+//
+// THE RECORD IS CHOSEN TO LIGHT THE CONTROLS THE STILLS GATE, not to look
+// pretty: a timed event (the time row un-hidden), a `custom` recurrence with
+// interval 3 (the `every 3 <week-noun>` row populated, which is where the
+// corrected unit list is legible), an allow+deny `visibility_rules` pair (the
+// ◈ Restricted card SELECTED and the roster showing both marks), and an
+// `entity_id` (the tie pill with its real 24px ✕ button).
+const daycardStubEditRecord = `
+  window.Chronicle = window.Chronicle || {};
+  window.__shotStub = 'not called';
+  window.Chronicle.apiFetch = function (url, opts) {
+    var method = (opts && opts.method) || 'GET';
+    // THE STUB ANSWERS ONE READ AND REFUSES EVERYTHING ELSE. A capture that
+    // could reach a write path would be a capture that might photograph a
+    // state no user produced.
+    if (method !== 'GET' || !/\/events\/[^/]+$/.test(url)) {
+      window.__shotStub = 'REFUSED ' + method + ' ' + url;
+      return Promise.resolve({ ok: false, status: 405,
+        json: function () { return Promise.resolve({}); } });
+    }
+    // The date comes from the day the card is actually open on, read off the
+    // page's own payload — a record dated somewhere else would make edFill's
+    // edKeyFor miss and the date grid would disagree with the head.
+    var ymd = { year: null, month: null, day: null };
+    var head = document.querySelector('[data-cal-daycard] [data-dc-head]');
+    var key = head ? head.getAttribute('data-day') : '';
+    var pel = document.querySelector('[data-cal-daycard-payload]');
+    if (pel && key) {
+      try {
+        var pay = JSON.parse(pel.getAttribute('data-cal-daycard-payload'));
+        (pay.calendars || []).forEach(function (c) {
+          (c.days || []).forEach(function (d) {
+            if (d.key === key) { ymd = { year: d.year, month: d.month, day: d.day }; }
+          });
+        });
+      } catch (e) { /* an unreadable payload leaves the record undated */ }
+    }
+    // THE ID IS THE ONE THAT WAS ASKED FOR, echoed back. A stub that answered
+    // a fixed id for every row would make the editor's evt- readout a
+    // decoration rather than a readout, and the caption below would be naming
+    // a request that was not made.
+    var asked = String(url).split('/').pop();
+    var rec = {
+      id: asked, name: 'Feast of the Moonmaiden',
+      description: 'The tenday-long feast the Vayle house keeps for its founder. ' +
+        'Doors open at dusk; the Umber moon is full on the third night.',
+      category: 'festival',
+      year: ymd.year, month: ymd.month, day: ymd.day,
+      all_day: false, start_hour: 19, start_minute: 30, end_hour: 23, end_minute: 0,
+      is_recurring: true, recurrence_type: 'custom', recurrence_interval: 3,
+      visibility: 'everyone',
+      visibility_rules: '{"allowed_users":["u-kael","u-nissa"],"denied_users":["u-tam"]}',
+      entity_id: 'ent-nissa-vayle', entity_name: 'Nissa Vayle'
+    };
+    window.__shotStub = 'ANSWERED GET ' + url;
+    var tag = document.getElementById('shot-diag');
+    if (tag) {
+      tag.textContent = 'RIG: EDIT MODE. Chronicle.apiFetch is STUBBED for this capture — ' +
+        'a file:// page has no server. It answered exactly one request, ' +
+        'GET …/events/' + asked + ', with a canned record (festival · timed 19:30–23:00 · ' +
+        'custom recurrence interval 3 · allowed u-kael,u-nissa · denied u-tam · ' +
+        'tied to ent-nissa-vayle) and REFUSES every other verb with a 405. ' +
+        'The record is substituted; the chrome that draws it is the shipped chrome.';
+    }
+    return Promise.resolve({ ok: true, status: 200,
+      json: function () { return Promise.resolve(rec); } });
+  };
+`
+
+// daycardOpenEditRow walks the day cells until one of them opens a card with a
+// row `Edit` door on it, then clicks that door. It walks rather than assuming,
+// because which fixture day carries an event is not this file's business and a
+// driver that clicked cell zero and found nothing would silently photograph a
+// create-mode editor with an edit-mode caption on it.
+// It picks the day with the MOST rows rather than the first day with any,
+// because a one-row card photographs a row list that cannot be read as one and
+// the day the fixture loads up is the day worth photographing.
+const daycardOpenEditRow = `
+  var cells = Array.prototype.slice.call(
+    document.querySelectorAll('[data-bench-block] [data-day][data-day-ord]'));
+  var bestCell = null, bestN = 0;
+  cells.forEach(function (c) {
+    c.click();
+    var n = document.querySelectorAll('[data-cal-daycard] [data-dc-edit]').length;
+    if (n > bestN) { bestN = n; bestCell = c; }
+  });
+  if (bestCell) {
+    bestCell.click();
+    var door = document.querySelector('[data-cal-daycard] [data-dc-edit]');
+    if (door) door.click();
+  }
 `
 
 // daycardPauseAt pauses EVERY running animation and parks it at an exact
@@ -284,8 +404,12 @@ func daycardShotList() []daycardShot {
 			title:   "Event editor · co-DM · 390×844 · light",
 			caption: "the co-DM at the phone width — §10 item 2's last matrix cell"},
 		{file: "07-editor-gm-820-light.png", mount: gm, w: 820, h: 1200, script: daycardOpenEditor,
-			title: "Event editor · GM · 820px",
-			caption: "the tablet width: ONE column, and at 1200px tall the body does not fold — so this single frame carries all three visibility cards, the allow/deny roster AND `Tied to`, which is the un-scrolled proof that the build renders what 01b shows. Horizontal scroll is measured, not eyeballed — see fold-and-floor-probe.txt"},
+			title: "Event editor · GM · 820×1200 · light",
+			caption: "the tablet width: ONE column, and the widest un-scrolled frame the fold allows — `.ed-body` caps at min(70vh, 620px), so the 620px cap binds at every viewport this rig shoots and 122px of the live preview sit below this frame (the strip says so). What IS in this one un-scrolled frame: all three visibility cards and `Tied to`, which is the direct proof that the build renders what 01b has to scroll to reach. Horizontal scroll is measured, not eyeballed — see fold-and-floor-probe.txt"},
+		{file: "07b-editor-gm-820-light-lowerband.png", mount: gm, w: 820, h: 1200,
+			script: daycardOpenEditor, scroll: daycardEdBody,
+			title:   "Event editor · GM · 820×1200 · light — LOWER BAND",
+			caption: "the 122px 07 leaves below its frame: the live-preview column's foot"},
 
 		// ── §10 item 4: the player set, checked for ABSENCE ─────────────────
 		{file: "08-card-player-1440x900-light.png", mount: player, w: 1440, h: 900, script: daycardOpenCard,
@@ -334,6 +458,56 @@ func daycardShotList() []daycardShot {
 		{file: "15-editor-gm-no-ledger.png", mount: gm, w: 1440, h: 900, script: daycardOpenEditor,
 			title:   "Event editor · GM · the Ledger layer switched OFF",
 			caption: "the card is the ONLY answer in this state — the harder half of the operator's complaint — and the morph must still run"},
+
+		// ── §10 items 1 and 2: EDIT MODE — the state 21 of the 22 stills gate ──
+		//
+		// The rejected set had none of it. See daycardStubEditRecord's header
+		// for what is substituted (one GET, one record) and what is not (the
+		// door, the fetch path, edFill, and every pixel of the chrome).
+		{file: "16-editor-gm-edit-820-light.png", mount: gm, w: 820, h: 1400,
+			script: daycardStubEditRecord + daycardOpenEditRow,
+			title:  "Event editor · EDIT · GM · 820×1400 · light — UPPER BAND",
+			caption: "edit mode, one column. In THIS frame: the head reads `Edit event · 14 Deepwinter 1523`, the id readout carries the id the stub was actually asked for rather than `draft`, `Festival` is the selected type, the time row is un-hidden at 19:30–23:00, and the recurrence row is populated — `Repeats · every 3 · 10-day week`, which is where the corrected unit list is legible: no `year` at all, `day` and `moon phase` chipped, and the week unit wearing the CALENDAR's own noun rather than the literal string `week`. Pinned to the box and therefore also in frame: `Delete event` and a footer reading `Save changes`. The rest is in 16b"},
+		{file: "16b-editor-gm-edit-820-light-lowerband.png", mount: gm, w: 820, h: 1400,
+			script: daycardStubEditRecord + daycardOpenEditRow, scroll: daycardEdBody,
+			title:  "Event editor · EDIT · GM · 820×1400 · light — LOWER BAND",
+			caption: "what 16 leaves below its frame, and it is the state no image in the rejected set contained: the ◈ Restricted card SELECTED, the allow/deny roster with all five members and both marks (Kael and Nissa allowed, Bryn, Rell and Tam denied), and the `Tied to` pill for Nissa Vayle with its real 24px ✕ button. This is the frame to lay beside editor-gm-1440x900.png"},
+		{file: "17-editor-gm-edit-1440x900-light.png", mount: gm, w: 1440, h: 900,
+			script: daycardStubEditRecord + daycardOpenEditRow,
+			title:  "Event editor · EDIT · GM · 1440×900 · light — UPPER BAND",
+			caption: "edit mode at the desktop width: the head reads `Edit event`, the id readout carries `evt-7f3a` rather than `draft`, the type rail has `Festival` selected, the time row is un-hidden at 19:30–23:00, and the recurrence row is populated. The footer's `Delete event` and `Save changes` are pinned to the box and are in this frame. What is below it is in 17b"},
+		{file: "17b-editor-gm-edit-1440x900-light-lowerband.png", mount: gm, w: 1440, h: 900,
+			script: daycardStubEditRecord + daycardOpenEditRow, scroll: daycardEdBody,
+			title:  "Event editor · EDIT · GM · 1440×900 · light — LOWER BAND",
+			caption: "the ◈ Restricted card SELECTED (not merely present — this is the state no shot in the rejected set contained), the allow/deny roster with Kael and Nissa allowed and Tam denied, and the `Tied to` pill with its 24px ✕"},
+		{file: "18-editor-gm-edit-1440x900-dark.png", mount: gm, w: 1440, h: 900, dark: true,
+			script: daycardStubEditRecord + daycardOpenEditRow,
+			title:  "Event editor · EDIT · GM · 1440×900 · dark — UPPER BAND",
+			caption: "the same record in dark"},
+		{file: "18b-editor-gm-edit-1440x900-dark-lowerband.png", mount: gm, w: 1440, h: 900, dark: true,
+			script: daycardStubEditRecord + daycardOpenEditRow, scroll: daycardEdBody,
+			title:   "Event editor · EDIT · GM · 1440×900 · dark — LOWER BAND",
+			caption: "the selected ◈ Restricted card, its roster and the tie pill, in dark"},
+		{file: "19-editor-codm-edit-1440x900-light.png", mount: codm, w: 1440, h: 900,
+			script: daycardStubEditRecord + daycardOpenEditRow,
+			title:  "Event editor · EDIT · co-DM · 1440×900 · light — THE DELETE AXIS",
+			caption: "read against 17. The record is byte-identical and the viewer is not: `Delete event` is ABSENT here and present there, because Delete is `CanDelete` (Owner) and this viewer is a Scribe with the dm_only grant. The ◥ DM only card is still present. This is the axis proof create mode cannot make — a draft has no id to delete, so 01 and 04 are both Delete-less for a reason that has nothing to do with permission"},
+		{file: "19b-editor-codm-edit-1440x900-light-lowerband.png", mount: codm, w: 1440, h: 900,
+			script: daycardStubEditRecord + daycardOpenEditRow, scroll: daycardEdBody,
+			title:  "Event editor · EDIT · co-DM · 1440×900 · light — LOWER BAND",
+			caption: "read against 17b. The stored record's audience pair is unchanged and the co-DM is shown NEITHER the ◈ card NOR the names — the editor opens on Public for a viewer who cannot author the mode, and the write path round-trips the stored pair untouched. The `Tied to` pill is here, because ties are Scribe-floor"},
+		{file: "20-editor-scribe-edit-1440x900-light.png", mount: scribe, w: 1440, h: 900,
+			script: daycardStubEditRecord + daycardOpenEditRow,
+			title:  "Event editor · EDIT · Scribe, no grant · 1440×900 · light",
+			caption: "the edit-mode absence proof: no Visibility fieldset at all, no Delete, and `Save changes` in the footer. A Scribe editing a restricted event neither sees nor disturbs its audience"},
+		{file: "21-editor-gm-edit-390x844-light.png", mount: gm, w: 390, h: 844,
+			script: daycardStubEditRecord + daycardOpenEditRow,
+			title:  "Event editor · EDIT · GM · 390×844 · light",
+			caption: "edit mode on a real phone viewport, one column. The 390px wrap of the trailing `:`+minute in the time row is PRE-EXISTING IN THE DRAWING and out of scope — it is not silently fixed and it is not copied as a target"},
+		{file: "21b-editor-gm-edit-390x844-light-lowerband.png", mount: gm, w: 390, h: 844,
+			script: daycardStubEditRecord + daycardOpenEditRow, scroll: daycardEdBody,
+			title:   "Event editor · EDIT · GM · 390×844 · light — LOWER BAND",
+			caption: "the phone's lower band in edit mode: the selected ◈ card, the roster, the tie pill and the footer"},
 	}
 
 	// ── §10 item 5: THE MORPH, MID-FLIGHT — AND WHAT THIS RIG CANNOT DO ─────
@@ -412,28 +586,23 @@ func TestGenerateDayCardScreenshots(t *testing.T) {
 	css := benchCSS(t) + benchBlockSheet(t) + dayCardCSS(t)
 	for _, s := range daycardShotList() {
 		t.Run(s.file, func(t *testing.T) {
-			data := benchFxData(true, true)
-			if !s.mount.CanCreate {
-				data = benchFxData(false, false)
-			}
-			data.DayCard = s.mount
-			// THE CALENDAR IS PASSED, AND THAT IS THE WHOLE OF FINDING 4.
-			// `Calendar: nil` used to be handed here, and dayCardCategories
-			// returns nil for a nil calendar — so the payload carried NO type
-			// palette, the module fell to its single `[{slug:'', name:'No
-			// type'}]` seed, and all fifteen shots rendered the TYPE row as ONE
-			// bare chip with no hue rail, no stroke pattern and no glyph. The
-			// captions claimed those shots proved "the locked type rail" and
-			// "every type option's rail-pattern plus glyph survive"; they
-			// photographed the fallback. A caption is not evidence and a
-			// fixture that seeds nothing cannot be evidence of a palette.
-			cal := benchFxTypedCalendar()
-			data.DayCardJSON = dayCardPayloadJSON(
-				dayCardSeed{
-					CanAuthor: s.mount.CanCreate, CanRestrict: s.mount.CanRestrict,
-					Roster: benchFxRoster(),
-				},
-				dayCardSource{Block: data.Primary, Calendar: &cal})
+			// THE FIXTURE CARRIES A PALETTE **AND** EVENTS, and each half was
+			// its own finding.
+			//
+			// The palette was finding 4 of the previous round: `Calendar: nil`
+			// used to be handed to the payload builder, dayCardCategories
+			// returns nil for a nil calendar, so the module fell to its single
+			// `[{slug:'', name:'No type'}]` seed and every shot rendered TYPE as
+			// ONE bare chip while its caption claimed a locked triple.
+			//
+			// The EVENTS are finding 2 of this one: benchFxData projects with
+			// none, so every card said "No events on this day", no row carried
+			// an Edit door, and create mode was the only editor the rig could
+			// reach — for a set whose fidelity gate is 21 edit-mode stills.
+			//
+			// A caption is not evidence, and a fixture that seeds nothing cannot
+			// be evidence of the thing it does not seed.
+			data := benchFxShotData(s.mount)
 			page := daycardShotPage(t, s, css, benchStripLinks(renderBench(t, data)))
 			dir := t.TempDir()
 			src := filepath.Join(dir, "shot.html")
@@ -513,14 +682,20 @@ func daycardShotPage(t *testing.T, s daycardShot, css, body string) string {
 		// which the editor's placed box does not reach at any viewport this
 		// generator shoots. It starts with what it starts with — "no transition
 		// was created" is a measurement and it is printed as one.
-		`.shot-diag{position:fixed;left:0;right:0;bottom:0;z-index:1;` +
+		// THE TWO STRIPS ARE STACKED IN ONE FIXED FOOTER, not pinned
+		// independently. The first cut gave each its own `bottom:` and the
+		// diag — which grows to three lines in edit mode — painted straight
+		// over the fold report. A diagnostic a reader cannot see is the same
+		// defect as a caption a reader cannot check.
+		`.shot-strips{position:fixed;left:0;right:0;bottom:0;z-index:1}` +
+		`.shot-diag{` +
 		`font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:6px 10px;` +
 		`background:oklch(0.18 0.02 265);color:oklch(0.98 0 0)}` +
 		// THE FOLD REPORT SITS ABOVE THE RIG STRIP AND IS ON EVERY SHOT. It is
 		// finding 1's mechanical answer: the image says how much of `.ed-body`
 		// is inside its own frame, so a reader can never again take a caption's
 		// word for a mark that scrolled out of view.
-		`.shot-fold{position:fixed;left:0;right:0;bottom:24px;z-index:1;` +
+		`.shot-fold{` +
 		`font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:6px 10px;` +
 		`background:oklch(0.30 0.09 60);color:oklch(0.99 0 0)}` +
 		fmt.Sprintf(`.cal-bench{width:%dpx;max-width:100%%}`, min(s.w-40, 1180)) +
@@ -531,15 +706,25 @@ func daycardShotPage(t *testing.T, s daycardShot, css, body string) string {
 		`<h1>` + s.title + `</h1><p class="shot-cap">` + s.caption + `</p>` +
 		body +
 		`</div>` +
+		`<div class="shot-strips">` +
 		`<div class="shot-fold" id="shot-fold">RIG: the fold report did not run</div>` +
 		`<div class="shot-diag" id="shot-diag">RIG: no transition was created to park — ` +
-		`see the report's morph section</div>` +
+		`see the report's morph section</div></div>` +
 		`<script>` + vis + `</script><script>` + mod + `</script>` +
 		// THE ORDER IS THE CLAIM'S ORDER: open the doors, scroll to where the
 		// caption says it is looking, THEN report the fold. A diag written
 		// before the scroll would describe a frame this shot does not contain.
+		// THE ORDER IS THE CLAIM'S ORDER AND THE DELAY IS NOT COSMETIC. Edit
+		// mode opens from a PROMISE — `edLoad` fetches, then `edOpen` runs in a
+		// `.then` — so a scroll and a fold report emitted in the same task as
+		// the door click describe an editor that does not exist yet. The first
+		// cut did exactly that and burned "shows 0px of 0px" onto an image of a
+		// populated editor, which is the same class of defect as the captions
+		// this round is fixing. The timer also lets the morph's settle land, so
+		// the box being measured is the placed one.
 		`<script>window.addEventListener('load', function () {` +
-		s.script + daycardScrollTo(s.scroll) + daycardFoldDiag +
+		s.script +
+		`setTimeout(function () {` + daycardScrollTo(s.scroll) + daycardFoldDiag + `}, 250);` +
 		`});</script>` +
 		`</body></html>`
 }
@@ -607,6 +792,127 @@ func TestDayCardShotPageMountsWhatItClaimsTo(t *testing.T) {
 //     channel would enter. The build law's "glyphs inked --text-body, never
 //     --axis" is a claim about the SHEET, and it is asserted directly by
 //     TestDayCardCSS_* rather than inferred from a picture.
+// benchFxShotEvents is the capture rig's event set, and it exists because the
+// shared Bench fixture has NONE.
+//
+// THAT ABSENCE IS THE ROOT OF FINDING 2. `benchFxData` projects its Blocks with
+// no Events at all, so every card the rejected set opened printed "No events on
+// this day", no row carried a `[data-dc-edit]` door, and the ONLY editor a
+// driver could reach was the create-mode one behind `+ New event`. Twenty-one
+// of the 22 gating stills are edit-mode editors or player cards with a row
+// list; the rig could not have photographed either.
+//
+// SEPARATE FROM THE SHARED FIXTURE, for benchFxTypedCalendar's reason exactly:
+// the Block's marks, the Ledger's rows, the count oracle and the attention
+// tallies are all projected from the event list, so adding events to the shared
+// fixture would move numbers in dozens of assertions that are about something
+// else. One call site, capture only.
+//
+// THE SET IS CHOSEN TO LIGHT THE CHROME THE STILLS GATE: three events on one
+// day so the card has a row list and a row to Edit, one of each visibility so
+// the gold rail and the Restricted chip are both drawn, a timed event and an
+// all-day one, a recurring event, and a tie.
+func benchFxShotEvents() []Event {
+	s := func(v string) *string { return &v }
+	i := func(v int) *int { return &v }
+	return []Event{
+		{
+			ID: "evt-7f3a", CalendarID: "cal-harptos", Name: "Feast of the Moonmaiden",
+			Description: s("The tenday-long feast the Vayle house keeps for its founder."),
+			Year:        1523, Month: 1, Day: 14, AllDay: false,
+			StartHour: i(19), StartMinute: i(30), EndHour: i(23), EndMinute: i(0),
+			IsRecurring: true, RecurrenceType: s("custom"), RecurrenceInterval: i(3),
+			Visibility:      "everyone",
+			VisibilityRules: s(`{"allowed_users":["u-kael","u-nissa"],"denied_users":["u-tam"]}`),
+			Category:        s("festival"), EntityID: s("ent-nissa-vayle"),
+		},
+		{
+			ID: "evt-2b17", CalendarID: "cal-harptos", Name: "Session 12 — The Sunken Vault",
+			Year: 1523, Month: 1, Day: 14, AllDay: true,
+			Visibility: "everyone", Category: s("session"),
+		},
+		{
+			ID: "evt-9c40", CalendarID: "cal-harptos", Name: "What the Umber council decided",
+			Year: 1523, Month: 1, Day: 14, AllDay: true,
+			Visibility: "dm_only", Category: s("quest"),
+		},
+		{
+			ID: "evt-3d51", CalendarID: "cal-harptos", Name: "Caravan leaves for Tam's Ford",
+			Year: 1523, Month: 1, Day: 6, AllDay: true,
+			Visibility: "everyone", Category: s("downtime"),
+		},
+		{
+			ID: "evt-5e62", CalendarID: "cal-harptos", Name: "Umber moon full",
+			Year: 1523, Month: 1, Day: 21, AllDay: true,
+			Visibility: "everyone", Category: s("celestial"),
+		},
+	}
+}
+
+// benchFxShotData is the capture rig's BenchData: the shared fixture with its
+// PRIMARY Block re-projected through the REAL projection over benchFxShotEvents
+// and benchFxTypedCalendar, and the day card's payload rebuilt from it.
+//
+// It re-projects rather than reaching into the projected Block, so what a shot
+// photographs is what production renders for those events — the marks, their
+// hue/pattern/glyph, the viewer filter that removes a dm_only row for a player,
+// and the Ledger's own rows all come from the shipped projection.
+func benchFxShotData(mount DayCardMount) BenchData {
+	data := benchFxData(true, true)
+	role := 3
+	if !mount.CanCreate {
+		data = benchFxData(false, false)
+		// A PLAYER IS PROJECTED AS A PLAYER, so the dm_only row is removed by
+		// the shipped viewer filter rather than by the fixture omitting it.
+		role = 1
+	}
+	cal := benchFxTypedCalendar()
+	d := projectBlock(BlockProjectionInput{
+		Calendar: &cal, Events: benchFxShotEvents(),
+		Viewer:     BlockViewer{UserID: "u-1", Role: role},
+		MonthIndex: cal.CurrentMonth - 1, Year: cal.CurrentYear,
+		Sync: calblock.SyncPill{State: blockSyncStateOK, Linked: 1, Total: 4,
+			Full: "In sync · 1 of 4 linked", Compact: "In sync · 1 of 4"},
+		MoonCap: benchMoonCap,
+	})
+	d.Layers = benchBlockLayers(blockLayerPrefs{})
+	data.Primary = &BenchBlock{Data: d, Manage: benchManage(&cal, "cal-harptos", "camp-1")}
+	data.DayCard = mount
+	data.DayCardJSON = dayCardPayloadJSON(
+		dayCardSeed{
+			CanAuthor: mount.CanCreate, CanRestrict: mount.CanRestrict,
+			Roster: benchFxRoster(),
+		},
+		dayCardSource{Block: data.Primary, Calendar: &cal})
+	return data
+}
+
+// TestDayCardShotFixtureCarriesEventsToEdit is ALWAYS ON, and it is the second
+// half of finding 2's mechanical answer: an edit-mode DRIVER with no event to
+// drive is a driver that silently photographs a create-mode editor.
+func TestDayCardShotFixtureCarriesEventsToEdit(t *testing.T) {
+	data := benchFxShotData(DayCardMount{CanCreate: true, CanAuthorDmOnly: true,
+		CanDelete: true, CanRestrict: true, CampaignID: "camp-1"})
+	raw := data.DayCardJSON
+	for _, want := range []string{
+		`"id":"evt-7f3a"`, // the row the edit driver clicks
+		`"events":[`,      // …reached through a day that HAS events
+		`"gold":true`,     // the dm_only rail, so the card's GM marks are drawn
+	} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("the capture payload is missing %q — the card would print \"No events on "+
+				"this day\", no row would carry a `data-dc-edit` door, and every shot in the "+
+				"set would be create mode with an edit-mode caption on it", want)
+		}
+	}
+	// …and the player arm must lose the dm_only row through the SHIPPED filter.
+	player := benchFxShotData(DayCardMount{CampaignID: "camp-1"})
+	if strings.Contains(player.DayCardJSON, "evt-9c40") {
+		t.Error("a player's capture payload still carries the dm_only event; the shot would " +
+			"photograph a leak rather than the viewer filter")
+	}
+}
+
 func benchFxTypedCalendar() Calendar {
 	cal := benchFxHarptos()
 	cal.EventCategories = []EventCategory{
@@ -713,6 +1019,58 @@ func TestDayCardShotCaptionsStayInsideTheirOwnFrame(t *testing.T) {
 	}
 }
 
+// TestDayCardShotSetCoversEditMode is ALWAYS ON, and it is the cheap check that
+// the fix round's finding 2 cannot recur silently.
+//
+// FINDING 2, IN ONE SENTENCE: every shot in the rejected set ran the CREATE
+// driver, and of the 22 gating stills 21 are edit-mode editors or player cards
+// — so the by-eye comparison the dispatch's §10 item 1 asks for could not have
+// been made for the state 21 of them are in. The chrome states that render ONLY
+// in edit mode (the tie pill, `Delete event`, the `Save changes` footer, the
+// populated recurrence row, the SELECTED Restricted card) were in no image.
+//
+// The rule is mechanical: the set must drive the row `Edit` door, at more than
+// one viewer, and at more than one width — and the edit-mode driver must be the
+// producer's own door rather than a state written into the page.
+func TestDayCardShotSetCoversEditMode(t *testing.T) {
+	viewers := map[string]bool{}
+	widths := map[int]bool{}
+	edit := 0
+	for _, s := range daycardShotList() {
+		if !strings.Contains(s.script, "data-dc-edit") {
+			continue
+		}
+		edit++
+		widths[s.w] = true
+		viewers[fmt.Sprintf("%v/%v/%v", s.mount.CanAuthorDmOnly, s.mount.CanDelete, s.mount.CanRestrict)] = true
+	}
+	if edit == 0 {
+		t.Fatal("no shot in the set drives `[data-dc-edit]` — the whole set is CREATE mode, " +
+			"which is the state exactly ONE of the 22 gating stills is in. This is the fix " +
+			"round's finding 2")
+	}
+	if len(viewers) < 3 {
+		t.Errorf("edit mode is captured for %d viewer(s); §10 item 2 names GM / co-DM / Scribe, "+
+			"and the Delete axis is only visible in edit mode because a draft has no id to "+
+			"delete", len(viewers))
+	}
+	if len(widths) < 2 {
+		t.Errorf("edit mode is captured at %d width(s); §10 item 2 names 1440 AND 390", len(widths))
+	}
+	// …and the stub must still be the ONE substitution it claims to be: a
+	// single GET, every other verb refused. A stub that answered writes could
+	// photograph a state no user produced.
+	if !strings.Contains(daycardStubEditRecord, "REFUSED") ||
+		!strings.Contains(daycardStubEditRecord, "status: 405") {
+		t.Error("the edit-mode stub no longer refuses non-GET verbs; a capture could " +
+			"photograph a save it did not make")
+	}
+	if !strings.Contains(daycardStubEditRecord, "STUBBED for this capture") {
+		t.Error("the edit-mode stub no longer discloses itself on the shot's diagnostic " +
+			"strip — the one fabrication in this directory must say so on the image")
+	}
+}
+
 // TestDayCardShotRigReportsTheFoldOnEveryShot is ALWAYS ON. The fold report is
 // the part of finding 1's answer a reader who never opens this file relies on:
 // it is burned onto the image itself. If the strip or its script went missing,
@@ -725,8 +1083,9 @@ func TestDayCardShotRigReportsTheFoldOnEveryShot(t *testing.T) {
 		daycardShot{w: 1440, h: 900, script: daycardOpenEditor, scroll: daycardEdBody},
 		dayCardCSS(t), benchStripLinks(renderBench(t, data)))
 	for _, want := range []string{
-		`id="shot-fold"`,       // the strip exists…
-		".shot-fold{position:", // …and is pinned where the editor cannot cover it
+		`id="shot-fold"`,         // the strip exists…
+		`.shot-strips{position:`, // …inside the one fixed footer…
+		`class="shot-strips"`,    // …which is actually on the page
 		"BELOW THE FOLD in this frame",
 		"sc.scrollTop = sc.scrollHeight", // the scroll actually happens
 	} {
@@ -740,6 +1099,14 @@ func TestDayCardShotRigReportsTheFoldOnEveryShot(t *testing.T) {
 	if strings.Index(page, "sc.scrollTop") > strings.Index(page, "BELOW THE FOLD in this frame") {
 		t.Error("the fold report runs before the scroll; it would describe the resting " +
 			"scroll position of an image captured somewhere else")
+	}
+	// …and BOTH must be deferred past the task the doors were clicked in. Edit
+	// mode opens from a promise; a report emitted in the click's own task
+	// measured an editor that had not been created and burned "0px of 0px" onto
+	// an image of a populated one.
+	if strings.Index(page, "setTimeout(function () {") > strings.Index(page, "sc.scrollTop") {
+		t.Error("the scroll and the fold report are not deferred past the door click; in " +
+			"edit mode they would measure an editor that does not exist yet")
 	}
 	// The sheet must still declare the fold this whole apparatus is about. If
 	// `.ed-body` ever stops scrolling, this file's pairs become noise and
