@@ -94,6 +94,12 @@
         id: cal.id,
         slug: cal.slug || '',
         ledgerDocked: !!cal.ledgerDocked,
+        // THE ORDERED LIST, BESIDE THE MAP. The map is the card's hot path (one
+        // lookup per click); the ORDER is the editor's — its date grid, its end
+        // cycler and its week derivation all need the month's dates in the
+        // Ledger's own ordinal order, which a map does not carry. Two views of
+        // one array, never a second parse.
+        list: (Array.isArray(cal.days) ? cal.days : []).slice(),
         // Scribe+ only, and absent entirely below that floor — the producer
         // simply does not emit it, so there is nothing here to gate.
         categories: Array.isArray(cal.categories) ? cal.categories : [],
@@ -101,6 +107,29 @@
       };
     });
     return out;
+  }
+
+  // indexMembers reads the Owner-only audience roster off the SAME page
+  // attribute ([ER-3] SIGNED).
+  //
+  // IT IS A SECOND READ OF ONE ATTRIBUTE RATHER THAN A SECOND SHAPE FOR
+  // indexPayload'S RETURN. Five test files drive indexPayload's `{calendarId:
+  // {...}}` map and the day card's own hot path is that map; widening it to a
+  // wrapper object to carry a key only the editor reads would make every one of
+  // those call sites carry the editor's concern. The parse happens once per
+  // page mount, not once per open.
+  //
+  // DEFENSIVE BY CONSTRUCTION, exactly as indexPayload is: an absent or
+  // malformed attribute, or a payload with no `members` key at all (which is
+  // what every viewer below the Owner floor receives), yields an empty roster
+  // and the audience list simply has no rows to draw.
+  function indexMembers(raw) {
+    if (!raw) return [];
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return []; }
+    var list = parsed && parsed.members;
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (m) { return m && m.id; });
   }
 
   // headText is the card's dated head: "12 Deepwinter 1523 · Sixthday".
@@ -413,10 +442,40 @@
       end_day: numOrNull(form.endDay),
     };
 
+    // ── VISIBILITY ─────────────────────────────────────────────────────────
+    //
+    // EXTENDED, NOT REPLACED, by C-CALV4-EDITOR-R2b stage 2. The stage-2 rule
+    // was: author public-vs-dm_only when the viewer has the capability and the
+    // stored mode is not `specific`, else round-trip. Every one of those cases
+    // still resolves identically — `form.vis` is ABSENT on the pure-function
+    // call sites the existing suite drives, so `mode` falls back to
+    // `form.gmOnly` exactly as before ([ER-10] condition 2: the request body is
+    // byte-equivalent for equivalent input).
+    //
+    // What is NEW is the third mode. `restricted` is Owner-only, so it is
+    // authored only under `opts.canRestrict`, and the ROUND-TRIP GUARD IS
+    // UNCHANGED IN THE DIRECTION THAT MATTERS: a stored `specific` audience is
+    // re-authored only by someone who can author restricted. A co-DM saving a
+    // restricted event still round-trips the audience they were never shown —
+    // dropping it would DESTROY the audience on the first save, silently, and
+    // the only visible symptom would be players seeing something they should
+    // not.
+    //
+    // THE MAPPING ITSELF IS THE SHARED MAPPER'S ([DC-10] SIGNED), never a local
+    // copy: a fourth copy of those fifteen lines is the one nobody notices
+    // going stale.
     var V = (typeof window !== 'undefined' && window.ChronicleCalVisibility) || null;
     var storedMode = prev && V ? V.modeFor(prev.visibility, prev.visibility_rules) : 'public';
-    if (opts.canOfferGMOnly && storedMode !== 'specific' && V) {
-      var mapped = V.buildVisibilityPayload(form.gmOnly ? 'gmonly' : 'public', []);
+    var mode = form.vis || (form.gmOnly ? 'gmonly' : 'public');
+    var mayAuthor =
+      (mode === 'gmonly' && !!opts.canOfferGMOnly) ||
+      (mode === 'restricted' && !!opts.canRestrict) ||
+      (mode === 'public' && (!!opts.canOfferGMOnly || !!opts.canRestrict));
+    if (storedMode === 'specific' && !opts.canRestrict) mayAuthor = false;
+    if (mayAuthor && V) {
+      var mapped = V.buildVisibilityPayload(
+        mode === 'restricted' ? 'specific' : mode,
+        mode === 'restricted' ? (form.audience || []) : []);
       body.visibility = mapped.visibility;
       body.visibility_rules = mapped.visibility_rules;
     } else if (prev) {
@@ -442,7 +501,30 @@
     // applied to the one field where an ABSENT key is a WRITE. Create mode
     // sends nothing: a new event has no stored recurrence and false is then
     // the true value rather than a silent clear.
-    if (prev) {
+    //
+    // R2b AUTHORS IT, so the round trip becomes an AUTHOR-vs-OMIT distinction
+    // rather than a pure round trip, and the three cases are pinned by name in
+    // test/js/daycard_editor_requests.test.mjs:
+    //
+    //   AUTHORED   → recurrenceBody's mapping is sent (every 1 → weekly,
+    //                every 2 → biweekly, every N → custom + interval N;
+    //                month → monthly with no interval, because OccursOn's
+    //                monthly branch ignores the interval entirely)
+    //   UNTOUCHED  → the stored triple is round-tripped exactly as stage 2 did.
+    //                `form.recurrence` is ABSENT on every existing pure-function
+    //                case, so those bodies are byte-identical
+    //   ONCE       → is_recurring:false AND the type and interval cleared
+    //                TOGETHER, never the half-state
+    //
+    // A CHIPPED UNIT AUTHORS NOTHING. recurrenceBody returns null for `day` and
+    // the moon unit, so the branch below falls through to the round trip rather
+    // than writing a type the server would silently degrade to one occurrence.
+    var authored = form.recurrence ? recurrenceBody(form.recurrence) : null;
+    if (authored) {
+      body.is_recurring = authored.is_recurring;
+      body.recurrence_type = authored.recurrence_type;
+      body.recurrence_interval = authored.recurrence_interval;
+    } else if (prev) {
       body.is_recurring = !!prev.is_recurring;
       if (prev.recurrence_type !== undefined && prev.recurrence_type !== null) {
         body.recurrence_type = prev.recurrence_type;
@@ -451,7 +533,15 @@
         body.recurrence_interval = prev.recurrence_interval;
       }
     }
-    if (prev && prev.entity_id) body.entity_id = prev.entity_id;
+    // THE PRIMARY TIE IS AUTHORED WHEN THE FIELD EXISTS AND ROUND-TRIPPED WHEN
+    // IT DOES NOT. `form.entityID` is emitted by edFormValues on every DOM
+    // path, so a cleared pill really clears `entity_id`; the pure-function
+    // cases that pass no `entityID` at all keep stage 2's round trip exactly
+    // ([ER-10] condition 2). `+ tie another` and the multi-tie routes are
+    // BOOKED, not shipped — [ER-4] SIGNED makes the single tie with remove the
+    // sanctioned shape when the wider list is not proven.
+    if (form.entityID !== undefined) body.entity_id = form.entityID || null;
+    else if (prev && prev.entity_id) body.entity_id = prev.entity_id;
     if (prev && prev.description_html !== undefined) body.description_html = prev.description_html;
     return body;
   }
@@ -470,10 +560,246 @@
     return { method: 'POST', eventID: '' };
   }
 
+  // dayRange is STOLEN BY COPY from calendar_v2's event_grid.js:27, with
+  // attribution, exactly as [DC-10] SIGNED sanctions ([DC-11] term 4's
+  // sibling). It is re-expressed over the ordered DATE LIST rather than over
+  // raw day numbers, because this surface has an intercalary day and that day
+  // is not "day 31": on the list it is simply the last entry, so a run that
+  // ends on it is a run like any other.
+  //
+  // COPYING FROM A FROZEN FILE IS NOT OPENING IT. event_grid.js is not edited,
+  // not imported and not depended on in any way — R2-4 sunsets it and a
+  // dependency would die with it.
+  function dayRange(dates, aKey, bKey) {
+    var a = -1, b = -1;
+    for (var i = 0; i < dates.length; i++) {
+      if (dates[i].key === aKey) a = i;
+      if (dates[i].key === bKey) b = i;
+    }
+    if (a < 0 || b < 0) return [];
+    if (a > b) { var t = a; a = b; b = t; }
+    return dates.slice(a, b + 1);
+  }
+
+  // ── THE CHROME'S PURE MAPPERS — C-CALV4-EDITOR-R2b stage 2 ──────────────
+
+  // isIntercalary reads the ANSWER key's own namespace rather than a flag.
+  //
+  // The payload mints `slug-N` / `N` for an ordinary day and `slug-iN` / `iN`
+  // for an intercalary one (daycard.go's two mirrored helpers), so the
+  // distinction is already on the wire and a `intercalary: true` field would be
+  // a NINTH payload key restating it. [DC-1]'s law is not widened to say a
+  // thing the key already says.
+  function isIntercalary(day) {
+    return !!day && typeof day.ord === 'string' && day.ord.charAt(0) === 'i';
+  }
+
+  // weekShape DERIVES the calendar's week from the payload's own weekday names.
+  //
+  // THERE IS NO LITERAL WEEK LENGTH ANYWHERE IN THIS MODULE, THE TEMPLATE OR
+  // THE SHEET, and this function is why. Ten-day weeks are native to this
+  // product; a `% 7` here is the exact defect css_contract_test.go forbids one
+  // layer up. The producer already places every day in its own column and names
+  // that column's weekday, so the cycle length is the number of names before
+  // the first one comes round again — read off shipped data rather than added
+  // to the payload as a tenth field.
+  //
+  // A calendar that declares NO weekdays returns a length of 0, and every
+  // consumer treats that as "there is no week here": the grid flows instead of
+  // gridding, and the week-based recurrence unit does not ship at all — which
+  // is correct, because WeekLength() 0 makes the server's own stride 0 and
+  // OccursOn falls back to a single occurrence.
+  function weekShape(list) {
+    var ordinary = (list || []).filter(function (d) {
+      return d && !isIntercalary(d) && d.weekday;
+    }).slice().sort(function (a, b) { return (a.day || 0) - (b.day || 0); });
+    var names = [];
+    for (var i = 0; i < ordinary.length; i++) {
+      var n = ordinary[i].weekday;
+      if (names.indexOf(n) >= 0) break;
+      names.push(n);
+    }
+    return { len: names.length, names: names };
+  }
+
+  // orderedDates is the month's dates in the LEDGER'S OWN ORDINAL ORDER:
+  // ordinary days ascending, then the intercalary days.
+  //
+  // THE INTERCALARY DAY SORTS LAST, and that single fact is what makes the end
+  // date unable to precede its start. The producer already emits the list in
+  // this order (buildDayCardCalendar walks the grid then the intercalary
+  // months, which is newLedgerView's own walk), so this re-derives nothing — it
+  // defends against an index that lost the order on the way through a map.
+  function orderedDates(list) {
+    var ord = [], ic = [];
+    (list || []).forEach(function (d) {
+      if (!d || !d.key) return;
+      (isIntercalary(d) ? ic : ord).push(d);
+    });
+    ord.sort(function (a, b) { return (a.day || 0) - (b.day || 0); });
+    return ord.concat(ic);
+  }
+
+  // nextDate is the `Ends` cycler's whole ordering law: the next date AFTER the
+  // given one, on the ordered list, or null when there is no next one.
+  //
+  // IT COMPARES ORDINALS OFF ONE ORDERED LIST rather than arithmetic on `day`.
+  // The drawing lane learned this the hard way: taking `st.day === 'ic' ? days
+  // : st.day` as the base made an intercalary START behave like day 30, so the
+  // end clamped BACKWARDS to 30 while the readout said Midwinter. On this list
+  // the intercalary day is simply the last entry, so a start on it has no next
+  // date and the field says "ends the same day" instead of clamping.
+  function nextDate(dates, key) {
+    if (!key) return (dates && dates.length) ? dates[0] : null;
+    for (var i = 0; i < dates.length; i++) {
+      if (dates[i].key === key) return dates[i + 1] || null;
+    }
+    return null;
+  }
+
+  // recurrenceUnits is THE CORRECTED UNIT LIST, and it is corrected in three
+  // directions the drawing got wrong.
+  //
+  // `recurrence_type` accepts exactly weekly · biweekly · monthly · custom
+  // (model.go:214-217) and OccursOn sends anything else to
+  // `default: return onBase` (model.go:305-309). A WRONG UNIT IS NOT AN ERROR,
+  // IT IS A SILENT SINGLE OCCURRENCE — which is the failure a chip exists to
+  // prevent, so the chip has to land on exactly the right units.
+  //
+  //  1. THE WEEK UNIT IS NOT INVENTION AND ITS CHIP COMES OFF. Week-based
+  //     recurrence strides `WeekLength() × recurrenceWeeks(...)` (model.go:336,
+  //     :351-361), so on a ten-day calendar `weekly` MEANS every tenday. §5 of
+  //     DAYCARD and the mockup both chip this unit and both are wrong.
+  //  2. `year` IS INVENTION AND THE DRAWING OFFERS IT UNCHIPPED. There is no
+  //     yearly type; it degrades silently. It does not ship at all — an
+  //     unbacked unit in a picker is a trap, and the one thing worse than a
+  //     missing option is one that quietly does nothing.
+  //  3. THE LABEL IS DERIVED, NEVER A LITERAL. Chronicle's Calendar carries
+  //     `Weekdays` and a `WeekLength()` and NO WEEK NOUN AT ALL, so there is no
+  //     "the calendar's own week noun" to read: the honest derived label names
+  //     the cycle's length, which cannot lie about the stride the way a bare
+  //     "week" does on a ten-day calendar and cannot hardcode "tenday" either.
+  //
+  // `day` and the moon unit stay chipped, exactly as drawn — neither is an
+  // accepted type. The moon unit is labelled generically because the payload
+  // carries no moon to name; the drawing's "Umber full moon" reads a moon out
+  // of its own demo data and adding one here would be a payload field for a
+  // control that is chipped precisely because it does not work.
+  function recurrenceUnits(weekLen) {
+    var out = [];
+    if (weekLen > 0) out.push({ id: 'week', label: weekLen + '-day week', backed: true });
+    out.push({ id: 'month', label: 'month', backed: true });
+    out.push({ id: 'day', label: 'day', backed: false });
+    out.push({ id: 'moon', label: 'moon phase', backed: false });
+    return out;
+  }
+
+  // recurrenceInterval says whether the `every [N]` field applies at all.
+  //
+  // ONLY THE WEEK UNIT HAS AN INTERVAL. OccursOn's monthly branch ignores
+  // RecurrenceInterval entirely — it checks the day-of-month and the occurrence
+  // cap and returns — so `every 2 months` would be stored, accepted and then
+  // silently expanded EVERY month. That is the same trap as a wrong unit, one
+  // level down, and the drawing offers the field on every unit. The control is
+  // therefore ABSENT for month rather than chipped: there is nothing here for a
+  // backend to add, the type simply has no interval.
+  function recurrenceInterval(unit) { return unit === 'week'; }
+
+  // recurrenceBody maps the editor's recurrence state onto the request body,
+  // and it is the mapping [ER-10] condition 2 makes the real contract.
+  //
+  //   every 1 → weekly · every 2 → biweekly · every N → custom + interval N
+  //   month   → monthly, no interval (see recurrenceInterval)
+  //   an UNBACKED unit → null, meaning DO NOT AUTHOR
+  //
+  // NULL IS THE HONEST ANSWER FOR A CHIPPED UNIT. The caller round-trips the
+  // stored recurrence when it gets one, so picking `day` writes nothing at all
+  // rather than writing a type the server will silently degrade. That is
+  // exactly what the `needs backend` chip beside it promises.
+  //
+  // `once` CLEARS THE TYPE AND THE INTERVAL TOGETHER, and the empty string is
+  // not a flourish: service.UpdateEvent guards the pointer siblings
+  // (`if input.RecurrenceType != nil`), so a JSON `null` CANNOT clear the
+  // column — it preserves it, which is precisely the half-state
+  // C-CAL-RECURRING-PARTIAL-STATE-CLEANUP already had to clean up once
+  // (is_recurring=false with a live recurrence_type beside it). "" is a
+  // non-nil pointer the switch sends to `default`, so the pair lands
+  // consistent. THE END/MAX FIELDS CANNOT BE REACHED FROM HERE AT ALL — the
+  // shipped PUT binds none of them — and that is carried, not papered over.
+  function recurrenceBody(rec) {
+    if (!rec || rec.mode !== 'repeats') {
+      return { is_recurring: false, recurrence_type: '', recurrence_interval: 0 };
+    }
+    if (rec.unit === 'month') {
+      return { is_recurring: true, recurrence_type: 'monthly', recurrence_interval: 0 };
+    }
+    if (rec.unit !== 'week') return null;
+    var every = Math.floor(Number(rec.every));
+    if (!isFinite(every) || every < 1) every = 1;
+    if (every === 1) return { is_recurring: true, recurrence_type: 'weekly', recurrence_interval: 0 };
+    if (every === 2) return { is_recurring: true, recurrence_type: 'biweekly', recurrence_interval: 0 };
+    return { is_recurring: true, recurrence_type: 'custom', recurrence_interval: every };
+  }
+
+  // recurrenceFromRecord is the INVERSE, so the editor opens on the state the
+  // record is actually in and a title-only save round-trips it byte for byte.
+  function recurrenceFromRecord(rec, weekLen) {
+    var out = { mode: 'once', every: 1, unit: weekLen > 0 ? 'week' : 'month', wd: [] };
+    if (!rec || !rec.is_recurring) return out;
+    var t = rec.recurrence_type;
+    if (t === 'monthly') { out.mode = 'repeats'; out.unit = 'month'; return out; }
+    if (t === 'weekly' || t === 'biweekly' || t === 'custom') {
+      out.mode = 'repeats';
+      out.unit = 'week';
+      out.every = t === 'biweekly' ? 2
+        : (t === 'custom' && rec.recurrence_interval > 0 ? rec.recurrence_interval : 1);
+      return out;
+    }
+    // A legacy or unknown type expands to a single occurrence server-side, so
+    // the editor shows it as one rather than inventing a rule for it.
+    return out;
+  }
+
+  // audienceFromRules turns the stored allow/deny pair into the roster's own
+  // per-member state. IT IS ALLOW-BY-DEFAULT ONLY WHEN THERE IS NO RULE AT ALL:
+  // an event with an allowed_users list admits exactly that list, so a member
+  // absent from it is denied, and reading them as allowed would silently widen
+  // an audience on the first save.
+  function audienceFromRules(chips, memberIDs) {
+    var allowed = {}, denied = {}, sawAllow = false;
+    (chips || []).forEach(function (c) {
+      if (!c || c.kind !== 'user' || !c.target) return;
+      if (c.mode === 'allow') { allowed[c.target] = true; sawAllow = true; }
+      else if (c.mode === 'deny') denied[c.target] = true;
+    });
+    var out = {};
+    (memberIDs || []).forEach(function (id) {
+      out[id] = sawAllow ? !!allowed[id] : !denied[id];
+    });
+    return out;
+  }
+
+  // audienceToChips is the return leg, in the shape the SHARED mapper takes
+  // ([DC-10] SIGNED — this module never writes visibility_rules itself).
+  //
+  // It emits an ALLOW list, which is the shape `visibility_rules` carries for a
+  // restricted event and the shape the stills draw. A member switched off is
+  // absent from the list rather than present on a deny list, because the two
+  // are not the same statement: allowed_users is a closed door with a guest
+  // list, and denied_users is an open door with a bouncer.
+  function audienceToChips(state, memberIDs) {
+    var chips = [];
+    (memberIDs || []).forEach(function (id) {
+      if (state && state[id]) chips.push({ mode: 'allow', kind: 'user', target: id, label: id });
+    });
+    return chips;
+  }
+
   if (typeof window !== 'undefined') {
     window.__calDayCard = {
       writeTarget: writeTarget,
       indexPayload: indexPayload,
+      indexMembers: indexMembers,
       headText: headText,
       durationMS: durationMS,
       closeDelayMS: closeDelayMS,
@@ -483,6 +809,17 @@
       ordIsSafe: ordIsSafe,
       numOrNull: numOrNull,
       buildEventBody: buildEventBody,
+      isIntercalary: isIntercalary,
+      weekShape: weekShape,
+      orderedDates: orderedDates,
+      dayRange: dayRange,
+      nextDate: nextDate,
+      recurrenceUnits: recurrenceUnits,
+      recurrenceInterval: recurrenceInterval,
+      recurrenceBody: recurrenceBody,
+      recurrenceFromRecord: recurrenceFromRecord,
+      audienceFromRules: audienceFromRules,
+      audienceToChips: audienceToChips,
     };
   }
 
@@ -545,7 +882,46 @@
       gmOnly: editor.querySelector('[data-de-gmonly]'),
       err: editor.querySelector('[data-de-err]'),
       del: editor.querySelector('[data-de-delete]'),
+      // ── THE CHROME'S HANDLES (C-CALV4-EDITOR-R2b stage 2) ─────────────
+      //
+      // EVERY ONE OF THEM MAY BE null AND THAT IS THE GATE. `restricted`,
+      // `vis`, `aud` and `audRows` are absent for a viewer the producer did not
+      // render them for, and `gmOnly` was already absent below the capability.
+      // The builders below check before they write, so a Scribe-floor render
+      // that expects a control and finds none DEGRADES rather than throwing —
+      // which is also what the handler's own body gating requires
+      // (a player receives neither audience key at all).
+      tyRail: editor.querySelector('[data-de-tyrail]'),
+      tyGlyph: editor.querySelector('[data-de-tyglyph]'),
+      idOut: editor.querySelector('[data-de-id]'),
+      typeRail: editor.querySelector('[data-de-typerail]'),
+      dateLab: editor.querySelector('[data-de-datelab]'),
+      datePicker: editor.querySelector('[data-de-datepicker]'),
+      dateRead: editor.querySelector('[data-de-dateread]'),
+      endRead: editor.querySelector('[data-de-endread]'),
+      recSeg: editor.querySelector('[data-de-recurrence]'),
+      recOn: editor.querySelector('[data-de-recon]'),
+      recEvery: editor.querySelector('[data-de-recevery]'),
+      recUnits: editor.querySelector('[data-de-recunits]'),
+      recRead: editor.querySelector('[data-de-recread]'),
+      recBox: editor.querySelector('[data-de-recbox]'),
+      wdPick: editor.querySelector('[data-de-wdpick]'),
+      vis: editor.querySelector('[data-de-vis]'),
+      restricted: editor.querySelector('[data-de-restricted]'),
+      aud: editor.querySelector('[data-de-aud]'),
+      audRows: editor.querySelector('[data-de-audrows]'),
+      tieRow: editor.querySelector('[data-de-tierow]'),
+      tieSearch: editor.querySelector('[data-de-tiesearch]'),
+      tieRes: editor.querySelector('[data-de-tieres]'),
+      entity: editor.querySelector('[data-de-entity]'),
+      preview: editor.querySelector('[data-de-preview]'),
+      save: editor.querySelector('[data-de-save]'),
     } : null;
+    // THE AUDIENCE ROSTER IS OWNER-ONLY AND IT ARRIVES ALREADY GATED ([ER-3]
+    // SIGNED). The producer omits the `members` key entirely below the Owner
+    // floor, so there is nothing here to gate: a Scribe's page simply has no
+    // names in it. This module executes the gate; it does not compute it.
+    var members = indexMembers(surface.getAttribute('data-cal-daycard-payload'));
     // `busy` is the WRITE IN FLIGHT flag (DC-SAVE-6). Two independent
     // listeners reach edSave — the delegated document click on [data-de-save]
     // and the form's own submit — and a real user click only fires one of them
@@ -560,7 +936,25 @@
     // points, both verbs, and the delete path, and it is cleared on failure so a
     // refused save can be retried — but never on success, because success ends
     // in a reload and clearing it would open a window for a second POST.
-    var edState = { open: false, timer: 0, mode: '', calId: '', eventID: '', day: null, prev: null, busy: false };
+    var edState = {
+      open: false, timer: 0, mode: '', calId: '', eventID: '', day: null,
+      prev: null, busy: false,
+      // THE MORPH'S MEASURED GEOMETRY, taken from the CARD at open and replayed
+      // on close. Null under reduced motion and whenever a rect could not be
+      // measured, which is what makes the stage-2 open path the fallback.
+      morph: null, morphTimer: 0,
+    };
+
+    // DRAG-CREATE'S STATE, declared HERE rather than beside its listeners at
+    // the foot of this function. `var` is function-scoped and hoisted, so the
+    // click handler above would have worked either way — but a reader meeting
+    // `drag.eatClick` two hundred lines before the declaration has to take the
+    // hoisting on trust, and stage 4 is supposed to be readable as a severable
+    // block, not as a puzzle.
+    var drag = {
+      on: false, host: null, cal: null, startKey: '', lastKey: '',
+      moved: false, layer: null, eatClick: false,
+    };
 
     function reduced() {
       return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -800,8 +1194,178 @@
     // carve-out for their signature, not invented here: per-surface motion
     // invention is what produced the skypane verdict.
 
+    // ── THE EDITOR MORPH — the operator's signed carve-out ───────────────
+    //
+    // decisions/2026-08-01-operator-signatures-wz1-sky-editor.md §3, recorded
+    // as: "the day card may visually morph into the editor as its own named
+    // motion signature — resolving [DC-7]'s escalation; the DAYCARD-era
+    // register-only constraint is lifted FOR R2b ONLY, and the morph must still
+    // be instant/complete under reduced motion and never touch the Block's
+    // interior."
+    //
+    // GROW/MORPH CONTINUITY, WHICH IS THE WHOLE POINT. The card does not vanish
+    // and the editor does not appear: ONE BOX BECOMES THE OTHER. The editor is
+    // placed at its FINAL geometry by the shipped placement law, then seeded
+    // back onto the card's measured rect and handed to the register's carve-out
+    // rule. The card cross-fades out over the same interval on the mechanism it
+    // already had, so at no frame are two full boxes visible — they occupy the
+    // same rect while one ramps up and the other ramps down.
+    //
+    // IT MOVES BY `translate`, NOT BY `left`/`top`, and it does NOT SCALE. A
+    // FLIP scale is the cheap way and it visibly squashes the text inside a
+    // growing box; this surface is a FORM. `translate` is also nameable in the
+    // guard's allowlist on its own, so the allowlist can admit the movement
+    // without admitting a scale.
+    //
+    // `.edmorph` IS PRESENT ONLY IN FLIGHT. It is added to seed, removed when
+    // the geometry has landed, and re-added to reverse — so a resting editor
+    // carries no transition and opening the audience list later resizes
+    // instantly rather than animating something nobody signed.
+    //
+    // ZERO BLOCK LEAKAGE. The only rect this reads is the CARD's, which is a
+    // page-level sibling in the top layer. It inserts no node inside
+    // .cal-block-host, adds and removes no class there, and animates nothing
+    // there — and test/js/daycard_block_immutability.test.mjs drives this path
+    // and re-compares the fixture's innerHTML byte for byte.
+
+    function edMorphRect(el) {
+      if (!el || !el.getBoundingClientRect) return null;
+      var r = el.getBoundingClientRect();
+      if (!(r.width > 0) || !(r.height > 0)) return null;
+      return r;
+    }
+
+    // edMorphSeed places the editor at the card's geometry once the placement
+    // law has decided where it really goes. It returns false when it cannot —
+    // no card rect, no resolved target, or reduced motion — and the caller then
+    // opens the editor exactly as stage 2 did.
+    //
+    // THE TARGET SIZE IS THE ONE edPosition ALREADY COMPUTED, NEVER
+    // getBoundingClientRect(). This is the bug the parked capture caught, and
+    // it is worth the paragraph because it looked right in every still: at the
+    // moment the editor is shown, `.cal-dayeditor:not(.edmorph) .dcbox` still
+    // collapses the inner box to block-size 0, so the ROOT measures about two
+    // pixels tall. A morph seeded from that rect animates a 2px target — the
+    // box appears to snap and the frames are stills of nothing. `scrollHeight +
+    // chrome` is the content's real height under `overflow:hidden`, it is what
+    // the placement law is already measuring, and using the same number means
+    // the box lands exactly where placeCard put it.
+    //
+    // REDUCED MOTION SEEDS NOTHING AT ALL, and that is the second half of
+    // "instant AND complete". The sheet declares no rule outside the
+    // no-preference wrapper, so a seeded start geometry with no transition to
+    // leave it would land the editor INSTANTLY AT A MID-MORPH SIZE — the exact
+    // failure mode the signature's two words are guarding against.
+    function edMorphSeed(fromEl, target, at) {
+      if (reduced()) return false;
+      var from = edMorphRect(fromEl);
+      if (!from || !target || !(target.w > 0) || !(target.h > 0)) return false;
+      edState.morph = {
+        dx: Math.round(from.left - (at ? at.left : 0)),
+        dy: Math.round(from.top - (at ? at.top : 0)),
+        w: Math.round(from.width),
+        h: Math.round(from.height),
+        toW: Math.round(target.w),
+        toH: Math.round(target.h),
+      };
+      edMorphWrite(edState.morph, true);
+      return true;
+    }
+
+    // edMorphWrite is the ONE writer of the four transitioned properties, so
+    // the outbound and inbound halves cannot drift into two ideas of what the
+    // card's geometry was.
+    // IT WRITES THE LOGICAL PROPERTIES, AND THAT IS NOT A STYLE PREFERENCE.
+    // The carve-out's rule names `inline-size` and `block-size`; writing
+    // `style.width` / `style.height` instead leaves the declared
+    // transition-property matching nothing, so the box SNAPS to its end
+    // geometry while `opacity` alone animates — which looks close enough to a
+    // morph in a still and is not one. It was caught by parking the transitions
+    // at 0% and finding the editor already at full size.
+    function edMorphWrite(m, atCard) {
+      if (!m || !ed.root || !ed.root.style) return;
+      ed.root.style.setProperty('translate',
+        atCard ? m.dx + 'px ' + m.dy + 'px' : '0px 0px');
+      ed.root.style.setProperty('inline-size', (atCard ? m.w : m.toW) + 'px');
+      ed.root.style.setProperty('block-size', (atCard ? m.h : m.toH) + 'px');
+      ed.root.style.setProperty('opacity', atCard ? '0' : '1');
+    }
+
+    // edMorphSettle hands the box back to its own natural sizing once the
+    // geometry has landed. Leaving the measured height pinned would make
+    // `overflow:hidden` clip anything the form grew afterwards — the audience
+    // roster opening under Restricted is exactly that case.
+    function edMorphSettle() {
+      if (edState.morphTimer) { clearTimeout(edState.morphTimer); edState.morphTimer = 0; }
+      if (!ed.root || !ed.root.style) return;
+      ed.root.classList.remove('edmorph');
+      ed.root.style.removeProperty('translate');
+      ed.root.style.removeProperty('inline-size');
+      ed.root.style.removeProperty('block-size');
+      ed.root.style.removeProperty('opacity');
+    }
+
+    // edShow OPENS THE BOX, AND ITS FIRST JOB IS TO MAKE THE BOX MEASURABLE.
+    //
+    // THE STALE-GEOMETRY REOPEN, WHICH WAS THE ROUND-3 BLOCKER ARRIVING THROUGH
+    // A STYLE ATTRIBUTE. edClose writes the REVERSE morph geometry as inline
+    // `inline-size` / `block-size` / `translate` / `opacity` — the card's
+    // measured rect, 420px wide — and edHide is the only thing that clears it,
+    // on the --disc-close timer the line above has just CANCELLED. So a reopen
+    // inside that 160ms window used to walk into edPosition with the card's
+    // width still pinned inline, and `ed.root.offsetWidth` answered 420 for a
+    // box the sheet sizes at `--de-w` (760). placeCard then reasoned about a
+    // box that is not the one that renders: it found a "clear" position for a
+    // 420px box, the 760px box drew there, and the docked Ledger was occluded —
+    // with the module's own occlusion report cheerfully saying clear=true.
+    //
+    // MEASURED, NOT REASONED: DAYCARD_GEOMETRY=1 caught it on 23 of the real
+    // world calendar's day cells at viewport 900, up to 70,906 px² of overlap,
+    // at EVERY candidate width including the shipped one — because the stale
+    // rect is the card's rect and does not vary with --de-w. Closing and
+    // immediately opening another day is not an exotic path; it is what reading
+    // two days in a row looks like.
+    //
+    // THE FIX IS TO CLEAR, NOT TO RE-MEASURE. edMorphSettle is already the one
+    // place that hands the box back to its own natural sizing, so the reopen
+    // borrows it rather than growing a second idea of what "no morph geometry"
+    // means. `placeCard` IS NOT TOUCHED BY ANY OF THIS ([ER-5]: a fourth
+    // geometry would be the round-4 lesson unlearned) — the law was always
+    // right, it was being handed a lie about the box.
+    // AND THE SAME LIE ARRIVES A SECOND WAY, THROUGH THE PREVIOUS PLACEMENT'S
+    // SHEET — stage 19, found by the [ER-5] probe's own MeasuredW guard.
+    //
+    // `applyPlacement` is the only writer of `.dcsheet` and of the `style.width`
+    // that goes with it, and it writes them AFTER `edPosition` has measured the
+    // box. Nothing clears them in between: `edHide` drops the whole style
+    // attribute but not the class, and it runs on a --disc-close timer this path
+    // has already cancelled. So opening a day whose editor SHEETS and then
+    // opening one whose editor does not hands `edPosition` a box still wearing
+    // the sheet — `ed.root.offsetWidth` answers the full viewport width for a
+    // box that is about to render at `--de-w`, and placeCard reasons about a
+    // rectangle that does not exist. That is the round-3 blocker's exact shape
+    // arriving through a class instead of an inline style.
+    //
+    // IT IS PRE-EXISTING AND IT WAS INVISIBLE UNTIL THE MORPH RAN. With the open
+    // morph inert the box was never actually sized from that measurement, so
+    // every rendered frame looked right and only the PLACEMENT was computed from
+    // the wrong number. The stage-18 reorder made the morph animate to that
+    // number, the probe read it, and its stale-geometry assertion went red
+    // naming the full viewport width. The guard did its job; this is the answer,
+    // not an excuse for it.
+    //
+    // CLEARED, NOT RE-MEASURED, for the reason above — and `placeCard` is still
+    // not touched.
     function edShow() {
       if (edState.timer) { clearTimeout(edState.timer); edState.timer = 0; }
+      edMorphSettle();
+      // BOTH HALVES, AND THROUGH THE SAME WRITER `applyPlacement` USES.
+      // `el.style.width = ''` is how the placement law itself clears the sheet's
+      // width for a popover placement; using `removeProperty` here instead would
+      // be a second idea of what "no sheet" means.
+      ed.root.classList.remove('dcsheet');
+      if (ed.root.style) ed.root.style.width = '';
+      edState.morph = null;
       ed.root.setAttribute('data-dc-shown', '');
       if (typeof ed.root.showPopover === 'function') {
         try { ed.root.showPopover(); } catch (e) { /* already open */ }
@@ -810,6 +1374,9 @@
 
     function edHide() {
       edState.timer = 0;
+      if (edState.morphTimer) { clearTimeout(edState.morphTimer); edState.morphTimer = 0; }
+      edState.morph = null;
+      ed.root.classList.remove('edmorph');
       ed.root.removeAttribute('data-dc-shown');
       ed.root.removeAttribute('style');
       if (typeof ed.root.hidePopover === 'function') {
@@ -820,9 +1387,21 @@
     function edClose() {
       if (!edState.open) return;
       edState.open = false;
+      // `.dcopen` COMES OFF FIRST, AND THE ORDER IS THE WHOLE OF CLAUSE 2.
+      // The carve-out's open-state rule is the only thing declaring
+      // --disc-open, so removing the class before writing the reverse geometry
+      // makes leaving run at --disc-close without anyone having to remember it.
       ed.root.classList.remove('dcopen');
       var wait = closeDelayMS(cssVar('--disc-close'), reduced());
       if (wait <= 0) { edHide(); return; }
+      if (edState.morphTimer) { clearTimeout(edState.morphTimer); edState.morphTimer = 0; }
+      if (edState.morph) {
+        // REVERSE, not a second signature: the same four properties, the same
+        // easing, back onto the same measured rect the card occupied.
+        ed.root.classList.add('edmorph');
+        void ed.root.offsetHeight;
+        edMorphWrite(edState.morph, true);
+      }
       if (edState.timer) clearTimeout(edState.timer);
       edState.timer = setTimeout(edHide, wait);
     }
@@ -833,21 +1412,547 @@
       ed.err.hidden = !msg;
     }
 
-    // seedCategories fills the type picker from THE PAGE PAYLOAD, per calendar.
-    // The categories route is Owner-only, so a Scribe could not fetch this —
-    // [DC-8](c) resolved to answering it from the producer rather than widening
-    // that GET's floor.
-    function seedCategories(cal) {
-      if (!ed.category) return;
-      while (ed.category.children.length > 1) {
-        ed.category.removeChild(ed.category.children[ed.category.children.length - 1]);
-      }
-      (cal && cal.categories ? cal.categories : []).forEach(function (cat) {
-        var opt = document.createElement('option');
-        opt.setAttribute('value', cat.slug);
-        opt.textContent = cat.glyph ? cat.glyph + ' ' + cat.name : cat.name;
-        ed.category.appendChild(opt);
+    // ── THE CHROME'S BUILDERS — C-CALV4-EDITOR-R2b stage 2 ────────────────
+    //
+    // EVERY ONE OF THESE BUILDS DOM INSIDE THE EDITOR'S OWN BOX AND NOWHERE
+    // ELSE. The module's boundary is unchanged: it may query and listen to the
+    // Block's DOM and may not insert a node inside .cal-block-host, add or
+    // remove a class there, or animate anything there.
+    //
+    // `edUI` is the chrome's state, and it is deliberately small. Where a value
+    // has a hidden input the input IS the state (the write path reads it), and
+    // this object carries only what has no field of its own: the calendar under
+    // edit, its derived week, the ordered date list, the recurrence triple, the
+    // per-member audience and the tie.
+    var edUI = {
+      cal: null,
+      dates: [],
+      week: { len: 0, names: [] },
+      dayKey: '',
+      endKey: '',
+      // `touched` IS THE AUTHOR-vs-OMIT DISTINCTION, and it is the whole of
+      // the dispatch's three losslessness cases. The chrome AUTHORS recurrence
+      // now, so a save has to be able to say "I did not touch this" — otherwise
+      // opening an event whose stored type Chronicle does not accept (a legacy
+      // `yearly`, which expands to one occurrence) and renaming it would
+      // REWRITE the stored rule as a side effect of a title change. Untouched
+      // round-trips; touched authors; explicitly Once clears the pair.
+      rec: { mode: 'once', every: 1, unit: 'week', wd: {}, touched: false },
+      vis: 'public',
+      aud: {},
+      tie: null,
+      tieTimer: 0,
+      tieSeq: 0,
+    };
+
+    function clear(node) {
+      if (!node) return;
+      while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function mk(tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined && text !== null) n.textContent = String(text);
+      return n;
+    }
+
+    function pressed(node, on) {
+      if (node) node.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+
+    // memberIDs is the audience's iteration order, and it is the ROSTER'S own
+    // order — the same order the RSVP panel prints, because the identity pair
+    // is keyed to the roster index and two surfaces that reorder the same
+    // people would hand the same member two different hues.
+    function memberIDs() {
+      return members.map(function (m) { return m.id; });
+    }
+
+    // ── the type rail: the locked (hue · pattern · glyph) triple ──────────
+    //
+    // Seeded from THE PAGE PAYLOAD, per calendar, because
+    // GET /calendars/:calId/event-categories sits behind an OWNER floor and a
+    // Scribe cannot reach it ([DC-8](c) resolved to option ii).
+    //
+    // `data-de-category` DID NOT MOVE OFF THE NODE THE MODULE READS. It is a
+    // hidden input now instead of a <select>, and `ed.category.value` is the
+    // same read it always was — which is [ER-10] condition 1, met literally.
+    function edTypeRail(cal) {
+      if (!ed.typeRail) return;
+      clear(ed.typeRail);
+      var cats = [{ slug: '', name: 'No type' }].concat(
+        (cal && cal.categories) ? cal.categories : []);
+      cats.forEach(function (cat) {
+        var b = mk('button', 'topt');
+        b.type = 'button';
+        b.setAttribute('data-type-pick', cat.slug || '');
+        b.setAttribute('role', 'radio');
+        if (cat.axis) b.style.setProperty('--axis', cat.axis);
+        var rail = mk('i', 'rail ' + (cat.pattern || 'p1'));
+        rail.setAttribute('aria-hidden', 'true');
+        b.appendChild(rail);
+        if (cat.glyph) {
+          // THE GLYPH IS INKED --text-body BY THE SHEET, NEVER --axis. The
+          // stills index measured axis-inked type glyphs at 2.27:1 and 3.06:1
+          // in light and retired both sites by name; the rail beside it is
+          // where the hue lives.
+          var g = mk('span', 'g', cat.glyph);
+          g.setAttribute('aria-hidden', 'true');
+          b.appendChild(g);
+        }
+        b.appendChild(mk('span', 'nm', cat.name || cat.slug));
+        ed.typeRail.appendChild(b);
       });
+      edTypeSet(ed.category ? ed.category.value : '');
+    }
+
+    function edTypeSet(slug) {
+      if (ed.category) ed.category.value = slug || '';
+      if (ed.typeRail) {
+        ed.typeRail.querySelectorAll('[data-type-pick]').forEach(function (b) {
+          var on = b.getAttribute('data-type-pick') === (slug || '');
+          pressed(b, on);
+          b.setAttribute('aria-checked', on ? 'true' : 'false');
+        });
+      }
+      edHeadMark();
+      edPreview();
+    }
+
+    function edCategory(slug) {
+      var cats = (edUI.cal && edUI.cal.categories) || [];
+      for (var i = 0; i < cats.length; i++) if (cats[i].slug === slug) return cats[i];
+      return null;
+    }
+
+    // THE HEAD RESTATES THE TYPE IN THREE CHANNELS. The 3px bar carries the
+    // event's own hue; `.tymark` directly under it carries the SAME type's
+    // stroke pattern and glyph. The stills index measured the old proximity
+    // claim at 99px with three controls interposed and replaced the argument
+    // with structure — 13.3px worst case, and structural here for the same
+    // reason. `--accent` never inks this bar.
+    function edHeadMark() {
+      var cat = edCategory(ed.category ? ed.category.value : '');
+      var axis = (cat && cat.axis) || '';
+      if (ed.root) {
+        if (axis) ed.root.style.setProperty('--axis', axis);
+        else ed.root.style.setProperty('--axis', 'var(--own-none)');
+      }
+      if (ed.tyRail) ed.tyRail.className = 'rail ' + ((cat && cat.pattern) || 'p1');
+      if (ed.tyGlyph) ed.tyGlyph.textContent = (cat && cat.glyph) || '';
+    }
+
+    // ── the date picker: a real month grid, week length DERIVED ───────────
+    //
+    // There is no literal week length here, in the template or in the sheet:
+    // weekShape reads the cycle off the payload's own weekday names. The
+    // INTERCALARY DAY IS A FULL-WIDTH ROW AND A REAL DATE — it carries its own
+    // (year, month) from the producer, because Midwinter 1 is not Deepwinter 1
+    // and an editor that pre-filled the rendered month for it would create the
+    // event on the wrong date, silently, on every calendar with festival days.
+    function edDatePicker(cal) {
+      if (!ed.datePicker) return;
+      clear(ed.datePicker);
+      var week = edUI.week;
+      if (week.len > 0) ed.datePicker.style.setProperty('--week-len', String(week.len));
+      if (week.len > 0) {
+        var head = mk('div', 'dp-head');
+        week.names.forEach(function (n) {
+          var h = mk('span', 'hd', n);
+          h.setAttribute('title', n);
+          head.appendChild(h);
+        });
+        ed.datePicker.appendChild(head);
+      }
+      var grid = mk('div', 'dp-grid');
+      edUI.dates.forEach(function (d) {
+        var ic = isIntercalary(d);
+        var b = mk('button', ic ? 'dp-ic' : 'dp-c');
+        b.type = 'button';
+        // GUARD B4: every dated node carries the ANSWER key, in the dayKey
+        // namespace the Block mints, so a partner surface can match it.
+        b.setAttribute('data-day', d.key);
+        b.setAttribute('data-day-pick', d.ord);
+        b.setAttribute('aria-label', d.label || String(d.day));
+        if (ic) {
+          b.appendChild(mk('b', '', String(d.day)));
+          b.appendChild(mk('span', 'cap', d.label || ''));
+        } else {
+          b.appendChild(mk('span', 'dn', String(d.day)));
+          var first = (d.events && d.events[0]) || null;
+          if (first) {
+            // A day that already carries events says so in the event's own two
+            // channels — hue and pattern — never in colour alone.
+            var mkr = mk('span', 'mk ' + (first.pattern || 'p1'));
+            if (first.axis) mkr.style.setProperty('--axis', first.axis);
+            mkr.setAttribute('aria-hidden', 'true');
+            b.appendChild(mkr);
+          }
+        }
+        grid.appendChild(b);
+      });
+      ed.datePicker.appendChild(grid);
+      edDateSet(edUI.dayKey, true);
+    }
+
+    function edDateFor(key) {
+      for (var i = 0; i < edUI.dates.length; i++) {
+        if (edUI.dates[i].key === key) return edUI.dates[i];
+      }
+      return null;
+    }
+
+    // edDateSet writes the three hidden coordinate fields AND re-resolves the
+    // end date. `keepEnd` is false on a user pick, which is what makes an end
+    // date unable to survive a start that moved past it.
+    function edDateSet(key, keepEnd) {
+      var d = edDateFor(key);
+      if (!d) return;
+      edUI.dayKey = key;
+      setValue(ed.year, d.year);
+      setValue(ed.month, d.month);
+      setValue(ed.day, d.day);
+      if (ed.datePicker) {
+        ed.datePicker.querySelectorAll('[data-day-pick]').forEach(function (b) {
+          pressed(b, b.getAttribute('data-day') === key);
+        });
+      }
+      if (ed.dateRead) ed.dateRead.textContent = edDateLabel(d);
+      // AN END DATE MAY NEVER PRECEDE ITS START. Moving the start past the end
+      // clears the end rather than clamping it backwards, and a start ON the
+      // intercalary day has no next date at all, so the field says "ends the
+      // same day" instead of jumping to a numbered day earlier in the month.
+      if (!keepEnd && edUI.endKey) {
+        var order = edUI.dates.map(function (x) { return x.key; });
+        if (order.indexOf(edUI.endKey) <= order.indexOf(key)) edUI.endKey = '';
+      }
+      edEndSet(edUI.endKey);
+      edPreview();
+    }
+
+    function edDateLabel(d) {
+      if (!d) return '';
+      return d.weekday ? (d.label || '') + ' · ' + d.weekday : (d.label || '');
+    }
+
+    // ── the `Ends` cycler ─────────────────────────────────────────────────
+    //
+    // It advances over ONE ORDERED LIST of the month's dates, on which the
+    // intercalary day is simply the last entry, and wraps to "ends the same
+    // day" after it. That single construction is why `end < start` cannot
+    // happen and why an intercalary START offers no end options.
+    function edEndAdvance() {
+      var from = edUI.endKey || edUI.dayKey;
+      var next = nextDate(edUI.dates, from);
+      edUI.endKey = next ? next.key : '';
+      edEndSet(edUI.endKey);
+      edPreview();
+    }
+
+    function edEndSet(key) {
+      var d = key ? edDateFor(key) : null;
+      edUI.endKey = d ? key : '';
+      setValue(ed.endYear, d ? d.year : '');
+      setValue(ed.endMonth, d ? d.month : '');
+      setValue(ed.endDay, d ? d.day : '');
+      if (ed.endRead) {
+        // A CLOSED DISCLOSURE RENDERS A REAL SUMMARY LABEL, NEVER A BARE
+        // CHEVRON — the register's clause 5, which this cycler is a consumer
+        // of. "ends the same day" is a state, not a placeholder.
+        clear(ed.endRead);
+        ed.endRead.appendChild(mk('span', 'lb', d ? (d.label || '') : 'ends the same day'));
+        var ar = mk('span', 'ar', '⌄');
+        ar.setAttribute('aria-hidden', 'true');
+        ed.endRead.appendChild(ar);
+      }
+    }
+
+    // ── recurrence ────────────────────────────────────────────────────────
+
+    function edRecUnits() {
+      if (!ed.recUnits) return;
+      clear(ed.recUnits);
+      recurrenceUnits(edUI.week.len).forEach(function (u) {
+        var b = mk('button', '');
+        b.type = 'button';
+        b.setAttribute('data-unit-pick', u.id);
+        b.setAttribute('role', 'radio');
+        b.appendChild(mk('span', '', u.label));
+        if (!u.backed) {
+          // `.badge.need` MEANS LITERALLY "needs backend" AND NOTHING ELSE. It
+          // is here because `recurrence_type` does not accept this unit and
+          // OccursOn would expand it to a SINGLE OCCURRENCE without saying so.
+          b.appendChild(mk('span', 'badge need', 'needs backend'));
+        }
+        ed.recUnits.appendChild(b);
+      });
+      edRecPaint();
+    }
+
+    function edWdPick() {
+      if (!ed.wdPick) return;
+      clear(ed.wdPick);
+      edUI.week.names.forEach(function (n, i) {
+        var b = mk('button', '', n.slice(0, 2));
+        b.type = 'button';
+        b.setAttribute('data-wd-pick', String(i));
+        b.setAttribute('aria-label', n);
+        pressed(b, !!edUI.rec.wd[i]);
+        ed.wdPick.appendChild(b);
+      });
+    }
+
+    // edRecPaint is the ONE place recurrence state reaches the DOM, so the
+    // segment, the interval, the unit list, the day-of-week box and the readout
+    // can never disagree about what the rule currently says.
+    function edRecPaint() {
+      var r = edUI.rec;
+      if (ed.recSeg) {
+        ed.recSeg.querySelectorAll('[data-rec-pick]').forEach(function (b) {
+          pressed(b, b.getAttribute('data-rec-pick') === r.mode);
+        });
+      }
+      if (ed.recOn) ed.recOn.hidden = r.mode !== 'repeats';
+      if (ed.recUnits) {
+        ed.recUnits.querySelectorAll('[data-unit-pick]').forEach(function (b) {
+          var on = b.getAttribute('data-unit-pick') === r.unit;
+          pressed(b, on);
+          b.setAttribute('aria-checked', on ? 'true' : 'false');
+        });
+      }
+      // THE INTERVAL FIELD IS ABSENT FOR month, NOT CHIPPED. OccursOn's monthly
+      // branch ignores RecurrenceInterval entirely, so `every 2 months` would be
+      // stored, accepted and then expanded every month — the same trap as a
+      // wrong unit. There is nothing here for a backend to add: the type has no
+      // interval.
+      if (ed.recEvery) ed.recEvery.hidden = !recurrenceInterval(r.unit);
+      if (ed.recBox) ed.recBox.hidden = !(r.mode === 'repeats' && r.unit === 'week');
+      if (ed.recRead) ed.recRead.textContent = edRecReadout();
+      edPreview();
+    }
+
+    // The readout is the AUTHOR'S OWN RULE, stated plainly. It says what the
+    // server will actually do, which for an unbacked unit is "once" — the same
+    // thing the chip beside the unit is promising to fix.
+    function edRecReadout() {
+      var body = recurrenceBody(edUI.rec);
+      if (!body || !body.is_recurring) return 'once, on this date';
+      if (body.recurrence_type === 'monthly') return 'every month, on this day of the month';
+      var n = body.recurrence_interval > 0 ? body.recurrence_interval
+        : (body.recurrence_type === 'biweekly' ? 2 : 1);
+      return 'every ' + (n === 1 ? '' : n + ' × ') + edUI.week.len + ' days, from this date';
+    }
+
+    // ── the restricted audience ───────────────────────────────────────────
+    //
+    // One row per member: hue swatch + LOCKED PATTERN + the RINGED two-letter
+    // mark + the name + the role + a real allow/deny pair at the 24px floor.
+    // The list that decides who may see a hidden event never speaks in colour
+    // alone, and the mark is a ring rather than a filled disc because near-white
+    // on a raw owner hue measured 1.72:1 in dark and 2.86:1 in light.
+    function edAudience() {
+      if (!ed.audRows) return;
+      clear(ed.audRows);
+      members.forEach(function (m) {
+        var row = mk('div', 'mrow');
+        if (m.axis) row.style.setProperty('--axis', m.axis);
+        var sw = mk('span', 'swatch ' + (m.pattern || 'p1'));
+        sw.setAttribute('aria-hidden', 'true');
+        row.appendChild(sw);
+        var ini = mk('span', 'inimark', m.initials || '');
+        ini.setAttribute('aria-hidden', 'true');
+        row.appendChild(ini);
+        row.appendChild(mk('span', 'nm', m.name || m.id));
+        row.appendChild(mk('span', 'mt', '· ' + (m.role || '')));
+        row.appendChild(mk('span', 'sp'));
+        var ad = mk('span', 'ad');
+        var allow = mk('button', '', '✓ allow');
+        allow.type = 'button';
+        allow.setAttribute('data-aud-pick', 'allow:' + m.id);
+        allow.setAttribute('aria-label', 'Allow ' + (m.name || m.id));
+        var deny = mk('button', '', '✕ deny');
+        deny.type = 'button';
+        deny.setAttribute('data-aud-pick', 'deny:' + m.id);
+        deny.setAttribute('aria-label', 'Deny ' + (m.name || m.id));
+        ad.appendChild(allow);
+        ad.appendChild(deny);
+        row.appendChild(ad);
+        ed.audRows.appendChild(row);
+      });
+      edAudPaint();
+    }
+
+    function edAudPaint() {
+      if (!ed.audRows) return;
+      ed.audRows.querySelectorAll('[data-aud-pick]').forEach(function (b) {
+        var parts = String(b.getAttribute('data-aud-pick')).split(':');
+        var on = !!edUI.aud[parts[1]];
+        pressed(b, parts[0] === 'allow' ? on : !on);
+      });
+    }
+
+    // ── visibility ────────────────────────────────────────────────────────
+    //
+    // The cards are REAL RADIOS and the module only reads them. The gate that
+    // decides which cards exist is the PRODUCER'S, in markup, and there is no
+    // branch here that could turn one on for a viewer the server did not render
+    // it for.
+    function edVisSet(mode) {
+      edUI.vis = mode || 'public';
+      if (ed.vis) {
+        ed.vis.querySelectorAll('[data-vis-pick]').forEach(function (r) {
+          r.checked = r.getAttribute('data-vis-pick') === edUI.vis;
+        });
+      }
+      if (ed.aud) ed.aud.hidden = edUI.vis !== 'restricted';
+      edPreview();
+    }
+
+    function edVisRead() {
+      if (!ed.vis) return 'public';
+      var found = 'public';
+      ed.vis.querySelectorAll('[data-vis-pick]').forEach(function (r) {
+        if (r.checked) found = r.getAttribute('data-vis-pick');
+      });
+      return found;
+    }
+
+    // ── the tie field ─────────────────────────────────────────────────────
+    //
+    // `entity_id` on create and update — both shipped writes bind it and
+    // eventEditorRecord round-trips it. The picker READS
+    // GET /campaigns/:id/entities/search, which is a cross-plugin FETCH and not
+    // a cross-plugin IMPORT: check-plugin-isolation.sh polices Go imports, and a
+    // client-side call to another plugin's public API breaks nothing.
+    //
+    // THE ✕ IS A REAL 24px BUTTON. A remove affordance is a control, not a
+    // decoration, and the drawing's bare <span> measured 8.4 × 10.0px.
+    function edTiePaint() {
+      if (!ed.tieRow) return;
+      clear(ed.tieRow);
+      if (edUI.tie) {
+        var pill = mk('span', 'pill tie');
+        pill.appendChild(mk('span', '', '◎ ' + (edUI.tie.name || edUI.tie.id)));
+        var x = mk('button', 'rmx', '✕');
+        x.type = 'button';
+        x.setAttribute('data-tie-pick', '');
+        x.setAttribute('aria-label', 'Remove the tie to ' + (edUI.tie.name || edUI.tie.id));
+        pill.appendChild(x);
+        ed.tieRow.appendChild(pill);
+      }
+      if (ed.entity) ed.entity.value = edUI.tie ? edUI.tie.id : '';
+      if (ed.tieSearch) ed.tieSearch.hidden = !!edUI.tie;
+      if (ed.tieRes && edUI.tie) { ed.tieRes.hidden = true; clear(ed.tieRes); }
+      edPreview();
+    }
+
+    function edTieSearch(q) {
+      var fetcher = api();
+      if (!fetcher || !ed.tieRes) return;
+      if (!q || q.trim().length < 2) { ed.tieRes.hidden = true; clear(ed.tieRes); return; }
+      var seq = ++edUI.tieSeq;
+      fetcher('/campaigns/' + campaignID + '/entities/search?q=' + encodeURIComponent(q.trim()),
+        { method: 'GET' })
+        .then(function (resp) { return (resp && resp.ok) ? resp.json() : null; })
+        .then(function (data) {
+          // A STALE RESPONSE NEVER WINS. Typing produces overlapping reads and
+          // the last one typed must be the one shown, not the last one to land.
+          if (seq !== edUI.tieSeq || !ed.tieRes) return;
+          clear(ed.tieRes);
+          var list = (data && data.results) || [];
+          if (!list.length) {
+            ed.tieRes.appendChild(mk('span', 'none', 'No entity matches that.'));
+          } else {
+            list.slice(0, 8).forEach(function (item) {
+              if (!item || !item.id) return;
+              var b = mk('button', '', item.type_name
+                ? item.name + ' · ' + item.type_name : item.name);
+              b.type = 'button';
+              b.setAttribute('data-tie-pick', item.id);
+              b.setAttribute('data-tie-name', item.name || item.id);
+              ed.tieRes.appendChild(b);
+            });
+          }
+          ed.tieRes.hidden = false;
+        })
+        .catch(function () { /* a refused read is an empty picker, not a broken editor */ });
+    }
+
+    // ── the live preview ──────────────────────────────────────────────────
+    //
+    // A client-side render of marks the payload ALREADY CARRIES — the grid chip
+    // and the Ledger row, both of which ship. It resolves no audience and names
+    // no viewer: the "who sees it" roster depends on the composed audience,
+    // which does not exist on main and is W-G's.
+    function edPreview() {
+      if (!ed.preview) return;
+      clear(ed.preview);
+      var cat = edCategory(ed.category ? ed.category.value : '');
+      var day = edDateFor(edUI.dayKey);
+      var vis = edUI.vis;
+      var title = ed.name ? ed.name.value : '';
+      var axis = (cat && cat.axis) || '';
+      var pat = (cat && cat.pattern) || 'p1';
+      var dayLb = day ? (isIntercalary(day) ? (day.label || '').slice(0, 1) : String(day.day)) : '';
+
+      ed.preview.appendChild(mk('span', 'cap', 'Live preview — on the grid'));
+
+      var cell = mk('div', 'pv-cell');
+      if (day) cell.setAttribute('data-day', day.key);
+      if (axis) cell.style.setProperty('--axis', axis);
+      cell.appendChild(mk('span', 'dn', dayLb));
+      var chip = mk('div', 'chip');
+      var crail = mk('i', 'rail ' + pat);
+      crail.setAttribute('aria-hidden', 'true');
+      chip.appendChild(crail);
+      if (cat && cat.glyph) {
+        var ctok = mk('span', 'tok', cat.glyph);
+        ctok.setAttribute('aria-hidden', 'true');
+        chip.appendChild(ctok);
+      }
+      chip.appendChild(mk('span', 'lb', title));
+      cell.appendChild(chip);
+      // THE GOLD DOGEAR IS dm_only AND THE DIAMOND IS RESTRICTED. They are two
+      // different marks for two different facts, and drawing one on both would
+      // delete the distinction from the product one layer down.
+      if (vis === 'gmonly') {
+        var dg = mk('span', 'dogear');
+        dg.setAttribute('aria-hidden', 'true');
+        cell.appendChild(dg);
+      }
+      if (vis === 'restricted') {
+        var am = mk('span', 'audmark');
+        am.setAttribute('aria-hidden', 'true');
+        cell.appendChild(am);
+      }
+      ed.preview.appendChild(cell);
+
+      ed.preview.appendChild(mk('span', 'cap', 'In the Ledger'));
+      var row = mk('div', 'lrow');
+      if (day) row.setAttribute('data-day', day.key);
+      if (axis) row.style.setProperty('--axis', axis);
+      row.appendChild(mk('span', 'dg', dayLb));
+      var rail = mk('i', 'rail ' + pat);
+      rail.setAttribute('aria-hidden', 'true');
+      row.appendChild(rail);
+      if (vis === 'gmonly') {
+        var gr = mk('i', 'gr');
+        gr.setAttribute('title', 'hidden from players');
+        gr.setAttribute('aria-hidden', 'true');
+        row.appendChild(gr);
+      }
+      if (cat && cat.glyph) {
+        var tok = mk('span', 'tok', cat.glyph);
+        tok.setAttribute('aria-hidden', 'true');
+        row.appendChild(tok);
+      }
+      var mid = mk('span', 'mid');
+      mid.appendChild(mk('span', 'nm', title));
+      if (vis === 'gmonly') mid.appendChild(mk('span', 'badge gm', 'GM'));
+      if (vis === 'restricted') mid.appendChild(mk('span', 'audchip', '◈ Restricted'));
+      row.appendChild(mid);
+      ed.preview.appendChild(row);
     }
 
     function setValue(node, v) {
@@ -855,26 +1960,68 @@
       node.value = (v === null || v === undefined) ? '' : String(v);
     }
 
+    // edFill loads a record into the whole chrome. The order matters: the
+    // per-calendar structure (type rail, date grid, unit list, roster) is built
+    // by edOpen BEFORE this runs, so every setter here has a control to write.
     function edFill(rec) {
       setValue(ed.name, rec.name || '');
       setValue(ed.desc, rec.description || '');
-      setValue(ed.category, rec.category || '');
-      setValue(ed.year, rec.year);
-      setValue(ed.month, rec.month);
-      setValue(ed.day, rec.day);
+      edTypeSet(rec.category || '');
       setValue(ed.startH, rec.start_hour);
       setValue(ed.startM, rec.start_minute);
       setValue(ed.endH, rec.end_hour);
       setValue(ed.endM, rec.end_minute);
-      setValue(ed.endYear, rec.end_year);
-      setValue(ed.endMonth, rec.end_month);
-      setValue(ed.endDay, rec.end_day);
       var allDay = rec.all_day || rec.start_hour === null || rec.start_hour === undefined;
       if (ed.allDay) ed.allDay.checked = !!allDay;
       if (ed.timeRow) ed.timeRow.hidden = !!allDay;
-      if (ed.gmOnly) ed.gmOnly.checked = rec.visibility === 'dm_only';
+
+      // THE DATE COMES FROM THE RECORD'S OWN COORDINATES, matched back onto the
+      // ordered list. An intercalary day resolves to its OWN month, which is
+      // why the payload carries (year, month) per day rather than deriving them.
+      var startKey = edKeyFor(rec.year, rec.month, rec.day);
+      edUI.dayKey = startKey || edUI.dayKey;
+      edUI.endKey = edKeyFor(rec.end_year, rec.end_month, rec.end_day) || '';
+      edDateSet(edUI.dayKey, true);
+
+      edUI.rec = recurrenceFromRecord(rec, edUI.week.len);
+      edUI.rec.wd = {};
+      edUI.rec.touched = false;
+      if (ed.recEvery) ed.recEvery.value = String(edUI.rec.every || 1);
+      edWdPick();
+      edRecPaint();
+
+      var V = window.ChronicleCalVisibility || null;
+      var mode = V ? V.modeFor(rec.visibility, rec.visibility_rules) : 'public';
+      // A viewer without the Restricted card must not be shown a mode they
+      // cannot author; the write path round-trips the stored pair for them, so
+      // the editor opens on Public and never touches the audience.
+      var canRestrict = !!ed.restricted;
+      edUI.aud = audienceFromRules(
+        V ? V.rulesToChips(rec.visibility_rules) : [], memberIDs());
+      edVisSet(mode === 'specific' ? (canRestrict ? 'restricted' : 'public')
+        : (mode === 'gmonly' && ed.gmOnly ? 'gmonly' : 'public'));
+      edAudPaint();
+
+      edUI.tie = rec.entity_id ? { id: rec.entity_id, name: rec.entity_name || rec.entity_id } : null;
+      if (ed.tieSearch) ed.tieSearch.value = '';
+      edTiePaint();
+
       if (ed.del) ed.del.hidden = !rec.id;
       edError('');
+    }
+
+    // edKeyFor matches a record's (year, month, day) back onto the month's own
+    // ordered list. It is a MATCH, not a computation: an intercalary day's
+    // month is not the rendered one, and re-deriving it here would be the
+    // second copy of an adjacency rule block_geometry.go names as single.
+    function edKeyFor(year, month, day) {
+      if (year === null || year === undefined || month === null || month === undefined) return '';
+      if (day === null || day === undefined) return '';
+      for (var i = 0; i < edUI.dates.length; i++) {
+        var d = edUI.dates[i];
+        if (d.year === Number(year) && d.month === Number(month) && d.day === Number(day)) return d.key;
+      }
+      return '';
     }
 
     // edOpen's `doorID` is THE ID OF THE ROW THAT WAS CLICKED, and in edit mode
@@ -900,7 +2047,24 @@
       edState.day = day;
       edState.eventID = mode === 'edit' ? String(doorID || '') : '';
       edState.prev = mode === 'edit' ? rec : null;
-      seedCategories(cal);
+
+      // THE PER-CALENDAR STRUCTURE IS BUILT BEFORE THE RECORD IS FILLED. The
+      // week is DERIVED from this calendar's own weekday names, the date list
+      // is its own ordered dates, and the unit list drops the week unit
+      // entirely when there is no week — so every setter edFill runs has a
+      // control to write and none of them has to guess a shape.
+      edUI.cal = cal;
+      edUI.dates = orderedDates(cal.list);
+      edUI.week = weekShape(cal.list);
+      edUI.dayKey = day.key || '';
+      edUI.endKey = '';
+      edTypeRail(cal);
+      edDatePicker(cal);
+      edRecUnits();
+      edAudience();
+      if (ed.dateLab) {
+        ed.dateLab.textContent = cal.slug ? 'Date · ' + cal.slug : 'Date';
+      }
       edFill(rec);
       // Delete targets the same id the save does, so the two can never disagree
       // about which event this editor session is holding.
@@ -909,26 +2073,101 @@
         ed.head.textContent = (mode === 'edit' ? 'Edit event · ' : 'New event · ') + (day.label || '');
         ed.head.setAttribute('data-day', day.key || '');
       }
-      // The card leaves first, so the two boxes are never on screen together.
+      // `draft` BEFORE THE POST HAS RETURNED AN ID. It is a readout of what the
+      // record is, not a placeholder standing in for one — the same honesty the
+      // absent Delete button on a draft carries.
+      if (ed.idOut) ed.idOut.textContent = edState.eventID || 'draft';
+      if (ed.save) ed.save.textContent = mode === 'edit' ? 'Save changes' : 'Create event';
+      // THE CARD'S RECT IS MEASURED WHILE IT IS STILL THE OPEN BOX, before
+      // anything closes it — that rect is the morph's start geometry and the
+      // one thing this path reads from outside the editor.
+      var fromRect = edMorphRect(anchor);
+      // The card leaves first: it cross-fades out on the mechanism it already
+      // had, over --disc-close, while the editor grows over --disc-open.
       closeCard();
       edState.open = true;
       edShow();
-      if (anchor) edPosition(anchor);
+      var placed = anchor ? edPosition(anchor) : null;
+      // FORCED REFLOW, DELIBERATELY, and now it carries two jobs. The editor
+      // was display:none a moment ago, so it has no rendered before-change
+      // style and a transition started in the same frame would not run at all
+      // — which is what makes the register's reveal fire on a popover without
+      // @starting-style, a standing refusal. The morph's seeded start geometry
+      // needs the same flush for the same reason.
       void ed.root.offsetHeight;
+      var morphing = (fromRect && placed) ? edMorphSeed(
+        { getBoundingClientRect: function () { return fromRect; } },
+        placed.size, placed.at) : false;
+      if (morphing) {
+        // ── THE ORDER IS THE MORPH, AND GETTING IT WRONG COSTS THE WHOLE
+        //    OPEN DIRECTION ─────────────────────────────────────────────────
+        //
+        // SEED → FLUSH → CLASS → FLUSH → FINAL WRITE. Every arrow is load
+        // bearing and the FIRST one is the one this shipped without.
+        //
+        // WHAT WENT WRONG WITHOUT IT, MEASURED IN REAL CHROMIUM RATHER THAN
+        // REASONED. The seeded geometry and `.edmorph` used to arrive in the
+        // SAME style recalc. CSS Transitions start a transition from the
+        // AFTER-change style, so that single recalc read `transition-property:
+        // inline-size, block-size, translate, opacity` for the first time
+        // WHILE the values were changing — and started 160ms transitions
+        // running AWAY from the resting box and TOWARD the seed. The seed
+        // therefore never became the settled before-change style:
+        // getComputedStyle answered the RESTING box at opacity 1, the
+        // final write that followed in the same task saw nothing to change,
+        // and no transition to the placed geometry was ever created. The
+        // editor POPPED IN at full size and animated only on the way out. The
+        // one animation the page really had was a no-op `height` CSSTransition
+        // from `calc-size(fit-content, 0px + size)` to itself, which is
+        // exactly what the capture rig kept reporting and nobody believed.
+        //
+        // WITH THE FLUSH the seed lands as a settled style with NO transition
+        // declared on it (there is no `.edmorph` yet, so nothing can start),
+        // the class then declares the four properties over values that are not
+        // changing, and only the final write — the third recalc — has both a
+        // declared transition and a changed value. That is the one that runs.
+        //
+        // THIS IS BROWSER-GENERAL. It follows from the after-change-style rule,
+        // not from anything Chromium does on its own, and
+        // TestDayCardMorphInterpolates samples the flight frame by frame in a
+        // real browser so the ordering cannot silently come apart again.
+        void ed.root.offsetHeight;
+        // THE CLASS GOES ON AFTER THE START GEOMETRY, so the browser records
+        // the card's rect as the transition's from-value rather than animating
+        // the box INTO the card on the way in. The flush after it is what makes
+        // that recording happen at all — a transition started in the same
+        // frame as the style that declared it does not run.
+        ed.root.classList.add('edmorph');
+        void ed.root.offsetHeight;
+      }
       ed.root.classList.add('dcopen');
+      if (morphing) {
+        edMorphWrite(edState.morph, false);
+        // THE SETTLE IS SCHEDULED OFF --disc-open, READ FROM THE SHEET rather
+        // than carried as a copy of 200 — the same discipline closeDelayMS
+        // already applies to the close.
+        edState.morphTimer = setTimeout(edMorphSettle,
+          durationMS(cssVar('--disc-open'), 200));
+      } else {
+        edState.morph = null;
+      }
     }
 
+    // edPosition RETURNS what it measured and where it put the box. The morph
+    // needs both, and re-measuring afterwards would read a collapsed inner box
+    // — see edMorphSeed's header for the frames that proved it.
     function edPosition(anchor) {
-      if (!anchor.getBoundingClientRect) return;
+      if (!anchor.getBoundingClientRect) return null;
       var view = { w: window.innerWidth || 0, h: window.innerHeight || 0 };
       var chrome = (ed.root.offsetHeight || 0) - (ed.box ? ed.box.offsetHeight || 0 : 0);
       var size = {
         w: ed.root.offsetWidth || 0,
         h: (ed.box ? ed.box.scrollHeight || 0 : 0) + (chrome > 0 ? chrome : 0),
       };
-      applyPlacement(ed.root,
+      var at = applyPlacement(ed.root,
         placeCard(anchor.getBoundingClientRect(), size, view, ledgerRect(state.host), {}),
         reportOcclusion);
+      return { size: size, at: at };
     }
 
     function api() {
@@ -940,6 +2179,7 @@
     }
 
     function edFormValues() {
+      var vis = edVisRead();
       return {
         name: ed.name ? ed.name.value : '',
         description: ed.desc ? ed.desc.value : '',
@@ -955,7 +2195,18 @@
         endYear: ed.endYear ? ed.endYear.value : '',
         endMonth: ed.endMonth ? ed.endMonth.value : '',
         endDay: ed.endDay ? ed.endDay.value : '',
-        gmOnly: ed.gmOnly ? !!ed.gmOnly.checked : false,
+        // BOTH ARE EMITTED, AND `gmOnly` IS NOT VESTIGIAL. It keeps the pure
+        // mapper's stage-2 contract exactly as it was for every existing case
+        // ([ER-10] condition 2), and `vis` is what the third mode rides on.
+        gmOnly: vis === 'gmonly',
+        vis: vis,
+        audience: audienceToChips(edUI.aud, memberIDs()),
+        // NULL WHEN UNTOUCHED. buildEventBody then falls to the stage-2 round
+        // trip, so a title-only save on an event whose stored type Chronicle
+        // does not accept leaves that rule exactly as it found it.
+        recurrence: edUI.rec.touched
+          ? { mode: edUI.rec.mode, every: edUI.rec.every, unit: edUI.rec.unit } : null,
+        entityID: ed.entity ? ed.entity.value : '',
       };
     }
 
@@ -1052,6 +2303,10 @@
     }
 
     document.addEventListener('click', function (e) {
+      // THE CLICK A REAL DRAG LEAVES BEHIND, consumed exactly once (stage 4,
+      // [DC-11] term 5). A drag of zero cells never sets this, so the
+      // single-day click is untouched — which is the term, stated as code.
+      if (drag.eatClick) { drag.eatClick = false; return; }
       if (e.target && e.target.closest && e.target.closest('[data-dc-ledger]')) {
         e.preventDefault();
         openInLedger();
@@ -1078,10 +2333,20 @@
           if (calEd && dayEd) edLoad(calEd, dayEd, editBtn.getAttribute('data-dc-edit'), card);
           return;
         }
-        if (e.target.closest('[data-de-cancel]')) { e.preventDefault(); edClose(); return; }
+          if (e.target.closest('[data-de-cancel]')) { e.preventDefault(); edClose(); return; }
         if (e.target.closest('[data-de-delete]')) { e.preventDefault(); edDelete(); return; }
         if (e.target.closest('[data-de-save]')) { e.preventDefault(); edSave(); return; }
-        if (e.target.closest('[data-cal-dayeditor]')) return;
+        // EVERY CHROME CONTROL IS HANDLED INSIDE THE EDITOR'S OWN SUBTREE AND
+        // NOWHERE ELSE. The scoping is not cosmetic: the date grid's buttons
+        // carry `data-day` and `data-day-pick`, which are the BLOCK's own key
+        // namespaces, and a handler that matched them page-wide would make an
+        // editor cell open the card behind it. `cellFrom` cannot reach them
+        // either — it requires `[data-day][data-day-ord]` and these carry no
+        // ordinal — but relying on that would be relying on an absence.
+        if (e.target.closest('[data-cal-dayeditor]')) {
+          if (edControl(e.target)) e.preventDefault();
+          return;
+        }
       }
       var hit = cellFrom(e.target);
       if (hit) { openCard(hit.host, hit.cell); return; }
@@ -1104,6 +2369,88 @@
     }
     if (ed && ed.form) {
       ed.form.addEventListener('submit', function (e) { e.preventDefault(); edSave(); });
+    }
+
+    // edControl is the chrome's one click router. It returns true when it
+    // consumed the event, so the caller preventDefaults exactly the clicks that
+    // did something — a blanket preventDefault inside the editor would break
+    // text selection in the description and the native label-to-radio path the
+    // visibility cards depend on.
+    function edControl(target) {
+      if (!target || !target.closest) return false;
+      var t = target.closest('[data-type-pick]');
+      if (t) { edTypeSet(t.getAttribute('data-type-pick')); return true; }
+      var d = target.closest('[data-day-pick]');
+      if (d) { edDateSet(d.getAttribute('data-day'), false); return true; }
+      if (target.closest('[data-end-pick]')) { edEndAdvance(); return true; }
+      var r = target.closest('[data-rec-pick]');
+      if (r) {
+        edUI.rec.mode = r.getAttribute('data-rec-pick');
+        edUI.rec.touched = true;
+        edRecPaint();
+        return true;
+      }
+      var u = target.closest('[data-unit-pick]');
+      if (u) {
+        edUI.rec.unit = u.getAttribute('data-unit-pick');
+        edUI.rec.touched = true;
+        edRecPaint();
+        return true;
+      }
+      var w = target.closest('[data-wd-pick]');
+      if (w) {
+        var i = w.getAttribute('data-wd-pick');
+        edUI.rec.wd[i] = !edUI.rec.wd[i];
+        pressed(w, edUI.rec.wd[i]);
+        return true;
+      }
+      var a = target.closest('[data-aud-pick]');
+      if (a) {
+        var parts = String(a.getAttribute('data-aud-pick')).split(':');
+        edUI.aud[parts[1]] = parts[0] === 'allow';
+        edAudPaint();
+        return true;
+      }
+      var tie = target.closest('[data-tie-pick]');
+      if (tie) {
+        var id = tie.getAttribute('data-tie-pick');
+        edUI.tie = id ? { id: id, name: tie.getAttribute('data-tie-name') || id } : null;
+        if (ed.tieSearch) ed.tieSearch.value = '';
+        edTiePaint();
+        return true;
+      }
+      return false;
+    }
+
+    // THE VISIBILITY CARDS ARE REAL RADIOS, so their state change is the
+    // browser's and this listener only READS it. Nothing here decides a gate:
+    // a card the producer did not render has no radio to fire.
+    if (ed && ed.vis) {
+      ed.vis.addEventListener('change', function () { edVisSet(edVisRead()); });
+    }
+    if (ed && ed.name) {
+      ed.name.addEventListener('input', function () { edPreview(); });
+    }
+    if (ed && ed.recEvery) {
+      ed.recEvery.addEventListener('input', function () {
+        var n = Math.floor(Number(ed.recEvery.value));
+        edUI.rec.every = (isFinite(n) && n > 0) ? n : 1;
+        edUI.rec.touched = true;
+        edRecPaint();
+      });
+    }
+    if (ed && ed.tieSearch) {
+      // DEBOUNCED, and the debounce is the reason the picker is affordable at
+      // all: a read per keystroke against a search endpoint is a cost the
+      // editor has no business imposing on every campaign.
+      ed.tieSearch.addEventListener('input', function () {
+        if (edUI.tieTimer) clearTimeout(edUI.tieTimer);
+        var q = ed.tieSearch.value;
+        edUI.tieTimer = setTimeout(function () {
+          edUI.tieTimer = 0;
+          edTieSearch(q);
+        }, 200);
+      });
     }
 
     // THE SECOND OPENER ([DC-4] SIGNED): the day radio's `change`. Where the
@@ -1131,6 +2478,213 @@
       if (edState.open) { edClose(); return; }
       if (state.open) closeCard();
     });
+
+    // ── DRAG-CREATE — C-CALV4-EDITOR-R2b stage 4, [DC-11] SIGNED ─────────
+    //
+    // SEVERABLE BY CONSTRUCTION, on the ruling's seven terms, and every one of
+    // them is a property of this block rather than a promise about it:
+    //
+    //  1. IT IS THE LAST STAGE. The chrome and the morph are complete and
+    //     shippable without a line of it.
+    //  2. IT ADDS CODE TO ONE FILE AND ITS OWN TEST. It changes nothing in
+    //     bench.templ, bench.go, routes.go or the handler, and nothing in any
+    //     stylesheet beyond APPENDING its own drag rules.
+    //  3. IT IS REVERTIBLE BY DELETING ONE COMMIT, verified by doing it.
+    //  4. IT CREATES THROUGH THE EXISTING POST. end_year / end_month / end_day
+    //     already ship and the chrome already writes them; this fills the same
+    //     three hidden fields a pointer would. ZERO NEW API.
+    //  5. IT MAY NOT REGRESS THE DAY CLICK, and A DRAG OF ZERO CELLS IS A
+    //     CLICK — not "a drag that opens the editor with one day selected".
+    //     The single-day case falls through untouched to the shipped opener.
+    //  6. IT IS SCRIBE+ AND POINTER-ONLY. `canEdit` is the producer's gate, so
+    //     a player never receives the listener at all. THERE IS NO KEYBOARD
+    //     EQUIVALENT AND THIS SLICE DOES NOT INVENT ONE — it is booked with
+    //     [DC-4]'s a11y follow-on, C-CALV4-DAYPICK-A11Y, because a focusable
+    //     day cell that does not depend on a docked Ledger is a WIDGET change.
+    //  7. TEXT-SELECTION SUPPRESSION IS SCOPED TO THE ACTIVE DRAG and restored
+    //     on pointerup — the V2 implementation learned that one the hard way.
+    //
+    // ── THE PREVIEW IS DRAWN OUTSIDE THE BLOCK OR NOT AT ALL ([ER-8]) ────
+    //
+    // The obvious implementation adds a class to the cells under the pointer.
+    // Those cells are inside `.cal-block-host`, and §1 rule 1 forbids adding or
+    // removing a class on ANY element inside it — a rule
+    // daycard_block_immutability.test.mjs enforces byte for byte. Term 2's "its
+    // own drag-highlight rules" reads like a licence to mark cells and is not
+    // one, and "just a class, just during a drag" is exactly how this bound
+    // would be lost.
+    //
+    // So the preview is a PAGE-LEVEL OVERLAY: absolutely-positioned boxes, a
+    // sibling of the card, created by this module, positioned from the run's
+    // own getBoundingClientRect(). ONE BOX PER CONTIGUOUS ROW, not one union
+    // box over the whole span — a union across two weeks would paint days that
+    // are not in the run, which is a preview lying about what it is about to
+    // create.
+    //
+    // IT DECLARES NO MOTION AND IT IS NOT MOTION. A highlight that appears and
+    // follows the pointer is a POSITION UPDATE, not a transition: it touches
+    // neither the register nor the carve-out, and
+    // TestDayCardCSS_CarriesNoMotionOfItsOwn stays green with the rules in the
+    // card's own sheet where they belong.
+
+
+    function dragLayer() {
+      if (drag.layer && drag.layer.parentNode) return drag.layer;
+      var root = card.parentNode;
+      if (!root) return null;
+      var el = document.createElement('div');
+      el.className = 'cal-daycard-drag';
+      el.setAttribute('data-dc-drag', '');
+      el.setAttribute('aria-hidden', 'true');
+      root.appendChild(el);
+      drag.layer = el;
+      return el;
+    }
+
+    function dragClear() {
+      if (!drag.layer) return;
+      while (drag.layer.firstChild) drag.layer.removeChild(drag.layer.firstChild);
+      drag.layer.hidden = true;
+    }
+
+    // dragPaint draws the run as one box per contiguous ROW, read off the
+    // cells' own rects. It never touches a cell: it reads geometry and draws
+    // beside it.
+    function dragPaint(run) {
+      var layer = dragLayer();
+      if (!layer) return;
+      dragClear();
+      if (run.length < 2) return;
+      var rows = [];
+      run.forEach(function (d) {
+        var cell = drag.host.querySelector('[data-day="' + d.key.replace(/"/g, '') + '"][data-day-ord]');
+        if (!cell || !cell.getBoundingClientRect) return;
+        var r = cell.getBoundingClientRect();
+        if (!(r.width > 0)) return;
+        var row = rows.length ? rows[rows.length - 1] : null;
+        if (row && Math.abs(row.top - r.top) < 1) {
+          row.left = Math.min(row.left, r.left);
+          row.right = Math.max(row.right, r.right);
+          row.bottom = Math.max(row.bottom, r.bottom);
+          return;
+        }
+        rows.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+      });
+      rows.forEach(function (b) {
+        var box = document.createElement('i');
+        box.className = 'dragbox';
+        box.style.left = b.left + 'px';
+        box.style.top = b.top + 'px';
+        box.style.width = (b.right - b.left) + 'px';
+        box.style.height = (b.bottom - b.top) + 'px';
+        layer.appendChild(box);
+      });
+      layer.hidden = rows.length === 0;
+    }
+
+    function dragEnd(restore) {
+      drag.on = false;
+      dragClear();
+      // TERM 7: the suppression is scoped to the ACTIVE drag and restored here,
+      // on every exit path — including the one where the run turned out to be a
+      // single cell and nothing was created.
+      if (restore && document.body && document.body.style) {
+        document.body.style.removeProperty('user-select');
+      }
+    }
+
+    if (canEdit) {
+      document.addEventListener('pointerdown', function (e) {
+        // POINTER ONLY, and PRIMARY pointer only: a right-click or a secondary
+        // button is not a drag, and treating it as one would swallow the
+        // context menu.
+        if (e.button !== undefined && e.button !== 0) return;
+        var hit = cellFrom(e.target);
+        if (!hit) return;
+        var cal = index[hit.host.getAttribute('data-calendar-id') || ''];
+        var key = hit.cell.getAttribute('data-day') || '';
+        if (!cal || !cal.days[key]) return;
+        drag.on = true;
+        drag.moved = false;
+        drag.host = hit.host;
+        drag.cal = cal;
+        drag.startKey = key;
+        drag.lastKey = key;
+      });
+
+      document.addEventListener('pointermove', function (e) {
+        if (!drag.on) return;
+        var hit = cellFrom(e.target);
+        if (!hit || hit.host !== drag.host) return;
+        var key = hit.cell.getAttribute('data-day') || '';
+        if (!key || key === drag.lastKey) return;
+        drag.lastKey = key;
+        // A DRAG OF ZERO CELLS IS A CLICK (term 5). `moved` only becomes true
+        // when the pointer reaches a DIFFERENT day, so a jittery press on one
+        // cell is still a click and still opens the card.
+        if (key !== drag.startKey) {
+          drag.moved = true;
+          if (document.body && document.body.style) {
+            document.body.style.setProperty('user-select', 'none');
+          }
+        }
+        dragPaint(dayRange(orderedDates(drag.cal.list), drag.startKey, drag.lastKey));
+      });
+
+      document.addEventListener('pointerup', function () {
+        if (!drag.on) return;
+        var moved = drag.moved;
+        var run = moved
+          ? dayRange(orderedDates(drag.cal.list), drag.startKey, drag.lastKey) : [];
+        var host = drag.host, cal = drag.cal;
+        var boxes = [];
+        if (drag.layer) {
+          for (var i = 0; i < drag.layer.children.length; i++) {
+            boxes.push(drag.layer.children[i].getBoundingClientRect());
+          }
+        }
+        dragEnd(true);
+        if (!moved || run.length < 2) return;
+        // THE CLICK THAT FOLLOWS A REAL DRAG IS SUPPRESSED, so a span-create
+        // does not also open the card on the last cell.
+        //
+        // IT IS ITS OWN FLAG AND NOT `state.suppress`. That one guards the
+        // RADIO's change while the Ledger door activates it, inside a
+        // try/finally around one synchronous .click(); borrowing it here would
+        // have the door's own finally clear a flag this path had just set, and
+        // the two would clobber each other in a way no test would name.
+        drag.eatClick = true;
+        state.host = host;
+        var start = run[0], end = run[run.length - 1];
+        // TERM 4: the span rides end_year / end_month / end_day, which the
+        // shipped POST already binds and the chrome already writes. ZERO NEW API.
+        var rec = {
+          year: start.year, month: start.month, day: start.day,
+          end_year: end.year, end_month: end.month, end_day: end.day,
+          all_day: true,
+        };
+        // THE EDITOR MORPHS OUT OF THE SPAN THE USER JUST DREW. The card is not
+        // open on this path, so the drawn overlay's own rect is the honest
+        // origin — one box becomes the other, and the box it becomes is the one
+        // the pointer described.
+        var from = boxes.length ? {
+          left: Math.min.apply(null, boxes.map(function (b) { return b.left; })),
+          top: Math.min.apply(null, boxes.map(function (b) { return b.top; })),
+          right: Math.max.apply(null, boxes.map(function (b) { return b.right; })),
+          bottom: Math.max.apply(null, boxes.map(function (b) { return b.bottom; })),
+        } : null;
+        if (from) { from.width = from.right - from.left; from.height = from.bottom - from.top; }
+        edOpen('create', cal, start, rec,
+          from ? { getBoundingClientRect: function () { return from; } } : card);
+      });
+
+      // A CANCELLED POINTER (the OS took it, the window blurred) must not leave
+      // the page unselectable. Same restoration, same exit path.
+      document.addEventListener('pointercancel', function () {
+        if (drag.on) dragEnd(true);
+      });
+
+    }
 
     window.addEventListener('resize', function () {
       if (!state.open || !state.host) return;

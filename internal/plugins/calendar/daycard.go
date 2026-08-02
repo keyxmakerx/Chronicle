@@ -141,10 +141,120 @@ type dayCardDay struct {
 // IT IS SCRIBE+ ONLY. A player has no editor and therefore no type picker, so
 // carrying the palette to them would be payload with no consumer.
 type dayCardCategory struct {
-	Slug  string `json:"slug"`
-	Name  string `json:"name"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+	// Glyph and Axis are two of the locked triple's three channels.
 	Glyph string `json:"glyph,omitempty"`
 	Axis  string `json:"axis,omitempty"`
+	// Pattern is the THIRD, and it is the greyscale identity channel — the one
+	// that survives hue removal, and therefore the one the whole "every hue
+	// pairs with a pattern or a glyph" law actually rests on.
+	//
+	// ADDED AT STAGE 8, FIX-FORWARD, and its absence was a real defect rather
+	// than an omission: the module's type rail falls back to `p1` when a
+	// category carries no pattern, so EVERY option in the rail drew the same
+	// solid stroke and the pattern channel — which is the point of the channel
+	// — carried no information at all. Two types were separable by hue alone,
+	// which is the thing this arc's build law forbids in terms.
+	//
+	// IT IS DERIVED FROM THE SAME KEY THE BLOCK USES, not invented here.
+	// blockPatternFor(slug) is what blockMarkFor already locks a mark's pattern
+	// to (block_projection.go), so the pattern a type wears in the type rail is
+	// the pattern its events wear in the grid and in the Ledger. A second
+	// derivation would have been two identities for one category.
+	Pattern string `json:"pattern,omitempty"`
+}
+
+// dayCardMember is one campaign member as the RESTRICTED-AUDIENCE roster prints
+// them, and it is C-CALV4-EDITOR-R2b's one addition to this file ([ER-3] SIGNED).
+//
+// ── WHY IT RIDES THE PAGE PAYLOAD, AND WHY THAT IS NOT A BREACH OF [DC-1] ──
+//
+// The editor's Restricted card draws one row per member — hue swatch + locked
+// pattern + the ringed two-letter mark + the name + the role + an allow/deny
+// pair — and to draw it at all you need user ids AND display names.
+// `visibility_rules` stores ids; cal_visibility.js's rulesToChips labels a chip
+// with the RAW ID today because it has nothing better.
+//
+// [DC-1]'s payload law governs the CARD'S PER-EVENT FIELD SET: "the Ledger row's
+// own field set and NOTHING more". The roster is neither an event nor a per-day
+// field — it is EDITOR SEED DATA on the same wrapper, exactly like
+// dayCardCategory, which rides here for the same shape of reason ([DC-8](c)
+// option ii). The law is therefore re-stated rather than widened, and
+// daycard_test.go asserts the wrapper's top-level key set EXPLICITLY BY NAME so
+// a third seed cannot arrive by inference.
+//
+// ── OWNER-ONLY, BECAUSE RESTRICTED IS OWNER-ONLY ───────────────────────────
+//
+// PUT …/events/:eid/visibility is RequireRole(RoleOwner) (routes.go:182), so a
+// Scribe never renders the Restricted card and MUST NOT RECEIVE THE NAMES.
+// The gate is DayCardMount.CanRestrict — an EXPLICIT Owner fact, never
+// CanDelete borrowed for the day: two Owner floors that coincide today are one
+// refactor away from not, and the coincidence would be silent.
+//
+// ── IT COSTS NO NEW READ AND NO NEW ROUTE ──────────────────────────────────
+//
+// BenchScheduleReader.BenchRoster is already called on EVERY Bench render, for
+// every viewer, ungated (benchRsvpResolve, bench.go) — Step 0 confirmed it is
+// not behind the RSVP panel's own gate. This is a re-serialisation of data the
+// page already rendered, which is the same argument [DC-1] Option B was signed
+// on. No route moved; routes_snapshot.txt is untouched.
+//
+// THE IDENTITY PAIR IS THE RSVP PANEL'S OWN, from benchRsvpIdentity /
+// benchRsvpInitials / benchRoleLabel, on the SAME roster index. Two surfaces
+// that draw the same people must not draw them in two colours, and a second
+// derivation here is exactly how that happens.
+type dayCardMember struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Role is benchRoleLabel's output — the one shim printed role names go
+	// through, so the later game-system terminology slice stays a one-file
+	// change.
+	Role string `json:"role"`
+	// Initials is the ringed two-letter mark. It is a RING, not a filled disc:
+	// the stills index measured near-white on a raw owner hue at 1.72:1 and
+	// retired the filled form by name. The ink is the sheet's, not the hue's.
+	Initials string `json:"initials"`
+	// Axis and Pattern are the locked identity pair — hue NEVER travels alone,
+	// so a viewer who cannot separate the hues separates the people by dash.
+	Axis    string `json:"axis"`
+	Pattern string `json:"pattern"`
+}
+
+// dayCardMembers projects the Bench roster for the audience list.
+//
+// It returns nil below the Owner floor — not an empty slice, so the key is
+// omitted entirely rather than shipped as `"members":[]`, which would be a
+// promise of a roster this viewer is simply not entitled to. Permission is
+// ABSENCE, applied to a payload key.
+func dayCardMembers(roster []BenchRosterMember, canRestrict bool) []dayCardMember {
+	if !canRestrict || len(roster) == 0 {
+		return nil
+	}
+	out := make([]dayCardMember, 0, len(roster))
+	for i, m := range roster {
+		id := strings.TrimSpace(m.UserID)
+		if id == "" {
+			continue
+		}
+		hue, pattern := benchRsvpIdentity(i)
+		name := strings.TrimSpace(m.Name)
+		if name == "" {
+			name = id
+		}
+		out = append(out, dayCardMember{
+			ID:       id,
+			Name:     name,
+			Role:     benchRoleLabel(m.Role),
+			Initials: benchRsvpInitials(name),
+			Axis:     hue,
+			Pattern:  pattern,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // dayCardCalendar is one Block's worth of days.
@@ -170,8 +280,17 @@ type dayCardCalendar struct {
 // The card is a page-level singleton positioned per click, so the payload is
 // keyed by calendar id and the module picks the entry off the clicked cell's
 // own `[data-bench-block][data-calendar-id]` ancestor.
+// THE WRAPPER CARRIES EXACTLY TWO TOP-LEVEL KEYS AND BOTH ARE ENUMERATED IN
+// THE SUITE. `calendars` is the per-day event data [DC-1] governs; `members` is
+// the Owner-only editor seed [ER-3] SIGNED added. A THIRD key is a decision,
+// not a convenience, and TestDayCard_PayloadWrapperCarriesOnlyItsTwoSeeds
+// fails on one.
 type dayCardPayload struct {
 	Calendars []dayCardCalendar `json:"calendars"`
+	// Members is the restricted-audience roster ([ER-3]). Owner-only and
+	// omitted entirely below that floor — see dayCardMember's header for why
+	// this is editor seed data rather than a widening of the payload law.
+	Members []dayCardMember `json:"members,omitempty"`
 }
 
 // ── the two key namespaces, mirrored ───────────────────────────────────────
@@ -381,9 +500,15 @@ func dayCardCategories(cal *Calendar, canAuthor bool) []dayCardCategory {
 			continue
 		}
 		cat := dayCardCategory{
-			Slug:  slug,
-			Name:  strings.TrimSpace(ec.Name),
-			Glyph: strings.TrimSpace(ec.Icon),
+			Slug: slug,
+			Name: strings.TrimSpace(ec.Name),
+			// THE SAME KEY THE BLOCK LOCKS ITS MARKS TO. blockEventAxisKey
+			// resolves an event's key to its category slug and blockMarkFor
+			// takes blockPatternFor(key) — so this is the identical
+			// derivation, and a type's rail in the editor wears the pattern
+			// its events wear in the grid.
+			Pattern: dayCardPattern(blockPatternFor(slug)),
+			Glyph:   strings.TrimSpace(ec.Icon),
 		}
 		if hue := strings.TrimSpace(ec.Color); hue != "" {
 			cat.Axis = dayCardAxis(hue)
@@ -486,22 +611,37 @@ type dayCardSource struct {
 	Calendar *Calendar
 }
 
+// dayCardSeed is the VIEWER-LEVEL half of the payload: the two facts that
+// decide what editor seed data this page carries, kept together so a call site
+// cannot pass one and forget the other.
+//
+// CanAuthor is the Scribe floor (the type palette). CanRestrict is the Owner
+// floor ([ER-3]) and it is EXPLICIT rather than inferred from CanAuthor or
+// borrowed from CanDelete — the whole point of the ruling is that the two Owner
+// gates are named separately.
+type dayCardSeed struct {
+	CanAuthor   bool
+	CanRestrict bool
+	Roster      []BenchRosterMember
+}
+
 // dayCardPayloadJSON serialises the surface's Blocks into the page attribute.
 //
 // It returns "" when there is nothing to carry, and the mount emits no
 // attribute at all in that case — an empty payload attribute is a promise of a
-// card that has no days to open on.
+// card that has no days to open on. THE ROSTER ALONE IS NOT SOMETHING TO CARRY:
+// a page with no Block has no card, so no editor, so no audience list to seed.
 //
 // MARSHAL CANNOT FAIL HERE (every field is a string, bool, int or a slice of
 // those), and a swallowed error would be a silent blank card, so the error is
 // folded into the empty return rather than logged per render.
-func dayCardPayloadJSON(canAuthor bool, sources ...dayCardSource) string {
-	p := dayCardPayload{}
+func dayCardPayloadJSON(seed dayCardSeed, sources ...dayCardSource) string {
+	p := dayCardPayload{Members: dayCardMembers(seed.Roster, seed.CanRestrict)}
 	for _, src := range sources {
 		if src.Block == nil {
 			continue
 		}
-		p.Calendars = append(p.Calendars, buildDayCardCalendar(src.Block.Data, src.Calendar, canAuthor))
+		p.Calendars = append(p.Calendars, buildDayCardCalendar(src.Block.Data, src.Calendar, seed.CanAuthor))
 	}
 	if len(p.Calendars) == 0 {
 		return ""

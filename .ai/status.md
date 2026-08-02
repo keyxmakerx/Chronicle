@@ -20,6 +20,171 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — R2-2b SHIPPED: the editor earns its chrome (2026-08-02)
+
+**The operator's complaint, closed at last.** 2026-07-29, on the live client:
+*"I'm unable to click and do anything… It should be a small card with a nice
+unfolding animation, and then a bigger editor that forms via some animation."*
+DAYCARD answered the first two thirds and gave one honest reason for the rest —
+[DC-7] refused to invent a motion signature and escalated it. The operator
+signed the carve-out on 2026-08-01, and `C-CALV4-EDITOR-R2b` is the answer to
+the last four words.
+
+**Three things and no fourth.** THE CHROME: the stage-2 mechanism keeps every
+`data-de-*` handle and every request body while its controls are replaced — the
+locked (hue · pattern · glyph) type rail, a real month grid whose week length is
+DERIVED from the payload's own weekday names, the intercalary day as a full-width
+row and a real date, the recurrence block, the visibility cards as real radios
+with an Owner-only allow/deny roster, the tie pill with an entity picker, and a
+live preview. THE MORPH: geometric, ONE named class, four properties
+(`inline-size` · `block-size` · `translate` · `opacity`), the register's existing
+tokens, no new duration, no scale, declared inside the ONE register section.
+DRAG-CREATE: landed rather than severed, on all seven [DC-11] terms.
+
+**THE RECURRENCE UNIT LIST WAS WRONG IN THREE DIRECTIONS AND ALL THREE ARE
+CORRECTED.** The week unit is NOT invention and its chip came off — week-based
+recurrence strides `WeekLength() × recurrenceWeeks(...)`, so `weekly` MEANS
+every tenday on a ten-day calendar, and DAYCARD §5 and the mockup are both
+wrong. `year` IS invention, the drawing offers it UNCHIPPED, and it does not
+ship at all. And new to this slice: `every N months` degrades exactly the same
+way, because `OccursOn`'s monthly branch ignores `RecurrenceInterval` entirely —
+so that control is ABSENT for the month unit rather than chipped. There is
+nothing there for a backend to add.
+
+**[ER-5] WAS MEASURED AND THE MEASUREMENT DISAGREED WITH THE PREDICTION.** The
+ruling expected a wide editor to re-create DAYCARD's occlusion blockers. It does
+not: 61 day cells × 11 viewport widths × 6 candidate box widths, Ledger stacked
+and docked, and **every** candidate holds 0 px² of overlap. What moves with width
+is how often the popover falls to the signed desktop SHEET. The shipped 760px is
+the largest that never sheets at or above the editor's own two-column
+breakpoint, and the divergence from the drawing's ~1008px is arithmetic: a
+1008px box cannot sit beside a 300px docked Ledger inside an 1180px measure.
+`placeCard` was not re-opened.
+
+**AND THE MEASUREMENT WENT STALE TWO STAGES LATER — the fix round's first
+finding.** It was taken before the morph existed and not re-run. From the morph
+stage the same probe FAILED at every width, up to 70,906 px² over a docked
+Ledger, `clear=true`. Cause: `edClose` writes the reverse morph geometry as an
+INLINE `inline-size` and `edHide` — the only thing that clears it — runs on a
+timer `edShow` cancels, so a reopen inside 160ms measured the CARD's width for a
+box the sheet sizes at 760. `edShow` now clears it before the box is measured;
+`placeCard` is still untouched. The probe's own accounting was separated at the
+same time (popover overlap gates; the signed desktop sheet is recorded; the
+CROSS-BLOCK case is reported with a card control arm and booked as
+`C-CALV4-CARD-CROSSBLOCK-LEDGER`). **A measurement is scoped to the commit it
+was taken on.**
+
+**THE FIX ROUND'S OTHER FIVE, IN ONE PARAGRAPH EACH, because every one of them
+was GREEN and wrong rather than red and obvious.** (1) The greyscale proofs
+declared `html{filter:grayscale(1)}` and the card and editor are `[popover]` —
+top-layer, not painted as descendants of `<html>` — so the filter never reached
+the surface under test; measured at 0.39% of editor pixels above chroma 20 with
+a maximum of 255 while the caption said hue was removed. (2) The editor's
+primary action shipped at **1.0:1**: `.cal-dayeditor .btn.fill` set `color:
+var(--accent)` at the same specificity as the Bench's `background:
+var(--accent)`, with the day card's sheet linked second, so `Create event` was
+painted in its own fill. (3) The capture fixture seeded NO event categories, so
+every shot photographed the module's `No type` fallback while its caption
+claimed "the locked type rail" — and the producer was emitting no pattern
+channel at all, making the type rail's three locked channels two. (4)
+`TestDayCardCSS_EverySelectorIsScoped`'s comment claimed a literal check over a
+`strings.Contains` prefix test; `.cal-daycard-drag` passed by accident and so
+would a fourth root. (5) The carve-out monopoly guard iterated a hardcoded
+eight-file list while claiming "product-wide"; adding `.edmorph` to
+`gm_panel.js` left the whole package green. **Every one of them is now a
+mechanical check with a named mutation that turns it red.**
+
+**A GUARD THAT COULD NOT SEE ITS OWN SUBJECT.** The morph's close must remove
+`.dcopen` before writing the reverse geometry or leaving takes as long as
+arriving. Mutating that order left every end-state assertion green — it is an
+ordering claim inside one task. The fixture's DOM stub grew an operation log and
+the ordering is now a real assertion. A guard nudged until green stops proving
+anything; a guard that was never able to see its subject never proved anything
+at all.
+
+**THE SECOND FIX ROUND WAS ENTIRELY ABOUT THE EVIDENCE, AND IT TOUCHED NO
+PRODUCT CODE.** Three blockers, all of the same family: a picture and the
+sentence beside it were not the same claim. (1) `.ed-body` is
+`max-block-size: min(70vh, 620px); overflow-y:auto`, so at 1440 the two-column
+body FOLDS and the ◈ Restricted card, the allow/deny roster and `Tied to` fell
+below it — four captions and two index rows named marks their frames did not
+contain. Desktop shots are now upper/lower PAIRS, the lower half scrolled as a
+wheel would scroll it with no geometry overridden, and every shot burns a fold
+report saying what is VISIBLE IN THIS FRAME. (2) Every shot ran `+ New event`
+while **21 of the 22 gating stills are EDIT mode** — and the cause was one layer
+back: the shared Bench fixture projects with NO events, so no card ever had a
+row to Edit and create mode was the only editor the rig could reach. A
+capture-only evented fixture and a stubbed single GET fixed it; nine edit-mode
+shots followed, including the Delete axis, which create mode cannot make because
+a draft has no id to delete. (3) `daycard_test.go` handed the 24px floor and the
+horizontal fold to "the screenshot gate" and the gate carried two CAPTION
+STRINGS; `daycard_floors_probe_test.go` now MEASURES both over 12 runs, and the
+drag row is captured rather than described.
+
+**THE 390px VIEWPORT WAS NEVER REAL, IN ANY ARTEFACT, UNTIL NOW.** Headless
+Chromium here **clamps the window to a 500px minimum width** — measured, in old
+headless and `--headless=new` alike. Three files were named `-390x844` and were
+500px wide, and two of the three did not say so, so the fold had never been
+checked at 390 in any form. A nested browsing context has its own viewport;
+both the probe and the shot rig use one, the probe asserts the width it actually
+measured in, and the shot burns the substitution onto the image. **A later hand
+should not have to rediscover this.**
+
+**THE MORPH DID NOT RUN, AND THE EVIDENCE'S DIAGNOSIS OF WHY IT COULD NOT BE
+PHOTOGRAPHED WAS ITSELF THE DEFECT (R2b stages 18-19).** The signed carve-out
+shipped INERT IN THE OPEN DIRECTION: measured frame by frame in real Chromium,
+the editor's box was at its resting geometry, translate 0, opacity 1 from the
+first sample after the door was clicked through 434ms. It popped in at full
+size and animated only on the way out. Cause: `edOpen` wrote the seeded start
+geometry and added `.edmorph` in the SAME style recalc, and CSS Transitions
+start from the AFTER-change style — so that one recalc started transitions
+running AWAY from the resting box toward the seed, the seed never became the
+settled before-change style, and the final write saw nothing to change.
+`edClose` always worked because it adds the class and flushes BEFORE any value
+change. **The fix is one flush** (seed → flush → class → flush → final write)
+and it is browser-general.
+
+**Three lessons the books should keep, because each one cost a round.**
+
+ 1. **EVERY MORPH GUARD ASSERTED THE STATE MACHINE AND NONE THE RENDERED
+    RESULT** — a DOM-stub test reading end-state inline styles, a
+    MutationObserver over the style attribute whose own header conceded it
+    "DOES NOT PROVE that the compositor interpolated", and two CSS guards that
+    read the sheet. All four stayed green with the morph completely dead.
+    `TestDayCardMorphInterpolates` is the missing one: real Chromium, real
+    timeline, `getBoundingClientRect` + `getComputedStyle` sampled every
+    animation frame in BOTH directions, and it is NOT env-gated.
+ 2. **A RIG'S LIMIT IS A CLAIM, AND CLAIMS GET CHECKED.** "This environment
+    cannot photograph the morph" was a true measurement of
+    `--virtual-time-budget` (which never runs the rendering lifecycle) promoted
+    into a false statement about the environment. Serve the page, hold the
+    `load` event with a slow subresource, freeze `setTimeout` at the click, and
+    the same Chromium photographs the flight in both directions.
+ 3. **A DEAD ANIMATION HIDES THE BUGS DOWNSTREAM OF IT.** The moment the morph
+    ran, three synchronous rigs turned out to have been measuring the box
+    mid-flight, and the [ER-5] probe's own stale-geometry guard then caught a
+    PRE-EXISTING placement defect: `applyPlacement` writes `.dcsheet` and its
+    `style.width` AFTER `edPosition` measures, and nothing cleared them, so a
+    reopen after a sheeted placement handed the placement law the viewport
+    width for a box about to render at `--de-w`. `edShow` now clears both.
+
+**Carried, not closed:** `C-CALV4-DAYMENU` (the 10 `menus-*` stills travel with
+it — a 22-of-32 fidelity split, never a shortfall); `C-CALV4-DAYPICK-A11Y`, now
+also holding drag-create's missing keyboard equivalent; **`C-CALV4-CARD-REDUCED-ANCHOR`
+— NEW at stage 19**, the editor opening at the viewport's top-left under
+`prefers-reduced-motion` because `closeCard` hides the card synchronously and
+the placement law is handed a 0×0 anchor (pre-existing, visible in the branch
+that has no morph at all, disclosed on shot 13's own caption and booked rather
+than fixed inside a signed carve-out); `C-CALV4-TOKENS-RESIGN`,
+booked a **sixth** time, with two of the seven defects now visible in stills the
+operator has signed; the live-authed CSRF case DAYCARD could not measure; **the
+day-of-week wrap at 390**, which is performed by no test and no image and is now
+named as unperformed in `daycard_test.go`'s own handoff comment rather than
+pointed at a gate that does not do it.
+
+Books: ADR-048 §27 · `reports/chronicle/2026-08-02-C-CALV4-EDITOR-R2b.md` ·
+`reports/chronicle/screenshots/2026-08-02-c-calv4-editor-r2b/`.
+
 ### calendar-v4 — W-H SHIPPED: the builder wizard, the last wave (2026-08-02)
 
 **The remodel's last wave, and the only one whose gate was *finish*.**

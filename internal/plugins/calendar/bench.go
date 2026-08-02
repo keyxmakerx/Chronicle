@@ -162,6 +162,21 @@ type DayCardMount struct {
 	CanAuthorDmOnly bool
 	// CanDelete is the Owner floor of DELETE .../events/:eid.
 	CanDelete bool
+	// CanRestrict is the Owner floor of PUT .../events/:eid/visibility, and it
+	// is C-CALV4-EDITOR-R2b's one addition to this struct ([ER-3] SIGNED).
+	//
+	// IT IS ITS OWN FIELD AND NOT CanDelete REUSED. Both read in.IsOwner today
+	// and the ruling still asked for two, in terms: "two Owner floors that
+	// happen to coincide today are a refactor away from not." The routes are
+	// genuinely different — DELETE .../events/:eid and PUT
+	// .../events/:eid/visibility — and the day one of them moves, a shared
+	// field would move the other one silently.
+	//
+	// It gates TWO things together, which is why it is a mount fact rather than
+	// a template branch: the ◈ Restricted visibility card in the editor, AND
+	// the per-member roster on the page payload that card's allow/deny list is
+	// drawn from. A Scribe renders neither and receives neither.
+	CanRestrict bool
 	// CampaignID is the API base the editor writes to. It is emitted rather
 	// than parsed out of window.location, because a surface that is not at
 	// /campaigns/:id/... would parse a wrong id and write to another campaign.
@@ -892,6 +907,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 			CanCreate:       in.CanCreateEvents,
 			CanAuthorDmOnly: in.CanAuthorDmOnly,
 			CanDelete:       in.IsOwner,
+			CanRestrict:     in.IsOwner,
 			CampaignID:      in.Campaign.ID,
 		},
 	}
@@ -945,7 +961,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	// two can never disagree about which events this viewer may see.
 	upcoming := benchUpcoming(ctx, spine, in.Campaign.ID, viewer)
 	data.NextUp = benchNextUp(upcoming, data.IsGM, in.Campaign.ID)
-	rsvpPanel, sessionTile := h.benchRsvpResolve(ctx, in, upcoming)
+	rsvpPanel, sessionTile, roster := h.benchRsvpResolve(ctx, in, upcoming)
 	data.Rsvp = rsvpPanel
 
 	// The subordinate-row ordering reuses the shipped ?sort control. The
@@ -979,7 +995,16 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	// received — no second repository read, no second filter pass — which is the
 	// only construction under which the agreement law ([DC-2]) is provable at
 	// the producer rather than asserted in JS about DOM that may not be there.
-	data.DayCardJSON = dayCardPayloadJSON(data.DayCard.CanCreate,
+	//
+	// THE ROSTER RIDES BESIDE IT, OWNER-ONLY ([ER-3] SIGNED). It is the roster
+	// benchRsvpResolve already read a few lines above — no second read, no new
+	// route — and dayCardMembers drops it entirely below the Owner floor.
+	data.DayCardJSON = dayCardPayloadJSON(
+		dayCardSeed{
+			CanAuthor:   data.DayCard.CanCreate,
+			CanRestrict: data.DayCard.CanRestrict,
+			Roster:      roster,
+		},
 		dayCardSource{Block: data.Primary, Calendar: primary},
 		dayCardSource{Block: data.RealWorld, Calendar: realWorld})
 
@@ -2658,10 +2683,20 @@ func benchRsvpAnyNumericZone(members []BenchRsvpMember) bool {
 // in.Role decides what the sessions seam RETURNS, not what the template hides.
 // A player's BenchAvailability comes back with FreeDays nil, so their HTML
 // cannot contain another member's lane data even by accident.
+//
+// ── IT ALSO RETURNS THE ROSTER, AND THAT IS THE WHOLE OF [ER-3]'s COST ─────
+//
+// C-CALV4-EDITOR-R2b's restricted-audience list needs member ids and display
+// names, and this function ALREADY READS THEM on every Bench render, for every
+// viewer, before any role is consulted. Returning what was already fetched is
+// the difference between "no new read" and "one more members route", and [ER-3]
+// SIGNED chose the former in terms. The Owner gate is applied at the PAYLOAD
+// (dayCardMembers), not here: this seam reports what the page has, and the
+// producer decides who may be told.
 func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
-	upcoming []BlockUpcoming) (BenchRsvp, *benchSessionTileInput) {
+	upcoming []BlockUpcoming) (BenchRsvp, *benchSessionTileInput, []BenchRosterMember) {
 	if h.schedule == nil {
-		return benchRsvpPanel(), nil
+		return benchRsvpPanel(), nil, nil
 	}
 	roster, err := h.schedule.BenchRoster(ctx, in.Campaign.ID)
 	if err != nil || len(roster) == 0 {
@@ -2669,7 +2704,7 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
 			slog.Warn("bench: rsvp roster read failed",
 				slog.String("campaign_id", in.Campaign.ID), slog.Any("error", err))
 		}
-		return benchRsvpPanel(), nil
+		return benchRsvpPanel(), nil, nil
 	}
 
 	isGM := permissions.CanSeeDmOnly(in.Role)
@@ -2772,7 +2807,7 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
 			CSRFToken:  in.CSRFToken,
 		}
 	}
-	return benchRsvpBuild(out), tile
+	return benchRsvpBuild(out), tile, roster
 }
 
 // benchRsvpPickSession finds the occurrence the panel is about: the soonest row

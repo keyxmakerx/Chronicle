@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -304,9 +305,18 @@ func benchFxData(isGM, isOwner bool) BenchData {
 	// predates it.
 	data.DayCard = DayCardMount{
 		CanCreate: isOwner, CanAuthorDmOnly: isOwner, CanDelete: isOwner,
-		CampaignID: "camp-1",
+		CanRestrict: isOwner,
+		CampaignID:  "camp-1",
 	}
-	data.DayCardJSON = dayCardPayloadJSON(data.DayCard.CanCreate,
+	// The Owner-only audience roster rides the same wrapper ([ER-3] SIGNED,
+	// C-CALV4-EDITOR-R2b). benchFxRoster is the same three people the RSVP
+	// panel's fixture prints, so a player render can be asserted to carry NO
+	// member name at all rather than merely to carry no roster key.
+	data.DayCardJSON = dayCardPayloadJSON(
+		dayCardSeed{
+			CanAuthor: data.DayCard.CanCreate, CanRestrict: data.DayCard.CanRestrict,
+			Roster: benchFxRoster(),
+		},
 		dayCardSource{Block: data.Primary, Calendar: primary},
 		dayCardSource{Block: data.RealWorld, Calendar: realWorld})
 	data.Ribbon = benchRibbon(benchRibbonInput{
@@ -629,6 +639,27 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	//       denominator, inverted (WG-8). The chip moved to the two controls
 	//       inside it that really are unbacked.
 	//
+	//   ADDED BY C-CALV4-EDITOR-R2b stage 2, and this is the fourth
+	//   re-enumeration:
+	//     4. daycard.templ's DAY-OF-WEEK MULTI-SELECT, inside the event
+	//        editor's recurrence block. `recurrence_day_of_week` exists as a
+	//        column (migration 011) and EXPANSION IGNORES IT ENTIRELY — OccursOn
+	//        is base-anchored (internal/plugins/calendar/.ai.md:963) and
+	//        eventEditorRecord does not carry it — so the control is real, the
+	//        storage is real, and the behaviour is not. That is precisely what
+	//        `.badge.need` means and precisely why it is not the `year`
+	//        treatment: `year` is not an accepted recurrence_type at all and
+	//        does not ship, chipped or otherwise.
+	//        GM-TIER BY CONSTRUCTION, which is the rule this list exists to
+	//        keep: bench.templ renders the editor only for CanCreate, so the
+	//        chip cannot reach a player and
+	//        TestDayCard_APlayerBenchCarriesNoAuthoringDOMAndNoHonestyChip
+	//        asserts the zero rather than trusting the construction.
+	//        The editor's OTHER two chips — the `day` and moon recurrence units
+	//        — are built by the module from the calendar's own derived week and
+	//        are pinned in test/js/daycard_editor_requests.test.mjs, which is
+	//        the honest split rather than a Go test asserting about JS.
+	//
 	//   BENCH-SIDE BUT NOT IN THIS FIXTURE: the RSVP panel's Propose and Nudge
 	//   chips, which only render once the panel is FILLED — benchFxDataRsvp is
 	//   the fixture that exercises them, and TestBenchRsvp_* below counts them.
@@ -650,12 +681,13 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	const chip = `class="badge need">needs backend`
 	const filtersChip = `data-spane="filters"><span ` + chip
 	benchOwn := strings.Count(html, chip) - strings.Count(html, filtersChip)
-	if benchOwn != 3 {
-		t.Errorf("the Bench's own chips = %d, want 3 (session tile · sync · horizon); "+
-			"Block-side chips are subtracted and must not stand in for them. If this "+
-			"dropped to 2, a chip was retired without its entry above being struck; "+
-			"if it rose to 4, the retired Nudge came back over a backend that exists",
-			benchOwn)
+	if benchOwn != 4 {
+		t.Errorf("the Bench's own chips = %d, want 4 (session tile · sync · horizon · "+
+			"the editor's day-of-week multi-select); Block-side chips are subtracted "+
+			"and must not stand in for them. If this dropped to 3, a chip was retired "+
+			"without its entry above being struck; if it rose to 5, either the retired "+
+			"Nudge came back over a backend that exists or the editor chipped a field "+
+			"the API already writes", benchOwn)
 	}
 	// The Ledger's chip is gone because W-B FILLED the zone, and the Shelf's
 	// because W-E did. Inverted, not deleted: a chip beside real rows is a lie
@@ -1184,16 +1216,73 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 			"under prefers-reduced-motion they would still run", outside)
 	}
 
-	// THE ALLOWLIST: three properties, and no fourth. Guard B1 in particular —
-	// --dash and --gap are the greyscale identity channel and are NEVER animated.
-	allowed := map[string]bool{"block-size": true, "opacity": true, "content-visibility": true}
-	for _, decl := range benchTransitionDecls(motion) {
-		for _, prop := range decl {
-			if !allowed[prop] {
+	// THE ALLOWLIST: three properties, and no fourth — EXCEPT under the one
+	// named carve-out class, which gets four and no fifth.
+	//
+	// Guard B1 in particular — --dash and --gap are the greyscale identity
+	// channel and are NEVER animated, under any prelude.
+	//
+	// ── THE CARVE-OUT CLAUSE — amended deliberately, by name ──────────────
+	//
+	// C-CALV4-EDITOR-R2b, under the OPERATOR's signature of 2026-08-01
+	// (decisions/2026-08-01-operator-signatures-wz1-sky-editor.md §3) and
+	// [ER-6] / [ER-7] SIGNED.
+	//
+	// WHAT IT LIFTS AND WHAT IT DOES NOT. The signature lifts exactly one
+	// thing — [DC-7]'s "register-only in this slice" — so the day card may
+	// morph into the editor as its own NAMED motion signature. It does not
+	// repeal the register: the carve-out is an addition on top of it, the base
+	// grammar is unchanged, and every other surface in R2b still moves under
+	// the three properties above.
+	//
+	// THE OLD CLAIM: every transitioned property in this sheet is one of
+	// block-size · opacity · content-visibility.
+	// THE NEW CLAIM: that is still true of EVERY RULE WHOSE PRELUDE DOES NOT
+	// NAME THE CARVE-OUT CLASS, and rules that do name it may additionally
+	// transition inline-size and translate — the two properties a GEOMETRIC
+	// morph needs and a scale would have avoided.
+	//
+	// WHY THE NEW CLAIM IS NOT WEAKER. The widening is keyed to a class that
+	// TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut independently pins to two
+	// files product-wide, so it cannot be borrowed by a second surface without
+	// that guard going red. `transform` is still refused everywhere, including
+	// under the carve-out — `translate` is named on its own precisely so the
+	// allowlist can admit the movement without admitting a scale. The five
+	// refusal strings and the `--disc-*` count assert UNCHANGED, above and
+	// below this block.
+	//
+	// MUTATION-TESTED: moving the morph's transition onto a rule whose prelude
+	// does not name the class turns this red; adding `transform` under the
+	// class turns this red.
+	const carveOut = ".edmorph"
+	base := map[string]bool{"block-size": true, "opacity": true, "content-visibility": true}
+	morph := map[string]bool{"inline-size": true, "translate": true}
+	for _, rule := range benchCSSRules(motion) {
+		carved := strings.Contains(rule[0], carveOut)
+		for _, decl := range benchTransitionDecls(rule[1]) {
+			for _, prop := range decl {
+				if base[prop] || (carved && morph[prop]) {
+					continue
+				}
+				if carved {
+					t.Errorf("`%s` names the carve-out and transitions %q, which is on "+
+						"neither the base allowlist nor the morph's four "+
+						"(inline-size · block-size · translate · opacity) — [ER-6] SIGNED "+
+						"names four properties and no fifth", rule[0], prop)
+					continue
+				}
 				t.Errorf("transitioned property %q is not on the allowlist "+
-					"(block-size · opacity · content-visibility) — [BR2-2] SIGNED", prop)
+					"(block-size · opacity · content-visibility) — [BR2-2] SIGNED. The "+
+					"editor-morph carve-out widens it ONLY for rules whose prelude names "+
+					"%s", prop, carveOut)
 			}
 		}
+	}
+	// …and the parser really saw the rules, so the loop above is proving a
+	// property set rather than an empty iteration.
+	if n := len(benchTransitionDecls(motion)); n < 3 {
+		t.Fatalf("only %d transition declarations found inside the wrapper; the rule "+
+			"parser stopped reading and every assertion above is vacuous", n)
 	}
 
 	// CLAUSE 2, ENFORCEABLE RATHER THAN DECORATIVE: exactly two durations, and
@@ -1246,6 +1335,230 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 		t.Error("the card declares a closed state and no open one — the reveal has no " +
 			"endpoint and the register's 200ms open cannot run")
 	}
+
+	// ── THE MORPH'S OWN TWO-DIRECTIONAL CLAUSE ────────────────────────────
+	//
+	// The same shape the DAYCARD clause above uses, for the same reason: it
+	// fails if the morph's rules VANISH (the carve-out was quietly deleted and
+	// the operator's signed ask stopped shipping) and if they ESCAPE the
+	// wrapper (under prefers-reduced-motion the morph would then run, and the
+	// signature says instant AND complete).
+	const morphRule = ".cal-bench .cal-dayeditor.edmorph"
+	if !strings.Contains(motion, morphRule) {
+		t.Errorf("the editor morph is not inside %q — the carve-out is a named addition "+
+			"INSIDE the one register section ([DC-6]'s singularity clause survives it), "+
+			"and a morph declared anywhere else would be the second grammar", guard)
+	}
+	if strings.Count(code, morphRule) != strings.Count(motion, morphRule) {
+		t.Errorf("a `%s` rule sits OUTSIDE the reduced-motion wrapper; the operator's "+
+			"signature says the morph must be instant AND COMPLETE under reduced motion, "+
+			"which is structural (no rule at all) and never a shortened duration", morphRule)
+	}
+	// CLOSE FASTER THAN OPEN, STRUCTURALLY, in the register's own idiom: the
+	// base rule carries --disc-close and the OPEN state overrides the duration.
+	// Clause 2 was not named by the carve-out, so clause 2 binds.
+	if !strings.Contains(motion, ".cal-bench .cal-dayeditor.edmorph.dcopen") {
+		t.Error("the morph declares no open-state duration override — leaving would " +
+			"then take exactly as long as arriving, which is register clause 2's " +
+			"whole subject")
+	}
+}
+
+// TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut is NEW with
+// C-CALV4-EDITOR-R2b, and it is the carve-out's MONOPOLY guard ([ER-7] SIGNED).
+//
+// WHY A SEPARATE GUARD RATHER THAN ANOTHER CLAUSE. The clause above widens an
+// allowlist for rules that name `.edmorph`. That widening is only safe if the
+// class itself cannot spread — otherwise the next surface that wants a
+// geometric transition simply adds the class to its own rule and the allowlist
+// admits it silently. So the class is pinned as narrowly as the properties are.
+//
+// THREE CLAIMS, and the third is the operator's signature made mechanical:
+//
+//  1. THE MORPH'S PROPERTIES APPEAR ONLY UNDER THE CLASS, and only in this
+//     sheet. inline-size and translate are transitioned nowhere else.
+//  2. THE CLASS APPEARS IN EXACTLY TWO FILES PRODUCT-WIDE — the sheet that
+//     declares the transition and the module that adds and removes it —
+//     established by WALKING the repository's authored source, not by
+//     consulting a list of files someone already suspected. Test files are
+//     excluded by construction: a guard that counted its own assertions would
+//     be counting itself, and a test cannot add a transition to a shipped
+//     surface. See benchCarveOutMentions for exactly what is walked and what
+//     is skipped.
+//  3. NO RULE NAMING THE CLASS ALSO NAMES `.benchblock`, `.cal-block-host`,
+//     `.block`, `.lrow` or `[data-cell]`. That is bound 4 of the signature —
+//     "never touch the Block's interior" — checked rather than promised.
+//
+// MUTATION-TESTED, STAGE 7, EACH REVERTED:
+//   · `el.classList.add("edmorph")` appended to
+//     internal/plugins/calendar/static/js/gm_panel.js — a REAL third consumer
+//     one directory away — turns claim 2 red, BY NAME, on this test. Against
+//     the eight-file allowlist this replaced, the whole calendar package stayed
+//     GREEN, which is why the walk exists.
+//   · `.cal-sched .edmorph { … }` appended to static/css/calendar-schedule.css
+//     turns claim 2 red on THIS test. Against the allowlist it went red only on
+//     that sheet's own scoping guard — the right answer for the wrong reason,
+//     which is indistinguishable from luck.
+//   · `.cal-block-host` added to the morph's prelude turns claim 3 red.
+func TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut(t *testing.T) {
+	const carveOut = ".edmorph"
+	const bare = "edmorph"
+	css := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
+
+	// (1) the two morph-only properties, only under the class, only here.
+	for _, rule := range benchCSSRules(css) {
+		if strings.Contains(rule[0], carveOut) {
+			continue
+		}
+		for _, decl := range benchTransitionDecls(rule[1]) {
+			for _, prop := range decl {
+				if prop == "inline-size" || prop == "translate" {
+					t.Errorf("`%s` transitions %q without naming the carve-out class — "+
+						"the geometric properties are the MORPH's and a second surface "+
+						"taking them is a second signature nobody signed", rule[0], prop)
+				}
+			}
+		}
+	}
+
+	// (2) EXACTLY TWO FILES PRODUCT-WIDE, AND "PRODUCT-WIDE" MEANS THE
+	// REPOSITORY, NOT A LIST.
+	//
+	// FIXED FORWARD AT STAGE 7, AND THE PREVIOUS CUT IS THE REASON THIS
+	// PARAGRAPH IS LONG. This claim used to iterate a HARDCODED EIGHT-FILE
+	// ALLOWLIST while its comment said "product-wide" and "adding `.edmorph` to
+	// a third file turns claim 2 red." It did not: adding the class to
+	// internal/plugins/calendar/static/js/gm_panel.js — a real consumer, one
+	// directory away, outside the list — left the entire calendar package green.
+	// A closed allowlist can only ever find the files someone already thought
+	// of, which is precisely the set that does not need finding.
+	//
+	// [ER-7]'s stated rationale is exactly this risk, in its own words: the
+	// allowlist widening "is only safe if the class itself cannot spread —
+	// otherwise the next surface that wants a geometric transition simply adds
+	// the class to its own rule and the allowlist admits it silently." A guard
+	// that cannot see the next surface cannot enforce that.
+	//
+	// It now WALKS the repository's own source — every .css, .js, .templ and
+	// non-generated .go under the tracked source roots — and names every file
+	// that mentions the class. Vendor, node_modules, .git, build output and
+	// _templ.go generations are skipped because they are not authored here; the
+	// test files that assert ABOUT the carve-out are skipped for the obvious
+	// reason that they must name it to check it.
+	found := map[string]bool{}
+	for _, path := range benchCarveOutMentions(t, bare) {
+		found[path] = true
+	}
+	if len(found) == 0 {
+		t.Fatal("the repository walk found no mention of the carve-out class at all — " +
+			"the walk is not reading the tree, and every claim below would pass vacuously")
+	}
+	want := map[string]bool{
+		"static/css/calendar-bench.css": true,
+		"internal/plugins/calendar/static/js/calendar_daycard.js": true,
+	}
+	for path := range found {
+		if !want[path] {
+			t.Errorf("%s names %q — the carve-out lives in exactly two places: the sheet "+
+				"that declares the transition and the module that adds and removes the "+
+				"class. A third is a second consumer of a signature that names ONE "+
+				"transition, card→editor and back", path, bare)
+		}
+	}
+	for path := range want {
+		if !found[path] {
+			t.Errorf("%s no longer names %q — the morph is the operator's signed ask and "+
+				"the reason this slice exists in the shape it does", path, bare)
+		}
+	}
+
+	// (3) BOUND 4, MECHANICALLY: the morph reads the CARD's rect and nothing
+	// else, and no rule of it reaches into the Block.
+	for _, rule := range benchCSSRules(css) {
+		if !strings.Contains(rule[0], carveOut) {
+			continue
+		}
+		for _, inside := range []string{".benchblock", ".cal-block-host", ".block", ".lrow", "[data-cell]"} {
+			if strings.Contains(rule[0], inside) {
+				t.Errorf("`%s` names the carve-out AND %q — the signature's last clause is "+
+					"\"never touch the Block's interior\", and a morph that selected into "+
+					"it would be animating the one subtree this whole arc is fenced around",
+					rule[0], inside)
+			}
+		}
+	}
+}
+
+// benchCarveOutMentions walks the repository's authored source and returns every
+// file that names the carve-out class, repo-relative and slash-separated.
+//
+// WHAT IT READS: the four source roots this product's front end actually lives
+// in — `static/`, `internal/`, `cmd/` and `tools/` — over `.css`, `.js`, `.mjs`,
+// `.templ` and `.go`. WHAT IT SKIPS, and why each skip is safe:
+//
+//   · `node_modules`, `vendor`, `.git`, `dist`, `bin`, `tmp` — not authored here.
+//   · `*_templ.go` — GENERATED from a `.templ` that the walk already reads, so a
+//     class in one is a class in the other and counting both would report two
+//     files for one authoring decision.
+//   · `*_test.go` and `test/js/*.test.mjs` — a test that ASSERTS about the
+//     carve-out must name it. Excluding assertions from a monopoly count is not
+//     a loophole: a test file cannot add a transition to a shipped surface.
+//
+// The point of a walk over a list is that it finds the file nobody thought of.
+// That is the whole difference between this and the eight-name allowlist it
+// replaced.
+func benchCarveOutMentions(t *testing.T, needle string) []string {
+	t.Helper()
+	root := repoRootFrom(t)
+	skipDir := map[string]bool{
+		"node_modules": true, "vendor": true, ".git": true,
+		"dist": true, "bin": true, "tmp": true,
+	}
+	exts := map[string]bool{
+		".css": true, ".js": true, ".mjs": true, ".templ": true, ".go": true,
+	}
+	var out []string
+	for _, top := range []string{"static", "internal", "cmd", "tools", "test"} {
+		base := filepath.Join(root, top)
+		if _, err := os.Stat(base); err != nil {
+			continue
+		}
+		err := filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				if skipDir[info.Name()] {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			name := info.Name()
+			if !exts[strings.ToLower(filepath.Ext(name))] {
+				return nil
+			}
+			if strings.HasSuffix(name, "_templ.go") ||
+				strings.HasSuffix(name, "_test.go") ||
+				strings.HasSuffix(name, ".test.mjs") {
+				return nil
+			}
+			body, rerr := os.ReadFile(path)
+			if rerr != nil {
+				return rerr
+			}
+			if !strings.Contains(string(body), needle) {
+				return nil
+			}
+			rel, _ := filepath.Rel(root, path)
+			out = append(out, filepath.ToSlash(rel))
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", top, err)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // TestBenchProse_MotionClaimsMatchTheSheet pins the two SENTENCES that describe

@@ -79,3 +79,66 @@ test('the card is a page-level sibling, not a child of the Block host', () => {
     'the card must stay inside .cal-bench: the register lives there and every prelude ' +
     'in that sheet names it');
 });
+
+// ── C-CALV4-EDITOR-R2b: THE MORPH RUNS, AND THE BLOCK STILL DOES NOT MOVE ──
+//
+// EXTENDED per §4 bound 4 and [ER-7] SIGNED. The signature's last clause is
+// "never touch the Block's interior", and the dispatch is explicit that this
+// suite "must pass WITH THE MORPH RUNNING, not merely with the module loaded".
+// The distinction is real: the morph is the first thing in this arc that
+// MEASURES a rect and writes geometry in response, and a measurement is one
+// refactor away from being a measurement of a cell.
+test('the card→editor morph leaves the Block host byte-identical', () => {
+  const fx = boot();
+  const before = fx.blockHost.outerHTML;
+  assert.ok(before.length > 200, 'the fixture is too thin to prove anything');
+
+  fx.fire('click', fx.cells[3]);
+  assert.equal(fx.blockHost.outerHTML, before, 'opening the card mutated the Block');
+
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+  assert.equal(fx.editor.classList.contains('edmorph'), true,
+    'the morph never engaged; this assertion would be about a plain open');
+  assert.equal(fx.blockHost.outerHTML, before, 'the MORPH mutated the Block while opening');
+
+  fx.flush();
+  assert.equal(fx.blockHost.outerHTML, before, 'the morph mutated the Block while settling');
+
+  fx.fire('keydown', fx.editor, { key: 'Escape' });
+  assert.equal(fx.blockHost.outerHTML, before, 'the REVERSE morph mutated the Block');
+  fx.flush();
+  assert.equal(fx.editor.popoverOpen, false);
+  assert.equal(fx.blockHost.outerHTML, before, 'the morph mutated the Block while hiding');
+});
+
+test('the morph carries its class on the EDITOR and never on anything in the Block', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+
+  // BOUND 4, at runtime rather than in the sheet: the class exists in exactly
+  // one place on the page while it is in flight, and that place is the editor.
+  assert.equal(fx.blockHost.querySelectorAll('.edmorph').length, 0);
+  assert.equal(fx.host.querySelectorAll('.edmorph').length, 0);
+  assert.equal(fx.root.querySelectorAll('.edmorph').length, 1);
+  assert.equal(fx.root.querySelectorAll('.edmorph')[0], fx.editor);
+});
+
+test('the DRAG path leaves the Block host byte-identical, start to finish', () => {
+  const fx = boot();
+  const before = fx.blockHost.outerHTML;
+
+  // EXTENDED for stage 4 ([DC-11] / [ER-8] SIGNED). The drag is the first thing
+  // in this arc that follows the pointer ACROSS the Block's own cells, which is
+  // exactly where "just a class, just during a drag" would go.
+  fx.fire('pointerdown', fx.cells[3], { button: 0 });
+  assert.equal(fx.blockHost.outerHTML, before, 'pointerdown mutated the Block');
+  fx.fire('pointermove', fx.cells[4]);
+  assert.equal(fx.blockHost.outerHTML, before, 'the preview marked a cell');
+  fx.fire('pointermove', fx.cells[5]);
+  assert.equal(fx.blockHost.outerHTML, before, 'the growing preview marked a cell');
+  fx.fire('pointerup', fx.cells[5]);
+  assert.equal(fx.blockHost.outerHTML, before, 'release mutated the Block');
+  fx.flush();
+  assert.equal(fx.blockHost.outerHTML, before, 'the editor the drag opened mutated the Block');
+});

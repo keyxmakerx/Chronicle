@@ -192,12 +192,59 @@ test('`+ New event` POSTs to the shipped create route, dated from the card day',
   assert.equal(fx.calls[0].body.day, 3);
 });
 
+// AMENDED BY NAME, C-CALV4-EDITOR-R2b stage 2, under [ER-10] SIGNED.
+//
+// WHO TURNED IT OVER AND WHAT THE OLD CLAIM WAS. Stage 2 shipped the type
+// picker as `<select data-de-category>` and this test counted its <option>
+// children. The chrome replaces it with the LOCKED TRIPLE — one `.topt` per
+// category carrying hue rail + stroke pattern + glyph — because a <select>
+// can carry exactly one channel and the build law wants three.
+//
+// WHY THE NEW CLAIM IS NOT WEAKER. It asserts the same seeding fact (the
+// palette came off the PAGE PAYLOAD and no request was made for it) and adds
+// the three claims the old shape could not make at all: that the rail carries
+// the category's own hue, that the pattern class is present, and that the
+// glyph is a sibling of the rail rather than the rail's ink. Condition 1 is
+// met literally — `data-de-category` did not move off the node the module
+// reads, it merely became a hidden input — and condition 2 holds because the
+// body's `category` value is produced by the same `.value` read as before.
+//
+// MUTATION-TESTED: dropping `cat.axis` from edTypeRail turns this red.
 test('the type picker is seeded from the PAGE payload, not from an Owner-only route', () => {
   const fx = boot();
   openEditorOn(fx, 3);
-  const opts = fx.editor.querySelector('[data-de-category]').children;
+  const opts = fx.editor.querySelector('[data-de-typerail]').children;
   assert.equal(opts.length, 3, 'the palette did not reach the picker');
-  assert.equal(opts[1].getAttribute('value'), 'quest');
+  // The first option is `No type`, which every event may be.
+  assert.equal(opts[0].getAttribute('data-type-pick'), '');
+  assert.equal(opts[1].getAttribute('data-type-pick'), 'quest');
+
+  // THE LOCKED TRIPLE, per option: hue on the rail, pattern as a class beside
+  // it, glyph as its OWN element. A hue never travels alone on this surface.
+  const quest = opts[1];
+  assert.equal(quest.style.getPropertyValue('--axis'), '#ef4444');
+  assert.ok(/\brail\b/.test(quest.querySelector('.rail').className));
+  assert.equal(quest.querySelector('.g').textContent, '▲');
+  assert.equal(quest.querySelector('.nm').textContent, 'Quest');
+
+  // THE PATTERN CHANNEL MUST CARRY INFORMATION, NOT MERELY EXIST — stage 8,
+  // fix-forward. `.rail` used to be asserted for the presence of a class, and
+  // it passed while every option in the rail drew `p1`: the producer emitted no
+  // pattern at all and the module's fallback supplied the same solid stroke for
+  // every type. A channel that says the same thing about everything is not a
+  // channel, and hue was doing the whole job — which is exactly what the build
+  // law forbids. The two categories carry DIFFERENT patterns and the assertion
+  // is that the rail keeps them apart.
+  const social = opts[2];
+  const pat = (o) => (o.querySelector('.rail').className.match(/\bp[1-8]\b/) || [])[0];
+  assert.equal(pat(quest), 'p4', 'the type rail dropped the category\'s own pattern');
+  assert.equal(pat(social), 'p7');
+  assert.notEqual(pat(quest), pat(social),
+    'two types share a stroke pattern, so hue is carrying the identity alone');
+
+  // …and the handle the write path reads is still the one it always read.
+  assert.equal(fx.editor.querySelector('[data-de-category]').tagName, 'INPUT');
+
   // …and no request was made to fetch it. GET .../event-categories sits behind
   // an OWNER floor, so a Scribe reaching for it would 403.
   assert.equal(fx.calls.filter((c) => /event-categories/.test(c.url)).length, 0);
@@ -552,4 +599,206 @@ test('reopening the editor clears an in-flight flag left by a failed save', asyn
   await new Promise((r) => setImmediate(r));
   assert.equal(fx.calls.filter((c) => c.method === 'POST').length, 2,
     'a fresh editor session is a fresh write');
+});
+
+// ── C-CALV4-EDITOR-R2b stage 2: the chrome's own contracts ────────────────
+
+test('the recurrence unit list is corrected in all three directions', () => {
+  const P = boot().pure;
+
+  // A TEN-DAY WEEK IS NOT INVENTION AND ITS CHIP COMES OFF. Week-based
+  // recurrence strides `WeekLength() × recurrenceWeeks(...)`, so `weekly` on a
+  // ten-day calendar MEANS every tenday. DAYCARD §5 and the mockup both chip
+  // this unit; both are wrong and the correction is this slice's.
+  // `plain` round-trips through JSON because these values are built inside the
+  // module's own vm realm: strict deepEqual compares prototypes, and an array
+  // from another realm is never reference-equal to one from this file's.
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  const ten = P.recurrenceUnits(10);
+  assert.deepEqual(plain(ten.map((u) => u.id)), ['week', 'month', 'day', 'moon']);
+  assert.equal(ten[0].backed, true, 'the week unit is an accepted recurrence_type');
+  assert.equal(ten[1].backed, true, 'monthly is an accepted recurrence_type');
+  assert.equal(ten[2].backed, false, 'there is no daily recurrence_type');
+  assert.equal(ten[3].backed, false, 'there is no moon-phase recurrence_type');
+
+  // `year` IS INVENTION AND THE DRAWING OFFERS IT UNCHIPPED. It does not ship
+  // at all: an unbacked unit in a picker is a trap, and the one thing worse
+  // than a missing option is one that quietly does nothing.
+  assert.equal(ten.filter((u) => /year/i.test(u.id) || /year/i.test(u.label)).length, 0);
+
+  // THE LABEL IS DERIVED, NEVER A LITERAL, and it is re-driven at the four
+  // week lengths the stills re-drive `.wdpick` at. Chronicle's Calendar carries
+  // Weekdays and a WeekLength() and NO WEEK NOUN, so the honest derived label
+  // names the cycle's length — which cannot lie about the stride the way a bare
+  // "week" does on a ten-day calendar, and cannot hardcode "tenday" either.
+  for (const n of [5, 7, 10, 13]) {
+    assert.equal(P.recurrenceUnits(n)[0].label, n + '-day week');
+  }
+  // A CALENDAR WITH NO WEEKDAYS HAS NO WEEK UNIT. WeekLength() 0 makes the
+  // server's own stride 0 and OccursOn falls back to a single occurrence, so
+  // offering the unit would be offering exactly the silent degradation the chip
+  // exists to prevent.
+  assert.deepEqual(plain(P.recurrenceUnits(0).map((u) => u.id)), ['month', 'day', 'moon']);
+});
+
+test('the interval maps onto the type at the producer of the request body', () => {
+  const P = boot().pure;
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  const rec = (unit, every, mode) => plain(P.recurrenceBody({ mode: mode || 'repeats', unit, every }));
+
+  assert.deepEqual(rec('week', 1), { is_recurring: true, recurrence_type: 'weekly', recurrence_interval: 0 });
+  assert.deepEqual(rec('week', 2), { is_recurring: true, recurrence_type: 'biweekly', recurrence_interval: 0 });
+  assert.deepEqual(rec('week', 3), { is_recurring: true, recurrence_type: 'custom', recurrence_interval: 3 });
+  assert.deepEqual(rec('week', 9), { is_recurring: true, recurrence_type: 'custom', recurrence_interval: 9 });
+
+  // MONTHLY HAS NO INTERVAL, and the field is ABSENT rather than chipped:
+  // OccursOn's monthly branch ignores RecurrenceInterval entirely, so `every 2
+  // months` would be stored, accepted and then expanded EVERY month.
+  assert.equal(P.recurrenceInterval('week'), true);
+  assert.equal(P.recurrenceInterval('month'), false);
+  assert.deepEqual(rec('month', 4), { is_recurring: true, recurrence_type: 'monthly', recurrence_interval: 0 });
+
+  // AN UNBACKED UNIT AUTHORS NOTHING. Null means "do not write", so the caller
+  // round-trips the stored rule instead of sending a type the server would
+  // silently degrade to one occurrence — which is exactly what the chip beside
+  // the unit promises.
+  assert.equal(rec('day', 1), null);
+  assert.equal(rec('moon', 1), null);
+
+  // ONCE CLEARS THE TYPE AND THE INTERVAL TOGETHER. A JSON null cannot clear
+  // either column — service.UpdateEvent guards the pointer siblings — so the
+  // empty string is the only clear the shipped PUT admits, and it lands the
+  // pair consistent instead of in the half-state
+  // C-CAL-RECURRING-PARTIAL-STATE-CLEANUP already had to clean up once.
+  assert.deepEqual(rec('week', 3, 'once'),
+    { is_recurring: false, recurrence_type: '', recurrence_interval: 0 });
+});
+
+test('the three losslessness cases, on the wire', () => {
+  const P = boot().pure;
+  const stored = {
+    id: 'ev-1', visibility: 'everyone',
+    is_recurring: true, recurrence_type: 'weekly', recurrence_interval: 1,
+  };
+  const base = { name: 'x', year: '1', month: '1', day: '1', allDay: true };
+
+  // UNTOUCHED → ROUND-TRIPPED. `form.recurrence` is null when the author never
+  // opened the recurrence controls, which is what keeps a title-only save from
+  // rewriting a rule it never showed anybody.
+  const untouched = P.buildEventBody({ ...base, recurrence: null }, stored, {});
+  assert.equal(untouched.is_recurring, true);
+  assert.equal(untouched.recurrence_type, 'weekly');
+  assert.equal(untouched.recurrence_interval, 1);
+
+  // AUTHORED → SENT.
+  const authored = P.buildEventBody(
+    { ...base, recurrence: { mode: 'repeats', unit: 'week', every: 2 } }, stored, {});
+  assert.equal(authored.recurrence_type, 'biweekly');
+
+  // EXPLICITLY ONCE → is_recurring:false AND the pair cleared together.
+  const once = P.buildEventBody(
+    { ...base, recurrence: { mode: 'once', unit: 'week', every: 2 } }, stored, {});
+  assert.equal(once.is_recurring, false);
+  assert.equal(once.recurrence_type, '');
+  assert.equal(once.recurrence_interval, 0);
+
+  // A CHIPPED UNIT ROUND-TRIPS RATHER THAN DEGRADING.
+  const chipped = P.buildEventBody(
+    { ...base, recurrence: { mode: 'repeats', unit: 'day', every: 1 } }, stored, {});
+  assert.equal(chipped.recurrence_type, 'weekly', 'a chipped unit wrote a degrading type');
+});
+
+test('the editor renders a chip on every unbacked unit and on no backed one', () => {
+  const fx = boot();
+  openEditorOn(fx, 3);
+  const units = fx.editor.querySelectorAll('[data-unit-pick]');
+  assert.ok(units.length >= 3, 'the unit list did not build');
+  for (const u of units) {
+    const id = u.getAttribute('data-unit-pick');
+    const chip = u.querySelector('.badge.need');
+    const backed = id === 'week' || id === 'month';
+    assert.equal(!!chip, !backed,
+      'unit ' + id + ': a chip on a backed unit is the mockup’s defect; a chip ' +
+      'missing from an unbacked one is a silent single occurrence');
+    if (chip) assert.equal(chip.textContent, 'needs backend');
+  }
+});
+
+test('an end date can never precede its own start, and the intercalary day sorts last', () => {
+  const P = boot().pure;
+  // The signed shape in miniature: three ordinary days then a festival day,
+  // exactly the order the producer emits (ordinary ascending, then intercalary).
+  const list = [
+    { key: 'h-1', ord: '1', day: 1, weekday: 'A' },
+    { key: 'h-2', ord: '2', day: 2, weekday: 'B' },
+    { key: 'h-3', ord: '3', day: 3, weekday: 'A' },
+    { key: 'h-i1', ord: 'i1', day: 1, label: 'Midwinter' },
+  ];
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  const dates = P.orderedDates(list);
+  assert.deepEqual(plain(dates.map((d) => d.key)), ['h-1', 'h-2', 'h-3', 'h-i1']);
+  assert.equal(P.isIntercalary(dates[3]), true);
+
+  // Advancing from every start, over the whole list, never lands before it.
+  for (let i = 0; i < dates.length; i++) {
+    let cur = dates[i].key;
+    for (let step = 0; step < 6; step++) {
+      const next = P.nextDate(dates, cur);
+      if (!next) break;
+      assert.ok(dates.indexOf(next) > i,
+        'an end date landed before its own start — the defect the drawing lane ' +
+        'found by taking `day === "ic" ? days : day` as the ordering base');
+      cur = next.key;
+    }
+  }
+  // FROM THE INTERCALARY DAY THERE ARE NO END OPTIONS AT ALL. It is the last
+  // date in the month, so the field says "ends the same day" rather than
+  // clamping backwards to a numbered day.
+  assert.equal(P.nextDate(dates, 'h-i1'), null);
+});
+
+test('the week is DERIVED from the calendar’s own weekday names, at any length', () => {
+  const P = boot().pure;
+  for (const len of [5, 7, 10, 13]) {
+    const names = [];
+    for (let i = 0; i < len; i++) names.push('WD' + i);
+    const list = [];
+    for (let d = 1; d <= 30; d++) {
+      list.push({ key: 'h-' + d, ord: String(d), day: d, weekday: names[(d - 1) % len] });
+    }
+    const shape = P.weekShape(list);
+    assert.equal(shape.len, len, 'the derived week length is wrong at ' + len);
+    assert.deepEqual(JSON.parse(JSON.stringify(shape.names)), names);
+  }
+  // A calendar that declares no weekdays has no week, and says so rather than
+  // guessing one.
+  assert.deepEqual(JSON.parse(JSON.stringify(P.weekShape([{ key: 'h-1', ord: '1', day: 1 }]))),
+    { len: 0, names: [] });
+});
+
+test('the audience reads allow-by-default ONLY when there is no rule at all', () => {
+  const P = boot().pure;
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  const ids = ['u-a', 'u-b', 'u-c'];
+
+  // No rule: everyone is allowed, because the event is not restricted.
+  assert.deepEqual(plain(P.audienceFromRules([], ids)), { 'u-a': true, 'u-b': true, 'u-c': true });
+
+  // AN ALLOW LIST IS A CLOSED DOOR WITH A GUEST LIST. A member absent from it
+  // is DENIED, and reading them as allowed would silently widen the audience on
+  // the first save — a permission bug wearing a UI bug's clothes.
+  assert.deepEqual(
+    plain(P.audienceFromRules([{ mode: 'allow', kind: 'user', target: 'u-a' }], ids)),
+    { 'u-a': true, 'u-b': false, 'u-c': false });
+
+  // A deny list is an open door with a bouncer.
+  assert.deepEqual(
+    plain(P.audienceFromRules([{ mode: 'deny', kind: 'user', target: 'u-b' }], ids)),
+    { 'u-a': true, 'u-b': false, 'u-c': true });
+
+  // The return leg emits an ALLOW list, in the roster's own order.
+  assert.deepEqual(
+    plain(P.audienceToChips({ 'u-a': true, 'u-b': false, 'u-c': true }, ids)),
+    [{ mode: 'allow', kind: 'user', target: 'u-a', label: 'u-a' },
+     { mode: 'allow', kind: 'user', target: 'u-c', label: 'u-c' }]);
 });

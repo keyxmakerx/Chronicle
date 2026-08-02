@@ -303,3 +303,317 @@ test('a BUSY day card clears the stacked band instead of sheeting over it', () =
   assert.equal(fx.card.getAttribute('data-dc-clear'), '1');
   assert.equal(said.length, 0);
 });
+
+// ── C-CALV4-EDITOR-R2b: THE MORPH'S STATE MACHINE ─────────────────────────
+//
+// EXTENDED per §4 and [ER-6] / [ER-7] SIGNED. What is asserted here is the
+// mechanism the operator signed: ONE BOX BECOMES THE OTHER, growing from the
+// card's measured geometry rather than sliding in from elsewhere, with no
+// scale, reversing faster than it arrived, and landing INSTANT AND COMPLETE
+// under reduced motion.
+
+function openEditorFromCard(fx, day) {
+  fx.fire('click', fx.cells[day]);
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+}
+
+test('the editor grows FROM the card’s measured geometry, not from nowhere', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  const card = fx.card.getBoundingClientRect();
+  assert.ok(card.width > 0 && card.height > 0, 'the card has no rect to morph from');
+
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+
+  // THE START STATE: the editor sits at the card's rect, at the card's size,
+  // transparent. The offset is a `translate`, so the box's own left/top stay
+  // the placement law's answer and the morph never re-decides where it goes.
+  const ed = fx.editor;
+  assert.equal(ed.classList.contains('edmorph'), true, 'the carve-out class is not on the box');
+  // The offset the START state carried, recomputed here from the two rects
+  // rather than read back off the box: by the time this line runs the module
+  // has already written the END state, and asserting on that would be asserting
+  // that a value equals itself.
+  const placedLeft = parseFloat(ed.style.left) || 0;
+  const placedTop = parseFloat(ed.style.top) || 0;
+  assert.ok(Math.round(card.left - placedLeft) !== 0 || Math.round(card.top - placedTop) !== 0,
+    'the card and the editor were placed at the same point, so this fixture ' +
+    'cannot tell a morph from a plain reveal');
+  assert.equal(ed.style.getPropertyValue('translate'), '0px 0px',
+    'the END state must be no offset — the box travels by `translate` and lands ' +
+    'on the placement law\'s own answer, never on a second geometry');
+
+  // THE END STATE, written in the same task: back to no offset, at the box's
+  // own measured size, fully opaque.
+  assert.equal(ed.style.getPropertyValue('inline-size'), '760px');
+  assert.equal(ed.style.getPropertyValue('opacity'), '1');
+  assert.equal(ed.classList.contains('dcopen'), true);
+});
+
+test('the morph does not scale — it writes a size, never a transform', () => {
+  const fx = boot();
+  openEditorFromCard(fx, 3);
+  const ed = fx.editor;
+  // A FLIP SCALE IS THE CHEAP WAY AND IT SQUASHES A FORM'S TEXT. `translate` is
+  // named on its own precisely so this assertion can exist.
+  assert.equal(ed.style.getPropertyValue('transform'), '');
+  assert.equal(ed.style.getPropertyValue('scale'), '');
+  assert.ok(/px/.test(ed.style.getPropertyValue('inline-size')),
+    'the box grew by something other than its own size');
+});
+
+test('the morph settles and hands the box back its natural sizing', () => {
+  const fx = boot();
+  openEditorFromCard(fx, 3);
+  assert.equal(fx.editor.classList.contains('edmorph'), true);
+
+  fx.flush();
+
+  // ONCE THE GEOMETRY HAS LANDED THE CLASS COMES OFF and the inline sizing goes
+  // with it. Leaving the measured height pinned would make `overflow:hidden`
+  // clip anything the form grew afterwards — the audience roster opening under
+  // Restricted is exactly that case.
+  assert.equal(fx.editor.classList.contains('edmorph'), false,
+    'a resting editor still carries the carve-out class, so a later content ' +
+    'change would animate something nobody signed');
+  assert.equal(fx.editor.style.getPropertyValue('inline-size'), '');
+  assert.equal(fx.editor.style.getPropertyValue('block-size'), '');
+  assert.equal(fx.editor.style.getPropertyValue('translate'), '');
+  assert.equal(fx.editor.popoverOpen, true, 'the editor closed instead of settling');
+});
+
+test('close reverses the SAME geometry, and is never slower than open', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  // The card's rect, taken while it is still the open box — the same
+  // measurement the module takes, computed INDEPENDENTLY here so the assertion
+  // below is a check rather than an echo of whatever the module stored.
+  const card = fx.card.getBoundingClientRect();
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+  const placedLeft = parseFloat(fx.editor.style.left) || 0;
+  const placedTop = parseFloat(fx.editor.style.top) || 0;
+  const want = Math.round(card.left - placedLeft) + 'px ' +
+    Math.round(card.top - placedTop) + 'px';
+  fx.flush();
+
+  // THE LOG IS SCOPED TO THE CLOSE. It accumulates from the open phase too —
+  // where `.edmorph` is added BEFORE `.dcopen`, which is correct and would make
+  // the ordering assertion below pass vacuously on any implementation.
+  fx.editor._ops.length = 0;
+  fx.fire('keydown', fx.editor, { key: 'Escape' });
+
+  // THE REVERSE IS THE SAME FOUR PROPERTIES ONTO THE SAME MEASURED RECT — not
+  // a second signature, and not a fade-out standing in for one.
+  assert.equal(fx.editor.classList.contains('edmorph'), true);
+  assert.equal(fx.editor.style.getPropertyValue('opacity'), '0');
+  assert.equal(fx.editor.style.getPropertyValue('translate'), want,
+    'the reverse morph went somewhere other than the card it came from');
+
+  // CLOSE FASTER THAN OPEN, READ FROM THE TOKENS RATHER THAN ASSERTED. The
+  // harness reports --disc-close 160ms and --disc-open 200ms, which is what the
+  // sheet declares, and `.dcopen` comes off BEFORE the reverse geometry is
+  // written so the carve-out's open-state duration override is already gone.
+  const P = fx.pure;
+  const open = P.durationMS('200ms', 0);
+  const close = P.durationMS('160ms', 0);
+  assert.ok(close < open, 'leaving must never feel slower than arriving');
+  assert.equal(fx.editor.classList.contains('dcopen'), false,
+    'the open-state duration override is still on the box, so the close would ' +
+    'run at 200ms');
+
+  // THE ORDER IS THE CLAIM, NOT THE END STATE. `.dcopen` must come off BEFORE
+  // the reverse geometry is written: the carve-out's open-state rule is the
+  // only thing declaring --disc-open, so writing the geometry first would run
+  // the close at 200ms with every end-state assertion in this file still green.
+  // A mutation proved exactly that hole, which is why the fixture records an
+  // operation log at all.
+  const ops = fx.editor._ops;
+  const droppedOpen = ops.findIndex((o) => o.startsWith('class:') && !/\bdcopen\b/.test(o));
+  const wroteReverse = ops.findIndex((o) => /^style:translate=-?\d+px/.test(o) && o !== 'style:translate=0px 0px');
+  assert.ok(droppedOpen >= 0, 'the log never recorded `.dcopen` coming off');
+  assert.ok(wroteReverse >= 0, 'the log never recorded the reverse geometry');
+  assert.ok(droppedOpen < wroteReverse,
+    'the reverse geometry was written while `.dcopen` was still on the box, so ' +
+    'the close would run at --disc-open — leaving must never feel slower than ' +
+    'arriving (register clause 2, which the carve-out did not name and therefore ' +
+    'did not lift)');
+
+  fx.flush();
+  assert.equal(fx.editor.popoverOpen, false);
+  assert.equal(fx.editor.classList.contains('edmorph'), false);
+});
+
+test('REDUCED MOTION: the morph is instant AND COMPLETE, asserted on the END state', () => {
+  const fx = boot({ reduced: true });
+  openEditorFromCard(fx, 3);
+  const ed = fx.editor;
+
+  // INSTANT: nothing was seeded, so there is no start geometry for a
+  // transition that will never fire to leave behind.
+  assert.equal(ed.classList.contains('edmorph'), false,
+    'the carve-out class is on the box under reduced motion; the sheet declares ' +
+    'no rule there, so the seeded start geometry would simply STICK');
+  assert.equal(ed.style.getPropertyValue('translate'), '');
+  assert.equal(ed.style.getPropertyValue('opacity'), '');
+  assert.equal(ed.style.getPropertyValue('block-size'), '');
+
+  // COMPLETE, and this is the half the signature's second word is about: the
+  // editor lands at full size, full opacity, correctly placed and open — never
+  // instantly at a MID-MORPH geometry.
+  assert.equal(ed.popoverOpen, true);
+  assert.equal(ed.hasAttribute('data-dc-shown'), true);
+  assert.equal(ed.classList.contains('dcopen'), true);
+  const r = ed.getBoundingClientRect();
+  assert.equal(r.width, 760, 'the editor did not land at full size');
+  assert.ok(r.height > 0, 'the editor landed with no height');
+  assert.ok(parseFloat(ed.style.left) >= 0 && parseFloat(ed.style.top) >= 0,
+    'the editor landed without a resolved placement');
+
+  // …and it does not WAIT for an animation that will never fire.
+  assert.equal(fx.timers.length, 0,
+    'a timer is queued under reduced motion; the module is waiting on a ' +
+    'transition the sheet does not declare');
+
+  // THE COUNTERFACTUAL: the same fixture WITHOUT the reduced-motion branch
+  // seeds a start geometry and queues the settle. The number comes back, which
+  // is what proves the branch is doing the work rather than the fixture being
+  // inert.
+  const normal = boot();
+  openEditorFromCard(normal, 3);
+  assert.equal(normal.editor.classList.contains('edmorph'), true);
+  assert.match(normal.editor.style.getPropertyValue('translate'), /px/);
+  assert.ok(normal.timers.length > 0,
+    'the no-preference branch queued nothing either, so the zero above proves ' +
+    'the fixture is inert rather than proving the branch');
+});
+
+test('with no measurable card rect the editor opens exactly as stage 2 did', () => {
+  const fx = boot();
+  fx.fire('click', fx.cells[3]);
+  // A card with no rect is the degraded case — a browser that has not laid the
+  // popover out yet, or a fixture that never gave it one. The morph DECLINES
+  // rather than seeding a zero box, and the stage-2 open path is the fallback.
+  Object.defineProperty(fx.card, 'rect', {
+    configurable: true,
+    get() { return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
+  });
+  fx.fire('click', fx.card.querySelector('[data-dc-new]'));
+
+  assert.equal(fx.editor.classList.contains('edmorph'), false);
+  assert.equal(fx.editor.classList.contains('dcopen'), true);
+  assert.equal(fx.editor.popoverOpen, true);
+  assert.equal(fx.editor.style.getPropertyValue('translate'), '');
+});
+
+// ── C-CALV4-EDITOR-R2b stage 6, FIX-FORWARD: THE STALE-GEOMETRY REOPEN ────
+//
+// THE DEFECT, AND IT WAS THE ROUND-3 BLOCKER ARRIVING THROUGH A STYLE
+// ATTRIBUTE. edClose writes the REVERSE morph geometry as inline
+// `inline-size` / `block-size` / `translate` / `opacity` — the CARD's measured
+// rect, 420px wide — and edHide is the only thing that clears it, on the
+// --disc-close timer that edShow cancels. So closing one day and opening
+// another inside that 160ms window walked into edPosition with the card's width
+// still pinned inline: `ed.root.offsetWidth` answered 420 for a box the sheet
+// sizes at 760, placeCard found a clear position for a rectangle that does not
+// exist, the 760px box drew there, and the module's own occlusion report said
+// clear=true about it.
+//
+// MEASURED, NOT REASONED. daycard_geometry_probe_test.go (DAYCARD_GEOMETRY=1)
+// caught it on 23 of the real-world calendar's day cells at viewport 900, up to
+// 70,906 px² over the docked Ledger, at EVERY candidate width including the
+// shipped one — because the stale rect is the CARD's and does not vary with
+// --de-w. That probe is env-gated; this test is not, which is the point of
+// writing it twice.
+//
+// `placeCard` IS NOT TOUCHED BY THE FIX ([ER-5]: a fourth geometry would be
+// round 4's lesson unlearned). The law was always right; it was being handed a
+// lie about the box.
+test('reopening INSIDE the close window measures the box, not its last morph', () => {
+  const fx = boot();
+  openEditorFromCard(fx, 3);
+  fx.flush(); // the morph settles; the editor is resting at its own size
+
+  // CLOSE WITHOUT FLUSHING. The hide timer is now pending and the reverse
+  // geometry — the card's rect — is sitting on the box as inline style.
+  const cardW = Math.round(fx.card.getBoundingClientRect().width);
+  fx.fire('keydown', fx.editor, { key: 'Escape' });
+  assert.equal(fx.editor.style.getPropertyValue('inline-size'), cardW + 'px',
+    'the reverse morph did not write the card geometry, so this test is not ' +
+    'reproducing the condition it claims to');
+  assert.notEqual(cardW, 760, 'the fixture cannot tell the two widths apart');
+  assert.ok(fx.timers.length > 0, 'no hide timer is pending; the window under test is not open');
+
+  // …and REOPEN on another day, inside that window, exactly as a user reading
+  // two days in a row does.
+  fx.editor._ops.length = 0;
+  openEditorFromCard(fx, 5);
+
+  // THE ORDERING IS THE CLAIM. The four morph properties must be CLEARED
+  // before the placement writes `left`, because `left` is written by
+  // applyPlacement from a size edPosition measured a moment earlier — if the
+  // clear came after, the measurement already happened through the stale box.
+  const ops = fx.editor._ops;
+  const cleared = ops.indexOf('style:inline-size=');
+  const placed = ops.findIndex((o) => o.startsWith('style:left='));
+  assert.ok(cleared >= 0, 'the stale inline-size was never cleared on reopen');
+  assert.ok(placed >= 0, 'the reopen never placed the box');
+  assert.ok(cleared < placed,
+    'the box was measured and placed BEFORE its stale geometry was cleared — ' +
+    'placeCard is reasoning about a rectangle that does not render');
+
+  // And the box really did land at its own width, not the card's.
+  assert.equal(fx.editor.style.getPropertyValue('inline-size'), '760px');
+  assert.equal(fx.editor.style.getPropertyValue('opacity'), '1');
+});
+
+// ── THE OTHER STALE GEOMETRY: THE PREVIOUS PLACEMENT'S SHEET — stage 19 ──────
+//
+// `applyPlacement` is the only writer of `.dcsheet` and of the `style.width`
+// that goes with it, and it writes them AFTER `edPosition` has measured the box.
+// Nothing used to clear them in between — `edHide` drops the style attribute but
+// not the class, and it runs on a --disc-close timer this path cancels — so a
+// reopen after a SHEETED placement handed `edPosition` a box still wearing the
+// sheet. `ed.root.offsetWidth` then answers the full viewport width for a box
+// that is about to render at `--de-w`, and the placement law reasons about a
+// rectangle that does not exist. Same shape as the round-3 blocker, arriving
+// through a class instead of an inline style.
+//
+// IT WAS INVISIBLE UNTIL THE MORPH RAN. With the open morph inert the box was
+// never sized from that measurement, so every rendered frame looked right and
+// only the PLACEMENT was wrong. The [ER-5] geometry probe's own stale-geometry
+// assertion went red the moment stage 18 made the morph animate to it.
+//
+// THE ORDERING IS THE CLAIM, exactly as in the test above: both must be cleared
+// BEFORE the placement writes `left`, because `left` comes from a size measured
+// a moment earlier.
+test('reopening after a SHEETED placement measures the box, not the sheet', () => {
+  // A Ledger that fills the Bench, so the editor's first placement has nowhere
+  // clear to go and takes [DC-3] bullet 4's signed desktop sheet.
+  const fx = boot({ console: { warn: () => {} } });
+  fx.ledger.rect = { left: 300, top: 200, right: 1200, bottom: 800, width: 900, height: 600 };
+  openEditorFromCard(fx, 3);
+  assert.equal(fx.editor.classList.contains('dcsheet'), true,
+    'the first placement did not sheet, so this test is not reproducing the ' +
+    'condition it claims to');
+  fx.flush();
+
+  // The geometry opens up, and the next day is placed as a popover.
+  fx.ledger.rect = { left: 1400, top: 900, right: 1500, bottom: 1000, width: 100, height: 100 };
+  fx.fire('keydown', fx.editor, { key: 'Escape' });
+  fx.editor._ops.length = 0;
+  openEditorFromCard(fx, 5);
+
+  const ops = fx.editor._ops;
+  const unsheeted = ops.findIndex((o) => o.startsWith('class:') && !o.includes('dcsheet'));
+  const widthCleared = ops.indexOf('style:width=');
+  const placed = ops.findIndex((o) => o.startsWith('style:left='));
+  assert.ok(unsheeted >= 0, 'the stale sheet class was never taken off on reopen');
+  assert.ok(widthCleared >= 0, 'the stale sheet width was never cleared on reopen');
+  assert.ok(placed >= 0, 'the reopen never placed the box');
+  assert.ok(unsheeted < placed && widthCleared < placed,
+    'the box was measured and placed while it still wore the previous ' +
+    'placement’s sheet — placeCard is reasoning about a rectangle that does ' +
+    'not render');
+  assert.equal(fx.editor.classList.contains('dcsheet'), false,
+    'and the reopened editor must not still be a sheet');
+});
