@@ -1424,6 +1424,23 @@ func builderChecksFor(d *builderDraft) []builderCheck {
 			"Year length fixed: %d days", builderYearDays(d))})
 	}
 
+	// A NAME CHRONICLE CANNOT STORE IS NEVER CERTIFIED GREEN EITHER. Chronicle
+	// models a leap day as Month.LeapYearDays — extra days on a named month —
+	// and has no column for the day's own name, in any of the four import
+	// formats or in the model. The wizard shows the name because the sentence
+	// is the station ("add 1 day named Shieldmeet after Midsummer") and because
+	// swallowing it silently is the failure this surface exists to avoid; the
+	// chip is what keeps showing it honest.
+	if d.LeapName != "" && d.LeapEvery > 0 && d.LeapAdd > 0 {
+		after := d.LeapAfter
+		if after == "" {
+			after = "the month that carries it"
+		}
+		out = append(out, builderCheck{Kind: "need", Text: fmt.Sprintf(
+			"The leap day's name %q has no column — Chronicle stores the day as +%d on %s. "+
+				"Create writes the day and drops the name", d.LeapName, d.LeapAdd, after)})
+	}
+
 	// AN EXCEPTION CHRONICLE CANNOT STORE IS NEVER CERTIFIED GREEN.
 	if d.LeapNote != "" {
 		out = append(out, builderCheck{Kind: "need", Text: fmt.Sprintf(

@@ -102,6 +102,16 @@ type builderPreset struct {
 	// model has no home for. It is SHOWN so nothing silently disappears, it is
 	// not editable, and Review says what Create will actually write.
 	LeapNote string
+
+	// LeapName is the leap day's own name, and it is roster data because NO
+	// IMPORT FORMAT CARRIES ONE. Chronicle stores a leap day as Month.
+	// LeapYearDays — extra days on a named month — so Harptos's Shieldmeet
+	// arrives from presets/harptos.json as `Midsummer: leap_year_days 1` and
+	// nothing else. The wizard's flagship sentence reads "add 1 day named
+	// Shieldmeet after Midsummer" in the signed still, and it printed an empty
+	// box instead. The name is display-only, it is chipped as such on Review,
+	// and Create writes the DAY and drops the NAME.
+	LeapName string
 }
 
 // builderPresets is the signed roster, in the signed order.
@@ -110,6 +120,7 @@ var builderPresets = []builderPreset{
 		Key: "harptos", Name: "Harptos of Imix", File: "presets/harptos.json", Mode: ModeFantasy,
 		Desc: "Twelve 30-day months, five festivals between them, ten-day weeks.",
 		Hue:  "harptos", Pattern: "p1", Letter: "H",
+		LeapName: "Shieldmeet",
 	},
 	{
 		// NO FILE, BY RULING. See the header: a real-life calendar is a mode,
@@ -174,6 +185,12 @@ func builderPresetDraft(key string) (*builderDraft, error) {
 	d.Preset, d.Mode = p.Key, p.Mode
 	d.Hue, d.Pattern, d.Letter, d.HollowSwatch = p.Hue, p.Pattern, p.Letter, p.Hollow
 	d.LeapNote = p.LeapNote
+	// The leap day's NAME is roster data: no import format carries one, so a
+	// preset that has a named leap day says so here or the sentence prints a
+	// blank. It is display-only either way — see builderPreset.LeapName.
+	if d.LeapEvery > 0 && d.LeapAdd > 0 {
+		d.LeapName = p.LeapName
+	}
 	if d.Name == "" {
 		d.Name = p.Name
 	}

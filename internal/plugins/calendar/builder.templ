@@ -549,8 +549,22 @@ templ builderLeapPanel(data BuilderViewData) {
 			<span class="wz-pr">
 				<span class="wz-lbl">named</span>
 				<span class="wz-field">
-					<input class="wz-in" type="text" name="leap_name" value={ data.Draft.LeapName } aria-label="Leap day name"/>
+					<input
+						class="wz-in"
+						type="text"
+						name="leap_name"
+						value={ data.Draft.LeapName }
+						placeholder="unnamed"
+						aria-label="Leap day name"
+					/>
 				</span>
+				// ABSENCE IS STATED, NOT DRAWN AS A BLANK. An empty box inside the
+				// wizard's flagship sentence reads as a field that failed to load;
+				// the fact chip says the author left it empty, which is a legal
+				// and common answer — no import format carries a leap-day name.
+				if data.Draft.LeapName == "" {
+					<span class="wz-badge wz-fact">left empty</span>
+				}
 			</span>
 			<span class="wz-pr">
 				<span class="wz-lbl">after</span>
@@ -580,10 +594,22 @@ templ builderLeapPanel(data BuilderViewData) {
 					here so nothing silently disappears, it is not editable, and Review says what
 					Create will actually write.
 				}
+				// THE NAME IS SHOWN AND THE TRUTH IS SHOWN BESIDE IT. Chronicle
+				// models a leap day as Month.LeapYearDays and has no column for the
+				// day's own name, in the model or in any of the four import formats.
 				if data.Draft.LeapName != "" {
+					The extra day lands on <b>{ data.Draft.LeapAfter }</b> — intercalary on leap years
+					only, so it appears in the band row and never as a column. The name
 					<b>{ data.Draft.LeapName }</b>
 					{ " " }
-					is intercalary on leap years only — it appears in the band row, never as a column.
+					is yours to read: there is no column for it, so Create writes the day and Review
+					says the name is dropped.
+				} else {
+					This rule's day is unnamed, and nothing is lost by that — there is no column for a
+					leap day's name in the first place. The extra day lands on
+					<b>{ data.Draft.LeapAfter }</b>
+					{ " " }
+					either way.
 				}
 			</span>
 		</div>

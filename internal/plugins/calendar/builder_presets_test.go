@@ -393,3 +393,71 @@ func TestBuilderPresets_TheCalendariaNestingWeShip(t *testing.T) {
 		"(import.go:583). Reported upward; import.go's parsers are not W-H's files.",
 		len(res.Months), res.Months)
 }
+
+// TestBuilderPreset_TheLeapDayIsNamedAndTheNameIsChipped pins the fix for a
+// blank inside the wizard's flagship "a sentence, not a form" station.
+//
+// The signed still reads "Every 4 years, add 1 day named Shieldmeet after
+// Midsummer" on one line. The shipped build printed "named [   ] after
+// [Midsummer]" — an empty box — because presets/harptos.json cannot carry a
+// leap-day name: Chronicle models a leap day as Month.LeapYearDays, extra days
+// on a named month, and NO import format has a field for the day's own name.
+//
+// So the name is roster data, and because it is roster data that Create cannot
+// write, Review carries the SIGNED needs-backend chip for it. Both halves are
+// asserted here: the sentence reads, and the honesty rides with it.
+func TestBuilderPreset_TheLeapDayIsNamedAndTheNameIsChipped(t *testing.T) {
+	d, err := builderPresetDraft("harptos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.LeapName != "Shieldmeet" {
+		t.Errorf("the signed still names the leap day Shieldmeet; got %q", d.LeapName)
+	}
+	if d.LeapAfter != "Midsummer" {
+		t.Errorf("the leap day rides Midsummer's LeapYearDays; got %q", d.LeapAfter)
+	}
+
+	// The month the name is derived FROM still carries the day, because that
+	// is the only part of this Create actually writes.
+	found := false
+	for _, m := range d.Months {
+		if m.Name == "Midsummer" && m.LeapDays == 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Midsummer must carry leap_year_days 1 — the name is display, the DAY is data")
+	}
+
+	var need string
+	for _, c := range builderChecksFor(d) {
+		if c.Kind == "need" && strings.Contains(c.Text, "Shieldmeet") {
+			need = c.Text
+		}
+	}
+	if need == "" {
+		t.Fatal("a name Create drops must carry the needs-backend chip on Review")
+	}
+	for _, want := range []string{"no column", "drops the name"} {
+		if !strings.Contains(need, want) {
+			t.Errorf("the Review line must say what Create writes and what it drops; "+
+				"missing %q in %q", want, need)
+		}
+	}
+
+	// A preset with no leap rule declares no name and raises no chip — the
+	// chip is a genuine gap, never decoration.
+	blank, err := builderPresetDraft("blank")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blank.LeapName != "" {
+		t.Errorf("Blank declares no leap day and therefore no name; got %q", blank.LeapName)
+	}
+	for _, c := range builderChecksFor(blank) {
+		if c.Kind == "need" && strings.Contains(c.Text, "leap day's name") {
+			t.Error("no leap rule, no leap-name chip")
+		}
+	}
+}
