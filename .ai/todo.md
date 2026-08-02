@@ -45,6 +45,25 @@ Carried out of R2-2a, not closed:
   drag-create in place, on all seven [DC-11] terms, with revertibility verified
   by actually deleting the commit and re-running the battery. The booking
   existed for the case where the stage had to be dropped; it did not.
+- [ ] **`C-CALV4-CARD-CROSSBLOCK-LEDGER` — NEW, and it is a STOP-AND-FLAG,
+      not a defect this slice may fix.** `placeCard` is handed
+      `ledgerRect(state.host)` — the Ledger of the Block the clicked day belongs
+      to — and treats exactly that one rect as its exclusion zone. The Bench
+      renders **one Block per calendar** and each carries its own Ledger, so a
+      card or editor opened from the real-world Block's grid can land squarely
+      on the PRIMARY Block's Ledger. **Measured** by
+      `daycard_geometry_probe_test.go` (`DAYCARD_GEOMETRY=1`), which now runs a
+      CARD control arm beside the editor arm precisely so the ownership of this
+      finding is not a matter of opinion: **the card hits it too** — 2,221 px²
+      at viewport 720 — and the card's box and `placeCard` are byte-unchanged by
+      R2-2b. The editor, being taller and wider, reaches 72,600 px² (100% of a
+      docked 300×242 Ledger) at viewport 1232. **Widening the exclusion to every
+      Ledger on the page means re-opening `placeCard`, which [ER-5] SIGNED makes
+      a STOP-AND-FLAG rather than an edit** ("round 4's lesson was that the third
+      geometry was already one too many"), so it is measured, named in the R2b
+      report, reported by the probe on every run whether it fires or not, and
+      handed back. The own-host gate — the thing the law actually promises —
+      holds at **0 px² at all six candidate widths across the whole sweep**.
 - [ ] **`C-CALV4-DAYPICK-A11Y` also inherits drag-create's missing keyboard
   equivalent** ([DC-11] term 6). The drag is pointer-only and this slice did not
   invent a keyboard path for it — a focusable day cell is the same widget change

@@ -1305,8 +1305,37 @@
       ed.root.style.removeProperty('opacity');
     }
 
+    // edShow OPENS THE BOX, AND ITS FIRST JOB IS TO MAKE THE BOX MEASURABLE.
+    //
+    // THE STALE-GEOMETRY REOPEN, WHICH WAS THE ROUND-3 BLOCKER ARRIVING THROUGH
+    // A STYLE ATTRIBUTE. edClose writes the REVERSE morph geometry as inline
+    // `inline-size` / `block-size` / `translate` / `opacity` — the card's
+    // measured rect, 420px wide — and edHide is the only thing that clears it,
+    // on the --disc-close timer the line above has just CANCELLED. So a reopen
+    // inside that 160ms window used to walk into edPosition with the card's
+    // width still pinned inline, and `ed.root.offsetWidth` answered 420 for a
+    // box the sheet sizes at `--de-w` (760). placeCard then reasoned about a
+    // box that is not the one that renders: it found a "clear" position for a
+    // 420px box, the 760px box drew there, and the docked Ledger was occluded —
+    // with the module's own occlusion report cheerfully saying clear=true.
+    //
+    // MEASURED, NOT REASONED: DAYCARD_GEOMETRY=1 caught it on 23 of the real
+    // world calendar's day cells at viewport 900, up to 70,906 px² of overlap,
+    // at EVERY candidate width including the shipped one — because the stale
+    // rect is the card's rect and does not vary with --de-w. Closing and
+    // immediately opening another day is not an exotic path; it is what reading
+    // two days in a row looks like.
+    //
+    // THE FIX IS TO CLEAR, NOT TO RE-MEASURE. edMorphSettle is already the one
+    // place that hands the box back to its own natural sizing, so the reopen
+    // borrows it rather than growing a second idea of what "no morph geometry"
+    // means. `placeCard` IS NOT TOUCHED BY ANY OF THIS ([ER-5]: a fourth
+    // geometry would be the round-4 lesson unlearned) — the law was always
+    // right, it was being handed a lie about the box.
     function edShow() {
       if (edState.timer) { clearTimeout(edState.timer); edState.timer = 0; }
+      edMorphSettle();
+      edState.morph = null;
       ed.root.setAttribute('data-dc-shown', '');
       if (typeof ed.root.showPopover === 'function') {
         try { ed.root.showPopover(); } catch (e) { /* already open */ }

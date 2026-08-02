@@ -504,3 +504,64 @@ test('with no measurable card rect the editor opens exactly as stage 2 did', () 
   assert.equal(fx.editor.popoverOpen, true);
   assert.equal(fx.editor.style.getPropertyValue('translate'), '');
 });
+
+// ── C-CALV4-EDITOR-R2b stage 6, FIX-FORWARD: THE STALE-GEOMETRY REOPEN ────
+//
+// THE DEFECT, AND IT WAS THE ROUND-3 BLOCKER ARRIVING THROUGH A STYLE
+// ATTRIBUTE. edClose writes the REVERSE morph geometry as inline
+// `inline-size` / `block-size` / `translate` / `opacity` — the CARD's measured
+// rect, 420px wide — and edHide is the only thing that clears it, on the
+// --disc-close timer that edShow cancels. So closing one day and opening
+// another inside that 160ms window walked into edPosition with the card's width
+// still pinned inline: `ed.root.offsetWidth` answered 420 for a box the sheet
+// sizes at 760, placeCard found a clear position for a rectangle that does not
+// exist, the 760px box drew there, and the module's own occlusion report said
+// clear=true about it.
+//
+// MEASURED, NOT REASONED. daycard_geometry_probe_test.go (DAYCARD_GEOMETRY=1)
+// caught it on 23 of the real-world calendar's day cells at viewport 900, up to
+// 70,906 px² over the docked Ledger, at EVERY candidate width including the
+// shipped one — because the stale rect is the CARD's and does not vary with
+// --de-w. That probe is env-gated; this test is not, which is the point of
+// writing it twice.
+//
+// `placeCard` IS NOT TOUCHED BY THE FIX ([ER-5]: a fourth geometry would be
+// round 4's lesson unlearned). The law was always right; it was being handed a
+// lie about the box.
+test('reopening INSIDE the close window measures the box, not its last morph', () => {
+  const fx = boot();
+  openEditorFromCard(fx, 3);
+  fx.flush(); // the morph settles; the editor is resting at its own size
+
+  // CLOSE WITHOUT FLUSHING. The hide timer is now pending and the reverse
+  // geometry — the card's rect — is sitting on the box as inline style.
+  const cardW = Math.round(fx.card.getBoundingClientRect().width);
+  fx.fire('keydown', fx.editor, { key: 'Escape' });
+  assert.equal(fx.editor.style.getPropertyValue('inline-size'), cardW + 'px',
+    'the reverse morph did not write the card geometry, so this test is not ' +
+    'reproducing the condition it claims to');
+  assert.notEqual(cardW, 760, 'the fixture cannot tell the two widths apart');
+  assert.ok(fx.timers.length > 0, 'no hide timer is pending; the window under test is not open');
+
+  // …and REOPEN on another day, inside that window, exactly as a user reading
+  // two days in a row does.
+  fx.editor._ops.length = 0;
+  openEditorFromCard(fx, 5);
+
+  // THE ORDERING IS THE CLAIM. The four morph properties must be CLEARED
+  // before the placement writes `left`, because `left` is written by
+  // applyPlacement from a size edPosition measured a moment earlier — if the
+  // clear came after, the measurement already happened through the stale box.
+  const ops = fx.editor._ops;
+  const cleared = ops.indexOf('style:inline-size=');
+  const placed = ops.findIndex((o) => o.startsWith('style:left='));
+  assert.ok(cleared >= 0, 'the stale inline-size was never cleared on reopen');
+  assert.ok(placed >= 0, 'the reopen never placed the box');
+  assert.ok(cleared < placed,
+    'the box was measured and placed BEFORE its stale geometry was cleared — ' +
+    'placeCard is reasoning about a rectangle that does not render');
+
+  // And the box really did land at its own width, not the card's.
+  assert.equal(fx.editor.style.getPropertyValue('inline-size'), '760px');
+  assert.equal(fx.editor.style.getPropertyValue('opacity'), '1');
+});
