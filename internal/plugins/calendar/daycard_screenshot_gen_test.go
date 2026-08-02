@@ -47,7 +47,65 @@ type daycardShot struct {
 	mount   DayCardMount
 	// script is the in-page driver: which doors to click, and where to pause.
 	script string
+	// scroll is a selector whose element is scrolled to its END before the
+	// shot. It exists because of the fix round's finding 1 — see
+	// daycardFoldDiag's header. Empty means "photograph the resting scroll
+	// position", which is what every shot in the rejected set did.
+	scroll string
 }
+
+// ── THE SCROLL FOLD, AND WHY EVERY EDITOR SHOT NOW REPORTS ITS OWN ────────
+//
+// `.cal-dayeditor .ed-body` is `max-block-size: min(70vh, 620px); overflow-y:
+// auto` (calendar-daycard.css). At 1440×900 in the TWO-COLUMN layout the left
+// column is ~437px wide and `.vis` is `repeat(auto-fit, minmax(150px, 1fr))`,
+// so the ◈ Restricted card wraps to a second row that falls INSIDE the
+// overflow — and with it the allow/deny roster and the whole `Tied to` field.
+//
+// THE REJECTED SET PHOTOGRAPHED THAT FOLD AND ITS CAPTIONS DID NOT KNOW.
+// Shots 01, 04, 11 and 12 showed exactly two visibility cards — `Public` and
+// `◥ DM only` — and nothing else before the footer, while their captions and
+// the index read "all THREE visibility cards, the allow/deny roster". The
+// BUILD was right the whole time: the Go render carries `data-de-restricted`,
+// `data-de-aud` and `data-de-tie`, the payload carries `"members"`, and the
+// 820px one-column shot photographs all three cards plus `TIED TO`. The
+// EVIDENCE was wrong. A caption is not evidence, and a caption that names a
+// mark outside its own frame is worse than no caption.
+//
+// Three things close it, and all three are mechanical rather than editorial:
+//
+//  1. EVERY editor shot burns its OWN fold report onto the image — how many
+//     pixels of `.ed-body` are visible, how many exist, how many are below the
+//     fold, and whether this capture scrolled. A reader can no longer be
+//     wrong about what is in the frame, because the frame says.
+//  2. Every desktop shot that needs the lower band has a LOWER-BAND COMPANION
+//     (`…-lowerband.png`) captured with `.ed-body` scrolled to its end, and
+//     the pair is what the index cites.
+//  3. TestDayCardShotCaptionsStayInsideTheirOwnFrame is always on and refuses
+//     a two-column, un-scrolled shot whose caption names a below-fold mark.
+//     Finding 1 cannot recur silently.
+//
+// The fold is NOT "fixed" by the rig. `max-block-size` is the shipped
+// geometry — a capture that overrode it would be photographing a box that no
+// user has. The rig scrolls, exactly as a user would.
+const daycardFoldDiag = `
+  var fold = document.getElementById('shot-fold');
+  var edb = document.querySelector('.cal-dayeditor .ed-body');
+  if (fold) {
+    if (!edb) { fold.textContent = 'RIG: no .ed-body on this page (card-only shot)'; }
+    else {
+      var vis = Math.round(edb.clientHeight), all = Math.round(edb.scrollHeight);
+      var below = Math.max(0, all - vis - Math.round(edb.scrollTop));
+      fold.textContent = 'RIG: .ed-body shows ' + vis + 'px of ' + all + 'px' +
+        ' · scrollTop ' + Math.round(edb.scrollTop) + 'px' +
+        ' · ' + below + 'px BELOW THE FOLD in this frame' +
+        ' · marks present in the DOM: ' +
+        (document.querySelector('[data-de-restricted]') ? '◈ Restricted ' : '') +
+        (document.querySelector('[data-de-audrows]') ? '· allow/deny roster ' : '') +
+        (document.querySelector('[data-de-tie]') ? '· Tied to' : '');
+    }
+  }
+`
 
 // daycardOpenEditor drives the two clicks a user makes — a day, then a door —
 // through the module's own listeners, after the load event so the module is
@@ -148,19 +206,26 @@ func daycardPauseAt(fraction float64) string {
 `, fraction)
 }
 
-func TestGenerateDayCardScreenshots(t *testing.T) {
-	outDir := os.Getenv("DAYCARD_SHOTS")
-	if outDir == "" {
-		t.Skip("daycard screenshot generator: set DAYCARD_SHOTS=<dir> to run")
-	}
-	chrome := benchFindChromium()
-	if chrome == "" {
-		t.Skip("daycard screenshot generator: no Chromium binary found (set CHROMIUM_BIN)")
-	}
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", outDir, err)
-	}
+// daycardEdBody is the scroll container the fold lives on. It is named once so
+// the rig, the diag and the caption guard cannot drift apart.
+const daycardEdBody = ".cal-dayeditor .ed-body"
 
+// daycardScrollTo scrolls a container to its END, exactly as a user's wheel
+// would, and does not touch the geometry that put it there.
+func daycardScrollTo(sel string) string {
+	if sel == "" {
+		return ""
+	}
+	return `
+  var sc = document.querySelector('` + sel + `');
+  if (sc) sc.scrollTop = sc.scrollHeight;
+`
+}
+
+// daycardShotList is the whole capture set, extracted from the generator so the
+// ALWAYS-ON caption guard can read it. A shot list that only exists inside an
+// env-gated test body is a list nothing in CI can check.
+func daycardShotList() []daycardShot {
 	gm := DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanDelete: true, CanRestrict: true, CampaignID: "camp-1"}
 	codm := DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CampaignID: "camp-1"}
 	scribe := DayCardMount{CanCreate: true, CampaignID: "camp-1"}
@@ -168,44 +233,92 @@ func TestGenerateDayCardScreenshots(t *testing.T) {
 
 	shots := []daycardShot{
 		// ── §10 item 2: create mode, three authoring viewers, two devices ──
+		//
+		// EVERY CAPTION HERE NAMES ONLY WHAT IS IN ITS OWN FRAME. At 1440 the
+		// two-column body folds — see daycardFoldDiag — so the desktop shots
+		// come in PAIRS and the lower band is its own image. The fold report is
+		// burned onto both halves.
 		{file: "01-editor-gm-1440x900-light.png", mount: gm, w: 1440, h: 900, script: daycardOpenEditor,
-			title: "Event editor · CREATE · GM (Owner + grant) · 1440×900 · light",
-			caption: "the locked type rail, the real month grid, the corrected recurrence unit list, all THREE visibility cards, the allow/deny roster and the live preview. Against editor-gm-1440x900.png: no `year` unit, no ends cycler, no knowledge-horizon chip, and the box is 760px rather than ~1008 — see the report's [ER-5] section"},
+			title: "Event editor · CREATE · GM (Owner + grant) · 1440×900 · light — UPPER BAND",
+			caption: "the locked type rail, the real month grid, the corrected recurrence unit list, the live preview, and the FIRST ROW of the visibility cards. `.ed-body` scrolls (see the fold strip at the foot): the ◈ Restricted card, the allow/deny roster and `Tied to` are below this frame and are photographed in 01b. Against editor-gm-1440x900.png: no `year` unit, no ends cycler, no knowledge-horizon chip, and the box is 760px rather than ~1008 — see the report's [ER-5] section"},
+		{file: "01b-editor-gm-1440x900-light-lowerband.png", mount: gm, w: 1440, h: 900,
+			script: daycardOpenEditor, scroll: daycardEdBody,
+			title:   "Event editor · CREATE · GM · 1440×900 · light — LOWER BAND (`.ed-body` scrolled to its end)",
+			caption: "the SAME capture with `.ed-body` scrolled exactly as a wheel would scroll it — no geometry is overridden. This is where the ◈ Restricted card, the allow/deny roster (5 members, ✓/✕ per row) and the `Tied to` field live at 1440. 01 and 01b together are the desktop GM editor"},
 		{file: "02-editor-gm-1440x900-dark.png", mount: gm, w: 1440, h: 900, dark: true, script: daycardOpenEditor,
-			title: "Event editor · CREATE · GM · 1440×900 · dark",
-			caption: "the same DOM in dark. Inherited defect 6 is visible and BOOKED, not patched: a fogged day still renders lighter than a known one"},
-		{file: "03-editor-gm-390x844-light.png", mount: gm, w: 500, h: 844, script: daycardOpenEditor,
-			title: "Event editor · CREATE · GM · phone · light",
-			caption: "below 1080px `.ed-body` is ONE column and the live preview sits under the form — the hard requirement of [ER-5], not a nicety"},
+			title: "Event editor · CREATE · GM · 1440×900 · dark — UPPER BAND",
+			caption: "the same DOM in dark, same fold. Inherited defect 6 is visible and BOOKED, not patched: a fogged day still renders lighter than a known one"},
+		{file: "02b-editor-gm-1440x900-dark-lowerband.png", mount: gm, w: 1440, h: 900, dark: true,
+			script: daycardOpenEditor, scroll: daycardEdBody,
+			title:   "Event editor · CREATE · GM · 1440×900 · dark — LOWER BAND",
+			caption: "the dark half of the pair: ◈ Restricted, the roster and `Tied to`"},
+		{file: "03-editor-gm-390x844-light.png", mount: gm, w: 390, h: 844, script: daycardOpenEditor,
+			title: "Event editor · CREATE · GM · 390×844 · light",
+			caption: "the REAL 390 viewport, not a 500px stand-in — the rejected set shot three files named `-390x844` at a 500px window and only one of them said so. Below 1080px `.ed-body` is ONE column and the live preview sits under the form ([ER-5]'s hard requirement). The fold strip reports what is below this frame"},
+		{file: "03b-editor-gm-390x844-light-lowerband.png", mount: gm, w: 390, h: 844,
+			script: daycardOpenEditor, scroll: daycardEdBody,
+			title:   "Event editor · CREATE · GM · 390×844 · light — LOWER BAND",
+			caption: "the phone's lower band: the one-column body scrolled to its end"},
 		{file: "04-editor-codm-1440x900-light.png", mount: codm, w: 1440, h: 900, script: daycardOpenEditor,
-			title: "Event editor · co-DM (Scribe WITH the grant) · 1440×900 · light — THE AXES PROOF",
-			caption: "read against 01: the ◥ DM only card is PRESENT, Restricted and its roster are ABSENT, Delete is ABSENT. One capability flipped, and exactly the dm_only affordances move"},
+			title: "Event editor · co-DM (Scribe WITH the grant) · 1440×900 · light — THE AXES PROOF, UPPER BAND",
+			caption: "read against 01 (upper) — the ◥ DM only card is PRESENT. The absences this pair proves are in 04b, which is the frame the ◈ Restricted card and its roster would occupy if the capability were there. Delete is absent from BOTH 01 and 04 because create mode has no id to delete; the Delete axis is proved in the EDIT-mode pair 16/17, not here"},
+		{file: "04b-editor-codm-1440x900-light-lowerband.png", mount: codm, w: 1440, h: 900,
+			script: daycardOpenEditor, scroll: daycardEdBody,
+			title:   "Event editor · co-DM · 1440×900 · light — THE AXES PROOF, LOWER BAND",
+			caption: "read against 01b, which is the same scroll position for an Owner. There: ◈ Restricted, the roster, `Tied to`. Here: `Tied to` and NO ◈ Restricted card and NO roster. One capability flipped and exactly the CanRestrict affordances moved"},
 		{file: "05-editor-scribe-1440x900-light.png", mount: scribe, w: 1440, h: 900, script: daycardOpenEditor,
 			title: "Event editor · Scribe, no grant · 1440×900 · light — THE ABSENCE PROOF",
-			caption: "the whole Visibility fieldset is STRUCTURALLY GONE — not collapsed, not a radio group of one, not narrated. Nothing marks where it was"},
-		{file: "06-editor-scribe-390x844-light.png", mount: scribe, w: 500, h: 844, script: daycardOpenEditor,
-			title: "Event editor · Scribe · phone · light",
-			caption: "the same absence at 390: the fold holds, nothing crosses it, and the fieldset is still simply not there"},
+			caption: "the whole Visibility fieldset is STRUCTURALLY GONE — not collapsed, not a radio group of one, not narrated. Nothing marks where it was. With the fieldset gone the body is short enough that the fold strip reports 0px below the frame"},
+		{file: "05b-editor-scribe-1440x900-dark.png", mount: scribe, w: 1440, h: 900, dark: true,
+			script: daycardOpenEditor,
+			title:  "Event editor · Scribe, no grant · 1440×900 · dark — THE ABSENCE PROOF",
+			caption: "the same absence in dark. The rejected set had the Scribe in light only and the co-DM at one viewport in one theme; §10 item 2's matrix is filled here and in 04c/06b"},
+		{file: "04c-editor-codm-1440x900-dark.png", mount: codm, w: 1440, h: 900, dark: true,
+			script: daycardOpenEditor,
+			title:  "Event editor · co-DM · 1440×900 · dark",
+			caption: "the co-DM in dark — the theme leg §10 item 2 names and the rejected set did not have"},
+		{file: "06-editor-scribe-390x844-light.png", mount: scribe, w: 390, h: 844, script: daycardOpenEditor,
+			title: "Event editor · Scribe · 390×844 · light",
+			caption: "the same absence at a REAL 390: the fieldset is still simply not there. Whether anything crosses the horizontal fold is NOT read off this image — it is MEASURED, at 390 and 820, in both themes, by TestDayCardFoldProbe (DAYCARD_FLOORS=1); see fold-and-floor-probe.txt"},
+		{file: "06b-editor-codm-390x844-light.png", mount: codm, w: 390, h: 844, script: daycardOpenEditor,
+			title:   "Event editor · co-DM · 390×844 · light",
+			caption: "the co-DM at the phone width — §10 item 2's last matrix cell"},
 		{file: "07-editor-gm-820-light.png", mount: gm, w: 820, h: 1200, script: daycardOpenEditor,
 			title: "Event editor · GM · 820px",
-			caption: "the tablet fold — one column, no horizontal scroll"},
+			caption: "the tablet width: ONE column, and at 1200px tall the body does not fold — so this single frame carries all three visibility cards, the allow/deny roster AND `Tied to`, which is the un-scrolled proof that the build renders what 01b shows. Horizontal scroll is measured, not eyeballed — see fold-and-floor-probe.txt"},
 
 		// ── §10 item 4: the player set, checked for ABSENCE ─────────────────
 		{file: "08-card-player-1440x900-light.png", mount: player, w: 1440, h: 900, script: daycardOpenCard,
 			title: "The day card · PLAYER · 1440×900 · light — THE ABSENCE PROOF",
 			caption: "no `+ New event`, no row Edit door, no editor scaffold anywhere in the DOM, no `needs backend`, no disabled control, and NO `.card-x` DETAIL PANEL — [ER-2] SIGNED refuses it and the report names the divergence from card-player-light.png"},
-		{file: "09-card-player-390x844-light.png", mount: player, w: 500, h: 844, script: daycardOpenCard,
+		{file: "09-card-player-390x844-light.png", mount: player, w: 390, h: 844, script: daycardOpenCard,
 			title: "The day card · PLAYER · phone · light",
 			caption: "the same absence on a phone; the card is the day's full list and says nothing about what a filter removed"},
 		{file: "10-card-player-1440x900-dark.png", mount: player, w: 1440, h: 900, dark: true, script: daycardOpenCard,
 			title: "The day card · PLAYER · dark", caption: "the same, in dark"},
 
 		// ── §10 item 10: greyscale — every permission mark survives ─────────
+		//
+		// THE GREYSCALE PROOF IS A PAIR PER THEME, and that is finding 1's
+		// second consequence: §10 item 10 names FIVE marks and two of them —
+		// the ◈ diamond and the allow/deny ✓/✕ — live below the fold at 1440.
+		// The rejected set's caption listed all five over a frame containing
+		// three. The upper frame now claims the three it has; the lower frame
+		// claims the two it has.
 		{file: "11-editor-gm-grayscale-light.png", mount: gm, w: 1440, h: 900, gray: true, script: daycardOpenEditor,
-			title: "Event editor · GM · GREYSCALE · light — THE PERMISSION-MARK PROOF",
-			caption: "hue removed AT THE TOP LAYER TOO — the card and the editor are [popover] and an ancestor filter on <html> does not reach them, which is why the previous cut of this pair photographed a grey page with a full-colour editor on it. What must survive: the ◥ dogear, the ◈ diamond, the GM badge, the allow/deny ✓/✕, and every type option's rail-PATTERN + glyph. This is menus-gm-grayscale's rule taken without its surface ([ER-1])"},
+			title: "Event editor · GM · GREYSCALE · light — PERMISSION MARKS, UPPER BAND",
+			caption: "hue removed AT THE TOP LAYER TOO — the card and the editor are [popover] and an ancestor filter on <html> does not reach them, which is why an earlier cut of this pair photographed a grey page with a full-colour editor on it. What must survive IN THIS FRAME: the ◥ dogear on the DM-only card, the GM badge, and every type option's rail-PATTERN + glyph. The other two marks §10 item 10 names — the ◈ diamond and the allow/deny ✓/✕ — are below the fold and are proved in 11b"},
+		{file: "11b-editor-gm-grayscale-light-lowerband.png", mount: gm, w: 1440, h: 900, gray: true,
+			script: daycardOpenEditor, scroll: daycardEdBody,
+			title:   "Event editor · GM · GREYSCALE · light — PERMISSION MARKS, LOWER BAND",
+			caption: "the other half of §10 item 10 with hue removed: the ◈ diamond on the Restricted card and the allow/deny ✓/✕ on every roster row. This is menus-gm-grayscale's rule taken without its surface ([ER-1])"},
 		{file: "12-editor-gm-grayscale-dark.png", mount: gm, w: 1440, h: 900, gray: true, dark: true, script: daycardOpenEditor,
-			title: "Event editor · GM · GREYSCALE · dark", caption: "the same proof in dark"},
+			title:   "Event editor · GM · GREYSCALE · dark — UPPER BAND",
+			caption: "the same three marks in dark: ◥ dogear, GM badge, rail-pattern + glyph"},
+		{file: "12b-editor-gm-grayscale-dark-lowerband.png", mount: gm, w: 1440, h: 900, gray: true, dark: true,
+			script: daycardOpenEditor, scroll: daycardEdBody,
+			title:   "Event editor · GM · GREYSCALE · dark — LOWER BAND",
+			caption: "the ◈ diamond and the allow/deny ✓/✕ in dark"},
 
 		// ── §10 item 6: reduced motion — instant AND COMPLETE ───────────────
 		{file: "13-editor-gm-reduced-motion.png", mount: gm, w: 1440, h: 900, reduced: true,
@@ -280,9 +393,24 @@ func TestGenerateDayCardScreenshots(t *testing.T) {
 				"the report names it as open",
 		})
 	}
+	return shots
+}
+
+func TestGenerateDayCardScreenshots(t *testing.T) {
+	outDir := os.Getenv("DAYCARD_SHOTS")
+	if outDir == "" {
+		t.Skip("daycard screenshot generator: set DAYCARD_SHOTS=<dir> to run")
+	}
+	chrome := benchFindChromium()
+	if chrome == "" {
+		t.Skip("daycard screenshot generator: no Chromium binary found (set CHROMIUM_BIN)")
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", outDir, err)
+	}
 
 	css := benchCSS(t) + benchBlockSheet(t) + dayCardCSS(t)
-	for _, s := range shots {
+	for _, s := range daycardShotList() {
 		t.Run(s.file, func(t *testing.T) {
 			data := benchFxData(true, true)
 			if !s.mount.CanCreate {
@@ -388,6 +516,13 @@ func daycardShotPage(t *testing.T, s daycardShot, css, body string) string {
 		`.shot-diag{position:fixed;left:0;right:0;bottom:0;z-index:1;` +
 		`font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:6px 10px;` +
 		`background:oklch(0.18 0.02 265);color:oklch(0.98 0 0)}` +
+		// THE FOLD REPORT SITS ABOVE THE RIG STRIP AND IS ON EVERY SHOT. It is
+		// finding 1's mechanical answer: the image says how much of `.ed-body`
+		// is inside its own frame, so a reader can never again take a caption's
+		// word for a mark that scrolled out of view.
+		`.shot-fold{position:fixed;left:0;right:0;bottom:24px;z-index:1;` +
+		`font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:6px 10px;` +
+		`background:oklch(0.30 0.09 60);color:oklch(0.99 0 0)}` +
 		fmt.Sprintf(`.cal-bench{width:%dpx;max-width:100%%}`, min(s.w-40, 1180)) +
 		`h1{font-size:15px;line-height:1.2;margin:0 0 4px;letter-spacing:-.02em}` +
 		`.shot-cap{font-size:11px;line-height:1.5;margin:0 0 12px;opacity:.72;max-width:80ch}` +
@@ -396,10 +531,16 @@ func daycardShotPage(t *testing.T, s daycardShot, css, body string) string {
 		`<h1>` + s.title + `</h1><p class="shot-cap">` + s.caption + `</p>` +
 		body +
 		`</div>` +
+		`<div class="shot-fold" id="shot-fold">RIG: the fold report did not run</div>` +
 		`<div class="shot-diag" id="shot-diag">RIG: no transition was created to park — ` +
 		`see the report's morph section</div>` +
 		`<script>` + vis + `</script><script>` + mod + `</script>` +
-		`<script>window.addEventListener('load', function () {` + s.script + `});</script>` +
+		// THE ORDER IS THE CLAIM'S ORDER: open the doors, scroll to where the
+		// caption says it is looking, THEN report the fold. A diag written
+		// before the scroll would describe a frame this shot does not contain.
+		`<script>window.addEventListener('load', function () {` +
+		s.script + daycardScrollTo(s.scroll) + daycardFoldDiag +
+		`});</script>` +
 		`</body></html>`
 }
 
@@ -507,6 +648,107 @@ func TestDayCardShotFixtureSeedsThePaletteItPhotographs(t *testing.T) {
 				"would photograph the module's `No type` fallback while its caption "+
 				"claimed a locked triple", want)
 		}
+	}
+}
+
+// daycardBelowFoldMarks are the chrome marks a TWO-COLUMN editor puts below
+// `.ed-body`'s scroll fold at the viewport heights this rig shoots. They are
+// named as the strings a caption would use, because a caption is the thing
+// under test.
+//
+// Derived, not guessed: at 1440×900 the left column is ~437px and `.vis` is
+// `repeat(auto-fit, minmax(150px, 1fr))`, so the third visibility card wraps to
+// a second row — and everything after it (`audb`, `Tied to`) wraps with it.
+var daycardBelowFoldMarks = []string{
+	"Restricted", "roster", "allow/deny", "Tied to", "◈",
+}
+
+// TestDayCardShotCaptionsStayInsideTheirOwnFrame is ALWAYS ON, and it is the
+// cheap check that the fix round's finding 1 cannot recur silently.
+//
+// FINDING 1, IN ONE SENTENCE: four desktop captions named the ◈ Restricted
+// card, the allow/deny roster and `Tied to` over frames that were cut off at
+// `.ed-body`'s 620px scroll fold and contained none of them. The build was
+// right; the evidence was not. The failure mode is not a typo — it is a caption
+// written from the DOM instead of from the image.
+//
+// So the rule is mechanical: a shot that is TWO-COLUMN (>= the sheet's own
+// 1080px breakpoint) and does NOT scroll `.ed-body` may not name a below-fold
+// mark in its title or caption. Scrolled shots may, un-scrolled narrow shots
+// may (one column, and 07 at 820×1200 photographs the lot un-scrolled), and a
+// caption that merely says where the mark IS NOT — "are below this frame",
+// "are photographed in 01b" — is what the pairs are for and is admitted by an
+// explicit deferral phrase rather than by accident.
+func TestDayCardShotCaptionsStayInsideTheirOwnFrame(t *testing.T) {
+	// A caption may name a below-fold mark if it is DEFERRING it to another
+	// frame. The phrases are exhaustive and short on purpose: an open-ended
+	// escape hatch would make this test decorative.
+	defers := []string{
+		"below this frame", "are below the fold", "photographed in 01b",
+		"are in 04b", "proved in 11b", "would occupy",
+	}
+	for _, s := range daycardShotList() {
+		if s.w < daycardEditorTwoColumnPx || s.scroll != "" {
+			continue
+		}
+		text := s.title + " " + s.caption
+		deferred := false
+		for _, d := range defers {
+			if strings.Contains(text, d) {
+				deferred = true
+				break
+			}
+		}
+		for _, mark := range daycardBelowFoldMarks {
+			if !strings.Contains(text, mark) || deferred {
+				continue
+			}
+			t.Errorf("shot %s is %dpx wide (two-column) and does not scroll %s, but its "+
+				"caption names %q — that mark is below `.ed-body`'s scroll fold and is NOT "+
+				"in this frame. Either scroll the body, split the shot into an upper/lower "+
+				"pair, or defer the mark to the frame that has it. This is the fix round's "+
+				"finding 1, and it is the difference between evidence and a sentence",
+				s.file, s.w, daycardEdBody, mark)
+		}
+	}
+}
+
+// TestDayCardShotRigReportsTheFoldOnEveryShot is ALWAYS ON. The fold report is
+// the part of finding 1's answer a reader who never opens this file relies on:
+// it is burned onto the image itself. If the strip or its script went missing,
+// every future capture would go back to being silent about what it cropped.
+func TestDayCardShotRigReportsTheFoldOnEveryShot(t *testing.T) {
+	data := benchFxData(true, true)
+	data.DayCard = DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanDelete: true,
+		CanRestrict: true, CampaignID: "camp-1"}
+	page := daycardShotPage(t,
+		daycardShot{w: 1440, h: 900, script: daycardOpenEditor, scroll: daycardEdBody},
+		dayCardCSS(t), benchStripLinks(renderBench(t, data)))
+	for _, want := range []string{
+		`id="shot-fold"`,       // the strip exists…
+		".shot-fold{position:", // …and is pinned where the editor cannot cover it
+		"BELOW THE FOLD in this frame",
+		"sc.scrollTop = sc.scrollHeight", // the scroll actually happens
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the shot page is missing %q — a capture from this rig would not say "+
+				"what it cropped, which is the whole of finding 1", want)
+		}
+	}
+	// …and the fold report must come AFTER the scroll, or it describes a frame
+	// the image does not contain.
+	if strings.Index(page, "sc.scrollTop") > strings.Index(page, "BELOW THE FOLD in this frame") {
+		t.Error("the fold report runs before the scroll; it would describe the resting " +
+			"scroll position of an image captured somewhere else")
+	}
+	// The sheet must still declare the fold this whole apparatus is about. If
+	// `.ed-body` ever stops scrolling, this file's pairs become noise and
+	// somebody should be told rather than left to notice.
+	sheet := dayCardCSS(t)
+	if !strings.Contains(sheet, "max-block-size: min(70vh, 620px)") ||
+		!strings.Contains(sheet, "overflow-y: auto") {
+		t.Error("calendar-daycard.css no longer declares a scrolling `.ed-body`; the " +
+			"upper/lower band pairs and this guard are about a fold that has moved")
 	}
 }
 
