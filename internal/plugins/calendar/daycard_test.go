@@ -934,7 +934,15 @@ func TestDayCard_TheEditorIsRenderedExactlyAtItsFloors(t *testing.T) {
 			name:    "a plain Scribe authors, but not as a co-DM and not as an Owner",
 			mount:   DayCardMount{CanCreate: true, CampaignID: "camp-1"},
 			present: []string{"data-dc-can-edit", "data-dc-new", "data-cal-dayeditor", "data-de-save"},
-			absent:  []string{"data-de-gmonly", "data-de-delete"},
+			// THE WHOLE VISIBILITY FIELDSET IS GONE, not collapsed and not a
+			// radio group of one: a Scribe with neither capability has exactly
+			// one lawful visibility, so there is no choice to render and
+			// nothing narrates its absence. editor-scribe-light.png is that
+			// state.
+			absent: []string{
+				"data-de-gmonly", "data-de-delete", "data-de-restricted",
+				"data-de-aud", "data-de-visibility",
+			},
 		},
 		{
 			name:    "a co-DM Scribe gains dm_only and nothing else",
@@ -943,9 +951,33 @@ func TestDayCard_TheEditorIsRenderedExactlyAtItsFloors(t *testing.T) {
 			absent:  []string{"data-de-delete"},
 		},
 		{
-			name:    "an Owner gains Delete",
-			mount:   DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanDelete: true, CampaignID: "camp-1"},
-			present: []string{"data-de-gmonly", "data-de-delete"},
+			// EXTENDED for CanRestrict (C-CALV4-EDITOR-R2b stage 2, [ER-3]
+			// SIGNED). A co-DM has the dm_only CAPABILITY and neither Owner
+			// floor, so the ◈ Restricted card and its audience roster are
+			// absent from their DOM while ◥ DM only is present — which is the
+			// shortest proof the two axes did not collapse into one.
+			name:    "a co-DM gains dm_only and NEITHER Owner gate",
+			mount:   DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CampaignID: "camp-1"},
+			present: []string{"data-de-gmonly", "data-de-visibility"},
+			absent:  []string{"data-de-delete", "data-de-restricted", "data-de-aud"},
+		},
+		{
+			name:    "an Owner gains Delete AND Restricted",
+			mount:   DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanDelete: true, CanRestrict: true, CampaignID: "camp-1"},
+			present: []string{"data-de-gmonly", "data-de-delete", "data-de-restricted", "data-de-aud"},
+		},
+		{
+			// AN OWNER WITHOUT THE dm_only CAPABILITY CANNOT EXIST — Step 0
+			// confirmed CanAuthorDmOnly() is `MemberRole >= RoleOwner ||
+			// IsDmGranted` (campaigns/model.go:277), so an Owner always has it
+			// and this table must never construct the fourth combination. What
+			// IS constructible and worth pinning is the reverse: the Restricted
+			// card without CanDelete, which proves the two Owner floors are two
+			// fields rather than one borrowed twice.
+			name:    "Restricted is its own gate, not Delete's",
+			mount:   DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanRestrict: true, CampaignID: "camp-1"},
+			present: []string{"data-de-restricted", "data-de-aud"},
+			absent:  []string{"data-de-delete"},
 		},
 		{
 			name:   "a player receives the card and no editor at all",
@@ -976,15 +1008,37 @@ func TestDayCard_TheEditorIsRenderedExactlyAtItsFloors(t *testing.T) {
 	}
 }
 
-// TestDayCard_TheEditorShipsNoRationaleAndNoUnbackedChip. Two REVIEW findings
-// bound as build law ([DC-5] part 2): design rationale addressed to a reviewer
-// must not render inside the product, and `.badge.need` means literally "needs
-// backend" and nothing else. The mockup's ten `.hint` strings and its two WRONG
-// chips (over in-world time and "Lasts N days", both of which the API has
-// always had) are the subjects.
+// TestDayCard_TheEditorShipsNoRationaleAndNoUnbackedChip.
+//
+// EXTENDED BY NAME, C-CALV4-EDITOR-R2b stage 2, per §8 of the dispatch and
+// under [ER-10] SIGNED.
+//
+// WHO TURNED IT OVER AND WHAT THE OLD CLAIM WAS. Stage 2 shipped no chips at
+// all, so this test could COUNT ZERO: the literal "needs backend" simply did
+// not appear in the editor. The chrome adds the LEGITIMATE chips — the units
+// `recurrence_type` does not accept, and the day-of-week multi-select whose
+// column exists but whose expansion is base-anchored and ignores it — so a
+// count of zero would now be a test forcing the honest disclosure OUT of the
+// product.
+//
+// WHY THE NEW CLAIM IS NOT WEAKER, which is [ER-10]'s bar. The old claim was
+// "no chips"; the new one is STRICTLY MORE SPECIFIC: every `.badge.need` in
+// the editor carries the literal words "needs backend" and nothing else, the
+// number of them is pinned, and each one is required to sit beside a control
+// this file NAMES as unbacked. A chip on a shipped field — the mockup's two
+// wrong ones, over in-world time and "Lasts N days" — still fails, and so does
+// a chip that says anything other than "needs backend". The rationale half of
+// the test (`.hint`, the audience builder, the change-owner row) is untouched.
+//
+// MUTATION-TESTED: chipping the month unit (a backed type) turns this red on
+// the count; changing a chip's text to "coming soon" turns it red on the
+// literal; adding a fourth chip turns it red on the inventory.
 func TestDayCard_TheEditorShipsNoRationaleAndNoUnbackedChip(t *testing.T) {
 	data := benchFxData(true, true)
-	data.DayCard = DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanDelete: true, CampaignID: "camp-1"}
+	data.DayCard = DayCardMount{
+		CanCreate: true, CanAuthorDmOnly: true, CanDelete: true, CanRestrict: true,
+		CampaignID: "camp-1",
+	}
 	body := renderBench(t, data)
 
 	i := strings.Index(body, "cal-dayeditor")
@@ -995,19 +1049,54 @@ func TestDayCard_TheEditorShipsNoRationaleAndNoUnbackedChip(t *testing.T) {
 	if j := strings.Index(editor, "</form>"); j > 0 {
 		editor = editor[:j]
 	}
+
+	// ── THE RATIONALE HALF — UNCHANGED, AND STILL ZERO ────────────────────
 	for _, bad := range []string{
-		`class="hint"`, "needs backend", "badge need",
-		// The audience builder and the change-owner row do not exist.
-		"add tag or member", "resolves to", "Owner\u003c/span\u003e",
-		// The exotic recurrence units are invention against Chronicle's model.
-		"tenday", "Umber", "moon phase",
+		`class="hint"`,
+		// The audience BUILDER (tags, "resolves to 3 of 5") and the change-owner
+		// row do not exist. The per-member allow/deny roster does — it is the
+		// shape visibility_rules actually carries — and it is built by the
+		// module from the Owner-only payload seed, not rendered here.
+		"add tag or member", "resolves to", "Change owner",
+		// `year` IS INVENTION: there is no yearly recurrence_type and it
+		// degrades silently to one occurrence, so it does not ship at all —
+		// not even chipped. An unbacked unit in a picker is a trap.
+		">year<", "Umber",
+		// The recurrence "ends" cycler has no write path on either shipped verb.
+		"until Deepwinter ends", "no end date", "max occurrences",
 	} {
 		if strings.Contains(editor, bad) {
 			t.Errorf("the editor renders %q — see this file's header and [DC-5] part 2", bad)
 		}
 	}
-	// …and the two fields whose mockup chips were WRONG are really here.
-	for _, want := range []string{"data-de-starth", "data-de-endday"} {
+
+	// ── THE CHIP HALF — BACKED vs UNBACKED, not zero vs non-zero ──────────
+	//
+	// The SERVER-RENDERED editor carries exactly ONE chip: the day-of-week
+	// multi-select's. The other two ride the unit list, which the module builds
+	// from the calendar's own derived week — they cannot be asserted here and
+	// are pinned in test/js/daycard_editor_requests.test.mjs instead, which is
+	// the honest split rather than a Go test asserting about JS.
+	if n := strings.Count(editor, `class="badge need"`); n != 1 {
+		t.Errorf("the editor renders %d `.badge.need` chips server-side, want exactly 1 "+
+			"(the day-of-week multi-select, whose column exists but whose expansion is "+
+			"BASE-ANCHORED and ignores it). A chip on a shipped field is the mockup's "+
+			"defect; a chip missing from an unbacked one is a silent trap", n)
+	}
+	// EVERY CHIP SAYS THE LITERAL WORDS. `.badge.need` means "needs backend"
+	// and nothing else — a chip that said "coming soon" or "planned" would be
+	// the same promise wearing a vaguer face.
+	if strings.Count(editor, `class="badge need"`) != strings.Count(editor, "needs backend") {
+		t.Error("a `.badge.need` in the editor does not carry the literal words " +
+			"`needs backend`; the class means that phrase and nothing else")
+	}
+
+	// …and the fields whose mockup chips were WRONG are really here, UNCHIPPED.
+	// The columns and the bindings exist for all of them.
+	for _, want := range []string{
+		"data-de-starth", "data-de-endm", "data-de-endday", "data-de-endread",
+		"data-de-typerail", "data-de-datepicker", "data-de-tie",
+	} {
 		if !strings.Contains(editor, want) {
 			t.Errorf("the editor is missing %q — the columns and the binding exist, so "+
 				"the mockup's `needs backend` chip came off and the FIELD stayed", want)
@@ -1015,7 +1104,111 @@ func TestDayCard_TheEditorShipsNoRationaleAndNoUnbackedChip(t *testing.T) {
 	}
 }
 
-// --- 4. the sheets ----------------------------------------------------------
+// TestDayCard_TheEditorReproducesTheStillsMechanicalClaims is the other half of
+// §2's instruction: "the mockup proves the drawing; your test proves the build."
+//
+// Every assertion here restates a number `mockups/stills/event-editor/
+// _measurements.json` asserts about the DRAWING, re-taken against the PRODUCT's
+// own DOM. Where a claim can only be checked in a browser (the 24px floor, the
+// day-of-week wrap, the horizontal fold) it belongs to the screenshot gate and
+// is NOT faked here — a Go test asserting a pixel it cannot see would be worse
+// than no coverage, because it would read as coverage.
+func TestDayCard_TheEditorReproducesTheStillsMechanicalClaims(t *testing.T) {
+	data := benchFxData(true, true)
+	data.DayCard = DayCardMount{
+		CanCreate: true, CanAuthorDmOnly: true, CanDelete: true, CanRestrict: true,
+		CampaignID: "camp-1",
+	}
+	body := renderBench(t, data)
+
+	// SCOPED TO THE CARD AND THE EDITOR, DELIBERATELY, and the scope is a
+	// finding rather than a convenience. The Bench at large carries BOTH of the
+	// next two strings legitimately and they are signed where they sit: the
+	// surface caption explains what `needs backend` means ("Tiles marked <b>needs
+	// backend</b> name a gap…"), and the RSVP tile's inert Propose control is a
+	// real `disabled` button with a real reason on it (C-CALV4-RSVP-P8B). This
+	// slice inherits both unchanged; what it asserts is that ITS OWN surface
+	// adds neither, which is the claim the stills make about the editor.
+	surface := dayCardSurfaceOf(t, body)
+
+	// `.hint` nodes = 0 — no design rationale ships as product copy.
+	if n := strings.Count(surface, `class="hint"`); n != 0 {
+		t.Errorf("%d `.hint` nodes on the card+editor surface; design rationale "+
+			"addressed to a reviewer does not render inside the product", n)
+	}
+	// disabled / aria-disabled controls = 0 — PERMISSION IS ABSENCE, never
+	// greying, and never a `title` explaining what is missing.
+	for _, bad := range []string{"disabled", "aria-disabled"} {
+		if strings.Contains(surface, bad) {
+			t.Errorf("the card+editor surface renders a %q attribute — absence is "+
+				"absence ([DC-9] SIGNED: markup-level, never CSS, never JS, never a "+
+				"greyed control)", bad)
+		}
+	}
+	// literal week lengths in CSS selectors = 0. Ten-day weeks are native; a
+	// `nth-child(7n)` or a `repeat(7,…)` here is the exact defect
+	// css_contract_test.go forbids one layer up.
+	sheet := benchCommentRe.ReplaceAllString(dayCardCSS(t), " ")
+	for _, bad := range []string{
+		"nth-child(7", "nth-child(10", "repeat(7", "repeat(10", "repeat(5", "repeat(13",
+	} {
+		if strings.Contains(sheet, bad) {
+			t.Errorf("calendar-daycard.css contains %q — week length is a VARIABLE, "+
+				"written by the module from the calendar's own weekday names", bad)
+		}
+	}
+	// …and the variable it uses instead is really there, so the assertion above
+	// is proving a mechanism rather than an absence.
+	if !strings.Contains(sheet, "var(--week-len") {
+		t.Error("the date grid does not read --week-len; the assertion above would " +
+			"pass on a sheet that had simply stopped drawing a grid")
+	}
+	// The module must not carry one either — a `% 7` in the derivation is the
+	// same defect one layer in.
+	mod := readRepoFile(t, "internal/plugins/calendar/static/js/calendar_daycard.js")
+	code := dayCardJSLineComment.ReplaceAllString(mod, "")
+	for _, bad := range []string{"% 7", "%7", "'tenday'", `"tenday"`, "* 7"} {
+		if strings.Contains(code, bad) {
+			t.Errorf("calendar_daycard.js contains %q — the week is DERIVED from the "+
+				"payload's own weekday names (weekShape), never assumed and never named", bad)
+		}
+	}
+
+	// A PLAYER MEETS NONE OF IT, and the chip count is where the chrome bites.
+	// The player's SURFACE is the card alone — the editor is not rendered at
+	// all below the Scribe floor, which is the gate expressed as absence.
+	player := dayCardSurfaceOf(t, renderBench(t, benchFxData(false, false)))
+	for _, bad := range []string{
+		"needs backend", "badge need", "data-de-typerail", "data-de-datepicker",
+		"data-de-visibility", "data-de-aud", "data-de-tie", "data-de-restricted",
+		"data-de-recurrence", "Create event", "Save changes", "Delete event",
+	} {
+		if strings.Contains(player, bad) {
+			t.Errorf("a player's Bench contains %q — the chrome is where a chip gets "+
+				"tempting, and a chip is a promise addressed to someone who can act on it", bad)
+		}
+	}
+}
+
+// dayCardSurfaceOf narrows a rendered Bench to THIS SLICE'S OWN DOM: the card
+// scaffold, and the editor when the viewer's floor rendered one.
+//
+// It exists because the assertions above are about what R2b ADDS. The Bench it
+// mounts onto legitimately carries both `needs backend` (in the surface caption
+// that explains the chip) and a `disabled` control (the RSVP tile's inert
+// Propose, signed under C-CALV4-RSVP-P8B with its reason on it), and a
+// page-wide assertion would either fail on inherited, signed DOM or have to be
+// weakened until it proved nothing.
+func dayCardSurfaceOf(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `id="cal-daycard"`)
+	if i < 0 {
+		t.Fatal("the card did not mount; every assertion downstream would be vacuous")
+	}
+	return body[i:]
+}
+
+// --- 4. the sheets ---// --- 4. the sheets ----------------------------------------------------------
 
 func dayCardCSS(t *testing.T) string {
 	t.Helper()
@@ -1125,12 +1318,79 @@ func TestDayCardCSS_DefinesWhatTheModuleNames(t *testing.T) {
 		".cal-daycard .dc-empty", ".cal-daycard .dc-f", ".cal-daycard .dc-f .dc-door",
 		".cal-daycard .dc-row .rail.p1", ".cal-daycard .dc-row .rail.p8",
 		".cal-daycard .dc-row .dc-edit",
-		// The editor (stage 2, the MECHANISM).
-		".cal-dayeditor", ".cal-dayeditor[data-dc-shown]", ".cal-dayeditor .dcbox",
-		".cal-dayeditor .de-form", ".cal-dayeditor .de-row", ".cal-dayeditor .de-lab",
-		".cal-dayeditor .de-fields", ".cal-dayeditor .de-err",
-		".cal-dayeditor .de-f", ".cal-dayeditor .de-f .dc-door",
-		".cal-dayeditor .de-f .de-danger",
+		// ── THE EDITOR ────────────────────────────────────────────────
+		//
+		// AMENDED BY NAME, C-CALV4-EDITOR-R2b stage 2, under [ER-10] SIGNED.
+		//
+		// WHO TURNED IT OVER AND WHAT THE OLD CLAIM WAS. Stage 2 of DAYCARD
+		// shipped the editor as a MECHANISM and this list named its five
+		// classes: `.de-row`, `.de-fields`, `.de-f .dc-door`, `.de-f
+		// .de-danger` and `.de-form`. The chrome pass REPLACES those controls —
+		// `.de-row` became `.fld`, the `.dc-door` foot buttons became `.btn`,
+		// `.de-danger` became `.btn.danger` — so four of the five names now
+		// describe DOM that no longer exists.
+		//
+		// WHY THE NEW CLAIM IS NOT WEAKER, which is [ER-10]'s real bar. The old
+		// list had ELEVEN editor entries; this one has FORTY-ONE, and it covers
+		// every class the module builds at runtime (the type rail's `.topt`, the
+		// date grid's `.dp-c` / `.dp-ic`, the audience row's `.inimark` and its
+		// allow/deny pair, the tie pill's `.rmx`, the preview's `.lrow` and its
+		// gold rail) — which is precisely the DOM a stale sheet would render as
+		// unstyled text while every assertion stayed green. The #568 gap this
+		// test closes is WIDER after the amendment, not narrower.
+		//
+		// The three conditions are met in full: every `data-de-*` handle
+		// survives the controls' replacement (the templ's header enumerates
+		// them), the request bodies are byte-equivalent for equivalent input
+		// (daycard_editor_requests.test.mjs keeps its cases and gains more), and
+		// this comment is the naming. Mutation-tested: deleting the `.topt .g`
+		// rule turns this red.
+		".cal-dayeditor", ".cal-dayeditor[data-dc-shown]", ".cal-dayeditor.dcsheet",
+		".cal-dayeditor .dcbox", ".cal-dayeditor .de-form", ".cal-dayeditor .de-lab",
+		".cal-dayeditor .de-err", ".cal-dayeditor .de-f",
+		// the head's three channels
+		".cal-dayeditor .ed-bar", ".cal-dayeditor .ed-head", ".cal-dayeditor .tymark",
+		".cal-dayeditor .tymark .rail", ".cal-dayeditor .tymark .g",
+		".cal-dayeditor .dc-h", ".cal-dayeditor .readout", ".cal-dayeditor .readout.mono",
+		// the shared control vocabulary
+		".cal-dayeditor .btn", ".cal-dayeditor .btn.fill", ".cal-dayeditor .btn.danger",
+		".cal-dayeditor .ed-head .btn", ".cal-dayeditor .in", ".cal-dayeditor .in.num",
+		".cal-dayeditor .in.prose", ".cal-dayeditor .in.sel-like",
+		".cal-dayeditor .in.sel-like .lb", ".cal-dayeditor .in.sel-like .ar", ".cal-dayeditor .vh",
+		".cal-dayeditor .fld", ".cal-dayeditor .frow", ".cal-dayeditor .cap",
+		".cal-dayeditor .badge", ".cal-dayeditor .badge.need", ".cal-dayeditor .badge.gm",
+		".cal-dayeditor .gold",
+		// the two-column body
+		".cal-dayeditor .ed-body", ".cal-dayeditor .ed-form-col", ".cal-dayeditor .ed-side",
+		// the type rail's locked triple
+		".cal-dayeditor .types", ".cal-dayeditor .topt", ".cal-dayeditor .topt .rail",
+		".cal-dayeditor .topt .rail.p1", ".cal-dayeditor .topt .rail.p8",
+		".cal-dayeditor .topt .g", ".cal-dayeditor .topt .nm",
+		// the date picker
+		".cal-dayeditor .dp", ".cal-dayeditor .dp-head", ".cal-dayeditor .dp-head .hd",
+		".cal-dayeditor .dp-grid", ".cal-dayeditor .dp-c", ".cal-dayeditor .dp-c .mk",
+		".cal-dayeditor .dp-ic",
+		// recurrence
+		".cal-dayeditor .seg", ".cal-dayeditor .rec-on", ".cal-dayeditor .units",
+		".cal-dayeditor .recbox", ".cal-dayeditor .wdpick",
+		// visibility and its audience
+		".cal-dayeditor .vis", ".cal-dayeditor .viscard", ".cal-dayeditor .viscard .nm",
+		".cal-dayeditor .viscard .sub", ".cal-dayeditor .viscard .audmark",
+		".cal-dayeditor .audb", ".cal-dayeditor .audrows", ".cal-dayeditor .mrow",
+		".cal-dayeditor .mrow .swatch", ".cal-dayeditor .mrow .swatch.p8",
+		".cal-dayeditor .mrow .inimark", ".cal-dayeditor .mrow .nm",
+		".cal-dayeditor .mrow .mt", ".cal-dayeditor .mrow .ad",
+		// the tie field
+		".cal-dayeditor .pill", ".cal-dayeditor .pill .rmx", ".cal-dayeditor .tieres",
+		// the live preview
+		".cal-dayeditor .pv", ".cal-dayeditor .pv-cell", ".cal-dayeditor .pv .chip",
+		".cal-dayeditor .pv .chip .rail", ".cal-dayeditor .pv .chip .tok",
+		".cal-dayeditor .pv .chip .lb", ".cal-dayeditor .pv .dogear",
+		".cal-dayeditor .pv .audmark", ".cal-dayeditor .pv .lrow",
+		".cal-dayeditor .pv .lrow .dg", ".cal-dayeditor .pv .lrow .rail",
+		".cal-dayeditor .pv .lrow .gr", ".cal-dayeditor .pv .lrow .tok",
+		".cal-dayeditor .pv .lrow .mid", ".cal-dayeditor .pv .lrow .nm",
+		".cal-dayeditor .pv .lrow .audchip",
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("calendar-daycard.css does not define %q", want)

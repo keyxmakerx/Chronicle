@@ -68,42 +68,77 @@ templ dayCardScaffold(m DayCardMount) {
 	</div>
 }
 
-// dayCardEditor is the event editor, and in this stage it is the MECHANISM: the
-// fields the shipped API already writes, wired to the routes that already ship.
+
+// dayCardEditor is the event editor, and C-CALV4-EDITOR-R2b turns the stage-2
+// MECHANISM into the chrome the 22 sealed stills draw.
 //
-// ZERO NEW WRITE ROUTES ([DC-8] SIGNED). Save is POST
-// /campaigns/:id/calendars/:calId/events (Scribe) or PUT .../events/:eid
-// (Scribe); Delete is DELETE .../events/:eid (Owner). All three are IDOR-closed
-// at requireEventInCampaign / requireCalendarInCampaign and all three ride
-// Chronicle.apiFetch, which attaches X-CSRF-Token on every mutating method.
-// This file adds nothing to that surface and widens no request body.
+// WHAT CHANGED, AND WHAT DELIBERATELY DID NOT. Stage 2 shipped a `<select>` for
+// the type, three number inputs for the date and a checkbox for GM-only. Every
+// one of those controls is REPLACED here and every one of their `data-de-*`
+// HANDLES SURVIVES ([ER-10] SIGNED, condition 1): a picker that replaces
+// `<select data-de-category>` carries `data-de-category` on the node the module
+// reads. The request bodies are byte-equivalent for equivalent input (condition
+// 2) and every amended assertion is named, commented and mutation-tested
+// (condition 3). Restyle the control; keep the handle; keep the body.
 //
-// WHAT IS HERE IS §5's TABLE, NOT THE MOCKUP. Title, description, type, date,
-// in-world time, end date, GM-only, delete — every one of them a row the
-// shipped create/update structs already bind. What is deliberately NOT here:
+// ZERO NEW WRITE ROUTES, STILL ([DC-8] SIGNED, unchanged). Create is POST
+// /campaigns/:id/calendars/:calId/events (Scribe), update is PUT
+// .../events/:eid (Scribe), delete is DELETE .../events/:eid (Owner), and the
+// tie picker READS GET /campaigns/:id/entities/search. All of them shipped
+// before this slice; routes_snapshot.txt is untouched.
 //
-//   - the mockup's `needs backend` chips on in-world time and "Lasts N days".
-//     The columns and the binding EXIST; the chips were wrong and they come off
-//     rather than being ported.
-//   - the audience builder ("+ add tag or member", "resolves to 3 of 5
-//     members"). There is no member_tags table; the composed audience is W-G's.
-//   - the Owner row (change the event's owner). There is no API field and no
-//     signed design — that is not a `needs backend` promise, it is a thing
-//     nobody has decided to build, so it is ABSENT rather than chipped.
-//   - the ten `.hint` rationale strings. Design rationale addressed to a
-//     reviewer, rendered inside the product, is a REVIEW [POLICY] finding and
-//     none of them ship.
-//   - the exotic recurrence units (tenday, moon-phase, day-of-tenday). They are
-//     invention against Chronicle's model and they belong to the chrome pass.
+// ── EVERY GATE IS MARKUP-LEVEL, AND THE CHROME IS WHERE THAT BECOMES VISIBLE ─
 //
-// The full §5 chrome pass — including the restricted-audience chip row and the
-// recurrence block with its GM-side chips — is C-CALV4-EDITOR-R2b, gated on the
-// operator's stills signature ([DC-5]). NOTHING here renders a `needs backend`
-// chip, so the player rule is satisfied by construction as well as by absence.
+// [DC-9] SIGNED, restated because this is the first surface where the two axes
+// are drawn side by side:
+//
+//	the ◥ DM only card   CanAuthorDmOnly() — the CAPABILITY, not the role
+//	the ◈ Restricted card + the audience roster   CanRestrict (Owner)
+//	Delete                                        CanDelete (Owner), and
+//	                                              ABSENT ON A DRAFT
+//
+// THE CARD SET IS THE GATE SET, AND `<2` CARDS MEANS THE FIELDSET IS GONE. A
+// Scribe with neither capability has exactly one lawful visibility, so there is
+// no choice to render: not a radio group of one, not a collapsed row, not a
+// sentence saying why. Gone. `editor-scribe-light.png` is that state.
+//
+// THE VISIBILITY CARDS ARE REAL RADIOS AND THAT IS LOAD-BEARING. A `<button
+// aria-pressed>` group would need JS for keyboard traversal, would need JS to
+// stay mutually exclusive, and would put `data-de-gmonly`'s checkedness — which
+// the write path reads and five test files pin — behind a script. A radio group
+// gives arrow-key traversal, exclusivity and `.checked` for free, so the
+// module's read is the SAME read it always was.
+//
+// ── WHAT IS ABSENT, AND WHY EACH ABSENCE IS A DECISION ─────────────────────
+//
+//   - THE `year` RECURRENCE UNIT. `recurrence_type` accepts exactly weekly,
+//     biweekly, monthly and custom (model.go:214-217); OccursOn sends anything
+//     else to `default: return onBase` (model.go:305-309). A wrong unit is not
+//     an error, it is a SILENT SINGLE OCCURRENCE — so an unbacked unit in a
+//     picker is a trap, and the one thing worse than a missing option is one
+//     that quietly does nothing. The mockup offers `year` UNCHIPPED; it does
+//     not ship at all.
+//   - THE RECURRENCE "ENDS" CYCLER. RecurrenceEnd* and RecurrenceMaxOccurrences
+//     exist on the model and NEITHER the shipped POST nor the shipped PUT binds
+//     any of them (handler.go), which is why eventEditorRecord leaves them off.
+//     A control with no write path and no signed design is ABSENT, not chipped:
+//     a chip is a promise addressed to someone who can act on it.
+//   - THE OWNER ROW. No API field, no signed design. Absence, not a chip.
+//   - THE KNOWLEDGE-HORIZON FOOT under the date grid. The drawing chips it;
+//     there is no queryable horizon on main and it is not in §5's table.
+//   - THE `.hint` RATIONALE STRINGS. Design rationale addressed to a reviewer,
+//     rendered inside the product, is a REVIEW [POLICY] finding. Zero, asserted.
+//   - THE PREVIEW'S "WHO SEES IT" ROSTER. It resolves a COMPOSED audience that
+//     does not exist on main (there is no member_tags table); that is W-G's.
+//   - `+ tie another` AND THE MULTI-TIE LIST. The primary tie is `entity_id`,
+//     which BOTH shipped writes bind and the record round-trips. The multi-tie
+//     rides three more routes and a list this slice's stills draw as one pill;
+//     [ER-4] SIGNED makes shipping the single tie with remove the sanctioned
+//     shape and books the rest.
 //
 // THE EDITOR IS NOT RENDERED AT ALL BELOW THE SCRIBE FLOOR. bench.templ gates
 // the whole component, so a player's page contains no editor scaffold, no field
-// names and no route strings.
+// names, no route strings and the literal `needs backend` zero times.
 templ dayCardEditor(m DayCardMount) {
 	<div
 		id="cal-dayeditor"
@@ -111,78 +146,243 @@ templ dayCardEditor(m DayCardMount) {
 		popover="manual"
 		data-cal-dayeditor
 		data-campaign-id={ m.CampaignID }
+		if m.CanRestrict {
+			data-de-can-restrict
+		}
 		aria-labelledby="cal-dayeditor-head"
 	>
 		<div class="dcbox" data-dc-box>
-			<h2 class="dc-h" id="cal-dayeditor-head" data-de-head data-day=""></h2>
+			// THE HEAD RESTATES THE EVENT'S TYPE IN THREE CHANNELS, NOT ONE. The
+			// 3px bar carries the hue; `.tymark` directly under it carries the
+			// same type's STROKE PATTERN and its GLYPH. The stills index measured
+			// the old proximity claim at 99px with three controls interposed and
+			// replaced the argument with structure — the measured gap is 13.3px
+			// worst case, and it is structural here for the same reason.
+			//
+			// `--accent` NEVER INKS THIS BAR. It takes the event's own --axis,
+			// which the module writes from the payload's normalised token.
+			<div class="ed-bar" data-de-bar aria-hidden="true"></div>
+			<div class="ed-head">
+				<span class="tymark" data-de-tymark aria-hidden="true">
+					<i class="rail p1" data-de-tyrail></i>
+					<span class="g" data-de-tyglyph></span>
+				</span>
+				<h2 class="dc-h t" id="cal-dayeditor-head" data-de-head data-day=""></h2>
+				<span class="sp"></span>
+				// The record's own id, or `draft` before the POST has returned
+				// one. It is a readout, never a control.
+				<span class="readout mono" data-de-id></span>
+				// `.ed-head .btn{flex:none}` in the sheet: adding the type mark
+				// made this the item that gave way and it measured 23.4px at 390.
+				// The shrink belongs on the label, which is the only thing in this
+				// row that should carry it.
+				<button type="button" class="btn xs ghost" data-de-cancel aria-label="Close the editor">✕</button>
+			</div>
 			<form class="de-form" data-de-form>
-				<label class="de-row">
-					<span class="de-lab">Title</span>
-					<input type="text" name="name" data-de-name required maxlength="200"/>
-				</label>
-				<label class="de-row">
-					<span class="de-lab">Description</span>
-					<textarea name="description" data-de-desc rows="3"></textarea>
-				</label>
-				<label class="de-row">
-					<span class="de-lab">Type</span>
-					// Seeded from the page payload, per-calendar, because
-					// GET /calendars/:calId/event-categories sits behind an OWNER
-					// floor and a Scribe cannot reach it ([DC-8](c), option ii).
-					<select name="category" data-de-category>
-						<option value="">No type</option>
-					</select>
-				</label>
-				<div class="de-row de-date">
-					<span class="de-lab">Date</span>
-					<span class="de-fields">
-						<input type="number" name="year" data-de-year aria-label="Year" step="1"/>
-						<input type="number" name="month" data-de-month aria-label="Month" min="1" step="1"/>
-						<input type="number" name="day" data-de-day aria-label="Day" min="1" step="1"/>
-					</span>
+				// TWO COLUMNS ABOVE THE BREAKPOINT, ONE BELOW ([ER-5] SIGNED).
+				// The breakpoint is a hard requirement, not a nicety, and the
+				// desktop width is MEASURED against the clear band placeCard can
+				// actually find rather than taken from the drawing.
+				<div class="ed-body">
+					<div class="ed-form-col">
+						<div class="fld">
+							<label class="de-lab" for="de-name">Title</label>
+							<input class="in" type="text" id="de-name" name="name" data-de-name required maxlength="200"/>
+						</div>
+						// THE TYPE RAIL IS THE LOCKED TRIPLE: hue rail + stroke
+						// pattern + glyph, one .topt per category. The GLYPH IS
+						// INKED --text-body AND NEVER --axis — the stills index
+						// measured 2.27:1 and 3.06:1 on axis-inked glyphs and
+						// retired both sites by name. The rail beside it carries
+						// the hue, so the option keeps all three channels.
+						//
+						// Seeded from the PAGE PAYLOAD, per calendar, because
+						// GET /calendars/:calId/event-categories sits behind an
+						// OWNER floor a Scribe cannot reach ([DC-8](c) option ii).
+						//
+						// `data-de-category` SURVIVES ON THE NODE THE MODULE READS
+						// ([ER-10] condition 1). It moved from the <select> to a
+						// hidden input; the module still reads `.value` and the
+						// request body is byte-identical for the same choice.
+						<div class="fld">
+							<span class="de-lab">Type</span>
+							<div class="types" data-de-typerail role="radiogroup" aria-label="Event type"></div>
+							<input type="hidden" name="category" data-de-category/>
+						</div>
+						<div class="fld">
+							<label class="de-lab" for="de-desc">Description</label>
+							<textarea class="in prose" id="de-desc" name="description" data-de-desc rows="3"></textarea>
+						</div>
+						// THE REAL MONTH GRID. Its week length is the CALENDAR'S
+						// OWN, derived by the module from the payload's weekday
+						// names — there is no literal 7 and no literal 10 anywhere
+						// in this file, the sheet or the module. The intercalary
+						// day is a FULL-WIDTH ROW and a REAL DATE: Midwinter 1 is
+						// not Deepwinter 1, it lives in its own is_intercalary
+						// month, and the payload carries both key namespaces so
+						// the editor writes the coordinates the API takes.
+						//
+						// The three number inputs stage 2 shipped are now hidden
+						// fields the grid drives. Their handles are unchanged.
+						<div class="fld">
+							<span class="de-lab" data-de-datelab>Date</span>
+							<div class="dp" data-de-datepicker></div>
+							<span class="readout" data-de-dateread></span>
+							<input type="hidden" name="year" data-de-year/>
+							<input type="hidden" name="month" data-de-month/>
+							<input type="hidden" name="day" data-de-day/>
+						</div>
+						<div class="frow frow-split">
+							// IN-WORLD TIME CARRIES NO CHIP. start_hour /
+							// start_minute / end_hour / end_minute are shipped
+							// columns with shipped bindings — the mockup's
+							// `needs backend` chip over this field was simply
+							// wrong and it comes off rather than being ported.
+							<div class="fld">
+								<label class="de-lab de-inline">
+									<input type="checkbox" data-de-allday checked/>
+									<span>All day</span>
+								</label>
+								<div class="frow de-time" data-de-timerow hidden>
+									<span class="readout">from</span>
+									<input class="in num" type="number" data-de-starth aria-label="Start hour" min="0" step="1" placeholder="hh"/>
+									<span class="readout">:</span>
+									<input class="in num" type="number" data-de-startm aria-label="Start minute" min="0" step="1" placeholder="mm"/>
+									<span class="readout">to</span>
+									<input class="in num" type="number" data-de-endh aria-label="End hour" min="0" step="1" placeholder="hh"/>
+									<span class="readout">:</span>
+									<input class="in num" type="number" data-de-endm aria-label="End minute" min="0" step="1" placeholder="mm"/>
+								</div>
+							</div>
+							// ENDS ON — end_year / end_month / end_day, all three
+							// shipped. THE END DATE MAY NEVER PRECEDE ITS START:
+							// the module cycles it over the month's OWN ordered
+							// date list, on which the intercalary day is simply
+							// the last entry, so a start ON that day offers no end
+							// options at all rather than clamping backwards.
+							<div class="fld">
+								<span class="de-lab">Ends</span>
+								<button type="button" class="in sel-like" data-end-pick data-de-endread>ends the same day <span class="ar" aria-hidden="true">⌄</span></button>
+								<input type="hidden" data-de-endyear/>
+								<input type="hidden" data-de-endmonth/>
+								<input type="hidden" data-de-endday/>
+							</div>
+						</div>
+						// RECURRENCE, WITH THE UNIT LIST CORRECTED IN BOTH
+						// DIRECTIONS. §5 and the mockup both chip the week unit as
+						// invention: they are wrong. Week-based recurrence strides
+						// `WeekLength() × recurrenceWeeks(...)`, so on a ten-day
+						// calendar `weekly` MEANS every tenday and the chip comes
+						// OFF. The mockup offers `year` unchipped: there is no
+						// yearly type, it degrades silently, and it does not ship.
+						// What stays chipped is `day` and the moon unit — neither
+						// is an accepted recurrence_type — and the day-of-week
+						// multi-select, because expansion is BASE-ANCHORED and
+						// ignores recurrence_day_of_week entirely (.ai.md:963).
+						// Every recurrence control is GM-side by construction: a
+						// player has no editor to meet one in.
+						<div class="fld" data-de-recurrence>
+							<span class="de-lab">Recurrence</span>
+							<div class="frow">
+								<span class="seg" role="radiogroup" aria-label="Recurrence">
+									<button type="button" data-rec-pick="once" aria-pressed="true">Once</button>
+									<button type="button" data-rec-pick="repeats" aria-pressed="false">Repeats</button>
+								</span>
+								<span class="rec-on" data-de-recon hidden>
+									<span class="readout">every</span>
+									<input class="in num" type="number" min="1" step="1" value="1" data-de-recevery aria-label="Recurrence interval"/>
+									<span class="units" data-de-recunits role="radiogroup" aria-label="Recurrence unit"></span>
+								</span>
+								<span class="readout" data-de-recread></span>
+							</div>
+							<div class="recbox" data-de-recbox hidden>
+								<span class="cap">
+									On days of the week
+									<span class="badge need">needs backend</span>
+								</span>
+								<div class="wdpick" data-de-wdpick></div>
+							</div>
+						</div>
+						if m.CanAuthorDmOnly || m.CanRestrict {
+							// THE FIELDSET EXISTS ONLY WHEN THERE ARE TWO CARDS TO
+							// CHOOSE BETWEEN, and that is a CONSEQUENCE of the gates
+							// rather than a fourth decision. Public is every author's;
+							// the other two are their own capabilities.
+							<div class="fld" data-de-visibility>
+								<span class="de-lab">
+									Visibility
+									<span class="badge gm">GM</span>
+								</span>
+								<div class="vis" data-de-vis>
+									<label class="viscard">
+										<input type="radio" class="vh" name="de-vis" value="public" data-vis-pick="public" checked/>
+										<span class="nm">Public</span>
+										<span class="sub">every member of the campaign sees it</span>
+									</label>
+									if m.CanAuthorDmOnly {
+										// The server DOWNGRADES dm_only to everyone for
+										// anyone without CanAuthorDmOnly (handler.go), so
+										// offering this to a plain Scribe would be offering
+										// a switch the server silently ignores.
+										<label class="viscard">
+											<input type="radio" class="vh" name="de-vis" value="gmonly" data-vis-pick="gmonly" data-de-gmonly/>
+											<span class="nm"><span class="gold" aria-hidden="true">◥</span> DM only</span>
+											<span class="sub">you and the GMs — the grid gets the gold dogear</span>
+										</label>
+									}
+									if m.CanRestrict {
+										// PUT .../events/:eid/visibility is Owner-floor, so
+										// the card AND the roster it draws from are Owner's.
+										<label class="viscard">
+											<input type="radio" class="vh" name="de-vis" value="restricted" data-vis-pick="restricted" data-de-restricted/>
+											<span class="nm"><span class="gold" aria-hidden="true">◈</span> Restricted</span>
+											<span class="sub">only the members you allow</span>
+											<span class="audmark" aria-hidden="true"></span>
+										</label>
+									}
+								</div>
+								if m.CanRestrict {
+									<div class="audb" data-de-aud hidden>
+										<span class="cap">Who this is restricted to</span>
+										<div class="audrows" data-de-audrows></div>
+									</div>
+								}
+							</div>
+						}
+						// entity_id on create and update — both shipped writes bind
+						// it and eventEditorRecord round-trips it. The picker READS
+						// GET /campaigns/:id/entities/search, which is a cross-plugin
+						// FETCH and not a cross-plugin IMPORT: check-plugin-isolation
+						// polices Go imports, and a client-side call to another
+						// plugin's public API breaks nothing.
+						<div class="fld" data-de-tie>
+							<label class="de-lab" for="de-tiesearch">Tied to</label>
+							<div class="frow" data-de-tierow></div>
+							<input class="in" type="search" id="de-tiesearch" data-de-tiesearch autocomplete="off" placeholder="Search entities"/>
+							<div class="tieres" data-de-tieres hidden></div>
+							<input type="hidden" data-de-entity/>
+						</div>
+					</div>
+					// THE LIVE PREVIEW is a client-side render of marks the payload
+					// already carries — the grid chip and the Ledger row, both of
+					// which ship. It resolves no audience and names no viewer.
+					<div class="ed-side">
+						<div class="pv" data-de-preview></div>
+					</div>
 				</div>
-				<label class="de-row de-inline">
-					<input type="checkbox" data-de-allday checked/>
-					<span class="de-lab">All day</span>
-				</label>
-				<div class="de-row de-time" data-de-timerow hidden>
-					<span class="de-lab">In-world time</span>
-					<span class="de-fields">
-						<input type="number" data-de-starth aria-label="Start hour" min="0" step="1"/>
-						<input type="number" data-de-startm aria-label="Start minute" min="0" step="1"/>
-						<span class="de-sep">to</span>
-						<input type="number" data-de-endh aria-label="End hour" min="0" step="1"/>
-						<input type="number" data-de-endm aria-label="End minute" min="0" step="1"/>
-					</span>
-				</div>
-				<div class="de-row de-date">
-					<span class="de-lab">Ends on</span>
-					<span class="de-fields">
-						<input type="number" data-de-endyear aria-label="End year" step="1"/>
-						<input type="number" data-de-endmonth aria-label="End month" min="1" step="1"/>
-						<input type="number" data-de-endday aria-label="End day" min="1" step="1"/>
-					</span>
-				</div>
-				// THE dm_only CONTROL IS THE CAPABILITY'S, NOT THE ROLE'S
-				// ([DC-9] SIGNED). The server downgrades dm_only to everyone for
-				// anyone without CanAuthorDmOnly, so offering the switch to a
-				// plain Scribe would be offering one the server silently ignores.
-				if m.CanAuthorDmOnly {
-					<label class="de-row de-inline">
-						<input type="checkbox" data-de-gmonly/>
-						<span class="de-lab">GM only</span>
-					</label>
-				}
 				<p class="de-err" data-de-err hidden></p>
-				<div class="de-f">
-					<button type="submit" class="dc-door" data-de-save>Save</button>
-					<button type="button" class="dc-door" data-de-cancel>Cancel</button>
+				<div class="de-f ed-foot">
 					// Delete rides the shipped DELETE's OWNER floor and nothing
-					// else. The module reveals it only in edit mode; a viewer
-					// below the floor never receives the element.
+					// else, and the module reveals it only in EDIT mode: a
+					// `DELETE .../events/:eid` cannot name an event the POST has
+					// not returned an id for, so an Owner's blank draft draws no
+					// button aimed at an event that does not exist.
 					if m.CanDelete {
-						<button type="button" class="dc-door de-danger" data-de-delete hidden>Delete</button>
+						<button type="button" class="btn danger" data-de-delete hidden>Delete event</button>
 					}
+					<span class="sp"></span>
+					<button type="button" class="btn" data-de-cancel>Cancel</button>
+					<button type="submit" class="btn fill" data-de-save>Save changes</button>
 				</div>
 			</form>
 		</div>

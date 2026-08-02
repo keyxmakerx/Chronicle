@@ -252,33 +252,126 @@
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   THE EVENT EDITOR — C-CALV4-DAYCARD stage 2, the MECHANISM.
+   THE EVENT EDITOR — C-CALV4-EDITOR-R2b, the CHROME.
 
-   Its chrome pass (the type rail's locked hue+pattern+glyph triple, the
-   restricted-audience chip row, the recurrence block with its GM-side chips,
-   the live preview column) is C-CALV4-EDITOR-R2b, gated on the operator's
-   stills signature ([DC-5] SIGNED). What is here is what the shipped API
-   already writes, laid out plainly enough to be used.
+   Stage 2 of DAYCARD shipped this box as a MECHANISM: a <select>, three number
+   inputs and a checkbox, laid out plainly enough to be used. What is here is
+   the same mechanism wearing the 22 sealed stills' clothes — the locked type
+   rail, the real month grid, the recurrence block, the visibility cards and
+   their allow/deny roster, the tie pill, the live preview.
 
-   NO MOTION HERE EITHER. The editor's open/close is the SAME register rule as
-   the card's, declared once in calendar-bench.css against both roots.
+   STILL ZERO MOTION, AND THAT IS STRUCTURAL RATHER THAN RESTRAINT.
+   TestDayCardCSS_CarriesNoMotionOfItsOwn bans the literal `transition` in this
+   file, and R2b did not touch that guard by a byte — which is the cheapest
+   possible proof that the editor-morph carve-out did not fork the register. The
+   card's reveal, the editor's reveal AND THE MORPH all live in the ONE register
+   section of calendar-bench.css. If a rule with a duration on it ever wants to
+   be here, the morph is in the wrong file.
+
+   EVERY SELECTOR IS SCOPED UNDER .cal-daycard OR .cal-dayeditor, without
+   exception. This sheet is unlayered and outranks the whole layered app
+   cascade, and the chrome adds a LOT of generic vocabulary — `.in`, `.fld`,
+   `.nm`, `.sub`, `.cap`, `.seg`, `.rail`, `.badge`, `.readout` — so a bare rule
+   here would restyle the product. A THIRD ROOT IN THIS FILE IS A SURFACE THAT
+   ESCAPED ITS SHEET, and TestDayCardCSS_EverySelectorIsScoped says so.
+
+   THE ACCENT NEVER COLOURS EVENT DATA. `.ed-bar` takes the EVENT's own --axis,
+   written by the module from the payload's normalised token; `var(--accent)`
+   appears below only on focus rings and on the selected-state ring of a control
+   the viewer is operating. The two are different jobs and the stills measure
+   the difference.
+
+   EVERY HUE PAIRS WITH A PATTERN OR A GLYPH. The type rail carries hue + stroke
+   pattern + glyph; the audience swatch carries hue + locked pattern + the
+   ringed two-letter mark; the head's bar is restated 13px below it by
+   `.tymark`, which carries the same type's pattern AND glyph. Nothing on this
+   surface means anything by colour alone.
+
+   THE GLYPH IS INKED --text-body, NEVER --axis. The stills index measured
+   axis-inked type glyphs at 2.27:1 and 3.06:1 in light — below even the 3:1
+   non-text floor — and retired both sites by name. The rail beside the glyph
+   carries the hue; the glyph is inked for READING.
+
+   THE 24px CONTROL FLOOR IS THE FLOOR, at 1440 AND at 390. A remove affordance
+   is a control, not a decoration: the tie pill's ✕ is a real 24px <button>
+   inside a pill sized from the floor up, the same `24 + 4 + 2` arithmetic the
+   allow/deny pair uses. `.ed-head .btn { flex: none }` exists because adding
+   the type mark to the head made the close button the item that gave way, and
+   it measured 23.4px wide at 390.
+
+   NO `disabled`, NO `aria-disabled`, NO `title` EXPLAINING AN ABSENCE, anywhere
+   in this file's surface. Permission is ABSENCE and the producer decides it.
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── the box ─────────────────────────────────────────────────────────────
+   THE DESKTOP WIDTH IS MEASURED, NOT DRAWN ([ER-5] SIGNED). The stills draw a
+   two-column editor ~1008px wide. A wider box has FEWER CLEAR POSITIONS, and
+   DAYCARD's verify rounds 3 and 4 both failed on exactly that: the popover
+   occluded a stacked full-width Ledger at ~884-944px, and then the fix dropped
+   to a desktop sheet covering 100.0% of it at 625-884px. The placement law that
+   came out of those two blockers treats the Ledger's rect as a HARD EXCLUSION
+   ZONE and never resizes the box to fit — so the box's width has to be chosen
+   against the clear band the law can actually find.
+
+   `--de-w` IS THAT MEASUREMENT and daycard_geometry_probe_test.go is where it
+   was taken: the real Bench markup, the real sheets, the real module, headless
+   Chromium, 61 day cells × 11 viewport widths × 6 candidate box widths, with
+   the Ledger stacked (<=820) and docked (>=900).
+
+   WHAT THE SWEEP ACTUALLY FOUND, because it is not what the ruling predicted:
+   EVERY candidate width holds 0 px² of overlap, at every viewport, on every
+   day. The placement law is doing its job and the round-3 harm does not recur
+   at any width. What DOES move with width is how often the popover falls to the
+   signed desktop SHEET fallback — 60 placements at the shipped 420px box, 270
+   at the drawing's 1008px — and the viewports it starts falling at:
+
+     420px → sheets at 720, 820          (the stacked-Ledger band; inherited)
+     640px → …and 900
+     760px → …and 1000
+     860px → …and 1080, 1100
+    1008px → …and 1232, 1280, 1440
+
+   760px IS THE LARGEST WIDTH THAT NEVER SHEETS AT OR ABOVE THE EDITOR'S OWN
+   TWO-COLUMN BREAKPOINT (1080px, below). Below that breakpoint `.ed-body` is
+   one column anyway and the narrow sheet is a treatment the shipped 420px box
+   already takes; at and above it the two-column chrome is supposed to sit
+   BESIDE the docked Ledger, and a width that turns those viewports into sheets
+   has bought its width out of the layout it was drawn for.
+
+   THE DIVERGENCE FROM THE DRAWING IS 760 vs ~1008 AND THE REPORT NAMES IT. It
+   is arithmetic, not taste: `.cal-bench` is 1180px at its measure, a docked
+   Ledger column is 300px, and 8px of pad on each side leaves ~860px of clear
+   band at 1232 and ~780px at 1100. A 1008px editor cannot sit beside that
+   column at any viewport this product's measure produces.
+
+   REQUIRING "NEVER SHEETS AT ANY DOCKED VIEWPORT" WAS TRIED AND REFUSED, on
+   arithmetic rather than taste: at a 900px viewport a 300px Ledger leaves 583px
+   of band, so that rule admits only the stage-2 420px box and the chrome would
+   never get a second column at all.
+
+   `placeCard` IS NOT RE-OPENED TO ACCOMMODATE ANY OF THIS. Round 4's lesson was
+   that the third geometry was already one too many. */
 .cal-dayeditor {
+  --de-w: 760px;
   display: none;
   position: fixed;
   inset: auto;
   margin: 0;
   padding: 0;
   border: 1px solid var(--rule-hairline);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface-card);
   color: var(--text-primary);
   box-shadow: 0 10px 30px rgb(0 0 0 / 24%);
-  inline-size: min(420px, calc(100vw - 16px));
+  inline-size: min(var(--de-w), calc(100vw - 16px));
   font-size: 12px;
   line-height: 1.35;
+  overflow: hidden;
 }
 .cal-dayeditor[data-dc-shown] { display: block; }
+
+/* The mobile treatment is the same bottom sheet the card takes. The module
+   sets the width; this is the shape. */
 .cal-dayeditor.dcsheet {
   inline-size: 100vw;
   border-inline: 0;
@@ -289,107 +382,861 @@
   border-end-end-radius: 0;
 }
 
-.cal-dayeditor .dcbox { padding: 10px 12px 12px; }
+.cal-dayeditor .dcbox { padding: 0; }
+
+/* The form is the box below the head: body, error line, foot. It is a column
+   so the foot stays at the bottom and the error line sits directly above it,
+   where a save that did not happen is read rather than scrolled to. */
+.cal-dayeditor .de-form {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+/* ── the head ──────────────────────────────────────────────────────────── */
+
+/* The event's hue, 3px, full bleed. It restates a type the row 13px below it
+   carries as a pattern AND a glyph, which is what makes "every hue pairs with a
+   pattern or a glyph" structural here rather than a proximity argument. */
+.cal-dayeditor .ed-bar {
+  block-size: 3px;
+  background: var(--axis, var(--own-none));
+}
+
+.cal-dayeditor .ed-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-block-end: 1px solid var(--rule-hairline);
+}
+.cal-dayeditor .ed-head .sp { flex: 1 1 auto; }
+
+/* The type's OWN pattern and glyph, directly under the bar. */
+.cal-dayeditor .tymark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cal-dayeditor .tymark .rail {
+  inline-size: 3px;
+  block-size: 14px;
+  border-radius: 2px;
+  background: var(--axis, var(--own-none));
+}
+.cal-dayeditor .tymark .rail.p1 { opacity: 1; }
+.cal-dayeditor .tymark .rail.p2 { opacity: 0.92; }
+.cal-dayeditor .tymark .rail.p3 { opacity: 0.84; }
+.cal-dayeditor .tymark .rail.p4 { opacity: 0.76; }
+.cal-dayeditor .tymark .rail.p5 { opacity: 0.68; }
+.cal-dayeditor .tymark .rail.p6 { opacity: 0.6; }
+.cal-dayeditor .tymark .rail.p7 { opacity: 0.52; }
+.cal-dayeditor .tymark .rail.p8 { opacity: 0.44; }
+/* --text-body, never --axis. See the header. */
+.cal-dayeditor .tymark .g {
+  font-size: 11px;
+  color: var(--text-body, var(--text-primary));
+}
 
 .cal-dayeditor .dc-h {
-  margin: 0 0 8px;
+  margin: 0;
+  min-inline-size: 0;
   font-weight: 650;
   font-size: 11px;
   line-height: 1.2;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.cal-dayeditor .de-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-block-size: min(64vh, 520px);
-  overflow-y: auto;
-}
-
-.cal-dayeditor .de-row {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.cal-dayeditor .de-row.de-inline {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-.cal-dayeditor .de-row[hidden] { display: none; }
-
-.cal-dayeditor .de-lab {
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.cal-dayeditor .readout {
   color: var(--text-muted);
+  font-size: 10.5px;
+}
+.cal-dayeditor .readout.mono {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.cal-dayeditor .de-fields {
-  display: flex;
+/* ── the shared control vocabulary ─────────────────────────────────────── */
+
+.cal-dayeditor .btn {
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-.cal-dayeditor .de-sep { color: var(--text-muted); }
-
-.cal-dayeditor input[type="text"],
-.cal-dayeditor input[type="number"],
-.cal-dayeditor textarea,
-.cal-dayeditor select {
-  font: inherit;
-  font-size: 12px;
-  color: var(--text-primary);
-  background: var(--surface-inset);
+  justify-content: center;
+  gap: 4px;
+  min-block-size: 24px;
+  min-inline-size: 24px;
+  padding: 2px 10px;
   border: 1px solid var(--rule-hairline);
-  border-radius: 4px;
-  padding: 3px 6px;
-  min-inline-size: 0;
-}
-.cal-dayeditor input[type="number"] { inline-size: 5.5em; }
-.cal-dayeditor textarea { resize: vertical; }
-.cal-dayeditor input:focus-visible,
-.cal-dayeditor textarea:focus-visible,
-.cal-dayeditor select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* The error line is the honest failure state: a save that did not happen says
-   so, in the editor, rather than closing and pretending. */
-.cal-dayeditor .de-err {
-  margin: 0;
-  color: var(--tone-bad, #b91c1c);
-}
-.cal-dayeditor .de-err[hidden] { display: none; }
-
-.cal-dayeditor .de-f {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-block-start: 2px;
-}
-.cal-dayeditor .de-f .dc-door {
-  padding: 3px 8px;
-  border: 1px solid var(--rule-hairline);
-  border-radius: 4px;
+  border-radius: 5px;
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
   font-size: 11px;
   cursor: pointer;
 }
-.cal-dayeditor .de-f .dc-door:hover {
+/* THE CLOSE BUTTON MAY NOT SHRINK. Adding the type mark to this flex row made
+   it the item that gave way, at 23.4px wide at 390 — under the floor this file
+   states as law. The shrink goes back on the label, which is the only thing in
+   the row that should carry it. */
+.cal-dayeditor .ed-head .btn { flex: none; padding: 2px 6px; }
+.cal-dayeditor .btn:hover {
   background: color-mix(in oklch, transparent 92%, var(--text-primary));
   color: var(--text-primary);
 }
-.cal-dayeditor .de-f .dc-door:focus-visible {
+.cal-dayeditor .btn.ghost { border-color: transparent; }
+.cal-dayeditor .btn.fill {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 650;
+}
+.cal-dayeditor .btn.danger { color: var(--tone-bad, #b91c1c); }
+.cal-dayeditor .btn[hidden] { display: none; }
+.cal-dayeditor .btn:focus-visible,
+.cal-dayeditor .in:focus-visible,
+.cal-dayeditor input:focus-visible,
+.cal-dayeditor textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.cal-dayeditor .de-f .de-danger { color: var(--tone-bad, #b91c1c); }
-.cal-dayeditor .de-f .de-danger[hidden] { display: none; }
+/* The radio inside a card is the real control; the card is its label. Focus
+   therefore has to travel to the card, or the keyboard user gets no ring. */
+.cal-dayeditor .vh:focus-visible + .nm,
+.cal-dayeditor .viscard:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cal-dayeditor .in {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--surface-inset);
+  border: 1px solid var(--rule-hairline);
+  border-radius: 5px;
+  padding: 3px 7px;
+  min-block-size: 24px;
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+.cal-dayeditor .in.num { inline-size: 46px; flex: none; text-align: center; }
+.cal-dayeditor .in.prose { resize: vertical; line-height: 1.45; }
+/* A closed disclosure renders a REAL SUMMARY LABEL, never a bare chevron —
+   register clause 5, which the `Ends` cycler is a consumer of. */
+.cal-dayeditor .in.sel-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  inline-size: auto;
+  max-inline-size: 100%;
+  cursor: pointer;
+  text-align: start;
+}
+.cal-dayeditor .in.sel-like .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-dayeditor .in.sel-like .ar { color: var(--text-muted); font-size: 10px; }
+
+/* VISUALLY HIDDEN, NOT ABSENT. The visibility radios are real controls the
+   keyboard reaches; the card beside each one is its label. */
+.cal-dayeditor .vh {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cal-dayeditor .fld {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.cal-dayeditor .fld[hidden],
+.cal-dayeditor .frow[hidden],
+.cal-dayeditor .recbox[hidden],
+.cal-dayeditor .audb[hidden],
+.cal-dayeditor .tieres[hidden],
+.cal-dayeditor .rec-on[hidden] { display: none; }
+
+.cal-dayeditor .de-lab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cal-dayeditor .de-lab.de-inline {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-block-size: 24px;
+  cursor: pointer;
+}
+
+.cal-dayeditor .frow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+}
+/* Two fields side by side above the fold, stacked below it. */
+.cal-dayeditor .frow-split { align-items: start; gap: 12px; }
+.cal-dayeditor .frow-split > .fld { flex: 1 1 200px; }
+
+.cal-dayeditor .cap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* `.badge.need` MEANS LITERALLY "needs backend" AND NOTHING ELSE. Three of them
+   ship on this surface — the `day` unit, the moon unit and the day-of-week
+   multi-select — and every one names a control Chronicle's model does not
+   accept. None reaches a player, because a player has no editor. */
+.cal-dayeditor .badge {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--rule-hairline);
+  color: var(--text-secondary);
+}
+.cal-dayeditor .badge.need {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+.cal-dayeditor .badge.gm {
+  border-color: var(--gm-gold, #c8a24a);
+  color: var(--gm-gold, #c8a24a);
+}
+/* The permission marks stay GOLD and survive hue removal — ◥ the dogear, ◈ the
+   diamond. `--accent` never carries this channel. */
+.cal-dayeditor .gold { color: var(--gm-gold, #c8a24a); }
+
+/* ── the body: two columns above the fold, one below ────────────────────── */
+
+.cal-dayeditor .ed-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding: 12px;
+  max-block-size: min(70vh, 620px);
+  overflow-y: auto;
+}
+.cal-dayeditor .ed-form-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-inline-size: 0;
+}
+.cal-dayeditor .ed-side { min-inline-size: 0; }
+
+/* THE ONE-COLUMN BREAKPOINT IS A HARD REQUIREMENT, NOT A NICETY ([ER-5]).
+   Below 1080px the live preview sits UNDER the form instead of beside it,
+   exactly as the drawing does it — and `editor-gm-390x844.png` is that state. */
+@media (min-width: 1080px) {
+  .cal-dayeditor .ed-body { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+}
+
+/* ── the type rail: the locked triple ──────────────────────────────────── */
+
+.cal-dayeditor .types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.cal-dayeditor .topt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-block-size: 24px;
+  padding: 2px 8px 2px 4px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cal-dayeditor .topt .rail {
+  flex: none;
+  inline-size: 3px;
+  align-self: stretch;
+  min-block-size: 14px;
+  border-radius: 2px;
+  background: var(--axis, var(--own-none));
+}
+.cal-dayeditor .topt .rail.p1 { opacity: 1; }
+.cal-dayeditor .topt .rail.p2 { opacity: 0.92; }
+.cal-dayeditor .topt .rail.p3 { opacity: 0.84; }
+.cal-dayeditor .topt .rail.p4 { opacity: 0.76; }
+.cal-dayeditor .topt .rail.p5 { opacity: 0.68; }
+.cal-dayeditor .topt .rail.p6 { opacity: 0.6; }
+.cal-dayeditor .topt .rail.p7 { opacity: 0.52; }
+.cal-dayeditor .topt .rail.p8 { opacity: 0.44; }
+/* THE SHAPE CHANNEL IS INKED FOR READING. `--axis` here measured 2.27:1. */
+.cal-dayeditor .topt .g { color: var(--text-body, var(--text-primary)); }
+.cal-dayeditor .topt .nm { color: inherit; }
+.cal-dayeditor .topt:hover { color: var(--text-primary); }
+/* The pressed state is a RING plus the label's weight — the accent rings the
+   control the viewer is operating and never inks the event's own hue. */
+.cal-dayeditor .topt[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+/* ── the date picker: a real month grid, no literal week length ─────────── */
+
+/* `--week-len` IS WRITTEN BY THE MODULE FROM THE CALENDAR'S OWN WEEKDAYS.
+   There is no `nth-child(7n)` and no `repeat(7, …)` anywhere in this sheet: a
+   literal week length here is the exact defect css_contract_test.go forbids one
+   layer up, and ten-day weeks are native to this product. */
+.cal-dayeditor .dp {
+  border: 1px solid var(--rule-hairline);
+  border-radius: 6px;
+  padding: 6px;
+  background: var(--surface-inset);
+}
+.cal-dayeditor .dp-head {
+  display: grid;
+  grid-template-columns: repeat(var(--week-len, 1), minmax(0, 1fr));
+  gap: 2px;
+  margin-block-end: 3px;
+}
+.cal-dayeditor .dp-head .hd {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-dayeditor .dp-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--week-len, 1), minmax(0, 1fr));
+  gap: 2px;
+}
+.cal-dayeditor .dp-c {
+  min-block-size: 24px;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.cal-dayeditor .dp-c:hover { color: var(--text-primary); }
+.cal-dayeditor .dp-c[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+/* A day that already carries events says so with a rail, in the event's own
+   hue and pattern — the same two channels the card's rows use. */
+.cal-dayeditor .dp-c .mk {
+  display: block;
+  block-size: 2px;
+  border-radius: 1px;
+  margin-block-start: 1px;
+  background: var(--axis, var(--own-none));
+}
+/* THE INTERCALARY DAY IS A FULL-WIDTH ROW AND A REAL DATE. Midwinter 1 is not
+   Deepwinter 1 — it lives in its own is_intercalary month, and the payload
+   carries its own (year, month) so the editor writes the coordinates the API
+   actually takes. */
+.cal-dayeditor .dp-ic {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 24px;
+  margin-block-start: 3px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cal-dayeditor .dp-ic .cap { color: var(--text-muted); }
+.cal-dayeditor .dp-ic[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+/* ── recurrence ─────────────────────────────────────────────────────────── */
+
+.cal-dayeditor .seg {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.cal-dayeditor .seg button {
+  min-block-size: 24px;
+  padding: 2px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cal-dayeditor .seg button[aria-pressed="true"] {
+  background: color-mix(in oklch, transparent 88%, var(--accent));
+  color: var(--text-primary);
+  font-weight: 650;
+}
+.cal-dayeditor .rec-on {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cal-dayeditor .units {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.cal-dayeditor .units button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cal-dayeditor .units button[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.cal-dayeditor .recbox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px dashed var(--rule-hairline);
+  border-radius: 6px;
+}
+/* A STOP YOU MUST FIND BY DRAGGING IS NOT THERE. The day-of-week field WRAPS
+   rather than scrolling inside its own box: ten stops in one row wherever ten
+   fit, 6 + 4 where they do not, and zero stops outside the visible box at 390. */
+.cal-dayeditor .wdpick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-inline-size: 100%;
+}
+.cal-dayeditor .wdpick button {
+  min-block-size: 24px;
+  min-inline-size: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.cal-dayeditor .wdpick button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+/* ── visibility, and the audience it opens ─────────────────────────────── */
+
+.cal-dayeditor .vis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px;
+}
+.cal-dayeditor .viscard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-block-size: 24px;
+  padding: 6px 8px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.cal-dayeditor .viscard .nm {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.cal-dayeditor .viscard .sub {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+/* THE CHECKED INK IS GOLD, NEVER `--accent`. The ◈/◥ permission channel is the
+   gold one and the stills assert `checked ◈/◥ ink = --gold`; what the accent
+   may do is ring the card the viewer selected. */
+.cal-dayeditor .viscard:has(.vh:checked) {
+  border-color: var(--accent);
+  background: color-mix(in oklch, transparent 94%, var(--accent));
+}
+.cal-dayeditor .viscard .audmark {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 6px;
+  inline-size: 6px;
+  block-size: 6px;
+  transform: rotate(45deg);
+  background: var(--gm-gold, #c8a24a);
+}
+
+.cal-dayeditor .audb {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-block-start: 6px;
+  padding: 6px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 6px;
+}
+.cal-dayeditor .audrows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cal-dayeditor .mrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 24px;
+}
+/* Hue + LOCKED PATTERN. Colour is never the only channel on the list that
+   decides who may see a hidden event. */
+.cal-dayeditor .mrow .swatch {
+  flex: none;
+  inline-size: 3px;
+  block-size: 16px;
+  border-radius: 2px;
+  background: var(--axis, var(--own-none));
+}
+.cal-dayeditor .mrow .swatch.p1 { opacity: 1; }
+.cal-dayeditor .mrow .swatch.p2 { opacity: 0.92; }
+.cal-dayeditor .mrow .swatch.p3 { opacity: 0.84; }
+.cal-dayeditor .mrow .swatch.p4 { opacity: 0.76; }
+.cal-dayeditor .mrow .swatch.p5 { opacity: 0.68; }
+.cal-dayeditor .mrow .swatch.p6 { opacity: 0.6; }
+.cal-dayeditor .mrow .swatch.p7 { opacity: 0.52; }
+.cal-dayeditor .mrow .swatch.p8 { opacity: 0.44; }
+/* A RINGED MARK, NOT A FILLED DISC. Near-white on a raw owner hue measured
+   1.72:1 in dark and 2.86:1 in light; the ring puts the hue where it needs no
+   contrast against text and the initials inherit the sheet's own ink. */
+.cal-dayeditor .mrow .inimark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--axis, var(--own-none));
+  color: var(--text-primary);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+.cal-dayeditor .mrow .nm {
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.cal-dayeditor .mrow .mt { color: var(--text-muted); font-size: 10px; }
+.cal-dayeditor .mrow .sp { flex: 1 1 auto; }
+/* THE ALLOW/DENY PAIR IS TWO REAL CONTROLS, both at the 24px floor at every
+   width. The ✓ and the ✕ survive hue removal because they are glyphs. */
+.cal-dayeditor .mrow .ad {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+}
+.cal-dayeditor .mrow .ad button {
+  min-block-size: 24px;
+  min-inline-size: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.cal-dayeditor .mrow .ad button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+/* ── the tie field ──────────────────────────────────────────────────────── */
+
+/* A REMOVE AFFORDANCE IS A CONTROL, so the pill is sized from the 24px floor
+   up: 24 + 4 + 2. The ✕ used to be a bare <span> at 8.4 × 10.0px inside a 22px
+   pill — under the floor, and invisible to every control-scoped assertion
+   because it had no handler and no role. */
+.cal-dayeditor .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 30px;
+  padding: 2px 2px 2px 8px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 15px;
+  color: var(--text-primary);
+  font-size: 11px;
+}
+.cal-dayeditor .pill .rmx {
+  inline-size: 24px;
+  block-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cal-dayeditor .pill .rmx:hover {
+  background: color-mix(in oklch, transparent 88%, var(--text-primary));
+  color: var(--text-primary);
+}
+
+.cal-dayeditor .tieres {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-block-size: 132px;
+  overflow-y: auto;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 5px;
+  padding: 3px;
+}
+.cal-dayeditor .tieres button {
+  min-block-size: 24px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  text-align: start;
+  cursor: pointer;
+}
+.cal-dayeditor .tieres button:hover {
+  background: color-mix(in oklch, transparent 92%, var(--text-primary));
+}
+.cal-dayeditor .tieres .none {
+  padding: 2px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── the live preview ───────────────────────────────────────────────────── */
+
+.cal-dayeditor .pv {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 6px;
+  background: var(--surface-inset);
+}
+.cal-dayeditor .pv-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  inline-size: 82px;
+  min-block-size: 54px;
+  padding: 3px;
+  border: 1px solid var(--rule-hairline);
+  border-radius: 4px;
+  background: var(--surface-card);
+  /* the dogear may not escape its box */
+  overflow: hidden;
+}
+.cal-dayeditor .pv-cell .dn {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.cal-dayeditor .pv .chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-inline-size: 0;
+}
+.cal-dayeditor .pv .chip .rail {
+  flex: none;
+  inline-size: 3px;
+  align-self: stretch;
+  min-block-size: 10px;
+  border-radius: 2px;
+  background: var(--axis, var(--own-none));
+}
+.cal-dayeditor .pv .chip .rail.p1 { opacity: 1; }
+.cal-dayeditor .pv .chip .rail.p2 { opacity: 0.92; }
+.cal-dayeditor .pv .chip .rail.p3 { opacity: 0.84; }
+.cal-dayeditor .pv .chip .rail.p4 { opacity: 0.76; }
+.cal-dayeditor .pv .chip .rail.p5 { opacity: 0.68; }
+.cal-dayeditor .pv .chip .rail.p6 { opacity: 0.6; }
+.cal-dayeditor .pv .chip .rail.p7 { opacity: 0.52; }
+.cal-dayeditor .pv .chip .rail.p8 { opacity: 0.44; }
+.cal-dayeditor .pv .chip .tok { flex: none; font-size: 9px; color: var(--text-body, var(--text-primary)); }
+.cal-dayeditor .pv .chip .lb {
+  font-size: 9.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* THE GOLD DOGEAR — the dm_only mark, drawn on the preview cell exactly as the
+   grid draws it, and clipped by the cell's own overflow. */
+.cal-dayeditor .pv .dogear {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  inline-size: 0;
+  block-size: 0;
+  border-block-start: 9px solid var(--gm-gold, #c8a24a);
+  border-inline-start: 9px solid transparent;
+}
+.cal-dayeditor .pv .audmark {
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-end: 3px;
+  inline-size: 6px;
+  block-size: 6px;
+  transform: rotate(45deg);
+  background: var(--gm-gold, #c8a24a);
+}
+/* The Ledger row, in the Ledger's own vocabulary, so the two surfaces read
+   alike — which is also why every one of these selectors is scoped. */
+.cal-dayeditor .pv .lrow {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px;
+  border-radius: 4px;
+  background: var(--surface-card);
+}
+.cal-dayeditor .pv .lrow .dg {
+  flex: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.cal-dayeditor .pv .lrow .rail {
+  flex: none;
+  inline-size: 3px;
+  align-self: stretch;
+  min-block-size: 12px;
+  border-radius: 2px;
+  background: var(--axis, var(--own-none));
+}
+.cal-dayeditor .pv .lrow .rail.p1 { opacity: 1; }
+.cal-dayeditor .pv .lrow .rail.p2 { opacity: 0.92; }
+.cal-dayeditor .pv .lrow .rail.p3 { opacity: 0.84; }
+.cal-dayeditor .pv .lrow .rail.p4 { opacity: 0.76; }
+.cal-dayeditor .pv .lrow .rail.p5 { opacity: 0.68; }
+.cal-dayeditor .pv .lrow .rail.p6 { opacity: 0.6; }
+.cal-dayeditor .pv .lrow .rail.p7 { opacity: 0.52; }
+.cal-dayeditor .pv .lrow .rail.p8 { opacity: 0.44; }
+/* The gold rail is dm_only and ONLY dm_only — a visibility_rules restriction
+   gets the audience chip alone. Audience.Restricted is the discriminator, not
+   a synonym for "hidden". */
+.cal-dayeditor .pv .lrow .gr {
+  flex: none;
+  inline-size: 2px;
+  align-self: stretch;
+  min-block-size: 12px;
+  border-radius: 2px;
+  background: var(--gm-gold, #c8a24a);
+}
+.cal-dayeditor .pv .lrow .tok { flex: none; font-size: 9px; color: var(--text-body, var(--text-primary)); }
+.cal-dayeditor .pv .lrow .mid {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+}
+.cal-dayeditor .pv .lrow .nm { font-size: 10.5px; color: var(--text-primary); overflow-wrap: anywhere; }
+.cal-dayeditor .pv .lrow .audchip { font-size: 9px; color: var(--text-muted); }
+
+/* ── the foot, and the honest failure state ─────────────────────────────── */
+
+.cal-dayeditor .de-err {
+  margin: 0;
+  padding: 0 12px;
+  color: var(--tone-bad, #b91c1c);
+}
+.cal-dayeditor .de-err[hidden] { display: none; }
+
+.cal-dayeditor .de-f {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-block-start: 1px solid var(--rule-hairline);
+}
+.cal-dayeditor .de-f .sp { flex: 1 1 auto; }

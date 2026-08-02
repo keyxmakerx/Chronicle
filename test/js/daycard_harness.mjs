@@ -163,36 +163,115 @@ export function buildBenchFixture(opts) {
     );
   }
 
+  // THE EDITOR'S CHROME, mirroring internal/plugins/calendar/daycard.templ
+  // (C-CALV4-EDITOR-R2b stage 2). THE FIXTURE REPRODUCES THE PRODUCER'S GATES
+  // RATHER THAN SIMULATING THEM: `canGMOnly` and `canRestrict` decide whether
+  // the DM-only and Restricted cards EXIST, exactly as `if m.CanAuthorDmOnly` /
+  // `if m.CanRestrict` do in the template, so a Scribe fixture genuinely has no
+  // control to find and a test cannot accidentally assert on one.
+  //
+  // THE WHOLE VISIBILITY FIELDSET IS GONE BELOW TWO CARDS, which is the
+  // template's own `if m.CanAuthorDmOnly || m.CanRestrict` and the state
+  // editor-scribe-light.png draws.
+  const canRestrict = opts.canRestrict !== false;
+  const visCards = [
+    el('label', { class: 'viscard' }, [
+      el('input', { type: 'radio', class: 'vh', name: 'de-vis', value: 'public', 'data-vis-pick': 'public', checked: '' }),
+      el('span', { class: 'nm' }, [], 'Public'),
+    ]),
+    ...(canGMOnly ? [el('label', { class: 'viscard' }, [
+      el('input', { type: 'radio', class: 'vh', name: 'de-vis', value: 'gmonly', 'data-vis-pick': 'gmonly', 'data-de-gmonly': '' }),
+      el('span', { class: 'nm' }, [], '◥ DM only'),
+    ])] : []),
+    ...(canRestrict ? [el('label', { class: 'viscard' }, [
+      el('input', { type: 'radio', class: 'vh', name: 'de-vis', value: 'restricted', 'data-vis-pick': 'restricted', 'data-de-restricted': '' }),
+      el('span', { class: 'nm' }, [], '◈ Restricted'),
+    ])] : []),
+  ];
+  const visibility = (canGMOnly || canRestrict) ? [
+    el('div', { class: 'fld', 'data-de-visibility': '' }, [
+      el('div', { class: 'vis', 'data-de-vis': '' }, visCards),
+      ...(canRestrict ? [el('div', { class: 'audb', 'data-de-aud': '', hidden: '' }, [
+        el('div', { class: 'audrows', 'data-de-audrows': '' }),
+      ])] : []),
+    ]),
+  ] : [];
+
   const editor = canEdit ? el('div', {
     id: 'cal-dayeditor', class: 'cal-dayeditor', popover: 'manual',
     'data-cal-dayeditor': '', 'data-campaign-id': 'camp-1',
+    ...(canRestrict ? { 'data-de-can-restrict': '' } : {}),
     'aria-labelledby': 'cal-dayeditor-head',
   }, [
     el('div', { class: 'dcbox', 'data-dc-box': '' }, [
-      el('h2', { class: 'dc-h', id: 'cal-dayeditor-head', 'data-de-head': '', 'data-day': '' }),
-      el('form', { class: 'de-form', 'data-de-form': '' }, [
-        el('input', { type: 'text', 'data-de-name': '' }),
-        el('textarea', { 'data-de-desc': '' }),
-        el('select', { 'data-de-category': '' }, [el('option', { value: '' }, [], 'No type')]),
-        el('input', { type: 'number', 'data-de-year': '' }),
-        el('input', { type: 'number', 'data-de-month': '' }),
-        el('input', { type: 'number', 'data-de-day': '' }),
-        el('input', { type: 'checkbox', 'data-de-allday': '' }),
-        el('div', { 'data-de-timerow': '', hidden: '' }, [
-          el('input', { type: 'number', 'data-de-starth': '' }),
-          el('input', { type: 'number', 'data-de-startm': '' }),
-          el('input', { type: 'number', 'data-de-endh': '' }),
-          el('input', { type: 'number', 'data-de-endm': '' }),
+      el('div', { class: 'ed-bar', 'data-de-bar': '' }),
+      el('div', { class: 'ed-head' }, [
+        el('span', { class: 'tymark', 'data-de-tymark': '' }, [
+          el('i', { class: 'rail p1', 'data-de-tyrail': '' }),
+          el('span', { class: 'g', 'data-de-tyglyph': '' }),
         ]),
-        el('input', { type: 'number', 'data-de-endyear': '' }),
-        el('input', { type: 'number', 'data-de-endmonth': '' }),
-        el('input', { type: 'number', 'data-de-endday': '' }),
-        ...(canGMOnly ? [el('input', { type: 'checkbox', 'data-de-gmonly': '' })] : []),
+        el('h2', { class: 'dc-h t', id: 'cal-dayeditor-head', 'data-de-head': '', 'data-day': '' }),
+        el('span', { class: 'sp' }),
+        el('span', { class: 'readout mono', 'data-de-id': '' }),
+        el('button', { type: 'button', class: 'btn xs ghost', 'data-de-cancel': '' }, [], '✕'),
+      ]),
+      el('form', { class: 'de-form', 'data-de-form': '' }, [
+        el('div', { class: 'ed-body' }, [
+          el('div', { class: 'ed-form-col' }, [
+            el('input', { type: 'text', class: 'in', 'data-de-name': '' }),
+            el('div', { class: 'types', 'data-de-typerail': '' }),
+            el('input', { type: 'hidden', 'data-de-category': '' }),
+            el('textarea', { class: 'in prose', 'data-de-desc': '' }),
+            el('span', { class: 'de-lab', 'data-de-datelab': '' }, [], 'Date'),
+            el('div', { class: 'dp', 'data-de-datepicker': '' }),
+            el('span', { class: 'readout', 'data-de-dateread': '' }),
+            el('input', { type: 'hidden', 'data-de-year': '' }),
+            el('input', { type: 'hidden', 'data-de-month': '' }),
+            el('input', { type: 'hidden', 'data-de-day': '' }),
+            el('input', { type: 'checkbox', 'data-de-allday': '' }),
+            el('div', { class: 'frow de-time', 'data-de-timerow': '', hidden: '' }, [
+              el('input', { type: 'number', class: 'in num', 'data-de-starth': '' }),
+              el('input', { type: 'number', class: 'in num', 'data-de-startm': '' }),
+              el('input', { type: 'number', class: 'in num', 'data-de-endh': '' }),
+              el('input', { type: 'number', class: 'in num', 'data-de-endm': '' }),
+            ]),
+            el('button', { type: 'button', class: 'in sel-like', 'data-end-pick': '', 'data-de-endread': '' }, [], 'ends the same day'),
+            el('input', { type: 'hidden', 'data-de-endyear': '' }),
+            el('input', { type: 'hidden', 'data-de-endmonth': '' }),
+            el('input', { type: 'hidden', 'data-de-endday': '' }),
+            el('div', { class: 'fld', 'data-de-recurrence': '' }, [
+              el('span', { class: 'seg' }, [
+                el('button', { type: 'button', 'data-rec-pick': 'once', 'aria-pressed': 'true' }, [], 'Once'),
+                el('button', { type: 'button', 'data-rec-pick': 'repeats', 'aria-pressed': 'false' }, [], 'Repeats'),
+              ]),
+              el('span', { class: 'rec-on', 'data-de-recon': '', hidden: '' }, [
+                el('input', { type: 'number', class: 'in num', value: '1', 'data-de-recevery': '' }),
+                el('span', { class: 'units', 'data-de-recunits': '' }),
+              ]),
+              el('span', { class: 'readout', 'data-de-recread': '' }),
+              el('div', { class: 'recbox', 'data-de-recbox': '', hidden: '' }, [
+                el('span', { class: 'cap' }, [
+                  el('span', { class: 'badge need' }, [], 'needs backend'),
+                ], 'On days of the week '),
+                el('div', { class: 'wdpick', 'data-de-wdpick': '' }),
+              ]),
+            ]),
+            ...visibility,
+            el('div', { class: 'fld', 'data-de-tie': '' }, [
+              el('div', { class: 'frow', 'data-de-tierow': '' }),
+              el('input', { type: 'search', class: 'in', 'data-de-tiesearch': '' }),
+              el('div', { class: 'tieres', 'data-de-tieres': '', hidden: '' }),
+              el('input', { type: 'hidden', 'data-de-entity': '' }),
+            ]),
+          ]),
+          el('div', { class: 'ed-side' }, [el('div', { class: 'pv', 'data-de-preview': '' })]),
+        ]),
         el('p', { class: 'de-err', 'data-de-err': '', hidden: '' }),
-        el('div', { class: 'de-f' }, [
-          el('button', { type: 'submit', class: 'dc-door', 'data-de-save': '' }, [], 'Save'),
-          el('button', { type: 'button', class: 'dc-door', 'data-de-cancel': '' }, [], 'Cancel'),
-          ...(canDelete ? [el('button', { type: 'button', class: 'dc-door de-danger', 'data-de-delete': '', hidden: '' }, [], 'Delete')] : []),
+        el('div', { class: 'de-f ed-foot' }, [
+          ...(canDelete ? [el('button', { type: 'button', class: 'btn danger', 'data-de-delete': '', hidden: '' }, [], 'Delete event')] : []),
+          el('span', { class: 'sp' }),
+          el('button', { type: 'button', class: 'btn', 'data-de-cancel': '' }, [], 'Cancel'),
+          el('button', { type: 'submit', class: 'btn fill', 'data-de-save': '' }, [], 'Save changes'),
         ]),
       ]),
     ]),

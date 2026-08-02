@@ -638,6 +638,27 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	//       denominator, inverted (WG-8). The chip moved to the two controls
 	//       inside it that really are unbacked.
 	//
+	//   ADDED BY C-CALV4-EDITOR-R2b stage 2, and this is the fourth
+	//   re-enumeration:
+	//     4. daycard.templ's DAY-OF-WEEK MULTI-SELECT, inside the event
+	//        editor's recurrence block. `recurrence_day_of_week` exists as a
+	//        column (migration 011) and EXPANSION IGNORES IT ENTIRELY — OccursOn
+	//        is base-anchored (internal/plugins/calendar/.ai.md:963) and
+	//        eventEditorRecord does not carry it — so the control is real, the
+	//        storage is real, and the behaviour is not. That is precisely what
+	//        `.badge.need` means and precisely why it is not the `year`
+	//        treatment: `year` is not an accepted recurrence_type at all and
+	//        does not ship, chipped or otherwise.
+	//        GM-TIER BY CONSTRUCTION, which is the rule this list exists to
+	//        keep: bench.templ renders the editor only for CanCreate, so the
+	//        chip cannot reach a player and
+	//        TestDayCard_APlayerBenchCarriesNoAuthoringDOMAndNoHonestyChip
+	//        asserts the zero rather than trusting the construction.
+	//        The editor's OTHER two chips — the `day` and moon recurrence units
+	//        — are built by the module from the calendar's own derived week and
+	//        are pinned in test/js/daycard_editor_requests.test.mjs, which is
+	//        the honest split rather than a Go test asserting about JS.
+	//
 	//   BENCH-SIDE BUT NOT IN THIS FIXTURE: the RSVP panel's Propose and Nudge
 	//   chips, which only render once the panel is FILLED — benchFxDataRsvp is
 	//   the fixture that exercises them, and TestBenchRsvp_* below counts them.
@@ -659,12 +680,13 @@ func TestBench_DesignAheadTilesChipRatherThanFabricate(t *testing.T) {
 	const chip = `class="badge need">needs backend`
 	const filtersChip = `data-spane="filters"><span ` + chip
 	benchOwn := strings.Count(html, chip) - strings.Count(html, filtersChip)
-	if benchOwn != 3 {
-		t.Errorf("the Bench's own chips = %d, want 3 (session tile · sync · horizon); "+
-			"Block-side chips are subtracted and must not stand in for them. If this "+
-			"dropped to 2, a chip was retired without its entry above being struck; "+
-			"if it rose to 4, the retired Nudge came back over a backend that exists",
-			benchOwn)
+	if benchOwn != 4 {
+		t.Errorf("the Bench's own chips = %d, want 4 (session tile · sync · horizon · "+
+			"the editor's day-of-week multi-select); Block-side chips are subtracted "+
+			"and must not stand in for them. If this dropped to 3, a chip was retired "+
+			"without its entry above being struck; if it rose to 5, either the retired "+
+			"Nudge came back over a backend that exists or the editor chipped a field "+
+			"the API already writes", benchOwn)
 	}
 	// The Ledger's chip is gone because W-B FILLED the zone, and the Shelf's
 	// because W-E did. Inverted, not deleted: a chip beside real rows is a lie
