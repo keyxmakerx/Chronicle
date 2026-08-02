@@ -30,11 +30,24 @@ type CalendarRepository interface {
 	GetActiveCalendarID(ctx context.Context, userID, campaignID string) (string, error)
 	SetActiveCalendar(ctx context.Context, userID, campaignID, calendarID string) error
 
+	// THE THREE PREFERENCE WRITERS BELOW ALL TAKE A calendarID, and it is not
+	// optional. They upsert the SAME calendar_active row as the active-calendar
+	// pointer, whose `calendar_id` column is NOT NULL and foreign-keyed to
+	// `calendars(id)` (migration 006). Each of them used to insert the literal
+	// empty string there as a first-write fallback; no calendar has that id,
+	// InnoDB checks the FK on the attempted insert before the duplicate-key path
+	// resolves, and so every one of these writes failed with errno 1452 and
+	// surfaced as a 500. The caller must supply a calendar that exists in the
+	// campaign — the service resolves it with the same active-or-default ladder
+	// GetActiveCalendar walks. It seeds the row on first write and is NEVER
+	// written over an existing pointer (the conflict clause names only the
+	// preference column).
+
 	// Sidebar pin preference (V2 Wave 1.7A §G). Per-user-per-campaign
 	// boolean piggybacked on the calendar_active row; defaults TRUE
 	// for new rows + backfilled rows per migration 007.
 	GetSidebarPinned(ctx context.Context, userID, campaignID string) (bool, error)
-	SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error
+	SetSidebarPinned(ctx context.Context, userID, campaignID, calendarID string, pinned bool) error
 
 	// Per-viewer calendar-v4 Block layer set (C-CALV4-LAYERS-P9 [LYR-3]).
 	// Piggybacked on the SAME calendar_active row as the two above, per
@@ -47,9 +60,9 @@ type CalendarRepository interface {
 	// state distinct from "no preference". A []string that collapsed both onto
 	// len()==0 would make a bare month unreachable.
 	GetBlockLayers(ctx context.Context, userID, campaignID string) ([]string, error)
-	SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error
+	SetBlockLayers(ctx context.Context, userID, campaignID, calendarID string, keys []string) error
 	GetBenchSections(ctx context.Context, userID, campaignID string) ([]string, error)
-	SetBenchSections(ctx context.Context, userID, campaignID string, keys []string) error
+	SetBenchSections(ctx context.Context, userID, campaignID, calendarID string, keys []string) error
 
 	// Months.
 	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
@@ -339,16 +352,32 @@ func (r *calendarRepo) GetSidebarPinned(ctx context.Context, userID, campaignID 
 }
 
 // SetSidebarPinned writes the pin preference. Upserts via the same
-// calendar_active row used for active-cal pointers; preserves any
-// existing calendar_id reference (empty string fallback on first
-// write so a user who toggles pin before ever selecting a calendar
-// still gets a row).
-func (r *calendarRepo) SetSidebarPinned(ctx context.Context, userID, campaignID string, pinned bool) error {
+// calendar_active row used for active-cal pointers.
+//
+// calendarID SEEDS THE ROW AND IS NEVER WRITTEN OVER AN EXISTING ONE. The
+// three preference writers on this table all used to insert an empty
+// calendar_id as a "fallback on first write". `calendar_active.calendar_id` is
+// `VARCHAR(36) NOT NULL` with `fk_calendar_active_cal` referencing
+// `calendars(id)` (migration 006:17,22-23), and no calendar carries that id — so
+// the INSERT tripped MariaDB errno 1452 and the whole write 500'd. InnoDB checks
+// the foreign key on the attempted insert, BEFORE the duplicate-key path
+// resolves, so ON DUPLICATE KEY UPDATE never rescued it: the preference could
+// not be saved by a first-time viewer or by a returning one. That is why the
+// Block's layer switches "did nothing" — the POST fired, the server 500'd, no
+// HX-Refresh came back, and the switch stayed exactly where it was.
+//
+// The service resolves a REAL calendar id (active pointer, else campaign
+// default, else first by sort order — the same ladder GetActiveCalendar walks)
+// and passes it here. The ON DUPLICATE KEY UPDATE clause deliberately names ONLY
+// the preference column: a viewer who has chosen an active calendar must not
+// have that choice silently rewritten to the default because they collapsed a
+// section.
+func (r *calendarRepo) SetSidebarPinned(ctx context.Context, userID, campaignID, calendarID string, pinned bool) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO calendar_active (user_id, campaign_id, calendar_id, sidebar_pinned)
-		 VALUES (?, ?, '', ?)
+		 VALUES (?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE sidebar_pinned = VALUES(sidebar_pinned)`,
-		userID, campaignID, pinned)
+		userID, campaignID, calendarID, pinned)
 	return err
 }
 
@@ -387,24 +416,24 @@ func (r *calendarRepo) GetBlockLayers(ctx context.Context, userID, campaignID st
 }
 
 // SetBlockLayers persists the viewer's layer set. Upserts through the same
-// calendar_active row as the pin preference, with the identical empty-
-// calendar_id fallback on first write, so a viewer who sets layers before ever
-// picking a calendar still gets a row.
+// calendar_active row as the pin preference, and takes calendarID for the same
+// reason — see SetSidebarPinned's comment for the FK that made the old
+// empty-string seed a guaranteed 1452 on every call.
 //
 // A nil keys slice writes NULL — "forget my choice", the reset the switchboard
 // does not expose yet but the store must be able to express, or a viewer could
 // never get back to the host's seed. An empty non-nil slice writes '', which is
 // the bare month.
-func (r *calendarRepo) SetBlockLayers(ctx context.Context, userID, campaignID string, keys []string) error {
+func (r *calendarRepo) SetBlockLayers(ctx context.Context, userID, campaignID, calendarID string, keys []string) error {
 	var val any
 	if keys != nil {
 		val = strings.Join(keys, ",")
 	}
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO calendar_active (user_id, campaign_id, calendar_id, block_layers)
-		 VALUES (?, ?, '', ?)
+		 VALUES (?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE block_layers = VALUES(block_layers)`,
-		userID, campaignID, val)
+		userID, campaignID, calendarID, val)
 	return err
 }
 
@@ -449,24 +478,24 @@ func (r *calendarRepo) GetBenchSections(ctx context.Context, userID, campaignID 
 }
 
 // SetBenchSections persists the viewer's closed set. Upserts through the same
-// calendar_active row as the pin and layer preferences, with the identical
-// empty-calendar_id fallback on first write, so a viewer who collapses a
-// section before ever picking a calendar still gets a row.
+// calendar_active row as the pin and layer preferences, and takes calendarID for
+// the same reason — see SetSidebarPinned's comment for the FK that made the old
+// empty-string seed a guaranteed 1452 on every call.
 //
 // A nil keys slice writes NULL — "forget my choice", which returns the viewer
 // to the ruled default. An empty non-nil slice writes '', which is all four
 // open. The two are not interchangeable and this method must never collapse
 // them.
-func (r *calendarRepo) SetBenchSections(ctx context.Context, userID, campaignID string, keys []string) error {
+func (r *calendarRepo) SetBenchSections(ctx context.Context, userID, campaignID, calendarID string, keys []string) error {
 	var val any
 	if keys != nil {
 		val = strings.Join(keys, ",")
 	}
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO calendar_active (user_id, campaign_id, calendar_id, bench_sections)
-		 VALUES (?, ?, '', ?)
+		 VALUES (?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE bench_sections = VALUES(bench_sections)`,
-		userID, campaignID, val)
+		userID, campaignID, calendarID, val)
 	return err
 }
 

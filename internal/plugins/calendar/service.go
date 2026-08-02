@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -1145,6 +1146,68 @@ func (s *calendarService) GetSidebarPinned(ctx context.Context, userID, campaign
 	return s.repo.GetSidebarPinned(ctx, userID, campaignID)
 }
 
+// prefsCalendarID resolves the calendar id the three per-viewer preference
+// writers must attach their calendar_active row to.
+//
+// WHY A PREFERENCE NEEDS A CALENDAR AT ALL. It does not, conceptually — the pin,
+// the Block layer set and the closed Bench sections are per (user, campaign) and
+// have nothing to do with any one calendar. But they are stored on the
+// calendar_active row, whose `calendar_id` is `VARCHAR(36) NOT NULL` with a
+// foreign key to `calendars(id)` (migration 006:17,22-23). The repository used to
+// paper over that with a literal empty string on first write, which is not a
+// calendar id any campaign has, so
+// InnoDB refused the insert with errno 1452 and every one of these writes 500'd.
+// The row has to name a real calendar, so the service names the one the viewer is
+// actually looking at.
+//
+// IT IS THE SAME LADDER GetActiveCalendar WALKS, deliberately reusing
+// resolveActiveCalendar rather than re-deriving it: active pointer (if it still
+// resolves into this campaign) → campaign default → first by sort order. Reusing
+// it means a preference write can never seed a row that points somewhere the
+// reader would not have gone. The real-time seam is skipped because nothing here
+// reads the calendar's date — only its id.
+//
+// A CAMPAIGN WITH NO CALENDARS HAS NO VALID ANSWER and this returns a domain
+// error rather than inventing one. That state is not reachable from any surface
+// that offers these controls (all three live on the Bench or the V2 shell, and
+// both require a calendar to render), but the schema makes it expressible, and a
+// caller that reached it deserves "there is nowhere to save this" rather than a
+// driver error wearing a 500.
+func (s *calendarService) prefsCalendarID(ctx context.Context, userID, campaignID string) (string, error) {
+	cal, err := s.resolveActiveCalendar(ctx, userID, campaignID)
+	if err != nil {
+		return "", prefsWriteError(err)
+	}
+	if cal == nil {
+		return "", apperror.NewValidation(
+			"this campaign has no calendar yet, so there is nothing to save the preference against")
+	}
+	return cal.ID, nil
+}
+
+// prefsWriteError turns a failed preference write into an AppError that says
+// what failed.
+//
+// apperror.NewInternal's message is the generic "An unexpected error occurred",
+// which is honest but useless in a toast: the operator's report of this bug was
+// "the enable disable switches don't do anything", because a raw 500 produced no
+// HX-Refresh, left aria-pressed untouched, and said nothing a person could act
+// on. A named message means the next failure of this write is VISIBLE as a
+// failure instead of reading as an inert control. The driver error still travels
+// in Internal for the log and never reaches the client.
+func prefsWriteError(err error) error {
+	if err == nil {
+		return nil
+	}
+	// An error the service already classified (validation, not-found) keeps its
+	// own status and message — re-wrapping would turn a 422 into a 500.
+	var appErr *apperror.AppError
+	if errors.As(err, &appErr) {
+		return err
+	}
+	return apperror.NewInternalMessage("Couldn't save that preference. Please try again.", err)
+}
+
 // SetSidebarPinned persists the user's sidebar pin preference.
 // Empty user_id rejects — anonymous toggle isn't persisted (operator
 // would just see default on next page load).
@@ -1152,7 +1215,11 @@ func (s *calendarService) SetSidebarPinned(ctx context.Context, userID, campaign
 	if userID == "" {
 		return apperror.NewValidation("user_id required to set sidebar pin")
 	}
-	return s.repo.SetSidebarPinned(ctx, userID, campaignID, pinned)
+	calID, err := s.prefsCalendarID(ctx, userID, campaignID)
+	if err != nil {
+		return err
+	}
+	return prefsWriteError(s.repo.SetSidebarPinned(ctx, userID, campaignID, calID, pinned))
 }
 
 // GetBlockLayers returns the viewer's stored calendar-v4 Block layer set, or
@@ -1226,7 +1293,11 @@ func (s *calendarService) SetBlockLayers(ctx context.Context, userID, campaignID
 		seen[k] = true
 		clean = append(clean, k)
 	}
-	return s.repo.SetBlockLayers(ctx, userID, campaignID, clean)
+	calID, err := s.prefsCalendarID(ctx, userID, campaignID)
+	if err != nil {
+		return err
+	}
+	return prefsWriteError(s.repo.SetBlockLayers(ctx, userID, campaignID, calID, clean))
 }
 
 // GetBenchSections returns the viewer's stored set of CLOSED Bench sections, or
@@ -1306,7 +1377,7 @@ func (s *calendarService) ToggleBenchSection(ctx context.Context, userID, campai
 	}
 	stored, err := s.repo.GetBenchSections(ctx, userID, campaignID)
 	if err != nil {
-		return err
+		return prefsWriteError(err)
 	}
 	closed := resolveBenchSections(stored)
 	closed[key] = !closed[key]
@@ -1317,9 +1388,13 @@ func (s *calendarService) ToggleBenchSection(ctx context.Context, userID, campai
 			next = append(next, k)
 		}
 	}
+	calID, err := s.prefsCalendarID(ctx, userID, campaignID)
+	if err != nil {
+		return err
+	}
 	// next is ALWAYS non-nil (make with a length of 0), which is what makes
 	// "I opened all four" reachable as '' rather than collapsing to NULL.
-	return s.repo.SetBenchSections(ctx, userID, campaignID, next)
+	return prefsWriteError(s.repo.SetBenchSections(ctx, userID, campaignID, calID, next))
 }
 
 // SetMonths replaces all months. Validates at least one month exists.

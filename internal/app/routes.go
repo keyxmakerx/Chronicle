@@ -2798,8 +2798,37 @@ func (a *App) RegisterRoutes() {
 	// every page's Templ context by the LayoutInjector below.
 	// Follow-up: a WidgetScript field on PluginRegistration would make this implicit
 	// (post-launch C-PLUGIN-CONTRACTS-REFACTOR).
+	//
+	// ORDER IS LOAD-BEARING for the three Bench drivers below: base.templ emits
+	// these in slice order with `defer`, and deferred scripts execute in
+	// DOCUMENT ORDER. calendar_permissions.js captures
+	// `window.ChronicleCalVisibility` at execution time (calendar_permissions.js:22
+	// `var V = ... || null`, and its init() bails on `!V`), so cal_visibility.js
+	// MUST be listed before it.
+	//
+	// WHY THE BENCH DRIVERS LIVE HERE RATHER THAN IN bench.templ. They used to be
+	// `<script src>` tags inside the Bench page body — which the App layout renders
+	// inside `<main id="main-content">`. Every sidebar link is
+	// `hx-boost="true" hx-select="#main-content" hx-swap="innerHTML"`, and boot.js
+	// sets `htmx.config.allowScriptTags = false`; htmx's makeFragment then DELETES
+	// every <script> in the swapped fragment rather than skipping it. The result was
+	// a Bench that wired itself on a direct load and silently did not when reached
+	// through the sidebar — dead day card, dead Permissions button, with the CSS in
+	// the same region surviving so nothing looked wrong. This registry emits after
+	// `{children...}`, outside the swapped region, so a boosted navigation and a
+	// full load deliver the same scripts.
+	//
+	// They are mounted UNCONDITIONALLY (the page templ used to gate them on owner /
+	// day-card presence). That is safe and deliberate: all three are drivers, not
+	// data — each re-inits on htmx:afterSettle/htmx:load and returns immediately
+	// when its mount is absent, and none of them carries a permission decision (the
+	// gate is, as it always was, the producer not rendering the editor DOM and the
+	// server not honouring the route).
 	pluginBodyScripts := []string{
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_widget.js",
+		"/static/plugins/" + calendar.PluginSlug + "/js/cal_visibility.js",
+		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_permissions.js",
+		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_daycard.js",
 	}
 
 	if a.PluginHealth.IsHealthy("calendar") {

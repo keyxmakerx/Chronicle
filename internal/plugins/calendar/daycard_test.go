@@ -626,9 +626,21 @@ func TestDayCard_TheStyleChannelsAreNormalisedAtTheProducer(t *testing.T) {
 //
 // READING A DAY IS A PLAYER AFFORDANCE ([DC-9] SIGNED): the card mounts for
 // every role. What a player does not get is anything to author with, and that
-// is asserted separately below. A Bench with no Block gets NO scaffold, no
-// stylesheet and no script — orphan DOM keyed to invokers that do not exist is
-// the same thing bench.templ's header refuses for popovers().
+// is asserted separately below. A Bench with no Block gets NO scaffold and no
+// stylesheet — orphan DOM keyed to invokers that do not exist is the same thing
+// bench.templ's header refuses for popovers().
+//
+// THE DRIVER IS NO LONGER PART OF THIS ASSERTION and its absence here is the
+// hotfix, not an erosion. calendar_daycard.js used to be a page-side <script>
+// mounted beside this scaffold; because the scaffold lives inside
+// <main id="main-content">, htmx DELETED that tag on every boosted sidebar
+// navigation (allowScriptTags=false), so the card wired on a direct load and
+// silently did not when reached through the sidebar. The driver now ships from
+// the plugin body-script registry, which base.templ emits outside the swapped
+// region — pinned by TestPermissionsDriverIsNeverMountedWithoutItsDependency
+// and TestBenchPageMountsNoPageSideScript. The SCAFFOLD's presence-per-role and
+// absence-without-a-payload are what this test still owns, and both are
+// unchanged.
 func TestDayCard_MountIsPresentForEveryRoleAndAbsentWithoutAPayload(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -647,7 +659,6 @@ func TestDayCard_MountIsPresentForEveryRoleAndAbsentWithoutAPayload(t *testing.T
 				`data-cal-daycard`,
 				`popover="manual"`,
 				`/static/css/calendar-daycard.css`,
-				`/static/plugins/calendar/js/calendar_daycard.js`,
 				`data-dc-rows`, `data-dc-empty`, `data-dc-foot`, `data-dc-box`,
 			} {
 				if !strings.Contains(body, want) {
@@ -662,12 +673,79 @@ func TestDayCard_MountIsPresentForEveryRoleAndAbsentWithoutAPayload(t *testing.T
 	body := renderBench(t, bare)
 	for _, bad := range []string{
 		`data-cal-daycard`, `/static/css/calendar-daycard.css`,
-		`/static/plugins/calendar/js/calendar_daycard.js`,
 	} {
 		if strings.Contains(body, bad) {
 			t.Errorf("a Bench with no Block still emits %q — there is no day to open on", bad)
 		}
 	}
+}
+
+// TestBenchPageMountsNoScriptInsideTheSwappedRegion is the durable form of the
+// hotfix.
+//
+// THE DEFECT IN ONE SENTENCE: a <script src> anywhere in the Bench page body is
+// inside <main id="main-content">, because that is where the App layout puts
+// {children...}; every sidebar link is hx-boost="true"
+// hx-select="#main-content" hx-swap="innerHTML"; and with
+// htmx.config.allowScriptTags false (boot.js) htmx's makeFragment does not skip
+// those tags, it REMOVES them. So a page-side script is present on a direct load
+// and absent on a boosted one, and nothing in the rendered page looks different,
+// because the stylesheets in the same region survive.
+//
+// THE SCOPE IS THE SWAPPED REGION, not the document. The shell's own ~59 script
+// tags sit outside <main> and are exactly what a boosted navigation is designed
+// to keep; counting those would be measuring the layout. What must be zero is
+// scripts INSIDE #main-content, for every role and with and without a day-card
+// payload. Anything the Bench needs goes through the plugin body-script registry
+// (internal/app/routes.go → layouts.SetPluginBodyScripts → base.templ), which
+// emits after {children...}.
+//
+// This test renders with an empty context, so the registry contributes nothing
+// here by construction — which is exactly why the registry's own contents are
+// pinned separately, in TestBenchDriversShipFromThePluginBodyScriptRegistry.
+func TestBenchPageMountsNoScriptInsideTheSwappedRegion(t *testing.T) {
+	bare := benchFxData(true, true)
+	bare.Primary, bare.RealWorld, bare.DayCardJSON = nil, nil, ""
+	empty := benchFxData(true, true)
+	empty.CalendarCount = 0
+	for name, data := range map[string]BenchData{
+		"owner":       benchFxData(true, true),
+		"player":      benchFxData(false, false),
+		"no-block":    bare,
+		"owner-empty": empty,
+	} {
+		swapped := benchSwappedRegion(t, renderBench(t, data))
+		if n := strings.Count(swapped, "<script"); n != 0 {
+			t.Errorf("%s: the Bench page emits %d <script> tag(s) inside #main-content; htmx DELETES "+
+				"every one of them on a boosted sidebar navigation (allowScriptTags=false), so the "+
+				"surface wires on a direct load and silently does not through the sidebar. Contribute "+
+				"it to the plugin body-script registry in internal/app/routes.go instead.", name, n)
+		}
+	}
+}
+
+// benchSwappedRegion returns the substring htmx would keep on a boosted sidebar
+// navigation: the contents of <main id="main-content">. Both bounds are checked
+// before they are used, so a layout rename fails loudly here instead of silently
+// reducing every caller to an assertion over the empty string (COMMON §3).
+func benchSwappedRegion(t *testing.T, page string) string {
+	t.Helper()
+	const marker = `id="main-content"`
+	at := strings.Index(page, marker)
+	if at < 0 {
+		t.Fatalf("no %s in the rendered page — the App layout's swap target was renamed and every "+
+			"boosted-navigation assertion in this file just stopped reading anything", marker)
+	}
+	open := strings.Index(page[at:], ">")
+	if open < 0 {
+		t.Fatal("unterminated <main> open tag in the rendered page")
+	}
+	rest := page[at+open+1:]
+	end := strings.Index(rest, "</main>")
+	if end < 0 {
+		t.Fatal("no </main> in the rendered page")
+	}
+	return rest[:end]
 }
 
 // TestDayCard_APlayerBenchCarriesNoAuthoringDOMAndNoHonestyChip.
