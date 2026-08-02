@@ -338,3 +338,538 @@
     transition-duration: var(--t-fast);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §LAYOUT — the shell, the nine stations, the preview column.
+
+   Nothing below moves. Every rule here is geometry, colour and type; the entire
+   motion budget is the block above and it is the only place a transition or a
+   keyframe may appear.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.cal-builder .wz-phead { margin: 4px 0 18px; }
+.cal-builder .wz-phead h1 {
+  margin: 0; font-weight: 700; font-size: 26px; line-height: 1.15; letter-spacing: -.02em;
+}
+.cal-builder .wz-phead p {
+  margin: 4px 0 0; font-weight: 500; font-size: 13px; line-height: 1.4;
+  color: var(--text-secondary); max-width: 88ch;
+}
+
+.cal-builder .wz-wiz { display: block; margin: 0 0 34px; }
+.cal-builder .wz-shell {
+  background: var(--surface-card); border: 1px solid var(--rule-structural);
+  border-radius: var(--r-panel);
+  /* clip, not hidden: it keeps the rounded corner and the containment but does
+     NOT create a scroll container, so the narrow rail strip can stick and any
+     residual overflow reaches the document, where the gate measures it.
+     Truncation that does not announce itself is worse than a scrollbar. */
+  overflow: clip;
+}
+
+.cal-builder .wz-top {
+  display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px;
+  border-bottom: 1px solid var(--rule-structural);
+}
+.cal-builder .wz-t b { display: block; font-weight: 700; font-size: 14px; line-height: 1.2; }
+.cal-builder .wz-t small {
+  font-weight: 500; font-size: 10.5px; line-height: 1.2; color: var(--text-muted);
+}
+.cal-builder .wz-sp { flex: 1; }
+.cal-builder .wz-stepnow {
+  font-weight: 650; font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-secondary); white-space: nowrap;
+}
+.cal-builder .wz-body {
+  display: grid; grid-template-columns: 186px minmax(380px, 442px) minmax(0, 1fr);
+}
+
+/* ── the rail ─────────────────────────────────────────────────────────────── */
+.cal-builder .wz-rail {
+  border-right: 1px solid var(--rule-hairline); padding: 8px 6px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.cal-builder .wz-step {
+  display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 7px; width: 100%;
+  border: 0; background: none; cursor: pointer; text-align: left;
+  border-radius: var(--r-ctl); font-weight: 600; font-size: 12px;
+  color: var(--text-secondary); position: relative; font-family: inherit;
+}
+.cal-builder .wz-step:hover {
+  background: color-mix(in oklch, transparent 92%, var(--accent)); color: var(--text-primary);
+}
+.cal-builder .wz-nbox {
+  width: 20px; height: 20px; border-radius: var(--r-chip); flex: none;
+  display: grid; place-items: center; font-weight: 650; font-size: 10px; line-height: 1;
+  border: 1px solid var(--rule-structural); color: var(--text-muted);
+}
+.cal-builder .wz-step.wz-done { color: var(--text-body); }
+.cal-builder .wz-step.wz-done .wz-nbox {
+  border-color: color-mix(in oklch, var(--ok) 45%, transparent); color: var(--ok);
+}
+.cal-builder .wz-step.wz-cur {
+  color: var(--accent); background: color-mix(in oklch, transparent 96%, var(--accent));
+}
+.cal-builder .wz-step.wz-cur .wz-nbox { border-color: transparent; color: var(--accent); }
+/* the current ring is a pseudo so the latch can close it centre→corners */
+.cal-builder .wz-step.wz-cur::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  border-radius: var(--r-ctl); box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cal-builder .wz-step.wz-todo .wz-nbox { color: var(--text-muted); }
+/* the hairline that separates "choose a shape" from "bend it" */
+.cal-builder .wz-rulegap { height: 1px; background: var(--rule-hairline); margin: 6px 4px; }
+
+/* ── the step panel ───────────────────────────────────────────────────────── */
+.cal-builder .wz-panel {
+  padding: 16px 18px 14px; display: flex; flex-direction: column; min-height: 560px;
+  border-right: 1px solid var(--rule-hairline);
+}
+.cal-builder .wz-ph { margin-bottom: 2px; font-weight: 700; font-size: 16px; line-height: 1.25; }
+.cal-builder .wz-ps {
+  font-weight: 500; font-size: 12px; line-height: 1.5; color: var(--text-secondary);
+  margin: 0 0 14px; max-width: 56ch;
+}
+.cal-builder .wz-frow {
+  display: flex; align-items: center; gap: 8px; min-height: 36px;
+  border-bottom: 1px solid var(--rule-hairline); padding: 3px 0;
+}
+.cal-builder .wz-frow.wz-wrap { flex-wrap: wrap; row-gap: 6px; }
+.cal-builder .wz-frow:last-of-type { border-bottom: 0; }
+.cal-builder .wz-ix {
+  width: 18px; flex: none; font-weight: 650; font-size: 11px; color: var(--text-muted);
+}
+.cal-builder .wz-grow { flex: 1; min-width: 0; }
+.cal-builder .wz-lbl {
+  font-weight: 500; font-size: 11px; color: var(--text-muted); white-space: nowrap;
+}
+.cal-builder .wz-lbl.wz-wrapline {
+  white-space: normal; line-height: 1.4; color: var(--text-body);
+}
+.cal-builder .wz-mono {
+  font-family: "JetBrains Mono", "DejaVu Sans Mono", ui-monospace, monospace;
+}
+/* a label and its value wrap AS A UNIT once the row wraps. At desktop it is
+   display:contents — it generates no box, so every child stays a direct flex
+   item of the row and the wide geometry is unchanged. */
+.cal-builder .wz-pr { display: contents; }
+.cal-builder .wz-field {
+  display: inline-flex; align-items: center; height: 28px; padding: 0 9px;
+  border: 1px solid var(--rule-structural); border-radius: var(--r-ctl);
+  background: var(--surface-card); font-weight: 600; font-size: 12px; line-height: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-builder .wz-field.wz-grow { flex: 1; justify-content: flex-start; }
+.cal-builder .wz-in {
+  border: 0; background: none; padding: 0; margin: 0; width: 100%; min-width: 0;
+  font-family: inherit; font-weight: 600; font-size: 12px; line-height: 1;
+  color: var(--text-primary);
+}
+.cal-builder .wz-in:focus { outline: none; }
+.cal-builder .wz-field:focus-within { border-color: var(--accent); }
+.cal-builder .wz-in.wz-num { width: 5ch; text-align: right; }
+.cal-builder .wz-u { font-weight: 500; font-size: 10.5px; color: var(--text-muted); margin-left: 5px; }
+/* A FAULT BADGE HANGS OUT OF FLOW INSIDE THE FIELD IT DESCRIBES (canon A8
+   L-M1): the row's track is identical with and without it, so a data-driven
+   change moves nothing. */
+.cal-builder .wz-field.wz-flagged { position: relative; padding-right: 62px; }
+.cal-builder .wz-flag { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); }
+
+.cal-builder .wz-stepper {
+  display: inline-flex; align-items: center; height: 28px; flex: none;
+  border: 1px solid var(--rule-structural); border-radius: var(--r-ctl);
+  overflow: hidden; background: var(--surface-card);
+}
+.cal-builder .wz-stepper button {
+  width: 26px; height: 100%; display: grid; place-items: center; border: 0;
+  background: none; cursor: pointer; font-family: inherit;
+  font-weight: 600; font-size: 13px; color: var(--text-secondary);
+}
+.cal-builder .wz-stepper button:hover {
+  background: color-mix(in oklch, transparent 90%, var(--accent)); color: var(--text-primary);
+}
+.cal-builder .wz-stepper b {
+  min-width: 34px; text-align: center; font-weight: 650; font-size: 12.5px;
+  border-left: 1px solid var(--rule-hairline); border-right: 1px solid var(--rule-hairline);
+  height: 100%; display: grid; place-items: center; padding: 0 4px;
+}
+.cal-builder .wz-stepper.wz-big { height: 40px; }
+.cal-builder .wz-stepper.wz-big button { width: 36px; font-size: 16px; }
+.cal-builder .wz-stepper.wz-big b { min-width: 52px; font-size: 18px; }
+
+.cal-builder .wz-note {
+  display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; padding: 8px 10px;
+  border-radius: var(--r-ctl); background: var(--surface-inset);
+  font-weight: 500; font-size: 11.5px; line-height: 1.5; color: var(--text-body);
+}
+.cal-builder .wz-g { flex: none; font-size: 12px; color: var(--text-secondary); }
+.cal-builder .wz-sum { font-weight: 500; font-size: 11.5px; color: var(--text-muted); padding: 8px 0 0; }
+.cal-builder .wz-sum b { color: var(--text-body); font-weight: 650; }
+.cal-builder .wz-foot { margin-top: auto; padding-top: 14px; display: flex; align-items: center; gap: 8px; }
+
+.cal-builder .wz-chipswrap { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 2px; }
+.cal-builder .wz-wdchip {
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px;
+  border: 1px solid var(--rule-structural); border-radius: var(--r-ctl);
+  background: var(--surface-card); font-weight: 600; font-size: 11.5px;
+}
+.cal-builder .wz-wdchip i { font-style: normal; font-weight: 650; font-size: 9px; color: var(--text-muted); }
+.cal-builder .wz-in.wz-chipin { width: 6ch; }
+/* the half-mark: the stronger rule the grid draws on the split column */
+.cal-builder .wz-wdchip.wz-halfmark {
+  border-right-width: 2px; border-right-color: var(--rule-structural-strong);
+}
+
+/* ── controls ─────────────────────────────────────────────────────────────── */
+.cal-builder .wz-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px;
+  font-family: inherit; font-weight: 600; font-size: 12px; line-height: 1; cursor: pointer;
+  border: 1px solid var(--rule-structural); border-radius: var(--r-ctl);
+  background: var(--surface-card); color: var(--text-body); white-space: nowrap;
+  text-decoration: none;
+}
+.cal-builder .wz-btn:hover {
+  background: color-mix(in oklch, var(--surface-card) 94%, var(--text-primary));
+  border-color: var(--rule-structural-strong); color: var(--text-primary);
+}
+.cal-builder .wz-btn[disabled] { color: var(--text-muted); cursor: default; }
+.cal-builder .wz-btn[disabled]:hover { background: var(--surface-card); border-color: var(--rule-structural); color: var(--text-muted); }
+.cal-builder .wz-btn.wz-ghost { border-color: transparent; background: transparent; color: var(--text-secondary); }
+.cal-builder .wz-btn.wz-ghost:hover {
+  background: color-mix(in oklch, transparent 92%, var(--accent));
+  border-color: transparent; color: var(--text-primary);
+}
+.cal-builder .wz-btn.wz-fill {
+  background: var(--accent-action); border-color: transparent;
+  color: var(--accent-action-ink); font-weight: 700;
+}
+.cal-builder .wz-btn.wz-fill:hover {
+  background: color-mix(in oklch, var(--accent-action) 90%, black);
+  border-color: transparent; color: var(--accent-action-ink);
+}
+.cal-builder .wz-btn.wz-sm { height: 26px; padding: 0 8px; font-size: 11px; }
+.cal-builder .wz-icb {
+  width: 28px; height: 28px; display: grid; place-items: center; border: 0; background: none;
+  cursor: pointer; border-radius: var(--r-ctl); color: var(--text-secondary); font-size: 13px;
+  text-decoration: none; font-family: inherit;
+}
+.cal-builder .wz-wash:hover { background: color-mix(in oklch, transparent 94%, var(--text-primary)); }
+.cal-builder .wz-wash:active { background: color-mix(in oklch, transparent 88%, var(--text-primary)); }
+.cal-builder :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── THE FOUR BADGE CLASSES, FOUR JOBS ────────────────────────────────────
+   .wz-need is the SIGNED needs-backend chip and it appears ONLY where the text
+   is literally "needs backend" — genuine backend gaps, nothing else.
+   .wz-fact is NEW on this surface and exists precisely so .wz-need is not
+   diluted into a fourth grey chip meaning a third thing: it is the neutral
+   state readout, with AA-passing ink.
+   .wz-warn wants the author's hand. .wz-ok is verified. */
+.cal-builder .wz-badge {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px;
+  font-weight: 650; font-size: 10px; line-height: 1.3; letter-spacing: .04em;
+  text-transform: uppercase; border-radius: var(--r-badge);
+  border: 1px solid transparent; white-space: nowrap; flex: none;
+}
+.cal-builder .wz-badge.wz-warn {
+  border-color: color-mix(in oklch, var(--warn) 45%, transparent); color: var(--warn);
+}
+.cal-builder .wz-badge.wz-ok {
+  border-color: color-mix(in oklch, var(--ok) 45%, transparent); color: var(--ok);
+}
+/* THE INK BELOW IS SUB-AA AND IS DELIBERATELY NOT PATCHED HERE. It is inherited
+   from the signed contract and belongs to an upstream token pass WITH A
+   RE-SIGN; patching it per-file forks the token set. W-H is the FOURTH consumer
+   to measure it (2.59:1 light / 4.15:1 dark) and the fourth to book it rather
+   than fix it. The same applies to the light-mode selection tint's rose drift,
+   which is why .wz-sel below uses the `transparent 96%` form the signed
+   .layerrow already uses wherever it can. */
+.cal-builder .wz-badge.wz-need { border-color: var(--rule-structural); color: var(--text-muted); }
+.cal-builder .wz-badge.wz-fact { border-color: var(--rule-structural); color: var(--text-secondary); }
+
+/* ── identity: hue · pattern · letter, and colour is never the only channel ── */
+.cal-builder .wz-idtriple { display: inline-flex; align-items: center; gap: 6px; }
+.cal-builder .wz-swatch {
+  width: 10px; height: 10px; border-radius: var(--r-full); flex: none;
+  background-color: var(--axis);
+}
+.cal-builder .wz-swatch.wz-hollow {
+  background: transparent; box-shadow: inset 0 0 0 1px var(--rule-structural-strong);
+}
+.cal-builder .wz-ulseg {
+  --dash: 100%; --gap: 0px; background-color: var(--axis);
+  height: 3px; width: 26px; border-radius: var(--r-full); flex: none;
+}
+.cal-builder .wz-ulseg.wz-p2, .cal-builder .wz-ulseg.wz-p3, .cal-builder .wz-ulseg.wz-p4,
+.cal-builder .wz-ulseg.wz-p6, .cal-builder .wz-ulseg.wz-p8 {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(to right, var(--axis) 0 var(--dash),
+    transparent var(--dash) calc(var(--dash) + var(--gap)));
+}
+.cal-builder .wz-p2 { --dash: 4px; --gap: 2px; }
+.cal-builder .wz-p3 { --dash: 1px; --gap: 2px; }
+.cal-builder .wz-p4 { --dash: 2px; --gap: 2px; }
+.cal-builder .wz-p6 { --dash: 6px; --gap: 2px; }
+.cal-builder .wz-p8 { --dash: 1px; --gap: 1px; }
+.cal-builder .wz-ulseg.wz-p5 {
+  background-color: transparent;
+  background-image: linear-gradient(to bottom, var(--axis) 0 1px, transparent 1px 2px, var(--axis) 2px 3px);
+}
+.cal-builder .wz-ulseg.wz-p7 {
+  background-color: transparent;
+  background-image: linear-gradient(to right, var(--axis) 0 calc(50% - .5px),
+    transparent calc(50% - .5px) calc(50% + .5px), var(--axis) calc(50% + .5px) 100%);
+}
+.cal-builder .wz-lbx {
+  width: 18px; height: 18px; border-radius: var(--r-chip); flex: none;
+  display: grid; place-items: center; font-weight: 700; font-size: 10px; line-height: 1;
+  color: var(--axis); border: 1px solid color-mix(in oklch, var(--axis) 55%, transparent);
+}
+
+/* ── the preset gallery ───────────────────────────────────────────────────── */
+.cal-builder .wz-pgal {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 4px;
+}
+.cal-builder .wz-pcard {
+  position: relative; border: 1px solid var(--rule-structural);
+  border-radius: var(--r-card); background: var(--surface-card); padding: 10px 11px;
+  display: flex; flex-direction: column; gap: 5px; box-shadow: none; width: 100%;
+  cursor: pointer; text-align: left; font-family: inherit;
+}
+.cal-builder .wz-pcard:hover, .cal-builder .wz-icard:hover {
+  background: color-mix(in oklch, var(--surface-card) 95%, var(--text-primary));
+  box-shadow: 0 0 0 .5px var(--rule-structural-strong), var(--elev-1);
+}
+.cal-builder .wz-pcard:active { box-shadow: none; }
+/* ONE RING, NOT TWO: the ::after pseudo IS the selection ring (it also hosts the
+   latch), and the element border steps aside rather than doubling.
+   SELECTION IS IDENTITY, NOT ELEVATION — accent border + tint, no shadow. */
+.cal-builder .wz-pcard.wz-sel, .cal-builder .wz-pcard.wz-sel:hover {
+  border-color: transparent;
+  background: color-mix(in oklch, transparent 96%, var(--accent));
+  box-shadow: none;
+}
+.cal-builder .wz-pcard.wz-sel::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  border-radius: var(--r-card); box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.cal-builder .wz-hd { display: flex; align-items: center; gap: 7px; }
+.cal-builder .wz-hd b { font-weight: 650; font-size: 13px; line-height: 1.25; flex: 1; min-width: 0; }
+.cal-builder .wz-ds { font-weight: 500; font-size: 11px; line-height: 1.45; color: var(--text-secondary); }
+.cal-builder .wz-mt {
+  font-weight: 500; font-size: 10.5px; line-height: 1.4; color: var(--text-muted); margin-top: auto;
+}
+
+.cal-builder .wz-impdoor {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 10px 12px;
+  border: 1px solid var(--rule-structural); border-radius: var(--r-card);
+  background: var(--surface-page);
+}
+.cal-builder .wz-nm { display: block; font-weight: 650; font-size: 12.5px; line-height: 1.3; }
+.cal-builder .wz-dt { display: block; font-weight: 500; font-size: 10.5px; line-height: 1.35; color: var(--text-muted); }
+/* a nowrap button must opt back out of the global min-width:0 or it clips
+   mid-word under pressure — the text block wraps instead */
+.cal-builder .wz-impdoor .wz-btn { flex: none; }
+
+/* ── the importer ─────────────────────────────────────────────────────────── */
+.cal-builder .wz-igrid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px;
+}
+.cal-builder .wz-icard {
+  border: 1px solid var(--rule-structural); border-radius: var(--r-card);
+  background: var(--surface-card); padding: 9px 10px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.cal-builder .wz-icard b { font-weight: 650; font-size: 12.5px; line-height: 1.3; }
+/* A SOLID STRUCTURAL BORDER ON INSET SURFACE. The signed contract declares the
+   skyband "the ONE dashed idiom in the entire product", so a dashed drop zone
+   would be the second. */
+.cal-builder .wz-dropz {
+  display: grid; place-content: center; text-align: center; gap: 2px; padding: 10px;
+  border: 1px solid var(--rule-structural); border-radius: var(--r-card);
+  background: var(--surface-inset); min-height: 74px; cursor: pointer;
+}
+.cal-builder .wz-dropz .wz-a { font-weight: 650; font-size: 12px; line-height: 1.3; }
+.cal-builder .wz-dropz .wz-b { font-weight: 500; font-size: 11px; line-height: 1.4; color: var(--text-muted); }
+.cal-builder .wz-file { display: block; margin: 6px auto 0; font-size: 11px; max-width: 100%; }
+.cal-builder .wz-maprow {
+  display: flex; align-items: center; gap: 8px; min-height: 30px;
+  border-bottom: 1px solid var(--rule-hairline); font-weight: 600; font-size: 12px;
+}
+.cal-builder .wz-maprow:last-child { border-bottom: 0; }
+.cal-builder .wz-maprow .wz-k { flex: 1; min-width: 0; font-weight: 500; color: var(--text-body); }
+.cal-builder .wz-maprow .wz-v { font-weight: 600; color: var(--text-primary); }
+
+/* ── the live preview column ──────────────────────────────────────────────── */
+.cal-builder .wz-pv {
+  padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--surface-card);
+}
+.cal-builder .wz-pvhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cal-builder .wz-cap {
+  font-weight: 650; font-size: 10px; line-height: 1.4; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-secondary);
+}
+.cal-builder .wz-pvsub {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-weight: 500; font-size: 11px; color: var(--text-muted);
+}
+.cal-builder .wz-anchor {
+  display: flex; align-items: center; gap: 10px; padding: 8px 11px;
+  border: 1px solid var(--rule-structural); border-radius: var(--r-ctl);
+  background: var(--surface-inset);
+}
+.cal-builder .wz-iw { font-weight: 650; font-size: 14px; line-height: 1.2; white-space: nowrap; }
+/* THE FAULT STATE — where the date would go, the surface says why it cannot.
+   The Bench's warnrow idiom: a 3px warn rail, a warn headline, a plain cause. */
+.cal-builder .wz-fault {
+  display: flex; align-items: center; gap: 10px; padding: 8px 11px 8px 14px;
+  border: 1px solid color-mix(in oklch, var(--warn) 35%, var(--rule-structural));
+  border-radius: var(--r-ctl); position: relative;
+  background: color-mix(in oklch, var(--surface-card) 94%, var(--warn));
+}
+.cal-builder .wz-fault::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  border-radius: var(--r-ctl) 0 0 var(--r-ctl); background: var(--warn);
+}
+.cal-builder .wz-fh { display: block; font-weight: 650; font-size: 13px; line-height: 1.3; color: var(--warn); }
+.cal-builder .wz-why { display: block; font-weight: 500; font-size: 11px; line-height: 1.4; color: var(--text-body); }
+.cal-builder .wz-fault .wz-btn { flex: none; }
+
+.cal-builder .wz-pvnav { display: flex; align-items: center; gap: 8px; }
+.cal-builder .wz-mnm { font-weight: 650; font-size: 13px; line-height: 1.2; min-width: 120px; }
+.cal-builder .wz-mnm small { font-weight: 500; font-size: 10.5px; color: var(--text-muted); margin-left: 5px; }
+/* the top rule of the month — furniture; it repaints with the whole preview */
+.cal-builder .wz-pvrule { height: 1.5px; background: var(--rule-editorial); border-radius: var(--r-full); }
+
+.cal-builder .wz-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; padding: 2px 1px; margin: 0; }
+.cal-builder .wz-stats dt { font-weight: 500; font-size: 11px; line-height: 1.5; color: var(--text-muted); }
+.cal-builder .wz-stats dd { margin: 0; font-weight: 600; font-size: 11px; line-height: 1.5; }
+.cal-builder .wz-stats.wz-dl { gap: 6px 12px; align-items: center; }
+/* an unresolvable number must never print as a confident one */
+.cal-builder .wz-warnink { color: var(--warn); font-weight: 650; }
+.cal-builder .wz-pvfoot {
+  margin-top: auto; padding-top: 8px; border-top: 1px solid var(--rule-hairline);
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 500; font-size: 11px; color: var(--text-secondary);
+}
+.cal-builder .wz-turns { display: inline-flex; align-items: flex-end; gap: 2px; height: 5px; }
+/* no radius declared: 0 is not on the closed scale, and 2px would erase a 1px mark */
+.cal-builder .wz-skyturn { display: inline-block; width: 4px; background: var(--rule-structural-strong); }
+.cal-builder .wz-skyturn.wz-full { height: 4px; }
+.cal-builder .wz-skyturn.wz-new { height: 1px; }
+
+@media (max-width: 1100px) {
+  .cal-builder .wz-body { grid-template-columns: 170px minmax(320px, 1fr); }
+  .cal-builder .wz-pv { grid-column: 1 / -1; border-top: 1px solid var(--rule-structural); }
+  .cal-builder .wz-pgal, .cal-builder .wz-igrid { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE NARROW TREATMENT — 390px. [WZ-14] SIGNED AS MODIFIED: the mobile pass was
+   DRAWN rather than decided by silence, and the fidelity gate extends to
+   measured zero horizontal scroll and a 24px hit-area floor across 390–1440.
+
+   THE ARITHMETIC, stated once:
+     390 host → 16px gutter each side → 358 page
+     358 → 1px shell border each side → 356 shell interior
+     356 → 10px panel padding each side → 336 preview host
+     sizeClass(336) = std (the signed threshold is ≥300) → THE PREVIEW KEEPS ITS
+       DESKTOP RENDERING. No phone-specific month grid is invented; the Block's
+       own std tier still fits, and the Block chooses its tier by container
+       query, never by anything this sheet says.
+
+   THE RAIL BECOMES A STICKY HORIZONTAL STRIP rather than a disclosure: a
+   stepper's whole job is orientation and a collapsed disclosure destroys
+   exactly that. It is the /schedule scroller idiom — hidden scrollbar, snap
+   points, sticky under the page chrome — so the STRIP scrolls and the DOCUMENT
+   does not.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .cal-builder .wz-phead h1 { font-size: 22px; }
+  .cal-builder .wz-phead p { font-size: 12px; max-width: none; }
+
+  .cal-builder .wz-top { min-height: 48px; padding: 8px 10px; flex-wrap: wrap; row-gap: 6px; }
+  .cal-builder .wz-t { flex: 1 1 100%; }
+  .cal-builder .wz-t small { white-space: normal; line-height: 1.35; display: block; }
+  .cal-builder .wz-body { grid-template-columns: minmax(0, 1fr); }
+
+  .cal-builder .wz-rail {
+    flex-direction: row; align-items: center; gap: 4px; padding: 7px 8px;
+    border-right: 0; border-bottom: 1px solid var(--rule-hairline);
+    overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity;
+    position: sticky; top: 0; z-index: 20; background: var(--surface-card);
+  }
+  .cal-builder .wz-rail::-webkit-scrollbar { display: none; }
+  .cal-builder .wz-step { width: auto; flex: none; padding: 0 9px; white-space: nowrap; scroll-snap-align: start; }
+  /* the column rule becomes a row rule — the same hairline, turned 90° */
+  .cal-builder .wz-rulegap { width: 1px; height: 18px; margin: 0 3px; flex: none; }
+
+  .cal-builder .wz-panel {
+    min-height: 0; padding: 12px 10px; border-right: 0;
+    border-bottom: 1px solid var(--rule-hairline);
+  }
+  .cal-builder .wz-ph { font-size: 15px; }
+  .cal-builder .wz-ps { font-size: 11.5px; max-width: none; margin-bottom: 10px; }
+  /* rows wrap; a label and its value wrap TOGETHER, never apart */
+  .cal-builder .wz-frow { flex-wrap: wrap; row-gap: 6px; padding: 6px 0; min-height: 40px; }
+  .cal-builder .wz-pr { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .cal-builder .wz-field.wz-grow { flex: 1 1 130px; }
+  .cal-builder .wz-lbl { white-space: normal; }
+  /* a sentence that follows a status chip wraps IN PLACE beside it rather than
+     being pushed to its own line — otherwise Review's longest row strands its
+     badge alone and the column reads as four passes and one different thing */
+  .cal-builder .wz-badge + .wz-lbl { flex: 1 1 0; min-width: 0; }
+  .cal-builder .wz-sum, .cal-builder .wz-note { font-size: 11px; }
+
+  /* THE 24px FLOOR. Every value below is a HIT AREA, not a printed box. */
+  .cal-builder .wz-icb { width: 32px; height: 32px; }
+  .cal-builder .wz-btn { height: 34px; }
+  .cal-builder .wz-btn.wz-sm { height: 30px; padding: 0 10px; }
+  .cal-builder .wz-stepper { height: 32px; }
+  .cal-builder .wz-stepper button { width: 32px; }
+  .cal-builder .wz-stepper b { min-width: 40px; font-size: 13px; }
+  .cal-builder .wz-stepper.wz-big { height: 44px; }
+  .cal-builder .wz-stepper.wz-big button { width: 44px; font-size: 17px; }
+  .cal-builder .wz-stepper.wz-big b { min-width: 56px; }
+  .cal-builder .wz-wdchip { height: 32px; }
+
+  /* the house full-width stack. DOM order is kept, which lands the primary
+     action at the bottom edge — where the thumb is. */
+  .cal-builder .wz-foot { flex-direction: column; align-items: stretch; gap: 6px; padding-top: 12px; }
+  .cal-builder .wz-foot .wz-sp { display: none; }
+  .cal-builder .wz-foot .wz-btn { width: 100%; height: 40px; justify-content: center; }
+  /* a full-width ghost with centred text reads as a caption, not a control — at
+     this width the back step gets its boundary back. Colour is unchanged. */
+  .cal-builder .wz-foot .wz-btn.wz-ghost { border-color: var(--rule-structural); }
+  .cal-builder .wz-foot .wz-badge { align-self: flex-start; }
+
+  .cal-builder .wz-pgal { gap: 8px; }
+  .cal-builder .wz-pcard { padding: 11px 11px 10px; gap: 6px; }
+  .cal-builder .wz-hd { flex-wrap: wrap; row-gap: 4px; }
+  .cal-builder .wz-hd b { flex: 1 1 100%; font-size: 13.5px; }
+  .cal-builder .wz-ds, .cal-builder .wz-mt { font-size: 11px; }
+  .cal-builder .wz-impdoor { flex-wrap: wrap; row-gap: 8px; padding: 10px; }
+  .cal-builder .wz-impdoor .wz-sp { display: none; }
+  .cal-builder .wz-impdoor .wz-btn { width: 100%; justify-content: center; height: 38px; }
+
+  .cal-builder .wz-igrid { gap: 8px; }
+  .cal-builder .wz-dropz { min-height: 88px; }
+  /* the long left phrase takes its own line so the station and its verdict stay
+     together on the second — a mapping row is a sentence, not a table */
+  .cal-builder .wz-maprow { flex-wrap: wrap; row-gap: 2px; padding: 7px 0; min-height: 40px; }
+  .cal-builder .wz-maprow .wz-k { flex: 1 1 100%; }
+
+  .cal-builder .wz-pv { padding: 12px 10px 10px; }
+  .cal-builder .wz-pvsub { font-size: 10.5px; }
+  /* the anchor's label row carries the chip; the resolved date gets the full
+     measure below it rather than the chip stranding on a third line */
+  .cal-builder .wz-anchor { flex-wrap: wrap; row-gap: 5px; padding: 8px 10px; }
+  .cal-builder .wz-anchor .wz-sp { display: none; }
+  .cal-builder .wz-iw { white-space: normal; font-size: 13px; line-height: 1.3; flex: 1 1 100%; }
+  .cal-builder .wz-fault { flex-wrap: wrap; row-gap: 8px; }
+  .cal-builder .wz-fault .wz-btn { width: 100%; justify-content: center; height: 36px; }
+  .cal-builder .wz-pvnav .wz-mnm { min-width: 0; flex: 1 1 auto; }
+  .cal-builder .wz-stats { grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; }
+  .cal-builder .wz-stats dd { overflow-wrap: anywhere; }
+  .cal-builder .wz-pvfoot { font-size: 10.5px; line-height: 1.45; }
+}

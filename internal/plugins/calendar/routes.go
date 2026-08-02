@@ -116,6 +116,35 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.POST("/calendars", h.CreateCalendar, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.POST("/calendars/import-setup", h.ImportFromSetupAPI, campaigns.RequireRole(campaigns.RoleOwner))
 
+	// THE BUILDER WIZARD — the designed front door (C-CALV4-WIZARD-P13, W-H).
+	// THREE routes and no fourth; §§7.2-7.4 of the dispatch are the security
+	// review for each and are restated verbatim in builder_handler.go's header.
+	//
+	// LITERAL PATHS, ALWAYS. wire_contract_test.go SKIPS AND LOGS a route
+	// registered through a variable, so a non-literal path is silently absent
+	// from the snapshot — an auth surface outside the oracle.
+	//
+	// Owner floor, matching all three creation doors above, and it is what
+	// carries the needs-backend audience rule on this surface: every viewer of
+	// the builder is an owner BY CONSTRUCTION, so the GM-facing chips it renders
+	// can never reach a player. Lowering this floor means re-auditing every chip
+	// in builder.templ in the same commit.
+	//
+	// Route 2 does DOUBLE DUTY on purpose: it accepts either a draft structure
+	// body (the live preview) or an uploaded file (the importer's preview), and
+	// in the file case runs the same DetectAndParse and renders the same
+	// fragment. That is what closes the :calId gap — ImportPreviewAPI below is
+	// mounted under /calendars/:calId/import/preview and therefore requires a
+	// calendar that does not exist yet — WITHOUT a fourth route.
+	//
+	// Route 3 is justified rather than assumed: POST /calendars above reads only
+	// mode/name/epoch_name/start_year and cannot carry months, weekdays, moons,
+	// seasons or eras. Both it and /calendars/import-setup stay live under any
+	// answer — external links, the Foundry flow and V2's empty state reach them.
+	cg.GET("/calendars/builder", h.ShowBuilder, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/builder/preview", h.BuilderPreviewAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	cg.POST("/calendars/builder", h.BuilderCreateAPI, campaigns.RequireRole(campaigns.RoleOwner))
+
 	// Dashboard widget quick-add: creates event on default calendar (no calId).
 	cg.POST("/calendars/events", h.CreateEventAPI, campaigns.RequireRole(campaigns.RoleScribe))
 

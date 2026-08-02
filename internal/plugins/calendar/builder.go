@@ -50,6 +50,7 @@ package calendar
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -694,4 +695,840 @@ func builderCreateBlocked(d *builderDraft) string {
 		return "this calendar has no era — the wizard holds Create until one is added"
 	}
 	return ""
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE VIEW MODEL
+//
+// Everything below is what builder.templ consumes. It is built in the handler
+// and the template decides nothing — the wizard's honesty states are FACTS
+// computed here, so a template branch can never be the only thing standing
+// between a player and a chip, or between an author and a fault.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// BuilderViewData is one render of the wizard.
+type BuilderViewData struct {
+	CampaignID string
+	CSRFToken  string
+
+	Draft    *builderDraft
+	Step     int
+	Importer bool
+
+	// PreviewMonth is the PAGER's cursor, not the calendar's current month.
+	PreviewMonth int
+	Block        calblock.BlockData
+
+	Presets []builderPreset
+	// Identity is the roster entry the draft started from, or the zero value
+	// for a draft the author has bent past recognition.
+	Identity builderPreset
+
+	// Carry is every field the CURRENT station does not render as a visible
+	// control, emitted as hidden inputs so the whole declaration round-trips
+	// through the form. It is what makes "no draft store" work.
+	Carry []builderField
+
+	// Blocked is the reason Create is held, or "".
+	Blocked string
+	// Fault is the wizard's own anchor-bar fault, drawn WHERE THE DATE WOULD
+	// GO. Zero when the declaration resolves.
+	Fault builderFault
+	// Checks is Review's line-by-line verdict.
+	Checks []builderCheck
+	// Stats is the preview column's declaration readout.
+	Stats []builderStat
+
+	// Importer state — the detected file's name and its mapping table. Empty
+	// until something is dropped.
+	Detected string
+	Mapping  []builderMapRow
+}
+
+// builderField is one hidden input.
+type builderField struct{ Name, Value string }
+
+// builderFault is the honesty state drawn where the date would go: a warn rail,
+// a warn headline, a plain-language cause and a jump to the station that fixes
+// it. NEVER a zero, never a dash, never a placeholder.
+type builderFault struct {
+	Headline string
+	Why      string
+	FixStep  string
+	FixLabel string
+}
+
+// builderCheck is one Review line. Kind is ok | warn | need, and `need` is the
+// SIGNED needs-backend chip — reserved for genuine backend gaps and never used
+// as decoration.
+type builderCheck struct {
+	Kind string
+	Text string
+}
+
+// builderStat is one row of the preview column's declaration readout.
+type builderStat struct {
+	Label string
+	Value string
+	// Warn puts the value in warn ink. The Year-length stat uses it while a
+	// month declares 0 days, because an unresolvable number must not print as
+	// a confident one.
+	Warn bool
+	// Need hangs the signed needs-backend chip on the row. Exactly one stat
+	// can carry it — the leap exception clause Chronicle cannot store.
+	Need string
+}
+
+// builderMapRow is one line of the importer's mapping table, which the mockup
+// calls its own honesty mechanism: every fact in the file, the station it
+// lands on, and what happened to it.
+type builderMapRow struct {
+	Fact    string
+	Station string
+	Kind    string // ok | warn | fact
+	Verdict string
+}
+
+// builderStationOwns reports whether the station at `step` renders this field
+// family as a VISIBLE control. Everything it does not own is carried hidden.
+//
+// The split exists because there is no draft store: the whole declaration must
+// survive a station change, and it survives by riding the form. A field
+// rendered twice — once visibly and once hidden — would submit twice and break
+// index alignment silently, which is exactly the kind of bug that produces a
+// calendar with the right month count and the wrong month names.
+func builderStationOwns(step int, importer bool, family string) bool {
+	if importer {
+		return false
+	}
+	switch family {
+	case "month-name":
+		return step == 1
+	case "interc-name":
+		return step == 3
+	case "month-list":
+		// EITHER month station emits the WHOLE ordered name list — see the
+		// comment on builderCarryFields for why the split cannot be per-family.
+		return step == 1 || step == 3
+	case "weekday":
+		return step == 2
+	case "leap":
+		return step == 4
+	case "moon":
+		return step == 5
+	case "season":
+		return step == 6
+	case "era":
+		return step == 7
+	case "identity":
+		return step == 8
+	}
+	return false
+}
+
+// builderCarryFields is every field the current station does not show.
+func builderCarryFields(d *builderDraft, step int, importer bool) []builderField {
+	var out []builderField
+	add := func(n, v string) { out = append(out, builderField{Name: n, Value: v}) }
+
+	// Scalars that no station edits as a list.
+	add("preset", d.Preset)
+	add("mode", d.Mode)
+	add("hue", d.Hue)
+	add("pattern", d.Pattern)
+	add("letter", d.Letter)
+	if d.HollowSwatch {
+		add("hollow", "1")
+	}
+	add("leap_note", d.LeapNote)
+	if !builderStationOwns(step, importer, "identity") {
+		add("cal_name", d.Name)
+		add("epoch", d.EpochName)
+		add("year", strconv.Itoa(d.Year))
+		add("tz", d.TimeZone)
+	}
+	// The leap MODULUS is changed by a stepper act, never typed, so it always
+	// rides hidden — exactly like a month's day count. Only the two authored
+	// strings move with the station that owns them.
+	add("leap_every", strconv.Itoa(d.LeapEvery))
+	add("leap_add", strconv.Itoa(d.LeapAdd))
+	if !builderStationOwns(step, importer, "leap") {
+		add("leap_name", d.LeapName)
+		add("leap_after", d.LeapAfter)
+	}
+
+	// Months. Days, the intercalary flag and the leap-day count always ride
+	// hidden — they are changed by a stepper act, never typed — and only the
+	// NAME moves between visible and hidden with the station that owns it.
+	for _, m := range d.Months {
+		add("m_days", strconv.Itoa(m.Days))
+		add("m_leapdays", strconv.Itoa(m.LeapDays))
+		if m.Intercalary {
+			add("m_inter", "1")
+		} else {
+			add("m_inter", "0")
+		}
+	}
+	// THE NAME LIST IS EMITTED WHOLE OR NOT AT ALL, AND THAT IS A BUG FIX WITH
+	// A TEST BEHIND IT. Splitting it per-family — visible names from the owning
+	// station, hidden names from here — concatenates two groups in submission
+	// order rather than interleaving them, so `m_name[i]` stops lining up with
+	// `m_days[i]` and every month silently takes its neighbour's name. The
+	// round-trip test caught exactly that. Either month station therefore emits
+	// the WHOLE ordered list itself (visible for its own family, hidden in place
+	// for the other), and the carry emits it only when neither station is open.
+	if !builderStationOwns(step, importer, "month-list") {
+		for _, m := range d.Months {
+			add("m_name", m.Name)
+		}
+	}
+
+	if !builderStationOwns(step, importer, "weekday") {
+		for _, w := range d.Weekdays {
+			add("wd", w)
+		}
+	}
+	if !builderStationOwns(step, importer, "moon") {
+		for _, m := range d.Moons {
+			add("moon_name", m.Name)
+			add("moon_period", strconv.FormatFloat(m.Period, 'f', -1, 64))
+			add("moon_newat", strconv.FormatFloat(m.NewAt, 'f', -1, 64))
+		}
+	}
+	for _, s := range d.Seasons {
+		// A season's colour is AUTHORED DATA and no station offers a picker in
+		// this wave, so it always rides hidden — as do its bounds, which come
+		// from the format that declared them.
+		add("season_color", s.Color)
+		add("season_cname", s.ColorName)
+		add("season_sm", strconv.Itoa(s.StartMonth))
+		add("season_sd", strconv.Itoa(s.StartDay))
+		add("season_em", strconv.Itoa(s.EndMonth))
+		add("season_ed", strconv.Itoa(s.EndDay))
+		if !builderStationOwns(step, importer, "season") {
+			add("season_name", s.Name)
+		}
+	}
+	for _, e := range d.Eras {
+		add("era_color", e.Color)
+		add("era_cname", e.ColorName)
+		if !builderStationOwns(step, importer, "era") {
+			add("era_name", e.Name)
+			add("era_code", e.Code)
+			add("era_year", strconv.Itoa(e.StartYear))
+		}
+	}
+	return out
+}
+
+// builderMonthIndexes returns the positions of the months a station owns, so
+// the template can walk the ONE ordered list without re-deriving the split.
+func builderMonthIndexes(d *builderDraft, intercalary bool) []int {
+	var out []int
+	for i, m := range d.Months {
+		if m.Intercalary == intercalary {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// builderPrecedingMonth names the month an intercalary day follows. The mockup
+// authors "{name} after {month}"; Chronicle stores the order and nothing else,
+// so the answer is read off the list rather than carried beside it.
+func builderPrecedingMonth(d *builderDraft, idx int) string {
+	for i := idx - 1; i >= 0; i-- {
+		if !d.Months[i].Intercalary {
+			return d.Months[i].Name
+		}
+	}
+	return "the start of the year"
+}
+
+// builderFaultFor is the wizard's own anchor-bar fault.
+//
+// IT IS NOT A SECOND FAULT SYSTEM. blockDateLine's structural family renders
+// inside the Block, unmodified, wherever the CURRENT date cannot resolve. This
+// one answers a different question — "is anything in the declaration broken",
+// which is true even when month 1 is fine and month 3 is not — and it is the
+// wizard's chrome, above the Block, with a jump to the station that fixes it.
+func builderFaultFor(d *builderDraft) builderFault {
+	if bad := builderBrokenMonth(d); bad != nil {
+		name := bad.Name
+		if name == "" {
+			name = "an unnamed month"
+		}
+		return builderFault{
+			Headline: "Cannot resolve a date",
+			Why: fmt.Sprintf("%s declares 0 days, so the year cannot be walked past it. "+
+				"Give it days in Structure, or remove it.", name),
+			FixStep: "structure", FixLabel: "Fix in Structure",
+		}
+	}
+	if len(d.Months) == 0 {
+		return builderFault{
+			Headline: "Cannot resolve a date",
+			Why:      "No months are declared, so there is no year to walk. Add one in Structure.",
+			FixStep:  "structure", FixLabel: "Fix in Structure",
+		}
+	}
+	if len(d.Eras) == 0 {
+		// [WZ-3] SIGNED, and the copy is the ruling. The headline is a claim
+		// about THE WIZARD, never about the model: Chronicle has no
+		// era-relative year numbering and a zero-era calendar resolves its year
+		// perfectly well, so "cannot resolve a year" would be false. The wizard
+		// may decline to CREATE what would read ambiguously; it may not
+		// misdescribe why.
+		return builderFault{
+			Headline: "This calendar has no era — Create waits",
+			Why: "Nothing is wrong with the dates: they resolve. The wizard holds " +
+				"Create until an era exists so the year has a name to read. Add one in Eras.",
+			FixStep: "eras", FixLabel: "Fix in Eras",
+		}
+	}
+	return builderFault{}
+}
+
+// ── paths and small readings the template needs ─────────────────────────────
+//
+// THE PATHS ARE BUILT HERE, NOT IN THE TEMPLATE. A route string assembled in
+// markup is a route string no test can find.
+
+func builderPagePath(campaignID string) string {
+	return fmt.Sprintf("/campaigns/%s/calendars/builder", campaignID)
+}
+
+func builderPreviewPath(campaignID string) string {
+	return fmt.Sprintf("/campaigns/%s/calendars/builder/preview", campaignID)
+}
+
+// builderStepPath is a station's own URL, so a station is bookmarkable and a
+// refresh mid-wizard lands where the author was.
+func builderStepPath(campaignID, step string) string {
+	return fmt.Sprintf("%s?step=%s", builderPagePath(campaignID), step)
+}
+
+// builderStepLabel is the wtop's readout: "Start" at 0, "Step N of 8" after.
+func builderStepLabel(step int, importer bool) string {
+	if importer {
+		return "Importer"
+	}
+	if step <= 0 {
+		return "Start"
+	}
+	return fmt.Sprintf("Step %d of %d · %s", step, len(builderStations)-1, builderStations[step].Name)
+}
+
+// builderRailState is cur | done | todo.
+func builderRailState(i, step int) string {
+	switch {
+	case i == step:
+		return "cur"
+	case i < step:
+		return "done"
+	default:
+		return "todo"
+	}
+}
+
+// builderRailMark is the number box's content: a tick for a station already
+// walked, the index otherwise.
+func builderRailMark(i, step int) string {
+	if i < step {
+		return "✓"
+	}
+	return strconv.Itoa(i)
+}
+
+// builderLadder is the --m-i inline custom property that drives the step
+// panel's delay ladder. It is the ONLY place a row carries an animation
+// position, and the guard asserts the ladder appears in no other prelude.
+func builderLadder(i int) string { return fmt.Sprintf("--m-i:%d", i) }
+
+// builderAxis sets the --axis channel from a CLOSED calendar identity token.
+// An empty hue is Blank's UNCHOSEN identity and falls back to a neutral RULE
+// token — never to --own-none, which is the owner axis and means something
+// else entirely.
+func builderAxis(hue string) string {
+	if strings.TrimSpace(hue) == "" {
+		return "--axis:var(--rule-structural-strong)"
+	}
+	return fmt.Sprintf("--axis:var(--cal-%s)", hue)
+}
+
+// builderSwatchStyle sets a swatch to an AUTHORED colour (Season.Color /
+// Era.Color), which is its own value and never a borrowed axis hue.
+func builderSwatchStyle(colour string) string {
+	if strings.TrimSpace(colour) == "" {
+		return "--axis:var(--rule-structural)"
+	}
+	return fmt.Sprintf("--axis:%s", colour)
+}
+
+// builderNum formats a moon's period or offset without a trailing zero storm.
+func builderNum(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
+
+// builderMonthSummary is the Structure station's running sum, and it is the
+// arithmetic the year is made of rather than a label for it.
+func builderMonthSummary(d *builderDraft) string {
+	months := len(builderMonthIndexes(d, false))
+	if ic := builderIntercalaryDays(d); ic > 0 {
+		return fmt.Sprintf("%d months · %d month days · +%d intercalary = %d days a year",
+			months, builderMonthDays(d), ic, builderYearDays(d))
+	}
+	return fmt.Sprintf("%d months · %d month days = %d days a year",
+		months, builderMonthDays(d), builderYearDays(d))
+}
+
+// builderWeekSummary proves the week's arithmetic against a real month.
+func builderWeekSummary(d *builderDraft) string {
+	week := len(d.Weekdays)
+	if week < 1 || len(d.Months) == 0 {
+		return ""
+	}
+	for _, m := range d.Months {
+		if m.Intercalary || m.Days < 1 {
+			continue
+		}
+		return fmt.Sprintf("A %d-day month is %d rows of %d.", m.Days, (m.Days+week-1)/week, week)
+	}
+	return ""
+}
+
+// builderSplitNote states the half-mark rule and where it lands, or that no
+// split is drawn at this length.
+func builderSplitNote(d *builderDraft) string {
+	week := len(d.Weekdays)
+	half := builderWeekSplit(week)
+	if half == 0 {
+		return "— at this length no split is drawn"
+	}
+	name := ""
+	if half-1 < len(d.Weekdays) {
+		name = d.Weekdays[half-1]
+	}
+	return fmt.Sprintf("— here after %s (%d+%d)", name, half, half)
+}
+
+// builderMoonTurns reads the turn marks a moon makes in the previewed month.
+// Nothing is authored date by date: the marks come from the SAME Block data
+// the grid drew, so the station and the month cannot disagree.
+func builderMoonTurns(data BuilderViewData, moonIndex int) []string {
+	var out []string
+	for _, m := range data.Block.Month.Almanac {
+		if m.Name == "" || moonIndex >= len(data.Draft.Moons) ||
+			m.Name != data.Draft.Moons[moonIndex].Name {
+			continue
+		}
+		for _, day := range m.Days {
+			if day.Turn != "" {
+				out = append(out, day.Turn)
+			}
+		}
+	}
+	return out
+}
+
+// builderSeasonSpan reads a season's bounds back as a sentence.
+func builderSeasonSpan(d *builderDraft, s builderSeason) string {
+	name := func(month int) string {
+		idx, seen := 0, 0
+		for i, m := range d.Months {
+			if m.Intercalary {
+				continue
+			}
+			seen++
+			if seen == month {
+				idx = i
+				return d.Months[idx].Name
+			}
+		}
+		return fmt.Sprintf("month %d", month)
+	}
+	if s.StartMonth == 0 && s.EndMonth == 0 {
+		return "no span declared"
+	}
+	return fmt.Sprintf("%s to %s", name(s.StartMonth), name(s.EndMonth))
+}
+
+// builderActValue encodes one panel action. The verb, an optional row index and
+// a direction, in one form value, because a button submits one name/value pair.
+func builderActValue(act string, index, dir int) string {
+	if index >= 0 {
+		return fmt.Sprintf("%s:%d:%d", act, index, dir)
+	}
+	return fmt.Sprintf("%s::%d", act, dir)
+}
+
+// builderCountLabel reads a count, or says "none" rather than printing a zero.
+func builderCountLabel(n int) string {
+	if n == 0 {
+		return "none"
+	}
+	return strconv.Itoa(n)
+}
+
+// builderCheckLabel is the badge text for a Review verdict. `need` reads
+// "needs backend" in full — the SIGNED chip, never an abbreviation of it.
+func builderCheckLabel(kind string) string {
+	switch kind {
+	case "ok":
+		return "ok"
+	case "need":
+		return "needs backend"
+	default:
+		return "fix"
+	}
+}
+
+// builderPresetMeta is a preset card's fact line.
+func builderPresetMeta(p builderPreset) string {
+	d, err := builderPresetDraft(p.Key)
+	if err != nil {
+		return ""
+	}
+	moons := "no moons"
+	if n := len(d.Moons); n == 1 {
+		moons = "1 moon"
+	} else if n > 1 {
+		moons = fmt.Sprintf("%d moons", n)
+	}
+	return fmt.Sprintf("%d months · %d days · %d-day week · %s",
+		len(builderMonthIndexes(d, false)), builderYearDays(d), len(d.Weekdays), moons)
+}
+
+// builderPreviewSub is the preview column's one-line reading of the whole
+// declaration. It says "year incomplete" rather than printing a total that a
+// 0-day month makes meaningless.
+func builderPreviewSub(d *builderDraft) string {
+	months := len(builderMonthIndexes(d, false))
+	year := fmt.Sprintf("%d days a year", builderYearDays(d))
+	if builderBrokenMonth(d) != nil {
+		year = "year incomplete"
+	}
+	out := fmt.Sprintf("%s · %s · %d-day week", builderPlural(months, "month"), year, len(d.Weekdays))
+	if n := len(d.Moons); n > builderMoonCap {
+		out += fmt.Sprintf(" · %d of %d moons drawn", builderMoonCap, n)
+	} else if n > 0 {
+		out += " · " + builderPlural(n, "moon")
+	}
+	return out
+}
+
+// builderPlural is "1 month" / "2 months".
+func builderPlural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// builderMonthLenLabel reads the previewed month's length, in WARN ink when it
+// is zero — the pager must never print a confident "0 days".
+func builderMonthLenLabel(data BuilderViewData) string {
+	if data.PreviewMonth < 0 || data.PreviewMonth >= len(data.Draft.Months) {
+		return ""
+	}
+	if d := data.Draft.Months[data.PreviewMonth]; d.Days < 1 {
+		return "0 days"
+	}
+	return fmt.Sprintf("%d days", data.Draft.Months[data.PreviewMonth].Days)
+}
+
+// builderPagerLabel is "3 of 12".
+func builderPagerLabel(data BuilderViewData) string {
+	if len(data.Draft.Months) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d of %d", data.PreviewMonth+1, len(data.Draft.Months))
+}
+
+// builderStatsFor is the preview column's declaration readout.
+func builderStatsFor(d *builderDraft) []builderStat {
+	bad := builderBrokenMonth(d)
+
+	leap := "none"
+	if d.LeapEvery > 0 {
+		leap = fmt.Sprintf("+%d every %d years", d.LeapAdd, d.LeapEvery)
+	}
+	moons := "none declared — the sky layer stays absent"
+	if n := len(d.Moons); n > builderMoonCap {
+		moons = fmt.Sprintf("%d drawn · %d almanac-only", builderMoonCap, n-builderMoonCap)
+	} else if n > 0 {
+		moons = fmt.Sprintf("%d drawn", n)
+	}
+	seasons := "none"
+	if len(d.Seasons) > 0 {
+		names := make([]string, 0, len(d.Seasons))
+		for _, s := range d.Seasons {
+			names = append(names, s.Name)
+		}
+		seasons = strings.Join(names, " · ")
+	}
+	eras := "none yet"
+	if len(d.Eras) > 0 {
+		codes := make([]string, 0, len(d.Eras))
+		for _, e := range d.Eras {
+			if e.Code != "" {
+				codes = append(codes, e.Code)
+			} else {
+				codes = append(codes, e.Name)
+			}
+		}
+		eras = strings.Join(codes, " · ")
+	}
+
+	yearLen := fmt.Sprintf("%d days", builderYearDays(d))
+	if d.LeapEvery > 0 && d.LeapAdd > 0 {
+		yearLen += fmt.Sprintf(" · %d on leap years", builderYearDays(d)+d.LeapAdd)
+	}
+	yearWarn := false
+	if bad != nil {
+		name := bad.Name
+		if name == "" {
+			name = "a month"
+		}
+		yearLen = fmt.Sprintf("unresolvable while %s has 0 days", name)
+		yearWarn = true
+	}
+
+	stats := []builderStat{
+		{Label: "Months", Value: fmt.Sprintf("%d · %d days",
+			len(builderMonthIndexes(d, false)), builderMonthDays(d))},
+		{Label: "Week", Value: builderWeekStat(d)},
+		{Label: "Intercalary", Value: builderIntercalaryStat(d)},
+		{Label: "Leap", Value: leap, Need: d.LeapNote},
+		{Label: "Moons", Value: moons},
+		{Label: "Seasons", Value: seasons},
+		{Label: "Eras", Value: eras},
+		{Label: "Year length", Value: yearLen, Warn: yearWarn},
+	}
+	if d.LeapNote != "" {
+		stats[3].Value = leap + " · " + d.LeapNote
+	}
+	return stats
+}
+
+func builderWeekStat(d *builderDraft) string {
+	week := len(d.Weekdays)
+	if half := builderWeekSplit(week); half > 0 {
+		return fmt.Sprintf("%d days · splits %d+%d", week, half, half)
+	}
+	return fmt.Sprintf("%d days", week)
+}
+
+func builderIntercalaryStat(d *builderDraft) string {
+	if n := builderIntercalaryDays(d); n > 0 {
+		return builderPlural(n, "festival day")
+	}
+	return "none"
+}
+
+// builderChecksFor is Review's line-by-line verdict.
+//
+// `need` IS THE SIGNED needs-backend CHIP AND IT APPEARS ONLY WHERE THE TEXT IS
+// LITERALLY ABOUT A BACKEND GAP. LAYERS-P9 §10 states the rule: add no
+// `.badge need` use that is not literally "needs backend". Everything else that
+// wants the author's hand takes `warn`, and every neutral state readout takes
+// `.wz-fact` — the class this surface mints precisely so `.need` is not diluted
+// into a fourth grey chip meaning a third thing.
+func builderChecksFor(d *builderDraft) []builderCheck {
+	var out []builderCheck
+
+	if bad := builderBrokenMonth(d); bad != nil {
+		name := bad.Name
+		if name == "" {
+			name = "an unnamed month"
+		}
+		out = append(out, builderCheck{Kind: "warn",
+			Text: fmt.Sprintf("Dates do not resolve — %s declares 0 days", name)})
+	} else if len(d.Months) == 0 {
+		out = append(out, builderCheck{Kind: "warn", Text: "No months are declared"})
+	} else {
+		last := d.Months[len(d.Months)-1]
+		out = append(out, builderCheck{Kind: "ok", Text: fmt.Sprintf(
+			"Every date resolves — the year walks 1 %s to %d %s with no gaps",
+			d.Months[0].Name, last.Days, last.Name)})
+	}
+
+	seen := map[string]bool{}
+	dupes := false
+	for _, w := range d.Weekdays {
+		if seen[w] {
+			dupes = true
+		}
+		seen[w] = true
+	}
+	if dupes {
+		out = append(out, builderCheck{Kind: "warn", Text: "Weekday names repeat"})
+	} else {
+		out = append(out, builderCheck{Kind: "ok", Text: fmt.Sprintf(
+			"Weekday names unique (%d of %d)", len(seen), len(d.Weekdays))})
+	}
+
+	if d.LeapEvery > 0 && d.LeapAdd > 0 {
+		out = append(out, builderCheck{Kind: "ok", Text: fmt.Sprintf(
+			"Year length stable: %d, %d on leap years",
+			builderYearDays(d), builderYearDays(d)+d.LeapAdd)})
+	} else {
+		out = append(out, builderCheck{Kind: "ok", Text: fmt.Sprintf(
+			"Year length fixed: %d days", builderYearDays(d))})
+	}
+
+	// AN EXCEPTION CHRONICLE CANNOT STORE IS NEVER CERTIFIED GREEN.
+	if d.LeapNote != "" {
+		out = append(out, builderCheck{Kind: "need", Text: fmt.Sprintf(
+			"The exception %q has no home in Chronicle's single-modulus leap model — "+
+				"Create writes +%d every %d and drops the clause", d.LeapNote, d.LeapAdd, d.LeapEvery)})
+	}
+
+	switch n := len(d.Moons); {
+	case n > builderMoonCap:
+		var extra []string
+		for _, m := range d.Moons[builderMoonCap:] {
+			extra = append(extra, m.Name)
+		}
+		out = append(out, builderCheck{Kind: "ok", Text: fmt.Sprintf(
+			"Moons: %d drawn in the grid, %d almanac-only (%s)",
+			builderMoonCap, n-builderMoonCap, strings.Join(extra, ", "))})
+	case n > 0:
+		out = append(out, builderCheck{Kind: "ok", Text: fmt.Sprintf(
+			"Moons: %d, all drawn in the grid", n)})
+	default:
+		out = append(out, builderCheck{Kind: "ok", Text: "No moons — the sky layer stays absent"})
+	}
+
+	if len(d.Eras) > 0 {
+		reading := d.EpochName
+		if reading == "" {
+			reading = "the year alone"
+		}
+		out = append(out, builderCheck{Kind: "ok", Text: fmt.Sprintf(
+			"Era present — years read %q", fmt.Sprintf("%s %d", reading, d.Year))})
+	} else {
+		// [WZ-3] SIGNED: a claim about the WIZARD, never about the model.
+		out = append(out, builderCheck{Kind: "warn",
+			Text: "0 eras — this calendar has no era, and the wizard holds Create until one exists"})
+	}
+
+	if d.Mode == ModeRealLife {
+		if strings.TrimSpace(d.TimeZone) == "" {
+			out = append(out, builderCheck{Kind: "warn",
+				Text: "A real-world calendar needs an IANA timezone — its date comes from the wall clock in that zone"})
+		} else {
+			out = append(out, builderCheck{Kind: "ok", Text: fmt.Sprintf(
+				"Wall-clock authoritative in %s — the date is read from the real world and cannot be advanced by hand",
+				d.TimeZone)})
+		}
+	}
+	return out
+}
+
+// builderMappingFor is the importer's mapping table: every fact in the file,
+// the station it lands on, and what happened to it.
+//
+// THE FILE CALLS THIS ITS OWN HONESTY MECHANISM. A row that says "left empty"
+// is the difference between an import that silently dropped something and one
+// that told you.
+func builderMappingFor(res *ImportResult, d *builderDraft) []builderMapRow {
+	rows := []builderMapRow{
+		{Fact: fmt.Sprintf("%d months, %d days", len(builderMonthIndexes(d, false)), builderMonthDays(d)),
+			Station: "Structure", Kind: "ok", Verdict: "mapped"},
+		{Fact: fmt.Sprintf("%d weekday names", len(d.Weekdays)),
+			Station: "Week", Kind: "ok", Verdict: "mapped"},
+	}
+	if n := builderIntercalaryDays(d); n > 0 {
+		rows = append(rows, builderMapRow{
+			Fact:    fmt.Sprintf("%d festival days outside weeks", n),
+			Station: "Intercalary", Kind: "ok", Verdict: "mapped"})
+	} else {
+		rows = append(rows, builderMapRow{Fact: "no festival days outside weeks",
+			Station: "Intercalary", Kind: "fact", Verdict: "left empty"})
+	}
+	if d.LeapEvery > 0 {
+		rows = append(rows, builderMapRow{
+			Fact:    fmt.Sprintf("leap: +%d every %d years", d.LeapAdd, d.LeapEvery),
+			Station: "Leap rules", Kind: "ok", Verdict: "mapped"})
+	} else {
+		rows = append(rows, builderMapRow{Fact: "no leap rule declared",
+			Station: "Leap rules", Kind: "fact", Verdict: "left empty"})
+	}
+	if len(d.Moons) > 0 {
+		rows = append(rows, builderMapRow{
+			Fact:    fmt.Sprintf("%d moons with periods", len(d.Moons)),
+			Station: "Moons", Kind: "ok", Verdict: "mapped"})
+	} else {
+		rows = append(rows, builderMapRow{Fact: "no moons carried by this file",
+			Station: "Moons", Kind: "fact", Verdict: "left empty"})
+	}
+	if len(d.Seasons) > 0 {
+		rows = append(rows, builderMapRow{
+			Fact:    fmt.Sprintf("%d seasons with bounds", len(d.Seasons)),
+			Station: "Seasons", Kind: "ok", Verdict: "mapped"})
+	} else {
+		rows = append(rows, builderMapRow{Fact: "seasons not carried by this format",
+			Station: "Seasons", Kind: "fact", Verdict: "left empty"})
+	}
+	// SIMPLE CALENDAR GENUINELY CARRIES NO ERAS — parseSimpleCalendarInner never
+	// populates result.Eras; only the Calendaria, Fantasy-Cal and Chronicle
+	// parsers do. So this row is a real outcome of a real file rather than a
+	// demonstration, and it is the row that makes the wizard's era gate visible
+	// at the moment it starts mattering.
+	if len(d.Eras) > 0 {
+		rows = append(rows, builderMapRow{
+			Fact:    fmt.Sprintf("%d eras", len(d.Eras)),
+			Station: "Eras", Kind: "ok", Verdict: "mapped"})
+	} else {
+		rows = append(rows, builderMapRow{
+			Fact:    "eras not carried by this format — the wizard holds Create until one exists",
+			Station: "Eras", Kind: "warn", Verdict: "add before Create"})
+	}
+	if res != nil && res.Format != "" {
+		rows = append(rows, builderMapRow{
+			Fact:    fmt.Sprintf("detected as %s", builderFormatLabel(res.Format)),
+			Station: "Start", Kind: "ok", Verdict: "detected"})
+	}
+	return rows
+}
+
+// builderFormatLabel names a format the way its own product names it. THE FOUR
+// ARE THE FOUR ON MAIN and there is no fifth: an earlier revision of the mockup
+// invented two, and the design review failed it for exactly that.
+func builderFormatLabel(f ImportFormat) string {
+	switch f {
+	case FormatChronicle:
+		return "Chronicle native"
+	case FormatSimpleCal:
+		return "Simple Calendar"
+	case FormatCalendaria:
+		return "Calendaria"
+	case FormatFantasyCal:
+		return "Fantasy-Calendar.com"
+	}
+	return string(f)
+}
+
+// builderFormats is the roster the importer's four cards read from.
+var builderFormats = []struct{ Name, Detail string }{
+	{"Simple Calendar", "Foundry module export · months, weekdays, leap, moons"},
+	{"Calendaria", "Foundry module export · months, weekdays, moons, eras"},
+	{"Fantasy-Calendar.com", "JSON export · full structure, eras, seasons"},
+	{"Chronicle native", "chronicle-calendar-v1 · a calendar exported from Chronicle"},
+}
+
+// builderRowNumber is a month's ordinal WITHIN ITS OWN FAMILY — the number the
+// Structure and Intercalary stations print in their index column. The
+// underlying list is one ordered slice, so the two stations count separately
+// while sharing it.
+func builderRowNumber(d *builderDraft, idx int) int {
+	if idx < 0 || idx >= len(d.Months) {
+		return 0
+	}
+	want, n := d.Months[idx].Intercalary, 0
+	for i := 0; i <= idx; i++ {
+		if d.Months[i].Intercalary == want {
+			n++
+		}
+	}
+	return n
 }
