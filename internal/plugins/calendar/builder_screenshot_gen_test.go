@@ -757,12 +757,39 @@ func TestBuilderPage_IsWholeInOneRender(t *testing.T) {
 			if !strings.Contains(html, `id="wz-shell"`) || !strings.Contains(html, `id="wz-live"`) {
 				t.Error("the shell and the preview must both be present in every station")
 			}
-			if !strings.Contains(html, "cal-block-host") {
+			if key != "fault" && !strings.Contains(html, "cal-block-host") {
 				t.Error("the shipped Block must render in every station's preview")
 			}
 			if key == "fault" {
-				if !strings.Contains(html, "Cannot resolve a date") {
-					t.Error("the fault sheet must draw the fault where the date would go")
+				// ── THE COMPOSITION [WZ-15] ITEM 5 RATIFIES AS DRAWN, AND THIS
+				// ASSERTION USED TO CONTRADICT IT.
+				//
+				// It demanded "Cannot resolve a date" on this sheet, which is
+				// what the build printed: a warn rail replacing the anchor bar
+				// while the Block's own Nameplate, a hundred-odd pixels below,
+				// printed "Hammer 1, RoW 1523". The date resolves. The signed
+				// still keeps the ANCHOR ("TODAY RESOLVES TO …") beside the
+				// warn-ink Year length and puts the fault INSIDE the grid, and
+				// that two-honesty-states-at-once composition is the ruling.
+				//
+				// INVERTED, NOT DELETED: the sheet must still say the thing is
+				// broken — in the two places that know it — and it must no
+				// longer say the thing that is not.
+				if !strings.Contains(html, "today resolves to") {
+					t.Error("the anchor must state what today resolves to — today's month " +
+						"is intact and the anchor's question is about today ([WZ-15] item 5)")
+				}
+				if strings.Contains(html, "Cannot resolve a date") {
+					t.Error("today RESOLVES on this sheet — a headline claiming otherwise is " +
+						"the claim-about-the-model falsehood [WZ-3] was signed to remove")
+				}
+				if !strings.Contains(html, "Nothing to draw — Ches declares 0 days") ||
+					!strings.Contains(html, "The year cannot be walked past 30 Alturiak.") {
+					t.Error("the fault belongs where the grid would be, in the signed copy (§6.2)")
+				}
+				if strings.Contains(html, "cal-block-host") {
+					t.Error("the Block must not be asked to draw a month with no days — an " +
+						"empty grid shape is the placeholder §6.2 refuses")
 				}
 				if !strings.Contains(html, "unresolvable while") {
 					t.Error("the Year-length stat must print in warn ink beside it — the " +

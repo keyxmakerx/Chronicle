@@ -675,3 +675,83 @@ func TestBuilderPreview_SaysWhatItDoesNotDraw(t *testing.T) {
 			`the Block paints no phase mark at all — the count is about the ceiling`)
 	}
 }
+
+// TestBuilderFault_TheAnchorAsksAboutTodayAndTheGridAsksAboutTheMonth pins the
+// composition [WZ-15] item 5 ratifies AS DRAWN, and it is the fix for the one
+// place the build abandoned it.
+//
+// The signed still `builder-wizard--fault--light.png` keeps the ANCHOR bar
+// ("TODAY RESOLVES TO Wir, 14 Hammer · 1523 RoW") beside a warn-ink Year length
+// ("unresolvable while Ches has 0 days") and puts the fault INSIDE the grid
+// ("Nothing to draw — Ches declares 0 days / The year cannot be walked past 30
+// Alturiak. Fix the count in Structure."). The ruling calls that
+// two-honesty-states-at-once composition correct and says it should be
+// "inherited on purpose rather than by accident".
+//
+// The build had done neither: builderFaultFor answered "is anything in the
+// declaration broken", so ANY empty month replaced the anchor with a warn rail
+// reading "Cannot resolve a date" — printed a hundred-odd pixels above the
+// Block's own Nameplate reading "Hammer 1, RoW 1523". The date resolves. That
+// is the claim-about-the-model falsehood [WZ-3] was signed to remove from the
+// other fault, and the grid said nothing at all.
+//
+// So there are two questions and each is asked of the thing that can answer it:
+// the anchor asks whether TODAY resolves, the grid asks whether the month it is
+// SHOWING can be drawn.
+func TestBuilderFault_TheAnchorAsksAboutTodayAndTheGridAsksAboutTheMonth(t *testing.T) {
+	// The fault sheet's own state: Harptos with Ches emptied, previewing Ches.
+	d := fxBuilderDraft()
+	ches := -1
+	for i := range d.Months {
+		if d.Months[i].Name == "Ches" {
+			d.Months[i].Days = 0
+			ches = i
+		}
+	}
+	if ches < 0 {
+		t.Fatal("the fixture no longer carries Ches; the fault sheet's state moved")
+	}
+
+	// TODAY still resolves — today is 1/1 and the first month is intact — so
+	// the anchor stays and there is no fault rail claiming otherwise.
+	if f := builderFaultFor(d); f.Headline != "" {
+		t.Errorf("a broken month ELSEWHERE must not blank the anchor: got %q / %q",
+			f.Headline, f.Why)
+	}
+
+	// The grid, asked to show Ches, says what it cannot draw and where to fix it.
+	head, why := builderEmptyPreview(d, ches)
+	if head != "Nothing to draw — Ches declares 0 days" {
+		t.Errorf("the empty-grid headline is signed copy; got %q", head)
+	}
+	if why != "The year cannot be walked past 30 Alturiak. Fix the count in Structure." {
+		t.Errorf("the empty-grid cause names the last day the year reaches; got %q", why)
+	}
+
+	// Asked to show an intact month, it draws the month: no panel, and the
+	// Block is what renders.
+	if head, why := builderEmptyPreview(d, 0); head != "" || why != "" {
+		t.Errorf("an intact month draws the Block, not a panel; got %q / %q", head, why)
+	}
+
+	// And when TODAY's own month is the empty one, the anchor DOES fault —
+	// which is what makes the assertion above a scope and not a suppression.
+	today := fxBuilderDraft()
+	today.Months[0].Days = 0
+	f := builderFaultFor(today)
+	if f.Headline != "Cannot resolve a date" {
+		t.Errorf("today's month declaring 0 days is exactly the anchor's question; got %q",
+			f.Headline)
+	}
+	if !strings.Contains(f.Why, "Day 1 of") || f.FixStep != "structure" {
+		t.Errorf("the cause names the day that does not exist and jumps to Structure; got %+v", f)
+	}
+
+	// The first month of a year that has none at all is nothing, and the anchor
+	// says so rather than dereferencing it.
+	none := fxBuilderDraft()
+	none.Months = nil
+	if f := builderFaultFor(none); f.Headline != "Cannot resolve a date" {
+		t.Errorf("a monthless draft has no today; got %q", f.Headline)
+	}
+}

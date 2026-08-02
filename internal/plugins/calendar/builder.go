@@ -578,6 +578,62 @@ func builderBrokenMonth(d *builderDraft) *builderMonth {
 	return nil
 }
 
+// builderTodayMonth is the month the draft's current date falls in.
+//
+// draftCalendar sets CurrentMonth = 1 / CurrentDay = 1 because ApplyImport
+// forces exactly that ([WZ-15] item 4), so today is the first NON-INTERCALARY
+// month — festival days sit outside the week and outside the walk. Returning a
+// pointer into the slice, like builderBrokenMonth, so the caller can name it.
+func builderTodayMonth(d *builderDraft) *builderMonth {
+	for i := range d.Months {
+		if !d.Months[i].Intercalary {
+			return &d.Months[i]
+		}
+	}
+	return nil
+}
+
+// builderEmptyPreview is the sentence pair drawn WHERE THE GRID WOULD GO when
+// the previewed month declares no days, and it is §6.2 by name: "the empty grid
+// ('Nothing to draw — Ches declares 0 days')", inside the composition [WZ-15]
+// item 5 ratifies as drawn.
+//
+// IT IS NOT A "NOTHING TO PREVIEW YET" PLACEHOLDER, which the acceptance list
+// forbids and which would be a bespoke stand-in for the Block's own shipped
+// fault text on a HALF-BUILT calendar. This is the opposite case: the
+// declaration is complete enough to render and the author has emptied one month
+// on purpose or by accident. Asked to draw it, the Block paints a box with
+// weekday headers and no cells — a grid shape containing nothing, which is the
+// "never a zero, never a dash, never a placeholder" §6.2 refuses. The signed
+// still replaces that whole region with two sentences and the station that
+// fixes it, so that is what the preview column does: the Block is not asked to
+// draw a month that has no days, and nothing else about the column changes.
+//
+// The second sentence names the last day the year CAN be walked to, which is
+// the previous month's last day, exactly as the mockup's gridHTML words it.
+func builderEmptyPreview(d *builderDraft, monthIndex int) (headline, why string) {
+	if monthIndex < 0 || monthIndex >= len(d.Months) {
+		return "", ""
+	}
+	m := d.Months[monthIndex]
+	if m.Days >= 1 {
+		return "", ""
+	}
+	name := m.Name
+	if name == "" {
+		name = "This month"
+	}
+	last := "its first day"
+	for i := monthIndex - 1; i >= 0; i-- {
+		if d.Months[i].Days >= 1 {
+			last = fmt.Sprintf("%d %s", d.Months[i].Days, d.Months[i].Name)
+			break
+		}
+	}
+	return fmt.Sprintf("Nothing to draw — %s declares 0 days", name),
+		fmt.Sprintf("The year cannot be walked past %s. Fix the count in Structure.", last)
+}
+
 // builderNextLeaps prints the next N leap years so the rule proves itself.
 // Nothing is authored year by year — the list is derived from the modulus.
 func builderNextLeaps(d *builderDraft, n int) []int {
@@ -737,6 +793,12 @@ type BuilderViewData struct {
 
 	// Blocked is the reason Create is held, or "".
 	Blocked string
+	// EmptyHeadline / EmptyWhy are the sentence pair drawn WHERE THE GRID
+	// WOULD GO when the previewed month declares no days (§6.2's "the empty
+	// grid", inside the [WZ-15] item 5 composition). Both empty means the
+	// Block draws the month, which is every other case.
+	EmptyHeadline string
+	EmptyWhy      string
 	// Fault is the wizard's own anchor-bar fault, drawn WHERE THE DATE WOULD
 	// GO. Zero when the declaration resolves.
 	Fault builderFault
@@ -951,31 +1013,54 @@ func builderPrecedingMonth(d *builderDraft, idx int) string {
 	return "the start of the year"
 }
 
-// builderFaultFor is the wizard's own anchor-bar fault.
+// builderFaultFor is the wizard's own anchor-bar fault, and IT IS ABOUT TODAY.
 //
 // IT IS NOT A SECOND FAULT SYSTEM. blockDateLine's structural family renders
 // inside the Block, unmodified, wherever the CURRENT date cannot resolve. This
-// one answers a different question — "is anything in the declaration broken",
-// which is true even when month 1 is fine and month 3 is not — and it is the
-// wizard's chrome, above the Block, with a jump to the station that fixes it.
+// is the wizard's chrome, above the Block, with a jump to the station that
+// fixes it.
+//
+// ── WHY IT IS SCOPED TO TODAY'S MONTH AND NOT TO THE WHOLE DECLARATION ────
+//
+// It once asked "is anything in the declaration broken", which is a different
+// and larger question, and the answer was a warn rail replacing the anchor bar
+// whenever ANY month was empty. On the signed fault sheet that produced a
+// headline reading "Cannot resolve a date" sitting a hundred-odd pixels above
+// the Block's own Nameplate printing "Hammer 1, RoW 1523" — the date resolves,
+// and the surface said it did not. That is precisely the claim-about-the-model
+// falsehood [WZ-3] was signed to remove from the OTHER fault, in a wave whose
+// deliverable is honesty states.
+//
+// The signed composition ([WZ-15] item 5, RATIFIED AS DRAWN, "inherited on
+// purpose rather than by accident") is TWO HONESTY STATES AT ONCE: the anchor
+// asserts what today resolves to, because it does, while the Year-length stat
+// prints warn ink, the pager reads "0 days" in warn and the grid says it has
+// nothing to draw — because the YEAR cannot be walked. Each says exactly what
+// it knows. So the anchor's question is the mockup's anchorHTML question:
+// does TODAY resolve? Today is 1/1 (draftCalendar; ApplyImport forces it), so
+// the month it asks about is the first.
+//
+// A broken month elsewhere does not lose its jump: builderEmptyPreview carries
+// "Fix the count in Structure" where the grid would be, the footer's Create
+// stays disabled on builderBrokenMonth, and the Year-length stat names it.
 func builderFaultFor(d *builderDraft) builderFault {
-	if bad := builderBrokenMonth(d); bad != nil {
-		name := bad.Name
-		if name == "" {
-			name = "an unnamed month"
-		}
-		return builderFault{
-			Headline: "Cannot resolve a date",
-			Why: fmt.Sprintf("%s declares 0 days, so the year cannot be walked past it. "+
-				"Give it days in Structure, or remove it.", name),
-			FixStep: "structure", FixLabel: "Fix in Structure",
-		}
-	}
 	if len(d.Months) == 0 {
 		return builderFault{
 			Headline: "Cannot resolve a date",
 			Why:      "No months are declared, so there is no year to walk. Add one in Structure.",
 			FixStep:  "structure", FixLabel: "Fix in Structure",
+		}
+	}
+	if today := builderTodayMonth(d); today != nil && today.Days < 1 {
+		name := today.Name
+		if name == "" {
+			name = "an unnamed month"
+		}
+		return builderFault{
+			Headline: "Cannot resolve a date",
+			Why: fmt.Sprintf("Day 1 of %s does not exist — %s declares 0 days. "+
+				"Give it days in Structure, or remove it.", name, name),
+			FixStep: "structure", FixLabel: "Fix in Structure",
 		}
 	}
 	if len(d.Eras) == 0 {

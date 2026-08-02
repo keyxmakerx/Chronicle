@@ -650,6 +650,7 @@ func builderView(campaignID, csrf string, d *builderDraft, step int, importer bo
 		Block:        builderPreviewBlock(d, pvMonth),
 		MoonAlmanac:  builderMoonAlmanac(d, pvMonth),
 	}
+	data.EmptyHeadline, data.EmptyWhy = builderEmptyPreview(d, pvMonth)
 	if p, ok := builderPresetFor(d.Preset); ok {
 		data.Identity = p
 	}

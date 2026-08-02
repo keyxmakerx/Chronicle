@@ -983,8 +983,33 @@ templ builderPreview(data BuilderViewData) {
 			<span class="wz-cap">{ builderPagerLabel(data) }</span>
 		</div>
 		<div class="wz-pvrule"></div>
-		// ── THE SHIPPED BLOCK. There is no second month renderer in this diff.
-		@calblock.Block(data.Block)
+		if data.EmptyHeadline != "" {
+			// ── THE EMPTY GRID, §6.2 BY NAME, inside the composition [WZ-15]
+			// item 5 ratifies AS DRAWN.
+			//
+			// The previewed month declares no days. Asked to draw it the Block
+			// paints a box with weekday headers and no cells — a grid shape
+			// containing nothing, which is the "never a zero, never a dash,
+			// never a placeholder" the fault states exist to refuse. The signed
+			// still replaces that whole region with two sentences naming the
+			// cause and the station that fixes it, so the Block is simply not
+			// asked to draw a month with no days. Everything else in the column
+			// — the anchor, the pager, the stats, the foot — is unchanged, and
+			// the anchor above still says what today resolves to, because it
+			// does. Two honesty states at once, each saying what it knows.
+			//
+			// THIS IS NOT the forbidden "nothing to preview yet" placeholder:
+			// that one would stand in for the Block's OWN shipped fault text on
+			// a half-built calendar, and a wizard on station 1 with no months
+			// still renders blockDateLine's text from the real renderer.
+			<div class="wz-pvempty">
+				<span class="wz-a">{ data.EmptyHeadline }</span>
+				<span class="wz-b">{ data.EmptyWhy }</span>
+			</div>
+		} else {
+			// ── THE SHIPPED BLOCK. There is no second month renderer in this diff.
+			@calblock.Block(data.Block)
+		}
 		// WHAT THIS COLUMN DOES NOT DRAW, SAID OUT LOUD.
 		//
 		// Reusing the shipped Block ([WZ-2a]) means inheriting its size classes and
