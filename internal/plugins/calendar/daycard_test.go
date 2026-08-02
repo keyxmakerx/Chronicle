@@ -81,7 +81,7 @@ func dayCardFixture(t *testing.T, v BlockViewer) (calblock.BlockData, *Calendar)
 // every viewer's browser receives.
 func TestDayCard_PayloadCarriesTheLedgerRowFieldSetAndNothingMore(t *testing.T) {
 	d, cal := dayCardFixture(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
-	raw := dayCardPayloadJSON(true, dayCardSource{Block: &BenchBlock{Data: d}, Calendar: cal})
+	raw := dayCardPayloadJSON(dayCardSeed{CanAuthor: true}, dayCardSource{Block: &BenchBlock{Data: d}, Calendar: cal})
 	if raw == "" {
 		t.Fatal("the GM fixture produced no payload at all")
 	}
@@ -180,6 +180,122 @@ func TestDayCard_PayloadCarriesTheLedgerRowFieldSetAndNothingMore(t *testing.T) 
 	}
 }
 
+// TestDayCard_PayloadWrapperCarriesOnlyItsTwoSeeds is [ER-3]'s half of the
+// payload law, and it exists so the law is RE-STATED rather than quietly
+// widened (C-CALV4-EDITOR-R2b, [ER-3] SIGNED).
+//
+// [DC-1] governs the CARD'S PER-EVENT FIELD SET and the test above enforces it
+// by reflection over dayCardEvent / dayCardDay. That reflection says nothing
+// about the WRAPPER — a third top-level key could arrive tomorrow and every
+// assertion above would stay green. R2-2b added exactly one (`members`, the
+// Owner-only audience roster), which is precisely the moment to pin the
+// wrapper's own inventory: two keys, both named here, and the roster's own
+// field set named beside them.
+//
+// A THIRD SEED IS A DECISION, NOT A CONVENIENCE. Whoever adds one has to come
+// here, read this, and write down why it is editor seed data on the wrapper
+// rather than event data on a row.
+func TestDayCard_PayloadWrapperCarriesOnlyItsTwoSeeds(t *testing.T) {
+	wantWrapper := []string{"calendars", "members"}
+	if got := sortedKeys(jsonKeySet(t, dayCardPayload{})); !equalStrings(got, wantWrapper) {
+		t.Errorf("dayCardPayload declares top-level JSON keys %v, want exactly %v — "+
+			"[DC-1] SIGNED governs the per-event field set and [ER-3] SIGNED added the "+
+			"Owner-only roster; a THIRD key is a ruling, not a convenience", got, wantWrapper)
+	}
+	wantMember := []string{"axis", "id", "initials", "name", "pattern", "role"}
+	if got := sortedKeys(jsonKeySet(t, dayCardMember{})); !equalStrings(got, wantMember) {
+		t.Errorf("dayCardMember declares JSON keys %v, want exactly %v — the audience row "+
+			"draws hue + locked pattern + the ringed mark + name + role, and NOTHING "+
+			"about a member the Bench does not already print", got, wantMember)
+	}
+	// The roster must not become a second place a member's availability, zone
+	// or email lives. Those are the RSVP panel's and they are gated separately.
+	for _, forbidden := range []string{"tz", "timezone", "email", "free", "availability", "answer"} {
+		if jsonKeySet(t, dayCardMember{})[forbidden] {
+			t.Errorf("dayCardMember carries %q — the audience list decides who may SEE an "+
+				"event; it is not a second roster panel", forbidden)
+		}
+	}
+}
+
+// TestDayCard_TheAudienceRosterIsOwnerOnlyAndCostsNoSecondDerivation is the
+// other half of [ER-3]: the gate, and the identity channel.
+//
+// THE GATE IS CanRestrict AND NOTHING ELSE. PUT …/events/:eid/visibility is
+// RequireRole(RoleOwner), so a Scribe never renders the Restricted card and
+// must not receive the names — and the field is deliberately not CanDelete
+// borrowed, so this test drives the two apart: a mount with CanDelete but not
+// CanRestrict gets no roster.
+//
+// THE IDENTITY PAIR IS THE RSVP PANEL'S OWN. Two surfaces that draw the same
+// people must not draw them in two colours, so the hue/pattern come from
+// benchRsvpIdentity on the same roster index and this asserts the agreement
+// rather than trusting the call.
+func TestDayCard_TheAudienceRosterIsOwnerOnlyAndCostsNoSecondDerivation(t *testing.T) {
+	// DELIBERATELY UNLIKE THE ORACLE FIXTURE'S OWN NAMES. The signed oracle
+	// month names Nissa and Bryn in its event data, so asserting "this name is
+	// absent" against those strings would fail on the EVENT rows rather than on
+	// the roster — a test that goes red for the wrong reason is worse than none.
+	roster := []BenchRosterMember{
+		{UserID: "u-kael", Name: "Quillon Ardent", Role: "Owner", IsOwner: true},
+		{UserID: "u-nissa", Name: "Verrow Sedge", Role: "Scribe", IsCoDM: true},
+		{UserID: "u-bryn", Name: "Ilmen Vast", Role: "Player"},
+	}
+	d, cal := dayCardFixture(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
+	src := dayCardSource{Block: &BenchBlock{Data: d}, Calendar: cal}
+
+	owner := dayCardPayloadJSON(dayCardSeed{CanAuthor: true, CanRestrict: true, Roster: roster}, src)
+	for _, want := range []string{`"members"`, `"Quillon Ardent"`, `"Verrow Sedge"`, `"Ilmen Vast"`, `"QA"`, `"Owner"`} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("an Owner's payload is missing %s — the allow/deny roster cannot be "+
+				"drawn from ids alone, which is the whole of [ER-3]", want)
+		}
+	}
+
+	// EVERY OTHER FLOOR GETS NOTHING, and the key is ABSENT rather than empty:
+	// `"members":[]` would be a promise of a roster this viewer is not entitled
+	// to, and permission is absence all the way down.
+	for _, tc := range []struct {
+		name string
+		seed dayCardSeed
+	}{
+		{"a plain Scribe", dayCardSeed{CanAuthor: true, Roster: roster}},
+		{"a player", dayCardSeed{Roster: roster}},
+		{"an Owner with no roster read", dayCardSeed{CanAuthor: true, CanRestrict: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := dayCardPayloadJSON(tc.seed, src)
+			if strings.Contains(raw, `"members"`) {
+				t.Error("the payload carries a `members` key below the Owner floor")
+			}
+			for _, name := range []string{"Quillon Ardent", "Verrow Sedge", "Ilmen Vast"} {
+				if strings.Contains(raw, name) {
+					t.Errorf("the payload names %q below the Owner floor — the audience "+
+						"roster is Restricted's own data and Restricted is Owner-only", name)
+				}
+			}
+		})
+	}
+
+	// THE PAIR AGREES WITH THE PANEL'S, INDEX FOR INDEX.
+	members := dayCardMembers(roster, true)
+	if len(members) != len(roster) {
+		t.Fatalf("projected %d members from a roster of %d", len(members), len(roster))
+	}
+	for i, m := range members {
+		hue, pattern := benchRsvpIdentity(i)
+		if m.Axis != hue || m.Pattern != pattern {
+			t.Errorf("member %d draws (%s, %s); the RSVP panel draws (%s, %s) for the same "+
+				"person — one derivation, or the two surfaces disagree in colour",
+				i, m.Axis, m.Pattern, hue, pattern)
+		}
+		if m.Initials != benchRsvpInitials(m.Name) {
+			t.Errorf("member %d's mark is %q, not the panel's %q", i, m.Initials,
+				benchRsvpInitials(m.Name))
+		}
+	}
+}
+
 // TestDayCard_APlayerPayloadCarriesNoGMMarkInAnyForm. The producer leaves
 // AudienceMark nil for a viewer who is not entitled to it, so `gold` and
 // `audience` are absent for a player BY CONSTRUCTION — this asserts the
@@ -187,14 +303,14 @@ func TestDayCard_PayloadCarriesTheLedgerRowFieldSetAndNothingMore(t *testing.T) 
 // surface where a player opens something adjacent to authoring.
 func TestDayCard_APlayerPayloadCarriesNoGMMarkInAnyForm(t *testing.T) {
 	gmData, gmCal := dayCardFixture(t, BlockViewer{UserID: "u-gm", Role: permissions.RoleOwner})
-	gm := dayCardPayloadJSON(true, dayCardSource{Block: &BenchBlock{Data: gmData}, Calendar: gmCal})
+	gm := dayCardPayloadJSON(dayCardSeed{CanAuthor: true}, dayCardSource{Block: &BenchBlock{Data: gmData}, Calendar: gmCal})
 	if !strings.Contains(gm, `"gold":true`) {
 		t.Fatal("the GM payload carries no gold rail at all; the player assertion below " +
 			"would be vacuous")
 	}
 	for _, name := range []string{"u-nissa", "u-bryn"} {
 		pd, pcal := dayCardFixture(t, BlockViewer{UserID: name, Role: permissions.RolePlayer})
-		raw := dayCardPayloadJSON(false, dayCardSource{Block: &BenchBlock{Data: pd}, Calendar: pcal})
+		raw := dayCardPayloadJSON(dayCardSeed{}, dayCardSource{Block: &BenchBlock{Data: pd}, Calendar: pcal})
 		for _, bad := range []string{`"gold"`, `"audience"`, "GM only", "Restricted"} {
 			if strings.Contains(raw, bad) {
 				t.Errorf("%s's payload contains %q — permission is ABSENCE, and a "+

@@ -304,9 +304,18 @@ func benchFxData(isGM, isOwner bool) BenchData {
 	// predates it.
 	data.DayCard = DayCardMount{
 		CanCreate: isOwner, CanAuthorDmOnly: isOwner, CanDelete: isOwner,
-		CampaignID: "camp-1",
+		CanRestrict: isOwner,
+		CampaignID:  "camp-1",
 	}
-	data.DayCardJSON = dayCardPayloadJSON(data.DayCard.CanCreate,
+	// The Owner-only audience roster rides the same wrapper ([ER-3] SIGNED,
+	// C-CALV4-EDITOR-R2b). benchFxRoster is the same three people the RSVP
+	// panel's fixture prints, so a player render can be asserted to carry NO
+	// member name at all rather than merely to carry no roster key.
+	data.DayCardJSON = dayCardPayloadJSON(
+		dayCardSeed{
+			CanAuthor: data.DayCard.CanCreate, CanRestrict: data.DayCard.CanRestrict,
+			Roster: benchFxRoster(),
+		},
 		dayCardSource{Block: data.Primary, Calendar: primary},
 		dayCardSource{Block: data.RealWorld, Calendar: realWorld})
 	data.Ribbon = benchRibbon(benchRibbonInput{
