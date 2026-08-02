@@ -67,6 +67,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -332,7 +333,19 @@ func daycardMorphRun(t *testing.T, chrome, page string) (*daycardMorphFilm, erro
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	profile := t.TempDir()
+	// THE PROFILE DIRECTORY IS NOT `t.TempDir()`, AND THAT IS A FIXED FLAKE
+	// RATHER THAN A PREFERENCE. `t.TempDir()` is removed by the testing package
+	// in a cleanup that runs while the killed browser is still flushing its
+	// profile to disk, and `RemoveAll` then fails with "directory not empty" —
+	// which testing reports as a FAILURE of this test. It failed roughly one
+	// full-suite run in three that way, on a passing measurement, which is the
+	// worst kind of red: it teaches the next hand to re-run rather than to look.
+	// The directory is therefore ours, and it is removed AFTER the process is
+	// reaped, best effort.
+	profile, err := os.MkdirTemp("", "daycard-morph-profile-")
+	if err != nil {
+		return nil, fmt.Errorf("profile dir: %w", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, chrome,
@@ -351,11 +364,15 @@ func daycardMorphRun(t *testing.T, chrome, page string) (*daycardMorphFilm, erro
 	)
 	cmd.Stderr = nil
 	if err := cmd.Start(); err != nil {
+		_ = os.RemoveAll(profile)
 		return nil, fmt.Errorf("start chromium: %w", err)
 	}
 	defer func() {
 		_ = cmd.Process.Kill()
+		// REAPED FIRST, REMOVED SECOND. Deleting the profile while the process
+		// still holds it is the race this whole block exists to avoid.
 		_ = cmd.Wait()
+		_ = os.RemoveAll(profile)
 	}()
 
 	select {
