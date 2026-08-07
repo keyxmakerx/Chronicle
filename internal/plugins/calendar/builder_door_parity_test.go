@@ -131,6 +131,176 @@ func TestBuilderDoorIsNotLossierThanTheImporter(t *testing.T) {
 	if got := optStr(viaWizard.Settings.EpochName, ""); got != "TA" {
 		t.Errorf("epoch: expected the documented era-code seed %q, got %q", "TA", got)
 	}
+
+	// ── the OTHER door out of the same draft ──────────────────────────────
+	//
+	// C-SWEEP-R4 stage 27. Stage 24 applied the same four-field fix TWICE —
+	// once in builderImportResult (the commit path, asserted above) and once in
+	// draftCalendar (the preview path) — and pinned only the first. Reverting
+	// draftCalendar's four fields to their old hardcoded 24/60/60/0 left the
+	// whole calendar suite green.
+	//
+	// draftCalendar is not a lesser path: builderPreviewBlock draws the wizard's
+	// live month grid from it and builderMoonAlmanac derives the moon shelf from
+	// it, both keyed on the leap configuration. Left unpinned, a regression
+	// there shows the operator a preview whose leap years and moon phases
+	// disagree with the calendar they are about to create — the same front-
+	// door/back-door divergence stage 24 exists to close, just pointed the other
+	// way.
+	preview := draftCalendar(builderDraftFromImport(direct))
+	assertPreviewMatchesImporter(t, preview, direct)
+}
+
+// assertPreviewMatchesImporter compares the wizard's PREVIEW projection against
+// the plain importer, on the fields stage 24 fixed.
+//
+// It also asserts the fixture is capable of failing: each of the four settings
+// must differ from the value draftCalendar used to hardcode, or the comparison
+// would pass on a fully reverted draftCalendar and prove nothing. That check is
+// the test's own load-bearing part — it is what makes the reviewer's mutation
+// (revert all four to 24/60/60/0) red instead of green.
+func assertPreviewMatchesImporter(t *testing.T, preview *Calendar, direct *ImportResult) {
+	t.Helper()
+
+	for _, f := range []struct {
+		name              string
+		got, want, oldHar int
+	}{
+		{"hours_per_day", preview.HoursPerDay, direct.Settings.HoursPerDay, 24},
+		{"minutes_per_hour", preview.MinutesPerHour, direct.Settings.MinutesPerHour, 60},
+		{"seconds_per_minute", preview.SecondsPerMinute, direct.Settings.SecondsPerMinute, 60},
+		{"leap_year_offset", preview.LeapYearOffset, direct.Settings.LeapYearOffset, 0},
+	} {
+		if f.want == f.oldHar {
+			t.Fatalf("%s: the fixture authors %d, which is the value draftCalendar used to "+
+				"hardcode — this assertion would pass on the reverted code and proves nothing",
+				f.name, f.want)
+		}
+		if f.got != f.want {
+			t.Errorf("%s: the plain importer keeps %d, the wizard's PREVIEW showed %d",
+				f.name, f.want, f.got)
+		}
+	}
+
+	// Not part of the four, asserted so a regression cannot hide behind them.
+	if preview.LeapYearEvery != direct.Settings.LeapYearEvery {
+		t.Errorf("leap_year_every: importer %d, preview %d",
+			direct.Settings.LeapYearEvery, preview.LeapYearEvery)
+	}
+	if preview.CurrentYear != direct.Settings.CurrentYear {
+		t.Errorf("current_year: importer %d, preview %d",
+			direct.Settings.CurrentYear, preview.CurrentYear)
+	}
+
+	// The moon colour, on the preview side. draftCalendar stamps the fallback
+	// swatch only over an EMPTY colour; the fixture authors one, so the swatch
+	// must not appear.
+	if len(preview.Moons) != len(direct.Moons) {
+		t.Fatalf("moons: importer %d, preview %d", len(direct.Moons), len(preview.Moons))
+	}
+	for i, w := range direct.Moons {
+		if got := preview.Moons[i].Color; got != w.Color {
+			t.Errorf("moon %d colour: the plain importer keeps %q, the wizard's PREVIEW showed %q",
+				i, w.Color, got)
+		}
+		if preview.Moons[i].CycleDays != w.CycleDays {
+			t.Errorf("moon %d cycle: importer %v, preview %v",
+				i, w.CycleDays, preview.Moons[i].CycleDays)
+		}
+	}
+
+	// The era code, on the preview side.
+	if len(preview.Eras) != len(direct.Eras) {
+		t.Fatalf("eras: importer %d, preview %d", len(direct.Eras), len(preview.Eras))
+	}
+	for i, w := range direct.Eras {
+		wantCode := optStr(w.Description, "")
+		if wantCode == "" {
+			t.Fatal("the fixture era must carry an abbreviation, or this assertion proves nothing")
+		}
+		if got := optStr(preview.Eras[i].Description, ""); got != wantCode {
+			t.Errorf("era %d code: the plain importer keeps %q, the wizard's PREVIEW showed %q",
+				i, wantCode, got)
+		}
+	}
+}
+
+// TestBuilderPreviewAndCreateAgree closes the loop the other way.
+//
+// The assertion above ties the preview to the IMPORTER. This one ties it to
+// what Create will actually write, from the SAME draft — which is the promise
+// the wizard makes to the operator ("the result looks the same", [WZ-15]) and
+// the only comparison that stays meaningful for a draft the operator typed by
+// hand, where there is no importer leg to compare against at all.
+//
+// It runs over every embedded preset as well as the odd-units payload, so a
+// door that diverges only on Gregorian-shaped input is still caught.
+func TestBuilderPreviewAndCreateAgree(t *testing.T) {
+	drafts := map[string]*builderDraft{}
+
+	direct, err := DetectAndParse([]byte(doorParityPayload))
+	if err != nil {
+		t.Fatalf("plain importer: %v", err)
+	}
+	drafts["odd-units"] = builderDraftFromImport(direct)
+
+	for _, p := range builderPresets {
+		d, perr := builderPresetDraft(p.Key)
+		if perr != nil {
+			t.Fatalf("preset %q: %v", p.Key, perr)
+		}
+		drafts[p.Key] = d
+	}
+
+	for name, d := range drafts {
+		t.Run(name, func(t *testing.T) {
+			preview := draftCalendar(d)
+			created := builderImportResult(d)
+
+			if preview.HoursPerDay != created.Settings.HoursPerDay ||
+				preview.MinutesPerHour != created.Settings.MinutesPerHour ||
+				preview.SecondsPerMinute != created.Settings.SecondsPerMinute ||
+				preview.LeapYearEvery != created.Settings.LeapYearEvery ||
+				preview.LeapYearOffset != created.Settings.LeapYearOffset ||
+				preview.CurrentYear != created.Settings.CurrentYear {
+				t.Errorf("the preview shows a different calendar from the one Create writes:\n"+
+					"  preview hours=%d min=%d sec=%d every=%d offset=%d year=%d\n"+
+					"  create  hours=%d min=%d sec=%d every=%d offset=%d year=%d",
+					preview.HoursPerDay, preview.MinutesPerHour, preview.SecondsPerMinute,
+					preview.LeapYearEvery, preview.LeapYearOffset, preview.CurrentYear,
+					created.Settings.HoursPerDay, created.Settings.MinutesPerHour,
+					created.Settings.SecondsPerMinute, created.Settings.LeapYearEvery,
+					created.Settings.LeapYearOffset, created.Settings.CurrentYear)
+			}
+			if optStr(preview.EpochName, "") != optStr(created.Settings.EpochName, "") {
+				t.Errorf("epoch: preview %q, create %q",
+					optStr(preview.EpochName, ""), optStr(created.Settings.EpochName, ""))
+			}
+
+			if len(preview.Moons) != len(created.Moons) {
+				t.Fatalf("moons: preview %d, create %d", len(preview.Moons), len(created.Moons))
+			}
+			for i := range created.Moons {
+				if preview.Moons[i].Color != created.Moons[i].Color ||
+					preview.Moons[i].CycleDays != created.Moons[i].CycleDays ||
+					preview.Moons[i].PhaseOffset != created.Moons[i].PhaseOffset {
+					t.Errorf("moon %d: preview %+v, create %+v",
+						i, preview.Moons[i], created.Moons[i])
+				}
+			}
+
+			if len(preview.Eras) != len(created.Eras) {
+				t.Fatalf("eras: preview %d, create %d", len(preview.Eras), len(created.Eras))
+			}
+			for i := range created.Eras {
+				if optStr(preview.Eras[i].Description, "") != optStr(created.Eras[i].Description, "") {
+					t.Errorf("era %d code: preview %q, create %q", i,
+						optStr(preview.Eras[i].Description, ""),
+						optStr(created.Eras[i].Description, ""))
+				}
+			}
+		})
+	}
 }
 
 // TestBuilderDoorSurvivesTheFormRoundTrip is the other half, and it is the half
