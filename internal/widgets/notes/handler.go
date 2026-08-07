@@ -422,19 +422,10 @@ func (h *Handler) MembersAPI(c echo.Context) error {
 
 // canAccessNote checks if a user can access a note: owner, shared with
 // everyone (is_shared), or shared with this specific user (shared_with).
+// Delegates to Note.CanAccess so the web routes and the /api/v1 note routes
+// share one predicate instead of two that can drift apart.
 func canAccessNote(note *Note, userID, campaignID string) bool {
-	if note.CampaignID != campaignID {
-		return false
-	}
-	if note.UserID == userID || note.IsShared {
-		return true
-	}
-	for _, uid := range note.SharedWith {
-		if uid == userID {
-			return true
-		}
-	}
-	return false
+	return note.CanAccess(userID, campaignID)
 }
 
 // --- Attachment Handlers ---

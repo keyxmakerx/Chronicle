@@ -53,15 +53,26 @@ func (h *NoteAPIHandler) ListNotes(c echo.Context) error {
 // GET /api/v1/campaigns/:id/notes/:noteID
 func (h *NoteAPIHandler) GetNote(c echo.Context) error {
 	noteID := c.Param("noteID")
+	key := GetAPIKey(c)
+	if key == nil {
+		return apperror.NewUnauthorized("api key required")
+	}
 
 	note, err := h.noteSvc.GetByID(c.Request().Context(), noteID)
 	if err != nil {
 		return err
 	}
 
-	// Verify the note belongs to the campaign in the URL.
+	// Verify the note belongs to the campaign in the URL AND that the caller may
+	// read it. The middleware chain only proves the caller is a member of the
+	// campaign with the "read" permission — it knows nothing about note
+	// ownership, and the service/repository address the note by bare `WHERE id
+	// = ?`. Without this gate any campaign member reads any other member's
+	// private journal. Same predicate the web route applies (ADR-013: private
+	// notes are owner-only); 404 rather than 403 so the response does not
+	// confirm that a note the caller may not see exists.
 	campaignID := c.Param("id")
-	if note.CampaignID != campaignID {
+	if !note.CanAccess(key.UserID, campaignID) {
 		return apperror.NewNotFound("note not found")
 	}
 
@@ -149,19 +160,31 @@ func (h *NoteAPIHandler) UpdateNote(c echo.Context) error {
 		return apperror.NewUnauthorized("api key required")
 	}
 
-	// Verify the note belongs to the campaign.
+	// Verify the note belongs to the campaign AND that the caller may edit it.
+	// A campaign-wide "write" permission is not authority over another member's
+	// note: without this gate any Scribe overwrites any other member's private
+	// journal. Mirrors the web route — owner or share recipient may edit.
 	existing, err := h.noteSvc.GetByID(c.Request().Context(), noteID)
 	if err != nil {
 		return err
 	}
 	campaignID := c.Param("id")
-	if existing.CampaignID != campaignID {
+	if !existing.CanAccess(key.UserID, campaignID) {
 		return apperror.NewNotFound("note not found")
 	}
 
 	var req apiUpdateNoteRequest
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
+	}
+
+	// Only the owner can change sharing/pinned status — a share recipient may
+	// edit the body but must not be able to re-share or un-share someone else's
+	// note. Mirrors the web route.
+	if !existing.IsOwnedBy(key.UserID, campaignID) {
+		req.IsShared = nil
+		req.SharedWith = nil
+		req.Pinned = nil
 	}
 
 	note, err := h.noteSvc.Update(c.Request().Context(), noteID, key.UserID, notes.UpdateNoteRequest{
@@ -185,14 +208,21 @@ func (h *NoteAPIHandler) UpdateNote(c echo.Context) error {
 // DELETE /api/v1/campaigns/:id/notes/:noteID
 func (h *NoteAPIHandler) DeleteNote(c echo.Context) error {
 	noteID := c.Param("noteID")
+	key := GetAPIKey(c)
+	if key == nil {
+		return apperror.NewUnauthorized("api key required")
+	}
 
-	// Verify the note belongs to the campaign.
+	// Verify the note belongs to the campaign AND that the caller owns it.
+	// Deletion is owner-only on the web route, and campaign-wide "write" is not
+	// authority to destroy another member's journal — not even for a note that
+	// was shared with the caller.
 	existing, err := h.noteSvc.GetByID(c.Request().Context(), noteID)
 	if err != nil {
 		return err
 	}
 	campaignID := c.Param("id")
-	if existing.CampaignID != campaignID {
+	if !existing.IsOwnedBy(key.UserID, campaignID) {
 		return apperror.NewNotFound("note not found")
 	}
 
