@@ -1104,6 +1104,76 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stage 13 (the probes had never once run)
+
+**Every real-browser probe was a silent pass, twice over.** The probes are the
+only tests in the repo that look at the RENDERED result — they drive a headless
+Chromium over a built page and read geometry out of the live layout. Every other
+test asserts on the strings we emitted, which cannot see a container query
+resolve, a Shelf collide with the Ledger, or a phone breakpoint fail to swap.
+
+They all open `if testing.Short() { t.Skip }`, and `-short` is *exactly* the mode
+CI's "Build & Test" job and `make verify` run. They then skip again with no
+Chromium — and a `go test` SKIP hides inside an `ok` package line, so a machine
+with no browser produced a green run indistinguishable from a measured one.
+
+Reproduced: changing the Shelf scroller's `max-height` from 132px to 160px in
+`static/css/calendar-block.css` leaves `go test ./internal/widgets/calendar_block/
+-short` reporting `ok`.
+
+`tools/check-browser-probes.sh` runs the eight covered probes **without**
+`-short` and then requires a `--- PASS:` line from each **by name** — so a probe
+that skipped, failed, was renamed or was deleted fails the guard, and coverage
+cannot evaporate by rename. With no browser it prints a loud banner naming every
+probe that did not run and exits 0; `BROWSER_PROBES_REQUIRED=1` (set by the new
+`Browser Probes` CI job) makes that fatal instead. `TestProbe_MobileBreakpointSwap
+InRealBrowser` also needs the Tailwind CLI and is tracked as its own named
+dependency group. The guard self-tests on every run (SKIP / FAIL / ABSENT must
+each fire) in the house guard idiom. Wired into `make verify` as `make
+test-probes`.
+
+Out of scope by design: the opt-in explorers and screenshot generators
+(`DAYCARD_GEOMETRY`, `DAYCARD_FLOORS`, `DAYCARD_MORPH_TRACE`, `*_screenshot_gen`)
+— they emit artefacts and assert nothing.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 12 (a half-applied plugin migration was terminal)
+
+**A plugin migration that died on its second statement could never be finished.**
+`execPluginMigration` splits on semicolons, executes statement by statement on a
+plain `*sql.DB`, and writes the `plugin_schema_versions` row only after the LAST
+one succeeds. A failure part-way therefore left the earlier statements' effects
+in the database and *no record that anything happened*. The next boot replayed
+from statement one and died on "duplicate column name" — because most plugin
+ALTERs are not idempotent — so the operator saw an artefact of the retry instead
+of the real cause, and repairing the real cause could never help.
+
+**This is not a transaction and does not pretend to be one.** MariaDB has no
+transactional DDL: every CREATE / ALTER / DROP / RENAME commits implicitly. The
+error text says so rather than implying a rollback that did not happen.
+
+Two mechanisms, in `internal/database/plugin_migration_safety.go`:
+
+- **Pre-flight applicability check.** Every statement is validated against the
+  schema catalogue *as it will stand at that point in the migration* (the
+  simulation moves forward, so the normal "CREATE then ALTER" shape is not
+  falsely refused). If any statement cannot succeed, the migration aborts having
+  executed NOTHING — half-applied-and-unrecoverable becomes nothing-applied-and-
+  actionable. Table granularity; **fails open** if `information_schema` cannot be
+  read, because refusing every plugin migration over a metadata hiccup would be
+  worse than the bug.
+- **Partial-progress recording** in a new runtime table `plugin_migration_progress`.
+  The count of statements that DID apply is written before the error returns, so
+  the next boot resumes after them. Keyed by a sha256 of the migration text and
+  honoured only on a byte-identical match — a resume that skipped the WRONG
+  statements would be far worse than the crash-loop it replaces. Every uncertain
+  answer degrades to replaying from zero, i.e. the pre-existing behaviour.
+
+Three DB-backed regression tests (`TestPluginMigration_*`) run in the existing
+`Fresh-DB Migration Replay` job and are named in its grep-for-PASS assertion, so
+a skip fails the job. `TestFreshDatabase_EveryPluginSchemaApplies` still passes,
+which is what rules out the pre-flight falsely aborting a real migration — a
+false abort is the one outcome worse than the bug.
+
 #### 2026-08-07 — C-SWEEP-R4 stage 11 (every fresh install shipped a dead plugin)
 
 **`foundry_vtt`'s migration 001 crashed on its FIRST statement on every
