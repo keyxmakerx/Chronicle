@@ -129,6 +129,21 @@ jobs:
         # means the rule can fire. Sweep of the survivors: C-HTMX-SCRIPT-SWEEP.
         run: ./tools/check-page-scripts.sh
 
+      - name: Dead widget-mount ratchet
+        # boot.js binds a `data-widget="name"` mount to whatever
+        # Chronicle.register('name', …) put in its registry, and RETURNS
+        # SILENTLY when the name is absent. Nothing lazy-loads the file — no
+        # script injection, no dynamic import, no bundler. So a widget whose JS
+        # is in no <script src> anywhere is a permanently empty div, with an
+        # empty console and a page that looks finished. That is how `aliases`,
+        # `inventory` and `transaction_log` shipped fully built and permanently
+        # blank on entity pages (C-SWEEP-R3).
+        #
+        # Whole-tree ratchet against tools/widget-mount-allowlist.txt, which may
+        # only shrink. Needs no git history. Every run self-tests first, so "OK"
+        # means the rule can fire.
+        run: ./tools/check-widget-mounts.sh
+
       - name: Test
         # Includes M-B2.2 cross-plugin import guard (TestPluginImportGuard in
         # internal/wire/plugin_import_guard_test.go): fails on any NEW
