@@ -2,6 +2,8 @@
 // campaign export envelope declares is actually wired to an adapter in
 // app/routes.go.
 //
+// Fix id: promises/notes-never-exported.
+//
 // This exists because of the notes hole (sweep R4 stage 15): campaigns'
 // ExportImportService had SetNoteExporter / SetNoteImporter setters and an
 // envelope field for notes, but nothing ever called the setters. The

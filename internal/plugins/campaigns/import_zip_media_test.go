@@ -1,6 +1,8 @@
 // import_zip_media_test.go pins the ruling on "Export ZIP (with media)"
 // (sweep R4 stage 17).
 //
+// Fix id: promises/export-zip-media-dropped.
+//
 // The export side was never broken: the zip really does contain campaign.json
 // plus a media/ folder of real bytes. Two things made it read as a promise
 // that round-trips:

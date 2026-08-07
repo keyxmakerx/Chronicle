@@ -1,6 +1,8 @@
 // sync_pull_cursor_test.go is the regression for the unreachable-tail bug in
 // POST /api/v1/campaigns/:id/sync (sweep R4 stage 18).
 //
+// Fix id: backend/syncapi-pull-1000-cap-no-cursor.
+//
 // The pull walked the campaign's entity list internally, page 1 to
 // syncMaxPullPages, and stopped. `has_more` reported the truth, but nothing
 // in the request could act on it: `since` is a FILTER over the list, not a

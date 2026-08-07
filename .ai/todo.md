@@ -1390,6 +1390,23 @@ W-H shipped the builder wizard. Three things it deliberately did not decide.
   New pin: `builder_door_parity_test.go`, whose fixture declares a value different from
   Chronicle's default for every one of the six — which the preset payloads could not
   (they all carry 24/60/60, offset 0, and an era code equal to their epoch).
+
+  **AMENDED by C-SWEEP-R4 stage 27 — the mutation coverage above was HALF.** The
+  four-field fix landed in TWO functions, `builderImportResult` (commit) and
+  `draftCalendar` (preview), and only the commit path was pinned: reverting
+  `draftCalendar` alone to 24/60/60/0 left the whole calendar suite green. Since
+  `draftCalendar` feeds `builderPreviewBlock` (the live month grid) and
+  `builderMoonAlmanac` (the moon shelf), both by way of the leap configuration, that
+  gap admits a preview whose leap years and moon phases disagree with the calendar the
+  operator is about to create. `TestBuilderDoorIsNotLossierThanTheImporter` now runs
+  the preview leg alongside the commit leg and asserts the fixture is CAPABLE of
+  failing (each of the four must differ from the value `draftCalendar` used to
+  hardcode). New `TestBuilderPreviewAndCreateAgree` ties preview to Create from the
+  same draft across all five embedded presets plus the odd-units payload — the only
+  comparison that still means anything for a hand-typed draft, where there is no
+  importer leg at all. Mutation-tested: reverting the four settings reds both; reverting
+  only `draftCalendar`'s moon-colour and era-code handling reds the preset matrix on
+  harptos, elven, gregorian and dwarven too.
 - [ ] ~~**THE WIZARD'S IMPORTER DOOR DISCARDS TWO AUTHORED FIELDS THE PLAIN
   IMPORTER KEEPS — a moon's colour and an era's code.** Found by the acceptance
   item's own round-trip test (`TestBuilderPresets_RoundTripThroughBuildExport`),

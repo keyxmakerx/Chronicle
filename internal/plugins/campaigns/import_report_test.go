@@ -1,5 +1,6 @@
 // import_report_test.go is the regression for the silent-partial-import bug
-// (sweep R4 stage 16). Import has always been best-effort — a single bad row
+// (sweep R4 stage 16). Fix id: backend/import-silent-partial-success.
+// Import has always been best-effort — a single bad row
 // must not abandon a half-built campaign — but every skipped row went to
 // slog.Warn only, and the handler redirected the operator to their new
 // campaign as if nothing had been lost. A restore tool that reports success

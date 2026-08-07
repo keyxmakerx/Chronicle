@@ -3,6 +3,8 @@
 #
 # THE BROWSER PROBES ACTUALLY RUN.
 #
+# Fix id: guards/probes-never-run-in-ci (C-SWEEP-R4).
+#
 # THE RULE, AND WHY IT IS A RULE. Chronicle's browser probes are the only tests
 # in the repo that look at the RENDERED result: they build a page, drive a real
 # headless Chromium over it, read geometry back out of the live layout and

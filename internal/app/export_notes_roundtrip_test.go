@@ -1,5 +1,10 @@
 // export_notes_roundtrip_test.go proves campaign export/import carries shared
-// notes. Before sweep R4 stage 15 neither adapter existed and neither setter
+// notes.
+//
+// Fix id: promises/notes-never-exported (C-SWEEP-R4 stage 15). Cited here so
+// the id is greppable from the code that discharges it — the R4 review found
+// this fix real but untraceable by name.
+// Before sweep R4 stage 15 neither adapter existed and neither setter
 // was called, so `Notes` was always empty in the envelope and always empty on
 // the way back in: the backup silently dropped every shared note in the
 // campaign. The round trip below fails (zero notes exported, zero recreated)

@@ -9,6 +9,8 @@
 // that quietly drops rows is worse than one that fails, because the operator
 // stops looking.
 //
+// Fix id: backend/import-silent-partial-success.
+//
 // ImportReport keeps best-effort behaviour and adds the missing half: every
 // skip is recorded, counted, and shown. The report threads through the
 // importer adapters exactly like *IDMap does.

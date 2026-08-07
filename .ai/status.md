@@ -1104,6 +1104,58 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stages 26–28 (the review's own findings, closed)
+
+The C-SWEEP-R4 adversarial review returned pass=false on ONE blocking item and
+one genuine test gap. Both are closed here, plus the bookkeeping the review
+flagged. Nothing in R4's substance was found false.
+
+**Stage 26 — the branch was failing its own CI.** Stage 16's ImportReport
+threading introduced four `report.Fail("calendar", …)` / `("timelines",
+"timeline", …)` labels outside the owning plugin directories, so
+`tools/check-plugin-isolation.sh` (T-B2 / M-B2.1) went red at stage 16 and
+stayed red for nine commits, including HEAD. It runs in `.github/workflows/
+ci.yml` and `make verify`. No commit claimed it passed — it simply was not run.
+The labels now route through constants in
+`internal/plugins/campaigns/import_report.go`, and guard **amendment R4-S26-A**
+adds `const_registry_files`: exact-path matching, exempting only a bare
+`Name = "slug"` declaration that is the whole line. That is strictly narrower
+than the `always_allowed_prefixes` entry the guard itself suggests, which would
+have exempted the entire file forever including any call site later added to it.
+`tools/test-plugin-isolation.sh` (new, 7 cases, wired into CI and `make verify`)
+mutation-tests the narrowness in both directions.
+
+**Stage 27 — the preview door was fixed but unpinned.** Stage 24 applied the
+same four-field fix in `builderImportResult` (commit path) and `draftCalendar`
+(preview path) and tested only the first; reverting `draftCalendar` to
+24/60/60/0 left the whole calendar suite green. `draftCalendar` feeds
+`builderPreviewBlock` and `builderMoonAlmanac`, so an unpinned regression there
+shows a preview whose leap years and moon phases disagree with the calendar
+about to be created. `TestBuilderDoorIsNotLossierThanTheImporter` now runs the
+preview leg too (and asserts the fixture can fail), and
+`TestBuilderPreviewAndCreateAgree` ties preview to Create across all five
+embedded presets as well as the odd-units payload.
+
+**Stage 28 — traceability.** Five R4 fix ids had working, biting code but were
+not greppable by id. The id now appears in the file that discharges it. Full
+index:
+
+| Fix id | Where it lives |
+|---|---|
+| `guards/probes-never-run-in-ci` | `tools/check-browser-probes.sh`, `Makefile`, `.github/workflows/ci.yml` |
+| `promises/notes-never-exported` | `internal/app/export_notes_roundtrip_test.go`, `internal/wire/export_adapter_wiring_test.go` |
+| `backend/import-silent-partial-success` | `internal/plugins/campaigns/import_report.go` + `import_report_test.go` |
+| `promises/export-zip-media-dropped` | `internal/plugins/campaigns/import_zip_media_test.go` |
+| `backend/syncapi-pull-1000-cap-no-cursor` | `internal/plugins/syncapi/sync_pull_cursor_test.go` |
+
+Two review findings are recorded rather than fixed, because neither is a defect:
+
+- **R4 stage numbers 7 and 8 do not exist.** The sequence jumps 6 → 9. A
+  numbering blemish already acknowledged in the R4 report; no work is missing.
+- **`tools/restore-drill.sh` (exit 2) and `tools/test-restore-drill.sh` (exit 1)
+  fail only where no docker daemon is reachable.** Environmental, not a
+  regression, and not caused by this branch.
+
 #### 2026-08-07 — C-SWEEP-R4 stage 25 (deleting a calendar reset preferences it had nothing to do with)
 
 **`calendar_active` holds four facts on one row and only one of them is about a
