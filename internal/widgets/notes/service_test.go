@@ -20,6 +20,7 @@ type mockNoteRepo struct {
 	listByUserAndCampaignFn  func(ctx context.Context, userID, campaignID string) ([]Note, error)
 	listByEntityFn           func(ctx context.Context, userID, campaignID, entityID string) ([]Note, error)
 	listCampaignWideFn       func(ctx context.Context, userID, campaignID string) ([]Note, error)
+	listSharedByCampaignFn   func(ctx context.Context, campaignID string) ([]Note, error)
 	acquireLockFn            func(ctx context.Context, noteID, userID string) (bool, error)
 	releaseLockFn            func(ctx context.Context, noteID, userID string) error
 	forceReleaseLockFn       func(ctx context.Context, noteID string) error
@@ -75,6 +76,13 @@ func (m *mockNoteRepo) ListByEntity(ctx context.Context, userID, campaignID, ent
 func (m *mockNoteRepo) ListCampaignWide(ctx context.Context, userID, campaignID string) ([]Note, error) {
 	if m.listCampaignWideFn != nil {
 		return m.listCampaignWideFn(ctx, userID, campaignID)
+	}
+	return nil, nil
+}
+
+func (m *mockNoteRepo) ListSharedByCampaign(ctx context.Context, campaignID string) ([]Note, error) {
+	if m.listSharedByCampaignFn != nil {
+		return m.listSharedByCampaignFn(ctx, campaignID)
 	}
 	return nil, nil
 }

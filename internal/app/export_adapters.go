@@ -21,6 +21,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
@@ -640,10 +641,75 @@ func (a *mapExportAdapter) ExportMaps(ctx context.Context, campaignID string, en
 	return result, nil
 }
 
-// Note export is intentionally not implemented in v1 because notes are
-// per-user and the NoteService doesn't support listing all shared notes
-// across users. A future version could add a ListSharedByCampaign
-// repository method to enable shared note export.
+// --- Note Export Adapter ---
+
+// noteExportAdapter implements campaigns.NoteExporter.
+//
+// Shared notes are campaign content — session recaps, party inventories,
+// shared checklists — but export shipped without an exporter for them, so
+// every campaign backup silently omitted the lot. Personal (unshared) notes
+// stay out on purpose: they belong to a user, not to the campaign, and an
+// export is handed to whoever imports it.
+type noteExportAdapter struct {
+	svc notes.NoteService
+}
+
+// ExportNotes gathers the campaign's shared notes. Folder membership is
+// carried as an index into the returned slice, so the importer can rebuild
+// the tree without depending on note IDs surviving the trip.
+func (a *noteExportAdapter) ExportNotes(ctx context.Context, campaignID string, entitySlugLookup func(string) string) ([]campaigns.ExportNote, error) {
+	shared, err := a.svc.ListSharedByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+
+	// First pass fixes each note's position so parent references can be
+	// resolved to an index regardless of the order rows came back in.
+	indexByID := make(map[string]int, len(shared))
+	for i, n := range shared {
+		indexByID[n.ID] = i
+	}
+
+	result := make([]campaigns.ExportNote, 0, len(shared))
+	for _, n := range shared {
+		en := campaigns.ExportNote{
+			Title:     n.Title,
+			Entry:     n.Entry,
+			EntryHTML: n.EntryHTML,
+			Color:     n.Color,
+			Pinned:    n.Pinned,
+			IsFolder:  n.IsFolder,
+		}
+		if n.EntityID != nil {
+			if slug := entitySlugLookup(*n.EntityID); slug != "" {
+				s := slug
+				en.EntitySlug = &s
+			}
+		}
+		if len(n.Content) > 0 {
+			// Marshal failures here would mean unrepresentable blocks;
+			// drop the block content rather than fail the whole export.
+			if raw, err := json.Marshal(n.Content); err == nil {
+				en.Content = raw
+			} else {
+				slog.Warn("export: note content not serializable; exporting without blocks",
+					slog.String("note", n.ID), slog.Any("error", err))
+			}
+		}
+		// A parent outside the shared set (a shared note filed under a
+		// private folder) cannot be represented; the note is exported at
+		// top level rather than dropped.
+		if n.ParentID != nil {
+			if idx, ok := indexByID[*n.ParentID]; ok {
+				i := idx
+				en.ParentIndex = &i
+			}
+		}
+		result = append(result, en)
+	}
+
+	return result, nil
+}
 
 // --- Addon Export Adapter ---
 
@@ -1447,7 +1513,94 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 	return nil
 }
 
-// Note import is intentionally not implemented in v1 (see note export comment).
+// --- Note Import Adapter ---
+
+// noteImportAdapter implements campaigns.NoteImporter.
+type noteImportAdapter struct {
+	svc notes.NoteService
+}
+
+// ImportNotes recreates the campaign's shared notes, owned by the importing
+// user. Runs in two passes: create every note flat, then re-parent the ones
+// that were filed in a folder. Two passes rather than one because a folder
+// may appear after its children in the export, and a single pass would have
+// to drop those children.
+//
+// Entry / EntryHTML / Pinned are applied through Update rather than Create
+// because CreateNoteRequest carries neither, and because Update runs the
+// imported HTML through the sanitizer on the way in — an imported export is
+// untrusted input.
+func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID string, data []campaigns.ExportNote, idMap *campaigns.IDMap) error {
+	newIDs := make([]string, len(data))
+
+	for i, n := range data {
+		var entityID *string
+		if n.EntitySlug != nil {
+			if id, ok := idMap.EntitySlugToID[*n.EntitySlug]; ok {
+				eid := id
+				entityID = &eid
+			} else {
+				slog.Warn("import: note entity not found; importing note campaign-wide",
+					slog.String("entity_slug", *n.EntitySlug), slog.String("note", n.Title))
+			}
+		}
+
+		var blocks []notes.Block
+		if len(n.Content) > 0 {
+			if err := json.Unmarshal(n.Content, &blocks); err != nil {
+				slog.Warn("import: note content unreadable; importing note without blocks",
+					slog.String("note", n.Title), slog.Any("error", err))
+				blocks = nil
+			}
+		}
+
+		created, err := a.svc.Create(ctx, campaignID, userID, notes.CreateNoteRequest{
+			EntityID: entityID,
+			IsFolder: n.IsFolder,
+			Title:    n.Title,
+			Content:  blocks,
+			Color:    n.Color,
+			IsShared: true, // Only shared notes are exported; keep them shared.
+		})
+		if err != nil {
+			slog.Warn("import: create note failed", slog.String("note", n.Title), slog.Any("error", err))
+			continue
+		}
+		newIDs[i] = created.ID
+
+		if n.Entry != nil || n.EntryHTML != nil || n.Pinned {
+			pinned := n.Pinned
+			if _, err := a.svc.Update(ctx, created.ID, userID, notes.UpdateNoteRequest{
+				Entry:     n.Entry,
+				EntryHTML: n.EntryHTML,
+				Pinned:    &pinned,
+			}); err != nil {
+				slog.Warn("import: note body not applied", slog.String("note", n.Title), slog.Any("error", err))
+			}
+		}
+	}
+
+	// Second pass: re-parent notes whose folder now exists.
+	for i, n := range data {
+		if n.ParentIndex == nil || newIDs[i] == "" {
+			continue
+		}
+		pi := *n.ParentIndex
+		if pi < 0 || pi >= len(newIDs) || newIDs[pi] == "" {
+			slog.Warn("import: note parent folder missing; note left at top level",
+				slog.String("note", n.Title))
+			continue
+		}
+		parentID := newIDs[pi]
+		if _, err := a.svc.Update(ctx, newIDs[i], userID, notes.UpdateNoteRequest{
+			ParentID: &parentID,
+		}); err != nil {
+			slog.Warn("import: note re-parent failed", slog.String("note", n.Title), slog.Any("error", err))
+		}
+	}
+
+	return nil
+}
 
 // addonImportAdapter implements campaigns.AddonImporter.
 type addonImportAdapter struct {

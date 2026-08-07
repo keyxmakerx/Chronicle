@@ -421,12 +421,27 @@ type ExportFogRegion struct {
 // ExportNote captures a note. Only shared notes are exported since
 // personal notes are user-specific.
 type ExportNote struct {
-	Title       string  `json:"title"`
-	Entry       *string `json:"entry,omitempty"`
-	EntryHTML   *string `json:"entry_html,omitempty"`
-	EntitySlug  *string `json:"entity_slug,omitempty"`
-	Color       string  `json:"color"`
-	Pinned      bool    `json:"pinned"`
+	Title      string  `json:"title"`
+	Entry      *string `json:"entry,omitempty"`
+	EntryHTML  *string `json:"entry_html,omitempty"`
+	EntitySlug *string `json:"entity_slug,omitempty"`
+	Color      string  `json:"color"`
+	Pinned     bool    `json:"pinned"`
+
+	// IsFolder marks a note that is a container for other notes rather
+	// than content itself.
+	IsFolder bool `json:"is_folder,omitempty"`
+
+	// Content is the legacy block content (text + checklists). Checklists
+	// live only here, never in Entry, so an export that drops this loses
+	// every checkbox in the campaign.
+	Content json.RawMessage `json:"content,omitempty"`
+
+	// ParentIndex is the index into the export's Notes slice of this
+	// note's containing folder, or nil for a top-level note. Index rather
+	// than ID for the same reason ExportEventConnection uses indices: note
+	// IDs are not stable across instances.
+	ParentIndex *int `json:"parent_index,omitempty"`
 }
 
 // --- Addons ---

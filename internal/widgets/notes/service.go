@@ -22,6 +22,13 @@ type NoteService interface {
 	ListByEntity(ctx context.Context, userID, campaignID, entityID string) ([]Note, error)
 	ListCampaignWide(ctx context.Context, userID, campaignID string) ([]Note, error)
 
+	// ListSharedByCampaign returns every shared note in the campaign across
+	// all owners. Unlike the three list methods above it applies no per-user
+	// visibility filter, so it is owner-gated data: campaign export is the
+	// only caller. Notes are campaign content, and an export that omits them
+	// is a backup that quietly lies.
+	ListSharedByCampaign(ctx context.Context, campaignID string) ([]Note, error)
+
 	// Locking
 	AcquireLock(ctx context.Context, noteID, userID string) (*Note, error)
 	ReleaseLock(ctx context.Context, noteID, userID string) error
@@ -246,6 +253,13 @@ func (s *noteService) ListByEntity(ctx context.Context, userID, campaignID, enti
 // ListCampaignWide returns campaign-wide notes (not entity-scoped).
 func (s *noteService) ListCampaignWide(ctx context.Context, userID, campaignID string) ([]Note, error) {
 	return s.repo.ListCampaignWide(ctx, userID, campaignID)
+}
+
+// ListSharedByCampaign returns every shared note in the campaign, across all
+// owners, for campaign export. See the interface comment for why this one is
+// unfiltered and who is allowed to call it.
+func (s *noteService) ListSharedByCampaign(ctx context.Context, campaignID string) ([]Note, error) {
+	return s.repo.ListSharedByCampaign(ctx, campaignID)
 }
 
 // AcquireLock attempts to take a pessimistic edit lock on the note. Returns
