@@ -405,6 +405,15 @@ func builderReadForm(c echo.Context) (d *builderDraft, step int, importer bool, 
 		LeapName:  form.Get("leap_name"),
 		LeapAfter: form.Get("leap_after"),
 		LeapNote:  form.Get("leap_note"),
+		// Carried-only payload (C-SWEEP-R4 stage 24): no station edits these
+		// four, they ride hidden from builderCarryFields, and a default of 0
+		// means "unset" — builderTimeUnits resolves the time units to 24/60/60
+		// at the two places they are consumed, so a wizard-authored calendar is
+		// unchanged while an IMPORTED 20-hour day survives to Create.
+		LeapOffset:       builderAtoi(form.Get("leap_offset"), 0),
+		HoursPerDay:      builderAtoi(form.Get("hpd"), 0),
+		MinutesPerHour:   builderAtoi(form.Get("mph"), 0),
+		SecondsPerMinute: builderAtoi(form.Get("spm"), 0),
 	}
 	d.HollowSwatch = form.Get("hollow") == "1"
 	if d.Mode == "" {
@@ -431,7 +440,12 @@ func builderReadForm(c echo.Context) (d *builderDraft, step int, importer bool, 
 	}
 	d.Weekdays = append(d.Weekdays, form["wd"]...)
 
+	// moon_color is the fourth index-aligned array here. It always rides hidden
+	// (builderCarryFields emits it outside the station guard, one per moon, in
+	// order) because it is AUTHORED DATA no station offers a picker for — the
+	// same discipline season_color rides.
 	mn, mp, ma := form["moon_name"], form["moon_period"], form["moon_newat"]
+	mc := form["moon_color"]
 	for i := range mn {
 		m := builderMoon{Name: mn[i]}
 		if i < len(mp) {
@@ -439,6 +453,9 @@ func builderReadForm(c echo.Context) (d *builderDraft, step int, importer bool, 
 		}
 		if i < len(ma) {
 			m.NewAt = builderAtof(ma[i], 0)
+		}
+		if i < len(mc) {
+			m.Color = mc[i]
 		}
 		d.Moons = append(d.Moons, m)
 	}

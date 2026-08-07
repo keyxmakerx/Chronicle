@@ -1104,6 +1104,53 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stage 24 (the front door threw away what the back door kept)
+
+**The wizard is "one code path, two front doors" — and one of the doors was
+lossier.** Six authored fields died between `builderDraftFromImport` and
+`builderImportResult`: a moon's colour, an era's code, and `hours_per_day` /
+`minutes_per_hour` / `seconds_per_minute` / `leap_year_offset`. Measured on a
+Calendaria payload declaring 20/50/40 and leap offset 3:
+
+    plain importer : hours=20 min=50 sec=40 leapOffset=3 moon=#22aa55 era code="TA"
+    wizard door    : hours=24 min=60 sec=60 leapOffset=0 moon=#c0c0c0 era code=<nil>
+
+Every one of those is a field the operator authored, the wizard DISPLAYED (the
+Eras station prints the code), and then did not write.
+
+**The booked split's open question is answered HIDDEN CARRY.** The booking noted
+that carrying a moon colour or a time unit means choosing between a new visible
+control on the Moons station — an authoring surface the wizard deliberately does
+not offer — and an invisible hidden carry. Hidden carry is the option that
+changes nothing about what the wizard ASKS: the fields ride through
+`builderCarryFields` / `builderReadForm` exactly as a season's authored colour
+and a month's day count already do. `builder.templ` is untouched and **no templ
+regen was needed**, because the carry renders through the existing generic
+hidden-input loop. "A colour is never invented here" still holds — an empty
+colour stays empty, and `builderImportMoonSwatch` now covers the one case it was
+ever right for: a moon the wizard itself created.
+
+**`draftCalendar` had to move with it.** It hardcoded 24/60/60 and wrote an empty
+moon colour and no era description, so fixing only the create path would have
+left the wizard's own preview and export contradicting its own Create.
+
+**One pin amended, named R4-S24-A.**
+`TestBuilderPresets_RoundTripThroughBuildExport` asserted all three asymmetries
+by equality rather than exemption — good discipline while they were booked, and
+exactly what made this fix legible: it reds and says *"the asymmetry was fixed
+(delete the exemption) or it moved (say where)"*. Each exemption is inverted into
+the stronger claim that the authored value survives. The two "the payload must
+still author a colour / a code" guards are kept, because without them the new
+assertions would prove nothing.
+
+**The new pin has two halves, and the second is the one that matters.** A fix
+that stopped at `builderImportResult` would have passed a unit test and still
+lost everything in the product, because the wizard has no server-side draft —
+every preview rebuilds from the posted body. `TestBuilderDoorSurvivesTheFormRoundTrip`
+replays the draft through the SHIPPED writer/reader pairing at all nine stations
+in both importer modes; removing only the carry entries reds it everywhere while
+the create-side test stays green.
+
 #### 2026-08-07 — C-SWEEP-R4 stage 23 (the Elven preset had one season, three times)
 
 **`parseCalendaria` only ever implemented one of Calendaria's two season

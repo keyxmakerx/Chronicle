@@ -1326,7 +1326,41 @@ W-H shipped the builder wizard. Three things it deliberately did not decide.
   but it is a slice judgement rather than the ruling, so it is flagged rather than
   filed: Review reads "Eras 1", the preview stat reads "RoW", and the signed
   stills read "Eras 2" / "RoW · AE".
-- [ ] **THE WIZARD'S IMPORTER DOOR DISCARDS TWO AUTHORED FIELDS THE PLAIN
+- [x] **CLOSED — C-SWEEP-R4 stage 24. The wizard's importer door is no longer lossier
+  than the importer it wraps.** All six dropped fields are carried: a moon's colour, an
+  era's code, and the four settings (`hours_per_day` / `minutes_per_hour` /
+  `seconds_per_minute` / `leap_year_offset`).
+
+  **The split's open question — visible control or invisible hidden carry — is answered
+  HIDDEN CARRY**, which is the option that changes nothing about what the wizard asks
+  the author. `builderMoon` gains `Color` and `builderDraft` gains `LeapOffset` +
+  the three time units; all of them ride hidden through `builderCarryFields` /
+  `builderReadForm` exactly as a season's authored colour and a month's day count
+  already do. No station acquires a control, the wizard acquires no notion of a
+  non-24-hour day *to author*, `builder.templ` is untouched and NO templ regen was
+  needed — the carry renders through the existing generic hidden-input loop. That also
+  keeps the "a colour is never invented here" rule intact: an empty colour stays empty,
+  and `builderImportMoonSwatch` now applies to the one case it was ever right for — a
+  moon the WIZARD created, which has no payload behind it.
+
+  **`draftCalendar` was fixed with them, and that was not optional.** It hardcoded
+  24/60/60 and wrote `Moon.Color: ""` / no era description, so fixing only the create
+  path would have left the wizard's own preview and export contradicting its own Create.
+
+  **`TestBuilderPresets_RoundTripThroughBuildExport` is AMENDED, named R4-S24-A.** It
+  asserted all three asymmetries by equality-not-exemption; each is now inverted into
+  the stronger claim that the authored value SURVIVES — the old form tolerated a lossy
+  door so long as the loss was stable, the new one forbids the loss. The two
+  "the payload must still author a colour / a code" guards are KEPT, because without
+  them the preservation assertions prove nothing. Mutation-tested in both halves:
+  reverting the create-side writes reds 6 assertions in
+  `TestBuilderDoorIsNotLossierThanTheImporter`; reverting only the CARRY entries (a fix
+  that stopped at `builderImportResult` and looked complete) reds
+  `TestBuilderDoorSurvivesTheFormRoundTrip` at all 9 stations × both importer modes.
+  New pin: `builder_door_parity_test.go`, whose fixture declares a value different from
+  Chronicle's default for every one of the six — which the preset payloads could not
+  (they all carry 24/60/60, offset 0, and an era code equal to their epoch).
+- [ ] ~~**THE WIZARD'S IMPORTER DOOR DISCARDS TWO AUTHORED FIELDS THE PLAIN
   IMPORTER KEEPS — a moon's colour and an era's code.** Found by the acceptance
   item's own round-trip test (`TestBuilderPresets_RoundTripThroughBuildExport`),
   and only after that test was anchored to the AUTHORED PAYLOAD BYTES on
@@ -1379,7 +1413,9 @@ W-H shipped the builder wizard. Three things it deliberately did not decide.
   `builder.go:754-757` is a true one-liner with no new surface, and its only
   semantic question is the narrow one of whether an era owns a code distinct from
   its epoch. Legs (1) and (3) should stay booked until the sky/reckoning question
-  is answered.
+  is answered.~~ *(the original booking, kept for the split analysis it records — the
+  coordinator ruled all three legs in together, and the hidden-carry option is the one
+  that needed no answer to the sky/reckoning question, because it adds no control)*
 - [x] **`parseCalendaria` reads moons, seasons and eras out of JSON OBJECTS and
   does not fully re-sort them, so two parses of the same bytes can disagree on
   ORDER.** CLOSED sweep R3 2026-08-07 — see the sweep entry under Critical. Go map iteration is randomised; months and weekdays are sorted by

@@ -266,6 +266,16 @@ func builderDraftFromImport(res *ImportResult) *builderDraft {
 		Mode: ModeFantasy,
 		Name: res.CalendarName,
 		Year: res.Settings.CurrentYear,
+		// CARRIED, NOT AUTHORED (C-SWEEP-R4 stage 24). No station asks for the
+		// time units or the leap phase, and before stage 24 that meant the door
+		// dropped them: builderImportResult stamped 24/60/60 and a zero offset
+		// over whatever the payload declared, so a 20-hour day imported through
+		// the WIZARD became a 24-hour day while the same file imported through
+		// the plain importer stayed 20. The wizard is a front door onto the
+		// importer, so it must not be lossier than the thing it wraps.
+		HoursPerDay:      res.Settings.HoursPerDay,
+		MinutesPerHour:   res.Settings.MinutesPerHour,
+		SecondsPerMinute: res.Settings.SecondsPerMinute,
 	}
 	if res.Settings.EpochName != nil {
 		d.EpochName = strings.TrimSpace(*res.Settings.EpochName)
@@ -273,6 +283,10 @@ func builderDraftFromImport(res *ImportResult) *builderDraft {
 	if res.Settings.LeapYearEvery > 0 {
 		d.LeapEvery = res.Settings.LeapYearEvery
 		d.LeapAdd = 1
+		// The phase rides with the modulus: "every 7 years" and "every 7 years
+		// starting at 3" are different calendars, and only one of them is what
+		// the payload said.
+		d.LeapOffset = res.Settings.LeapYearOffset
 	}
 	for _, m := range res.Months {
 		d.Months = append(d.Months, builderMonth{
@@ -288,7 +302,12 @@ func builderDraftFromImport(res *ImportResult) *builderDraft {
 		d.Weekdays = append(d.Weekdays, w.Name)
 	}
 	for _, m := range res.Moons {
-		d.Moons = append(d.Moons, builderMoon{Name: m.Name, Period: m.CycleDays, NewAt: m.PhaseOffset})
+		// The authored colour is CARRIED. A colour is still never invented here
+		// — an empty one stays empty and builderImportMoonSwatch stands in only
+		// for a moon the wizard itself created, which has no payload behind it.
+		d.Moons = append(d.Moons, builderMoon{
+			Name: m.Name, Period: m.CycleDays, NewAt: m.PhaseOffset, Color: m.Color,
+		})
 	}
 	for _, s := range res.Seasons {
 		d.Seasons = append(d.Seasons, builderSeason{
