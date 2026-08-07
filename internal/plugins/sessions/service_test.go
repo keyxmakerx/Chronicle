@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
@@ -793,8 +794,8 @@ func TestUpdateSession_Success(t *testing.T) {
 	svc := newTestSessionService(repo)
 
 	_, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-		Name:   "New Name",
-		Status: StatusPlanned,
+		Name:   patch.Of("New Name"),
+		Status: patch.Of(StatusPlanned),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -809,8 +810,8 @@ func TestUpdateSession_NotFound(t *testing.T) {
 	}
 	svc := newTestSessionService(repo)
 	_, err := svc.UpdateSession(context.Background(), "nonexistent", UpdateSessionInput{
-		Name:   "Updated",
-		Status: StatusPlanned,
+		Name:   patch.Of("Updated"),
+		Status: patch.Of(StatusPlanned),
 	})
 	assertAppError(t, err, 404)
 }
@@ -818,8 +819,8 @@ func TestUpdateSession_NotFound(t *testing.T) {
 func TestUpdateSession_EmptyName(t *testing.T) {
 	svc := newTestSessionService(&mockSessionRepo{})
 	_, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-		Name:   "",
-		Status: StatusPlanned,
+		Name:   patch.Of(""),
+		Status: patch.Of(StatusPlanned),
 	})
 	assertAppError(t, err, 400)
 }
@@ -839,8 +840,8 @@ func TestUpdateSession_InvalidStatusDefaultsToPlanned(t *testing.T) {
 	svc := newTestSessionService(repo)
 
 	_, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-		Name:   "Session",
-		Status: "invalid_status",
+		Name:   patch.Of("Session"),
+		Status: patch.Of("invalid_status"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -858,8 +859,8 @@ func TestUpdateSession_RepoUpdateError(t *testing.T) {
 	}
 	svc := newTestSessionService(repo)
 	_, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-		Name:   "Updated",
-		Status: StatusPlanned,
+		Name:   patch.Of("Updated"),
+		Status: patch.Of(StatusPlanned),
 	})
 	assertAppError(t, err, 500)
 }
@@ -879,9 +880,9 @@ func TestUpdateSession_RecurrenceIntervalDefaultsToOne(t *testing.T) {
 	svc := newTestSessionService(repo)
 
 	_, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-		Name:               "Session",
-		Status:             StatusPlanned,
-		RecurrenceInterval: 0,
+		Name:               patch.Of("Session"),
+		Status:             patch.Of(StatusPlanned),
+		RecurrenceInterval: patch.Of(0),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -926,11 +927,11 @@ func TestUpdateSession_CompletingRecurringSessionGeneratesNext(t *testing.T) {
 	svc := newTestSessionService(repo)
 
 	nextSession, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-		Name:           "Weekly Game",
-		Status:         StatusCompleted,
-		IsRecurring:    true,
-		RecurrenceType: &recType,
-		ScheduledDate:  &scheduledDate,
+		Name:           patch.Of("Weekly Game"),
+		Status:         patch.Of(StatusCompleted),
+		IsRecurring:    patch.Of(true),
+		RecurrenceType: patch.Of(recType),
+		ScheduledDate:  patch.Of(scheduledDate),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -957,8 +958,8 @@ func TestUpdateSession_CompletingNonRecurringReturnsNil(t *testing.T) {
 	svc := newTestSessionService(repo)
 
 	nextSession, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-		Name:   "One-off Game",
-		Status: StatusCompleted,
+		Name:   patch.Of("One-off Game"),
+		Status: patch.Of(StatusCompleted),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

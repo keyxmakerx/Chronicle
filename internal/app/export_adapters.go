@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -1150,17 +1151,21 @@ func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, u
 			if status == "" {
 				status = "planned"
 			}
+			// The import is a full restore of an exported row, so every
+			// field is sent explicitly: a null in the export means the
+			// source had no value, and under the sweep-R4 contract an
+			// explicit null clears (patch.FromPtr renders exactly that).
 			_, _ = a.svc.UpdateSession(ctx, newSession.ID, sessions.UpdateSessionInput{
-				Name:               sess.Name,
-				Summary:            sess.Summary,
-				ScheduledDate:      sess.ScheduledDate,
-				CalendarYear:       sess.CalendarYear,
-				CalendarMonth:      sess.CalendarMonth,
-				CalendarDay:        sess.CalendarDay,
-				Status:             status,
-				IsRecurring:        sess.IsRecurring,
-				RecurrenceType:     sess.RecurrenceType,
-				RecurrenceInterval: sess.RecurrenceInterval,
+				Name:               patch.Of(sess.Name),
+				Summary:            patch.FromPtr(sess.Summary),
+				ScheduledDate:      patch.FromPtr(sess.ScheduledDate),
+				CalendarYear:       patch.FromPtr(sess.CalendarYear),
+				CalendarMonth:      patch.FromPtr(sess.CalendarMonth),
+				CalendarDay:        patch.FromPtr(sess.CalendarDay),
+				Status:             patch.Of(status),
+				IsRecurring:        patch.Of(sess.IsRecurring),
+				RecurrenceType:     patch.FromPtr(sess.RecurrenceType),
+				RecurrenceInterval: patch.Of(sess.RecurrenceInterval),
 			})
 		}
 

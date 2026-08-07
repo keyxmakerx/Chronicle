@@ -274,12 +274,18 @@ templ SessionDetailPage(cc *campaigns.CampaignContext, session *Session, csrfTok
 							<i class="fa-solid fa-pen mr-1"></i> Edit
 						</button>
 						if session.Status == StatusPlanned {
+							// Mark Complete sends ONLY {status} — the one thing the
+							// button means. Every other key is absent, and under the
+							// sweep-R4 partial-write contract absent PRESERVES. It used
+							// to send the name as well, which was harmless; what was not
+							// harmless is that the server read every OTHER absent key as
+							// a write, erasing the schedule, summary, in-world date and
+							// recurrence config — and with them the next occurrence.
 							<button
 								type="button"
 								class="btn-primary text-sm"
 								data-url={ fmt.Sprintf("/campaigns/%s/sessions/%s", cc.Campaign.ID, session.ID) }
-								data-name={ session.Name }
-								onclick="Chronicle.apiFetch(this.dataset.url,{method:'PUT',body:{name:this.dataset.name,status:'completed'}}).then(function(r){if(r.ok)location.reload();else Chronicle.notify('Failed to complete session','error');});"
+								onclick="Chronicle.apiFetch(this.dataset.url,{method:'PUT',body:{status:'completed'}}).then(function(r){if(r.ok)location.reload();else Chronicle.notify('Failed to complete session','error');});"
 							>
 								<i class="fa-solid fa-check mr-1"></i> Mark Complete
 							</button>
