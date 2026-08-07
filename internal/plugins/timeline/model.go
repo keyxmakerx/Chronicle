@@ -8,6 +8,8 @@ package timeline
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // Zoom level constants for the timeline visualization.
@@ -305,29 +307,45 @@ type CreateTimelineEventInput struct {
 	CreatedBy       string
 }
 
-// UpdateTimelineEventInput is the validated input for updating a standalone event.
+// UpdateTimelineEventInput is the validated input for updating a standalone
+// event.
+//
+// This is a PARTIAL update and every field carries its own presence, per the
+// contract ruled on 2026-08-07 (sweep R4): an ABSENT key preserves the
+// stored value, an EXPLICIT null clears it, a present value replaces it.
+//
+// Before that, UpdateStandaloneEvent assigned all of them unguarded and the
+// edit modal sends five keys, so RENAMING an event cleared eight fields at
+// once: its entity link, its rich-text description_html, its start and end
+// times, its recurrence config and — the sharp one — its per-player
+// visibility_rules, which the edit request struct does not even carry.
+//
+// visibility_rules stays absent from that request struct on purpose. The
+// dedicated PUT .../visibility endpoint owns it, the same way the
+// permissions card owns entities' is_private; the edit modal's job is to
+// stop DESTROYING it, not to gain the ability to write it.
 type UpdateTimelineEventInput struct {
-	Name            string
-	Description     *string
-	DescriptionHTML *string
-	EntityID        *string
-	Year            int
-	Month           int
-	Day             int
-	StartHour       *int
-	StartMinute     *int
-	EndYear         *int
-	EndMonth        *int
-	EndDay          *int
-	EndHour         *int
-	EndMinute       *int
-	IsRecurring     bool
-	RecurrenceType  *string
-	Category        *string
-	Visibility      string
-	VisibilityRules *string
-	Label           *string
-	Color           *string
+	Name            patch.Field[string]
+	Description     patch.Field[string]
+	DescriptionHTML patch.Field[string]
+	EntityID        patch.Field[string]
+	Year            patch.Field[int]
+	Month           patch.Field[int]
+	Day             patch.Field[int]
+	StartHour       patch.Field[int]
+	StartMinute     patch.Field[int]
+	EndYear         patch.Field[int]
+	EndMonth        patch.Field[int]
+	EndDay          patch.Field[int]
+	EndHour         patch.Field[int]
+	EndMinute       patch.Field[int]
+	IsRecurring     patch.Field[bool]
+	RecurrenceType  patch.Field[string]
+	Category        patch.Field[string]
+	Visibility      patch.Field[string]
+	VisibilityRules patch.Field[string]
+	Label           patch.Field[string]
+	Color           patch.Field[string]
 }
 
 // ToEventLink converts a standalone TimelineEvent to an EventLink for

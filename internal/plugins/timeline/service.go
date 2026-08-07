@@ -599,47 +599,60 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 		return apperror.NewNotFound("event not found")
 	}
 
-	if input.Name == "" {
+	// Load-merge-write (sweep R4). `e` is the row as stored, so every merge
+	// below defaults to the stored value: only a key the caller actually
+	// sent can change anything. The edit modal sends five keys, and before
+	// this a rename cleared eight fields it never mentioned.
+	name := input.Name.Val(e.Name)
+	if name == "" {
 		return apperror.NewValidation("event name is required")
 	}
-	if len(input.Name) > 255 {
+	if len(name) > 255 {
 		return apperror.NewValidation("event name must be 255 characters or less")
 	}
-	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+	visibility := input.Visibility.Val(e.Visibility)
+	if visibility != "everyone" && visibility != "dm_only" {
 		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
 	}
-	if input.Color != nil && *input.Color != "" && !colorPattern.MatchString(*input.Color) {
+	color := input.Color.Ptr(e.Color)
+	if color != nil && *color != "" && !colorPattern.MatchString(*color) {
 		return apperror.NewValidation("color must be a valid hex color")
 	}
 
 	// Sanitize HTML if provided (rich text descriptions from TipTap editor).
-	var descHTML *string
-	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
-		sanitized := sanitize.HTML(*input.DescriptionHTML)
-		descHTML = &sanitized
+	// An ABSENT description_html preserves the stored HTML — this is the
+	// field whose loss made a rename silently discard a formatted write-up.
+	// A present empty string, or an explicit null, still clears, exactly as
+	// before.
+	if input.DescriptionHTML.Present() {
+		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
+			sanitized := sanitize.HTML(v)
+			e.DescriptionHTML = &sanitized
+		} else {
+			e.DescriptionHTML = nil
+		}
 	}
 
-	e.EntityID = input.EntityID
-	e.Name = input.Name
-	e.Description = input.Description
-	e.DescriptionHTML = descHTML
-	e.Year = input.Year
-	e.Month = input.Month
-	e.Day = input.Day
-	e.StartHour = input.StartHour
-	e.StartMinute = input.StartMinute
-	e.EndYear = input.EndYear
-	e.EndMonth = input.EndMonth
-	e.EndDay = input.EndDay
-	e.EndHour = input.EndHour
-	e.EndMinute = input.EndMinute
-	e.IsRecurring = input.IsRecurring
-	e.RecurrenceType = input.RecurrenceType
-	e.Category = input.Category
-	e.Visibility = input.Visibility
-	e.VisibilityRules = input.VisibilityRules
-	e.Label = input.Label
-	e.Color = input.Color
+	e.EntityID = input.EntityID.Ptr(e.EntityID)
+	e.Name = name
+	e.Description = input.Description.Ptr(e.Description)
+	e.Year = input.Year.Val(e.Year)
+	e.Month = input.Month.Val(e.Month)
+	e.Day = input.Day.Val(e.Day)
+	e.StartHour = input.StartHour.Ptr(e.StartHour)
+	e.StartMinute = input.StartMinute.Ptr(e.StartMinute)
+	e.EndYear = input.EndYear.Ptr(e.EndYear)
+	e.EndMonth = input.EndMonth.Ptr(e.EndMonth)
+	e.EndDay = input.EndDay.Ptr(e.EndDay)
+	e.EndHour = input.EndHour.Ptr(e.EndHour)
+	e.EndMinute = input.EndMinute.Ptr(e.EndMinute)
+	e.IsRecurring = input.IsRecurring.Val(e.IsRecurring)
+	e.RecurrenceType = input.RecurrenceType.Ptr(e.RecurrenceType)
+	e.Category = input.Category.Ptr(e.Category)
+	e.Visibility = visibility
+	e.VisibilityRules = input.VisibilityRules.Ptr(e.VisibilityRules)
+	e.Label = input.Label.Ptr(e.Label)
+	e.Color = color
 
 	if err := s.repo.UpdateEvent(ctx, e); err != nil {
 		return fmt.Errorf("update standalone event: %w", err)

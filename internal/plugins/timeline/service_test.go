@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
@@ -785,8 +786,8 @@ func TestUpdateStandaloneEvent_Success(t *testing.T) {
 	svc := newTestTimelineService(repo)
 
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
-		Name:       "New Name",
-		Visibility: "everyone",
+		Name:       patch.Of("New Name"),
+		Visibility: patch.Of("everyone"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -798,8 +799,8 @@ func TestUpdateStandaloneEvent_NotFound(t *testing.T) {
 	svc := newTestTimelineService(repo)
 
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "nonexistent", UpdateTimelineEventInput{
-		Name:       "X",
-		Visibility: "everyone",
+		Name:       patch.Of("X"),
+		Visibility: patch.Of("everyone"),
 	})
 	assertAppError(t, err, 404)
 }
@@ -814,8 +815,8 @@ func TestUpdateStandaloneEvent_WrongTimeline(t *testing.T) {
 
 	// Event belongs to tl-other, but we're requesting tl-1 -- should be not found.
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
-		Name:       "X",
-		Visibility: "everyone",
+		Name:       patch.Of("X"),
+		Visibility: patch.Of("everyone"),
 	})
 	assertAppError(t, err, 404)
 }
@@ -829,8 +830,8 @@ func TestUpdateStandaloneEvent_EmptyName(t *testing.T) {
 	svc := newTestTimelineService(repo)
 
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
-		Name:       "",
-		Visibility: "everyone",
+		Name:       patch.Of(""),
+		Visibility: patch.Of("everyone"),
 	})
 	assertAppError(t, err, 422)
 }
