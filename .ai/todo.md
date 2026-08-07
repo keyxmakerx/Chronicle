@@ -218,8 +218,22 @@ Carried out of R2-2a, not closed:
   CSRF-bearing write** and **any layout difference between the fixture month
   and real seeded data**.
 
-- [ ] **`C-CALV4-CARD-REDUCED-ANCHOR` — NEW at R2b stage 19, measured and
-  handed back.** Under `prefers-reduced-motion` the editor opens at the
+- [x] **`C-CALV4-CARD-REDUCED-ANCHOR` — CLOSED in sweep R3.** `edOpen` now
+  freezes the anchor's rect one line after the morph's own `fromRect` and hands
+  `edPosition` that frozen rect through the same one-shot shim the drag path
+  already used, so the read happens while the card is still the open box.
+  `placeCard` is untouched, so [ER-5]'s carve-out stays closed, and the morph's
+  SEED→FLUSH→CLASS→FLUSH→WRITE ordering is untouched because the morph branch
+  does not run under reduced motion at all. Pinned by
+  `TestDayCardReducedMotionAnchorsToItsDay` (`daycard_reduced_anchor_test.go`),
+  which drives the same page through real Chromium twice — bare and with
+  `--force-prefers-reduced-motion` — and asserts the two arms rest in the same
+  place; it goes red without the fix (reduced at l=8 against the control's
+  l=241). The Node suite could never have held this: `test/js/daycard_dom.mjs`'s
+  `El` carries a STATIC rect that `hidePopover()` does not change. Shot 13's
+  caption is corrected in the same commit. The original booking follows.
+
+  Under `prefers-reduced-motion` the editor opened at the
   VIEWPORT'S TOP-LEFT corner rather than beside the day it was opened from.
   Cause, read off the shipped path: `edOpen` calls `closeCard()` before
   `edPosition(anchor)`, and under reduced motion `closeCard` takes its

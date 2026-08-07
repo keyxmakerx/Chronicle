@@ -2082,12 +2082,37 @@
       // anything closes it — that rect is the morph's start geometry and the
       // one thing this path reads from outside the editor.
       var fromRect = edMorphRect(anchor);
+      // …AND SO IS THE PLACEMENT LAW'S ANCHOR, FOR THE SAME REASON AND ONE LINE
+      // LATER THAN IT USED TO BE (C-CALV4-CARD-REDUCED-ANCHOR).
+      //
+      // edPosition used to be handed the LIVE element and measure it AFTER
+      // `closeCard()`. With motion allowed that is harmless — `closeDelayMS`
+      // returns --disc-close and the card is still on screen at its own rect
+      // when the read happens. Under prefers-reduced-motion it is the whole
+      // defect: `closeDelayMS` returns 0 BY DESIGN (the sheet declares no
+      // transition, so waiting would leave a fully-styled card sitting there
+      // after it was logically closed), `hide()` therefore runs SYNCHRONOUSLY
+      // inside `closeCard()`, and it both strips the inline geometry and calls
+      // `hidePopover()`. The next getBoundingClientRect on that element answers
+      // 0×0 at 0,0 — so `placeCard` did its job perfectly over an anchor that no
+      // longer existed and put the editor at (8,8), the viewport's top-left,
+      // half a screen from the day it belongs to.
+      //
+      // FROZEN, NOT RE-READ. The rect is captured while the card is still the
+      // open box and handed to edPosition through the same one-shot shim the
+      // drag path and the morph seed already use, so there is exactly one
+      // measurement of the anchor per open and no ordering can invalidate it.
+      // `placeCard` is not touched — [ER-5]'s STOP-AND-FLAG carve-out stays
+      // closed; this is a reordering inside edOpen.
+      var anchorRect = (anchor && anchor.getBoundingClientRect)
+        ? anchor.getBoundingClientRect() : null;
       // The card leaves first: it cross-fades out on the mechanism it already
       // had, over --disc-close, while the editor grows over --disc-open.
       closeCard();
       edState.open = true;
       edShow();
-      var placed = anchor ? edPosition(anchor) : null;
+      var placed = anchorRect ? edPosition(
+        { getBoundingClientRect: function () { return anchorRect; } }) : null;
       // FORCED REFLOW, DELIBERATELY, and now it carries two jobs. The editor
       // was display:none a moment ago, so it has no rendered before-change
       // style and a transition started in the same frame would not run at all

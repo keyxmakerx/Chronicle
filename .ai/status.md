@@ -168,14 +168,20 @@ and it is browser-general.
     reopen after a sheeted placement handed the placement law the viewport
     width for a box about to render at `--de-w`. `edShow` now clears both.
 
+**`C-CALV4-CARD-REDUCED-ANCHOR` is closed (sweep R3, 2026-08-07).** R2b measured
+it at stage 19 and booked it, because [ER-5] made `placeCard` a STOP-AND-FLAG and
+[ER-6]/[ER-7] bound the slice to the morph's ordering. The fix needed neither:
+`edOpen` freezes the anchor's rect one line after the morph's own `fromRect` —
+BEFORE `closeCard()` runs `hide()` synchronously on the reduced-motion branch —
+and hands `edPosition` that frozen rect through the same one-shot
+`{getBoundingClientRect}` shim the drag-create path already used. Both motion
+modes now land on the same placement, measured in real Chromium by
+`TestDayCardReducedMotionAnchorsToItsDay`; shot 13's caption, which disclosed the
+defect, is corrected in the same commit.
+
 **Carried, not closed:** `C-CALV4-DAYMENU` (the 10 `menus-*` stills travel with
 it — a 22-of-32 fidelity split, never a shortfall); `C-CALV4-DAYPICK-A11Y`, now
-also holding drag-create's missing keyboard equivalent; **`C-CALV4-CARD-REDUCED-ANCHOR`
-— NEW at stage 19**, the editor opening at the viewport's top-left under
-`prefers-reduced-motion` because `closeCard` hides the card synchronously and
-the placement law is handed a 0×0 anchor (pre-existing, visible in the branch
-that has no morph at all, disclosed on shot 13's own caption and booked rather
-than fixed inside a signed carve-out); `C-CALV4-TOKENS-RESIGN`,
+also holding drag-create's missing keyboard equivalent; `C-CALV4-TOKENS-RESIGN`,
 booked a **sixth** time, with two of the seven defects now visible in stills the
 operator has signed; the live-authed CSRF case DAYCARD could not measure; **the
 day-of-week wrap at 390**, which is performed by no test and no image and is now
