@@ -94,6 +94,20 @@ test-freshdb: ## Replay core + every plugin migration against a NEVER-migrated s
 	# a half-applied migration, so it is measured on one too.
 	go test ./internal/database/ -v -run 'TestPluginMigration_'
 
+.PHONY: test-probes
+test-probes: ## Drive the real-browser probes (the only tests that see the RENDERED result)
+	# C-SWEEP-R4 (guards/probes-never-run-in-ci). The browser probes skip under
+	# `-short` — the mode BOTH `make test-unit` and `make verify` and CI's
+	# "Build & Test" job run — and skip again with no Chromium, and a `go test`
+	# SKIP hides inside an `ok` package line. So none of them had ever executed
+	# in CI or in verify, and a machine with no browser produced a green run
+	# indistinguishable from one that measured everything.
+	#
+	# The guard runs them WITHOUT -short and then requires a PASS from each by
+	# name, so once a machine CAN drive a browser, not driving it is an error.
+	# With no browser it says so loudly, naming every probe that did not run.
+	./tools/check-browser-probes.sh
+
 .PHONY: test-cover
 test-cover: ## Run tests with coverage report
 	go test ./... -coverprofile=coverage.out
@@ -114,6 +128,13 @@ test-js: ## Run JS runtime tests (cal-almanac world-state spine, node --test)
 # (`make vuln`), and tools/test-restore-drill.sh (spins real MariaDB
 # containers — too heavy for an inner-loop check; CI still runs it).
 #
+# The browser probes ARE included, at the end. `go test ./... -short` above
+# cannot see them — that is the whole point of C-SWEEP-R4's
+# guards/probes-never-run-in-ci — so verify would otherwise report a green
+# sequence in which nothing had ever looked at a rendered page. On a machine
+# with no Chromium the step names every probe it could not run and moves on;
+# it is fatal only in CI, which sets BROWSER_PROBES_REQUIRED=1.
+#
 # The three diff-scoped guards resolve their base as origin/main and need real
 # git history; in a shallow clone they silently report OK. Override with
 # DIFF_BASE=<ref>.
@@ -131,6 +152,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> guard: widget-mounts";          ./tools/check-widget-mounts.sh
 	@echo "==> go test ./... -short";          go test ./... -short
 	@echo "==> make test-js";                  $(MAKE) test-js
+	@echo "==> browser probes";                $(MAKE) test-probes
 	@echo "==> verify: OK"
 
 .PHONY: lint

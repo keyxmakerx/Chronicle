@@ -260,6 +260,72 @@ jobs:
             }
           done
 
+  # --- Real-browser probes ---
+  # C-SWEEP-R4 (guards/probes-never-run-in-ci). The probes are the ONLY tests
+  # in the repo that look at the RENDERED result — they drive a headless
+  # Chromium over a built page and read geometry out of the live layout. Every
+  # other test asserts on the strings we emitted, which cannot tell you whether
+  # a container query resolved, a shelf collided with the ledger, a card
+  # anchored to its day, or the phone breakpoint swapped the assembly.
+  #
+  # Not one of them had ever run here. They all begin
+  # `if testing.Short() { t.Skip }`, and "Build & Test" above runs
+  # `go test ./... -v -short`; they then skip again with no browser, and a
+  # `go test` SKIP is reported inside an `ok` package line. A rendering
+  # regression could land on main with a completely green build — proven by
+  # changing the Shelf scroller's max-height in static/css/calendar-block.css
+  # and watching `-short` stay green while the probe catches it.
+  #
+  # A separate job because it needs a browser and a CSS toolchain that the main
+  # job must not have to install, and because its runtime is dominated by the
+  # browser rather than by Go. BROWSER_PROBES_REQUIRED=1 makes a missing
+  # Chromium fatal HERE specifically: a runner whose browser install broke must
+  # redden the build, not quietly measure nothing. Locally the same script
+  # names what it could not run and exits clean.
+  probes:
+    name: Browser Probes
+    runs-on: ubuntu-latest
+    env:
+      # The layout the probes' Chromium finders glob for.
+      PLAYWRIGHT_BROWSERS_PATH: /opt/pw-browsers
+      BROWSER_PROBES_REQUIRED: '1'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+
+      - name: Generate templ files
+        run: templ generate
+
+      - name: Install Chromium
+        # --with-deps pulls the shared libraries a headless Chromium needs on a
+        # bare ubuntu-latest image; without them the binary exists and every
+        # probe dies on launch instead of skipping, which the guard reports as
+        # a failure rather than an absence — correctly.
+        run: npx --yes playwright@1.49.1 install --with-deps chromium
+
+      - name: Install Tailwind CLI
+        # TestProbe_MobileBreakpointSwapInRealBrowser measures a breakpoint that
+        # only exists in the BUILT stylesheet, so it needs the CLI on top of the
+        # browser. Tracked as its own dependency by the guard so a missing
+        # Tailwind cannot take the browser-only probes down with it.
+        run: npm install --no-save --no-audit --no-fund tailwindcss@3.4.17
+
+      - name: Drive the browser probes
+        # Runs them WITHOUT -short and then requires a `--- PASS:` line from
+        # each probe by name. A probe that skipped, failed, was renamed or was
+        # deleted fails this job — the coverage cannot evaporate quietly.
+        run: ./tools/check-browser-probes.sh
+
   # --- Lint ---
   lint:
     name: Lint
