@@ -587,9 +587,24 @@ a different bug:**
   conventions — an architecture decision that belongs in `.ai/decisions.md` per house
   rule 6.~~ *(the original booking, kept for the reproduction it records)*
 
-#### C. `C-CAL-YEAR-BOUNDS` — unauthenticated CPU-exhaustion DoS (dispatch drafted)
+#### C. `C-CAL-YEAR-BOUNDS` — unauthenticated CPU-exhaustion DoS
 
-- [ ] **An unbounded `?year` on the public world-state seed drives an O(year) loop
+- [x] **CLOSED — C-SWEEP-R4 stage 21.** Fixed as the ALGORITHM, not the input, per the
+  coordinator ruling: `Calendar.AbsoluteDay`'s year term is now closed-form
+  (`year·YearLength() + leapExtraDays·leapYearsBefore(year)`), so **no clamp was
+  invented, no year window exists, and none of the three entry points needed to agree
+  on a constant**. Measured on the 12-month/366-day fixture: `?year=2000000000` fell
+  from **53.5 s to ~140 ns** per call (100000000: 2.71 s → ~130 ns; 250000: 7.9 ms →
+  ~130 ns). No context threading was needed because no unbounded loop survives — the
+  remaining month loop is bounded by `len(c.Months)`. The bit-identical-arithmetic risk
+  the booking flagged is discharged by `TestAbsoluteDayClosedFormMatchesLoop`, which
+  asserts the closed form against the ORIGINAL loop as an oracle over nine calendar
+  shapes (including negative and over-modulus leap offsets) × 14 years × 7 months × 4
+  days, so no moon phase or countdown moves. `TestBlockMoonBaseDayIsSteppedNotRecomputed`
+  is AMENDED (R4-S21-A) — its old 5×-ratio premise was the linearity this fix removes,
+  so it now pins the strictly stronger year-independence property instead.
+  Pins: `absoluteday_dos_test.go`, `block_geometry_test.go`.
+- [x] ~~**An unbounded `?year` on the public world-state seed drives an O(year) loop
   with no context check.** Confirmed. It is not one handler: the same unclamped year
   reaches the same loop from `calendar/worldstate_handler.go:61` (`atoiOr`),
   `calendar/handler_v2.go:135-139` (`ShowV2` bounds month and day but **not** year)
@@ -602,7 +617,8 @@ a different bug:**
   user-visible policy: what year window is legitimate for a fantasy calendar
   (±10k? ±100k? unbounded-but-O(1)?), and is an out-of-window year a 400 or a silent
   clamp? A campaign legitimately set in year 250000 would start 400-ing on a bound
-  chosen without an operator.
+  chosen without an operator.~~ *(the original booking, kept for the reproduction it
+  records and for the clamp question the algorithmic fix made moot)*
 
 #### D. `C-PLUGIN-MIGRATION-RUNNER` — two defects in the same runner (dispatch drafted)
 

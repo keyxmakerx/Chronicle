@@ -414,11 +414,45 @@ func (c *Calendar) EraForYear(year int) *Era {
 
 // AbsoluteDay returns the total number of days from year 0 day 0 to the given
 // date (year, month 1-indexed, day). Used for moon phase calculation.
+//
+// THE YEAR TERM IS CLOSED-FORM AND THAT IS A DENIAL-OF-SERVICE FIX, not a
+// micro-optimisation. This function used to sum YearLengthForYear over every
+// year from 0, so its cost was O(year) — and `year` arrives straight off an
+// unauthenticated query string on three public seed routes
+// (calendar/worldstate_handler.go GetWorldState, calendar/handler_v2.go's
+// cursor, syncapi/calendar_api_handler.go GetWorldState), which all feed it to
+// BuildWorldStateSeed → moonSeeds → here. Measured on the 12-month/366-day
+// fixture in TestAbsoluteDayClosedFormIsNotLinear: `?year=2000000000` burned
+// **53.5 s of CPU in a single request** (100000000 → 2.7 s, 250000 → 7.9 ms).
+// Closed form retires all three at once: the same call is now ~40 ns and a
+// campaign legitimately set in year 250000 — or 2000000000 — still resolves
+// exactly the date it did before.
+//
+// NO INPUT WINDOW WAS INVENTED. Bounding `?year` would have been the cheap fix
+// and it is the wrong one: a fantasy calendar's year number is authored data,
+// the three entry points would each need the same arbitrary constant, and the
+// next caller that reaches AbsoluteDay from somewhere other than a handler
+// would still be linear. Fixing the algorithm needs no constant and no
+// coordination. No context plumbing is needed either, for the same reason:
+// after this change the function contains no unbounded loop to cancel — the
+// surviving month loop is bounded by len(c.Months).
+//
+// The arithmetic is EXACTLY the loop's, term for term, so no stored date moves:
+//
+//	Σ_{y=0}^{year-1} YearLengthForYear(y)
+//	  = Σ (YearLength() + leapExtraDays if IsLeapYear(y))
+//	  = year·YearLength() + leapExtraDays·|{y ∈ [0,year) : IsLeapYear(y)}|
+//
+// and leapYearsBefore counts that set in O(1) (see its own comment). A negative
+// or zero `year` contributes nothing, which is what the `y < year` loop did.
 func (c *Calendar) AbsoluteDay(year, month, day int) int {
 	total := 0
-	// Add full years.
-	for y := 0; y < year; y++ {
-		total += c.YearLengthForYear(y)
+	// Add full years — closed form, see the function comment.
+	if year > 0 {
+		total = year * c.YearLength()
+		if extra := c.leapExtraDays(); extra != 0 {
+			total += extra * c.leapYearsBefore(year)
+		}
 	}
 	// Add full months in the current year.
 	for i := 0; i < month-1 && i < len(c.Months); i++ {
@@ -426,6 +460,43 @@ func (c *Calendar) AbsoluteDay(year, month, day int) int {
 	}
 	total += day
 	return total
+}
+
+// leapExtraDays is the number of days a leap year adds over a common one: the
+// sum of every month's LeapYearDays, which is exactly the difference between
+// YearLengthForYear(leap) and YearLength().
+func (c *Calendar) leapExtraDays() int {
+	total := 0
+	for _, m := range c.Months {
+		total += m.LeapYearDays
+	}
+	return total
+}
+
+// leapYearsBefore counts the leap years in [0, year) in O(1) — the counting
+// half of AbsoluteDay's closed form.
+//
+// IsLeapYear(y) is `(y-LeapYearOffset) % LeapYearEvery == 0`, and a Go
+// remainder of zero means exact divisibility for either sign, so the predicate
+// is plain congruence: y ≡ LeapYearOffset (mod LeapYearEvery). Reducing the
+// offset to its least non-negative residue r turns the count into "how many
+// members of the arithmetic progression r, r+e, r+2e, … are below year", which
+// is (year-1-r)/e + 1 once year exceeds r, and 0 otherwise. Every division here
+// is on non-negative operands, so Go's truncating integer division is floor
+// division and the formula is exact.
+func (c *Calendar) leapYearsBefore(year int) int {
+	e := c.LeapYearEvery
+	if e <= 0 || year <= 0 {
+		return 0 // IsLeapYear is unconditionally false with no modulus
+	}
+	r := c.LeapYearOffset % e
+	if r < 0 {
+		r += e
+	}
+	if year <= r {
+		return 0
+	}
+	return (year-1-r)/e + 1
 }
 
 // CurrentAbsoluteDay returns AbsoluteDay for the current date.

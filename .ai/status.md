@@ -1104,6 +1104,47 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stage 21 (a query string could pin a core for a minute)
+
+**`?year` on the world-state seed was an unauthenticated CPU-exhaustion vector.**
+`Calendar.AbsoluteDay` summed `YearLengthForYear` from year 0, so its cost was
+linear in the year — and the year arrives raw off a public query string on three
+routes across two plugins (`calendar/worldstate_handler.go` `GetWorldState`,
+`calendar/handler_v2.go`'s cursor, `syncapi/calendar_api_handler.go`
+`GetWorldState`), all of which funnel into `BuildWorldStateSeed` → `moonSeeds` →
+`AbsoluteDay`. Measured before the fix on a 12-month/366-day calendar:
+`?year=2000000000` burned **53.5 s of CPU in one request**; 100000000 took 2.71 s;
+250000 took 7.9 ms. No login, no campaign membership, no rate limit in between.
+
+**The fix is the algorithm, not the input** (coordinator ruling). The year term is
+now closed-form — `year·YearLength() + leapExtraDays·leapYearsBefore(year)`, where
+`leapYearsBefore` counts an arithmetic progression in O(1) — so the same calls cost
+~140 ns. **No clamp was invented**: a fantasy year number is authored data, a bound
+would have needed the same arbitrary constant repeated at all three entry points,
+and the next caller to reach `AbsoluteDay` from somewhere that is not a handler
+would still have been linear. A campaign set in year 250000 — or 2000000000 — still
+resolves exactly the date it resolved before. No context plumbing was needed for the
+same reason: after the change there is no unbounded loop left to cancel; the
+surviving month loop is bounded by `len(c.Months)`.
+
+**The risk the booking flagged was that the leap arithmetic would not be
+bit-identical**, silently shifting every moon phase and countdown.
+`TestAbsoluteDayClosedFormMatchesLoop` discharges it by keeping the ORIGINAL loop
+in the test file as an oracle and asserting equality across nine calendar shapes
+(no modulus, offsets 0/1/3, an offset larger than the modulus, a NEGATIVE offset,
+every-year leap, months with no leap days, no months at all) × 14 years including
+0 and negatives × 7 months × 4 days.
+
+**One guard was amended, and named: R4-S21-A.**
+`TestBlockMoonBaseDayIsSteppedNotRecomputed` asserted that per-cell `AbsoluteDay`
+is ≥5× slower than stepping off one base — true only *because* `AbsoluteDay` was
+linear, which is the defect. The ratio inverted and the guard failed on a correct
+tree. It is amended to the strictly stronger property it was always a proxy for:
+year-independence, which forbids an O(year) `AbsoluteDay` outright rather than
+tolerating one so long as a single producer routes around it. Both timing guards
+race their work against a timer so a restored loop FAILS in a second instead of
+hanging until the `go test` deadline.
+
 #### 2026-08-07 — C-SWEEP-R4 stages 15–19 (the backup told four lies)
 
 Four defects in the export/import/sync path, all reproduced before they were
