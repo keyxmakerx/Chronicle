@@ -14,12 +14,13 @@
 # longer dead ALSO fails, because slack in a ratchet is a hole a dead mount can
 # be put back through.
 
-# impact_tree — internal/systems/preview.templ's "Impact Overview" diagram.
-# NOT fixable by loading static/js/widgets/impact_tree.js: that file registers
-# itself with `Chronicle.registerWidget('impact_tree', mount)`, and boot.js has
-# no registerWidget — the call sits behind `if (window.Chronicle &&
-# Chronicle.registerWidget)`, so the module would load and self-disable. Closing
-# it means either adding a second registration API to boot.js or porting the
-# widget to Chronicle.register()'s {init, destroy} shape; both are a call on the
-# public widget API, not a script-tag fix, so it is booked rather than guessed.
-impact_tree
+# EMPTY, and that is the goal state — every literal widget mount in the tree now
+# has a load path. The last survivor was `impact_tree`
+# (internal/systems/preview.templ's "Impact Overview" diagram), which stage 9
+# booked rather than guessed at because it registered with
+# `Chronicle.registerWidget('impact_tree', mount)` — an API boot.js has never
+# had — so shipping the file would only have made it load and self-disable.
+# Closed by porting it to Chronicle.register()'s {init} shape and adding the tag
+# to base.templ; pinned by test/js/impact_tree_registration.test.mjs.
+#
+# Do not re-add a name here to make this guard pass. Fix the mount.
