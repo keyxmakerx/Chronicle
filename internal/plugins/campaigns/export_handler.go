@@ -252,7 +252,7 @@ func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 		return err
 	}
 
-	campaign, err := h.exportSvc.Import(c.Request().Context(), userID, export)
+	campaign, report, err := h.exportSvc.Import(c.Request().Context(), userID, export)
 	if err != nil {
 		return err
 	}
@@ -265,6 +265,18 @@ func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 			slog.String("campaign", campaign.ID),
 			slog.Int("skipped_media_files", mediaCount),
 		)
+	}
+
+	// A partial import must say so. Redirecting to the shiny new campaign
+	// when rows were dropped is how a restore quietly lies; only a clean
+	// import earns the straight-through redirect.
+	if report.HasFailures() {
+		if middleware.IsHTMX(c) {
+			return middleware.Render(c, http.StatusOK,
+				ImportResultPanel(campaign.ID, campaign.Name, report))
+		}
+		return middleware.Render(c, http.StatusOK,
+			ImportResultPage(campaign.ID, campaign.Name, report))
 	}
 
 	redirectURL := "/campaigns/" + campaign.ID

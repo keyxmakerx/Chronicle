@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
@@ -827,7 +828,7 @@ type entityImportAdapter struct {
 
 // ImportEntities creates entity types, entities, tags, and relations from
 // import data. Returns an IDMap for cross-referencing by other importers.
-func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData) (*campaigns.IDMap, error) {
+func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData, report *campaigns.ImportReport) (*campaigns.IDMap, error) {
 	idMap := campaigns.NewIDMap(campaignID)
 
 	// 1. Create entity types.
@@ -842,6 +843,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		})
 		if err != nil {
 			slog.Warn("import: create entity type failed", slog.String("slug", et.Slug), slog.Any("error", err))
+			report.Fail("entities", "entity type", et.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -853,6 +855,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		if len(et.Fields) > 0 {
 			if err := json.Unmarshal(et.Fields, &fields); err != nil {
 				slog.Warn("import: invalid fields JSON", slog.String("type", et.Slug), slog.Any("error", err))
+				report.Fail("entities", "entity type field set", et.Name, "field definitions were not readable")
 			}
 		}
 		if len(fields) > 0 {
@@ -862,6 +865,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			})
 			if err != nil {
 				slog.Warn("import: update entity type fields failed", slog.String("type", et.Slug), slog.Any("error", err))
+				report.Fail("entities", "entity type field set", et.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -871,6 +875,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			if err := json.Unmarshal(et.Layout, &layout); err == nil {
 				if err := a.entitySvc.UpdateEntityTypeLayout(ctx, newType.ID, layout); err != nil {
 					slog.Warn("import: apply layout failed", slog.String("type", et.Slug), slog.Any("error", err))
+					report.Fail("entities", "entity type layout", et.Name, apperror.SafeMessage(err))
 				}
 			}
 		}
@@ -887,6 +892,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		typeID, ok := typeSlugToNewID[e.EntityTypeSlug]
 		if !ok {
 			slog.Warn("import: unknown entity type", slog.String("slug", e.EntityTypeSlug))
+			report.Fail("entities", "entity", e.Name, "entity type \""+e.EntityTypeSlug+"\" is not in the file")
 			continue
 		}
 
@@ -904,6 +910,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		})
 		if err != nil {
 			slog.Warn("import: create entity failed", slog.String("name", e.Name), slog.Any("error", err))
+			report.Fail("entities", "entity", e.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -931,6 +938,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			})
 			if updateErr != nil {
 				slog.Warn("import: update entity entry/image failed", slog.String("entity", e.Name), slog.Any("error", updateErr))
+				report.Fail("entities", "entity body", e.Name, apperror.SafeMessage(updateErr))
 			}
 		}
 
@@ -940,6 +948,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			if err := json.Unmarshal(e.FieldOverrides, &overrides); err == nil {
 				if err := a.entitySvc.UpdateFieldOverrides(ctx, newEntity.ID, &overrides); err != nil {
 					slog.Warn("import: apply field overrides failed", slog.String("entity", e.Name), slog.Any("error", err))
+					report.Fail("entities", "entity field override", e.Name, apperror.SafeMessage(err))
 				}
 			}
 		}
@@ -950,6 +959,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			if err := json.Unmarshal(e.PopupConfig, &config); err == nil {
 				if err := a.entitySvc.UpdatePopupConfig(ctx, newEntity.ID, &config); err != nil {
 					slog.Warn("import: apply popup config failed", slog.String("entity", e.Name), slog.Any("error", err))
+					report.Fail("entities", "entity popup config", e.Name, apperror.SafeMessage(err))
 				}
 			}
 		}
@@ -970,6 +980,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			})
 			if err != nil {
 				slog.Warn("import: set entity permissions failed", slog.String("entity", e.Name), slog.Any("error", err))
+				report.Fail("entities", "entity permission set", e.Name, apperror.SafeMessage(err))
 			}
 		}
 	}
@@ -986,6 +997,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		parentNewID, ok := entitySlugToNewID[*e.ParentSlug]
 		if !ok {
 			slog.Warn("import: parent entity not found", slog.String("entity", e.Name), slog.String("parent_slug", *e.ParentSlug))
+			report.Fail("entities", "entity parent link", e.Name, "parent \""+*e.ParentSlug+"\" is not in the file")
 			continue
 		}
 
@@ -1007,6 +1019,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		})
 		if err != nil {
 			slog.Warn("import: set parent failed", slog.String("entity", e.Name), slog.Any("error", err))
+			report.Fail("entities", "entity parent link", e.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -1016,6 +1029,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		newTag, err := a.tagSvc.Create(ctx, campaignID, t.Name, t.Color, t.DmOnly)
 		if err != nil {
 			slog.Warn("import: create tag failed", slog.String("name", t.Name), slog.Any("error", err))
+			report.Fail("entities", "tag", t.Name, apperror.SafeMessage(err))
 			continue
 		}
 		idMap.TagIDs[t.OriginalID] = newTag.ID
@@ -1064,6 +1078,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 				slog.String("source", r.SourceEntitySlug),
 				slog.String("target", r.TargetEntitySlug),
 				slog.Any("error", err))
+			report.Fail("entities", "relation", r.SourceEntitySlug+" \u2192 "+r.TargetEntitySlug, apperror.SafeMessage(err))
 		}
 	}
 
@@ -1076,7 +1091,7 @@ type calendarImportAdapter struct {
 }
 
 // ImportCalendar creates a calendar from import data.
-func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap) error {
+func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	// Convert to calendar import format.
 	months := make([]calendar.MonthInput, len(data.Months))
 	for i, m := range data.Months {
@@ -1192,6 +1207,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		})
 		if err != nil {
 			slog.Warn("import: create calendar event failed", slog.String("name", evt.Name), slog.Any("error", err))
+			report.Fail("calendar", "calendar event", evt.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -1204,7 +1220,7 @@ type sessionImportAdapter struct {
 }
 
 // ImportSessions creates sessions from import data.
-func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, userID string, data []campaigns.ExportSession, idMap *campaigns.IDMap) error {
+func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, userID string, data []campaigns.ExportSession, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, sess := range data {
 		newSession, err := a.svc.CreateSession(ctx, campaignID, sessions.CreateSessionInput{
 			Name:          sess.Name,
@@ -1221,6 +1237,7 @@ func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, u
 		})
 		if err != nil {
 			slog.Warn("import: create session failed", slog.String("name", sess.Name), slog.Any("error", err))
+			report.Fail("sessions", "session", sess.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1268,6 +1285,7 @@ func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, u
 			}
 			if err := a.svc.InviteAll(ctx, newSession.ID, userIDs); err != nil {
 				slog.Warn("import: invite attendees failed", slog.String("session", sess.Name), slog.Any("error", err))
+				report.Fail("sessions", "session attendee list", sess.Name, apperror.SafeMessage(err))
 			} else {
 				// Update statuses for attendees who responded.
 				for _, att := range sess.Attendees {
@@ -1287,7 +1305,7 @@ type timelineImportAdapter struct {
 }
 
 // ImportTimelines creates timelines from import data.
-func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID, userID string, data []campaigns.ExportTimeline, idMap *campaigns.IDMap) error {
+func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID, userID string, data []campaigns.ExportTimeline, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, tl := range data {
 		// Link to calendar if one was created.
 		var calendarID *string
@@ -1308,6 +1326,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 		})
 		if err != nil {
 			slog.Warn("import: create timeline failed", slog.String("name", tl.Name), slog.Any("error", err))
+			report.Fail("timelines", "timeline", tl.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1344,6 +1363,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 			})
 			if err != nil {
 				slog.Warn("import: create timeline event failed", slog.String("name", evt.Name), slog.Any("error", err))
+				report.Fail("timelines", "timeline event", evt.Name, apperror.SafeMessage(err))
 				continue
 			}
 			eventIndexToID[i] = newEvt.ID
@@ -1367,6 +1387,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 			})
 			if err != nil {
 				slog.Warn("import: create timeline connection failed", slog.Any("error", err))
+				report.Fail("timelines", "timeline connection", tl.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -1378,6 +1399,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 			})
 			if err != nil {
 				slog.Warn("import: create entity group failed", slog.String("name", eg.Name), slog.Any("error", err))
+				report.Fail("timelines", "timeline entity group", eg.Name, apperror.SafeMessage(err))
 				continue
 			}
 			for _, memberSlug := range eg.Members {
@@ -1397,7 +1419,7 @@ type mapImportAdapter struct {
 }
 
 // ImportMaps creates maps from import data.
-func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID string, data []campaigns.ExportMap, idMap *campaigns.IDMap) error {
+func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID string, data []campaigns.ExportMap, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, m := range data {
 		newMap, err := a.mapSvc.CreateMap(ctx, maps.CreateMapInput{
 			CampaignID:  campaignID,
@@ -1409,6 +1431,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 		})
 		if err != nil {
 			slog.Warn("import: create map failed", slog.String("name", m.Name), slog.Any("error", err))
+			report.Fail("maps", "map", m.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1422,6 +1445,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create layer failed", slog.String("name", l.Name), slog.Any("error", err))
+				report.Fail("maps", "map layer", l.Name, apperror.SafeMessage(err))
 				continue
 			}
 			layerNameToID[l.Name] = newLayer.ID
@@ -1442,6 +1466,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create marker failed", slog.String("name", mk.Name), slog.Any("error", err))
+				report.Fail("maps", "map marker", mk.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -1463,6 +1488,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create drawing failed", slog.Any("error", err))
+				report.Fail("maps", "map drawing", m.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -1497,6 +1523,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create token failed", slog.String("name", t.Name), slog.Any("error", err))
+				report.Fail("maps", "map token", t.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -1507,6 +1534,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create fog region failed", slog.Any("error", err))
+				report.Fail("maps", "map fog region", m.Name, apperror.SafeMessage(err))
 			}
 		}
 	}
@@ -1530,7 +1558,7 @@ type noteImportAdapter struct {
 // because CreateNoteRequest carries neither, and because Update runs the
 // imported HTML through the sanitizer on the way in — an imported export is
 // untrusted input.
-func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID string, data []campaigns.ExportNote, idMap *campaigns.IDMap) error {
+func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID string, data []campaigns.ExportNote, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	newIDs := make([]string, len(data))
 
 	for i, n := range data {
@@ -1542,6 +1570,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 			} else {
 				slog.Warn("import: note entity not found; importing note campaign-wide",
 					slog.String("entity_slug", *n.EntitySlug), slog.String("note", n.Title))
+				report.Fail("notes", "note entity link", n.Title, "the linked entity is not in the file")
 			}
 		}
 
@@ -1550,6 +1579,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 			if err := json.Unmarshal(n.Content, &blocks); err != nil {
 				slog.Warn("import: note content unreadable; importing note without blocks",
 					slog.String("note", n.Title), slog.Any("error", err))
+				report.Fail("notes", "note checklist", n.Title, "block content was not readable")
 				blocks = nil
 			}
 		}
@@ -1564,6 +1594,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 		})
 		if err != nil {
 			slog.Warn("import: create note failed", slog.String("note", n.Title), slog.Any("error", err))
+			report.Fail("notes", "note", n.Title, apperror.SafeMessage(err))
 			continue
 		}
 		newIDs[i] = created.ID
@@ -1576,6 +1607,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 				Pinned:    &pinned,
 			}); err != nil {
 				slog.Warn("import: note body not applied", slog.String("note", n.Title), slog.Any("error", err))
+				report.Fail("notes", "note body", n.Title, apperror.SafeMessage(err))
 			}
 		}
 	}
@@ -1589,6 +1621,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 		if pi < 0 || pi >= len(newIDs) || newIDs[pi] == "" {
 			slog.Warn("import: note parent folder missing; note left at top level",
 				slog.String("note", n.Title))
+			report.Fail("notes", "note folder link", n.Title, "its folder is not in the file")
 			continue
 		}
 		parentID := newIDs[pi]
@@ -1596,6 +1629,7 @@ func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID 
 			ParentID: &parentID,
 		}); err != nil {
 			slog.Warn("import: note re-parent failed", slog.String("note", n.Title), slog.Any("error", err))
+			report.Fail("notes", "note folder link", n.Title, apperror.SafeMessage(err))
 		}
 	}
 
@@ -1608,17 +1642,19 @@ type addonImportAdapter struct {
 }
 
 // ImportAddons enables addons from import data.
-func (a *addonImportAdapter) ImportAddons(ctx context.Context, campaignID, userID string, data []campaigns.ExportAddon) error {
+func (a *addonImportAdapter) ImportAddons(ctx context.Context, campaignID, userID string, data []campaigns.ExportAddon, report *campaigns.ImportReport) error {
 	for _, ad := range data {
 		// Look up addon by slug.
 		addon, err := a.svc.GetBySlug(ctx, ad.Slug)
 		if err != nil {
 			slog.Warn("import: addon not found", slog.String("slug", ad.Slug))
+			report.Fail("addons", "addon", ad.Slug, "not installed on this instance")
 			continue
 		}
 
 		if err := a.svc.EnableForCampaign(ctx, campaignID, addon.ID, userID); err != nil {
 			slog.Warn("import: enable addon failed", slog.String("slug", ad.Slug), slog.Any("error", err))
+			report.Fail("addons", "addon", ad.Slug, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1674,11 +1710,12 @@ type groupImportAdapter struct {
 
 // ImportGroups creates campaign groups from import data.
 // Member user IDs that don't exist on the target instance are skipped.
-func (a *groupImportAdapter) ImportGroups(ctx context.Context, campaignID string, data []campaigns.ExportGroup) error {
+func (a *groupImportAdapter) ImportGroups(ctx context.Context, campaignID string, data []campaigns.ExportGroup, report *campaigns.ImportReport) error {
 	for _, g := range data {
 		newGroup, err := a.svc.CreateGroup(ctx, campaignID, g.Name, g.Description)
 		if err != nil {
 			slog.Warn("import: create group failed", slog.String("name", g.Name), slog.Any("error", err))
+			report.Fail("groups", "group", g.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1686,6 +1723,7 @@ func (a *groupImportAdapter) ImportGroups(ctx context.Context, campaignID string
 			if err := a.svc.AddGroupMember(ctx, newGroup.ID, userID); err != nil {
 				slog.Warn("import: add group member skipped (user may not exist)",
 					slog.String("group", g.Name), slog.String("user_id", userID))
+				report.Fail("groups", "group member", userID, "no such user on this instance")
 			}
 		}
 	}
@@ -1756,11 +1794,12 @@ type postImportAdapter struct {
 
 // ImportPosts creates entity posts from import data, resolving entity slugs
 // to new IDs via the IDMap.
-func (a *postImportAdapter) ImportPosts(ctx context.Context, campaignID, userID string, data []campaigns.ExportPost, idMap *campaigns.IDMap) error {
+func (a *postImportAdapter) ImportPosts(ctx context.Context, campaignID, userID string, data []campaigns.ExportPost, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, p := range data {
 		entityID, ok := idMap.EntitySlugToID[p.EntitySlug]
 		if !ok {
 			slog.Warn("import: post entity not found", slog.String("entity_slug", p.EntitySlug), slog.String("post", p.Name))
+			report.Fail("posts", "post", p.Name, "its entity is not in the file")
 			continue
 		}
 
@@ -1771,6 +1810,7 @@ func (a *postImportAdapter) ImportPosts(ctx context.Context, campaignID, userID 
 		})
 		if err != nil {
 			slog.Warn("import: create post failed", slog.String("post", p.Name), slog.Any("error", err))
+			report.Fail("posts", "post", p.Name, apperror.SafeMessage(err))
 		}
 	}
 	return nil

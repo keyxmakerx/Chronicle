@@ -9,7 +9,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/apperror"
 
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
@@ -23,7 +26,7 @@ type fakeNoteService struct {
 
 	shared []notes.Note // What ListSharedByCampaign returns.
 
-	created []*notes.Note     // What ImportNotes created, in order.
+	created []*notes.Note // What ImportNotes created, in order.
 	byID    map[string]*notes.Note
 	nextID  int
 }
@@ -177,8 +180,12 @@ func TestCampaignExportImport_SharedNotesRoundTrip(t *testing.T) {
 	importSvc := campaigns.NewExportImportService(&stubCampaignSvc{})
 	importSvc.SetNoteImporter(&noteImportAdapter{svc: dst})
 
-	if _, err := importSvc.Import(context.Background(), "user-1", &reloaded); err != nil {
+	_, report, err := importSvc.Import(context.Background(), "user-1", &reloaded)
+	if err != nil {
 		t.Fatalf("import: %v", err)
+	}
+	if report.HasFailures() {
+		t.Errorf("clean note import reported %d failures: %s", report.Count(), report.Summary())
 	}
 
 	if len(dst.created) != 3 {
@@ -207,6 +214,39 @@ func TestCampaignExportImport_SharedNotesRoundTrip(t *testing.T) {
 	}
 	if imported.ParentID == nil {
 		t.Error("imported note was not re-filed into its folder")
+	}
+}
+
+// failingNoteService fails every Create, standing in for a database that has
+// gone away partway through a restore.
+type failingNoteService struct{ notes.NoteService }
+
+func (failingNoteService) Create(context.Context, string, string, notes.CreateNoteRequest) (*notes.Note, error) {
+	return nil, apperror.NewInternal(errors.New("notes table is gone"))
+}
+
+// TestNoteImportAdapter_CountsDroppedNotes pins the second half of the
+// silent-partial-import fix at the adapter layer: an adapter that skips a row
+// must record it, not just log it. With the report.Fail call removed from the
+// create branch the import still "succeeds" with zero notes and a clean
+// report — exactly the lie stage 16 closes.
+func TestNoteImportAdapter_CountsDroppedNotes(t *testing.T) {
+	report := campaigns.NewImportReport()
+	a := &noteImportAdapter{svc: failingNoteService{}}
+	err := a.ImportNotes(context.Background(), "c1", "user-1", []campaigns.ExportNote{
+		{Title: "Party Loot"}, {Title: "Session Recaps"},
+	}, campaigns.NewIDMap("c1"), report)
+	if err != nil {
+		t.Fatalf("ImportNotes returned %v; per-row failures must not abort the import", err)
+	}
+	if got := report.Count(); got != 2 {
+		t.Fatalf("report.Count() = %d, want 2 — dropped notes were not counted", got)
+	}
+	if got := report.Summary(); got != "2 notes" {
+		t.Errorf("report.Summary() = %q, want %q", got, "2 notes")
+	}
+	if f := report.Failures()[0]; f.Name != "Party Loot" || f.Section != "notes" {
+		t.Errorf("failure detail does not name the lost note: %+v", f)
 	}
 }
 
