@@ -190,9 +190,17 @@ func (h *ExportHandler) ImportCampaignForm(c echo.Context) error {
 
 // ImportCampaign imports a campaign from an uploaded JSON file or zip
 // bundle (POST /campaigns/import). Creates a new campaign owned by the
-// current user. The zip path accepts files produced by ?include_media=1
-// exports; embedded media bytes are NOT yet restored automatically (see
-// docs/campaign-import.md), but the structural data still lands.
+// current user.
+//
+// The zip path accepts files produced by ?include_media=1 exports. Embedded
+// media bytes are NOT restored: doing that correctly means remapping every
+// old media ID to its new one across entity image_path, map image_id, token
+// image_path and every /media/<id> embedded in entry_html, and a half-done
+// remap would restore the files while leaving every image broken — a new
+// quiet lie in place of the old one. Booked whole as C-IMPORT-MEDIA-RESTORE
+// in .ai/todo.md. Until then the count of unrestored files goes into the
+// ImportReport so the operator is told, in the response, exactly what the
+// zip did not give back.
 func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 	userID := auth.GetUserID(c)
 	if userID == "" {
@@ -257,14 +265,21 @@ func (h *ExportHandler) ImportCampaign(c echo.Context) error {
 		return err
 	}
 
+	// Media bytes in a zip are NOT restored — see the ruling in
+	// docs/campaign-import.md and the C-IMPORT-MEDIA-RESTORE entry in
+	// .ai/todo.md. Until they are, every unrestored file goes into the
+	// report so the operator is told in the response instead of in a log
+	// line they will never read. This is the whole reason the "Export ZIP
+	// (with media)" button was a quiet lie: the bytes went in, nothing
+	// came out, and the import looked clean.
 	if mediaCount > 0 {
-		// Surfaced in logs so the operator knows the limitation kicked
-		// in. Per-user UI messaging would require a flash-message
-		// surface that isn't built yet; logging is the v1 compromise.
-		slog.Info("campaign import: media bytes in zip not yet restored",
+		slog.Info("campaign import: media bytes in zip not restored",
 			slog.String("campaign", campaign.ID),
 			slog.Int("skipped_media_files", mediaCount),
 		)
+		report.FailN("media", "media file", "",
+			"archived in the zip but not re-attached on import; restore them by hand",
+			mediaCount)
 	}
 
 	// A partial import must say so. Redirecting to the shiny new campaign

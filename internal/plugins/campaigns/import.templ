@@ -15,7 +15,8 @@ templ ImportCampaignPage(csrfToken string) {
 			<div class="mb-6">
 				<h1 class="text-2xl font-bold text-fg">Import Campaign</h1>
 				<p class="text-sm text-fg-secondary mt-1">
-					Upload a previously exported Chronicle campaign JSON file to create a new campaign.
+					Upload a previously exported Chronicle campaign file to create a new campaign.
+					Both the JSON export and the ZIP export are accepted.
 				</p>
 			</div>
 			<div class="card p-6">
@@ -36,11 +37,18 @@ templ ImportCampaignPage(csrfToken string) {
 							type="file"
 							id="import-file"
 							name="file"
-							accept=".json,application/json"
+							accept=".json,.zip,application/json,application/zip"
 							required
 							class="input w-full text-sm file:mr-4 file:py-1.5 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-accent file:text-white hover:file:bg-accent-hover file:cursor-pointer"
 						/>
-						<p class="text-xs text-fg-muted mt-1">Maximum file size: 10 MB. Must be a Chronicle export JSON file.</p>
+						<p class="text-xs text-fg-muted mt-1">
+							Must be a Chronicle export: a .json file (max 10 MB) or a .zip bundle (max 500 MB).
+						</p>
+						<p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+							A ZIP restores structural data only. The media files inside it are
+							<strong>not</strong> re-attached, so images in the restored campaign will point at
+							files that no longer exist until you restore them by hand.
+						</p>
 					</div>
 					<div class="flex items-center justify-end gap-3 pt-2 border-t border-edge">
 						<a href="/dashboard" class="btn-secondary text-sm">Cancel</a>
@@ -91,7 +99,11 @@ templ ImportResultPanel(campaignID, campaignName string, report *ImportReport) {
 				<ul class="mt-4 space-y-1 text-xs text-fg-body max-h-80 overflow-y-auto">
 					for _, f := range report.Failures() {
 						<li class="flex flex-wrap gap-x-2 border-b border-edge/50 pb-1">
-							<span class="font-medium">{ f.Kind }</span>
+							if f.Count > 1 {
+								<span class="font-medium">{ fmt.Sprintf("%d %s", f.Count, pluralize(f.Kind, f.Count)) }</span>
+							} else {
+								<span class="font-medium">{ f.Kind }</span>
+							}
 							if f.Name != "" {
 								<span class="text-fg-secondary">{ f.Name }</span>
 							}

@@ -44,6 +44,13 @@ type ImportFailure struct {
 
 	// Reason is a short, user-safe cause. Never a raw driver error.
 	Reason string
+
+	// Count is how many objects this record stands for. Normally 1. A
+	// section that loses a whole homogeneous batch — every media file in a
+	// zip, say — records it once with the real count rather than emitting
+	// hundreds of identical rows, so the tally stays exact without burying
+	// the interesting failures.
+	Count int
 }
 
 // ImportReport accumulates per-object failures during a campaign import.
@@ -64,14 +71,21 @@ func NewImportReport() *ImportReport { return &ImportReport{} }
 // Fail records one failed object. reason should already be user-safe;
 // callers holding a raw error should pass apperror.SafeMessage(err).
 func (r *ImportReport) Fail(section, kind, name, reason string) {
-	if r == nil {
+	r.FailN(section, kind, name, reason, 1)
+}
+
+// FailN records n identical failures as a single detail row. Use it when a
+// whole homogeneous batch is lost for one reason; use Fail when the objects
+// are individually worth naming.
+func (r *ImportReport) FailN(section, kind, name, reason string, n int) {
+	if r == nil || n <= 0 {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.total++
+	r.total += n
 	if len(r.failures) >= maxRecordedImportFailures {
-		r.truncated++
+		r.truncated += n
 		return
 	}
 	r.failures = append(r.failures, ImportFailure{
@@ -79,6 +93,7 @@ func (r *ImportReport) Fail(section, kind, name, reason string) {
 		Kind:    kind,
 		Name:    name,
 		Reason:  reason,
+		Count:   n,
 	})
 }
 
@@ -138,7 +153,7 @@ func (r *ImportReport) CountsByKind() []KindCount {
 
 	byKind := map[string]int{}
 	for _, f := range r.failures {
-		byKind[f.Kind]++
+		byKind[f.Kind] += f.Count
 	}
 	out := make([]KindCount, 0, len(byKind))
 	for k, n := range byKind {
