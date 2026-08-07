@@ -501,7 +501,7 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	if s.calendarImp != nil && data.Calendar != nil {
 		if err := s.calendarImp.ImportCalendar(ctx, campaignID, data.Calendar, idMap, report); err != nil {
 			slog.Warn("import calendar failed", slog.Any("error", err))
-			report.Fail("calendar", "calendar", data.Calendar.Name, apperror.SafeMessage(err))
+			report.Fail(SectionCalendar, KindCalendar, data.Calendar.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -509,7 +509,7 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	if s.timelineImp != nil && len(data.Timelines) > 0 {
 		if err := s.timelineImp.ImportTimelines(ctx, campaignID, userID, data.Timelines, idMap, report); err != nil {
 			slog.Warn("import timelines failed", slog.Any("error", err))
-			report.Fail("timelines", "timeline", "", apperror.SafeMessage(err))
+			report.Fail(SectionTimelines, KindTimeline, "", apperror.SafeMessage(err))
 		}
 	}
 

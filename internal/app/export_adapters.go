@@ -1207,7 +1207,7 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 		})
 		if err != nil {
 			slog.Warn("import: create calendar event failed", slog.String("name", evt.Name), slog.Any("error", err))
-			report.Fail("calendar", "calendar event", evt.Name, apperror.SafeMessage(err))
+			report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -1326,7 +1326,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 		})
 		if err != nil {
 			slog.Warn("import: create timeline failed", slog.String("name", tl.Name), slog.Any("error", err))
-			report.Fail("timelines", "timeline", tl.Name, apperror.SafeMessage(err))
+			report.Fail(campaigns.SectionTimelines, campaigns.KindTimeline, tl.Name, apperror.SafeMessage(err))
 			continue
 		}
 

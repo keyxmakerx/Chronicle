@@ -28,6 +28,38 @@ import (
 // whether to trust the restore.
 const maxRecordedImportFailures = 200
 
+// Report section and kind labels whose spelling collides with a plugin slug.
+//
+// These are user-facing report headings ("calendar", "timelines") and singular
+// human nouns ("calendar", "timeline"). Nothing resolves a plugin from them —
+// they are never compared against a registry, never used to build a route, and
+// never round-trip into the export envelope as a plugin identifier. But a bare
+// literal at a call site is indistinguishable from a real cross-plugin
+// reference to tools/check-plugin-isolation.sh (T-B2 / M-B2.1), and the guard
+// is right to be unable to tell the difference: a heading today is a lookup key
+// tomorrow.
+//
+// So the vocabulary lives here, in the file that owns ImportFailure, and the
+// call sites name the constant. This is the second remedy the guard documents
+// ("route the labels through a constant"). The guard's const_registry_files
+// list (amendment R4-S26-A) permits the literals on THESE const lines only —
+// any other line of this file, and every call site in every other file, stays
+// fully governed. tools/test-plugin-isolation.sh pins that narrowness.
+//
+// Labels that do not collide with a plugin slug ("notes", "maps", "entities",
+// "sessions", …) are deliberately NOT hoisted here: they are ordinary prose and
+// hoisting them would imply the guard cares about them.
+const (
+	// SectionCalendar is the export-envelope section heading for calendar data.
+	SectionCalendar = "calendar"
+	// SectionTimelines is the export-envelope section heading for timelines.
+	SectionTimelines = "timelines"
+	// KindCalendar is the singular noun for a calendar in a failure row.
+	KindCalendar = "calendar"
+	// KindTimeline is the singular noun for a timeline in a failure row.
+	KindTimeline = "timeline"
+)
+
 // ImportFailure records one object the import could not create.
 type ImportFailure struct {
 	// Section is the export envelope section the object came from,

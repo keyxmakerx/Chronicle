@@ -144,6 +144,7 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> go build ./...";                go build ./...
 	@echo "==> go vet ./...";                  go vet ./...
 	@echo "==> guard: no-instance-hostname";   ./tools/check-no-instance-hostname.sh
+	@echo "==> guard: plugin-isolation (self-test)"; ./tools/test-plugin-isolation.sh
 	@echo "==> guard: plugin-isolation";       ./tools/check-plugin-isolation.sh
 	@echo "==> guard: migration-immutability"; ./tools/check-migration-immutability.sh
 	@echo "==> guard: v2-motion-discipline";   ./tools/check-v2-motion-discipline.sh

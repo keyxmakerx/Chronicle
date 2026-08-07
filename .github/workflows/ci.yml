@@ -66,6 +66,14 @@ jobs:
         # join so it doesn't fail-self.
         run: ./tools/check-no-instance-hostname.sh
 
+      - name: Plugin isolation guard self-tests (R4-S26-A)
+        # The guard sat red for nine commits during sweep R4 because nothing
+        # ran it and nothing tested it. These self-tests build throwaway repos
+        # and prove the guard still bites — in particular that the
+        # const_registry_files allowance covers declarations only and not the
+        # call sites in the same file. Hermetic: needs no repo history.
+        run: ./tools/test-plugin-isolation.sh
+
       - name: Plugin isolation guard (M-B2.1 extended)
         # Per C-MODULARITY-PRELAUNCH-QUICKWINS + cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
         # Diff-scoped FAIL: catches NEW plugin-name string literals introduced
