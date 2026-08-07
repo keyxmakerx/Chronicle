@@ -792,7 +792,42 @@ a different bug:**
   reseat (re-point surviving rows at the promoted default before DELETE) **has no answer
   when the deleted calendar was the last one**. The fix must be a NEW migration whose
   shape is precisely the contested question.
-- [ ] **`OccursOn`'s monthly branch ignores `recurrence_interval` — "every N months"
+- [x] **CLOSED — C-SWEEP-R4 stage 22. `OccursOn`'s monthly branch honours
+  `recurrence_interval`.** The operator settled the fork on **(a) honour the interval**.
+  The predicate now takes `step = RecurrenceInterval when > 1, else 1` and requires
+  `monthsBetween % step == 0`; `RecurrenceMaxOccurrences` reads `n/step` — the 0-based
+  OCCURRENCE index, the same quantity `diff/stride` is on the week-based branch —
+  closing the entangled months-vs-occurrences bug that was booked as un-fixable until
+  the fork was chosen ("every 3 months, 4 times" used to stop after the 2nd occurrence).
+  **Nothing below interval 2 moves**: absent, 0, 1 and negative all expand exactly as
+  before, which is every row the shipped editor can author (`recurrenceBody` sends 0 for
+  the month unit). Pins: `TestEventOccursOn_MonthlyHonoursInterval`,
+  `TestEventOccursOn_MonthlyIntervalRespectsMax` in `calendar_recurrence_test.go`.
+  Two follow-ons are booked BY NAME below: `C-CALV4-MONTHLY-INTERVAL-CONTROL` and
+  `C-CAL-MONTHLY-INTERVAL-STORED-ROWS`.
+- [ ] **`C-CALV4-MONTHLY-INTERVAL-CONTROL` — restore the `every [N]` field for the month
+  unit in the daycard editor.** R2-2b withheld it *because* the server ignored the
+  interval (`calendar_daycard.js::recurrenceInterval` returns `unit === 'week'`, and its
+  comment stated the reason in as many words). Stage 22 removed that reason, so the
+  control can come back with a working backend under it. It is a UI change, not a
+  predicate change, and it needs four things moved together: `recurrenceInterval` to
+  admit `month`; `recurrenceBody` to send `recurrence_interval` for the monthly branch;
+  `recurrenceFromRecord` (the inverse) to read it back so a title-only save round-trips;
+  and the `every N months` readout wording, plus the request pins in
+  `test/js/daycard_editor_requests.test.mjs`. Small and self-contained; deliberately not
+  bundled into stage 22 so the predicate fix could be proved on its own.
+- [ ] **`C-CAL-MONTHLY-INTERVAL-STORED-ROWS` — decide what happens to rows already
+  carrying `monthly` + `interval ≥ 2`.** These are the ONLY rows stage 22 re-spaces, and
+  it re-spaces them on deploy with no operator prompt. The shipped daycard cannot author
+  one (it sends 0 for the month unit), so the sources are the REST API and the
+  pre-R2-2b drawer's stale-hidden-field leak — and a leaked value cannot be told apart
+  from a deliberate one by inspecting the row, which is exactly why stage 22 shipped no
+  reconciler: an `EnsureX` that zeroed the column would destroy a legitimately-authored
+  interval to protect a leaked one. What is needed first is a COUNT from the operator's
+  database (`SELECT COUNT(*) FROM calendar_events WHERE recurrence_type='monthly' AND
+  recurrence_interval >= 2`). If it is zero, close this with a note. If it is not, the
+  remedy is an idempotent reconciler plus an operator-visible notice, not a migration.
+- [ ] ~~**`OccursOn`'s monthly branch ignores `recurrence_interval` — "every N months"
   silently fires every month.** The code fix is small; the problem is that the two
   candidate fixes move **already-stored operator rows in OPPOSITE directions**, so this
   is a product decision with an operator gate. **Fork (a)** — honour the interval —
@@ -808,7 +843,8 @@ a different bug:**
   house precedent for exactly this situation: a change that shifts what is already in the
   operator's production database *"is a data-visible product decision with an operator
   gate, not a rendering fix."* The entangled `RecurrenceMaxOccurrences`
-  months-vs-occurrences bug cannot be fixed correctly until the fork is chosen.
+  months-vs-occurrences bug cannot be fixed correctly until the fork is chosen.~~
+  *(the original booking, kept for the reproduction and the fork analysis it records)*
 - [ ] **`parseCalendaria` ignores seasons' `monthStart`/`monthEnd`, so the shipped Elven
   preset imports three identical, wrong season ranges.** Self-contained to `import.go`,
   but it carries an un-signed semantic decision: **the two real Calendaria exports in

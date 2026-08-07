@@ -1104,6 +1104,37 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stage 22 (every N months fired every month)
+
+**`OccursOn`'s monthly branch ignored `recurrence_interval`.** It checked the
+day-of-month and the occurrence cap and returned, so an event authored as "every
+3 months" was accepted, persisted and then expanded EVERY month. The week-based
+branch has always applied its interval through `recurrenceWeeks`; monthly now
+does the same, counted in months. The operator settled the booked fork on
+**honour the interval**.
+
+**Nothing below interval 2 moves.** `step` is the stored interval only when it is
+greater than 1; absent, 0, 1 and negative all collapse to 1, which is
+byte-for-byte the old expansion — and that is every row the shipped editor can
+author, because `calendar_daycard.js::recurrenceBody` sends
+`recurrence_interval: 0` for the month unit.
+
+**The entangled cap bug is closed with it.** `RecurrenceMaxOccurrences` compared
+the raw whole-month offset, so "every 3 months, 4 times" stopped after 4 MONTHS —
+the 2nd occurrence — delivering half the series. It now compares `n/step`, the
+0-based occurrence index, which is the same quantity `diff/stride` is on the
+week-based branch. That half was booked as un-fixable until the fork was chosen.
+
+**Two follow-ons are booked BY NAME rather than bundled in.**
+`C-CALV4-MONTHLY-INTERVAL-CONTROL`: R2-2b withheld the `every [N]` field from the
+month unit *because* the server ignored it, and said so in the source; that reason
+is gone, so the control can return — as a UI change with its own inverse,
+readout wording and request pins. `C-CAL-MONTHLY-INTERVAL-STORED-ROWS`: rows
+already carrying `monthly` + `interval ≥ 2` are the only rows this re-spaces, and
+no reconciler can tell a leaked interval from a deliberate one by looking at the
+row, so stage 22 shipped none — what is needed first is a count from the
+operator's database.
+
 #### 2026-08-07 — C-SWEEP-R4 stage 21 (a query string could pin a core for a minute)
 
 **`?year` on the world-state seed was an unauthenticated CPU-exhaustion vector.**

@@ -292,8 +292,13 @@ func (c *Calendar) constLenDayIndex(year, month, day int) int {
 // four recurring types expand forward from the base date:
 //   - weekly/biweekly/custom: every (interval × week) days, base-anchored, so
 //     each instance shares the base weekday;
-//   - monthly: the same day-of-month each month, skipped in months too short for
-//     that day (leap-aware via MonthDays).
+//   - monthly: the same day-of-month every (interval) months, base-anchored,
+//     skipped in months too short for that day (leap-aware via MonthDays).
+//
+// BOTH families apply recurrence_interval. Monthly did not until C-SWEEP-R4
+// stage 22, which is why calendar_daycard.js's editor withholds the `every [N]`
+// field from the month unit — that workaround can now be lifted, booked as
+// C-CALV4-MONTHLY-INTERVAL-CONTROL.
 //
 // Recurrence stops at the recurrence-end date (inclusive) and/or after
 // RecurrenceMaxOccurrences. Multi-day events are not expanded here (the ribbon
@@ -325,10 +330,37 @@ func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
 		if day != e.Day || day > cal.MonthDays(month-1, year) {
 			return false
 		}
-		if e.RecurrenceMaxOccurrences != nil {
-			if n := monthsBetween(cal, e.Year, e.Month, year, month); n < 0 || n >= *e.RecurrenceMaxOccurrences {
-				return false
-			}
+		// MONTHLY HONOURS recurrence_interval, and did not used to
+		// (C-SWEEP-R4 stage 22). The branch checked the day-of-month and the
+		// occurrence cap and returned, so an event stored as "every 3 months"
+		// was accepted, persisted, and then expanded EVERY month — the rule the
+		// operator authored was not the rule they got. The week-based branch
+		// below has always applied its interval through recurrenceWeeks; this is
+		// the same idea, counted in months rather than weeks, and it is the ONLY
+		// difference between the two.
+		//
+		// step 1 is exactly the old behaviour, so a monthly event with no
+		// interval, a zero, or a negative one does not move. Only a stored
+		// interval of 2 or more expands differently than it did — see the
+		// commit for stage 22 for which rows those are.
+		step := 1
+		if e.RecurrenceInterval != nil && *e.RecurrenceInterval > 1 {
+			step = *e.RecurrenceInterval
+		}
+		n := monthsBetween(cal, e.Year, e.Month, year, month)
+		if n < 0 || n%step != 0 {
+			return false
+		}
+		// THE CAP COUNTS OCCURRENCES, NOT MONTHS. n is the whole-month offset
+		// from the base date, so with an interval it overcounts by exactly the
+		// step: "every 3 months, 4 times" would have stopped after 4 MONTHS —
+		// i.e. after the 2nd occurrence. n/step is the 0-based occurrence index,
+		// which is the same quantity `diff/stride` is in the week-based branch,
+		// so the two branches now read the cap the same way. This half was
+		// booked as un-fixable until the interval fork was settled; settling it
+		// unblocked it.
+		if e.RecurrenceMaxOccurrences != nil && n/step >= *e.RecurrenceMaxOccurrences {
+			return false
 		}
 		return true
 	}

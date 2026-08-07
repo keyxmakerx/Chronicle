@@ -508,8 +508,9 @@
     //
     //   AUTHORED   → recurrenceBody's mapping is sent (every 1 → weekly,
     //                every 2 → biweekly, every N → custom + interval N;
-    //                month → monthly with no interval, because OccursOn's
-    //                monthly branch ignores the interval entirely)
+    //                month → monthly with no interval, because this editor
+    //                does not offer the field for the month unit — see
+    //                recurrenceInterval; OccursOn honours one since stage 22)
     //   UNTOUCHED  → the stored triple is round-tripped exactly as stage 2 did.
     //                `form.recurrence` is ABSENT on every existing pure-function
     //                case, so those bodies are byte-identical
@@ -696,20 +697,31 @@
 
   // recurrenceInterval says whether the `every [N]` field applies at all.
   //
-  // ONLY THE WEEK UNIT HAS AN INTERVAL. OccursOn's monthly branch ignores
-  // RecurrenceInterval entirely — it checks the day-of-month and the occurrence
-  // cap and returns — so `every 2 months` would be stored, accepted and then
-  // silently expanded EVERY month. That is the same trap as a wrong unit, one
-  // level down, and the drawing offers the field on every unit. The control is
-  // therefore ABSENT for month rather than chipped: there is nothing here for a
-  // backend to add, the type simply has no interval.
+  // ONLY THE WEEK UNIT HAS AN INTERVAL — IN THIS FILE, AND NO LONGER IN THE
+  // BACKEND. R2-2b withheld the field from the month unit because OccursOn's
+  // monthly branch ignored RecurrenceInterval entirely: it checked the
+  // day-of-month and the occurrence cap and returned, so `every 2 months` would
+  // be stored, accepted and then silently expanded EVERY month. Offering a
+  // control the server discards is the same trap as a wrong unit, one level
+  // down, so the control was made ABSENT rather than chipped.
+  //
+  // C-SWEEP-R4 STAGE 22 FIXED THE SERVER. `model.go`'s monthly branch now
+  // applies the interval and reads the occurrence cap as occurrences rather
+  // than months, so the reason this control is withheld is GONE and restoring
+  // it is a UI change with a working backend under it. It is deliberately NOT
+  // done in the same stage as the predicate fix — it is booked by name as
+  // C-CALV4-MONTHLY-INTERVAL-CONTROL (.ai/todo.md), because it also needs the
+  // `every N months` readout wording, the inverse in recurrenceFromRecord, and
+  // the daycard request pins updated together.
   function recurrenceInterval(unit) { return unit === 'week'; }
 
   // recurrenceBody maps the editor's recurrence state onto the request body,
   // and it is the mapping [ER-10] condition 2 makes the real contract.
   //
   //   every 1 → weekly · every 2 → biweekly · every N → custom + interval N
-  //   month   → monthly, no interval (see recurrenceInterval)
+  //   month   → monthly, no interval (see recurrenceInterval — the server
+  //             honours one since stage 22; this file has not been taught to
+  //             AUTHOR one yet, which is C-CALV4-MONTHLY-INTERVAL-CONTROL)
   //   an UNBACKED unit → null, meaning DO NOT AUTHOR
   //
   // NULL IS THE HONEST ANSWER FOR A CHIPPED UNIT. The caller round-trips the
