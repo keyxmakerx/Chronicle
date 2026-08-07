@@ -1487,12 +1487,14 @@ func (r *entityRepository) Search(ctx context.Context, campaignID, query string,
 		return nil, 0, fmt.Errorf("counting search results: %w", err)
 	}
 
-	// Fetch page.
+	// Fetch page. `e.id` breaks name ties so the sort is a total order —
+	// entity names are not unique, and OFFSET paging over a partial order
+	// silently duplicates and skips rows (see ListOptions.OrderByClause).
 	selectQuery := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e
 	          INNER JOIN entity_types et ON et.id = e.entity_type_id
 	          %s
-	          ORDER BY e.name
+	          ORDER BY e.name ASC, e.id ASC
 	          LIMIT ? OFFSET ?`, where)
 
 	pageArgs := append(args, opts.PerPage, opts.Offset())
