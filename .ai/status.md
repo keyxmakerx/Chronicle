@@ -299,10 +299,15 @@ reproduced before anything was changed.
    by moving all three into the plugin body-script registry
    (`internal/app/routes.go` → `layouts.SetPluginBodyScripts` → `base.templ`),
    which emits outside the swapped region. **Class defect:** 29 more page-side
-   `<script src>` tags across 16 templs remain; `tools/check-page-scripts.sh` +
+   `<script src>` tags across 16 templs remained; `tools/check-page-scripts.sh` +
    `tools/page-script-allowlist.txt` is a whole-tree ratchet (wired into CI,
    self-testing) that lets the count only shrink, and the sweep is booked as
-   **C-HTMX-SCRIPT-SWEEP**.
+   **C-HTMX-SCRIPT-SWEEP**. **First survivor closed (sweep R3, 2026-08-07):**
+   the Characters page's `characters.js` — measured live in headless Chromium
+   against the vendored htmx 2.0.4 and boot.js's real config (direct load wires
+   the cast cards' quick-look; boosted sidebar nav never fetches the file and
+   the button does nothing), moved to the registry, ratchet lowered to
+   **28 across 15**. The other 15 are undiagnosed.
 
 2. **Every calendar preference write was a guaranteed FK violation.**
    `SetSidebarPinned` / `SetBlockLayers` / `SetBenchSections` inserted an empty

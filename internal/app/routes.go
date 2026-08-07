@@ -2824,11 +2824,23 @@ func (a *App) RegisterRoutes() {
 	// when its mount is absent, and none of them carries a permission decision (the
 	// gate is, as it always was, the producer not rendering the editor DOM and the
 	// server not honouring the route).
+	//
+	// characters.js JOINED FOR THE SAME REASON, ONE SURFACE LATER
+	// (C-HTMX-SCRIPT-SWEEP). It was a `<script src>` at the top of
+	// entities/characters.templ's body, i.e. inside the same swapped region, so
+	// every cast card's "quick look" button wired on a direct load of
+	// /campaigns/:id/characters and silently did nothing when the page was
+	// reached through the sidebar — the cards are real links, so the page looked
+	// and behaved normally right up to the click. It has no ordering dependency
+	// on anything above it and, like the Bench drivers, returns immediately when
+	// its mount (`[data-cast-peek]`) is absent, which on this registry is every
+	// page but one.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_widget.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/cal_visibility.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_permissions.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_daycard.js",
+		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 	}
 
 	if a.PluginHealth.IsHealthy("calendar") {

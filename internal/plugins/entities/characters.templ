@@ -14,11 +14,23 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
-// CharactersPage renders the full Characters page for a campaign. Loads the
-// per-plugin enhancement script and wraps the content fragment in the App shell.
+// CharactersPage renders the full Characters page for a campaign, wrapping the
+// content fragment in the App shell.
+//
+// THE ENHANCEMENT SCRIPT IS DELIBERATELY NOT HERE. characters.js used to be a
+// `<script src>` right here, at the top of the body — which the App layout
+// renders inside `<main id="main-content">`. Every sidebar link is
+// `hx-boost="true" hx-target="#main-content" hx-select="#main-content"`, and
+// boot.js sets `htmx.config.allowScriptTags = false`; htmx's makeFragment then
+// REMOVES every script in the swapped fragment rather than skipping it. So the
+// cast cards' quick-look wired on a direct load and silently did not when the
+// page was reached through the sidebar, looking identical either way. The
+// driver now ships from the plugin body-script registry (internal/app/routes.go
+// → layouts.SetPluginBodyScripts → base.templ), which emits after
+// `{children...}` — outside the swapped region. Pinned by
+// characters_boosted_nav_test.go; do not put it back.
 templ CharactersPage(cc *campaigns.CampaignContext, view CastView) {
 	@layouts.App("Characters - " + cc.Campaign.Name) {
-		<script src={ layouts.AssetURL("/static/plugins/entities/js/characters.js") } defer></script>
 		<div class="max-w-7xl mx-auto px-4 py-6" id="characters-root">
 			@CharactersContent(cc, view)
 		</div>
