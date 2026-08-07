@@ -1271,9 +1271,22 @@ type apiUpdateRelationRequest struct {
 // UpdateRelation updates a relation's metadata.
 // PUT /api/v1/campaigns/:id/relations/:relationId
 func (h *APIHandler) UpdateRelation(c echo.Context) error {
+	campaignID := c.Param("id")
 	relationID, err := strconv.Atoi(c.Param("relationId"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid relation ID")
+	}
+
+	// Verify the relation belongs to this campaign. The relation is addressed
+	// by its enumerable integer primary key and the repository looks it up by
+	// id alone, so without this check a key scoped to one campaign could
+	// overwrite any relation row in the database.
+	existing, err := h.relationSvc.GetByID(c.Request().Context(), relationID)
+	if err != nil {
+		return apperror.NewNotFound("relation not found")
+	}
+	if existing.CampaignID != campaignID {
+		return apperror.NewNotFound("relation not found")
 	}
 
 	var req apiUpdateRelationRequest
@@ -1291,9 +1304,21 @@ func (h *APIHandler) UpdateRelation(c echo.Context) error {
 // DeleteRelation removes a relation and its reverse.
 // DELETE /api/v1/campaigns/:id/relations/:relationId
 func (h *APIHandler) DeleteRelation(c echo.Context) error {
+	campaignID := c.Param("id")
 	relationID, err := strconv.Atoi(c.Param("relationId"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid relation ID")
+	}
+
+	// Verify the relation belongs to this campaign before deleting -- same
+	// cross-campaign exposure as UpdateRelation, and Delete also removes the
+	// reverse direction, so an unscoped call destroys two rows.
+	existing, err := h.relationSvc.GetByID(c.Request().Context(), relationID)
+	if err != nil {
+		return apperror.NewNotFound("relation not found")
+	}
+	if existing.CampaignID != campaignID {
+		return apperror.NewNotFound("relation not found")
 	}
 
 	if err := h.relationSvc.Delete(c.Request().Context(), relationID); err != nil {
