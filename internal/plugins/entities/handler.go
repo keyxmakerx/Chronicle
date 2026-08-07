@@ -3206,8 +3206,28 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 	role := cc.VisibilityRole()
 	userID := auth.GetUserID(c)
 
-	// Try Redis cache for JSON response.
-	cacheKey := fmt.Sprintf("backlinks:%s:%d:%s", entityID, role, userID)
+	entity, err := h.service.GetByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+
+	// IDOR protection: verify entity belongs to the campaign in the URL. This
+	// route is public-capable, so without it an anonymous visitor to ANY public
+	// campaign could read another campaign's entities through it. (C-SWEEP-R3)
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Visibility gate: canonical CheckEntityAccess honors custom (grant-based)
+	// visibility, not just legacy is_private — matches PreviewAPI / GetAliasesAPI.
+	access, err := h.service.CheckEntityAccess(ctx, entity.ID, int(cc.MemberRole), userID)
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Try Redis cache for JSON response. The campaign is part of the key because
+	// the result set is campaign-scoped (mention ids alone are not).
+	cacheKey := fmt.Sprintf("backlinks:%s:%s:%d:%s", cc.Campaign.ID, entityID, role, userID)
 	var entries []BacklinkEntry
 
 	if h.cache != nil {
@@ -3222,7 +3242,7 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 		}
 	}
 
-	entries, err := h.service.GetBacklinksWithSnippets(ctx, entityID, role, userID)
+	entries, err = h.service.GetBacklinksWithSnippets(ctx, cc.Campaign.ID, entityID, role, userID)
 	if err != nil {
 		return err
 	}

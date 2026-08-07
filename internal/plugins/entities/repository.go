@@ -770,8 +770,9 @@ type EntityRepository interface {
 	ResequenceSiblings(ctx context.Context, campaignID string, orderedIDs []string) error
 
 	// FindBacklinks returns entities whose entry_html contains a @mention link
-	// pointing to the given entity. Respects visibility filtering.
-	FindBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
+	// pointing to the given entity, scoped to campaignID. Respects visibility
+	// filtering.
+	FindBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
 
 	// UpdatePopupConfig persists the entity's hover preview configuration.
 	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
@@ -1793,18 +1794,33 @@ func (r *entityRepository) UpdateEntityType(ctx context.Context, entityID string
 	return nil
 }
 
-// FindBacklinks returns entities that mention the given entity via @mention links
-// in their entry_html. Searches for the data-mention-id="<entityID>" attribute
-// pattern. Respects visibility filtering.
-func (r *entityRepository) FindBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
-	where := `WHERE e.entry_html LIKE ? AND e.id != ?`
+// backlinksWhere builds the WHERE clause + args for FindBacklinks.
+//
+// Split out as a pure helper (mirroring visibilityFilter's shape) so the
+// campaign scope can be pinned without a database — see
+// backlinks_scope_test.go. The `e.campaign_id = ?` term is SECURITY-SENSITIVE:
+// mention IDs are campaign-agnostic UUIDs, so without it a lookup for an
+// entity id matched every campaign's entry_html, and an Owner-role viewer
+// (empty visibilityFilter fragment) collected other campaigns' private
+// entities too. Same scoping FilterViewableEntityIDs / FindAllMentionLinks
+// already apply. (C-SWEEP-R3)
+func backlinksWhere(campaignID, entityID string, role int, userID string) (string, []any) {
+	where := `WHERE e.campaign_id = ? AND e.entry_html LIKE ? AND e.id != ?`
 	escaped := strings.NewReplacer("%", `\%`, "_", `\_`).Replace(entityID)
 	pattern := `%data-mention-id="` + escaped + `"%`
-	args := []any{pattern, entityID}
+	args := []any{campaignID, pattern, entityID}
 
 	visFilter, visArgs := visibilityFilter(role, userID)
 	where += visFilter
 	args = append(args, visArgs...)
+	return where, args
+}
+
+// FindBacklinks returns entities in the given campaign that mention the given
+// entity via @mention links in their entry_html. Searches for the
+// data-mention-id="<entityID>" attribute pattern. Respects visibility filtering.
+func (r *entityRepository) FindBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {
+	where, args := backlinksWhere(campaignID, entityID, role, userID)
 
 	query := fmt.Sprintf(`SELECT `+entitySelectColumns+`
 	          FROM entities e

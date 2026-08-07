@@ -172,7 +172,7 @@ type mockEntityRepo struct {
 	findChildrenFn   func(ctx context.Context, parentID string, role int, userID string) ([]Entity, error)
 	findAncestorsFn  func(ctx context.Context, entityID string) ([]Entity, error)
 	updateParentFn   func(ctx context.Context, entityID string, parentID *string) error
-	findBacklinksFn  func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
+	findBacklinksFn  func(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
 	setAliasesFn     func(ctx context.Context, entityID string, aliases []string) error
 	updatePrivateFn  func(ctx context.Context, entityID string, isPrivate bool) error
 	listByOwnerFn    func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
@@ -331,9 +331,9 @@ func (m *mockEntityRepo) ResequenceSiblings(ctx context.Context, campaignID stri
 	return nil
 }
 
-func (m *mockEntityRepo) FindBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
+func (m *mockEntityRepo) FindBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {
 	if m.findBacklinksFn != nil {
-		return m.findBacklinksFn(ctx, entityID, role, userID)
+		return m.findBacklinksFn(ctx, campaignID, entityID, role, userID)
 	}
 	return nil, nil
 }
@@ -1314,7 +1314,7 @@ func TestGetAncestors_DelegatesToRepo(t *testing.T) {
 
 func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
 	entityRepo := &mockEntityRepo{
-		findBacklinksFn: func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
+		findBacklinksFn: func(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {
 			return []Entity{
 				{ID: "ref-1", Name: "Referrer One"},
 				{ID: "ref-2", Name: "Referrer Two"},
@@ -1324,7 +1324,7 @@ func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	backlinks, err := svc.GetBacklinks(context.Background(), "target-entity", 2, "")
+	backlinks, err := svc.GetBacklinks(context.Background(), "camp-1", "target-entity", 2, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1405,7 +1405,7 @@ func TestExtractMentionSnippet_Nil(t *testing.T) {
 func TestGetBacklinksWithSnippets(t *testing.T) {
 	html := `<p>See <a data-mention-id="target-1" href="/e/target-1">@Target</a> for details.</p>`
 	entityRepo := &mockEntityRepo{
-		findBacklinksFn: func(_ context.Context, _ string, _ int, _ string) ([]Entity, error) {
+		findBacklinksFn: func(_ context.Context, _, _ string, _ int, _ string) ([]Entity, error) {
 			return []Entity{
 				{ID: "ref-1", Name: "Source", EntryHTML: &html},
 			}, nil
@@ -1413,7 +1413,7 @@ func TestGetBacklinksWithSnippets(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	entries, err := svc.GetBacklinksWithSnippets(context.Background(), "target-1", 2, "")
+	entries, err := svc.GetBacklinksWithSnippets(context.Background(), "camp-1", "target-1", 2, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

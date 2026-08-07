@@ -43,8 +43,8 @@ type EntityService interface {
 	// among its parent's children. sortOrder is a desired 0-based index.
 	ReorderEntityType(ctx context.Context, campaignID string, typeID int, sortOrder int) error
 
-	// Backlinks
-	GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
+	// Backlinks — always campaign-scoped; mention ids alone are not.
+	GetBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
 
 	// Popup preview config
 	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
@@ -108,8 +108,8 @@ type EntityService interface {
 	GetAliases(ctx context.Context, entityID string) ([]EntityAlias, error)
 	SetAliases(ctx context.Context, entityID string, aliases []string) error
 
-	// Backlinks with context snippets.
-	GetBacklinksWithSnippets(ctx context.Context, entityID string, role int, userID string) ([]BacklinkEntry, error)
+	// Backlinks with context snippets — always campaign-scoped.
+	GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string) ([]BacklinkEntry, error)
 
 	// GetMentionLinks returns all @mention references across a campaign for the
 	// relations graph. Each link is a source→target pair extracted from entry_html.
@@ -776,10 +776,10 @@ func (s *entityService) ReorderEntityType(ctx context.Context, campaignID string
 	return nil
 }
 
-// GetBacklinks returns entities that reference the given entity via @mention
-// links in their entry content. Respects visibility filtering.
-func (s *entityService) GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
-	backlinks, err := s.entities.FindBacklinks(ctx, entityID, role, userID)
+// GetBacklinks returns entities in campaignID that reference the given entity
+// via @mention links in their entry content. Respects visibility filtering.
+func (s *entityService) GetBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {
+	backlinks, err := s.entities.FindBacklinks(ctx, campaignID, entityID, role, userID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
 	}
@@ -2464,8 +2464,8 @@ func (s *entityService) SetAliases(ctx context.Context, entityID string, aliases
 // GetBacklinksWithSnippets returns backlink entities with context snippets
 // showing text around the @mention. Builds on the existing GetBacklinks by
 // extracting snippets from each referencing entity's entry_html.
-func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, entityID string, role int, userID string) ([]BacklinkEntry, error) {
-	backlinks, err := s.entities.FindBacklinks(ctx, entityID, role, userID)
+func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string) ([]BacklinkEntry, error) {
+	backlinks, err := s.entities.FindBacklinks(ctx, campaignID, entityID, role, userID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
 	}
