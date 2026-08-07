@@ -1104,6 +1104,37 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stage 11 (every fresh install shipped a dead plugin)
+
+**`foundry_vtt`'s migration 001 crashed on its FIRST statement on every
+brand-new database.** It is a consolidation migration —
+`RENAME TABLE foundry_module_campaign_tokens TO foundry_vtt_campaign_tokens` —
+and the plugin that created that source table was deleted in C-FMC-5c. A fresh
+self-hosted install therefore hit `Error 1146`, the plugin was marked DEGRADED,
+and it could never self-heal: the runner returns on the first failed migration,
+so no later migration for that plugin was ever reachable.
+
+`PreMigrationCheck` (PR #507) does **not** cover this. It only refuses when
+`foundry_module_versions` exists *and has rows*; on a fresh database the table
+does not exist, so the check returns `nil` and the doomed migration runs anyway.
+
+The reason it survived: **CI never migrated an empty database anywhere.** The
+restore drill loads a dump of an already-migrated one, and every other
+integration test assumes `make migrate-up` already ran.
+
+Migration 001 is immutable (ADR-044/045), so the repair is split:
+`foundry_vtt.ReconcileConsolidationState` records 001 as applied on any database
+where its RENAME has no source table, and new migration **002** establishes the
+post-consolidation shape with idempotent DDL. Fresh install, completed upgrade
+and an upgrade that crashed between 001's two statements all converge on the
+same schema; a database that still HAS the predecessor table is untouched and
+001 runs for real, carrying its live token rows across.
+
+Verified by replaying the real bootstrap against genuinely empty MariaDB schemas
+(`make test-freshdb`, `cmd/server/freshdb_migration_test.go`) — one from zero,
+one from the pre-consolidation shape — and wired into CI as its own
+`Fresh-DB Migration Replay` job that fails if either test merely *skips*.
+
 #### 2026-08-07 — C-SWEEP-R4 stage 9 (the anonymous dm_only leak — ADR-049)
 
 **"No authenticated user" and "trusted system caller" were the SAME value, and

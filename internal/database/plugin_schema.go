@@ -90,6 +90,43 @@ func RunPluginMigrations(db *sql.DB, plugins []PluginSchema) []PluginMigrationRe
 	return results
 }
 
+// MarkPluginMigrationApplied records `version` as already applied for `slug`
+// WITHOUT running its SQL, so the migration runner skips straight past it.
+//
+// This exists for exactly one situation: a migration whose SQL can never
+// succeed against the database in front of it, because it encodes an upgrade
+// step from a predecessor state this database was never in. `foundry_vtt`'s
+// migration 001 is the archetype — it RENAMEs a table the deleted
+// `foundry_modules` plugin used to create, so on a fresh install its first
+// statement fails and (since the runner returns on the first failure) every
+// later migration for that plugin is unreachable forever.
+//
+// Marking a migration applied is a DATA fix to the tracking table, not a
+// schema change, which is why it lives in a Go reconciler rather than in a
+// migration (see CLAUDE.md → "Migration Safety Rules"). The caller owns the
+// judgement that the migration is genuinely inapplicable; a later idempotent
+// migration must still establish the schema the skipped one would have
+// produced, or the plugin ends up "healthy" with a missing table.
+//
+// Idempotent: INSERT IGNORE, and the tracking table is ensured first because
+// reconcilers run BEFORE RunPluginMigrations creates it.
+func MarkPluginMigrationApplied(ctx context.Context, db *sql.DB, slug string, version int) error {
+	if db == nil {
+		return fmt.Errorf("MarkPluginMigrationApplied(%s, %d): nil db handle", slug, version)
+	}
+	if err := ensurePluginSchemaTable(db); err != nil {
+		return fmt.Errorf("ensuring plugin_schema_versions: %w", err)
+	}
+	_, err := db.ExecContext(ctx,
+		`INSERT IGNORE INTO plugin_schema_versions (plugin_slug, version) VALUES (?, ?)`,
+		slug, version,
+	)
+	if err != nil {
+		return fmt.Errorf("recording %s migration %d as applied: %w", slug, version, err)
+	}
+	return nil
+}
+
 // ensurePluginSchemaTable creates the plugin_schema_versions table if it
 // doesn't exist. Separate from extension_schema_versions to keep built-in
 // plugin state distinct from user-installed extensions.

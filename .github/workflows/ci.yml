@@ -186,6 +186,75 @@ jobs:
         continue-on-error: true
         run: ./tools/check-decision-citations.sh
 
+  # --- Fresh-database migration replay ---
+  # C-SWEEP-R4 (data/fvtt-fresh-db-rename). Until this job existed, CI never
+  # migrated an EMPTY database anywhere: the restore drill loads a dump of an
+  # already-migrated one, and every other integration test assumes
+  # `make migrate-up` already ran. So foundry_vtt's migration 001 — which
+  # RENAMEs a table the deleted foundry_modules plugin used to create — failed
+  # on its first statement on every brand-new self-hosted install, permanently
+  # disabling the Foundry integration, and the whole suite stayed green.
+  #
+  # A separate job rather than a service on "Build & Test" deliberately: the
+  # replay needs a database, the main job must keep running with none, and
+  # coupling them would let a DB hiccup redden the entire build.
+  freshdb:
+    name: Fresh-DB Migration Replay
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        # Matches the version docker-compose.yml pins for the dev database, so
+        # a migration that only fails on a different server version cannot slip
+        # through here and land on operators.
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: chronicle
+          MARIADB_DATABASE: chronicle
+          MARIADB_USER: chronicle
+          MARIADB_PASSWORD: chronicle
+        ports:
+          - 3306:3306
+        # The scratch schemas the replay creates need CREATE/DROP DATABASE, so
+        # it connects as root; the health check gates the job on readiness.
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+
+      - name: Generate templ files
+        run: templ generate
+
+      - name: Fresh-database migration replay
+        # NOT `-short`: these tests skip under it by design, which is exactly
+        # how this class of bug survived. If no server answers they SKIP, so
+        # the explicit reachability assertion below is what makes a silent skip
+        # impossible — a job that reports success having tested nothing is the
+        # failure mode this whole job exists to end.
+        env:
+          CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
+        run: |
+          go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_' \
+            2>&1 | tee replay.log
+          for want in TestFreshDatabase_EveryPluginSchemaApplies \
+                      TestUpgradeDatabase_FoundryConsolidationStillRuns; do
+            grep -q -- "--- PASS: $want" replay.log || {
+              echo "::error::$want did not PASS — it was skipped or never ran."
+              echo "This job exists because a skipped fresh-DB replay is why"
+              echo "every new self-hosted install shipped with a dead plugin."
+              exit 1
+            }
+          done
+
   # --- Lint ---
   lint:
     name: Lint

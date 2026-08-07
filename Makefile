@@ -76,6 +76,20 @@ test-unit: ## Run unit tests only (skip integration)
 test-int: ## Run integration tests (requires running DB)
 	go test ./... -v -run Integration
 
+.PHONY: test-freshdb
+test-freshdb: ## Replay core + every plugin migration against a NEVER-migrated schema (requires running DB)
+	# C-SWEEP-R4 (data/fvtt-fresh-db-rename): nothing in the suite ever
+	# migrated an empty database. tools/restore-drill.sh loads a dump of an
+	# ALREADY-migrated one and every other integration test assumes
+	# `make migrate-up` already ran — so foundry_vtt's migration 001 failed on
+	# its first statement on every new self-hosted install and no test noticed.
+	# These two replay the real bootstrap (core migrations → the foundry_vtt
+	# pre-check + reconciler → RunPluginMigrations over registeredPlugins())
+	# against a throwaway schema: one from zero, one from the pre-consolidation
+	# shape. They create and drop their own scratch schema, so this never
+	# touches the dev database.
+	go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_'
+
 .PHONY: test-cover
 test-cover: ## Run tests with coverage report
 	go test ./... -coverprofile=coverage.out
