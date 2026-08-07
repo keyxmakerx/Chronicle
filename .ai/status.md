@@ -1104,6 +1104,40 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stage 23 (the Elven preset had one season, three times)
+
+**`parseCalendaria` only ever implemented one of Calendaria's two season
+shapes.** Calendaria authors a season as either a day-of-year span
+(`dayStart`/`dayEnd` from the start of the year) or a MONTH RANGE
+(`monthStart`/`monthEnd` naming whole months, the day fields narrowing the first
+and last). The parser read only the day fields, so every month-range file
+collapsed. `presets/elven.json` — the Start gallery's Elven card — is one: its
+three seasons differ ONLY in `monthStart`/`monthEnd` (0-2, 3-5, 6-7) and all
+carry `dayStart 0 / dayEnd 45`, so all three imported as `1/1 → 1/45`. Three
+identical, mutually overlapping ranges covering one of eight months; the other
+seven belonged to no season at all.
+
+**The un-signed decision in the booking was which base `monthStart` uses, and it
+is settled by measurement rather than decree.** The two real exports in
+`cordinator/references/calendars` genuinely disagree, so no constant is correct.
+The base is detected per file from the smallest `monthStart` any season declares
+— and on the three real payloads that is not a coin-flip, it is the only reading
+under which each file's seasons tile its months exactly once: `forbidden-lands`
+(8 months, starts 0/2/4/6) has no month 0 under a 1-based reading;
+`calendar-of-therin` (15 months, starts 1/4/7/10/13) leaves its FIRST month
+seasonless under a 0-based one. `monthEnd` is deliberately excluded from the
+test, because therin's trailing `monthEnd 0` means "to the end of the year" and
+would otherwise read as evidence of 0-basing — the exact one-month shift the
+booking warned about.
+
+**Nothing was re-authored and nothing preset-specific was added.**
+`presets/elven.json` is untouched, so `builder_presets.go`'s "no preset-specific
+code exists" claim still holds. A file that names no month keeps the day-of-year
+reading byte-for-byte, which is the other half of the fix: teaching the parser
+about `monthStart` must not reinterpret every season Chronicle has already
+imported. The `seasonList` sort is re-keyed off `monthStart` so stage 13's
+determinism does not regress — therin ties on every other field.
+
 #### 2026-08-07 — C-SWEEP-R4 stage 22 (every N months fired every month)
 
 **`OccursOn`'s monthly branch ignored `recurrence_interval`.** It checked the

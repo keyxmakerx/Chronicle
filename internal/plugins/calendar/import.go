@@ -15,8 +15,15 @@
 // ## Calendaria (Foundry VTT)
 // A newer Foundry VTT calendar module. Identified by top-level "months" as an
 // object (not array) with keyed entries, or by presence of "days.hoursPerDay".
-// Months use days/leapDays. Seasons use dayStart/dayEnd (day-of-year numbers).
-// Moons have cycleLength/referenceDate. Supports eras and festivals natively.
+// Months use days/leapDays. Moons have cycleLength/referenceDate. Supports eras
+// and festivals natively.
+//
+// Calendaria authors SEASONS IN TWO SHAPES and both are read: a day-of-year span
+// (dayStart/dayEnd counted from the start of the year) and a MONTH RANGE
+// (monthStart/monthEnd naming whole months, dayStart/dayEnd narrowing the first
+// and last). Which shape a file is in, and whether its month indices are 0- or
+// 1-based, is detected per file — see calendariaSeasonMonthBase, and do not
+// replace that detection with a constant: the real exports disagree.
 package calendar
 
 import (
@@ -658,9 +665,137 @@ type calSeason struct {
 	Color        string `json:"color"`
 	SeasonalType string `json:"seasonalType"`
 	Ordinal      int    `json:"ordinal"`  // author-declared rank; the only total order when dayStart ties
-	DayStart     int    `json:"dayStart"` // day-of-year (1-indexed)
-	DayEnd       int    `json:"dayEnd"`   // day-of-year (1-indexed)
+	DayStart     int    `json:"dayStart"` // day-of-year (1-indexed), or day-of-MONTH in the month-range shape
+	DayEnd       int    `json:"dayEnd"`   // day-of-year (1-indexed), or day-of-MONTH in the month-range shape
 	Abbreviation string `json:"abbreviation"`
+
+	// Calendaria authors seasons in ONE OF TWO SHAPES and the day fields mean
+	// different things in each — see calendariaSeasonMonthBase. These two are
+	// POINTERS because "absent" is the discriminator: a file that declares no
+	// monthStart anywhere is the day-of-year shape, and 0 is a legitimate
+	// monthStart in the other one, so a value-typed int cannot tell them apart.
+	MonthStart *int `json:"monthStart"`
+	MonthEnd   *int `json:"monthEnd"`
+}
+
+// calendariaSeasonMonthBase decides which shape a Calendaria file's seasons are
+// authored in, and — when it is the month-range shape — whether its month
+// indices are 0-based or 1-based.
+//
+// THE TWO SHAPES. Calendaria seasons come as either a day-of-year span
+// (dayStart/dayEnd counted from the start of the year, no month fields) or a
+// MONTH RANGE (monthStart/monthEnd naming whole months, with dayStart/dayEnd
+// narrowing the first and last of them). parseCalendaria only ever implemented
+// the first, so every month-range file collapsed: presets/elven.json declares
+// three seasons that all carry dayStart 0 / dayEnd 45 and differ ONLY in
+// monthStart/monthEnd, so the shipped Elven preset imported three IDENTICAL
+// ranges — Aevel 1 → Aevel 45, three times over — instead of Aevel→Lethra,
+// Vanyr→Serel and Thalor→Myrren. Seven of its eight months belonged to no
+// season at all.
+//
+// THE BASE IS DETECTED, NOT DECREED, because the real exports disagree and a
+// hard-coded "+1 because monthStart is 0-based" would silently shift half of
+// them by a month. The two reference files in cordinator/references/calendars
+// are the evidence:
+//
+//   - forbidden-lands.json — 8 months, seasons at monthStart 0/2/4/6 with
+//     monthEnd 1/3/5/7. A 1-based reading has no month 0, so it is 0-based, and
+//     the four seasons tile all eight months exactly.
+//   - calendar-of-therin.json — 15 months, seasons at monthStart 1/4/7/10/13
+//     with monthEnd 3/6/9/12/0. A 0-based reading leaves the FIRST month in no
+//     season and pushes the last past the end, so it is 1-based, and the five
+//     seasons then tile all fifteen months exactly.
+//
+// The discriminator that separates them is therefore the smallest monthStart in
+// the FILE: a 0-based export addresses its first month as 0, a 1-based one as 1.
+// It is file-global rather than per-season because a base is a property of the
+// exporter, not of one row. monthEnd is deliberately NOT consulted — therin's
+// last season carries monthEnd 0 as "runs to the end of the year", which would
+// wrongly read as evidence of 0-basing.
+//
+// Returns declared=false when no season names a month at all; that file is the
+// day-of-year shape and keeps dayOfYearToMonthDay byte-for-byte.
+func calendariaSeasonMonthBase(seasons []calSeason) (declared bool, base int) {
+	smallest := 0
+	for _, s := range seasons {
+		if s.MonthStart == nil {
+			continue
+		}
+		if !declared || *s.MonthStart < smallest {
+			smallest = *s.MonthStart
+		}
+		declared = true
+	}
+	if !declared {
+		return false, 0
+	}
+	if smallest <= 0 {
+		return true, 0 // addresses the first month as 0
+	}
+	return true, 1 // addresses the first month as 1
+}
+
+// calendariaSeasonRange converts one month-range season into Chronicle's
+// (startMonth, startDay, endMonth, endDay), all 1-based.
+//
+// The month indices are rebased by `base` and then CLAMPED into the months the
+// file actually declares, because a season may not name a month that does not
+// exist. Two conventions are honoured inside that clamp:
+//
+//   - a monthEnd that normalises BELOW the first month means "to the end of the
+//     year" (calendar-of-therin's Greylight: monthEnd 0 on a 1-based file, the
+//     season that runs from month 13 to the end). On a 0-based file the same
+//     literal 0 normalises to month 1 and is an ordinary index, so the two
+//     readings never collide.
+//   - dayStart/dayEnd are days WITHIN the first/last month here, not days of the
+//     year. dayStart 0 means "from the first day" (Calendaria writes 0 for an
+//     unset start exactly as it does in the day-of-year shape, where
+//     dayOfYearToMonthDay already maps it to 1/1), and a dayEnd that is unset or
+//     longer than the closing month runs to that month's last day.
+//
+// It is faithful to the file rather than tidy: forbidden-lands.json writes
+// dayEnd 45 for every season, including ones closing on a 46-day month, so
+// Spring ends on day 45 of a 46-day month and day 46 belongs to no season. That
+// is what the payload says. Inventing "…and always to the end of the month"
+// would be a nicer calendar than the one the author exported.
+func calendariaSeasonRange(s calSeason, base int, months []MonthInput) (startMonth, startDay, endMonth, endDay int) {
+	n := len(months)
+	if n == 0 {
+		return 1, 1, 1, 1
+	}
+
+	startMonth = 1
+	if s.MonthStart != nil {
+		startMonth = *s.MonthStart - base + 1
+	}
+	endMonth = n
+	if s.MonthEnd != nil {
+		endMonth = *s.MonthEnd - base + 1
+	}
+	if endMonth < 1 {
+		endMonth = n // "to the end of the year"
+	}
+	startMonth = clampInt(startMonth, 1, n)
+	endMonth = clampInt(endMonth, 1, n)
+
+	startDay = clampInt(s.DayStart, 1, months[startMonth-1].Days)
+	endDay = months[endMonth-1].Days
+	if s.DayEnd >= 1 && s.DayEnd < endDay {
+		endDay = s.DayEnd
+	}
+	return startMonth, startDay, endMonth, endDay
+}
+
+// clampInt confines v to [lo, hi]. lo wins when the bounds are inverted, which
+// only happens for a calendar with no months — a case its callers reject first.
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 type calEra struct {
@@ -852,10 +987,27 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 	// dayStart 0. Sorting on DayStart alone therefore left the order to Go's
 	// randomised map iteration. The map key is the final tiebreak so the
 	// comparator is total and two parses of the same bytes always agree.
+	//
+	// MONTHSTART IS PART OF THE KEY, and it has to be: a month-range file with
+	// no ordinals ties on BOTH remaining fields, and calendar-of-therin.json is
+	// exactly that — five seasons, no ordinal, no dayStart, ranked only by the
+	// months they name. Without this the determinism the tie-break bought would
+	// hold (the key is still total) while the ORDER would be alphabetical
+	// nonsense. Ordinal still outranks it, so elven's authored 1/2/3 decides
+	// there and its order is unchanged.
+	seasonMonthKey := func(s calSeason) int {
+		if s.MonthStart == nil {
+			return 0
+		}
+		return *s.MonthStart
+	}
 	sort.Slice(seasonList, func(i, j int) bool {
 		a, b := seasonList[i], seasonList[j]
 		if a.val.Ordinal != b.val.Ordinal {
 			return a.val.Ordinal < b.val.Ordinal
+		}
+		if ka, kb := seasonMonthKey(a.val), seasonMonthKey(b.val); ka != kb {
+			return ka < kb
 		}
 		if a.val.DayStart != b.val.DayStart {
 			return a.val.DayStart < b.val.DayStart
@@ -863,10 +1015,24 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		return a.key < b.key
 	})
 
-	// Build cumulative day-of-year → month+day lookup from months.
+	// Which of the two season shapes is this file in? See
+	// calendariaSeasonMonthBase — the answer is file-global, so it is resolved
+	// once here rather than re-guessed per season.
+	seasonVals := make([]calSeason, 0, len(seasonList))
 	for _, s := range seasonList {
-		startMonth, startDay := dayOfYearToMonthDay(s.val.DayStart, result.Months)
-		endMonth, endDay := dayOfYearToMonthDay(s.val.DayEnd, result.Months)
+		seasonVals = append(seasonVals, s.val)
+	}
+	monthRanged, monthBase := calendariaSeasonMonthBase(seasonVals)
+
+	for _, s := range seasonList {
+		var startMonth, startDay, endMonth, endDay int
+		if monthRanged {
+			startMonth, startDay, endMonth, endDay = calendariaSeasonRange(s.val, monthBase, result.Months)
+		} else {
+			// The day-of-year shape: cumulative day-of-year → month+day.
+			startMonth, startDay = dayOfYearToMonthDay(s.val.DayStart, result.Months)
+			endMonth, endDay = dayOfYearToMonthDay(s.val.DayEnd, result.Months)
+		}
 
 		result.Seasons = append(result.Seasons, Season{
 			Name:       stripLocalizationKey(s.val.Name),

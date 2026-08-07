@@ -845,7 +845,38 @@ a different bug:**
   gate, not a rendering fix."* The entangled `RecurrenceMaxOccurrences`
   months-vs-occurrences bug cannot be fixed correctly until the fork is chosen.~~
   *(the original booking, kept for the reproduction and the fork analysis it records)*
-- [ ] **`parseCalendaria` ignores seasons' `monthStart`/`monthEnd`, so the shipped Elven
+- [x] **CLOSED — C-SWEEP-R4 stage 23. `parseCalendaria` reads BOTH Calendaria season
+  shapes.** The shipped Elven preset used to import Budding/Zenith/Waning as three
+  identical `1/1 → 1/45` ranges — mutually overlapping, covering one of eight months and
+  leaving the other seven seasonless. It now imports `1/1→3/45`, `4/1→6/45`, `7/1→8/45`,
+  which tile the year exactly once.
+
+  **The un-signed semantic decision the booking flagged is resolved by MEASUREMENT, not
+  by decree.** The base is DETECTED per file from the smallest `monthStart` any of its
+  seasons declares: a 0-based export addresses its first month as 0, a 1-based one as 1.
+  Applied to the three real payloads this is not a coin-flip — it is the only reading
+  under which each file's seasons tile its months exactly once. `forbidden-lands.json`
+  (8 months, starts 0/2/4/6) has no month 0 under a 1-based reading; `calendar-of-therin`
+  (15 months, starts 1/4/7/10/13) leaves its FIRST month seasonless under a 0-based one.
+  `monthEnd` is deliberately excluded from the discriminator, because therin's trailing
+  `monthEnd 0` means "to the end of the year" and would otherwise read as evidence of
+  0-basing — the exact `+1` shift the booking warned about.
+
+  `dayStart 0 / dayEnd 45` in the month-range shape is read as day-WITHIN-month:
+  `dayStart <= 0` → day 1 (the same convention `dayOfYearToMonthDay` already applies to
+  a 0), and a `dayEnd` that is unset or longer than the closing month runs to that
+  month's last day. It is faithful rather than tidy — forbidden-lands writes `dayEnd 45`
+  even for seasons closing on a 46-day month, so day 46 there belongs to no season, which
+  is what the payload says.
+
+  Nothing was re-authored: `presets/elven.json` is untouched and `builder_presets.go`
+  still contains no preset-specific code. A file that names no month keeps the
+  day-of-year reading byte-for-byte (`TestParseCalendaria_DayOfYearSeasonsUnchanged`).
+  The `seasonList` sort is re-keyed off `monthStart` (below `Ordinal`, above `DayStart`)
+  so stage 13's determinism does not come back — therin ties on every other field.
+  Pins: `import_calendaria_seasons_test.go`, with the real `presets/elven.json` as the
+  fixture and the two reference shapes reproduced case by case.
+- [ ] ~~**`parseCalendaria` ignores seasons' `monthStart`/`monthEnd`, so the shipped Elven
   preset imports three identical, wrong season ranges.** Self-contained to `import.go`,
   but it carries an un-signed semantic decision: **the two real Calendaria exports in
   `cordinator/references/calendars` DISAGREE on the base of `monthStart`.**
@@ -862,7 +893,8 @@ a different bug:**
   exports **do not even parse today** (weeks-is-an-object), so the schema knowledge this
   fix depends on is demonstrably incomplete. Whatever lands must also re-key the
   `seasonList` sort off `monthStart`, or the nondeterminism stage 13 just closed comes
-  back.
+  back.~~ *(the original booking, kept for the two-file disagreement it documents —
+  which is what made the detector, rather than a constant, the right answer)*
 - [ ] **Campaign default visibility "Private" produces DM-Only — a creator-only
   visibility mode does not exist in the schema.** Confirmed. Severity corrected **high →
   medium**: `is_private=true` DOES correctly hide the content from Players, so nothing
