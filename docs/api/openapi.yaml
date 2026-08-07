@@ -1379,6 +1379,14 @@ paths:
         Bidirectional sync endpoint. Provide "since" to pull entities modified
         after that timestamp. Provide "changes" array to push create/update/delete
         operations. Max 2000 changes per request.
+
+
+        One request walks at most 1000 entities of the campaign's list. If the
+        campaign is larger, the response sets has_more and next_cursor; re-POST
+        the SAME since with that cursor until has_more is false. Use the
+        server_time from the FIRST response of a completed walk as the next
+        since — taking it from the last response would skip anything modified
+        while the walk was in flight.
       parameters:
         - $ref: "#/components/parameters/campaignId"
       requestBody:
@@ -3032,6 +3040,13 @@ components:
           format: date-time
           nullable: true
           description: Pull entities modified after this timestamp
+        cursor:
+          type: string
+          description: >
+            Opaque resume token from a previous response's next_cursor. Omit or
+            send an empty string to start at the beginning. Treat it as opaque —
+            a malformed cursor is rejected with 400 rather than silently
+            restarting the walk.
         changes:
           type: array
           maxItems: 2000
@@ -3075,6 +3090,12 @@ components:
             $ref: "#/components/schemas/Entity"
         has_more:
           type: boolean
+          description: True when the campaign has more entities than this request walked.
+        next_cursor:
+          type: string
+          description: >
+            Resume token for the next request. Present exactly when has_more is
+            true. Send it back unchanged as the request's "cursor".
         results:
           type: array
           items:

@@ -651,8 +651,13 @@ func (h *APIHandler) DeleteEntity(c echo.Context) error {
 
 // --- Sync Endpoint ---
 
-// syncMaxPullPages caps the number of internal pages fetched during sync pull
-// to prevent unbounded queries on large campaigns.
+// syncMaxPullPages caps the number of internal pages ONE pull request walks,
+// so a single request cannot hold a connection open across an unbounded table
+// scan. With the cursor (sweep R4 stage 18) this is a page size rather than a
+// ceiling: when the walk stops early the response carries a next_cursor that
+// resumes it. Before the cursor existed it really was a ceiling, and every
+// entity past syncMaxPullPages*syncPageSize in list order could never sync at
+// all — has_more said so and the client had no way to act on it.
 const syncMaxPullPages = 10
 
 // syncPageSize is the per-page size used for internal pagination during sync.
@@ -661,6 +666,7 @@ const syncPageSize = 100
 // syncRequest is the JSON body for the bulk sync endpoint.
 type syncRequest struct {
 	Since   *time.Time   `json:"since"`   // Pull entities modified after this time.
+	Cursor  string       `json:"cursor"`  // Opaque resume token from a previous response's next_cursor. Empty starts at the beginning.
 	Changes []syncChange `json:"changes"` // Batch of create/update/delete operations.
 }
 
@@ -697,7 +703,15 @@ type syncResponse struct {
 	ServerTime time.Time         `json:"server_time"`
 	Entities   []entities.Entity `json:"entities"`
 	HasMore    bool              `json:"has_more"`
-	Results    []syncResult      `json:"results"`
+
+	// NextCursor resumes the pull where this response stopped. Non-empty
+	// exactly when HasMore is true. A client walks a pull by re-POSTing the
+	// SAME since with this cursor until has_more is false, then keeps the
+	// server_time from the FIRST response of that walk as the next since —
+	// not the last, which would skip anything modified mid-walk.
+	NextCursor string `json:"next_cursor,omitempty"`
+
+	Results []syncResult `json:"results"`
 }
 
 // Sync performs a bidirectional sync operation.
@@ -705,7 +719,13 @@ type syncResponse struct {
 //
 // Pull: if "since" is provided, returns entities modified after that timestamp.
 // Push: if "changes" is provided, applies the batch of create/update/delete operations.
-// Returns server_time for the client to use as the next "since" parameter.
+//
+// One request walks at most syncMaxPullPages*syncPageSize entities. When the
+// campaign is larger than that the response sets has_more and next_cursor;
+// the client re-POSTs the SAME since with that cursor until has_more is
+// false. server_time from the FIRST response of a completed walk is the next
+// since — taking it from the last response would skip anything modified while
+// the walk was in flight.
 func (h *APIHandler) Sync(c echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil {
@@ -733,11 +753,19 @@ func (h *APIHandler) Sync(c echo.Context) error {
 	// Pull: get entities modified since the given timestamp.
 	var pulledEntities []entities.Entity
 	hasMore := false
+	nextCursor := ""
 
 	if req.Since != nil {
 		since := *req.Since
 		syncUserID := h.resolveUserID(c)
-		for page := 1; page <= syncMaxPullPages; page++ {
+
+		startPage, err := decodeSyncCursor(req.Cursor)
+		if err != nil {
+			return err
+		}
+		endPage := startPage + syncMaxPullPages - 1
+
+		for page := startPage; page <= endPage; page++ {
 			items, total, err := h.entitySvc.List(ctx, campaignID, 0, role, syncUserID, entities.ListOptions{
 				Page:    page,
 				PerPage: syncPageSize,
@@ -753,12 +781,21 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				}
 			}
 
-			// Check if there are more pages beyond what we've fetched.
+			// A short page means we ran off the end of the list even if
+			// `total` says otherwise (rows deleted mid-walk), so stop.
+			if len(items) < syncPageSize {
+				break
+			}
+			// Everything the campaign has is now behind us.
 			if page*syncPageSize >= total {
 				break
 			}
-			if page == syncMaxPullPages && page*syncPageSize < total {
+			// Out of budget for this request, but not out of entities:
+			// hand the caller the token that resumes the walk. Without
+			// this the remaining entities were unreachable forever.
+			if page == endPage {
 				hasMore = true
+				nextCursor = encodeSyncCursor(page + 1)
 			}
 		}
 	}
@@ -850,6 +887,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 		ServerTime: serverTime,
 		Entities:   pulledEntities,
 		HasMore:    hasMore,
+		NextCursor: nextCursor,
 		Results:    results,
 	})
 }
