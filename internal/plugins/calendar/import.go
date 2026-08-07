@@ -400,6 +400,16 @@ func parseSimpleCalendarInner(cal scCalendar) (*ImportResult, error) {
 		Format:       FormatSimpleCal,
 		CalendarName: "Imported Calendar",
 	}
+	// The file names itself and this parser was the only one dropping it (the
+	// Calendaria and Fantasy-Calendar parsers both carry cal.Name through), so
+	// every Simple Calendar import arrived on Review as the placeholder and the
+	// author had to retype it. stripLocalizationKey, not a bare TrimSpace,
+	// because Simple Calendar ships localization-key names ("FSC.Date.January")
+	// and every other name field in this parser is read through it. The
+	// placeholder stays as the empty-name fallback.
+	if n := stripLocalizationKey(cal.Name); n != "" {
+		result.CalendarName = n
+	}
 
 	// Settings.
 	result.Settings = ImportedSettings{
@@ -647,6 +657,7 @@ type calSeason struct {
 	Icon         string `json:"icon"`
 	Color        string `json:"color"`
 	SeasonalType string `json:"seasonalType"`
+	Ordinal      int    `json:"ordinal"`  // author-declared rank; the only total order when dayStart ties
 	DayStart     int    `json:"dayStart"` // day-of-year (1-indexed)
 	DayEnd       int    `json:"dayEnd"`   // day-of-year (1-indexed)
 	Abbreviation string `json:"abbreviation"`
@@ -742,7 +753,12 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		monthList = append(monthList, monthEntry{k, m})
 	}
 	sort.Slice(monthList, func(i, j int) bool {
-		return monthList[i].val.Ordinal < monthList[j].val.Ordinal
+		if monthList[i].val.Ordinal != monthList[j].val.Ordinal {
+			return monthList[i].val.Ordinal < monthList[j].val.Ordinal
+		}
+		// Map iteration is randomised, so an ordinal tie must fall back to the
+		// authored key or two parses of the same bytes disagree on SortOrder.
+		return monthList[i].key < monthList[j].key
 	})
 
 	for i, m := range monthList {
@@ -781,7 +797,10 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		wdList = append(wdList, weekdayEntry{k, w})
 	}
 	sort.Slice(wdList, func(i, j int) bool {
-		return wdList[i].val.Ordinal < wdList[j].val.Ordinal
+		if wdList[i].val.Ordinal != wdList[j].val.Ordinal {
+			return wdList[i].val.Ordinal < wdList[j].val.Ordinal
+		}
+		return wdList[i].key < wdList[j].key // total order over a randomised map
 	})
 
 	for i, w := range wdList {
@@ -791,13 +810,30 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		})
 	}
 
-	// Moons.
-	for _, m := range cal.Moons {
+	// Moons — Calendaria stores them in an object map, and Go's map iteration is
+	// randomised, so ranging straight over cal.Moons made two parses of the SAME
+	// bytes emit the moons in a different order. Nothing in the payload ranks
+	// moons (unlike months / weekdays / eras, calMoon carries no ordinal), so the
+	// authored map key is the only deterministic rank the file gives us; keys are
+	// unique within a map, so this comparator is total.
+	type moonEntry struct {
+		key string
+		val calMoon
+	}
+	var moonList []moonEntry
+	for k, m := range cal.Moons {
+		moonList = append(moonList, moonEntry{k, m})
+	}
+	sort.Slice(moonList, func(i, j int) bool {
+		return moonList[i].key < moonList[j].key
+	})
+
+	for _, m := range moonList {
 		result.Moons = append(result.Moons, MoonInput{
-			Name:        stripLocalizationKey(m.Name),
-			CycleDays:   m.CycleLength,
+			Name:        stripLocalizationKey(m.val.Name),
+			CycleDays:   m.val.CycleLength,
 			PhaseOffset: 0, // Calendaria uses referenceDate instead of offset
-			Color:       normalizeColor(m.Color),
+			Color:       normalizeColor(m.val.Color),
 		})
 	}
 
@@ -810,8 +846,21 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 	for k, s := range cal.Seasons {
 		seasonList = append(seasonList, seasonEntry{k, s})
 	}
+	// Calendaria authors an explicit `ordinal` on seasons exactly as it does on
+	// months and weekdays, and it is the only field that ranks them when their
+	// day-of-year ranges tie — presets/elven.json ties all three seasons at
+	// dayStart 0. Sorting on DayStart alone therefore left the order to Go's
+	// randomised map iteration. The map key is the final tiebreak so the
+	// comparator is total and two parses of the same bytes always agree.
 	sort.Slice(seasonList, func(i, j int) bool {
-		return seasonList[i].val.DayStart < seasonList[j].val.DayStart
+		a, b := seasonList[i], seasonList[j]
+		if a.val.Ordinal != b.val.Ordinal {
+			return a.val.Ordinal < b.val.Ordinal
+		}
+		if a.val.DayStart != b.val.DayStart {
+			return a.val.DayStart < b.val.DayStart
+		}
+		return a.key < b.key
 	})
 
 	// Build cumulative day-of-year → month+day lookup from months.
@@ -839,7 +888,10 @@ func parseCalendaria(data []byte) (*ImportResult, error) {
 		eraList = append(eraList, eraEntry{k, e})
 	}
 	sort.Slice(eraList, func(i, j int) bool {
-		return eraList[i].val.StartYear < eraList[j].val.StartYear
+		if eraList[i].val.StartYear != eraList[j].val.StartYear {
+			return eraList[i].val.StartYear < eraList[j].val.StartYear
+		}
+		return eraList[i].key < eraList[j].key // total order over a randomised map
 	})
 
 	for i, e := range eraList {

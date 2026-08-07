@@ -200,6 +200,13 @@ the importer with four embedded payloads read through the SAME `DetectAndParse`
 an upload meets — no preset table, no migration, no new parser, no second apply
 path. The importer front door is the existing parser behind a route with no
 `:calId`. What is new is the shell, the honesty states, and the motion.
+**The two parser gaps W-H booked rather than owned are closed (sweep R3,
+2026-08-07):** `parseCalendaria` is now deterministic (moons were never sorted
+at all and seasons tied three ways at `dayStart` 0 in `presets/elven.json`, so
+100 parses of the Elven card's own bytes gave 2 moon orders and 3 season
+orders), and `parseSimpleCalendar` carries the file's own `calendar.name`
+instead of naming every Simple Calendar import "Imported Calendar". Details in
+`.ai/todo.md` under Critical.
 
 **The three-card V1 setup chooser is RETIRED.** `GET /calendars/new` resolves to
 the wizard, so every link across the product and every external bookmark lands
