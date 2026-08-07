@@ -582,10 +582,15 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 					color: fd.get('color') || '#3b82f6',
 					visibility: fd.get('visibility') || 'everyone',
 				};
-				var desc = fd.get('description');
-				if (desc) body.description = desc;
-				var eid = fd.get('entity_id');
-				if (eid) body.entity_id = eid;
+				// Send an explicit null when the operator EMPTIED a field.
+				// Under the sweep-R4 contract null clears and absent
+				// preserves, so omitting an emptied description or entity
+				// link would silently bring the old value back. Everything
+				// the form does not own — pin_category, visibility_rules and
+				// the Foundry pairing key foundry_id — stays absent, which
+				// now preserves it instead of erasing it.
+				body.description = fd.get('description') || null;
+				body.entity_id = fd.get('entity_id') || null;
 
 				var markerID = fd.get('marker_id');
 				var url, method;
@@ -616,15 +621,15 @@ templ MapEditorBody(cc *campaigns.CampaignContext, data MapViewData, mapContaine
 			// Drag-end position update (silent PUT).
 			async function updateMarkerPosition(mk) {
 				try {
+					// A drag means ONE thing: the marker moved. It used to
+					// echo six other fields off the local marker object to
+					// defend them from the whole-replace PUT — and still
+					// lost pin_category, visibility_rules and foundry_id,
+					// which it had no copy of. The server preserves every
+					// absent key now, so the honest body is {x, y}.
 					await Chronicle.apiFetch('/campaigns/' + campaignID + '/maps/' + mapID + '/markers/' + mk.id, {
 						method: 'PUT',
-						body: {
-							name: mk.name, description: mk.description || null,
-							x: mk.x, y: mk.y,
-							icon: mk.icon, color: mk.color,
-							visibility: mk.visibility,
-							entity_id: mk.entity_id || null,
-						},
+						body: { x: mk.x, y: mk.y },
 					});
 				} catch (err) {
 					console.error('Failed to save marker position:', err);

@@ -283,32 +283,39 @@ func (s *mapService) UpdateMarker(ctx context.Context, id string, input UpdateMa
 		return err
 	}
 
-	if input.Name == "" {
+	// Load-merge-write (sweep R4). `mk` is the row as stored, so every merge
+	// below defaults to the stored value and only a key the caller actually
+	// sent can change it. The validators read the MERGED value, not the raw
+	// input — an absent name is not an empty name.
+	name := input.Name.Val(mk.Name)
+	if name == "" {
 		return apperror.NewValidation("marker name is required")
 	}
-	if input.X < 0 || input.X > 100 || input.Y < 0 || input.Y > 100 {
+	x, y := input.X.Val(mk.X), input.Y.Val(mk.Y)
+	if x < 0 || x > 100 || y < 0 || y > 100 {
 		return apperror.NewValidation("marker coordinates must be 0-100")
 	}
 
 	// Validate icon and color to prevent XSS (these are rendered into HTML).
-	if input.Icon != "" && !iconPattern.MatchString(input.Icon) {
+	icon, color := input.Icon.Val(mk.Icon), input.Color.Val(mk.Color)
+	if icon != "" && !iconPattern.MatchString(icon) {
 		return apperror.NewValidation("icon must be a valid FontAwesome class name")
 	}
-	if input.Color != "" && !colorPattern.MatchString(input.Color) {
+	if color != "" && !colorPattern.MatchString(color) {
 		return apperror.NewValidation("color must be a valid hex color")
 	}
 
-	mk.Name = input.Name
-	mk.Description = input.Description
-	mk.X = input.X
-	mk.Y = input.Y
-	mk.Icon = input.Icon
-	mk.Color = input.Color
-	mk.PinCategory = input.PinCategory
-	mk.EntityID = input.EntityID
-	mk.Visibility = input.Visibility
-	mk.VisibilityRules = input.VisibilityRules
-	mk.FoundryID = input.FoundryID
+	mk.Name = name
+	mk.Description = input.Description.Ptr(mk.Description)
+	mk.X = x
+	mk.Y = y
+	mk.Icon = icon
+	mk.Color = color
+	mk.PinCategory = input.PinCategory.Ptr(mk.PinCategory)
+	mk.EntityID = input.EntityID.Ptr(mk.EntityID)
+	mk.Visibility = input.Visibility.Val(mk.Visibility)
+	mk.VisibilityRules = input.VisibilityRules.Ptr(mk.VisibilityRules)
+	mk.FoundryID = input.FoundryID.Ptr(mk.FoundryID)
 
 	if err := s.repo.UpdateMarker(ctx, mk); err != nil {
 		return fmt.Errorf("update marker: %w", err)
