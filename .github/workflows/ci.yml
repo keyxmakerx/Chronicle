@@ -245,8 +245,13 @@ jobs:
         run: |
           go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_' \
             2>&1 | tee replay.log
+          go test ./internal/database/ -v -run 'TestPluginMigration_' \
+            2>&1 | tee -a replay.log
           for want in TestFreshDatabase_EveryPluginSchemaApplies \
-                      TestUpgradeDatabase_FoundryConsolidationStillRuns; do
+                      TestUpgradeDatabase_FoundryConsolidationStillRuns \
+                      TestPluginMigration_ResumesInsteadOfCrashLooping \
+                      TestPluginMigration_PreflightRefusesBeforeApplyingAnything \
+                      TestPluginMigration_IgnoresProgressRecordedForDifferentSQL; do
             grep -q -- "--- PASS: $want" replay.log || {
               echo "::error::$want did not PASS — it was skipped or never ran."
               echo "This job exists because a skipped fresh-DB replay is why"

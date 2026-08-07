@@ -89,6 +89,10 @@ test-freshdb: ## Replay core + every plugin migration against a NEVER-migrated s
 	# shape. They create and drop their own scratch schema, so this never
 	# touches the dev database.
 	go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_'
+	# The plugin-migration damage-control layer (pre-flight applicability +
+	# resume-after-partial-failure) is a claim about what the SERVER does with
+	# a half-applied migration, so it is measured on one too.
+	go test ./internal/database/ -v -run 'TestPluginMigration_'
 
 .PHONY: test-cover
 test-cover: ## Run tests with coverage report
