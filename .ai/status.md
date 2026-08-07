@@ -1129,6 +1129,13 @@ empty user id is an ABSENT per-user layer, never a sentinel — which matters
 because R2-4 moves `GET /apps/calendar` onto the public group and widens this
 exact surface.
 
+**A third consumer, swept and fixed in the same stage:** the sync API's
+`GET /calendar/events` passed `""` into the same filter on purpose, so a
+Player-level API key (or a Player/Scribe member on the session door) was served
+events whose `visibility_rules` restrict them to OTHER users. It now forwards
+the caller's own identity (`resolveUserID`) — narrowing only, and a
+sync-permission key is untouched because `resolveRole` gives it Owner.
+
 **Behaviour deliberately preserved:** the two genuine trusted callers
 (`timeline_widget_type.go`'s Scribe-gated create-or-pick picker and the
 campaign timeline export adapter) now pass `permissions.SystemViewer` and see

@@ -420,17 +420,31 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 
 	var events []calendar.Event
 
-	// Sync API uses API-key auth, not user sessions, so pass empty userID
-	// to skip per-user visibility filtering.
+	// C-AUTHZ-EMPTY-USERID / ADR-049. This used to pass userID "" with the
+	// comment "Sync API uses API-key auth, not user sessions, so pass empty
+	// userID to skip per-user visibility filtering" — the same sentinel that
+	// served anonymous web visitors dm_only rows, and here it meant a
+	// PLAYER-level caller (a read/write key, or a Player/Scribe member on the
+	// session door — resolveRole gives both role 1) was handed events whose
+	// visibility_rules restrict them to OTHER users.
+	//
+	// Every caller on this route is authenticated and every one of them has a
+	// real identity: the API key's owner, which for the session door IS the
+	// signed-in member (middleware.go's synthetic key). So the identity is
+	// passed instead of skipped. This can only NARROW what is returned — a
+	// bypass returns everything — and a sync-permission key is unaffected
+	// entirely, because resolveRole gives it Owner and CanSeeDmOnly still
+	// short-circuits.
+	viewerID := h.resolveUserID(c)
 	if month > 0 {
-		events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, month, role, "")
+		events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, month, role, viewerID)
 	} else {
 		// No month specified — return events for the entity if entity_id is provided.
 		entityID := c.QueryParam("entity_id")
 		if entityID != "" {
-			events, err = h.calendarSvc.ListEventsForEntity(ctx, entityID, role, "")
+			events, err = h.calendarSvc.ListEventsForEntity(ctx, entityID, role, viewerID)
 		} else {
-			events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, cal.CurrentMonth, role, "")
+			events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, cal.CurrentMonth, role, viewerID)
 		}
 	}
 
@@ -1539,6 +1553,20 @@ func (h *CalendarAPIHandler) recordCalendarDateBeaconIfModule(c echo.Context, ca
 }
 
 // resolveRole returns the API key owner's role for privacy filtering.
+// resolveUserID returns the API key owner's user ID — for the session door
+// (middleware.go's synthetic key) that is the signed-in member themselves.
+// Mirrors APIHandler.resolveUserID. Empty only when there is no key at all,
+// which the route middleware makes unreachable; an empty value here is
+// therefore treated as "no user" and takes the strictest filter path, never
+// a bypass (C-AUTHZ-EMPTY-USERID / ADR-049).
+func (h *CalendarAPIHandler) resolveUserID(c echo.Context) string {
+	key := GetAPIKey(c)
+	if key == nil {
+		return ""
+	}
+	return key.UserID
+}
+
 func (h *CalendarAPIHandler) resolveRole(c echo.Context) int {
 	key := GetAPIKey(c)
 	if key == nil {

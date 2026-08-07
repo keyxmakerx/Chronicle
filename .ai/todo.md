@@ -535,6 +535,19 @@ a different bug:**
   plugins. Pins: `calendar/anonymous_visibility_test.go`,
   `timeline/anonymous_visibility_test.go`. **[EU-5] (a route-level
   anonymous-identity floor) was deliberately NOT taken** — see item B2.
+- [x] **B1b — a THIRD consumer of the sentinel, found by the sweep and fixed in
+  the same stage: `syncapi/calendar_api_handler.go`'s `ListEvents`.** It passed
+  userID `""` into the calendar per-user filter on purpose ("Sync API uses
+  API-key auth, not user sessions, so pass empty userID to skip per-user
+  visibility filtering"), which meant a **Player-level** caller — a read/write
+  key, or a Player/Scribe member arriving through the session door, both role 1
+  — was served events whose `visibility_rules` restrict them to OTHER users.
+  Every caller on that route is authenticated and carries a real identity, so
+  `resolveUserID` (the key owner; the signed-in member on the session door) is
+  forwarded instead. **Narrowing only** — a bypass returned everything — and a
+  `sync`-permission key is untouched because `resolveRole` gives it Owner.
+  `BuildWorldStateSeed`'s `userID` is unused by the assembler, so the `""` at
+  that call site is inert and was left alone.
 - [ ] **B2 — `C-AUTHZ-ANON-IDENTITY-FLOOR` (booked out of [EU-5], low/medium).**
   The deeper invariant is *"an anonymous request never reaches a visibility
   filter with an identity that means trusted."* ADR-049 makes that true by
