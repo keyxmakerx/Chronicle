@@ -1104,6 +1104,53 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R3 (eight sweeps: security · partial-PUT · backend · frontend · promises · data · guards · backlog)
+
+**Sixteen fixes shipped in fifteen stages, twenty-five findings booked for a
+signature, four claims refuted.** Report:
+`cordinator/reports/chronicle/2026-08-07-C-SWEEP-R3.md`. The booked set is
+enumerated in `.ai/todo.md` §"Booked by sweep R3"; eight of them earned their own
+dispatch under `cordinator/dispatches/chronicle/`.
+
+**Two cross-cutting facts this sweep established, which later work should not
+re-derive:**
+
+1. **The dominant defect class in this codebase right now is the whole-replace
+   PUT.** Seven independent clients — sessions "Mark Complete" and its edit modal,
+   syncapi entity update, the Foundry actor push, the Timeline standalone-event
+   modal, the Foundry calendar-event push, and the web marker form/drag — send
+   partial bodies at endpoints that assign every field unguarded, so an omitted
+   key is a WRITE. It is invisible per-site because the request structs are a
+   patchwork: pointer fields nil-preserve, value fields (`bool`, `string`) clear,
+   and two pointers deliberately clear-on-nil. Consequences measured this sweep
+   range from lost schedules to **un-privating a hidden character entity** and
+   **NULLing the Foundry pairing key**. One ruling — absent-means-preserve with an
+   explicit-null form, per `C-SIDEBAR-REORDER-RESCUE` PR1 step 1 — closes all
+   seven; a per-client patch contradicts that booked precedent and collides with
+   the parked `C-ENTITY-LINK-DESIGN`. Booked as **`C-PARTIAL-PUT-CONTRACT`**. The
+   one member that needed no ruling (the Foundry marker config dialog) shipped in
+   stage 3, cross-repo.
+2. **"The route is authorized" is not "the object is authorized".** Four of the
+   five security fixes are the same mistake at four addresses: the middleware
+   proves campaign membership and the handler then addresses a relation, a note,
+   a calendar or an entity **by its own id** with no ownership or visibility
+   predicate at any layer below it. Two were cross-user reads of private data
+   (notes, backlinks), one was a cross-CAMPAIGN write reachable by an enumerable
+   integer PK (relations), one served a `dm_only` calendar to anyone (public
+   calendar reads). The pattern to copy is the one the fixes used: **resolve the
+   object, 404 on a campaign mismatch, then run the plugin's canonical visibility
+   gate — before the cache lookup, not after.** A fifth instance is booked and
+   unfixed: the `userID == ""` "system context" sentinel also matches an anonymous
+   visitor (**`C-AUTHZ-EMPTY-USERID`**, high).
+
+Also of record: entity `LIMIT/OFFSET` paging had **no total order**, so a walk
+returned 563 of 50,000 entities twice and missed 563 entirely on real MariaDB —
+and both **campaign-export** walk-to-exhaustion loops inherit that reader.
+Guards were strengthened twice, never weakened (the Bench CSS scope scanner now
+reads by brace, `check-page-scripts.sh` now walks the open tag), and a new
+whole-tree `check-widget-mounts.sh` ratchet proved every literal `data-widget`
+mount in the tree now has a load path.
+
 #### 2026-07-26 — C-CALV4-FOUNDATION-P0 (calendar-v4 wave 1, phase A)
 
 The floor the other four wave-1 slices stand on. Additive only — no Go behaviour

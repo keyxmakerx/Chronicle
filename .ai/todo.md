@@ -39,6 +39,30 @@ Carried out of R2-2a, not closed:
   inject `tabindex` — that is a Block mutation and it would ship a focusable
   control the server never rendered. This is a WIDGET change with its own
   screen-reader pass.
+
+  **RE-REPRODUCED AND SCOPED (sweep R3, 2026-08-07); still not ship-now, and the
+  severity is corrected high → medium.** The gate is SIGNED DESIGN, not an
+  oversight: `instrument.templ:206-212` and `helpers.go:972-978` both argue the
+  controls are withheld because a ledger-less Block "has no home for the `✕ all`
+  option … a radio group with no way out of it", and
+  `ledger_test.go:203-218` (`TestDayPick_AbsentWithoutADockedLedger`) **pins the
+  absence** for both causes (layer off, and `Ledger.Hidden`). Fixing this
+  necessarily amends a green guard-class test to assert the opposite, which is an
+  operator/coordinator act under house law, not a reproducer's. The scope is also
+  narrower than filed: the bench default set ships `ledger` ON, so the keyboard
+  path exists out of the box, and the DEF `["moons"]` entity embed has no
+  `[data-bench-block]` ancestor so the day card never opens there for pointer
+  users either — the total-loss case is specifically **a bench viewer who turned
+  "Event list" off**. Within that case it is a genuine WCAG 2.1.1 total keyboard
+  failure of the day surface, which is why it is not lower than medium. Four
+  design questions stay open and are the reason it needs a signature: radio-minus-
+  `✕ all` vs a `<button class="dsel">`; what the deselect affordance becomes with
+  no Ledger to repaint; the accessible name (today the `.vh` span doubles as the
+  radio's label); and whether the ANSWER ladder's `answers` bound still suppresses
+  the control past its limit. It spans `instrument.templ` + `calendar-block.css`
+  (the `.dsel` box is an absolutely-positioned sibling tuned to the fixed 84px
+  cell height and the dogear/`+n more` z-order exclusion at cv4:2775-2782) + a
+  seam test in both layer sets.
 - [x] **The editor MORPH — SIGNED 2026-08-01 and SHIPPED in R2-2b.** The
   carve-out lifts exactly [DC-7]'s "register-only in this slice" and nothing
   else: it is a GEOMETRIC morph under ONE named class (`.edmorph`) transitioning
@@ -71,6 +95,22 @@ Carried out of R2-2a, not closed:
       report, reported by the probe on every run whether it fires or not, and
       handed back. The own-host gate — the thing the law actually promises —
       holds at **0 px² at all six candidate widths across the whole sweep**.
+
+      **RE-MEASURED (sweep R3, 2026-08-07), and two things changed in the
+      operator's favour.** (1) The reachable harm at the **shipped 760px is
+      EDITOR-ONLY** — the "the card hits it too" control, which is what justified
+      booking this as pre-existing rather than R2b's, **does not fire under
+      visible-click conditions**. (2) While it happens, the module reports
+      `data-dc-clear="1"`, i.e. **the signed STOP-AND-FLAG warning is silent on
+      the one case that is actually reachable** — the probe's honesty channel does
+      not cover the cross-Block case. Still not shippable here: [ER-5] makes
+      re-opening `placeCard` a flag rather than an edit, `desktopPlacement`'s left
+      dodge is written for exactly ONE rect (`limit = ledger.left - pad - size.w`)
+      and against a rect LIST must choose among competing dodge targets — a fourth
+      geometry, which round 4's lesson forbids inventing without a signature — and
+      narrowing the clear band re-triggers the round-3/round-4 sheet regressions,
+      so all six candidate widths need re-verifying across the eleven-viewport
+      sweep. What the operator should be handed is the pair above.
 - [ ] **`C-CALV4-DAYPICK-A11Y` also inherits drag-create's missing keyboard
   equivalent** ([DC-11] term 6). The drag is pointer-only and this slice did not
   invent a keyboard path for it — a focusable day cell is the same widget change
@@ -96,6 +136,23 @@ Carried out of R2-2a, not closed:
       any API consumer; the fix is per-client (send the stored value back), not a
       service change — nil-guarding the bools would take "clear this repeat" away
       from an author who means it.
+
+      **PART-SWEPT (sweep R3, 2026-08-07) — and the sweep contradicted this
+      booking's own prescription.** The Foundry module's calendar push was
+      reproduced: all three of `calendar-sync.mjs`'s event-update paths send a
+      five-key partial body, so every Foundry-side note edit writes `false` into
+      `is_recurring` and `all_day` exactly as predicted — **and also drops
+      `entity_id`, which the service clears on nil BY DESIGN**
+      (`service.go:2060-2070`, pinned by `TestUpdateEvent_EntityIDStillClearsOnNil`
+      and deliberately parked as `C-ENTITY-LINK-DESIGN`). So "the fix is
+      per-client" cannot be executed here without first ruling on the parked
+      design: telling the Foundry client to echo `entity_id` back IS a call on
+      C-ENTITY-LINK-DESIGN. The rest of the sweep (the same class on
+      `PUT /sessions/:sid`, `PUT /entities/:id`, `PUT …/markers/:mid` and the
+      timeline standalone-event modal) found six more partial writers, which is
+      why the class now has one owner: **`C-PARTIAL-PUT-CONTRACT`** in the booked
+      section below. The one client that COULD be fixed without a ruling was —
+      the Foundry map-marker config dialog, closed cross-repo in stage 3.
 - [x] **Guard B4's scope glob did not match `daycard.templ`. RULED and CLOSED
       2026-07-31** (DC2-B4-GLOB-4, R2-2a fix-forward round 3 stage 12).
       `b4_scope_for` matched `*calendar_block*|*bench*|*Bench*|*schedule*|
@@ -111,8 +168,15 @@ Carried out of R2-2a, not closed:
       a `data-day` key on the card's head now fires B4 at
       `daycard.templ:56` and exits 1; before the widening the same mutation was
       invisible.
-- [ ] **The single-line blind spot in `TestBenchCSS_EverySelectorIsScoped` is a
-      HOUSE pattern, not this slice's.** Both scope guards only inspected lines
+- [x] **The single-line blind spot in `TestBenchCSS_EverySelectorIsScoped` is a
+      HOUSE pattern, not this slice's. CLOSED sweep R3 2026-08-07 (stage 12)** —
+      taken exactly as this booking asked, by whoever next opened `bench_test.go`.
+      The guard now reads the sheet BY BRACE through the package's own
+      `cssSelectors()` and splits every comma prelude, which raised its coverage
+      from 113 of 180 rules to all of them, and it carries the daycard test's
+      vacuous-pass floor. The booking's own measurement held — no live violation
+      appeared — so this was a strict strengthening with no sheet edit. Full
+      entry under Critical. Both scope guards only inspected lines
       ENDING in `{`, so a rule written entirely on one line was never examined.
       R2-2a fix-forward fixed **its own** (`TestDayCardCSS_EverySelectorIsScoped`
       now scans by brace via `cssSelectors`, and the sheet's 21 single-line rules
@@ -317,6 +381,13 @@ Known broken or missing things, ordered by severity.
 - [x] **The `impact_tree` mount registered through an API boot.js does not have (C-WIDGET-REGISTERWIDGET, sweep R3, 2026-08-07)** — booked by the dead-widget-mount sweep below, and closed here by taking the second of the two options it named: porting the widget rather than growing a second registration API. `internal/systems/preview.templ`'s "Impact Overview" diagram mounts `data-widget="impact_tree"`, and `static/js/widgets/impact_tree.js` registered itself with `Chronicle.registerWidget('impact_tree', mount)` behind `if (window.Chronicle && Chronicle.registerWidget)`. boot.js has no `registerWidget` — only `register(name, {init, destroy})` — so the module self-disabled and fell through to a `DOMContentLoaded` scan that is the **wrong lifecycle** for this mount besides: the preview fragment is delivered by an htmx swap (`custom_system.templ` → `POST /campaigns/:id/systems/preview`, `hx-target="#custom-system-section"`) long after DOMContentLoaded, and only boot.js's `htmx:afterSettle` re-mount reaches swapped-in content. So both halves were broken independently, and the file was in no `<script src>` anywhere either. Live effect was ONE dead card — an "Impact Overview" heading with a sitemap icon over a blank div — not a blind approval: `preview.templ` renders Categories, Entity Presets and Warnings as independent server-side sections, so the owner still saw the substance. Fixed by `Chronicle.register('impact_tree', { init: mount })` (unguarded, like every sibling — base.templ loads boot.js first and `defer` preserves order) plus the tag in base.templ. The tag goes in the LAYOUT, not `preview.templ`: `htmx.config.allowScriptTags = false` strips scripts out of a swapped fragment, which is the whole reason `tools/check-page-scripts.sh` exists. `tools/widget-mount-allowlist.txt` is now EMPTY — every literal widget mount in the tree has a load path — and the ratchet pins both directions (drop the tag → DEAD; re-add the line → STALE). Registration and the swap lifecycle are pinned by `test/js/impact_tree_registration.test.mjs`, which boots the real boot.js and the real widget over a mount attached AFTER `DOMContentLoaded` — the ordering the old fallback could not survive and a naive test would not have caught. `internal/extensions/.ai.md`'s Layer-2 description, which named the nonexistent API and is plausibly what the widget was written against, now names `Chronicle.register`. Sprint Q-1's `registerWidget` line below is untouched: it stays an open design question, and this fix deliberately does not pre-empt it.
 - [x] **Three fully-built widgets were mounted on real pages and loaded by nothing (sweep R3, 2026-08-07)** — `aliases`, `inventory` and `transaction_log` each had a table, a repository, a service, REST routes and a 170–380 line widget, mounted from `internal/plugins/entities/show.templ`, and their JS was in **no `<script src>` anywhere in the product**. `aliases` sat inside the `title` CORE block, i.e. effectively every entity page; `transaction_log` is a core block an owner can add from the layout editor and get blank whitespace. boot.js's `mountElement` does `var impl = widgets[name]; if (!impl) { return; }` — no script injection, no dynamic import, no fetch, and the only esbuild call in the Makefile builds the tiptap vendor bundle — so the mount rendered an empty div forever, with an empty console and no failed request. Measured A/B on the real mount markup: 980 chars of alias chip-row with the file loaded, byte-for-byte empty without it, zero console output either way. Fixed by adding all three to `internal/templates/layouts/base.templ`'s script list (all three are register-only at load, so they are inert on pages without their mount). Two guards: `tools/check-widget-mounts.sh` + `tools/widget-mount-allowlist.txt` — a whole-tree, self-testing ratchet failing on any literal `data-widget` mount with no load path, wired into `make verify` and CI; and boot.js now emits ONE `console.warn` per unmatched widget name after the load settles, so "not registered yet" and "shipped on no page at all" stop having the identical observable (`test/js/widget_mount_unmatched_warning.test.mjs`). The one mount that could not be fixed this way is booked above as C-WIDGET-REGISTERWIDGET.
 - [x] **The Characters page lost its quick-look driver on every boosted sidebar nav (sweep R3, 2026-08-07)** — the first C-HTMX-SCRIPT-SWEEP survivor **confirmed live**, not merely suspected. `internal/plugins/entities/characters.templ` mounted `characters.js` as the first child of `CharactersPage`'s body, i.e. inside `<main id="main-content">`; the sidebar navigates with `hx-boost="true" hx-target="#main-content" hx-select="#main-content"`, and with `htmx.config.allowScriptTags=false` (boot.js) htmx's `makeFragment` **removes** every script in the swapped fragment. Measured two ways: a headless Chromium harness running the vendored htmx 2.0.4 with boot.js's real config and app.templ's real sidebar attributes (direct load → script in DOM, button wired; boosted nav → `characters.js` never fetched, `[data-cast-peek]` never wired, clicking it does nothing), and a templ render showing the tag inside the swapped region. Nothing looked wrong because the cast cards are **real links** — the page works, right up to the click on quick-look. Fixed the way the hotfix prescribes: the tag is gone from the templ and the driver ships from the plugin body-script registry (`internal/app/routes.go` → `layouts.SetPluginBodyScripts` → `base.templ`), addressed through `entities.PluginSlug` so it tracks the mount point of the plugin's static FS, with `AssetURL` still applied in the layout so it keeps its digest. `wire()` now returns before injecting its overlay stylesheet when no `[data-cast-peek]` is present, because the registry executes it on every page in the app and a no-op must leave nothing behind. Ratchet turned: `characters.templ`'s line is deleted from `tools/page-script-allowlist.txt` (29/16 → 28/15). Pinned by `internal/plugins/entities/characters_boosted_nav_test.go` — zero scripts inside `#main-content` for three cast shapes, plus a registry-slice assertion so deleting the tag without re-mounting the script cannot pass.
+- [x] **Two sync-API IDOR holes: relations and notes (sweep R3 stages 1–2, 2026-08-07)** — both are the same shape, an object addressed by its own id with no ownership predicate at any layer, and in both the middleware chain proved only that the caller may write to the campaign named in the URL. (1) **Relations.** `PUT`/`DELETE /api/v1/campaigns/:id/relations/:relationId` addressed the relation by its **enumerable integer primary key** and the repository looks it up by id alone, so a Bearer key scoped to campaign A could overwrite the metadata of, or delete, **any relation row in the database** — and `Delete` also removes the reverse direction, so one unscoped call destroyed two rows. Both handlers now load the relation and 404 on a campaign mismatch before touching it — the same check the relations WEB handler already carried and the same shape as `UpdateEntityType` a few lines down in the same file. (2) **Notes.** `GET`/`PUT`/`DELETE /api/v1/campaigns/:id/notes/:noteID` checked only that the note belonged to the campaign in the URL; the service and repository address a note by bare `WHERE id = ?` with **no user predicate at any layer**, so the handler was the only possible ownership gate and it was missing — **any campaign member read any other member's private journal, and any Scribe overwrote or deleted it**, while the web widget routes serving the identical caller population 404 both. Fixed by lifting the web route's predicate onto the model as `Note.CanAccess` (owner, campaign-wide share, or explicit per-user share — ADR-013) and `Note.IsOwnedBy`, so the two route sets share ONE implementation instead of two that drift; `canAccessNote` in the widget handler now delegates. `GetNote`/`UpdateNote` gate on `CanAccess`, `DeleteNote` on `IsOwnedBy` (reading a shared note is not authority to destroy it), and `UpdateNote` drops `is_shared`/`shared_with`/`pinned` from a non-owner's patch so a share recipient cannot re-broadcast someone else's note; `GetNote`/`DeleteNote` now resolve the API key first and 401 without one rather than defaulting to an empty user id. Pinned by `syncapi/relation_scope_test.go` and `syncapi/note_ownership_test.go`, the latter driving the real handlers against a stub that replicates `noteService.Update`'s patch-with-no-owner-check verbatim — red on all three verbs before the fix (non-owner got the private body, overwrote it, deleted it), green after, with negative controls for owner, share recipient and campaign-wide access.
+- [x] **The Foundry marker config dialog wiped entity, visibility rules and the pairing key (sweep R3 stage 3, cross-repo, 2026-08-07)** — the one member of the partial-PUT family that could be closed without a contract ruling, because the fix lives entirely in the client. `PUT /api/v1/campaigns/:id/maps/:mapID/markers/:markerID` is a full replace (`apiUpdateMarkerRequest` binds pointers, `mapService.UpdateMarker` assigns every one onto the loaded row, `mapRepo.UpdateMarker` UPDATEs `entity_id`, `visibility_rules` and `foundry_id` with no COALESCE), so an absent key binds nil and lands on disk as NULL. `ChronicleMarkerConfigDialog.#onSave` rebuilt its payload from scratch with exactly eight keys, so **every GM edit of a Chronicle marker from the Foundry map viewer silently cleared the marker's entity link, its per-user allow/deny list, and the module's own Foundry pairing key**. Fixed in `/home/user/Chronicle-Foundry-Module` (`scripts/map-viewer.mjs`, commit `e51bcdb`) by spreading the stored marker under the edited fields — matching the sibling `PinConfigDialog.#onSave` in the same file and the Chronicle web form, which does carry `entity_id`; the read-only keys the spread carries along are undeclared on the wire struct and ignored by the binder, and `updated_at` is not `expected_updated_at` so it does not accidentally engage optimistic concurrency. Pinned by `tools/test-marker-config-payload.mjs`, which drives the real save action off `DEFAULT_OPTIONS.actions['save-marker']`. **Nothing changed in this repo**, and the twin defect on Chronicle's OWN marker form is booked below (`C-PARTIAL-PUT-CONTRACT`) because the web PUT has no `foundry_id` key at all and cannot be fixed client-side.
+- [x] **Entity pagination sorted on a non-unique column, so a page walk returned some entities twice and never returned others (sweep R3 stage 4, 2026-08-07)** — both `LIMIT/OFFSET` reads in the entities repository ordered by a column with no tiebreaker: `ListByCampaign` takes its clause from `ListOptions.OrderByClause` (name / updated_at / created_at / sort_order+name, picked by the list page's `?sort=`) and `Search` hardcoded `ORDER BY e.name`. None of those leading columns is unique — only `uq_entities_campaign_slug` is — so the order of tied rows was whatever plan the optimizer chose, and **that choice is not stable across the statements of one walk**: MariaDB uses a priority-queue sort while `LIMIT+OFFSET` is small and falls back to a full filesort once it is not, and the two disagree about which tied rows belong in a given window. **Measured on MariaDB 10.11 against a 50,000-entity table** whose primary-key order is scrambled relative to its name order and whose rows share one `updated_at` (what a campaign import or seed produces): walking `ORDER BY e.updated_at DESC LIMIT 100 OFFSET n` to exhaustion fetched 50,000 rows but only **49,437 distinct** ones — 563 entities returned twice, 563 missing entirely — with `Sort_priority_queue_sorts` flipping 1 → 0 inside that same walk. Appending `e.id` drove it to 0 duplicated / 0 missing. Every branch of `OrderByClause` and `Search`'s literal clause now end in `e.id ASC`. The callers that inherit the fix are the entity list page, the sync API's `ListEntities` and its pull loop, and **both export walk-to-exhaustion loops** — i.e. this was also silently dropping entities from campaign exports. Pinned by `pagination_total_order_test.go`: a table test over every sort the list page exposes plus the unknown/empty default, and a **structural pin** that walks every `LIMIT ? OFFSET ?` query in `repository.go` and requires it to either delegate to `OrderByClause` or carry `e.id` in its own `ORDER BY`, so a new paginated read cannot land without a tiebreaker. Both go red with the clauses reverted.
+- [x] **Three public calendar reads checked the campaign and never the calendar's own visibility (sweep R3 stage 5, 2026-08-07)** — `EmbedCalendar`, `UpcomingEventsFragment` and `ShowTimeline` resolve a calendar by ID through `requireCalendarInCampaign`, which proves only that the row belongs to the campaign in the URL. All three are registered on the calendar plugin's **PUBLIC** group behind `RequireViewAccess`, whose floor is "member at any role, or **anyone at all** on a public campaign", and the service layer supplies no second term either: `ListEventsForMonth`/`ForYear`/`ListUpcomingEvents` apply `filterEventsByUser`, a per-EVENT check, and never look at `cal.Visibility`. So **a `dm_only` calendar was fully readable by any player — or any anonymous visitor to a public campaign — who knew or guessed its id**: the month grid, the upcoming list, the timeline, the calendar's name, and every event on it marked `everyone`, which the per-event filter passes through by design because the secret was never the events. C-CAL-DASHBOARD-W5a had built exactly the missing gate (`requireVisibleCalendar` = `requireCalendarInCampaign` + `calendarVisibleTo`, refusing with the same NotFound a missing calendar gets so existence does not leak) but scoped that wave to `/calendar/v2/:calId`; these three were never in it. Fixed by swapping the three call sites, which changes nothing else — each already had a "this calendar did not resolve" branch, so the embed and the upcoming fragment answer a hidden calendar with the empty fragment they already answer a missing one with, and the timeline 404s exactly as `ShowV2` does. The embed's query-param door (`?calendarId=`, how a dashboard block config passes it) runs through the same branch and is gated with it; the no-`:calId` default-calendar path resolves through the service rather than by id and is not this defect. Pinned by `calendar_visibility_public_reads_test.go` — four leaking probes over a mock serving one `dm_only` calendar with one `everyone` event, asserting the calendar name, event name and event id are all absent; reverting the handler change alone turns all four red (the embed renders `title="Blood Moon Ritual" data-event-id="e1"` through both doors, the upcoming fragment prints the name, the timeline renders 26,167 bytes instead of refusing), plus a no-regression pin for the owning DM and for a player on an `everyone` calendar.
+- [x] **The entity backlinks read was scoped to nothing (sweep R3 stage 6, 2026-08-07)** — `GET /campaigns/:id/entities/:eid/backlinks` is a public-capable route, but `AllowPublicCampaignAccess` and `RequireViewAccess` only resolve and authorize the **campaign**; neither looks at `:eid`. The handler carried neither the campaign-match 404 nor the `CheckEntityAccess` that `Show`, `GetEntry`, `GetFieldsAPI`, `PreviewAPI` and `GetAliasesAPI` all carry, so **an anonymous visitor to any public campaign could name a private campaign's entity id and get back that campaign's referencing entities in full, `entry_html` included**. The repository query was campaign-agnostic on top of that: mention ids are plain UUIDs, and for an Owner-role viewer `visibilityFilter` contributes an empty fragment, so nothing constrained the rows at all. The handler now fetches the entity, 404s when it belongs to another campaign, and runs the canonical visibility gate **before anything else — including before the Redis lookup**, whose key also gains the campaign term; `FindBacklinks` takes the campaign id and pins `e.campaign_id = ?` as its first predicate, the same scoping `FilterViewableEntityIDs` and `FindAllMentionLinks` already apply, with its WHERE builder split into a pure `backlinksWhere` so the scope is testable without a database (mirroring `visibilityFilter`). Pinned by `backlinks_scope_test.go`.
+- [x] **The notes share picker read fields the server has never sent (sweep R3 stage 7, 2026-08-07)** — `GET /campaigns/:id/notes/members` serializes `memberRef` = `{user_id, username, role}` and has only ever done so; the share-with-players picker in `notes.js` read `m.id` and `m.name`. **Three failures compounded in one render** and none of them logged anything: `escapeHtml` (boot.js) maps `undefined` to `''`, so every label came out as just the `' '` separator; `escapeAttr(m.id)` put `value=""` on every checkbox; and the `m.id !== currentUserId` self-filter excluded nobody, because `undefined` is never equal to a user id, so the viewer appeared in their own picker. Ticking a row then PUT `{isShared:false, sharedWith:[""]}` — **the note was persisted shared with no one**, and nothing anywhere reported an error. `fetchMembers` now filters on `m.user_id` (dropping rows with no `user_id` at all, so a malformed row cannot reintroduce an empty value) and the picker renders `escapeAttr(m.user_id)` with `escapeHtml(m.username)` as the label, falling back to the id when a member has no display name — the binding `entity_notes.js` already uses. Pinned from BOTH ends so the contract cannot drift silently again: `members_api_shape_test.go` drives the real `MembersAPI` and asserts the body is a bare array whose rows carry `user_id`/`username`/`role` and **neither `id` nor `name`**; `notes_share_picker.test.mjs` does not hardcode those key names — it parses the json tags off `type memberRef struct` in `handler.go` and asserts the widget binds to exactly those, with a sweep that fails on any `m.<field>` read the struct does not ship. Renaming either side reddens both files.
+- [x] **The layout editor's entity-type picker parsed the management PAGE as JSON (sweep R3 stage 8, 2026-08-07)** — the `entity_type` config field of the block config dialog GET'd `/campaigns/:id/entity-types`, which is the entity-type **management page**. `middleware.Render` hard-sets `text/html; charset=utf-8` and never inspects `Accept`, so both the HTMX-fragment and full-page branches return HTML regardless of the `Accept: application/json` `apiFetch` sends; `r.json()` threw a `SyntaxError` on the leading `<` and an **empty `.catch(function () {})` swallowed it**, so the `entity_list` block's "Entity Type" dropdown on `/campaigns/:id/customize` was permanently stuck on its `— Select entity type —` placeholder with nothing on the console. Repointed at `/api/v1/campaigns/:id/entity-types`, the same v1 hop the sibling `map` case beside it already takes (browser sessions reach that group through `RequireAuthOrAPIKey`'s synthetic campaign-scoped key, pinned by `TestRequireAuthOrAPIKey_SessionCookie`; `RequireJSONContentType` is POST/PUT/PATCH-only). **Repointing alone was not enough** — `ListEntityTypes` returns the `{data, total}` envelope and the old `(types || []).forEach` over that object is a silent no-op, so the list is now unwrapped for both shapes per the envelope law. The catch no longer eats the error: the placeholder reads "Could not load entity types" and the cause is warned to the console. Pinned by `layout_editor_entity_type_picker.test.mjs`, which executes the real widget source in a vm sandbox with a DOM shim and reads the config field's key out of `block_registry_core.go`, so it asserts the option list a browser would actually render.
 - [x] **Every calendar preference write was a guaranteed FK violation (hotfix, 2026-08-02)** — the Block's layer switches, the Bench's disclosures and the sidebar pin all "did nothing": the POST fired, the server 500'd, no `HX-Refresh` came back, `aria-pressed` never moved, and the only trace was a generic toast. `SetSidebarPinned`, `SetBlockLayers` and `SetBenchSections` each inserted the literal empty string into `calendar_active.calendar_id`, which migration 006 declares `VARCHAR(36) NOT NULL` with `fk_calendar_active_cal` referencing `calendars(id)`. No calendar has that id, and InnoDB validates the foreign key on the **attempted insert** — before the duplicate-key path resolves — so `ON DUPLICATE KEY UPDATE` never rescued it and the write failed with errno 1452 for **every** viewer, not only row-less first-timers. Invisible to CI because every existing test of these paths mocks the repository, so the SQL was never executed or read. Fixed by having the service resolve a real calendar (`calendarService.prefsCalendarID`, reusing `resolveActiveCalendar`'s active→default→first ladder) and pass it down; the conflict clause still names only the preference column, so a preference write can never overwrite the viewer's active-calendar choice. A campaign with zero calendars has no valid row and now gets an honest domain error rather than an invented id — **flagged, not migrated**: relaxing the FK is a real design question (should a preference outlive every calendar?) and not a hotfix's to answer. Error honesty: a failed write is now `apperror.NewInternalMessage("Couldn't save that preference…")` instead of a raw driver error, so the next failure is visible as a failure instead of reading as an inert control. Real-DB proof booked above as C-PREFS-FK-INTEGRATION.
 - [x] **Boosted navigation silently deleted the Bench's page scripts (hotfix, 2026-08-02)** — reaching the Calendar Bench through the sidebar produced a page that looked perfect and did nothing: the day card would not open, the Permissions button was dead. Typing the URL worked. The App layout renders `{children...}` inside `<main id="main-content">`; every sidebar link is `hx-boost="true" hx-select="#main-content" hx-swap="innerHTML"`; `boot.js` sets `htmx.config.allowScriptTags = false`, at which point htmx's `makeFragment` does not skip script tags in the swapped fragment — it **removes** them. `bench.templ` mounted `cal_visibility.js`, `calendar_permissions.js` and `calendar_daycard.js` at exactly that depth. The `<link rel=stylesheet>` tags beside them survive the same code path, which is why nothing looked wrong; day selection and the ledger-header follow kept working because that path is pure CSS. Fixed by moving all three into the plugin body-script registry (emitted after `{children...}`, outside the swapped region), with `AssetURL` applied there so they keep their cache-busting digest and the slice order documented as a contract (`calendar_permissions.js` captures `window.ChronicleCalVisibility` as it executes). Ratchet: `tools/check-page-scripts.sh` + `tools/page-script-allowlist.txt`, wired into the CI Lint/Build job; sweep of the survivors booked above as C-HTMX-SCRIPT-SWEEP.
 - [x] **Entity-tie visibility leak on event/era tie lists (C-CAL-ENTITY-TIES-LEAK-FIX)** — `GET /campaigns/:id/calendars/:calId/events/:eid/entities` (RolePlayer-gated) returned every tied entity's NAME/type/icon/color with no visibility filtering; `EntitiesForEvent`/`EntitiesForEra` took only an ID, so a Player could read a dm_only/custom-restricted entity's name via any event or era it was tied to. Sibling `EntitiesForCalendar` was already hardened (cordinator#32 gap #1) — the original audit missed these two. Fixed by threading `role, userID` through both methods + the `CalendarRepository`/`CalendarService` interfaces and applying the same `entityVisibilityFilter`; the handler now sources viewer context via `cc.VisibilityRole()` (co-DM counts as Owner) + `auth.GetUserID(c)`. See `.ai/status.md` 2026-07-24 entry + `internal/plugins/calendar/.ai.md` §"Entity-tie visibility leak fix".
@@ -337,6 +408,455 @@ Known broken or missing things, ordered by severity.
 - [x] **Static assets shipped unversioned + uncached (C-ASSET-VERSIONING, audit SEC-3)** — Echo's `e.Static` sets no `Cache-Control` at all, so browsers applied heuristic freshness and could serve build-old CSS/JS for hours against freshly-rendered HTML ("the calendar looks old after deploy"). Demonstrated, not assumed: rendering post-C-CAL-MOBILE-AGENDA HTML against the pre-deploy `app.css` drops the Week/Day/Timeline pills from the **desktop** calendar, because `md:contents` was a brand-new Tailwind utility that build introduced. Fixed with `layouts.AssetURL` (per-file SHA-256 `?v=` token, per-build fallback, plugin embed FSes registered via `RegisterAssetFS`) + `middleware.StaticCache` (immutable for versioned, must-revalidate otherwise) + a contract test that fails any `.templ` emitting a bare `/static/` URL. All 101 call sites across 17 templates converted.
 
 _Completed entries archived → .ai/archive/todo-completed-2026-06-10.md_
+
+### Booked by sweep R3 — REPRODUCED, and unshippable without a signature (2026-08-07)
+
+Twenty-five findings that a sweep executor **reproduced against the shipped code**
+and then did not ship, because each fails the self-contained / no-user-visible-
+decision bar. They are not suspicions: every one below carries a measurement.
+What each needs is a **ruling**, not a reproduction. The full account — including
+the four claims that were REFUTED and what killed them — is
+`cordinator/reports/chronicle/2026-08-07-C-SWEEP-R3.md`; the eight that earned
+their own slice have dispatches under `cordinator/dispatches/chronicle/`.
+
+#### A. `C-PARTIAL-PUT-CONTRACT` — seven whole-replace PUTs, one ruling (dispatch drafted)
+
+**One question closes all seven: on a campaign-scoped JSON PUT, does an ABSENT
+key mean "preserve" or "clear"?** Today the answer differs per struct field by
+accident (pointer → preserve, value type → clear, and a couple of pointers are
+deliberately clear-on-nil), and seven clients send partial bodies against it.
+`C-SIDEBAR-REORDER-RESCUE` PR1 step 1 already booked this exact hazard class and
+already prescribed the answer — *"Server: load-merge-write … a request field that
+is nil/absent leaves the stored value untouched; only present fields update.
+(Distinguish absent from explicitly-empty: pointer fields or `json.RawMessage`
+presence flags — mirror the C-CAL-NULL-PRESERVE pattern.) This kills the clobber
+class for every current and future writer."* — so a per-client patch here would
+contradict a booked house precedent. It also collides with
+`C-ENTITY-LINK-DESIGN`, which deliberately PARKED nil-clears-link for event
+`entity_id` (pinned by `TestUpdateEvent_EntityIDStillClearsOnNil`). Both sides of
+the fork are user-visible: after a presence-merge, **no client can ever null out
+`entity_id`, `end_time` or `summary` again** unless the design also mints an
+explicit-null form.
+
+- [ ] **`PUT /campaigns/:id/sessions/:sid` — "Mark Complete" wipes the session.**
+  The button sends `{name, status}` only; `UpdateSession` assigns every field
+  unguarded, so the schedule, summary, in-world date and recurrence are erased
+  and **the next-occurrence generator silently stops firing**. A second probe
+  proves it is **not one client**: the Edit modal wipes `calendar_year` and
+  `recurrence_day_of_week` too, so patching only the button leaves the endpoint
+  loaded and the loss live on the other surface. Both probes are ready-made red
+  tests for the signed work.
+- [ ] **`PUT /api/v1/campaigns/:id/entities/:eid` — EVERY syncapi entity update
+  un-parents the entity.** `apiUpdateEntityRequest` has **no `parent_id` field at
+  all**, so every sync push detaches the entity from the Chronicle hierarchy. The
+  structural fix (`UpdateEntityInput.ParentID string` → `*string`, nil = preserve)
+  is a semantic change to a service input shared across four plugins —
+  `entities/handler.go:742` and `:2223`, `syncapi/api_handler.go:514` and `:783`,
+  `app/export_adapters.go:844` and `:919`, `ai_workspace/importer/committer.go:469`
+  — and it fixes the meaning of an absent `parent_id` **on the sync wire**, which
+  governs the Foundry module too. The narrow alternative (thread the already-loaded
+  `entity.ParentID` through at both syncapi sites) is self-contained but leaves the
+  trap armed for the next caller and needs a paired decision on the companion
+  `TypeLabel` clear-on-empty loss.
+- [ ] **The Foundry actor-sync `{name}`-only push UN-PRIVATES a hidden character.**
+  `actor-sync.mjs` pushes `{name}` alone to `PUT /entities/:id`; the **value-typed**
+  `is_private` binds to `false`, so a hidden character entity is published to every
+  player. The only in-repo fix — `apiUpdateEntityRequest.IsPrivate` as `*bool` —
+  changes the DOCUMENTED wire semantics of that endpoint from "absent means public"
+  to "absent means preserve", so `API-CONTRACT.md:216-218` and the handler comment
+  at `:510` must be rewritten with it; it implicates the sibling batch path at
+  `api_handler.go:782-786` (`syncChange.IsPrivate`, same pattern, same comment), and
+  leaving that one asymmetric would be worse than leaving both. The alternative fix
+  (send `is_private` + `type_label` in `nameBody`) lives in a **different repo**, so
+  **no single commit on this branch closes the hole**. Privacy defaults are an
+  operator's call.
+- [ ] **The Timeline standalone-event edit modal clears eight fields on a rename.**
+  `UpdateStandaloneEvent` assigns them unguarded, so entity link, rich-text
+  `description_html`, start/end times, recurrence and per-player visibility rules
+  all go on a rename. The client-only sketch **does not work as written**: the modal
+  cannot echo the untouched fields because `openEdit`'s `detail` never receives them
+  (`timeline.templ:1460` dispatches ten keys), so the client route requires widening
+  that inline Alpine `$dispatch` to carry the whole row — **including raw TipTap
+  `description_html` through `fmt.Sprintf %q` into an HTML attribute**, a
+  security-relevant new surface. The server route is cleaner and also fixes the
+  sibling bug that the modal cannot clear a description at all (`if (self.description)`
+  drops empty strings) — but it is the API-contract change above.
+- [ ] **All three Foundry calendar-event update paths send five-key bodies.** The
+  booked `is_recurring`/`all_day` hazard, confirmed live, **plus `entity_id`, which
+  the service clears on nil by design.** CROSS-REPO: the fix lands in
+  `Chronicle-Foundry-Module`'s `scripts/calendar-sync.mjs`, with its own branch, CI
+  and release flow — nothing in Chronicle changes. Two real design choices ride on
+  it: GET-before-PUT on every note edit (a round trip on a hot hook path) vs a
+  widened mapping-store field cache; and — the load-bearing one — **what happens when
+  that GET fails**: fail-closed (the Foundry edit silently never reaches Chronicle)
+  or fail-open (push partial anyway, i.e. keep the data loss). Both are user-visible
+  data-loss choices. The `entity_id` leg is a call on the parked
+  `C-ENTITY-LINK-DESIGN`, not an implementation detail.
+- [ ] **The Chronicle web marker PUT NULLs the Foundry pairing key.**
+  `UpdateMarkerAPI`'s request struct has no `foundry_id` member, so **every marker
+  edit or drag from the Chronicle web UI** clears the marker's Foundry pairing —
+  which shows up later as duplicate markers on the next sync. Blast radius is three
+  fields, not the one filed: `foundry_id`, `pin_category` and `visibility_rules`,
+  **one of which is access-control data**. Adding `foundry_id` to the web req struct
+  lets a browser form set/clear a sync pairing key; nil-preserving in
+  `mapService.UpdateMarker` instead also changes the **syncapi twin's** semantics, so
+  Foundry could never CLEAR a pairing by sending null — and that PUT is documented
+  public API.
+- [ ] **The Chronicle marker edit form and drag-end PUT drop `pin_category` and
+  `visibility_rules`.** `UpdateMarker` assigns both unguarded. These two COULD be
+  echoed back in `maps.templ` alone — but the same reproduction shows `foundry_id`
+  is clobbered by the identical mechanism and **cannot** be fixed client-side, so
+  shipping only the client echo would close the ticket while leaving an equally
+  silent data loss in place. Same cross-plugin contract call as the row above.
+
+#### B. `C-AUTHZ-EMPTY-USERID` — anonymous visitors match the "system context" sentinel (dispatch drafted) · **high**
+
+- [ ] **`userID == ""` means "trusted system caller" in the calendar and timeline
+  visibility filters — and it also matches a logged-out visitor.** So on a public
+  campaign, **`dm_only` calendars and per-user-restricted events are served to an
+  anonymous internet viewer that a logged-in Player is correctly denied.**
+  Unauthenticated confidentiality break; severity confirmed high. Three things
+  block the obvious fix. (1) The sentinel has a REAL dependent:
+  `timeline/timeline_widget_type.go:81` calls `ListTimelines(ctx, campaignID, role, "")`
+  with a genuine NON-owner role, and its comment says so deliberately ("the picker
+  is Scribe-gated at the route") — failing empty-userID closed would silently drop
+  allow-list-restricted timelines from the widget create-or-pick UI, a user-visible
+  behaviour change. (`export_adapters.go:345` also passes `""` but with
+  `ownerRole=3`, so `CanSeeDmOnly` already fires and it is unaffected.) (2) The fix
+  must **amend a green guard that pins today's behaviour as intended** —
+  `calendar_visibility_w5a_test.go:49`: `{"system context (empty userID) bypasses",
+  &Calendar{Visibility: "dm_only"}, w5aRolePlayer, "", true}`. Inverting a pinned
+  expectation is a deliberate, named, mutation-tested amendment. (3) It introduces a
+  new cross-cutting authz concept (an explicit system/trusted flag vs a `"__system__"`
+  sentinel) touching the documented C-CAL-DASHBOARD-W5a and C-PERM-ANON-IDENTITY
+  conventions — an architecture decision that belongs in `.ai/decisions.md` per house
+  rule 6.
+
+#### C. `C-CAL-YEAR-BOUNDS` — unauthenticated CPU-exhaustion DoS (dispatch drafted)
+
+- [ ] **An unbounded `?year` on the public world-state seed drives an O(year) loop
+  with no context check.** Confirmed. It is not one handler: the same unclamped year
+  reaches the same loop from `calendar/worldstate_handler.go:61` (`atoiOr`),
+  `calendar/handler_v2.go:135-139` (`ShowV2` bounds month and day but **not** year)
+  and `syncapi/calendar_api_handler.go:333`/`:349`, across two plugins — so a
+  handler-local patch leaves the hole open. The honest fix is a shared clamp **plus**
+  an O(1) `AbsoluteDay` rewrite, and rewriting `AbsoluteDay` touches core date math
+  consumed by `block_service.go`, `block_geometry.go`, `builder.go`, `service.go` and
+  `calendar_v2_mobile_agenda.go` — **medium risk of shifting every moon phase and
+  countdown if the leap arithmetic is not bit-identical**. And the clamp itself is a
+  user-visible policy: what year window is legitimate for a fantasy calendar
+  (±10k? ±100k? unbounded-but-O(1)?), and is an out-of-window year a 400 or a silent
+  clamp? A campaign legitimately set in year 250000 would start 400-ing on a bound
+  chosen without an operator.
+
+#### D. `C-PLUGIN-MIGRATION-RUNNER` — two defects in the same runner (dispatch drafted)
+
+- [ ] **`foundry_vtt` migration 001 crashes on EVERY fresh database** — it RENAMEs a
+  table nothing creates and DROPs a table that never exists. Reproduced. The blocker
+  is the runner's semantics, verified at `internal/database/plugin_schema.go:154-176`:
+  migrations run in ascending order and the loop **RETURNS on the first failure**, so
+  a new fresh-DB-safe `002_*.up.sql` does nothing — 001 still fails first and 002 is
+  never reached. There are exactly three shapes out and each is a coordinator/operator
+  call: **(a)** edit or delete 001 — forbidden by house law (APPEND-ONLY,
+  `tools/check-migration-immutability.sh`) and additionally grandfathered in
+  `migrate_test.go:402`; **(b)** change `runSinglePluginMigrations` so an unapplied
+  earlier version is not a hard stop — this alters migration semantics for all nine
+  registered plugins; **(c)** pre-stamp `foundry_vtt` version 1 as applied on fresh
+  DBs via a Go-side reconciler next to `PreMigrationCheck` — the most surgical, but it
+  invents a new fresh-vs-upgrade detection policy AND a canonical CREATE schema that
+  no migration currently states. Whichever is chosen changes how EVERY plugin's
+  migrations may fail, or establishes a new class of Go-side schema bootstrap — an
+  ADR, plus a new guard: **a fresh-DB migration-replay test, which CI does not have**
+  (`tools/restore-drill.sh` loads a dump; it does not replay from zero).
+- [ ] **A plugin migration that fails on its second statement is unrecoverable** — no
+  transaction, version recorded last, and most plugin ALTERs are non-idempotent, so a
+  half-applied migration re-runs its first statement and dies. Both fix shapes are
+  policy-visible: **(a)** per-statement progress tracking changes boot-time recovery
+  semantics for every plugin and needs a new column on `plugin_schema_versions` plus a
+  resume rule; **(b)** a CI ratchet that REDs non-idempotent plugin DDL cannot be added
+  cleanly either, because all **nine existing offenders are immutable** under the
+  immutability guard, so it needs a grandfather allowlist and a house-law amendment
+  naming what shapes are permitted going forward. Neither requires editing an existing
+  migration or the byte-pinned `data.go`, so the work is safe **once signed**; it is the
+  choice of semantics, not the mechanics, that blocks.
+
+#### E. `C-EXPORT-IMPORT-FIDELITY` — three promises the export/import round trip does not keep (dispatch drafted)
+
+- [ ] **Campaign export/import silently omits ALL shared notes** — the exporter and
+  importer are never wired. The fix needs a new cross-user listing capability on the
+  notes widget (repository + service + the `NoteService` interface), two new adapters
+  in `export_adapters.go`, and wiring in `routes.go` — and it forces the **egress
+  policy** decisions this repo has always settled by ADR + structural pin: which notes
+  leave the instance (`is_shared=TRUE` only? also `shared_with` notes, whose target
+  user ids do not exist in the destination? never personal notes?) and who owns an
+  imported note. That is the class governed by `.ai/decisions.md:1997` ("RSVP data
+  never leaves via export"), pinned by `calendar/rsvp_egress_test.go`, which walks
+  `campaigns.CampaignExport` as its root — **so widening that root is a deliberate,
+  signed egress change**. Getting it wrong converts a data-omission bug into a
+  data-leak bug.
+- [ ] **"Export ZIP (with media)" round-trips to nothing** — import silently discards
+  every media file. The real fix is a new `MediaImporter` interface on
+  `ExportImportService` plus a media-side adapter that writes media rows AND file bytes
+  and remaps paths through the `IDMap` — a cross-plugin (campaigns ↔ media) FEATURE
+  with new persistence and new failure modes, not a bug patch. The claim's own
+  alternative ("stop shipping the ZIP export button") is a product decision. One
+  genuinely tiny piece exists — widening `import.templ`'s `accept=` to `.zip` and
+  correcting its "Maximum file size: 10 MB / Must be a Chronicle export JSON file" copy
+  to match `maxImportZipSize` — but that is a **different** defect from the one filed
+  and is still user-visible UI copy, so it belongs in the same signed decision rather
+  than being slipped in under this id.
+- [ ] **Campaign import drops objects on any per-row failure and still reports
+  success** — no failure count reaches the user. The fix changes the return signature
+  of essentially every importer interface on the cross-plugin boundary (`EntityImporter`,
+  `GroupImporter`, `CalendarImporter`, `TimelineImporter`, `SessionImporter`,
+  `MapImporter`, `NoteImporter`, `PostImporter`, `AddonImporter`) plus
+  `ExportImportService.Import`, threading a result struct through `campaigns` and all
+  ~10 adapters — and it requires a **brand-new user-visible import-summary page** to
+  replace the bare redirect, which the handler's own comment
+  (`export_handler.go:264-266`) records as a known platform gap ("would require a
+  flash-message surface that isn't built yet"). Underneath is an unanswered product
+  question: should a partial import succeed at all, or hard-fail and roll back?
+  Separately, the strongest trigger found — the Player Character addon gate firing
+  because **addons import after entities** — may be better fixed by reordering addon
+  import ahead of entity types, itself a behavioural change wanting a signature.
+
+#### F. `C-ADDON-TOGGLE-TRUTH` — two integration toggles that gate nothing (dispatch drafted)
+
+- [ ] **Turning "Sync API" OFF does not disable the REST API** — every issued Bearer
+  key keeps working. And the migration path is the whole problem:
+  `IsEnabledForCampaign` (`addons/repository.go:311-325`) returns **false when no row
+  exists**, and nothing seeds sync-api at campaign creation (the only
+  `EnableForCampaign` call sites are `addons/handler.go:154` and
+  `export_adapters.go:1449`), so **today the overwhelming majority of live campaigns
+  running Foundry sync have `enabled=0` while their keys work fine** — dropping
+  `RequireAddonAPI(addonChecker, "sync-api")` onto v1 would 404 every existing
+  integration on upgrade. Closing it properly needs an idempotent reconciler
+  (auto-enable sync-api for any campaign that owns an `api_keys` row) — a reconciler,
+  never a migration. Second, `RequireAuthOrAPIKey`'s own doc comment says in-app
+  browser widgets authenticate on `/api/v1/*` by session cookie, so gating the whole
+  group would break those widgets whenever the GM turns the *integration* addon off —
+  not what "Sync API" means to an operator. Third sub-decision: should the API-keys
+  management UI disappear/refuse when the addon is off, and should "off" deactivate
+  keys or merely refuse requests?
+- [ ] **The "Sessions" feature toggle gates nothing that matters** — Sessions is
+  actually gated on the **Calendar** addon, so enabling Sessions alone silently
+  redirects to the dashboard. Severity corrected DOWN from high: the claim's "gates
+  nothing" is measurably false (it does gate the dashboard block and the sidebar item),
+  and routes stay protected by auth + campaign access + role, so this is a feature-hub
+  consistency / dead-link gap, **not an authz hole**. Both remedies amend an Accepted
+  ADR (ADR-023) and have opposite blast radii: **(a)** gate routes on `"sessions"` —
+  every campaign whose sessions row is currently off silently loses the whole plugin
+  (pages, RSVP, availability scheduler, proposals) on deploy, and it needs a
+  calendar-dependency rule besides; **(b)** drop the sessions addon from `builtinAddons`
+  per ADR-023 — but the row is already seeded in `campaign_addons` on every live DB and
+  the `session_tracker` dashboard block's `Addon:"sessions"` gating would start failing
+  closed, so it needs an idempotent reconciler plus a re-point of the block meta.
+
+#### G. `C-SYNCAPI-PULL-CURSOR` — the pull is capped and cannot resume (dispatch drafted)
+
+- [ ] **Foundry sync pull is hard-capped at 1000 entities with no cursor**, so
+  entities past that point can never sync, permanently. Not shippable unsigned on four
+  counts. (1) Any resume cursor is a **documented public wire change**: it must be added
+  to `SyncResponse` in `docs/api/openapi.yaml` and mirrored in the module's
+  `API-CONTRACT.md`. (2) It spans layers — pushing `since` into SQL means a new
+  repository method + service method in `internal/plugins/entities` (hand-written SQL,
+  new index consideration on `updated_at`) plus the handler rewrite. (3) There is a
+  tempting one-line variant — set `Sort: "updated"` so the 1000-row budget is spent
+  recency-first — that fixes the reproduced scenario without a wire change, and choosing
+  between it and the full cursor **changes the observable ordering of a public
+  endpoint**. (4) Impact is smaller than filed: **no shipped client uses the endpoint**
+  today, which should feed the decision rather than be pre-empted by a ship.
+
+#### H. `C-HTMX-INLINE-SCRIPT-RATCHET` — the script guard's marker is narrower than the harm (dispatch drafted)
+
+- [ ] **`tools/check-page-scripts.sh` only inventories `<script src=`, but htmx deletes
+  ALL script tags from a swapped fragment** — so the **30 inline `<script>` blocks in
+  page templs are the same defect, unguarded.** (Stage 12 already made the existing
+  marker attribute-order-blind; this is the orthogonal widening.) Not shippable
+  unsigned: it **re-baselines an operator-signed ratchet** from "16 files / 29
+  `<script src=` occurrences" to a new ~18-file / 32-occurrence inline baseline, and
+  **re-scopes `C-HTMX-SCRIPT-SWEEP` above**, which is explicitly src-only. It is not
+  self-contained either — closing it touches the guard + its allowlist, `plugins/media`
+  and `plugins/campaigns` (each needing a new static JS file and a `pluginBodyScripts`
+  entry), and each move raises a real load-order/lifecycle question (the registry script
+  must define `window.mediaUploader` before Alpine's deferred init, and must be
+  **idempotent because the registry mounts on EVERY page**). Widening to bare `<script`
+  also sweeps in `widgets/` and `demo/` templs that may render outside `#main-content`,
+  so the new baseline is a judgement about scope, not a mechanical count. **It cannot be
+  split into a safe first commit**: guard-widening alone goes red immediately. Two
+  sub-items an operator could sign separately: (a) widen the marker + re-baseline +
+  mutation-test; (b) move the two confirmed-dead surfaces into the body-script registry
+  and lower the new baseline by 2.
+
+#### I. Booked here only — no dispatch drafted, each waiting on one ruling
+
+- [ ] **The widget-binding integrity `Sweep` — one of the three legs ADR-038 rests on —
+  has no production caller, and host-side orphans are never cleaned at all.**
+  Reproduced, and every branch of the fix breaks the self-contained bar. Chronicle has
+  **no job/cron/ticker runner at all**, so "wire Sweep to a real caller" must INVENT an
+  invocation surface (scheduler subsystem, boot-time pass, or a new admin "integrity
+  sweep" action) — a new user-visible design. Extending `Sweep` to validate `host_id`
+  **cannot be done inside the package**: the `WidgetType` registry has no host-existence
+  predicate, and `widgetbindings` deliberately imports NO other plugin (its `.ai.md`
+  §Boundary: *"Calendar/maps/timeline depend on widgetbindings, never the reverse"*;
+  `HostRef` is plain strings for that reason), so host validation means inverting that
+  dependency or adding a whole new HostType registry tier — an architectural change to
+  the shape ADR-038 signed off on. The `OnHostDeleted` hook spans widgetbindings +
+  entities; the `campaign_id` FK option needs a NEW migration and re-opens a signed ADR
+  whose thesis is "FK-free, integrity lives in the app". Risk is genuinely **medium, not
+  low**: any host-existence predicate that reaps rows can destroy live GM configuration
+  if it is wrong — `service.go:142-146`/`181-183` already refuse to delete on a transient
+  `InstanceExists` error for exactly that reason. **The honest minimum, if nothing else
+  is signed, is to correct the ADR/package-doc/`.ai.md` wording so the "AND of three"
+  claim stops asserting a leg that has no caller.**
+- [ ] **Deleting a calendar silently destroys three unrelated per-viewer preferences**
+  via `calendar_active`'s `ON DELETE CASCADE` (sidebar pin, Block layers, Bench
+  sections). Reproduced — and **every fix path reverses a signed decision.** (a) A
+  `calendar_user_prefs` table FK'd to campaigns is exactly the "new
+  `calendar_v2_user_prefs` table" that PR #368 stop-and-flag #3 rejected, re-affirmed
+  under `[LYR-3 SIGNED]` (014 header) and `[BR2-5 SIGNED]` (016 header) — **three signed
+  refusals of the same shape**. (b) Making `calendar_id` NULLable + `ON DELETE SET NULL`
+  changes what a NULL means to `GetActiveCalendarID` and `resolveActiveCalendar` and
+  re-signs the 006 header's stated cascade rationale. (c) Even the small in-service
+  reseat (re-point surviving rows at the promoted default before DELETE) **has no answer
+  when the deleted calendar was the last one**. The fix must be a NEW migration whose
+  shape is precisely the contested question.
+- [ ] **`OccursOn`'s monthly branch ignores `recurrence_interval` — "every N months"
+  silently fires every month.** The code fix is small; the problem is that the two
+  candidate fixes move **already-stored operator rows in OPPOSITE directions**, so this
+  is a product decision with an operator gate. **Fork (a)** — honour the interval —
+  silently RE-SPACES every row already carrying `monthly` + `interval>1`; because the
+  only first-party writer of such rows is the V2 drawer's stale-hidden-field leak, those
+  rows were almost certainly authored as plain "monthly", so the fix turns a user's
+  monthly tithe into a quarterly one on deploy, **hitting exactly the rows the UI bug
+  produced**. **Fork (b)** — normalize/reject interval for monthly at the service
+  boundary and fix the drawer leak — matches the contract the shipped code already states
+  in `calendar_daycard.js:697-707` (*"ONLY THE WEEK UNIT HAS AN INTERVAL… the type has no
+  interval"*), but forecloses monthly-with-interval as a feature and needs an idempotent
+  reconciler (never a migration) to clean the stored garbage. `model.go:250-277` sets the
+  house precedent for exactly this situation: a change that shifts what is already in the
+  operator's production database *"is a data-visible product decision with an operator
+  gate, not a rendering fix."* The entangled `RecurrenceMaxOccurrences`
+  months-vs-occurrences bug cannot be fixed correctly until the fork is chosen.
+- [ ] **`parseCalendaria` ignores seasons' `monthStart`/`monthEnd`, so the shipped Elven
+  preset imports three identical, wrong season ranges.** Self-contained to `import.go`,
+  but it carries an un-signed semantic decision: **the two real Calendaria exports in
+  `cordinator/references/calendars` DISAGREE on the base of `monthStart`.**
+  `forbidden-lands.json` is 0-based (8 months; 4 seasons at 0/2/4/6, ends 1/3/5/7) while
+  `calendar-of-therin.json` is 1-based (15 months; seasons at 1/4/7/10/13, plus a fifth
+  "Greylight" with `monthEnd 0` — either "unset" or a wrap). The sketched "+1 because
+  monthStart is 0-based" would silently shift every therin-shaped season by one month.
+  There is also **no defined meaning for `dayStart 0` / `dayEnd 45`** in the month-range
+  shape (day-in-month? ignore? clamp to that month's length, which is 45 vs 46 in
+  forbidden-lands?). It lands on the `[WZ-7]`-SIGNED preset gallery, and a second option
+  nobody has ruled on exists — re-authoring `presets/elven.json` into day-of-year values
+  instead of touching the shared parser (`builder_presets.go:1-30` insists no
+  preset-specific code exists, which cuts both ways). Add that the real-world Calendaria
+  exports **do not even parse today** (weeks-is-an-object), so the schema knowledge this
+  fix depends on is demonstrably incomplete. Whatever lands must also re-key the
+  `seasonList` sort off `monthStart`, or the nondeterminism stage 13 just closed comes
+  back.
+- [ ] **Campaign default visibility "Private" produces DM-Only — a creator-only
+  visibility mode does not exist in the schema.** Confirmed. Severity corrected **high →
+  medium**: `is_private=true` DOES correctly hide the content from Players, so nothing
+  leaks to the party; the false promise only bites in a multi-Scribe / co-DM campaign. It
+  is a misleading affordance and a self-contradicting UI, not an authorization bypass.
+  Both remedies are user-visible: (a) a real creator-only mode adds a **fourth**
+  visibility state across the schema, the `VisibilityMode` enum, the `visibility_glance`
+  vocabulary, the SQL filter **and its VERBATIM MIRROR in
+  `calendar/entity_ties_repository.go::entityVisibilityFilter`** (a security-sensitive
+  cross-plugin pin, cordinator#32/#455), the card/show badges and the ai_workspace import
+  path; (b) deleting the "Private" radio removes a shipped, documented option and needs a
+  decision on campaigns that already have `default_visibility:"private"` persisted in
+  settings JSON (an idempotent reconciler, not a migration) plus coordinated removal of
+  the enum value in `ai_workspace/parser.go:31`, `import_review.templ:597`,
+  `handler.go:263` and `committer.go:390`/`:563`. **The minimal honest remedy** — reword
+  the radio's help text in `campaigns/settings.templ` to match reality, regenerate templ
+  from repo root — is still product copy.
+- [ ] **The REST API's entity-create path ignores the campaign's default-visibility
+  setting.** The mechanism is real and measured (with `default_visibility="dm_only"`,
+  both syncapi create branches pass `IsPrivate` straight to the service and nothing
+  downstream re-applies the setting) — but **the filed failure scenario is refuted on
+  every specific**, so severity is corrected **high → low**: the two Foundry
+  journal-create payloads carry `entity_type_id:0` and are rejected 400 by the
+  C-SYNCAPI-PRELAUNCH-HARDENING guard, so no journals are created at all; those payloads
+  derive `is_private` from Foundry ownership, so entities "the GM had not revealed"
+  map to `is_private=TRUE` — **exactly backwards from the claim**; and the batch-sync
+  create branch has no client. The only live public-landing create is
+  `actor-sync.mjs:429`, which hardcodes `is_private:false` for character entities. Not
+  shippable anyway: `IsPrivate bool` cannot distinguish "omitted" from "explicitly
+  false", so copying the web fallback would **hide every synced player character from its
+  own player** in a dm_only campaign; it is one of **seven** create paths that ignore the
+  setting, and moving enforcement into `entityService.Create` changes bestiary / import /
+  AI-import behaviour campaign-wide; and putting a `campaignSvc.GetByID` + `ParseSettings`
+  fallback in the handler is business logic in a handler, which house law forbids. Re-file
+  as a low-severity design item covering all create paths.
+- [ ] **Browser probes never run in CI — ALREADY OWNED, do not re-file.** Re-reproduced:
+  every real-browser probe (the only tests that look at the RENDERED result) is skipped in
+  CI and in `make verify`, and skips again when Chromium is absent. This is **a signed
+  coordinator decision, not an open finding**: `plans/ACTIVE.md:1125` (r47/r48) routed
+  "browser-probe CI gating → BACKLOG w/ `C-CI-REALSQL-LANE` as one 'real-runtime CI'
+  decision", and `dispatches/chronicle/C-CI-REALSQL-LANE.md` §5 is the drafted owner
+  carrying this exact fix sketch plus its own STOP-AND-FLAG on runner flakiness. Shipping
+  the probe half alone would split a decision the coordinator deliberately bound to the
+  real-SQL lane, and it changes CI gating policy (a new required lane that can red PRs on
+  browser flake).
+
+Three more sweep-R3 bookings live with their own arcs rather than here, each updated in
+place with its new measurement: **`C-CALV4-DAYPICK-A11Y`** (severity corrected high →
+medium; the gate is signed design pinned by a green test), **`C-CALV4-CARD-CROSSBLOCK-LEDGER`**
+(the reachable harm is editor-only at the shipped 760px, and the module reports `clear=true`
+while it happens) and **the wizard importer door** (a three-way SPLIT recommended; the era
+code is separable and cheap, the moon swatch and time units need a new authoring surface).
+
+#### J. REFUTED by sweep R3 — do not re-file these (2026-08-07)
+
+Four reported defects died under reproduction. Recorded so the same claims do not come
+back around; the killing evidence is in the report.
+
+- **"Campaign export swallows relations when one entity's query fails."** REFUTED by the
+  export's own redundancy: relations are written as two mirror rows with distinct
+  auto-inc ids, so the `seenRelations` dedup never fires and BOTH directions are exported.
+  A probe with a fake that errors on one entity exported **1** surviving relation, not 0 —
+  and feeding that single row through the REAL `relationService.Create` the import adapter
+  calls **restored both directions**. Loss requires both sides to fail.
+- **"The bestiary has no UI."** REFUTED — the claim greps the wrong tier. The plugin's
+  `.ai.md` says in bold *"No UI in this plugin. All handlers return JSON,"* and CLAUDE.md's
+  three-tier table puts game-system UI in **Systems** = external package repos, so
+  `grep --include="*.templ" internal/` cannot find it by construction. That UI ships and is
+  live-wired (`Chronicle-Draw-Steel`'s `bestiary-browser.js` reads the handler's exact
+  `{results:[…]}` envelope; `monster-builder.js` POSTs to `/bestiary`), the host emits a
+  palette `BlockMeta` per manifest widget so both appear by name in the layout editor, and
+  a probe rendered the promised creature cards. The routes are also **not** registered
+  unconditionally — `routes.go:2864` gates them on `PluginHealth.IsHealthy("bestiary")`.
+  Two much smaller residues below.
+- **"A duplicate Player Character type is permanently unhealable without editing migration
+  000030."** REFUTED — the duplicate DOES form exactly as described, and then **heals
+  idempotently in-product**: `MergeDuplicatePlayerCharacterType` moved 3 entities, removed
+  the generic type, and a re-run was a clean no-op, with migration 000030 never touched.
+  The heal is reachable (`newPCSetupProvider` is registered; the Setup link is unconditional
+  on `HasSetup` — only the amber badge is suppressed after a prior completion).
+- **"The restore drill is blind to media."** Facts confirmed, conclusion REFUTED on three
+  counts. The scope is **explicitly documented** (script header lines 14-15; `docs/RESTORE-DRILL.md`
+  "What this doesn't check" lists the media tarball FIRST), so the "operator is misled by
+  PASS" premise is false. The proposed fix **does not catch the failure it is offered for**:
+  an unmounted media volume tars to **one** entry (`media/`), not zero, so a "fail on zero
+  entries" check never fires — and the sha is computed by `backup.sh` from the file it just
+  wrote, so it can only ever detect post-backup transfer corruption. And an unmounted volume
+  vs a legitimate brand-new install with zero uploads produce **byte-identical** tarballs
+  (112 bytes, same sha256), so separating them requires a new minimum-content policy = a
+  user-visible design decision.
+
+Two small residues the refutations turned up — real, but neither is the claim that was
+filed:
+
+- [ ] **`blockExtWidget` does not pass a placed widget its manifest config.** It emits only
+  `widget_slug` / `campaign-id` / `entity-id`, so the Draw Steel manifest's `source` default
+  (`"bestiary"`) never reaches the mounted widget and a placed Bestiary Browser runs in
+  campaign mode. Host widget-config passthrough plumbing, small.
+- [ ] **`/admin/bestiary/flagged` has no sidebar entry** (confirmed against `app.templ`'s
+  admin link list). It is an admin-reachable JSON endpoint consistent with the plugin's
+  documented JSON-API design — a discoverability gap, not an unreachable queue.
 
 ### In flight — 2026-06-11 sweep round (agents dispatched; coordinator-verified findings)
 
@@ -701,6 +1221,26 @@ W-H shipped the builder wizard. Three things it deliberately did not decide.
   the bytes, so fixing any one in either direction reds a test that says which
   way it moved; six distinct payload mutations were demonstrated red-then-green
   when it landed.
+
+  **RE-REPRODUCED (sweep R3, 2026-08-07); still booked, and the sweep recommends
+  a SPLIT.** Two of the three legs cannot be fixed inside `builder.go` at all:
+  the draft is rebuilt from the wizard FORM at Create, and neither a moon colour
+  nor `hours_per_day`/`minutes_per_hour`/`seconds_per_minute` has a draft field, a
+  `builderCarryFields` entry, or a form key — so carrying them means deciding
+  whether they become a **visible control on the Moons station** (a new authoring
+  surface the wizard deliberately does not offer) or an invisible hidden carry,
+  and the time units mean deciding whether the wizard acquires a notion of a
+  non-24-hour day at all. That is a `builder.templ` edit plus a templ regen from
+  repo root — a different shape of change from data plumbing. It also MOVES a
+  deliberately-pinned test (`TestBuilderPresets_RoundTripThroughBuildExport`
+  asserts all three asymmetries by equality, not exemption), which under house law
+  is a deliberate, named, mutation-tested amendment signed alongside the direction
+  chosen. **Leg (2), the era code, is separable and cheap:** `era_code` already
+  round-trips the form, so `Description: &e.Code` (nil when blank) at
+  `builder.go:754-757` is a true one-liner with no new surface, and its only
+  semantic question is the narrow one of whether an era owns a code distinct from
+  its epoch. Legs (1) and (3) should stay booked until the sky/reckoning question
+  is answered.
 - [x] **`parseCalendaria` reads moons, seasons and eras out of JSON OBJECTS and
   does not fully re-sort them, so two parses of the same bytes can disagree on
   ORDER.** CLOSED sweep R3 2026-08-07 — see the sweep entry under Critical. Go map iteration is randomised; months and weekdays are sorted by
