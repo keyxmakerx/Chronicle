@@ -211,7 +211,11 @@ func (h *Handler) EmbedCalendar(c echo.Context) error {
 	var cal *Calendar
 	var err error
 	if calID != "" {
-		cal, err = h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+		// W5a: the embed is player-reachable by ID (route param OR ?calendarId=
+		// from a dashboard block config), so it takes the visibility gate, not
+		// the bare campaign check — otherwise a player who guesses a hidden
+		// calendar's ID gets the whole month grid and its `everyone` events.
+		cal, err = h.requireVisibleCalendar(c, calID, cc.Campaign.ID)
 		if err != nil {
 			return middleware.Render(c, http.StatusOK, CalendarEmbedEmpty(cc))
 		}
@@ -1278,7 +1282,10 @@ func (h *Handler) UpcomingEventsFragment(c echo.Context) error {
 	var cal *Calendar
 	var err error
 	if calID != "" {
-		cal, err = h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+		// W5a: player-reachable by ID (the calendar_preview block lazy-loads it),
+		// so it takes the visibility gate — a hidden calendar answers with the
+		// same empty fragment a missing one does.
+		cal, err = h.requireVisibleCalendar(c, calID, cc.Campaign.ID)
 		if err != nil {
 			return middleware.Render(c, http.StatusOK, UpcomingEventsEmpty())
 		}
@@ -1316,7 +1323,10 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 	ctx := c.Request().Context()
 	calID := c.Param("calId")
 
-	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	// W5a: player-reachable by ID, so it takes the visibility gate — a calendar
+	// hidden from this viewer 404s exactly as a missing one does, so its name
+	// and its `everyone` events never reach the timeline.
+	cal, err := h.requireVisibleCalendar(c, calID, cc.Campaign.ID)
 	if err != nil {
 		return err
 	}
