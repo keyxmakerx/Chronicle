@@ -1745,19 +1745,35 @@ func benchCSSDurationMS(css, token string) (int, bool) {
 // app's layered CSS, so a bare `.badge` rule in here would silently restyle the
 // whole product — which is exactly the class of bug the Block's sheet carries
 // the same warning about.
+//
+// It reads the sheet BY BRACE, not by line — the same DC2-SCOPEGUARD-LINEFORM
+// fix-forward daycard_test.go already took, applied here to the last line-form
+// scanner left in the repo. The line-form version only inspected lines ENDING
+// in `{`, and never split a comma list, so it examined 113 of this sheet's 180
+// rules and 113 of its 190 comma-list members: a one-liner `.badge { … }` and a
+// `.badge,` member of a multi-selector prelude were both invisible to it.
+// Measured, every one of the 67 unexamined rules was correctly scoped, which is
+// precisely why the hole would have stayed invisible until it wasn't.
 func TestBenchCSS_EverySelectorIsScoped(t *testing.T) {
-	code := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
-	for _, line := range strings.Split(code, "\n") {
-		l := strings.TrimSpace(line)
-		if l == "" || !strings.HasSuffix(l, "{") || strings.HasPrefix(l, "@") || strings.HasPrefix(l, "}") {
-			continue
-		}
-		sel := strings.TrimSpace(strings.TrimSuffix(l, "{"))
-		if sel == "" {
-			continue
-		}
-		if !strings.Contains(sel, ".cal-bench") {
-			t.Errorf("unscoped selector in calendar-bench.css: %q", sel)
+	sels := cssSelectors(benchCommentRe.ReplaceAllString(benchCSS(t), " "))
+	if len(sels) < 150 {
+		t.Fatalf("only %d selectors found; the parser stopped reading the sheet", len(sels))
+	}
+	for _, sel := range sels {
+		// A prelude is a comma-separated LIST; each member carries the scope on
+		// its own, so the list has to be split before it is judged.
+		for _, part := range strings.Split(sel, ",") {
+			p := strings.TrimSpace(part)
+			if p == "" {
+				continue
+			}
+			// Contains, not HasPrefix. The sheet's dark-mode rules are written
+			// `.dark .cal-bench …` — legitimately scoped, and a HasPrefix form
+			// would redden both of them today. The scope root just has to be
+			// somewhere in the compound.
+			if !strings.Contains(p, ".cal-bench") {
+				t.Errorf("unscoped selector in calendar-bench.css: %q (in prelude %q)", p, sel)
+			}
 		}
 	}
 }

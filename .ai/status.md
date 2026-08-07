@@ -307,7 +307,17 @@ reproduced before anything was changed.
    against the vendored htmx 2.0.4 and boot.js's real config (direct load wires
    the cast cards' quick-look; boosted sidebar nav never fetches the file and
    the button does nothing), moved to the registry, ratchet lowered to
-   **28 across 15**. The other 15 are undiagnosed.
+   **28 across 15**. The other 15 are undiagnosed. **Ratchet strengthened
+   (sweep R3, 2026-08-07):** it counted one literal byte sequence,
+   `<script src=`, so `<script defer src={…}>`, `<script type="module"
+   src={…}>` and a newline-split open tag put the file into the inventory not
+   at all — the guard exited 0 with all three present, and `templ fmt` does not
+   normalise attribute order, so the evasion survived `make templ` and CI. The
+   harm is order-blind (htmx removes scripts BY TAG NAME), so the guard now is
+   too: it walks the open tag a character at a time, the same walk
+   `check-calendar-v4-lints.sh` does for B3/B4. Tree counts unchanged — the gap
+   was latent — so the allowlist needed no edit; the three forms plus an
+   inline-body decoy are fixtures in the guard's own self-test.
 
 2. **Every calendar preference write was a guaranteed FK violation.**
    `SetSidebarPinned` / `SetBlockLayers` / `SetBenchSections` inserted an empty
