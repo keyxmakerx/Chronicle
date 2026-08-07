@@ -693,9 +693,11 @@ Chronicle.register('notes', {
       return Chronicle.apiFetch(apiUrl('/members'))
         .then(function (r) { return r.ok ? r.json() : []; })
         .then(function (members) {
-          // Exclude the current user from the picker.
+          // Exclude the current user from the picker. The wire shape is the
+          // memberRef in internal/widgets/notes/handler.go — user_id/username/
+          // role — so match on user_id, not a non-existent `id`.
           state.members = (members || []).filter(function (m) {
-            return m.id !== currentUserId;
+            return m && m.user_id && m.user_id !== currentUserId;
           });
           state.membersLoading = false;
           return state.members;
@@ -1374,10 +1376,11 @@ Chronicle.register('notes', {
         var currentShared = (note && note.sharedWith) || [];
         var html = '';
         members.forEach(function (m) {
-          var checked = currentShared.indexOf(m.id) !== -1 ? ' checked' : '';
+          // memberRef fields (handler.go): user_id / username / role.
+          var checked = currentShared.indexOf(m.user_id) !== -1 ? ' checked' : '';
           html += '<label class="note-share-member">';
-          html += '<input type="checkbox" class="note-share-member-cb" value="' + Chronicle.escapeAttr(m.id) + '"' + checked + '>';
-          html += ' ' + Chronicle.escapeHtml(m.name);
+          html += '<input type="checkbox" class="note-share-member-cb" value="' + Chronicle.escapeAttr(m.user_id) + '"' + checked + '>';
+          html += ' ' + Chronicle.escapeHtml(m.username || m.user_id);
           html += '</label>';
         });
         membersDiv.innerHTML = html;
