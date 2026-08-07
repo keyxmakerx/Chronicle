@@ -318,8 +318,23 @@ func (r *calendarRepo) SetDefault(ctx context.Context, campaignID, calendarID st
 // GetActiveCalendarID returns the user's last-selected calendar ID
 // for a campaign, or "" if no row exists yet. Service layer falls
 // back to the campaign's default calendar when this returns "".
+//
+// A NULL POINTER READS AS "" — THE SAME ANSWER AS NO ROW, DELIBERATELY.
+// Migration 017 made calendar_id nullable and moved the FK to ON DELETE SET
+// NULL, so that deleting a calendar clears the pointer WITHOUT destroying the
+// three unrelated per-viewer preferences that share this row (sidebar_pinned,
+// block_layers, bench_sections). A viewer whose chosen calendar was deleted is
+// in exactly the situation of a viewer who has never chosen one, and
+// resolveActiveCalendar's ladder — pointer, then campaign default, then first
+// by sort order — already handles that case, which is what makes 017 a schema
+// change rather than a semantic one.
+//
+// The sql.NullString is load-bearing: scanning a NULL into a plain string is a
+// driver error, so without it the read would 500 for every viewer in a campaign
+// that had ever deleted a calendar. That is the whole reason this reader changes
+// alongside the migration and not after it.
 func (r *calendarRepo) GetActiveCalendarID(ctx context.Context, userID, campaignID string) (string, error) {
-	var calendarID string
+	var calendarID sql.NullString
 	err := r.db.QueryRowContext(ctx,
 		`SELECT calendar_id FROM calendar_active WHERE user_id = ? AND campaign_id = ?`,
 		userID, campaignID).Scan(&calendarID)
@@ -329,7 +344,7 @@ func (r *calendarRepo) GetActiveCalendarID(ctx context.Context, userID, campaign
 	if err != nil {
 		return "", err
 	}
-	return calendarID, nil
+	return calendarID.String, nil // "" when NULL — see the doc comment
 }
 
 // GetSidebarPinned returns the user-per-campaign sidebar pin
@@ -356,10 +371,14 @@ func (r *calendarRepo) GetSidebarPinned(ctx context.Context, userID, campaignID 
 //
 // calendarID SEEDS THE ROW AND IS NEVER WRITTEN OVER AN EXISTING ONE. The
 // three preference writers on this table all used to insert an empty
-// calendar_id as a "fallback on first write". `calendar_active.calendar_id` is
-// `VARCHAR(36) NOT NULL` with `fk_calendar_active_cal` referencing
-// `calendars(id)` (migration 006:17,22-23), and no calendar carries that id — so
-// the INSERT tripped MariaDB errno 1452 and the whole write 500'd. InnoDB checks
+// calendar_id as a "fallback on first write". `calendar_active.calendar_id`
+// carries `fk_calendar_active_cal` referencing `calendars(id)` (migration
+// 006:17,22-23), and no calendar carries the empty id — so the INSERT tripped
+// MariaDB errno 1452 and the whole write 500'd. Migration 017 made the column
+// NULLable (ON DELETE SET NULL, so a deleted calendar clears the pointer rather
+// than destroying this row and the three preferences on it); that does NOT
+// rescue the old behaviour, because "" is not NULL and the foreign key still
+// rejects it. InnoDB checks
 // the foreign key on the attempted insert, BEFORE the duplicate-key path
 // resolves, so ON DUPLICATE KEY UPDATE never rescued it: the preference could
 // not be saved by a first-time viewer or by a returning one. That is why the

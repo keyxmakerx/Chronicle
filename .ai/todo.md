@@ -780,7 +780,36 @@ a different bug:**
   `InstanceExists` error for exactly that reason. **The honest minimum, if nothing else
   is signed, is to correct the ADR/package-doc/`.ai.md` wording so the "AND of three"
   claim stops asserting a leg that has no caller.**
-- [ ] **Deleting a calendar silently destroys three unrelated per-viewer preferences**
+- [x] **CLOSED — C-SWEEP-R4 stage 25. Deleting a calendar no longer destroys three
+  unrelated per-viewer preferences.** New migration
+  `017_active_prefs_survive_delete` makes `calendar_active.calendar_id` NULLable and
+  moves `fk_calendar_active_cal` to `ON DELETE SET NULL`. The pointer is still cleared
+  by the delete; the sidebar pin, Block layer set and Bench sections beside it survive.
+
+  **Fork (c) taken, and what it re-signs is stated rather than glossed.** (a) A separate
+  prefs table is the shape PR #368 stop-and-flag #3 rejected and `[LYR-3 SIGNED]` /
+  `[BR2-5 SIGNED]` re-affirmed — three signed refusals of one shape is an answer.
+  (b) The in-service reseat has no answer when the deleted calendar was the campaign's
+  LAST one, so it loses the preferences in exactly the case that loses the most.
+  (c) SET NULL re-signs ONE sentence of 006's header ("its active-cal pointers go too")
+  while keeping that header's actual PROMISE verbatim: "the next read falls back to the
+  new default automatically". It still does — `GetActiveCalendarID` answers `""` for a
+  NULL exactly as it does for no row, and `resolveActiveCalendar`'s ladder (pointer →
+  campaign default → first by sort order) already handles that, which is what keeps this
+  a schema change rather than a semantic one.
+
+  **The reader moved with the schema and had to.** Scanning a NULL into a plain `string`
+  is a `database/sql` error, so the migration alone would have traded a silent
+  preference wipe for a 500 on every viewer in a campaign that had ever deleted a
+  calendar. `GetActiveCalendarID` now scans a `sql.NullString`.
+
+  **SCHEMA-ONLY, no reconciler, and that is deliberate**: rows already destroyed by the
+  old cascade are gone beyond recovery, so there is nothing to reconcile — only to stop
+  losing. Pins: `active_prefs_cascade_test.go`, which replays the SHIPPED migration
+  files in order (006 declares the cascade and is immutable, so a single-file assertion
+  would assert the bug) and carries its own mutation test proving the replay can SEE a
+  cascade.
+- [ ] ~~**Deleting a calendar silently destroys three unrelated per-viewer preferences**
   via `calendar_active`'s `ON DELETE CASCADE` (sidebar pin, Block layers, Bench
   sections). Reproduced — and **every fix path reverses a signed decision.** (a) A
   `calendar_user_prefs` table FK'd to campaigns is exactly the "new
@@ -791,7 +820,8 @@ a different bug:**
   re-signs the 006 header's stated cascade rationale. (c) Even the small in-service
   reseat (re-point surviving rows at the promoted default before DELETE) **has no answer
   when the deleted calendar was the last one**. The fix must be a NEW migration whose
-  shape is precisely the contested question.
+  shape is precisely the contested question.~~ *(the original booking, kept for the
+  three-way analysis it records)*
 - [x] **CLOSED — C-SWEEP-R4 stage 22. `OccursOn`'s monthly branch honours
   `recurrence_interval`.** The operator settled the fork on **(a) honour the interval**.
   The predicate now takes `step = RecurrenceInterval when > 1, else 1` and requires

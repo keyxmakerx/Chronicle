@@ -1152,10 +1152,13 @@ func (s *calendarService) GetSidebarPinned(ctx context.Context, userID, campaign
 // WHY A PREFERENCE NEEDS A CALENDAR AT ALL. It does not, conceptually — the pin,
 // the Block layer set and the closed Bench sections are per (user, campaign) and
 // have nothing to do with any one calendar. But they are stored on the
-// calendar_active row, whose `calendar_id` is `VARCHAR(36) NOT NULL` with a
-// foreign key to `calendars(id)` (migration 006:17,22-23). The repository used to
-// paper over that with a literal empty string on first write, which is not a
-// calendar id any campaign has, so
+// calendar_active row, whose `calendar_id` carries a foreign key to
+// `calendars(id)` (migration 006:17,22-23; 017 made the column NULLable and
+// moved the FK to ON DELETE SET NULL so a calendar deletion clears the pointer
+// instead of destroying the whole row and the three preferences on it — but a
+// FOREIGN KEY still rejects a non-NULL id that names no calendar). The
+// repository used to paper over that with a literal empty string on first
+// write, which is not a calendar id any campaign has and is not NULL either, so
 // InnoDB refused the insert with errno 1452 and every one of these writes 500'd.
 // The row has to name a real calendar, so the service names the one the viewer is
 // actually looking at.

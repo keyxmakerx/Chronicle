@@ -1104,6 +1104,44 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stage 25 (deleting a calendar reset preferences it had nothing to do with)
+
+**`calendar_active` holds four facts on one row and only one of them is about a
+calendar.** `calendar_id` is the viewer's switcher choice; `sidebar_pinned`
+(007), `block_layers` (014) and `bench_sections` (016) are per (user, campaign)
+and merely piggyback on the same row — three signed decisions
+(PR #368 stop-and-flag #3, `[LYR-3 SIGNED]`, `[BR2-5 SIGNED]`) put them there
+rather than in a table of their own. `fk_calendar_active_cal` cascaded on
+DELETE, and a cascade deletes the ROW, so deleting one calendar silently reset
+every viewer's sidebar pin, layer set and Bench sections for the whole
+campaign — including viewers who had never opened the deleted calendar.
+
+**Migration 017 makes `calendar_id` NULLable and moves the FK to
+`ON DELETE SET NULL`.** The pointer is still cleared by the delete; the three
+preferences beside it survive.
+
+**The booking said every path reverses something signed, so the migration says
+what this one re-signs.** A separate prefs table is the shape three signed
+refusals already rejected. The in-service reseat has no answer when the deleted
+calendar was the campaign's LAST one — it loses the preferences in exactly the
+case that loses the most. SET NULL re-signs ONE sentence of 006's header ("its
+active-cal pointers go too") while keeping that header's actual promise verbatim:
+"the next read falls back to the new default automatically". It still does. NULL
+and "no row" resolve identically, which is what keeps this a schema change rather
+than a semantic one.
+
+**The reader moved with the schema, and had to.** Scanning a NULL into a plain
+`string` is a `database/sql` error, so the migration on its own would have traded
+a silent preference wipe for a hard 500 on every affected viewer's page.
+
+**Testing without a database.** No MariaDB runs in this build (the sibling FK
+defect's tests say so already), so the pin replays the SHIPPED migration files in
+version order and asserts the END STATE — 006 declares the cascade and is
+immutable, so any test reading one file in isolation would assert either the bug
+or nothing — and carries its own mutation test proving the replay can actually
+SEE a cascade. The second half feeds the repository a real NULL through a
+driver-level stand-in.
+
 #### 2026-08-07 — C-SWEEP-R4 stage 24 (the front door threw away what the back door kept)
 
 **The wizard is "one code path, two front doors" — and one of the doors was
