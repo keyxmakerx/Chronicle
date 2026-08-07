@@ -13,6 +13,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -763,32 +764,36 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		return err
 	}
 
+	// PARTIAL update: absent preserves, explicit null clears, a present value
+	// replaces (sweep R4). is_recurring and all_day used to be value-typed
+	// here, so any client that did not carry them turned recurrence off and
+	// all-day off on somebody's event.
 	var req struct {
-		Name               string  `json:"name"`
-		Description        *string `json:"description"`
-		DescriptionHTML    *string `json:"description_html"`
-		EntityID           *string `json:"entity_id"`
-		Year               int     `json:"year"`
-		Month              int     `json:"month"`
-		Day                int     `json:"day"`
-		StartHour          *int    `json:"start_hour"`
-		StartMinute        *int    `json:"start_minute"`
-		EndYear            *int    `json:"end_year"`
-		EndMonth           *int    `json:"end_month"`
-		EndDay             *int    `json:"end_day"`
-		EndHour            *int    `json:"end_hour"`
-		EndMinute          *int    `json:"end_minute"`
-		IsRecurring        bool    `json:"is_recurring"`
-		RecurrenceType     *string `json:"recurrence_type"`
-		RecurrenceInterval *int    `json:"recurrence_interval"`
-		Visibility         string  `json:"visibility"`
-		VisibilityRules    *string `json:"visibility_rules"`
-		Category           *string `json:"category"`
+		Name               patch.Field[string] `json:"name"`
+		Description        patch.Field[string] `json:"description"`
+		DescriptionHTML    patch.Field[string] `json:"description_html"`
+		EntityID           patch.Field[string] `json:"entity_id"`
+		Year               patch.Field[int]    `json:"year"`
+		Month              patch.Field[int]    `json:"month"`
+		Day                patch.Field[int]    `json:"day"`
+		StartHour          patch.Field[int]    `json:"start_hour"`
+		StartMinute        patch.Field[int]    `json:"start_minute"`
+		EndYear            patch.Field[int]    `json:"end_year"`
+		EndMonth           patch.Field[int]    `json:"end_month"`
+		EndDay             patch.Field[int]    `json:"end_day"`
+		EndHour            patch.Field[int]    `json:"end_hour"`
+		EndMinute          patch.Field[int]    `json:"end_minute"`
+		IsRecurring        patch.Field[bool]   `json:"is_recurring"`
+		RecurrenceType     patch.Field[string] `json:"recurrence_type"`
+		RecurrenceInterval patch.Field[int]    `json:"recurrence_interval"`
+		Visibility         patch.Field[string] `json:"visibility"`
+		VisibilityRules    patch.Field[string] `json:"visibility_rules"`
+		Category           patch.Field[string] `json:"category"`
 		// Tier + AllDay: internal-UI-only binding completion (C-CAL-LARGE-EDITOR).
 		// See CreateEventAPI for the rationale — existing columns/inputs, no
 		// schema, no new endpoint, external module API untouched.
-		Tier   *string `json:"tier"`
-		AllDay bool    `json:"all_day"`
+		Tier   patch.Field[string] `json:"tier"`
+		AllDay patch.Field[bool]   `json:"all_day"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
@@ -796,9 +801,10 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 
 	// Only co-DMs (Owner or DM-grantee) can set dm_only visibility; everyone
 	// else is downgraded to 'everyone'. Co-DM capability (C-CAL-COGM-CAPABILITY).
+	// The downgrade applies only to a visibility the caller actually SENT.
 	visibility := req.Visibility
-	if visibility == "dm_only" && !cc.CanAuthorDmOnly() && !cc.IsSiteAdmin {
-		visibility = "everyone"
+	if v, ok := req.Visibility.Get(); ok && v == "dm_only" && !cc.CanAuthorDmOnly() && !cc.IsSiteAdmin {
+		visibility = patch.Of("everyone")
 	}
 
 	if err := h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
@@ -827,8 +833,8 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	}); err != nil {
 		return err
 	}
-	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarEventUpdated, "calendar_event", eventID, req.Name,
-		map[string]any{"year": req.Year, "month": req.Month, "day": req.Day, "visibility": visibility})
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarEventUpdated, "calendar_event", eventID, req.Name.Val(""),
+		map[string]any{"year": req.Year.Val(0), "month": req.Month.Val(0), "day": req.Day.Val(0), "visibility": visibility.Val("")})
 	return nil
 }
 

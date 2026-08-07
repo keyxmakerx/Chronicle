@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // renderEditorDrawer renders eventV2Drawer with a rich, mockup-shaped view so
@@ -230,8 +232,8 @@ func TestUpdateEvent_AllDayClearsStoredTimes(t *testing.T) {
 	// the grid (nil StartHour == all-day) renders it correctly — the null-preserve
 	// guard would otherwise keep the stale clock.
 	err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
-		Name: "Now all day", Year: 1492, Month: 7, Day: 15, Visibility: "everyone",
-		AllDay: true,
+		Name: patch.Of("Now all day"), Year: patch.Of(1492), Month: patch.Of(7), Day: patch.Of(15), Visibility: patch.Of("everyone"),
+		AllDay: patch.Of(true),
 	})
 	if err != nil {
 		t.Fatalf("UpdateEvent: %v", err)
@@ -263,11 +265,20 @@ func TestUpdateEvent_NotAllDayKeepsNullPreserve(t *testing.T) {
 	}
 	svc := newTestCalendarService(repo)
 
-	// AllDay false (zero value) + no time fields sent → the existing null-preserve
-	// guard must keep the seeded clock. This pins that my all-day clear is gated
-	// strictly on AllDay==true and does not regress C-CAL-NULL-PRESERVE.
+	// An EXPLICIT all_day=false plus no time fields → the preserve guard must
+	// keep the seeded clock. This pins that the all-day clear is gated
+	// strictly on an explicit AllDay==true and does not regress
+	// C-CAL-NULL-PRESERVE.
+	//
+	// AMENDED in sweep R4: "AllDay false" used to be spelled by OMITTING the
+	// field, because it was a value-typed bool. Under the ruled contract an
+	// absent all_day preserves — that was the whole point, since the Foundry
+	// calendar-sync's five-key body omits it and was silently switching
+	// all-day off. So the false is sent explicitly here, and
+	// TestUpdateEvent_AbsentAllDayPreserves below pins the other half.
 	err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
-		Name: "Title only", Year: 1492, Month: 7, Day: 15, Visibility: "everyone",
+		Name: patch.Of("Title only"), Year: patch.Of(1492), Month: patch.Of(7), Day: patch.Of(15), Visibility: patch.Of("everyone"),
+		AllDay: patch.Of(false),
 	})
 	if err != nil {
 		t.Fatalf("UpdateEvent: %v", err)
@@ -318,14 +329,30 @@ func TestEventHandler_BindsTierAndAllDay(t *testing.T) {
 	// Whitespace-insensitive so gofmt's tag/value alignment can shift freely.
 	ws := regexp.MustCompile(`\s+`)
 	flat := ws.ReplaceAllString(src, " ")
+	// Both handlers must still carry BOTH fields and pass them through.
 	for _, want := range []string{
-		"Tier *string `json:\"tier\"`",   // request-struct binding
-		"AllDay bool `json:\"all_day\"`", // request-struct binding
-		"Tier: req.Tier,",                // pass-through to the service input
-		"AllDay: req.AllDay,",            // pass-through to the service input
+		"Tier: req.Tier,",     // pass-through to the service input
+		"AllDay: req.AllDay,", // pass-through to the service input
 	} {
 		if strings.Count(flat, want) < 2 {
 			t.Errorf("CreateEventAPI + UpdateEventAPI must both bind %q (found %d, want 2)", want, strings.Count(flat, want))
+		}
+	}
+	// AMENDED in sweep R4, and named as such: the two handlers no longer
+	// SPELL the binding the same way, so one shared substring can no longer
+	// stand for both. Create is a full write and stays value-typed; Update is
+	// a partial and must be presence-typed, or an absent all_day switches
+	// all-day off — which is precisely what the Foundry calendar-sync's
+	// five-key body was doing. Requiring each spelling separately is strictly
+	// stronger than the old count-of-two: it now pins WHICH handler has which.
+	for _, want := range []string{
+		"Tier *string `json:\"tier\"`",              // CreateEventAPI
+		"AllDay bool `json:\"all_day\"`",            // CreateEventAPI
+		"Tier patch.Field[string] `json:\"tier\"`",  // UpdateEventAPI — partial
+		"AllDay patch.Field[bool] `json:\"all_day\"`", // UpdateEventAPI — partial
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("calendar/handler.go no longer binds %q", want)
 		}
 	}
 }

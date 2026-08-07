@@ -2014,132 +2014,91 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 		return apperror.NewNotFound("event not found")
 	}
 
-	// Validate visibility (same rules as CreateEvent).
-	if input.Visibility == "" {
-		input.Visibility = evt.Visibility // preserve existing if not provided
+	// Validate visibility (same rules as CreateEvent). An absent visibility
+	// preserves the stored one, same as the empty string always did.
+	visibility := input.Visibility.Val(evt.Visibility)
+	if visibility == "" {
+		visibility = evt.Visibility
 	}
-	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+	if visibility != "everyone" && visibility != "dm_only" {
 		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
 	}
-	if err := validateVisibilityRules(input.VisibilityRules); err != nil {
+	visRules := input.VisibilityRules.Ptr(evt.VisibilityRules)
+	if err := validateVisibilityRules(visRules); err != nil {
 		return err
 	}
 
-	// C-CAL-NULL-PRESERVE (chronicle PR for 2026-05-19 audit):
-	// 18 pointer-typed input fields are nil-guarded so a partial-save
-	// (e.g. title-only edit via the FM-CAL-EDITOR day inspector) doesn't
-	// silently blank description, color, times, recurrence config, or
-	// per-user visibility rules. Same pattern as
-	// UpdateEntityInput.IsPrivate *bool from chronicle#318. Audit
-	// context: reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md
-	// §2 risk matrix.
+	// Load-merge-write (sweep R4, extending C-CAL-NULL-PRESERVE).
 	//
-	// Value-typed fields stay unguarded by design — they have no
-	// "absent" semantic distinct from "false/default/empty":
-	//   Name      — required; empty string would fail validation upstream.
-	//   Year/Month/Day — required for an event edit.
-	//   Visibility    — defaulted to evt.Visibility above when empty.
-	//   IsRecurring   — bool: false IS the value, not "absent".
-	//   AllDay        — same.
-	evt.Name = input.Name
-	if input.Description != nil {
-		evt.Description = input.Description
-	}
-	// Sanitize rich text HTML if provided. nil input.DescriptionHTML
-	// means "preserve current" (the nil-guard), not "clear". Empty-string
-	// inside a non-nil pointer falls through to the else branch, which
-	// preserves the original behavior of writing the (empty) value.
-	if input.DescriptionHTML != nil {
-		if *input.DescriptionHTML != "" {
-			sanitized := sanitize.HTML(*input.DescriptionHTML)
+	// C-CAL-NULL-PRESERVE (chronicle PR for the 2026-05-19 audit) nil-guarded
+	// eighteen pointer fields so a title-only edit via the FM-CAL-EDITOR day
+	// inspector could not blank description, color, times, recurrence config
+	// or per-user visibility rules. It left the value-typed fields unguarded
+	// on the reasoning that they have no "absent" state — true of the Go
+	// type, false of the wire. Foundry's calendar-sync pushes five-key bodies
+	// from three separate paths, and each of them silently wrote
+	// is_recurring=false and all_day=false onto somebody's event.
+	//
+	// patch.Field carries presence, so every field below now reads the same
+	// way: absent preserves, an explicit null clears, a value replaces.
+	//
+	// EntityID is the one C-ENTITY-LINK-DESIGN parked. The parking's concern
+	// was that a nil-preserve sweep would remove a caller's ability to CLEAR
+	// the link; the three-state contract keeps it — an explicit null still
+	// unlinks — while a body that never mentions entity_id stops unlinking by
+	// accident. TestUpdateEvent_EntityIDStillClearsOnNil still pins the clear.
+	evt.Name = input.Name.Val(evt.Name)
+	evt.Description = input.Description.Ptr(evt.Description)
+	// Sanitize rich text HTML if provided. Absent means "preserve current",
+	// not "clear". A present empty string writes the (empty) value, which is
+	// the pre-sweep behaviour of a non-nil empty pointer.
+	if input.DescriptionHTML.Present() {
+		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
+			sanitized := sanitize.HTML(v)
 			evt.DescriptionHTML = &sanitized
 		} else {
-			evt.DescriptionHTML = input.DescriptionHTML
+			evt.DescriptionHTML = input.DescriptionHTML.Ptr(evt.DescriptionHTML)
 		}
 	}
-	// EntityID intentionally NOT nil-guarded here pending C-ENTITY-LINK-
-	// DESIGN (see cordinator/plans/BACKLOG.md). Today nil EntityID
-	// continues to mean "clear the entity link" to preserve the existing
-	// wire semantic until the entity-linking surface is reworked
-	// holistically — including the deferred multi-entity N:M support
-	// (C-CALENDAR-AUDIT Chunk 3) and cross-plugin link consistency. A
-	// regression test (TestUpdateEvent_EntityIDStillClearsOnNil) pins
-	// this deliberate non-fix so a future sweep can't accidentally
-	// include it without revisiting the design dispatch. Audit context:
-	// reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md §5 risk #1.
-	evt.EntityID = input.EntityID
-	evt.Year = input.Year
-	evt.Month = input.Month
-	evt.Day = input.Day
-	if input.StartHour != nil {
-		evt.StartHour = input.StartHour
-	}
-	if input.StartMinute != nil {
-		evt.StartMinute = input.StartMinute
-	}
-	if input.EndYear != nil {
-		evt.EndYear = input.EndYear
-	}
-	if input.EndMonth != nil {
-		evt.EndMonth = input.EndMonth
-	}
-	if input.EndDay != nil {
-		evt.EndDay = input.EndDay
-	}
-	if input.EndHour != nil {
-		evt.EndHour = input.EndHour
-	}
-	if input.EndMinute != nil {
-		evt.EndMinute = input.EndMinute
-	}
-	evt.IsRecurring = input.IsRecurring
-	if input.RecurrenceType != nil {
-		evt.RecurrenceType = input.RecurrenceType
-	}
-	if input.RecurrenceInterval != nil {
-		evt.RecurrenceInterval = input.RecurrenceInterval
-	}
-	if input.RecurrenceEndYear != nil {
-		evt.RecurrenceEndYear = input.RecurrenceEndYear
-	}
-	if input.RecurrenceEndMonth != nil {
-		evt.RecurrenceEndMonth = input.RecurrenceEndMonth
-	}
-	if input.RecurrenceEndDay != nil {
-		evt.RecurrenceEndDay = input.RecurrenceEndDay
-	}
-	if input.RecurrenceMaxOccurrences != nil {
-		evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences
-	}
-	evt.Visibility = input.Visibility
-	if input.VisibilityRules != nil {
-		evt.VisibilityRules = input.VisibilityRules
-	}
-	if input.Category != nil {
-		evt.Category = input.Category
-	}
-	// Tier nil-preserve (Wave 1.6 §D): nil leaves existing tier
-	// untouched; explicit empty-string slug clears to platform default.
-	if input.Tier != nil {
-		evt.Tier = input.Tier
-	}
-	if input.Color != nil {
-		evt.Color = input.Color
-	}
-	if input.Icon != nil {
-		evt.Icon = input.Icon
-	}
-	evt.AllDay = input.AllDay
+	evt.EntityID = input.EntityID.Ptr(evt.EntityID)
+	evt.Year = input.Year.Val(evt.Year)
+	evt.Month = input.Month.Val(evt.Month)
+	evt.Day = input.Day.Val(evt.Day)
+	evt.StartHour = input.StartHour.Ptr(evt.StartHour)
+	evt.StartMinute = input.StartMinute.Ptr(evt.StartMinute)
+	evt.EndYear = input.EndYear.Ptr(evt.EndYear)
+	evt.EndMonth = input.EndMonth.Ptr(evt.EndMonth)
+	evt.EndDay = input.EndDay.Ptr(evt.EndDay)
+	evt.EndHour = input.EndHour.Ptr(evt.EndHour)
+	evt.EndMinute = input.EndMinute.Ptr(evt.EndMinute)
+	evt.IsRecurring = input.IsRecurring.Val(evt.IsRecurring)
+	evt.RecurrenceType = input.RecurrenceType.Ptr(evt.RecurrenceType)
+	evt.RecurrenceInterval = input.RecurrenceInterval.Ptr(evt.RecurrenceInterval)
+	evt.RecurrenceEndYear = input.RecurrenceEndYear.Ptr(evt.RecurrenceEndYear)
+	evt.RecurrenceEndMonth = input.RecurrenceEndMonth.Ptr(evt.RecurrenceEndMonth)
+	evt.RecurrenceEndDay = input.RecurrenceEndDay.Ptr(evt.RecurrenceEndDay)
+	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences.Ptr(evt.RecurrenceMaxOccurrences)
+	evt.Visibility = visibility
+	evt.VisibilityRules = visRules
+	evt.Category = input.Category.Ptr(evt.Category)
+	// Tier preserve (Wave 1.6 §D): absent leaves the existing tier untouched;
+	// an explicit empty-string slug clears to the platform default.
+	evt.Tier = input.Tier.Ptr(evt.Tier)
+	evt.Color = input.Color.Ptr(evt.Color)
+	evt.Icon = input.Icon.Ptr(evt.Icon)
+	evt.AllDay = input.AllDay.Val(evt.AllDay)
 	// All-day means "no clock time" — the V2 grid/card treat a nil StartHour as
 	// the all-day signal (calendar_v2_helpers.go monthCellLines: allDay ==
-	// TimeLabel==""). Because the time fields above are nil-PRESERVE (a title-only
+	// TimeLabel==""). Because the time fields above are PRESERVING (a title-only
 	// edit must not blank an event's clock), toggling all-day ON in the editor
 	// drawer could not otherwise clear an existing start/end time. So when the
 	// caller explicitly marks the event all-day, drop the clock fields here — the
 	// one place that unambiguously means "make this all-day" (C-CAL-LARGE-EDITOR).
-	// Safe for the day-resolution module note path (APIHandler always sends
-	// AllDay=true with nil times, so this is a no-op there).
-	if evt.AllDay {
+	// Gated on an EXPLICIT all_day=true, not on the merged value: an absent
+	// all_day on an already-all-day event is not a fresh instruction to blank
+	// times, and re-running the blanking on every partial save would be the
+	// same class of silent write this sweep exists to stop.
+	if v, ok := input.AllDay.Get(); ok && v {
 		evt.StartHour = nil
 		evt.StartMinute = nil
 		evt.EndHour = nil

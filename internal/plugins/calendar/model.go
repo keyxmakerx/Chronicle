@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // VisibilityRules defines per-user visibility overrides for calendar events.
@@ -794,36 +796,54 @@ type CreateEventInput struct {
 }
 
 // UpdateEventInput is the validated input for updating an event.
+//
+// PARTIAL update, per the contract ruled on 2026-08-07 (sweep R4): an
+// ABSENT key preserves the stored value, an EXPLICIT null clears it, a
+// present value replaces it.
+//
+// C-CAL-NULL-PRESERVE got eighteen of these right in 2026-05 by making them
+// nil-preserving pointers. It could not fix the rest, and said so: a plain
+// pointer collapses "absent" and "null", so the value-typed fields were
+// left unguarded on the grounds that they have no absent state — which was
+// true of the TYPE, not of the wire. The Foundry calendar-sync sends
+// five-key bodies from three separate paths, and every one of them silently
+// set is_recurring=false and all_day=false on somebody's event.
+//
+// EntityID is the field C-ENTITY-LINK-DESIGN parked. The parking asked that
+// a caller keep the ability to CLEAR the link, which nil-preserve would
+// have taken away. patch.Field gives both: an explicit null still clears
+// (TestUpdateEvent_EntityIDStillClearsOnNil still passes, in its own
+// vocabulary), while a body that never mentions entity_id stops unlinking.
 type UpdateEventInput struct {
-	Name                     string
-	Description              *string
-	DescriptionHTML          *string
-	EntityID                 *string
-	Year                     int
-	Month                    int
-	Day                      int
-	StartHour                *int
-	StartMinute              *int
-	EndYear                  *int
-	EndMonth                 *int
-	EndDay                   *int
-	EndHour                  *int
-	EndMinute                *int
-	IsRecurring              bool
-	RecurrenceType           *string
-	RecurrenceInterval       *int
-	RecurrenceEndYear        *int
-	RecurrenceEndMonth       *int
-	RecurrenceEndDay         *int
-	RecurrenceMaxOccurrences *int
-	Visibility               string
-	VisibilityRules          *string
-	Category                 *string
+	Name                     patch.Field[string]
+	Description              patch.Field[string]
+	DescriptionHTML          patch.Field[string]
+	EntityID                 patch.Field[string]
+	Year                     patch.Field[int]
+	Month                    patch.Field[int]
+	Day                      patch.Field[int]
+	StartHour                patch.Field[int]
+	StartMinute              patch.Field[int]
+	EndYear                  patch.Field[int]
+	EndMonth                 patch.Field[int]
+	EndDay                   patch.Field[int]
+	EndHour                  patch.Field[int]
+	EndMinute                patch.Field[int]
+	IsRecurring              patch.Field[bool]
+	RecurrenceType           patch.Field[string]
+	RecurrenceInterval       patch.Field[int]
+	RecurrenceEndYear        patch.Field[int]
+	RecurrenceEndMonth       patch.Field[int]
+	RecurrenceEndDay         patch.Field[int]
+	RecurrenceMaxOccurrences patch.Field[int]
+	Visibility               patch.Field[string]
+	VisibilityRules          patch.Field[string]
+	Category                 patch.Field[string]
 	// Tier — see CreateEventInput.Tier doc.
-	Tier                     *string
-	Color                    *string
-	Icon                     *string
-	AllDay                   bool
+	Tier   patch.Field[string]
+	Color  patch.Field[string]
+	Icon   patch.Field[string]
+	AllDay patch.Field[bool]
 }
 
 // MonthInput is the input for creating/updating a month.

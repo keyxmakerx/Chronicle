@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
@@ -571,33 +572,38 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 }
 
 // apiUpdateEventRequest is the JSON body for updating a calendar event.
+//
+// PARTIAL: absent preserves, explicit null clears, a present value replaces
+// (sweep R4). is_recurring and all_day were value-typed here, so the Foundry
+// calendar-sync's five-key push turned recurrence and all-day off on every
+// note it touched; entity_id was a plain pointer the service cleared on nil.
 type apiUpdateEventRequest struct {
-	Name                     string   `json:"name"`
-	Description              *string  `json:"description"`
-	DescriptionHTML          *string  `json:"description_html"`
-	EntityID                 *string  `json:"entity_id"`
-	Year                     int      `json:"year"`
-	Month                    int      `json:"month"`
-	Day                      int      `json:"day"`
-	StartHour                *int     `json:"start_hour"`
-	StartMinute              *int     `json:"start_minute"`
-	EndYear                  *int     `json:"end_year"`
-	EndMonth                 *int     `json:"end_month"`
-	EndDay                   *int     `json:"end_day"`
-	EndHour                  *int     `json:"end_hour"`
-	EndMinute                *int     `json:"end_minute"`
-	IsRecurring              bool     `json:"is_recurring"`
-	RecurrenceType           *string  `json:"recurrence_type"`
-	RecurrenceInterval       *int     `json:"recurrence_interval"`
-	RecurrenceEndYear        *int     `json:"recurrence_end_year"`
-	RecurrenceEndMonth       *int     `json:"recurrence_end_month"`
-	RecurrenceEndDay         *int     `json:"recurrence_end_day"`
-	RecurrenceMaxOccurrences *int     `json:"recurrence_max_occurrences"`
-	Visibility               string   `json:"visibility"`
-	Category                 *string  `json:"category"`
-	Color                    *string  `json:"color"`
-	Icon                     *string  `json:"icon"`
-	AllDay                   bool     `json:"all_day"`
+	Name                     patch.Field[string] `json:"name"`
+	Description              patch.Field[string] `json:"description"`
+	DescriptionHTML          patch.Field[string] `json:"description_html"`
+	EntityID                 patch.Field[string] `json:"entity_id"`
+	Year                     patch.Field[int]    `json:"year"`
+	Month                    patch.Field[int]    `json:"month"`
+	Day                      patch.Field[int]    `json:"day"`
+	StartHour                patch.Field[int]    `json:"start_hour"`
+	StartMinute              patch.Field[int]    `json:"start_minute"`
+	EndYear                  patch.Field[int]    `json:"end_year"`
+	EndMonth                 patch.Field[int]    `json:"end_month"`
+	EndDay                   patch.Field[int]    `json:"end_day"`
+	EndHour                  patch.Field[int]    `json:"end_hour"`
+	EndMinute                patch.Field[int]    `json:"end_minute"`
+	IsRecurring              patch.Field[bool]   `json:"is_recurring"`
+	RecurrenceType           patch.Field[string] `json:"recurrence_type"`
+	RecurrenceInterval       patch.Field[int]    `json:"recurrence_interval"`
+	RecurrenceEndYear        patch.Field[int]    `json:"recurrence_end_year"`
+	RecurrenceEndMonth       patch.Field[int]    `json:"recurrence_end_month"`
+	RecurrenceEndDay         patch.Field[int]    `json:"recurrence_end_day"`
+	RecurrenceMaxOccurrences patch.Field[int]    `json:"recurrence_max_occurrences"`
+	Visibility               patch.Field[string] `json:"visibility"`
+	Category                 patch.Field[string] `json:"category"`
+	Color                    patch.Field[string] `json:"color"`
+	Icon                     patch.Field[string] `json:"icon"`
+	AllDay                   patch.Field[bool]   `json:"all_day"`
 }
 
 // UpdateEvent updates an existing calendar event.

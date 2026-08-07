@@ -9,6 +9,7 @@ package calendar
 import (
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	calwidget "github.com/keyxmakerx/chronicle/internal/widgets/calendar_v2"
 )
 
@@ -124,12 +125,16 @@ func TestCreateEventInput_TierPointerRoundTrip(t *testing.T) {
 }
 
 func TestUpdateEventInput_TierNilPreserve(t *testing.T) {
-	// Nil tier on UpdateEventInput signals "leave existing tier
-	// untouched" per the service-layer nil-preserve convention.
-	// Verified by struct-level inspection; service-layer test would
-	// cover the actual preserve path with a mock repo.
-	input := UpdateEventInput{Name: "X", Tier: nil}
-	if input.Tier != nil {
-		t.Error("nil tier on input should stay nil through round-trip")
+	// An ABSENT tier on UpdateEventInput signals "leave existing tier
+	// untouched" per the service-layer preserve convention. Sweep R4 made
+	// the absence explicit in the type (patch.Field) rather than implied by
+	// a nil pointer, so the same intent is now spelled patch.Absent — and,
+	// unlike a bare nil, it is distinguishable from an explicit null.
+	input := UpdateEventInput{Name: patch.Of("X"), Tier: patch.Absent[string]()}
+	if input.Tier.Present() {
+		t.Error("an absent tier on input should stay absent through round-trip")
+	}
+	if !patch.Null[string]().IsNull() {
+		t.Error("an explicit null tier must remain expressible; it clears to the platform default")
 	}
 }

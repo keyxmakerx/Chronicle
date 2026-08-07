@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
@@ -1107,10 +1108,10 @@ func TestUpdateEvent_Success(t *testing.T) {
 	svc := newTestCalendarService(repo)
 
 	err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
-		Name:       "New Name",
-		Month:      5,
-		Day:        10,
-		Visibility: "everyone",
+		Name:       patch.Of("New Name"),
+		Month:      patch.Of(5),
+		Day:        patch.Of(10),
+		Visibility: patch.Of("everyone"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1122,8 +1123,8 @@ func TestUpdateEvent_NotFound(t *testing.T) {
 	svc := newTestCalendarService(repo)
 
 	err := svc.UpdateEvent(context.Background(), "nonexistent", UpdateEventInput{
-		Name:       "X",
-		Visibility: "everyone",
+		Name:       patch.Of("X"),
+		Visibility: patch.Of("everyone"),
 	})
 	assertAppError(t, err, 404)
 }
@@ -1137,8 +1138,8 @@ func TestUpdateEvent_InvalidVisibility(t *testing.T) {
 	svc := newTestCalendarService(repo)
 
 	err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
-		Name:       "X",
-		Visibility: "invalid",
+		Name:       patch.Of("X"),
+		Visibility: patch.Of("invalid"),
 	})
 	assertAppError(t, err, 422)
 }
