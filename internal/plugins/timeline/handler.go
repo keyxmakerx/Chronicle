@@ -10,6 +10,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -89,7 +90,7 @@ func (h *Handler) Index(c echo.Context) error {
 	role := effectiveRole(c, cc)
 	userID := auth.GetUserID(c)
 
-	timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, role, userID)
+	timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -122,7 +123,7 @@ func (h *Handler) Show(c echo.Context) error {
 		return err
 	}
 
-	events, err := h.svc.ListTimelineEvents(ctx, timelineID, role, userID)
+	events, err := h.svc.ListTimelineEvents(ctx, timelineID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -527,7 +528,7 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 		return err
 	}
 
-	events, err := h.svc.ListTimelineEvents(ctx, timelineID, role, userID)
+	events, err := h.svc.ListTimelineEvents(ctx, timelineID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -928,7 +929,7 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	role := effectiveRole(c, cc)
 	userID := auth.GetUserID(c)
 
-	timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, role, userID)
+	timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -964,7 +965,7 @@ func (h *Handler) EmbedTimeline(c echo.Context) error {
 	timelineID := c.QueryParam("timeline_id")
 
 	if timelineID == "" {
-		timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, role, userID)
+		timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 		if err != nil {
 			return err
 		}

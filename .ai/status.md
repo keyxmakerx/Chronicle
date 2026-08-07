@@ -1104,6 +1104,41 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stage 9 (the anonymous dm_only leak — ADR-049)
+
+**"No authenticated user" and "trusted system caller" were the SAME value, and
+the filters read that value as trusted.** `C-AUTHZ-EMPTY-USERID`, the only
+high-severity unauthenticated confidentiality break R3 found, is closed.
+
+On a PUBLIC campaign a logged-out visitor carries `role = RoleNone` and
+`auth.GetUserID(c) == ""`, and the calendar/timeline visibility filters
+short-circuited on exactly `userID == ""` — documented in both plugins as "the
+system context". So anonymous internet traffic took the MOST privileged branch
+and was served `dm_only` calendars, `dm_only` timelines and per-user-restricted
+events and event links that a logged-in Player on the same campaign is
+correctly denied.
+
+**The fix is a type, not a check.** `internal/permissions/viewer.go`'s `Viewer`
+carries an **unexported** `system` bit with two constructors: `RequestViewer`
+(anything off an HTTP request — an empty user id means ANONYMOUS and cannot
+become trusted) and `SystemViewer` (declared at the call site). Filters ask
+`SkipsPerUserRules()`; **an anonymous viewer is neither an Owner nor a system
+caller**, so it fails closed by construction rather than by every call site
+remembering. This is the concrete form of C-CALV4-V2SUNSET **[VS-15]** — an
+empty user id is an ABSENT per-user layer, never a sentinel — which matters
+because R2-4 moves `GET /apps/calendar` onto the public group and widens this
+exact surface.
+
+**Behaviour deliberately preserved:** the two genuine trusted callers
+(`timeline_widget_type.go`'s Scribe-gated create-or-pick picker and the
+campaign timeline export adapter) now pass `permissions.SystemViewer` and see
+exactly what they saw before. **Two green tests that pinned the bug as intended
+were INVERTED, not deleted**, each keeping a system-path row. `[EU-5]`, a
+route-level anonymous-identity floor, was **booked, not taken** (`.ai/todo.md`
+§B2), as was the observation that the two per-user rate limiters skip anonymous
+traffic entirely (§B3 — a cost question, and [VS-15] forbids the per-IP key
+that would fix it).
+
 #### 2026-08-07 — C-SWEEP-R4 (the absent-means-preserve contract, done once)
 
 **The whole partial-write class is closed, product-wide, by one contract.**

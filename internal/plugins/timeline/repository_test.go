@@ -218,7 +218,7 @@ func TestTimelineEventCount_Integration(t *testing.T) {
 			t.Fatalf("expected exactly 1 timeline, got %d", len(tls))
 		}
 
-		rows, err := svc.ListTimelineEvents(ctx, timelineID, role, userID)
+		rows, err := svc.ListTimelineEvents(ctx, timelineID, permissions.RequestViewer(role, userID))
 		if err != nil {
 			t.Fatalf("ListTimelineEvents: %v", err)
 		}

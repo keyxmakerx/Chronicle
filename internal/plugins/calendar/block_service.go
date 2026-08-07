@@ -190,7 +190,7 @@ func (s *BlockService) requireVisibleCalendar(ctx context.Context, calendarID st
 		return nil, err
 	}
 	cal := cals[calendarID]
-	if cal == nil || !calendarVisibleTo(cal, viewer.Role, viewer.UserID) {
+	if cal == nil || !calendarVisibleTo(cal, viewer.Identity()) {
 		return nil, apperror.NewNotFound("calendar not found")
 	}
 	return cal, nil
@@ -224,7 +224,7 @@ func (s *BlockService) Block(ctx context.Context, req BlockRequest) (calblock.Bl
 	// handed is already viewer-visible; handing it raw candidates would ask it
 	// about events this viewer may not see. `events` is compacted in place and
 	// only the filtered prefix is read from here on (COMMON §7).
-	events = filterEventsByUser(events, req.Viewer.Role, req.Viewer.UserID)
+	events = filterEventsByUser(events, req.Viewer.Identity())
 
 	tied, err := s.tiedEventIDs(ctx, req.Viewer.HostEntity, events)
 	if err != nil {
@@ -371,7 +371,7 @@ func (s *BlockService) EventsForDay(ctx context.Context, calendarID string, view
 		return nil, fmt.Errorf("events for day: %w", err)
 	}
 	// THE ONE PASS — `candidates` is compacted in place and must not be reread.
-	visible := filterEventsByUser(candidates, viewer.Role, viewer.UserID)
+	visible := filterEventsByUser(candidates, viewer.Identity())
 	out := make([]Event, 0, len(visible))
 	for i := range visible {
 		if visible[i].OccursOn(cal, date.Year, date.Month, date.Day) {
@@ -588,7 +588,7 @@ func (s *BlockService) UpcomingAcrossCalendars(ctx context.Context, campaignID s
 	}
 	// Calendar-level visibility gates the whole calendar before its events are
 	// read — a dm_only CALENDAR must not contribute rows to a player's index.
-	cals = filterCalendarsByUser(cals, viewer.Role, viewer.UserID)
+	cals = filterCalendarsByUser(cals, viewer.Identity())
 	if len(cals) == 0 {
 		return nil, nil
 	}
@@ -617,7 +617,7 @@ func (s *BlockService) UpcomingAcrossCalendars(ctx context.Context, campaignID s
 		base := cal.AbsoluteDay(cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
 		// THE ONE PASS, per calendar — rows[id] is compacted in place here and
 		// is not read again.
-		visible := filterEventsByUser(rows[id], viewer.Role, viewer.UserID)
+		visible := filterEventsByUser(rows[id], viewer.Identity())
 		for i := range visible {
 			if up, ok := s.nextOccurrence(cal, base, &visible[i]); ok {
 				out = append(out, up)

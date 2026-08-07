@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -48,9 +49,9 @@ func (s *stubCalendarLister) ListAllEventsForCalendar(_ context.Context, _ strin
 }
 
 type stubSessionLister struct {
-	list    []sessions.Session
-	atts    map[string][]sessions.Attendee
-	linked  map[string][]sessions.SessionEntity
+	list   []sessions.Session
+	atts   map[string][]sessions.Attendee
+	linked map[string][]sessions.SessionEntity
 }
 
 func (s *stubSessionLister) ListSessions(_ context.Context, _ string) ([]sessions.Session, error) {
@@ -68,10 +69,10 @@ type stubTimelineLister struct {
 	events map[string][]timeline.EventLink
 }
 
-func (s *stubTimelineLister) ListTimelines(_ context.Context, _ string, _ int, _ string) ([]timeline.Timeline, error) {
+func (s *stubTimelineLister) ListTimelines(_ context.Context, _ string, _ permissions.Viewer) ([]timeline.Timeline, error) {
 	return s.tls, nil
 }
-func (s *stubTimelineLister) ListTimelineEvents(_ context.Context, tlID string, _ int, _ string) ([]timeline.EventLink, error) {
+func (s *stubTimelineLister) ListTimelineEvents(_ context.Context, tlID string, _ permissions.Viewer) ([]timeline.EventLink, error) {
 	return s.events[tlID], nil
 }
 

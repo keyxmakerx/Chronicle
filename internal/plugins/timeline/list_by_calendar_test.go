@@ -23,7 +23,7 @@ func TestListTimelinesForCalendar_FiltersByCalendar(t *testing.T) {
 		},
 	}
 	svc := newTestTimelineService(repo)
-	out, err := svc.ListTimelinesForCalendar(context.Background(), "cal-1", permissions.RoleOwner, "u1")
+	out, err := svc.ListTimelinesForCalendar(context.Background(), "cal-1", permissions.RequestViewer(permissions.RoleOwner, "u1"))
 	if err != nil {
 		t.Fatalf("ListTimelinesForCalendar: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestListTimelinesForCalendar_HidesDmOnlyFromPlayers(t *testing.T) {
 	}
 	svc := newTestTimelineService(repo)
 
-	player, err := svc.ListTimelinesForCalendar(context.Background(), "cal-1", permissions.RolePlayer, "u1")
+	player, err := svc.ListTimelinesForCalendar(context.Background(), "cal-1", permissions.RequestViewer(permissions.RolePlayer, "u1"))
 	if err != nil {
 		t.Fatalf("player list: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestListTimelinesForCalendar_HidesDmOnlyFromPlayers(t *testing.T) {
 		t.Errorf("player should see exactly the public timeline; got %d", len(player))
 	}
 
-	owner, err := svc.ListTimelinesForCalendar(context.Background(), "cal-1", permissions.RoleOwner, "u1")
+	owner, err := svc.ListTimelinesForCalendar(context.Background(), "cal-1", permissions.RequestViewer(permissions.RoleOwner, "u1"))
 	if err != nil {
 		t.Fatalf("owner list: %v", err)
 	}

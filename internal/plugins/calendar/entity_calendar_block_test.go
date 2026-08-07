@@ -86,7 +86,9 @@ func (s *entityCalBlockStub) EventsForEntity(context.Context, string) ([]EntityE
 func (s *entityCalBlockStub) EventsForEntityFiltered(_ context.Context, entityID string, role int, userID string) ([]EntityEventTie, error) {
 	s.filteredCalls = append(s.filteredCalls, [2]string{entityID, userID})
 	s.filteredRoles = append(s.filteredRoles, role)
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+	// Mirrors the real bypass predicate after C-AUTHZ-EMPTY-USERID: a stub that
+	// still opened on `userID == ""` would keep asserting the anonymous leak.
+	if permissions.RequestViewer(role, userID).SkipsPerUserRules() {
 		return s.ties, nil
 	}
 	var out []EntityEventTie

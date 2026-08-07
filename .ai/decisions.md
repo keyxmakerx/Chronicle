@@ -3895,3 +3895,85 @@ measures a surface no user sees will report a spotless result about it.*
 - Wave reports: `reports/chronicle/2026-07-28-C-CALV4-{SEAM-P5,HOST-P3,BENCH-P4,
   LEDGER-P6,SHELF-P7}.md`
 - Contract: `mockups/calendar-v4.html` + `mockups/renders/v4-*.png`
+
+---
+
+## ADR-049: "no authenticated user" and "trusted system caller" are two states, not one empty string
+
+**Date:** 2026-08-07 · **Status:** Accepted · **Amends:** C-CAL-DASHBOARD-W5a
+(the calendar visibility gate) and C-PERM-ANON-IDENTITY · **Consistent with:**
+C-CALV4-V2SUNSET [VS-15] · **Origin:** C-AUTHZ-EMPTY-USERID, reproduced in
+`reports/chronicle/2026-08-07-C-SWEEP-R3.md` §3 row 8.
+
+### Context
+
+The calendar and timeline visibility filters short-circuited on
+`permissions.CanSeeDmOnly(role) || userID == ""` (calendar) and
+`!CanSeeDmOnly(role) && userID != ""` (timeline). The empty user id was
+documented in both places as "the system context" — a trusted in-process
+caller with no request behind it.
+
+**An anonymous HTTP request carries exactly that value.** `auth.GetUserID(c)`
+returns `""` when there is no session, and on a PUBLIC campaign
+`AllowPublicCampaignAccess` + `RequireViewAccess` let that request reach the
+service. So the most privileged branch in the filter was the branch logged-out
+internet traffic took: `dm_only` calendars, `dm_only` timelines and
+per-user-restricted events and event links were served to a visitor who never
+logged in — content a logged-in Player on the same campaign is correctly
+denied.
+
+This was not a missing check at a call site. It was **one representation
+standing for two different states**, so every call site was correct and the
+system was still wrong. It is also about to widen: R2-4 (C-CALV4-V2SUNSET)
+moves `GET /apps/calendar` onto the public group.
+
+### Decision
+
+**The two states get two representations, and the trusted one is unforgeable
+from request data.**
+
+`internal/permissions/viewer.go` adds `Viewer`, with an **unexported** `system`
+bool and exactly two constructors:
+
+- `RequestViewer(role, userID)` — anything that came in over HTTP. An empty
+  `userID` means ANONYMOUS: no user. It cannot produce a system viewer.
+- `SystemViewer(role)` — a trusted in-process caller that has no request
+  identity, stated at the call site.
+
+Every visibility filter asks `Viewer.SkipsPerUserRules()` (`system ||
+CanSeeDmOnly(role)`) instead of testing the user id itself. **An anonymous
+viewer is neither**, so it falls to the least-privileged path by construction
+rather than by each call site remembering.
+
+Consistent with **[VS-15]**: an empty user id is an ABSENT per-user layer —
+never a sentinel, never a lookup key, never substituted with a synthesised
+identity (no `"anonymous"` user, no per-IP key).
+
+### Consequences
+
+- **Two trusted callers now say so.** `timeline_widget_type.go`'s
+  create-or-pick picker (Scribe-gated at the route) and the campaign timeline
+  export adapter pass `permissions.SystemViewer`. **Their shipped behaviour is
+  unchanged** — the picker still lists allow-list-restricted timelines — which
+  is the point: the trust was real, only its representation was shared with
+  anonymous traffic.
+- **Two green tests that pinned the bug as intended were INVERTED, not
+  deleted**, each with a comment naming this ADR, and each kept a row asserting
+  that the SYSTEM path still bypasses so the pair proves the distinction:
+  `calendar_visibility_w5a_test.go`'s `TestCalendarVisibleTo` and
+  `entity_ties_test.go`'s `…_OwnerUnfilteredAnonymousFiltered`.
+- `TimelineService.ListTimelines` / `ListTimelinesForCalendar` /
+  `ListTimelineEvents` take a `permissions.Viewer` instead of `(role, userID)`;
+  the calendar's own filters are package-private and take one too, with the
+  exported service methods building a `RequestViewer` at their boundary.
+- **Not taken here:** a route-level middleware assertion that an anonymous
+  request can never reach a filter with a trusted identity ([EU-5]). It touches
+  every public-group route and is booked, not shipped.
+
+### References
+
+- Dispatch: `dispatches/chronicle/C-AUTHZ-EMPTY-USERID.md` ([EU-1] = explicit
+  flag, [EU-2] = the picker becomes a declared system caller, [EU-3] = amend the
+  pinned rows, [EU-4] = calendar + timeline in one slice, [EU-5] = booked)
+- Pins: `internal/plugins/calendar/anonymous_visibility_test.go` ·
+  `internal/plugins/timeline/anonymous_visibility_test.go`

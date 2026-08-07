@@ -87,7 +87,7 @@ func TestBlockCountsAreNotAnOracle(t *testing.T) {
 	// the player's own visible set alone. If either had been computed pre-filter,
 	// one of them would carry the hidden event and this would fail.
 	visibleToPlayer := blockCopyEvents(events)
-	visibleToPlayer = filterEventsByUser(visibleToPlayer, permissions.RolePlayer, "u-player")
+	visibleToPlayer = filterEventsByUser(visibleToPlayer, permissions.RequestViewer(permissions.RolePlayer, "u-player"))
 	wantWhole := len(visibleToPlayer)
 	wantTied := 0
 	for i := range visibleToPlayer {
@@ -129,7 +129,7 @@ func TestFilterEventsByUserMutatesTheCallerSlice(t *testing.T) {
 		blockEvent("b", 2, "dm_only"),
 		blockEvent("c", 3, "everyone"),
 	}
-	first := filterEventsByUser(original, permissions.RolePlayer, "u1")
+	first := filterEventsByUser(original, permissions.RequestViewer(permissions.RolePlayer, "u1"))
 	if len(first) != 2 {
 		t.Fatalf("first pass returned %d, want 2", len(first))
 	}
@@ -141,7 +141,7 @@ func TestFilterEventsByUserMutatesTheCallerSlice(t *testing.T) {
 	}
 	// A second pass over the same header therefore counts "c" twice — which is
 	// precisely how a tie/whole pair computed in two passes goes wrong.
-	second := filterEventsByUser(original, permissions.RolePlayer, "u1")
+	second := filterEventsByUser(original, permissions.RequestViewer(permissions.RolePlayer, "u1"))
 	if len(second) != 3 {
 		t.Fatalf("second pass over the mutated header returned %d; the corruption this "+
 			"test documents has changed shape and the projection's one-pass rule needs "+

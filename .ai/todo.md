@@ -514,9 +514,42 @@ a different bug:**
   ratchet's `notYetSwept` list is a statement about what was LOOKED AT, not a
   safety claim. A future sweep that wants the class fully closed starts there.
 
-#### B. `C-AUTHZ-EMPTY-USERID` — anonymous visitors match the "system context" sentinel (dispatch drafted) · **high**
+#### B. `C-AUTHZ-EMPTY-USERID` — anonymous visitors match the "system context" sentinel — **CLOSED, sweep R4 stage 9** · was **high**
 
-- [ ] **`userID == ""` means "trusted system caller" in the calendar and timeline
+- [x] **CLOSED (sweep R4 stage 9, ADR-049).** The two states stopped sharing one
+  representation. `internal/permissions/viewer.go` adds `Viewer` with an
+  **unexported** `system` bit and two constructors —
+  `RequestViewer(role, userID)` (anything off an HTTP request; an empty user id
+  means ANONYMOUS) and `SystemViewer(role)` (a trusted in-process caller, stated
+  at the call site). Every calendar and timeline visibility filter now bypasses
+  on `Viewer.SkipsPerUserRules()` (`system || CanSeeDmOnly(role)`) and **an
+  anonymous viewer is neither**, so it fails closed by construction rather than
+  by each call site remembering. Both blockers below were handled as the
+  dispatch ruled: the picker (`timeline_widget_type.go`) and the timeline export
+  adapter are now DECLARED system callers with **behaviour unchanged**, and the
+  two green rows that pinned the bug as intended (`calendar_visibility_w5a_test.go`
+  `TestCalendarVisibleTo` and `entity_ties_test.go`'s owner/system test) were
+  **inverted with a comment naming the ADR, each keeping a system-path row** so
+  the pair proves the distinction. Red-then-green by mutation: restoring
+  `|| v.userID == ""` inside `SkipsPerUserRules` reddens 8 tests across both
+  plugins. Pins: `calendar/anonymous_visibility_test.go`,
+  `timeline/anonymous_visibility_test.go`. **[EU-5] (a route-level
+  anonymous-identity floor) was deliberately NOT taken** — see item B2.
+- [ ] **B2 — `C-AUTHZ-ANON-IDENTITY-FLOOR` (booked out of [EU-5], low/medium).**
+  The deeper invariant is *"an anonymous request never reaches a visibility
+  filter with an identity that means trusted."* ADR-049 makes that true by
+  construction for the calendar and timeline filters; a middleware-level
+  assertion would make it true for every future filter as well. It touches every
+  public-group route, so it is a separate signed item, exactly as the dispatch
+  flagged.
+- [ ] **B3 — the two per-user rate limiters skip anonymous traffic entirely**
+  (`calendar/routes.go:66`, `bestiary/ratelimit.go:45`: `userID == "" → next(c)`).
+  Swept under B and deliberately NOT changed: it is a throughput question, not a
+  confidentiality one, and the only per-anonymous key available is a per-IP one,
+  which **[VS-15] item 3 forbids by name**. Belongs with `C-CAL-YEAR-BOUNDS`
+  (item C), whose ruling covers unauthenticated cost.
+
+- [x] ~~**`userID == ""` means "trusted system caller" in the calendar and timeline
   visibility filters — and it also matches a logged-out visitor.** So on a public
   campaign, **`dm_only` calendars and per-user-restricted events are served to an
   anonymous internet viewer that a logged-in Player is correctly denied.**
@@ -535,7 +568,7 @@ a different bug:**
   new cross-cutting authz concept (an explicit system/trusted flag vs a `"__system__"`
   sentinel) touching the documented C-CAL-DASHBOARD-W5a and C-PERM-ANON-IDENTITY
   conventions — an architecture decision that belongs in `.ai/decisions.md` per house
-  rule 6.
+  rule 6.~~ *(the original booking, kept for the reproduction it records)*
 
 #### C. `C-CAL-YEAR-BOUNDS` — unauthenticated CPU-exhaustion DoS (dispatch drafted)
 

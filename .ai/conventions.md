@@ -626,6 +626,31 @@ Per `cordinator/decisions/2026-05-21-core-tenets.md §T-B1`, security is the hig
 
 When a PR touches any of the surfaces in this section, the PR description MUST include a Security-implication line per the audit's discipline. If the surface change is a regression risk, the corresponding CI guard (listed throughout this section) catches it; the guard is the load-bearing mechanism.
 
+### Visibility filters take a `permissions.Viewer`, never a bare `(role, userID)` (ADR-049)
+
+**An empty user id means ANONYMOUS. It has never meant "trusted", and it must
+never be used as a lookup key.** (C-CALV4-V2SUNSET [VS-15], made mechanical by
+C-AUTHZ-EMPTY-USERID.)
+
+The calendar and timeline filters used to short-circuit on
+`CanSeeDmOnly(role) || userID == ""`, documenting the empty string as "the
+system context". A logged-out visitor to a **public** campaign carries exactly
+that value, so anonymous traffic took the most privileged branch and was served
+`dm_only` calendars and per-user-restricted events.
+
+When you write a visibility filter:
+
+- Take a `permissions.Viewer`. Bypass only on `v.SkipsPerUserRules()`
+  (`system || CanSeeDmOnly(role)`). Never test the user id yourself.
+- Build it with `permissions.RequestViewer(role, userID)` at the handler/service
+  boundary. It cannot produce a trusted viewer — the `system` bit is unexported.
+- If a caller genuinely IS trusted (an export walking its own rows, a picker
+  already authorized at its route), say so with `permissions.SystemViewer(role)`
+  **at that call site**, with a comment justifying the trust.
+- Never synthesise an identity for an anonymous request — no `"anonymous"` user,
+  no session-derived pseudo-id, no per-IP key. A shared anonymous identity is a
+  shared write target.
+
 ### Auth surfaces — four canonical shapes
 
 Chronicle exposes **four distinct auth surfaces**. Conflating them is the chronicle#323 risk pattern that motivated the wire-contract conformance test (PR #330). Full inventory in `cordinator/reports/chronicle/2026-05-21-c-hygiene-audit.md §5.1`.

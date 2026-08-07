@@ -937,7 +937,7 @@ func (s *calendarService) ListVisibleCalendars(ctx context.Context, campaignID s
 	// The base loader ListCalendars already applied the real-time seam per
 	// element (C-REAL-CALENDAR-P2 F1); filterCalendarsByUser reuses those same
 	// structs, so no re-seam is needed here.
-	return filterCalendarsByUser(cals, role, userID), nil
+	return filterCalendarsByUser(cals, permissions.RequestViewer(role, userID)), nil
 }
 
 // dashboardAgendaCap bounds the per-calendar agenda the dashboard widget shows.
@@ -1101,7 +1101,7 @@ func (s *calendarService) GetActiveVisibleCalendar(ctx context.Context, campaign
 	if err != nil {
 		return nil, err
 	}
-	if cal != nil && calendarVisibleTo(cal, role, userID) {
+	if cal != nil && calendarVisibleTo(cal, permissions.RequestViewer(role, userID)) {
 		return cal, nil
 	}
 	// Active/default calendar is hidden from this viewer — fall back to the
@@ -2143,7 +2143,7 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID str
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // ListEventsForEntity returns all events linked to a specific entity, filtered by per-user rules.
@@ -2152,7 +2152,7 @@ func (s *calendarService) ListEventsForEntity(ctx context.Context, entityID stri
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // ListEventsForYear returns all events for a given year, filtered by per-user rules.
@@ -2161,7 +2161,7 @@ func (s *calendarService) ListEventsForYear(ctx context.Context, calendarID stri
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // ListEventsForDateRange returns events within a date range for a given year.
@@ -2170,7 +2170,7 @@ func (s *calendarService) ListEventsForDateRange(ctx context.Context, calendarID
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // UpdateEventVisibility updates the base visibility and per-user rules for a calendar event.
@@ -2234,7 +2234,7 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID str
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // AdvanceDate moves the current date forward by the given number of days,
@@ -2587,31 +2587,38 @@ func (s *calendarService) ListAllEvents(ctx context.Context, calendarID string) 
 // --- Visibility Helpers ---
 
 // calendarVisibleTo reports whether a viewer may see a calendar
-// (C-CAL-DASHBOARD-W5a). Owner/co-DM (CanSeeDmOnly) and the system context
-// (empty userID) always pass; otherwise the calendar's own visibility + rules
-// decide, via the SAME resolver events use (canUserView). Calendar visibility
-// and event visibility compose: this gates the calendar; events inside a
-// visible calendar are still filtered by filterEventsByUser.
-func calendarVisibleTo(cal *Calendar, role int, userID string) bool {
+// (C-CAL-DASHBOARD-W5a). Owner/co-DM (CanSeeDmOnly) and a declared SYSTEM
+// caller always pass; otherwise the calendar's own visibility + rules decide,
+// via the SAME resolver events use (canUserView). Calendar visibility and
+// event visibility compose: this gates the calendar; events inside a visible
+// calendar are still filtered by filterEventsByUser.
+//
+// C-AUTHZ-EMPTY-USERID / ADR-049: the bypass used to also read
+// `userID == ""`, which is what an ANONYMOUS request carries — so a logged-out
+// visitor to a public campaign was served every dm_only calendar. Trust is now
+// a stated property of permissions.Viewer that no request-derived viewer can
+// hold; an empty user id means "no user" and takes the strictest path.
+func calendarVisibleTo(cal *Calendar, v permissions.Viewer) bool {
 	if cal == nil {
 		return false
 	}
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+	if v.SkipsPerUserRules() {
 		return true
 	}
-	return canUserView(cal.Visibility, cal.VisibilityRules, role, userID)
+	return canUserView(cal.Visibility, cal.VisibilityRules, v.Role(), v.UserID())
 }
 
 // filterCalendarsByUser drops the calendars a viewer may not see, mirroring
-// filterEventsByUser exactly (C-CAL-DASHBOARD-W5a). Owner/co-DM or the system
-// context get the list unchanged.
-func filterCalendarsByUser(cals []Calendar, role int, userID string) []Calendar {
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+// filterEventsByUser exactly (C-CAL-DASHBOARD-W5a). Owner/co-DM or a declared
+// system caller get the list unchanged — an anonymous viewer does NOT
+// (C-AUTHZ-EMPTY-USERID).
+func filterCalendarsByUser(cals []Calendar, v permissions.Viewer) []Calendar {
+	if v.SkipsPerUserRules() {
 		return cals
 	}
 	filtered := cals[:0]
 	for _, c := range cals {
-		if canUserView(c.Visibility, c.VisibilityRules, role, userID) {
+		if canUserView(c.Visibility, c.VisibilityRules, v.Role(), v.UserID()) {
 			filtered = append(filtered, c)
 		}
 	}
@@ -2619,14 +2626,16 @@ func filterCalendarsByUser(cals []Calendar, role int, userID string) []Calendar 
 }
 
 // filterEventsByUser applies per-user visibility rules to a slice of events.
-// Owners always see everything and are not filtered.
-func filterEventsByUser(events []Event, role int, userID string) []Event {
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+// Owners and declared system callers see everything and are not filtered; an
+// anonymous viewer is filtered like any other non-privileged one
+// (C-AUTHZ-EMPTY-USERID).
+func filterEventsByUser(events []Event, v permissions.Viewer) []Event {
+	if v.SkipsPerUserRules() {
 		return events
 	}
 	filtered := events[:0]
 	for _, e := range events {
-		if canUserView(e.Visibility, e.VisibilityRules, role, userID) {
+		if canUserView(e.Visibility, e.VisibilityRules, v.Role(), v.UserID()) {
 			filtered = append(filtered, e)
 		}
 	}

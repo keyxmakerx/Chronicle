@@ -48,6 +48,14 @@ type BlockViewer struct {
 	Zone string
 }
 
+// Identity is the BlockViewer as the visibility filters see it. A BlockViewer
+// is always request-derived, so it can only ever produce a RequestViewer — an
+// empty UserID here means an ANONYMOUS visitor, never a trusted system caller
+// (C-AUTHZ-EMPTY-USERID / ADR-049).
+func (v BlockViewer) Identity() permissions.Viewer {
+	return permissions.RequestViewer(v.Role, v.UserID)
+}
+
 // BlockProjectionInput is the complete input to one Block render.
 //
 // Calendar MUST be non-nil — see the contract on projectBlock.
@@ -130,7 +138,7 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	// this line on (filterEventsByUser compacted it in place) and is nilled so
 	// a later edit cannot accidentally re-read the corrupted backing array.
 	// ───────────────────────────────────────────────────────────────────────
-	visible := filterEventsByUser(in.Events, viewer.Role, viewer.UserID)
+	visible := filterEventsByUser(in.Events, viewer.Identity())
 	in.Events = nil
 
 	geo := buildMonthGeometry(cal, blockMonthGeometryInput{

@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -342,8 +343,15 @@ type timelineExportAdapter struct {
 
 // ExportTimelines gathers timeline data for a campaign export.
 func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID string, entitySlugLookup func(string) string) ([]campaigns.ExportTimeline, error) {
+	// A campaign export is a declared SYSTEM caller: it walks the owner's own
+	// rows with no per-request identity behind it. It used to say that by
+	// passing userID "" — the same value an anonymous HTTP request carries
+	// (C-AUTHZ-EMPTY-USERID / ADR-049). Behaviour is unchanged either way here,
+	// because ownerRole already clears CanSeeDmOnly; the point is that the trust
+	// is now stated rather than inferred from an empty string.
 	const ownerRole = 3
-	timelines, err := a.svc.ListTimelines(ctx, campaignID, ownerRole, "")
+	systemViewer := permissions.SystemViewer(ownerRole)
+	timelines, err := a.svc.ListTimelines(ctx, campaignID, systemViewer)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +372,7 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 		// Export standalone events only (calendar events are in the calendar section).
 		// Build event ID → export index map for connection references.
 		eventIDToIndex := make(map[string]int)
-		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, ownerRole, "")
+		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, systemViewer)
 		if err == nil {
 			for _, evt := range events {
 				if evt.Source != "standalone" {
@@ -450,13 +458,13 @@ func (a *sessionExportAdapter) ExportSessions(ctx context.Context, campaignID st
 	var result []campaigns.ExportSession
 	for _, sess := range allSessions {
 		es := campaigns.ExportSession{
-			Name:               sess.Name,
-			Summary:            sess.Summary,
-			Notes:              sess.Notes,
-			NotesHTML:          sess.NotesHTML,
-			Recap:              sess.Recap,
-			RecapHTML:          sess.RecapHTML,
-			ScheduledDate:      sess.ScheduledDate,
+			Name:          sess.Name,
+			Summary:       sess.Summary,
+			Notes:         sess.Notes,
+			NotesHTML:     sess.NotesHTML,
+			Recap:         sess.Recap,
+			RecapHTML:     sess.RecapHTML,
+			ScheduledDate: sess.ScheduledDate,
 			// STOP-AND-FLAG (C-SCHED-P3): carrying sess.ScheduledTime through export
 			// needs a matching `ScheduledTime *string` field on
 			// campaigns.ExportSession (export.go) — outside this dispatch's
@@ -1097,24 +1105,24 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 			}
 		}
 		_, err := a.svc.CreateEvent(ctx, cal.ID, calendar.CreateEventInput{
-			Name:           evt.Name,
-			Description:    evt.Description,
+			Name:            evt.Name,
+			Description:     evt.Description,
 			DescriptionHTML: evt.DescriptionHTML,
-			EntityID:       entityID,
-			Year:           evt.Year,
-			Month:          evt.Month,
-			Day:            evt.Day,
-			StartHour:      evt.StartHour,
-			StartMinute:    evt.StartMinute,
-			EndYear:        evt.EndYear,
-			EndMonth:       evt.EndMonth,
-			EndDay:         evt.EndDay,
-			EndHour:        evt.EndHour,
-			EndMinute:      evt.EndMinute,
-			IsRecurring:    evt.IsRecurring,
-			RecurrenceType: evt.RecurrenceType,
-			Visibility:     evt.Visibility,
-			Category:       evt.Category,
+			EntityID:        entityID,
+			Year:            evt.Year,
+			Month:           evt.Month,
+			Day:             evt.Day,
+			StartHour:       evt.StartHour,
+			StartMinute:     evt.StartMinute,
+			EndYear:         evt.EndYear,
+			EndMonth:        evt.EndMonth,
+			EndDay:          evt.EndDay,
+			EndHour:         evt.EndHour,
+			EndMinute:       evt.EndMinute,
+			IsRecurring:     evt.IsRecurring,
+			RecurrenceType:  evt.RecurrenceType,
+			Visibility:      evt.Visibility,
+			Category:        evt.Category,
 		})
 		if err != nil {
 			slog.Warn("import: create calendar event failed", slog.String("name", evt.Name), slog.Any("error", err))
@@ -1133,17 +1141,17 @@ type sessionImportAdapter struct {
 func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, userID string, data []campaigns.ExportSession, idMap *campaigns.IDMap) error {
 	for _, sess := range data {
 		newSession, err := a.svc.CreateSession(ctx, campaignID, sessions.CreateSessionInput{
-			Name:                sess.Name,
-			ScheduledDate:       sess.ScheduledDate,
+			Name:          sess.Name,
+			ScheduledDate: sess.ScheduledDate,
 			// STOP-AND-FLAG (C-SCHED-P3): ScheduledTime import is blocked on the same
 			// missing campaigns.ExportSession field noted in ExportSessions above.
-			CalendarYear:        sess.CalendarYear,
-			CalendarMonth:       sess.CalendarMonth,
-			CalendarDay:         sess.CalendarDay,
-			IsRecurring:         sess.IsRecurring,
-			RecurrenceType:      sess.RecurrenceType,
-			RecurrenceInterval:  sess.RecurrenceInterval,
-			CreatedBy:           userID,
+			CalendarYear:       sess.CalendarYear,
+			CalendarMonth:      sess.CalendarMonth,
+			CalendarDay:        sess.CalendarDay,
+			IsRecurring:        sess.IsRecurring,
+			RecurrenceType:     sess.RecurrenceType,
+			RecurrenceInterval: sess.RecurrenceInterval,
+			CreatedBy:          userID,
 		})
 		if err != nil {
 			slog.Warn("import: create session failed", slog.String("name", sess.Name), slog.Any("error", err))
@@ -1247,26 +1255,26 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 				}
 			}
 			newEvt, err := a.svc.CreateStandaloneEvent(ctx, newTimeline.ID, timeline.CreateTimelineEventInput{
-				Name:        evt.Name,
-				Description: evt.Description,
-				EntityID:    entityID,
-				Year:        evt.Year,
-				Month:       evt.Month,
-				Day:         evt.Day,
-				StartHour:   evt.StartHour,
-				StartMinute: evt.StartMinute,
-				EndYear:     evt.EndYear,
-				EndMonth:    evt.EndMonth,
-				EndDay:      evt.EndDay,
-				EndHour:     evt.EndHour,
-				EndMinute:   evt.EndMinute,
-				IsRecurring: evt.IsRecurring,
+				Name:           evt.Name,
+				Description:    evt.Description,
+				EntityID:       entityID,
+				Year:           evt.Year,
+				Month:          evt.Month,
+				Day:            evt.Day,
+				StartHour:      evt.StartHour,
+				StartMinute:    evt.StartMinute,
+				EndYear:        evt.EndYear,
+				EndMonth:       evt.EndMonth,
+				EndDay:         evt.EndDay,
+				EndHour:        evt.EndHour,
+				EndMinute:      evt.EndMinute,
+				IsRecurring:    evt.IsRecurring,
 				RecurrenceType: evt.RecurrenceType,
-				Category:    evt.Category,
-				Visibility:  evt.Visibility,
-				Label:       evt.Label,
-				Color:       evt.Color,
-				CreatedBy:   userID,
+				Category:       evt.Category,
+				Visibility:     evt.Visibility,
+				Label:          evt.Label,
+				Color:          evt.Color,
+				CreatedBy:      userID,
 			})
 			if err != nil {
 				slog.Warn("import: create timeline event failed", slog.String("name", evt.Name), slog.Any("error", err))
@@ -1419,7 +1427,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 				LightColor: t.LightColor, VisionEnabled: t.VisionEnabled,
 				VisionRange: t.VisionRange, Elevation: t.Elevation,
 				StatusEffects: t.StatusEffects,
-				CreatedBy: userID,
+				CreatedBy:     userID,
 			})
 			if err != nil {
 				slog.Warn("import: create token failed", slog.String("name", t.Name), slog.Any("error", err))
@@ -1622,4 +1630,3 @@ func ptrString(s *string) string {
 	}
 	return ""
 }
-

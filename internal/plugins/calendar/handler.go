@@ -14,6 +14,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
 	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -129,7 +130,7 @@ func (h *Handler) requireVisibleCalendar(c echo.Context, calendarID, campaignID 
 		return nil, err
 	}
 	cc := campaigns.GetCampaignContext(c)
-	if !calendarVisibleTo(cal, cc.VisibilityRole(), auth.GetUserID(c)) {
+	if !calendarVisibleTo(cal, permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c))) {
 		return nil, apperror.NewNotFound("calendar not found")
 	}
 	return cal, nil
@@ -746,7 +747,7 @@ func (h *Handler) GetEventAPI(c echo.Context) error {
 	// THE SAME VIEWER FILTER THE GRID USES. filterEventsByUser compacts IN
 	// PLACE, so it is handed a fresh one-element slice and the result is read
 	// rather than the input (the COMMON §7 slice trap, in miniature).
-	if len(filterEventsByUser([]Event{*evt}, cc.VisibilityRole(), auth.GetUserID(c))) == 0 {
+	if len(filterEventsByUser([]Event{*evt}, permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c)))) == 0 {
 		return notFound
 	}
 	return c.JSON(http.StatusOK, newEventEditorRecord(*evt, cc.MemberRole >= campaigns.RoleScribe))

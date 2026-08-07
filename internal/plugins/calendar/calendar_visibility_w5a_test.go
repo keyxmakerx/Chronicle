@@ -28,34 +28,64 @@ func TestCalendarVisibleTo(t *testing.T) {
 	tests := []struct {
 		name   string
 		cal    *Calendar
-		role   int
-		userID string
+		viewer permissions.Viewer
 		want   bool
 	}{
-		{"everyone → player sees", &Calendar{Visibility: "everyone"}, w5aRolePlayer, "u1", true},
-		{"everyone (default) → player sees (no regression)", &Calendar{Visibility: "everyone"}, w5aRolePlayer, "u1", true},
-		{"dm_only → player hidden", &Calendar{Visibility: "dm_only"}, w5aRolePlayer, "u1", false},
-		{"dm_only → owner sees (bypass)", &Calendar{Visibility: "dm_only"}, w5aRoleOwner, "u1", true},
+		{"everyone → player sees", &Calendar{Visibility: "everyone"}, w5aPlayer("u1"), true},
+		{"everyone (default) → player sees (no regression)", &Calendar{Visibility: "everyone"}, w5aPlayer("u1"), true},
+		{"dm_only → player hidden", &Calendar{Visibility: "dm_only"}, w5aPlayer("u1"), false},
+		{"dm_only → owner sees (bypass)", &Calendar{Visibility: "dm_only"}, w5aOwner("u1"), true},
 		{"dm_only + allow-list → player STILL hidden (dm_only is a hard gate)",
-			&Calendar{Visibility: "dm_only", VisibilityRules: strptr(`{"allowed_users":["u1"]}`)}, w5aRolePlayer, "u1", false},
+			&Calendar{Visibility: "dm_only", VisibilityRules: strptr(`{"allowed_users":["u1"]}`)}, w5aPlayer("u1"), false},
 		{"everyone + allow-list → listed player sees",
-			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"allowed_users":["u1"]}`)}, w5aRolePlayer, "u1", true},
+			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"allowed_users":["u1"]}`)}, w5aPlayer("u1"), true},
 		{"everyone + allow-list → unlisted player hidden",
-			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"allowed_users":["u1"]}`)}, w5aRolePlayer, "u2", false},
+			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"allowed_users":["u1"]}`)}, w5aPlayer("u2"), false},
 		{"everyone + deny-list → denied player hidden",
-			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"denied_users":["u2"]}`)}, w5aRolePlayer, "u2", false},
+			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"denied_users":["u2"]}`)}, w5aPlayer("u2"), false},
 		{"everyone + deny-list → other player sees",
-			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"denied_users":["u2"]}`)}, w5aRolePlayer, "u1", true},
-		{"system context (empty userID) bypasses", &Calendar{Visibility: "dm_only"}, w5aRolePlayer, "", true},
-		{"nil calendar → not visible", nil, w5aRoleOwner, "u1", false},
+			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"denied_users":["u2"]}`)}, w5aPlayer("u1"), true},
+
+		// ── C-AUTHZ-EMPTY-USERID / ADR-049 — THE AMENDMENT ───────────────────
+		// This row used to read `{"system context (empty userID) bypasses",
+		// dm_only, w5aRolePlayer, "", true}` and it pinned the bug as intended:
+		// an ANONYMOUS request carries exactly that empty user id, so a
+		// logged-out visitor to a PUBLIC campaign was served every dm_only
+		// calendar. It is INVERTED here rather than deleted, and the system
+		// path it was meant to describe keeps its own row directly below — so
+		// the pair proves the DISTINCTION instead of erasing it.
+		{"ANONYMOUS (no user, RoleNone) → dm_only hidden", &Calendar{Visibility: "dm_only"}, w5aAnon(), false},
+		{"ANONYMOUS (no user, but member-shaped role) → dm_only hidden",
+			&Calendar{Visibility: "dm_only"}, permissions.RequestViewer(w5aRolePlayer, ""), false},
+		{"ANONYMOUS → everyone + allow-list hidden (an empty id is not on any list)",
+			&Calendar{Visibility: "everyone", VisibilityRules: strptr(`{"allowed_users":["u1"]}`)}, w5aAnon(), false},
+		{"ANONYMOUS → plain everyone still visible (a public calendar is public)",
+			&Calendar{Visibility: "everyone"}, w5aAnon(), true},
+		{"SYSTEM caller (declared, non-owner role) still bypasses",
+			&Calendar{Visibility: "dm_only"}, permissions.SystemViewer(w5aRolePlayer), true},
+
+		{"nil calendar → not visible", nil, w5aOwner("u1"), false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := calendarVisibleTo(tc.cal, tc.role, tc.userID); got != tc.want {
+			if got := calendarVisibleTo(tc.cal, tc.viewer); got != tc.want {
 				t.Errorf("calendarVisibleTo = %v; want %v", got, tc.want)
 			}
 		})
 	}
+}
+
+// w5aPlayer / w5aOwner / w5aAnon name the three viewer shapes these tables use.
+// w5aAnon is the one that did not exist before C-AUTHZ-EMPTY-USERID: a
+// logged-out visitor on a public campaign — no user id AND no membership role.
+func w5aPlayer(userID string) permissions.Viewer {
+	return permissions.RequestViewer(w5aRolePlayer, userID)
+}
+func w5aOwner(userID string) permissions.Viewer {
+	return permissions.RequestViewer(w5aRoleOwner, userID)
+}
+func w5aAnon() permissions.Viewer {
+	return permissions.RequestViewer(int(permissions.RoleNone), "")
 }
 
 func TestFilterCalendarsByUser(t *testing.T) {
@@ -66,20 +96,37 @@ func TestFilterCalendarsByUser(t *testing.T) {
 	}
 
 	// Player u1: sees only the open calendar (secret is dm_only, denied excludes u1).
-	got := filterCalendarsByUser(append([]Calendar(nil), cals...), w5aRolePlayer, "u1")
+	got := filterCalendarsByUser(append([]Calendar(nil), cals...), w5aPlayer("u1"))
 	if len(got) != 1 || got[0].ID != "open" {
 		t.Errorf("player got %v; want only [open]", ids(got))
 	}
 
 	// Owner: sees all (bypass).
-	gotOwner := filterCalendarsByUser(append([]Calendar(nil), cals...), w5aRoleOwner, "u1")
+	gotOwner := filterCalendarsByUser(append([]Calendar(nil), cals...), w5aOwner("u1"))
 	if len(gotOwner) != 3 {
 		t.Errorf("owner got %d calendars; want all 3", len(gotOwner))
 	}
 
+	// C-AUTHZ-EMPTY-USERID: the logged-out visitor gets the SAME narrowing as a
+	// player — never the owner's list. ('denied' has no rule naming an empty id,
+	// so it stays; 'secret' is dm_only and must go.)
+	gotAnon := filterCalendarsByUser(append([]Calendar(nil), cals...), w5aAnon())
+	for _, c := range gotAnon {
+		if c.ID == "secret" {
+			t.Errorf("anonymous got %v; a dm_only calendar must never be listed", ids(gotAnon))
+		}
+	}
+
+	// The declared system caller keeps the whole list — that is the state the
+	// empty-userID sentinel used to stand for, now said out loud.
+	gotSystem := filterCalendarsByUser(append([]Calendar(nil), cals...), permissions.SystemViewer(w5aRolePlayer))
+	if len(gotSystem) != 3 {
+		t.Errorf("system caller got %d calendars; want all 3", len(gotSystem))
+	}
+
 	// No-regression: an all-default ('everyone') set is fully visible to a player.
 	allOpen := []Calendar{{ID: "a", Visibility: "everyone"}, {ID: "b", Visibility: "everyone"}}
-	if got := filterCalendarsByUser(allOpen, w5aRolePlayer, "u1"); len(got) != 2 {
+	if got := filterCalendarsByUser(allOpen, w5aPlayer("u1")); len(got) != 2 {
 		t.Errorf("default-everyone set: player got %d; want 2 (no regression)", len(got))
 	}
 }

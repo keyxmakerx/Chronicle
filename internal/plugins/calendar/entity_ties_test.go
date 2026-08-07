@@ -504,13 +504,23 @@ func TestEventsForEntityFiltered_EventLevelVisibilityStillApplies(t *testing.T) 
 	}
 }
 
-// TestEventsForEntityFiltered_OwnerAndSystemContextUnfiltered mirrors
-// filterEventsByUser's own short-circuit (service.go): owners/co-DMs and the
-// system context (userID == "") get the raw EventsForEntity result untouched
-// — and critically, make NO GetByID calls, so a block rendered with
-// context.Background() (COMMON §7: "Bound blocks render with
-// context.Background()") never pays for calendar lookups it doesn't need.
-func TestEventsForEntityFiltered_OwnerAndSystemContextUnfiltered(t *testing.T) {
+// TestEventsForEntityFiltered_OwnerUnfilteredAnonymousFiltered mirrors
+// filterEventsByUser's own short-circuit (service.go): owners/co-DMs get the
+// raw EventsForEntity result untouched — and critically, make NO GetByID
+// calls, so a block rendered with context.Background() (COMMON §7: "Bound
+// blocks render with context.Background()") never pays for calendar lookups it
+// doesn't need.
+//
+// AMENDED — C-AUTHZ-EMPTY-USERID / ADR-049. This test used to be named
+// …_OwnerAndSystemContextUnfiltered and its second arm asserted that
+// `(RolePlayer, "")` ALSO got the raw result, calling that "the system
+// context". It is not: an empty user id is exactly what an ANONYMOUS request
+// on a public campaign carries, so that arm pinned a dm_only tie being served
+// to a logged-out visitor. The arm is INVERTED, not deleted, and a declared
+// system caller keeps its own bypass row in
+// calendar_visibility_w5a_test.go's TestCalendarVisibleTo — the pair proves
+// the distinction rather than erasing it.
+func TestEventsForEntityFiltered_OwnerUnfilteredAnonymousFiltered(t *testing.T) {
 	calls := 0
 	repo := &mockCalendarRepo{
 		eventsForEntityFn: func(_ context.Context, _ string) ([]EntityEventTie, error) {
@@ -530,12 +540,25 @@ func TestEventsForEntityFiltered_OwnerAndSystemContextUnfiltered(t *testing.T) {
 	if err != nil || len(owner) != 1 {
 		t.Fatalf("owner should see the unfiltered result: %+v, err=%v", owner, err)
 	}
-	system, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RolePlayer, "")
-	if err != nil || len(system) != 1 {
-		t.Fatalf("system context (empty userID) should see the unfiltered result: %+v, err=%v", system, err)
-	}
 	if calls != 0 {
-		t.Errorf("owner/system-context short-circuit must not call GetByID; got %d calls", calls)
+		t.Errorf("owner short-circuit must not call GetByID; got %d calls", calls)
+	}
+
+	// The anonymous viewer — no user id, no membership role — is a logged-out
+	// visitor, and a dm_only tie on a dm_only calendar must not reach them.
+	anon, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RoleNone, "")
+	if err != nil {
+		t.Fatalf("EventsForEntityFiltered(anonymous): %v", err)
+	}
+	if len(anon) != 0 {
+		t.Errorf("anonymous visitor got %+v; a dm_only tie must be filtered out", anon)
+	}
+
+	// A player with a real id is unchanged by the amendment — the negative
+	// control that proves the fix narrows the ANONYMOUS path specifically.
+	player, err := svc.EventsForEntityFiltered(ctx, "ent-1", permissions.RolePlayer, "user-9")
+	if err != nil || len(player) != 0 {
+		t.Errorf("player got %+v (err=%v); want the dm_only tie filtered out", player, err)
 	}
 }
 

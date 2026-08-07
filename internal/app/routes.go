@@ -493,8 +493,10 @@ type timelineForCalendarAdapter struct {
 
 // ListTimelinesForCalendar returns the timelines bound to a calendar as the
 // calendar plugin's lightweight TimelineRef projection.
+// The (role, userID) pair is request-derived on every caller of this adapter,
+// so it becomes a RequestViewer — never a system one (C-AUTHZ-EMPTY-USERID).
 func (a *timelineForCalendarAdapter) ListTimelinesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]calendar.TimelineRef, error) {
-	tls, err := a.svc.ListTimelinesForCalendar(ctx, calendarID, role, userID)
+	tls, err := a.svc.ListTimelinesForCalendar(ctx, calendarID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return nil, err
 	}
