@@ -175,10 +175,72 @@ single-field nil-guards; chronicle PR for C-CAL-NULL-PRESERVE (`SetWeather`
 load-merge-write) for the multi-field merge pattern. Audit context:
 `cordinator/reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md`.
 
-**Trade-off to acknowledge:** nil-preserve guards make it harder to clear a
-field by sending explicit null. If "clear by null" is a real use case for a
-field, ship a dedicated endpoint or escape-hatch flag rather than mixing
-preserve-and-clear into one input — the two semantics interfere.
+**Trade-off, and how it was resolved (sweep R4, ruled 2026-08-07).** A plain
+pointer collapses "absent" and "explicit null", so nil-preserve made it
+impossible to clear a field by sending null — and the note above recommended
+a dedicated endpoint as the escape hatch. That trade-off is retired. The
+house answer is now **three-state**, and it is the same everywhere:
+
+> **An ABSENT key preserves. An EXPLICIT `null` clears. A present value replaces.**
+
+The distinction must be REAL, not implied by a type: use
+`internal/patch`'s `Field[T]`, which records presence in `UnmarshalJSON` —
+encoding/json only calls it for keys the body actually carries.
+
+```go
+// Request struct (handler) and the service input it feeds. Field is
+// Echo-free, so the same type crosses the boundary unchanged.
+type updateSessionRequest struct {
+    Summary patch.Field[string] `json:"summary"`
+    Status  patch.Field[string] `json:"status"`
+}
+
+// Service: load-merge-write. `stored` is the row as read, so every merge
+// defaults to the stored value.
+stored.Summary = input.Summary.Ptr(stored.Summary) // nullable column
+stored.Status  = input.Status.Val(stored.Status)   // NOT NULL column
+```
+
+- `Ptr(cur)` merges onto a **nullable** model field: absent → `cur`,
+  null → `nil` (cleared), value → a pointer to it.
+- `Val(cur)` merges onto a **non-nullable** one: absent → `cur`, value →
+  the value. An explicit null also preserves, because a NOT NULL column has
+  no cleared state and writing its zero silently IS the data loss.
+- **Validators read the MERGED value, not the raw input.** An absent name is
+  not an empty name.
+- **A refused write is dropped to ABSENT, not to null.** "You may not set
+  this field" is not authority to erase what is there — the maps marker
+  handler used to send a non-Owner's `visibility_rules` as nil and wipe the
+  Owner's rules.
+
+**Where the contract came from.** Sweep R3 reproduced seven independent
+whole-replace PUTs and found the behaviour was accidental per field: pointer
+fields preserved, value-typed fields cleared, two pointers cleared on purpose.
+Measured consequences ranged from a lost schedule, to a Foundry `{name}` push
+**un-privating a hidden character entity to every player**, to every sync
+update detaching an entity from the hierarchy, to NULLing the Foundry pairing
+key. Sweep R4 closed all of them with this one contract.
+`C-SIDEBAR-REORDER-RESCUE` PR1 step 1 had already booked the same prescription
+for the sidebar column; C-CAL-NULL-PRESERVE is its direct ancestor.
+
+**Every fixed endpoint is pinned in all three directions** — absent preserves,
+present replaces, explicit null clears — and the contract is documented where
+the endpoint is described (`API-CONTRACT.md` in the Foundry module for the
+public wire; the plugin's `.ai.md` for the web routes).
+
+**The structural ratchet** is `internal/patch/partial_update_contract_test.go`.
+It does NOT try to detect "a service assigns this field unguarded" — that needs
+cross-package data flow and would be almost all false positives, because plenty
+of unguarded assignments are correct. It pins the PRECONDITION instead: a field
+can only preserve an absence if its type can represent one. Every field of a
+contract-governed `Update*Input` must be `patch.Field[T]`, a pointer, a map or
+a slice, and the whole-tree inventory of `Update*Input` structs is frozen, so a
+new one has to be classified out loud. Named exceptions carry a reason.
+
+Canonical precedent: chronicle#318 (`UpdateEntityInput.IsPrivate *bool`) for
+single-field nil-guards; C-CAL-NULL-PRESERVE (`SetWeather` load-merge-write)
+for the multi-field merge; sweep R4 (`internal/patch`) for the three-state
+contract this section now prescribes.
 
 ## Test Pattern (Table-Driven)
 

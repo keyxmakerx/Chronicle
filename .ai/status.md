@@ -1104,6 +1104,65 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 (the absent-means-preserve contract, done once)
+
+**The whole partial-write class is closed, product-wide, by one contract.**
+Report: `cordinator/reports/chronicle/2026-08-07-C-SWEEP-R4.md`. Six stages
+here plus one in `Chronicle-Foundry-Module`.
+
+> **An ABSENT key preserves the stored value. An EXPLICIT `null` clears it. A
+> present value replaces it.**
+
+Ruled by the coordinator on 2026-08-07, honouring the `C-SIDEBAR-REORDER-RESCUE`
+PR1 step 1 booking. Client-side echo-the-full-body was REFUSED as the primary
+fix — it leaves the endpoint armed for the next writer, and R3 proved there is
+always a next writer. Read `.ai/conventions.md` §"Partial-Update Endpoints"
+before writing any update handler.
+
+**The mechanism is `internal/patch.Field[T]`.** It records presence in
+`UnmarshalJSON`, which encoding/json only calls for keys the body actually
+carries — so "absent" and "null" stop being the same `nil`. `Ptr(cur)` merges
+onto a nullable column, `Val(cur)` onto a NOT NULL one. Services load the row
+and merge onto it; validators read the MERGED value, not the raw input.
+
+**What this changed, by endpoint** (each pinned in all three directions):
+sessions (Mark Complete no longer erases the schedule, the summary, the
+in-world date and the recurrence — and the next-occurrence generator fires
+again); entities (a sync push no longer un-parents; a `{name}` push no longer
+un-privates a hidden character to every player, on BOTH the single and batch
+doors); timeline standalone events (a rename no longer clears eight fields
+including per-player visibility rules); map markers (an edit or a drag no
+longer clears `pin_category`, `visibility_rules` or the Foundry pairing key);
+calendar events (a five-key Foundry push no longer turns off recurrence,
+all-day and the entity link).
+
+**Three previously-green pinned expectations were AMENDED**, each named in a
+comment and mutation-tested:
+`TestUpdateEvent_AnOmittedIsRecurringIsAWriteOfFalse` (inverted — it pinned
+the booked hazard as a deliberate non-fix),
+`TestUpdateEvent_EntityIDStillClearsOnNil` (name and guarantee kept, gained the
+absent-preserves half — `C-ENTITY-LINK-DESIGN` is NOT overruled, because its
+guarantee was the ability to clear, and an explicit null still clears), and
+`TestEventHandler_BindsTierAndAllDay` (stopped counting one substring twice now
+that create and update spell the binding differently).
+
+**Ratchet:** `internal/patch/partial_update_contract_test.go`. It does not try
+to detect "assigns unguarded" — that needs cross-package data flow and is
+mostly false positives. It pins the PRECONDITION: a field can only preserve an
+absence if its type can represent one. Every field of a contract-governed
+`Update*Input` must be presence-typed, and the whole-tree inventory of
+`Update*Input` structs is frozen, so a new one must be classified out loud.
+Twenty structs sit on `notYetSwept` — that list records what was LOOKED AT,
+not what is safe.
+
+**Cross-repo:** `Chronicle-Foundry-Module` `f3ffa90` rewrote `API-CONTRACT.md`
+(which had documented the opposite — "absent means public"), commented each
+narrow body as narrow ON PURPOSE, and added
+`tools/test-partial-put-contract.mjs` so nobody "hardens" them with an echo.
+The marker dialog's existing spread stays: harmless against a merging server,
+load-bearing against a pre-R4 one.
+
+
 #### 2026-08-07 — C-SWEEP-R3 (eight sweeps: security · partial-PUT · backend · frontend · promises · data · guards · backlog)
 
 **Sixteen fixes shipped in fifteen stages, twenty-five findings booked for a

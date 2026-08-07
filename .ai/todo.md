@@ -153,6 +153,19 @@ Carried out of R2-2a, not closed:
       why the class now has one owner: **`C-PARTIAL-PUT-CONTRACT`** in the booked
       section below. The one client that COULD be fixed without a ruling was —
       the Foundry map-marker config dialog, closed cross-repo in stage 3.
+
+      **CLOSED by sweep R4 (2026-08-07), and this booking's prescription was
+      overruled by the coordinator, not by the executor.** "The fix is
+      per-client (send the stored value back), not a service change" is exactly
+      the client-side echo the 2026-08-07 ruling REFUSED: it leaves the endpoint
+      armed for the next writer. The service change the booking feared —
+      "nil-guarding the bools would take 'clear this repeat' away from an author
+      who means it" — was a consequence of pointers collapsing absent and null,
+      and `patch.Field` does not collapse them. An absent `is_recurring`
+      preserves; an EXPLICIT `false` still clears the repeat, pinned in the same
+      test. Same resolution for `entity_id`: `C-ENTITY-LINK-DESIGN`'s guarantee
+      (a caller can clear the link) is intact — an explicit null still clears —
+      while the accidental unlink stopped. See §A below.
 - [x] **Guard B4's scope glob did not match `daycard.templ`. RULED and CLOSED
       2026-07-31** (DC2-B4-GLOB-4, R2-2a fix-forward round 3 stage 12).
       `b4_scope_for` matched `*calendar_block*|*bench*|*Bench*|*schedule*|
@@ -419,95 +432,87 @@ the four claims that were REFUTED and what killed them — is
 `cordinator/reports/chronicle/2026-08-07-C-SWEEP-R3.md`; the eight that earned
 their own slice have dispatches under `cordinator/dispatches/chronicle/`.
 
-#### A. `C-PARTIAL-PUT-CONTRACT` — seven whole-replace PUTs, one ruling (dispatch drafted)
+#### A. `C-PARTIAL-PUT-CONTRACT` — **CLOSED by sweep R4 (2026-08-07). All seven.**
 
-**One question closes all seven: on a campaign-scoped JSON PUT, does an ABSENT
-key mean "preserve" or "clear"?** Today the answer differs per struct field by
-accident (pointer → preserve, value type → clear, and a couple of pointers are
-deliberately clear-on-nil), and seven clients send partial bodies against it.
-`C-SIDEBAR-REORDER-RESCUE` PR1 step 1 already booked this exact hazard class and
-already prescribed the answer — *"Server: load-merge-write … a request field that
-is nil/absent leaves the stored value untouched; only present fields update.
-(Distinguish absent from explicitly-empty: pointer fields or `json.RawMessage`
-presence flags — mirror the C-CAL-NULL-PRESERVE pattern.) This kills the clobber
-class for every current and future writer."* — so a per-client patch here would
-contradict a booked house precedent. It also collides with
-`C-ENTITY-LINK-DESIGN`, which deliberately PARKED nil-clears-link for event
-`entity_id` (pinned by `TestUpdateEvent_EntityIDStillClearsOnNil`). Both sides of
-the fork are user-visible: after a presence-merge, **no client can ever null out
-`entity_id`, `end_time` or `summary` again** unless the design also mints an
-explicit-null form.
+**Ruled by the coordinator, 2026-08-07:** the fix for the whole partial-write
+class is **server-side presence-merge**, exactly as `C-SIDEBAR-REORDER-RESCUE`
+PR1 step 1 booked it. Client-side echo-the-full-body was REFUSED as the
+primary fix (it leaves the endpoint armed for the next writer, and this sweep
+proved there is always a next writer); minting a narrow per-action route was
+REFUSED (it does not close the class).
 
-- [ ] **`PUT /campaigns/:id/sessions/:sid` — "Mark Complete" wipes the session.**
-  The button sends `{name, status}` only; `UpdateSession` assigns every field
-  unguarded, so the schedule, summary, in-world date and recurrence are erased
-  and **the next-occurrence generator silently stops firing**. A second probe
-  proves it is **not one client**: the Edit modal wipes `calendar_year` and
-  `recurrence_day_of_week` too, so patching only the button leaves the endpoint
-  loaded and the loss live on the other surface. Both probes are ready-made red
-  tests for the signed work.
-- [ ] **`PUT /api/v1/campaigns/:id/entities/:eid` — EVERY syncapi entity update
-  un-parents the entity.** `apiUpdateEntityRequest` has **no `parent_id` field at
-  all**, so every sync push detaches the entity from the Chronicle hierarchy. The
-  structural fix (`UpdateEntityInput.ParentID string` → `*string`, nil = preserve)
-  is a semantic change to a service input shared across four plugins —
-  `entities/handler.go:742` and `:2223`, `syncapi/api_handler.go:514` and `:783`,
-  `app/export_adapters.go:844` and `:919`, `ai_workspace/importer/committer.go:469`
-  — and it fixes the meaning of an absent `parent_id` **on the sync wire**, which
-  governs the Foundry module too. The narrow alternative (thread the already-loaded
-  `entity.ParentID` through at both syncapi sites) is self-contained but leaves the
-  trap armed for the next caller and needs a paired decision on the companion
-  `TypeLabel` clear-on-empty loss.
-- [ ] **The Foundry actor-sync `{name}`-only push UN-PRIVATES a hidden character.**
-  `actor-sync.mjs` pushes `{name}` alone to `PUT /entities/:id`; the **value-typed**
-  `is_private` binds to `false`, so a hidden character entity is published to every
-  player. The only in-repo fix — `apiUpdateEntityRequest.IsPrivate` as `*bool` —
-  changes the DOCUMENTED wire semantics of that endpoint from "absent means public"
-  to "absent means preserve", so `API-CONTRACT.md:216-218` and the handler comment
-  at `:510` must be rewritten with it; it implicates the sibling batch path at
-  `api_handler.go:782-786` (`syncChange.IsPrivate`, same pattern, same comment), and
-  leaving that one asymmetric would be worse than leaving both. The alternative fix
-  (send `is_private` + `type_label` in `nameBody`) lives in a **different repo**, so
-  **no single commit on this branch closes the hole**. Privacy defaults are an
-  operator's call.
-- [ ] **The Timeline standalone-event edit modal clears eight fields on a rename.**
-  `UpdateStandaloneEvent` assigns them unguarded, so entity link, rich-text
-  `description_html`, start/end times, recurrence and per-player visibility rules
-  all go on a rename. The client-only sketch **does not work as written**: the modal
-  cannot echo the untouched fields because `openEdit`'s `detail` never receives them
-  (`timeline.templ:1460` dispatches ten keys), so the client route requires widening
-  that inline Alpine `$dispatch` to carry the whole row — **including raw TipTap
-  `description_html` through `fmt.Sprintf %q` into an HTML attribute**, a
-  security-relevant new surface. The server route is cleaner and also fixes the
-  sibling bug that the modal cannot clear a description at all (`if (self.description)`
-  drops empty strings) — but it is the API-contract change above.
-- [ ] **All three Foundry calendar-event update paths send five-key bodies.** The
-  booked `is_recurring`/`all_day` hazard, confirmed live, **plus `entity_id`, which
-  the service clears on nil by design.** CROSS-REPO: the fix lands in
-  `Chronicle-Foundry-Module`'s `scripts/calendar-sync.mjs`, with its own branch, CI
-  and release flow — nothing in Chronicle changes. Two real design choices ride on
-  it: GET-before-PUT on every note edit (a round trip on a hot hook path) vs a
-  widened mapping-store field cache; and — the load-bearing one — **what happens when
-  that GET fails**: fail-closed (the Foundry edit silently never reaches Chronicle)
-  or fail-open (push partial anyway, i.e. keep the data loss). Both are user-visible
-  data-loss choices. The `entity_id` leg is a call on the parked
-  `C-ENTITY-LINK-DESIGN`, not an implementation detail.
-- [ ] **The Chronicle web marker PUT NULLs the Foundry pairing key.**
-  `UpdateMarkerAPI`'s request struct has no `foundry_id` member, so **every marker
-  edit or drag from the Chronicle web UI** clears the marker's Foundry pairing —
-  which shows up later as duplicate markers on the next sync. Blast radius is three
-  fields, not the one filed: `foundry_id`, `pin_category` and `visibility_rules`,
-  **one of which is access-control data**. Adding `foundry_id` to the web req struct
-  lets a browser form set/clear a sync pairing key; nil-preserving in
-  `mapService.UpdateMarker` instead also changes the **syncapi twin's** semantics, so
-  Foundry could never CLEAR a pairing by sending null — and that PUT is documented
-  public API.
-- [ ] **The Chronicle marker edit form and drag-end PUT drop `pin_category` and
-  `visibility_rules`.** `UpdateMarker` assigns both unguarded. These two COULD be
-  echoed back in `maps.templ` alone — but the same reproduction shows `foundry_id`
-  is clobbered by the identical mechanism and **cannot** be fixed client-side, so
-  shipping only the client echo would close the ticket while leaving an equally
-  silent data loss in place. Same cross-plugin contract call as the row above.
+**The contract, product-wide:**
+
+> An **ABSENT** key preserves the stored value. An **EXPLICIT `null`** clears
+> it. A present value replaces it.
+
+The distinction is real, not implied by a type: `internal/patch.Field[T]`
+records presence in `UnmarshalJSON`. It is written up in `.ai/conventions.md`
+§"Partial-Update Endpoints", documented at each endpoint (the Foundry
+module's `API-CONTRACT.md` for the public wire, the plugin `.ai.md` for the
+web routes), pinned per endpoint in all three directions, and ratcheted
+structurally by `internal/patch/partial_update_contract_test.go`.
+
+- [x] **`PUT /campaigns/:id/sessions/:sid` — "Mark Complete" wiped the
+  session.** CLOSED, stage 1. `UpdateSessionInput` is presence-aware field for
+  field; the service load-merge-writes; the button sends `{status}` alone. The
+  next-occurrence generator reads the MERGED status, so completing a recurring
+  session still generates the next one — pinned by
+  `sessions/partial_update_test.go`, which also pins what both templ clients
+  send. The Edit modal needed no payload change: its omissions became honest.
+- [x] **`PUT /api/v1/campaigns/:id/entities/:eid` un-parented every entity.**
+  CLOSED, stage 2, with the STRUCTURAL fix the booking preferred:
+  `UpdateEntityInput.ParentID` (and the companion `TypeLabel`) are
+  `patch.Field[string]` — absent preserves, `""` or an explicit null clears.
+  All seven call sites updated. The AI-workspace committer was a third victim
+  of the same hole and is fixed by the same change.
+- [x] **The Foundry actor-sync `{name}` push UN-PRIVATED a hidden character.**
+  CLOSED, stage 2 (server) + the Foundry module's stage 6 (client + docs).
+  `apiUpdateEntityRequest.IsPrivate` and its batch twin `syncChange.IsPrivate`
+  are `patch.Field[bool]`, whose absent state produces the nil `*bool` the
+  service already read as preserve; both doors moved together.
+  `API-CONTRACT.md` no longer says absent means public, and the module pins
+  that the rename push stays `{name}`.
+- [x] **The Timeline standalone-event edit cleared eight fields on a rename.**
+  CLOSED, stage 3. The predicted client widening — raw TipTap
+  `description_html` through `fmt.Sprintf %q` into an HTML attribute — was
+  never needed and is now pinned AGAINST. `visibility_rules` stays off the
+  edit request struct: the dedicated visibility endpoint owns it, and that
+  endpoint stopped re-echoing all twenty fields to defend itself.
+- [x] **All three Foundry calendar-event update paths sent five-key bodies.**
+  CLOSED, stage 5 (server) + module stage 6 (docs + pins). No GET-before-PUT
+  was needed, so the fail-open/fail-closed fork the booking named never had to
+  be decided. The `entity_id` leg did NOT overrule `C-ENTITY-LINK-DESIGN`: its
+  guarantee was that a caller can still CLEAR a link, and an explicit null
+  still does — what stopped is the accidental unlink.
+  `TestUpdateEvent_EntityIDStillClearsOnNil` keeps its name and gained the
+  other half.
+- [x] **The web marker PUT NULLed the Foundry pairing key.** CLOSED, stage 4.
+  The booking's fork dissolves under absent-preserve: the web form still never
+  sends `foundry_id` (pinned at source level), so it cannot touch the pairing,
+  and syncapi still unpairs with an explicit null.
+- [x] **The marker edit form and drag-end dropped `pin_category` and
+  `visibility_rules`.** CLOSED, stage 4, in the same commit as the row above —
+  the booking was right that shipping one without the other would have been
+  dishonest. The drag-end PUT now sends `{x, y}`, which is what a drag means.
+
+**Residue booked out of this arc, deliberately not fixed under a ruling about
+a different bug:**
+
+- [ ] **`entities.UpdateEntityInput.ImagePath` is inert** — `entityService.
+  Update` never reads it, but `export_adapters.go` sets it on both import
+  passes under a comment that says "Apply entry content and image via
+  Update". So **campaign import silently drops every entity's `image_path`**.
+  Found while hardening the struct; it is a broken promise, not a
+  partial-write clobber (nothing reads the field, so nothing can be
+  clobbered by it). Fixing it means deciding whether `Update` should own
+  image paths at all or whether import should use the media path — a design
+  call. It is carried as a NAMED exception in
+  `internal/patch/partial_update_contract_test.go` so it cannot be forgotten
+  and a new value-typed field cannot land quietly beside it.
+- [ ] **Twenty other `Update*Input` structs are frozen but unaudited.** The
+  ratchet's `notYetSwept` list is a statement about what was LOOKED AT, not a
+  safety claim. A future sweep that wants the class fully closed starts there.
 
 #### B. `C-AUTHZ-EMPTY-USERID` — anonymous visitors match the "system context" sentinel (dispatch drafted) · **high**
 
