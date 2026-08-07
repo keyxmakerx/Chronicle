@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -475,14 +476,27 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 }
 
 // apiUpdateEntityRequest is the JSON body for updating an entity via the API.
+// This is a PARTIAL update: an ABSENT key preserves the stored value, an
+// EXPLICIT null clears it, a present value replaces it (sweep R4, ruled
+// 2026-08-07). patch.Field is what makes absent and null different — a
+// plain pointer collapses them.
+//
+// It used to bind is_private to a value-typed bool, and the documented
+// contract said so: "absent means public". Nobody designed that. The
+// Foundry actor-sync pushes {name} alone on a rename, which bound
+// is_private=false and PUBLISHED a hidden character entity to every player
+// in the campaign. There was no parent_id member at all, so every update
+// also detached the entity from the Chronicle hierarchy; the field is here
+// now and absent preserves.
 type apiUpdateEntityRequest struct {
-	Name              string         `json:"name"`
-	TypeLabel         string         `json:"type_label"`
-	IsPrivate         bool           `json:"is_private"`
-	Entry             string         `json:"entry"`
-	PlayerNotes       *string        `json:"player_notes"`
-	FieldsData        map[string]any `json:"fields_data"`
-	ExpectedUpdatedAt *time.Time     `json:"expected_updated_at"`
+	Name              patch.Field[string] `json:"name"`
+	TypeLabel         patch.Field[string] `json:"type_label"`
+	ParentID          patch.Field[string] `json:"parent_id"`
+	IsPrivate         patch.Field[bool]   `json:"is_private"`
+	Entry             patch.Field[string] `json:"entry"`
+	PlayerNotes       *string             `json:"player_notes"`
+	FieldsData        map[string]any      `json:"fields_data"`
+	ExpectedUpdatedAt *time.Time          `json:"expected_updated_at"`
 }
 
 // UpdateEntity updates an existing entity.
@@ -505,16 +519,15 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	// syncapi callers always provide is_private in the request body
-	// (it's documented in the sync contract). Pass through as an explicit
-	// pointer so the service writes it. UpdateEntityInput.IsPrivate is
-	// nil-preserving since C-PERMISSIONS-INLINE-COMPONENT made the in-app
-	// form-side handlers stop carrying the field.
-	isPrivate := req.IsPrivate
+	// is_private: absent (and an explicit null, which a NOT NULL column has
+	// no room for) yields a nil pointer, which the service reads as
+	// "preserve"; a present true/false is written. Before sweep R4 an absent
+	// key bound false and un-privated the entity.
 	updated, err := h.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{
 		Name:              req.Name,
 		TypeLabel:         req.TypeLabel,
-		IsPrivate:         &isPrivate,
+		ParentID:          req.ParentID,
+		IsPrivate:         req.IsPrivate.Ptr(nil),
 		Entry:             req.Entry,
 		PlayerNotes:       req.PlayerNotes,
 		FieldsData:        req.FieldsData,
@@ -652,15 +665,23 @@ type syncRequest struct {
 }
 
 // syncChange describes a single mutation in a sync batch.
+// The content fields are patch.Field for the same reason
+// apiUpdateEntityRequest's are: on an "update" action this struct is a
+// PARTIAL body, and absent must preserve rather than write (sweep R4).
+// Leaving this path value-typed while fixing its single-entity twin would
+// have left the same privacy break reachable through the batch door.
+// On a "create" action there is nothing to preserve, so the create branch
+// reads each field with its zero default.
 type syncChange struct {
-	Action       string         `json:"action"`         // "create", "update", "delete".
-	EntityID     string         `json:"entity_id"`      // Required for update/delete.
-	EntityTypeID int            `json:"entity_type_id"` // Required for create.
-	Name         string         `json:"name"`
-	TypeLabel    string         `json:"type_label"`
-	IsPrivate    bool           `json:"is_private"`
-	Entry        string         `json:"entry"`
-	FieldsData   map[string]any `json:"fields_data"`
+	Action       string              `json:"action"`         // "create", "update", "delete".
+	EntityID     string              `json:"entity_id"`      // Required for update/delete.
+	EntityTypeID int                 `json:"entity_type_id"` // Required for create.
+	Name         patch.Field[string] `json:"name"`
+	TypeLabel    patch.Field[string] `json:"type_label"`
+	ParentID     patch.Field[string] `json:"parent_id"`
+	IsPrivate    patch.Field[bool]   `json:"is_private"`
+	Entry        patch.Field[string] `json:"entry"`
+	FieldsData   map[string]any      `json:"fields_data"`
 }
 
 // syncResult describes the outcome of a single sync operation.
@@ -753,11 +774,13 @@ func (h *APIHandler) Sync(c echo.Context) error {
 
 		switch change.Action {
 		case "create":
+			// Create has no stored value to preserve, so each field
+			// reads with its zero default: absent is the same as empty.
 			entity, err := h.entitySvc.Create(ctx, campaignID, key.UserID, entities.CreateEntityInput{
-				Name:         change.Name,
+				Name:         change.Name.Val(""),
 				EntityTypeID: change.EntityTypeID,
-				TypeLabel:    change.TypeLabel,
-				IsPrivate:    change.IsPrivate,
+				TypeLabel:    change.TypeLabel.Val(""),
+				IsPrivate:    change.IsPrivate.Val(false),
 				FieldsData:   change.FieldsData,
 			})
 			if err != nil {
@@ -775,15 +798,16 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				result.Status = "error"
 				result.Error = "entity not found"
 			} else {
-				// Batch sync: the change carries is_private explicitly,
-				// so pass through as a pointer to keep the always-overwrite
-				// behavior the sync contract documents. See
-				// UpdateEntityInput.IsPrivate for why this is nil-preserving.
-				isPrivate := change.IsPrivate
+				// Batch sync is a PARTIAL update, same contract as the
+				// single-entity PUT: absent preserves, a present value
+				// writes. is_private absent yields a nil pointer, which the
+				// service preserves — it used to bind false and un-private
+				// the entity through this door as well.
 				_, err := h.entitySvc.Update(ctx, change.EntityID, entities.UpdateEntityInput{
 					Name:       change.Name,
 					TypeLabel:  change.TypeLabel,
-					IsPrivate:  &isPrivate,
+					ParentID:   change.ParentID,
+					IsPrivate:  change.IsPrivate.Ptr(nil),
 					Entry:      change.Entry,
 					FieldsData: change.FieldsData,
 				})

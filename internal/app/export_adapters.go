@@ -842,11 +842,16 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			// Import carries the source row's is_private; pass through
 			// as a pointer so the nil-preserving service layer writes it.
 			isPrivate := e.IsPrivate
+			// The import restores a complete exported row, so every field
+			// is sent PRESENT — an empty descriptor in the source really
+			// does mean "no descriptor". ParentID is absent on purpose:
+			// parents are resolved in a second pass below, once every
+			// entity exists.
 			_, updateErr := a.entitySvc.Update(ctx, newEntity.ID, entities.UpdateEntityInput{
-				Name:       e.Name,
-				TypeLabel:  ptrString(e.TypeLabel),
+				Name:       patch.Of(e.Name),
+				TypeLabel:  patch.Of(ptrString(e.TypeLabel)),
 				IsPrivate:  &isPrivate,
-				Entry:      ptrString(e.Entry),
+				Entry:      patch.Of(ptrString(e.Entry)),
 				ImagePath:  ptrString(e.ImagePath),
 				FieldsData: fieldsData,
 			})
@@ -918,11 +923,11 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		// Second-pass parent resolve carries the source is_private.
 		isPrivate := e.IsPrivate
 		_, err := a.entitySvc.Update(ctx, entityNewID, entities.UpdateEntityInput{
-			Name:       e.Name,
-			TypeLabel:  ptrString(e.TypeLabel),
-			ParentID:   parentNewID,
+			Name:       patch.Of(e.Name),
+			TypeLabel:  patch.Of(ptrString(e.TypeLabel)),
+			ParentID:   patch.Of(parentNewID),
 			IsPrivate:  &isPrivate,
-			Entry:      ptrString(e.Entry),
+			Entry:      patch.Of(ptrString(e.Entry)),
 			ImagePath:  ptrString(e.ImagePath),
 			FieldsData: fieldsData,
 		})

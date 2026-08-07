@@ -30,6 +30,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -121,7 +122,7 @@ func TestUpdate_PreservesIsPrivateWhenInputNil(t *testing.T) {
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	entity, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
-		Name: "Gandalf the White",
+		Name: patch.Of("Gandalf the White"),
 		// IsPrivate intentionally nil — same shape the form/metadata
 		// handlers produce now that the UI toggle is gone.
 	})
@@ -154,7 +155,7 @@ func TestUpdate_SetsIsPrivateWhenInputNonNil(t *testing.T) {
 	priv := true
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	entity, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
-		Name:      "Gandalf",
+		Name:      patch.Of("Gandalf"),
 		IsPrivate: &priv,
 	})
 	if err != nil {

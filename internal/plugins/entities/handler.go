@@ -19,6 +19,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -739,11 +740,15 @@ func (h *Handler) Update(c echo.Context) error {
 	// IsPrivate means the service preserves the entity's current value
 	// instead of resetting it to false on every save. See model.go
 	// UpdateEntityInput for the rationale.
+	//
+	// This is the legacy full-form PUT: the edit form posts name, descriptor,
+	// parent and entry on every save, so each is wrapped PRESENT — an empty
+	// descriptor or parent select still means "clear", exactly as before.
 	input := UpdateEntityInput{
-		Name:              req.Name,
-		TypeLabel:         req.TypeLabel,
-		ParentID:          req.ParentID,
-		Entry:             req.Entry,
+		Name:              patch.Of(req.Name),
+		TypeLabel:         patch.Of(req.TypeLabel),
+		ParentID:          patch.Of(req.ParentID),
+		Entry:             patch.Of(req.Entry),
 		FieldsData:        fieldsData,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}
@@ -2210,16 +2215,20 @@ func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
 	// descriptor, and parent. Passing IsPrivate=nil tells the service
 	// to preserve the entity's current value. See
 	// C-PERMISSIONS-INLINE-COMPONENT.
+	//
+	// PARTIAL: absent preserves, explicit null clears, a value replaces
+	// (sweep R4). The panel sends all three keys today, but binding them as
+	// patch.Field means a panel that ever stops sending one stops erasing it.
 	var req struct {
-		Name      string `json:"name"`
-		TypeLabel string `json:"type_label"`
-		ParentID  string `json:"parent_id"`
+		Name      patch.Field[string] `json:"name"`
+		TypeLabel patch.Field[string] `json:"type_label"`
+		ParentID  patch.Field[string] `json:"parent_id"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	// Use the existing Update service with empty entry/fields so they stay unchanged.
+	// Use the existing Update service with absent entry/fields so they stay unchanged.
 	input := UpdateEntityInput{
 		Name:      req.Name,
 		TypeLabel: req.TypeLabel,
