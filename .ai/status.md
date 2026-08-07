@@ -1104,6 +1104,107 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 
 ### Cross-cutting state (not plugin-scoped)
 
+#### 2026-08-07 — C-SWEEP-R4 stages 15–19 (the backup told four lies)
+
+Four defects in the export/import/sync path, all reproduced before they were
+touched. They share one shape: **the tool reported success while losing
+data**, which is the failure mode that matters most for a self-hosted product,
+because the export is the users' only safety net and an operator who is told it
+worked stops checking.
+
+**Stage 15 — campaign export omitted every shared note.** The envelope has had
+a `notes` field and an `ExportNote` type since v1, and `ExportImportService`
+has had `SetNoteExporter`/`SetNoteImporter` since v1. Nothing ever called them.
+A nil adapter is skipped silently *by design* — some sections depend on
+optional plugins — so `Export` wrote `notes: []` and `Import` read nothing, and
+the two "intentionally not implemented in v1" comments in `export_adapters.go`
+named exactly the repository method that was missing. Wired both halves:
+`notes.ListSharedByCampaign` (the one list method in that package with **no
+per-user filter**, because the shared-note corpus is campaign data — owner-
+gated by its only caller, reachable from no HTTP route), plus the two adapters.
+`ExportNote` grew `is_folder`, `content` and `parent_index`: checklists live
+only in the legacy block content, so shipping notes without `content` would
+have lost every checkbox in the campaign, and folders are referenced by index
+the way `ExportEventConnection` already does, because note IDs are not stable
+across instances. Import re-parents in a second pass (a folder may appear after
+its children) and applies bodies through `Update` so imported HTML goes through
+the sanitizer — an imported export is untrusted input. **Personal notes stay
+out on purpose**: they belong to a user, and an export is handed to whoever
+imports it. The wiring hole itself is now pinned in `internal/wire` by an AST
+test that requires all twenty export/import setters — that is the test that
+would have caught the original.
+
+**Stage 16 — a partial import reported clean success.** Import is best-effort
+on purpose: one bad row must not abandon a half-built campaign. The other half
+was missing. Thirty-nine skip sites across the nine adapters each went to
+`slog.Warn` and nowhere else, and the handler then redirected the operator
+straight to the new campaign. `campaigns.ImportReport` now threads through the
+adapters exactly the way `*IDMap` does; every skip records section, kind, name
+and a user-safe reason, degraded-but-created rows included (an entity whose
+body failed to apply is a loss even though the entity exists). `Import` returns
+`(*Campaign, *ImportReport, error)` — a return value, not a side channel, so a
+caller that ignores a partial import has to ignore it in writing. Detail is
+capped at 200 records; **the count stays exact past the cap** and the summary
+admits "and N more", because the count is what tells the operator whether to
+trust the restore. The handler stops redirecting when anything was lost and
+renders the loss list instead. A clean import redirects exactly as before.
+
+**Stage 17 — "Export ZIP (with media)" round-tripped to nothing.** The export
+side was never broken; the zip really does hold `campaign.json` plus real
+bytes. Two things made it a lie. The import form's `accept` was
+`.json,application/json`, so the file picker would not offer the operator the
+`.zip` they had just been told to make — the handler could parse a zip, the UI
+could not deliver one, and the ZIP round-tripped to **nothing at all**, not
+even structural data. And media entries in an accepted zip were dropped with
+one `slog.Info`. **Ruling taken: stop promising, book the rest by name** —
+not "make it round-trip". Restoring the *files* is easy (`MediaService.Upload`
+already takes bytes); restoring the *references* is the job, and files without
+references is a **new** quiet lie in place of the old one — the library fills
+up and every image stays broken. Every reference is a media ID
+(`entities.image_path`, `cover_image_path`, `maps.image_id`, token
+`image_path`, and `/media/<id>` inside `entry_html` across entities, posts and
+notes), and the manifest cannot even be paired with the zip today because
+`ExportMediaFile` carries no `Filename`. Booked whole as
+**C-IMPORT-MEDIA-RESTORE** in `.ai/todo.md` with its four steps, the import-
+ordering change it forces, and its acceptance test. What shipped is honesty:
+the form accepts `.zip` and states both size caps, the settings copy says
+plainly what each export contains and what an import does *not* give back, and
+the unrestored count rides the stage-16 report ("3 media files — archived in
+the zip but not re-attached on import").
+
+**Stages 18–19 — the thousand-and-first entity could never reach the VTT.**
+`POST /api/v1/campaigns/:id/sync` walked the entity list to `syncMaxPullPages`
+and stopped, setting `has_more` truthfully with nothing in the request able to
+act on it: `since` is a **filter** over the list, not a position in it, so the
+next request re-walked the same first thousand. Kept the cap as a page size and
+added the cursor — opaque on the wire (versioned base64) so it can become a
+keyset later without breaking a client that hard-coded the arithmetic, bounded
+so a corrupt cursor cannot ask for an absurd OFFSET, and **400 on a malformed
+cursor rather than a silent reset to page 1**, since a silent reset restarts
+the walk from the top and looks like it worked while the tail stays exactly as
+unreachable. Offset paging is only safe here because entity list ordering
+became a total order in sweep R3 stage 4 (`e.id ASC` on every clause); without
+that tiebreaker this endpoint would have re-imported the duplicate/skip bug at
+scale, which is why the walk test asserts no duplicates. `docs/api/openapi.yaml`
+gained both fields and the rule about which `server_time` a client keeps: the
+one from the **first** response of a completed walk, not the last, or anything
+modified mid-walk is skipped. Stage 19 fixed the client twin in
+`Chronicle-Foundry-Module` (`0d17f9c`): `JournalSync.resyncAll` and the
+dashboard's `_buildEntityGroups` each had `while (hasMore && page <= 5)`
+inline — a silent 500-entity ceiling — now one shared
+`scripts/_entity-page-walk.mjs` bounded at 200 pages whose `truncated` flag the
+GM is actually told about. Fixing the server and leaving the client capped at
+500 would have left the operator exactly as stuck.
+
+**What these do not promise.** Nothing here was exercised against a real
+MariaDB — this environment has none, so the note round trip, the failure tally
+and the cursor walk are all proven against fakes that replicate the service
+contracts, not against the database. The note exporter's SQL
+(`is_shared = TRUE`, `ORDER BY created_at, id`) is read, not run. The import
+result panel's markup is asserted as a string, not rendered in a browser. And
+media restoration is **not** fixed: a ZIP import still leaves every image
+broken, and the only change is that it now says so.
+
 #### 2026-08-07 — C-SWEEP-R4 stage 13 (the probes had never once run)
 
 **Every real-browser probe was a silent pass, twice over.** The probes are the
