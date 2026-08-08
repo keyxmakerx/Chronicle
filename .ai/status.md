@@ -340,6 +340,28 @@ full-tier floor, and both computed by a test from the sheet's own numbers rather
 than asserted. `static/css/calendar-bench.css` is **96,811 bytes** and is now
 linked on a third page.
 
+**THE §4 COST MEASUREMENT IS A FINDING, NOT A SHRUG.** [TH-2] says the
+wall-clock delta of `EntityCalendarBlock` "should be at the noise floor, and if
+it is not, that is a finding." **It is not.** On the ten-day fixture the entity
+page goes **19,834 → 47,339 bytes (+138.7%)** and the build+render goes
+**510 µs → 1,399 µs (+174%)**. The attribution, stated so it can be judged
+rather than taken: **this is TEMPLATE-RENDER cost, not service cost.**
+`spine.Block` is called **once** (pinned at the source by
+`TestEntityCalendarBlock_OneProjectionAndNoSecondViewerFilter`, which also
+asserts no second viewer-filter call site and no new role middleware), and the
+cost tracks BYTES at a flat rate — 25.7 µs/KB before, 29.6 µs/KB after — because
+the theater's Block renders a Ledger and a Shelf the embed does not. The byte
+delta is the slice's biggest single cost and is the price of Option A's
+zero-route, zero-fetch, instant-open story; the lever, if it is judged too high,
+is Option B (a Block-fragment route) and that needs a signed route.
+
+**NO SCREENSHOTS.** §14's visual gate could not be executed in a headless
+container — the repo's own browser probe was already failing at Step 0. Every
+geometry number above is derived from the sheet BY A TEST rather than
+photographed, which is the strongest thing available and is not the same thing
+as a still. The visual, mobile, player and keyboard-trace set is itemised in
+`.ai/todo.md` §0d.
+
 **Split out and booked:** `C-CALV4-THEATER-DAYCARD` (the day card inside the
 theater — it would be the first surface with two Ledgers on one page, which is
 where `C-CALV4-CARD-CROSSBLOCK-LEDGER` lives) and `C-CALV4-DASH-BLOCK-V4` (the
