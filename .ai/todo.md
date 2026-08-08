@@ -22,6 +22,68 @@ Round 2 adds no data, no zone and no engine. Five slices; R2-1 has landed.
 | **R2-4** — V2 sunset / the anonymous-public route move | the frozen V2 shell. R2-1 did not open `calendar_v2*` for any reason. | [ ] |
 | **R2-5** — the sky header | the dashed skyband placeholder in the real-world Block. Drawing pass FIRST. Reuses R2-1's register as its base motion. | [ ] |
 
+## 0a. C-CALV4-GAMEREADY — the playability slice (partially landed)
+
+Outside the round-2 numbering. It exists because the operator starts a real
+table in under two weeks and a five-lane readiness audit found 33 findings that
+hit the table. **Playability, not polish.**
+
+| block | what it owns | state |
+|---|---|---|
+| **[GR-1] / [GR-2]** — §1, the month cursor | `?y=&m=` on the existing `/apps/calendar`, filling the `BlockRequest.View` field that had existed since wave 1 and had **never been called with a view**; the `‹ Prev · Today · Next ›` link trio on the Bench's own row above the Block. Zero new routes, zero new page scripts, zero CSS, zero breakpoints. Guarded by `bench_month_cursor_test.go`, including **two real-database tests** — the navigated month is what `candidateEvents` READS, so a cursor that moved the geometry and not the query would draw next month's cells full of this month's events. | **[x] shipped** |
+| **[GR-SIGN-A] / [GR-4]** — §2, the date verbs | `+1 day` / `−1 day` on the same nameplate row, at the EXISTING `CanControlWorldState` gate, through the EXISTING `PUT /campaigns/:id/calendar/world-state`; plus **Set date at the stricter, existing Owner-only floor** — a co-DM steps and does not set, which is the SHIPPED asymmetry [GR-SIGN-A](b) signed rather than a defect. Permission is absence. Guarded by `bench_date_verbs_test.go` (nine-row matrix in both halves + a real-database write test) and `test/js/bench_date_verbs.test.mjs`. | **[x] shipped** |
+| **[GR-3]** — §1's second half, the editor's cross-month roll | **BLOCKED AS SIGNED — see below.** | **[!] flagged** |
+
+- [!] **`[GR-3]` cannot be built as ruled, and the reason is a namespace, not a
+  preference.** The ruling says the picker and the `Ends` cycler should "compute
+  the next/previous date from **the calendar structure the payload already
+  carries**". Two measurements refute that premise:
+  1. **The day-card payload carries no month list and no `MonthDays`.**
+     `dayCardCalendar` is `{id, slug, ledgerDocked, categories, days}` and
+     `dayCardDay` is one rendered month's days. There is no month count, so
+     "month+1, or year+1 if that was the last month" is **not derivable
+     client-side** — and adding the structure is a payload widening the ruling's
+     own body refuses.
+  2. **The day-key namespace is NOT month-qualified.** `dayKey(slug, day)` is
+     `slug + "-" + day` (`internal/widgets/calendar_block/helpers.go:590`),
+     mirrored byte-for-byte by `dayCardKey` and pinned in BOTH directions by
+     `TestDayCard_KeysAgreeWithTheRenderedBlock` and its intercalary twin. Day 1
+     of the next month mints the SAME key as day 1 of the rendered month. The
+     editor's whole date state is that key — `edUI.dayKey`, `edUI.endKey`,
+     `edDateFor`, `edKeyFor`, `edDateSet`'s end-precedes-start ordering law and
+     every `data-day` the picker emits — so **a date outside the rendered month
+     is not addressable at all**. (`edKeyFor` already returns `''` for a
+     cross-month end, which is the same defect arriving from the other side:
+     opening an event whose end is in the next month loses the end date.)
+     Month-qualifying the namespace is an edit to
+     `internal/widgets/calendar_block/`, which this slice's Bounds close.
+
+  **What it would take** — a month-qualified key namespace in the widget package
+  plus its two pinned mirrors, a structure field on the day-card payload, and a
+  refactor of the editor's date state from keys to coordinates on a surface
+  governed by C-CALV4-EDITOR-R2b's seven signed terms and the byte-frozen event
+  `PUT` body. That is an escalation, not an edit.
+
+  **What §1's first half already bought, meanwhile:** the START-date half of the
+  finding is closed by navigation — a GM can now navigate the Bench to next
+  month and author into it from the day card there. The residue is the `Ends`
+  cycler dead-ending at the month edge, which remains open.
+
+- [ ] **`C-CALV4-MONTH-JUMP`** — a month `<select>` / year `<input>` / date
+  picker for the Bench. [GR-2] rules the link trio the playable floor and books
+  everything past it: jumping a year is not playability. The V2 idioms
+  (`<select>` + year input, keyboard shortcuts, swipe, a mini-calendar) are all
+  refused here by name.
+
+- [ ] **`C-CALV4-DATEVERB-RELOCATE`** — if `C-CALV4-GM-CONSOLE` [GC-1] is later
+  signed for a fifth Bench section, moving the two date verbs into it is
+  GM-CONSOLE's move to make, not a re-litigation. The nameplate row was chosen
+  precisely because it is severable. GM-CONSOLE's [GC-3] triage marks the
+  *advance* and *set-date* families **ALREADY LANDED** and keeps the remaining
+  EIGHT (weather today, weather for a day, world/celestial trigger with
+  `dm_only`, clear one, clear all, mood tint, reset sky, pause, and the
+  world-state READ that has no data path to the Bench at all).
+
 Carried out of R2-2a, not closed:
 
 - [ ] **`C-CALV4-DAYCARD-WDWRAP`** — the day-of-week wrap at 390 (the stills

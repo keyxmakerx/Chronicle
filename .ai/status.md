@@ -20,6 +20,65 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — C-CALV4-GAMEREADY §1 and §2 SHIPPED: the Bench can leave today, and the GM can move the date (2026-08-08)
+
+**Two blockers a five-lane readiness audit measured as hitting the table**, both
+closed on the branch that carries the R4 sweep.
+
+**§1 — the Bench could only ever render the calendar's CURRENT in-world month.**
+`benchBlock` built its `BlockRequest` with no `View` field, so `resolveView` — a
+function written FOR navigation in wave 1, whose own comment worries in prose
+about *"losing a navigated year"* — **had never once been called with one.** A
+GM preparing a session could not look at next month. The cursor is now `?y=&m=`
+on the existing route: shareable, refreshable, back-buttonable, and needing no
+store, no migration and no fifth `benchSectionKeys` entry. **No clamping logic
+shipped** — `resolveView` already had it. The control is three `<a>` elements
+computed server-side against the calendar's own month list, so no page script,
+no stylesheet and no breakpoint number were added. The cursor applies to the
+**primary Block only**: `?y=1524&m=3` is a coordinate in the in-world month
+list and would have parked the Gregorian Block beside it in March 1524.
+
+**§2 — advancing the in-world date was V2-only**, on the page
+`C-CALV4-V2SUNSET` [VS-1] has committed to deleting. `+1 day` / `−1 day` now
+seat on the same nameplate row, at the **existing** `CanControlWorldState` gate,
+through the **existing** `PUT /campaigns/:id/calendar/world-state`. **Set date
+renders only at the stricter, existing Owner-only floor** — so a co-DM steps and
+does not set, which is [GR-SIGN-A](b)'s signed, deliberate asymmetry and not an
+oversight. Permission is absence throughout. Only two verbs: the other four V2
+verbs move the **clock**, and v4 has no clock, so they would change a quantity
+the surface does not display.
+
+**THE PROJECT HAD A DATABASE ALL ALONG, AND THIS SLICE USED IT.** Three
+real-MariaDB tests ship here (`make test-db-up`, scratch schema per test, core +
+plugin migrations replayed): the cursor's month is what `candidateEvents`
+actually READS, and the verbs' whole value is that the STORED date afterwards is
+the one the GM meant — including the month rollover, which is entirely the
+server's arithmetic because the client sends only `{advance:{days:±1}}`.
+
+**One measurement worth carrying:** a form-encoded `PUT` to the world-state
+endpoint binds **nothing**. `putWorldStateBody`'s `advance` and `time` are
+tagless pointer-to-struct members, which Echo's form binder skips outright, so a
+plain `<form>` or a bare `hx-put` would answer 200 having changed no date. That
+is why the verb row is driven from the plugin's already-registry-mounted
+`calendar_daycard.js` rather than declaratively, and
+`TestWorldStatePut_FormEncodedBindsNothing` pins it so nobody re-derives it.
+
+**[GR-3] IS FLAGGED, NOT BUILT.** The editor's cross-month roll cannot be built
+as signed: the ruling assumes the day-card payload carries the calendar's month
+structure (it does not) and the day-key namespace is `slug + "-" + day` —
+**not month-qualified** — so a date outside the rendered month is not
+addressable in the key space the picker, `edDateFor`, `edUI.endKey` and guard B4
+all share. Both fixes live inside `internal/widgets/calendar_block/`, which this
+slice's Bounds close. Full measurements and what it would take are in
+`.ai/todo.md` §0a.
+
+Bounds held and measured, not promised: `routes_snapshot.txt` byte-identical at
+**727** lines, zero migrations, `internal/widgets/calendar_block/**` and every
+`calendar_v2*` file byte-unchanged, `static/css/**` byte-unchanged,
+`check-page-scripts.sh` and `check-calendar-v4-lints.sh` green **unedited**, the
+`weather` grep over the widget package and `bench.go` still empty, and
+`golangci-lint` 0.
+
 ### calendar-v4 — R2-2b SHIPPED: the editor earns its chrome (2026-08-02)
 
 **The operator's complaint, closed at last.** 2026-07-29, on the live client:
