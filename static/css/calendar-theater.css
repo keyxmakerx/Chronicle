@@ -1,0 +1,213 @@
+/* calendar-theater.css — C-CALV4-THEATER (slice R2-3).
+   The Block theater: the box, the door and nothing else.
+
+   WHAT THIS SHEET IS FOR, AND WHAT IT IS DELIBERATELY NOT.
+
+   The theater displays the ALREADY-SIGNED full-tier Block, unchanged, in a
+   different container. There is no theater mockup and none is required: what it
+   shows is the surface `mockups/renders/v4-bench-*.png` already show. So this
+   sheet styles a container and touches nothing about the Block. IF YOU FIND
+   YOURSELF RESTYLING THE BLOCK TO MAKE IT FIT THE THEATER, STOP — that is a
+   fidelity break wearing a layout change's clothes, and
+   internal/widgets/calendar_block/** is not opened by this slice at all.
+
+   ── THIS SHEET DECLARES NO MOTION, AND THAT IS THE POINT ([TH-3] SIGNED) ────
+
+   THERE IS EXACTLY ONE DISCLOSURE REGISTER IN THE PRODUCT and it is NOT here.
+   It lives in static/css/calendar-bench.css, and the theater's TWO reveal rules
+   are added BY NAME inside that file's ONE
+   `@media (prefers-reduced-motion: no-preference)` wrapper — exactly as the day
+   card's two were under [DC-6]. A second sheet carrying its own `--disc-*` is
+   laundering and is refused; this file therefore contains no `transition`, no
+   `@keyframes`, no `--disc-*` and no `will-change`, and a guard in
+   internal/plugins/calendar/theater_css_test.go reaches into it to keep that
+   true rather than trusting it.
+
+   THE SCAFFOLD CARRIES `cal-bench` AS A SECOND SCOPE ROOT, and the class name
+   is a small lie: a theater on an entity page is not a Bench. It is the same
+   lie /schedule already tells (`class="cal-bench cal-schedule"`), and the
+   product has decided it prefers that to two registers. Carrying the class buys
+   `--disc-open`, `--disc-close` and `--disc-ease` and the whole token ramp; the
+   two RULES that consume them live in the register's own section.
+
+   (A CORRECTION WORTH CARRYING: /schedule is a precedent for INHERITING THE
+   TOKENS, not for consuming the register — it has no `<details>`, no `.disc`
+   and no `::details-content`, and its own guard BANS `--disc-open` there. The
+   real precedent for consuming the register from outside the Bench is the DAY
+   CARD, and this slice copies it exactly.)
+
+   ── THE UA BOX IS RESET, AND THE INSET IS A BUDGET RATHER THAN A TASTE ──────
+
+   A `<dialog>` arrives carrying `max-width: calc(100% - 6px - 6px)`,
+   `padding: 1em` and a solid border from the UA sheet. At a 1024px viewport
+   that is 1024 − 12 − 2 − 32 = 978px of content box before the theater has
+   spent a pixel of its own. So the padding, the border and the max-inline-size
+   are all set HERE, EXPLICITLY, never left to a cascade — and THE THEATER'S
+   TOTAL HORIZONTAL INSET AROUND `.cal-block-host` MAY NOT EXCEED 60px
+   ([TH-1] SIGNED). It is 48px as shipped: a 12px viewport gutter each side plus
+   the content region's 12px padding each side. Full tier is
+   `@container cal-block (min-width: 900px)`, so any chrome that pushes the
+   inset past the budget takes the surface below 900 and the slice has not
+   shipped. A second card, a padded scroll container or a gutter is a
+   STOP-AND-FLAG, not a trim.
+
+   ── THE HEIGHT BUDGET ([TH-16] SIGNED) ─────────────────────────────────────
+
+   `.cal-block-host .block` is `max-height: 520px` at std tier and 780px at full
+   tier, so a full-tier theater wants roughly 850px of viewport height — more
+   than a 1024x768 desktop has, and more than a laptop with devtools open has.
+   The inherited `.cal-bench` cap constrains INLINE size and says nothing about
+   block size. So:
+
+     - the `<dialog>` carries an explicit viewport-relative `max-block-size`
+       and never relies on the UA default;
+     - THE SCROLL CONTAINER IS THE CONTENT REGION (`.tbody`). It is NOT
+       `.cal-block-host` — that is the container-query container, and scrolling
+       or clamping it is a tier hazard dressed as a layout choice — and it is
+       NOT `.tbox`;
+     - `.tbox` CARRIES NO CLAMP AND NO OVERFLOW IN THIS SHEET, and that is the
+       part that will be got wrong. The register's reveal animates `.tbox`'s
+       `block-size`; a `max-block-size` or a scroll container placed there
+       animates against a clamped box, so the transition either does not run at
+       all or runs to the wrong size — with every guard still green.
+
+   The close control sits OUTSIDE the scrolling region, which is what keeps it
+   reachable without scrolling at the 768px viewport floor and on a phone.
+
+   ── MOBILE ([TH-7] SIGNED) ─────────────────────────────────────────────────
+
+   No phone viewport reaches the 900px container, so on a phone the theater is a
+   std-tier Block with its zones STACKED. That is real depth, deliberately
+   opened, and it is the opposite of the "on the entity it scrolls" complaint
+   precisely because the reader asked for it. Below 640px the full-bleed
+   treatment IS the layout, not a placement. The affordance is NOT suppressed by
+   width: a server-rendered attribute cannot vary by viewport (ADR-048 §13), and
+   suppression would mean either a control that exists and cannot be pressed or
+   a script this slice does not want to own.
+
+   EVERY SELECTOR IS SCOPED. This sheet is unlayered and outranks the whole
+   layered app cascade, and `dialog`, `::backdrop`, `.thead` and `.tbody` are
+   exactly the generic nouns an unscoped rule likes to hide behind. Every
+   prelude names `cal-theater` or `cal-theater-lock` as a literal class token. */
+
+/* ── THE BOX ───────────────────────────────────────────────────────────────
+   `inline-size` is stated rather than left to `fit-content`, because a
+   fit-content dialog around a container-query container is a circular
+   measurement: the Block would size itself from a box that is sizing itself
+   from the Block, and the tier it lands on is whatever the first pass happened
+   to produce.
+
+   `max-inline-size: 1180px` IS THE BENCH'S OWN MEASURE, ADOPTED DELIBERATELY
+   RATHER THAN INHERITED. `.cal-bench` sets `max-width: 1180px; margin-inline:
+   auto` and the scaffold carries that class, so the cap would arrive by cascade
+   whatever this rule said. It is restated here so it is a CHOICE with a reason:
+   1180 ≥ 900, so full tier holds at every viewport the cap can produce, and a
+   centred 1180px theater is a better reading measure than a full-bleed one. */
+dialog.cal-theater {
+  padding: 0;
+  border: 0;
+  margin: auto;
+  inline-size: calc(100vw - 24px);
+  max-inline-size: 1180px;
+  max-block-size: calc(100dvh - 24px);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border-radius: var(--r-panel);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 28%);
+  /* The rounded corner clips the theater's OWN chrome. The SCROLL belongs to
+     the content region ([TH-16]) and this is not it. */
+  overflow: hidden;
+}
+
+/* A STATIC SCRIM AND NOTHING ELSE. `::backdrop` is new visual surface, and
+   [TH-1] is explicit: it is a static scrim or it rides the register's existing
+   opacity ramp. A backdrop blur, a backdrop keyframe or a third duration is a
+   STOP-AND-FLAG. */
+dialog.cal-theater::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+/* ── THE HEAD ──────────────────────────────────────────────────────────────
+   A FIXED 44px so the content region's budget below is arithmetic rather than a
+   guess: `100dvh − 24px of inset − 44px of head` is what is left to scroll. */
+.cal-bench.cal-theater .thead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  block-size: 44px;
+  padding-inline: 12px;
+  border-block-end: 1px solid var(--rule-hairline);
+  background: var(--surface-card);
+}
+
+.cal-bench.cal-theater .thd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-bench.cal-theater .tclose {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 28px;
+  block-size: 28px;
+  border: 1px solid var(--rule-structural);
+  border-radius: var(--r-ctl);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cal-bench.cal-theater .tclose:hover {
+  color: var(--text-primary);
+  border-color: var(--rule-structural-strong);
+}
+
+/* ── THE CONTENT REGION — the theater's scroll container ([TH-16]) ──────────
+   `overscroll-behavior: contain` stops a scroll that reaches the end of this
+   region from chaining to the page behind it. The page's own lock is the
+   `html.cal-theater-lock` rule below; this is the other half, and neither is
+   redundant: the lock stops the page scrolling at all, containment stops the
+   gesture leaking out of the region while the theater is scrollable. */
+.cal-bench.cal-theater .tbody {
+  padding: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-block-size: calc(100dvh - 24px - 44px);
+}
+
+/* ── THE PAGE BEHIND DOES NOT SCROLL ───────────────────────────────────────
+   `<dialog>` gives inertness and focus containment for free; it does NOT give
+   scroll-lock. The module adds this class to the documentElement while the
+   theater is open and removes it on every close path. */
+html.cal-theater-lock,
+html.cal-theater-lock > body {
+  overflow: hidden;
+}
+
+/* ── MOBILE: THE FULL-BLEED TREATMENT IS THE LAYOUT ([TH-7]) ────────────────
+   640px is the day card's own breakpoint, reused rather than invented. Below it
+   the theater is the whole viewport: no gutter, no radius, no cap — and the
+   head stays out of the scrolling region, so the close control is reachable
+   without scrolling to it. */
+@media (max-width: 640px) {
+  dialog.cal-theater {
+    inline-size: 100vw;
+    max-inline-size: none;
+    block-size: 100dvh;
+    max-block-size: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .cal-bench.cal-theater .tbody {
+    max-block-size: calc(100dvh - 44px);
+  }
+}
