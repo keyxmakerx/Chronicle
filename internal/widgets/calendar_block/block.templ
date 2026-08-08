@@ -190,6 +190,9 @@ templ skyHeader(d BlockData) {
 			<div class="skpane-in">
 				<div class="skpane-pad">
 					<div class="skhead">{ skyHeadLine(d, anchor) }</div>
+					if sub := skySubHead(d, anchor); sub != "" {
+						<div class="skynote">{ sub }</div>
+					}
 					if skyDiscsReachable(d) {
 						@skyTabs(d)
 						<div class="skbody">
@@ -240,15 +243,28 @@ templ skyTab(d BlockData, key string, label string) {
 
 // skyTonight is the default panel: one row per declared body, written for the
 // anchored day. Every number is the producer's; nothing here is derived.
+//
+// FOUR ALIGNED COLUMNS, WHICH IS WHAT THE SIGNED STILLS SHOW: name, phase word,
+// illumination right-aligned, next turn muted at the far right. The first pass
+// shipped a two-item flex carrying r53's merged register sentence instead — an
+// undisclosed divergence from a signed still, fixed forward here.
+//
+// THE `.skynote` MOVED RATHER THAN MULTIPLIED. `almanacLitLine`'s >25%-lit
+// summary used to close this panel; the stills have no such line here, and the
+// three percentage columns now state the same numbers explicitly rather than
+// summarising them behind a threshold. The class keeps its seat in the pane —
+// it now carries `skySubHead` directly under the head, where the stills put it.
+// The Shelf's Almanac panel still renders `almanacLitLine`, untouched.
 templ skyTonight(d BlockData, anchor int) {
 	<div class="skypane-t sky-tonight" data-cal-sky-panel="tonight">
 		for _, m := range d.Month.Almanac {
 			<div class="skyrow">
 				<span class="nm">{ m.Name }</span>
-				<span class="ln">{ almanacMoonLine(m, anchor) }</span>
+				<span class="ph">{ almanacRowPhase(m, anchor) }</span>
+				<span class="il">{ almanacRowIllum(m, anchor) }</span>
+				<span class="nx">{ almanacRowNext(m, anchor) }</span>
 			</div>
 		}
-		<div class="skynote">{ almanacLitLine(d, anchor) }</div>
 	</div>
 }
 

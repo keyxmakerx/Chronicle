@@ -2012,14 +2012,52 @@
 }
 .cal-bench .cal-block-host .skygrow .skyrow .nm {
   flex: none;
+  /* 46px at the seal, 52px at the horizon line — the mock's own two widths
+     (cv4-sky:645 and :1018). A fixed measure is what makes the four columns
+     read as columns rather than as a ragged sentence. */
+  inline-size: 46px;
   font-weight: 650;
   font-size: 10.5px;
   letter-spacing: .05em;
   text-transform: uppercase;
 }
+/* THE MOONS PANEL STILL RUNS A SENTENCE. `.ln` is the two-item row shape and it
+   is correct there — the register's per-moon arithmetic is prose, not columns.
+   Only TONIGHT is bound to four columns by a signed still. */
 .cal-bench .cal-block-host .skygrow .skyrow .ln {
   flex: 1;
   min-inline-size: 0;
+}
+/* ── THE SIGNED TONIGHT ROW — four aligned columns (sky-open-1440.png):
+   ALDER | waxing crescent | 33% | full in 10 days. The percentage is
+   right-aligned and tabular so the column reads down; the turn is muted and
+   parked at the far right. ────────────────────────────────────────────── */
+.cal-bench .cal-block-host .skygrow .skyrow .ph {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cal-bench .cal-block-host .skygrow .skyrow .il {
+  flex: none;
+  inline-size: 38px;
+  font-weight: 600;
+  font-size: 11.5px;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+/* The turn column RETIRES AT THE SEAL rather than wrapping — the mock's own
+   `.mrowx .nx{display:none}` at C3 (cv4-sky:1017). The fact is not lost: the
+   sub-head above still names the soonest turn across every declared body. */
+.cal-bench .cal-block-host .skygrow .skyrow .nx {
+  display: none;
+  flex: none;
+  inline-size: 96px;
+  font-weight: 500;
+  font-size: 10.5px;
+  text-align: end;
+  opacity: .8;
 }
 .cal-bench .cal-block-host .skygrow .skynote {
   margin-block-start: 8px;
@@ -2027,6 +2065,12 @@
   font-size: 10.5px;
   line-height: 1.4;
   opacity: .8;
+}
+/* The sub-head sits TIGHT under the bold head — one stack, not a third block.
+   The 8px above is the footnote spacing for the two panels that close with a
+   `.skynote`; this position is a different one. */
+.cal-bench .cal-block-host .skygrow .skhead + .skynote {
+  margin-block-start: 2px;
 }
 /* THE MONTH LANE — one lane per moon, one column per day, at the month's REAL
    day count. It scrolls inside its own box rather than widening the Block. */
@@ -2092,6 +2136,14 @@
   }
   .cal-bench .cal-block-host .skygrow .skpane-pad {
     padding: 24px 12px 12px;
+  }
+  /* The Tonight row's two density figures, both the mock's: the name column
+     widens 46px → 52px and the turn column comes back. */
+  .cal-bench .cal-block-host .skygrow .skyrow .nm {
+    inline-size: 52px;
+  }
+  .cal-bench .cal-block-host .skygrow .skyrow .nx {
+    display: block;
   }
 }
 

@@ -265,7 +265,150 @@ func TestSky_DefaultsClosedAndRemembersNothing(t *testing.T) {
 	}
 }
 
+// --- [SKY-5]: the two divergences from the signed stills, closed ------------
+
+// TestSky_TheOpenPaneCarriesTheSignedSubHead is the FIRST of the two fidelity
+// gaps the adversarial verifier found, and it is written two-directionally
+// because a presence-only assertion would have gone green against the shipped
+// build that had the line in the WRONG PLACE saying a DIFFERENT THING.
+//
+// The signed still (mockups/stills/sky-header/sky-open-1440.png) renders a
+// muted line DIRECTLY UNDER the bold head and ABOVE the trio. The first pass
+// emitted no such line and instead closed the Tonight panel with
+// `almanacLitLine`'s >25%-lit summary — a different sentence in a different
+// position. So this guard asserts the position (between `.skhead` and
+// `.sktabs`), the wording, AND that the lit-line no longer appears in the sky
+// while it still appears in the Shelf's own Almanac panel, which is r53's and
+// was never in this slice's bounds.
+func TestSky_TheOpenPaneCarriesTheSignedSubHead(t *testing.T) {
+	body := render(t, fxSky(t, true))
+	sky := skyTestDetails(t, body)
+
+	// (a) THE SENTENCE. On the signed fixture, anchor 14: Alder's next turn at
+	// or after the anchor is its full on day 19, and it is the soonest of the
+	// four declared bodies — every other moon's only turn this month is already
+	// behind day 14 and does NOT get restated as a negative distance.
+	const want = `<div class="skynote">Alder turns full in 5 days</div>`
+	if !strings.Contains(sky, want) {
+		t.Errorf("the open pane is missing the stills' muted sub-head %q", want)
+	}
+
+	// (b) THE POSITION. Under the head, above the trio — a muted line below the
+	// tabs is a footnote, which is what shipped and what this replaces.
+	head := strings.Index(sky, `class="skhead"`)
+	sub := strings.Index(sky, want)
+	tabs := strings.Index(sky, `class="sktabs"`)
+	if head < 0 || tabs < 0 {
+		t.Fatal("the open pane lost its head or its trio")
+	}
+	if head >= sub || sub >= tabs {
+		t.Errorf("the sub-head sits at %d; it belongs between the head (%d) and the "+
+			"trio (%d) — the stills put it in the header stack, not in a footnote",
+			sub, head, tabs)
+	}
+
+	// (c) THE HALF THAT CANNOT SHIP, ASSERTED AS ABSENT. `calendar.Moon` has no
+	// eclipse-node column, so the stills' "Umber in shadow, days 17-21" segment
+	// has no source. It is DROPPED, not approximated — and an "in shadow"
+	// appearing here later would mean someone derived a shadow window from
+	// cycle length, which is the sunrise defect wearing different words.
+	if strings.Contains(strings.ToLower(sky), "in shadow") {
+		t.Error("the sky states a shadow window — Moon carries no node, no inclination " +
+			"and no ascending-node column, so any such window was invented ([SKY-6]'s " +
+			"reasoning, applied to the segment [SKY-5] cannot reproduce)")
+	}
+
+	// (d) THE LIT-LINE MOVED OUT OF THE SKY AND STAYED IN THE REGISTER. Both
+	// halves: absent here, present there. Absence alone would go green if the
+	// Shelf's Almanac panel were deleted too.
+	lit := almanacLitLine(fxSky(t, true), 14)
+	if lit == "" {
+		t.Fatal("the fixture produces no lit-line; this guard would be vacuous")
+	}
+	if strings.Contains(sky, lit) {
+		t.Errorf("the sky's Tonight panel still closes with %q — the stills have no such "+
+			"line, and the four columns now print the percentages the threshold used "+
+			"to summarise", lit)
+	}
+	if !strings.Contains(almZone(t, body), lit) {
+		t.Errorf("the Shelf's Almanac panel lost %q — r53's register was never in this "+
+			"slice's bounds and moving the sky's copy must not have touched it", lit)
+	}
+}
+
+// TestSky_TheTonightRowIsFourAlignedColumns is the SECOND fidelity gap. The
+// stills show `ALDER | waxing crescent | 33% | full in 10 days` — four columns,
+// the percentage right-aligned, the turn muted at the far right. The first pass
+// shipped a two-item flex carrying r53's merged register sentence
+// ("33% waxing crescent · next full 10"): different order, different wording,
+// no unit on the turn, no column alignment.
+func TestSky_TheTonightRowIsFourAlignedColumns(t *testing.T) {
+	body := render(t, fxSky(t, true))
+	i := strings.Index(body, `data-cal-sky-panel="tonight"`)
+	if i < 0 {
+		t.Fatal("no Tonight panel in the render")
+	}
+	pane := body[i:]
+	if j := strings.Index(pane, `data-cal-sky-panel="month"`); j > 0 {
+		pane = pane[:j]
+	}
+
+	// (a) THE COLUMNS, IN ORDER, WITH THE SIGNED FIXTURE'S OWN FIGURES.
+	const alder = `<span class="nm">Alder</span>` +
+		`<span class="ph">waxing gibbous</span>` +
+		`<span class="il">68%</span>` +
+		`<span class="nx">full in 5 days</span>`
+	if !strings.Contains(skyTightened(pane), alder) {
+		t.Errorf("the Tonight row is not the stills' four columns; wanted %q", alder)
+	}
+
+	// (b) THE MERGED SENTENCE IS GONE FROM THIS PANEL. `almanacMoonLine` is
+	// still correct for the Shelf's register and is asserted present there by
+	// almanac_test.go — here it is the shape the stills reject.
+	if merged := almanacMoonLine(fxSky(t, true).Month.Almanac[0], 14); strings.Contains(pane, merged) {
+		t.Errorf("the Tonight row still carries the register's merged sentence %q", merged)
+	}
+
+	// (c) A WRAPPED TURN DROPS ITS COLUMN RATHER THAN PRINTING A NEGATIVE
+	// DISTANCE. Umber's only turn this month is its full on day 11, behind the
+	// anchor at 14; almanacNextTurn wraps to it and "in -3 days" is not a fact.
+	if !strings.Contains(skyTightened(pane), `<span class="nm">Umber</span>`+
+		`<span class="ph">waning gibbous</span>`+
+		`<span class="il">68%</span>`+
+		`<span class="nx"></span>`) {
+		t.Error("Umber's row does not drop its turn column — its only turn this month " +
+			"is already behind the anchor and a wrapped day cannot be stated as a " +
+			"distance")
+	}
+	if strings.Contains(pane, "in -") {
+		t.Error("a turn column printed a negative distance")
+	}
+}
+
+// TestSky_InDaysStatesTheDistanceCorrectly pins the three branches the fixture
+// cannot all reach, including the singular the mock's own head line gets wrong.
+func TestSky_InDaysStatesTheDistanceCorrectly(t *testing.T) {
+	for _, tc := range []struct {
+		n    int
+		want string
+	}{
+		{-2, "tonight"}, {0, "tonight"}, {1, "in 1 day"}, {2, "in 2 days"}, {10, "in 10 days"},
+	} {
+		if got := almanacInDays(tc.n); got != tc.want {
+			t.Errorf("almanacInDays(%d) = %q, want %q", tc.n, got, tc.want)
+		}
+	}
+}
+
 // --- small readers ----------------------------------------------------------
+
+// skyTightened collapses the inter-tag whitespace templ emits from the
+// template's own line breaks, so a column-order assertion reads as the markup
+// rather than as a spacing accident. It touches only whitespace BETWEEN tags —
+// text content is left alone, so a lost word still reds the guard.
+var skyTagGapRe = regexp.MustCompile(`>\s+<`)
+
+func skyTightened(s string) string { return skyTagGapRe.ReplaceAllString(s, "><") }
 
 // skyTestDetails returns the sky's <details> subtree, or fails. It slices on
 // LOCATED bounds rather than on a bare strings.Index result, which would panic

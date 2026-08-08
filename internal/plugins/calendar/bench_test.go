@@ -2250,7 +2250,19 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 		".cal-bench .cal-block-host .skygrow .skybtn",
 		".cal-bench .cal-block-host .skygrow .skypane-t",
 		".cal-bench .cal-block-host .skygrow .skyrow",
+		// THE FOUR ALIGNED COLUMNS OF THE SIGNED TONIGHT ROW. Added in the
+		// C-CALV4-SKY fix round: the first pass shipped a two-item flex and the
+		// stills show four columns, so these three are as load-bearing as the
+		// name column already was. `.nx` is DECLARED here and switched on at C1
+		// — the base rule is the seal's `display:none`.
+		".cal-bench .cal-block-host .skygrow .skyrow .ph",
+		".cal-bench .cal-block-host .skygrow .skyrow .il",
+		".cal-bench .cal-block-host .skygrow .skyrow .nx",
 		".cal-bench .cal-block-host .skygrow .skynote",
+		// The sub-head's tight position under the bold head. Without it the
+		// muted line inherits the footnote's 8px and reads as a third block
+		// rather than as part of the header stack.
+		".cal-bench .cal-block-host .skygrow .skhead + .skynote",
 		".cal-bench .cal-block-host .skygrow .skylanes",
 		".cal-bench .cal-block-host .skygrow .skylane",
 		// The nameplate's hairline goes so the two read as ONE HEADER STACK —

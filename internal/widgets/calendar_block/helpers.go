@@ -2270,6 +2270,114 @@ func skyHeadLine(d BlockData, anchor int) string {
 	return line
 }
 
+// skySubHead is the MUTED SUB-LINE the signed stills render directly under the
+// open pane's bold head — "Umber in shadow, days 17-21 · Flint turns new in 4
+// days" (mockups/stills/sky-header/sky-open-1440.png, and the mock's own
+// `paneHTML()` <small> at cv4-sky:1618-1620).
+//
+// It shipped ABSENT in the first pass of this slice and that was an undisclosed
+// divergence from a signed still; this is the fix-forward. Restored here rather
+// than at the bottom of the Tonight panel because the stills put it above the
+// trio, and a muted line in the wrong place is a different sentence.
+//
+// IT SHIPS WITH ONE OF ITS TWO SEGMENTS, AND THE MISSING ONE IS A DATA FLOOR
+// RATHER THAN A CHOICE. The stills' first segment comes from the mock's
+// `nodeWindow()` (cv4-sky:1121-1126), which reads `mo.node` — an eclipse-node
+// flag the demo rig invents on its own moon literals. `calendar.Moon`
+// (model.go:673-685) has no node, no inclination and no ascending-node column;
+// a grep of db/migrations plus the plugin's own migrations declares none. So
+// the shadow window has nothing to read. Deriving one from cycle length alone
+// would be exactly the defect [SKY-6] refuses on sunrise — inventing world data
+// on a worldbuilding platform — so the segment is DROPPED ENTIRELY rather than
+// blanked or approximated (the Nameplate's `blockSeasonEraLabels` idiom) and is
+// reported as a second [SKY-5] "still that cannot be reproduced", beside the
+// sunset. It is a STOP-AND-FLAG, never a widened guard and never a guess.
+//
+// The second segment is real and reproduces the stills' wording exactly: the
+// SOONEST upcoming turn across the declared bodies, stated in days. The mock
+// hardcodes `MOONS[2]` for it (cv4-sky:1615) — soonest-across-all is the
+// general form that yields the same sentence on the signed data and does not
+// depend on which literal happens to sit third in a rig's array.
+func skySubHead(d BlockData, anchor int) string {
+	best, name, kind := 0, "", ""
+	for _, m := range d.Month.Almanac {
+		day, k := almanacNextTurn(m, anchor)
+		// almanacNextTurn WRAPS to the month's first turn when none falls at or
+		// after the anchor. A wrapped day is behind the anchor, and "in -3 days"
+		// is not a fact — such a moon simply does not compete for this line.
+		if day < anchor {
+			continue
+		}
+		if best == 0 || day < best {
+			best, name, kind = day, m.Name, k
+		}
+	}
+	if best == 0 {
+		return ""
+	}
+	return name + " turns " + kind + " " + almanacInDays(best-anchor)
+}
+
+// almanacInDays states a turn's distance from the anchor in the stills' own
+// words: "tonight" at zero, then "in 1 day" / "in N days".
+//
+// The mock prints a bare plural in the head line (`in ${ft.inDays} days`) and a
+// correct singular/plural in the rows (`day${inDays === 1 ? '' : 's'}`); the
+// correct one ships in both places, because "in 1 days" is a typo wherever it
+// appears and the stills' own fixture never exercises the one-day case.
+func almanacInDays(n int) string {
+	switch {
+	case n <= 0:
+		return "tonight"
+	case n == 1:
+		return "in 1 day"
+	default:
+		return "in " + strconv.Itoa(n) + " days"
+	}
+}
+
+// almanacRowPhase / almanacRowIllum / almanacRowNext are the THREE COLUMNS that
+// follow the name in the signed Tonight row: `ALDER | waxing crescent | 33% |
+// full in 10 days`, four aligned columns with the percentage right-aligned and
+// the turn muted at the far right (sky-open-1440.png; the mock's `.mrowx` at
+// cv4-sky:641-651 and `tonightHTML()` at cv4-sky:1561-1566).
+//
+// The first pass of this slice merged all three into ONE span carrying
+// `almanacMoonLine`'s "33% waxing crescent · next full 10" — r53's register
+// sentence, which is correct for the Shelf's Almanac panel and is a different
+// order, a different wording and no column alignment here. `almanacMoonLine`
+// itself is UNTOUCHED: almanac.templ is r53's and out of this slice's bounds.
+//
+// Every figure is the producer's. Nothing is re-derived.
+func almanacRowPhase(m AlmanacMoon, anchor int) string {
+	a, ok := almanacDayAt(m, anchor)
+	if !ok {
+		return ""
+	}
+	return a.Phase
+}
+
+func almanacRowIllum(m AlmanacMoon, anchor int) string {
+	a, ok := almanacDayAt(m, anchor)
+	if !ok {
+		return ""
+	}
+	return strconv.Itoa(almanacIllumPct(a)) + "%"
+}
+
+// almanacRowNext drops its column for a moon whose only turn this month is
+// already behind the anchor, for the same reason skySubHead skips it: the wrap
+// is a real feature of almanacNextTurn and a negative distance is not a fact.
+// The Shelf register's own line still prints the wrapped DAY NUMBER, which is
+// unambiguous; a distance is not.
+func almanacRowNext(m AlmanacMoon, anchor int) string {
+	day, kind := almanacNextTurn(m, anchor)
+	if day < anchor {
+		return ""
+	}
+	return kind + " " + almanacInDays(day-anchor)
+}
+
 // skyPickGroupName / skyPickInputID are the Tonight|Month|Moons radio group,
 // kept DISTINCT from the Almanac's own trio: the Shelf's Almanac panel renders
 // on the same Block with the same three tab keys, and one shared group name
