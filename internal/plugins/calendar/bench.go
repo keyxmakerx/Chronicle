@@ -572,6 +572,46 @@ type BenchTick struct {
 type BenchBlock struct {
 	Data   calblock.BlockData
 	Manage BenchManage
+	// Nav is the month cursor's control trio (C-CALV4-GAMEREADY §1, [GR-1] /
+	// [GR-2]). It is populated for the PRIMARY Block only — see benchNav.
+	Nav BenchNav
+}
+
+// BenchNav is the `‹ prev · Today · next ›` trio that navigates the month
+// cursor (C-CALV4-GAMEREADY [GR-2]).
+//
+// IT IS THREE LINKS AND NOTHING ELSE. The hrefs are computed server-side
+// against the calendar's OWN month list and land back on the same
+// `/campaigns/:id/apps/calendar` route with `?y=&m=` — no new route, no new
+// producer, no JS. `boot.js:163` sets `htmx.config.allowScriptTags = false`, so
+// a <script> inside a swapped fragment is DELETED; links need none of that and
+// this slice ships no new page script.
+//
+// `Today` IS ALWAYS RENDERED AND IS NEVER DISABLED, including on the current
+// month where it is a no-op link back to the bare route — a control that
+// vanishes when you are already there teaches the GM that it is missing rather
+// than satisfied.
+//
+// PrevHref IS THE ONE THAT CAN BE EMPTY, and the reason is resolveView's own
+// sentinel, which [GR-1] forbids this slice from editing: `v.Year == 0` MEANS
+// "unset" there (block_service.go:288), so year 0 is not addressable by the
+// cursor at all. A calendar standing in month 1 of year 1 therefore has no
+// expressible previous month, and the honest render is no link rather than a
+// link that silently lands on today. Every other month has one.
+type BenchNav struct {
+	// Live is false when the calendar carries no months — there is no month to
+	// step to and the Block is already printing its own "dates cannot resolve"
+	// fault where the date would go.
+	Live bool
+	// Month / Year are the month actually rendered, read off the projection so
+	// the control and the grid can never disagree about where the cursor is.
+	Month string
+	Year  int
+	// PrevHref is "" when the previous month is unaddressable — see the type's
+	// header. TodayHref is the bare route. NextHref is always populated.
+	PrevHref  string
+	TodayHref string
+	NextHref  string
 }
 
 // BenchManage is the owner-only per-calendar management cluster, shared by the
@@ -871,6 +911,14 @@ type benchInput struct {
 	// control the server refuses.
 	CanCreateEvents bool
 	CanAuthorDmOnly bool
+	// View is the month cursor, read straight off `?y=` / `?m=` and passed
+	// through UNVALIDATED (C-CALV4-GAMEREADY [GR-1]). Month is ONE-BASED, both
+	// fields are optional and independently optional, and the zero value is
+	// "the Block has not been navigated" — which is exactly what
+	// resolveView's unset branch already answers. The clamp is resolveView's
+	// and is not duplicated here: an out-of-range month lands in a real month
+	// of the requested year rather than 500ing or snapping back to today.
+	View BlockDate
 }
 
 // buildBench assembles the Bench.
@@ -973,8 +1021,17 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	data.NeedsSetup = benchNeedsSetup(hydrated)
 
 	if primary != nil {
-		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, layerPrefs); b != nil {
+		// THE CURSOR APPLIES TO THE PRIMARY BLOCK ONLY ([GR-1]).
+		//
+		// `?y=1524&m=3` is a coordinate in the IN-WORLD calendar's own month
+		// list; the real-world Block beside it is Gregorian, and handing it the
+		// same pair would park a real-world calendar in March 1524 every time
+		// the GM stepped their campaign's month. The finding §1 measures is
+		// "the GM cannot look at, or author into, next month" — that is the
+		// in-world calendar, which is also the only Block that carries the trio.
+		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, layerPrefs, in.View); b != nil {
 			data.Primary = b
+			data.Primary.Nav = benchNav(primary, b.Data, in.Campaign.ID)
 		} else {
 			rows = append([]*Calendar{primary}, rows...)
 		}
@@ -982,7 +1039,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	if realWorld != nil {
 		// noShelf — the signed real-world Block on the Bench renders with its
 		// Shelf docked but hidden, which is the ShelfHidden flag's whole purpose.
-		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, layerPrefs); b != nil {
+		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, layerPrefs, BlockDate{}); b != nil {
 			data.RealWorld = b
 		} else {
 			rows = append(rows, realWorld)
@@ -1092,7 +1149,10 @@ func benchSyncPill(ctx context.Context, spine *BlockService, campaignID string, 
 // hidden calendar by construction (C-CALV4-SEAM-P5 stage 9) and this host must
 // not undo that, so it does not branch on which — any failure simply demotes
 // the calendar to a subordinate row.
-func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, prefs blockLayerPrefs) *BenchBlock {
+// view is the month cursor ([GR-1]). It is the request's `?y=&m=` for the
+// PRIMARY Block and the zero BlockDate for every other one — see buildBench's
+// call sites for why the real-world Block does not take it.
+func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, prefs blockLayerPrefs, view BlockDate) *BenchBlock {
 	if spine == nil || cal == nil {
 		return nil
 	}
@@ -1100,6 +1160,7 @@ func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Cale
 		CalendarID:  cal.ID,
 		CampaignID:  cal.CampaignID,
 		Viewer:      viewer,
+		View:        view,
 		IsActive:    cal.ID == activeID,
 		ShelfHidden: noShelf,
 		MoonCap:     benchMoonCap,
@@ -1371,6 +1432,80 @@ func benchManage(c *Calendar, activeID, campaignID string) BenchManage {
 		OpenHref:     fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, c.ID),
 		SettingsHref: fmt.Sprintf("/campaigns/%s/calendars/%s/settings", campaignID, c.ID),
 	}
+}
+
+// benchNav computes the month cursor's trio for ONE Block
+// (C-CALV4-GAMEREADY [GR-1] / [GR-2]).
+//
+// THE CURSOR IS A URL, AND THAT IS THE WHOLE RULING. `?y=` / `?m=` on the
+// EXISTING `/apps/calendar` route, one-based month, both optional and both
+// independently optional. A URL is shareable, refreshable and back-buttonable:
+// a GM who navigates to the month of the siege can paste the link into party
+// chat, while a hidden per-viewer cursor shows different people different
+// months for reasons nobody can see and is still parked on last month next
+// week. It needs no store, no migration, no session value and NO FIFTH
+// benchSectionKeys entry.
+//
+// NO CLAMPING LOGIC LIVES HERE. resolveView (block_service.go:275) already
+// clamps a bad month into a real one and already keeps a navigated year when
+// only the month is junk — it was written for navigation in wave 1 and had
+// never been called with a view until this slice. The hrefs below are computed
+// off the calendar's own month list purely so a link never has to be clamped in
+// the first place; the server-side clamp remains the authority.
+//
+// THE STEP IS COMPUTED AGAINST cal.Months, NOT AGAINST A LITERAL TWELVE. Ten-
+// month and one-month calendars are native to this product, so "the month after
+// the last one" is month 1 of year+1 and "the month before the first one" is
+// month len(Months) of year-1.
+func benchNav(cal *Calendar, d calblock.BlockData, campaignID string) BenchNav {
+	if cal == nil || len(cal.Months) == 0 {
+		return BenchNav{}
+	}
+	base := fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID)
+	n := len(cal.Months)
+	idx := d.Month.Index
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= n {
+		idx = n - 1
+	}
+	year := d.Month.Year
+
+	prevYear, prevMonth := year, idx // idx is 0-based, so idx == the 1-based previous month
+	if idx == 0 {
+		prevYear, prevMonth = year-1, n
+	}
+	nextYear, nextMonth := year, idx+2
+	if idx == n-1 {
+		nextYear, nextMonth = year+1, 1
+	}
+
+	nav := BenchNav{
+		Live:      true,
+		Month:     d.Month.Name,
+		Year:      year,
+		TodayHref: base,
+		NextHref:  fmt.Sprintf("%s?y=%d&m=%d", base, nextYear, nextMonth),
+	}
+	// Year 0 is resolveView's "unset" sentinel, so it cannot be linked to. See
+	// BenchNav's header — this is the one direction that can be absent, and a
+	// missing link is honest where a link that lands on today is not.
+	if prevYear != 0 {
+		nav.PrevHref = fmt.Sprintf("%s?y=%d&m=%d", base, prevYear, prevMonth)
+	}
+	return nav
+}
+
+// benchNavLabel names the month the cursor is standing on. It is the month's
+// own name plus its year, and it is DERIVED FROM THE PROJECTION rather than
+// from the request, so a clamped `?m=13` is labelled with the month that was
+// actually drawn instead of the one that was asked for.
+func benchNavLabel(n BenchNav) string {
+	if n.Month == "" {
+		return fmt.Sprintf("Year %d", n.Year)
+	}
+	return fmt.Sprintf("%s %d", n.Month, n.Year)
 }
 
 // --- the ribbon -------------------------------------------------------------

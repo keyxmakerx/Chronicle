@@ -429,11 +429,63 @@ templ benchTickRule(ticks []BenchTick) {
 // strip. The strip is a documented addition — see BenchBlock's doc comment.
 templ benchBlockView(b BenchBlock, data BenchData, role string) {
 	<div class="benchblock" data-bench-block={ role } data-calendar-id={ b.Manage.CalendarID }>
+		@benchNavTrio(b.Nav)
 		@calblock.Block(b.Data)
 		if data.IsOwner {
 			@benchManageStrip(b.Manage)
 		}
 	</div>
+}
+
+// benchNavTrio is the month cursor's control (C-CALV4-GAMEREADY [GR-2]).
+//
+// WHERE IT SEATS, AND WHY IT IS HERE RATHER THAN IN THE NAMEPLATE ITSELF.
+// [GR-2] rules the trio onto "the Block's nameplate", beside the date label —
+// and the nameplate is `internal/widgets/calendar_block/nameplate.templ`, a
+// file this slice's Bounds put out of reach along with the rest of that
+// package (`data.go` is byte-pinned at r54 and [SKY-6] is concurrently
+// authorised for exactly two fields). The dispatch's own "Files you own" list
+// names `bench.templ` as where the trio's markup goes, which is this: the
+// Bench's own row, immediately ABOVE `.block` and therefore directly adjacent
+// to the nameplate it navigates, inside the same `.benchblock` wrapper the
+// owner's management strip already extends downward. Same construction, other
+// end.
+//
+// THREE <a> ELEMENTS. Not buttons, not a form, not JS. The hrefs are computed
+// server-side (benchNav) and land on the same route, so a plain navigation —
+// or the sidebar's `hx-boost` when the page is reached that way — swaps the
+// page with no script of any kind. `boot.js:163` sets
+// `htmx.config.allowScriptTags = false`, which DELETES a <script> inside a
+// swapped fragment, and any JS would otherwise have to ride the plugin
+// body-script registry and answer to tools/check-page-scripts.sh. Links need
+// none of that.
+//
+// A DAY CARD OPEN ACROSS A NAVIGATION IS CLOSED BY THE SWAP, AND THAT IS
+// CORRECT — a card describing 12 Marpenoth must not survive into Uktar. There
+// is no re-anchoring and no state restoration here, and `placeCard` is not
+// opened ([ER-5] SIGNED makes it a flag rather than an edit).
+//
+// IT REUSES `.manage` AND `.btn.xs`, WHICH ALREADY EXIST. This slice ships no
+// stylesheet, so the trio takes the flex row the management strip is already
+// styled with; at narrow density it WRAPS on that row's own rules rather than
+// earning a fifth breakpoint number (the Block's density switch is
+// `@container cal-block` at `min-width: 481px` and is signed territory,
+// [SKY-8]).
+templ benchNavTrio(n BenchNav) {
+	if n.Live {
+		<div class="manage" data-bench-nav>
+			<span class="badge" data-bench-nav-month>{ benchNavLabel(n) }</span>
+			<span class="sp"></span>
+			if n.PrevHref != "" {
+				<a class="btn xs" data-bench-nav-prev href={ templ.SafeURL(n.PrevHref) } rel="prev">‹ Prev</a>
+			}
+			// `Today` renders on the current month too, where it is a no-op
+			// link back to the bare route. A control that vanishes when you are
+			// already there teaches the GM that it is missing, not satisfied.
+			<a class="btn xs" data-bench-nav-today href={ templ.SafeURL(n.TodayHref) }>Today</a>
+			<a class="btn xs" data-bench-nav-next href={ templ.SafeURL(n.NextHref) } rel="next">Next ›</a>
+		</div>
+	}
 }
 
 // benchManageStrip is the owner's per-calendar cluster: the W5b visibility

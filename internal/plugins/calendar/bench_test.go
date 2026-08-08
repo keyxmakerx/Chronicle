@@ -293,6 +293,11 @@ func benchFxData(isGM, isOwner bool) BenchData {
 	}
 	if primary != nil {
 		data.Primary = benchFxBlock(primary, viewer, false)
+		// The month cursor's trio, exactly where buildBench puts it — on the
+		// PRIMARY Block only (C-CALV4-GAMEREADY [GR-1]/[GR-2]). The fixture
+		// carries it so every assertion in this file judges the DOM production
+		// renders, cursor and all.
+		data.Primary.Nav = benchNav(primary, data.Primary.Data, "camp-1")
 	}
 	if realWorld != nil {
 		data.RealWorld = benchFxBlock(realWorld, viewer, true)

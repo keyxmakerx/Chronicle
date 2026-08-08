@@ -113,6 +113,18 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 		// orthogonal co-DM capability the server already enforces.
 		CanCreateEvents: cc.MemberRole >= campaigns.RoleScribe,
 		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
+		// THE MONTH CURSOR (C-CALV4-GAMEREADY §1, [GR-1]). Two query params on
+		// this route and nowhere else: not a preference row, not a session
+		// value, not a fifth Bench section. `m` is ONE-BASED and both are
+		// independently optional; atoiOr's 0 fallback IS the "unnavigated"
+		// value resolveView already answers, so garbage (`?y=nope`) reads as
+		// "no cursor" rather than as an error page. No bounds check lives here
+		// — resolveView (block_service.go:275) owns the clamp and this slice
+		// does not duplicate it.
+		View: BlockDate{
+			Year:  atoiOr(c.QueryParam("y"), 0),
+			Month: atoiOr(c.QueryParam("m"), 0),
+		},
 	})
 	return h.renderAppDashboard(c, cc, data)
 }
