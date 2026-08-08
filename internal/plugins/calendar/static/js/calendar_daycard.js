@@ -435,6 +435,83 @@
     return at;
   }
 
+  // ── THE PAGE LOCK, AND THE RELEASE RULED HARDER THAN THE LOCK ────────────
+  //    C-CALV4-MOBILE [MOB-3] SIGNED.
+  //
+  // MEASURED, with the day card open AND with the editor open, at 390x664,
+  // 360x640 and 390x844 — six arms, six identical results:
+  //
+  //     window.scrollBy(0, 400)  ->  document.scrollingElement.scrollTop 0 -> 400
+  //     computed overflow on <html> and <body>: "visible"
+  //
+  // Because the sheet is `position: fixed` it stays pinned while the calendar
+  // behind it scrolls away — so the card can end up describing a day that is
+  // no longer on screen. No lock code existed; `document.body.style` was
+  // written in exactly two places, both `user-select` for the drag, which is
+  // why touching body.style here is not a new boundary crossing.
+  //
+  // THE `position: fixed` FORM, NOT `overflow: hidden` ON <html>. The audit
+  // offered both and noted the second is only safe "if iOS 16 support is not
+  // needed". The standing ruling picks the one that works on every phone that
+  // could be at the table; the extra code is a stored integer.
+  //
+  // ONE DERIVED BOOLEAN, NOT TWO LOCKS AND NOT A COUNTER. The card closes AS
+  // the editor opens ([DC-7]), so two independent locks race and one of them
+  // wins, and a reference count that goes negative leaves a phone on a page
+  // that will not scroll with no visible cause and no way out but a reload. A
+  // SET is idempotent and cannot go negative: each sheet records whether IT is
+  // open and the lock is `card || editor`, recomputed on every transition.
+  //
+  // THE STATE LIVES HERE, NOT ON THE SHEET. `edHide` does
+  // `ed.root.removeAttribute('style')` — a full style wipe — so anything
+  // parked on the element is gone before the release could read it.
+  //
+  // A LOCK NEVER RELEASED IS THE WORSE BUG. The condition it fixes (a page
+  // that scrolls when it should not) is survivable; the failure mode of a bad
+  // fix is not. Every exit path is proven by
+  // TestMobileProbe_ThePageIsLockedBehindASheetAndReleasedOnEveryExit.
+  var pageLock = { on: false, y: 0, prev: null, open: { card: false, editor: false } };
+
+  // sheetOpenChanged is the ONE entry point. `which` is 'card' or 'editor'.
+  function sheetOpenChanged(which, open) {
+    pageLock.open[which] = !!open;
+    setPageLock(pageLock.open.card || pageLock.open.editor);
+  }
+
+  function setPageLock(want) {
+    if (typeof document === 'undefined' || !document.body || !document.body.style) return;
+    if (!!want === pageLock.on) return;
+    var b = document.body.style;
+    if (want) {
+      pageLock.y = (typeof window !== 'undefined' && window.pageYOffset) ||
+        (document.scrollingElement ? document.scrollingElement.scrollTop : 0) || 0;
+      // EVERY property this lock writes is remembered, so the release restores
+      // what was there rather than what this module assumes was there.
+      pageLock.prev = {
+        position: b.position, top: b.top, left: b.left,
+        right: b.right, width: b.width,
+      };
+      b.position = 'fixed';
+      b.top = (-pageLock.y) + 'px';
+      b.left = '0px';
+      b.right = '0px';
+      b.width = '100%';
+      pageLock.on = true;
+      return;
+    }
+    pageLock.on = false;
+    var prev = pageLock.prev || {};
+    b.position = prev.position || '';
+    b.top = prev.top || '';
+    b.left = prev.left || '';
+    b.right = prev.right || '';
+    b.width = prev.width || '';
+    pageLock.prev = null;
+    // THE OFFSET COMES BACK. Without this the page snaps to the top on every
+    // close, which is a second defect wearing the first one's clothes.
+    if (typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, pageLock.y);
+  }
+
   // ordIsSafe gates the one attribute-selector interpolation in this module.
   // The ordinal comes from our own payload and is "12" or "i1", never anything
   // else — but a selector built from data is exactly where that stops being
@@ -1175,6 +1252,9 @@
     function show() {
       if (state.timer) { clearTimeout(state.timer); state.timer = 0; }
       card.setAttribute('data-dc-shown', '');
+      // [MOB-3]: the lock follows the SHOW, not the intent, so a card that was
+      // opened by any path locks the page behind it.
+      sheetOpenChanged('card', true);
       if (typeof card.showPopover === 'function') {
         try { card.showPopover(); } catch (e) { /* already open */ }
       }
@@ -1184,9 +1264,32 @@
       state.timer = 0;
       card.removeAttribute('data-dc-shown');
       card.removeAttribute('style');
+      sheetOpenChanged('card', false);
       if (typeof card.hidePopover === 'function') {
         try { card.hidePopover(); } catch (e) { /* already closed */ }
       }
+    }
+
+    // ── THE `toggle` EVENT IS THE TRUTH ([MOB-3] SIGNED) ──────────────────
+    //
+    // `closeCard`/`edClose` are the animated INTENT and `hide`/`edHide` are the
+    // teardown, but neither sees a UA-initiated close — Escape in the engines
+    // that honour it on a manual popover, or a `hidePopover()` from anywhere
+    // else on the page. Only the element's own event sees all of them, and a
+    // lock released only on the module's happy paths is exactly the bug this
+    // clause exists to prevent. Wiring both is safe because sheetOpenChanged is
+    // a SET rather than a counter.
+    if (card && card.addEventListener) {
+      card.addEventListener('toggle', function (e) {
+        // `newState` IS TRUSTED WHEN THE ENGINE SUPPLIES IT, and the attribute
+        // is the fallback for one that does not. Reading them as an OR would
+        // make a UA-initiated close invisible: `hidePopover()` from anywhere
+        // leaves `data-dc-shown` behind, so the OR would answer "still open"
+        // for a box that is not on the screen — and the lock would never lift.
+        sheetOpenChanged('card', (e && typeof e.newState === 'string')
+          ? e.newState === 'open'
+          : card.hasAttribute('data-dc-shown'));
+      });
     }
 
     function openCard(host, cell) {
@@ -1463,6 +1566,7 @@
       if (ed.root.style) ed.root.style.width = '';
       edState.morph = null;
       ed.root.setAttribute('data-dc-shown', '');
+      sheetOpenChanged('editor', true);
       if (typeof ed.root.showPopover === 'function') {
         try { ed.root.showPopover(); } catch (e) { /* already open */ }
       }
@@ -1474,7 +1578,10 @@
       edState.morph = null;
       ed.root.classList.remove('edmorph');
       ed.root.removeAttribute('data-dc-shown');
+      // THE STYLE WIPE IS WHY THE LOCK'S STATE IS NOT PARKED ON THIS ELEMENT
+      // ([MOB-3]): anything written here is gone one line later.
       ed.root.removeAttribute('style');
+      sheetOpenChanged('editor', false);
       if (typeof ed.root.hidePopover === 'function') {
         try { ed.root.hidePopover(); } catch (e) { /* already closed */ }
       }
@@ -2686,6 +2793,17 @@
         closeCard();
       }
     });
+
+    // The editor's half of [MOB-3]'s `toggle` truth. It is wired HERE rather
+    // than beside the card's because `ed` is built later in this mount and a
+    // listener attached against a hoisted `undefined` is a listener on nothing.
+    if (ed && ed.root && ed.root.addEventListener) {
+      ed.root.addEventListener('toggle', function (e) {
+        sheetOpenChanged('editor', (e && typeof e.newState === 'string')
+          ? e.newState === 'open'
+          : ed.root.hasAttribute('data-dc-shown'));
+      });
+    }
 
     // The all-day toggle reveals the in-world time row. It is a display switch
     // on a field the API has ALWAYS had — the mockup's `needs backend` chip

@@ -869,3 +869,179 @@ func mobileAllZeroDurations(d string) bool {
 	}
 	return true
 }
+
+// ── [MOB-3] — the lock, and the release ruled harder than the lock ────────
+//
+// BASELINE, measured with the day card open AND with the editor open, at
+// 390x664, 360x640 and 390x844 — six arms, six identical results:
+//
+//	window.scrollBy(0, 400)  ->  document.scrollingElement.scrollTop  0 -> 400
+//	computed overflow on <html> and on <body>: "visible"
+//
+// Because the sheet is position:fixed it stays pinned while the calendar
+// behind it scrolls away, so the card can end up describing a day that is no
+// longer on screen.
+//
+// THE RELEASE IS THE HALF THAT MATTERS MORE, and it is proven on every exit
+// path this surface has, including the pathological one: open the card, open
+// the editor from it (the card closes AS the editor opens), close the editor.
+// A page left locked is a phone on a page that will not scroll, with no
+// visible cause and no way out but a reload — which is strictly worse than the
+// defect being fixed.
+func TestMobileProbe_ThePageIsLockedBehindASheetAndReleasedOnEveryExit(t *testing.T) {
+	chrome := mobileNeedChromium(t)
+	page := mobileInnerPage(t, benchFxShotData(DayCardMount{
+		CanCreate: true, CanAuthorDmOnly: true, CanDelete: true,
+		CanRestrict: true, CampaignID: "camp-1"}), "")
+	inner := mobileWriteInner(t, "lock.html", page)
+
+	// ── the lock, six arms: card and editor, at three widths ──────────────
+	for _, w := range mobileWidths {
+		h := mobileHeightFor(w)
+		mobileHeader(t, "[MOB-3] the lock", w, h)
+
+		card := mobileDrive(t, chrome, inner, w, h, []mobileStep{
+			{Op: "preScroll"}, {Op: "openCard", Delay: 200}, {Op: "push", Delay: 300},
+		})
+		ed := mobileDrive(t, chrome, inner, w, h, []mobileStep{
+			{Op: "preScroll"}, {Op: "openCard", Delay: 200},
+			{Op: "openEditor", Delay: 400}, {Op: "push", Delay: 400},
+		})
+		for _, arm := range []struct {
+			label string
+			pre   mobileReply
+			push  mobileReply
+		}{
+			{"day card open", card[0], card[2]},
+			{"editor open", ed[0], ed[3]},
+		} {
+			t.Logf("   %s — pre-open scrollTop %.0f · after scrollBy(0,400) scrollTop %.0f · body position %q top %q · html overflow %q",
+				arm.label, arm.pre.num("top"), arm.push.num("top"),
+				arm.push.str("bodyPos"), arm.push.str("bodyTop"), arm.push.str("htmlOverflow"))
+			// THE RULED NUMBER IS ZERO, and that is the position:fixed form
+			// rather than a second opinion about it: with <body> taken out of
+			// flow the document has nothing left to scroll, so
+			// `scrollingElement.scrollTop` reads 0 and the page's real position
+			// is carried by `body { top: -Npx }`. The baseline here was 400.
+			if arm.push.num("top") != 0 {
+				t.Errorf("%dpx, %s: scrollBy(0,400) left scrollTop at %.0f, ruled 0 — the day "+
+					"the sheet describes slides out from under it", w, arm.label,
+					arm.push.num("top"))
+			}
+			if want := fmt.Sprintf("%.0fpx", -arm.pre.num("top")); arm.push.str("bodyTop") != want {
+				t.Errorf("%dpx, %s: body top is %q, want %q — the lock must hold the page "+
+					"WHERE IT WAS, not snap it to the top", w, arm.label,
+					arm.push.str("bodyTop"), want)
+			}
+			if arm.push.str("bodyPos") != "fixed" {
+				t.Errorf("%dpx, %s: body position is %q, not fixed — [MOB-3] rules the "+
+					"position:fixed form because `overflow:hidden` on <html> is only safe if "+
+					"iOS 16 support is not needed", w, arm.label, arm.push.str("bodyPos"))
+			}
+		}
+	}
+
+	// ── THE RELEASE, ON EVERY EXIT PATH ───────────────────────────────────
+	mobileHeader(t, "[MOB-3] the release, five exit paths plus the pathological arm", 390, 664)
+	for _, exit := range []struct {
+		label string
+		open  []mobileStep
+		close string
+	}{
+		{"Escape", nil, "closeEscape"},
+		{"the head ✕", nil, "closeX"},
+		{"Cancel", nil, "closeCancel"},
+		// SAVE'S TEARDOWN IS DRIVEN AS A UA-INITIATED CLOSE, AND THAT IS THE
+		// POINT OF THE ROW RATHER THAN A SHORTCUT AROUND IT. A file:// page has
+		// no server, so a real Save cannot complete; `hidePopover()` is exactly
+		// the shape of close the module's own functions never see, which is why
+		// [MOB-3] rules the release onto the `toggle` event. If the lock lifts
+		// here it lifts on the real Save too, because the real Save ends in the
+		// same hide.
+		{"Save (UA teardown)", nil, "closeSave"},
+	} {
+		steps := []mobileStep{
+			{Op: "preScroll"},
+			{Op: "openCard", Delay: 200},
+			{Op: "openEditor", Delay: 400},
+			{Op: "push", Delay: 400},
+			{Op: exit.close, Delay: 200},
+			{Op: "after", Delay: 400},
+		}
+		r := mobileDrive(t, chrome, inner, 390, 664, steps)
+		pre, locked, after := r[0], r[3], r[5]
+		t.Logf("   exit %-16s — locked scrollTop %.0f (body %q) · after close scrollTop %.0f (body %q) · pre-open was %.0f · editor still open %v",
+			exit.label, locked.num("top"), locked.str("bodyPos"), after.num("top"),
+			after.str("bodyPos"), pre.num("top"), after.boolean("edOpen"))
+		if after.str("bodyPos") == "fixed" {
+			t.Errorf("exit %q: the page is STILL LOCKED after the sheet closed (body position "+
+				"%q). A lock never released leaves a phone on a page that will not scroll, "+
+				"with no visible cause and no way out but a reload — [MOB-3] rules this the "+
+				"worse bug", exit.label, after.str("bodyPos"))
+		}
+		if d := after.num("top") - pre.num("top"); d > 1 || d < -1 {
+			t.Errorf("exit %q: the scroll position came back as %.0f against a pre-open %.0f — "+
+				"the stored offset is the whole reason the position:fixed form is affordable",
+				exit.label, after.num("top"), pre.num("top"))
+		}
+	}
+
+	// THE FIFTH PATH IS THE CARD'S, NOT THE EDITOR'S, AND THE PROBE SAYS SO
+	// RATHER THAN PRETENDING OTHERWISE. Measured from the module: the document
+	// click handler dismisses the CARD when the click lands outside
+	// `[data-cal-daycard]`, and the editor — popover="manual" with explicit
+	// controls — has no outside-click dismissal at all. Asserting one on the
+	// editor would be asserting a path that does not exist.
+	oc := mobileDrive(t, chrome, inner, 390, 664, []mobileStep{
+		{Op: "preScroll"},
+		{Op: "openCard", Delay: 200},
+		{Op: "push", Delay: 300},
+		{Op: "closeOutside", Delay: 200},
+		{Op: "after", Delay: 400},
+	})
+	t.Logf("   exit %-16s — locked scrollTop %.0f (body %q) · after close scrollTop %.0f (body %q) · pre-open was %.0f · card still open %v",
+		"outside click (card)", oc[2].num("top"), oc[2].str("bodyPos"),
+		oc[4].num("top"), oc[4].str("bodyPos"), oc[0].num("top"), oc[4].boolean("cardOpen"))
+	if oc[4].str("bodyPos") == "fixed" {
+		t.Errorf("exit outside-click: the page is STILL LOCKED after the card closed (body "+
+			"position %q)", oc[4].str("bodyPos"))
+	}
+	if d := oc[4].num("top") - oc[0].num("top"); d > 1 || d < -1 {
+		t.Errorf("exit outside-click: the scroll came back as %.0f against a pre-open %.0f",
+			oc[4].num("top"), oc[0].num("top"))
+	}
+
+	// THE PATHOLOGICAL ARM. Card -> editor (the card closes as the editor
+	// opens) -> close. Exactly one release, and the page comes back. A
+	// reference count that went negative is what this row exists to catch.
+	r := mobileDrive(t, chrome, inner, 390, 664, []mobileStep{
+		{Op: "preScroll"},
+		{Op: "openCard", Delay: 200},
+		{Op: "push", Delay: 200},
+		{Op: "openEditor", Delay: 400},
+		{Op: "push", Delay: 300},
+		{Op: "closeX", Delay: 200},
+		{Op: "after", Delay: 400},
+		{Op: "push", Delay: 200},
+	})
+	pre, cardLocked, edLocked, after, freeAgain := r[0], r[2], r[4], r[6], r[7]
+	t.Logf("   PATHOLOGICAL card→editor→close — pre %.0f · card-locked %.0f (%q) · editor-locked %.0f (%q) · after %.0f (%q) · scrolls again to %.0f",
+		pre.num("top"), cardLocked.num("top"), cardLocked.str("bodyPos"),
+		edLocked.num("top"), edLocked.str("bodyPos"), after.num("top"),
+		after.str("bodyPos"), freeAgain.num("top"))
+	if cardLocked.str("bodyPos") != "fixed" || edLocked.str("bodyPos") != "fixed" {
+		t.Errorf("the handover dropped the lock mid-flight: card %q then editor %q",
+			cardLocked.str("bodyPos"), edLocked.str("bodyPos"))
+	}
+	if after.str("bodyPos") == "fixed" {
+		t.Error("card→editor→close left the page locked — the handover released once too few")
+	}
+	if d := after.num("top") - pre.num("top"); d > 1 || d < -1 {
+		t.Errorf("card→editor→close restored the scroll to %.0f against a pre-open %.0f",
+			after.num("top"), pre.num("top"))
+	}
+	if freeAgain.num("top") <= after.num("top") {
+		t.Errorf("the page does not scroll again after the sheets closed: scrollBy(0,400) "+
+			"left it at %.0f", freeAgain.num("top"))
+	}
+}
