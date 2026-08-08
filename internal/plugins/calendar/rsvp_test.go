@@ -732,6 +732,66 @@ func TestToken_EmptySuggestionRejected(t *testing.T) {
 	}
 }
 
+// TestRSVPToken_OutWeekNotifiesOwner — C-CALV4-GAMEREADY §5 [GR-9].
+//
+// THE MEASURED ASYMMETRY (audit probe P9). One member redeems the emailed "Out
+// this week" link. They are told, correctly, that they are marked unavailable
+// for the whole week. `notifier.userIDs` is EMPTY. Another member then redeems a
+// plain `yes` and the owner IS notified. Cause: the token handler's
+// `case RSVPActionOutWeek:` set its message and returned WITHOUT calling
+// notifyOwnerOfResponse, while `default:` — yes/maybe/no — called it. The in-app
+// path has always called it.
+//
+// WHY ONE MISSING LINE CANCELS A SESSION. "Out this week" is the single decline
+// most likely to end a game night, and it was the ONE answer the Director never
+// heard. They see four notifications, count four, and arrive to a table of
+// three. The asymmetry was never a design choice: the in-app branch proves the
+// intent, which is why this is a one-line fix and not a question.
+//
+// BOTH SURFACES ARE ASSERTED IN THIS ONE TEST, ON PURPOSE. The defect existed
+// precisely because the two paths were pinned in different places — in fact the
+// in-app notify was pinned NOWHERE, which is how the emailed half could lose it
+// silently. Split across two tests they can drift apart again; here, deleting
+// the notify from either surface fails the same guard.
+func TestRSVPToken_OutWeekNotifiesOwner(t *testing.T) {
+	t.Run("the EMAILED out_week path notifies the owner", func(t *testing.T) {
+		h, notifier := newTokenHandler(t, RSVPActionOutWeek, &mockRSVPRepo{})
+		rec := serveToken(h, http.MethodPost, "tok", "")
+		if !strings.Contains(rec.Body.String(), "not attending") {
+			t.Fatalf("the member should be told they are marked out; body = %q", rec.Body.String())
+		}
+		if len(notifier.userIDs) != 1 || notifier.userIDs[0] != "owner-1" {
+			t.Errorf("the emailed \"out this week\" must notify the event's owner — this is the "+
+				"one decline most likely to cancel the session; got %v", notifier.userIDs)
+		}
+	})
+
+	t.Run("the IN-APP out_week path notifies the owner", func(t *testing.T) {
+		notifier := &mockNotifier{}
+		h := newBenchWriteHandler(&mockRSVPRepo{})
+		h.SetRSVPNotifier(notifier)
+		if _, err := serveRSVPWrite(h, "action="+RSVPActionOutWeek+"&csrf_token=t",
+			echo.MIMEApplicationForm, false, campaigns.RolePlayer, "u1"); err != nil {
+			t.Fatalf("in-app out_week write: %v", err)
+		}
+		if len(notifier.userIDs) != 1 || notifier.userIDs[0] != "owner-1" {
+			t.Errorf("the in-app \"out this week\" must notify the event's owner; got %v",
+				notifier.userIDs)
+		}
+	})
+
+	// The control that makes the two rows above mean something: a plain decline
+	// already notified on BOTH surfaces before this fix, so if it were the thing
+	// that were broken, the assertions above would be measuring the wrong gap.
+	t.Run("a plain decline notified on both surfaces all along", func(t *testing.T) {
+		h, notifier := newTokenHandler(t, RSVPActionNo, &mockRSVPRepo{})
+		serveToken(h, http.MethodPost, "tok", "")
+		if len(notifier.userIDs) != 1 {
+			t.Errorf("emailed \"no\" should notify; got %v", notifier.userIDs)
+		}
+	})
+}
+
 // --- temporary offered availability (C-CAL-RSVP-P2) ---
 
 // TestToken_SuggestWithWindowsWritesAvailability is the point of the feature: a

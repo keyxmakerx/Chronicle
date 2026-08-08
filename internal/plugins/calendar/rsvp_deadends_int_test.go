@@ -31,9 +31,11 @@ type rsvpIntFixture struct {
 	db         *sql.DB
 	campaignID string
 	userID     string
-	eventID    string
-	h          *RSVPHandler
-	rsvpRepo   RSVPRepository
+	// ownerID is the event's author — the person [GR-9]'s notification is for.
+	ownerID  string
+	eventID  string
+	h        *RSVPHandler
+	rsvpRepo RSVPRepository
 }
 
 func newRSVPIntFixture(t *testing.T) *rsvpIntFixture {
@@ -44,9 +46,21 @@ func newRSVPIntFixture(t *testing.T) *rsvpIntFixture {
 	campaignID, cal := calTestSeedNavCalendar(t, db)
 	calRepo := NewCalendarRepository(db)
 
+	// The event's AUTHOR is a real row, because notifyOwnerOfResponse addresses
+	// created_by: a fixture without one cannot tell "the Director was notified"
+	// apart from "there was no Director to notify", which is exactly the
+	// distinction [GR-9] turns on.
+	ownerID := calTestID(t)
+	if _, err := db.Exec(
+		`INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+		ownerID, ownerID+"@example.test", "The Director", "x"); err != nil {
+		t.Fatalf("seeding the event author: %v", err)
+	}
+
 	evt := &Event{
 		ID: calTestID(t), CalendarID: cal.ID, Name: "Harvest Feast",
 		Year: 1523, Month: 1, Day: 14, Visibility: storageVisibilityEveryone,
+		CreatedBy: &ownerID,
 	}
 	if err := calRepo.CreateEvent(ctx, evt); err != nil {
 		t.Fatalf("create event: %v", err)
@@ -74,8 +88,8 @@ func newRSVPIntFixture(t *testing.T) *rsvpIntFixture {
 	h.SetRSVPNotifier(&mockNotifier{})
 
 	return &rsvpIntFixture{
-		db: db, campaignID: campaignID, userID: userID, eventID: evt.ID,
-		h: h, rsvpRepo: rsvpRepo,
+		db: db, campaignID: campaignID, userID: userID, ownerID: ownerID,
+		eventID: evt.ID, h: h, rsvpRepo: rsvpRepo,
 	}
 }
 
@@ -171,6 +185,45 @@ func TestRSVPSuggestToken_SurvivesRejection_Integration(t *testing.T) {
 		!strings.Contains(rec3.Body.String(), "already answered") {
 		t.Errorf("a spent suggest link must not be redeemable a second time; body = %q",
 			rec3.Body.String())
+	}
+}
+
+// --- [GR-9] the emailed "Out this week" reaches the Director -----------------
+
+// TestRSVPOutWeek_NotifiesAndRecords_Integration ties [GR-9]'s notification to
+// the ROW the Director's count is computed from.
+//
+// The unit guard (TestRSVPToken_OutWeekNotifiesOwner) pins that the notifier
+// fires on both surfaces. What it cannot show is the thing that made the
+// Director's arithmetic wrong: the decline WAS being written to
+// calendar_event_rsvps as `no` the whole time, so the tally silently moved while
+// the one person who needed to act on it was never told. Notification and row
+// are asserted together here for that reason.
+func TestRSVPOutWeek_NotifiesAndRecords_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("RSVP dead-end integration tests require a database; skipped under -short")
+	}
+	f := newRSVPIntFixture(t)
+	notifier := &mockNotifier{}
+	f.h.SetRSVPNotifier(notifier)
+
+	token := f.mintOne(t, RSVPActionOutWeek)
+	body := serveToken(f.h, http.MethodPost, token, "").Body.String()
+	if !strings.Contains(body, "not attending") {
+		t.Fatalf("the member should be told they are marked out; body = %q", body)
+	}
+
+	if len(notifier.userIDs) != 1 || notifier.userIDs[0] != f.ownerID {
+		t.Errorf("the emailed \"Out this week\" must reach the Director — it is the one "+
+			"decline most likely to cancel the session; notified %v, want [%s]",
+			notifier.userIDs, f.ownerID)
+	}
+	stored, err := f.rsvpRepo.GetUserRSVP(context.Background(), f.eventID, f.userID)
+	if err != nil || stored == nil {
+		t.Fatalf("the decline must be on record; got %+v err=%v", stored, err)
+	}
+	if stored.Status != RSVPNo {
+		t.Errorf("an \"out this week\" is a decline: status = %q, want %q", stored.Status, RSVPNo)
 	}
 }
 

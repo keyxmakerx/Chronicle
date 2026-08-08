@@ -798,6 +798,18 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 	switch applied.Action {
 	case RSVPActionOutWeek:
 		message = h.applyOutThisWeek(ctx, cal, evt, tok.UserID)
+		// C-CALV4-GAMEREADY §5 [GR-9]. This branch used to return without
+		// notifying, while `default:` (yes/maybe/no) notified — so the emailed
+		// "Out this week" told the Director NOTHING, and it is the one decline
+		// most likely to cancel the session. The Director saw four
+		// notifications, counted four, and arrived to a table of three.
+		//
+		// The asymmetry was never a design choice: the IN-APP branch of
+		// SetEventRSVPAPI has always called this, with this same RSVPNo, so the
+		// intent was already written down one file over. The two surfaces are
+		// now pinned in ONE test (TestRSVPToken_OutWeekNotifiesOwner) precisely
+		// because being pinned in different places is how they drifted.
+		h.notifyOwnerOfResponse(ctx, cal.CampaignID, evt, tok.UserID, RSVPNo)
 	default:
 		h.notifyOwnerOfResponse(ctx, cal.CampaignID, evt, tok.UserID, statusForAction(applied.Action))
 	}
