@@ -962,8 +962,14 @@ type BenchRsvpMember struct {
 	Answer string
 	// Tone tints it: "ok" | "bad" | "" (muted).
 	Tone string
-	// AskHref is the "Ask →" repair's target when the zone is unset.
-	AskHref string
+	// AskHref is the zone repair's target when the zone is unset, and AskLabel
+	// is its words. THE TWO ARE CHOSEN TOGETHER, by benchZoneRepair, because
+	// the destination decides the sentence: the viewer's own row says
+	// "Set your zone →" and goes to /account, a GM looking at someone else's
+	// says "Ask →" and goes to the roster, and a Player looking at someone
+	// else's gets neither ([GR-15]). An empty AskHref means no control.
+	AskHref  string
+	AskLabel string
 }
 
 // --- assembly ---------------------------------------------------------------
@@ -2806,7 +2812,11 @@ func benchRsvpMembers(in benchRsvpInput) []BenchRsvpMember {
 			// rendered here would be a guess presented as a fact. The signed
 			// pair is the `zone not set` badge plus an Ask link, and the clock
 			// is LITERALLY EMPTY — never "--:--", never a dash (§5).
-			row.AskHref = benchRsvpAskHref(in.CampaignID)
+			//
+			// WHICH repair depends on whose row it is ([GR-15]): the viewer's
+			// own goes to /account, a GM's view of someone else's goes to the
+			// roster, and a Player's view of someone else's gets no control.
+			row.AskHref, row.AskLabel = benchZoneRepair(in.CampaignID, in.ViewerID, m.UserID, in.IsGM)
 			out = append(out, row)
 			continue
 		}
@@ -2857,15 +2867,56 @@ func benchRsvpAnswerWord(status string) (word, tone string) {
 	}
 }
 
-// benchRsvpAskHref is the `Ask →` repair's target: the campaign's member list,
-// where an owner can see who to prod. It is a LINK to a page that exists rather
-// than a control that does nothing, which is why the repair survives at every
-// width while the Director's inert controls do not render to a player at all.
+// benchRsvpAskHref returns the campaign's member roster —
+// `GET /campaigns/:id/members` (campaigns/routes.go, `RequireRole(RolePlayer)`)
+// — which is where a GM can see who to prod.
+//
+// IT USED TO RETURN `/campaigns/<id>/settings/members`, AND ITS OWN DOC COMMENT
+// ASSERTED THE PROPERTY IT LACKED: "It is a LINK to a page that exists rather
+// than a control that does nothing." That route has never existed —
+// `/campaigns/:id/settings` is `RequireRole(RoleOwner)` and has no `/members`
+// child — and there is no catch-all, so every render of it 404'd, in the
+// PLAYER's DOM, once per roster member with no timezone (the fresh-campaign
+// state, since `users.timezone` is nullable). A comment that states an
+// invariant while the code breaks it is how the next hand re-derives the bug,
+// so C-CALV4-GAMEREADY §8 [GR-15] deleted the sentence along with the string.
+//
+// AUDIENCE IS THE OTHER HALF OF THE FIX AND IT IS NOT OPTIONAL. Fixing only
+// the target would leave a Player told to "Ask" somebody about a roster they
+// can read but not change — so this link is now produced ONLY for a GM. A
+// viewer looking at their OWN zone-less row gets `/account` and
+// `Set your zone →` instead: the one thing they can actually do. See
+// benchZoneRepair, which is the single producer of both variants.
 func benchRsvpAskHref(campaignID string) string {
 	if campaignID == "" {
 		return ""
 	}
-	return "/campaigns/" + campaignID + "/settings/members"
+	return "/campaigns/" + campaignID + "/members"
+}
+
+// benchZoneRepair decides the repair link beside a roster row whose timezone is
+// unset — the href AND the words, because the two cannot be chosen separately
+// ([GR-15]).
+//
+// Three outcomes, and the middle one is the whole point:
+//
+//   - the viewer's OWN row → `/account` · `Set your zone →`. A player being
+//     told to ask someone else to fix a field only they can fix was the third
+//     fault stacked on this control.
+//   - anyone else's row, viewed by a GM → the member roster · `Ask →`.
+//   - anyone else's row, viewed by a non-GM → NOTHING. Permission is absence:
+//     a Player is not the person who chases a roster, so no control renders.
+//
+// viewerID may be empty (an anonymous or system render), in which case no row
+// is ever "the viewer's own" and only the GM branch can fire.
+func benchZoneRepair(campaignID, viewerID, memberID string, isGM bool) (href, label string) {
+	if viewerID != "" && memberID == viewerID {
+		return "/account", "Set your zone →"
+	}
+	if !isGM {
+		return "", ""
+	}
+	return benchRsvpAskHref(campaignID), "Ask →"
 }
 
 // benchRsvpCaptions is the panel's foot. Each line states a fact the numbers

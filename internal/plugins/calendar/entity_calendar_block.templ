@@ -21,7 +21,12 @@ import (
 // block is the calendar-v4 Block, or nil when the spine is absent or errored —
 // in which case the surrounding embed still renders, which is the degrade
 // ladder EntityCalendarBlock documents.
-templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.BlockData, data CalendarV2ViewData, ties []EntityEventTie, entityID, source string, isScribe bool) {
+// isOwner gates the "Create calendar" CTA below. C-CALV4-GAMEREADY §8 [GR-16]
+// tail: `GET /campaigns/:id/calendars/new` is `RequireRole(RoleOwner)`, and
+// this empty state was rendering its button to Players, Scribes and anonymous
+// visitors alike — an affordance shown to an audience that cannot use it, the
+// same defect as the `Ask →` link two files over. Permission is absence.
+templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.BlockData, data CalendarV2ViewData, ties []EntityEventTie, entityID, source string, isScribe, isOwner bool) {
 	<div class="card p-0 overflow-hidden" data-entity-calendar>
 		if cal == nil {
 			// EMPTY STATE (C-CAL-EMBED-CONVERGE-POLISH item 3): no calendar yet
@@ -30,13 +35,15 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.
 			<div class="flex flex-col items-center justify-center py-10 px-4 text-center" data-entity-calendar-empty>
 				<i class="fa-solid fa-calendar-days text-3xl text-fg-muted mb-3" aria-hidden="true"></i>
 				<p class="text-sm font-medium text-fg mb-1">No calendar yet</p>
-				<p class="text-xs text-fg-secondary mb-3">Create a calendar to show world dates + this page's linked events here.</p>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) }
-					class="btn-primary text-sm"
-				>
-					<i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Create calendar
-				</a>
+				if isOwner {
+					<p class="text-xs text-fg-secondary mb-3">Create a calendar to show world dates + this page's linked events here.</p>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) }
+						class="btn-primary text-sm"
+					>
+						<i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Create calendar
+					</a>
+				}
 			</div>
 		} else {
 			// Header: "Open full calendar" (ALL roles → the V2 shell for the

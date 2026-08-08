@@ -221,7 +221,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		}
 	}
 	if cal == nil {
-		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false)
+		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
 	}
 
 	// The viewer's stored layer set + their persistence endpoint, read ONCE.
@@ -254,7 +254,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 			block = &d
 		case isNotFound(err):
 			// Hidden or missing — indistinguishable on purpose (stage 9).
-			return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false)
+			return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
 		}
 		// Any other error: the Block is omitted and the rest of the embed
 		// stands, which is the same shape as the pre-existing seed/ties rungs.
@@ -287,7 +287,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 	}
 
 	data := CalendarV2ViewData{ActiveCalendar: cal, WorldState: seed, WorldStateJSON: seedJSON}
-	return entityCalendarBlockView(cc.Campaign.ID, cal, block, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe)
+	return entityCalendarBlockView(cc.Campaign.ID, cal, block, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe, cc.MemberRole >= campaigns.RoleOwner)
 }
 
 // entityEventHref links a linked-event row to the v2 calendar at that event's

@@ -814,12 +814,59 @@ func TestBenchRsvp_ZonelessMemberGetsTheRepairAndNoClock(t *testing.T) {
 	if rell.AskHref == "" {
 		t.Error("the `Ask →` repair must have somewhere to go")
 	}
-	html := renderBench(t, benchFxDataRsvp(false, false))
-	for _, want := range []string{`class="badge warn">zone not set`, `Ask →`} {
-		if !strings.Contains(html, want) {
-			t.Errorf("a player's DOM is missing the zone repair %q — the repair may never be "+
+	// AMENDED — C-CALV4-GAMEREADY §8 [GR-15]. This block used to assert that a
+	// PLAYER's DOM contained `Ask →`, which pinned the defect: the link went to
+	// `/campaigns/:id/settings/members`, a route that has never existed, and
+	// even a working member roster is not a Player's affordance — they were
+	// being told to ask somebody else about a page they cannot act on. The
+	// claim the original was making — "the repair may never be the thing that
+	// disappears on the smallest screen" — is preserved and now asserted where
+	// it belongs, on the GM's render; the Player's render asserts the ABSENCE
+	// that is the fix. Both directions, so neither can drift.
+	if rell.AskHref != "/campaigns/camp-1/members" {
+		t.Errorf("a GM's zone repair points at %q; it must be the campaign's real member roster",
+			rell.AskHref)
+	}
+	if rell.AskLabel != "Ask →" {
+		t.Errorf("a GM's repair on someone else's row says %q; want %q", rell.AskLabel, "Ask →")
+	}
+	gmHTML := renderBench(t, benchFxDataRsvp(true, false))
+	for _, want := range []string{`class="badge warn">zone not set`, `Ask →`, `/campaigns/camp-1/members`} {
+		if !strings.Contains(gmHTML, want) {
+			t.Errorf("a GM's DOM is missing the zone repair %q — the repair may never be "+
 				"the thing that disappears", want)
 		}
+	}
+	if strings.Contains(gmHTML, "/settings/members") {
+		t.Error("the dead `/campaigns/:id/settings/members` href is back; it 404s")
+	}
+	html := renderBench(t, benchFxDataRsvp(false, false))
+	if !strings.Contains(html, `class="badge warn">zone not set`) {
+		t.Error("a player still sees WHICH members have no zone — only the repair is re-audienced")
+	}
+	if strings.Contains(html, "Ask →") {
+		t.Error("a player was shown `Ask →` on another member's row: an affordance " +
+			"rendered to an audience that cannot use it, which is the [GR-15] defect")
+	}
+	// AND THE VIEWER'S OWN ROW REPAIRS ITSELF. u-kael is the viewer; make them
+	// the zone-less one and the control must become the one thing they can
+	// actually do.
+	own := benchFxRsvpInput(false)
+	for i := range own.Roster {
+		if own.Roster[i].UserID == own.ViewerID {
+			own.Roster[i].TZ = ""
+		}
+	}
+	var mine BenchRsvpMember
+	for _, m := range benchRsvpBuild(own).Members {
+		if m.Name == "Kael" {
+			mine = m
+		}
+	}
+	if mine.AskHref != "/account" || mine.AskLabel != "Set your zone →" {
+		t.Errorf("the viewer's own zone-less row got %q / %q; want /account and `Set your zone →` — "+
+			"telling somebody to ASK for the one field only they can set is the third fault",
+			mine.AskHref, mine.AskLabel)
 	}
 	for _, forbidden := range []string{"--:--", ">—<span", "UTC guess"} {
 		if strings.Contains(html, forbidden) {

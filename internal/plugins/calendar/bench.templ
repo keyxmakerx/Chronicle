@@ -777,8 +777,14 @@ templ benchRsvpMemberView(m BenchRsvpMember) {
 		<span class="sp"></span>
 		if m.Zone == "" {
 			<span class="badge warn">zone not set</span>
+			// THE LABEL IS THE PRODUCER'S, NOT THIS TEMPLATE'S
+			// (C-CALV4-GAMEREADY §8 [GR-15]). benchZoneRepair chooses the
+			// href and the words together: the viewer's own row says
+			// "Set your zone →" and goes to /account, a GM looking at
+			// someone else's says "Ask →", and a Player looking at someone
+			// else's gets an EMPTY href and therefore no control at all.
 			if m.AskHref != "" {
-				<a class="btn xs ghost" href={ templ.SafeURL(m.AskHref) }>Ask →</a>
+				<a class="btn xs ghost" href={ templ.SafeURL(m.AskHref) }>{ m.AskLabel }</a>
 			}
 		} else {
 			<span class="badge tz" title={ m.ZoneTitle }>{ m.Zone }</span>

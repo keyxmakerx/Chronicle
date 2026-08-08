@@ -525,8 +525,9 @@ templ scheduleRosterRowView(r ScheduleRosterRow) {
 		<span class="sp"></span>
 		if r.Zone == "" {
 			<span class="badge warn">zone not set</span>
+			// The label rides with the href ([GR-15]) — see benchZoneRepair.
 			if r.AskHref != "" {
-				<a class="btn xs ghost" href={ templ.SafeURL(r.AskHref) }>Ask →</a>
+				<a class="btn xs ghost" href={ templ.SafeURL(r.AskHref) }>{ r.AskLabel }</a>
 			}
 		} else {
 			<span class="badge tz" title={ r.ZoneTitle }>{ r.Zone }</span>
@@ -789,7 +790,7 @@ templ scheduleAnswerRowView(r ScheduleRosterRow, ask bool) {
 		<span class={ "rs", benchToneClass(r.Tone) }>{ r.Answer }</span>
 		<span class="sp"></span>
 		if ask && r.AskHref != "" {
-			<a class="btn xs ghost" href={ templ.SafeURL(r.AskHref) }>Ask →</a>
+			<a class="btn xs ghost" href={ templ.SafeURL(r.AskHref) }>{ r.AskLabel }</a>
 		}
 	</div>
 }
