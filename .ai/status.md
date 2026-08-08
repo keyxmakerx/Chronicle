@@ -20,6 +20,195 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 round 2 CLOSED — the three parity slices, and the one number that did not move (2026-08-08)
+
+**Read this before any other calendar-v4 entry.** R2-3 (`C-CALV4-THEATER`),
+R2-4 (`C-CALV4-V2SUNSET`) and R2-5 (`C-CALV4-SKY`) are the reveal pass's last
+three slices. Each has its own section below. This one exists because the three
+share an end state that none of them states alone.
+
+**ROUND 2 REMOVED NOTHING.** `internal/wire/routes_snapshot.txt` is
+**byte-identical at 727 lines** across every commit of all three slices — no
+route added, none removed, no migration, no file deleted. The V2 shell is still
+registered, still served and still reachable by URL. R2-4 stopped the product
+*linking* to it; that is a different claim from retiring it, and the difference
+is the whole of `C-CALV4-SHELL-REMOVAL`.
+
+**THE SHELL-REMOVAL GATE READS ONE OF FOUR.** The end state is signed by the
+operator ([VS-1], 2026-08-07 — *"delete it, but build the replacements first"*);
+what is outstanding is order, never outcome. Precise state, and the reason the
+third box is the interesting one:
+
+| Entry condition | State 2026-08-08 |
+|---|---|
+| every door swept by R2-4 | **MET.** Done, and held by `TestSunset_NoLiveDoorRemains`, which fails CI on a new one |
+| R2-5 (`C-CALV4-SKY`) MERGED | **NOT MET — and not for a build reason.** The sky *shipped*, fix round included. The box says MERGED and PR #588 is open, so this reads NOT MET until it lands. Do not tick it from the branch |
+| `C-CALV4-WEEKDAY-VIEWS` MERGED | **NOT MET, not started.** A prerequisite, not a booking — and R2-4 made it sharper, because `/calendars/:calId/week` and `/day` now 301 to a month |
+| `C-CALV4-GM-CONSOLE` MERGED | **NOT MET, not started.** A rehousing job, not a backend one: `PUT /calendar/world-state` survives any sunset |
+
+Arithmetic for that slice, pre-computed so it never regenerates until green:
+**727 → 722**. State removals and additions separately — a net count hides a
+swap. `.ai/todo.md` §0b holds the derivation and the traps.
+
+**ONE SLICE DELIVERED NO PRODUCT CODE, AND THAT IS THE CORRECT OUTCOME.** R2-3
+stopped at [TH-14] on a refuted premise, not on difficulty (below). Sixteen of
+its seventeen rulings are undelivered and the seventeenth — the B4 scope glob —
+shipped alone. It is **awaiting a coordinator re-sign**, and the design work is
+banked in ADR-048 §28 rather than lost. A slice that stops at a signed
+STOP-AND-FLAG has done its job; a slice that improvises past one has not.
+
+**WHAT A GM CAN DO NOW THAT THEY COULD NOT.** Reach the v4 calendar of a public
+campaign while logged out; land on the Bench from every door in the product
+instead of the legacy shell; and read the sky — in-world time, moon phases and
+tonight's celestial register — on the Bench's Primary Block. **What V2 still
+solely owns:** the week view, the day view, and the GM world-state console. All
+three are the gate above, and all three are why the shell is still standing.
+
+### A real MariaDB was available the whole time (2026-08-08)
+
+**The belief that this build cannot test against a database was false, and it
+cost real coverage across at least four slices.**
+
+`make docker-up` cannot work here — there is no Docker daemon, and that much is
+true and was measured correctly many times. The error was the inference drawn
+from it. **The MariaDB *server binary* is installed** (`/usr/sbin/mariadbd`,
+10.11.14) and runs directly against a scratch datadir; Docker was never the only
+way to get one. Two small things hid it, and both read as something else:
+
+- `mariadbd` **refuses to start as root** unless given `--user=root`, aborting
+  with *"Please consult the Knowledge Base to find out how to run mysqld as
+  root!"* — which reads like a permissions wall rather than a missing flag.
+- A **Unix socket path over ~107 characters** fails with a *truncated path* in
+  the error message rather than a length complaint, so a socket placed in a long
+  scratch directory looks like the server never started.
+
+**MEASURED 2026-08-08.** Server up in ~3s; `SELECT VERSION()` returns
+10.11.14-MariaDB; DDL and DML round-trip normally; and
+`TestFreshDatabase_EveryPluginSchemaApplies` — which had only ever been reasoned
+about or run once by a verifier — **RUNS AND PASSES in 1.41s against a real
+schema migrated from zero.** So the fresh-install crash fix is proven against a
+database, not against a fake.
+
+**The recipe is now `tools/start-test-db.sh`** (start / `--stop` / `--clean`),
+with `make test-db-up`, `make test-db-down` and `make test-int-local`. It listens
+on **13306, never 3306**, so it cannot collide with or be mistaken for a dev
+server, and it holds only disposable schemas.
+
+**What this unblocks.** Every "proven against fakes, not the database" caveat in
+the R3/R4 books is now a gap that can be closed rather than an environmental
+limit: the notes export round trip, the import failure tally, the sync cursor
+walk, the `calendar_active` cascade fix, and the RSVP flows. The integration
+tests that have been skipping silently — they SKIP rather than FAIL when no
+server answers, which is why nobody noticed — now run.
+
+**The lesson worth keeping.** Every one of those "no database here" notes was
+honest about what it had NOT proven, which is why this was recoverable at all.
+But an environmental limit asserted once gets quoted forward by every later
+slice without being re-measured, and this one was quoted for months. **Re-measure the environment when a limit is
+load-bearing, not just the code.**
+
+### The sky header — C-CALV4-SKY (R2-5), shipped 2026-08-08
+
+The last slice of calendar-v4 round 2. The operator thawed the parked sky arc as
+a **redesign, not a restoration**, and recorded a verdict on the old
+implementation in three counts so the redesign could not inherit it. Four facts
+from this build are worth carrying forward.
+
+**1. The placeholder was reserving a seat on the wrong Block, and nothing could
+have told us.** The dashed `.skyband` strip rendered only on the **real-world**
+Block (`block.templ`'s `if d.IsRealWorld`), and that Block's Almanac is empty for
+**two independent reasons**: the register's build gate named the Shelf alone
+while the Bench builds that Block `noShelf`, and `CreateCalendar`'s real-life
+path seeds no moons, no seasons and no eras. A sky there would have carried a
+gradient and a clock and nothing else, forever. One leg would be a configuration
+accident; two is a product fact. The sky seats on the **Primary** Block — one
+sky per surface — and the placeholder is deleted from all three hosts.
+
+**2. Its deletion was invisible to the entire battery.** A repo-wide grep for
+the placeholder's copy and its function name across every `*_test.go` returned
+**zero**. It could have been deleted, nothing shipped in its place, and every
+suite stayed green. The guard is therefore **two-directional**: absence of the
+retired class AND presence of the sky's own summary. A guard that only proves an
+absence goes green on a slice that deleted the thing and shipped nothing.
+
+**3. The one un-ruleable question was a collision between two operator
+signatures.** The signed stills seat the band INSIDE the Block's box; the signed
+disclosure register's clause 4 says the Block's interior stays still, enforced
+twice, in two packages, mutation-tested. Every factual leg was measured and none
+disagreed — **every candidate home was closed by a signed guard**. That is not a
+gap in the measurement, and it is not a dev call. The operator amended clause 4
+**by name, with one sentence**, and the monopoly guard gained a **per-class
+exemption** rather than a relaxed rule: its forbidden-ancestor list is
+byte-identical, so **every other rule in the product stays exactly as
+constrained as it was**. The guard is renamed
+`TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` — a guard whose name still claims
+a monopoly it lost is how the next hand learns the wrong law.
+
+**4. The counts are numbers, measured against the SHIPPED element.** The closed
+band is **40 / 40 / 32px** against a 44 / 44 / 36 budget, read twice
+independently (the custom property that sizes it, and the laid-out box);
+anchored-edge travel across a full open is **0.0px** for all three facts at all
+three widths; the discs grow **13→40px** and **11→32px** with **33.8%** and
+**32.8%** below the horizon; **3** controls. The drawing pass's own history is
+why: five of its seven fix rounds were caught by measurement rather than by
+looking, including a **65px** sideways slide of the clock that every property
+being correctly declared could not have revealed.
+
+**And one still cannot be reproduced under the guards, which is reported rather
+than approximated.** The mock's open pane leads with *"Sunset 19:58"*. Chronicle
+persists no daylight boundary — the importer parses `sunriseTime`/`sunsetTime`
+from two foreign formats and **drops** them, and no column and no migration
+exists — so the line states the day, the month and the register's own audited
+arithmetic instead. Deriving a plausible 06:00/18:00 would be inventing world
+data on a worldbuilding platform, which is the defect `WorldStateSun.Tint`
+already refuses by shipping null.
+
+### C-CALV4-SKY — the fix round, and the register that should have shipped with it (2026-08-08)
+
+The slice was verified adversarially and the finding worth carrying is not any
+one of the defects. It is that **the build checked itself against the
+enumerated half of a ruling and called that the ruling.**
+
+[SKY-5] says *"THE STILLS BIND THE RESULT"* and then lists what to measure:
+band heights, the C1/C3 density switch, disc growth, a third of each disc below
+the horizon, the seal's sweep, the trio, grayscale disc identity, reduced-motion
+identity. **Every item of that list was met and probe-measured in a real
+browser.** And the open pane still shipped with **two visible differences from
+the signed still** that the list does not name — a muted sub-head line that was
+absent, and a four-column per-moon row that had been collapsed into one merged
+sentence. Both were reproducible under every guard: markup and static CSS, no
+motion, no token, no transition. Neither was reportable instead of buildable.
+**An enumeration inside a ruling is a floor, not the gate.**
+
+**The second finding is that neither divergence was written down anywhere** —
+not in nine commit messages, not in this file, not in `.ai/todo.md`, not in the
+plugin's `.ai.md`. The mandate governing this arc says undisclosed divergence is
+a FAIL, and it is right to: a difference visible only by diffing a PNG against a
+template is a difference nobody finds. The sunset — the one divergence that
+*was* disclosed — was disclosed **four times over**, and that asymmetry is the
+tell. **What gets written down is what somebody decided was interesting, and the
+things you didn't notice are exactly the things that need a register rather than
+a decision.**
+
+**Both are now built** (stage 10) and the register lives in
+`internal/plugins/calendar/.ai.md` → *"The sky pane's DIVERGENCE REGISTER against
+the signed stills"*. It carries the two closed items, the **two** standing
+still-not-reproducible cases — the sunset **and now a second one**: the mock's
+"in shadow" window reads an eclipse-node flag its demo rig invents, and
+`calendar.Moon` has no node, no inclination and no ascending-node column, so
+deriving one would be the sunrise defect wearing different words — the
+deliberate subtractions, and the two shape deviations that were disclosed in
+their commit bodies but never travelled into the handoff claim list
+(`SkyGradient` being a gradient string rather than [SKY-6]'s "fraction", and
+`helpers.go` being off the Files-you-own list because the named
+`block_geometry.go` does not exist in that package).
+
+**A disclosure that does not travel with the claim is half a disclosure.** Both
+of those were reported honestly, in the right place, at the right time — and the
+verifier still had to re-derive them from the diff, because the summary handed
+forward did not carry them. The commit body is where a decision is *justified*;
+it is not where the next reader *looks*.
+
 ### calendar-v4 R2-4 — C-CALV4-V2SUNSET: the legacy calendar stops showing up (2026-08-08)
 
 **The operator's complaint was one sentence — "legacy calendar still shows up" —
@@ -37,7 +226,11 @@ still reachable by URL — just not by click.
 **THE SHELL'S DELETION IS SIGNED BY THE OPERATOR** ("delete it, but build the
 replacements first", 2026-08-07) and belongs to **`C-CALV4-SHELL-REMOVAL`**,
 behind four boxes: `C-CALV4-WEEKDAY-VIEWS` merged · `C-CALV4-GM-CONSOLE` merged ·
-R2-5 merged · every door swept by R2-4 (done). The pre-computed arithmetic for
+R2-5 merged · every door swept by R2-4 (done). **As of 2026-08-08 exactly ONE is
+met** — the door sweep. R2-5 shipped but PR #588 is open, and that box says
+MERGED, so it does not tick from the branch; the other two are unstarted. The
+per-box state is tabulated in the round-2 close-out entry at the top of this
+section. The pre-computed arithmetic for
 that slice is **727 → 722**. See `.ai/todo.md` §0b and
 `internal/plugins/calendar/.ai.md` for the deletion order and its traps.
 
@@ -2300,148 +2493,3 @@ Per `cordinator/decisions/2026-05-19-dispatch-workflow.md`:
 2. Plugin-scoped status updates → append to the owning plugin's `.ai.md` "Recent Work" section. Don't bloat this file.
 3. Cross-cutting decisions → new file in `cordinator/decisions/` + cite from code.
 4. This file's "Cross-cutting state" section gets updated when an arc advances or a release ships.
-
-## A real MariaDB was available the whole time (2026-08-08)
-
-**The belief that this build cannot test against a database was false, and it
-cost real coverage across at least four slices.**
-
-`make docker-up` cannot work here — there is no Docker daemon, and that much is
-true and was measured correctly many times. The error was the inference drawn
-from it. **The MariaDB *server binary* is installed** (`/usr/sbin/mariadbd`,
-10.11.14) and runs directly against a scratch datadir; Docker was never the only
-way to get one. Two small things hid it, and both read as something else:
-
-- `mariadbd` **refuses to start as root** unless given `--user=root`, aborting
-  with *"Please consult the Knowledge Base to find out how to run mysqld as
-  root!"* — which reads like a permissions wall rather than a missing flag.
-- A **Unix socket path over ~107 characters** fails with a *truncated path* in
-  the error message rather than a length complaint, so a socket placed in a long
-  scratch directory looks like the server never started.
-
-**MEASURED 2026-08-08.** Server up in ~3s; `SELECT VERSION()` returns
-10.11.14-MariaDB; DDL and DML round-trip normally; and
-`TestFreshDatabase_EveryPluginSchemaApplies` — which had only ever been reasoned
-about or run once by a verifier — **RUNS AND PASSES in 1.41s against a real
-schema migrated from zero.** So the fresh-install crash fix is proven against a
-database, not against a fake.
-
-**The recipe is now `tools/start-test-db.sh`** (start / `--stop` / `--clean`),
-with `make test-db-up`, `make test-db-down` and `make test-int-local`. It listens
-on **13306, never 3306**, so it cannot collide with or be mistaken for a dev
-server, and it holds only disposable schemas.
-
-**What this unblocks.** Every "proven against fakes, not the database" caveat in
-the R3/R4 books is now a gap that can be closed rather than an environmental
-limit: the notes export round trip, the import failure tally, the sync cursor
-walk, the `calendar_active` cascade fix, and the RSVP flows. The integration
-tests that have been skipping silently — they SKIP rather than FAIL when no
-server answers, which is why nobody noticed — now run.
-
-**The lesson worth keeping.** Every one of those "no database here" notes was
-honest about what it had NOT proven, which is why this was recoverable at all.
-But an environmental limit asserted once gets quoted forward by every later
-slice without being re-measured, and this one was quoted for months. **Re-measure the environment when a limit is
-load-bearing, not just the code.**
-
-## The sky header — C-CALV4-SKY (R2-5), shipped 2026-08-08
-
-The last slice of calendar-v4 round 2. The operator thawed the parked sky arc as
-a **redesign, not a restoration**, and recorded a verdict on the old
-implementation in three counts so the redesign could not inherit it. Four facts
-from this build are worth carrying forward.
-
-**1. The placeholder was reserving a seat on the wrong Block, and nothing could
-have told us.** The dashed `.skyband` strip rendered only on the **real-world**
-Block (`block.templ`'s `if d.IsRealWorld`), and that Block's Almanac is empty for
-**two independent reasons**: the register's build gate named the Shelf alone
-while the Bench builds that Block `noShelf`, and `CreateCalendar`'s real-life
-path seeds no moons, no seasons and no eras. A sky there would have carried a
-gradient and a clock and nothing else, forever. One leg would be a configuration
-accident; two is a product fact. The sky seats on the **Primary** Block — one
-sky per surface — and the placeholder is deleted from all three hosts.
-
-**2. Its deletion was invisible to the entire battery.** A repo-wide grep for
-the placeholder's copy and its function name across every `*_test.go` returned
-**zero**. It could have been deleted, nothing shipped in its place, and every
-suite stayed green. The guard is therefore **two-directional**: absence of the
-retired class AND presence of the sky's own summary. A guard that only proves an
-absence goes green on a slice that deleted the thing and shipped nothing.
-
-**3. The one un-ruleable question was a collision between two operator
-signatures.** The signed stills seat the band INSIDE the Block's box; the signed
-disclosure register's clause 4 says the Block's interior stays still, enforced
-twice, in two packages, mutation-tested. Every factual leg was measured and none
-disagreed — **every candidate home was closed by a signed guard**. That is not a
-gap in the measurement, and it is not a dev call. The operator amended clause 4
-**by name, with one sentence**, and the monopoly guard gained a **per-class
-exemption** rather than a relaxed rule: its forbidden-ancestor list is
-byte-identical, so **every other rule in the product stays exactly as
-constrained as it was**. The guard is renamed
-`TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` — a guard whose name still claims
-a monopoly it lost is how the next hand learns the wrong law.
-
-**4. The counts are numbers, measured against the SHIPPED element.** The closed
-band is **40 / 40 / 32px** against a 44 / 44 / 36 budget, read twice
-independently (the custom property that sizes it, and the laid-out box);
-anchored-edge travel across a full open is **0.0px** for all three facts at all
-three widths; the discs grow **13→40px** and **11→32px** with **33.8%** and
-**32.8%** below the horizon; **3** controls. The drawing pass's own history is
-why: five of its seven fix rounds were caught by measurement rather than by
-looking, including a **65px** sideways slide of the clock that every property
-being correctly declared could not have revealed.
-
-**And one still cannot be reproduced under the guards, which is reported rather
-than approximated.** The mock's open pane leads with *"Sunset 19:58"*. Chronicle
-persists no daylight boundary — the importer parses `sunriseTime`/`sunsetTime`
-from two foreign formats and **drops** them, and no column and no migration
-exists — so the line states the day, the month and the register's own audited
-arithmetic instead. Deriving a plausible 06:00/18:00 would be inventing world
-data on a worldbuilding platform, which is the defect `WorldStateSun.Tint`
-already refuses by shipping null.
-
-## C-CALV4-SKY — the fix round, and the register that should have shipped with it (2026-08-08)
-
-The slice was verified adversarially and the finding worth carrying is not any
-one of the defects. It is that **the build checked itself against the
-enumerated half of a ruling and called that the ruling.**
-
-[SKY-5] says *"THE STILLS BIND THE RESULT"* and then lists what to measure:
-band heights, the C1/C3 density switch, disc growth, a third of each disc below
-the horizon, the seal's sweep, the trio, grayscale disc identity, reduced-motion
-identity. **Every item of that list was met and probe-measured in a real
-browser.** And the open pane still shipped with **two visible differences from
-the signed still** that the list does not name — a muted sub-head line that was
-absent, and a four-column per-moon row that had been collapsed into one merged
-sentence. Both were reproducible under every guard: markup and static CSS, no
-motion, no token, no transition. Neither was reportable instead of buildable.
-**An enumeration inside a ruling is a floor, not the gate.**
-
-**The second finding is that neither divergence was written down anywhere** —
-not in nine commit messages, not in this file, not in `.ai/todo.md`, not in the
-plugin's `.ai.md`. The mandate governing this arc says undisclosed divergence is
-a FAIL, and it is right to: a difference visible only by diffing a PNG against a
-template is a difference nobody finds. The sunset — the one divergence that
-*was* disclosed — was disclosed **four times over**, and that asymmetry is the
-tell. **What gets written down is what somebody decided was interesting, and the
-things you didn't notice are exactly the things that need a register rather than
-a decision.**
-
-**Both are now built** (stage 10) and the register lives in
-`internal/plugins/calendar/.ai.md` → *"The sky pane's DIVERGENCE REGISTER against
-the signed stills"*. It carries the two closed items, the **two** standing
-still-not-reproducible cases — the sunset **and now a second one**: the mock's
-"in shadow" window reads an eclipse-node flag its demo rig invents, and
-`calendar.Moon` has no node, no inclination and no ascending-node column, so
-deriving one would be the sunrise defect wearing different words — the
-deliberate subtractions, and the two shape deviations that were disclosed in
-their commit bodies but never travelled into the handoff claim list
-(`SkyGradient` being a gradient string rather than [SKY-6]'s "fraction", and
-`helpers.go` being off the Files-you-own list because the named
-`block_geometry.go` does not exist in that package).
-
-**A disclosure that does not travel with the claim is half a disclosure.** Both
-of those were reported honestly, in the right place, at the right time — and the
-verifier still had to re-derive them from the diff, because the summary handed
-forward did not carry them. The commit body is where a decision is *justified*;
-it is not where the next reader *looks*.

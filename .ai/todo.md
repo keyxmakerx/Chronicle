@@ -11,8 +11,18 @@
 
 ## 0. calendar-v4 round 2 — the reveal pass (open)
 
-Round 2 adds no data, no zone and no engine. Five slices; four have landed
-(R2-1, R2-2a, R2-2b, R2-4, R2-5) and R2-3 is blocked on a coordinator re-sign.
+Round 2 adds no data, no zone and no engine. **Five slices** — R2-2a and R2-2b
+are two stages of ONE slice, which is why the count below reads five and not six.
+**Four have landed** (R2-1, R2-2, R2-4, R2-5); **R2-3 is blocked on a coordinator
+re-sign and delivered no product code.**
+
+**THE ROUND'S END STATE, in one line: it removed nothing.**
+`internal/wire/routes_snapshot.txt` is byte-identical at **727 lines** across
+every commit of all five slices — no route added, none removed, no migration, no
+file deleted. The V2 shell is still registered, served and reachable by URL;
+R2-4 stopped the product *linking* to it, which is a different claim from
+retiring it. Retirement is `C-CALV4-SHELL-REMOVAL`, and its gate reads **one of
+four** (§0b).
 
 | slice | what it owns | state |
 |---|---|---|
@@ -33,13 +43,29 @@ is carried, not closed, and the first row is the one the rest hang off.
       it, but build the replacements first"*). **What is outstanding is order,
       not outcome — this row reads "when", never "whether".**
 
-      **ENTRY CONDITION, ALL FOUR BOXES, not partially satisfiable:**
+      **ENTRY CONDITION, ALL FOUR BOXES, not partially satisfiable.**
+      **AS OF 2026-08-08 THE GATE READS ONE OF FOUR:**
       - [ ] `C-CALV4-WEEKDAY-VIEWS` MERGED — v4 has a week and a day view, or
-            the slice records the signed decision that it will not
-      - [ ] `C-CALV4-GM-CONSOLE` MERGED — the GM world-state console has a v4 home
-      - [ ] R2-5 (`C-CALV4-SKY`) MERGED — the sky header ships
+            the slice records the signed decision that it will not.
+            **NOT MET, NOT STARTED.** R2-4 sharpened this one rather than
+            advancing it: `/calendars/:calId/week` and `/day` now 301 to the
+            Bench's MONTH, so the loss is live in the product today and pinned
+            by `TestCutover_WeekRedirectsToTheBenchAndLosesTheWeek` + its day
+            twin — both of which invert back when this lands
+      - [ ] `C-CALV4-GM-CONSOLE` MERGED — the GM world-state console has a v4
+            home. **NOT MET, NOT STARTED.** A REHOUSING job, not a backend one:
+            `PUT /calendar/world-state` survives any sunset
+      - [ ] R2-5 (`C-CALV4-SKY`) MERGED — the sky header ships.
+            **NOT MET — AND NOT FOR A BUILD REASON.** The sky SHIPPED
+            2026-08-08, fix round included, and is on
+            `claude/coordinator-handoff-stage-3-3d3s4w`. **This box says MERGED
+            and PR #588 is open.** Do NOT tick it from the branch: the whole
+            point of a MERGED box is that the replacement is on `main` before
+            the thing it replaces is deleted. It ticks itself when #588 lands,
+            and nothing else about this row changes
       - [x] **EVERY DOOR SWEPT BY R2-4** — done 2026-08-08; the completeness
-            guard is `TestSunset_NoLiveDoorRemains`, which fails CI on a new one
+            guard is `TestSunset_NoLiveDoorRemains`, which fails CI on a new one.
+            **The only box met.**
 
       **THE ARITHMETIC, PRE-COMPUTED SO THAT SLICE NEVER REGENERATES UNTIL
       GREEN: 727 → 722.** −3 for the three `ShowV2` GETs, −1 for
@@ -153,6 +179,26 @@ round's failure mode was disclosure that never travelled.
       approximated — is correct, and no sunrise/sunset is persisted anywhere.
       **Three hands have now quoted this line from memory and two got it wrong.
       The string is four seconds of `t.Log` away.**
+- [ ] **A MIGRATION ANCHOR IN TWO SIGNED BLOCKS IS STALE, and both slices
+      measured it independently.** [TH-5] (theater) and [VS-8] (sunset) each
+      state that the calendar plugin's migrations *"end at `016_bench_section_
+      prefs`"*. **They end at `017_active_prefs_survive_delete`** — verified
+      2026-08-08 by listing `internal/plugins/calendar/migrations/`. **Nothing
+      is wrong with the code and neither slice created a migration**; both
+      correctly shipped none. The defect is only that the next slice reading
+      either block will measure against 016, find 017, and have to decide
+      whether it is looking at drift or at damage. **Re-anchor the sentence, or
+      stop anchoring it to a filename** — a block that needs to say "add no
+      migration" does not need to name the last one.
+- [ ] **`internal/plugins/calendar/bench_test.go` IS ON NEITHER LIST, and the
+      theater would have had to edit it.** C-CALV4-THEATER's [TH-3] required
+      two selectors added to `TestBenchCSS_DefinesWhatTheMarkupNames`' pin list
+      — a file that appears on neither the slice's Files-you-own nor its
+      Do-not-touch list. It was **moot on that slice** ([TH-3] dropped with
+      everything downstream of [TH-14]), but it is not moot on the re-sign:
+      **any theater that adds a Bench-scoped class hits this same file.** Rule
+      it explicitly in the re-signed dispatch rather than leaving the next hand
+      to infer that silence means permission.
 
 ### The three feature losses a GM will feel at a table, all dispatch-signed
 
