@@ -195,6 +195,16 @@ seed: ## Seed dev database with sample data (TODO: implement cmd/seed)
 
 # --- Docker ---
 .PHONY: docker-up
+test-db-up: ## Start a local MariaDB for integration tests WITHOUT Docker (port 13306)
+	@./tools/start-test-db.sh
+
+test-db-down: ## Stop the local test MariaDB
+	@./tools/start-test-db.sh --stop
+
+test-int-local: ## Run integration tests against the local test MariaDB (starts it if needed)
+	@./tools/start-test-db.sh >/dev/null
+	@CHRONICLE_TEST_DB_DSN='root@tcp(127.0.0.1:13306)/' go test ./... -count=1
+
 docker-up: ## Start MariaDB + Redis containers
 	docker compose -f $(DOCKER_COMP) up -d chronicle-db chronicle-redis
 

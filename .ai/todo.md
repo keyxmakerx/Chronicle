@@ -436,6 +436,19 @@ the four claims that were REFUTED and what killed them — is
 `cordinator/reports/chronicle/2026-08-07-C-SWEEP-R3.md`; the eight that earned
 their own slice have dispatches under `cordinator/dispatches/chronicle/`.
 
+**State after sweep R4 (2026-08-07, closed out at stage 29 —
+`cordinator/reports/chronicle/2026-08-07-C-SWEEP-R4.md`).** R4 was the signing
+pass over this list, not a fresh hunt. Five of the eight dispatched ids are now
+CLOSED — **A** (all seven partial-PUT sites, stages 1–6), **B** (the anonymous
+`dm_only` leak, stage 9 + ADR-049), **C** (the year DoS, stage 21, fixed as the
+algorithm so the clamp question never had to be answered), **D** (both migration-
+runner defects, stages 11–12 + ADR-050), **E** (two of three promises kept and the
+third replaced by one honestly-scoped booking, stages 15–17), **G** (the sync pull
+cap, stages 18–19 across both repos). **F** and **H** are still booked and still
+need exactly the ruling they needed before; each carries a fresh R4 measurement
+below. §I is untouched except for the calendar-prefs item stage 25 closed.
+A ruling being *given* is what moved these — none of them became self-contained.
+
 #### A. `C-PARTIAL-PUT-CONTRACT` — **CLOSED by sweep R4 (2026-08-07). All seven.**
 
 **Ruled by the coordinator, 2026-08-07:** the fix for the whole partial-write
@@ -620,9 +633,45 @@ a different bug:**
   chosen without an operator.~~ *(the original booking, kept for the reproduction it
   records and for the clamp question the algorithmic fix made moot)*
 
-#### D. `C-PLUGIN-MIGRATION-RUNNER` — two defects in the same runner (dispatch drafted)
+#### D. `C-PLUGIN-MIGRATION-RUNNER` — **CLOSED by sweep R4 (2026-08-07), both defects. ADR-050.**
 
-- [ ] **`foundry_vtt` migration 001 crashes on EVERY fresh database** — it RENAMEs a
+- [x] **CLOSED — C-SWEEP-R4 stage 11. Fork (c) was signed, and it cost a reconciler
+  plus a migration, not an edit.** `foundry_vtt.ReconcileConsolidationState` records
+  001 as applied on any database where its RENAME has no source table, and new
+  migration **002** states the post-consolidation shape in idempotent DDL. Nothing
+  in 001 was touched, so `tools/check-migration-immutability.sh` and
+  `migrate_test.go:402`'s grandfather both stay exactly as they were, and a database
+  that still HAS `foundry_module_campaign_tokens` is left alone — 001 runs for real
+  there and carries its live token rows across. Fresh install, completed upgrade, and
+  an upgrade that died between 001's two statements all converge on one schema.
+  **The reason it survived four years of CI is the thing that actually got fixed:
+  nothing anywhere migrated an empty database.** `make test-freshdb` /
+  `cmd/server/freshdb_migration_test.go` replay the real bootstrap against genuinely
+  empty MariaDB schemas (one from zero, one from the pre-consolidation shape), wired
+  into CI as its own `Fresh-DB Migration Replay` job that fails if either test merely
+  **skips** — the failure mode that would otherwise re-open this silently.
+  Fork (a) stayed forbidden and fork (b) was not taken: see the second item.
+- [x] **CLOSED — C-SWEEP-R4 stage 12. Neither of the booking's two shapes was taken;
+  a third was, and it needs no grandfather allowlist.** The booking's (a) "per-statement
+  progress tracking" and (b) "a CI ratchet that REDs non-idempotent plugin DDL" both
+  foundered on the nine immutable offenders. `internal/database/plugin_migration_safety.go`
+  instead adds two mechanisms that require *no* change to any existing migration:
+  a **pre-flight applicability check** (every statement validated against the schema
+  catalogue as it will stand at that point in the migration, so the ordinary
+  CREATE-then-ALTER shape is not falsely refused; if any statement cannot succeed the
+  migration aborts having executed NOTHING) and **partial-progress recording** in a new
+  runtime table `plugin_migration_progress`, keyed by a sha256 of the migration text
+  and honoured only on a byte-identical match. It is deliberately **not** a transaction
+  and the error text says so — MariaDB has no transactional DDL. Every uncertain answer
+  degrades to replaying from zero, i.e. exactly the pre-existing behaviour: the pre-flight
+  **fails open** if `information_schema` cannot be read, because refusing every plugin
+  migration over a metadata hiccup is worse than the bug it guards. The one outcome worse
+  than the original defect — a pre-flight that falsely aborts a real migration — is what
+  `TestFreshDatabase_EveryPluginSchemaApplies` still passing rules out. Three DB-backed
+  `TestPluginMigration_*` regressions run in the same CI job and are named in its
+  grep-for-PASS assertion, so a skip fails the job. Recorded as **ADR-050**, which is
+  what the booking asked for when it said "an ADR, plus a new guard".
+- [ ] ~~**`foundry_vtt` migration 001 crashes on EVERY fresh database** — it RENAMEs a
   table nothing creates and DROPs a table that never exists. Reproduced. The blocker
   is the runner's semantics, verified at `internal/database/plugin_schema.go:154-176`:
   migrations run in ascending order and the loop **RETURNS on the first failure**, so
@@ -638,8 +687,10 @@ a different bug:**
   no migration currently states. Whichever is chosen changes how EVERY plugin's
   migrations may fail, or establishes a new class of Go-side schema bootstrap — an
   ADR, plus a new guard: **a fresh-DB migration-replay test, which CI does not have**
-  (`tools/restore-drill.sh` loads a dump; it does not replay from zero).
-- [ ] **A plugin migration that fails on its second statement is unrecoverable** — no
+  (`tools/restore-drill.sh` loads a dump; it does not replay from zero).~~
+  *(the original booking, kept for the three-fork analysis it records — fork (c) is
+  the one that was signed, and the guard it demanded is the one that shipped)*
+- [ ] ~~**A plugin migration that fails on its second statement is unrecoverable** — no
   transaction, version recorded last, and most plugin ALTERs are non-idempotent, so a
   half-applied migration re-runs its first statement and dies. Both fix shapes are
   policy-visible: **(a)** per-statement progress tracking changes boot-time recovery
@@ -649,11 +700,55 @@ a different bug:**
   immutability guard, so it needs a grandfather allowlist and a house-law amendment
   naming what shapes are permitted going forward. Neither requires editing an existing
   migration or the byte-pinned `data.go`, so the work is safe **once signed**; it is the
-  choice of semantics, not the mechanics, that blocks.
+  choice of semantics, not the mechanics, that blocks.~~ *(the original booking, kept
+  because its two-shape analysis is what forced the search for a third; neither (a) nor
+  (b) was taken)*
 
-#### E. `C-EXPORT-IMPORT-FIDELITY` — three promises the export/import round trip does not keep (dispatch drafted)
+#### E. `C-EXPORT-IMPORT-FIDELITY` — **CLOSED by sweep R4 (2026-08-07). Two promises kept, one replaced by an honestly-scoped booking.**
 
-- [ ] **Campaign export/import silently omits ALL shared notes** — the exporter and
+The three bullets below are struck through and answered in place. The full closures,
+with what was decided about egress and what was deliberately left out, are the three
+`- [x]` entries under **§1 Critical** above (stages 15, 16, 18/19) plus the one
+surviving booking `C-IMPORT-MEDIA-RESTORE` (stage 17). This heading is kept so the
+dispatch id still resolves.
+
+- [x] **CLOSED — stage 15. The egress ruling was given, and it is narrower than any of
+  the booking's three options.** Only `is_shared=TRUE` notes leave; `shared_with`
+  targets are dropped rather than carried (their user ids do not exist in the
+  destination); personal notes never leave, because they belong to a person and an
+  export is handed to whoever imports it. `notes.ListSharedByCampaign` is the only list
+  method in that package with **no per-user filter**, which is why it is owner-gated by
+  its single caller and reachable from no HTTP route. `calendar/rsvp_egress_test.go`
+  still walks `CampaignExport` as its root and still passes: the root widened by a
+  `notes` field that was already declared in the envelope since v1, not by a new class
+  of person-owned data. Two new pins: the round-trip
+  (`internal/app/export_notes_roundtrip_test.go`) and the AST wiring pin
+  (`internal/wire/export_adapter_wiring_test.go`) that requires `routes.go` to call all
+  twenty export/import setters — the test that would have caught the original hole,
+  which was two `SetNoteExporter`/`SetNoteImporter` setters nobody ever called.
+- [x] **CLOSED — stage 16, and the "should a partial import hard-fail?" question was
+  answered as NO, deliberately.** Best-effort import is the right behaviour: one
+  unparseable row must not abandon a half-built campaign. What was missing was the
+  other half — thirty-nine per-row skip sites went to `slog.Warn` and nowhere else.
+  `campaigns.ImportReport` is threaded through the adapters exactly the way `*IDMap`
+  already is, and `Import` now returns `(*Campaign, *ImportReport, error)` so a caller
+  that ignores a partial import has to ignore it **in writing**. The booking's "needs a
+  brand-new user-visible import-summary page" was correct and that page shipped
+  (`ImportResultPanel`); the handler comment at `export_handler.go:264-266` recording
+  the missing flash surface is discharged, because the panel is rendered inline rather
+  than flashed. A clean import still redirects byte-identically to before.
+- [x] **PARTIALLY CLOSED — stage 17 took the "stop promising it" half and booked the
+  rest as `C-IMPORT-MEDIA-RESTORE` (§1 Critical) rather than shipping it half-done.**
+  The booking's own aside — that `import.templ`'s `accept=` and its "Must be a
+  Chronicle export JSON file" copy disagree with `maxImportZipSize` — turned out to be
+  the *load-bearing* half: the `accept` attribute meant the ZIP the settings page told
+  you to make **could not be selected in the file picker at all**, so `?include_media=1`
+  round-tripped to nothing, not even its structural data. That is fixed, the unrestored
+  file count is now surfaced honestly in `ImportResultPanel`, and both copy surfaces say
+  media is archived, not re-attached. The `MediaImporter` feature itself stays booked,
+  with the reference-rewriting work (which is the actual job) spelled out there.
+
+- [ ] ~~**Campaign export/import silently omits ALL shared notes** — the exporter and
   importer are never wired. The fix needs a new cross-user listing capability on the
   notes widget (repository + service + the `NoteService` interface), two new adapters
   in `export_adapters.go`, and wiring in `routes.go` — and it forces the **egress
@@ -664,8 +759,8 @@ a different bug:**
   never leaves via export"), pinned by `calendar/rsvp_egress_test.go`, which walks
   `campaigns.CampaignExport` as its root — **so widening that root is a deliberate,
   signed egress change**. Getting it wrong converts a data-omission bug into a
-  data-leak bug.
-- [ ] **"Export ZIP (with media)" round-trips to nothing** — import silently discards
+  data-leak bug.~~
+- [ ] ~~**"Export ZIP (with media)" round-trips to nothing** — import silently discards
   every media file. The real fix is a new `MediaImporter` interface on
   `ExportImportService` plus a media-side adapter that writes media rows AND file bytes
   and remaps paths through the `IDMap` — a cross-plugin (campaigns ↔ media) FEATURE
@@ -675,8 +770,9 @@ a different bug:**
   correcting its "Maximum file size: 10 MB / Must be a Chronicle export JSON file" copy
   to match `maxImportZipSize` — but that is a **different** defect from the one filed
   and is still user-visible UI copy, so it belongs in the same signed decision rather
-  than being slipped in under this id.
-- [ ] **Campaign import drops objects on any per-row failure and still reports
+  than being slipped in under this id.~~ *(the "tiny piece" was the load-bearing one —
+  see the stage 17 closure above)*
+- [ ] ~~**Campaign import drops objects on any per-row failure and still reports
   success** — no failure count reaches the user. The fix changes the return signature
   of essentially every importer interface on the cross-plugin boundary (`EntityImporter`,
   `GroupImporter`, `CalendarImporter`, `TimelineImporter`, `SessionImporter`,
@@ -689,9 +785,34 @@ a different bug:**
   question: should a partial import succeed at all, or hard-fail and roll back?
   Separately, the strongest trigger found — the Player Character addon gate firing
   because **addons import after entities** — may be better fixed by reordering addon
-  import ahead of entity types, itself a behavioural change wanting a signature.
+  import ahead of entity types, itself a behavioural change wanting a signature.~~
+  *(the import-ordering half was NOT taken — stage 16 made the loss visible rather than
+  reordering the import, because reordering changes what a restore produces and that
+  still wants a signature. It is a live sub-item of `C-IMPORT-MEDIA-RESTORE`, which
+  needs media to move ahead of entities for its own reasons.)*
 
-#### F. `C-ADDON-TOGGLE-TRUTH` — two integration toggles that gate nothing (dispatch drafted)
+#### F. `C-ADDON-TOGGLE-TRUTH` — two integration toggles that gate nothing (dispatch drafted) — **STILL BOOKED after R4**
+
+**R4 re-measurement (stage 29, 2026-08-07).** Two of the booking's numbers below have
+moved; neither moves the ruling, and one of them makes the reconciler easier to sign.
+
+1. **"the only `EnableForCampaign` call sites are `addons/handler.go:154` and
+   `export_adapters.go:1449`" is no longer true, and was already understated.** The
+   current set is `addons/handler.go:154`, `export_adapters.go:1655` (the line moved —
+   stage 15's note adapters are above it), `addons/service.go:607` (`EnableBySlug`, the
+   auto-register-on-first-use path for game-system addons), and **`calendar/handler.go:314`
+   and `:1581`, which auto-enable the `calendar` addon the moment a calendar is created**,
+   with the comment "so dashboard/entity blocks render immediately without manual
+   extension toggling". That matters because it means **auto-enable-on-use is already an
+   accepted, shipped pattern in this codebase** — the reconciler this booking asks for
+   ("auto-enable sync-api for any campaign that owns an `api_keys` row") is the same
+   move at boot rather than at create, not a new policy. It is still a reconciler and
+   still never a migration.
+2. `IsEnabledForCampaign` still returns false-on-no-row (`addons/repository.go:312`)
+   and `RequireAuthOrAPIKey`'s session-cookie caveat is unchanged, so sub-decisions two
+   and three are exactly as booked. **Nothing in R4 touched the addon gate**; stages 18–19
+   changed the sync pull's *paging*, not its authorization, so no R4 work has made the
+   404-every-live-integration risk any smaller.
 
 - [ ] **Turning "Sync API" OFF does not disable the REST API** — every issued Bearer
   key keeps working. And the migration path is the whole problem:
@@ -723,9 +844,42 @@ a different bug:**
   the `session_tracker` dashboard block's `Addon:"sessions"` gating would start failing
   closed, so it needs an idempotent reconciler plus a re-point of the block meta.
 
-#### G. `C-SYNCAPI-PULL-CURSOR` — the pull is capped and cannot resume (dispatch drafted)
+#### G. `C-SYNCAPI-PULL-CURSOR` — **CLOSED by sweep R4 (2026-08-07), stages 18 (server) and 19 (client).**
 
-- [ ] **Foundry sync pull is hard-capped at 1000 entities with no cursor**, so
+- [x] **CLOSED. The full cursor was signed; the tempting one-liner was refused, and
+  counter (4) turned out to be wrong in the module's favour.** Each of the booking's
+  four counters, answered:
+  **(1)** The wire change was made and documented — `cursor` / `next_cursor` are in
+  `docs/api/openapi.yaml`, including the rule about which `server_time` a client keeps
+  (the one from the FIRST response of a completed walk; taking the last skips anything
+  modified mid-walk). The cursor is **opaque on the wire** (versioned base64 of an
+  internal page number) precisely so it can become a keyset cursor later without
+  breaking a client that hard-coded the arithmetic.
+  **(2)** No new repository or service method was needed after all: the cap became a
+  page size and the walk stayed in the handler, so the `updated_at` index question
+  never had to be answered. Offset paging is safe here **only** because sweep R3 stage 4
+  gave entity list ordering a total order (every `ORDER BY` in the entities repository
+  ends `e.id ASC`) — without that tiebreaker this endpoint would have re-imported the
+  duplicate-and-skip bug at a larger scale, which is why the walk test asserts no
+  duplicates.
+  **(3)** The `Sort: "updated"` variant was **refused**: spending the budget
+  recency-first hides the same ceiling behind a nicer-looking first page and still
+  leaves the tail permanently unreachable. A malformed cursor is likewise a **400, not
+  a silent reset to page 1** — a silent reset restarts the walk from the top and looks
+  like it worked.
+  **(4)** "No shipped client uses the endpoint" was **false**, and stage 19 is why this
+  id spans two repos: `Chronicle-Foundry-Module` had its own twin ceiling —
+  `JournalSync.resyncAll` and the dashboard's `_buildEntityGroups` each carried
+  `while (hasMore && page <= 5)` inline, a silent 500-entity cap that showed the GM a
+  completed resync and a full-looking dashboard regardless. Fixing the server and
+  leaving the client capped at 500 would have left the operator exactly as stuck. Both
+  now share `scripts/_entity-page-walk.mjs`, bounded at 200 pages, whose `truncated`
+  flag the GM is actually told about (module commit `0d17f9c`).
+  Pins: `syncapi/sync_pull_cursor_test.go` and, in the module,
+  `tools/test-entity-page-walk.mjs` — including a source pin forbidding either caller
+  from keeping a `page <= 5` literal. Both red before their fixes. The long-form
+  closure is the `- [x]` entry under §1 Critical above.
+- [ ] ~~**Foundry sync pull is hard-capped at 1000 entities with no cursor**, so
   entities past that point can never sync, permanently. Not shippable unsigned on four
   counts. (1) Any resume cursor is a **documented public wire change**: it must be added
   to `SyncResponse` in `docs/api/openapi.yaml` and mirrored in the module's
@@ -736,9 +890,11 @@ a different bug:**
   recency-first — that fixes the reproduced scenario without a wire change, and choosing
   between it and the full cursor **changes the observable ordering of a public
   endpoint**. (4) Impact is smaller than filed: **no shipped client uses the endpoint**
-  today, which should feed the decision rather than be pre-empted by a ship.
+  today, which should feed the decision rather than be pre-empted by a ship.~~
+  *(the original booking, kept for its four counters — three were answered, and the
+  fourth was simply not true)*
 
-#### H. `C-HTMX-INLINE-SCRIPT-RATCHET` — the script guard's marker is narrower than the harm (dispatch drafted)
+#### H. `C-HTMX-INLINE-SCRIPT-RATCHET` — the script guard's marker is narrower than the harm (dispatch drafted) — **STILL BOOKED after R4**
 
 - [ ] **`tools/check-page-scripts.sh` only inventories `<script src=`, but htmx deletes
   ALL script tags from a swapped fragment** — so the **30 inline `<script>` blocks in
@@ -758,6 +914,22 @@ a different bug:**
   sub-items an operator could sign separately: (a) widen the marker + re-baseline +
   mutation-test; (b) move the two confirmed-dead surfaces into the body-script registry
   and lower the new baseline by 2.
+
+**R4 re-measurement (stage 29, 2026-08-07).** Re-counted today across all tracked
+`*.templ`: **34 `<script>` occurrences that are not `<script src=`, spread over 30
+files** — up from the 30 the booking recorded, so the baseline it would re-sign has
+already drifted. And the count is treacherous in the direction the booking warned
+about: `internal/templates/layouts/base.templ` holds **65 `<script` occurrences in
+total but only 2 of them inline**, and it is the one file that is never htmx-swapped
+at all. A bare-`<script` marker is therefore not a mechanical widening — it is a
+scoping judgement about which files can be swapped, which is exactly the thing an
+operator has to sign. The concrete surfaces the booking names are unchanged
+(`plugins/media/media_browser.templ` and `plugins/campaigns/branding.templ`, 1 inline
+block each).
+**Nothing in R4 widened or weakened this guard.** Stage 13 built an adjacent guard —
+`tools/check-browser-probes.sh`, which makes the browser probes actually run in CI —
+and deliberately did not touch `check-page-scripts.sh`, because widening the marker is
+the operator-signed re-baseline this booking is waiting for.
 
 #### I. Booked here only — no dispatch drafted, each waiting on one ruling
 

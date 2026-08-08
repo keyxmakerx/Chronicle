@@ -3977,3 +3977,131 @@ identity (no `"anonymous"` user, no per-IP key).
   pinned rows, [EU-4] = calendar + timeline in one slice, [EU-5] = booked)
 - Pins: `internal/plugins/calendar/anonymous_visibility_test.go` ·
   `internal/plugins/timeline/anonymous_visibility_test.go`
+
+---
+
+## ADR-050: An immutable plugin migration is repaired by a reconciler, and a half-applied one resumes instead of replaying
+
+**Date:** 2026-08-07 · **Status:** Accepted · **Extends:** ADR-044 / ADR-045
+(migration robustness, the `000030` incident) and ADR-028/030 (plugin
+migrations) · **Origin:** `C-PLUGIN-MIGRATION-RUNNER`, two defects reproduced in
+`reports/chronicle/2026-08-07-C-SWEEP-R3.md` and closed by C-SWEEP-R4
+stages 11–12.
+
+### Context
+
+Two failures in the same runner, both terminal, both invisible to CI.
+
+1. **`foundry_vtt` migration 001 crashed on every brand-new database.** It is a
+   consolidation migration — `RENAME TABLE foundry_module_campaign_tokens TO
+   foundry_vtt_campaign_tokens` — and the plugin that created the source table
+   was deleted in C-FMC-5c. A fresh install hit `Error 1146`, the plugin was
+   marked DEGRADED, and it could never self-heal, because
+   `runSinglePluginMigrations` returns on the first failed migration: no later
+   migration for that plugin is reachable, so a fresh-DB-safe `002` would never
+   run. `PreMigrationCheck` (PR #507) does not cover it — it refuses only when
+   `foundry_module_versions` exists *and has rows*, and on a fresh database the
+   table does not exist at all.
+2. **A plugin migration that failed on its second statement was unrecoverable.**
+   `execPluginMigration` splits on semicolons, runs statement by statement on a
+   plain `*sql.DB`, and writes the `plugin_schema_versions` row only after the
+   LAST statement succeeds. A mid-migration failure therefore leaves the earlier
+   statements' effects in the database and *no record that anything happened*.
+   The next boot replays from statement one and dies on "duplicate column name",
+   because most plugin ALTERs are not idempotent — so the operator sees an
+   artefact of the retry rather than the real cause, and fixing the real cause
+   cannot help.
+
+Both were invisible for the same reason: **nothing in CI ever migrated an empty
+database.** `tools/restore-drill.sh` loads a dump of an already-migrated one and
+every integration test assumes `make migrate-up` has run.
+
+### Decision
+
+**1. An immutable migration that cannot run is repaired by a Go-side reconciler
+plus a new append-only migration — never by editing the old one.**
+`foundry_vtt.ReconcileConsolidationState` records 001 as applied on any database
+where its RENAME has no source table; new migration `002_ensure_campaign_tokens`
+states the post-consolidation shape in idempotent DDL. 001 is untouched, so
+`tools/check-migration-immutability.sh` and the `migrate_test.go:402` grandfather
+stand exactly as they were, and a database that still HAS the predecessor table
+is left alone — 001 runs there for real and carries its live token rows across.
+Fresh install, completed upgrade, and an upgrade that died between 001's two
+statements all converge on one schema.
+
+This is the existing house rule ("one-time data fixes go in a reconciler, never a
+migration") extended to its schema-bootstrap twin, and it deliberately rejects the
+two alternatives: editing 001 is forbidden outright, and relaxing
+`runSinglePluginMigrations` so an unapplied earlier version is not a hard stop
+would change failure semantics for all nine registered plugins in order to fix
+one.
+
+**2. A plugin migration gets a pre-flight applicability check and partial-progress
+recording. It does NOT get a transaction, and the errors say so.** MariaDB has no
+transactional DDL: every CREATE / ALTER / DROP / RENAME commits implicitly and
+cannot be rolled back. `internal/database/plugin_migration_safety.go` therefore
+buys two specific things and claims nothing more:
+
+- **Pre-flight.** Before the first statement runs, every statement is validated
+  against the schema catalogue *as it will stand at that point in the migration*
+  (the simulation moves forward, so the ordinary CREATE-then-ALTER shape is not
+  falsely refused). If any statement cannot possibly succeed, the migration
+  aborts having executed NOTHING — converting "half-applied and unrecoverable"
+  into "nothing applied, actionable error", which is the closest thing to
+  atomicity available here. Table granularity: it catches the failures that
+  produce unrecoverable states, not every possible SQL error.
+- **Partial-progress recording** in a new runtime table
+  `plugin_migration_progress`. When a statement fails anyway, the number that DID
+  apply is recorded first, so the next boot resumes after them. Keyed by a sha256
+  of the migration text and honoured **only** on a byte-identical match —
+  migrations are immutable so this should never diverge, but a resume that skipped
+  the wrong statements would be far worse than the crash-loop it replaces, so it
+  is checked rather than assumed.
+
+**3. Every uncertain answer degrades to the pre-existing behaviour.** The
+pre-flight **fails open** when `information_schema` cannot be read, and an
+unmatched or missing progress row replays from zero. Refusing every plugin
+migration over a metadata hiccup would be worse than the bug being guarded, and
+a false abort of a real migration is the one outcome worse than the original
+defect.
+
+**4. The guard is a fresh-DB replay, and a SKIP is a failure.** `make test-freshdb`
+/ `cmd/server/freshdb_migration_test.go` replay the real bootstrap against
+genuinely empty MariaDB schemas — one from zero, one from the pre-consolidation
+shape — wired into CI as its own `Fresh-DB Migration Replay` job. The job greps
+for PASS on each named test, so a test that merely *skips* (the way this class
+hid for as long as it did) fails the job. The three DB-backed
+`TestPluginMigration_*` recovery regressions run in the same job and are named in
+the same assertion. `TestFreshDatabase_EveryPluginSchemaApplies` continuing to
+pass is what rules out the pre-flight falsely refusing a real migration.
+
+### Consequences
+
+- A plugin whose old migration is unrunnable now has a sanctioned repair that
+  does not touch the immutability guard. The cost is that the canonical schema is
+  stated in two places — the original migration and the idempotent `002` — which
+  is the price of append-only.
+- Boot-time recovery semantics changed for **all** plugins, not just
+  `foundry_vtt`: a failing migration may now abort earlier (pre-flight) or resume
+  later (progress). Both directions were chosen to be strictly safer than replay,
+  and both fall back to replay when unsure.
+- `plugin_migration_progress` is a runtime table created by the runner itself,
+  not by a migration — it must exist before any plugin migration runs, so it
+  cannot be one.
+- The non-idempotent-DDL CI ratchet the original booking imagined was **not**
+  built. All nine existing offenders are immutable, so a ratchet would have
+  needed a grandfather allowlist and a house-law amendment; the pre-flight
+  addresses the harm those offenders cause without requiring either.
+
+### References
+
+- `internal/database/plugin_migration_safety.go` (package doc states the
+  non-transaction claim in full) · `internal/database/plugin_schema.go`
+- `internal/plugins/foundry_vtt/reconcile_consolidation.go` +
+  `migrations/002_ensure_campaign_tokens.{up,down}.sql`
+- Pins: `cmd/server/freshdb_migration_test.go` ·
+  `internal/database/plugin_migration_recovery_test.go` ·
+  `internal/database/plugin_migration_safety_test.go` ·
+  `internal/plugins/foundry_vtt/reconcile_consolidation_test.go`
+- Booking: `.ai/todo.md` §"Booked by sweep R3" D · dispatch
+  `dispatches/chronicle/C-PLUGIN-MIGRATION-RUNNER.md`

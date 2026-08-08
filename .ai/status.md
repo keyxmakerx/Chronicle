@@ -1186,7 +1186,11 @@ than a semantic one.
 `string` is a `database/sql` error, so the migration on its own would have traded
 a silent preference wipe for a hard 500 on every affected viewer's page.
 
-**Testing without a database.** No MariaDB runs in this build (the sibling FK
+**Testing without a database.** *(CORRECTED 2026-08-08 — the premise below was
+false; see "A real MariaDB was available the whole time" at the end of this
+file. The test design described here is still sound and still runs without a
+database, but it was chosen under a belief that no alternative existed.)* No
+MariaDB was thought to run in this build (the sibling FK
 defect's tests say so already), so the pin replays the SHIPPED migration files in
 version order and asserts the END STATE — 006 declares the cascade and is
 immutable, so any test reading one file in isolation would assert either the bug
@@ -1440,9 +1444,13 @@ GM is actually told about. Fixing the server and leaving the client capped at
 500 would have left the operator exactly as stuck.
 
 **What these do not promise.** Nothing here was exercised against a real
-MariaDB — this environment has none, so the note round trip, the failure tally
+MariaDB, so the note round trip, the failure tally
 and the cursor walk are all proven against fakes that replicate the service
-contracts, not against the database. The note exporter's SQL
+contracts, not against the database. *(CORRECTED 2026-08-08: the reason given
+here — "this environment has none" — was FALSE. A real MariaDB was available
+the whole time; see the section at the end of this file. The tests below are
+still fake-backed, which is now a gap someone can close in an afternoon rather
+than an environmental limit.)* The note exporter's SQL
 (`is_shared = TRUE`, `ORDER BY created_at, id`) is read, not run. The import
 result panel's markup is asserted as a string, not rendered in a browser. And
 media restoration is **not** fixed: a ZIP import still leaves every image
@@ -1898,3 +1906,46 @@ Per `cordinator/decisions/2026-05-19-dispatch-workflow.md`:
 2. Plugin-scoped status updates → append to the owning plugin's `.ai.md` "Recent Work" section. Don't bloat this file.
 3. Cross-cutting decisions → new file in `cordinator/decisions/` + cite from code.
 4. This file's "Cross-cutting state" section gets updated when an arc advances or a release ships.
+
+## A real MariaDB was available the whole time (2026-08-08)
+
+**The belief that this build cannot test against a database was false, and it
+cost real coverage across at least four slices.**
+
+`make docker-up` cannot work here — there is no Docker daemon, and that much is
+true and was measured correctly many times. The error was the inference drawn
+from it. **The MariaDB *server binary* is installed** (`/usr/sbin/mariadbd`,
+10.11.14) and runs directly against a scratch datadir; Docker was never the only
+way to get one. Two small things hid it, and both read as something else:
+
+- `mariadbd` **refuses to start as root** unless given `--user=root`, aborting
+  with *"Please consult the Knowledge Base to find out how to run mysqld as
+  root!"* — which reads like a permissions wall rather than a missing flag.
+- A **Unix socket path over ~107 characters** fails with a *truncated path* in
+  the error message rather than a length complaint, so a socket placed in a long
+  scratch directory looks like the server never started.
+
+**MEASURED 2026-08-08.** Server up in ~3s; `SELECT VERSION()` returns
+10.11.14-MariaDB; DDL and DML round-trip normally; and
+`TestFreshDatabase_EveryPluginSchemaApplies` — which had only ever been reasoned
+about or run once by a verifier — **RUNS AND PASSES in 1.41s against a real
+schema migrated from zero.** So the fresh-install crash fix is proven against a
+database, not against a fake.
+
+**The recipe is now `tools/start-test-db.sh`** (start / `--stop` / `--clean`),
+with `make test-db-up`, `make test-db-down` and `make test-int-local`. It listens
+on **13306, never 3306**, so it cannot collide with or be mistaken for a dev
+server, and it holds only disposable schemas.
+
+**What this unblocks.** Every "proven against fakes, not the database" caveat in
+the R3/R4 books is now a gap that can be closed rather than an environmental
+limit: the notes export round trip, the import failure tally, the sync cursor
+walk, the `calendar_active` cascade fix, and the RSVP flows. The integration
+tests that have been skipping silently — they SKIP rather than FAIL when no
+server answers, which is why nobody noticed — now run.
+
+**The lesson worth keeping.** Every one of those "no database here" notes was
+honest about what it had NOT proven, which is why this was recoverable at all.
+But an environmental limit asserted once gets quoted forward by every later
+slice without being re-measured, and this one was quoted for months. **Re-measure the environment when a limit is
+load-bearing, not just the code.**
