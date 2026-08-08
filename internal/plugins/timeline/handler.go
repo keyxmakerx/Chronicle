@@ -9,6 +9,8 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -88,7 +90,7 @@ func (h *Handler) Index(c echo.Context) error {
 	role := effectiveRole(c, cc)
 	userID := auth.GetUserID(c)
 
-	timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, role, userID)
+	timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -121,7 +123,7 @@ func (h *Handler) Show(c echo.Context) error {
 		return err
 	}
 
-	events, err := h.svc.ListTimelineEvents(ctx, timelineID, role, userID)
+	events, err := h.svc.ListTimelineEvents(ctx, timelineID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -419,36 +421,46 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 		return err
 	}
 
+	// PARTIAL update: absent preserves, explicit null clears, a present value
+	// replaces (sweep R4). The edit modal sends five keys; every key it does
+	// not send used to be a WRITE, which is how a rename cleared the entity
+	// link, the rich-text body, the start/end times and the recurrence.
+	//
+	// visibility_rules is deliberately NOT a member here: PUT
+	// .../standalone-events/:eid/visibility owns it. Absent now means
+	// preserve, which is the whole fix for the per-player rules.
 	var req struct {
-		Name            string  `json:"name"`
-		Description     *string `json:"description"`
-		DescriptionHTML *string `json:"description_html"`
-		EntityID        *string `json:"entity_id"`
-		Year            int     `json:"year"`
-		Month           int     `json:"month"`
-		Day             int     `json:"day"`
-		StartHour       *int    `json:"start_hour"`
-		StartMinute     *int    `json:"start_minute"`
-		EndYear         *int    `json:"end_year"`
-		EndMonth        *int    `json:"end_month"`
-		EndDay          *int    `json:"end_day"`
-		EndHour         *int    `json:"end_hour"`
-		EndMinute       *int    `json:"end_minute"`
-		IsRecurring     bool    `json:"is_recurring"`
-		RecurrenceType  *string `json:"recurrence_type"`
-		Category        *string `json:"category"`
-		Visibility      string  `json:"visibility"`
-		Label           *string `json:"label"`
-		Color           *string `json:"color"`
+		Name            patch.Field[string] `json:"name"`
+		Description     patch.Field[string] `json:"description"`
+		DescriptionHTML patch.Field[string] `json:"description_html"`
+		EntityID        patch.Field[string] `json:"entity_id"`
+		Year            patch.Field[int]    `json:"year"`
+		Month           patch.Field[int]    `json:"month"`
+		Day             patch.Field[int]    `json:"day"`
+		StartHour       patch.Field[int]    `json:"start_hour"`
+		StartMinute     patch.Field[int]    `json:"start_minute"`
+		EndYear         patch.Field[int]    `json:"end_year"`
+		EndMonth        patch.Field[int]    `json:"end_month"`
+		EndDay          patch.Field[int]    `json:"end_day"`
+		EndHour         patch.Field[int]    `json:"end_hour"`
+		EndMinute       patch.Field[int]    `json:"end_minute"`
+		IsRecurring     patch.Field[bool]   `json:"is_recurring"`
+		RecurrenceType  patch.Field[string] `json:"recurrence_type"`
+		Category        patch.Field[string] `json:"category"`
+		Visibility      patch.Field[string] `json:"visibility"`
+		Label           patch.Field[string] `json:"label"`
+		Color           patch.Field[string] `json:"color"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
 	// Only Owners can set dm_only visibility; Scribes default to 'everyone'.
+	// The downgrade only applies to a visibility the caller actually SENT —
+	// an absent visibility is not an attempt to set dm_only.
 	visibility := req.Visibility
-	if visibility == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
-		visibility = "everyone"
+	if v, ok := req.Visibility.Get(); ok && v == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+		visibility = patch.Of("everyone")
 	}
 
 	if err := h.svc.UpdateStandaloneEvent(ctx, timelineID, eventID, UpdateTimelineEventInput{
@@ -475,8 +487,10 @@ func (h *Handler) UpdateStandaloneEventAPI(c echo.Context) error {
 	}); err != nil {
 		return err
 	}
-	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineStandaloneEventUpdated, "timeline_standalone_event", eventID, req.Name,
-		map[string]any{"timeline_id": timelineID, "year": req.Year, "month": req.Month, "day": req.Day, "visibility": visibility})
+	// The audit payload records what the request CARRIED; an absent key logs
+	// its zero, which is honest — nothing was asked of that field.
+	h.logTimelineAudit(c, cc.Campaign.ID, audit.ActionTimelineStandaloneEventUpdated, "timeline_standalone_event", eventID, req.Name.Val(""),
+		map[string]any{"timeline_id": timelineID, "year": req.Year.Val(0), "month": req.Month.Val(0), "day": req.Day.Val(0), "visibility": visibility.Val("")})
 	return c.NoContent(http.StatusOK)
 }
 
@@ -514,7 +528,7 @@ func (h *Handler) TimelineDataAPI(c echo.Context) error {
 		return err
 	}
 
-	events, err := h.svc.ListTimelineEvents(ctx, timelineID, role, userID)
+	events, err := h.svc.ListTimelineEvents(ctx, timelineID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -865,31 +879,15 @@ func (h *Handler) UpdateStandaloneEventVisibilityAPI(c echo.Context) error {
 		return apperror.NewBadRequest("visibility must be 'everyone' or 'dm_only'")
 	}
 
-	e.Visibility = req.Visibility
-	e.VisibilityRules = req.VisibilityRules
-
+	// This endpoint owns visibility and visibility_rules and nothing else,
+	// so it now SENDS only those two. It used to re-echo all twenty fields
+	// off the loaded row to stop the service blanking them — the very
+	// pattern the sweep-R4 ruling replaced with server-side presence-merge.
+	// Passing the rules through FromPtr keeps this endpoint's own semantics
+	// intact: a nil visibility_rules here means "no rules", i.e. clear.
 	if err := h.svc.UpdateStandaloneEvent(ctx, timelineID, eventID, UpdateTimelineEventInput{
-		Name:            e.Name,
-		Description:     e.Description,
-		DescriptionHTML: e.DescriptionHTML,
-		EntityID:        e.EntityID,
-		Year:            e.Year,
-		Month:           e.Month,
-		Day:             e.Day,
-		StartHour:       e.StartHour,
-		StartMinute:     e.StartMinute,
-		EndYear:         e.EndYear,
-		EndMonth:        e.EndMonth,
-		EndDay:          e.EndDay,
-		EndHour:         e.EndHour,
-		EndMinute:       e.EndMinute,
-		IsRecurring:     e.IsRecurring,
-		RecurrenceType:  e.RecurrenceType,
-		Category:        e.Category,
-		Visibility:      req.Visibility,
-		VisibilityRules: req.VisibilityRules,
-		Label:           e.Label,
-		Color:           e.Color,
+		Visibility:      patch.Of(req.Visibility),
+		VisibilityRules: patch.FromPtr(req.VisibilityRules),
 	}); err != nil {
 		return err
 	}
@@ -931,7 +929,7 @@ func (h *Handler) PreviewAPI(c echo.Context) error {
 	role := effectiveRole(c, cc)
 	userID := auth.GetUserID(c)
 
-	timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, role, userID)
+	timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return err
 	}
@@ -967,7 +965,7 @@ func (h *Handler) EmbedTimeline(c echo.Context) error {
 	timelineID := c.QueryParam("timeline_id")
 
 	if timelineID == "" {
-		timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, role, userID)
+		timelines, err := h.svc.ListTimelines(ctx, cc.Campaign.ID, permissions.RequestViewer(role, userID))
 		if err != nil {
 			return err
 		}

@@ -13,6 +13,8 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
@@ -128,7 +130,7 @@ func (h *Handler) requireVisibleCalendar(c echo.Context, calendarID, campaignID 
 		return nil, err
 	}
 	cc := campaigns.GetCampaignContext(c)
-	if !calendarVisibleTo(cal, cc.VisibilityRole(), auth.GetUserID(c)) {
+	if !calendarVisibleTo(cal, permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c))) {
 		return nil, apperror.NewNotFound("calendar not found")
 	}
 	return cal, nil
@@ -182,17 +184,27 @@ func (h *Handler) Index(c echo.Context) error {
 		if cc.MemberRole >= campaigns.RoleOwner {
 			return h.ShowBuilder(c)
 		}
+		// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). A non-owner with zero calendars
+		// used to be sent to the V2 shell, whose empty state is the designed
+		// surface for exactly this case. The Bench has its own ("No calendar
+		// yet"), and it is the surface a non-owner should be looking at. Still
+		// 302 rather than 301: a PERMANENT redirect whose target depends on the
+		// requester's ROLE is a cache poisoning waiting to happen, and this
+		// branch is the reason that sentence is at the top of this handler.
 		return c.Redirect(http.StatusFound,
-			"/campaigns/"+cc.Campaign.ID+"/calendar/v2")
+			"/campaigns/"+cc.Campaign.ID+"/apps/calendar")
 	}
 
-	// C-CAL-V1-V2-CUTOVER: any campaign WITH calendars goes to V2 — the active
-	// calendar + the multi-cal switcher replace the V1 single/list views. Only
-	// the 0-calendar owner branch above stays on V1 (no V2 create flow yet; the
-	// V2 empty state links back here). The V1 list templates are retired in a
-	// follow-on.
+	// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). Any campaign WITH calendars goes to
+	// THE BENCH — the product's front door — rather than to the V2 shell.
+	//
+	// The cutover reasoning is unchanged and only its destination moves: the V1
+	// single/list views are retired, and the surface that replaced them has
+	// itself been replaced. Only the 0-calendar OWNER branch above stays here,
+	// because that is the create flow. Still 301: this leg's target does not
+	// depend on the requester.
 	return c.Redirect(http.StatusMovedPermanently,
-		"/campaigns/"+cc.Campaign.ID+"/calendar/v2")
+		"/campaigns/"+cc.Campaign.ID+"/apps/calendar")
 }
 
 // EmbedCalendar returns a compact calendar grid fragment for dashboard embedding.
@@ -211,7 +223,11 @@ func (h *Handler) EmbedCalendar(c echo.Context) error {
 	var cal *Calendar
 	var err error
 	if calID != "" {
-		cal, err = h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+		// W5a: the embed is player-reachable by ID (route param OR ?calendarId=
+		// from a dashboard block config), so it takes the visibility gate, not
+		// the bare campaign check — otherwise a player who guesses a hidden
+		// calendar's ID gets the whole month grid and its `everyone` events.
+		cal, err = h.requireVisibleCalendar(c, calID, cc.Campaign.ID)
 		if err != nil {
 			return middleware.Render(c, http.StatusOK, CalendarEmbedEmpty(cc))
 		}
@@ -318,9 +334,19 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	// step is mode-agnostic (the settings editor, not the V1 view). The full
 	// V1→V2 cutover (C-CAL-V1-V2-CUTOVER) since 301'd every V1 view route to V2,
 	// so the settings landing below is itself a preserved route, not a V1 view.
+	// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED) — RE-POINTED, AND THE LANDING IS
+	// REDUCED, WHICH IS STATED RATHER THAN HIDDEN.
+	//
+	// A freshly-created REAL-LIFE calendar landed on the V2 shell BECAUSE THAT
+	// IS WHERE THE WORLDSTATE FEATURES LIVE — the comment that used to sit here
+	// said so. The Bench renders the real-world Block with a DASHED SKYBAND
+	// PLACEHOLDER, so this landing is genuinely poorer today. It is re-pointed
+	// anyway, on the signed reasoning that a newly-created calendar should land
+	// on the product's front door rather than on the surface being retired, and
+	// R2-5 (C-CALV4-SKY) is the slice that fills the band back in.
 	if mode == ModeRealLife {
 		return c.Redirect(http.StatusSeeOther,
-			fmt.Sprintf("/campaigns/%s/calendar/v2/%s", cc.Campaign.ID, cal.ID))
+			fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID))
 	}
 	return c.Redirect(http.StatusSeeOther,
 		fmt.Sprintf("/campaigns/%s/calendars/%s/settings", cc.Campaign.ID, cal.ID))
@@ -416,12 +442,28 @@ func (h *Handler) UpdateMonthsAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	if err := h.svc.SetMonths(ctx, cal.ID, months); err != nil {
+	// THE SAVE ALWAYS SUCCEEDS AND THE RESPONSE CARRIES THE WARNING
+	// (C-CALV4-GAMEREADY §9 [GR-18] under [GR-SIGN-B] — WARN, NEVER REFUSE).
+	// The service computes both numbers; this handler only renders them, and it
+	// renders the service's own Sentence() rather than assembling wording here.
+	impact, err := h.svc.SetMonths(ctx, cal.ID, months)
+	if err != nil {
 		return err
 	}
+	auditMeta := map[string]any{"count": len(months)}
+	if impact.Any() {
+		auditMeta["events_stranded"] = impact.Stranded
+		auditMeta["events_shifted"] = impact.Shifted
+	}
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarMonthsSet, "calendar", cal.ID, cal.Name,
-		map[string]any{"count": len(months)})
-	return nil
+		auditMeta)
+	// The body is ADDITIVE: this endpoint previously answered 200 with nothing,
+	// so a client that ignores it behaves exactly as before.
+	return c.JSON(http.StatusOK, map[string]any{
+		"events_stranded": impact.Stranded,
+		"events_shifted":  impact.Shifted,
+		"warning":         impact.Sentence(),
+	})
 }
 
 // UpdateWeekdaysAPI replaces all weekdays.
@@ -532,6 +574,30 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
+	}
+
+	// AN UNSUPPORTED recurrence_type IS A 400, NOT A 201
+	// (C-CALV4-GAMEREADY §6, [GR-12]).
+	//
+	// This handler used to store "yearly", "daily", "hourly", "WEEKLY" and
+	// "🐉" with a 201 and no validation; OccursOn then sent every one of them
+	// to `default: return onBase`, so the caller got a created event that fired
+	// exactly ONCE and nothing anywhere said so. It is in a playability slice
+	// because it is the FOUNDRY SYNC MODULE'S path, not the GM's: the v4 editor
+	// cannot produce a bad value, but a case-different "WEEKLY" from an
+	// integration is a silently non-recurring event, and the operator will
+	// debug the wrong system.
+	//
+	// EXACT AND CASE-SENSITIVE — reject, never coerce. Coercing "WEEKLY" to
+	// "weekly" would make an undocumented spelling a supported one.
+	//
+	// It is HANDLER work by house rule: input validation on a bound request
+	// field, not business logic. It deliberately does NOT get a second copy in
+	// the service — two validators with two accepted sets is how they diverge,
+	// which is why both handlers share IsSupportedRecurrenceType and the set is
+	// stated exactly once, beside the constants it names.
+	if req.RecurrenceType != nil && !IsSupportedRecurrenceType(*req.RecurrenceType) {
+		return apperror.NewBadRequest("unsupported recurrence_type: " + *req.RecurrenceType)
 	}
 
 	// Get user ID from session context.
@@ -741,7 +807,7 @@ func (h *Handler) GetEventAPI(c echo.Context) error {
 	// THE SAME VIEWER FILTER THE GRID USES. filterEventsByUser compacts IN
 	// PLACE, so it is handed a fresh one-element slice and the result is read
 	// rather than the input (the COMMON §7 slice trap, in miniature).
-	if len(filterEventsByUser([]Event{*evt}, cc.VisibilityRole(), auth.GetUserID(c))) == 0 {
+	if len(filterEventsByUser([]Event{*evt}, permissions.RequestViewer(cc.VisibilityRole(), auth.GetUserID(c)))) == 0 {
 		return notFound
 	}
 	return c.JSON(http.StatusOK, newEventEditorRecord(*evt, cc.MemberRole >= campaigns.RoleScribe))
@@ -759,42 +825,60 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 		return err
 	}
 
+	// PARTIAL update: absent preserves, explicit null clears, a present value
+	// replaces (sweep R4). is_recurring and all_day used to be value-typed
+	// here, so any client that did not carry them turned recurrence off and
+	// all-day off on somebody's event.
 	var req struct {
-		Name               string  `json:"name"`
-		Description        *string `json:"description"`
-		DescriptionHTML    *string `json:"description_html"`
-		EntityID           *string `json:"entity_id"`
-		Year               int     `json:"year"`
-		Month              int     `json:"month"`
-		Day                int     `json:"day"`
-		StartHour          *int    `json:"start_hour"`
-		StartMinute        *int    `json:"start_minute"`
-		EndYear            *int    `json:"end_year"`
-		EndMonth           *int    `json:"end_month"`
-		EndDay             *int    `json:"end_day"`
-		EndHour            *int    `json:"end_hour"`
-		EndMinute          *int    `json:"end_minute"`
-		IsRecurring        bool    `json:"is_recurring"`
-		RecurrenceType     *string `json:"recurrence_type"`
-		RecurrenceInterval *int    `json:"recurrence_interval"`
-		Visibility         string  `json:"visibility"`
-		VisibilityRules    *string `json:"visibility_rules"`
-		Category           *string `json:"category"`
+		Name               patch.Field[string] `json:"name"`
+		Description        patch.Field[string] `json:"description"`
+		DescriptionHTML    patch.Field[string] `json:"description_html"`
+		EntityID           patch.Field[string] `json:"entity_id"`
+		Year               patch.Field[int]    `json:"year"`
+		Month              patch.Field[int]    `json:"month"`
+		Day                patch.Field[int]    `json:"day"`
+		StartHour          patch.Field[int]    `json:"start_hour"`
+		StartMinute        patch.Field[int]    `json:"start_minute"`
+		EndYear            patch.Field[int]    `json:"end_year"`
+		EndMonth           patch.Field[int]    `json:"end_month"`
+		EndDay             patch.Field[int]    `json:"end_day"`
+		EndHour            patch.Field[int]    `json:"end_hour"`
+		EndMinute          patch.Field[int]    `json:"end_minute"`
+		IsRecurring        patch.Field[bool]   `json:"is_recurring"`
+		RecurrenceType     patch.Field[string] `json:"recurrence_type"`
+		RecurrenceInterval patch.Field[int]    `json:"recurrence_interval"`
+		Visibility         patch.Field[string] `json:"visibility"`
+		VisibilityRules    patch.Field[string] `json:"visibility_rules"`
+		Category           patch.Field[string] `json:"category"`
 		// Tier + AllDay: internal-UI-only binding completion (C-CAL-LARGE-EDITOR).
 		// See CreateEventAPI for the rationale — existing columns/inputs, no
 		// schema, no new endpoint, external module API untouched.
-		Tier   *string `json:"tier"`
-		AllDay bool    `json:"all_day"`
+		Tier   patch.Field[string] `json:"tier"`
+		AllDay patch.Field[bool]   `json:"all_day"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
+	// The same 400 as CreateEventAPI ([GR-12]) — see the long note there for
+	// why it is handler work and why it never coerces.
+	//
+	// IT VALIDATES ONLY A VALUE THE CALLER ACTUALLY SENT. RecurrenceType is a
+	// patch.Field, so ABSENT preserves the stored type and an explicit null
+	// clears it; neither is a value to reject, and rejecting an absent key
+	// would turn every partial PUT that does not mention recurrence into a 400.
+	// Get() is false for both of those states and true only for a present
+	// value, which is exactly the set this guard is about.
+	if rt, ok := req.RecurrenceType.Get(); ok && !IsSupportedRecurrenceType(rt) {
+		return apperror.NewBadRequest("unsupported recurrence_type: " + rt)
+	}
+
 	// Only co-DMs (Owner or DM-grantee) can set dm_only visibility; everyone
 	// else is downgraded to 'everyone'. Co-DM capability (C-CAL-COGM-CAPABILITY).
+	// The downgrade applies only to a visibility the caller actually SENT.
 	visibility := req.Visibility
-	if visibility == "dm_only" && !cc.CanAuthorDmOnly() && !cc.IsSiteAdmin {
-		visibility = "everyone"
+	if v, ok := req.Visibility.Get(); ok && v == "dm_only" && !cc.CanAuthorDmOnly() && !cc.IsSiteAdmin {
+		visibility = patch.Of("everyone")
 	}
 
 	if err := h.svc.UpdateEvent(ctx, eventID, UpdateEventInput{
@@ -823,8 +907,8 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	}); err != nil {
 		return err
 	}
-	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarEventUpdated, "calendar_event", eventID, req.Name,
-		map[string]any{"year": req.Year, "month": req.Month, "day": req.Day, "visibility": visibility})
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarEventUpdated, "calendar_event", eventID, req.Name.Val(""),
+		map[string]any{"year": req.Year.Val(0), "month": req.Month.Val(0), "day": req.Day.Val(0), "visibility": visibility.Val("")})
 	return nil
 }
 
@@ -1278,7 +1362,10 @@ func (h *Handler) UpcomingEventsFragment(c echo.Context) error {
 	var cal *Calendar
 	var err error
 	if calID != "" {
-		cal, err = h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+		// W5a: player-reachable by ID (the calendar_preview block lazy-loads it),
+		// so it takes the visibility gate — a hidden calendar answers with the
+		// same empty fragment a missing one does.
+		cal, err = h.requireVisibleCalendar(c, calID, cc.Campaign.ID)
 		if err != nil {
 			return middleware.Render(c, http.StatusOK, UpcomingEventsEmpty())
 		}
@@ -1316,7 +1403,10 @@ func (h *Handler) ShowTimeline(c echo.Context) error {
 	ctx := c.Request().Context()
 	calID := c.Param("calId")
 
-	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	// W5a: player-reachable by ID, so it takes the visibility gate — a calendar
+	// hidden from this viewer 404s exactly as a missing one does, so its name
+	// and its `everyone` events never reach the timeline.
+	cal, err := h.requireVisibleCalendar(c, calID, cc.Campaign.ID)
 	if err != nil {
 		return err
 	}
@@ -1427,10 +1517,19 @@ func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 		return c.JSON(http.StatusOK, result)
 	}
 
-	// Apply the import to the existing calendar.
-	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
+	// Apply the import to the EXISTING calendar — the one ApplyImport path in
+	// this file that can land on events somebody already authored, so the
+	// month-edit impact is recorded rather than dropped (§9 [GR-18]).
+	impact, err := h.svc.ApplyImport(ctx, cal.ID, result)
+	if err != nil {
 		slog.Error("import: failed to apply", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to apply import"))
+	}
+	if impact.Any() {
+		slog.Warn("calendar import re-dated existing events",
+			slog.String("calendar_id", cal.ID),
+			slog.Int("events_stranded", impact.Stranded),
+			slog.Int("events_shifted", impact.Shifted))
 	}
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarImported, "calendar", cal.ID, cal.Name,
 		map[string]any{
@@ -1541,8 +1640,9 @@ func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarCreated, "calendar", cal.ID, cal.Name,
 		map[string]any{"mode": string(ModeFantasy), "via": "import_setup"})
 
-	// Apply imported sub-resources.
-	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
+	// Apply imported sub-resources. The impact is not surfaced here: this
+	// calendar was created three lines above, so it carries no events yet.
+	if _, err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
 		slog.Error("import-setup: failed to apply", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to apply import"))
 	}

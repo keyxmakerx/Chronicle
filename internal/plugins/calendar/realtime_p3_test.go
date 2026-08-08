@@ -201,7 +201,7 @@ func TestRealTimeP3_ImportRoundTripPreservesRT(t *testing.T) {
 		getByIDFn:     func(_ context.Context, _ string) (*Calendar, error) { return target, nil },
 		applyImportFn: func(_ context.Context, cal *Calendar, _ *ImportResult) error { applied = cal; return nil },
 	}
-	if err := rtServiceRepo(repo, rtFixedClock).ApplyImport(context.Background(), "cal-target", result); err != nil {
+	if _, err := rtServiceRepo(repo, rtFixedClock).ApplyImport(context.Background(), "cal-target", result); err != nil {
 		t.Fatalf("import onto a fantasy target should succeed: %v", err)
 	}
 	if applied == nil {
@@ -237,7 +237,7 @@ func TestRealTimeP3_ImportBadZoneRejected(t *testing.T) {
 		getByIDFn:     func(_ context.Context, _ string) (*Calendar, error) { return target, nil },
 		applyImportFn: func(_ context.Context, _ *Calendar, _ *ImportResult) error { wrote = true; return nil },
 	}
-	err := rtServiceRepo(repo, rtFixedClock).ApplyImport(context.Background(), "cal-t", result)
+	_, err := rtServiceRepo(repo, rtFixedClock).ApplyImport(context.Background(), "cal-t", result)
 	if !isAppErrorType(err, "validation_error") {
 		t.Fatalf("err = %v, want validation_error naming the zone", err)
 	}
@@ -259,7 +259,7 @@ func TestRealTimeP3_ImportOntoRealTimeStillRejected(t *testing.T) {
 	result := &ImportResult{
 		Settings: ImportedSettings{TracksRealTime: true, RealTimeZone: rtStrPtr("Europe/London"), HoursPerDay: 24},
 	}
-	err := rtServiceRepo(repo, rtFixedClock).ApplyImport(context.Background(), "cal-rt", result)
+	_, err := rtServiceRepo(repo, rtFixedClock).ApplyImport(context.Background(), "cal-rt", result)
 	if !isAppErrorType(err, "validation_error") {
 		t.Fatalf("err = %v, want validation_error (W8 reject-onto-RT)", err)
 	}

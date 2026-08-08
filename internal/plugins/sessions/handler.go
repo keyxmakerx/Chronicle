@@ -13,6 +13,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -208,6 +209,43 @@ func (h *Handler) CreateSession(c echo.Context) error {
 	return middleware.HTMXRedirect(c, "/campaigns/"+cc.Campaign.ID+"/sessions/"+session.ID)
 }
 
+// updateSessionRequest is the wire form of PUT /campaigns/:id/sessions/:sid.
+//
+// It is a PARTIAL update: absent preserves, explicit null clears, a present
+// value replaces (sweep R4; see UpdateSessionInput and API-CONTRACT.md).
+// patch.Field is what makes "absent" and "null" different here — a plain
+// pointer collapses them, which is how "Mark Complete" (a {status}-only body)
+// used to wipe the schedule, the summary, the in-world date and the whole
+// recurrence config, and with it the next-occurrence generator.
+//
+// It is a named type, rather than the anonymous struct it used to be, so the
+// regression test can decode the real templ clients' literal request bodies
+// through the real binder.
+type updateSessionRequest struct {
+	Name                patch.Field[string] `json:"name"`
+	Summary             patch.Field[string] `json:"summary"`
+	ScheduledDate       patch.Field[string] `json:"scheduled_date"`
+	ScheduledTime       patch.Field[string] `json:"scheduled_time"`
+	CalendarYear        patch.Field[int]    `json:"calendar_year"`
+	CalendarMonth       patch.Field[int]    `json:"calendar_month"`
+	CalendarDay         patch.Field[int]    `json:"calendar_day"`
+	Status              patch.Field[string] `json:"status"`
+	IsRecurring         patch.Field[bool]   `json:"is_recurring"`
+	RecurrenceType      patch.Field[string] `json:"recurrence_type"`
+	RecurrenceInterval  patch.Field[int]    `json:"recurrence_interval"`
+	RecurrenceDayOfWeek patch.Field[int]    `json:"recurrence_day_of_week"`
+	RecurrenceEndDate   patch.Field[string] `json:"recurrence_end_date"`
+}
+
+// toInput maps the wire request onto the service input. Pure field carriage —
+// the presence state travels with the value, so no logic belongs here. The
+// direct conversion is deliberate: it compiles only while the two structs
+// stay field-for-field identical, so a field added to one and not the other
+// is a build error rather than a silently-dropped key.
+func (r updateSessionRequest) toInput() UpdateSessionInput {
+	return UpdateSessionInput(r)
+}
+
 // UpdateSessionAPI updates a session.
 // PUT /campaigns/:id/sessions/:sid
 func (h *Handler) UpdateSessionAPI(c echo.Context) error {
@@ -218,40 +256,12 @@ func (h *Handler) UpdateSessionAPI(c echo.Context) error {
 		return err
 	}
 
-	var req struct {
-		Name                string  `json:"name"`
-		Summary             *string `json:"summary"`
-		ScheduledDate       *string `json:"scheduled_date"`
-		ScheduledTime       *string `json:"scheduled_time"`
-		CalendarYear        *int    `json:"calendar_year"`
-		CalendarMonth       *int    `json:"calendar_month"`
-		CalendarDay         *int    `json:"calendar_day"`
-		Status              string  `json:"status"`
-		IsRecurring         bool    `json:"is_recurring"`
-		RecurrenceType      *string `json:"recurrence_type"`
-		RecurrenceInterval  int     `json:"recurrence_interval"`
-		RecurrenceDayOfWeek *int    `json:"recurrence_day_of_week"`
-		RecurrenceEndDate   *string `json:"recurrence_end_date"`
-	}
+	var req updateSessionRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
 
-	nextSession, err := h.svc.UpdateSession(c.Request().Context(), sessionID, UpdateSessionInput{
-		Name:                req.Name,
-		Summary:             req.Summary,
-		ScheduledDate:       req.ScheduledDate,
-		ScheduledTime:       req.ScheduledTime,
-		CalendarYear:        req.CalendarYear,
-		CalendarMonth:       req.CalendarMonth,
-		CalendarDay:         req.CalendarDay,
-		Status:              req.Status,
-		IsRecurring:         req.IsRecurring,
-		RecurrenceType:      req.RecurrenceType,
-		RecurrenceInterval:  req.RecurrenceInterval,
-		RecurrenceDayOfWeek: req.RecurrenceDayOfWeek,
-		RecurrenceEndDate:   req.RecurrenceEndDate,
-	})
+	nextSession, err := h.svc.UpdateSession(c.Request().Context(), sessionID, req.toInput())
 	if err != nil {
 		return c.JSON(apperror.SafeCode(err), map[string]string{"error": apperror.SafeMessage(err)})
 	}

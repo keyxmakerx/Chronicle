@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
@@ -475,14 +476,27 @@ func (h *APIHandler) CreateEntity(c echo.Context) error {
 }
 
 // apiUpdateEntityRequest is the JSON body for updating an entity via the API.
+// This is a PARTIAL update: an ABSENT key preserves the stored value, an
+// EXPLICIT null clears it, a present value replaces it (sweep R4, ruled
+// 2026-08-07). patch.Field is what makes absent and null different — a
+// plain pointer collapses them.
+//
+// It used to bind is_private to a value-typed bool, and the documented
+// contract said so: "absent means public". Nobody designed that. The
+// Foundry actor-sync pushes {name} alone on a rename, which bound
+// is_private=false and PUBLISHED a hidden character entity to every player
+// in the campaign. There was no parent_id member at all, so every update
+// also detached the entity from the Chronicle hierarchy; the field is here
+// now and absent preserves.
 type apiUpdateEntityRequest struct {
-	Name              string         `json:"name"`
-	TypeLabel         string         `json:"type_label"`
-	IsPrivate         bool           `json:"is_private"`
-	Entry             string         `json:"entry"`
-	PlayerNotes       *string        `json:"player_notes"`
-	FieldsData        map[string]any `json:"fields_data"`
-	ExpectedUpdatedAt *time.Time     `json:"expected_updated_at"`
+	Name              patch.Field[string] `json:"name"`
+	TypeLabel         patch.Field[string] `json:"type_label"`
+	ParentID          patch.Field[string] `json:"parent_id"`
+	IsPrivate         patch.Field[bool]   `json:"is_private"`
+	Entry             patch.Field[string] `json:"entry"`
+	PlayerNotes       *string             `json:"player_notes"`
+	FieldsData        map[string]any      `json:"fields_data"`
+	ExpectedUpdatedAt *time.Time          `json:"expected_updated_at"`
 }
 
 // UpdateEntity updates an existing entity.
@@ -505,16 +519,15 @@ func (h *APIHandler) UpdateEntity(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	// syncapi callers always provide is_private in the request body
-	// (it's documented in the sync contract). Pass through as an explicit
-	// pointer so the service writes it. UpdateEntityInput.IsPrivate is
-	// nil-preserving since C-PERMISSIONS-INLINE-COMPONENT made the in-app
-	// form-side handlers stop carrying the field.
-	isPrivate := req.IsPrivate
+	// is_private: absent (and an explicit null, which a NOT NULL column has
+	// no room for) yields a nil pointer, which the service reads as
+	// "preserve"; a present true/false is written. Before sweep R4 an absent
+	// key bound false and un-privated the entity.
 	updated, err := h.entitySvc.Update(ctx, entityID, entities.UpdateEntityInput{
 		Name:              req.Name,
 		TypeLabel:         req.TypeLabel,
-		IsPrivate:         &isPrivate,
+		ParentID:          req.ParentID,
+		IsPrivate:         req.IsPrivate.Ptr(nil),
 		Entry:             req.Entry,
 		PlayerNotes:       req.PlayerNotes,
 		FieldsData:        req.FieldsData,
@@ -638,8 +651,13 @@ func (h *APIHandler) DeleteEntity(c echo.Context) error {
 
 // --- Sync Endpoint ---
 
-// syncMaxPullPages caps the number of internal pages fetched during sync pull
-// to prevent unbounded queries on large campaigns.
+// syncMaxPullPages caps the number of internal pages ONE pull request walks,
+// so a single request cannot hold a connection open across an unbounded table
+// scan. With the cursor (sweep R4 stage 18) this is a page size rather than a
+// ceiling: when the walk stops early the response carries a next_cursor that
+// resumes it. Before the cursor existed it really was a ceiling, and every
+// entity past syncMaxPullPages*syncPageSize in list order could never sync at
+// all — has_more said so and the client had no way to act on it.
 const syncMaxPullPages = 10
 
 // syncPageSize is the per-page size used for internal pagination during sync.
@@ -648,19 +666,28 @@ const syncPageSize = 100
 // syncRequest is the JSON body for the bulk sync endpoint.
 type syncRequest struct {
 	Since   *time.Time   `json:"since"`   // Pull entities modified after this time.
+	Cursor  string       `json:"cursor"`  // Opaque resume token from a previous response's next_cursor. Empty starts at the beginning.
 	Changes []syncChange `json:"changes"` // Batch of create/update/delete operations.
 }
 
 // syncChange describes a single mutation in a sync batch.
+// The content fields are patch.Field for the same reason
+// apiUpdateEntityRequest's are: on an "update" action this struct is a
+// PARTIAL body, and absent must preserve rather than write (sweep R4).
+// Leaving this path value-typed while fixing its single-entity twin would
+// have left the same privacy break reachable through the batch door.
+// On a "create" action there is nothing to preserve, so the create branch
+// reads each field with its zero default.
 type syncChange struct {
-	Action       string         `json:"action"`         // "create", "update", "delete".
-	EntityID     string         `json:"entity_id"`      // Required for update/delete.
-	EntityTypeID int            `json:"entity_type_id"` // Required for create.
-	Name         string         `json:"name"`
-	TypeLabel    string         `json:"type_label"`
-	IsPrivate    bool           `json:"is_private"`
-	Entry        string         `json:"entry"`
-	FieldsData   map[string]any `json:"fields_data"`
+	Action       string              `json:"action"`         // "create", "update", "delete".
+	EntityID     string              `json:"entity_id"`      // Required for update/delete.
+	EntityTypeID int                 `json:"entity_type_id"` // Required for create.
+	Name         patch.Field[string] `json:"name"`
+	TypeLabel    patch.Field[string] `json:"type_label"`
+	ParentID     patch.Field[string] `json:"parent_id"`
+	IsPrivate    patch.Field[bool]   `json:"is_private"`
+	Entry        patch.Field[string] `json:"entry"`
+	FieldsData   map[string]any      `json:"fields_data"`
 }
 
 // syncResult describes the outcome of a single sync operation.
@@ -676,7 +703,15 @@ type syncResponse struct {
 	ServerTime time.Time         `json:"server_time"`
 	Entities   []entities.Entity `json:"entities"`
 	HasMore    bool              `json:"has_more"`
-	Results    []syncResult      `json:"results"`
+
+	// NextCursor resumes the pull where this response stopped. Non-empty
+	// exactly when HasMore is true. A client walks a pull by re-POSTing the
+	// SAME since with this cursor until has_more is false, then keeps the
+	// server_time from the FIRST response of that walk as the next since —
+	// not the last, which would skip anything modified mid-walk.
+	NextCursor string `json:"next_cursor,omitempty"`
+
+	Results []syncResult `json:"results"`
 }
 
 // Sync performs a bidirectional sync operation.
@@ -684,7 +719,13 @@ type syncResponse struct {
 //
 // Pull: if "since" is provided, returns entities modified after that timestamp.
 // Push: if "changes" is provided, applies the batch of create/update/delete operations.
-// Returns server_time for the client to use as the next "since" parameter.
+//
+// One request walks at most syncMaxPullPages*syncPageSize entities. When the
+// campaign is larger than that the response sets has_more and next_cursor;
+// the client re-POSTs the SAME since with that cursor until has_more is
+// false. server_time from the FIRST response of a completed walk is the next
+// since — taking it from the last response would skip anything modified while
+// the walk was in flight.
 func (h *APIHandler) Sync(c echo.Context) error {
 	key := GetAPIKey(c)
 	if key == nil {
@@ -712,11 +753,19 @@ func (h *APIHandler) Sync(c echo.Context) error {
 	// Pull: get entities modified since the given timestamp.
 	var pulledEntities []entities.Entity
 	hasMore := false
+	nextCursor := ""
 
 	if req.Since != nil {
 		since := *req.Since
 		syncUserID := h.resolveUserID(c)
-		for page := 1; page <= syncMaxPullPages; page++ {
+
+		startPage, err := decodeSyncCursor(req.Cursor)
+		if err != nil {
+			return err
+		}
+		endPage := startPage + syncMaxPullPages - 1
+
+		for page := startPage; page <= endPage; page++ {
 			items, total, err := h.entitySvc.List(ctx, campaignID, 0, role, syncUserID, entities.ListOptions{
 				Page:    page,
 				PerPage: syncPageSize,
@@ -732,12 +781,21 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				}
 			}
 
-			// Check if there are more pages beyond what we've fetched.
+			// A short page means we ran off the end of the list even if
+			// `total` says otherwise (rows deleted mid-walk), so stop.
+			if len(items) < syncPageSize {
+				break
+			}
+			// Everything the campaign has is now behind us.
 			if page*syncPageSize >= total {
 				break
 			}
-			if page == syncMaxPullPages && page*syncPageSize < total {
+			// Out of budget for this request, but not out of entities:
+			// hand the caller the token that resumes the walk. Without
+			// this the remaining entities were unreachable forever.
+			if page == endPage {
 				hasMore = true
+				nextCursor = encodeSyncCursor(page + 1)
 			}
 		}
 	}
@@ -753,11 +811,13 @@ func (h *APIHandler) Sync(c echo.Context) error {
 
 		switch change.Action {
 		case "create":
+			// Create has no stored value to preserve, so each field
+			// reads with its zero default: absent is the same as empty.
 			entity, err := h.entitySvc.Create(ctx, campaignID, key.UserID, entities.CreateEntityInput{
-				Name:         change.Name,
+				Name:         change.Name.Val(""),
 				EntityTypeID: change.EntityTypeID,
-				TypeLabel:    change.TypeLabel,
-				IsPrivate:    change.IsPrivate,
+				TypeLabel:    change.TypeLabel.Val(""),
+				IsPrivate:    change.IsPrivate.Val(false),
 				FieldsData:   change.FieldsData,
 			})
 			if err != nil {
@@ -775,15 +835,16 @@ func (h *APIHandler) Sync(c echo.Context) error {
 				result.Status = "error"
 				result.Error = "entity not found"
 			} else {
-				// Batch sync: the change carries is_private explicitly,
-				// so pass through as a pointer to keep the always-overwrite
-				// behavior the sync contract documents. See
-				// UpdateEntityInput.IsPrivate for why this is nil-preserving.
-				isPrivate := change.IsPrivate
+				// Batch sync is a PARTIAL update, same contract as the
+				// single-entity PUT: absent preserves, a present value
+				// writes. is_private absent yields a nil pointer, which the
+				// service preserves — it used to bind false and un-private
+				// the entity through this door as well.
 				_, err := h.entitySvc.Update(ctx, change.EntityID, entities.UpdateEntityInput{
 					Name:       change.Name,
 					TypeLabel:  change.TypeLabel,
-					IsPrivate:  &isPrivate,
+					ParentID:   change.ParentID,
+					IsPrivate:  change.IsPrivate.Ptr(nil),
 					Entry:      change.Entry,
 					FieldsData: change.FieldsData,
 				})
@@ -826,6 +887,7 @@ func (h *APIHandler) Sync(c echo.Context) error {
 		ServerTime: serverTime,
 		Entities:   pulledEntities,
 		HasMore:    hasMore,
+		NextCursor: nextCursor,
 		Results:    results,
 	})
 }
@@ -1271,9 +1333,22 @@ type apiUpdateRelationRequest struct {
 // UpdateRelation updates a relation's metadata.
 // PUT /api/v1/campaigns/:id/relations/:relationId
 func (h *APIHandler) UpdateRelation(c echo.Context) error {
+	campaignID := c.Param("id")
 	relationID, err := strconv.Atoi(c.Param("relationId"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid relation ID")
+	}
+
+	// Verify the relation belongs to this campaign. The relation is addressed
+	// by its enumerable integer primary key and the repository looks it up by
+	// id alone, so without this check a key scoped to one campaign could
+	// overwrite any relation row in the database.
+	existing, err := h.relationSvc.GetByID(c.Request().Context(), relationID)
+	if err != nil {
+		return apperror.NewNotFound("relation not found")
+	}
+	if existing.CampaignID != campaignID {
+		return apperror.NewNotFound("relation not found")
 	}
 
 	var req apiUpdateRelationRequest
@@ -1291,9 +1366,21 @@ func (h *APIHandler) UpdateRelation(c echo.Context) error {
 // DeleteRelation removes a relation and its reverse.
 // DELETE /api/v1/campaigns/:id/relations/:relationId
 func (h *APIHandler) DeleteRelation(c echo.Context) error {
+	campaignID := c.Param("id")
 	relationID, err := strconv.Atoi(c.Param("relationId"))
 	if err != nil {
 		return apperror.NewBadRequest("invalid relation ID")
+	}
+
+	// Verify the relation belongs to this campaign before deleting -- same
+	// cross-campaign exposure as UpdateRelation, and Delete also removes the
+	// reverse direction, so an unscoped call destroys two rows.
+	existing, err := h.relationSvc.GetByID(c.Request().Context(), relationID)
+	if err != nil {
+		return apperror.NewNotFound("relation not found")
+	}
+	if existing.CampaignID != campaignID {
+		return apperror.NewNotFound("relation not found")
 	}
 
 	if err := h.relationSvc.Delete(c.Request().Context(), relationID); err != nil {

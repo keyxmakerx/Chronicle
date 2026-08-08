@@ -248,7 +248,7 @@ func TestApplyImport_RoutesThroughRepoApplyImport(t *testing.T) {
 			{Name: "Janus", Days: 31, SortOrder: 0},
 		},
 	}
-	if err := svc.ApplyImport(context.Background(), "cal-1", result); err != nil {
+	if _, err := svc.ApplyImport(context.Background(), "cal-1", result); err != nil {
 		t.Fatalf("ApplyImport: %v", err)
 	}
 	if !applyCalled {
@@ -285,7 +285,7 @@ func TestApplyImport_ValidationShortCircuits(t *testing.T) {
 			{Name: "", Days: 31, SortOrder: 0}, // invalid
 		},
 	}
-	if err := svc.ApplyImport(context.Background(), "cal-1", result); err == nil {
+	if _, err := svc.ApplyImport(context.Background(), "cal-1", result); err == nil {
 		t.Fatal("expected validation error; got nil")
 	}
 }

@@ -86,7 +86,9 @@ func (s *entityCalBlockStub) EventsForEntity(context.Context, string) ([]EntityE
 func (s *entityCalBlockStub) EventsForEntityFiltered(_ context.Context, entityID string, role int, userID string) ([]EntityEventTie, error) {
 	s.filteredCalls = append(s.filteredCalls, [2]string{entityID, userID})
 	s.filteredRoles = append(s.filteredRoles, role)
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+	// Mirrors the real bypass predicate after C-AUTHZ-EMPTY-USERID: a stub that
+	// still opened on `userID == ""` would keep asserting the anonymous leak.
+	if permissions.RequestViewer(role, userID).SkipsPerUserRules() {
 		return s.ties, nil
 	}
 	var out []EntityEventTie
@@ -207,21 +209,35 @@ func TestEntityCalendarBlock_PreviewPlaceholder(t *testing.T) {
 }
 
 // TestEntityCalendarBlock_OpenFullCalendarLink (C-WIDGET-BINDING-QA2 Part B):
-// the block header has an "Open full calendar" link to the V2 shell for the
-// resolved calendar, shown for ALL roles (players can view the calendar).
+// the block header has an "Open full calendar" link, shown for ALL roles
+// (players can view the calendar).
+//
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). It required the link to
+// point at "/campaigns/camp-1/calendar/v2/cal-1". THE NEW CLAIM: it points at
+// the Bench, and it carries NO calendar id.
+//
+// THE AFFORDANCE IS NOT REMOVED HERE, and the difference from [VS-14]'s two
+// removals is the whole reason both rulings exist: this link leaves the ENTITY
+// page for the calendar, so it still goes somewhere. The id is dropped because
+// [VS-12] measured that AppDashboard never reads `calId` — the block's bound
+// calendar is a lost selection, named in the report and booked with
+// C-CALV4-BENCH-CALID. The V1 negative below stands unchanged.
 func TestEntityCalendarBlock_OpenFullCalendarLink(t *testing.T) {
 	for _, role := range []campaigns.Role{campaigns.RolePlayer, campaigns.RoleScribe} {
 		html := renderEntityCal(t, sampleEmbedSvc(), role, false)
-		// V2 shell for the resolved calendar (sampleEmbedSvc's default cal-1).
-		if !strings.Contains(html, "/campaigns/camp-1/calendar/v2/cal-1") {
-			t.Errorf("role %d: missing V2 open-calendar link; got: %q", role, html)
+		if !strings.Contains(html, "/campaigns/camp-1/apps/calendar") {
+			t.Errorf("role %d: missing the open-calendar link to the Bench; got: %q", role, html)
+		}
+		if strings.Contains(html, "/campaigns/camp-1/calendar/v2") {
+			t.Errorf("role %d: the entity block still links to the V2 shell — the header anchor "+
+				"and the linked-event rows were both swept in R2-4; got: %q", role, html)
 		}
 		if !strings.Contains(html, "data-open-calendar") || !strings.Contains(html, "Open full calendar") {
 			t.Errorf("role %d: missing the Open-full-calendar affordance", role)
 		}
-		// Must be V2, never the V1 /calendars/<id> view.
+		// Never the V1 /calendars/<id> view — unchanged claim, unchanged reason.
 		if strings.Contains(html, `href="/campaigns/camp-1/calendars/cal-1"`) {
-			t.Errorf("role %d: open link must target V2, not the V1 view", role)
+			t.Errorf("role %d: open link must not fall back to the V1 view", role)
 		}
 	}
 }

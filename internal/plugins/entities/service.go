@@ -43,8 +43,8 @@ type EntityService interface {
 	// among its parent's children. sortOrder is a desired 0-based index.
 	ReorderEntityType(ctx context.Context, campaignID string, typeID int, sortOrder int) error
 
-	// Backlinks
-	GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
+	// Backlinks — always campaign-scoped; mention ids alone are not.
+	GetBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
 
 	// Popup preview config
 	UpdatePopupConfig(ctx context.Context, entityID string, config *PopupConfig) error
@@ -108,8 +108,8 @@ type EntityService interface {
 	GetAliases(ctx context.Context, entityID string) ([]EntityAlias, error)
 	SetAliases(ctx context.Context, entityID string, aliases []string) error
 
-	// Backlinks with context snippets.
-	GetBacklinksWithSnippets(ctx context.Context, entityID string, role int, userID string) ([]BacklinkEntry, error)
+	// Backlinks with context snippets — always campaign-scoped.
+	GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string) ([]BacklinkEntry, error)
 
 	// GetMentionLinks returns all @mention references across a campaign for the
 	// relations graph. Each link is a source→target pair extracted from entry_html.
@@ -528,7 +528,14 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		}
 	}
 
-	name := strings.TrimSpace(input.Name)
+	// Load-merge-write (sweep R4). `entity` is the row as stored, so every
+	// merge below defaults to the stored value: only a key the caller
+	// actually sent can change anything.
+	//
+	// An absent name means "I am not editing the name" — which is what a
+	// {status}-shaped or {fields_data}-shaped push means. A name that IS
+	// sent is validated exactly as before.
+	name := strings.TrimSpace(input.Name.Val(entity.Name))
 	if name == "" {
 		return nil, apperror.NewBadRequest("entity name is required")
 	}
@@ -550,45 +557,61 @@ func (s *entityService) Update(ctx context.Context, entityID string, input Updat
 		entity.IsPrivate = *input.IsPrivate
 	}
 
-	typeLabel := strings.TrimSpace(input.TypeLabel)
-	if typeLabel != "" {
-		entity.TypeLabel = &typeLabel
-	} else {
-		entity.TypeLabel = nil
+	// TypeLabel: absent preserves; "" or an explicit null clears; a value
+	// sets. Before the sweep this was a plain string and every caller that
+	// did not carry the descriptor erased it.
+	if input.TypeLabel.Present() {
+		typeLabel := strings.TrimSpace(input.TypeLabel.Val(""))
+		if typeLabel != "" {
+			entity.TypeLabel = &typeLabel
+		} else {
+			entity.TypeLabel = nil
+		}
 	}
 
-	// Validate and update parent_id.
-	pid := strings.TrimSpace(input.ParentID)
-	if pid != "" {
-		if pid == entityID {
-			return nil, apperror.NewBadRequest("an entity cannot be its own parent")
-		}
-		parent, err := s.entities.FindByID(ctx, pid)
-		if err != nil {
-			return nil, apperror.NewBadRequest("parent entity not found")
-		}
-		if parent.CampaignID != entity.CampaignID {
-			return nil, apperror.NewBadRequest("parent entity does not belong to this campaign")
-		}
-		// Check for circular reference: the proposed parent must not be
-		// a descendant of this entity.
-		ancestors, err := s.entities.FindAncestors(ctx, pid)
-		if err != nil {
-			return nil, apperror.NewInternal(fmt.Errorf("checking ancestors: %w", err))
-		}
-		for _, a := range ancestors {
-			if a.ID == entityID {
-				return nil, apperror.NewBadRequest("circular reference: the selected parent is a descendant of this entity")
+	// ParentID: same three states. This is the un-parenting fix — syncapi's
+	// update body has never had a parent_id member, so before the sweep
+	// every sync push flattened the entity out of the hierarchy.
+	if input.ParentID.Present() {
+		pid := strings.TrimSpace(input.ParentID.Val(""))
+		if pid != "" {
+			if pid == entityID {
+				return nil, apperror.NewBadRequest("an entity cannot be its own parent")
 			}
+			parent, err := s.entities.FindByID(ctx, pid)
+			if err != nil {
+				return nil, apperror.NewBadRequest("parent entity not found")
+			}
+			if parent.CampaignID != entity.CampaignID {
+				return nil, apperror.NewBadRequest("parent entity does not belong to this campaign")
+			}
+			// Check for circular reference: the proposed parent must not be
+			// a descendant of this entity.
+			ancestors, err := s.entities.FindAncestors(ctx, pid)
+			if err != nil {
+				return nil, apperror.NewInternal(fmt.Errorf("checking ancestors: %w", err))
+			}
+			for _, a := range ancestors {
+				if a.ID == entityID {
+					return nil, apperror.NewBadRequest("circular reference: the selected parent is a descendant of this entity")
+				}
+			}
+			entity.ParentID = &pid
+		} else {
+			entity.ParentID = nil
 		}
-		entity.ParentID = &pid
-	} else {
-		entity.ParentID = nil
 	}
 
 	// Update entry content if provided. Sanitize HTML to prevent stored XSS.
-	entry := strings.TrimSpace(input.Entry)
-	if entry != "" {
+	// An empty string has always meant "preserve" here rather than "clear"
+	// — a real residue (no caller can blank a body through this input), but
+	// changing it is a user-visible decision this sweep was not given, so it
+	// is kept byte-for-byte. An EXPLICIT null does clear, which completes
+	// the contract without moving any shipped client's behaviour.
+	if input.Entry.IsNull() {
+		entity.Entry = nil
+		entity.EntryHTML = nil
+	} else if entry := strings.TrimSpace(input.Entry.Val("")); entry != "" {
 		entity.Entry = &entry
 		sanitized := sanitize.HTML(entry)
 		entity.EntryHTML = &sanitized
@@ -776,10 +799,10 @@ func (s *entityService) ReorderEntityType(ctx context.Context, campaignID string
 	return nil
 }
 
-// GetBacklinks returns entities that reference the given entity via @mention
-// links in their entry content. Respects visibility filtering.
-func (s *entityService) GetBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
-	backlinks, err := s.entities.FindBacklinks(ctx, entityID, role, userID)
+// GetBacklinks returns entities in campaignID that reference the given entity
+// via @mention links in their entry content. Respects visibility filtering.
+func (s *entityService) GetBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {
+	backlinks, err := s.entities.FindBacklinks(ctx, campaignID, entityID, role, userID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
 	}
@@ -2464,8 +2487,8 @@ func (s *entityService) SetAliases(ctx context.Context, entityID string, aliases
 // GetBacklinksWithSnippets returns backlink entities with context snippets
 // showing text around the @mention. Builds on the existing GetBacklinks by
 // extracting snippets from each referencing entity's entry_html.
-func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, entityID string, role int, userID string) ([]BacklinkEntry, error) {
-	backlinks, err := s.entities.FindBacklinks(ctx, entityID, role, userID)
+func (s *entityService) GetBacklinksWithSnippets(ctx context.Context, campaignID, entityID string, role int, userID string) ([]BacklinkEntry, error) {
+	backlinks, err := s.entities.FindBacklinks(ctx, campaignID, entityID, role, userID)
 	if err != nil {
 		return nil, apperror.NewInternal(fmt.Errorf("finding backlinks: %w", err))
 	}

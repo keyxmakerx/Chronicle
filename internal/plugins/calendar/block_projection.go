@@ -48,6 +48,14 @@ type BlockViewer struct {
 	Zone string
 }
 
+// Identity is the BlockViewer as the visibility filters see it. A BlockViewer
+// is always request-derived, so it can only ever produce a RequestViewer — an
+// empty UserID here means an ANONYMOUS visitor, never a trusted system caller
+// (C-AUTHZ-EMPTY-USERID / ADR-049).
+func (v BlockViewer) Identity() permissions.Viewer {
+	return permissions.RequestViewer(v.Role, v.UserID)
+}
+
 // BlockProjectionInput is the complete input to one Block render.
 //
 // Calendar MUST be non-nil — see the contract on projectBlock.
@@ -78,6 +86,18 @@ type BlockProjectionInput struct {
 	// Block on the Bench renders with noShelf.
 	LedgerHidden bool
 	ShelfHidden  bool
+	// SkyOn asks for the sky header on THIS Block (C-CALV4-SKY, [SKY-1]
+	// SIGNED). It is written the positive way round on purpose: the sky seats
+	// on the Bench's PRIMARY Block only — one sky per surface, never one per
+	// Block — so "no sky" is the zero value and every other host (the builder
+	// preview, the entity embed, the real-world Block, the subordinate rows)
+	// gets the correct answer by saying nothing at all.
+	//
+	// It drives TWO things and they must stay together: the two SkyGradient /
+	// SkyClock fields on BlockData (which are also the renderer's seat gate)
+	// and blockMonthGeometryInput.SkyHidden, the second half of the Almanac
+	// gate ([SKY-7]).
+	SkyOn bool
 	// MoonCap bounds the per-day discs; the ceiling is announced once in the
 	// Nameplate, never per cell.
 	MoonCap int
@@ -130,7 +150,7 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	// this line on (filterEventsByUser compacted it in place) and is nilled so
 	// a later edit cannot accidentally re-read the corrupted backing array.
 	// ───────────────────────────────────────────────────────────────────────
-	visible := filterEventsByUser(in.Events, viewer.Role, viewer.UserID)
+	visible := filterEventsByUser(in.Events, viewer.Identity())
 	in.Events = nil
 
 	geo := buildMonthGeometry(cal, blockMonthGeometryInput{
@@ -138,9 +158,12 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		Year:       in.Year,
 		ShowMoons:  true,
 		MoonCap:    in.MoonCap,
-		// W-E: the Almanac register is the Shelf's data, so a Block whose host
-		// removed the zone builds none.
+		// W-E: the Almanac register was the Shelf's data, so a Block whose host
+		// removed the zone built none. R2-5 gives it a SECOND reader and the
+		// gate names both ([SKY-7]) — the sky header's expansion draws on the
+		// same register and on nothing else.
 		ShelfHidden: in.ShelfHidden,
+		SkyHidden:   !in.SkyOn,
 	})
 
 	data := calblock.BlockData{
@@ -175,6 +198,7 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	}
 	data.DateLabel, data.Fault = blockDateLine(cal)
 	data.SeasonLabel, data.EraLabel = blockSeasonEraLabels(cal)
+	data.SkyGradient, data.SkyClock = blockSkyFacts(cal, in.SkyOn)
 
 	// Counts and cells, both derived from `visible` and nothing else.
 	tieMode := blockResolveTieMode(viewer)
@@ -332,6 +356,59 @@ func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event
 	}
 }
 
+// blockEventSpansDate reports whether (year, month, day) falls INSIDE a
+// multi-day event's stored [start, end] window — C-CALV4-GAMEREADY §3, [GR-5].
+//
+// THE DEFECT IT CLOSES IS A POSITIVE FALSE STATEMENT, NOT AN OMISSION. A
+// five-day festival marked ONE cell, because the only membership test here was
+// OccursOn, which matches the stored date and the recurrence rule and nothing
+// else. The day card is built from these marks (dayCardEvents(c.Marks)), so a
+// GM clicking day three of a siege the party was standing in read "No events on
+// this day". V2 drew a five-day ribbon; v4 never built the ribbon layer the
+// model's own comment promised, and inherited the gap as a lie.
+//
+// THE RIBBON IS REFUSED, NOT FORGOTTEN. Rendering the span as one continuous
+// bar reads better and is booked as C-CALV4-SPAN-RIBBON with its measurement
+// attached; it needs a calblock.Mark field, which is data.go, which is pinned.
+// Five identical chips on five consecutive days are visually inferior and
+// OPERATIONALLY IDENTICAL: the GM clicks day three, sees the siege, opens it.
+// A spanned day's chip therefore reads exactly like the start day's — no "day 3
+// of 5", no continuation glyph, no truncated variant, all three being
+// ribbon-layer concerns that would each need that same field.
+//
+// IT IS COMPARED THROUGH absDayIndex, the counter recurrence already uses, so
+// containment and expansion can never disagree about the geometry — and it
+// naturally makes an end equal to the start exactly one day, which is what
+// IsMultiDay's nil-vs-equal distinction means elsewhere.
+//
+// THE CALLER PUTS IT INSIDE THE VISIBILITY-FILTERED LOOP AND THAT IS
+// LOAD-BEARING: `visible` has already been through filterEventsByUser, so a
+// dm_only span is absent on ALL of its days rather than only its first. A
+// membership test at the wrong loop depth is how a span becomes a leak, and a
+// guard asserts exactly that.
+func blockEventSpansDate(cal *Calendar, e *Event, year, month, day int) bool {
+	if cal == nil || e == nil || e.EndYear == nil || e.EndMonth == nil || e.EndDay == nil {
+		return false
+	}
+	start := cal.absDayIndex(e.Year, e.Month, e.Day)
+	end := cal.absDayIndex(*e.EndYear, *e.EndMonth, *e.EndDay)
+	if end < start {
+		// A stored end before its own start is corrupt data, not a span. The
+		// editor cannot author one (the picker refuses), but the API can.
+		//
+		// THIS BRANCH IS DEFENSIVE, NOT LOAD-BEARING, AND SAYS SO RATHER THAN
+		// IMPLYING OTHERWISE: the containment test below already refuses an
+		// inverted window (no day is both >= 9 and <= 5), so removing this
+		// return changes no observable behaviour and the guard for it stays
+		// green either way. It is kept because it states the intent — such a row
+		// degrades to its single stored day — where a reader would otherwise
+		// have to derive it from the arithmetic.
+		return false
+	}
+	target := cal.absDayIndex(year, month, day)
+	return target >= start && target <= end
+}
+
 // blockMarksForDate builds the marks for one date and reports whether the date
 // carries at least one TIED event. Both come from the same walk over `visible`.
 func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, month, day int, times blockMarkTimeFormatter) ([]calblock.Mark, bool) {
@@ -340,7 +417,7 @@ func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, 
 	isGM := permissions.CanSeeDmOnly(in.Viewer.Role)
 	for i := range visible {
 		e := &visible[i]
-		if !e.OccursOn(cal, in.Year, month, day) {
+		if !e.OccursOn(cal, in.Year, month, day) && !blockEventSpansDate(cal, e, in.Year, month, day) {
 			continue
 		}
 		evTied := blockEventTied(e, in)
@@ -716,6 +793,41 @@ func blockSeasonEraLabels(cal *Calendar) (season, era string) {
 		era = e.Name
 	}
 	return season, era
+}
+
+// blockSkyFacts is the sky header's whole producer side — C-CALV4-SKY,
+// [SKY-6] SIGNED — and it is deliberately four lines with nothing derived.
+//
+// WHAT IT CARRIES, AND WHY THAT IS EXACTLY TWO THINGS. The band states three
+// facts: the moon phase disc(s), the in-world time and the season word. Two of
+// those already cross the seam — the discs ride MonthGeometry.Almanac ([SKY-7])
+// and the season word is BlockData.SeasonLabel — so the only fact this producer
+// must carry across is the time, and the only other thing the band needs is the
+// gradient keyed to it.
+//
+// THE GRADIENT IS REUSED, NEVER RE-DERIVED. `SkybandGradient(t)` already ships
+// and is pinned by TestSkybandGradient_SnapsToKeyframes; `timeOfDayFraction`
+// already ships over Calendar.CurrentHour/CurrentMinute. This function calls
+// both and hands the RESULT across, because internal/widgets/calendar_block
+// imports nothing from internal/plugins/** by construction: a fraction landing
+// in the widget could only become a gradient by the widget growing colour
+// science of its own, and shipping the fraction AND the gradient would be the
+// third BlockData field [SKY-6] refuses. See BlockData's own comment.
+//
+// NO SUNRISE AND NO SUNSET, IN ANY FORM ([SKY-6]). Not a tick, not a chip, not
+// a "needs backend" note, not a 06:00/18:00 default. Chronicle does not persist
+// them — import.go parses sunriseTime/sunsetTime from two foreign formats and
+// DROPS them, and no column and no migration exists — and deriving a daylight
+// boundary on a worldbuilding platform is the defect WorldStateSun.Tint already
+// refuses by shipping null.
+//
+// THE TIME IS AS OF RENDER. It does not tick client-side, which is why nothing
+// here emits a timestamp for a script to count from.
+func blockSkyFacts(cal *Calendar, on bool) (gradient, clock string) {
+	if cal == nil || !on {
+		return "", ""
+	}
+	return SkybandGradient(timeOfDayFraction(cal)), cal.FormatCurrentTime()
 }
 
 // blockViewerZone labels the viewer's zone. A real-time calendar's configured

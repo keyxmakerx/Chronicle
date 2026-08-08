@@ -80,8 +80,14 @@ type TimelineService interface {
 	// Timeline CRUD.
 	CreateTimeline(ctx context.Context, campaignID string, input CreateTimelineInput) (*Timeline, error)
 	GetTimeline(ctx context.Context, timelineID string) (*Timeline, error)
-	ListTimelines(ctx context.Context, campaignID string, role int, userID string) ([]Timeline, error)
-	ListTimelinesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]Timeline, error)
+	// ListTimelines / ListTimelinesForCalendar / ListTimelineEvents take a
+	// permissions.Viewer rather than (role, userID): "no authenticated user" and
+	// "trusted system caller" used to share the empty-string user id, so an
+	// anonymous visitor matched the system bypass (C-AUTHZ-EMPTY-USERID,
+	// ADR-049). A caller that really is trusted says so with
+	// permissions.SystemViewer.
+	ListTimelines(ctx context.Context, campaignID string, v permissions.Viewer) ([]Timeline, error)
+	ListTimelinesForCalendar(ctx context.Context, calendarID string, v permissions.Viewer) ([]Timeline, error)
 	UpdateTimeline(ctx context.Context, timelineID string, input UpdateTimelineInput) error
 	DeleteTimeline(ctx context.Context, timelineID string) error
 
@@ -89,7 +95,7 @@ type TimelineService interface {
 	LinkEvent(ctx context.Context, timelineID, eventID string, input LinkEventInput) (*EventLink, error)
 	LinkAllEvents(ctx context.Context, timelineID string, role int) (int, error)
 	UnlinkEvent(ctx context.Context, timelineID, eventID string) error
-	ListTimelineEvents(ctx context.Context, timelineID string, role int, userID string) ([]EventLink, error)
+	ListTimelineEvents(ctx context.Context, timelineID string, v permissions.Viewer) ([]EventLink, error)
 	ListAvailableEvents(ctx context.Context, timelineID string, role int) ([]CalendarEventRef, error)
 
 	// Event link visibility.
@@ -220,23 +226,37 @@ func (s *timelineService) GetTimeline(ctx context.Context, timelineID string) (*
 
 // ListTimelines returns all timelines for a campaign, filtered by role-based
 // visibility and per-user visibility rules.
-func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, role int, userID string) ([]Timeline, error) {
-	timelines, err := s.repo.List(ctx, campaignID, role)
+func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, v permissions.Viewer) ([]Timeline, error) {
+	timelines, err := s.repo.List(ctx, campaignID, v.Role())
 	if err != nil {
 		return nil, fmt.Errorf("list timelines: %w", err)
 	}
+	return filterTimelinesByUser(timelines, v), nil
+}
 
-	// Apply per-user visibility rules (Owners always see everything).
-	if !permissions.CanSeeDmOnly(role) && userID != "" {
-		filtered := timelines[:0]
-		for _, t := range timelines {
-			if canUserView(t.Visibility, t.VisibilityRules, role, userID) {
-				filtered = append(filtered, t)
-			}
-		}
-		timelines = filtered
+// filterTimelinesByUser applies the per-user visibility layer to a timeline
+// slice. Owners/co-DMs and DECLARED SYSTEM callers get the list unchanged.
+//
+// C-AUTHZ-EMPTY-USERID / ADR-049: the skip used to be `userID != ""`, so a
+// viewer with no user id — i.e. every logged-out visitor to a public campaign —
+// skipped the per-user layer entirely and was shown allow-list-restricted
+// timelines. Trust is now a stated property of permissions.Viewer that no
+// request-derived viewer can hold.
+//
+// It compacts IN PLACE (`timelines[:0]`), so the caller's backing array is
+// mutated and must not be read again — the calendar's filterEventsByUser
+// contract, verbatim.
+func filterTimelinesByUser(timelines []Timeline, v permissions.Viewer) []Timeline {
+	if v.SkipsPerUserRules() {
+		return timelines
 	}
-	return timelines, nil
+	filtered := timelines[:0]
+	for _, t := range timelines {
+		if canUserView(t.Visibility, t.VisibilityRules, v.Role(), v.UserID()) {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered
 }
 
 // ListTimelinesForCalendar returns the timelines bound to a calendar,
@@ -244,21 +264,12 @@ func (s *timelineService) ListTimelines(ctx context.Context, campaignID string, 
 // Exposed cross-plugin (calendar's Calendars dashboard) via the TimelineService
 // interface — the calendar plugin reaches it through an adapter, never a repo
 // import (C-APPS-CAL-DASH-W1, plugin-isolation convention).
-func (s *timelineService) ListTimelinesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]Timeline, error) {
-	timelines, err := s.repo.ListByCalendar(ctx, calendarID, role)
+func (s *timelineService) ListTimelinesForCalendar(ctx context.Context, calendarID string, v permissions.Viewer) ([]Timeline, error) {
+	timelines, err := s.repo.ListByCalendar(ctx, calendarID, v.Role())
 	if err != nil {
 		return nil, fmt.Errorf("list timelines for calendar: %w", err)
 	}
-	if !permissions.CanSeeDmOnly(role) && userID != "" {
-		filtered := timelines[:0]
-		for _, t := range timelines {
-			if canUserView(t.Visibility, t.VisibilityRules, role, userID) {
-				filtered = append(filtered, t)
-			}
-		}
-		timelines = filtered
-	}
-	return timelines, nil
+	return filterTimelinesByUser(timelines, v), nil
 }
 
 // UpdateTimeline modifies an existing timeline.
@@ -374,7 +385,8 @@ func (s *timelineService) UnlinkEvent(ctx context.Context, timelineID, eventID s
 // ListTimelineEvents returns all events for a timeline — both linked calendar
 // events and standalone events — merged into a unified EventLink slice, sorted
 // by date, and filtered by role-based and per-user visibility rules.
-func (s *timelineService) ListTimelineEvents(ctx context.Context, timelineID string, role int, userID string) ([]EventLink, error) {
+func (s *timelineService) ListTimelineEvents(ctx context.Context, timelineID string, v permissions.Viewer) ([]EventLink, error) {
+	role := v.Role()
 	// Fetch linked calendar events.
 	events, err := s.repo.ListEventLinks(ctx, timelineID, role)
 	if err != nil {
@@ -398,12 +410,15 @@ func (s *timelineService) ListTimelineEvents(ctx context.Context, timelineID str
 	// Sort merged events by date then display order.
 	sortEventLinks(events)
 
-	// Apply per-user event link visibility rules (Owners always see everything).
-	if !permissions.CanSeeDmOnly(role) && userID != "" {
+	// Apply per-user event link visibility rules. Owners/co-DMs and declared
+	// system callers see everything; an ANONYMOUS viewer does not — the skip
+	// used to be `userID != ""`, which is what a logged-out visitor carries
+	// (C-AUTHZ-EMPTY-USERID / ADR-049).
+	if !v.SkipsPerUserRules() {
 		filtered := events[:0]
 		for _, el := range events {
 			vis := el.EffectiveVisibility()
-			if canUserView(vis, el.VisibilityRules, role, userID) {
+			if canUserView(vis, el.VisibilityRules, role, v.UserID()) {
 				filtered = append(filtered, el)
 			}
 		}
@@ -599,47 +614,60 @@ func (s *timelineService) UpdateStandaloneEvent(ctx context.Context, timelineID,
 		return apperror.NewNotFound("event not found")
 	}
 
-	if input.Name == "" {
+	// Load-merge-write (sweep R4). `e` is the row as stored, so every merge
+	// below defaults to the stored value: only a key the caller actually
+	// sent can change anything. The edit modal sends five keys, and before
+	// this a rename cleared eight fields it never mentioned.
+	name := input.Name.Val(e.Name)
+	if name == "" {
 		return apperror.NewValidation("event name is required")
 	}
-	if len(input.Name) > 255 {
+	if len(name) > 255 {
 		return apperror.NewValidation("event name must be 255 characters or less")
 	}
-	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+	visibility := input.Visibility.Val(e.Visibility)
+	if visibility != "everyone" && visibility != "dm_only" {
 		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
 	}
-	if input.Color != nil && *input.Color != "" && !colorPattern.MatchString(*input.Color) {
+	color := input.Color.Ptr(e.Color)
+	if color != nil && *color != "" && !colorPattern.MatchString(*color) {
 		return apperror.NewValidation("color must be a valid hex color")
 	}
 
 	// Sanitize HTML if provided (rich text descriptions from TipTap editor).
-	var descHTML *string
-	if input.DescriptionHTML != nil && *input.DescriptionHTML != "" {
-		sanitized := sanitize.HTML(*input.DescriptionHTML)
-		descHTML = &sanitized
+	// An ABSENT description_html preserves the stored HTML — this is the
+	// field whose loss made a rename silently discard a formatted write-up.
+	// A present empty string, or an explicit null, still clears, exactly as
+	// before.
+	if input.DescriptionHTML.Present() {
+		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
+			sanitized := sanitize.HTML(v)
+			e.DescriptionHTML = &sanitized
+		} else {
+			e.DescriptionHTML = nil
+		}
 	}
 
-	e.EntityID = input.EntityID
-	e.Name = input.Name
-	e.Description = input.Description
-	e.DescriptionHTML = descHTML
-	e.Year = input.Year
-	e.Month = input.Month
-	e.Day = input.Day
-	e.StartHour = input.StartHour
-	e.StartMinute = input.StartMinute
-	e.EndYear = input.EndYear
-	e.EndMonth = input.EndMonth
-	e.EndDay = input.EndDay
-	e.EndHour = input.EndHour
-	e.EndMinute = input.EndMinute
-	e.IsRecurring = input.IsRecurring
-	e.RecurrenceType = input.RecurrenceType
-	e.Category = input.Category
-	e.Visibility = input.Visibility
-	e.VisibilityRules = input.VisibilityRules
-	e.Label = input.Label
-	e.Color = input.Color
+	e.EntityID = input.EntityID.Ptr(e.EntityID)
+	e.Name = name
+	e.Description = input.Description.Ptr(e.Description)
+	e.Year = input.Year.Val(e.Year)
+	e.Month = input.Month.Val(e.Month)
+	e.Day = input.Day.Val(e.Day)
+	e.StartHour = input.StartHour.Ptr(e.StartHour)
+	e.StartMinute = input.StartMinute.Ptr(e.StartMinute)
+	e.EndYear = input.EndYear.Ptr(e.EndYear)
+	e.EndMonth = input.EndMonth.Ptr(e.EndMonth)
+	e.EndDay = input.EndDay.Ptr(e.EndDay)
+	e.EndHour = input.EndHour.Ptr(e.EndHour)
+	e.EndMinute = input.EndMinute.Ptr(e.EndMinute)
+	e.IsRecurring = input.IsRecurring.Val(e.IsRecurring)
+	e.RecurrenceType = input.RecurrenceType.Ptr(e.RecurrenceType)
+	e.Category = input.Category.Ptr(e.Category)
+	e.Visibility = visibility
+	e.VisibilityRules = input.VisibilityRules.Ptr(e.VisibilityRules)
+	e.Label = input.Label.Ptr(e.Label)
+	e.Color = color
 
 	if err := s.repo.UpdateEvent(ctx, e); err != nil {
 		return fmt.Errorf("update standalone event: %w", err)

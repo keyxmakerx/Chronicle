@@ -281,8 +281,19 @@ templ benchHead(data BenchData) {
 		</div>
 		<span class="sp"></span>
 		<div class="ctl">
+			// "OPEN CALENDAR →" IS GONE, AND IT IS THE ONE AFFORDANCE R2-4 REMOVES
+			// RATHER THAN RE-POINTS (C-CALV4-V2SUNSET, [VS-14] SIGNED).
+			//
+			// It existed to leave this page for the real calendar. The real
+			// calendar is now this page, so re-pointed at /apps/calendar it would
+			// have been a link that navigates to itself — and [VS-12] measured
+			// that `?calId=` is inert on this handler, so it could not even have
+			// selected a different calendar. This is the ONE place [VS-2]'s rule
+			// "no link is deleted" is deliberately overridden, and the override
+			// is the ruling: a self-link is not a door, it is a dead end wearing
+			// a door's label. The Builder → and + New calendar controls beside it
+			// are untouched.
 			if data.Primary != nil {
-				<a class="btn ghost" href={ templ.SafeURL(data.Primary.Manage.OpenHref) }>Open calendar →</a>
 				if data.IsOwner {
 					<a class="btn ghost" href={ templ.SafeURL(data.Primary.Manage.SettingsHref) }>Builder →</a>
 				}
@@ -429,11 +440,126 @@ templ benchTickRule(ticks []BenchTick) {
 // strip. The strip is a documented addition — see BenchBlock's doc comment.
 templ benchBlockView(b BenchBlock, data BenchData, role string) {
 	<div class="benchblock" data-bench-block={ role } data-calendar-id={ b.Manage.CalendarID }>
+		@benchNavTrio(b.Nav)
+		@benchDateVerbRow(b.Verbs)
 		@calblock.Block(b.Data)
 		if data.IsOwner {
 			@benchManageStrip(b.Manage)
 		}
 	</div>
+}
+
+// benchNavTrio is the month cursor's control (C-CALV4-GAMEREADY [GR-2]).
+//
+// WHERE IT SEATS, AND WHY IT IS HERE RATHER THAN IN THE NAMEPLATE ITSELF.
+// [GR-2] rules the trio onto "the Block's nameplate", beside the date label —
+// and the nameplate is `internal/widgets/calendar_block/nameplate.templ`, a
+// file this slice's Bounds put out of reach along with the rest of that
+// package (`data.go` is byte-pinned at r54 and [SKY-6] is concurrently
+// authorised for exactly two fields). The dispatch's own "Files you own" list
+// names `bench.templ` as where the trio's markup goes, which is this: the
+// Bench's own row, immediately ABOVE `.block` and therefore directly adjacent
+// to the nameplate it navigates, inside the same `.benchblock` wrapper the
+// owner's management strip already extends downward. Same construction, other
+// end.
+//
+// THREE <a> ELEMENTS. Not buttons, not a form, not JS. The hrefs are computed
+// server-side (benchNav) and land on the same route, so a plain navigation —
+// or the sidebar's `hx-boost` when the page is reached that way — swaps the
+// page with no script of any kind. `boot.js:163` sets
+// `htmx.config.allowScriptTags = false`, which DELETES a <script> inside a
+// swapped fragment, and any JS would otherwise have to ride the plugin
+// body-script registry and answer to tools/check-page-scripts.sh. Links need
+// none of that.
+//
+// A DAY CARD OPEN ACROSS A NAVIGATION IS CLOSED BY THE SWAP, AND THAT IS
+// CORRECT — a card describing 12 Marpenoth must not survive into Uktar. There
+// is no re-anchoring and no state restoration here, and `placeCard` is not
+// opened ([ER-5] SIGNED makes it a flag rather than an edit).
+//
+// IT REUSES `.manage` AND `.btn.xs`, WHICH ALREADY EXIST. This slice ships no
+// stylesheet, so the trio takes the flex row the management strip is already
+// styled with; at narrow density it WRAPS on that row's own rules rather than
+// earning a fifth breakpoint number (the Block's density switch is
+// `@container cal-block` at `min-width: 481px` and is signed territory,
+// [SKY-8]).
+templ benchNavTrio(n BenchNav) {
+	if n.Live {
+		<div class="manage" data-bench-nav>
+			<span class="badge" data-bench-nav-month>{ benchNavLabel(n) }</span>
+			<span class="sp"></span>
+			if n.PrevHref != "" {
+				<a class="btn xs" data-bench-nav-prev href={ templ.SafeURL(n.PrevHref) } rel="prev">‹ Prev</a>
+			}
+			// `Today` renders on the current month too, where it is a no-op
+			// link back to the bare route. A control that vanishes when you are
+			// already there teaches the GM that it is missing, not satisfied.
+			<a class="btn xs" data-bench-nav-today href={ templ.SafeURL(n.TodayHref) }>Today</a>
+			<a class="btn xs" data-bench-nav-next href={ templ.SafeURL(n.NextHref) } rel="next">Next ›</a>
+		</div>
+	}
+}
+
+// benchDateVerbRow is §2's date-verb surface (C-CALV4-GAMEREADY [GR-SIGN-A]
+// SIGNED, [GR-4]). See BenchDateVerbs in bench.go for the ruling, the two
+// floors and why they differ.
+//
+// PERMISSION IS ABSENCE, AND IT IS ABSENCE TWICE OVER. A viewer without
+// `CanControlWorldState` gets no step buttons; a viewer who is not the Owner
+// gets no Set-date fields; a viewer with neither gets NO ELEMENT AT ALL — not a
+// disabled control, not a tooltip, not an empty row. The whole component is
+// wrapped in that outer test for exactly that reason.
+//
+// WHY THIS ROW IS DRIVEN BY JS WHEN [GR-2]'s TRIO IS NOT, and it is a
+// measurement rather than a preference. `PUT /campaigns/:id/calendar/world-
+// state` binds `putWorldStateBody`, whose `advance` and `time` members are
+// POINTERS TO ANONYMOUS STRUCTS carrying `json` tags and no `form` tags. Echo's
+// form binder skips a tagless pointer-to-struct field outright, so a
+// form-encoded submit — which is all a plain <form> or a bare hx-put can send —
+// binds NOTHING and the endpoint answers 200 having changed no date. That is a
+// silent no-op, which is worse at a table than a missing control. Giving the
+// shipped request struct form tags would be a wire-contract change to an
+// endpoint V2's console and the sync path both use, and this slice's Bounds
+// freeze that surface. TestWorldStatePut_FormEncodedBindsNothing pins the
+// measurement so the next hand does not re-derive it.
+//
+// SO THE WRITE RIDES `calendar_daycard.js`, the plugin's registry-mounted
+// driver that is already on this page (internal/app/routes.go →
+// pluginBodyScripts → base.templ). ZERO new page scripts, zero registry edits,
+// and tools/check-page-scripts.sh stays green unedited — which it could not if
+// this shipped its own <script src>, and a <script> inside an HTMX-swapped
+// fragment would be DELETED by boot.js:163 anyway.
+templ benchDateVerbRow(v BenchDateVerbs) {
+	if v.CanStep || v.CanSet {
+		<div
+			class="manage"
+			data-bench-date-verbs
+			data-verb-url={ v.URL }
+			data-verb-csrf={ v.CSRF }
+		>
+			<span class="badge">In-world date</span>
+			if v.CanStep {
+				<button type="button" class="btn xs" data-bench-date-step="-1">&minus;1 day</button>
+				<button type="button" class="btn xs" data-bench-date-step="1">+1 day</button>
+			}
+			<span class="sp"></span>
+			if v.CanSet {
+				// Set date is OWNER-ONLY and seeded from the calendar's own
+				// current date, never from the navigated month.
+				<label class="vh" for="bench-set-y">Year</label>
+				<input id="bench-set-y" class="btn xs" type="number" size="5" data-bench-date-year value={ benchIntAttr(v.Year) }/>
+				<label class="vh" for="bench-set-m">Month</label>
+				<input id="bench-set-m" class="btn xs" type="number" size="3" min="1" data-bench-date-month value={ benchIntAttr(v.Month) }/>
+				<label class="vh" for="bench-set-d">Day</label>
+				<input id="bench-set-d" class="btn xs" type="number" size="3" min="1" data-bench-date-day value={ benchIntAttr(v.Day) }/>
+				<button type="button" class="btn xs" data-bench-date-set>Set date</button>
+			}
+			// The one honest state this row has: what the last write did. It is
+			// aria-live so the answer reaches a screen reader, and it is TEXT —
+			// no transition, no animation, nothing that moves.
+			<span class="c" data-bench-date-say role="status" aria-live="polite"></span>
+		</div>
+	}
 }
 
 // benchManageStrip is the owner's per-calendar cluster: the W5b visibility
@@ -662,8 +788,14 @@ templ benchRsvpMemberView(m BenchRsvpMember) {
 		<span class="sp"></span>
 		if m.Zone == "" {
 			<span class="badge warn">zone not set</span>
+			// THE LABEL IS THE PRODUCER'S, NOT THIS TEMPLATE'S
+			// (C-CALV4-GAMEREADY §8 [GR-15]). benchZoneRepair chooses the
+			// href and the words together: the viewer's own row says
+			// "Set your zone →" and goes to /account, a GM looking at
+			// someone else's says "Ask →", and a Player looking at someone
+			// else's gets an EMPTY href and therefore no control at all.
 			if m.AskHref != "" {
-				<a class="btn xs ghost" href={ templ.SafeURL(m.AskHref) }>Ask →</a>
+				<a class="btn xs ghost" href={ templ.SafeURL(m.AskHref) }>{ m.AskLabel }</a>
 			}
 		} else {
 			<span class="badge tz" title={ m.ZoneTitle }>{ m.Zone }</span>
@@ -772,17 +904,26 @@ templ benchRowView(r BenchRow, data BenchData) {
 		style={ benchRowStyle(r) }
 	>
 		<span class="dot" aria-hidden="true"></span>
-		// THE ROW IS A DOOR, for every role: the name navigates to the calendar.
-		// A plain href, never an HTMX swap — the target page loads engine
-		// scripts, and boot.js:163 disables scripts inside swapped fragments.
-		<a class="grow" href={ templ.SafeURL(r.Manage.OpenHref) }>
+		// THE ROW IS NO LONGER A DOOR (C-CALV4-V2SUNSET R2-4, [VS-14] SIGNED).
+		//
+		// It used to navigate to /calendar/v2/<that calendar> — a v4 surface
+		// linking out to the legacy calendar, which is the operator's complaint
+		// at its sharpest. Re-pointing it at /apps/calendar would make every
+		// subordinate row a link back to the page it is printed on, because
+		// [VS-12] measured that this handler never reads `calId`. So the anchor
+		// goes and THE ROW STAYS, identity and all: the dot, the name, the fault,
+		// the date and the setup badge are unchanged.
+		//
+		// The row becomes a door again in C-CALV4-BENCH-CALID, when the Bench
+		// learns `?calId=` and the link would select something.
+		<div class="grow">
 			if r.Warn {
 				<div class="fault" role="status">{ r.Fault }</div>
 			} else {
 				<div class="nm">{ r.Name }</div>
 			}
 			<div class="dt">{ r.Detail }</div>
-		</a>
+		</div>
 		<span class="sp"></span>
 		if r.Warn {
 			<span class="badge warn">setup</span>

@@ -90,6 +90,43 @@ func RunPluginMigrations(db *sql.DB, plugins []PluginSchema) []PluginMigrationRe
 	return results
 }
 
+// MarkPluginMigrationApplied records `version` as already applied for `slug`
+// WITHOUT running its SQL, so the migration runner skips straight past it.
+//
+// This exists for exactly one situation: a migration whose SQL can never
+// succeed against the database in front of it, because it encodes an upgrade
+// step from a predecessor state this database was never in. `foundry_vtt`'s
+// migration 001 is the archetype — it RENAMEs a table the deleted
+// `foundry_modules` plugin used to create, so on a fresh install its first
+// statement fails and (since the runner returns on the first failure) every
+// later migration for that plugin is unreachable forever.
+//
+// Marking a migration applied is a DATA fix to the tracking table, not a
+// schema change, which is why it lives in a Go reconciler rather than in a
+// migration (see CLAUDE.md → "Migration Safety Rules"). The caller owns the
+// judgement that the migration is genuinely inapplicable; a later idempotent
+// migration must still establish the schema the skipped one would have
+// produced, or the plugin ends up "healthy" with a missing table.
+//
+// Idempotent: INSERT IGNORE, and the tracking table is ensured first because
+// reconcilers run BEFORE RunPluginMigrations creates it.
+func MarkPluginMigrationApplied(ctx context.Context, db *sql.DB, slug string, version int) error {
+	if db == nil {
+		return fmt.Errorf("MarkPluginMigrationApplied(%s, %d): nil db handle", slug, version)
+	}
+	if err := ensurePluginSchemaTable(db); err != nil {
+		return fmt.Errorf("ensuring plugin_schema_versions: %w", err)
+	}
+	_, err := db.ExecContext(ctx,
+		`INSERT IGNORE INTO plugin_schema_versions (plugin_slug, version) VALUES (?, ?)`,
+		slug, version,
+	)
+	if err != nil {
+		return fmt.Errorf("recording %s migration %d as applied: %w", slug, version, err)
+	}
+	return nil
+}
+
 // ensurePluginSchemaTable creates the plugin_schema_versions table if it
 // doesn't exist. Separate from extension_schema_versions to keep built-in
 // plugin state distinct from user-installed extensions.
@@ -102,7 +139,13 @@ func ensurePluginSchemaTable(db *sql.DB) error {
 			PRIMARY KEY (plugin_slug, version)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// The resume-offset table is ensured from the same place, so there is
+	// exactly one call site that has to be reached before either is used and
+	// they cannot drift apart. See plugin_migration_safety.go.
+	return ensurePluginMigrationProgressTable(db)
 }
 
 // runSinglePluginMigrations parses and applies pending migrations for one plugin.
@@ -269,11 +312,41 @@ func parsePluginMigrations(migrationsFS fs.FS) ([]pluginMigration, error) {
 // execPluginMigration executes a single migration's SQL and records it
 // in plugin_schema_versions. Statements are split by semicolons and
 // executed individually.
+// The migration is NOT atomic and cannot be — MariaDB commits every DDL
+// statement implicitly. Two mechanisms make a partial failure survivable
+// instead of terminal (C-SWEEP-R4 / data/plugin-migration-no-transaction); see
+// plugin_migration_safety.go for exactly what they do and do not promise:
+//
+//   - a pre-flight applicability check, so a migration that cannot complete
+//     aborts having executed nothing at all, and
+//   - a recorded resume offset, so a statement that DID apply before the
+//     failure is not replayed on the next boot into "table already exists".
 func execPluginMigration(ctx context.Context, db *sql.DB, slug string, m pluginMigration) error {
 	stmts := splitPluginStatements(m.UpSQL)
-	for _, stmt := range stmts {
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("migration %d failed on statement: %w\nSQL: %.200s", m.Version, err, stmt)
+	sum := migrationSQLSum(m.UpSQL)
+
+	// Statements before this index applied during an earlier failed attempt.
+	// Re-running them is what turned a one-statement failure into a permanent
+	// crash-loop, because most plugin ALTERs are not idempotent.
+	start := resumeOffset(ctx, db, slug, m.Version, sum, len(stmts))
+
+	if err := preflightPluginMigration(ctx, db, slug, m.Version, stmts[start:]); err != nil {
+		return err
+	}
+
+	for i := start; i < len(stmts); i++ {
+		if _, err := db.ExecContext(ctx, stmts[i]); err != nil {
+			// Record what really did apply BEFORE returning, so the next boot
+			// resumes here rather than replaying. Best-effort by design: the
+			// migration error below is the one the operator must see.
+			recordProgress(ctx, db, slug, m.Version, i, sum)
+			return fmt.Errorf(
+				"migration %d failed on statement %d of %d: %w\n"+
+					"The %d statement(s) before it DID apply and have NOT been rolled back — "+
+					"MariaDB commits DDL implicitly, so no rollback is possible. That progress "+
+					"is recorded: the next start resumes at statement %d instead of replaying "+
+					"the ones that succeeded.\nSQL: %.200s",
+				m.Version, i+1, len(stmts), err, i, i+1, stmts[i])
 		}
 	}
 
@@ -285,6 +358,9 @@ func execPluginMigration(ctx context.Context, db *sql.DB, slug string, m pluginM
 	if err != nil {
 		return fmt.Errorf("recording migration %d: %w", m.Version, err)
 	}
+
+	// The resume offset has served its purpose and must not outlive it.
+	clearProgress(ctx, db, slug, m.Version)
 
 	return nil
 }

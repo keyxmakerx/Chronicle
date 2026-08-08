@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // VisibilityRules defines per-user visibility overrides for calendar events.
@@ -210,12 +212,58 @@ func (c *Calendar) WeekLength() int {
 // (internal/plugins/sessions/model.go) so the two share semantics
 // (C-CAL-EDITOR-EXPANSION PR2). Any other / empty recurrence_type renders ONCE
 // at its stored date, so legacy rows are untouched.
+//
+// THIS BLOCK IS THE ACCEPTED SET, AND IT IS STATED EXACTLY ONCE.
+// CreateEventAPI / UpdateEventAPI validate an inbound recurrence_type against
+// these five constants plus the empty string and reject anything else with a
+// 400 (C-CALV4-GAMEREADY §6, [GR-12]) — before that guard existed the handlers
+// stored "daily", "hourly", "WEEKLY" and "🐉" with a 201 and then fired the
+// event exactly once. Adding a member here widens what the API accepts, so a
+// new constant is a wire-contract change, not a rename.
 const (
 	RecurrenceWeekly   = "weekly"   // every week, on the base date's weekday
 	RecurrenceBiWeekly = "biweekly" // every 2 weeks
 	RecurrenceMonthly  = "monthly"  // same day-of-month each month
 	RecurrenceCustom   = "custom"   // every N weeks (RecurrenceInterval)
+	// RecurrenceYearly is the festival / holy day / birthday unit — the most
+	// common recurring thing in a fantasy calendar, and the one the product
+	// could not express until C-CALV4-GAMEREADY §6 ([GR-11]). Its absence was a
+	// REGRESSION: the pre-v4 calendar was yearly-ONLY (the SQL expansion
+	// removed by recurring_cleanup_test.go), and .ai/data-model.md still
+	// documented the column as "yearly, monthly" while OccursOn dropped the
+	// value on the floor.
+	RecurrenceYearly = "yearly" // same month + day-of-month each year
 )
+
+// RecurrenceTypes is the accepted set as data, for the handlers' input
+// validation ([GR-12]). It is derived from the constants above rather than
+// re-typed, because two accepted sets in two places is how they diverge — the
+// house rule that keeps this in the handler and OUT of the service is the same
+// rule: one validator, one set.
+var RecurrenceTypes = []string{
+	RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly,
+	RecurrenceCustom, RecurrenceYearly,
+}
+
+// IsSupportedRecurrenceType reports whether t is a recurrence_type the engine
+// actually expands. The empty string is accepted and means "not recurring" —
+// calendar_daycard.js's `once` branch writes exactly that, deliberately, so the
+// type and is_recurring land consistent (a JSON null cannot clear the column).
+//
+// The comparison is EXACT AND CASE-SENSITIVE by ruling: a case-different
+// "WEEKLY" from an integration is rejected loudly rather than coerced, because
+// coercion turns an undocumented spelling into a supported one.
+func IsSupportedRecurrenceType(t string) bool {
+	if t == "" {
+		return true
+	}
+	for _, ok := range RecurrenceTypes {
+		if t == ok {
+			return true
+		}
+	}
+	return false
+}
 
 // absDayIndex returns a calendar-absolute day number for (year, month, day).
 // It is the SINGLE place the day-counter choice is made, and both recurrence
@@ -287,22 +335,52 @@ func (c *Calendar) constLenDayIndex(year, month, day int) int {
 //
 // Non-recurring events (or a legacy/empty/unknown recurrence_type) match only
 // their stored date — the prior behavior, so existing rows are untouched. The
-// four recurring types expand forward from the base date:
+// FIVE recurring types expand forward from the base date:
 //   - weekly/biweekly/custom: every (interval × week) days, base-anchored, so
 //     each instance shares the base weekday;
-//   - monthly: the same day-of-month each month, skipped in months too short for
-//     that day (leap-aware via MonthDays).
+//   - monthly: the same day-of-month every (interval) months, base-anchored,
+//     skipped in months too short for that day (leap-aware via MonthDays);
+//   - yearly: the same month AND day-of-month every (interval) years,
+//     base-anchored, SKIPPED — never clamped — in a year whose month is too
+//     short for that day (a leap day, an intercalary day a cycle omits).
+//
+// ALL THREE families apply recurrence_interval. Monthly did not until
+// C-SWEEP-R4 stage 22, which is why calendar_daycard.js's editor withholds the
+// `every [N]` field from the month unit — that workaround can now be lifted,
+// booked as C-CALV4-MONTHLY-INTERVAL-CONTROL. Yearly was built with the
+// interval already applied (C-CALV4-GAMEREADY §6) precisely so it would never
+// need that fix: a stored "every 4 years" that fires annually is the same
+// class of lie stage 22 had to unwind, and the branch below is stage 22's own
+// arithmetic counted in years.
 //
 // Recurrence stops at the recurrence-end date (inclusive) and/or after
-// RecurrenceMaxOccurrences. Multi-day events are not expanded here (the ribbon
-// layer renders their span).
+// RecurrenceMaxOccurrences.
+//
+// MULTI-DAY EVENTS ARE STILL NOT EXPANDED HERE, AND THE REASON HAS CHANGED.
+// This comment used to end "(the ribbon layer renders their span)", and that
+// sentence was FALSE in the code that made it: V2 had a ribbon layer, v4 never
+// built one, so a five-day festival marked exactly one cell and the day card —
+// which is built from those marks — told a GM standing inside a siege that
+// there were "No events on this day". A comment stating an invariant the
+// product does not hold is how the next hand re-derives the bug, so it is
+// corrected in the same commit that fixes the behaviour (C-CALV4-GAMEREADY §3,
+// [GR-5]).
+//
+// The span is now matched by blockEventSpansDate in block_projection.go,
+// BESIDE this predicate rather than inside it, and deliberately: OccursOn
+// answers "does the recurrence rule put an instance here", which is a different
+// question from "is this day inside the stored window", and every other
+// consumer of OccursOn (the week/day lists, the entity ties, the upcoming
+// index) has its own idea of how a span should read. Widening this predicate
+// would have changed all of them silently. The RENDERING of the span as one
+// continuous bar remains unbuilt and is booked as C-CALV4-SPAN-RIBBON.
 func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
 	onBase := e.Year == year && e.Month == month && e.Day == day
 	if !e.IsRecurring || e.RecurrenceType == nil || cal == nil {
 		return onBase
 	}
 	switch *e.RecurrenceType {
-	case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly, RecurrenceCustom:
+	case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly, RecurrenceCustom, RecurrenceYearly:
 		// expanded below
 	default:
 		return onBase // legacy / unknown type → single occurrence
@@ -319,14 +397,77 @@ func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
 		}
 	}
 
+	// YEARLY — the festival branch (C-CALV4-GAMEREADY §6, [GR-11]).
+	//
+	// A MISSING DAY IS SKIPPED, NEVER CLAMPED, and that is the whole ruling.
+	// Where the base day does not exist in a later year — a leap day, an
+	// intercalary day a cycle omits — the occurrence simply does not happen.
+	// Clamping it forward or back would put the holy day on the WRONG DAY
+	// without telling anyone, and a GM plans around the date they authored; an
+	// absent occurrence is visibly absent and can be answered with a one-off,
+	// while a moved one is a silent wrong answer at the table. MonthDays
+	// already answers "does this day exist in this year" (it folds in
+	// LeapYearDays and the Gregorian path), so this is a lookup, not new
+	// arithmetic.
+	if *e.RecurrenceType == RecurrenceYearly {
+		if month != e.Month || day != e.Day || day > cal.MonthDays(month-1, year) {
+			return false
+		}
+		step := 1
+		if e.RecurrenceInterval != nil && *e.RecurrenceInterval > 1 {
+			step = *e.RecurrenceInterval
+		}
+		n := year - e.Year
+		if n < 0 || n%step != 0 {
+			return false
+		}
+		// The cap counts OCCURRENCES, not years — n/step is the 0-based
+		// occurrence index, the same quantity the monthly and week-based
+		// branches compare. With the default interval of 1 the two are
+		// identical, which is why "MaxOccurrences counts years" and "counts
+		// occurrences" say the same thing for every event either editor can
+		// author.
+		if e.RecurrenceMaxOccurrences != nil && n/step >= *e.RecurrenceMaxOccurrences {
+			return false
+		}
+		return true
+	}
+
 	if *e.RecurrenceType == RecurrenceMonthly {
 		if day != e.Day || day > cal.MonthDays(month-1, year) {
 			return false
 		}
-		if e.RecurrenceMaxOccurrences != nil {
-			if n := monthsBetween(cal, e.Year, e.Month, year, month); n < 0 || n >= *e.RecurrenceMaxOccurrences {
-				return false
-			}
+		// MONTHLY HONOURS recurrence_interval, and did not used to
+		// (C-SWEEP-R4 stage 22). The branch checked the day-of-month and the
+		// occurrence cap and returned, so an event stored as "every 3 months"
+		// was accepted, persisted, and then expanded EVERY month — the rule the
+		// operator authored was not the rule they got. The week-based branch
+		// below has always applied its interval through recurrenceWeeks; this is
+		// the same idea, counted in months rather than weeks, and it is the ONLY
+		// difference between the two.
+		//
+		// step 1 is exactly the old behaviour, so a monthly event with no
+		// interval, a zero, or a negative one does not move. Only a stored
+		// interval of 2 or more expands differently than it did — see the
+		// commit for stage 22 for which rows those are.
+		step := 1
+		if e.RecurrenceInterval != nil && *e.RecurrenceInterval > 1 {
+			step = *e.RecurrenceInterval
+		}
+		n := monthsBetween(cal, e.Year, e.Month, year, month)
+		if n < 0 || n%step != 0 {
+			return false
+		}
+		// THE CAP COUNTS OCCURRENCES, NOT MONTHS. n is the whole-month offset
+		// from the base date, so with an interval it overcounts by exactly the
+		// step: "every 3 months, 4 times" would have stopped after 4 MONTHS —
+		// i.e. after the 2nd occurrence. n/step is the 0-based occurrence index,
+		// which is the same quantity `diff/stride` is in the week-based branch,
+		// so the two branches now read the cap the same way. This half was
+		// booked as un-fixable until the interval fork was settled; settling it
+		// unblocked it.
+		if e.RecurrenceMaxOccurrences != nil && n/step >= *e.RecurrenceMaxOccurrences {
+			return false
 		}
 		return true
 	}
@@ -412,11 +553,45 @@ func (c *Calendar) EraForYear(year int) *Era {
 
 // AbsoluteDay returns the total number of days from year 0 day 0 to the given
 // date (year, month 1-indexed, day). Used for moon phase calculation.
+//
+// THE YEAR TERM IS CLOSED-FORM AND THAT IS A DENIAL-OF-SERVICE FIX, not a
+// micro-optimisation. This function used to sum YearLengthForYear over every
+// year from 0, so its cost was O(year) — and `year` arrives straight off an
+// unauthenticated query string on three public seed routes
+// (calendar/worldstate_handler.go GetWorldState, calendar/handler_v2.go's
+// cursor, syncapi/calendar_api_handler.go GetWorldState), which all feed it to
+// BuildWorldStateSeed → moonSeeds → here. Measured on the 12-month/366-day
+// fixture in TestAbsoluteDayClosedFormIsNotLinear: `?year=2000000000` burned
+// **53.5 s of CPU in a single request** (100000000 → 2.7 s, 250000 → 7.9 ms).
+// Closed form retires all three at once: the same call is now ~40 ns and a
+// campaign legitimately set in year 250000 — or 2000000000 — still resolves
+// exactly the date it did before.
+//
+// NO INPUT WINDOW WAS INVENTED. Bounding `?year` would have been the cheap fix
+// and it is the wrong one: a fantasy calendar's year number is authored data,
+// the three entry points would each need the same arbitrary constant, and the
+// next caller that reaches AbsoluteDay from somewhere other than a handler
+// would still be linear. Fixing the algorithm needs no constant and no
+// coordination. No context plumbing is needed either, for the same reason:
+// after this change the function contains no unbounded loop to cancel — the
+// surviving month loop is bounded by len(c.Months).
+//
+// The arithmetic is EXACTLY the loop's, term for term, so no stored date moves:
+//
+//	Σ_{y=0}^{year-1} YearLengthForYear(y)
+//	  = Σ (YearLength() + leapExtraDays if IsLeapYear(y))
+//	  = year·YearLength() + leapExtraDays·|{y ∈ [0,year) : IsLeapYear(y)}|
+//
+// and leapYearsBefore counts that set in O(1) (see its own comment). A negative
+// or zero `year` contributes nothing, which is what the `y < year` loop did.
 func (c *Calendar) AbsoluteDay(year, month, day int) int {
 	total := 0
-	// Add full years.
-	for y := 0; y < year; y++ {
-		total += c.YearLengthForYear(y)
+	// Add full years — closed form, see the function comment.
+	if year > 0 {
+		total = year * c.YearLength()
+		if extra := c.leapExtraDays(); extra != 0 {
+			total += extra * c.leapYearsBefore(year)
+		}
 	}
 	// Add full months in the current year.
 	for i := 0; i < month-1 && i < len(c.Months); i++ {
@@ -424,6 +599,43 @@ func (c *Calendar) AbsoluteDay(year, month, day int) int {
 	}
 	total += day
 	return total
+}
+
+// leapExtraDays is the number of days a leap year adds over a common one: the
+// sum of every month's LeapYearDays, which is exactly the difference between
+// YearLengthForYear(leap) and YearLength().
+func (c *Calendar) leapExtraDays() int {
+	total := 0
+	for _, m := range c.Months {
+		total += m.LeapYearDays
+	}
+	return total
+}
+
+// leapYearsBefore counts the leap years in [0, year) in O(1) — the counting
+// half of AbsoluteDay's closed form.
+//
+// IsLeapYear(y) is `(y-LeapYearOffset) % LeapYearEvery == 0`, and a Go
+// remainder of zero means exact divisibility for either sign, so the predicate
+// is plain congruence: y ≡ LeapYearOffset (mod LeapYearEvery). Reducing the
+// offset to its least non-negative residue r turns the count into "how many
+// members of the arithmetic progression r, r+e, r+2e, … are below year", which
+// is (year-1-r)/e + 1 once year exceeds r, and 0 otherwise. Every division here
+// is on non-negative operands, so Go's truncating integer division is floor
+// division and the formula is exact.
+func (c *Calendar) leapYearsBefore(year int) int {
+	e := c.LeapYearEvery
+	if e <= 0 || year <= 0 {
+		return 0 // IsLeapYear is unconditionally false with no modulus
+	}
+	r := c.LeapYearOffset % e
+	if r < 0 {
+		r += e
+	}
+	if year <= r {
+		return 0
+	}
+	return (year-1-r)/e + 1
 }
 
 // CurrentAbsoluteDay returns AbsoluteDay for the current date.
@@ -794,36 +1006,54 @@ type CreateEventInput struct {
 }
 
 // UpdateEventInput is the validated input for updating an event.
+//
+// PARTIAL update, per the contract ruled on 2026-08-07 (sweep R4): an
+// ABSENT key preserves the stored value, an EXPLICIT null clears it, a
+// present value replaces it.
+//
+// C-CAL-NULL-PRESERVE got eighteen of these right in 2026-05 by making them
+// nil-preserving pointers. It could not fix the rest, and said so: a plain
+// pointer collapses "absent" and "null", so the value-typed fields were
+// left unguarded on the grounds that they have no absent state — which was
+// true of the TYPE, not of the wire. The Foundry calendar-sync sends
+// five-key bodies from three separate paths, and every one of them silently
+// set is_recurring=false and all_day=false on somebody's event.
+//
+// EntityID is the field C-ENTITY-LINK-DESIGN parked. The parking asked that
+// a caller keep the ability to CLEAR the link, which nil-preserve would
+// have taken away. patch.Field gives both: an explicit null still clears
+// (TestUpdateEvent_EntityIDStillClearsOnNil still passes, in its own
+// vocabulary), while a body that never mentions entity_id stops unlinking.
 type UpdateEventInput struct {
-	Name                     string
-	Description              *string
-	DescriptionHTML          *string
-	EntityID                 *string
-	Year                     int
-	Month                    int
-	Day                      int
-	StartHour                *int
-	StartMinute              *int
-	EndYear                  *int
-	EndMonth                 *int
-	EndDay                   *int
-	EndHour                  *int
-	EndMinute                *int
-	IsRecurring              bool
-	RecurrenceType           *string
-	RecurrenceInterval       *int
-	RecurrenceEndYear        *int
-	RecurrenceEndMonth       *int
-	RecurrenceEndDay         *int
-	RecurrenceMaxOccurrences *int
-	Visibility               string
-	VisibilityRules          *string
-	Category                 *string
+	Name                     patch.Field[string]
+	Description              patch.Field[string]
+	DescriptionHTML          patch.Field[string]
+	EntityID                 patch.Field[string]
+	Year                     patch.Field[int]
+	Month                    patch.Field[int]
+	Day                      patch.Field[int]
+	StartHour                patch.Field[int]
+	StartMinute              patch.Field[int]
+	EndYear                  patch.Field[int]
+	EndMonth                 patch.Field[int]
+	EndDay                   patch.Field[int]
+	EndHour                  patch.Field[int]
+	EndMinute                patch.Field[int]
+	IsRecurring              patch.Field[bool]
+	RecurrenceType           patch.Field[string]
+	RecurrenceInterval       patch.Field[int]
+	RecurrenceEndYear        patch.Field[int]
+	RecurrenceEndMonth       patch.Field[int]
+	RecurrenceEndDay         patch.Field[int]
+	RecurrenceMaxOccurrences patch.Field[int]
+	Visibility               patch.Field[string]
+	VisibilityRules          patch.Field[string]
+	Category                 patch.Field[string]
 	// Tier — see CreateEventInput.Tier doc.
-	Tier                     *string
-	Color                    *string
-	Icon                     *string
-	AllDay                   bool
+	Tier   patch.Field[string]
+	Color  patch.Field[string]
+	Icon   patch.Field[string]
+	AllDay patch.Field[bool]
 }
 
 // MonthInput is the input for creating/updating a month.

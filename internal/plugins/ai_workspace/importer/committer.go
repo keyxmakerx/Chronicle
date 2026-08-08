@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/ai_workspace/importer/htmlconv"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 )
@@ -466,9 +467,12 @@ func (c *Committer) commitUpdate(
 ) RowOutcome {
 	out := RowOutcome{Index: idx, Name: existing.Name, Slug: existing.Slug, EntityID: existing.ID}
 
+	// ParentID is deliberately ABSENT, which now means "preserve" (sweep R4):
+	// an import that re-commits an existing page must not flatten it out of
+	// the entity hierarchy, which is exactly what this call used to do.
 	if _, err := c.creator.Update(ctx, existing.ID, entities.UpdateEntityInput{
-		Name:       existing.Name, // update keeps the existing name
-		TypeLabel:  dec.Subcategory,
+		Name:       patch.Of(existing.Name), // update keeps the existing name
+		TypeLabel:  patch.Of(dec.Subcategory),
 		IsPrivate:  &isPrivate,
 		FieldsData: map[string]any{},
 		// Entry + EntryHTML on UpdateEntityInput would also work,

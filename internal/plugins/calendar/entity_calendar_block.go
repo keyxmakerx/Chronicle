@@ -221,7 +221,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		}
 	}
 	if cal == nil {
-		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false)
+		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
 	}
 
 	// The viewer's stored layer set + their persistence endpoint, read ONCE.
@@ -254,7 +254,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 			block = &d
 		case isNotFound(err):
 			// Hidden or missing — indistinguishable on purpose (stage 9).
-			return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false)
+			return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
 		}
 		// Any other error: the Block is omitted and the rest of the embed
 		// stands, which is the same shape as the pre-existing seed/ties rungs.
@@ -287,25 +287,49 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 	}
 
 	data := CalendarV2ViewData{ActiveCalendar: cal, WorldState: seed, WorldStateJSON: seedJSON}
-	return entityCalendarBlockView(cc.Campaign.ID, cal, block, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe)
+	return entityCalendarBlockView(cc.Campaign.ID, cal, block, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe, cc.MemberRole >= campaigns.RoleOwner)
 }
 
-// entityEventHref links a linked-event row to the v2 calendar at that event's
-// date so the reader can jump to it in context.
+// entityEventHref links a linked-event row to the campaign's calendar.
+//
+// C-CALV4-V2SUNSET R2-4, [VS-13] SIGNED — AND THE DATE CURSOR IS DROPPED, WHICH
+// IS A LOSS AND IS STATED RATHER THAN HIDDEN. This link used to carry
+// ?year=&month=&day= and land the reader on that event's own day, because
+// ShowV2 parses those params. The Bench does not: AppDashboard reads `sort`,
+// `y` and `m` and nothing else, and `y`/`m` are a MONTH cursor in the in-world
+// calendar's own month list — there is no day, and no calendar selector to say
+// WHICH calendar's month list a `y`/`m` pair means. So the row now lands on the
+// Bench's own current view.
+//
+// WHY DROP IT RATHER THAN KEEP THE V2 LINK. The V1 embed's chip
+// (calendar.templ:210 dayCellEventHref) makes the opposite trade and keeps its
+// V2 target, and the difference is the ruling: a V1 surface already scheduled
+// for retirement may keep a V2 link to preserve a date, but a v4 surface
+// linking out to the legacy calendar IS the operator's complaint. The cursor
+// rides with C-CALV4-BENCH-CALID.
+//
+// RENAMED from entityEventHref's V2-named sibling discipline: this one never
+// said V2, but its target did.
 func entityEventHref(campaignID string, evt Event) string {
-	return "/campaigns/" + campaignID + "/calendar/v2?year=" +
-		itoa(evt.Year) + "&month=" + itoa(evt.Month) + "&day=" + itoa(evt.Day)
+	return "/campaigns/" + campaignID + "/apps/calendar"
 }
 
-// openCalendarV2Href is the "Open full calendar" target (C-WIDGET-BINDING-QA2
-// Part B): the V2 shell for the resolved calendar (the bound one, or the
-// campaign-active default when unbound). Empty calendarID → the active-calendar
-// V2 entry. V2 not V1 — consistent with QA1 Bug 1.
-func openCalendarV2Href(campaignID, calendarID string) string {
-	if calendarID == "" {
-		return "/campaigns/" + campaignID + "/calendar/v2"
-	}
-	return "/campaigns/" + campaignID + "/calendar/v2/" + calendarID
+// openCalendarHref is the "Open full calendar" target (C-WIDGET-BINDING-QA2
+// Part B): the campaign's calendar, which since C-CALV4-V2SUNSET R2-4 is the
+// Bench and no longer the V2 shell.
+//
+// RENAMED FROM openCalendarV2Href ([VS-2] SIGNED). A helper called
+// openCalendarV2Href returning a v4 URL is the next reader's trap.
+//
+// THE calendarID ARGUMENT IS NOW IGNORED, and it is kept rather than removed
+// because the caller's binding still knows which calendar it means. [VS-12]
+// SIGNED, measured: AppDashboard (app_dashboard.go) reads only `sort`, `y` and
+// `m` — `?calId=` is INERT on this handler, so a door carrying it would land on
+// the Bench's default selection anyway, silently. Teaching the Bench to read it
+// is C-CALV4-BENCH-CALID, booked; dropping the parameter here is the honest
+// version of what already happens.
+func openCalendarHref(campaignID, calendarID string) string {
+	return "/campaigns/" + campaignID + "/apps/calendar"
 }
 
 // entityEventRole renders the participation role label (empty → "linked").

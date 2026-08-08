@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/sanitize"
 )
 
@@ -231,16 +232,23 @@ func (s *sessionService) ListPlannedSessions(ctx context.Context, campaignID str
 // UpdateSession validates and updates a session. If a recurring session is
 // completed, auto-generates the next occurrence and returns it.
 func (s *sessionService) UpdateSession(ctx context.Context, id string, input UpdateSessionInput) (*Session, error) {
-	if input.Name == "" {
+	// Sweep R4 / partial-write contract: absent preserves, explicit null
+	// clears, a present value replaces. A name is still required when the
+	// caller SENDS one — an absent name means "I am not editing the name",
+	// which is what "Mark Complete" means.
+	if name, ok := input.Name.Get(); ok && name == "" {
 		return nil, apperror.NewBadRequest("session name is required")
 	}
 
-	// Validate status.
-	switch input.Status {
-	case StatusPlanned, StatusCompleted, StatusCancelled:
-		// Valid.
-	default:
-		input.Status = StatusPlanned
+	// Validate status. An absent status preserves the stored one; a present
+	// but unrecognised status still falls back to "planned" as before.
+	if status, ok := input.Status.Get(); ok {
+		switch status {
+		case StatusPlanned, StatusCompleted, StatusCancelled:
+			// Valid.
+		default:
+			input.Status = patch.Of(StatusPlanned)
+		}
 	}
 
 	// Validate recurrence type. CreateSession only checks this when IsRecurring
@@ -250,8 +258,8 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	// (C-SEC-XSS-JSATTR-SWEEP-R1 sink 2 — the JSON PUT handler binds the body
 	// unchecked). A nil type means "no recurrence" and is always allowed;
 	// jsEsc at the sink is the second layer of defense.
-	if input.RecurrenceType != nil {
-		switch *input.RecurrenceType {
+	if rt, ok := input.RecurrenceType.Get(); ok {
+		switch rt {
 		case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly, RecurrenceCustom:
 			// Valid.
 		default:
@@ -268,29 +276,34 @@ func (s *sessionService) UpdateSession(ctx context.Context, id string, input Upd
 	wasPlanned := session.Status == StatusPlanned
 	wasRecurring := session.IsRecurring
 
-	session.Name = input.Name
-	session.Summary = input.Summary
-	session.ScheduledDate = input.ScheduledDate
-	session.ScheduledTime = input.ScheduledTime
-	session.CalendarYear = input.CalendarYear
-	session.CalendarMonth = input.CalendarMonth
-	session.CalendarDay = input.CalendarDay
-	session.Status = input.Status
-	session.IsRecurring = input.IsRecurring
-	session.RecurrenceType = input.RecurrenceType
-	session.RecurrenceInterval = input.RecurrenceInterval
+	// Load-merge-write. `session` is the row as stored, so every merge below
+	// defaults to the stored value and only a key the caller actually sent
+	// can change it.
+	session.Name = input.Name.Val(session.Name)
+	session.Summary = input.Summary.Ptr(session.Summary)
+	session.ScheduledDate = input.ScheduledDate.Ptr(session.ScheduledDate)
+	session.ScheduledTime = input.ScheduledTime.Ptr(session.ScheduledTime)
+	session.CalendarYear = input.CalendarYear.Ptr(session.CalendarYear)
+	session.CalendarMonth = input.CalendarMonth.Ptr(session.CalendarMonth)
+	session.CalendarDay = input.CalendarDay.Ptr(session.CalendarDay)
+	session.Status = input.Status.Val(session.Status)
+	session.IsRecurring = input.IsRecurring.Val(session.IsRecurring)
+	session.RecurrenceType = input.RecurrenceType.Ptr(session.RecurrenceType)
+	session.RecurrenceInterval = input.RecurrenceInterval.Val(session.RecurrenceInterval)
 	if session.RecurrenceInterval < 1 {
 		session.RecurrenceInterval = 1
 	}
-	session.RecurrenceDayOfWeek = input.RecurrenceDayOfWeek
-	session.RecurrenceEndDate = input.RecurrenceEndDate
+	session.RecurrenceDayOfWeek = input.RecurrenceDayOfWeek.Ptr(session.RecurrenceDayOfWeek)
+	session.RecurrenceEndDate = input.RecurrenceEndDate.Ptr(session.RecurrenceEndDate)
 
 	if err := s.repo.Update(ctx, session); err != nil {
 		return nil, err
 	}
 
 	// Auto-generate next occurrence when a recurring session is completed.
-	if wasPlanned && wasRecurring && input.Status == StatusCompleted {
+	// Read the MERGED status, not the raw input: "Mark Complete" sends only
+	// {status}, and the generator must fire on that.
+	if wasPlanned && wasRecurring && session.Status == StatusCompleted {
 		nextSession := s.generateNextOccurrence(ctx, session)
 		if nextSession != nil {
 			return nextSession, nil

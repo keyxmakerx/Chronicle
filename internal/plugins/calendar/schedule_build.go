@@ -550,7 +550,9 @@ func scheduleLaneFor(in scheduleBuildInput, m scheduleMember, cols []ScheduleCol
 	// repair beside it — never "--:--", never a dash, never a UTC guess.
 	if m.TZ == "" {
 		lane.ZoneMissing = true
-		lane.AskHref = benchRsvpAskHref(in.CampaignID)
+		// [GR-15]: the viewer's own row repairs itself at /account; a GM gets
+		// the roster; a Player looking at someone else's row gets no control.
+		lane.AskHref, lane.AskLabel = benchZoneRepair(in.CampaignID, in.ViewerID, m.UserID, in.IsGM)
 	} else if clock, next, ok := scheduleLocalHourAt(in, m); ok {
 		lane.LocalTime, lane.NextDay = clock, next
 		lane.Antisocial = scheduleAntisocialClock(clock)
@@ -953,8 +955,9 @@ func scheduleRosterRowFor(in scheduleBuildInput, m scheduleMember) ScheduleRoste
 	}
 	if m.TZ == "" {
 		// A MISSING TIMEZONE CAN NEVER PRODUCE A TIME. The repair may never be
-		// the thing that disappears on the smallest screen.
-		row.AskHref = benchRsvpAskHref(in.CampaignID)
+		// the thing that disappears on the smallest screen — but WHICH repair
+		// depends on whose row it is ([GR-15]).
+		row.AskHref, row.AskLabel = benchZoneRepair(in.CampaignID, in.ViewerID, m.UserID, in.IsGM)
 		return row
 	}
 	row.Zone, row.ZoneTitle = m.ZoneLeaf, m.TZ
@@ -985,7 +988,12 @@ func scheduleBuildAnswer(in scheduleBuildInput) ScheduleAnswer {
 		for _, m := range members {
 			row := scheduleRosterRowFor(in, m)
 			if m.Answer == "—" {
-				row.AskHref = benchRsvpAskHref(in.CampaignID)
+				// A DIFFERENT CONDITION FROM THE ZONE REPAIR: this row is
+				// awaiting an ANSWER, not a timezone, and this whole branch is
+				// already inside `if in.IsGM`. So it keeps `Ask →` and the
+				// roster unconditionally — the audience gate [GR-15] adds is
+				// the enclosing branch, not a second check.
+				row.AskHref, row.AskLabel = benchRsvpAskHref(in.CampaignID), "Ask →"
 				a.Awaiting = append(a.Awaiting, row)
 				continue
 			}

@@ -182,15 +182,17 @@ func TestGenerateDayCardMorphFrames(t *testing.T) {
 				"FULL OPACITY and interactive, and the strip reports ZERO transitions " +
 				"parked — there was nothing to park, which is the whole claim: reduced " +
 				"motion seeds no start geometry at all, so the box can never land at a " +
-				"mid-morph size. TWO THINGS THIS FRAME SHOWS THAT ARE NOT THE CLAIM, both " +
-				"pre-existing and both true of the rejected set's 13 as well: the box " +
-				"lands at the VIEWPORT'S TOP-LEFT rather than beside the day, because " +
-				"under reduced motion `closeCard` hides the card SYNCHRONOUSLY and the " +
-				"placement law is then handed a 0×0 anchor — booked as " +
-				"C-CALV4-CARD-REDUCED-ANCHOR, not fixed here ([ER-5]/[ER-6] bound this " +
-				"slice to the morph's ordering); and the page heading is therefore " +
-				"COVERED by the editor, which is why this family's black strip carries " +
-				"the file name and what the frame is. " + daycardMorphCaption},
+				"mid-morph size. WHAT THIS FRAME NO LONGER SHOWS: the rejected set's 13, " +
+				"and this one until C-CALV4-CARD-REDUCED-ANCHOR was closed, put the box at " +
+				"the VIEWPORT'S TOP-LEFT rather than beside the day — under reduced motion " +
+				"`closeCard` hides the card SYNCHRONOUSLY, so the placement law was handed " +
+				"a 0×0 anchor. `edOpen` now freezes the anchor's rect BEFORE `closeCard`, " +
+				"beside the morph's own `fromRect`, and both motion modes land on the same " +
+				"placement; TestDayCardReducedMotionAnchorsToItsDay measures the pair. ONE " +
+				"THING THIS FRAME SHOWS THAT IS STILL NOT THE CLAIM, and is pre-existing: " +
+				"the page heading is COVERED by the editor, which is why this family's " +
+				"black strip carries the file name and what the frame is. " +
+				daycardMorphCaption},
 		{file: "14-editor-gm-no-preference-50pct.png", dir: "open", f: 0.5,
 			title: "Event editor · NO PREFERENCE · the same pause, at 50% — THE COUNTERFACTUAL",
 			label: "no preference — the same pause, at 50%",

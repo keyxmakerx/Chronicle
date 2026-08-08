@@ -76,6 +76,38 @@ test-unit: ## Run unit tests only (skip integration)
 test-int: ## Run integration tests (requires running DB)
 	go test ./... -v -run Integration
 
+.PHONY: test-freshdb
+test-freshdb: ## Replay core + every plugin migration against a NEVER-migrated schema (requires running DB)
+	# C-SWEEP-R4 (data/fvtt-fresh-db-rename): nothing in the suite ever
+	# migrated an empty database. tools/restore-drill.sh loads a dump of an
+	# ALREADY-migrated one and every other integration test assumes
+	# `make migrate-up` already ran — so foundry_vtt's migration 001 failed on
+	# its first statement on every new self-hosted install and no test noticed.
+	# These two replay the real bootstrap (core migrations → the foundry_vtt
+	# pre-check + reconciler → RunPluginMigrations over registeredPlugins())
+	# against a throwaway schema: one from zero, one from the pre-consolidation
+	# shape. They create and drop their own scratch schema, so this never
+	# touches the dev database.
+	go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_'
+	# The plugin-migration damage-control layer (pre-flight applicability +
+	# resume-after-partial-failure) is a claim about what the SERVER does with
+	# a half-applied migration, so it is measured on one too.
+	go test ./internal/database/ -v -run 'TestPluginMigration_'
+
+.PHONY: test-probes
+test-probes: ## Drive the real-browser probes (the only tests that see the RENDERED result)
+	# C-SWEEP-R4 (guards/probes-never-run-in-ci). The browser probes skip under
+	# `-short` — the mode BOTH `make test-unit` and `make verify` and CI's
+	# "Build & Test" job run — and skip again with no Chromium, and a `go test`
+	# SKIP hides inside an `ok` package line. So none of them had ever executed
+	# in CI or in verify, and a machine with no browser produced a green run
+	# indistinguishable from one that measured everything.
+	#
+	# The guard runs them WITHOUT -short and then requires a PASS from each by
+	# name, so once a machine CAN drive a browser, not driving it is an error.
+	# With no browser it says so loudly, naming every probe that did not run.
+	./tools/check-browser-probes.sh
+
 .PHONY: test-cover
 test-cover: ## Run tests with coverage report
 	go test ./... -coverprofile=coverage.out
@@ -96,6 +128,13 @@ test-js: ## Run JS runtime tests (cal-almanac world-state spine, node --test)
 # (`make vuln`), and tools/test-restore-drill.sh (spins real MariaDB
 # containers — too heavy for an inner-loop check; CI still runs it).
 #
+# The browser probes ARE included, at the end. `go test ./... -short` above
+# cannot see them — that is the whole point of C-SWEEP-R4's
+# guards/probes-never-run-in-ci — so verify would otherwise report a green
+# sequence in which nothing had ever looked at a rendered page. On a machine
+# with no Chromium the step names every probe it could not run and moves on;
+# it is fatal only in CI, which sets BROWSER_PROBES_REQUIRED=1.
+#
 # The three diff-scoped guards resolve their base as origin/main and need real
 # git history; in a shallow clone they silently report OK. Override with
 # DIFF_BASE=<ref>.
@@ -105,13 +144,16 @@ verify: ## Run the full local CI sequence (templ → build → vet → guards �
 	@echo "==> go build ./...";                go build ./...
 	@echo "==> go vet ./...";                  go vet ./...
 	@echo "==> guard: no-instance-hostname";   ./tools/check-no-instance-hostname.sh
+	@echo "==> guard: plugin-isolation (self-test)"; ./tools/test-plugin-isolation.sh
 	@echo "==> guard: plugin-isolation";       ./tools/check-plugin-isolation.sh
 	@echo "==> guard: migration-immutability"; ./tools/check-migration-immutability.sh
 	@echo "==> guard: v2-motion-discipline";   ./tools/check-v2-motion-discipline.sh
 	@echo "==> guard: calendar-v4 B1-B4";      ./tools/check-calendar-v4-lints.sh
 	@echo "==> guard: decision-citations";     ./tools/check-decision-citations.sh
+	@echo "==> guard: widget-mounts";          ./tools/check-widget-mounts.sh
 	@echo "==> go test ./... -short";          go test ./... -short
 	@echo "==> make test-js";                  $(MAKE) test-js
+	@echo "==> browser probes";                $(MAKE) test-probes
 	@echo "==> verify: OK"
 
 .PHONY: lint
@@ -153,6 +195,16 @@ seed: ## Seed dev database with sample data (TODO: implement cmd/seed)
 
 # --- Docker ---
 .PHONY: docker-up
+test-db-up: ## Start a local MariaDB for integration tests WITHOUT Docker (port 13306)
+	@./tools/start-test-db.sh
+
+test-db-down: ## Stop the local test MariaDB
+	@./tools/start-test-db.sh --stop
+
+test-int-local: ## Run integration tests against the local test MariaDB (starts it if needed)
+	@./tools/start-test-db.sh >/dev/null
+	@CHRONICLE_TEST_DB_DSN='root@tcp(127.0.0.1:13306)/' go test ./... -count=1
+
 docker-up: ## Start MariaDB + Redis containers
 	docker compose -f $(DOCKER_COMP) up -d chronicle-db chronicle-redis
 

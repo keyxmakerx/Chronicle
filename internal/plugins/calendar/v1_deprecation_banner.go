@@ -24,5 +24,15 @@ func v1BannerSwitchHref(cc *campaigns.CampaignContext) templ.SafeURL {
 	if cc == nil || cc.Campaign == nil {
 		return templ.SafeURL("/")
 	}
-	return templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/calendar/v2")
+	// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED): the Bench, not the V2 shell. The
+	// banner's whole job is "the thing you are looking at is not the current
+	// calendar", and pointing it at a surface that is ALSO being retired would
+	// have made it wrong in a new way.
+	//
+	// MEASURED CORRECTION TO THE BOOKING: this banner has exactly ONE host —
+	// calendar.templ:308, the V1 timeline. The setup chooser it also used to
+	// steer no longer exists ([WZ-13] deleted CalendarSetupPage, and
+	// v1_deprecation_banner_test.go asserts it stays deleted). C-CAL-V1-SUNSET
+	// is a SMALLER job than booked because of it.
+	return templ.SafeURL("/campaigns/" + cc.Campaign.ID + "/apps/calendar")
 }

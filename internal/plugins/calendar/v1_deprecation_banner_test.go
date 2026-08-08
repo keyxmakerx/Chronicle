@@ -20,16 +20,29 @@ import (
 
 // --- Dormant-component guards (flip-back safety) ----------------------
 //
-// The Switch-to-V2 href helper stays exercised so that when the banner is
+// The banner's CTA href helper stays exercised so that when the banner is
 // reinstated the link target is still correct. Pure function; no mount.
 
-func TestV1BannerSwitchHref_RoutesToV2Shell(t *testing.T) {
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED), NAME AND ALL. It was
+// TestV1BannerSwitchHref_RoutesToV2Shell and required "/campaigns/camp-1/
+// calendar/v2". THE NEW CLAIM: the banner steers to the Bench.
+//
+// WHY THE TARGET HAD TO MOVE RATHER THAN STAY: the banner's whole job is to say
+// "the thing you are looking at is not the current calendar". Pointing it at a
+// surface that is ALSO being retired would have made it wrong in a new way.
+//
+// AND A MEASURED CORRECTION TO THE BOOKING, recorded where the next reader of
+// this banner will find it: V1DeprecationBanner has exactly ONE host —
+// calendar.templ:308, the V1 timeline. The setup chooser it also used to steer
+// no longer exists ([WZ-13]), and the test below asserts it stays deleted. So
+// C-CAL-V1-SUNSET is a SMALLER job than it was booked as.
+func TestV1BannerSwitchHref_RoutesToTheBench(t *testing.T) {
 	cc := &campaigns.CampaignContext{
 		Campaign: &campaigns.Campaign{ID: "camp-1"},
 	}
 	got := string(v1BannerSwitchHref(cc))
-	if got != "/campaigns/camp-1/calendar/v2" {
-		t.Errorf("switch href = %q; want '/campaigns/camp-1/calendar/v2'", got)
+	if got != "/campaigns/camp-1/apps/calendar" {
+		t.Errorf("banner CTA href = %q; want '/campaigns/camp-1/apps/calendar'", got)
 	}
 }
 

@@ -146,12 +146,20 @@
   }
 
   // Register with Chronicle widget system.
-  if (window.Chronicle && Chronicle.registerWidget) {
-    Chronicle.registerWidget('impact_tree', mount);
-  } else {
-    // Fallback: auto-mount on DOMContentLoaded.
-    document.addEventListener('DOMContentLoaded', () => {
-      document.querySelectorAll('[data-widget="impact_tree"]').forEach(mount);
-    });
-  }
+  //
+  // `Chronicle.register(name, {init})` is the registration API boot.js has —
+  // NOT `Chronicle.registerWidget`, which this file used to call and which has
+  // never existed (`.ai/todo.md` still lists it as an unchecked Sprint Q-1
+  // item). The guarded call self-disabled and fell through to a DOMContentLoaded
+  // scan, which is the wrong lifecycle for this mount besides: the preview
+  // fragment arrives by htmx swap (custom_system.templ → POST
+  // /campaigns/:id/systems/preview, hx-target="#custom-system-section") long
+  // after DOMContentLoaded, and only boot.js's htmx:afterSettle re-mount reaches
+  // swapped-in content. Result was a blank "Impact Overview" card.
+  //
+  // Unguarded, like every sibling widget: base.templ loads boot.js first and
+  // `defer` preserves document order, so Chronicle.register is always defined.
+  // init() receives (el, config); the tree is read off the element's own
+  // data-tree attribute, so the config argument is unused.
+  Chronicle.register('impact_tree', { init: mount });
 })();

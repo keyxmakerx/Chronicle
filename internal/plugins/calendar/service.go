@@ -78,7 +78,16 @@ type CalendarService interface {
 	ToggleBenchSection(ctx context.Context, userID, campaignID, key string) error
 
 	// Sub-resource bulk updates (replace all).
-	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
+	// SetMonths replaces the month list and reports what that did to the
+	// events already referencing it by POSITION ([GR-18]). The count is a
+	// WARNING, never a refusal, and never a data write.
+	SetMonths(ctx context.Context, calendarID string, months []MonthInput) (MonthEditImpact, error)
+	// MonthEditImpact answers the same question WITHOUT writing, so a preview
+	// and a save can never disagree.
+	MonthEditImpact(ctx context.Context, calendarID string, months []MonthInput) (MonthEditImpact, error)
+	// StrandedEventCounts is the standing read: events left pointing at a
+	// month position their calendar no longer has, per calendar, in one query.
+	StrandedEventCounts(ctx context.Context, campaignID string) (map[string]int, error)
 	SetWeekdays(ctx context.Context, calendarID string, weekdays []WeekdayInput) error
 	SetMoons(ctx context.Context, calendarID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
@@ -142,7 +151,7 @@ type CalendarService interface {
 	SetDate(ctx context.Context, calendarID string, year, month, day, hour, minute int) error
 
 	// Import/export.
-	ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error
+	ApplyImport(ctx context.Context, calendarID string, result *ImportResult) (MonthEditImpact, error)
 	ListAllEvents(ctx context.Context, calendarID string) ([]Event, error)
 
 	// Entity ties (C-CAL-ENTITY-TIES-DATA-MODEL). Optional M:N both ways
@@ -437,7 +446,7 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 			{Name: "November", Days: 30, SortOrder: 10},
 			{Name: "December", Days: 31, SortOrder: 11},
 		}
-		if err := s.SetMonths(ctx, cal.ID, gregorianMonths); err != nil {
+		if _, err := s.SetMonths(ctx, cal.ID, gregorianMonths); err != nil {
 			return err
 		}
 		gregorianWeekdays := []WeekdayInput{
@@ -490,7 +499,7 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 		{Name: "Month 11", Days: 30, SortOrder: 10},
 		{Name: "Month 12", Days: 30, SortOrder: 11},
 	}
-	if err := s.SetMonths(ctx, cal.ID, defaultMonths); err != nil {
+	if _, err := s.SetMonths(ctx, cal.ID, defaultMonths); err != nil {
 		return err
 	}
 	defaultWeekdays := []WeekdayInput{
@@ -937,7 +946,7 @@ func (s *calendarService) ListVisibleCalendars(ctx context.Context, campaignID s
 	// The base loader ListCalendars already applied the real-time seam per
 	// element (C-REAL-CALENDAR-P2 F1); filterCalendarsByUser reuses those same
 	// structs, so no re-seam is needed here.
-	return filterCalendarsByUser(cals, role, userID), nil
+	return filterCalendarsByUser(cals, permissions.RequestViewer(role, userID)), nil
 }
 
 // dashboardAgendaCap bounds the per-calendar agenda the dashboard widget shows.
@@ -1101,7 +1110,7 @@ func (s *calendarService) GetActiveVisibleCalendar(ctx context.Context, campaign
 	if err != nil {
 		return nil, err
 	}
-	if cal != nil && calendarVisibleTo(cal, role, userID) {
+	if cal != nil && calendarVisibleTo(cal, permissions.RequestViewer(role, userID)) {
 		return cal, nil
 	}
 	// Active/default calendar is hidden from this viewer — fall back to the
@@ -1152,10 +1161,13 @@ func (s *calendarService) GetSidebarPinned(ctx context.Context, userID, campaign
 // WHY A PREFERENCE NEEDS A CALENDAR AT ALL. It does not, conceptually — the pin,
 // the Block layer set and the closed Bench sections are per (user, campaign) and
 // have nothing to do with any one calendar. But they are stored on the
-// calendar_active row, whose `calendar_id` is `VARCHAR(36) NOT NULL` with a
-// foreign key to `calendars(id)` (migration 006:17,22-23). The repository used to
-// paper over that with a literal empty string on first write, which is not a
-// calendar id any campaign has, so
+// calendar_active row, whose `calendar_id` carries a foreign key to
+// `calendars(id)` (migration 006:17,22-23; 017 made the column NULLable and
+// moved the FK to ON DELETE SET NULL so a calendar deletion clears the pointer
+// instead of destroying the whole row and the three preferences on it — but a
+// FOREIGN KEY still rejects a non-NULL id that names no calendar). The
+// repository used to paper over that with a literal empty string on first
+// write, which is not a calendar id any campaign has and is not NULL either, so
 // InnoDB refused the insert with errno 1452 and every one of these writes 500'd.
 // The row has to name a real calendar, so the service names the one the viewer is
 // actually looking at.
@@ -1398,26 +1410,42 @@ func (s *calendarService) ToggleBenchSection(ctx context.Context, userID, campai
 }
 
 // SetMonths replaces all months. Validates at least one month exists.
-func (s *calendarService) SetMonths(ctx context.Context, calendarID string, months []MonthInput) error {
+//
+// IT RETURNS WHAT THE EDIT DID TO THE EVENTS THAT REFERENCE THE LIST
+// (C-CALV4-GAMEREADY §9 [GR-18], under [GR-SIGN-B] — WARN, NEVER REFUSE). The
+// save always succeeds: the operator is days from running a game and is
+// therefore in the exact week they are most likely to be reshaping their
+// months, and locking them out of their own data would be a worse defect than
+// the one being reported.
+//
+// The impact is computed BEFORE the write, because it is a before/after
+// comparison and the "before" stops existing the moment the repository's
+// delete-and-reinsert runs. A failure to compute it is NOT a failure to save —
+// a warning that could not be produced must never cost the operator their edit.
+func (s *calendarService) SetMonths(ctx context.Context, calendarID string, months []MonthInput) (MonthEditImpact, error) {
 	if len(months) == 0 {
-		return apperror.NewValidation("calendar must have at least one month")
+		return MonthEditImpact{}, apperror.NewValidation("calendar must have at least one month")
 	}
 	for i, m := range months {
 		if m.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
 		}
 		if m.Days < 1 || m.Days > 400 {
-			return apperror.NewValidation(fmt.Sprintf("month %q: days must be between 1 and 400", m.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %q: days must be between 1 and 400", m.Name))
 		}
 		if m.LeapYearDays < 0 {
-			return apperror.NewValidation(fmt.Sprintf("month %q: leap_year_days cannot be negative", m.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %q: leap_year_days cannot be negative", m.Name))
 		}
 	}
+	impact, ierr := s.MonthEditImpact(ctx, calendarID, months)
+	if ierr != nil {
+		impact = MonthEditImpact{}
+	}
 	if err := s.repo.SetMonths(ctx, calendarID, months); err != nil {
-		return err
+		return MonthEditImpact{}, err
 	}
 	s.publishStructureUpdated(ctx, calendarID)
-	return nil
+	return impact, nil
 }
 
 // SetWeekdays replaces all weekdays.
@@ -2014,132 +2042,91 @@ func (s *calendarService) UpdateEvent(ctx context.Context, eventID string, input
 		return apperror.NewNotFound("event not found")
 	}
 
-	// Validate visibility (same rules as CreateEvent).
-	if input.Visibility == "" {
-		input.Visibility = evt.Visibility // preserve existing if not provided
+	// Validate visibility (same rules as CreateEvent). An absent visibility
+	// preserves the stored one, same as the empty string always did.
+	visibility := input.Visibility.Val(evt.Visibility)
+	if visibility == "" {
+		visibility = evt.Visibility
 	}
-	if input.Visibility != "everyone" && input.Visibility != "dm_only" {
+	if visibility != "everyone" && visibility != "dm_only" {
 		return apperror.NewValidation("visibility must be 'everyone' or 'dm_only'")
 	}
-	if err := validateVisibilityRules(input.VisibilityRules); err != nil {
+	visRules := input.VisibilityRules.Ptr(evt.VisibilityRules)
+	if err := validateVisibilityRules(visRules); err != nil {
 		return err
 	}
 
-	// C-CAL-NULL-PRESERVE (chronicle PR for 2026-05-19 audit):
-	// 18 pointer-typed input fields are nil-guarded so a partial-save
-	// (e.g. title-only edit via the FM-CAL-EDITOR day inspector) doesn't
-	// silently blank description, color, times, recurrence config, or
-	// per-user visibility rules. Same pattern as
-	// UpdateEntityInput.IsPrivate *bool from chronicle#318. Audit
-	// context: reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md
-	// §2 risk matrix.
+	// Load-merge-write (sweep R4, extending C-CAL-NULL-PRESERVE).
 	//
-	// Value-typed fields stay unguarded by design — they have no
-	// "absent" semantic distinct from "false/default/empty":
-	//   Name      — required; empty string would fail validation upstream.
-	//   Year/Month/Day — required for an event edit.
-	//   Visibility    — defaulted to evt.Visibility above when empty.
-	//   IsRecurring   — bool: false IS the value, not "absent".
-	//   AllDay        — same.
-	evt.Name = input.Name
-	if input.Description != nil {
-		evt.Description = input.Description
-	}
-	// Sanitize rich text HTML if provided. nil input.DescriptionHTML
-	// means "preserve current" (the nil-guard), not "clear". Empty-string
-	// inside a non-nil pointer falls through to the else branch, which
-	// preserves the original behavior of writing the (empty) value.
-	if input.DescriptionHTML != nil {
-		if *input.DescriptionHTML != "" {
-			sanitized := sanitize.HTML(*input.DescriptionHTML)
+	// C-CAL-NULL-PRESERVE (chronicle PR for the 2026-05-19 audit) nil-guarded
+	// eighteen pointer fields so a title-only edit via the FM-CAL-EDITOR day
+	// inspector could not blank description, color, times, recurrence config
+	// or per-user visibility rules. It left the value-typed fields unguarded
+	// on the reasoning that they have no "absent" state — true of the Go
+	// type, false of the wire. Foundry's calendar-sync pushes five-key bodies
+	// from three separate paths, and each of them silently wrote
+	// is_recurring=false and all_day=false onto somebody's event.
+	//
+	// patch.Field carries presence, so every field below now reads the same
+	// way: absent preserves, an explicit null clears, a value replaces.
+	//
+	// EntityID is the one C-ENTITY-LINK-DESIGN parked. The parking's concern
+	// was that a nil-preserve sweep would remove a caller's ability to CLEAR
+	// the link; the three-state contract keeps it — an explicit null still
+	// unlinks — while a body that never mentions entity_id stops unlinking by
+	// accident. TestUpdateEvent_EntityIDStillClearsOnNil still pins the clear.
+	evt.Name = input.Name.Val(evt.Name)
+	evt.Description = input.Description.Ptr(evt.Description)
+	// Sanitize rich text HTML if provided. Absent means "preserve current",
+	// not "clear". A present empty string writes the (empty) value, which is
+	// the pre-sweep behaviour of a non-nil empty pointer.
+	if input.DescriptionHTML.Present() {
+		if v, ok := input.DescriptionHTML.Get(); ok && v != "" {
+			sanitized := sanitize.HTML(v)
 			evt.DescriptionHTML = &sanitized
 		} else {
-			evt.DescriptionHTML = input.DescriptionHTML
+			evt.DescriptionHTML = input.DescriptionHTML.Ptr(evt.DescriptionHTML)
 		}
 	}
-	// EntityID intentionally NOT nil-guarded here pending C-ENTITY-LINK-
-	// DESIGN (see cordinator/plans/BACKLOG.md). Today nil EntityID
-	// continues to mean "clear the entity link" to preserve the existing
-	// wire semantic until the entity-linking surface is reworked
-	// holistically — including the deferred multi-entity N:M support
-	// (C-CALENDAR-AUDIT Chunk 3) and cross-plugin link consistency. A
-	// regression test (TestUpdateEvent_EntityIDStillClearsOnNil) pins
-	// this deliberate non-fix so a future sweep can't accidentally
-	// include it without revisiting the design dispatch. Audit context:
-	// reports/chronicle/2026-05-19-c-cal-null-preserve-audit.md §5 risk #1.
-	evt.EntityID = input.EntityID
-	evt.Year = input.Year
-	evt.Month = input.Month
-	evt.Day = input.Day
-	if input.StartHour != nil {
-		evt.StartHour = input.StartHour
-	}
-	if input.StartMinute != nil {
-		evt.StartMinute = input.StartMinute
-	}
-	if input.EndYear != nil {
-		evt.EndYear = input.EndYear
-	}
-	if input.EndMonth != nil {
-		evt.EndMonth = input.EndMonth
-	}
-	if input.EndDay != nil {
-		evt.EndDay = input.EndDay
-	}
-	if input.EndHour != nil {
-		evt.EndHour = input.EndHour
-	}
-	if input.EndMinute != nil {
-		evt.EndMinute = input.EndMinute
-	}
-	evt.IsRecurring = input.IsRecurring
-	if input.RecurrenceType != nil {
-		evt.RecurrenceType = input.RecurrenceType
-	}
-	if input.RecurrenceInterval != nil {
-		evt.RecurrenceInterval = input.RecurrenceInterval
-	}
-	if input.RecurrenceEndYear != nil {
-		evt.RecurrenceEndYear = input.RecurrenceEndYear
-	}
-	if input.RecurrenceEndMonth != nil {
-		evt.RecurrenceEndMonth = input.RecurrenceEndMonth
-	}
-	if input.RecurrenceEndDay != nil {
-		evt.RecurrenceEndDay = input.RecurrenceEndDay
-	}
-	if input.RecurrenceMaxOccurrences != nil {
-		evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences
-	}
-	evt.Visibility = input.Visibility
-	if input.VisibilityRules != nil {
-		evt.VisibilityRules = input.VisibilityRules
-	}
-	if input.Category != nil {
-		evt.Category = input.Category
-	}
-	// Tier nil-preserve (Wave 1.6 §D): nil leaves existing tier
-	// untouched; explicit empty-string slug clears to platform default.
-	if input.Tier != nil {
-		evt.Tier = input.Tier
-	}
-	if input.Color != nil {
-		evt.Color = input.Color
-	}
-	if input.Icon != nil {
-		evt.Icon = input.Icon
-	}
-	evt.AllDay = input.AllDay
+	evt.EntityID = input.EntityID.Ptr(evt.EntityID)
+	evt.Year = input.Year.Val(evt.Year)
+	evt.Month = input.Month.Val(evt.Month)
+	evt.Day = input.Day.Val(evt.Day)
+	evt.StartHour = input.StartHour.Ptr(evt.StartHour)
+	evt.StartMinute = input.StartMinute.Ptr(evt.StartMinute)
+	evt.EndYear = input.EndYear.Ptr(evt.EndYear)
+	evt.EndMonth = input.EndMonth.Ptr(evt.EndMonth)
+	evt.EndDay = input.EndDay.Ptr(evt.EndDay)
+	evt.EndHour = input.EndHour.Ptr(evt.EndHour)
+	evt.EndMinute = input.EndMinute.Ptr(evt.EndMinute)
+	evt.IsRecurring = input.IsRecurring.Val(evt.IsRecurring)
+	evt.RecurrenceType = input.RecurrenceType.Ptr(evt.RecurrenceType)
+	evt.RecurrenceInterval = input.RecurrenceInterval.Ptr(evt.RecurrenceInterval)
+	evt.RecurrenceEndYear = input.RecurrenceEndYear.Ptr(evt.RecurrenceEndYear)
+	evt.RecurrenceEndMonth = input.RecurrenceEndMonth.Ptr(evt.RecurrenceEndMonth)
+	evt.RecurrenceEndDay = input.RecurrenceEndDay.Ptr(evt.RecurrenceEndDay)
+	evt.RecurrenceMaxOccurrences = input.RecurrenceMaxOccurrences.Ptr(evt.RecurrenceMaxOccurrences)
+	evt.Visibility = visibility
+	evt.VisibilityRules = visRules
+	evt.Category = input.Category.Ptr(evt.Category)
+	// Tier preserve (Wave 1.6 §D): absent leaves the existing tier untouched;
+	// an explicit empty-string slug clears to the platform default.
+	evt.Tier = input.Tier.Ptr(evt.Tier)
+	evt.Color = input.Color.Ptr(evt.Color)
+	evt.Icon = input.Icon.Ptr(evt.Icon)
+	evt.AllDay = input.AllDay.Val(evt.AllDay)
 	// All-day means "no clock time" — the V2 grid/card treat a nil StartHour as
 	// the all-day signal (calendar_v2_helpers.go monthCellLines: allDay ==
-	// TimeLabel==""). Because the time fields above are nil-PRESERVE (a title-only
+	// TimeLabel==""). Because the time fields above are PRESERVING (a title-only
 	// edit must not blank an event's clock), toggling all-day ON in the editor
 	// drawer could not otherwise clear an existing start/end time. So when the
 	// caller explicitly marks the event all-day, drop the clock fields here — the
 	// one place that unambiguously means "make this all-day" (C-CAL-LARGE-EDITOR).
-	// Safe for the day-resolution module note path (APIHandler always sends
-	// AllDay=true with nil times, so this is a no-op there).
-	if evt.AllDay {
+	// Gated on an EXPLICIT all_day=true, not on the merged value: an absent
+	// all_day on an already-all-day event is not a fresh instruction to blank
+	// times, and re-running the blanking on every partial save would be the
+	// same class of silent write this sweep exists to stop.
+	if v, ok := input.AllDay.Get(); ok && v {
 		evt.StartHour = nil
 		evt.StartMinute = nil
 		evt.EndHour = nil
@@ -2184,7 +2171,7 @@ func (s *calendarService) ListEventsForMonth(ctx context.Context, calendarID str
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // ListEventsForEntity returns all events linked to a specific entity, filtered by per-user rules.
@@ -2193,7 +2180,7 @@ func (s *calendarService) ListEventsForEntity(ctx context.Context, entityID stri
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // ListEventsForYear returns all events for a given year, filtered by per-user rules.
@@ -2202,7 +2189,7 @@ func (s *calendarService) ListEventsForYear(ctx context.Context, calendarID stri
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // ListEventsForDateRange returns events within a date range for a given year.
@@ -2211,7 +2198,7 @@ func (s *calendarService) ListEventsForDateRange(ctx context.Context, calendarID
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // UpdateEventVisibility updates the base visibility and per-user rules for a calendar event.
@@ -2275,7 +2262,7 @@ func (s *calendarService) ListUpcomingEvents(ctx context.Context, calendarID str
 	if err != nil {
 		return nil, err
 	}
-	return filterEventsByUser(events, role, userID), nil
+	return filterEventsByUser(events, permissions.RequestViewer(role, userID)), nil
 }
 
 // AdvanceDate moves the current date forward by the given number of days,
@@ -2500,13 +2487,20 @@ func (s *calendarService) SetDate(ctx context.Context, calendarID string, year, 
 //
 // On success, a single structure.updated WS event publishes; consumers
 // (UI / sync clients) refresh once rather than 6 times mid-import.
-func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error {
+// ApplyImport replaces a calendar's structure wholesale.
+//
+// LIKE SetMonths, IT REPORTS WHAT THAT DID TO EXISTING EVENTS
+// (C-CALV4-GAMEREADY §9 [GR-18]). ApplyImport is the OTHER delete-and-reinsert
+// path over the same positional month indices, so an import onto a calendar
+// that already carries events re-dates them exactly as a hand edit does — and
+// an import is precisely when nobody is looking at the month list.
+func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, result *ImportResult) (MonthEditImpact, error) {
 	cal, err := s.repo.GetByID(ctx, calendarID)
 	if err != nil {
-		return fmt.Errorf("get calendar: %w", err)
+		return MonthEditImpact{}, fmt.Errorf("get calendar: %w", err)
 	}
 	if cal == nil {
-		return apperror.NewNotFound("calendar not found")
+		return MonthEditImpact{}, apperror.NewNotFound("calendar not found")
 	}
 	// W8 (F3, C-REAL-CALENDAR-P2): ApplyImport unconditionally rewrites the stored
 	// date (CurrentYear from settings, CurrentMonth/Day forced to 1, below) — it is
@@ -2516,7 +2510,7 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 	// like the manual writers W1–W7 would. Reject the whole import; there is no
 	// meaningful "import a fantasy structure onto a live Gregorian calendar" case.
 	if err := guardManualDateChange(cal); err != nil {
-		return err
+		return MonthEditImpact{}, err
 	}
 
 	// Validate sub-resource inputs upfront. Reuse the same rules each
@@ -2524,36 +2518,36 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 	// calendar stays at its pre-import state.
 	for i, m := range result.Months {
 		if m.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
 		}
 		if m.Days <= 0 {
-			return apperror.NewValidation(fmt.Sprintf("month %q: days must be positive", m.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %q: days must be positive", m.Name))
 		}
 	}
 	for i, w := range result.Weekdays {
 		if w.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("weekday %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("weekday %d: name is required", i+1))
 		}
 	}
 	for i, m := range result.Moons {
 		if m.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("moon %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("moon %d: name is required", i+1))
 		}
 		if m.CycleDays <= 0 {
-			return apperror.NewValidation(fmt.Sprintf("moon %q: cycle_days must be positive", m.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("moon %q: cycle_days must be positive", m.Name))
 		}
 	}
 	for i, sn := range result.Seasons {
 		if sn.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("season %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("season %d: name is required", i+1))
 		}
 	}
 	for i, e := range result.Eras {
 		if e.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("era %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("era %d: name is required", i+1))
 		}
 		if e.EndYear != nil && *e.EndYear < e.StartYear {
-			return apperror.NewValidation(fmt.Sprintf("era %q: end year cannot be before start year", e.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("era %q: end year cannot be before start year", e.Name))
 		}
 		if e.Color == "" {
 			result.Eras[i].Color = "#6366f1"
@@ -2593,7 +2587,7 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 			RealTimeZone: result.Settings.RealTimeZone,
 			HoursPerDay:  cal.HoursPerDay,
 		}); err != nil {
-			return err
+			return MonthEditImpact{}, err
 		}
 		zone := strings.TrimSpace(*result.Settings.RealTimeZone) // non-nil & non-blank guaranteed by validate
 		cal.TracksRealTime = true
@@ -2603,12 +2597,20 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 		cal.RealTimeZone = nil
 	}
 
+	// Computed BEFORE the write, because "before" stops existing the moment
+	// the repository's delete-and-reinsert runs. A failure to compute the
+	// warning never costs the operator their import.
+	impact, ierr := s.MonthEditImpact(ctx, calendarID, result.Months)
+	if ierr != nil {
+		impact = MonthEditImpact{}
+	}
+
 	if err := s.repo.ApplyImport(ctx, cal, result); err != nil {
-		return fmt.Errorf("apply import: %w", err)
+		return MonthEditImpact{}, fmt.Errorf("apply import: %w", err)
 	}
 
 	s.publishStructureUpdated(ctx, calendarID)
-	return nil
+	return impact, nil
 }
 
 // ListAllEvents returns all events for a calendar (owner visibility, no limit).
@@ -2628,31 +2630,38 @@ func (s *calendarService) ListAllEvents(ctx context.Context, calendarID string) 
 // --- Visibility Helpers ---
 
 // calendarVisibleTo reports whether a viewer may see a calendar
-// (C-CAL-DASHBOARD-W5a). Owner/co-DM (CanSeeDmOnly) and the system context
-// (empty userID) always pass; otherwise the calendar's own visibility + rules
-// decide, via the SAME resolver events use (canUserView). Calendar visibility
-// and event visibility compose: this gates the calendar; events inside a
-// visible calendar are still filtered by filterEventsByUser.
-func calendarVisibleTo(cal *Calendar, role int, userID string) bool {
+// (C-CAL-DASHBOARD-W5a). Owner/co-DM (CanSeeDmOnly) and a declared SYSTEM
+// caller always pass; otherwise the calendar's own visibility + rules decide,
+// via the SAME resolver events use (canUserView). Calendar visibility and
+// event visibility compose: this gates the calendar; events inside a visible
+// calendar are still filtered by filterEventsByUser.
+//
+// C-AUTHZ-EMPTY-USERID / ADR-049: the bypass used to also read
+// `userID == ""`, which is what an ANONYMOUS request carries — so a logged-out
+// visitor to a public campaign was served every dm_only calendar. Trust is now
+// a stated property of permissions.Viewer that no request-derived viewer can
+// hold; an empty user id means "no user" and takes the strictest path.
+func calendarVisibleTo(cal *Calendar, v permissions.Viewer) bool {
 	if cal == nil {
 		return false
 	}
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+	if v.SkipsPerUserRules() {
 		return true
 	}
-	return canUserView(cal.Visibility, cal.VisibilityRules, role, userID)
+	return canUserView(cal.Visibility, cal.VisibilityRules, v.Role(), v.UserID())
 }
 
 // filterCalendarsByUser drops the calendars a viewer may not see, mirroring
-// filterEventsByUser exactly (C-CAL-DASHBOARD-W5a). Owner/co-DM or the system
-// context get the list unchanged.
-func filterCalendarsByUser(cals []Calendar, role int, userID string) []Calendar {
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+// filterEventsByUser exactly (C-CAL-DASHBOARD-W5a). Owner/co-DM or a declared
+// system caller get the list unchanged — an anonymous viewer does NOT
+// (C-AUTHZ-EMPTY-USERID).
+func filterCalendarsByUser(cals []Calendar, v permissions.Viewer) []Calendar {
+	if v.SkipsPerUserRules() {
 		return cals
 	}
 	filtered := cals[:0]
 	for _, c := range cals {
-		if canUserView(c.Visibility, c.VisibilityRules, role, userID) {
+		if canUserView(c.Visibility, c.VisibilityRules, v.Role(), v.UserID()) {
 			filtered = append(filtered, c)
 		}
 	}
@@ -2660,14 +2669,16 @@ func filterCalendarsByUser(cals []Calendar, role int, userID string) []Calendar 
 }
 
 // filterEventsByUser applies per-user visibility rules to a slice of events.
-// Owners always see everything and are not filtered.
-func filterEventsByUser(events []Event, role int, userID string) []Event {
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+// Owners and declared system callers see everything and are not filtered; an
+// anonymous viewer is filtered like any other non-privileged one
+// (C-AUTHZ-EMPTY-USERID).
+func filterEventsByUser(events []Event, v permissions.Viewer) []Event {
+	if v.SkipsPerUserRules() {
 		return events
 	}
 	filtered := events[:0]
 	for _, e := range events {
-		if canUserView(e.Visibility, e.VisibilityRules, role, userID) {
+		if canUserView(e.Visibility, e.VisibilityRules, v.Role(), v.UserID()) {
 			filtered = append(filtered, e)
 		}
 	}
@@ -2759,8 +2770,22 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 				"type_name":  typeName,
 				"type_icon":  "fa-calendar",
 				"type_color": "#f59e0b",
-				// C-CAL-V1-V2-CUTOVER: search results deep-link to the V2 shell.
-				"url": fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, cal.ID),
+				// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED) — AN EGRESS DOOR, and one
+				// of the two that outlive the page.
+				//
+				// A search result is a URL that leaves this application: it is
+				// copied, bookmarked and pasted, and it keeps resolving long
+				// after the page that minted it is closed. From this commit the
+				// application MINTS no more /calendar/v2 URLs through search.
+				// The ones already indexed still resolve — the shell's routes
+				// stay ([VS-3]: R2-4 removes nothing) — and breaking those is
+				// C-CALV4-SHELL-REMOVAL's, which should consider a permanent
+				// redirect rather than a 404. That cost is ACCEPTED, not open.
+				//
+				// The calendar id is dropped with the target ([VS-12]: the Bench
+				// never reads `calId`), so a search hit lands on the Bench rather
+				// than on the hit's own calendar. Named as a lost selection.
+				"url": fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID),
 			})
 		}
 	}

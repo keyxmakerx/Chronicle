@@ -819,20 +819,26 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 		// S6: Data Portability.
 		<div class="card p-4">
 			<h2 class="text-sm font-semibold text-fg mb-3">Data Export &amp; Import</h2>
-			<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file (or a zip with media bytes) for backup or migration.</p>
+			<p class="text-xs text-fg-secondary mb-3">Export your campaign as a JSON file, or as a ZIP that adds an archive of your media files, for backup or migration.</p>
 			<div class="flex flex-wrap items-center gap-3">
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
 					<i class="fa-solid fa-download text-xs"></i> Export JSON
 				</a>
 				<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/export?include_media=1", cc.Campaign.ID)) } class="btn-primary text-sm inline-flex items-center gap-1.5" download>
-					<i class="fa-solid fa-file-zipper text-xs"></i> Export ZIP (with media)
+					<i class="fa-solid fa-file-zipper text-xs"></i> Export ZIP (+ media archive)
 				</a>
 				<a href="/campaigns/import" class="btn-secondary text-sm inline-flex items-center gap-1.5">
 					<i class="fa-solid fa-upload text-xs"></i> Import Campaign
 				</a>
 			</div>
 			<p class="text-[11px] text-fg-muted mt-2">
-				Note: media bytes are bundled into the ZIP, but importing a ZIP currently restores only structural data — media files require manual restoration. JSON-only exports are a manifest of media metadata; the bytes are not included.
+				The ZIP contains <code>campaign.json</code> plus a <code>media/</code> folder holding your image
+				files, so nothing is lost from the backup. Importing either file restores
+				<strong>structural data only</strong>: media files are archived for manual restoration and
+				are <strong>not</strong> re-attached on import, so images in a restored campaign will be
+				broken until you restore them by hand. The import tells you how many media files it left
+				behind. The JSON-only export carries media <em>metadata</em> and no bytes at all — use the
+				ZIP if you want a complete backup.
 			</p>
 		</div>
 	</div>
@@ -842,8 +848,12 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 func pluginURL(campaignID, slug string) string {
 	switch slug {
 	case "calendar":
-		// C-CAL-V1-V2-CUTOVER: the calendar's main page is now the V2 shell.
-		return fmt.Sprintf("/campaigns/%s/calendar/v2", campaignID)
+		// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). The stale C-CAL-V1-V2-CUTOVER
+		// comment claiming "the calendar's main page is now the V2 shell" is
+		// dropped with the href it justified: it has been false since the Bench
+		// shipped, and the nav sidebar and the Extensions hub have both pointed
+		// at /apps/calendar since then.
+		return fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID)
 	case "maps":
 		return fmt.Sprintf("/campaigns/%s/maps", campaignID)
 	case "timeline":

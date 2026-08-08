@@ -93,6 +93,38 @@ type BlockData struct {
 	EraLabel    string
 	Fault       string
 
+	// --- The sky header (C-CALV4-SKY, [SKY-6] SIGNED) ---
+	//
+	// TWO FIELDS AND NO THIRD. [SKY-6] authorises the in-world time-of-day and
+	// the formatted in-world time onto this struct and nothing else; a third
+	// field on this axis is a STOP-AND-FLAG and an escalation, never an edit.
+	//
+	// WHY THE TIME-OF-DAY ARRIVES AS ITS GRADIENT RATHER THAN AS A 0..1
+	// FRACTION, stated here because it is the one place the shape can be
+	// mistaken for a producer shortcut. [SKY-6] binds two things at once: the
+	// gradient is `calendar.SkybandGradient(timeOfDayFraction(cal))` REUSED and
+	// never re-derived, and this struct gains exactly two fields. This package
+	// imports nothing from internal/plugins/** BY CONSTRUCTION, so a raw
+	// fraction landing here could only become a gradient by the widget
+	// re-deriving one — which is the half of [SKY-6] that is refused — and
+	// carrying the fraction AND the gradient would be the third field, which is
+	// the other half. So the fraction is consumed at the producer, where the
+	// one shipped gradient function lives, and what crosses the seam is its
+	// result. Reported as a §20-item-1 finding rather than taken quietly.
+	//
+	// SkyGradient IS ALSO THE SEAT GATE. [SKY-1] seats the sky on the Bench's
+	// PRIMARY Block only — one sky per surface — and the producer fills these
+	// two fields on that Block and nowhere else, so an empty SkyGradient is
+	// "this surface carries no sky", not "the sky failed to load". The Block
+	// then renders no band and says nothing about one, on the Almanac tab's own
+	// absence-is-the-honesty-mechanism precedent.
+	SkyGradient string
+	// SkyClock is the in-world time AS OF RENDER — Calendar.FormatCurrentTime(),
+	// formatted at the producer because this package has no calendar geometry.
+	// It does NOT tick client-side ([SKY-6]): a stale clock on an idle page is
+	// honest, a clock that drifts from the campaign's own is not.
+	SkyClock string
+
 	// --- Instrument (zone B) ---
 	Month MonthGeometry
 

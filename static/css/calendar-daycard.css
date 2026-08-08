@@ -60,10 +60,16 @@
 .cal-daycard[data-dc-shown] { display: block; }
 
 /* The mobile treatment is a BOTTOM SHEET, full width, still the same popover
-   and still the register's motion. The module sets the width; this is the
-   shape. */
+   and still the register's motion.
+   THE SHEET'S GEOMETRY IS CSS'S AND NO LONGER JAVASCRIPT'S (C-CALV4-MOBILE
+   [MOB-2] SIGNED) — see the editor's copy of this block below for the whole
+   argument and the measurement. */
 .cal-daycard.dcsheet {
-  inline-size: 100vw;
+  inset-block-end: 0;
+  inset-block-start: auto;
+  inset-inline: 0;
+  inline-size: 100%;
+  max-block-size: 100dvh;
   border-inline: 0;
   border-block-end: 0;
   border-start-start-radius: 12px;
@@ -88,12 +94,27 @@
   color: var(--text-secondary);
 }
 
+/* ── WHERE A SWIPE STOPS (C-CALV4-MOBILE [MOB-4] SIGNED) ────────────────────
+   MEASURED at 390x664, Bench idle, in a document whose own scrollHeight is
+   2251: FIVE independently-scrolling regions stacked down one phone page, and
+   `grep -n 'overscroll-behavior' ` over all four calendar stylesheets returned
+   ZERO hits. Every one of them chained its scroll to the page the moment it
+   reached its end, so a vertical swipe on the middle third of the screen did
+   something different depending on which 40-pixel band the finger landed in.
+   That is the operator's "the scrolling on mobile" in mechanical form.
+
+   `contain` is the whole declaration: the region absorbs its own swipe and
+   stops, and nothing here is `none` (which would also kill the browser's own
+   pull-to-refresh) and nothing here is `touch-action` — [MOB-9b] refuses that
+   property by name, because on the month grid it would claim the gesture and
+   kill page scrolling over the calendar. */
 .cal-daycard .dc-rows {
   display: flex;
   flex-direction: column;
   gap: 2px;
   max-block-size: min(52vh, 420px);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* One row, and its field set is the Ledger row's own (ledger.templ:155-190):
@@ -370,10 +391,48 @@
 }
 .cal-dayeditor[data-dc-shown] { display: block; }
 
-/* The mobile treatment is the same bottom sheet the card takes. The module
-   sets the width; this is the shape. */
+/* The mobile treatment is the same bottom sheet the card takes.
+   ── THE SHEET'S GEOMETRY IS CSS'S. JAVASCRIPT STOPPED WRITING IT.
+      C-CALV4-MOBILE [MOB-2] SIGNED ───────────────────────────────────────────
+
+   MEASURED, at a real 390x664 in a nested browsing context, with the editor
+   open: the box carried an inline `top: 106px; width: 390px` written ONCE by
+   applyPlacement at open time and never recomputed.
+
+     box   y[106 .. 663]   (390x557, 84% of the screen)
+     Save  y[625 .. 655]   (the bottom 9px of the viewport)
+
+   Shrink the frame to 390x380 — which is what a software keyboard does to the
+   layout viewport on Android Chrome, and what the overlay does on iOS — and
+   dispatch a real resize:
+
+     box   y[106 .. 464]   UNCHANGED. inline top still "106px"
+     Save  y[426 .. 456]   against a 380px viewport
+
+   84px of the sheet, INCLUDING THE ENTIRE FOOTER, below the fold of a
+   `position: fixed` box that does not scroll with the page. There is no
+   gesture that reaches Save. Rotating 390x664 -> 844x390 was the same bug
+   wearing a second hat: the sheet kept `width: 390px` on an 844px viewport.
+
+   THIS BLOCK DELETES AN OVERRIDE RATHER THAN INVENTING A TREATMENT. The rule
+   already declared `inline-size: 100vw` and the module's inline `width: 390px`
+   had been overriding a correct declaration. `100vw` becomes `100%` in the
+   same edit: 100vw includes the scrollbar gutter and the box is `inset-inline:
+   0` anyway.
+
+   `100dvh`, NOT `100vh`, and the difference is the whole point: `vh` resolves
+   against the LARGE viewport (URL bar retracted), so a `vh` ceiling on a phone
+   is bigger than the screen the user is actually looking at.
+
+   NOTHING HERE IS A TRANSITION. inset-block-*, inline-size and max-block-size
+   are static geometry; the literal `transition` stays absent from this sheet
+   and TestDayCardCSS_CarriesNoMotionOfItsOwn stays green by doing nothing. */
 .cal-dayeditor.dcsheet {
-  inline-size: 100vw;
+  inset-block-end: 0;
+  inset-block-start: auto;
+  inset-inline: 0;
+  inline-size: 100%;
+  max-block-size: 100dvh;
   border-inline: 0;
   border-block-end: 0;
   border-start-start-radius: 12px;
@@ -383,6 +442,41 @@
 }
 
 .cal-dayeditor .dcbox { padding: 0; }
+
+/* ── THE SHEET'S INTERIOR ABSORBS THE CLAMP, RATHER THAN OVERFLOWING IT
+   C-CALV4-MOBILE [MOB-2], and it is a MEASURED consequence of [MOB-7] rather
+   than a tidy-up.
+
+   `max-block-size: 100dvh` bounds the BOX. It does not bound the box's
+   contents, and `.cal-dayeditor` is `overflow: hidden` — so a form taller than
+   the clamp is CLIPPED at the bottom, which is where the footer is, which is
+   where Save is. That is the same defect the inline `top` produced, arriving
+   through a different door.
+
+   MEASURED: with the editor's foot raised to a 44px tap target ([MOB-7]) and
+   the frame shrunk to 390x380, Save's rect was y[340..384] against a 380px
+   viewport — four pixels past the fold, in a box that cannot be scrolled to.
+
+   THE COLUMN IS WHAT FIXES IT: head and foot keep their intrinsic heights, and
+   `.ed-body` — which is already the sheet's scroller — takes whatever is left.
+   `[data-dc-shown]` is on the selector on purpose: without it this `display`
+   would outrank the closed state's `display: none` on source order and a shut
+   editor would be on the screen. */
+.cal-dayeditor.dcsheet[data-dc-shown] {
+  display: flex;
+  flex-direction: column;
+}
+.cal-dayeditor.dcsheet[data-dc-shown] .dcbox,
+.cal-dayeditor.dcsheet[data-dc-shown] .de-form {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cal-dayeditor.dcsheet[data-dc-shown] .ed-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
 
 /* The form is the box below the head: body, error line, foot. It is a column
    so the foot stays at the bottom and the error line sits directly above it,
@@ -660,8 +754,17 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   padding: 12px;
-  max-block-size: min(70vh, 620px);
+  /* `dvh`, NOT `vh` (C-CALV4-MOBILE [MOB-2]). On a real phone `vh` resolves
+     against the LARGE viewport — the one with the URL bar retracted — so a
+     `vh`-measured body is TALLER than the 70% of the screen anybody measured,
+     which made the Save-under-the-keyboard finding worse than its own
+     numbers said rather than better. */
+  max-block-size: min(70dvh, 620px);
   overflow-y: auto;
+  /* C-CALV4-MOBILE [MOB-4]. This one is the sharpest of the five: the editor's
+     body measured 465 client against 1229 scroll in a realistic edit — 2.6
+     screens of form in one window — over a page that was not locked. */
+  overscroll-behavior: contain;
 }
 .cal-dayeditor .ed-form-col {
   display: flex;
@@ -674,6 +777,33 @@
 /* THE ONE-COLUMN BREAKPOINT IS A HARD REQUIREMENT, NOT A NICETY ([ER-5]).
    Below 1080px the live preview sits UNDER the form instead of beside it,
    exactly as the drawing does it — and `editor-gm-390x844.png` is that state. */
+/* ── THE EDITOR'S TAP FLOOR AT ≤640 (C-CALV4-MOBILE [MOB-7] SIGNED) ────────
+   MEASURED at 390x664: 46 of the editor's 50 visible controls are under 44px,
+   and the smallest is the head's 24x24 ✕ — which sits on the same sheet as a
+   one-click, hard-DELETE, no-undo Delete (the confirmation is the editor
+   lane's and this slice does not add it; the separation below is what this
+   slice ships).
+
+   FOUR CONTROLS, NAMED, AND THE OTHER FORTY-SIX ARE NOT CHASED. The floor is
+   the BLOCK axis so a wider control cannot push a row out of a 360px screen,
+   and it lands in THIS sheet rather than in calendar-bench.css because the day
+   card and the editor bring their own scoped stylesheet. */
+@media (max-width: 640px) {
+  .cal-dayeditor .ed-head [data-de-cancel],
+  .cal-dayeditor .ed-foot [data-de-cancel],
+  .cal-dayeditor [data-de-save],
+  .cal-dayeditor [data-de-delete] {
+    min-inline-size: 44px;
+    min-block-size: 44px;
+    height: auto;
+  }
+  /* THE ✕ AND DELETE ARE HELD APART. Two 44px targets that touch are one
+     44px target with two outcomes, and one of those outcomes is a destroyed
+     event with no undo. */
+  .cal-dayeditor .ed-foot { gap: 10px; }
+  .cal-dayeditor .ed-head { gap: 10px; }
+}
+
 @media (min-width: 1080px) {
   .cal-dayeditor .ed-body { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
 }

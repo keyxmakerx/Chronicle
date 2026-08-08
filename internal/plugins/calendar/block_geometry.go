@@ -84,16 +84,33 @@ type blockMonthGeometryInput struct {
 	// make the ceiling illegitimate. MoonCap only decides AlmanacMoon.Drawn.
 	MoonCap int
 	// ShelfHidden mirrors ShelfStub.Hidden — the HOST has removed zone D
-	// entirely (the Bench's real-world Block renders with noShelf). The Almanac
-	// register is the Shelf's data and nothing else reads it, so a Block with
-	// no Shelf carries none: the pin's own contract is "empty when … no Shelf
-	// is reachable in this render", and on a four-Block Bench that is four
-	// registers not built.
+	// entirely (the Bench's real-world Block renders with noShelf).
+	//
+	// THE REGISTER IS NO LONGER THE SHELF'S ALONE, AND THIS COMMENT SAID IT WAS
+	// FOR ONE WAVE TOO LONG (C-CALV4-SKY, [SKY-7] SIGNED). It used to read "the
+	// Almanac register is the Shelf's data and nothing else reads it", which was
+	// true when the Shelf was its only consumer and is now the sentence by which
+	// the next hand deletes the sky's data while tidying. The sky header's
+	// expansion reads the SAME register — no new query, no new endpoint, no
+	// second producer ([SKY-7]) — so the gate below names BOTH readers, and a
+	// viewer who turns the Shelf layer off no longer silently empties the sky.
 	//
 	// The LAYER half of "reachable" is not knowable here — the producer emits
 	// DEF (["moons"]) and the host overrides Layers afterwards — so the layer
 	// gate stays where it can be evaluated, in block.templ.
 	ShelfHidden bool
+	// SkyHidden is the SECOND reader's half of the same gate, added BY NAME
+	// rather than by widening ShelfHidden's meaning ([SKY-7] SIGNED): this Block
+	// carries no sky header, so the sky asks for no register.
+	//
+	// ITS ZERO VALUE IS DELIBERATELY THE SAFE ONE READ THE OTHER WAY ROUND from
+	// its sibling. ShelfHidden false means "there is a Shelf"; SkyHidden false
+	// would mean "there is a sky", and since the sky seats on ONE Block per
+	// surface ([SKY-1]) while the Shelf is the common case, every producer path
+	// that is not the Bench's Primary sets this true explicitly. The producer
+	// derives it from BlockProjectionInput.SkyOn, whose zero value is "no sky",
+	// so no construction site can acquire a sky by forgetting a field.
+	SkyHidden bool
 }
 
 // blockWeekLen returns the calendar's week length, falling back to the NAMED
@@ -747,7 +764,13 @@ func buildMonthGeometry(cal *Calendar, in blockMonthGeometryInput) calblock.Mont
 	// `moons` is the DISC pass's input and is emptied when the moons layer is
 	// off, while MoonsDeclared — and therefore the Almanac — is the calendar's
 	// declared total either way (r51's own argument, one field up).
-	if !in.ShelfHidden && len(cal.Moons) > 0 {
+	//
+	// TWO READERS, NAMED SEPARATELY ([SKY-7] SIGNED). The gate used to name the
+	// Shelf alone, which meant a viewer who turned the Shelf layer off — or a
+	// host that docked the Block without one — silently emptied the sky header's
+	// expansion, invisibly, until someone reported "the sky is blank on my page".
+	// EITHER reader asking is enough; neither is subordinate to the other.
+	if (!in.ShelfHidden || !in.SkyHidden) && len(cal.Moons) > 0 {
 		anchor := geo.TodayDay
 		if anchor < 1 {
 			anchor = 1

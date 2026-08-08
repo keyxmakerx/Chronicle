@@ -194,6 +194,22 @@ export function buildBenchFixture(opts) {
       el('span', { class: 'nm' }, [], '◈ Restricted'),
     ])] : []),
   ];
+  // THE COLLECT-RSVPs SECTION, MIRRORING `if m.CanCollectRSVPs` IN THE TEMPLATE
+  // (C-CALV4-GAMEREADY §4 [GR-6]). Like the visibility cards above, the fixture
+  // REPRODUCES the producer's gate rather than simulating it: with
+  // canCollectRSVPs false there is genuinely no markup, so a test cannot
+  // accidentally assert on a control a Player would never receive.
+  const canCollectRSVPs = opts.canCollectRSVPs !== false;
+  const rsvpSection = canCollectRSVPs ? [
+    el('div', { class: 'fld', 'data-de-rsvp': '' }, [
+      el('label', { class: 'viscard' }, [
+        el('input', { type: 'checkbox', class: 'vh', 'data-de-rsvp-toggle': '', disabled: '' }),
+        el('span', { class: 'nm' }, [], "Ask the party who's coming"),
+        el('span', { class: 'sub', 'data-de-rsvp-hint': '' }, [], 'Save the event first, then invite the party'),
+      ]),
+    ]),
+  ] : [];
+
   const visibility = (canGMOnly || canRestrict) ? [
     el('div', { class: 'fld', 'data-de-visibility': '' }, [
       el('div', { class: 'vis', 'data-de-vis': '' }, visCards),
@@ -263,6 +279,7 @@ export function buildBenchFixture(opts) {
               ]),
             ]),
             ...visibility,
+            ...rsvpSection,
             el('div', { class: 'fld', 'data-de-tie': '' }, [
               el('div', { class: 'frow', 'data-de-tierow': '' }),
               el('input', { type: 'search', class: 'in', 'data-de-tiesearch': '' }),
@@ -312,17 +329,52 @@ export function buildBenchFixture(opts) {
     });
   }
 
+  // THE DATE-VERB ROW (C-CALV4-GAMEREADY §2, [GR-SIGN-A] SIGNED / [GR-4]),
+  // mirroring benchDateVerbRow in internal/plugins/calendar/bench.templ.
+  //
+  // THE FIXTURE REPRODUCES THE PRODUCER'S TWO GATES RATHER THAN SIMULATING
+  // THEM, exactly as the editor's canGMOnly / canRestrict do above: `canStep`
+  // is `if v.CanStep` (CanControlWorldState) and `canSet` is `if v.CanSet` (the
+  // existing Owner-only floor). A co-DM fixture therefore genuinely has no Set
+  // date control to find, and a test cannot accidentally assert on one.
+  //
+  // opts.dateVerbs is undefined by default, so every pre-existing test in this
+  // suite renders a Bench with NO verb row — which is a player's Bench, and the
+  // state that must keep working unchanged.
+  let verbRow = null;
+  if (opts.dateVerbs) {
+    const dv = opts.dateVerbs;
+    const kids = [el('span', { class: 'badge' }, [], 'In-world date')];
+    if (dv.canStep !== false) {
+      kids.push(el('button', { type: 'button', class: 'btn xs', 'data-bench-date-step': '-1' }, [], '\u22121 day'));
+      kids.push(el('button', { type: 'button', class: 'btn xs', 'data-bench-date-step': '1' }, [], '+1 day'));
+    }
+    if (dv.canSet) {
+      kids.push(el('input', { type: 'number', 'data-bench-date-year': '', value: String(dv.year ?? 1523) }));
+      kids.push(el('input', { type: 'number', 'data-bench-date-month': '', value: String(dv.month ?? 1) }));
+      kids.push(el('input', { type: 'number', 'data-bench-date-day': '', value: String(dv.day ?? 14) }));
+      kids.push(el('button', { type: 'button', class: 'btn xs', 'data-bench-date-set': '' }, [], 'Set date'));
+    }
+    kids.push(el('span', { class: 'c', 'data-bench-date-say': '', role: 'status', 'aria-live': 'polite' }));
+    verbRow = el('div', {
+      class: 'manage',
+      'data-bench-date-verbs': '',
+      'data-verb-url': dv.url || '/campaigns/camp-1/calendar/world-state?calendarId=cal-1',
+      'data-verb-csrf': 'fx-csrf',
+    }, kids);
+  }
+
   const rootAttrs = { class: 'cal-bench', 'data-cal-bench': '', 'data-cal-dashboard': '' };
   if (payload !== null) rootAttrs['data-cal-daycard-payload'] = JSON.stringify(payload);
   const root = el('div', rootAttrs, [
     el('div', { class: 'bsurf', 'data-bench-surface': '' }, [
-      el('div', { class: 'stack', 'data-bench-stack': '' }, [host]),
+      el('div', { class: 'stack', 'data-bench-stack': '' }, verbRow ? [verbRow, host] : [host]),
     ]),
     card,
     ...(editor ? [editor] : []),
   ]);
 
-  return { root, card, editor, host, cells, ledger, blockHost };
+  return { root, card, editor, host, cells, ledger, blockHost, verbRow };
 }
 
 // boot runs the module against a fresh fixture.
@@ -393,6 +445,16 @@ export function boot(opts) {
     calls,
     reloads: () => reloads,
     fire: (type, target, extra) => document._fire(type, { target, preventDefault() {}, ...(extra || {}) }),
+    // fireOn dispatches to the ELEMENT'S OWN listeners, which `fire` cannot
+    // reach: `fire` drives the module's DELEGATED document handler, and a
+    // handler bound with el.addEventListener (the all-day switch, the RSVP
+    // opt-in) is never registered there. Two dispatch shapes because the module
+    // genuinely uses two, and a test that could only exercise one would silently
+    // stop covering whichever control moved to the other.
+    fireOn: (type, target, extra) => {
+      const handlers = (target && target._on && target._on[type]) || [];
+      handlers.forEach((fn) => fn({ target, preventDefault() {}, ...(extra || {}) }));
+    },
     flush: () => { const q = timers.splice(0, timers.length); q.forEach((t) => t.fn()); },
     winFire: (type) => (winListeners[type] || []).forEach((fn) => fn({})),
   };

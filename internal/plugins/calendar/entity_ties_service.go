@@ -105,7 +105,11 @@ func (s *calendarService) EventsForEntityFiltered(ctx context.Context, entityID 
 	if err != nil {
 		return nil, err
 	}
-	if permissions.CanSeeDmOnly(role) || userID == "" {
+	// C-AUTHZ-EMPTY-USERID / ADR-049: the bypass is a stated property of the
+	// viewer, never `userID == ""` — that value is what an ANONYMOUS request
+	// carries, and it must take the strictest path, not the most trusting one.
+	viewer := permissions.RequestViewer(role, userID)
+	if viewer.SkipsPerUserRules() {
 		return all, nil
 	}
 
@@ -120,7 +124,7 @@ func (s *calendarService) EventsForEntityFiltered(ctx context.Context, entityID 
 			}
 			cals[tie.Event.CalendarID] = cal
 		}
-		if !calendarVisibleTo(cal, role, userID) {
+		if !calendarVisibleTo(cal, viewer) {
 			continue
 		}
 		if !canUserView(tie.Event.Visibility, tie.Event.VisibilityRules, role, userID) {

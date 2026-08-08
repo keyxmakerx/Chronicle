@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
@@ -636,11 +637,11 @@ func TestUpdateMarker_Success(t *testing.T) {
 	svc := newTestMapService(repo)
 
 	err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{
-		Name:  "New Name",
-		X:     75,
-		Y:     30,
-		Icon:  "fa-castle",
-		Color: "#ff0000",
+		Name:  patch.Of("New Name"),
+		X:     patch.Of(75.0),
+		Y:     patch.Of(30.0),
+		Icon:  patch.Of("fa-castle"),
+		Color: patch.Of("#ff0000"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -654,7 +655,7 @@ func TestUpdateMarker_NotFound(t *testing.T) {
 		},
 	}
 	svc := newTestMapService(repo)
-	err := svc.UpdateMarker(context.Background(), "nonexistent", UpdateMarkerInput{Name: "X", X: 50, Y: 50})
+	err := svc.UpdateMarker(context.Background(), "nonexistent", UpdateMarkerInput{Name: patch.Of("X"), X: patch.Of(50.0), Y: patch.Of(50.0)})
 	assertAppError(t, err, 404)
 }
 
@@ -665,7 +666,7 @@ func TestUpdateMarker_EmptyName(t *testing.T) {
 		},
 	}
 	svc := newTestMapService(repo)
-	err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{Name: "", X: 50, Y: 50})
+	err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{Name: patch.Of(""), X: patch.Of(50.0), Y: patch.Of(50.0)})
 	assertAppError(t, err, 422)
 }
 
@@ -677,9 +678,9 @@ func TestUpdateMarker_InvalidCoordinates(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 	err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{
-		Name: "Pin",
-		X:    150,
-		Y:    50,
+		Name: patch.Of("Pin"),
+		X:    patch.Of(150.0),
+		Y:    patch.Of(50.0),
 	})
 	assertAppError(t, err, 422)
 }
@@ -692,10 +693,10 @@ func TestUpdateMarker_InvalidIcon(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 	err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{
-		Name: "Pin",
-		X:    50,
-		Y:    50,
-		Icon: "javascript:alert(1)",
+		Name: patch.Of("Pin"),
+		X:    patch.Of(50.0),
+		Y:    patch.Of(50.0),
+		Icon: patch.Of("javascript:alert(1)"),
 	})
 	assertAppError(t, err, 422)
 }
@@ -708,11 +709,11 @@ func TestUpdateMarker_InvalidColor(t *testing.T) {
 	}
 	svc := newTestMapService(repo)
 	err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{
-		Name:  "Pin",
-		X:     50,
-		Y:     50,
-		Icon:  "fa-map-pin",
-		Color: "not-a-color",
+		Name:  patch.Of("Pin"),
+		X:     patch.Of(50.0),
+		Y:     patch.Of(50.0),
+		Icon:  patch.Of("fa-map-pin"),
+		Color: patch.Of("not-a-color"),
 	})
 	assertAppError(t, err, 422)
 }

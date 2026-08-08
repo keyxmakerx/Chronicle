@@ -106,6 +106,33 @@ always_allowed_prefixes=(
 )
 
 # ---------------------------------------------------------------------------
+# Amendment R4-S26-A (sweep R4 stage 26) — const-registry files.
+#
+# STRICTLY NARROWER than always_allowed_prefixes, and the correct tool when a
+# file needs to DEFINE a colliding label rather than USE a plugin. Matching is
+# by EXACT path (not prefix), and inside a listed file only a bare
+# const-assignment line — `Name = "slug"` and nothing else on it — is exempt.
+# Every other added line in that file is checked exactly as if it were not
+# listed, so a `report.Fail("<slug>", …)` smuggled into a registry file still
+# fails, and so does a trailing-code line dressed up to look like an
+# assignment. Blanket-allowlisting the whole file would have exempted both.
+#
+# Listed:
+#   internal/plugins/campaigns/import_report.go — import-report section/kind
+#   vocabulary. Two report headings and two singular nouns happen to spell
+#   plugin slugs; see the const block there for why they are labels and not
+#   references. Introduced when sweep R4 stage 16 threaded ImportReport through
+#   the export adapters and left this guard red for nine commits.
+#
+# Pinned by tools/test-plugin-isolation.sh, which mutation-tests the narrowness
+# in both directions (a const line passes; the same slug on any other line of
+# the same file still fails).
+# ---------------------------------------------------------------------------
+const_registry_files=(
+  "internal/plugins/campaigns/import_report.go"
+)
+
+# ---------------------------------------------------------------------------
 # Diff base detection
 # ---------------------------------------------------------------------------
 base="${DIFF_BASE:-}"
@@ -158,6 +185,20 @@ check_one() {
   # code after it and open a bypass (e.g. `/* x */ f("calendar")`).
   local code_added
   code_added=$(echo "${added}" | grep -vE '^\+[[:space:]]*//' || true)
+  [[ -z "${code_added}" ]] && return 0
+
+  # Amendment R4-S26-A — const-registry files: drop bare const-assignment
+  # lines, and ONLY those. The anchored `$` is what keeps this narrow; without
+  # it, `X = "calendar"; report.Fail("calendar", …)` would slip through. An
+  # inline trailing comment is not permitted either — the declaration must be
+  # the whole line, so nothing can hide to the right of it.
+  local crf
+  for crf in "${const_registry_files[@]}"; do
+    if [[ "${file}" == "${crf}" ]]; then
+      code_added=$(echo "${code_added}" | grep -vE '^\+[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[[:space:]]*"[^"]*"[[:space:]]*$' || true)
+      break
+    fi
+  done
   [[ -z "${code_added}" ]] && return 0
 
   if echo "${code_added}" | grep -qE "\"${tok_re}\""; then

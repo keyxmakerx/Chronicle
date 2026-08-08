@@ -458,7 +458,7 @@ func (r *calendarRepo) UpcomingEventsForCalendars(ctx context.Context, calIDs []
 		    (e.year > c.current_year)
 		    OR (e.year = c.current_year AND e.month > c.current_month)
 		    OR (e.year = c.current_year AND e.month = c.current_month AND e.day >= c.current_day)
-		    OR (e.is_recurring = 1 AND e.recurrence_type IN ('weekly','biweekly','monthly','custom'))
+		    OR `+recurringCandidateClause+`
 		  )
 		  %s
 		ORDER BY e.calendar_id, e.year, e.month, e.day,

@@ -46,7 +46,7 @@ func TestFanOut_VisibilityGated(t *testing.T) {
 	notifier := &mockNotifier{}
 
 	newFanOutHandler(evt, dir, mailer, notifier).
-		fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt)
+		fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt, "gm-1")
 
 	got := strings.Join(mailer.sent, ",")
 	for _, blocked := range []string{"scribe@example.test", "player@example.test"} {
@@ -77,7 +77,7 @@ func TestFanOut_MembersOnly(t *testing.T) {
 	notifier := &mockNotifier{}
 
 	newFanOutHandler(evt, dir, mailer, notifier).
-		fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt)
+		fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt, "gm-1")
 
 	if len(mailer.sent) != 1 || mailer.sent[0] != "u1@example.test" {
 		t.Errorf("only members with an address are emailed; got %v", mailer.sent)
@@ -110,7 +110,7 @@ func TestFanOut_NilSafeWithoutSMTP(t *testing.T) {
 				m = tc.mailer
 			}
 			h := newFanOutHandler(evt, dir, m, notifier)
-			h.fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt)
+			h.fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt, "gm-1")
 
 			if len(notifier.userIDs) != 1 {
 				t.Errorf("in-app notification must still fire; got %v", notifier.userIDs)
@@ -204,9 +204,21 @@ func TestTokenPages_EscapeAndCarryCSRF(t *testing.T) {
 		t.Error("confirm page must POST back to the token URL")
 	}
 
-	suggest := rsvpSuggestPage(evil, "/calendar-rsvp/tok", "csrf-123")
+	suggest := rsvpSuggestPage(evil, "/calendar-rsvp/tok", "csrf-123", "")
 	if strings.Contains(suggest, "<script>alert(1)</script>") {
 		t.Error("suggest page must escape interpolated text")
+	}
+	// [GR-7] gave this page a re-render reason, so the reason is interpolated
+	// text too and gets the same escaping assertion the detail line has.
+	reRendered := rsvpSuggestPage("Feast", "/calendar-rsvp/tok", "csrf-123", evil)
+	if strings.Contains(reRendered, "<script>alert(1)</script>") {
+		t.Error("the suggest page's re-render reason must be escaped like every other interpolation")
+	}
+	if !strings.Contains(reRendered, `role="alert"`) {
+		t.Error("the re-render reason must be announced, not silently repainted")
+	}
+	if strings.Contains(suggest, `role="alert"`) {
+		t.Error("a FIRST render carries no reason and must not announce one")
 	}
 	if !strings.Contains(suggest, `name="note"`) {
 		t.Error("suggest page must render the free-text field")
@@ -224,11 +236,30 @@ func TestTokenPages_EscapeAndCarryCSRF(t *testing.T) {
 		t.Error("suggest page must carry the CSRF token")
 	}
 
-	result := rsvpResultPage("Done", evil, true)
+	result := rsvpResultPage("Done", evil, true, "")
 	if strings.Contains(result, "<script>alert(1)</script>") {
 		t.Error("result page must escape interpolated text")
 	}
 	if strings.Contains(result, "<form") {
-		t.Error("the terminal result page must offer nothing to submit")
+		t.Error("the result page must offer nothing to SUBMIT")
+	}
+	// [GR-8] gave this page a way back, and the empty href is a DECISION: the
+	// generic invalid-link page is rendered for viewers who may no longer be
+	// members, so it must still disclose nothing — not the title, and not which
+	// campaign the link belonged to.
+	if strings.Contains(result, "<a ") {
+		t.Error("a result page with no backHref must render no link at all")
+	}
+	withDoor := rsvpResultPage("Done", "You're down as Going.", true, "/campaigns/c-1/schedule")
+	if !strings.Contains(withDoor, `<a href="/campaigns/c-1/schedule"`) {
+		t.Errorf("a result page WITH a backHref must render it; got %q", withDoor)
+	}
+	if strings.Contains(withDoor, "<form") {
+		t.Error("the way back is a LINK, not a second form to maintain")
+	}
+	// The href is interpolated text like every other value on these pages.
+	if strings.Contains(rsvpResultPage("Done", "x", true, `"><script>alert(1)</script>`),
+		"<script>alert(1)</script>") {
+		t.Error("the back href must be escaped")
 	}
 }

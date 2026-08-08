@@ -74,12 +74,18 @@ templ calendarExtensionDashboardActive(data calendarExtensionDashboardData) {
 					{ formatCalendarCurrentDate(data.Active) }
 				</p>
 			</div>
+			// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). The single most direct answer
+			// to the operator's "legacy calendar still shows up": a button that
+			// named the product's own version number and opened the shell v4
+			// replaced. A product that says "V2" at the user is the complaint in
+			// miniature, so the LABEL changes with the target — a link's text
+			// changes when its meaning does.
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2", data.CampaignID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", data.CampaignID)) }
 				class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent-hover transition-colors duration-micro"
 				data-extension-dashboard-open
 			>
-				Open V2 Calendar
+				Open calendar
 				<i class="fa-solid fa-arrow-right text-[10px]"></i>
 			</a>
 		</div>

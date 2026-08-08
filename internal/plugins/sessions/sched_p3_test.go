@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
@@ -170,9 +171,9 @@ func TestGenerateNextOccurrence_CarriesScheduledTime(t *testing.T) {
 	svc := NewSessionService(repo, nil)
 
 	if _, err := svc.UpdateSession(context.Background(), "s1", UpdateSessionInput{
-		Name: "Weekly Game", Status: StatusCompleted,
-		ScheduledDate: &date, ScheduledTime: &clock,
-		IsRecurring: true, RecurrenceType: &weekly, RecurrenceInterval: 1,
+		Name: patch.Of("Weekly Game"), Status: patch.Of(StatusCompleted),
+		ScheduledDate: patch.Of(date), ScheduledTime: patch.Of(clock),
+		IsRecurring: patch.Of(true), RecurrenceType: patch.Of(weekly), RecurrenceInterval: patch.Of(1),
 	}); err != nil {
 		t.Fatalf("UpdateSession(complete): %v", err)
 	}

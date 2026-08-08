@@ -1,0 +1,26 @@
+# tools/widget-mount-allowlist.txt — the dead-widget-mount ratchet.
+#
+# Read tools/check-widget-mounts.sh first; it explains the rule this file is the
+# state for. In one line: boot.js binds a `data-widget="name"` mount to whatever
+# Chronicle.register('name', …) put in its registry, and bails SILENTLY when the
+# name is absent — so a widget whose JS is in no <script src> anywhere is a
+# permanently empty div with an empty console. New ones are forbidden; the lines
+# below are the survivors, each with the reason a script tag alone cannot fix it.
+#
+# FORMAT: one data-widget name per line. Blank lines and #-comments ignored.
+#
+# THIS FILE MAY ONLY SHRINK. Deleting a line as you fix a mount is the point.
+# Adding one is what the guard exists to refuse — and a line whose mount is no
+# longer dead ALSO fails, because slack in a ratchet is a hole a dead mount can
+# be put back through.
+
+# EMPTY, and that is the goal state — every literal widget mount in the tree now
+# has a load path. The last survivor was `impact_tree`
+# (internal/systems/preview.templ's "Impact Overview" diagram), which stage 9
+# booked rather than guessed at because it registered with
+# `Chronicle.registerWidget('impact_tree', mount)` — an API boot.js has never
+# had — so shipping the file would only have made it load and self-disable.
+# Closed by porting it to Chronicle.register()'s {init} shape and adding the tag
+# to base.templ; pinned by test/js/impact_tree_registration.test.mjs.
+#
+# Do not re-add a name here to make this guard pass. Fix the mount.

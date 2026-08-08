@@ -172,15 +172,13 @@ func (s *stubCalendarService) UpdateEvent(_ context.Context, eventID string, inp
 		return s.updateEventErr
 	}
 	if e, ok := s.getEventResult[eventID]; ok {
-		e.Name = input.Name
-		e.Year = input.Year
-		e.Month = input.Month
-		e.Day = input.Day
-		if input.Description != nil {
-			d := *input.Description
-			e.Description = &d
-		}
-		e.Visibility = input.Visibility
+		// Mirrors the real service's load-merge-write: absent preserves.
+		e.Name = input.Name.Val(e.Name)
+		e.Year = input.Year.Val(e.Year)
+		e.Month = input.Month.Val(e.Month)
+		e.Day = input.Day.Val(e.Day)
+		e.Description = input.Description.Ptr(e.Description)
+		e.Visibility = input.Visibility.Val(e.Visibility)
 		e.UpdatedAt = time.Date(2026, 5, 18, 12, 30, 0, 0, time.UTC)
 		s.updatedEvent = e
 	}
@@ -223,12 +221,12 @@ func (s *stubCalendarService) CreateCalendar(_ context.Context, campaignID strin
 	return cal, nil
 }
 
-func (s *stubCalendarService) ApplyImport(_ context.Context, calendarID string, result *ImportResult) error {
+func (s *stubCalendarService) ApplyImport(_ context.Context, calendarID string, result *ImportResult) (MonthEditImpact, error) {
 	if result != nil {
 		copyR := *result
 		s.lastApplyImport = &copyR
 	}
-	return s.applyImportErr
+	return MonthEditImpact{}, s.applyImportErr
 }
 
 func (s *stubCalendarService) DeleteCalendar(_ context.Context, calendarID string) error {

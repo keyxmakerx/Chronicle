@@ -104,6 +104,15 @@ func TestBlockData_ShapePinned(t *testing.T) {
 		{name: "SeasonLabel", kind: reflect.String},
 		{name: "EraLabel", kind: reflect.String},
 		{name: "Fault", kind: reflect.String},
+		// THE SKY HEADER'S TWO FIELDS AND NO THIRD (C-CALV4-SKY, [SKY-6]
+		// SIGNED). The pin is EXTENDED BY EXACTLY TWO ENTRIES, deliberately: a
+		// third field on this axis is a STOP-AND-FLAG and an escalation rather
+		// than an edit, and the whole value of this pin is that adding one is
+		// impossible to do quietly. SkyGradient is also the seat gate — the
+		// producer fills both on the Bench's PRIMARY Block and nowhere else,
+		// so an empty gradient is "this surface carries no sky".
+		{name: "SkyGradient", kind: reflect.String},
+		{name: "SkyClock", kind: reflect.String},
 		{name: "Month", kind: reflect.Struct, typeName: "MonthGeometry"},
 		{name: "Sync", kind: reflect.Struct, typeName: "SyncPill"},
 		{name: "Layers", kind: reflect.Struct, typeName: "LayerState"},
@@ -405,6 +414,8 @@ func fullyPopulated() BlockData {
 		SeasonLabel: "Late Winter",
 		EraLabel:    "Age of Ash",
 		Fault:       "Needs eras — 0 eras defined, dates cannot resolve",
+		SkyGradient: "linear-gradient(180deg, oklch(0.62 0.16 60) 0%, oklch(0.38 0.12 350) 100%)",
+		SkyClock:    "19:42",
 
 		Month: MonthGeometry{
 			Index:    3,

@@ -313,7 +313,12 @@ type ScheduleLane struct {
 	NextDay    bool
 	Antisocial bool
 	ZoneMissing bool
+	// AskHref / AskLabel are the zone repair, chosen together by
+	// benchZoneRepair ([GR-15]): /account + "Set your zone →" on the viewer's
+	// own row, the member roster + "Ask →" for a GM looking at someone else's,
+	// and NOTHING for a Player looking at someone else's.
 	AskHref    string
+	AskLabel   string
 	Answer     string
 	Tone       string
 }
@@ -442,7 +447,11 @@ type ScheduleRosterRow struct {
 	// LITERALLY EMPTY — never "--:--", never a dash, never a UTC guess.
 	Zone      string
 	ZoneTitle string
-	AskHref   string
+	// AskHref / AskLabel are the repair pair — see benchZoneRepair ([GR-15]).
+	// On this row the label is also reused for the GM-only "has not answered"
+	// prompt, which is a different condition with the same affordance.
+	AskHref  string
+	AskLabel string
 
 	LocalTime  string
 	NextDay    bool

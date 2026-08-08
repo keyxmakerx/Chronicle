@@ -1252,11 +1252,26 @@ func TestDayCardShotRigReportsTheFoldOnEveryShot(t *testing.T) {
 	// The sheet must still declare the fold this whole apparatus is about. If
 	// `.ed-body` ever stops scrolling, this file's pairs become noise and
 	// somebody should be told rather than left to notice.
+	//
+	// AMENDED — C-CALV4-MOBILE [MOB-2] SIGNED, `70vh` -> `70dvh`. The unit
+	// moved and the fold did not: on a real phone `vh` resolves against the
+	// LARGE viewport (URL bar retracted), so the shipped body was TALLER than
+	// the 70% of the screen this apparatus was measuring, which made the
+	// Save-under-the-keyboard finding worse than its numbers said rather than
+	// better. The guard still pins one declaration and still fires if `.ed-body`
+	// stops scrolling; it now pins the unit that describes the screen a thumb
+	// is on. The literal `vh` form must NOT come back, so it is asserted absent
+	// as well — otherwise this string check would pass on a sheet carrying both.
 	sheet := dayCardCSS(t)
-	if !strings.Contains(sheet, "max-block-size: min(70vh, 620px)") ||
+	if !strings.Contains(sheet, "max-block-size: min(70dvh, 620px)") ||
 		!strings.Contains(sheet, "overflow-y: auto") {
 		t.Error("calendar-daycard.css no longer declares a scrolling `.ed-body`; the " +
 			"upper/lower band pairs and this guard are about a fold that has moved")
+	}
+	if strings.Contains(sheet, "70vh") {
+		t.Error("calendar-daycard.css has grown a `70vh` back — [MOB-2] swapped it for " +
+			"`70dvh` because `vh` measures a viewport with the URL bar retracted, which is " +
+			"not the screen the Save button has to fit inside")
 	}
 }
 

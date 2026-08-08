@@ -1,0 +1,17 @@
+-- Down migration for 002.
+--
+-- 002 is a CONVERGENCE migration: it brings a fresh (or half-migrated)
+-- database up to the shape 001 produces on the upgrade path. There is no
+-- meaningful "undo" for that — dropping foundry_vtt_campaign_tokens here would
+-- destroy the live token counters of a database that reached this shape via
+-- 001's RENAME, which is data 002 never created.
+--
+-- So this down is deliberately a no-op on the token table. Rolling back past
+-- 002 means rolling back to 001, whose own down migration re-creates
+-- foundry_module_versions and renames the token table back; that is the file
+-- that owns the reversal.
+--
+-- A migration pair still needs a .down.sql to parse (see
+-- database.parsePluginMigrations), so the intent is stated rather than left
+-- to an empty file.
+SELECT 1;

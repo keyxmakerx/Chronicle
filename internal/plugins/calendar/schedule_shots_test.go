@@ -100,8 +100,25 @@ const (
 	schedulePagePadWide   = 20
 	schedulePagePadBreak  = 768
 	// schedulePhoneViewport is the mockup's own phone key, and the width every
-	// piece of narrow arithmetic on this surface is stated against.
+	// piece of narrow arithmetic on this surface WAS stated against.
 	schedulePhoneViewport = 390
+	// scheduleNarrowViewport is the SECOND phone, added beside the first rather
+	// than instead of it (C-CALV4-MOBILE [MOB-6] SIGNED).
+	//
+	// MEASURED: `.sc-wrap` reported overflow-x `hidden` with 346 of 346 at 390
+	// and 370 of 370 at 414, but `auto` with 331 of 338 at 375 and 316 of 338
+	// at 360 — 7px and 22px of sideways drag, each of them exactly
+	// `338 - budget`. 375 is the iPhone SE / mini / 8 and 360 is the most
+	// common Android width; both are below the ONE width this surface's narrow
+	// arithmetic had ever been checked at.
+	//
+	// It is 360 rather than 375 because 360 is the smaller of the two and the
+	// budget assertion is a floor: a grid that fits 360 fits 375 by
+	// construction, and the shot sweep photographs both.
+	scheduleNarrowViewport = 360
+	// scheduleMidPhoneViewport is the third shot width. It is a SHOT key, not
+	// an arithmetic key — the budget is asserted at the two ends.
+	scheduleMidPhoneViewport = 375
 	// scheduleHairline is one structural border — the panel's and the scroll
 	// container's, which are the two the grid has to fit inside.
 	scheduleHairline = 1

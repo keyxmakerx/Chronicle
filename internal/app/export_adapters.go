@@ -11,6 +11,9 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/addons"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -19,6 +22,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/plugins/media"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
+	"github.com/keyxmakerx/chronicle/internal/widgets/notes"
 	"github.com/keyxmakerx/chronicle/internal/widgets/posts"
 	"github.com/keyxmakerx/chronicle/internal/widgets/relations"
 	"github.com/keyxmakerx/chronicle/internal/widgets/tags"
@@ -341,8 +345,15 @@ type timelineExportAdapter struct {
 
 // ExportTimelines gathers timeline data for a campaign export.
 func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID string, entitySlugLookup func(string) string) ([]campaigns.ExportTimeline, error) {
+	// A campaign export is a declared SYSTEM caller: it walks the owner's own
+	// rows with no per-request identity behind it. It used to say that by
+	// passing userID "" — the same value an anonymous HTTP request carries
+	// (C-AUTHZ-EMPTY-USERID / ADR-049). Behaviour is unchanged either way here,
+	// because ownerRole already clears CanSeeDmOnly; the point is that the trust
+	// is now stated rather than inferred from an empty string.
 	const ownerRole = 3
-	timelines, err := a.svc.ListTimelines(ctx, campaignID, ownerRole, "")
+	systemViewer := permissions.SystemViewer(ownerRole)
+	timelines, err := a.svc.ListTimelines(ctx, campaignID, systemViewer)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +374,7 @@ func (a *timelineExportAdapter) ExportTimelines(ctx context.Context, campaignID 
 		// Export standalone events only (calendar events are in the calendar section).
 		// Build event ID → export index map for connection references.
 		eventIDToIndex := make(map[string]int)
-		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, ownerRole, "")
+		events, err := a.svc.ListTimelineEvents(ctx, tl.ID, systemViewer)
 		if err == nil {
 			for _, evt := range events {
 				if evt.Source != "standalone" {
@@ -449,13 +460,13 @@ func (a *sessionExportAdapter) ExportSessions(ctx context.Context, campaignID st
 	var result []campaigns.ExportSession
 	for _, sess := range allSessions {
 		es := campaigns.ExportSession{
-			Name:               sess.Name,
-			Summary:            sess.Summary,
-			Notes:              sess.Notes,
-			NotesHTML:          sess.NotesHTML,
-			Recap:              sess.Recap,
-			RecapHTML:          sess.RecapHTML,
-			ScheduledDate:      sess.ScheduledDate,
+			Name:          sess.Name,
+			Summary:       sess.Summary,
+			Notes:         sess.Notes,
+			NotesHTML:     sess.NotesHTML,
+			Recap:         sess.Recap,
+			RecapHTML:     sess.RecapHTML,
+			ScheduledDate: sess.ScheduledDate,
 			// STOP-AND-FLAG (C-SCHED-P3): carrying sess.ScheduledTime through export
 			// needs a matching `ScheduledTime *string` field on
 			// campaigns.ExportSession (export.go) — outside this dispatch's
@@ -631,10 +642,75 @@ func (a *mapExportAdapter) ExportMaps(ctx context.Context, campaignID string, en
 	return result, nil
 }
 
-// Note export is intentionally not implemented in v1 because notes are
-// per-user and the NoteService doesn't support listing all shared notes
-// across users. A future version could add a ListSharedByCampaign
-// repository method to enable shared note export.
+// --- Note Export Adapter ---
+
+// noteExportAdapter implements campaigns.NoteExporter.
+//
+// Shared notes are campaign content — session recaps, party inventories,
+// shared checklists — but export shipped without an exporter for them, so
+// every campaign backup silently omitted the lot. Personal (unshared) notes
+// stay out on purpose: they belong to a user, not to the campaign, and an
+// export is handed to whoever imports it.
+type noteExportAdapter struct {
+	svc notes.NoteService
+}
+
+// ExportNotes gathers the campaign's shared notes. Folder membership is
+// carried as an index into the returned slice, so the importer can rebuild
+// the tree without depending on note IDs surviving the trip.
+func (a *noteExportAdapter) ExportNotes(ctx context.Context, campaignID string, entitySlugLookup func(string) string) ([]campaigns.ExportNote, error) {
+	shared, err := a.svc.ListSharedByCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+
+	// First pass fixes each note's position so parent references can be
+	// resolved to an index regardless of the order rows came back in.
+	indexByID := make(map[string]int, len(shared))
+	for i, n := range shared {
+		indexByID[n.ID] = i
+	}
+
+	result := make([]campaigns.ExportNote, 0, len(shared))
+	for _, n := range shared {
+		en := campaigns.ExportNote{
+			Title:     n.Title,
+			Entry:     n.Entry,
+			EntryHTML: n.EntryHTML,
+			Color:     n.Color,
+			Pinned:    n.Pinned,
+			IsFolder:  n.IsFolder,
+		}
+		if n.EntityID != nil {
+			if slug := entitySlugLookup(*n.EntityID); slug != "" {
+				s := slug
+				en.EntitySlug = &s
+			}
+		}
+		if len(n.Content) > 0 {
+			// Marshal failures here would mean unrepresentable blocks;
+			// drop the block content rather than fail the whole export.
+			if raw, err := json.Marshal(n.Content); err == nil {
+				en.Content = raw
+			} else {
+				slog.Warn("export: note content not serializable; exporting without blocks",
+					slog.String("note", n.ID), slog.Any("error", err))
+			}
+		}
+		// A parent outside the shared set (a shared note filed under a
+		// private folder) cannot be represented; the note is exported at
+		// top level rather than dropped.
+		if n.ParentID != nil {
+			if idx, ok := indexByID[*n.ParentID]; ok {
+				i := idx
+				en.ParentIndex = &i
+			}
+		}
+		result = append(result, en)
+	}
+
+	return result, nil
+}
 
 // --- Addon Export Adapter ---
 
@@ -752,7 +828,7 @@ type entityImportAdapter struct {
 
 // ImportEntities creates entity types, entities, tags, and relations from
 // import data. Returns an IDMap for cross-referencing by other importers.
-func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData) (*campaigns.IDMap, error) {
+func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, userID string, data *campaigns.ExportEntityData, report *campaigns.ImportReport) (*campaigns.IDMap, error) {
 	idMap := campaigns.NewIDMap(campaignID)
 
 	// 1. Create entity types.
@@ -767,6 +843,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		})
 		if err != nil {
 			slog.Warn("import: create entity type failed", slog.String("slug", et.Slug), slog.Any("error", err))
+			report.Fail("entities", "entity type", et.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -778,6 +855,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		if len(et.Fields) > 0 {
 			if err := json.Unmarshal(et.Fields, &fields); err != nil {
 				slog.Warn("import: invalid fields JSON", slog.String("type", et.Slug), slog.Any("error", err))
+				report.Fail("entities", "entity type field set", et.Name, "field definitions were not readable")
 			}
 		}
 		if len(fields) > 0 {
@@ -787,6 +865,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			})
 			if err != nil {
 				slog.Warn("import: update entity type fields failed", slog.String("type", et.Slug), slog.Any("error", err))
+				report.Fail("entities", "entity type field set", et.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -796,6 +875,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			if err := json.Unmarshal(et.Layout, &layout); err == nil {
 				if err := a.entitySvc.UpdateEntityTypeLayout(ctx, newType.ID, layout); err != nil {
 					slog.Warn("import: apply layout failed", slog.String("type", et.Slug), slog.Any("error", err))
+					report.Fail("entities", "entity type layout", et.Name, apperror.SafeMessage(err))
 				}
 			}
 		}
@@ -812,6 +892,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		typeID, ok := typeSlugToNewID[e.EntityTypeSlug]
 		if !ok {
 			slog.Warn("import: unknown entity type", slog.String("slug", e.EntityTypeSlug))
+			report.Fail("entities", "entity", e.Name, "entity type \""+e.EntityTypeSlug+"\" is not in the file")
 			continue
 		}
 
@@ -829,6 +910,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		})
 		if err != nil {
 			slog.Warn("import: create entity failed", slog.String("name", e.Name), slog.Any("error", err))
+			report.Fail("entities", "entity", e.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -841,16 +923,22 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			// Import carries the source row's is_private; pass through
 			// as a pointer so the nil-preserving service layer writes it.
 			isPrivate := e.IsPrivate
+			// The import restores a complete exported row, so every field
+			// is sent PRESENT — an empty descriptor in the source really
+			// does mean "no descriptor". ParentID is absent on purpose:
+			// parents are resolved in a second pass below, once every
+			// entity exists.
 			_, updateErr := a.entitySvc.Update(ctx, newEntity.ID, entities.UpdateEntityInput{
-				Name:       e.Name,
-				TypeLabel:  ptrString(e.TypeLabel),
+				Name:       patch.Of(e.Name),
+				TypeLabel:  patch.Of(ptrString(e.TypeLabel)),
 				IsPrivate:  &isPrivate,
-				Entry:      ptrString(e.Entry),
+				Entry:      patch.Of(ptrString(e.Entry)),
 				ImagePath:  ptrString(e.ImagePath),
 				FieldsData: fieldsData,
 			})
 			if updateErr != nil {
 				slog.Warn("import: update entity entry/image failed", slog.String("entity", e.Name), slog.Any("error", updateErr))
+				report.Fail("entities", "entity body", e.Name, apperror.SafeMessage(updateErr))
 			}
 		}
 
@@ -860,6 +948,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			if err := json.Unmarshal(e.FieldOverrides, &overrides); err == nil {
 				if err := a.entitySvc.UpdateFieldOverrides(ctx, newEntity.ID, &overrides); err != nil {
 					slog.Warn("import: apply field overrides failed", slog.String("entity", e.Name), slog.Any("error", err))
+					report.Fail("entities", "entity field override", e.Name, apperror.SafeMessage(err))
 				}
 			}
 		}
@@ -870,6 +959,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			if err := json.Unmarshal(e.PopupConfig, &config); err == nil {
 				if err := a.entitySvc.UpdatePopupConfig(ctx, newEntity.ID, &config); err != nil {
 					slog.Warn("import: apply popup config failed", slog.String("entity", e.Name), slog.Any("error", err))
+					report.Fail("entities", "entity popup config", e.Name, apperror.SafeMessage(err))
 				}
 			}
 		}
@@ -890,6 +980,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 			})
 			if err != nil {
 				slog.Warn("import: set entity permissions failed", slog.String("entity", e.Name), slog.Any("error", err))
+				report.Fail("entities", "entity permission set", e.Name, apperror.SafeMessage(err))
 			}
 		}
 	}
@@ -906,6 +997,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		parentNewID, ok := entitySlugToNewID[*e.ParentSlug]
 		if !ok {
 			slog.Warn("import: parent entity not found", slog.String("entity", e.Name), slog.String("parent_slug", *e.ParentSlug))
+			report.Fail("entities", "entity parent link", e.Name, "parent \""+*e.ParentSlug+"\" is not in the file")
 			continue
 		}
 
@@ -917,16 +1009,17 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		// Second-pass parent resolve carries the source is_private.
 		isPrivate := e.IsPrivate
 		_, err := a.entitySvc.Update(ctx, entityNewID, entities.UpdateEntityInput{
-			Name:       e.Name,
-			TypeLabel:  ptrString(e.TypeLabel),
-			ParentID:   parentNewID,
+			Name:       patch.Of(e.Name),
+			TypeLabel:  patch.Of(ptrString(e.TypeLabel)),
+			ParentID:   patch.Of(parentNewID),
 			IsPrivate:  &isPrivate,
-			Entry:      ptrString(e.Entry),
+			Entry:      patch.Of(ptrString(e.Entry)),
 			ImagePath:  ptrString(e.ImagePath),
 			FieldsData: fieldsData,
 		})
 		if err != nil {
 			slog.Warn("import: set parent failed", slog.String("entity", e.Name), slog.Any("error", err))
+			report.Fail("entities", "entity parent link", e.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -936,6 +1029,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 		newTag, err := a.tagSvc.Create(ctx, campaignID, t.Name, t.Color, t.DmOnly)
 		if err != nil {
 			slog.Warn("import: create tag failed", slog.String("name", t.Name), slog.Any("error", err))
+			report.Fail("entities", "tag", t.Name, apperror.SafeMessage(err))
 			continue
 		}
 		idMap.TagIDs[t.OriginalID] = newTag.ID
@@ -984,6 +1078,7 @@ func (a *entityImportAdapter) ImportEntities(ctx context.Context, campaignID, us
 				slog.String("source", r.SourceEntitySlug),
 				slog.String("target", r.TargetEntitySlug),
 				slog.Any("error", err))
+			report.Fail("entities", "relation", r.SourceEntitySlug+" \u2192 "+r.TargetEntitySlug, apperror.SafeMessage(err))
 		}
 	}
 
@@ -996,7 +1091,7 @@ type calendarImportAdapter struct {
 }
 
 // ImportCalendar creates a calendar from import data.
-func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap) error {
+func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID string, data *campaigns.ExportCalendarData, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	// Convert to calendar import format.
 	months := make([]calendar.MonthInput, len(data.Months))
 	for i, m := range data.Months {
@@ -1027,7 +1122,11 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 
 	// Set sub-resources.
 	if len(months) > 0 {
-		_ = a.svc.SetMonths(ctx, cal.ID, months)
+		// The month-edit impact ([GR-18]) is discarded here deliberately: this
+		// is an IMPORT into a calendar this adapter has just created, so there
+		// are no pre-existing events for a month edit to re-date, and there is
+		// no operator standing in front of this path to warn.
+		_, _ = a.svc.SetMonths(ctx, cal.ID, months)
 	}
 	if len(weekdays) > 0 {
 		_ = a.svc.SetWeekdays(ctx, cal.ID, weekdays)
@@ -1091,27 +1190,28 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 			}
 		}
 		_, err := a.svc.CreateEvent(ctx, cal.ID, calendar.CreateEventInput{
-			Name:           evt.Name,
-			Description:    evt.Description,
+			Name:            evt.Name,
+			Description:     evt.Description,
 			DescriptionHTML: evt.DescriptionHTML,
-			EntityID:       entityID,
-			Year:           evt.Year,
-			Month:          evt.Month,
-			Day:            evt.Day,
-			StartHour:      evt.StartHour,
-			StartMinute:    evt.StartMinute,
-			EndYear:        evt.EndYear,
-			EndMonth:       evt.EndMonth,
-			EndDay:         evt.EndDay,
-			EndHour:        evt.EndHour,
-			EndMinute:      evt.EndMinute,
-			IsRecurring:    evt.IsRecurring,
-			RecurrenceType: evt.RecurrenceType,
-			Visibility:     evt.Visibility,
-			Category:       evt.Category,
+			EntityID:        entityID,
+			Year:            evt.Year,
+			Month:           evt.Month,
+			Day:             evt.Day,
+			StartHour:       evt.StartHour,
+			StartMinute:     evt.StartMinute,
+			EndYear:         evt.EndYear,
+			EndMonth:        evt.EndMonth,
+			EndDay:          evt.EndDay,
+			EndHour:         evt.EndHour,
+			EndMinute:       evt.EndMinute,
+			IsRecurring:     evt.IsRecurring,
+			RecurrenceType:  evt.RecurrenceType,
+			Visibility:      evt.Visibility,
+			Category:        evt.Category,
 		})
 		if err != nil {
 			slog.Warn("import: create calendar event failed", slog.String("name", evt.Name), slog.Any("error", err))
+			report.Fail(campaigns.SectionCalendar, "calendar event", evt.Name, apperror.SafeMessage(err))
 		}
 	}
 
@@ -1124,23 +1224,24 @@ type sessionImportAdapter struct {
 }
 
 // ImportSessions creates sessions from import data.
-func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, userID string, data []campaigns.ExportSession, idMap *campaigns.IDMap) error {
+func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, userID string, data []campaigns.ExportSession, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, sess := range data {
 		newSession, err := a.svc.CreateSession(ctx, campaignID, sessions.CreateSessionInput{
-			Name:                sess.Name,
-			ScheduledDate:       sess.ScheduledDate,
+			Name:          sess.Name,
+			ScheduledDate: sess.ScheduledDate,
 			// STOP-AND-FLAG (C-SCHED-P3): ScheduledTime import is blocked on the same
 			// missing campaigns.ExportSession field noted in ExportSessions above.
-			CalendarYear:        sess.CalendarYear,
-			CalendarMonth:       sess.CalendarMonth,
-			CalendarDay:         sess.CalendarDay,
-			IsRecurring:         sess.IsRecurring,
-			RecurrenceType:      sess.RecurrenceType,
-			RecurrenceInterval:  sess.RecurrenceInterval,
-			CreatedBy:           userID,
+			CalendarYear:       sess.CalendarYear,
+			CalendarMonth:      sess.CalendarMonth,
+			CalendarDay:        sess.CalendarDay,
+			IsRecurring:        sess.IsRecurring,
+			RecurrenceType:     sess.RecurrenceType,
+			RecurrenceInterval: sess.RecurrenceInterval,
+			CreatedBy:          userID,
 		})
 		if err != nil {
 			slog.Warn("import: create session failed", slog.String("name", sess.Name), slog.Any("error", err))
+			report.Fail("sessions", "session", sess.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1150,17 +1251,21 @@ func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, u
 			if status == "" {
 				status = "planned"
 			}
+			// The import is a full restore of an exported row, so every
+			// field is sent explicitly: a null in the export means the
+			// source had no value, and under the sweep-R4 contract an
+			// explicit null clears (patch.FromPtr renders exactly that).
 			_, _ = a.svc.UpdateSession(ctx, newSession.ID, sessions.UpdateSessionInput{
-				Name:               sess.Name,
-				Summary:            sess.Summary,
-				ScheduledDate:      sess.ScheduledDate,
-				CalendarYear:       sess.CalendarYear,
-				CalendarMonth:      sess.CalendarMonth,
-				CalendarDay:        sess.CalendarDay,
-				Status:             status,
-				IsRecurring:        sess.IsRecurring,
-				RecurrenceType:     sess.RecurrenceType,
-				RecurrenceInterval: sess.RecurrenceInterval,
+				Name:               patch.Of(sess.Name),
+				Summary:            patch.FromPtr(sess.Summary),
+				ScheduledDate:      patch.FromPtr(sess.ScheduledDate),
+				CalendarYear:       patch.FromPtr(sess.CalendarYear),
+				CalendarMonth:      patch.FromPtr(sess.CalendarMonth),
+				CalendarDay:        patch.FromPtr(sess.CalendarDay),
+				Status:             patch.Of(status),
+				IsRecurring:        patch.Of(sess.IsRecurring),
+				RecurrenceType:     patch.FromPtr(sess.RecurrenceType),
+				RecurrenceInterval: patch.Of(sess.RecurrenceInterval),
 			})
 		}
 
@@ -1184,6 +1289,7 @@ func (a *sessionImportAdapter) ImportSessions(ctx context.Context, campaignID, u
 			}
 			if err := a.svc.InviteAll(ctx, newSession.ID, userIDs); err != nil {
 				slog.Warn("import: invite attendees failed", slog.String("session", sess.Name), slog.Any("error", err))
+				report.Fail("sessions", "session attendee list", sess.Name, apperror.SafeMessage(err))
 			} else {
 				// Update statuses for attendees who responded.
 				for _, att := range sess.Attendees {
@@ -1203,7 +1309,7 @@ type timelineImportAdapter struct {
 }
 
 // ImportTimelines creates timelines from import data.
-func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID, userID string, data []campaigns.ExportTimeline, idMap *campaigns.IDMap) error {
+func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID, userID string, data []campaigns.ExportTimeline, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, tl := range data {
 		// Link to calendar if one was created.
 		var calendarID *string
@@ -1224,6 +1330,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 		})
 		if err != nil {
 			slog.Warn("import: create timeline failed", slog.String("name", tl.Name), slog.Any("error", err))
+			report.Fail(campaigns.SectionTimelines, campaigns.KindTimeline, tl.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1237,29 +1344,30 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 				}
 			}
 			newEvt, err := a.svc.CreateStandaloneEvent(ctx, newTimeline.ID, timeline.CreateTimelineEventInput{
-				Name:        evt.Name,
-				Description: evt.Description,
-				EntityID:    entityID,
-				Year:        evt.Year,
-				Month:       evt.Month,
-				Day:         evt.Day,
-				StartHour:   evt.StartHour,
-				StartMinute: evt.StartMinute,
-				EndYear:     evt.EndYear,
-				EndMonth:    evt.EndMonth,
-				EndDay:      evt.EndDay,
-				EndHour:     evt.EndHour,
-				EndMinute:   evt.EndMinute,
-				IsRecurring: evt.IsRecurring,
+				Name:           evt.Name,
+				Description:    evt.Description,
+				EntityID:       entityID,
+				Year:           evt.Year,
+				Month:          evt.Month,
+				Day:            evt.Day,
+				StartHour:      evt.StartHour,
+				StartMinute:    evt.StartMinute,
+				EndYear:        evt.EndYear,
+				EndMonth:       evt.EndMonth,
+				EndDay:         evt.EndDay,
+				EndHour:        evt.EndHour,
+				EndMinute:      evt.EndMinute,
+				IsRecurring:    evt.IsRecurring,
 				RecurrenceType: evt.RecurrenceType,
-				Category:    evt.Category,
-				Visibility:  evt.Visibility,
-				Label:       evt.Label,
-				Color:       evt.Color,
-				CreatedBy:   userID,
+				Category:       evt.Category,
+				Visibility:     evt.Visibility,
+				Label:          evt.Label,
+				Color:          evt.Color,
+				CreatedBy:      userID,
 			})
 			if err != nil {
 				slog.Warn("import: create timeline event failed", slog.String("name", evt.Name), slog.Any("error", err))
+				report.Fail("timelines", "timeline event", evt.Name, apperror.SafeMessage(err))
 				continue
 			}
 			eventIndexToID[i] = newEvt.ID
@@ -1283,6 +1391,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 			})
 			if err != nil {
 				slog.Warn("import: create timeline connection failed", slog.Any("error", err))
+				report.Fail("timelines", "timeline connection", tl.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -1294,6 +1403,7 @@ func (a *timelineImportAdapter) ImportTimelines(ctx context.Context, campaignID,
 			})
 			if err != nil {
 				slog.Warn("import: create entity group failed", slog.String("name", eg.Name), slog.Any("error", err))
+				report.Fail("timelines", "timeline entity group", eg.Name, apperror.SafeMessage(err))
 				continue
 			}
 			for _, memberSlug := range eg.Members {
@@ -1313,7 +1423,7 @@ type mapImportAdapter struct {
 }
 
 // ImportMaps creates maps from import data.
-func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID string, data []campaigns.ExportMap, idMap *campaigns.IDMap) error {
+func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID string, data []campaigns.ExportMap, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, m := range data {
 		newMap, err := a.mapSvc.CreateMap(ctx, maps.CreateMapInput{
 			CampaignID:  campaignID,
@@ -1325,6 +1435,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 		})
 		if err != nil {
 			slog.Warn("import: create map failed", slog.String("name", m.Name), slog.Any("error", err))
+			report.Fail("maps", "map", m.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1338,6 +1449,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create layer failed", slog.String("name", l.Name), slog.Any("error", err))
+				report.Fail("maps", "map layer", l.Name, apperror.SafeMessage(err))
 				continue
 			}
 			layerNameToID[l.Name] = newLayer.ID
@@ -1358,6 +1470,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create marker failed", slog.String("name", mk.Name), slog.Any("error", err))
+				report.Fail("maps", "map marker", mk.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -1379,6 +1492,7 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create drawing failed", slog.Any("error", err))
+				report.Fail("maps", "map drawing", m.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -1409,10 +1523,11 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 				LightColor: t.LightColor, VisionEnabled: t.VisionEnabled,
 				VisionRange: t.VisionRange, Elevation: t.Elevation,
 				StatusEffects: t.StatusEffects,
-				CreatedBy: userID,
+				CreatedBy:     userID,
 			})
 			if err != nil {
 				slog.Warn("import: create token failed", slog.String("name", t.Name), slog.Any("error", err))
+				report.Fail("maps", "map token", t.Name, apperror.SafeMessage(err))
 			}
 		}
 
@@ -1423,13 +1538,107 @@ func (a *mapImportAdapter) ImportMaps(ctx context.Context, campaignID, userID st
 			})
 			if err != nil {
 				slog.Warn("import: create fog region failed", slog.Any("error", err))
+				report.Fail("maps", "map fog region", m.Name, apperror.SafeMessage(err))
 			}
 		}
 	}
 	return nil
 }
 
-// Note import is intentionally not implemented in v1 (see note export comment).
+// --- Note Import Adapter ---
+
+// noteImportAdapter implements campaigns.NoteImporter.
+type noteImportAdapter struct {
+	svc notes.NoteService
+}
+
+// ImportNotes recreates the campaign's shared notes, owned by the importing
+// user. Runs in two passes: create every note flat, then re-parent the ones
+// that were filed in a folder. Two passes rather than one because a folder
+// may appear after its children in the export, and a single pass would have
+// to drop those children.
+//
+// Entry / EntryHTML / Pinned are applied through Update rather than Create
+// because CreateNoteRequest carries neither, and because Update runs the
+// imported HTML through the sanitizer on the way in — an imported export is
+// untrusted input.
+func (a *noteImportAdapter) ImportNotes(ctx context.Context, campaignID, userID string, data []campaigns.ExportNote, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
+	newIDs := make([]string, len(data))
+
+	for i, n := range data {
+		var entityID *string
+		if n.EntitySlug != nil {
+			if id, ok := idMap.EntitySlugToID[*n.EntitySlug]; ok {
+				eid := id
+				entityID = &eid
+			} else {
+				slog.Warn("import: note entity not found; importing note campaign-wide",
+					slog.String("entity_slug", *n.EntitySlug), slog.String("note", n.Title))
+				report.Fail("notes", "note entity link", n.Title, "the linked entity is not in the file")
+			}
+		}
+
+		var blocks []notes.Block
+		if len(n.Content) > 0 {
+			if err := json.Unmarshal(n.Content, &blocks); err != nil {
+				slog.Warn("import: note content unreadable; importing note without blocks",
+					slog.String("note", n.Title), slog.Any("error", err))
+				report.Fail("notes", "note checklist", n.Title, "block content was not readable")
+				blocks = nil
+			}
+		}
+
+		created, err := a.svc.Create(ctx, campaignID, userID, notes.CreateNoteRequest{
+			EntityID: entityID,
+			IsFolder: n.IsFolder,
+			Title:    n.Title,
+			Content:  blocks,
+			Color:    n.Color,
+			IsShared: true, // Only shared notes are exported; keep them shared.
+		})
+		if err != nil {
+			slog.Warn("import: create note failed", slog.String("note", n.Title), slog.Any("error", err))
+			report.Fail("notes", "note", n.Title, apperror.SafeMessage(err))
+			continue
+		}
+		newIDs[i] = created.ID
+
+		if n.Entry != nil || n.EntryHTML != nil || n.Pinned {
+			pinned := n.Pinned
+			if _, err := a.svc.Update(ctx, created.ID, userID, notes.UpdateNoteRequest{
+				Entry:     n.Entry,
+				EntryHTML: n.EntryHTML,
+				Pinned:    &pinned,
+			}); err != nil {
+				slog.Warn("import: note body not applied", slog.String("note", n.Title), slog.Any("error", err))
+				report.Fail("notes", "note body", n.Title, apperror.SafeMessage(err))
+			}
+		}
+	}
+
+	// Second pass: re-parent notes whose folder now exists.
+	for i, n := range data {
+		if n.ParentIndex == nil || newIDs[i] == "" {
+			continue
+		}
+		pi := *n.ParentIndex
+		if pi < 0 || pi >= len(newIDs) || newIDs[pi] == "" {
+			slog.Warn("import: note parent folder missing; note left at top level",
+				slog.String("note", n.Title))
+			report.Fail("notes", "note folder link", n.Title, "its folder is not in the file")
+			continue
+		}
+		parentID := newIDs[pi]
+		if _, err := a.svc.Update(ctx, newIDs[i], userID, notes.UpdateNoteRequest{
+			ParentID: &parentID,
+		}); err != nil {
+			slog.Warn("import: note re-parent failed", slog.String("note", n.Title), slog.Any("error", err))
+			report.Fail("notes", "note folder link", n.Title, apperror.SafeMessage(err))
+		}
+	}
+
+	return nil
+}
 
 // addonImportAdapter implements campaigns.AddonImporter.
 type addonImportAdapter struct {
@@ -1437,17 +1646,19 @@ type addonImportAdapter struct {
 }
 
 // ImportAddons enables addons from import data.
-func (a *addonImportAdapter) ImportAddons(ctx context.Context, campaignID, userID string, data []campaigns.ExportAddon) error {
+func (a *addonImportAdapter) ImportAddons(ctx context.Context, campaignID, userID string, data []campaigns.ExportAddon, report *campaigns.ImportReport) error {
 	for _, ad := range data {
 		// Look up addon by slug.
 		addon, err := a.svc.GetBySlug(ctx, ad.Slug)
 		if err != nil {
 			slog.Warn("import: addon not found", slog.String("slug", ad.Slug))
+			report.Fail("addons", "addon", ad.Slug, "not installed on this instance")
 			continue
 		}
 
 		if err := a.svc.EnableForCampaign(ctx, campaignID, addon.ID, userID); err != nil {
 			slog.Warn("import: enable addon failed", slog.String("slug", ad.Slug), slog.Any("error", err))
+			report.Fail("addons", "addon", ad.Slug, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1503,11 +1714,12 @@ type groupImportAdapter struct {
 
 // ImportGroups creates campaign groups from import data.
 // Member user IDs that don't exist on the target instance are skipped.
-func (a *groupImportAdapter) ImportGroups(ctx context.Context, campaignID string, data []campaigns.ExportGroup) error {
+func (a *groupImportAdapter) ImportGroups(ctx context.Context, campaignID string, data []campaigns.ExportGroup, report *campaigns.ImportReport) error {
 	for _, g := range data {
 		newGroup, err := a.svc.CreateGroup(ctx, campaignID, g.Name, g.Description)
 		if err != nil {
 			slog.Warn("import: create group failed", slog.String("name", g.Name), slog.Any("error", err))
+			report.Fail("groups", "group", g.Name, apperror.SafeMessage(err))
 			continue
 		}
 
@@ -1515,6 +1727,7 @@ func (a *groupImportAdapter) ImportGroups(ctx context.Context, campaignID string
 			if err := a.svc.AddGroupMember(ctx, newGroup.ID, userID); err != nil {
 				slog.Warn("import: add group member skipped (user may not exist)",
 					slog.String("group", g.Name), slog.String("user_id", userID))
+				report.Fail("groups", "group member", userID, "no such user on this instance")
 			}
 		}
 	}
@@ -1585,11 +1798,12 @@ type postImportAdapter struct {
 
 // ImportPosts creates entity posts from import data, resolving entity slugs
 // to new IDs via the IDMap.
-func (a *postImportAdapter) ImportPosts(ctx context.Context, campaignID, userID string, data []campaigns.ExportPost, idMap *campaigns.IDMap) error {
+func (a *postImportAdapter) ImportPosts(ctx context.Context, campaignID, userID string, data []campaigns.ExportPost, idMap *campaigns.IDMap, report *campaigns.ImportReport) error {
 	for _, p := range data {
 		entityID, ok := idMap.EntitySlugToID[p.EntitySlug]
 		if !ok {
 			slog.Warn("import: post entity not found", slog.String("entity_slug", p.EntitySlug), slog.String("post", p.Name))
+			report.Fail("posts", "post", p.Name, "its entity is not in the file")
 			continue
 		}
 
@@ -1600,6 +1814,7 @@ func (a *postImportAdapter) ImportPosts(ctx context.Context, campaignID, userID 
 		})
 		if err != nil {
 			slog.Warn("import: create post failed", slog.String("post", p.Name), slog.Any("error", err))
+			report.Fail("posts", "post", p.Name, apperror.SafeMessage(err))
 		}
 	}
 	return nil
@@ -1612,4 +1827,3 @@ func ptrString(s *string) string {
 	}
 	return ""
 }
-

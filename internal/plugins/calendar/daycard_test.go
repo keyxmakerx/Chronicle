@@ -1548,7 +1548,7 @@ func TestDayCardModule_KeepsTheHouseShape(t *testing.T) {
 		// geometry because the JS wrote a start state and the CSS had no
 		// transition to leave it. Deleting the reduced-motion check turns
 		// test/js/daycard_open_close.test.mjs red on the END state; deleting the
-		// class turns TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut red on its
+		// class turns TestBenchCSS_TheNamedCarveOutsAreExactlyTwo red on its
 		// two-file claim. This is the third leg, at the source level, where the
 		// other two cannot see.
 		"edmorph",

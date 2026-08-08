@@ -113,47 +113,47 @@ type PostExporter interface {
 // EntityImporter creates entities from import data. Returns the ID map
 // for cross-referencing by other importers.
 type EntityImporter interface {
-	ImportEntities(ctx context.Context, campaignID, userID string, data *ExportEntityData) (*IDMap, error)
+	ImportEntities(ctx context.Context, campaignID, userID string, data *ExportEntityData, report *ImportReport) (*IDMap, error)
 }
 
 // CalendarImporter creates calendar from import data.
 type CalendarImporter interface {
-	ImportCalendar(ctx context.Context, campaignID string, data *ExportCalendarData, idMap *IDMap) error
+	ImportCalendar(ctx context.Context, campaignID string, data *ExportCalendarData, idMap *IDMap, report *ImportReport) error
 }
 
 // TimelineImporter creates timelines from import data.
 type TimelineImporter interface {
-	ImportTimelines(ctx context.Context, campaignID, userID string, data []ExportTimeline, idMap *IDMap) error
+	ImportTimelines(ctx context.Context, campaignID, userID string, data []ExportTimeline, idMap *IDMap, report *ImportReport) error
 }
 
 // SessionImporter creates sessions from import data.
 type SessionImporter interface {
-	ImportSessions(ctx context.Context, campaignID, userID string, data []ExportSession, idMap *IDMap) error
+	ImportSessions(ctx context.Context, campaignID, userID string, data []ExportSession, idMap *IDMap, report *ImportReport) error
 }
 
 // MapImporter creates maps from import data.
 type MapImporter interface {
-	ImportMaps(ctx context.Context, campaignID, userID string, data []ExportMap, idMap *IDMap) error
+	ImportMaps(ctx context.Context, campaignID, userID string, data []ExportMap, idMap *IDMap, report *ImportReport) error
 }
 
 // NoteImporter creates notes from import data.
 type NoteImporter interface {
-	ImportNotes(ctx context.Context, campaignID, userID string, data []ExportNote, idMap *IDMap) error
+	ImportNotes(ctx context.Context, campaignID, userID string, data []ExportNote, idMap *IDMap, report *ImportReport) error
 }
 
 // AddonImporter enables addons from import data.
 type AddonImporter interface {
-	ImportAddons(ctx context.Context, campaignID, userID string, data []ExportAddon) error
+	ImportAddons(ctx context.Context, campaignID, userID string, data []ExportAddon, report *ImportReport) error
 }
 
 // GroupImporter creates campaign groups from import data.
 type GroupImporter interface {
-	ImportGroups(ctx context.Context, campaignID string, data []ExportGroup) error
+	ImportGroups(ctx context.Context, campaignID string, data []ExportGroup, report *ImportReport) error
 }
 
 // PostImporter creates entity posts from import data.
 type PostImporter interface {
-	ImportPosts(ctx context.Context, campaignID, userID string, data []ExportPost, idMap *IDMap) error
+	ImportPosts(ctx context.Context, campaignID, userID string, data []ExportPost, idMap *IDMap, report *ImportReport) error
 }
 
 // --- Export/Import Service ---
@@ -413,17 +413,25 @@ func (s *ExportImportService) Export(ctx context.Context, campaignID string) (*C
 }
 
 // Import creates a new campaign from a CampaignExport. Returns the newly
-// created campaign. The import processes data in dependency order:
+// created campaign and a report of everything that could not be restored.
+// The import processes data in dependency order:
 // 1. Campaign metadata → 2. Entity types + entities + tags + relations →
 // 3. Calendar → 4. Timelines → 5. Sessions → 6. Maps → 7. Notes → 8. Addons
-func (s *ExportImportService) Import(ctx context.Context, userID string, data *CampaignExport) (*Campaign, error) {
+//
+// Import is best-effort by design: a single bad row must not abandon a
+// half-built campaign. The returned *ImportReport is how that stays honest —
+// it is never nil, and a non-zero Count() means the caller MUST tell the
+// operator that the restore is partial and what was lost. Returning it
+// unused is the bug this signature exists to prevent.
+func (s *ExportImportService) Import(ctx context.Context, userID string, data *CampaignExport) (*Campaign, *ImportReport, error) {
+	report := NewImportReport()
 	// Create the new campaign.
 	campaign, err := s.campaigns.Create(ctx, userID, CreateCampaignInput{
 		Name:        data.Campaign.Name,
 		Description: ptrToString(data.Campaign.Description),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("import create campaign: %w", err)
+		return nil, report, fmt.Errorf("import create campaign: %w", err)
 	}
 
 	campaignID := campaign.ID
@@ -448,6 +456,7 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		}
 		if err := s.campaigns.UpdateSidebarConfig(ctx, campaignID, sidebarReq); err != nil {
 			slog.Warn("import sidebar config failed", slog.Any("error", err))
+			report.Fail("campaign", "sidebar layout", data.Campaign.Name, apperror.SafeMessage(err))
 		}
 	}
 	if len(data.Campaign.DashboardLayout) > 0 {
@@ -455,6 +464,7 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 		if err := json.Unmarshal(data.Campaign.DashboardLayout, &dashLayout); err == nil {
 			if err := s.campaigns.UpdateDashboardLayout(ctx, campaignID, &dashLayout); err != nil {
 				slog.Warn("import dashboard layout failed", slog.Any("error", err))
+				report.Fail("campaign", "dashboard layout", data.Campaign.Name, apperror.SafeMessage(err))
 			}
 		}
 	}
@@ -469,9 +479,9 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 			EntityTags: data.EntityTags,
 			Relations:  data.Relations,
 		}
-		idMap, err = s.entityImp.ImportEntities(ctx, campaignID, userID, entityData)
+		idMap, err = s.entityImp.ImportEntities(ctx, campaignID, userID, entityData, report)
 		if err != nil {
-			return nil, fmt.Errorf("import entities: %w", err)
+			return nil, report, fmt.Errorf("import entities: %w", err)
 		}
 	}
 	if idMap == nil {
@@ -481,61 +491,77 @@ func (s *ExportImportService) Import(ctx context.Context, userID string, data *C
 	// Import campaign groups (before calendar, since group-based permission
 	// grants may reference group IDs).
 	if s.groupImp != nil && len(data.Groups) > 0 {
-		if err := s.groupImp.ImportGroups(ctx, campaignID, data.Groups); err != nil {
+		if err := s.groupImp.ImportGroups(ctx, campaignID, data.Groups, report); err != nil {
 			slog.Warn("import groups failed", slog.Any("error", err))
+			report.Fail("groups", "group", "", apperror.SafeMessage(err))
 		}
 	}
 
 	// Import calendar.
 	if s.calendarImp != nil && data.Calendar != nil {
-		if err := s.calendarImp.ImportCalendar(ctx, campaignID, data.Calendar, idMap); err != nil {
+		if err := s.calendarImp.ImportCalendar(ctx, campaignID, data.Calendar, idMap, report); err != nil {
 			slog.Warn("import calendar failed", slog.Any("error", err))
+			report.Fail(SectionCalendar, KindCalendar, data.Calendar.Name, apperror.SafeMessage(err))
 		}
 	}
 
 	// Import timelines.
 	if s.timelineImp != nil && len(data.Timelines) > 0 {
-		if err := s.timelineImp.ImportTimelines(ctx, campaignID, userID, data.Timelines, idMap); err != nil {
+		if err := s.timelineImp.ImportTimelines(ctx, campaignID, userID, data.Timelines, idMap, report); err != nil {
 			slog.Warn("import timelines failed", slog.Any("error", err))
+			report.Fail(SectionTimelines, KindTimeline, "", apperror.SafeMessage(err))
 		}
 	}
 
 	// Import sessions.
 	if s.sessionImp != nil && len(data.Sessions) > 0 {
-		if err := s.sessionImp.ImportSessions(ctx, campaignID, userID, data.Sessions, idMap); err != nil {
+		if err := s.sessionImp.ImportSessions(ctx, campaignID, userID, data.Sessions, idMap, report); err != nil {
 			slog.Warn("import sessions failed", slog.Any("error", err))
+			report.Fail("sessions", "session", "", apperror.SafeMessage(err))
 		}
 	}
 
 	// Import maps.
 	if s.mapImp != nil && len(data.Maps) > 0 {
-		if err := s.mapImp.ImportMaps(ctx, campaignID, userID, data.Maps, idMap); err != nil {
+		if err := s.mapImp.ImportMaps(ctx, campaignID, userID, data.Maps, idMap, report); err != nil {
 			slog.Warn("import maps failed", slog.Any("error", err))
+			report.Fail("maps", "map", "", apperror.SafeMessage(err))
 		}
 	}
 
 	// Import notes.
 	if s.noteImp != nil && len(data.Notes) > 0 {
-		if err := s.noteImp.ImportNotes(ctx, campaignID, userID, data.Notes, idMap); err != nil {
+		if err := s.noteImp.ImportNotes(ctx, campaignID, userID, data.Notes, idMap, report); err != nil {
 			slog.Warn("import notes failed", slog.Any("error", err))
+			report.Fail("notes", "note", "", apperror.SafeMessage(err))
 		}
 	}
 
 	// Import entity posts (after entities are created).
 	if s.postImp != nil && len(data.Posts) > 0 {
-		if err := s.postImp.ImportPosts(ctx, campaignID, userID, data.Posts, idMap); err != nil {
+		if err := s.postImp.ImportPosts(ctx, campaignID, userID, data.Posts, idMap, report); err != nil {
 			slog.Warn("import posts failed", slog.Any("error", err))
+			report.Fail("posts", "post", "", apperror.SafeMessage(err))
 		}
 	}
 
 	// Import addons.
 	if s.addonImp != nil && len(data.Addons) > 0 {
-		if err := s.addonImp.ImportAddons(ctx, campaignID, userID, data.Addons); err != nil {
+		if err := s.addonImp.ImportAddons(ctx, campaignID, userID, data.Addons, report); err != nil {
 			slog.Warn("import addons failed", slog.Any("error", err))
+			report.Fail("addons", "addon", "", apperror.SafeMessage(err))
 		}
 	}
 
-	return campaign, nil
+	if report.HasFailures() {
+		slog.Warn("campaign import completed with losses",
+			slog.String("campaign", campaignID),
+			slog.Int("failed_objects", report.Count()),
+			slog.String("summary", report.Summary()),
+		)
+	}
+
+	return campaign, report, nil
 }
 
 // Validate checks a CampaignExport for structural integrity before import.

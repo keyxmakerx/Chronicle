@@ -68,6 +68,22 @@ type RSVPService interface {
 	// interstitial's pure read, so a mail scanner's prefetch changes nothing.
 	ValidateToken(ctx context.Context, token string) (*EventRSVPToken, error)
 
+	// AnsweredToken resolves a token that is ALREADY SPENT, together with the
+	// answer standing on record for it (C-CALV4-GAMEREADY §5 [GR-8]).
+	//
+	// It is the read behind "you've already answered — you're down as Going",
+	// and it exists because ValidateToken cannot serve it: ValidateToken's whole
+	// contract is that spent, expired and never-existed are INDISTINGUISHABLE,
+	// which is right for a link that may still be redeemable and wrong for one
+	// the member has already used. Both halves must be present — a spent token
+	// with no stored answer is not "already answered", it is a link whose write
+	// did not happen, and that is the generic page's business.
+	//
+	// IT AUTHORISES NOTHING. The handler still runs the SAME membership and
+	// event-visibility re-check resolveToken runs before it prints a word; this
+	// method only reports what the two rows say.
+	AnsweredToken(ctx context.Context, token string) (*EventRSVPToken, *EventRSVP, error)
+
 	// ApplyToken consumes a token and writes the RSVP status it implies.
 	//
 	// The two richer actions' side-effects are NOT applied here — "out this
@@ -408,6 +424,42 @@ func (s *rsvpService) ValidateToken(ctx context.Context, token string) (*EventRS
 
 // rsvpBadTokenMsg is the single user-facing message for every token failure.
 const rsvpBadTokenMsg = "this RSVP link is invalid or has expired"
+
+// AnsweredToken reports a SPENT token plus the answer already on record.
+//
+// THE NARROWNESS IS THE SAFETY. Three conditions must ALL hold, and a miss on
+// any of them returns the same not-found the generic page is built on:
+//
+//	the token row exists            — a guessed 64-hex string resolves nothing
+//	used_at IS NOT NULL             — a LIVE token is ValidateToken's business,
+//	                                  and answering here would let a redeemable
+//	                                  link be read without being redeemed
+//	the (event, user) row exists    — "spent with nothing written" is a failure,
+//	                                  not an answer, and must not claim otherwise
+//
+// Expiry is deliberately NOT re-checked: a spent link is spent, and the answer
+// it recorded is just as true a week later. What the member is told is a fact
+// about their own row, not a permission to do anything.
+func (s *rsvpService) AnsweredToken(ctx context.Context, token string) (*EventRSVPToken, *EventRSVP, error) {
+	if token == "" {
+		return nil, nil, apperror.NewBadRequest(rsvpBadTokenMsg)
+	}
+	t, err := s.repo.FindRSVPToken(ctx, token)
+	if err != nil {
+		return nil, nil, apperror.NewInternal(err)
+	}
+	if t == nil || t.UsedAt == nil {
+		return nil, nil, apperror.NewBadRequest(rsvpBadTokenMsg)
+	}
+	answer, err := s.repo.GetUserRSVP(ctx, t.EventID, t.UserID)
+	if err != nil {
+		return nil, nil, apperror.NewInternal(err)
+	}
+	if answer == nil {
+		return nil, nil, apperror.NewBadRequest(rsvpBadTokenMsg)
+	}
+	return t, answer, nil
+}
 
 // ApplyToken consumes a token and writes its effect. State-changing, so it only
 // ever runs from the POST route (the GET half is ValidateToken) — a mail

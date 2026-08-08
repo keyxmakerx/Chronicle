@@ -28,14 +28,17 @@ import (
 // click must return immediately, and a dead mail server must not turn a UI
 // toggle into a timeout. context.WithTimeout (not the request context) because
 // the request's context is cancelled the moment the handler returns.
-func (h *RSVPHandler) startInviteFanOut(campaignID, campaignName string, cal *Calendar, evt *Event) {
+// `actorUserID` is the operator who armed the gate. It is carried in because the
+// per-recipient floor's send log records WHO mailed each recipient
+// (calendar_schedule_asks.actor_user_id, NOT NULL) — see fanOutInvites.
+func (h *RSVPHandler) startInviteFanOut(campaignID, campaignName string, cal *Calendar, evt *Event, actorUserID string) {
 	if h.members == nil {
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		h.fanOutInvites(ctx, campaignID, campaignName, cal, evt)
+		h.fanOutInvites(ctx, campaignID, campaignName, cal, evt, actorUserID)
 	}()
 }
 
@@ -52,7 +55,34 @@ func (h *RSVPHandler) startInviteFanOut(campaignID, campaignName string, cal *Ca
 // The in-app notification is sent to everyone who passes both gates. The EMAIL
 // additionally needs a configured SMTP service and a member email address —
 // with neither, in-app RSVP still works end to end (nil-safe by design).
-func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignName string, cal *Calendar, evt *Event) {
+// ── THE 24h PER-RECIPIENT FLOOR, REUSED AND NOT REINVENTED ─────────────────
+// C-CALV4-GAMEREADY §4 [GR-6]. Toggling Collect RSVPs off and then on re-mailed
+// the ENTIRE roster with no cooldown of any kind — and §4 makes this toggle far
+// easier to reach (it moves from the legacy V2 drawer into the v4 day card),
+// which makes that hazard worse rather than better.
+//
+// So this loop now reads the SAME floor the schedule-ask path already ships and
+// the audit verified working: the same repository read (RecentlyAskedRecipients),
+// the same SKIP-don't-refuse semantics, the same silence. A member mailed inside
+// the window is passed over; everyone else is invited normally, so a second
+// arming after somebody joins mails the new member and nobody else.
+//
+// THE 6h CAMPAIGN COOLDOWN IS DELIBERATELY NOT APPLIED. That one REFUSES the
+// whole action, and refusing to arm the operator's own go/no-go gate because
+// they armed something six hours ago is the polish-over-playability trade this
+// slice forbids.
+//
+// A CONSEQUENCE, STATED RATHER THAN DISCOVERED: because both limits are read off
+// one log, recording invite sends here means an arming also starts the 6h
+// cooldown on the separate "Ask availability" control. That is the honest
+// reading of a table whose stated purpose is "when was this roster last mailed"
+// — the roster WAS just mailed — and it only ever affects the control that
+// refuses, never this one.
+//
+// THE FLOOR APPLIES TO EMAIL ONLY. The in-app bell is not rate-limited: it is
+// free, retractable and already honest, and suppressing it would hide a real
+// state change from a member who is looking at the product.
+func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignName string, cal *Calendar, evt *Event, actorUserID string) {
 	members, err := h.members.ListMembers(ctx, campaignID)
 	if err != nil {
 		slog.Warn("calendar rsvp: member list failed for invite fan-out",
@@ -61,6 +91,21 @@ func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignNam
 	}
 
 	mailOK := h.mailer != nil && h.mailer.IsConfigured(ctx)
+
+	// Read once, outside the loop. A FAILED read degrades to an EMPTY skip set
+	// — the invite still goes out — because the operator's gate must arm even
+	// when the bookkeeping is unavailable, and the worst case is the duplicate
+	// email this floor exists to avoid rather than a party nobody invited.
+	var skip map[string]bool
+	if mailOK {
+		skip, err = h.svc.RecentlyAskedRecipients(ctx, campaignID)
+		if err != nil {
+			slog.Warn("calendar rsvp: per-recipient floor unreadable; inviting everyone",
+				slog.Any("error", err), slog.String("campaign_id", campaignID))
+			skip = nil
+		}
+	}
+
 	var notifyIDs []string
 
 	for _, m := range members {
@@ -69,7 +114,7 @@ func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignNam
 		}
 		notifyIDs = append(notifyIDs, m.UserID)
 
-		if !mailOK || m.Email == "" {
+		if !mailOK || m.Email == "" || skip[m.UserID] {
 			continue
 		}
 		tokens, err := h.svc.MintActionTokens(ctx, evt.ID, m.UserID)
@@ -82,6 +127,14 @@ func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignNam
 		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plain, htmlBody); err != nil {
 			slog.Warn("calendar rsvp: invite email failed",
 				slog.Any("error", err), slog.String("event_id", evt.ID))
+			continue
+		}
+		// RECORDED ONLY AFTER THE MAILER TOOK IT WITHOUT ERROR — the log's own
+		// invariant (migration 015): nothing is recorded when nothing was sent,
+		// because a floor must never suppress mail to somebody who never got any.
+		if err := h.svc.RecordScheduleAsk(ctx, campaignID, evt.ID, m.UserID, actorUserID); err != nil {
+			slog.Warn("calendar rsvp: recording the invite send failed",
+				slog.Any("error", err), slog.String("user_id", m.UserID))
 		}
 	}
 
@@ -287,19 +340,46 @@ textarea{margin-bottom:1rem}
 .wrow{text-align:left;margin-bottom:.7rem}
 .wrow label,.notelabel{display:block;font-size:.78rem;font-weight:600;color:#52525b;margin-bottom:.3rem}
 .wgrid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:.4rem}
+.prob{color:#b91c1c;font-weight:600}
+a{color:#4f46e5}
 @media (max-width:420px){.wgrid{grid-template-columns:1fr}}
 button{font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius:8px;background:#6366f1;color:#fff;cursor:pointer}</style>
 </head><body><div class="card">` + body + `</div></body></html>`
 }
 
-// rsvpResultPage is the terminal page: what happened, nothing to click.
-func rsvpResultPage(title, message string, success bool) string {
+// rsvpResultPage reports what happened AND offers a way back into the product.
+//
+// IT USED TO BE TERMINAL — "what happened, nothing to click" — and that was the
+// whole of C-CALV4-GAMEREADY §5 [GR-8]'s second dead end: the page contained no
+// `<a>` at all and never mentioned `/campaigns/`, so a member who answered from
+// their inbox landed on a card with no route anywhere. The success page is the
+// one every answering member sees, so it is the one that most needed a door.
+//
+// `backHref` EMPTY IS A DECISION, NOT A DEFAULT. The generic invalid-link page
+// is rendered for viewers who may no longer be members and may no longer see
+// the event, and its contract is that it discloses NOTHING — not the title, and
+// not which campaign the link belonged to. So it passes "" and keeps its shape
+// exactly as the audit verified it.
+func rsvpResultPage(title, message string, success bool, backHref string) string {
 	accent := "#ef4444"
 	if success {
 		accent = "#22c55e"
 	}
+	back := ""
+	if backHref != "" {
+		back = `<p><a href="` + escapeAttr(backHref) + `">Go to the schedule to change your answer</a></p>`
+	}
 	return rsvpPageShell(title, accent,
-		`<div class="dot"></div><h1>`+escapeAttr(title)+`</h1><p>`+escapeAttr(message)+`</p>`)
+		`<div class="dot"></div><h1>`+escapeAttr(title)+`</h1><p>`+escapeAttr(message)+`</p>`+back)
+}
+
+// rsvpSchedulePath is the one destination the token pages link back to, and it
+// is the SHIPPED campaign schedule page (`GET /campaigns/:id/schedule`,
+// routes.go) — which already owns the tri-state answer control, so a member who
+// wants to change their mind lands on the surface that can do it rather than on
+// a second inline form nobody has to maintain.
+func rsvpSchedulePath(campaignID string) string {
+	return "/campaigns/" + campaignID + "/schedule"
 }
 
 // rsvpConfirmPage is the GET interstitial: a POST form the recipient must
@@ -336,8 +416,13 @@ const rsvpSuggestFormRows = 3
 // degrade to text inputs on anything that doesn't support them, and the parser
 // simply skips a row it can't read.
 //
+// `errMsg` is the RE-RENDER's reason ([GR-7], C-CALV4-GAMEREADY §5) and is
+// empty on the first render. A refused submission comes BACK HERE rather than
+// dead-ending on the failure page, because the token that carried it is
+// deliberately still unspent — the member fixes the row and sends it again.
+//
 // Same GET-renders / POST-applies split as the confirm page.
-func rsvpSuggestPage(detail, actionURL, csrfToken string) string {
+func rsvpSuggestPage(detail, actionURL, csrfToken, errMsg string) string {
 	var rows strings.Builder
 	for i := 0; i < rsvpSuggestFormRows; i++ {
 		idx := fmt.Sprint(i)
@@ -354,10 +439,19 @@ func rsvpSuggestPage(detail, actionURL, csrfToken string) string {
 				`</div></div>`)
 	}
 
+	// The reason renders ABOVE the form and inside `role="alert"`, so a member
+	// on a screen reader hears why the send did not go through rather than
+	// finding an unchanged form and guessing.
+	problem := ""
+	if errMsg != "" {
+		problem = `<p class="prob" role="alert">` + escapeAttr(errMsg) + `</p>`
+	}
+
 	return rsvpPageShell("Suggest another time", "#6366f1",
 		`<div class="dot"></div><h1>When could you make it?</h1>`+
 			`<p>`+escapeAttr(detail)+`<br>Add any times that would work — they'll be added to your `+
 			`availability so the organiser can see them on the schedule.</p>`+
+			problem+
 			`<form method="POST" action="`+escapeAttr(actionURL)+`">`+
 			`<input type="hidden" name="csrf_token" value="`+escapeAttr(csrfToken)+`">`+
 			rows.String()+

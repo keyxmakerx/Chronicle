@@ -19,6 +19,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/audit"
 	"github.com/keyxmakerx/chronicle/internal/plugins/auth"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
@@ -739,11 +740,15 @@ func (h *Handler) Update(c echo.Context) error {
 	// IsPrivate means the service preserves the entity's current value
 	// instead of resetting it to false on every save. See model.go
 	// UpdateEntityInput for the rationale.
+	//
+	// This is the legacy full-form PUT: the edit form posts name, descriptor,
+	// parent and entry on every save, so each is wrapped PRESENT — an empty
+	// descriptor or parent select still means "clear", exactly as before.
 	input := UpdateEntityInput{
-		Name:              req.Name,
-		TypeLabel:         req.TypeLabel,
-		ParentID:          req.ParentID,
-		Entry:             req.Entry,
+		Name:              patch.Of(req.Name),
+		TypeLabel:         patch.Of(req.TypeLabel),
+		ParentID:          patch.Of(req.ParentID),
+		Entry:             patch.Of(req.Entry),
 		FieldsData:        fieldsData,
 		ExpectedUpdatedAt: req.ExpectedUpdatedAt,
 	}
@@ -2210,16 +2215,20 @@ func (h *Handler) UpdateMetadataAPI(c echo.Context) error {
 	// descriptor, and parent. Passing IsPrivate=nil tells the service
 	// to preserve the entity's current value. See
 	// C-PERMISSIONS-INLINE-COMPONENT.
+	//
+	// PARTIAL: absent preserves, explicit null clears, a value replaces
+	// (sweep R4). The panel sends all three keys today, but binding them as
+	// patch.Field means a panel that ever stops sending one stops erasing it.
 	var req struct {
-		Name      string `json:"name"`
-		TypeLabel string `json:"type_label"`
-		ParentID  string `json:"parent_id"`
+		Name      patch.Field[string] `json:"name"`
+		TypeLabel patch.Field[string] `json:"type_label"`
+		ParentID  patch.Field[string] `json:"parent_id"`
 	}
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
 		return apperror.NewBadRequest("invalid JSON body")
 	}
 
-	// Use the existing Update service with empty entry/fields so they stay unchanged.
+	// Use the existing Update service with absent entry/fields so they stay unchanged.
 	input := UpdateEntityInput{
 		Name:      req.Name,
 		TypeLabel: req.TypeLabel,
@@ -3206,8 +3215,28 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 	role := cc.VisibilityRole()
 	userID := auth.GetUserID(c)
 
-	// Try Redis cache for JSON response.
-	cacheKey := fmt.Sprintf("backlinks:%s:%d:%s", entityID, role, userID)
+	entity, err := h.service.GetByID(ctx, entityID)
+	if err != nil {
+		return err
+	}
+
+	// IDOR protection: verify entity belongs to the campaign in the URL. This
+	// route is public-capable, so without it an anonymous visitor to ANY public
+	// campaign could read another campaign's entities through it. (C-SWEEP-R3)
+	if entity.CampaignID != cc.Campaign.ID {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Visibility gate: canonical CheckEntityAccess honors custom (grant-based)
+	// visibility, not just legacy is_private — matches PreviewAPI / GetAliasesAPI.
+	access, err := h.service.CheckEntityAccess(ctx, entity.ID, int(cc.MemberRole), userID)
+	if err != nil || !access.CanView {
+		return apperror.NewNotFound("entity not found")
+	}
+
+	// Try Redis cache for JSON response. The campaign is part of the key because
+	// the result set is campaign-scoped (mention ids alone are not).
+	cacheKey := fmt.Sprintf("backlinks:%s:%s:%d:%s", cc.Campaign.ID, entityID, role, userID)
 	var entries []BacklinkEntry
 
 	if h.cache != nil {
@@ -3222,7 +3251,7 @@ func (h *Handler) BacklinksFragment(c echo.Context) error {
 		}
 	}
 
-	entries, err := h.service.GetBacklinksWithSnippets(ctx, entityID, role, userID)
+	entries, err = h.service.GetBacklinksWithSnippets(ctx, cc.Campaign.ID, entityID, role, userID)
 	if err != nil {
 		return err
 	}

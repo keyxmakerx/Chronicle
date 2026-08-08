@@ -6,38 +6,40 @@ import (
 	"testing"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 )
 
 // --- Mock Repository ---
 
 type mockTimelineRepo struct {
-	createFn              func(ctx context.Context, t *Timeline) error
-	getByIDFn             func(ctx context.Context, id string) (*Timeline, error)
-	listFn                func(ctx context.Context, campaignID string, role int) ([]Timeline, error)
-	listByCalendarFn      func(ctx context.Context, calendarID string, role int) ([]Timeline, error)
-	updateFn              func(ctx context.Context, t *Timeline) error
-	deleteFn              func(ctx context.Context, id string) error
-	searchFn              func(ctx context.Context, campaignID, query string, role int) ([]Timeline, error)
-	linkEventFn           func(ctx context.Context, link *EventLink) error
-	unlinkEventFn         func(ctx context.Context, timelineID, eventID string) error
-	listEventLinksFn      func(ctx context.Context, timelineID string, role int) ([]EventLink, error)
-	countEventsFn         func(ctx context.Context, timelineID string) (int, error)
-	updateEventLinkVisFn  func(ctx context.Context, timelineID, eventID string, visOverride *string, visRules *string) error
-	createEventFn         func(ctx context.Context, e *TimelineEvent) error
-	getEventFn            func(ctx context.Context, eventID string) (*TimelineEvent, error)
-	updateEventFn         func(ctx context.Context, e *TimelineEvent) error
-	deleteEventFn         func(ctx context.Context, eventID string) error
-	listStandaloneEventsFn func(ctx context.Context, timelineID string, role int) ([]TimelineEvent, error)
+	createFn                func(ctx context.Context, t *Timeline) error
+	getByIDFn               func(ctx context.Context, id string) (*Timeline, error)
+	listFn                  func(ctx context.Context, campaignID string, role int) ([]Timeline, error)
+	listByCalendarFn        func(ctx context.Context, calendarID string, role int) ([]Timeline, error)
+	updateFn                func(ctx context.Context, t *Timeline) error
+	deleteFn                func(ctx context.Context, id string) error
+	searchFn                func(ctx context.Context, campaignID, query string, role int) ([]Timeline, error)
+	linkEventFn             func(ctx context.Context, link *EventLink) error
+	unlinkEventFn           func(ctx context.Context, timelineID, eventID string) error
+	listEventLinksFn        func(ctx context.Context, timelineID string, role int) ([]EventLink, error)
+	countEventsFn           func(ctx context.Context, timelineID string) (int, error)
+	updateEventLinkVisFn    func(ctx context.Context, timelineID, eventID string, visOverride *string, visRules *string) error
+	createEventFn           func(ctx context.Context, e *TimelineEvent) error
+	getEventFn              func(ctx context.Context, eventID string) (*TimelineEvent, error)
+	updateEventFn           func(ctx context.Context, e *TimelineEvent) error
+	deleteEventFn           func(ctx context.Context, eventID string) error
+	listStandaloneEventsFn  func(ctx context.Context, timelineID string, role int) ([]TimelineEvent, error)
 	countStandaloneEventsFn func(ctx context.Context, timelineID string) (int, error)
-	createEntityGroupFn   func(ctx context.Context, g *EntityGroup) error
-	updateEntityGroupFn   func(ctx context.Context, g *EntityGroup) error
-	deleteEntityGroupFn   func(ctx context.Context, groupID int, timelineID string) error
-	listEntityGroupsFn    func(ctx context.Context, timelineID string) ([]EntityGroup, error)
-	addGroupMemberFn      func(ctx context.Context, groupID int, timelineID, entityID string) error
-	removeGroupMemberFn   func(ctx context.Context, groupID int, timelineID, entityID string) error
-	createConnectionFn    func(ctx context.Context, c *EventConnection) error
-	deleteConnectionFn    func(ctx context.Context, connectionID int, timelineID string) error
-	listConnectionsFn     func(ctx context.Context, timelineID string) ([]EventConnection, error)
+	createEntityGroupFn     func(ctx context.Context, g *EntityGroup) error
+	updateEntityGroupFn     func(ctx context.Context, g *EntityGroup) error
+	deleteEntityGroupFn     func(ctx context.Context, groupID int, timelineID string) error
+	listEntityGroupsFn      func(ctx context.Context, timelineID string) ([]EntityGroup, error)
+	addGroupMemberFn        func(ctx context.Context, groupID int, timelineID, entityID string) error
+	removeGroupMemberFn     func(ctx context.Context, groupID int, timelineID, entityID string) error
+	createConnectionFn      func(ctx context.Context, c *EventConnection) error
+	deleteConnectionFn      func(ctx context.Context, connectionID int, timelineID string) error
+	listConnectionsFn       func(ctx context.Context, timelineID string) ([]EventConnection, error)
 }
 
 func (m *mockTimelineRepo) Create(ctx context.Context, t *Timeline) error {
@@ -451,7 +453,7 @@ func TestListTimelines_Success(t *testing.T) {
 	svc := newTestTimelineService(repo)
 
 	// Owner (role 3) sees all.
-	timelines, err := svc.ListTimelines(context.Background(), "camp-1", 3, "user-1")
+	timelines, err := svc.ListTimelines(context.Background(), "camp-1", permissions.RequestViewer(3, "user-1"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -472,7 +474,7 @@ func TestListTimelines_PlayerFiltersDMOnly(t *testing.T) {
 	svc := newTestTimelineService(repo)
 
 	// Player (role 1) should be filtered to only "everyone".
-	timelines, err := svc.ListTimelines(context.Background(), "camp-1", 1, "user-1")
+	timelines, err := svc.ListTimelines(context.Background(), "camp-1", permissions.RequestViewer(1, "user-1"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -785,8 +787,8 @@ func TestUpdateStandaloneEvent_Success(t *testing.T) {
 	svc := newTestTimelineService(repo)
 
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
-		Name:       "New Name",
-		Visibility: "everyone",
+		Name:       patch.Of("New Name"),
+		Visibility: patch.Of("everyone"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -798,8 +800,8 @@ func TestUpdateStandaloneEvent_NotFound(t *testing.T) {
 	svc := newTestTimelineService(repo)
 
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "nonexistent", UpdateTimelineEventInput{
-		Name:       "X",
-		Visibility: "everyone",
+		Name:       patch.Of("X"),
+		Visibility: patch.Of("everyone"),
 	})
 	assertAppError(t, err, 404)
 }
@@ -814,8 +816,8 @@ func TestUpdateStandaloneEvent_WrongTimeline(t *testing.T) {
 
 	// Event belongs to tl-other, but we're requesting tl-1 -- should be not found.
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
-		Name:       "X",
-		Visibility: "everyone",
+		Name:       patch.Of("X"),
+		Visibility: patch.Of("everyone"),
 	})
 	assertAppError(t, err, 404)
 }
@@ -829,8 +831,8 @@ func TestUpdateStandaloneEvent_EmptyName(t *testing.T) {
 	svc := newTestTimelineService(repo)
 
 	err := svc.UpdateStandaloneEvent(context.Background(), "tl-1", "evt-1", UpdateTimelineEventInput{
-		Name:       "",
-		Visibility: "everyone",
+		Name:       patch.Of(""),
+		Visibility: patch.Of("everyone"),
 	})
 	assertAppError(t, err, 422)
 }

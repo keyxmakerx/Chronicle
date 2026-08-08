@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/timeline"
@@ -214,13 +215,13 @@ func (s *Service) renderCategory(
 		if s.Timelines == nil {
 			return "", fmt.Errorf("timelines lister not wired")
 		}
-		tls, err := s.Timelines.ListTimelines(ctx, campaignID, role, ownerID)
+		tls, err := s.Timelines.ListTimelines(ctx, campaignID, permissions.RequestViewer(role, ownerID))
 		if err != nil {
 			return "", err
 		}
 		eventsByTimeline := map[string][]timeline.EventLink{}
 		for _, tl := range tls {
-			evs, err := s.Timelines.ListTimelineEvents(ctx, tl.ID, role, ownerID)
+			evs, err := s.Timelines.ListTimelineEvents(ctx, tl.ID, permissions.RequestViewer(role, ownerID))
 			if err != nil {
 				return "", fmt.Errorf("timeline %q events: %w", tl.Name, err)
 			}

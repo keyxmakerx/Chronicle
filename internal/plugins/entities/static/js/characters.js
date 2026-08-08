@@ -78,9 +78,15 @@
       .catch(function () { panel.innerHTML = errHTML(fullURL); });
   }
 
+  // wire — bind every unwired quick-look button under `root`, and pay for the
+  // overlay stylesheet only if there was one. This module ships from the plugin
+  // body-script registry, so it executes on EVERY page in the app; on all but
+  // the Characters page the query is empty and wire() must be a no-op that
+  // leaves nothing behind, styles included.
   function wire(root) {
     var scope = root && root.querySelectorAll ? root : document;
     var btns = scope.querySelectorAll('[data-cast-peek]');
+    if (!btns.length) return;
     Array.prototype.forEach.call(btns, function (btn) {
       if (btn._castWired) return;
       btn._castWired = true;
@@ -96,9 +102,11 @@
 
   function boot() {
     wire(document);
-    // Re-wire after HTMX swaps the page fragment. This script lives inside
-    // #main-content, so a boosted nav re-executes it — register the global
-    // listener at most once so handlers don't stack across boosted loads.
+    // Re-wire after HTMX swaps the page fragment. This script is loaded once,
+    // from OUTSIDE #main-content (the plugin body-script registry), so a boosted
+    // navigation onto the Characters page never re-executes it — this listener
+    // is the only thing that wires the cards on that path. Registered at most
+    // once so handlers don't stack.
     if (!window.__castAfterSettle) {
       window.__castAfterSettle = true;
       document.addEventListener('htmx:afterSettle', function (e) { wire(e.target); });

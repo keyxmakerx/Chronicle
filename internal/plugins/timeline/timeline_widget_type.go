@@ -18,6 +18,7 @@ import (
 	"github.com/a-h/templ"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/widgetbindings"
 )
@@ -75,10 +76,18 @@ func (w *timelineWidgetType) DefaultInstance(ctx context.Context, host widgetbin
 }
 
 // ListInstances returns the campaign's timelines for the create-or-pick UI
-// (C-WIDGET-BINDING-P4b), role-filtered via the service. userID is "" — the
-// picker is Scribe-gated at the route, and the role already authorizes the list.
+// (C-WIDGET-BINDING-P4b), role-filtered via the service.
+//
+// C-AUTHZ-EMPTY-USERID / ADR-049: this used to pass userID `""` and rely on the
+// filters reading that as "trusted system caller" — the same value an anonymous
+// HTTP request carries, which is how logged-out visitors were served restricted
+// rows elsewhere. The trust is unchanged and its BEHAVIOUR is unchanged (the
+// picker still lists allow-list-restricted timelines); it is now DECLARED with
+// permissions.SystemViewer, which no request-derived viewer can be. The trust
+// itself is justified the same way it always was: this surface is Scribe-gated
+// at the route and there is no per-request identity to filter by here.
 func (w *timelineWidgetType) ListInstances(ctx context.Context, campaignID string, role int) ([]widgetbindings.InstanceRef, error) {
-	tls, err := w.svc.ListTimelines(ctx, campaignID, role, "")
+	tls, err := w.svc.ListTimelines(ctx, campaignID, permissions.SystemViewer(role))
 	if err != nil {
 		return nil, err
 	}

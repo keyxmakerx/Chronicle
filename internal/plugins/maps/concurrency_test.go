@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // TestUpdateMarker_StaleConflict locks in the optimistic-concurrency
@@ -51,12 +53,12 @@ func TestUpdateMarker_StaleConflict(t *testing.T) {
 			svc := newTestMapService(repo)
 
 			err := svc.UpdateMarker(context.Background(), "mk-1", UpdateMarkerInput{
-				Name:              "New Name",
-				X:                 50,
-				Y:                 50,
-				Icon:              "fa-map-pin",
-				Color:             "#3b82f6",
-				Visibility:        "everyone",
+				Name:              patch.Of("New Name"),
+				X:                 patch.Of(50.0),
+				Y:                 patch.Of(50.0),
+				Icon:              patch.Of("fa-map-pin"),
+				Color:             patch.Of("#3b82f6"),
+				Visibility:        patch.Of("everyone"),
 				ExpectedUpdatedAt: tc.expected,
 			})
 

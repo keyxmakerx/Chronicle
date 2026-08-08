@@ -1423,12 +1423,25 @@
             emptyOpt.value = '';
             emptyOpt.textContent = '— Select entity type —';
             input.appendChild(emptyOpt);
-            // Fetch entity types.
+            // Fetch entity types from the v1 JSON API. The web
+            // /campaigns/:id/entity-types route renders the entity-type
+            // MANAGEMENT PAGE — middleware.Render hard-sets
+            // "text/html; charset=utf-8" and never inspects Accept, so both
+            // its HTMX and full-page branches are HTML. Parsing that as JSON
+            // threw a SyntaxError the empty .catch() below used to swallow,
+            // leaving this dropdown permanently empty with nothing on the
+            // console. Same v1 hop the `map` case below takes.
             if (self.campaignId) {
-              Chronicle.apiFetch('/campaigns/' + self.campaignId + '/entity-types')
-                .then(function (r) { return r.ok ? r.json() : []; })
+              Chronicle.apiFetch('/api/v1/campaigns/' + self.campaignId + '/entity-types')
+                .then(function (r) {
+                  if (!r.ok) throw new Error('entity-types HTTP ' + r.status);
+                  return r.json();
+                })
                 .then(function (types) {
-                  (types || []).forEach(function (et) {
+                  // ListEntityTypes returns the { data: [...], total: N }
+                  // envelope; accept a bare array too, per the envelope law.
+                  var arr = Array.isArray(types) ? types : (types && types.data) || [];
+                  arr.forEach(function (et) {
                     var o = document.createElement('option');
                     o.value = et.id;
                     o.textContent = et.name;
@@ -1436,7 +1449,12 @@
                     input.appendChild(o);
                   });
                 })
-                .catch(function () {});
+                .catch(function (err) {
+                  // Make the failure visible: an unexplained empty picker
+                  // reads as "this campaign has no categories".
+                  emptyOpt.textContent = 'Could not load entity types';
+                  console.warn('[layout-editor] Failed to load entity types:', err);
+                });
             }
             break;
 

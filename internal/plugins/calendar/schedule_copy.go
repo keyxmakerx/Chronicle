@@ -22,9 +22,22 @@ import (
 // frame and its two refusals.
 func scheduleBuildPainter(in scheduleBuildInput) SchedulePainter {
 	p := SchedulePainter{
-		Title:    "My availability · week of " + in.WeekStart.Format("2 Jan"),
-		Frame:    schedulePainterFrame(in),
-		ZoneHref: "/settings/profile",
+		Title: "My availability · week of " + in.WeekStart.Format("2 Jan"),
+		Frame: schedulePainterFrame(in),
+		// THE REPAIR MUST POINT AT A PAGE THAT EXISTS (C-CALV4-GAMEREADY §8
+		// [GR-14]). This read `/settings/profile` — a route that has never
+		// existed. There is no catch-all, so it 404'd, and it is the ONLY
+		// control offered in the state EVERY NEW PLAYER STARTS IN:
+		// `users.timezone` is nullable and a fantasy calendar has no anchor
+		// zone, so `in.Zone == ""` is the fresh-account default, and the fault
+		// box below REPLACES the entire availability grid. The feature was
+		// therefore dead on arrival with its single repair 404ing.
+		//
+		// `/account` is the page that owns `PUT /account/timezone`
+		// (routes_snapshot.txt: `GET /account`, `PUT /account/timezone`), so it
+		// is where the zone is actually set. Pinned by
+		// TestCalendarHrefs_AllResolve.
+		ZoneHref: "/account",
 	}
 	// THE DEGRADED FLOOR IS A NAMED FAULT, NOT A BLANK. When the scheduler seam
 	// is not answering, availability entry genuinely cannot be offered, and the
@@ -44,9 +57,13 @@ func scheduleBuildPainter(in scheduleBuildInput) SchedulePainter {
 		// conversion of it would inherit the guess.
 		p.Fault = &ScheduleFault{
 			Headline: "Set a time zone before painting your week",
+			// THE SENTENCE NAMES THE SAME DESTINATION THE BUTTON GOES TO
+			// ([GR-14]). It used to say "in your profile", which is a page
+			// this product does not have — so a reader who ignored the button
+			// and went looking would find nothing either.
 			Detail: "Your availability is saved as a wall clock in your own zone, and no zone " +
 				"is set for you or for this calendar — so there is nothing to save it against " +
-				"yet. Set yours in your profile and this grid fills in.",
+				"yet. Set yours on your account page and this grid fills in.",
 		}
 		return p
 	}

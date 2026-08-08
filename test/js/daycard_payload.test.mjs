@@ -323,17 +323,67 @@ test('applyPlacement writes the report onto the box — the flag has a reader', 
   assert.equal(el._cls.has('dcsheet'), false);
   assert.equal(el.style.width, '', 'a non-sheet must not keep a sheet width');
 
-  P.applyPlacement(el, { left: 0, top: 500, width: 390, sheet: true, clear: false }, null);
+  // ── AMENDED, AND THE AMENDMENT IS STRICTLY STRONGER: C-CALV4-MOBILE
+  //    [MOB-2] SIGNED, "the sheet's geometry is CSS's; applyPlacement stops
+  //    writing it".
+  //
+  // This block used to assert `el.style.width === '390px'` on the sheet arm —
+  // it pinned the very write the ruling deletes. MEASURED at a real 390x664 in
+  // a nested browsing context, that inline pair (`top: 106px; width: 390px`)
+  // was computed ONCE at open time and never again: shrink the viewport to
+  // 390x380, as a software keyboard does, and the box stayed at y[106..464]
+  // with Save at y[426..456] — below the fold of a position:fixed box that
+  // cannot be scrolled to.
+  //
+  // What it asserts now is the absence of all three writes AND the clearing of
+  // a stale one, which is a superset: the old assertion could pass with a
+  // stale `top` left behind, and this one cannot. `.dcsheet` and
+  // `data-dc-clear` — [DC-3]'s signed honesty channel — are untouched and
+  // still asserted here.
+  el.style.top = '106px';
+  el.style.left = '0px';
+  el.style.width = '390px';
+  P.applyPlacement(el, { left: 0, top: 500, width: 390, height: 164, sheet: true, applied: false, clear: false }, null);
   assert.equal(el._attr['data-dc-clear'], '0', 'the occlusion is recorded on the DOM at every width');
   assert.equal(el._cls.has('dcsheet'), true);
-  assert.equal(el.style.width, '390px');
+  assert.equal(el.style.width, '', 'the sheet writes NO inline width — .dcsheet owns the box');
+  assert.equal(el.style.top, '', 'a stale inline top outranks inset-block-start:auto and would hang the sheet in mid-air');
+  assert.equal(el.style.left, '', 'the sheet writes no inline left either');
 
-  // Crossing the breakpoint back up clears the sheet width rather than pinning
-  // a desktop card to the phone's.
+  // Crossing the breakpoint back up places a popover again and still clears the
+  // sheet width rather than pinning a desktop card to the phone's.
   P.applyPlacement(el, { left: 20, top: 40, width: 0, sheet: false, clear: true }, null);
+  assert.equal(el.style.left, '20px');
+  assert.equal(el.style.top, '40px');
   assert.equal(el.style.width, '');
   assert.equal(el._cls.has('dcsheet'), false);
   assert.equal(el._attr['data-dc-clear'], '1');
+});
+
+// C-CALV4-MOBILE [MOB-2]: sheetPlacement still measures `clear` — [DC-3]'s
+// STOP-AND-FLAG survives the pixel it used to be written in — and the rect it
+// reasons about is the box CSS RENDERS: bottom-anchored, full-width, CLAMPED
+// to the viewport. Before the clamp a sheet taller than the screen reported
+// itself at top 0 with its full height, which is not what anybody saw.
+test('sheetPlacement describes the box CSS renders, and applies none of it', () => {
+  const short = P.sheetPlacement({ w: 390, h: 200 }, { w: 390, h: 664 }, null, false);
+  assert.equal(short.applied, false, 'the sheet has no inline geometry to write');
+  assert.equal(short.sheet, true);
+  assert.equal(short.top, 464, 'flush to the bottom edge: 664 - 200');
+  assert.equal(short.height, 200);
+
+  // Taller than the viewport: 100dvh clamps it, so the report clamps with it.
+  const tall = P.sheetPlacement({ w: 390, h: 900 }, { w: 390, h: 664 }, null, false);
+  assert.equal(tall.top, 0);
+  assert.equal(tall.height, 664, 'max-block-size: 100dvh is what the user sees');
+
+  // The Ledger intersection is still measured against the PLACED box.
+  const overLedger = P.sheetPlacement({ w: 390, h: 300 }, { w: 390, h: 664 },
+    { left: 0, top: 400, width: 390, height: 200 }, false);
+  assert.equal(overLedger.clear, false);
+  const clearOfLedger = P.sheetPlacement({ w: 390, h: 100 }, { w: 390, h: 664 },
+    { left: 0, top: 0, width: 390, height: 100 }, false);
+  assert.equal(clearOfLedger.clear, true);
 });
 
 test('applyPlacement hands every placement to the reporter, clear or not', () => {

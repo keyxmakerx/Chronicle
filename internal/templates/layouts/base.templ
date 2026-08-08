@@ -140,6 +140,28 @@ templ Base(title string) {
 		<!-- Shop inventory widget (item list with price/quantity/stock) -->
 		<script src={ AssetURL("/static/js/widgets/shop_inventory.js") } defer></script>
 
+		<!-- Character inventory widget ("Has Item" relations with qty/equipped/attuned).
+		     Sibling of shop_inventory above; its mount is the `inventory` entity
+		     block (entities/show.templ blockInventory). -->
+		<script src={ AssetURL("/static/js/widgets/inventory.js") } defer></script>
+
+		<!-- Transaction log widget (shop purchase/sale/gift/restock history).
+		     Mount is the `transaction_log` entity block; reads the armory
+		     plugin's /armory/shops/:eid/transactions endpoint. -->
+		<script src={ AssetURL("/static/js/widgets/transaction_log.js") } defer></script>
+
+		<!-- Entity aliases widget (alternative names; feeds auto-linking, search,
+		     @mentions). Mounts inside the `title` core block, i.e. effectively
+		     every entity page. -->
+		<script src={ AssetURL("/static/js/widgets/aliases.js") } defer></script>
+
+		<!-- Impact tree widget ("Impact Overview" diagram on the custom-system
+		     upload preview). Mount is internal/systems/preview.templ, which is
+		     an HTMX fragment — so the tag belongs here and not in that templ:
+		     boot.js sets htmx.config.allowScriptTags = false, and a script in a
+		     swapped fragment is stripped (see tools/check-page-scripts.sh). -->
+		<script src={ AssetURL("/static/js/widgets/impact_tree.js") } defer></script>
+
 		<!-- Entity type editor widget (inline edit for entity type management) -->
 		<script src={ AssetURL("/static/js/widgets/entity_type_editor.js") } defer></script>
 

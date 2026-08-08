@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
@@ -305,6 +306,15 @@ func (m *mockCalendarRepo) ListEventsForDateRange(ctx context.Context, calendarI
 	if m.listEventsForDateRangeFn != nil {
 		return m.listEventsForDateRangeFn(ctx, calendarID, year, startMonth, startDay, endMonth, endDay, role)
 	}
+	return nil, nil
+}
+
+// StrandedEventCounts is a real-database concern (C-CALV4-GAMEREADY §9
+// [GR-18]) — one aggregate query over calendar_events × calendar_months. The
+// arithmetic it reports is pinned against a REAL MariaDB in
+// months_edit_impact_test.go; a fake that invented counts here would pin
+// nothing and read as coverage.
+func (m *mockCalendarRepo) StrandedEventCounts(_ context.Context, _ string) (map[string]int, error) {
 	return nil, nil
 }
 
@@ -835,7 +845,7 @@ func TestSetMonths_Success(t *testing.T) {
 	repo := &mockCalendarRepo{}
 	svc := newTestCalendarService(repo)
 
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
 		{Name: "January", Days: 31, SortOrder: 0},
 		{Name: "February", Days: 28, SortOrder: 1},
 	})
@@ -846,13 +856,13 @@ func TestSetMonths_Success(t *testing.T) {
 
 func TestSetMonths_Empty(t *testing.T) {
 	svc := newTestCalendarService(&mockCalendarRepo{})
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{})
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{})
 	assertAppError(t, err, 422)
 }
 
 func TestSetMonths_MissingName(t *testing.T) {
 	svc := newTestCalendarService(&mockCalendarRepo{})
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
 		{Name: "", Days: 30},
 	})
 	assertAppError(t, err, 422)
@@ -860,7 +870,7 @@ func TestSetMonths_MissingName(t *testing.T) {
 
 func TestSetMonths_InvalidDays(t *testing.T) {
 	svc := newTestCalendarService(&mockCalendarRepo{})
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
 		{Name: "Bad", Days: 0},
 	})
 	assertAppError(t, err, 422)
@@ -868,7 +878,7 @@ func TestSetMonths_InvalidDays(t *testing.T) {
 
 func TestSetMonths_NegativeLeapYearDays(t *testing.T) {
 	svc := newTestCalendarService(&mockCalendarRepo{})
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
 		{Name: "Bad", Days: 30, LeapYearDays: -1},
 	})
 	assertAppError(t, err, 422)
@@ -1107,10 +1117,10 @@ func TestUpdateEvent_Success(t *testing.T) {
 	svc := newTestCalendarService(repo)
 
 	err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
-		Name:       "New Name",
-		Month:      5,
-		Day:        10,
-		Visibility: "everyone",
+		Name:       patch.Of("New Name"),
+		Month:      patch.Of(5),
+		Day:        patch.Of(10),
+		Visibility: patch.Of("everyone"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1122,8 +1132,8 @@ func TestUpdateEvent_NotFound(t *testing.T) {
 	svc := newTestCalendarService(repo)
 
 	err := svc.UpdateEvent(context.Background(), "nonexistent", UpdateEventInput{
-		Name:       "X",
-		Visibility: "everyone",
+		Name:       patch.Of("X"),
+		Visibility: patch.Of("everyone"),
 	})
 	assertAppError(t, err, 404)
 }
@@ -1137,8 +1147,8 @@ func TestUpdateEvent_InvalidVisibility(t *testing.T) {
 	svc := newTestCalendarService(repo)
 
 	err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
-		Name:       "X",
-		Visibility: "invalid",
+		Name:       patch.Of("X"),
+		Visibility: patch.Of("invalid"),
 	})
 	assertAppError(t, err, 422)
 }
@@ -1320,10 +1330,19 @@ func TestSearchCalendarEvents_Success(t *testing.T) {
 	if results[0]["type_name"] != "Event" {
 		t.Errorf("expected type_name 'Event', got %q", results[0]["type_name"])
 	}
-	// C-CAL-V1-V2-CUTOVER: the search result deep-links to the V2 shell, not the
-	// retired V1 view.
-	if want := "/campaigns/camp-1/calendar/v2/cal-1"; results[0]["url"] != want {
-		t.Errorf("search url = %q, want %q (V2 shell)", results[0]["url"], want)
+	// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED) — AND THIS ONE IS
+	// EGRESS. A search result URL is copied, bookmarked and pasted; it outlives
+	// the page that minted it. From R2-4 the application mints no more
+	// /calendar/v2 URLs through search. Results ALREADY indexed still resolve,
+	// because R2-4 removes no route; breaking those belongs to
+	// C-CALV4-SHELL-REMOVAL, which should consider a permanent redirect rather
+	// than a 404. That cost is ACCEPTED, not open.
+	//
+	// The calendar id is dropped with the target ([VS-12]: the Bench never reads
+	// `calId`), so a search hit lands on the Bench rather than on the hit's own
+	// calendar — a lost selection, named in the report.
+	if want := "/campaigns/camp-1/apps/calendar"; results[0]["url"] != want {
+		t.Errorf("search url = %q, want %q (the Bench)", results[0]["url"], want)
 	}
 }
 
