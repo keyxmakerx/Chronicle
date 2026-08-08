@@ -654,7 +654,7 @@ func (h *RSVPHandler) RedeemEventRSVPToken(c echo.Context) error {
 	detail := evt.Name + " — " + rsvpDateLine(cal, evt)
 
 	if tok.Action == RSVPActionSuggest {
-		return c.HTML(http.StatusOK, rsvpSuggestPage(detail, action, csrf))
+		return c.HTML(http.StatusOK, rsvpSuggestPage(detail, action, csrf, ""))
 	}
 
 	msg := fmt.Sprintf("You're responding %q to %s. Tap below to confirm.", rsvpActionLabel(tok.Action), detail)
@@ -678,6 +678,51 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
 	}
 
+	// ── VALIDATE BEFORE CONSUMING ─────────────────────────────────────────
+	// C-CALV4-GAMEREADY §5 [GR-7]. "Suggest another time" is the ONE action
+	// whose write can still be REFUSED after the token has resolved:
+	// applySuggestion rejects a submission carrying neither a usable window nor
+	// a note. This handler used to call ApplyToken FIRST, which marks the token
+	// used — so a partially-filled row (date + from, no `to`, with an empty
+	// note) was refused with the link ALREADY DEAD. Correcting the row and
+	// resubmitting answered "this RSVP link is invalid or has expired", and so
+	// did re-opening the link from the email: one incomplete form permanently
+	// destroyed a player's only way in.
+	//
+	// So the suggest branch runs the write first and consumes ONLY on success.
+	// That is the same shape as the existing GET-never-applies rule, moved one
+	// step earlier — nothing is spent until something happened.
+	//
+	// SINGLE-USE IS NOT WEAKENED. ApplyToken still owns consumption and still
+	// consumes atomically (`used_at IS NULL`); it is safe to run LAST for this
+	// action specifically because it returns early for `suggest` (rsvp_service.go)
+	// — it marks the token used and writes no status — so the reorder changes
+	// only WHEN the link dies, never whether it can be spent twice. Two
+	// concurrent submits still land exactly one consume; the loser is told the
+	// link is spent, and the suggestion the winner wrote is on record.
+	if tok.Action == RSVPActionSuggest {
+		// The token flow's role is the member's real campaign role, resolved in
+		// resolveToken; re-resolve rather than assume, so the visibility gate
+		// inside SuggestTime is the same one every other path uses.
+		role, _ := h.memberRole(ctx, cal.CampaignID, tok.UserID)
+		msg, err := h.applySuggestion(ctx, cal.CampaignID, evt, tok.UserID, role,
+			c.FormValue("note"), parseOfferedWindows(c))
+		if err != nil {
+			// THE FORM COMES BACK, carrying the reason. Not a dead end: the
+			// token is still live, which is the entire point of the reorder.
+			return c.HTML(http.StatusOK, rsvpSuggestPage(
+				evt.Name+" — "+rsvpDateLine(cal, evt),
+				escapeAttr("/calendar-rsvp/"+tokenStr),
+				middleware.GetCSRFToken(c),
+				apperror.UserMessage(err, "Please add a time that would work, or a short note.")))
+		}
+		if _, err := h.svc.ApplyToken(ctx, tokenStr); err != nil {
+			return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed",
+				apperror.UserMessage(err, rsvpBadTokenMsg), false))
+		}
+		return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", msg, true))
+	}
+
 	applied, err := h.svc.ApplyToken(ctx, tokenStr)
 	if err != nil {
 		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
@@ -687,18 +732,6 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 	switch applied.Action {
 	case RSVPActionOutWeek:
 		message = h.applyOutThisWeek(ctx, cal, evt, tok.UserID)
-	case RSVPActionSuggest:
-		// The token flow's role is the member's real campaign role, resolved in
-		// resolveToken; re-resolve rather than assume, so the visibility gate
-		// inside SuggestTime is the same one every other path uses.
-		role, _ := h.memberRole(ctx, cal.CampaignID, tok.UserID)
-		msg, err := h.applySuggestion(ctx, cal.CampaignID, evt, tok.UserID, role,
-			c.FormValue("note"), parseOfferedWindows(c))
-		if err != nil {
-			return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed",
-				apperror.UserMessage(err, "Please add a time that would work, or a short note."), false))
-		}
-		message = msg
 	default:
 		h.notifyOwnerOfResponse(ctx, cal.CampaignID, evt, tok.UserID, statusForAction(applied.Action))
 	}

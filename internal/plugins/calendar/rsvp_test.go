@@ -670,12 +670,65 @@ func TestToken_SuggestWritesNoteAndNotifiesOwner(t *testing.T) {
 	}
 }
 
+// TestToken_EmptySuggestionRejected — AMENDED by C-CALV4-GAMEREADY §5 [GR-7],
+// which is one of exactly TWO guard amendments that dispatch authorises by name.
+//
+// WHAT IT ASSERTED BEFORE: that an empty suggestion is refused. That is still
+// asserted and still true.
+//
+// WHAT IT NOW ALSO ASSERTS, AND WHY THE OLD VERSION LET A DEFECT SHIP GREEN:
+// the refusal must leave the token UNSPENT. ApplyEventRSVPToken used to consume
+// the token BEFORE running applySuggestion, so a partially-filled form — date
+// and from with no to, which is exactly what the page invites, since every field
+// looks optional — was refused with `used_at` ALREADY SET. Correcting the row
+// and resubmitting then answered "this RSVP link is invalid or has expired", and
+// so did re-opening the link from the email. One incomplete form permanently
+// destroyed a player's only way in, and this test passed the whole time because
+// it checked the refusal and never checked what the refusal cost.
+//
+// Two directions, deliberately in ONE test so they cannot drift apart:
+//
+//	negative control — a REFUSED suggest must not mark the token used;
+//	positive control — an ACCEPTED suggest must.
+//
+// MUTATION-TESTED BOTH WAYS: restore the consume-first order and the negative
+// control goes red; delete the post-write ApplyToken call and the positive
+// control goes red.
 func TestToken_EmptySuggestionRejected(t *testing.T) {
-	repo := &mockRSVPRepo{}
+	marked := 0
+	repo := &mockRSVPRepo{
+		markUsedFn: func(_ context.Context, _ string) error { marked++; return nil },
+	}
 	h, _ := newTokenHandler(t, RSVPActionSuggest, repo)
+
 	rec := serveToken(h, http.MethodPost, "tok", "note=")
-	if !strings.Contains(rec.Body.String(), "RSVP Failed") {
-		t.Errorf("an empty suggestion with no times must be refused; body = %q", rec.Body.String())
+	body := rec.Body.String()
+	if !strings.Contains(body, "a time that would work") {
+		t.Errorf("an empty suggestion with no times must be refused; body = %q", body)
+	}
+	// THE AMENDMENT. `used_at IS NULL` after a refusal, expressed as "the repo's
+	// consume was never called" — the mock is the single-use write.
+	if marked != 0 {
+		t.Errorf("a REFUSED suggestion must leave the token live (used_at IS NULL); "+
+			"MarkRSVPTokenUsed was called %d time(s)", marked)
+	}
+	// The refusal comes back as the FORM, not a terminal failure page: the whole
+	// point of keeping the token live is that the member can fix the row here.
+	if !strings.Contains(body, `<form method="POST"`) || !strings.Contains(body, `name="w0date"`) {
+		t.Errorf("a refused suggestion must re-render the suggest form so the "+
+			"member can correct it; body = %q", body)
+	}
+
+	// POSITIVE CONTROL. A suggestion that IS accepted still spends the link —
+	// single-use is not weakened, it is only moved after the write.
+	marked = 0
+	rec2 := serveToken(h, http.MethodPost, "tok", "note=Sundays+after+4")
+	if !strings.Contains(rec2.Body.String(), "Response recorded") {
+		t.Errorf("a complete suggestion must be recorded; body = %q", rec2.Body.String())
+	}
+	if marked != 1 {
+		t.Errorf("an ACCEPTED suggestion must consume the token exactly once; "+
+			"MarkRSVPTokenUsed was called %d time(s)", marked)
 	}
 }
 

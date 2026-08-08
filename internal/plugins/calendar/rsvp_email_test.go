@@ -204,9 +204,21 @@ func TestTokenPages_EscapeAndCarryCSRF(t *testing.T) {
 		t.Error("confirm page must POST back to the token URL")
 	}
 
-	suggest := rsvpSuggestPage(evil, "/calendar-rsvp/tok", "csrf-123")
+	suggest := rsvpSuggestPage(evil, "/calendar-rsvp/tok", "csrf-123", "")
 	if strings.Contains(suggest, "<script>alert(1)</script>") {
 		t.Error("suggest page must escape interpolated text")
+	}
+	// [GR-7] gave this page a re-render reason, so the reason is interpolated
+	// text too and gets the same escaping assertion the detail line has.
+	reRendered := rsvpSuggestPage("Feast", "/calendar-rsvp/tok", "csrf-123", evil)
+	if strings.Contains(reRendered, "<script>alert(1)</script>") {
+		t.Error("the suggest page's re-render reason must be escaped like every other interpolation")
+	}
+	if !strings.Contains(reRendered, `role="alert"`) {
+		t.Error("the re-render reason must be announced, not silently repainted")
+	}
+	if strings.Contains(suggest, `role="alert"`) {
+		t.Error("a FIRST render carries no reason and must not announce one")
 	}
 	if !strings.Contains(suggest, `name="note"`) {
 		t.Error("suggest page must render the free-text field")

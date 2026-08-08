@@ -287,6 +287,7 @@ textarea{margin-bottom:1rem}
 .wrow{text-align:left;margin-bottom:.7rem}
 .wrow label,.notelabel{display:block;font-size:.78rem;font-weight:600;color:#52525b;margin-bottom:.3rem}
 .wgrid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:.4rem}
+.prob{color:#b91c1c;font-weight:600}
 @media (max-width:420px){.wgrid{grid-template-columns:1fr}}
 button{font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius:8px;background:#6366f1;color:#fff;cursor:pointer}</style>
 </head><body><div class="card">` + body + `</div></body></html>`
@@ -336,8 +337,13 @@ const rsvpSuggestFormRows = 3
 // degrade to text inputs on anything that doesn't support them, and the parser
 // simply skips a row it can't read.
 //
+// `errMsg` is the RE-RENDER's reason ([GR-7], C-CALV4-GAMEREADY §5) and is
+// empty on the first render. A refused submission comes BACK HERE rather than
+// dead-ending on the failure page, because the token that carried it is
+// deliberately still unspent — the member fixes the row and sends it again.
+//
 // Same GET-renders / POST-applies split as the confirm page.
-func rsvpSuggestPage(detail, actionURL, csrfToken string) string {
+func rsvpSuggestPage(detail, actionURL, csrfToken, errMsg string) string {
 	var rows strings.Builder
 	for i := 0; i < rsvpSuggestFormRows; i++ {
 		idx := fmt.Sprint(i)
@@ -354,10 +360,19 @@ func rsvpSuggestPage(detail, actionURL, csrfToken string) string {
 				`</div></div>`)
 	}
 
+	// The reason renders ABOVE the form and inside `role="alert"`, so a member
+	// on a screen reader hears why the send did not go through rather than
+	// finding an unchanged form and guessing.
+	problem := ""
+	if errMsg != "" {
+		problem = `<p class="prob" role="alert">` + escapeAttr(errMsg) + `</p>`
+	}
+
 	return rsvpPageShell("Suggest another time", "#6366f1",
 		`<div class="dot"></div><h1>When could you make it?</h1>`+
 			`<p>`+escapeAttr(detail)+`<br>Add any times that would work — they'll be added to your `+
 			`availability so the organiser can see them on the schedule.</p>`+
+			problem+
 			`<form method="POST" action="`+escapeAttr(actionURL)+`">`+
 			`<input type="hidden" name="csrf_token" value="`+escapeAttr(csrfToken)+`">`+
 			rows.String()+
