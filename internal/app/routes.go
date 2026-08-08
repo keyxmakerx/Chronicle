@@ -2842,6 +2842,7 @@ func (a *App) RegisterRoutes() {
 		"/static/plugins/" + calendar.PluginSlug + "/js/cal_visibility.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_permissions.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_daycard.js",
+		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_theater.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 	}
 
