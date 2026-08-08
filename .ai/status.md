@@ -20,6 +20,88 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — C-CALV4-GAMEREADY CLOSED: the calendar survives a real session (2026-08-08, stage 23)
+
+**The playability slice is done.** It existed for one reason: the operator
+starts a real tabletop game in under two weeks, and a five-lane readiness audit
+measured 33 findings that hit the table. **This bought PLAYABILITY, not
+polish**, and it is closed at twenty-three stages on
+`claude/coordinator-handoff-stage-3-3d3s4w` (PR #588), base `c573a9cc`.
+
+**The bill, in one line each:**
+
+| § | what the GM could not do before | state |
+|---|---|---|
+| §1 | See any month but the one the campaign was standing in | **shipped** ([GR-1]/[GR-2]) |
+| §1b | Author an event into a month other than the rendered one | **[GR-3] BLOCKED AS SIGNED** — reported, not improvised |
+| §2 | Advance the in-world date without opening a page being deleted | **shipped** ([GR-SIGN-A]/[GR-4]) |
+| §3 | See a multi-day event on any day but its first | **shipped** ([GR-5]) |
+| §4 | Turn on "Collect RSVPs" at all from calendar-v4 | **shipped** ([GR-6]/[GR-10]) |
+| §5 | Four RSVP paths that dead-ended players and silenced the GM | **shipped** ([GR-7]/[GR-8]/[GR-9]) |
+| §6 | Repeat a festival yearly; the API said 201 to junk | **shipped** ([GR-11]/[GR-12]) |
+| §7 | Survive one mis-tap beside Save without destroying an event | **shipped** ([GR-13]) |
+| §8 | Follow two links that had never resolved, shipped to users | **shipped** ([GR-14]/[GR-15]/[GR-16]) |
+| §9 | Edit the month list without silently re-dating the year | **shipped** ([GR-17]/[GR-18]) |
+| §10 | (the anonymous visibility bypass) | **VERIFIED already fixed — not re-fixed** ([GR-19]) |
+| lane 3 | Use any of it on the phone they will be holding | **shipped** (C-CALV4-MOBILE, 12 blocks) |
+
+**THE ONE LESSON WORTH CARRYING OUT OF THIS SLICE: the project spent months
+believing it had no database, and the fakes lied.** `make test-db-up` runs
+MariaDB 10.11 on 13306 without Docker. Twelve DB-backed test functions now ride
+in this plugin, and **three findings were green against a fake and dead against
+a database**:
+
+- **[GR-11]** — `yearly` expanded perfectly in memory while three repository
+  queries carried a hand-typed `recurrence_type IN (…)` that never loaded the
+  row. Shipped, the feature would have been **completely inert**. The clause is
+  now derived from the constant block.
+- **[GR-5]** — `ListEventsForMonth` selected on the *stored* month, so a
+  festival crossing a month boundary was never LOADED while the second month
+  rendered. The in-month fix alone would have left the identical lie for the
+  commonest festival shape there is.
+- **[GR-17]** — the §9 finding was `[READ]`, not measured. The ruling was
+  *reproduce first*. It reproduced on a real MariaDB: inserting an intercalary
+  month at position 5 moved **3 of 4** events a month later and stranded
+  **zero** — which is why the shipped warning is a **before/after comparison**
+  and not the `month > len(months)` bounds check that would have reported 0 and
+  certified the damage.
+
+**What was NOT built, and why that is the correct outcome:**
+
+- **[GR-3]** — the editor's cross-month roll. **BLOCKED AS SIGNED and flagged
+  rather than improvised**, on two measurements: the day-card payload carries
+  no month list or `MonthDays`, and the day-key namespace is
+  `slug + "-" + day` — **not month-qualified** — and is pinned in both
+  directions. Day 1 of next month mints the same key as day 1 of this month, so
+  a date outside the rendered month **is not addressable at all**. Both fixes
+  live inside `internal/widgets/calendar_block/`, which this slice's Bounds
+  close (`data.go` byte-pinned r54). §1's first half already closes the
+  START-date half. Full measurements in `.ai/todo.md` §0a.
+- **[MOB-S1]** — the one `[COORDINATOR TO SIGN]` block. **Reported UNSIGNED and
+  shipped as answer A (nothing changes).** It is the operator's, and the next
+  hand must not answer it either.
+
+**Bounds held, and they are checkable:** `internal/wire/routes_snapshot.txt` is
+**727 lines and byte-identical** to base — **zero new routes** across
+twenty-three stages. `internal/widgets/calendar_block/data.go` byte-identical.
+Zero migrations, zero data writes, zero new page scripts
+(`check-page-scripts.sh` green *unedited*, 15 files remaining),
+`check-calendar-v4-lints.sh` green unedited, the ONE motion register in
+`calendar-bench.css` unchanged.
+
+**Correction landed with these books:** `.ai/decisions.md` asserted in three
+places that *"there is no ADR-049"*. That rule always meant *calendar-v4 does
+not fork an ADR of its own*, and it stayed true — but the **number** was
+legitimately claimed by C-SWEEP-R4 stage 9 on 2026-08-07 for an unrelated
+subject, and ADR-049 is live at `.ai/decisions.md:3901`. The flat wording cost
+a GAMEREADY stage a false STOP-AND-FLAG against a citation that was correct.
+All three now say what they mean. (Two historical entries below, at the 2026-07
+dates, still carry the old flat phrasing in their own session context; they are
+left as written because this file's later sections are a dated record.)
+
+Books: `.ai/todo.md` §0a · `internal/plugins/calendar/.ai.md`
+§"C-CALV4-GAMEREADY" · `reports/chronicle/2026-08-08-C-CALV4-GAMEREADY.md`.
+
 ### calendar-v4 — C-CALV4-MOBILE SHIPPED: the phone the GM will actually be holding (2026-08-08)
 
 **GAMEREADY's lane 3, the only one of five the readiness audit returned

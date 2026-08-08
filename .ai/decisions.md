@@ -2223,7 +2223,9 @@ groups cannot force a realign of the existing block.
 
 ### Section: the Almanac, and why the grid's moon ceiling is legitimate (W-E, C-CALV4-SHELF-P7, 2026-07-28)
 
-**Added as a SECTION and not as ADR-049, per the paragraph below.** W-F's layer
+**Added as a SECTION of ADR-048 rather than as an ADR of its own, per the
+paragraph below.** (This read "not as ADR-049" until C-CALV4-GAMEREADY stage 23;
+that number is now taken by an unrelated 2026-08-07 decision.) W-F's layer
 switchboard and preference store join it here when they land.
 
 **10. THE GRID'S THREE-MOON CEILING IS ONLY LEGITIMATE BECAUSE THE ALMANAC
@@ -3618,14 +3620,24 @@ W-F's layer switchboard and preference store became sections HERE when they
 landed — §20-§24 above, W-G's tail is §25, and W-H's builder wizard is §26.
 Round 2's reveal pass (R2-1) is a section here too, and R2-2…R2-5 will land the
 same way.
-There is no ADR-049. calendar-v4 is one architecture
-decision; competing ADRs for its later waves would fragment the rationale that a
-future re-litigation needs in one place. W-E followed this rule first (its
+**calendar-v4 never gets an ADR of its own beyond this one.** calendar-v4 is
+one architecture decision; competing ADRs for its later waves would fragment the
+rationale that a future re-litigation needs in one place. **(Corrected at
+C-CALV4-GAMEREADY stage 23: this paragraph and §27 below used to read "there is
+no ADR-049" flatly. That was true when written and is now FALSE as written —
+C-SWEEP-R4 stage 9 legitimately claimed the number ADR-049 on 2026-08-07 for an
+unrelated subject, `"no authenticated user" vs "trusted system caller"`, and it
+is live at the bottom of this file. The rule was always "calendar-v4 does not
+fork an ADR", never "the number 049 is unused"; the flat wording cost a
+GAMEREADY stage a false STOP-AND-FLAG against the dispatch's own correct
+citation.)** W-E followed this rule first (its
 Almanac decisions are §10-§14) and W-G's RSVP decisions are §15-§19.
 
 ### §27 — R2-2b: the editor's chrome, the signed morph, and drag-create
 
-**ADR-048 GROWS A SECTION; THERE IS NO ADR-049.** C-CALV4-EDITOR-R2b is the
+**ADR-048 GROWS A SECTION; calendar-v4 DOES NOT FORK AN ADR.** (Wording
+corrected at C-CALV4-GAMEREADY stage 23 — see the note above: this read "there
+is no ADR-049", which a later, unrelated slice made false.) C-CALV4-EDITOR-R2b is the
 second half of C-CALV4-DAYCARD, taken at the split point that slice's §11
 pre-authorised, and every ruling below is a decision about the same surface.
 

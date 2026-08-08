@@ -22,11 +22,31 @@ Round 2 adds no data, no zone and no engine. Five slices; R2-1 has landed.
 | **R2-4** — V2 sunset / the anonymous-public route move | the frozen V2 shell. R2-1 did not open `calendar_v2*` for any reason. | [ ] |
 | **R2-5** — the sky header | the dashed skyband placeholder in the real-world Block. Drawing pass FIRST. Reuses R2-1's register as its base motion. | [ ] |
 
-## 0a. C-CALV4-GAMEREADY — the playability slice (partially landed)
+## 0a. C-CALV4-GAMEREADY — the playability slice (LANDED 2026-08-08)
 
 Outside the round-2 numbering. It exists because the operator starts a real
 table in under two weeks and a five-lane readiness audit found 33 findings that
 hit the table. **Playability, not polish.**
+
+**CLOSED at stage 23.** Twenty-one ruled blocks plus C-CALV4-MOBILE's twelve.
+**Nineteen of the twenty-one shipped; one is BLOCKED-AS-SIGNED and reported
+rather than improvised ([GR-3], below); one was VERIFIED already fixed and
+deliberately not re-fixed ([GR-19]).** MOBILE shipped eleven of twelve; its
+twelfth ([MOB-S1]) is the operator's signature and was shipped as answer A,
+"nothing changes". **Zero new routes** — `internal/wire/routes_snapshot.txt` is
+**727 lines and byte-identical** to its state at the slice's base commit
+(`c573a9cc`), as is the byte-pinned
+`internal/widgets/calendar_block/data.go` (r54). Zero migrations and zero data
+writes across the whole slice. **The database was real, and the number is
+counted rather than asserted: TWELVE DB-backed top-level test functions** in
+this plugin (`go test -run 'Integration|Reproduction|MonthEditImpact|
+StrandedEventCounts|BenchAttention' -v` → 14 top-level PASS, of which
+`TestMonthEditImpact_Sentence` and `TestBenchAttention_PrintsTheStrandedLine`
+are pure), each minting its own scratch schema via
+`newCalendarScratchSchema`. **Three findings were visible ONLY because of it**
+— see the `[GR-11]`, `[GR-5]` and `[GR-17]` rows: each was **green against a
+fake and dead against a database**, which is the single most important thing
+this slice learned.
 
 | block | what it owns | state |
 |---|---|---|
@@ -2747,4 +2767,78 @@ NOT take, each with the reason it was left.
   resolves to a month that exists and a day that does not. It is counted as
   SHIFTED today, which is true but understates it. **Booked rather than
   improvised**, because widening the signed sentence is not an executor's call.
+
+- [ ] **`C-CALV4-RSVP-RESCHEDULE-NOTIFY`** — moving or deleting a collecting
+  event notifies nobody and carries every stale answer to the new date. The one
+  booking in C-CALV4-GAMEREADY's Books list that no stage had written down;
+  recorded here at close-out so it is not re-derived from the dispatch.
+  **Re-measured on this branch, because the dispatch's anchors had drifted
+  under the slice's own additions:** `UpdateEventAPI` is `handler.go:798` (the
+  dispatch says `:752`) and `DeleteEventAPI` is `handler.go:897` (`:833`).
+  Neither touches the RSVP tables. The delete half is worse than the update
+  half and is schema-level: `migrations/013_event_rsvps.up.sql:29` and `:52`
+  put `ON DELETE CASCADE` on both `calendar_event_rsvps.event_id` and
+  `calendar_rsvp_tokens.event_id`, so deleting a collecting event **silently
+  drops every answer and every live emailed token** — a player's link dies with
+  no notice to anyone. **[READ]** — the notifier seam and the roster read are
+  both already wired at the collection PUT, so this is a call site rather than
+  a new dependency, but the cascade means the notify must fire BEFORE the
+  delete or there is nobody left to read.
+
+- [ ] **STOP-AND-FLAG (dispatch §"does NOT rule" 3) — whether the month cursor
+  should ever PERSIST.** [GR-1] ruled it a URL param **for this slice** and
+  that is what shipped; whether a GM eventually wants a remembered month is a
+  product question and it costs a fifth `benchSectionKeys` entry. Not a defect;
+  recorded so the next hand does not read the URL param as an oversight.
+
+- [ ] **STOP-AND-FLAG (4) — whether `/schedule` is the declared successor to
+  V2's week view**, and the day card the successor to the day view **for lists
+  but not for hours**. Belongs to `C-CALV4-WEEKDAY-VIEWS` and to the V2
+  deletion ticket, **not** to GAMEREADY. Decide it explicitly there rather than
+  letting the deletion answer it by omission.
+
+- [ ] **STOP-AND-FLAG (5) — the Bench cannot switch which calendar it shows,
+  and `Set active` is DEAD CODE. Re-measured and CONFIRMED at close-out:**
+  `CalendarAppDashboardPage` (`app_dashboard.templ:21`) is referenced from
+  exactly two places in the tree — its own doc comment and
+  `app_dashboard_test.go:62`. **No route renders it**, so the written, CSRF'd
+  `Set active` form inside it has no host. `benchClassify` consults the active
+  calendar only when no in-world calendar carries `is_default`, and the Bench
+  renders neither a switcher nor a "make default". **A live route with a
+  working form and no page is a tempting freebie; it was not in this slice's
+  ten findings and was deliberately not taken.**
+
+- [ ] **STOP-AND-FLAG (6) — a Scribe POSTing `visibility="dm_only"` gets a 201
+  with the visibility silently stored as `"everyone"`. Re-measured:
+  `handler.go:591-596`** (the dispatch says `:546-550`; drifted +45 under this
+  slice). The downgrade is deliberate and commented (C-CAL-COGM-CAPABILITY) —
+  the finding is that it is **silent**, so an API or Foundry-path author
+  believes they wrote a secret and did not. Unreachable from the v4 editor,
+  reachable from the API and V2. **Silent downgrade vs 403 is an audience
+  decision and it is [GC-2]'s neighbourhood, not this slice's.**
+
+**Two of the dispatch's Books were NOT booked, because both were conditional on
+a refusal that did not happen. Recorded by name so the next hand reading the
+dispatch does not go looking for a backlog entry that should not exist:**
+
+- **`C-CALV4-EDITOR-BUSY`** — booked only *"if §7's Save busy latch did not
+  fit"*. It fit. Save gained `disabled` + `aria-busy` in flight, the stale
+  error clears at save START, and a ~15s ceiling turns a hung write into a
+  stated failure. [GR-13] required that which one happened be **said out
+  loud**; this is that sentence.
+- **`C-CALV4-EMBED-CTA-AUDIENCE`** — booked only *"if the phantom Owner-only
+  'Create calendar' CTA's gate did not fit in §8's tail"*. It fit, in the same
+  commit as [GR-14]/[GR-15]/[GR-16].
+
+**And one was RETIRED rather than carried, by measuring it:**
+
+- **`C-CALV4-RECUR-MONTHLY-INTERVAL`** — the dispatch books it on the ground
+  that `monthly` ignores `recurrence_interval` (`model.go:325-333`), so "every
+  3 months" fires every month. **Measured on this branch: already closed.**
+  C-SWEEP-R4 stage 22 (`be9d4c33`, *"every N months fired every month"*) landed
+  the interval on the monthly branch and reads the cap as occurrences, with a
+  comment saying so. The **editor-side** residue — the `every [N]` control that
+  R2-2b deliberately withheld while the engine was broken — is a different
+  item and is already booked above as **`C-CALV4-MONTHLY-INTERVAL-CONTROL`**.
+  Do not re-create the engine booking from the dispatch text.
 
