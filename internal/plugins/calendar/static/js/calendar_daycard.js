@@ -978,6 +978,15 @@
     var edState = {
       open: false, timer: 0, mode: '', calId: '', eventID: '', day: null,
       prev: null, busy: false,
+      // DELETE'S TWO-STEP (C-CALV4-GAMEREADY §7 [GR-13]). `delArmed` is the
+      // "one click has landed" latch and `delTimer` is its ~4s expiry. Both
+      // live on edState rather than in a closure beside edDelete so that
+      // edClose and edOpen can clear them — an editor that reopened still
+      // armed would delete on the FIRST click of the next session.
+      delArmed: false, delTimer: 0,
+      // The save's in-flight ceiling (§7's same-handler freebie). A fetch that
+      // never resolves must become a stated failure, not a dead button.
+      saveTimer: 0,
       // THE MORPH'S MEASURED GEOMETRY, taken from the CARD at open and replayed
       // on close. Null under reduced motion and whenever a rect could not be
       // measured, which is what makes the stage-2 open path the fallback.
@@ -1426,6 +1435,10 @@
     function edClose() {
       if (!edState.open) return;
       edState.open = false;
+      // THE ARMED DELETE DIES WITH THE EDITOR (§7 [GR-13]). A sheet that
+      // closed while armed and reopened later would delete on the FIRST click
+      // of a session the user believes is fresh.
+      edDeleteDisarm();
       // `.dcopen` COMES OFF FIRST, AND THE ORDER IS THE WHOLE OF CLAUSE 2.
       // The carve-out's open-state rule is the only thing declaring
       // --disc-open, so removing the class before writing the reverse geometry
@@ -2091,6 +2104,13 @@
       // the box being closed and opened again, or a network blip would leave the
       // editor permanently unable to save.
       edState.busy = false;
+      // A fresh session also repaints Save live: a previous session's hung
+      // write must not hand this one a disabled button (§7's freebie).
+      edBusyPaint(false);
+      // …and neither may a half-pressed Delete (§7 [GR-13]). edClose already
+      // disarms; this covers the path that swaps one event's editor straight
+      // into another's without a close in between.
+      edDeleteDisarm();
       edState.mode = mode;
       edState.calId = cal.id;
       edState.day = day;
@@ -2293,7 +2313,36 @@
     // already navigating.
     function edFailed(msg) {
       edState.busy = false;
+      edBusyPaint(false);
       edError(msg);
+    }
+
+    // ── SAVE HAS A BUSY STATE (C-CALV4-GAMEREADY §7 [GR-13], the same-handler
+    //    freebie) ─────────────────────────────────────────────────────────────
+    //
+    // `edState.busy` was invisible: it is cleared only in edFailed, because
+    // every success path ends in window.location.reload(). So a save whose
+    // fetch NEVER RESOLVES left a button that still looked live, still had
+    // `disabled === false`, carried no `aria-busy`, and sat under the PREVIOUS
+    // failure's error text. Two more taps fired zero requests and said nothing.
+    // A GM who taps Save and gets a dead button under an old error will assume
+    // the event saved.
+    //
+    // Three parts, all inside the editor's own box: paint the button disabled
+    // + `aria-busy` while the write is in flight, clear the stale error at the
+    // START of a save rather than only on the next failure, and give the fetch
+    // a ~15s ceiling so a hung request becomes a stated failure instead of a
+    // permanent one.
+    var edSaveTimeoutMs = 15000;
+
+    function edBusyPaint(on) {
+      if (!ed) return;
+      if (ed.save) {
+        ed.save.disabled = !!on;
+        if (on) ed.save.setAttribute('aria-busy', 'true');
+        else ed.save.removeAttribute('aria-busy');
+      }
+      if (!on && edState.saveTimer) { clearTimeout(edState.saveTimer); edState.saveTimer = 0; }
     }
 
     function edSave() {
@@ -2319,6 +2368,15 @@
       var body = buildEventBody(form, edState.prev, { canOfferGMOnly: !!ed.gmOnly });
       // Set AFTER validation, so a rejected title does not lock the editor.
       edState.busy = true;
+      // THE PREVIOUS FAILURE'S SENTENCE IS NOT THIS SAVE'S STATE. Clearing it
+      // here means a retry never runs under stale text that reads as if the
+      // new attempt had already failed.
+      edError('');
+      edBusyPaint(true);
+      edState.saveTimer = setTimeout(function () {
+        if (!edState.busy) return;
+        edFailed('That save is taking too long. Nothing has been confirmed — try again.');
+      }, edSaveTimeoutMs);
       fetcher(target.eventID ? eventsBase() + '/' + target.eventID : eventsBase(), {
         method: target.method, body: body,
       }).then(function (resp) {
@@ -2329,10 +2387,66 @@
       });
     }
 
+    // ── DELETE ARMS ITSELF IN PLACE (C-CALV4-GAMEREADY §7 [GR-13]) ────────
+    //
+    // The repository does `DELETE FROM calendar_events WHERE id = ?` — no soft
+    // delete, no restore path — and this button sits at a 24px tap floor on a
+    // phone, on the line ABOVE Save in the same delegated handler
+    // (`[data-de-delete]` then `[data-de-save]`). The danger is not "the user
+    // did not mean to delete"; it is "the user meant to hit Save".
+    //
+    // So the first click ARMS: the label becomes `Confirm delete` and a ~4s
+    // timer starts. A second click inside the window sends the DELETE. The
+    // timer expiring, the editor closing, or ANY other editor interaction
+    // disarms it. That turns a mis-tap into a visible label change one pixel
+    // from where the thumb was aiming, which is a better signal than a modal
+    // the user dismisses reflexively.
+    //
+    // NO DIALOG, NO `window.confirm`, NO DOM OUTSIDE THE EDITOR'S OWN BOX.
+    // This module's own boundary rule (see the delegated handler below: "EVERY
+    // CHROME CONTROL IS HANDLED INSIDE THE EDITOR'S OWN SUBTREE AND NOWHERE
+    // ELSE") forbids the first; the editor sheet is `position: fixed` and
+    // already puts Save under a software keyboard, so a second fixed layer on
+    // top of it would be a second trap rather than a confirmation.
+    //
+    // IT IS A TEXT SWAP AND NOT A TRANSITION. Nothing here animates: the ONE
+    // motion register in calendar-bench.css is untouched by design.
+    var edDeleteArmMs = 4000;
+    var edDeleteRestLabel = '';
+
+    // edDeleteDisarm returns the button to its resting label. Safe to call at
+    // any time, including when nothing is armed — every disarm path funnels
+    // here so there is exactly one place that can restore the label.
+    function edDeleteDisarm() {
+      if (edState.delTimer) { clearTimeout(edState.delTimer); edState.delTimer = 0; }
+      if (!edState.delArmed) return;
+      edState.delArmed = false;
+      if (ed && ed.del && edDeleteRestLabel) ed.del.textContent = edDeleteRestLabel;
+    }
+
+    function edDeleteArm() {
+      if (!ed || !ed.del) return;
+      if (!edDeleteRestLabel) edDeleteRestLabel = ed.del.textContent || 'Delete';
+      edState.delArmed = true;
+      // `aria-live` sits on the button itself so the swap is ANNOUNCED rather
+      // than only seen — the two-step is a state change, and a screen-reader
+      // user who cannot see the label change would otherwise meet a button
+      // that silently did nothing on the first press.
+      ed.del.setAttribute('aria-live', 'polite');
+      ed.del.textContent = 'Confirm delete';
+      if (edState.delTimer) clearTimeout(edState.delTimer);
+      edState.delTimer = setTimeout(edDeleteDisarm, edDeleteArmMs);
+    }
+
     function edDelete() {
       if (edState.busy) return;
       var fetcher = api();
       if (!fetcher || !edState.eventID) return;
+      // FIRST CLICK SENDS NOTHING. The arm happens after the fetcher and id
+      // checks so a button that could never delete anything does not pretend
+      // to arm.
+      if (!edState.delArmed) { edDeleteArm(); return; }
+      edDeleteDisarm();
       edState.busy = true;
       fetcher(eventsBase() + '/' + edState.eventID, { method: 'DELETE' })
         .then(function (resp) {
@@ -2494,6 +2608,12 @@
           if (calEd && dayEd) edLoad(calEd, dayEd, editBtn.getAttribute('data-dc-edit'), card);
           return;
         }
+        // ANY CLICK THAT IS NOT ON DELETE DISARMS IT (§7 [GR-13]). This sits
+        // ABOVE the branch chain so it covers Cancel, Save, every chrome
+        // control in the editor's subtree, and every click elsewhere on the
+        // page — the arming window is for a second press on the SAME button
+        // and nothing else, so any other intent the user expresses cancels it.
+        if (edState.delArmed && !e.target.closest('[data-de-delete]')) edDeleteDisarm();
           if (e.target.closest('[data-de-cancel]')) { e.preventDefault(); edClose(); return; }
         if (e.target.closest('[data-de-delete]')) { e.preventDefault(); edDelete(); return; }
         if (e.target.closest('[data-de-save]')) { e.preventDefault(); edSave(); return; }
@@ -2631,6 +2751,10 @@
     // Ledger) and injecting tabindex from here would be both the mutation this
     // module refuses and a control the server never rendered.
     document.addEventListener('change', function (e) {
+      // TYPING OR TOGGLING ANYTHING DISARMS DELETE (§7 [GR-13]). The click
+      // path is covered in the delegated handler above; this is the keyboard
+      // and form-control half of "any other editor interaction".
+      if (edState.delArmed) edDeleteDisarm();
       if (state.suppress) return;
       var t = e.target;
       if (!t || !t.matches || !t.matches('input.daypick[data-day-pick]')) return;

@@ -343,6 +343,13 @@ test('DELETE follows the same door id as the save, so the two cannot disagree', 
   await new Promise((r) => setImmediate(r));
 
   assert.equal(fx.editor.querySelector('[data-de-delete]').hidden, false);
+  // AMENDED — C-CALV4-GAMEREADY §7 [GR-13]. Delete now ARMS on the first click
+  // and sends on the second (two-step in place; no dialog, no window.confirm).
+  // The assertion below is UNCHANGED — this is the ruled call shape, not a
+  // relaxation: the wire claim it makes is still that DELETE targets the same
+  // door id the save would have. The arming half is pinned in its own suite,
+  // test/js/daycard_delete_twostep.test.mjs.
+  fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
   fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
   await new Promise((r) => setImmediate(r));
   assert.equal(fx.calls.find((c) => c.method === 'DELETE').url,
@@ -403,6 +410,10 @@ test('Delete uses the shipped DELETE and nothing else', async () => {
   fx.fire('click', fx.cells[3]);
   fx.fire('click', fx.card.querySelector('[data-dc-edit]'));
   await new Promise((r) => setImmediate(r));
+  // AMENDED — C-CALV4-GAMEREADY §7 [GR-13]: arm, then confirm. The assertions
+  // below are unchanged; only the call shape moved, and it moved because the
+  // ruling moved it. See test/js/daycard_delete_twostep.test.mjs.
+  fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
   fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
   await new Promise((r) => setImmediate(r));
 
