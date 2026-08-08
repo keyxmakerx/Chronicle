@@ -6,6 +6,9 @@ package calendar
 import (
 	"context"
 	"errors"
+	"os"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -392,7 +395,8 @@ func TestEntityCalendarBlock_TieToggleIsHostedAndDefaultsTied(t *testing.T) {
 // The `legend` / `horizon` negatives and the DEF check below are UNCHANGED.
 func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 	svc := entityHostSpine(t, blockTenDayCal())
-	html := renderEntityCal(t, svc, campaigns.RoleOwner, false)
+	markup := renderEntityCal(t, svc, campaigns.RoleOwner, false)
+	html := entityEmbedSubtree(t, markup)
 
 	for _, gone := range []struct{ needle, why string }{
 		{`data-zone="ledger"`, "the docked Ledger adds a ZONE — 300px beside the month at full tier, stacked UNDER it at the std tier an entity embed actually lives at"},
@@ -401,6 +405,19 @@ func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 		if strings.Contains(html, gone.needle) {
 			t.Errorf("the entity seed still renders %s (%s) — R2-1 [BR2-8] SIGNED took it out; "+
 				"it is one switchboard click away and the click persists", gone.needle, gone.why)
+		}
+	}
+	// …AND THE DEPTH IS IN THE THEATER, WHICH IS THE OTHER HALF OF THE SAME
+	// CLAIM (C-CALV4-THEATER, R2-3). Scoping the negatives above to the EMBED's
+	// subtree would be a WEAKENING on its own — a whole-page grep that stopped
+	// looking at half the page — so it is paired with the positives here. The
+	// booking [BR2-8] made ("depth returns properly through R2-3's Block
+	// theater") is now a fact this test checks rather than a sentence a comment
+	// carries: one calendar shown two ways, glanceable here, deep there.
+	theater := entityTheaterSubtree(t, markup)
+	for _, want := range []string{`data-zone="ledger"`, `data-zone="shelf"`} {
+		if !strings.Contains(theater, want) {
+			t.Errorf("the THEATER is missing %s — its seed is the Bench's five keys, and without the two that add a zone it is a stretched glanceable month rather than a full-tier Block", want)
 		}
 	}
 	for _, want := range []struct{ needle, why string }{
@@ -424,7 +441,7 @@ func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 		t.Errorf("the Bench seed changed to %v; R2-1 leaves benchBlockLayers alone", got)
 	}
 	for _, bad := range []string{`data-layer="legend"`, `data-layer="horizon"`} {
-		if strings.Contains(html, bad) {
+		if strings.Contains(markup, bad) {
 			t.Errorf("%s is not in the signed entity renders — the host must not enable it", bad)
 		}
 	}
@@ -441,7 +458,7 @@ func TestEntityCalendarBlock_HostLayerSet(t *testing.T) {
 	// defaults OFF. So the host SEED still omits moongraph, this assertion still
 	// holds for a viewer who has never chosen, and the zone is now one toggle
 	// away instead of a wave away.
-	if strings.Contains(html, `data-layer="moongraph"`) {
+	if strings.Contains(markup, `data-layer="moongraph"`) {
 		t.Error("moongraph is booked for W-F: enabling its stub zone collides with the docked " +
 			"Ledger and the Shelf at std tier, for a chip that carries no information")
 	}
@@ -524,5 +541,156 @@ func TestEntityCalendarBlock_TiesUseTheViewerFilteredRead(t *testing.T) {
 	}
 	if strings.Contains(html, "Secret Pact") {
 		t.Error("the dm_only linked event survived the filtered read")
+	}
+}
+
+// ── THE NO-WIDER LAW, PINNED STRUCTURALLY (C-CALV4-THEATER, [TH-6] SIGNED) ───
+//
+// > For any viewer, the set of events the theater's Block prints is EXACTLY the
+// > set the embed's Block prints for the same month, and exactly the set the
+// > Bench's Block would print for the same calendar. The two renders differ in
+// > LAYER SET only. Not one event more, not one field more.
+//
+// THE PIN IS A REFLECT ASSERTION AND NOT A MARK-SET ORACLE, AND THAT IS A
+// STRENGTHENING RATHER THAN A SHORTCUT. The dispatch originally asked for a
+// GM/Nissa/Bryn mark-id-set-per-day agreement test joined to
+// block_count_oracle_test.go, on the assumption that two independent
+// projections could drift. [TH-2] measured that there is only ONE projection:
+// the host passes neither LedgerHidden nor ShelfHidden, block_projection builds
+// both zone stubs unconditionally, and the host overwrites `d.Layers` post-hoc
+// — so the theater's Block is a COPY of the same value. A per-day mark-set
+// comparison would therefore compare a struct to itself. It would pass forever,
+// INCLUDING on the day a later slice forks the projection and the fork happens
+// to agree on the signed fixture.
+//
+// What actually holds the line is this: the two BlockData values differ in
+// `Layers` and in `Viewer.HostEntity` and in NO OTHER FIELD, asserted by
+// reflect over every exported field of the struct. It covers every field rather
+// than only marks, it holds for every fixture rather than only the signed one,
+// and it goes red the moment somebody enriches one of the two — which is the
+// temptation this test exists to stop.
+func TestEntityCalendarBlock_TheatreCopyDiffersInLayersAndHostEntityAndNothingElse(t *testing.T) {
+	entityHostSpine(t, blockTenDayCal())
+
+	spine := BlockSpine()
+	if spine == nil {
+		t.Fatal("no spine installed")
+	}
+	// The embed's projection, built exactly as EntityCalendarBlock builds it —
+	// neither LedgerHidden nor ShelfHidden passed, which is the measurement the
+	// whole ruling rests on.
+	d, err := spine.Block(context.Background(), BlockRequest{
+		CalendarID: "cal-harptos",
+		CampaignID: "camp-1",
+		Viewer:     BlockViewer{UserID: "user-1", Role: permissions.RoleOwner, HostEntity: "ent-1", TieMode: "tied"},
+		IsActive:   true,
+		MoonCap:    entityBlockMoonCap,
+	})
+	if err != nil {
+		t.Fatalf("projection: %v", err)
+	}
+
+	prefs := blockLayerPrefs{PersistURL: blockPrefsPath("camp-1")}
+	theater := theaterBlockCopy(d, prefs)
+	embed := d
+	embed.Layers = entityBlockLayers(prefs)
+
+	rt := reflect.TypeOf(embed)
+	if rt.NumField() < 10 {
+		t.Fatalf("BlockData has only %d fields — the loop below would be near-vacuous", rt.NumField())
+	}
+	re, rth := reflect.ValueOf(embed), reflect.ValueOf(theater)
+	var sawLayers, sawViewer bool
+	for i := 0; i < rt.NumField(); i++ {
+		f := rt.Field(i)
+		if !f.IsExported() {
+			t.Fatalf("BlockData grew an UNEXPORTED field %q — this pin can no longer see the whole struct, which is exactly the blind spot it exists to close", f.Name)
+		}
+		a, b := re.Field(i).Interface(), rth.Field(i).Interface()
+		switch f.Name {
+		case "Layers":
+			sawLayers = true
+			if reflect.DeepEqual(a, b) {
+				t.Error("Layers is IDENTICAL on the two renders — then the theater is a stretched glanceable month, not a full-tier Block, and the slice has not shipped")
+			}
+		case "Viewer":
+			sawViewer = true
+			av, bv := re.Field(i), rth.Field(i)
+			vt := av.Type()
+			for j := 0; j < vt.NumField(); j++ {
+				vf := vt.Field(j)
+				if !vf.IsExported() {
+					continue
+				}
+				same := reflect.DeepEqual(av.Field(j).Interface(), bv.Field(j).Interface())
+				if vf.Name == "HostEntity" {
+					if same {
+						t.Error("Viewer.HostEntity is shared — every id and radio-group name the Block emits is a pure function of (CalendarSlug, HostEntity), so the theater's tie toggle would be dead and pressing it would re-ink the embed behind the backdrop")
+					}
+					continue
+				}
+				if !same {
+					t.Errorf("Viewer.%s differs between the embed and the theater — the two renders differ in LAYER SET and DOM NAMESPACE only, and a viewer field is neither", vf.Name)
+				}
+			}
+		default:
+			if !reflect.DeepEqual(a, b) {
+				t.Errorf("BlockData.%s differs between the embed and the theater — not one event more, not one FIELD more ([TH-6] SIGNED)", f.Name)
+			}
+		}
+	}
+	if !sawLayers || !sawViewer {
+		t.Fatal("the reflect walk never reached Layers or Viewer — BlockData was renamed under this pin")
+	}
+}
+
+// ONE PROJECTION, TWO RENDERS — asserted at the source, because it is a claim
+// about the CALL GRAPH that no output can express ([TH-2], [TH-10]).
+//
+// A second `spine.Block` call is not a cost to weigh: after the measurement
+// above it is a sign somebody built the refused Option B by accident. And the
+// viewer filter is not merely un-reimplemented, it CANNOT be — there is one
+// projection and the theater renders a copy of it, so there is no second slice
+// to filter. (The trap that grep used to guard is still real and worth naming:
+// filterEventsByUser mutates the caller's backing array via service.go's
+// `events[:0]`, so a second pass reads a corrupted slice — a correctness bug
+// and a leak in one.)
+func TestEntityCalendarBlock_OneProjectionAndNoSecondViewerFilter(t *testing.T) {
+	for _, path := range []string{"entity_calendar_block.go", "theater.go"} {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		code := string(src)
+		// Comments in these files quote the forbidden names on purpose, so the
+		// scan reads CODE only.
+		code = regexp.MustCompile(`(?s)/\*.*?\*/`).ReplaceAllString(code, " ")
+		code = regexp.MustCompile(`(?m)^\s*//.*$`).ReplaceAllString(code, " ")
+
+		if n := strings.Count(code, "spine.Block("); n > 1 {
+			t.Errorf("%s calls spine.Block %d times — one page, one projection", path, n)
+		}
+		for _, banned := range []string{"filterEventsByUser(", "canUserView("} {
+			if strings.Contains(code, banned) {
+				t.Errorf("%s calls %s — the theater adds no second viewer-filter pass", path, banned)
+			}
+		}
+		// No new authorisation surface: the theater's Block is produced inside
+		// the existing EntityCalendarBlock call path, behind the same campaign
+		// authorisation the entity page already performs.
+		for _, banned := range []string{"RequireRole(", "RequireCapability(", "RequireViewAccess("} {
+			if strings.Contains(code, banned) {
+				t.Errorf("%s introduces %s — this slice creates no new authorisation surface", path, banned)
+			}
+		}
+	}
+	// …and the scan really read the host, so the assertions above are not
+	// passing on an empty string.
+	src, err := os.ReadFile("entity_calendar_block.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "spine.Block(") {
+		t.Fatal("the host does not call spine.Block at all — the scan is reading the wrong file")
 	}
 }

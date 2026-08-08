@@ -221,7 +221,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		}
 	}
 	if cal == nil {
-		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
+		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
 	}
 
 	// The viewer's stored layer set + their persistence endpoint, read ONCE.
@@ -231,7 +231,15 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 
 	// THE BLOCK. The spine owns the visibility gate, the one viewer-filtered
 	// pass, and both tie counts; this host owns only the layer SEED.
-	var block *calblock.BlockData
+	// theater is the SAME value with a different layer set and a different DOM
+	// namespace — a struct COPY, never a second projection ([TH-2] SIGNED). See
+	// theater.go: the spine is called with neither LedgerHidden nor
+	// ShelfHidden, block_projection builds both zone stubs unconditionally, and
+	// `d.Layers` below is a POST-HOC display gate — so the projection this host
+	// already holds contains every mark the theater will print. A second
+	// spine.Block call here is not a cost to weigh, it is a sign somebody built
+	// the refused Option B by accident.
+	var block, theater *calblock.BlockData
 	if spine := BlockSpine(); spine != nil {
 		d, err := spine.Block(ctx, BlockRequest{
 			CalendarID: cal.ID,
@@ -250,11 +258,20 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		})
 		switch {
 		case err == nil:
+			// THE COPY IS TAKEN BEFORE d.Layers IS OVERWRITTEN — order matters
+			// only for readability, since theaterBlockCopy assigns its own
+			// Layers either way, but taking it here keeps the two renders
+			// visibly one value.
+			t := theaterBlockCopy(d, prefs)
 			d.Layers = entityBlockLayers(prefs)
 			block = &d
+			theater = &t
 		case isNotFound(err):
-			// Hidden or missing — indistinguishable on purpose (stage 9).
-			return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
+			// Hidden or missing — indistinguishable on purpose (stage 9). W5a:
+			// the theater is emitted from the same branch or not at all, so it
+			// can never become a side channel saying "there is a calendar here
+			// you may not see."
+			return entityCalendarBlockView(cc.Campaign.ID, nil, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
 		}
 		// Any other error: the Block is omitted and the rest of the embed
 		// stands, which is the same shape as the pre-existing seed/ties rungs.
@@ -287,7 +304,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 	}
 
 	data := CalendarV2ViewData{ActiveCalendar: cal, WorldState: seed, WorldStateJSON: seedJSON}
-	return entityCalendarBlockView(cc.Campaign.ID, cal, block, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe, cc.MemberRole >= campaigns.RoleOwner)
+	return entityCalendarBlockView(cc.Campaign.ID, cal, block, theater, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe, cc.MemberRole >= campaigns.RoleOwner)
 }
 
 // entityEventHref links a linked-event row to the campaign's calendar.
