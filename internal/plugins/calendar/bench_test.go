@@ -2099,8 +2099,91 @@ func benchShotPage(s benchShot, css, body string) string {
 		css +
 		`</style></head><body><div class="shot-wrap">` +
 		`<h1>` + s.title + `</h1><p class="shot-cap">` + s.caption + `</p>` +
-		`<div class="cal-bench">` + body + `</div>` +
+		`<div class="cal-bench"><div class="` + benchShotSurfaceClass + `" data-bench-surface>` +
+		body +
+		`</div></div>` +
 		`</div></body></html>`
+}
+
+// ── C-CALV4-MOBILE [MOB-10] — THE CAMERA WAS POINTED AT A PAGE PRODUCTION
+//    DOES NOT RENDER ────────────────────────────────────────────────────────
+//
+// benchShotPage wrapped benchSurface(...) in `<div class="cal-bench">` and
+// stopped there. bench.templ emits an INNER `<div class="bsurf"
+// data-bench-surface>` (bench.templ ~:100), and every ≤640 reading-order rule
+// [BR2-4] signed is written `.cal-bench .bsurf > .phead|.sechead|.stack`
+// (calendar-bench.css ~:1539-1545). With the inner wrapper missing those
+// selectors matched NOTHING, so every phone shot this rig ever took — 03, 04,
+// 10, 11 and 22, the entire phone evidence set — showed the ribbon above the
+// calendars while the product shows the calendars first.
+//
+// THE PRODUCT WAS RIGHT AND THE CAMERA WAS WRONG, and that is why a 41px
+// Ledger reached a live build: the only pictures anyone had of the phone Bench
+// were pictures of a different layout. No acceptance row in the MOBILE slice
+// may be gated on an artefact taken before this line landed.
+//
+// benchShotSurfaceClass is a named constant rather than a literal so
+// TestBenchShotPage_StandsInTheProductsOwnSurface can pin the camera's wrapper
+// against the sheet's own selector prefix instead of against a copy of it.
+const benchShotSurfaceClass = "bsurf"
+
+// benchOrderDeclRe matches a flex `order:` declaration and NOT `border:`,
+// `scroll-behavior` or any other word ending in "order".
+var benchOrderDeclRe = regexp.MustCompile(`(^|[^-\w])order\s*:\s*-?\d`)
+
+// TestBenchShotPage_StandsInTheProductsOwnSurface derives the ancestor chain
+// the ≤640 reading-order rules require FROM THE SHEET and asserts the shot rig
+// builds that chain. It does not compare against a copy of the class name: a
+// rename of `.bsurf` in bench.templ + calendar-bench.css must red this test
+// rather than silently pass while the camera drifts again.
+//
+// RED WITHOUT THE FIX: with benchShotPage emitting only `<div class="cal-bench">`
+// the derived chain `.cal-bench .bsurf` has no `bsurf` to find and the run
+// fails naming the missing wrapper.
+func TestBenchShotPage_StandsInTheProductsOwnSurface(t *testing.T) {
+	code := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
+
+	// Every ordering rule the sheet ships, by its own selector. The sheet
+	// carries three separate `@media (max-width: 640px)` blocks, so this reads
+	// the whole file rather than the first one it finds.
+	var chains []string
+	for _, r := range benchCSSRules(code) {
+		if !benchOrderDeclRe.MatchString(r[1]) {
+			continue
+		}
+		sel := strings.TrimSpace(r[0])
+		cut := strings.Index(sel, ">")
+		if cut < 0 {
+			continue
+		}
+		chains = append(chains, strings.TrimSpace(sel[:cut]))
+	}
+	if len(chains) == 0 {
+		t.Fatal("no `order:` rule found in the ≤640 block — [BR2-4] ships three of them, " +
+			"so either the reading order was retired or this test is reading the wrong block")
+	}
+
+	page := benchShotPage(
+		benchShot{title: "t", caption: "c", w: 390, h: 800, host: 358},
+		"", `<div class="stack"></div>`)
+
+	for _, chain := range chains {
+		// ".cal-bench .bsurf" → ["cal-bench", "bsurf"], in order.
+		at := 0
+		for _, part := range strings.Fields(chain) {
+			cls := strings.TrimPrefix(part, ".")
+			needle := `class="` + cls + `"`
+			i := strings.Index(page[at:], needle)
+			if i < 0 {
+				t.Fatalf("the shot rig does not build %q: no %s at or after offset %d.\n"+
+					"[MOB-10]: with the chain broken every ≤640 ordering rule matches nothing "+
+					"and every phone artefact this rig produces is of a layout production does "+
+					"not render — which is how a 41px Ledger reached a live build.",
+					chain, needle, at)
+			}
+			at += i + len(needle)
+		}
+	}
 }
 
 // benchFindChromium locates a headless Chromium the same way the Block's
