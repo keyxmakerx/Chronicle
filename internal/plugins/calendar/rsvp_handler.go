@@ -591,10 +591,32 @@ func (h *RSVPHandler) displayName(ctx context.Context, campaignID, userID string
 	return "A player"
 }
 
-// rsvpEventLink is the in-app URL an RSVP notification points at: the V2
-// calendar shell for the event's own calendar.
+// rsvpEventLink is the in-app URL an RSVP notification points at: the campaign's
+// calendar, which since C-CALV4-V2SUNSET R2-4 is the Bench.
+//
+// THE SHARPEST EGRESS DOOR IN THE SLICE ([VS-2] SIGNED). This URL is put into
+// NOTIFICATION EMAIL — it leaves the application entirely and sits in an inbox
+// for as long as the recipient keeps it. Two consequences, both stated rather
+// than discovered:
+//
+//  1. From this commit no NEW /calendar/v2 URL is mailed to anyone.
+//  2. MAIL ALREADY SENT STILL CARRIES THE OLD URL, and it still works, because
+//     R2-4 removes no route ([VS-3]). C-CALV4-SHELL-REMOVAL is what finally
+//     breaks those, and it should consider a permanent redirect rather than a
+//     404 — it would cost that slice one redirect and buy back the whole
+//     already-mailed population. This is a KNOWN AND ACCEPTED cost of the end
+//     state the operator signed, not an open risk.
+//
+// It is also the single strongest argument for [VS-3]'s zero-removals ruling
+// and for [VS-10]'s option (b): a door whose blast radius is somebody's inbox
+// must never point at a route that is authenticated-only, not even between two
+// commits of the same PR.
+//
+// The calendar id is dropped with the target ([VS-12]: the Bench never reads
+// `calId`). The mail still names the event in its own text, so the reader is
+// not left guessing which one it was about.
 func rsvpEventLink(campaignID string, evt *Event) string {
-	return fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, evt.CalendarID)
+	return fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID)
 }
 
 // rsvpDateLine renders the human date line shared by the emails and the token

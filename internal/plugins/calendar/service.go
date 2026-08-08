@@ -2770,8 +2770,22 @@ func (s *calendarService) SearchCalendarEvents(ctx context.Context, campaignID, 
 				"type_name":  typeName,
 				"type_icon":  "fa-calendar",
 				"type_color": "#f59e0b",
-				// C-CAL-V1-V2-CUTOVER: search results deep-link to the V2 shell.
-				"url": fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, cal.ID),
+				// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED) — AN EGRESS DOOR, and one
+				// of the two that outlive the page.
+				//
+				// A search result is a URL that leaves this application: it is
+				// copied, bookmarked and pasted, and it keeps resolving long
+				// after the page that minted it is closed. From this commit the
+				// application MINTS no more /calendar/v2 URLs through search.
+				// The ones already indexed still resolve — the shell's routes
+				// stay ([VS-3]: R2-4 removes nothing) — and breaking those is
+				// C-CALV4-SHELL-REMOVAL's, which should consider a permanent
+				// redirect rather than a 404. That cost is ACCEPTED, not open.
+				//
+				// The calendar id is dropped with the target ([VS-12]: the Bench
+				// never reads `calId`), so a search hit lands on the Bench rather
+				// than on the hit's own calendar. Named as a lost selection.
+				"url": fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID),
 			})
 		}
 	}

@@ -1528,7 +1528,15 @@ func benchManage(c *Calendar, activeID, campaignID string) BenchManage {
 		VisRules:     calVisRulesAttr(*c),
 		IsActive:     c.ID == activeID,
 		IsDefault:    c.IsDefault,
-		OpenHref:     fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, c.ID),
+		// OpenHref IS DELIBERATELY LEFT UNPOPULATED ([VS-14] SIGNED,
+		// C-CALV4-V2SUNSET R2-4). It used to build
+		// /campaigns/:id/calendar/v2/<calId> and was rendered twice — the header's
+		// "Open calendar →" and the row-grid card link — both of which this slice
+		// REMOVES rather than re-points, because re-pointed at /apps/calendar
+		// each becomes a link to the page it is printed on. The FIELD stays:
+		// removing it is a struct change this slice does not own, and
+		// C-CALV4-BENCH-CALID repopulates it the moment the Bench can honour a
+		// `?calId=`.
 		SettingsHref: fmt.Sprintf("/campaigns/%s/calendars/%s/settings", campaignID, c.ID),
 	}
 }
@@ -1706,7 +1714,14 @@ func benchTodayTile(in benchRibbonInput) BenchTile {
 	t.Qual = benchTodayQual(in.Primary)
 	season, era := blockSeasonEraLabels(in.Primary)
 	t.Detail = strings.TrimSpace(strings.Join(benchNonEmpty(era, season), " · "))
-	t.Href = fmt.Sprintf("/campaigns/%s/calendar/v2/%s", in.CampaignID, in.Primary.ID)
+	// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED, and [VS-14] explicitly does NOT
+	// cover this one): the today tile RE-POINTS to the bare Bench rather than
+	// being removed, because a today tile that does nothing is worse than one
+	// that re-renders the page it is on — and unlike the two removed anchors,
+	// this tile is a STATEMENT OF THE DATE first and a door second. The
+	// calendar id is dropped with the target ([VS-12]: the handler never reads
+	// it), so the tile lands on the Bench's default selection.
+	t.Href = fmt.Sprintf("/campaigns/%s/apps/calendar", in.CampaignID)
 	if in.Block != nil {
 		t.Ticks = benchTicks(&in.Block.Data)
 	}
@@ -2083,8 +2098,20 @@ func benchNextUpRow(r *BlockUpcoming, isGM bool, campaignID string) BenchNextUpR
 		Pattern:       blockPatternFor(key),
 		Glyph:         icon,
 		GMOnly:        blockAudienceFor(&r.Event, isGM) != nil,
-		Href: fmt.Sprintf("/campaigns/%s/calendar/v2?year=%d&month=%d&day=%d",
-			campaignID, r.Date.Year, r.Date.Month, r.Date.Day),
+		// C-CALV4-V2SUNSET R2-4 ([VS-13] SIGNED) — RE-POINTED, AND THE DATE
+		// CURSOR IS DROPPED, WHICH IS A LOSS AND IS STATED IN THE REPORT.
+		//
+		// This row used to carry ?year=&month=&day= into ShowV2, which parses
+		// them and lands on that event's day. The Bench parses `y` and `m` only,
+		// they mean a MONTH in the in-world calendar's own month list, and NEXT
+		// UP is a CROSS-CALENDAR index — so a `y`/`m` pair built from one row's
+		// calendar would be a coordinate in a different calendar's reckoning
+		// whenever the Bench's primary is not that row's calendar. A wrong month
+		// is worse than the current one. It is a "jump to the next thing"
+		// affordance, not a date navigator: landing on the Bench's current month
+		// is degraded but coherent, and the cursor rides with
+		// C-CALV4-BENCH-CALID.
+		Href: fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID),
 	}
 	if r.Calendar != nil {
 		row.DayKey = benchDayKey(blockCalendarSlug(r.Calendar), r.Date.Day)

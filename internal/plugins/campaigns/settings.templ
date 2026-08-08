@@ -848,8 +848,12 @@ templ settingsIntegrationsTab(cc *CampaignContext, csrfToken, baseURL string) {
 func pluginURL(campaignID, slug string) string {
 	switch slug {
 	case "calendar":
-		// C-CAL-V1-V2-CUTOVER: the calendar's main page is now the V2 shell.
-		return fmt.Sprintf("/campaigns/%s/calendar/v2", campaignID)
+		// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). The stale C-CAL-V1-V2-CUTOVER
+		// comment claiming "the calendar's main page is now the V2 shell" is
+		// dropped with the href it justified: it has been false since the Bench
+		// shipped, and the nav sidebar and the Extensions hub have both pointed
+		// at /apps/calendar since then.
+		return fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID)
 	case "maps":
 		return fmt.Sprintf("/campaigns/%s/maps", campaignID)
 	case "timeline":

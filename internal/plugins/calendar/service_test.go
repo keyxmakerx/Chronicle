@@ -1330,10 +1330,19 @@ func TestSearchCalendarEvents_Success(t *testing.T) {
 	if results[0]["type_name"] != "Event" {
 		t.Errorf("expected type_name 'Event', got %q", results[0]["type_name"])
 	}
-	// C-CAL-V1-V2-CUTOVER: the search result deep-links to the V2 shell, not the
-	// retired V1 view.
-	if want := "/campaigns/camp-1/calendar/v2/cal-1"; results[0]["url"] != want {
-		t.Errorf("search url = %q, want %q (V2 shell)", results[0]["url"], want)
+	// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED) — AND THIS ONE IS
+	// EGRESS. A search result URL is copied, bookmarked and pasted; it outlives
+	// the page that minted it. From R2-4 the application mints no more
+	// /calendar/v2 URLs through search. Results ALREADY indexed still resolve,
+	// because R2-4 removes no route; breaking those belongs to
+	// C-CALV4-SHELL-REMOVAL, which should consider a permanent redirect rather
+	// than a 404. That cost is ACCEPTED, not open.
+	//
+	// The calendar id is dropped with the target ([VS-12]: the Bench never reads
+	// `calId`), so a search hit lands on the Bench rather than on the hit's own
+	// calendar — a lost selection, named in the report.
+	if want := "/campaigns/camp-1/apps/calendar"; results[0]["url"] != want {
+		t.Errorf("search url = %q, want %q (the Bench)", results[0]["url"], want)
 	}
 }
 

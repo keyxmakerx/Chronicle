@@ -281,8 +281,19 @@ templ benchHead(data BenchData) {
 		</div>
 		<span class="sp"></span>
 		<div class="ctl">
+			// "OPEN CALENDAR →" IS GONE, AND IT IS THE ONE AFFORDANCE R2-4 REMOVES
+			// RATHER THAN RE-POINTS (C-CALV4-V2SUNSET, [VS-14] SIGNED).
+			//
+			// It existed to leave this page for the real calendar. The real
+			// calendar is now this page, so re-pointed at /apps/calendar it would
+			// have been a link that navigates to itself — and [VS-12] measured
+			// that `?calId=` is inert on this handler, so it could not even have
+			// selected a different calendar. This is the ONE place [VS-2]'s rule
+			// "no link is deleted" is deliberately overridden, and the override
+			// is the ruling: a self-link is not a door, it is a dead end wearing
+			// a door's label. The Builder → and + New calendar controls beside it
+			// are untouched.
 			if data.Primary != nil {
-				<a class="btn ghost" href={ templ.SafeURL(data.Primary.Manage.OpenHref) }>Open calendar →</a>
 				if data.IsOwner {
 					<a class="btn ghost" href={ templ.SafeURL(data.Primary.Manage.SettingsHref) }>Builder →</a>
 				}
@@ -893,17 +904,26 @@ templ benchRowView(r BenchRow, data BenchData) {
 		style={ benchRowStyle(r) }
 	>
 		<span class="dot" aria-hidden="true"></span>
-		// THE ROW IS A DOOR, for every role: the name navigates to the calendar.
-		// A plain href, never an HTMX swap — the target page loads engine
-		// scripts, and boot.js:163 disables scripts inside swapped fragments.
-		<a class="grow" href={ templ.SafeURL(r.Manage.OpenHref) }>
+		// THE ROW IS NO LONGER A DOOR (C-CALV4-V2SUNSET R2-4, [VS-14] SIGNED).
+		//
+		// It used to navigate to /calendar/v2/<that calendar> — a v4 surface
+		// linking out to the legacy calendar, which is the operator's complaint
+		// at its sharpest. Re-pointing it at /apps/calendar would make every
+		// subordinate row a link back to the page it is printed on, because
+		// [VS-12] measured that this handler never reads `calId`. So the anchor
+		// goes and THE ROW STAYS, identity and all: the dot, the name, the fault,
+		// the date and the setup badge are unchanged.
+		//
+		// The row becomes a door again in C-CALV4-BENCH-CALID, when the Bench
+		// learns `?calId=` and the link would select something.
+		<div class="grow">
 			if r.Warn {
 				<div class="fault" role="status">{ r.Fault }</div>
 			} else {
 				<div class="nm">{ r.Name }</div>
 			}
 			<div class="dt">{ r.Detail }</div>
-		</a>
+		</div>
 		<span class="sp"></span>
 		if r.Warn {
 			<span class="badge warn">setup</span>
