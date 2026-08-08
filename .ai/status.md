@@ -20,6 +20,72 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — C-CALV4-GAMEREADY §3 and §6 SHIPPED: the calendar stopped lying about what is happening today, and a festival can finally repeat (2026-08-08)
+
+**Two more table blockers closed, and BOTH of them had a second half that only a
+real database could see.** That is the sentence to carry out of this entry: the
+project believed for months it had no MariaDB available, and the recurrence
+engine has been proven against fakes for its entire life. Both halves below were
+perfectly green against fakes and completely dead against a database.
+
+**§3 — a five-day festival marked ONE cell.** `blockMarksForDate`'s only
+membership test was `OccursOn`, which matches the stored date and the recurrence
+rule and nothing else, so days 2..N of a span carried no mark. The day card is
+built straight off those marks, so a GM clicking day three of a siege the party
+was standing in read **"No events on this day"** — a positive false statement,
+not an omission. `blockEventSpansDate` now matches inside the stored
+`[start, end]` window, **inside the visibility-filtered loop** so a `dm_only`
+span is absent on all of its days rather than only its first. `model.go`'s
+comment promising that *"the ribbon layer renders their span"* was FALSE in the
+code that made it — V2 had a ribbon layer, v4 never built one — and is corrected
+in the same commit. **The ribbon itself is refused and booked**
+(`C-CALV4-SPAN-RIBBON`): five identical chips are visually inferior to one bar
+and operationally identical, and the mark is the half that stops the lie.
+
+**§3's second half, found by the database:** `ListEventsForMonth` selects on
+`e.year = ? AND e.month = ?`, so a festival running from day 28 of one month to
+day 3 of the next was **never loaded** while the second month rendered. The
+projection was right and the row never arrived. The month query now carries a
+composite-overlap clause (radix 10000, because a user-authored month list can
+exceed 99 days and the house `month * 100 + day` idiom cannot).
+
+**§6 — a festival, holy day or birthday could not repeat, and the API said 201
+anyway.** `OccursOn` expanded weekly/biweekly/monthly/custom and sent everything
+else to `default: return onBase`. It was a REGRESSION — the pre-v4 calendar was
+yearly-ONLY, and `.ai/data-model.md` still documented the column as
+*"yearly, monthly"*. `RecurrenceYearly` now expands on the same month and day
+with the interval applied. **A base day absent from a later year is SKIPPED,
+never clamped:** a festival that silently moves to a different day is worse at
+the table than one that does not appear, because the GM plans around the date
+they authored and an absent occurrence is visibly absent.
+
+**§6's second half, also found by the database:** THREE repository queries
+carried a hand-typed `recurrence_type IN ('weekly','biweekly','monthly',
+'custom')`. With the engine fixed and every fake green, every yearly festival
+was still invisible in every month but its own. The clause is now DERIVED from
+the constant block, so adding a recurrence type is one line in one place.
+
+**And the silent 201 is closed at both doors.** `CreateEventAPI` and
+`UpdateEventAPI` stored `"daily"`, `"hourly"`, `"WEEKLY"` and `"🐉"` with a 201
+and no validation. Both now 400 — **exact and case-sensitive, reject never
+coerce** — through ONE shared predicate, because two accepted sets in two places
+is how they diverge. It is handler work by house rule (input validation on a
+bound field) and deliberately gets no service-level twin. On `UpdateEventAPI`
+the guard reads `patch.Field.Get()`, so an ABSENT key still preserves and an
+explicit null still clears: neither is a value, so neither is rejected.
+
+**Measured and reported rather than designed:** a recurring event that is ALSO
+multi-day. [GR-5] names it a STOP-AND-FLAG. A weekly three-day rite based on
+days 5–7 marks 5, 6, 7, 12, 19, 26 — the window is matched once at the base
+dates while the recurrence expands only the base day. Pinned by
+`TestBlockMarks_RecurringSpanIsMEASUREDNotDesigned` and booked as
+`C-CALV4-SPAN-RECURRENCE`.
+
+Bounds held and measured: `routes_snapshot.txt` still **727** lines, zero
+migrations, `internal/widgets/calendar_block/**` and every `calendar_v2*` file
+byte-unchanged, `check-page-scripts.sh` and `check-calendar-v4-lints.sh` green
+unedited, the ONE motion register untouched, `golangci-lint` 0.
+
 ### calendar-v4 — C-CALV4-GAMEREADY §1 and §2 SHIPPED: the Bench can leave today, and the GM can move the date (2026-08-08)
 
 **Two blockers a five-lane readiness audit measured as hitting the table**, both

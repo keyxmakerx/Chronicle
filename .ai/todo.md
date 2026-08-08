@@ -33,6 +33,8 @@ hit the table. **Playability, not polish.**
 | **[GR-1] / [GR-2]** — §1, the month cursor | `?y=&m=` on the existing `/apps/calendar`, filling the `BlockRequest.View` field that had existed since wave 1 and had **never been called with a view**; the `‹ Prev · Today · Next ›` link trio on the Bench's own row above the Block. Zero new routes, zero new page scripts, zero CSS, zero breakpoints. Guarded by `bench_month_cursor_test.go`, including **two real-database tests** — the navigated month is what `candidateEvents` READS, so a cursor that moved the geometry and not the query would draw next month's cells full of this month's events. | **[x] shipped** |
 | **[GR-SIGN-A] / [GR-4]** — §2, the date verbs | `+1 day` / `−1 day` on the same nameplate row, at the EXISTING `CanControlWorldState` gate, through the EXISTING `PUT /campaigns/:id/calendar/world-state`; plus **Set date at the stricter, existing Owner-only floor** — a co-DM steps and does not set, which is the SHIPPED asymmetry [GR-SIGN-A](b) signed rather than a defect. Permission is absence. Guarded by `bench_date_verbs_test.go` (nine-row matrix in both halves + a real-database write test) and `test/js/bench_date_verbs.test.mjs`. | **[x] shipped** |
 | **[GR-3]** — §1's second half, the editor's cross-month roll | **BLOCKED AS SIGNED — see below.** | **[!] flagged** |
+| **[GR-5]** — §3, multi-day events | Every day of a span carries a MARK, so the day card stops saying "No events on this day" for days 2..N of an event in progress. `blockEventSpansDate` in `block_projection.go` matches inside the stored `[start, end]` window, INSIDE the visibility-filtered loop. **The ribbon is refused and booked.** Guarded by `block_multiday_test.go`, including a **real-database** test whose cross-month arm found a second half nothing else could: `ListEventsForMonth` selected on the stored month, so a festival running from one month into the next was never LOADED while the second month rendered — the same lie, one layer down. `model.go`'s false "the ribbon layer renders their span" comment corrected in the same commit. | **[x] shipped** |
+| **[GR-11] / [GR-12]** — §6, yearly recurrence + the silent 201 | `RecurrenceYearly` expands (same month + day, interval applied, cap counted as occurrences); a base day absent from a later year is **SKIPPED, never clamped**. Unsupported `recurrence_type` is a **400 in both handlers**, exact and case-sensitive, through one shared predicate so the accepted set is stated once. The editor gains the `year` unit `backed: true`. Guarded by `recurrence_yearly_test.go` (two **real-database** tests) and `test/js/daycard_editor_requests.test.mjs`. **The real database earned its keep here too:** three repository queries carried a hand-typed `recurrence_type IN (...)`, so `yearly` expanded perfectly in memory and the row was never loaded — the clause is now derived from the constant block. | **[x] shipped** |
 
 - [!] **`[GR-3]` cannot be built as ruled, and the reason is a namespace, not a
   preference.** The ruling says the picker and the `Ends` cycler should "compute
@@ -74,6 +76,67 @@ hit the table. **Playability, not polish.**
   everything past it: jumping a year is not playability. The V2 idioms
   (`<select>` + year input, keyboard shortcuts, swipe, a mini-calendar) are all
   refused here by name.
+
+- [ ] **`C-CALV4-SPAN-RIBBON`** — the multi-day span RENDERING layer, refused by
+  [GR-5] and booked with its measurement attached so nobody re-derives it. V2's
+  `monthRibbonRows` yields ONE segment across five day-columns; v4's
+  `marks.templ` ships `namedChip` / `underline` / `moonRow` and no span idiom at
+  all. The v4 grid is already a subgrid, so a spanning segment is cheap — **but
+  it needs a `calblock.Mark` field, and `internal/widgets/calendar_block/data.go`
+  is byte-pinned at r54.** §3 shipped the MARK instead because the mark plays
+  better sooner: five identical chips are visually inferior to one bar and
+  operationally identical, and the mark is the half that stops the day card
+  lying. The three sub-decisions §3 ruled (a spanned chip reads like the start
+  chip; it counts toward `+N more` and the Ledger; the match sits inside the
+  visibility filter) are the ribbon's starting constraints, not its open
+  questions.
+
+- [ ] **`C-CALV4-SPAN-RECURRENCE`** — a recurring event that is ALSO multi-day.
+  [GR-5] names this a STOP-AND-FLAG — *"measure what happens and REPORT it; do
+  not design the answer here"* — so it is **MEASURED, 2026-08-08, and pinned by
+  `TestBlockMarks_RecurringSpanIsMEASUREDNotDesigned`** rather than designed: a
+  weekly three-day rite based on days 5–7 marks **5, 6, 7, 12, 19, 26** — the
+  stored `[start, end]` window is matched once, at the base dates, while
+  `OccursOn` expands only the base DAY forward, so every later occurrence marks
+  ONE day. Neither obviously right nor obviously wrong (a recurring festival
+  plausibly wants its whole length each time). **The playable floor is
+  unaffected: a non-recurring span works, which is what §3 was chartered to
+  buy.** The test asserts today's behaviour so a slice that changes it has to
+  say so out loud.
+
+- [ ] **`C-CALV4-SPAN-OTHER-SURFACES`** — §3 widened the MONTH query
+  (`ListEventsForMonth`, which is what the Block and the day card read) so a
+  cross-month span reaches the month it runs into. **Two sibling queries were
+  measured and deliberately not touched**, because §3's charter is the day card:
+  `ListEventsForDateRange` (the week/day lists) and `block_repository.go`'s
+  upcoming-events query (the Ledger / NEXT UP index) still select on the stored
+  date, so a span in progress may be absent from those surfaces. `IsMultiDay`
+  and the composite-overlap idiom already exist; this is a call-site change, not
+  a new dependency.
+
+- [ ] **`C-CALV4-RECUR-YEARLY-EDITOR-INTERVAL`** — the engine honours a stored
+  `recurrence_interval` for `yearly` (built that way from the first line, so it
+  can never need C-SWEEP-R4 stage 22's unwind), but the v4 editor offers no
+  `every [N]` field for the unit and therefore cannot author "every 4 years".
+  Same shape and same blocker as `C-CALV4-MONTHLY-INTERVAL-CONTROL` — the
+  readout wording, the inverse in `recurrenceFromRecord` and the daycard request
+  pins move together — so the two should ship as one.
+
+- [ ] **`C-CAL-RECUR-BACKFILL`** — rows already carrying an unvalidated
+  `recurrence_type` ("daily", "WEEKLY", …) predate [GR-12]'s door and stay
+  exactly as they are: they expand to a single occurrence, which is the
+  behaviour they have always had, and `TestRecurrence_UnsupportedTypeStillExpandsOnce`
+  pins that so a future widening cannot start firing them by accident.
+  **An idempotent reconciler, NEVER a migration** (`.ai/conventions.md`
+  §"Migration Safety Rules": migrations are APPEND-ONLY and SCHEMA-ONLY, and a
+  one-time data fix is not a migration).
+
+- [ ] **`C-CALV4-RECUR-END`** — a recurring event recurs forever; the columns
+  (`recurrence_end_*`, `recurrence_max_occurrences`) exist and `OccursOn` honours
+  all of them, but **no UI and no internal API can set them** — the shipped event
+  `PUT` binds none of those keys. Yearly recurrence makes this louder, not
+  newer: an annual festival is exactly the thing an operator eventually wants to
+  end.
 
 - [ ] **`C-CALV4-DATEVERB-RELOCATE`** — if `C-CALV4-GM-CONSOLE` [GC-1] is later
   signed for a fifth Bench section, moving the two date verbs into it is

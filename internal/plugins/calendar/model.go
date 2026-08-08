@@ -354,8 +354,26 @@ func (c *Calendar) constLenDayIndex(year, month, day int) int {
 // arithmetic counted in years.
 //
 // Recurrence stops at the recurrence-end date (inclusive) and/or after
-// RecurrenceMaxOccurrences. Multi-day events are not expanded here (the ribbon
-// layer renders their span).
+// RecurrenceMaxOccurrences.
+//
+// MULTI-DAY EVENTS ARE STILL NOT EXPANDED HERE, AND THE REASON HAS CHANGED.
+// This comment used to end "(the ribbon layer renders their span)", and that
+// sentence was FALSE in the code that made it: V2 had a ribbon layer, v4 never
+// built one, so a five-day festival marked exactly one cell and the day card —
+// which is built from those marks — told a GM standing inside a siege that
+// there were "No events on this day". A comment stating an invariant the
+// product does not hold is how the next hand re-derives the bug, so it is
+// corrected in the same commit that fixes the behaviour (C-CALV4-GAMEREADY §3,
+// [GR-5]).
+//
+// The span is now matched by blockEventSpansDate in block_projection.go,
+// BESIDE this predicate rather than inside it, and deliberately: OccursOn
+// answers "does the recurrence rule put an instance here", which is a different
+// question from "is this day inside the stored window", and every other
+// consumer of OccursOn (the week/day lists, the entity ties, the upcoming
+// index) has its own idea of how a span should read. Widening this predicate
+// would have changed all of them silently. The RENDERING of the span as one
+// continuous bar remains unbuilt and is booked as C-CALV4-SPAN-RIBBON.
 func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
 	onBase := e.Year == year && e.Month == month && e.Day == day
 	if !e.IsRecurring || e.RecurrenceType == nil || cal == nil {

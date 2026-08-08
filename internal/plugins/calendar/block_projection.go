@@ -340,6 +340,59 @@ func blockDecorateCells(data *calblock.BlockData, cal *Calendar, visible []Event
 	}
 }
 
+// blockEventSpansDate reports whether (year, month, day) falls INSIDE a
+// multi-day event's stored [start, end] window — C-CALV4-GAMEREADY §3, [GR-5].
+//
+// THE DEFECT IT CLOSES IS A POSITIVE FALSE STATEMENT, NOT AN OMISSION. A
+// five-day festival marked ONE cell, because the only membership test here was
+// OccursOn, which matches the stored date and the recurrence rule and nothing
+// else. The day card is built from these marks (dayCardEvents(c.Marks)), so a
+// GM clicking day three of a siege the party was standing in read "No events on
+// this day". V2 drew a five-day ribbon; v4 never built the ribbon layer the
+// model's own comment promised, and inherited the gap as a lie.
+//
+// THE RIBBON IS REFUSED, NOT FORGOTTEN. Rendering the span as one continuous
+// bar reads better and is booked as C-CALV4-SPAN-RIBBON with its measurement
+// attached; it needs a calblock.Mark field, which is data.go, which is pinned.
+// Five identical chips on five consecutive days are visually inferior and
+// OPERATIONALLY IDENTICAL: the GM clicks day three, sees the siege, opens it.
+// A spanned day's chip therefore reads exactly like the start day's — no "day 3
+// of 5", no continuation glyph, no truncated variant, all three being
+// ribbon-layer concerns that would each need that same field.
+//
+// IT IS COMPARED THROUGH absDayIndex, the counter recurrence already uses, so
+// containment and expansion can never disagree about the geometry — and it
+// naturally makes an end equal to the start exactly one day, which is what
+// IsMultiDay's nil-vs-equal distinction means elsewhere.
+//
+// THE CALLER PUTS IT INSIDE THE VISIBILITY-FILTERED LOOP AND THAT IS
+// LOAD-BEARING: `visible` has already been through filterEventsByUser, so a
+// dm_only span is absent on ALL of its days rather than only its first. A
+// membership test at the wrong loop depth is how a span becomes a leak, and a
+// guard asserts exactly that.
+func blockEventSpansDate(cal *Calendar, e *Event, year, month, day int) bool {
+	if cal == nil || e == nil || e.EndYear == nil || e.EndMonth == nil || e.EndDay == nil {
+		return false
+	}
+	start := cal.absDayIndex(e.Year, e.Month, e.Day)
+	end := cal.absDayIndex(*e.EndYear, *e.EndMonth, *e.EndDay)
+	if end < start {
+		// A stored end before its own start is corrupt data, not a span. The
+		// editor cannot author one (the picker refuses), but the API can.
+		//
+		// THIS BRANCH IS DEFENSIVE, NOT LOAD-BEARING, AND SAYS SO RATHER THAN
+		// IMPLYING OTHERWISE: the containment test below already refuses an
+		// inverted window (no day is both >= 9 and <= 5), so removing this
+		// return changes no observable behaviour and the guard for it stays
+		// green either way. It is kept because it states the intent — such a row
+		// degrades to its single stored day — where a reader would otherwise
+		// have to derive it from the arithmetic.
+		return false
+	}
+	target := cal.absDayIndex(year, month, day)
+	return target >= start && target <= end
+}
+
 // blockMarksForDate builds the marks for one date and reports whether the date
 // carries at least one TIED event. Both come from the same walk over `visible`.
 func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, month, day int, times blockMarkTimeFormatter) ([]calblock.Mark, bool) {
@@ -348,7 +401,7 @@ func blockMarksForDate(cal *Calendar, visible []Event, in BlockProjectionInput, 
 	isGM := permissions.CanSeeDmOnly(in.Viewer.Role)
 	for i := range visible {
 		e := &visible[i]
-		if !e.OccursOn(cal, in.Year, month, day) {
+		if !e.OccursOn(cal, in.Year, month, day) && !blockEventSpansDate(cal, e, in.Year, month, day) {
 			continue
 		}
 		evTied := blockEventTied(e, in)

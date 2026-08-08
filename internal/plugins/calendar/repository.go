@@ -1123,6 +1123,38 @@ const eventJoins = `LEFT JOIN entities ent ON ent.id = e.entity_id
 // contains one, which would otherwise break the query silently at runtime.
 var recurringCandidateClause = buildRecurringCandidateClause()
 
+// spanningCandidateClause widens a MONTH-bounded event query to include every
+// multi-day row whose stored [start, end] window OVERLAPS that month, even
+// though its stored month is a different one — C-CALV4-GAMEREADY §3, [GR-5].
+//
+// IT IS THE SECOND HALF OF THE SAME FIX, AND ONLY A REAL DATABASE FOUND IT.
+// blockEventSpansDate makes the projection mark every day of a span, which is
+// enough for a festival that begins and ends inside one month. A festival that
+// runs from day 28 of one month to day 3 of the next has its stored `month` in
+// the FIRST month only, so `WHERE e.year = ? AND e.month = ?` never returned it
+// while the second month was being rendered — and the day card went on saying
+// "No events on this day" for days 1..3 of a festival in progress, which is
+// precisely the lie §3 exists to remove. The projection-level guard cannot see
+// this; the MariaDB guard fails on it.
+//
+// THE COMPARISON IS A COMPOSITE, AND THE RADIX IS NOT 100. The house idiom
+// elsewhere is `month * 100 + day`, which assumes no month exceeds 99 days —
+// safe for Gregorian and for every shipped fantasy preset, but this is a
+// user-authored month list and a 120-day month is expressible. The radix here
+// is 10000, so month lengths up to 9999 days compare correctly, and the month
+// bound uses day 0 / day 9999 rather than the month's real length so the clause
+// needs no per-calendar geometry.
+//
+// The four placeholders are (year, month) twice: the row's END must be at or
+// after the first of the asked-for month, and its START at or before the last.
+const spanningCandidateClause = `(
+		    e.end_year IS NOT NULL AND e.end_month IS NOT NULL AND e.end_day IS NOT NULL
+		    AND (e.end_year * 100000000 + e.end_month * 10000 + e.end_day)
+		        >= (? * 100000000 + ? * 10000 + 0)
+		    AND (e.year * 100000000 + e.month * 10000 + e.day)
+		        <= (? * 100000000 + ? * 10000 + 9999)
+		  )`
+
 func buildRecurringCandidateClause() string {
 	quoted := make([]string, 0, len(RecurrenceTypes))
 	for _, t := range RecurrenceTypes {
@@ -1237,11 +1269,12 @@ func (r *calendarRepo) ListEventsForMonth(ctx context.Context, calendarID string
 		  AND (
 		    (e.year = ? AND e.month = ?)
 		    OR `+recurringCandidateClause+`
+		    OR `+spanningCandidateClause+`
 		  )
 		  %s
 		ORDER BY e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
-	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month)
+	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month, year, month, year, month)
 	if err != nil {
 		return nil, err
 	}
