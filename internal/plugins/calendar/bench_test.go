@@ -254,7 +254,7 @@ func benchFxDataRsvp(isGM, isOwner bool) BenchData {
 	d.Ribbon = benchRibbon(benchRibbonInput{
 		IsGM: isGM, CampaignID: "camp-1", NextUp: d.NextUp,
 		Sync:      calblock.SyncPill{State: blockSyncStateOK, Linked: 1, Total: 4, Full: "In sync · 1 of 4 linked"},
-		Attention: benchAttentionRows(benchFxAll(), "camp-1"),
+		Attention: benchAttentionRows(benchFxAll(), "camp-1", nil),
 		Session: &benchSessionTileInput{
 			IsGM: isGM, CampaignID: "camp-1", CalendarID: "cal-real", EventID: "evt-41",
 			Name: in.Session.Name, When: benchRsvpWhen(in.Session.DaysUntil),
@@ -328,7 +328,7 @@ func benchFxData(isGM, isOwner bool) BenchData {
 		IsGM: isGM, CampaignID: "camp-1", Primary: primary, Block: data.Primary,
 		NextUp:    data.NextUp,
 		Sync:      calblock.SyncPill{State: blockSyncStateOK, Linked: 1, Total: 4, Full: "In sync · 1 of 4 linked"},
-		Attention: benchAttentionRows(cals, "camp-1"),
+		Attention: benchAttentionRows(cals, "camp-1", nil),
 	})
 	return data
 }
@@ -1079,7 +1079,7 @@ func TestBench_AttentionTileStatesAllClear(t *testing.T) {
 	if clear.Headline != "all clear" || clear.Tone != "ok" {
 		t.Errorf("a healthy campaign gets the all-clear tile; got %+v", clear)
 	}
-	rows := benchAttentionRows([]Calendar{benchFxHarptos(), benchFxDwarven()}, "camp-1")
+	rows := benchAttentionRows([]Calendar{benchFxHarptos(), benchFxDwarven()}, "camp-1", nil)
 	if len(rows) != 1 || !strings.Contains(rows[0].Label, "Dwarven Deep-count") {
 		t.Fatalf("the misconfigured calendar should be the one attention row; got %+v", rows)
 	}

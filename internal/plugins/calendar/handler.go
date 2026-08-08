@@ -422,12 +422,28 @@ func (h *Handler) UpdateMonthsAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
-	if err := h.svc.SetMonths(ctx, cal.ID, months); err != nil {
+	// THE SAVE ALWAYS SUCCEEDS AND THE RESPONSE CARRIES THE WARNING
+	// (C-CALV4-GAMEREADY §9 [GR-18] under [GR-SIGN-B] — WARN, NEVER REFUSE).
+	// The service computes both numbers; this handler only renders them, and it
+	// renders the service's own Sentence() rather than assembling wording here.
+	impact, err := h.svc.SetMonths(ctx, cal.ID, months)
+	if err != nil {
 		return err
 	}
+	auditMeta := map[string]any{"count": len(months)}
+	if impact.Any() {
+		auditMeta["events_stranded"] = impact.Stranded
+		auditMeta["events_shifted"] = impact.Shifted
+	}
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarMonthsSet, "calendar", cal.ID, cal.Name,
-		map[string]any{"count": len(months)})
-	return nil
+		auditMeta)
+	// The body is ADDITIVE: this endpoint previously answered 200 with nothing,
+	// so a client that ignores it behaves exactly as before.
+	return c.JSON(http.StatusOK, map[string]any{
+		"events_stranded": impact.Stranded,
+		"events_shifted":  impact.Shifted,
+		"warning":         impact.Sentence(),
+	})
 }
 
 // UpdateWeekdaysAPI replaces all weekdays.
@@ -1481,10 +1497,19 @@ func (h *Handler) ImportCalendarAPI(c echo.Context) error {
 		return c.JSON(http.StatusOK, result)
 	}
 
-	// Apply the import to the existing calendar.
-	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
+	// Apply the import to the EXISTING calendar — the one ApplyImport path in
+	// this file that can land on events somebody already authored, so the
+	// month-edit impact is recorded rather than dropped (§9 [GR-18]).
+	impact, err := h.svc.ApplyImport(ctx, cal.ID, result)
+	if err != nil {
 		slog.Error("import: failed to apply", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to apply import"))
+	}
+	if impact.Any() {
+		slog.Warn("calendar import re-dated existing events",
+			slog.String("calendar_id", cal.ID),
+			slog.Int("events_stranded", impact.Stranded),
+			slog.Int("events_shifted", impact.Shifted))
 	}
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarImported, "calendar", cal.ID, cal.Name,
 		map[string]any{
@@ -1595,8 +1620,9 @@ func (h *Handler) ImportFromSetupAPI(c echo.Context) error {
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarCreated, "calendar", cal.ID, cal.Name,
 		map[string]any{"mode": string(ModeFantasy), "via": "import_setup"})
 
-	// Apply imported sub-resources.
-	if err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
+	// Apply imported sub-resources. The impact is not surfaced here: this
+	// calendar was created three lines above, so it carries no events yet.
+	if _, err := h.svc.ApplyImport(ctx, cal.ID, result); err != nil {
 		slog.Error("import-setup: failed to apply", slog.Any("error", err))
 		return apperror.NewInternal(fmt.Errorf("failed to apply import"))
 	}

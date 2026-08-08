@@ -130,8 +130,17 @@ func (s *stubCalSvc) UpdateCalendar(_ context.Context, _ string, _ UpdateCalenda
 	return s.updateCalErr
 }
 func (s *stubCalSvc) DeleteCalendar(_ context.Context, _ string) error { return s.deleteCalErr }
-func (s *stubCalSvc) SetMonths(_ context.Context, _ string, _ []MonthInput) error {
-	return s.setMonthsErr
+// SetMonths returns the month-edit impact alongside its error
+// (C-CALV4-GAMEREADY §9 [GR-18]). The stub reports a zero impact: these tests
+// are about the AUDIT record, and a stub that invented counts would pin
+// arithmetic that lives in the service and is proven against a real database
+// in months_edit_impact_test.go.
+func (s *stubCalSvc) SetMonths(_ context.Context, _ string, _ []MonthInput) (MonthEditImpact, error) {
+	return MonthEditImpact{}, s.setMonthsErr
+}
+
+func (s *stubCalSvc) MonthEditImpact(_ context.Context, _ string, _ []MonthInput) (MonthEditImpact, error) {
+	return MonthEditImpact{}, nil
 }
 func (s *stubCalSvc) SetWeekdays(_ context.Context, _ string, _ []WeekdayInput) error {
 	return s.setWeekdaysErr

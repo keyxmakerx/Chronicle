@@ -38,6 +38,11 @@ hit the table. **Playability, not polish.**
 | **[GR-6] / [GR-10]** — §4 the operator's own gate, + §5's fourth dead end | **The only "Collect RSVPs" control in the entire product lived in the legacy V2 event drawer** — a committed deletion — and `daycard.templ` contained ZERO occurrences of "rsvp", while every downstream RSVP surface (the Bench session tile AND `/schedule`) is gated on the flag it sets. The control now ships in the v4 day-card event editor beside the visibility cards, at the route's OWN `RoleScribe` floor (`routes.go:431`), writing the already-shipped `PUT …/rsvp-collection`. **Zero new routes, zero new handlers, zero new service methods, zero stylesheet** (it reuses `.viscard`/`.vh`). CREATE mode is disabled carrying the V2 drawer's own hint verbatim — disabled by SEQUENCE, not by permission. The off→on fan-out **reuses the 24h per-recipient floor** the schedule-ask path already ships, because §4 makes the toggle far easier to reach and a re-arm used to re-mail the whole roster; the 6h campaign cooldown is deliberately NOT applied. And [GR-10]: the PUT now **reports its mail state** using the shared `mailNotConfiguredLine` constant, so arming with no SMTP stops printing "the party has been invited" over zero sent mail. Guarded by `rsvp_collect_control_test.go` (audience matrix, the verbatim hint, the mail-state table, the floor, the bell's exemption), `rsvp_deadends_int_test.go`'s **real-database** floor test, and `test/js/daycard_rsvp_collect.test.mjs` (10 cases). | **[x] shipped** |
 | **[GR-11] / [GR-12]** — §6, yearly recurrence + the silent 201 | `RecurrenceYearly` expands (same month + day, interval applied, cap counted as occurrences); a base day absent from a later year is **SKIPPED, never clamped**. Unsupported `recurrence_type` is a **400 in both handlers**, exact and case-sensitive, through one shared predicate so the accepted set is stated once. The editor gains the `year` unit `backed: true`. Guarded by `recurrence_yearly_test.go` (two **real-database** tests) and `test/js/daycard_editor_requests.test.mjs`. **The real database earned its keep here too:** three repository queries carried a hand-typed `recurrence_type IN (...)`, so `yearly` expanded perfectly in memory and the row was never loaded — the clause is now derived from the constant block. | **[x] shipped** |
 
+| **[GR-13]** — §7, delete's two-step | One click on `[data-de-delete]` fired a hard `DELETE` immediately — no soft delete, no restore path, at a 24px tap floor, on the line ABOVE Save in the same delegated handler. **TWO-STEP IN PLACE**: the first click swaps the label to `Confirm delete` and starts a ~4s timer; a second inside the window sends the DELETE; the timer, the editor closing, opening another event, or ANY other editor interaction disarms it. `aria-live` on the swap. **No `<dialog>`, no `[role=alertdialog]`, no `window.confirm`, no DOM outside the editor's subtree, zero motion** — a text swap, and the ONE motion register is byte-unchanged. Plus §7's same-handler freebie: Save gained `disabled` + `aria-busy` while in flight, the stale error cleared at save START, and a ~15s ceiling so a hung write becomes a stated failure instead of a permanently dead button. Guarded by `test/js/daycard_delete_twostep.test.mjs` (10 cases). | **[x] shipped** |
+| **[GR-14] / [GR-15] / [GR-16]** — §8, two dead links and the guard | `schedule_copy.go`'s `ZoneHref: "/settings/profile"` and `benchRsvpAskHref`'s `/campaigns/<id>/settings/members` were both routes that have never existed, with no catch-all — the first the ONLY repair offered in the no-timezone state EVERY new player starts in (so availability entry was dead on arrival), the second rendered once per zone-less roster member **in the Player's DOM**. Retargeted to `/account` and `GET /campaigns/:id/members`. **The audience was the other half:** `Ask →` now renders only for a GM, and the viewer's OWN zone-less row links to `/account` with `Set your zone →` — the one thing they can do. `bench.go`'s doc comment asserting *"It is a LINK to a page that exists"* deleted in the same commit. Tail: the entity-page embed's Owner-only "Create calendar" CTA gated. Guarded by **`TestCalendarHrefs_AllResolve`**, which resolves every statically-evaluable href the plugin emits against `routes_snapshot.txt` — rebuilding full paths by AST-resolving Echo group prefixes, since the snapshot records call-site paths — and **names its blind spot in its own comment**. Mutation-proven in both directions. | **[x] shipped** |
+| **[GR-17] / [GR-18]** — §9, the silently re-dated year | **[GR-17] REPRODUCED FIRST, on a real MariaDB, before a line of fix was written.** Inserting an intercalary month at position 5 moved 3 of 4 events a month later and stranded ZERO; deleting the last month stranded its events at a position nothing renders. Under **[GR-SIGN-B] (SIGNED — WARN, NEVER REFUSE)**, `SetMonths` and `ApplyImport` now return a `MonthEditImpact`, and **the count is a BEFORE/AFTER COMPARISON, not a bounds check** — a `month > len(months)` count reports 0 on the insertion case, which certifies the damage. The sentence states both numbers. Plus a read-only **stranded-events row on the Bench**, from ONE aggregate query for the whole campaign, so the state is visible after the moment of the edit. **Zero migrations, zero data writes, no stored `Month` ever rewritten.** Guarded by `months_edit_repro_test.go` + `months_edit_impact_test.go` (**four real-database tests**). | **[x] shipped** |
+| **[GR-19]** — §10, the anonymous visibility bypass | **VERIFIED ALREADY FIXED (World 1).** `internal/permissions/viewer.go`, the three `SkipsPerUserRules` branches in `service.go`, `entity_ties_service.go`'s `RequestViewer`, `anonymous_visibility_test.go` and ADR-049 are all present on this branch. Re-run and reported; no second fix written. | **[x] verified** |
+
 - [!] **`[GR-3]` cannot be built as ruled, and the reason is a namespace, not a
   preference.** The ruling says the picker and the `Ends` cycler should "compute
   the next/previous date from **the calendar structure the payload already
@@ -2639,3 +2644,51 @@ NOT take, each with the reason it was left.
   rule, and each bar states its own denominator in `title`. If the drawing pass
   ever specifies a different reduction, it is one function
   (`benchRsvpDensity`) and the count oracle moves with it.
+
+- [ ] **`C-CAL-EVENT-SOFT-DELETE`** — real undo for a deleted event. Booked by
+  [GR-13], which refused it on size and on the slice's zero-migration bound: a
+  soft delete is a schema change (`deleted_at`), plus a trash view, plus a
+  restore path, plus every read filtered. §7 shipped the two-step instead
+  because the two-step costs nothing and stops the mis-tap, which is the failure
+  that actually happens at a table. **The measurement to carry:** the repository
+  does `DELETE FROM calendar_events WHERE id = ?` (`repository.go:1161-1163`) —
+  there is no audit-restore path anywhere.
+
+- [ ] **`C-CALV4-SETTINGS-MONTH-WARNING-TOAST`** — surface [GR-18]'s sentence in
+  the month editor's own UI at the moment of the save. The count and the
+  sentence now ride the `PUT …/months` response body (and the syncapi twin's),
+  and the standing state has a Bench row — but the editor that PUTs it is
+  `subresource_grid.js`, a **V2** file, and `C-CALV4-V2SUNSET` [VS-1] (SIGNED)
+  has committed V2 to deletion. Teaching a demolished path is what [GR-6]
+  refused. **The wording is already written and pinned** —
+  `MonthEditImpact.Sentence()` — so whichever surface replaces the V2 structure
+  editor inherits it rather than re-deriving it.
+
+- [ ] **`C-CAL-MONTHS-RECONCILE`** — the real reconciliation [GR-18] warns about
+  instead of performing, and it stays booked under every branch of
+  [GR-SIGN-B]. Reconcile events by month NAME where names are unchanged, and
+  offer a mapping step where they are not. **It is a week, not a day**, and it
+  is a new service concern with its own ambiguity rules: renamed *and* moved;
+  two months swapping names; a name that now matches a different month. **The
+  correct new month for a shifted event is not derivable** — which is exactly
+  why §9 ships a count and a sentence and never a data write. Reproduction and
+  arithmetic already exist in `months_edit_repro_test.go` and
+  `months_edit_impact.go`; a reconciler inherits both.
+
+- [ ] **`C-CAL-IMPORT-STRANDS-THE-CALENDARS-OWN-DATE`** — reported, not chased,
+  per [GR-18]'s STOP-AND-FLAG. `ApplyImport` forces `CurrentMonth`/`CurrentDay`
+  to 1 (`service.go`, the W8 block) while replacing the month list. That is a
+  larger finding than §9's: `blockDateLine` does report "Date out of range" for
+  a calendar's own current date, so this one is at least visible — but forcing
+  the date to 1/1 on every import is a silent date write on a surface the
+  operator did not ask to move. **Measured while building §9; deliberately not
+  fixed there.**
+
+- [ ] **A day that outlives its month is a THIRD number §9 does not count.**
+  [GR-SIGN-B] names exactly two — stranded and shifted — and this slice ships
+  exactly two. But the reproduction turned one up: "Midsummer Fair" on day 20
+  moved into `Shieldmeet`, an intercalary month with **one** day, so it now
+  resolves to a month that exists and a day that does not. It is counted as
+  SHIFTED today, which is true but understates it. **Booked rather than
+  improvised**, because widening the signed sentence is not an executor's call.
+

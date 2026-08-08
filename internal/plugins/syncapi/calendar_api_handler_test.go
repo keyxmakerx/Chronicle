@@ -54,11 +54,16 @@ func (s *stubCalendarSvc) CreateCalendar(ctx context.Context, campaignID string,
 	return nil, nil
 }
 
-func (s *stubCalendarSvc) ApplyImport(ctx context.Context, calendarID string, result *calendar.ImportResult) error {
+// ApplyImport returns the month-edit impact alongside its error
+// (C-CALV4-GAMEREADY §9 [GR-18]). The stub reports a zero impact and keeps its
+// existing error hook untouched: these tests are about the API's wire contract,
+// and the count's arithmetic is pinned against a real database in the calendar
+// plugin's months_edit_impact_test.go.
+func (s *stubCalendarSvc) ApplyImport(ctx context.Context, calendarID string, result *calendar.ImportResult) (calendar.MonthEditImpact, error) {
 	if s.onApply != nil {
-		return s.onApply(ctx, calendarID, result)
+		return calendar.MonthEditImpact{}, s.onApply(ctx, calendarID, result)
 	}
-	return nil
+	return calendar.MonthEditImpact{}, nil
 }
 
 // --- interface-fill stubs (zero-value returns) ---
@@ -94,8 +99,14 @@ func (s *stubCalendarSvc) UpcomingByCalendar(context.Context, []calendar.Calenda
 	return nil, nil
 }
 func (s *stubCalendarSvc) SetDefaultCalendar(context.Context, string, string) error { return nil }
-func (s *stubCalendarSvc) SetMonths(context.Context, string, []calendar.MonthInput) error {
-	return nil
+func (s *stubCalendarSvc) SetMonths(context.Context, string, []calendar.MonthInput) (calendar.MonthEditImpact, error) {
+	return calendar.MonthEditImpact{}, nil
+}
+func (s *stubCalendarSvc) MonthEditImpact(context.Context, string, []calendar.MonthInput) (calendar.MonthEditImpact, error) {
+	return calendar.MonthEditImpact{}, nil
+}
+func (s *stubCalendarSvc) StrandedEventCounts(context.Context, string) (map[string]int, error) {
+	return nil, nil
 }
 func (s *stubCalendarSvc) SetWeekdays(context.Context, string, []calendar.WeekdayInput) error {
 	return nil

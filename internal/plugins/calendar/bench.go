@@ -1170,7 +1170,9 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		NextUp:     data.NextUp,
 		Session:    sessionTile,
 		Sync:       benchSyncPill(ctx, spine, in.Campaign.ID, data.Primary),
-		Attention:  benchAttentionRows(hydrated, data.CampaignID),
+		// One aggregate query for the whole campaign; a failure degrades to
+		// "no stranded rows" rather than costing the Bench its render.
+		Attention: benchAttentionRows(hydrated, data.CampaignID, benchStranded(ctx, h.svc, in.Campaign.ID)),
 	})
 	return data
 }
@@ -1924,7 +1926,7 @@ func benchItemCount(n int) string {
 // that is what it reports. The signed tile's second row ("2 RSVPs unanswered")
 // is not synthesised: no RSVP store exists, and inventing the row would put a
 // fabricated fact on the tile whose whole job is to be trusted.
-func benchAttentionRows(cals []Calendar, campaignID string) []BenchTileRow {
+func benchAttentionRows(cals []Calendar, campaignID string, stranded map[string]int) []BenchTileRow {
 	var out []BenchTileRow
 	for i := range cals {
 		c := &cals[i]
@@ -1935,8 +1937,44 @@ func benchAttentionRows(cals []Calendar, campaignID string) []BenchTileRow {
 				Href:  fmt.Sprintf("/campaigns/%s/calendars/%s/settings", campaignID, c.ID),
 			})
 		}
+		// STRANDED EVENTS ARE A STANDING STATE, NOT A TOAST
+		// (C-CALV4-GAMEREADY §9 [GR-18]). Editing the month list re-dates
+		// events by POSITION with no reconciliation; the ones left past the
+		// end of the new list simply stop rendering, and until this row
+		// existed nothing anywhere said so. blockDateLine reports
+		// "Date out of range" for the CALENDAR's own current date and has
+		// never reported out-of-range EVENTS.
+		//
+		// READ-ONLY. It states the number and links at the structure editor.
+		// It never offers to "fix" them: the correct new month for a moved
+		// event is not derivable, which is why the real reconciliation is
+		// booked as C-CAL-MONTHS-RECONCILE rather than guessed at here.
+		if n := stranded[c.ID]; n > 0 {
+			label := fmt.Sprintf("%s — %d events no longer land on a real month", blockCalendarName(c), n)
+			if n == 1 {
+				label = blockCalendarName(c) + " — 1 event no longer lands on a real month"
+			}
+			out = append(out, BenchTileRow{
+				Label: label,
+				Bad:   true,
+				Href:  fmt.Sprintf("/campaigns/%s/calendars/%s/settings", campaignID, c.ID),
+			})
+		}
 	}
 	return out
+}
+
+// benchStranded reads the campaign's stranded-event counts, degrading to nil.
+// A diagnostic row is never worth a failed page render.
+func benchStranded(ctx context.Context, svc CalendarService, campaignID string) map[string]int {
+	if svc == nil {
+		return nil
+	}
+	counts, err := svc.StrandedEventCounts(ctx, campaignID)
+	if err != nil {
+		return nil
+	}
+	return counts
 }
 
 // benchHorizonTile is design-ahead in full.

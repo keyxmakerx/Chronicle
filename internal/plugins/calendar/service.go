@@ -78,7 +78,16 @@ type CalendarService interface {
 	ToggleBenchSection(ctx context.Context, userID, campaignID, key string) error
 
 	// Sub-resource bulk updates (replace all).
-	SetMonths(ctx context.Context, calendarID string, months []MonthInput) error
+	// SetMonths replaces the month list and reports what that did to the
+	// events already referencing it by POSITION ([GR-18]). The count is a
+	// WARNING, never a refusal, and never a data write.
+	SetMonths(ctx context.Context, calendarID string, months []MonthInput) (MonthEditImpact, error)
+	// MonthEditImpact answers the same question WITHOUT writing, so a preview
+	// and a save can never disagree.
+	MonthEditImpact(ctx context.Context, calendarID string, months []MonthInput) (MonthEditImpact, error)
+	// StrandedEventCounts is the standing read: events left pointing at a
+	// month position their calendar no longer has, per calendar, in one query.
+	StrandedEventCounts(ctx context.Context, campaignID string) (map[string]int, error)
 	SetWeekdays(ctx context.Context, calendarID string, weekdays []WeekdayInput) error
 	SetMoons(ctx context.Context, calendarID string, moons []MoonInput) error
 	SetSeasons(ctx context.Context, calendarID string, seasons []Season) error
@@ -142,7 +151,7 @@ type CalendarService interface {
 	SetDate(ctx context.Context, calendarID string, year, month, day, hour, minute int) error
 
 	// Import/export.
-	ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error
+	ApplyImport(ctx context.Context, calendarID string, result *ImportResult) (MonthEditImpact, error)
 	ListAllEvents(ctx context.Context, calendarID string) ([]Event, error)
 
 	// Entity ties (C-CAL-ENTITY-TIES-DATA-MODEL). Optional M:N both ways
@@ -437,7 +446,7 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 			{Name: "November", Days: 30, SortOrder: 10},
 			{Name: "December", Days: 31, SortOrder: 11},
 		}
-		if err := s.SetMonths(ctx, cal.ID, gregorianMonths); err != nil {
+		if _, err := s.SetMonths(ctx, cal.ID, gregorianMonths); err != nil {
 			return err
 		}
 		gregorianWeekdays := []WeekdayInput{
@@ -490,7 +499,7 @@ func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error
 		{Name: "Month 11", Days: 30, SortOrder: 10},
 		{Name: "Month 12", Days: 30, SortOrder: 11},
 	}
-	if err := s.SetMonths(ctx, cal.ID, defaultMonths); err != nil {
+	if _, err := s.SetMonths(ctx, cal.ID, defaultMonths); err != nil {
 		return err
 	}
 	defaultWeekdays := []WeekdayInput{
@@ -1401,26 +1410,42 @@ func (s *calendarService) ToggleBenchSection(ctx context.Context, userID, campai
 }
 
 // SetMonths replaces all months. Validates at least one month exists.
-func (s *calendarService) SetMonths(ctx context.Context, calendarID string, months []MonthInput) error {
+//
+// IT RETURNS WHAT THE EDIT DID TO THE EVENTS THAT REFERENCE THE LIST
+// (C-CALV4-GAMEREADY §9 [GR-18], under [GR-SIGN-B] — WARN, NEVER REFUSE). The
+// save always succeeds: the operator is days from running a game and is
+// therefore in the exact week they are most likely to be reshaping their
+// months, and locking them out of their own data would be a worse defect than
+// the one being reported.
+//
+// The impact is computed BEFORE the write, because it is a before/after
+// comparison and the "before" stops existing the moment the repository's
+// delete-and-reinsert runs. A failure to compute it is NOT a failure to save —
+// a warning that could not be produced must never cost the operator their edit.
+func (s *calendarService) SetMonths(ctx context.Context, calendarID string, months []MonthInput) (MonthEditImpact, error) {
 	if len(months) == 0 {
-		return apperror.NewValidation("calendar must have at least one month")
+		return MonthEditImpact{}, apperror.NewValidation("calendar must have at least one month")
 	}
 	for i, m := range months {
 		if m.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
 		}
 		if m.Days < 1 || m.Days > 400 {
-			return apperror.NewValidation(fmt.Sprintf("month %q: days must be between 1 and 400", m.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %q: days must be between 1 and 400", m.Name))
 		}
 		if m.LeapYearDays < 0 {
-			return apperror.NewValidation(fmt.Sprintf("month %q: leap_year_days cannot be negative", m.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %q: leap_year_days cannot be negative", m.Name))
 		}
 	}
+	impact, ierr := s.MonthEditImpact(ctx, calendarID, months)
+	if ierr != nil {
+		impact = MonthEditImpact{}
+	}
 	if err := s.repo.SetMonths(ctx, calendarID, months); err != nil {
-		return err
+		return MonthEditImpact{}, err
 	}
 	s.publishStructureUpdated(ctx, calendarID)
-	return nil
+	return impact, nil
 }
 
 // SetWeekdays replaces all weekdays.
@@ -2462,13 +2487,20 @@ func (s *calendarService) SetDate(ctx context.Context, calendarID string, year, 
 //
 // On success, a single structure.updated WS event publishes; consumers
 // (UI / sync clients) refresh once rather than 6 times mid-import.
-func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, result *ImportResult) error {
+// ApplyImport replaces a calendar's structure wholesale.
+//
+// LIKE SetMonths, IT REPORTS WHAT THAT DID TO EXISTING EVENTS
+// (C-CALV4-GAMEREADY §9 [GR-18]). ApplyImport is the OTHER delete-and-reinsert
+// path over the same positional month indices, so an import onto a calendar
+// that already carries events re-dates them exactly as a hand edit does — and
+// an import is precisely when nobody is looking at the month list.
+func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, result *ImportResult) (MonthEditImpact, error) {
 	cal, err := s.repo.GetByID(ctx, calendarID)
 	if err != nil {
-		return fmt.Errorf("get calendar: %w", err)
+		return MonthEditImpact{}, fmt.Errorf("get calendar: %w", err)
 	}
 	if cal == nil {
-		return apperror.NewNotFound("calendar not found")
+		return MonthEditImpact{}, apperror.NewNotFound("calendar not found")
 	}
 	// W8 (F3, C-REAL-CALENDAR-P2): ApplyImport unconditionally rewrites the stored
 	// date (CurrentYear from settings, CurrentMonth/Day forced to 1, below) — it is
@@ -2478,7 +2510,7 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 	// like the manual writers W1–W7 would. Reject the whole import; there is no
 	// meaningful "import a fantasy structure onto a live Gregorian calendar" case.
 	if err := guardManualDateChange(cal); err != nil {
-		return err
+		return MonthEditImpact{}, err
 	}
 
 	// Validate sub-resource inputs upfront. Reuse the same rules each
@@ -2486,36 +2518,36 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 	// calendar stays at its pre-import state.
 	for i, m := range result.Months {
 		if m.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %d: name is required", i+1))
 		}
 		if m.Days <= 0 {
-			return apperror.NewValidation(fmt.Sprintf("month %q: days must be positive", m.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("month %q: days must be positive", m.Name))
 		}
 	}
 	for i, w := range result.Weekdays {
 		if w.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("weekday %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("weekday %d: name is required", i+1))
 		}
 	}
 	for i, m := range result.Moons {
 		if m.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("moon %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("moon %d: name is required", i+1))
 		}
 		if m.CycleDays <= 0 {
-			return apperror.NewValidation(fmt.Sprintf("moon %q: cycle_days must be positive", m.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("moon %q: cycle_days must be positive", m.Name))
 		}
 	}
 	for i, sn := range result.Seasons {
 		if sn.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("season %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("season %d: name is required", i+1))
 		}
 	}
 	for i, e := range result.Eras {
 		if e.Name == "" {
-			return apperror.NewValidation(fmt.Sprintf("era %d: name is required", i+1))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("era %d: name is required", i+1))
 		}
 		if e.EndYear != nil && *e.EndYear < e.StartYear {
-			return apperror.NewValidation(fmt.Sprintf("era %q: end year cannot be before start year", e.Name))
+			return MonthEditImpact{}, apperror.NewValidation(fmt.Sprintf("era %q: end year cannot be before start year", e.Name))
 		}
 		if e.Color == "" {
 			result.Eras[i].Color = "#6366f1"
@@ -2555,7 +2587,7 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 			RealTimeZone: result.Settings.RealTimeZone,
 			HoursPerDay:  cal.HoursPerDay,
 		}); err != nil {
-			return err
+			return MonthEditImpact{}, err
 		}
 		zone := strings.TrimSpace(*result.Settings.RealTimeZone) // non-nil & non-blank guaranteed by validate
 		cal.TracksRealTime = true
@@ -2565,12 +2597,20 @@ func (s *calendarService) ApplyImport(ctx context.Context, calendarID string, re
 		cal.RealTimeZone = nil
 	}
 
+	// Computed BEFORE the write, because "before" stops existing the moment
+	// the repository's delete-and-reinsert runs. A failure to compute the
+	// warning never costs the operator their import.
+	impact, ierr := s.MonthEditImpact(ctx, calendarID, result.Months)
+	if ierr != nil {
+		impact = MonthEditImpact{}
+	}
+
 	if err := s.repo.ApplyImport(ctx, cal, result); err != nil {
-		return fmt.Errorf("apply import: %w", err)
+		return MonthEditImpact{}, fmt.Errorf("apply import: %w", err)
 	}
 
 	s.publishStructureUpdated(ctx, calendarID)
-	return nil
+	return impact, nil
 }
 
 // ListAllEvents returns all events for a calendar (owner visibility, no limit).

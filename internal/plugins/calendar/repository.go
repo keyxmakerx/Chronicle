@@ -149,6 +149,10 @@ type CalendarRepository interface {
 	// (year/month/day/start_hour/start_minute/name) so consumers
 	// can rely on it for diffs.
 	ListAllEvents(ctx context.Context, calendarID string) ([]Event, error)
+	// StrandedEventCounts reports, per calendar in a campaign, how many events
+	// point at a month position the calendar no longer has ([GR-18]). One
+	// query for the whole campaign; calendars with none are absent.
+	StrandedEventCounts(ctx context.Context, campaignID string) (map[string]int, error)
 
 	// Event visibility.
 	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
@@ -1326,6 +1330,53 @@ func (r *calendarRepo) ListAllEvents(ctx context.Context, calendarID string) ([]
 	defer rows.Close()
 
 	return scanEvents(rows)
+}
+
+// StrandedEventCounts returns, per calendar in a campaign, how many events
+// point at a month POSITION that calendar no longer has
+// (C-CALV4-GAMEREADY §9 [GR-18]).
+//
+// ONE QUERY FOR THE WHOLE CAMPAIGN, because its consumer is the Bench — a hot
+// page that already renders every listed calendar, and a per-calendar read
+// there would be N round trips on the surface a GM opens most.
+//
+// It reports the STRANDED state only, never the SHIFTED delta. Shift is
+// meaningful only against the edit that caused it; a standing surface has no
+// "before" to compare with, and inventing one would be the kind of number that
+// looks authoritative and is not. The shift count is reported at the moment of
+// the save, by the service, and nowhere else.
+//
+// Calendars with no stranded events are ABSENT from the map rather than
+// present with a zero — the caller renders a row per entry, and a zero row is
+// a row that says nothing.
+func (r *calendarRepo) StrandedEventCounts(ctx context.Context, campaignID string) (map[string]int, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT e.calendar_id, COUNT(*)
+		FROM calendar_events e
+		JOIN calendars c ON c.id = e.calendar_id
+		LEFT JOIN (
+			SELECT calendar_id, COUNT(*) AS n
+			FROM calendar_months
+			GROUP BY calendar_id
+		) m ON m.calendar_id = e.calendar_id
+		WHERE c.campaign_id = ?
+		  AND (e.month < 1 OR e.month > COALESCE(m.n, 0))
+		GROUP BY e.calendar_id`, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
 }
 
 // ListEventsForDateRange returns events within a date range (same year).

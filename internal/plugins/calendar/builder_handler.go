@@ -335,7 +335,10 @@ func (h *Handler) BuilderCreateAPI(c echo.Context) error {
 	// THE SAME ApplyImport THE IMPORTER USES, from the same *ImportResult shape
 	// the four parsers produce. One apply path, two front doors.
 	res := builderImportResult(draft)
-	if err := h.svc.ApplyImport(ctx, cal.ID, res); err != nil {
+	// The month-edit impact ([GR-18]) is discarded on this path by design: the
+	// builder wizard applies to a calendar it has just created, so there are no
+	// pre-existing events for the import to re-date.
+	if _, err := h.svc.ApplyImport(ctx, cal.ID, res); err != nil {
 		return builderRollback(ctx, h, cal, err)
 	}
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarImported, "calendar", cal.ID, cal.Name,

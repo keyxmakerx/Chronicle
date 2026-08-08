@@ -672,7 +672,7 @@ func (h *APIHandler) CreateCalendar(c echo.Context) error {
 	// boundary instead of re-implementing it at the API layer.
 	result := buildImportResultFromAPI(&req)
 
-	if aErr := h.svc.ApplyImport(ctx, cal.ID, result); aErr != nil {
+	if _, aErr := h.svc.ApplyImport(ctx, cal.ID, result); aErr != nil {
 		// Rollback: delete the half-imported calendar so the operator
 		// doesn't end up with a zombie row that GetCalendar would then
 		// reject as a 409 conflict on the next attempt.

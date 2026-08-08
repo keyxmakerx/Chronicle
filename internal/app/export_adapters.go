@@ -1122,7 +1122,11 @@ func (a *calendarImportAdapter) ImportCalendar(ctx context.Context, campaignID s
 
 	// Set sub-resources.
 	if len(months) > 0 {
-		_ = a.svc.SetMonths(ctx, cal.ID, months)
+		// The month-edit impact ([GR-18]) is discarded here deliberately: this
+		// is an IMPORT into a calendar this adapter has just created, so there
+		// are no pre-existing events for a month edit to re-date, and there is
+		// no operator standing in front of this path to warn.
+		_, _ = a.svc.SetMonths(ctx, cal.ID, months)
 	}
 	if len(weekdays) > 0 {
 		_ = a.svc.SetWeekdays(ctx, cal.ID, weekdays)

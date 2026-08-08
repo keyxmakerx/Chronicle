@@ -121,7 +121,7 @@ func TestBuilderPresets_DraftsAreCreatable(t *testing.T) {
 				t.Fatalf("a shipped preset must validate: %v", err)
 			}
 			res := builderImportResult(d)
-			if err := svc.SetMonths(ctx, "c", res.Months); err != nil {
+			if _, err := svc.SetMonths(ctx, "c", res.Months); err != nil {
 				t.Errorf("months: %v", err)
 			}
 			if err := svc.SetWeekdays(ctx, "c", res.Weekdays); err != nil {

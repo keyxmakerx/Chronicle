@@ -309,6 +309,15 @@ func (m *mockCalendarRepo) ListEventsForDateRange(ctx context.Context, calendarI
 	return nil, nil
 }
 
+// StrandedEventCounts is a real-database concern (C-CALV4-GAMEREADY §9
+// [GR-18]) — one aggregate query over calendar_events × calendar_months. The
+// arithmetic it reports is pinned against a REAL MariaDB in
+// months_edit_impact_test.go; a fake that invented counts here would pin
+// nothing and read as coverage.
+func (m *mockCalendarRepo) StrandedEventCounts(_ context.Context, _ string) (map[string]int, error) {
+	return nil, nil
+}
+
 func (m *mockCalendarRepo) ListAllEvents(_ context.Context, _ string) ([]Event, error) {
 	// C-CALENDAR-ENDPOINTS: unfiltered list used by the public
 	// Foundry API. Existing service tests don't exercise this
@@ -836,7 +845,7 @@ func TestSetMonths_Success(t *testing.T) {
 	repo := &mockCalendarRepo{}
 	svc := newTestCalendarService(repo)
 
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
 		{Name: "January", Days: 31, SortOrder: 0},
 		{Name: "February", Days: 28, SortOrder: 1},
 	})
@@ -847,13 +856,13 @@ func TestSetMonths_Success(t *testing.T) {
 
 func TestSetMonths_Empty(t *testing.T) {
 	svc := newTestCalendarService(&mockCalendarRepo{})
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{})
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{})
 	assertAppError(t, err, 422)
 }
 
 func TestSetMonths_MissingName(t *testing.T) {
 	svc := newTestCalendarService(&mockCalendarRepo{})
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
 		{Name: "", Days: 30},
 	})
 	assertAppError(t, err, 422)
@@ -861,7 +870,7 @@ func TestSetMonths_MissingName(t *testing.T) {
 
 func TestSetMonths_InvalidDays(t *testing.T) {
 	svc := newTestCalendarService(&mockCalendarRepo{})
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
 		{Name: "Bad", Days: 0},
 	})
 	assertAppError(t, err, 422)
@@ -869,7 +878,7 @@ func TestSetMonths_InvalidDays(t *testing.T) {
 
 func TestSetMonths_NegativeLeapYearDays(t *testing.T) {
 	svc := newTestCalendarService(&mockCalendarRepo{})
-	err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
+	_, err := svc.SetMonths(context.Background(), "cal-1", []MonthInput{
 		{Name: "Bad", Days: 30, LeapYearDays: -1},
 	})
 	assertAppError(t, err, 422)

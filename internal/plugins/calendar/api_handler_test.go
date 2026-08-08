@@ -221,12 +221,12 @@ func (s *stubCalendarService) CreateCalendar(_ context.Context, campaignID strin
 	return cal, nil
 }
 
-func (s *stubCalendarService) ApplyImport(_ context.Context, calendarID string, result *ImportResult) error {
+func (s *stubCalendarService) ApplyImport(_ context.Context, calendarID string, result *ImportResult) (MonthEditImpact, error) {
 	if result != nil {
 		copyR := *result
 		s.lastApplyImport = &copyR
 	}
-	return s.applyImportErr
+	return MonthEditImpact{}, s.applyImportErr
 }
 
 func (s *stubCalendarService) DeleteCalendar(_ context.Context, calendarID string) error {

@@ -904,11 +904,21 @@ func (h *CalendarAPIHandler) UpdateMonths(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.calendarSvc.SetMonths(ctx, cal.ID, months); err != nil {
+	// The month-edit warning rides the API response too (C-CALV4-GAMEREADY §9
+	// [GR-18]): a sync client replacing a month list re-dates events by
+	// position exactly as the web UI does, and a machine caller that is told
+	// nothing is the same silent corruption with fewer witnesses.
+	impact, err := h.calendarSvc.SetMonths(ctx, cal.ID, months)
+	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":          "ok",
+		"events_stranded": impact.Stranded,
+		"events_shifted":  impact.Shifted,
+		"warning":         impact.Sentence(),
+	})
 }
 
 // UpdateWeekdays replaces all calendar weekdays.
@@ -1179,8 +1189,18 @@ func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error {
 		autoCreated = true
 	}
 
-	if err := h.calendarSvc.ApplyImport(ctx, cal.ID, result); err != nil {
+	// This path can land on an EXISTING calendar, so the month-edit impact
+	// ([GR-18]) is logged rather than dropped — a sync client that silently
+	// re-dates a campaign's events is the same corruption with no witness.
+	impact, err := h.calendarSvc.ApplyImport(ctx, cal.ID, result)
+	if err != nil {
 		return err
+	}
+	if impact.Any() {
+		slog.Warn("syncapi calendar import re-dated existing events",
+			slog.String("calendar_id", cal.ID),
+			slog.Int("events_stranded", impact.Stranded),
+			slog.Int("events_shifted", impact.Shifted))
 	}
 
 	status := http.StatusOK
@@ -1341,7 +1361,7 @@ func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
 	}
 
 	result := buildImportResultFromAPI(&req)
-	if aErr := h.calendarSvc.ApplyImport(ctx, newCal.ID, result); aErr != nil {
+	if _, aErr := h.calendarSvc.ApplyImport(ctx, newCal.ID, result); aErr != nil {
 		// Rollback the half-created calendar so the next attempt
 		// doesn't trip the 409 above on a zombie row.
 		if dErr := h.calendarSvc.DeleteCalendar(ctx, newCal.ID); dErr != nil {
