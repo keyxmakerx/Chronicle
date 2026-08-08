@@ -3894,6 +3894,100 @@ through a class instead of an inline style. `edShow` clears both, through the
 same writer `applyPlacement` uses; `placeCard` is still not touched. *A rig that
 measures a surface no user sees will report a spotless result about it.*
 
+### §28 — R2-3: the Block theater, and the mount that has nowhere legal to stand
+
+**ADR-048 GROWS A SECTION; calendar-v4 DOES NOT FORK AN ADR.** C-CALV4-THEATER
+(round 2, slice R2-3) is the slice that was to give the depth [BR2-8] took off
+the entity embed back through an overlay. **Its seventeen coordinator rulings
+were all signed on 2026-08-07 and it did NOT build, because [TH-14] — the block
+that rules where the scaffold sits in the entity page's DOM — names a
+STOP-AND-FLAG whose condition is, measured, TRUE.** This section records the
+founding distinction the slice rests on and the measurement that stopped it, so
+that whoever re-signs it starts from a fact rather than from the scout's premise.
+
+**1. THERE ARE TWO THINGS CALLED "FULL TIER", AND THIS IS THE FOUNDING FACT.**
+The **CSS tier** is a container query and nothing else —
+`.cal-block-host { container-type: inline-size; container-name: cal-block }`
+(`calendar-block.css:201`) against `@container cal-block (min-width: 900px)`
+(`:2197`). The **zone set** is a producer decision: `ledger` and `shelf` are
+`LayerState` keys, and a zone that was never seeded is not in the render at all.
+So **widening a box buys the whole CSS tier and none of the zone set**. Moving
+the embed's existing Block into a wide overlay produces a *stretched glanceable
+month*, not a full-tier Block — a surface that is bigger and no deeper, which is
+exactly what the operator would read as the feature not working. Any future
+theater needs its own render from its own layer seed
+(`["moons","eras","weeknums","ledger","shelf"]`, through `resolveBlockLayers` so
+the switchboard still wins), never a widened copy of the embed's.
+
+**2. AND THAT SECOND RENDER IS FREE, WHICH IS THE MEASUREMENT THE ORIGINAL COST
+PARAGRAPH GOT BACKWARDS.** `EntityCalendarBlock` calls
+`spine.Block(BlockRequest{...})` passing **neither `LedgerHidden` nor
+`ShelfHidden`**, `block_projection.go:181-182` builds both zone stubs
+unconditionally, and the host then OVERWRITES the projection's layer field at
+`entity_calendar_block.go:253` with `d.Layers = entityBlockLayers(prefs)`.
+**`Layers` is a post-hoc DISPLAY GATE**: the entity page's existing projection
+already contains every mark a theater would print. The theater's Block is a
+struct COPY of the same `BlockData` value — one copy and one extra template
+render, zero extra service work — and therefore the no-wider law ("the theater
+prints exactly the embed's mark set, differing in layer set only") is pinned
+STRUCTURALLY, by a reflect assertion that the two values differ in `Layers` and
+`Viewer.HostEntity` and in no other field. A per-day mark-set oracle would
+compare a struct to itself and pass forever.
+
+**3. THE DOM RE-NAMESPACE IS CORE, NOT POLISH.** Every id and radio-group name
+the Block emits is a pure function of `(CalendarSlug, HostEntity)` —
+`helpers.go:503` · `:954` · `:1358` · `:1587` · `:1833` · `:1857` — so two Blocks
+for the same calendar on one entity page emit **identical ids and identical
+radio-group names**, breaking the widget's own stated invariant
+(`calendar_block/.ai.md:415-419`). It is not latent: `nameplate.templ:98` gates
+the tie toggle on `HostEntity != ""` alone, so both Blocks emit it and the
+theater's `<label for=…>` resolves by document order to the EMBED's radio —
+pressing the theater's tie toggle would silently re-ink the embed behind the
+backdrop. The fix opens no widget file (`Viewer.HostEntity` is host-owned on the
+returned value), but it is a build obligation, not a tidy-up.
+
+**4. THE MEASUREMENT THAT STOPPED THE SLICE, AND WHY IT IS A REFUSAL RATHER THAN
+A DELAY.** [TH-14] rules the scaffold must sit **outside every
+`.cal-block-host`**, **inside a `cal-bench` root**, and **outside any
+HTMX-swappable region** — and rules that if the only position satisfying all
+three is inside the swapped region, that is *a host restructure, not a
+placement, and not this slice's to take*. The signature's own measurement cites
+`entity_calendar_block.templ:61` — the picker's inline slot — i.e. it took the
+swappable region to be a small nested slot with safe ground beside it inside the
+component. **Measured on this branch, that premise is false.**
+`calendar_widget_type.go:152` wraps the entire output of `EntityCalendarBlock` in
+`widgetbindings.BlockHost(WidgetTypeCalendar, rc.HostID, inner)`, and
+`picker.templ` targets that wrapper — `hx-target={"#" + BlockHostID(...)}` with
+`hx-swap="outerHTML"` — on **three live Scribe+ paths** (bind at `:99`, create at
+`:54`, unbind at `:80`). The swapped region is therefore the WHOLE component, one
+level above anything `entity_calendar_block.templ` can emit. Every position
+reachable from the files R2-3 owns is inside it, and reaching outside means
+editing either `internal/app/routes.go` beyond [TH-12]'s single registry line or
+the four-widget `BlockHost` seam. **Both are host restructures. The slice stops.**
+
+**5. THE THING THAT MAKES THIS WORTH WRITING DOWN RATHER THAN JUST RE-TRYING.**
+The failure [TH-14] names — *"a theater that opens once and then stops opening,
+with every guard green"* — may well not occur here, because the scaffold and its
+opener are swapped away **together as one unit** and [TH-12]'s
+`htmx:afterSettle` re-init would wire the replacements. **That reasoning is
+exactly why the block says "not a judgement call."** A slice that talks itself
+past a signed STOP-AND-FLAG because the named symptom looks survivable is how a
+guard becomes decorative. The condition is met; the decision belongs to whoever
+re-signs [TH-14] with the true swap target in front of them, and their options
+are visible: place the scaffold above `BlockHost` (a seam change four widgets
+share), or sign the in-swap placement explicitly with the re-init contract as its
+argument. **What must not happen is the placement arriving as an implementation
+detail.**
+
+**6. WHAT DID LAND.** Guard B4's scope glob, widened to `*theater*` / `*Theater*`
+with its `expect_scope` rows, mutation-tested in both directions. It follows the
+glob's own precedent — `*schedule*` was in scope before `schedule.templ` existed,
+because a missing glob is invisible in review precisely at the moment the file
+arrives — so the unblocking slice inherits B4 coverage instead of having to
+remember it. Nothing else was built: no scaffold, no second render, no module, no
+sheet, no route. `internal/wire/routes_snapshot.txt` is unchanged at **727**
+lines.
+
 ### References
 
 - Master plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`

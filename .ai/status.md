@@ -20,6 +20,42 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 R2-3 — C-CALV4-THEATER STOPPED AND FLAGGED at [TH-14] (2026-08-08)
+
+**The Block theater did not build, and the reason is a measurement rather than a
+difficulty.** All seventeen coordinator rulings were signed 2026-08-07. [TH-14]
+requires the theater's scaffold to sit **outside every `.cal-block-host`**,
+**inside a `cal-bench` root** and **outside any HTMX-swappable region**, and
+rules that if the only position satisfying all three is inside the swapped
+region, that is *"a host restructure, not a placement, and it is not this
+slice's to take."*
+
+**Measured on this branch, that condition is met.**
+`calendar_widget_type.go:152` wraps the ENTIRE output of `EntityCalendarBlock` in
+`widgetbindings.BlockHost(WidgetTypeCalendar, rc.HostID, inner)`, and
+`picker.templ` targets that wrapper — `hx-target={"#" + BlockHostID(...)}`,
+`hx-swap="outerHTML"` — on three live Scribe+ paths (bind `:99`, create `:54`,
+unbind `:80`). So the swappable region is the whole component, one level ABOVE
+anything `entity_calendar_block.templ` can emit. **[TH-14]'s own measurement
+cites `entity_calendar_block.templ:61`, the picker's inline SLOT** — it took the
+swap target to be a small nested slot with safe ground beside it. That premise is
+refuted, which is why this needs a coordinator re-sign rather than a retry.
+
+**What landed:** guard B4's scope glob widened to `*theater*` / `*Theater*` with
+its `expect_scope` rows, mutation-tested in both directions — the glob follows
+its own `*schedule*` precedent of landing ahead of the surface, so the unblocking
+slice inherits B4 coverage. **What did not:** no scaffold, no second render, no
+module, no sheet, no registry line, no route.
+`internal/wire/routes_snapshot.txt` unchanged at **727** lines.
+
+**The design work is banked in ADR-048 §28** so the re-sign starts from facts:
+the two-things-called-full-tier distinction (widening a box buys the CSS tier and
+none of the zone set), the one-projection/two-renders measurement (`Layers` is a
+post-hoc display gate at `entity_calendar_block.go:253`, so the theater's Block is
+a struct copy and the no-wider law pins structurally by reflect), and the
+`(CalendarSlug, HostEntity)` duplicate-id collision that makes the DOM
+re-namespace core rather than polish.
+
 ### calendar-v4 — C-CALV4-GAMEREADY CLOSED: the calendar survives a real session (2026-08-08, stage 23)
 
 **The playability slice is done.** It existed for one reason: the operator
