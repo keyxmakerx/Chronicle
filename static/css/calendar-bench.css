@@ -1238,9 +1238,20 @@
       there is NO RULE AT ALL, so native <details> behaviour stands: instant and
       complete. This is structural, not a duration choice, and it is the same
       construction TestCSS_NoMotionAtAll's clause 2 already demands of the Block.
-   4  THE BLOCK'S INTERIOR STAYS STILL. Nothing here selects `.benchblock`,
-      `.cal-block-host` or anything inside them; the Block's stylesheet is not
-      opened by this slice at all.
+   4  THE BLOCK'S INTERIOR STAYS STILL — WITH ONE NAMED EXCEPTION, AMENDED BY
+      THE OPERATOR ON 2026-08-07 (C-CALV4-SKY, [SKY-2] SIGNED):
+      "The sky header's band, seated between the Nameplate and the body of the
+       PRIMARY Block, is the single named exception; the month grid's no-motion
+       law, the Ledger, the Shelf and every cell remain untouched."
+      The amendment is BY NAME. It names the sky's band and it exempts the
+      sky's band — it is not a category, not a precedent for "header bands",
+      and not a licence for "things between the nameplate and the body". A
+      SECOND interior exception is a NEW OPERATOR SIGNATURE, never a dev call.
+      Apart from `.skygrow`'s own rules below, nothing here selects
+      `.benchblock`, `.cal-block-host` or anything inside them, and the
+      monopoly guard's forbidden-ancestor list is untouched — `.skygrow` is a
+      PER-CLASS EXEMPTION on that guard, which is precisely why every other
+      rule stays as constrained as it was.
    5  STATE IS HONEST AND REMEMBERED. The summary lines (bench.go's
       benchDisclosureFor) and the store (migration 016) carry that half.
 
@@ -1505,6 +1516,96 @@
   .cal-bench .cal-dayeditor.edmorph.dcopen {
     transition-duration: var(--disc-open);
   }
+
+  /* ── THE SKY BAND — the SECOND named carve-out ────────────────────────
+     C-CALV4-SKY slice R2-5, under the OPERATOR's signature of 2026-08-07
+     ([SKY-2]) and [SKY-3] / [SKY-4] / [SKY-12] SIGNED.
+
+     WHAT THE OPERATOR SIGNED, AND HOW NARROW IT IS. The signed stills seat
+     the sky's band INSIDE the Block's own box, between the nameplate and the
+     month. Clause 4 above said the Block's interior stays still. Those were
+     two operator signatures in collision, and the operator resolved it in
+     the stills' favour by amending clause 4 with ONE SENTENCE naming the
+     sky's band and nothing else:
+
+         "The sky header's band, seated between the Nameplate and the body of
+          the PRIMARY Block, is the single named exception; the month grid's
+          no-motion law, the Ledger, the Shelf and every cell remain
+          untouched."
+
+     THE MONTH GRID, THE LEDGER, THE SHELF AND EVERY CELL REMAIN UNTOUCHED,
+     and the monopoly guard's forbidden-ancestor list is NOT relaxed by a
+     byte: `.skygrow` joins its PER-CLASS EXEMPTION instead, so every other
+     rule in the product stays exactly as constrained as it was. A second
+     interior exception is a NEW OPERATOR SIGNATURE, not a dev call.
+
+     SEVEN PROPERTIES AND NO EIGHTH ([SKY-3]): grid-template-rows (the pane's
+     box) · opacity (its content) · inline-size and block-size (the discs) ·
+     gap (the cluster) · --seal-solid and --seal-fade (the C3 mask). The
+     mock's `width`/`height` are re-expressed as the house's logical
+     properties, the same substitution [ER-6] made for the morph. `transform`
+     is REFUSED, including `scale`, exactly as it is under the morph — and
+     `color` is off the list because the caret is a CONTENT SWAP ([SKY-12]),
+     never a rotation and never a hover colour.
+
+     TWO DURATIONS, STILL. --disc-open and --disc-close are the two TOTALS
+     and NO THIRD TOTAL IS BOUGHT — the --disc-* count assertion above stays
+     at exactly 3, byte-unchanged, which is the proof. The mock's six tokens
+     were a SEQUENCING of those two totals and ship here as four
+     --sky-phase-* tokens whose sums the guard asserts equal to them:
+     open = 150 + 50 = 200, close = 24 + 136 = 160. The phases are SPLIT
+     rather than overlapped because the register's gate is "height resolves
+     first, content reveals inside it", and the close's sequence is INVERTED
+     so the box really does collapse on empty.
+
+     CLOSE IS FASTER THAN OPEN, STRUCTURALLY, in the register's own idiom:
+     the base rule carries the CLOSE timing and the [open] state overrides it.
+     Clause 2 was not named by the exception, so clause 2 binds.
+
+     REDUCED MOTION IS STRUCTURAL AND NEVER AN OVERRIDE ([SKY-4]). Every rule
+     below is inside the one no-preference wrapper, so under
+     prefers-reduced-motion there is NO RULE AT ALL and native <details>
+     behaviour stands — instant AND complete. The mock reaches the same
+     outcome with `@media (prefers-reduced-motion: reduce) { transition: none
+     !important }`, the exact inverse of this construction; that is a MOCK
+     convenience for its own data-motion switch and it does not port. There
+     is no second wrapper, no reduce block and no !important in this slice.
+     And nothing seeds a start geometry: the closed state IS the resting
+     state, so a reduced-motion open lands on the end state rather than on a
+     mid-morph one. */
+  .cal-bench .cal-block-host .skygrow .skpane {
+    transition:
+      grid-template-rows var(--sky-phase-box-close) var(--disc-ease)
+        var(--sky-phase-reveal-close);
+  }
+  .cal-bench .cal-block-host .skygrow[open] .skpane {
+    transition: grid-template-rows var(--sky-phase-box-open) var(--disc-ease) 0ms;
+  }
+  .cal-bench .cal-block-host .skygrow .skpane-pad {
+    transition: opacity var(--sky-phase-reveal-close) var(--disc-ease) 0ms;
+  }
+  .cal-bench .cal-block-host .skygrow[open] .skpane-pad {
+    transition:
+      opacity var(--sky-phase-reveal-open) var(--disc-ease) var(--sky-phase-box-open);
+  }
+  .cal-bench .cal-block-host .skygrow .skb {
+    transition:
+      inline-size var(--disc-close) var(--disc-ease),
+      block-size var(--disc-close) var(--disc-ease);
+  }
+  .cal-bench .cal-block-host .skygrow .skdiscs {
+    transition: gap var(--disc-close) var(--disc-ease);
+  }
+  .cal-bench .cal-block-host .skygrow {
+    transition:
+      --seal-solid var(--disc-close) var(--disc-ease),
+      --seal-fade var(--disc-close) var(--disc-ease);
+  }
+  .cal-bench .cal-block-host .skygrow[open] .skb,
+  .cal-bench .cal-block-host .skygrow[open] .skdiscs,
+  .cal-bench .cal-block-host .skygrow[open] {
+    transition-duration: var(--disc-open);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1605,4 +1706,408 @@
   .cal-bench .bsurf > .phead { order: -3; }
   .cal-bench .bsurf > .sechead { order: -2; }
   .cal-bench .bsurf > .stack { order: -1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §THE SKY HEADER — C-CALV4-SKY slice R2-5. [SKY-1] · [SKY-2] · [SKY-3] ·
+   [SKY-8] · [SKY-12] · [SKY-16] SIGNED.
+
+   THE SEAT IS IN THE BLOCK; THE SHEET IS THE BENCH'S, and confusing the two is
+   the trap this header exists to close. The band is a CHILD OF THE BLOCK'S BOX
+   in the DOM — between the nameplate and the month, exactly where the signed
+   stills draw it and where the operator seated it on 2026-08-07 — while every
+   rule that styles it is AUTHORED HERE, because the Block's own sheet admits
+   background-color, color, transform and none and nothing else. Both facts are
+   binding and they are consistent. calendar-block.css receives DELETIONS ONLY
+   from this slice; its motion budget is byte-unchanged.
+
+   THE DENSITY SWITCH IS `@container cal-block`, NOT A MEDIA QUERY, and the
+   C1/C3 crossover is the Block's EXISTING `min-width: 481px` boundary — there
+   is no fifth number ([SKY-8]). C3 "the seal" is the BASE and C1 "the horizon
+   line" is what the container query promotes to, which is the mobile-first
+   reading of the same one boundary. The two densities are FOUR CUSTOM
+   PROPERTIES AND A JUSTIFICATION — never a second component, a second template
+   branch, or a different open/closed default.
+
+   THE CONSEQUENCE IS INTENDED AND IS REPORTED RATHER THAN CORRECTED: a Block
+   sitting in a narrow COLUMN gets the C3 seal even on a wide VIEWPORT. A Block
+   in a ~358px column inside a 1440px window seals, because the seal answers to
+   the box the band actually occupies and not to the window it happens to sit
+   in. That is what a container query is bought for; a media query added to
+   "fix" it is a STOP-AND-FLAG.
+
+   THERE IS NO SUNRISE AND NO SUNSET ON THIS SURFACE, IN ANY FORM ([SKY-6]).
+   Chronicle does not persist a daylight boundary and inventing one on a
+   worldbuilding platform is the defect WorldStateSun.Tint already refuses by
+   shipping null.
+
+   EVERY PRELUDE NAMES .cal-bench, WITHOUT EXCEPTION, for the reason the
+   register's own section states: this sheet is unlayered and outranks the whole
+   layered app cascade.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* THE SEAL'S TWO LENGTHS, REGISTERED SO THEY CAN BE TRANSITIONED. C3's sky
+   field retracts by MASK rather than by insetting a rounded box — that shape
+   was a dropdown button and the drawing pass deleted it. `--seal-solid` is how
+   much of the strip, measured from the RIGHT edge, is full sky; `--seal-fade`
+   is the soft ramp before it, where the sky dissolves back into page.
+
+   Registration is what makes the sweep a sweep: an UNREGISTERED custom property
+   inside `mask-image` jumps rather than interpolates, and a jump at 0ms is
+   exactly the pop the carve-out exists to avoid. The open endpoint is
+   STRIP-RELATIVE (`100%` of the mask box), not a sentinel past it, so every
+   frame of both directions is visible travel. */
+@property --seal-solid { syntax: "<length-percentage>"; inherits: true; initial-value: 100% }
+@property --seal-fade { syntax: "<length>"; inherits: true; initial-value: 0px }
+
+/* C3 "THE SEAL" IS THE BASE — see the crossover note above. */
+.cal-bench .cal-block-host .skygrow {
+  position: relative;
+  display: block;
+  isolation: isolate;
+  /* the four density properties */
+  --bandh: 32px;
+  --dsz0: 11px;
+  --dsz: 11px;
+  --dgap: 4px;
+  /* the mask's two lengths at seal density */
+  --seal-solid: 210px;
+  --seal-fade: 96px;
+  /* THE TWO DISSOLVES. Closed, the band's top and bottom used to butt straight
+     into card white — a harder cut than the seam the drawing pass booked as a
+     blocker, sitting in the RESTING state, which is the state that must be
+     beautiful or the whole idea fails. The sky BLEEDS past the strip at both
+     ends and fades out on alpha, into the nameplate's own bottom padding above
+     and the month's top padding below, so it reaches no neighbour's glyphs. */
+  --sky-rise: 4px;
+  --sky-bleed: 8px;
+  /* THE SEQUENCING TOKENS. Not a third or fourth DURATION: their sums are the
+     two totals the register already declares, and bench_test.go asserts that
+     arithmetic rather than trusting this sentence. */
+  --sky-phase-box-open: 150ms;
+  --sky-phase-reveal-open: 50ms;
+  --sky-phase-reveal-close: 24ms;
+  --sky-phase-box-close: 136ms;
+}
+
+/* THE ONE FIELD. The gradient itself is the PRODUCER's — server-rendered by the
+   shipped calendar.SkybandGradient() and handed over as --sky-grad — so nothing
+   here derives a colour. Two mask layers, intersected: the horizontal one is
+   the seal's reach, the vertical one is the pair of dissolves, whose bottom
+   stop is anchored to the box's own bottom so the sky's lower edge dissolves
+   into the page in BOTH states. */
+.cal-bench .cal-block-host .skygrow::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  inset: calc(-1 * var(--sky-rise)) 0 calc(-1 * var(--sky-bleed)) 0;
+  background: var(--sky-grad);
+  mask-image:
+    linear-gradient(to left, #000 var(--seal-solid), #0000 calc(var(--seal-solid) + var(--seal-fade))),
+    linear-gradient(to bottom, #0000 0, #000 var(--sky-rise), #000 calc(100% - var(--sky-bleed)), #0000 100%);
+  mask-composite: intersect;
+}
+.cal-bench .cal-block-host .skygrow > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* THE NAMEPLATE'S HAIRLINE IS REMOVED so the nameplate and the band read as ONE
+   HEADER STACK, which is the stills' own words at 390px. The sky rises through
+   the nameplate's bottom padding, so that hairline would otherwise sit
+   half-dissolved inside it — the sky IS the separator now. */
+.cal-bench .cal-block-host .block:has(.skygrow) .np {
+  border-bottom: 0;
+}
+
+/* ── THE BAND (the closed state) ──────────────────────────────────────────
+   A <summary>: real disclosure semantics, keyboard-reachable, the full width of
+   the Block. It is styled as the BAND and NOT as a button — no border, no
+   radius, no fill of its own, no shadow, no hover lift. */
+.cal-bench .cal-block-host .skygrow > summary.skyhdr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  block-size: var(--bandh);
+  padding: 0 11px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  z-index: 2;
+  /* AT SEAL DENSITY THE CONTENT PACKS RIGHT, because the sky only reaches
+     partway across and content packed left would fall off it. */
+  justify-content: flex-end;
+}
+.cal-bench .cal-block-host .skygrow > summary.skyhdr::-webkit-details-marker {
+  display: none;
+}
+.cal-bench .cal-block-host .skygrow > summary.skyhdr::marker {
+  content: "";
+}
+.cal-bench .cal-block-host .skygrow > summary.skyhdr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* fact 1 · THE PHASE DISCS. The cluster is TOP-ANCHORED rather than centred:
+   the margin is computed from the CLOSED diameter, so at rest the discs sit on
+   the strip's midline and when they grow they grow DOWNWARD, through the
+   horizon and onto the pane's own paper. A third of each disc ends below the
+   horizon line at BOTH densities, from the same anchor. The disc itself is the
+   Block's own `.ph` — the house's greyscale identity idiom, shape and fill and
+   never hue — sized here and never restyled. */
+.cal-bench .cal-block-host .skygrow .skdiscs {
+  display: flex;
+  align-items: flex-start;
+  align-self: flex-start;
+  gap: var(--dgap);
+  flex: none;
+  margin-block-start: calc((var(--bandh) - var(--dsz0)) / 2);
+}
+.cal-bench .cal-block-host .skygrow .skb {
+  position: relative;
+  inline-size: var(--dsz);
+  block-size: var(--dsz);
+  flex: none;
+}
+.cal-bench .cal-block-host .skygrow .skb .ph {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+/* THE SPACER SITS AHEAD OF THE TIME. Measured: with the clock left-packed
+   behind a growing cluster it travelled 65px sideways on every open and close —
+   layout-induced travel, invisible to a walk of `transition-property`. */
+.cal-bench .cal-block-host .skygrow .sksp {
+  flex: 1;
+  min-inline-size: 4px;
+  display: none;
+}
+/* fact 2 · THE IN-WORLD TIME, as of render. It does not tick. */
+.cal-bench .cal-block-host .skygrow .sktime {
+  flex: none;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+/* fact 3 · THE SEASON WORD, quieter than the clock and still real text. */
+.cal-bench .cal-block-host .skygrow .skseason {
+  flex: none;
+  font-weight: 650;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+/* THE AFFORDANCE MARK — not one of the three facts, and deliberately the
+   smallest mark on the band. IT IS A CONTENT SWAP, NOT A ROTATION and not a
+   hover colour ([SKY-12]): the register's twisty is `content: "▸"` / `"▾"`
+   changing INSTANTLY, which is what an affordance mark should do, and no rule
+   whose prelude names a summary here declares `transform` at all. */
+.cal-bench .cal-block-host .skygrow .skcaret {
+  flex: none;
+  font-size: 9px;
+  line-height: 1;
+  opacity: .8;
+}
+.cal-bench .cal-block-host .skygrow .skcaret::before {
+  content: "▸";
+}
+.cal-bench .cal-block-host .skygrow[open] .skcaret::before {
+  content: "▾";
+}
+
+/* ── THE PANE ─────────────────────────────────────────────────────────────
+   Clip-reveal, per the register: a 0fr→1fr grid row is the box and the inner
+   div is the clipped content. NOTHING HERE IS A CARD — no border, no shadow,
+   no background of its own. What a reader sees behind it is the one field
+   continuing past the horizon into the hour's own paper. */
+.cal-bench .cal-block-host .skygrow .skpane {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+}
+.cal-bench .cal-block-host .skygrow[open] .skpane {
+  grid-template-rows: 1fr;
+}
+.cal-bench .cal-block-host .skygrow .skpane-in {
+  min-block-size: 0;
+  overflow: hidden;
+  background: transparent;
+}
+.cal-bench .cal-block-host .skygrow .skpane-pad {
+  padding: 22px 11px 12px;
+  opacity: 0;
+}
+.cal-bench .cal-block-host .skygrow[open] .skpane-pad {
+  opacity: 1;
+}
+.cal-bench .cal-block-host .skygrow .skhead {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* THE TRIO — count 3's whole answer. One radio group, visually-hidden inputs
+   with for-labels, no JS and NO TRAVELLING INDICATOR: the pressed look is state
+   ON the pressed item (canon A6). */
+.cal-bench .cal-block-host .skygrow .sktabs {
+  display: flex;
+  gap: 2px;
+  margin: 10px 0 8px;
+  inline-size: 100%;
+  justify-content: space-between;
+}
+.cal-bench .cal-block-host .skygrow .skypick {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  appearance: none;
+}
+.cal-bench .cal-block-host .skygrow .skybtn {
+  flex: 1;
+  block-size: 26px;
+  padding: 0 8px;
+  border-radius: var(--r-chip, 999px);
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 26px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cal-bench .cal-block-host .skygrow .skypick:checked + .skybtn {
+  background: color-mix(in oklch, transparent 88%, currentColor);
+  font-weight: 700;
+}
+.cal-bench .cal-block-host .skygrow .skypick:focus-visible + .skybtn {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ONE PANEL AT A TIME, CHOSEN BY THE RADIO AND NOTHING ELSE. Tonight is the
+   signed default and it is the CHECKED input rather than a CSS fallback, so the
+   server's state and the sheet's cannot disagree. */
+.cal-bench .cal-block-host .skygrow .skypane-t {
+  display: none;
+}
+.cal-bench .cal-block-host .skygrow .sktabs:has([data-cal-sky-pick="tonight"]:checked) ~ .skbody .sky-tonight,
+.cal-bench .cal-block-host .skygrow .sktabs:has([data-cal-sky-pick="month"]:checked) ~ .skbody .sky-month,
+.cal-bench .cal-block-host .skygrow .sktabs:has([data-cal-sky-pick="moons"]:checked) ~ .skbody .sky-moons {
+  display: block;
+}
+.cal-bench .cal-block-host .skygrow .skyrow {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-block-size: 26px;
+  font-size: 12px;
+}
+.cal-bench .cal-block-host .skygrow .skyrow .nm {
+  flex: none;
+  font-weight: 650;
+  font-size: 10.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.cal-bench .cal-block-host .skygrow .skyrow .ln {
+  flex: 1;
+  min-inline-size: 0;
+}
+.cal-bench .cal-block-host .skygrow .skynote {
+  margin-block-start: 8px;
+  font-weight: 500;
+  font-size: 10.5px;
+  line-height: 1.4;
+  opacity: .8;
+}
+/* THE MONTH LANE — one lane per moon, one column per day, at the month's REAL
+   day count. It scrolls inside its own box rather than widening the Block. */
+.cal-bench .cal-block-host .skygrow .skylanes {
+  overflow-x: auto;
+}
+.cal-bench .cal-block-host .skygrow .skylane {
+  display: grid;
+  grid-template-columns: 64px repeat(var(--days, 30), 1fr);
+  align-items: end;
+  gap: 1px;
+  min-block-size: 18px;
+}
+.cal-bench .cal-block-host .skygrow .skylane .who {
+  font-weight: 650;
+  font-size: 9.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  align-self: center;
+}
+.cal-bench .cal-block-host .skygrow .skylane .c {
+  position: relative;
+  display: block;
+  block-size: 16px;
+}
+
+/* ── C1 "THE HORIZON LINE" — the Block's OWN existing boundary, no fifth
+   number ([SKY-8]). Four custom properties and a justification. ───────── */
+@container cal-block (min-width: 481px) {
+  .cal-bench .cal-block-host .skygrow {
+    --bandh: 40px;
+    --dsz0: 13px;
+    --dsz: 13px;
+    --dgap: 5px;
+    /* C1: the sky reaches everywhere, so the mask is a no-op and the seal's
+       two lengths rest at their registered initial values. */
+    --seal-solid: 100%;
+    --seal-fade: 0px;
+    --sky-rise: 7px;
+    --sky-bleed: 10px;
+  }
+  .cal-bench .cal-block-host .skygrow > summary.skyhdr {
+    gap: 10px;
+    padding: 0 12px;
+    justify-content: flex-start;
+  }
+  .cal-bench .cal-block-host .skygrow .sksp {
+    display: block;
+  }
+  .cal-bench .cal-block-host .skygrow .sktime {
+    font-size: 12.5px;
+  }
+  .cal-bench .cal-block-host .skygrow .skseason {
+    font-size: 10px;
+    letter-spacing: .09em;
+  }
+  .cal-bench .cal-block-host .skygrow .sktabs {
+    inline-size: auto;
+    justify-content: flex-start;
+  }
+  .cal-bench .cal-block-host .skygrow .skybtn {
+    flex: none;
+  }
+  .cal-bench .cal-block-host .skygrow .skpane-pad {
+    padding: 24px 12px 12px;
+  }
+}
+
+/* THE OPEN ENDPOINTS. 11→32px at the seal and 13→40px at the horizon line —
+   sized from the same anchor so a third of each disc lands below the horizon at
+   both densities. The mask's open endpoint is the STRIP, not a sentinel past
+   it. These are the only values the carve-out interpolates toward. */
+.cal-bench .cal-block-host .skygrow[open] {
+  --dsz: 32px;
+  --dgap: 10px;
+  --seal-solid: 100%;
+  --seal-fade: 0px;
+}
+@container cal-block (min-width: 481px) {
+  .cal-bench .cal-block-host .skygrow[open] {
+    --dsz: 40px;
+    --dgap: 10px;
+  }
 }
