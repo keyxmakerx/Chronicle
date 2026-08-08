@@ -325,11 +325,42 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	// associations panel. Owner-only (management surface, mirrors the
 	// Owner-gated Extensions hub). No :calId in the path — the selected
 	// calendar rides ?calId= so list selection HTMX-swaps the detail pane.
-	// W5c: Player+ (role-aware) — owners manage all calendars, players see the
-	// read-only card grid of the calendars visible to them (per-calendar
+	// W5c: role-aware — owners manage all calendars, everyone else sees the
+	// read-only surface built from the calendars visible to them (per-calendar
 	// visibility, W5a). The handler branches on role; no data leaks (the
-	// player's list is ListVisibleCalendars and a hidden ?calId is not loaded).
-	cg.GET("/apps/calendar", h.AppDashboard, campaigns.RequireRole(campaigns.RolePlayer))
+	// non-owner's list is ListVisibleCalendars and a hidden ?calId is not loaded).
+	//
+	// ── PUBLIC-CAPABLE SINCE R2-4 (C-CALV4-V2SUNSET, [VS-4] SIGNED) ──────────
+	//
+	// THE PATH AND THE METHOD ARE UNCHANGED; THE GROUP AND THE GUARD ARE NOT.
+	// routes_snapshot.txt records METHOD, PATH and defining file and NOTHING
+	// about middleware, so the wire oracle cannot see this line move from `cg`
+	// to `pub` ([VS-3] SIGNED). The oracle stays byte-identical at 727 lines and
+	// the review of this change is prose and tests, never a diff.
+	//
+	// WHY: the Bench is now the product's only linked calendar — R2-4 re-points
+	// every live door away from the V2 shell. The shell's own read routes are
+	// public-capable (pub.GET("/calendar/v2", …, RequireViewAccess()) above), so
+	// leaving the Bench on `cg` would have sent every anonymous visitor to a
+	// PUBLIC campaign to /login the moment the doors moved. This registration is
+	// a byte-for-byte copy of the pairing those three lines already carry, which
+	// is strictly safer than inventing one.
+	//
+	// AND THE GUARD MOVES WITH THE GROUP, WHICH IS THE EDIT A REVIEWER MISSES.
+	// Anonymous and authenticated-non-member visitors are RoleNone
+	// (middleware.go:150-157 and :128-134, C-PERM-ANON-IDENTITY), and
+	// RequireRole is a bare `cc.MemberRole < minRole` — so moving the group and
+	// keeping RequireRole(RolePlayer) would swap a /login redirect for a 403 for
+	// exactly the population this move exists to serve. That is not theoretical:
+	// RequireViewAccess's own doc comment narrates PR #478 shipping it.
+	// RequireAddon("calendar") is preserved by using `pub`, which carries it.
+	//
+	// THE ROLE FLOOR THIS LINE GIVES UP WAS LOAD-BEARING IN ONE PLACE, and it is
+	// now carried by the data instead of by the route: benchRsvpResolve
+	// (bench.go) skips the party roster below RolePlayer, so a viewer who could
+	// not reach this page yesterday cannot read member names today. See
+	// [VS-5] item 8 — the absence is in the payload, not in a template branch.
+	pub.GET("/apps/calendar", h.AppDashboard, campaigns.RequireViewAccess())
 
 	// THE SCHEDULE (calendar-v4 W-G Part B, C-CALV4-RSVP-P8 §10) — the door the
 	// dispatch names, and the ONE route the whole of Part B takes.

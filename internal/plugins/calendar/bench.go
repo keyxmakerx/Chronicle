@@ -3082,6 +3082,33 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
 	if h.schedule == nil {
 		return benchRsvpPanel(), nil, nil
 	}
+	// ── THE PARTY ROSTER IS PLAYER-FLOOR, AND THE FLOOR LIVES HERE NOW ────────
+	//
+	// C-CALV4-V2SUNSET R2-4, [VS-5] item 8 SIGNED. Until this slice the Bench
+	// rode `cg` behind RequireRole(RolePlayer), so every viewer who could reach
+	// it was a party member and this panel's audience law — "every member, at
+	// every role, with their answer, their zone and their own local clock"
+	// (benchRsvpMembers) — was bounded by the route. [VS-4] moves the route to
+	// the public-capable group, and a RoleNone viewer (a logged-out visitor to a
+	// PUBLIC campaign, or an authenticated non-member) now arrives here.
+	//
+	// MEASURED BEFORE THE MOVE LANDED: an anonymous render carried "Kaelthorn"
+	// and "Brynwyth" — real member display names — straight out of BenchRoster.
+	// The route's floor was load-bearing for this one panel, so the floor moves
+	// onto the DATA rather than being deleted with the guard: below RolePlayer
+	// the roster is never read, the panel returns its shipped unfilled state,
+	// and dayCardMembers ([ER-3], fed from this return) is empty. The absence is
+	// in the payload, not in a template branch — a permission expressed as a
+	// template branch is one refactor away from being lost (bench.templ:597-600).
+	//
+	// in.Role is the VISIBILITY role, which is RoleNone for anonymous, for an
+	// authenticated non-member and for a site admin who never joined — all three
+	// of whom were 403'd by RequireRole(RolePlayer) yesterday. So this guard
+	// preserves today's behaviour exactly for every viewer who could already
+	// reach the page, and it is the ONLY thing it changes.
+	if in.Role < int(campaigns.RolePlayer) {
+		return benchRsvpPanel(), nil, nil
+	}
 	roster, err := h.schedule.BenchRoster(ctx, in.Campaign.ID)
 	if err != nil || len(roster) == 0 {
 		if err != nil {
