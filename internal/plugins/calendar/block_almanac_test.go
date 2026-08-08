@@ -247,12 +247,22 @@ func TestBlockAlmanac_LanesStepOffTheSameBaseDayAsTheDiscs(t *testing.T) {
 // reachable in this render". The Bench's real-world Block renders with noShelf,
 // and building four registers for four Blocks that draw none is payload nobody
 // reads.
+//
+// AMENDED BY C-CALV4-SKY ([SKY-7] SIGNED), AND THE CLAIM IS NARROWED RATHER
+// THAN WEAKENED. The register has a SECOND reader now — the sky header's
+// expansion — so "no Shelf" is no longer sufficient on its own and the fixture
+// says `SkyHidden: true` out loud. Before this line existed the test read the
+// zero value, which after the gate widened would have meant "and a sky", i.e.
+// it would have been asserting the opposite of its own name. The positive leg
+// (a Block with no Shelf and a SKY does build the register) is
+// TestBlockSky_AlmanacGateNamesBothReaders' third row.
 func TestBlockAlmanac_EmptyWhenNoShelfIsReachable(t *testing.T) {
 	cal := blockTenDayCal()
 	cal.Moons = blockFourMoons()
 
 	hidden := buildMonthGeometry(cal, blockMonthGeometryInput{
-		MonthIndex: 0, Year: 1523, ShowMoons: true, MoonCap: 3, ShelfHidden: true,
+		MonthIndex: 0, Year: 1523, ShowMoons: true, MoonCap: 3,
+		ShelfHidden: true, SkyHidden: true,
 	})
 	if len(hidden.Almanac) != 0 {
 		t.Errorf("a Block whose host removed the Shelf built %d Almanac lanes", len(hidden.Almanac))

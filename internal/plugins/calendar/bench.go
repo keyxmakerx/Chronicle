@@ -1122,7 +1122,11 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		// the GM stepped their campaign's month. The finding §1 measures is
 		// "the GM cannot look at, or author into, next month" — that is the
 		// in-world calendar, which is also the only Block that carries the trio.
-		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, layerPrefs, in.View); b != nil {
+		// THE SKY SEATS HERE AND NOWHERE ELSE ([SKY-1] SIGNED). The Primary is
+		// the campaign's principal calendar and the only Block on this surface
+		// whose Almanac register is built, so it is the only Block whose sky
+		// could ever carry more than a gradient and a clock.
+		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, true, layerPrefs, in.View); b != nil {
 			data.Primary = b
 			data.Primary.Nav = benchNav(primary, b.Data, in.Campaign.ID)
 			// §2's verb row seats on the same nameplate row as the cursor, and
@@ -1136,7 +1140,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	if realWorld != nil {
 		// noShelf — the signed real-world Block on the Bench renders with its
 		// Shelf docked but hidden, which is the ShelfHidden flag's whole purpose.
-		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, layerPrefs, BlockDate{}); b != nil {
+		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, false, layerPrefs, BlockDate{}); b != nil {
 			data.RealWorld = b
 		} else {
 			rows = append(rows, realWorld)
@@ -1251,7 +1255,7 @@ func benchSyncPill(ctx context.Context, spine *BlockService, campaignID string, 
 // view is the month cursor ([GR-1]). It is the request's `?y=&m=` for the
 // PRIMARY Block and the zero BlockDate for every other one — see buildBench's
 // call sites for why the real-world Block does not take it.
-func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, prefs blockLayerPrefs, view BlockDate) *BenchBlock {
+func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, sky bool, prefs blockLayerPrefs, view BlockDate) *BenchBlock {
 	if spine == nil || cal == nil {
 		return nil
 	}
@@ -1262,8 +1266,13 @@ func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Cale
 		View:        view,
 		IsActive:    cal.ID == activeID,
 		ShelfHidden: noShelf,
-		MoonCap:     benchMoonCap,
-		LayerPrefs:  prefs,
+		// ONE SKY PER SURFACE, NEVER ONE PER BLOCK ([SKY-1] SIGNED). The
+		// parameter exists so the seat is decided at the ONE call site that
+		// knows which Block is the Primary, rather than by a predicate the
+		// producer would have to re-derive per Block.
+		SkyOn:      sky,
+		MoonCap:    benchMoonCap,
+		LayerPrefs: prefs,
 	})
 	if err != nil {
 		return nil

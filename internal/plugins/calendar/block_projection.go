@@ -86,6 +86,18 @@ type BlockProjectionInput struct {
 	// Block on the Bench renders with noShelf.
 	LedgerHidden bool
 	ShelfHidden  bool
+	// SkyOn asks for the sky header on THIS Block (C-CALV4-SKY, [SKY-1]
+	// SIGNED). It is written the positive way round on purpose: the sky seats
+	// on the Bench's PRIMARY Block only — one sky per surface, never one per
+	// Block — so "no sky" is the zero value and every other host (the builder
+	// preview, the entity embed, the real-world Block, the subordinate rows)
+	// gets the correct answer by saying nothing at all.
+	//
+	// It drives TWO things and they must stay together: the two SkyGradient /
+	// SkyClock fields on BlockData (which are also the renderer's seat gate)
+	// and blockMonthGeometryInput.SkyHidden, the second half of the Almanac
+	// gate ([SKY-7]).
+	SkyOn bool
 	// MoonCap bounds the per-day discs; the ceiling is announced once in the
 	// Nameplate, never per cell.
 	MoonCap int
@@ -146,9 +158,12 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		Year:       in.Year,
 		ShowMoons:  true,
 		MoonCap:    in.MoonCap,
-		// W-E: the Almanac register is the Shelf's data, so a Block whose host
-		// removed the zone builds none.
+		// W-E: the Almanac register was the Shelf's data, so a Block whose host
+		// removed the zone built none. R2-5 gives it a SECOND reader and the
+		// gate names both ([SKY-7]) — the sky header's expansion draws on the
+		// same register and on nothing else.
 		ShelfHidden: in.ShelfHidden,
+		SkyHidden:   !in.SkyOn,
 	})
 
 	data := calblock.BlockData{
@@ -183,6 +198,7 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 	}
 	data.DateLabel, data.Fault = blockDateLine(cal)
 	data.SeasonLabel, data.EraLabel = blockSeasonEraLabels(cal)
+	data.SkyGradient, data.SkyClock = blockSkyFacts(cal, in.SkyOn)
 
 	// Counts and cells, both derived from `visible` and nothing else.
 	tieMode := blockResolveTieMode(viewer)
@@ -777,6 +793,41 @@ func blockSeasonEraLabels(cal *Calendar) (season, era string) {
 		era = e.Name
 	}
 	return season, era
+}
+
+// blockSkyFacts is the sky header's whole producer side — C-CALV4-SKY,
+// [SKY-6] SIGNED — and it is deliberately four lines with nothing derived.
+//
+// WHAT IT CARRIES, AND WHY THAT IS EXACTLY TWO THINGS. The band states three
+// facts: the moon phase disc(s), the in-world time and the season word. Two of
+// those already cross the seam — the discs ride MonthGeometry.Almanac ([SKY-7])
+// and the season word is BlockData.SeasonLabel — so the only fact this producer
+// must carry across is the time, and the only other thing the band needs is the
+// gradient keyed to it.
+//
+// THE GRADIENT IS REUSED, NEVER RE-DERIVED. `SkybandGradient(t)` already ships
+// and is pinned by TestSkybandGradient_SnapsToKeyframes; `timeOfDayFraction`
+// already ships over Calendar.CurrentHour/CurrentMinute. This function calls
+// both and hands the RESULT across, because internal/widgets/calendar_block
+// imports nothing from internal/plugins/** by construction: a fraction landing
+// in the widget could only become a gradient by the widget growing colour
+// science of its own, and shipping the fraction AND the gradient would be the
+// third BlockData field [SKY-6] refuses. See BlockData's own comment.
+//
+// NO SUNRISE AND NO SUNSET, IN ANY FORM ([SKY-6]). Not a tick, not a chip, not
+// a "needs backend" note, not a 06:00/18:00 default. Chronicle does not persist
+// them — import.go parses sunriseTime/sunsetTime from two foreign formats and
+// DROPS them, and no column and no migration exists — and deriving a daylight
+// boundary on a worldbuilding platform is the defect WorldStateSun.Tint already
+// refuses by shipping null.
+//
+// THE TIME IS AS OF RENDER. It does not tick client-side, which is why nothing
+// here emits a timestamp for a script to count from.
+func blockSkyFacts(cal *Calendar, on bool) (gradient, clock string) {
+	if cal == nil || !on {
+		return "", ""
+	}
+	return SkybandGradient(timeOfDayFraction(cal)), cal.FormatCurrentTime()
 }
 
 // blockViewerZone labels the viewer's zone. A real-time calendar's configured

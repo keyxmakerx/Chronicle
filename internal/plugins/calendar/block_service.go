@@ -157,6 +157,11 @@ type BlockRequest struct {
 	// Block on the Bench renders with noShelf).
 	LedgerHidden bool
 	ShelfHidden  bool
+	// SkyOn asks for the sky header on this Block (C-CALV4-SKY, [SKY-1]
+	// SIGNED). Zero value is NO SKY: the header seats on the Bench's PRIMARY
+	// Block only, so the one host that wants it says so and every other caller
+	// is correct by default.
+	SkyOn bool
 	// MoonCap bounds the per-day discs; <= 0 draws every declared moon.
 	MoonCap int
 	// LayerPrefs is the viewer's stored layer set + persistence endpoint
@@ -250,6 +255,7 @@ func (s *BlockService) Block(ctx context.Context, req BlockRequest) (calblock.Bl
 		IsActive:     req.IsActive,
 		LedgerHidden: req.LedgerHidden,
 		ShelfHidden:  req.ShelfHidden,
+		SkyOn:        req.SkyOn,
 		MoonCap:      req.MoonCap,
 	}), nil
 }
