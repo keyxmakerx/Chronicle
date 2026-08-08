@@ -1287,7 +1287,43 @@
   .cal-schedule .phead .ctl .stepper { width: 100%; justify-content: space-between; }
   .cal-schedule .phead .ctl .btn.sm { height: 34px; }
   .cal-schedule .sc-body { padding: 8px; }
-  .cal-schedule .sc-grid { --idw: 76px; --sayw: 94px; --colmin: 24px; }
+  /* ── THE NARROW ARITHMETIC, RE-DERIVED AGAINST 360 RATHER THAN 390
+     C-CALV4-MOBILE [MOB-6] SIGNED.
+
+     MEASURED, four widths, before:
+
+       414x736  overflow-x hidden  client 370  scroll 370  drag  0
+       390x664  overflow-x hidden  client 346  scroll 346  drag  0
+       375x667  overflow-x auto    client 331  scroll 338  drag  7px
+       360x640  overflow-x auto    client 316  scroll 338  drag 22px
+
+     375 is the iPhone SE / mini / 8; 360 is the most common Android width.
+     Both are below the single width this surface was ever measured at
+     (schedulePhoneViewport = 390), and the 7px and the 22px are EXACTLY
+     `338 - budget` and nothing else.
+
+     THE FORMULA WAS NEVER WRONG; THREE NUMBERS WERE CHOSEN AGAINST ONE PHONE.
+     `min-width: calc(var(--idw) + var(--sayw) + var(--cols) * var(--colmin))`
+     stays exactly as written and NO LITERAL WIDTH IS RESTATED HERE — that is
+     the fluid treatment: the surface keeps one formula and the guard asserts
+     the formula's RESULT at 360 as well as at 390, so "tuned for 390" can
+     never again silently mean "broken at 360".
+
+     AND THE 22px COMES OUT OF THE FIXED TERMS, NOT OUT OF THE DAY COLUMNS.
+     `--colmin` stays at 24px — this surface's own signed cell floor, "THE CELL
+     IS THE TARGET (>=24x24 at every width)". 7 x 24 = 168 is untouchable, so
+     `--idw + --sayw` must come in at or under 148 against the 316px budget:
+
+       --idw   76 -> 48   the identity column carries a swatch and a token at
+                          this width; `.nm` is already display:none two rules
+                          below, so the NAME is not the thing being narrowed
+                          and nothing is ellipsed.
+       --sayw  94 -> 94   unchanged. The say column already wraps here
+                          (`flex-wrap: wrap` below) and it is the column that
+                          carries the local time and the +1d badge.
+
+       48 + 94 + 7 x 24 = 310, against a 316px budget at 360. */
+  .cal-schedule .sc-grid { --idw: 48px; --sayw: 94px; --colmin: 24px; }
   .cal-schedule .sc-row { height: 40px; }
   .cal-schedule .sc-row.dens { height: 18px; }
   .cal-schedule .sc-row.cnt { height: 22px; }
@@ -1379,10 +1415,23 @@
   /* the day's own name is the whole point of the band, so it comes back */
   .cal-schedule .sc-paintgrid .sc-row .who .nm { display: block; }
   .cal-schedule .sc-paintgrid .sc-row .say { display: none; }
+  /* ── THE PAINT TARGETS GET A REAL FLOOR (C-CALV4-MOBILE [MOB-6] SIGNED)
+     MEASURED: the buttons a player presses to say when they are free are
+     25x39 and 25x22 at 390, 24x39 and 24x22 at 375 and 360, 29x39 at 414.
+     They flex, so the width is whatever the row divides — and what the row
+     divides at 360 is under half the 44px platform floor.
+
+     THE ROW ALREADY WRAPS INSIDE A VERTICAL SCROLLER, which is what makes
+     this cost nothing but inner scroll rather than a horizontal drag: the
+     `.sc-row` above declares `flex-wrap: wrap` and the panel it sits in is
+     `max-height: 440px; overflow-y: auto`. `flex-basis: 44px` rather than 0
+     is what makes the wrap happen at the floor instead of the row shrinking
+     every cell below it. */
   .cal-schedule .sc-paintgrid .sc-pk {
-    flex: 1 1 0;
-    min-width: 0;
-    height: 40px;
+    flex: 1 1 44px;
+    min-inline-size: 44px;
+    min-block-size: 44px;
+    height: 44px;
     border-left: 0;
     border-radius: var(--r-chip);
     margin: 0 1px;

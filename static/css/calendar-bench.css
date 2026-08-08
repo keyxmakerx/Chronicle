@@ -877,10 +877,16 @@
   border: 1px solid var(--rule-hairline);
   border-radius: var(--r-ctl);
 }
-.cal-bench .rsvp .ovgrid { min-width: 520px; }
+/* --ovid IS THE MEMBER COLUMN, AND IT IS A VARIABLE RATHER THAN THREE COPIES
+   OF THE SAME LITERAL. `.ovhead`, `.lane` and the density/bracket rows are
+   three separate grids over one column set: if their track lists ever disagree
+   the overlay stops being an overlay. Declaring the width once on the wrapper
+   and inheriting it is what makes the ≤640 rule below a one-line change rather
+   than three that can drift apart. */
+.cal-bench .rsvp .ovgrid { --ovid: 96px; min-width: 520px; }
 .cal-bench .rsvp .ovhead {
   display: grid;
-  grid-template-columns: 96px repeat(7, 1fr);
+  grid-template-columns: var(--ovid) repeat(7, minmax(0, 1fr));
   border-bottom: 1px solid var(--rule-hairline);
 }
 .cal-bench .rsvp .ovhead b {
@@ -899,7 +905,7 @@
 }
 .cal-bench .rsvp .lane {
   display: grid;
-  grid-template-columns: 96px repeat(7, 1fr);
+  grid-template-columns: var(--ovid) repeat(7, minmax(0, 1fr));
   align-items: center;
   height: 22px;
   border-bottom: 1px solid var(--rule-hairline);
@@ -1086,6 +1092,30 @@
   .cal-bench .rsvp .side { width: 100%; }
 }
 @media (max-width: 640px) {
+  /* ── THE OVERVIEW GRID'S PHONE FORM (C-CALV4-MOBILE [MOB-5] SIGNED) ──────
+     MEASURED, with the repo's own RSVP fixture, on the player arm AND the GM
+     arm: `.cal-bench .rsvp .ovwrap` client 362 against scroll 520 at 390 —
+     158px of sideways drag — and client 332 against 520 at 360, 188px. It is
+     a 7-day availability grid you must drag SIDEWAYS inside a page that
+     scrolls vertically: a diagonal-gesture trap, on the panel the operator's
+     own go/no-go gate names.
+
+     THE INHERITED REFUSAL DOES NOT APPLY, and that is a correction rather
+     than an override. The "REFUSED ON ARITHMETIC" comment further down this
+     sheet refuses a THREE-COLUMN >=1024px DESKTOP panel — its own arithmetic
+     is "~1240px of content inside an 1180px measure" and its own closing
+     sentence is "BELOW 1024px NOTHING CHANGES". A ≤640 treatment was never on
+     the table.
+
+     NOTHING IS DROPPED AND NOTHING IS ELLIPSED. All seven day columns stay,
+     every lane stays, the density row and the bracket stay. The member column
+     carries INITIALS (`l.Initials`), not names — the panel that carries names
+     is `.mrow` below, and its own signed law that a name may never be
+     abbreviated is untouched. 520px was a floor for a 96px identity column
+     plus seven 60px day columns; a day column holds an 8px pill. */
+  .cal-bench .rsvp .ovgrid { --ovid: 64px; min-width: 0; }
+  .cal-bench .rsvp .ovhead b { padding: 6px 1px; }
+
   .cal-bench .rsvp .mrow {
     height: auto;
     padding: 7px 4px;

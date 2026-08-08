@@ -1247,3 +1247,207 @@ func TestMobileProbe_TheScrollerCensusAndTheLongWeek(t *testing.T) {
 		}
 	}
 }
+
+// mobileSchedulePage builds /schedule's real surface inside the app shell's
+// own phone padding, plus the ops listener. It is the same head+body pair the
+// fidelity harness renders, so this is a measurement of the product and not of
+// a harness.
+func mobileSchedulePage(t *testing.T, isGM bool) string {
+	t.Helper()
+	data := scheduleShotData(isGM, "week")
+	var head, body strings.Builder
+	if err := scheduleHead(data).Render(context.Background(), &head); err != nil {
+		t.Fatalf("render schedule head: %v", err)
+	}
+	if err := scheduleBody(data).Render(context.Background(), &body); err != nil {
+		t.Fatalf("render schedule body: %v", err)
+	}
+	return `<!doctype html><html><head><meta charset="utf-8"><style>` +
+		`html,body{margin:0;padding:0;background:#f9fafb;` +
+		`font-family:ui-sans-serif,system-ui,-apple-system,sans-serif}` +
+		fmt.Sprintf(`.shotwrap{padding:%dpx}`, schedulePagePadNarrow) +
+		fmt.Sprintf(`@media (min-width:%dpx){.shotwrap{padding:%dpx}}`,
+			schedulePagePadBreak, schedulePagePadWide) +
+		scheduleCSS(t, "calendar-bench.css") + scheduleCSS(t, "calendar-schedule.css") +
+		`</style></head><body>` +
+		`<div class="cal-bench cal-schedule shotwrap">` + head.String() + body.String() + `</div>` +
+		`<script>` + mobileScheduleOpsScript + `</script>` +
+		`</body></html>`
+}
+
+// ── [MOB-5] + [MOB-6] — the operator's own gate panel, and the page a player
+//    uses to say when they are free ─────────────────────────────────────────
+//
+// [MOB-5] BASELINE, measured on the player arm AND the GM arm with the repo's
+// own RSVP fixture: `.cal-bench .rsvp .ovwrap` client 362 against scroll 520 at
+// 390 — 158px of sideways drag — and client 332 against 520 at 360, 188px. The
+// document's own scrollWidth never moved and nothing was clipped away, so this
+// is a GESTURE TRAP rather than data loss: a 7-day availability grid you must
+// drag sideways inside a page that scrolls vertically, on the panel the
+// operator's go/no-go gate names.
+//
+// [MOB-6] BASELINE, four widths: `.sc-wrap` overflow-x `hidden` with 370/370 at
+// 414 and 346/346 at 390, but `auto` with 331/338 at 375 and 316/338 at 360 —
+// 7px and 22px, each exactly `338 - budget`.
+func TestMobileProbe_TheRSVPOverviewAndTheScheduleFitThePhone(t *testing.T) {
+	chrome := mobileNeedChromium(t)
+
+	// ── [MOB-5], both arms, three widths — six rows ───────────────────────
+	for _, arm := range []struct {
+		label string
+		data  BenchData
+	}{
+		{"player", benchFxDataRsvp(false, false)},
+		{"GM", benchFxDataRsvp(true, true)},
+	} {
+		inner := mobileWriteInner(t, "rsvp-"+arm.label+".html", mobileInnerPage(t, arm.data, ""))
+		for _, w := range mobileWidths {
+			h := mobileHeightFor(w)
+			mobileHeader(t, "[MOB-5] the RSVP overview · "+arm.label+" arm", w, h)
+			r := mobileDrive(t, chrome, inner, w, h, []mobileStep{{Op: "ovwrap"}})[0]
+			wrap, grid := mobileBox(r, "wrap"), mobileBox(r, "grid")
+			pg, _ := r["page"].(map[string]any)
+			drag := wrap["sw"] - wrap["cw"]
+			t.Logf("   .ovwrap client %.0fx%.0f · scroll %.0fx%.0f · DRAG %.0fpx · .ovgrid %.0f wide · overscroll-x %s · document %.0f/%.0f",
+				wrap["cw"], wrap["h"], wrap["sw"], wrap["h"], drag, grid["w"],
+				r.str("contain"), mobileF(pg, "sw"), mobileF(pg, "cw"))
+			if wrap["cw"] == 0 {
+				t.Fatalf("%dpx, %s arm: no .ovwrap was rendered — this measurement is of "+
+					"nothing", w, arm.label)
+			}
+			if drag > 0 {
+				t.Errorf("%dpx, %s arm: the overview needs %.0fpx of sideways drag (client "+
+					"%.0f, scroll %.0f). [MOB-5] rules ZERO at 360, 375 and 390, on both "+
+					"arms — a diagonal-gesture trap on the panel the operator's own gate "+
+					"names", w, arm.label, drag, wrap["cw"], wrap["sw"])
+			}
+			// NOTHING WAS DROPPED TO GET THERE: every lane still shows all
+			// seven days, and no identity cell has content wider than its box.
+			names, _ := r["names"].([]any)
+			for _, raw := range names {
+				m, _ := raw.(map[string]any)
+				if mobileF(m, "sw")-mobileF(m, "cw") > 1 {
+					t.Errorf("%dpx, %s arm: the identity cell %q is clipped (%.0f of %.0f) — "+
+						"the phone form may narrow the column, never abbreviate what is in it",
+						w, arm.label, m["t"], mobileF(m, "cw"), mobileF(m, "sw"))
+				}
+			}
+			// THE SIGNED PAIR STAYS AT EVERY WIDTH, AND "EVERY WIDTH" IS
+			// MEASURED AGAINST THE DESKTOP RATHER THAN AGAINST A LITERAL.
+			// `Ask →` is GM-only by audience ([GR-15]), so asserting it beside
+			// `zone not set` on a player's page would assert a control that is
+			// deliberately absent. What the signed law forbids is the phone
+			// DROPPING something the desktop shows: "the repair may never be
+			// the thing that disappears on the smallest screen".
+			narrowTxt := r.str("text")
+			wide := mobileDrive(t, chrome, inner, 1280, 900, []mobileStep{{Op: "ovwrap"}})[0]
+			wideTxt := wide.str("text")
+			for _, needle := range []string{"zone not set", "Ask"} {
+				if strings.Contains(wideTxt, needle) && !strings.Contains(narrowTxt, needle) {
+					t.Errorf("%dpx, %s arm: %q is on the panel at 1280 and gone at %d — the "+
+						"repair may never be the thing that disappears on the smallest screen",
+						w, arm.label, needle, w)
+				}
+			}
+			t.Logf("   the signed pair at %d vs 1280 — `zone not set` %v/%v · `Ask` %v/%v",
+				w, strings.Contains(narrowTxt, "zone not set"),
+				strings.Contains(wideTxt, "zone not set"),
+				strings.Contains(narrowTxt, "Ask"), strings.Contains(wideTxt, "Ask"))
+		}
+	}
+
+	// ── [MOB-6] /schedule, four widths ────────────────────────────────────
+	sched := mobileWriteInner(t, "schedule.html", mobileSchedulePage(t, true))
+	for _, w := range []int{414, schedulePhoneViewport, scheduleMidPhoneViewport,
+		scheduleNarrowViewport} {
+		h := 736
+		if w != 414 {
+			h = mobileHeightFor(w)
+		}
+		mobileHeader(t, "[MOB-6] /schedule", w, h)
+		r := mobileDrive(t, chrome, sched, w, h, []mobileStep{{Op: "schedule"}})[0]
+		wraps, _ := r["wraps"].([]any)
+		if len(wraps) == 0 {
+			t.Fatalf("%dpx: no .sc-wrap rendered — this measurement is of nothing", w)
+		}
+		for i, raw := range wraps {
+			m, _ := raw.(map[string]any)
+			drag := mobileF(m, "sw") - mobileF(m, "cw")
+			t.Logf("   .sc-wrap#%d — overflow-x %v · client %.0f · scroll %.0f · drag %.0fpx · overscroll-x %v",
+				i, m["ox"], mobileF(m, "cw"), mobileF(m, "sw"), drag, m["contain"])
+			if drag > 0 {
+				t.Errorf("%dpx: .sc-wrap#%d drags %.0fpx sideways (client %.0f, scroll %.0f) — "+
+					"the availability matrix was tuned to exactly one phone and this is the "+
+					"other ones", w, i, drag, mobileF(m, "cw"), mobileF(m, "sw"))
+			}
+		}
+		// The paint targets a player presses to say when they are free.
+		pk, _ := r["pk"].(map[string]any)
+		t.Logf("   .sc-pk — %v measured · smallest %.0fx%.0f · widest line count in a day row %.0f",
+			mobileF(pk, "n"), mobileF(pk, "minW"), mobileF(pk, "minH"), mobileF(pk, "maxLines"))
+		if mobileF(pk, "n") > 0 {
+			if mobileF(pk, "minW") < 44 || mobileF(pk, "minH") < 44 {
+				t.Errorf("%dpx: the smallest availability paint target is %.0fx%.0f against "+
+					"the 44px platform floor (baseline 24x39 at 375 and 360)",
+					w, mobileF(pk, "minW"), mobileF(pk, "minH"))
+			}
+			// A time axis that wraps three ways stops being an axis.
+			if w == scheduleNarrowViewport && mobileF(pk, "maxLines") > 2 {
+				t.Errorf("STOP-AND-FLAG at %dpx: a paint row wraps to %.0f lines. [MOB-6] "+
+					"rules more than two a flag, because a time axis that wraps three ways "+
+					"stops being an axis", w, mobileF(pk, "maxLines"))
+			}
+		}
+		pg, _ := r["page"].(map[string]any)
+		t.Logf("   document scrollWidth %.0f vs clientWidth %.0f",
+			mobileF(pg, "sw"), mobileF(pg, "cw"))
+		if mobileF(pg, "sw") != mobileF(pg, "cw") {
+			t.Errorf("%dpx: /schedule's page fold broke — scrollWidth %.0f vs clientWidth %.0f",
+				w, mobileF(pg, "sw"), mobileF(pg, "cw"))
+		}
+	}
+}
+
+// mobileScheduleOpsScript is /schedule's own measurement. It is a second,
+// smaller listener rather than a branch inside the Bench's, because the two
+// pages share no elements and a single script would be half dead on each.
+const mobileScheduleOpsScript = `
+(function () {
+  function all(s) { return Array.prototype.slice.call(document.querySelectorAll(s)); }
+  function reply(o) { o.innerWidth = window.innerWidth; o.innerHeight = window.innerHeight;
+    parent.postMessage(JSON.stringify(o), '*'); }
+  window.addEventListener('message', function (e) {
+    var out = { op: String(e.data || '') };
+    try {
+      var d = document.scrollingElement || document.documentElement;
+      out.page = { sw: d.scrollWidth, cw: d.clientWidth };
+      out.wraps = all('.cal-schedule .sc-wrap').map(function (n) {
+        var cs = getComputedStyle(n);
+        return { cw: n.clientWidth, sw: n.scrollWidth, ox: cs.overflowX,
+          contain: cs.overscrollBehaviorX };
+      });
+      // THE PAINT TARGETS, plus the LINE COUNT of the rows they wrap inside.
+      // The line count is derived from the distinct top edges in a row rather
+      // than from a height division, because the row's own height is exactly
+      // what wrapping changes.
+      var minW = 1e9, minH = 1e9, n = 0, maxLines = 0;
+      all('.cal-schedule .sc-paintgrid .sc-row').forEach(function (row) {
+        var tops = {};
+        all2(row, '.sc-pk').forEach(function (b) {
+          var r = b.getBoundingClientRect();
+          if (r.width <= 0 && r.height <= 0) return;
+          n++;
+          if (r.width < minW) minW = r.width;
+          if (r.height < minH) minH = r.height;
+          tops[Math.round(r.top)] = 1;
+        });
+        var lines = Object.keys(tops).length;
+        if (lines > maxLines) maxLines = lines;
+      });
+      out.pk = { n: n, minW: n ? minW : 0, minH: n ? minH : 0, maxLines: maxLines };
+    } catch (err) { out.error = String(err && err.message || err); }
+    reply(out);
+  });
+  function all2(root, s) { return Array.prototype.slice.call(root.querySelectorAll(s)); }
+})();
+`
