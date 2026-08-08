@@ -78,8 +78,18 @@ TestProbe_LedgerHeightIsInvariantUnderSelection \
 TestProbe_StdTierFilledLedgerDoesNotCollide"
 
 PKG_CALENDAR="./internal/plugins/calendar/"
+# C-CALV4-MOBILE registers its five phone probes here. Every one of them is
+# browser-gated ONLY — no env var hides them — because a registered probe that
+# skips itself by default is precisely the silent pass this guard exists to
+# kill, and because the mobile lane's findings are all RENDERED numbers that no
+# string assertion can see.
 PROBES_CALENDAR="TestDayCardReducedMotionAnchorsToItsDay \
-TestDayCardMorphInterpolates"
+TestDayCardMorphInterpolates \
+TestMobileProbe_TheLedgerShowsThreeRowsOnAPhone \
+TestMobileProbe_TheSheetStaysReachableWhenTheViewportShrinks \
+TestMobileProbe_ThePageIsLockedBehindASheetAndReleasedOnEveryExit \
+TestMobileProbe_TheScrollerCensusAndTheLongWeek \
+TestMobileProbe_TheRSVPOverviewAndTheScheduleFitThePhone"
 
 # Needs the Tailwind CLI on top of the browser.
 PROBES_CALENDAR_TAILWIND="TestProbe_MobileBreakpointSwapInRealBrowser"

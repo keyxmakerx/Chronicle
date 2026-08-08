@@ -2288,6 +2288,109 @@
   .cal-block-host .interc-row { display: grid }
 }
 
+/* ── NARROW · THE PHONE TIER ──────────────────────────────────────────────
+   C-CALV4-MOBILE [MOB-1] SIGNED. THE FOUNDING MEASUREMENT OF THAT SLICE:
+
+     390x664, real BenchPage, real sheets, driven browser —
+       .block 366x520   .np 64   .body 344   .inst 238   .shelf 110
+       .lrows  clientHeight 41   scrollHeight 220 (5 rows x 44px)
+       LEDGER ROWS FULLY VISIBLE: 0 of 5.
+     A second probe at host 358 read 14 against 82, with the empty-state
+     sentence sheared MID-WORD — a player-facing surface.
+
+   64 + 344 + 110 = 518. The Block was not CHOOSING to be 520px tall; it was
+   PINNED at 520 by `.block { max-height: 520px }` (:503, unconditional and
+   tuned for a desktop column) and its children were dividing a fixed ration.
+   The month grid took 238 of it and the Ledger — the list of what is actually
+   happening — took what was left.
+
+   THIS IS A CONTAINER QUERY AND NOT A MEDIA QUERY, WHICH IS A RULING RATHER
+   THAN A PREFERENCE. This sheet has no width media query at all (its only
+   @media is the reduced-motion one) because .cal-block-host is
+   container-type: inline-size (§HOST) and the Block cannot query itself. A
+   viewport query would uncap a Block in a 358px entity-page column only when
+   the VIEWPORT happened to be narrow, which is backwards. The consequence —
+   a Block in a narrow column takes its intrinsic height even on a 1440px
+   display — is [SKY-8]'s signed lesson applied to height, and is what a
+   container query buys.
+
+   480.98px IS NOT A NEW BREAKPOINT. It is the complement of this sheet's
+   existing `min-width: 481px` boundary (:796), written in the idiom the
+   239.98 / 240 pair below already ships.
+
+   THE CAP WAS BUYING AN INVARIANT AND THE INVARIANT IS BOUGHT BACK BY OTHER
+   MEANS. §SIZE CLASS's law is "Declared heights are INVARIANT so dropping a
+   Block into any host page can never shove that page around" — what that
+   protects is a HOST PAGE THAT DOES NOT JUMP, and a cap is only one way to
+   buy it. Here it is bought by two floors instead:
+
+     * .lrows takes a floor, so selecting or deselecting a day cannot change
+       the Block's height;
+     * .sp2 takes a floor equal to its OWN shipped ceiling, so switching a
+       Shelf tab cannot either (measured before this rule: Upcoming 112px,
+       Filters 59px — a 53px jump under the reader's thumb).
+
+   Both are measured at +/- 0px by TestMobileProbe_TheLedgerShowsThreeRowsOnAPhone.
+
+   .body IS DELIBERATELY NOT RE-DECLARED. Its overflow pair (:688-690) stays
+   exactly as written; once the cap is gone it simply has room. Writing
+   `overflow-y: visible` there is REFUSED — CSS resolves a visible/non-visible
+   pair to `auto` and the scroller would come straight back under a new name.
+
+   THIS BLOCK SITS ABOVE MINI AND SUB-MINI ON PURPOSE. Both of those bands are
+   inside 480.98 too, both re-declare .block's height, and both hide the
+   .layer-col and .shelf these floors describe. Source order lets them win. */
+@container cal-block (max-width: 480.98px) {
+  /* the desktop ration is lifted: the Block takes its intrinsic height and
+     THE PAGE scrolls, which is the one scroller a thumb can find blind */
+  .cal-block-host .block { max-height: none }
+
+  /* 132px is 3 x 44 — THREE of this sheet's own .lrow (:1426 height: 44px).
+     It is written as the arithmetic rather than as a bare literal so that
+     moving the row height moves the floor with it. Three rows is the ruled
+     floor because it is the smallest number of "what is happening" lines that
+     is a LIST rather than a sample.
+
+     IT IS A DECLARED HEIGHT, WHICH IS FLOOR **AND** CEILING, AND THAT IS THE
+     INVARIANCE ARRIVING RATHER THAN A SECOND OPINION. Measured with the floor
+     alone: 756px with no day selected (the month list's five rows) against
+     668px with one (that day's shorter list) — an 88px jump in the host page
+     under the reader's thumb, which is precisely what §SIZE CLASS's law
+     forbids. The FULL tier buys the same invariance with 176px plus an
+     out-of-flow column; the narrow tier has no column to take out of flow, so
+     the rows box declares its height and the list scrolls inside it. Three
+     rows are always there and the fourth is always one thumb away. */
+  .cal-block-host .lrows {
+    min-height: calc(3 * 44px);
+    max-height: calc(3 * 44px);
+  }
+
+  /* the Shelf's pane floor IS its own ceiling (:1654 max-height: 132px), so
+     the zone has one declared height in all three panes. No new number. */
+  /* THE SHELF DECLARES ITS HEIGHT, SO SWITCHING A TAB CANNOT SHOVE THE HOST
+     PAGE. Measured with the cap lifted and no floor here: the Upcoming pane
+     gave the Shelf 167px and the Filters pane 94px — a 73px jump under the
+     reader's thumb, which is exactly what §SIZE CLASS's law forbids.
+
+     34px + 132px + 1px ARE ALL THIS SHEET'S OWN NUMBERS — `.shelf`'s strip floor
+     (:1609 min-height: 34px, and the strip is 34px at every tier by
+     TestProbe_ShelfGeometryIsInvariant's own assertion) plus `.sp2`'s signed
+     ceiling (:1654 max-height: 132px) plus this rule's OWN border-top, which
+     is in the arithmetic because the sheet is border-box and without it the
+     floored panes measure 166 against the Upcoming pane's intrinsic 167. No
+     new number enters.
+
+     AND THE FLOOR IS ON THE ZONE, NOT ON THE SCROLLER, WHICH IS A MEASURED
+     CHOICE RATHER THAN A STYLE ONE. `min-height: 132px` on `.sp2` (or on
+     `.spane`) makes the Almanac pane measure exactly 132 of 132 — content
+     that fits its scroller precisely — and
+     TestProbe_ShelfGeometryIsInvariant then says, correctly, "either the lane
+     stopped rendering or the scroller stopped scrolling". That guard is right
+     and it is not weakened: the pane keeps its measured 119 of 119 and the
+     ZONE takes the floor instead. */
+  .cal-block-host .shelf { min-height: calc(34px + 132px + 1px) }
+}
+
 /* ── MINI ────────────────────────────────────────────────────────────────── */
 @container cal-block (min-width: 240px) and (max-width: 299.98px) {
   .cal-block-host .block {
