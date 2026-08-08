@@ -301,11 +301,42 @@
   //
   // `clear` is measured the same way in both, so the report never flatters the
   // placement.
+  // ── THE SHEET'S GEOMETRY LEFT JAVASCRIPT (C-CALV4-MOBILE [MOB-2] SIGNED) ──
+  //
+  // This function used to return an APPLIED top and an APPLIED width, and
+  // applyPlacement wrote both onto the element as inline style. They were
+  // computed ONCE, at open time, and never again — so the moment a software
+  // keyboard shrank the layout viewport (390x664 -> 390x380, measured) the box
+  // stayed at `top: 106px` and 84px of it, including the entire footer with
+  // Save in it, sat below the fold of a `position: fixed` box that does not
+  // scroll with the page. A rotation was the same bug wearing a second hat:
+  // `width: 390px` survived onto an 844px viewport.
+  //
+  // The sheet is now `inset-block-end: 0; inset-inline: 0; inline-size: 100%;
+  // max-block-size: 100dvh` in calendar-daycard.css, which the browser
+  // re-resolves on every viewport change without being asked. So this function
+  // no longer describes where the box WILL BE PUT; it describes where the box
+  // WILL LAND, for the sake of the one consumer that still needs to know.
+  //
+  // AND THAT CONSUMER IS [DC-3]'s HONESTY CHANNEL, WHICH IS WHY THE RECT IS
+  // RE-DERIVED RATHER THAN DELETED. `clear` is the STOP-AND-FLAG [DC-3]
+  // signed. Retiring the warning along with the pixel is how a signature gets
+  // un-signed quietly, so the rect it intersects against the Ledger is the box
+  // CSS now renders — bottom-anchored, full-width, clamped to the viewport —
+  // rather than the box JS used to write. The two agree at every size the old
+  // code could reach and disagree only where the old code was wrong (a sheet
+  // taller than the viewport used to be reported at top 0 with its full
+  // height; it is now reported clamped, which is what the user sees).
+  //
+  // `applied: false` is the contract with applyPlacement: this placement has
+  // no inline geometry to write.
   function sheetPlacement(size, view, ledger, fallback) {
-    var top = Math.max(0, view.h - size.h);
+    var h = Math.min(size.h, view.h);
+    var top = Math.max(0, view.h - h);
     return {
-      left: 0, top: top, width: view.w, sheet: true, fallback: !!fallback,
-      clear: !hitsLedger({ left: 0, top: top, width: view.w, height: size.h }, ledger),
+      left: 0, top: top, width: view.w, height: h, sheet: true, applied: false,
+      fallback: !!fallback,
+      clear: !hitsLedger({ left: 0, top: top, width: view.w, height: h }, ledger),
     };
   }
 
@@ -380,11 +411,24 @@
   // The width is CLEARED when the box is not a sheet. A viewport that crosses
   // the breakpoint downward and back left the sheet's inline `width` behind,
   // pinning a desktop card to the phone's width until reload.
+  // THE SHEET ARM WRITES NO GEOMETRY AT ALL (C-CALV4-MOBILE [MOB-2] SIGNED).
+  // `.dcsheet` owns the box — bottom-anchored, full-width, clamped to 100dvh —
+  // so the three inline properties are CLEARED rather than set. Clearing is
+  // not optional housekeeping: an inline `top` left behind by a previous
+  // popover placement outranks the class's `inset-block-start: auto` and the
+  // sheet would hang in mid-air at the old number, which is the same stale-
+  // pixel defect this ruling exists to close.
   function applyPlacement(el, at, report) {
     if (!el || !at) return at;
-    el.style.left = at.left + 'px';
-    el.style.top = at.top + 'px';
-    el.style.width = at.sheet ? at.width + 'px' : '';
+    if (at.applied === false) {
+      el.style.left = '';
+      el.style.top = '';
+      el.style.width = '';
+    } else {
+      el.style.left = at.left + 'px';
+      el.style.top = at.top + 'px';
+      el.style.width = '';
+    }
     el.classList.toggle('dcsheet', !!at.sheet);
     el.setAttribute('data-dc-clear', at.clear ? '1' : '0');
     if (report) report(at);
@@ -837,6 +881,10 @@
       durationMS: durationMS,
       closeDelayMS: closeDelayMS,
       placeCard: placeCard,
+      // C-CALV4-MOBILE [MOB-2]: sheetPlacement is exported so the clamped rect
+      // it reports — [DC-3]'s honesty channel after the pixel left JavaScript —
+      // is asserted directly rather than inferred through placeCard.
+      sheetPlacement: sheetPlacement,
       occlusionReporter: occlusionReporter,
       applyPlacement: applyPlacement,
       ordIsSafe: ordIsSafe,

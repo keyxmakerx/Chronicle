@@ -558,12 +558,7 @@ func TestMobileProbe_TheLedgerShowsThreeRowsOnAPhone(t *testing.T) {
 	inner := mobileWriteInner(t, "ledger.html", page)
 
 	for _, w := range mobileWidths {
-		h := 664
-		if w == 375 {
-			h = 667
-		} else if w == 360 {
-			h = 640
-		}
+		h := mobileHeightFor(w)
 		mobileHeader(t, "[MOB-1] the Ledger", w, h)
 		r := mobileDrive(t, chrome, inner, w, h, []mobileStep{
 			{Op: "zones"}, {Op: "lrowsAll"}, {Op: "blockHeight"},
@@ -677,6 +672,19 @@ func TestMobileProbe_TheLedgerShowsThreeRowsOnAPhone(t *testing.T) {
 	}
 }
 
+// mobileHeightFor pairs each phone width with the screen height it actually
+// ships on, so a "390" arm is a real 390x664 and not a 390-wide desktop.
+func mobileHeightFor(w int) int {
+	switch w {
+	case 375:
+		return 667
+	case 360:
+		return 640
+	default:
+		return 664
+	}
+}
+
 // mobileLedgerFloorPx is [MOB-1]'s floor, DERIVED not invented: three of the
 // sheet's own `.cal-block-host .lrow { height: 44px }`. The stylesheet writes
 // the same arithmetic in a comment rather than a bare literal.
@@ -699,4 +707,165 @@ func mobileF(m map[string]any, k string) float64 {
 		return v
 	}
 	return 0
+}
+
+// ── [MOB-2] + [MOB-9] — the sheet's geometry, and the morph that must not
+//    re-trigger ─────────────────────────────────────────────────────────────
+//
+// BASELINE, measured: at 390x664 the open editor carried an inline
+// `top: 106px; width: 390px` written once at open time. Shrink the viewport to
+// 390x380 with a real resize — what a software keyboard does — and the rect
+// was UNCHANGED at y[106..464] with Save at y[426..456] against a 380px
+// viewport. 84px of the sheet, including the entire footer, below the fold of
+// a `position: fixed` box that does not scroll with the page. Rotating to
+// 844x390 left `width: 390px` on an 844px viewport.
+//
+// TARGET, ruled: no inline `top`, no inline `width`, and `[data-de-save]`
+// entirely inside the viewport after BOTH a keyboard-shaped shrink and a
+// rotation, at all three widths.
+//
+// [MOB-9] rides the same run because it is [MOB-2]'s only motion consequence:
+// `.edmorph` transitions inline-size / block-size / translate / opacity, and
+// handing the sheet's geometry to CSS means the browser re-resolves it on
+// every viewport change. If `.edmorph` were still on the element when a
+// keyboard opened, the reposition would ANIMATE — a 200ms slide while the user
+// is trying to type. The sheet already claims the invariant in a comment
+// ("`.edmorph` IS PRESENT ONLY WHILE THE MORPH IS IN FLIGHT"); this turns the
+// claim into two numbers.
+func TestMobileProbe_TheSheetStaysReachableWhenTheViewportShrinks(t *testing.T) {
+	chrome := mobileNeedChromium(t)
+	page := mobileInnerPage(t, benchFxShotData(DayCardMount{
+		CanCreate: true, CanAuthorDmOnly: true, CanDelete: true,
+		CanRestrict: true, CampaignID: "camp-1"}), "")
+	inner := mobileWriteInner(t, "sheet.html", page)
+
+	for _, arm := range []struct{ w, h, shrinkH, rotW, rotH int }{
+		{390, 664, 380, 844, 390},
+		{375, 667, 360, 812, 375},
+		{360, 640, 340, 800, 360},
+	} {
+		mobileHeader(t, "[MOB-2] the sheet under a keyboard and a rotation", arm.w, arm.h)
+		r := mobileDrive(t, chrome, inner, arm.w, arm.h, []mobileStep{
+			{Op: "openCard"},
+			{Op: "openEditor", Delay: 400},
+			{Op: "sheet", Delay: 400},
+			{Op: "sheet", Delay: 300, Outer: fmt.Sprintf("size(%d,%d)", arm.w, arm.shrinkH)},
+			{Op: "sheet", Delay: 300, Outer: fmt.Sprintf("size(%d,%d)", arm.rotW, arm.rotH)},
+		})
+		open, shrunk, rotated := r[2], r[3], r[4]
+
+		if !open.boolean("open") {
+			t.Fatalf("%dpx: the editor was NOT open when the probe measured — every number "+
+				"below would be a number about nothing", arm.w)
+		}
+		for _, s := range []struct {
+			label string
+			vh    int
+			rep   mobileReply
+		}{
+			{"OPEN", arm.h, open},
+			{fmt.Sprintf("KEYBOARD (%dx%d)", arm.w, arm.shrinkH), arm.shrinkH, shrunk},
+			{fmt.Sprintf("ROTATED (%dx%d)", arm.rotW, arm.rotH), arm.rotH, rotated},
+		} {
+			root, save := mobileBox(s.rep, "root"), mobileBox(s.rep, "save")
+			t.Logf("   %s — viewport %.0fx%.0f · sheet %.0fx%.0f at y[%.0f..%.0f] · Save y[%.0f..%.0f] · inline top %q width %q · .dcsheet %v · .edmorph %v · data-dc-clear %q",
+				s.label, s.rep.num("innerWidth"), s.rep.num("innerHeight"),
+				root["w"], root["h"], root["top"], root["bottom"],
+				save["top"], save["bottom"], s.rep.str("inlineTop"), s.rep.str("inlineWidth"),
+				s.rep.boolean("dcsheet"), s.rep.boolean("edmorph"), s.rep.str("clear"))
+
+			if s.rep.str("inlineTop") != "" {
+				t.Errorf("%s: the sheet still carries an inline top of %q — [MOB-2] hands the "+
+					"geometry to CSS precisely so a stale pixel cannot survive a viewport change",
+					s.label, s.rep.str("inlineTop"))
+			}
+			if s.rep.str("inlineWidth") != "" {
+				t.Errorf("%s: the sheet still carries an inline width of %q", s.label,
+					s.rep.str("inlineWidth"))
+			}
+			if !s.rep.boolean("saveInside") {
+				t.Errorf("%s: Save's rect is y[%.0f..%.0f] against a %.0fpx viewport — it is "+
+					"NOT reachable, and a position:fixed box cannot be scrolled to. This is "+
+					"the finding: a GM taps Save at a table and there is no Save",
+					s.label, save["top"], save["bottom"], s.rep.num("innerHeight"))
+			}
+			// [MOB-9], both assertions, at every viewport state.
+			if s.rep.boolean("edmorph") {
+				t.Errorf("%s: `.edmorph` is STILL ON the settled open editor. It transitions "+
+					"inline-size / block-size / translate / opacity, so the reposition a "+
+					"keyboard causes would animate — a 200ms slide while the user is typing",
+					s.label)
+			}
+			if d := s.rep.str("tdur"); d != "" && !mobileAllZeroDurations(d) {
+				t.Errorf("%s: transition-duration on the settled editor resolves to %q over "+
+					"%q, not 0s — [MOB-9] rules the resting editor carries no transition at all",
+					s.label, d, s.rep.str("tprop"))
+			}
+		}
+		// The sheet is the WHOLE width after a rotation — the stale-width hat of
+		// the same bug (audit finding 40).
+		rw := mobileBox(rotated, "root")["w"]
+		if int(rw) != arm.rotW {
+			t.Errorf("rotated to %dx%d: the sheet renders %.0f wide, not %d — the stale inline "+
+				"width survived the rotation", arm.rotW, arm.rotH, rw, arm.rotW)
+		}
+		// [DC-3]'s honesty channel still describes the box that renders.
+		ro := mobileBox(open, "root")
+		t.Logf("   [DC-3] the reported rect vs the RENDERED box at %dx%d: data-dc-clear=%q, "+
+			"rendered y[%.0f..%.0f] x[%.0f..%.0f]", arm.w, arm.h, open.str("clear"),
+			ro["top"], ro["bottom"], ro["left"], ro["right"])
+		if open.str("clear") == "" {
+			t.Errorf("%dpx: data-dc-clear is absent — [DC-3] SIGNED makes the occlusion "+
+				"report a build-time flag and retiring it along with the pixel is how a "+
+				"signature gets un-signed quietly", arm.w)
+		}
+		if int(ro["bottom"]) != arm.h {
+			t.Errorf("%dpx: the sheet's bottom edge is %.0f against a %d viewport — a bottom "+
+				"sheet that is not flush to the bottom is not the shape the sheet declares",
+				arm.w, ro["bottom"], arm.h)
+		}
+		if mx := open.str("edbodyMax"); !strings.Contains(mx, "px") {
+			t.Errorf("%dpx: .ed-body's max-block-size resolves to %q", arm.w, mx)
+		} else {
+			t.Logf("   .ed-body max-block-size resolves to %s (declared min(70dvh, 620px); "+
+				"NOTE: in a NESTED BROWSING CONTEXT dvh equals the frame's own box, so this "+
+				"number is the frame's 70%%, not a phone's retracting-chrome 70%%)", mx)
+		}
+	}
+
+	// ── THE DAY CARD'S CONTROL, WHICH IS WHAT MADE THIS A DEFECT RATHER THAN
+	//    A LIMITATION. In the audit's own run the card moved 568 -> 285 under
+	//    the same shrink while the editor did not move at all. Under [MOB-2]
+	//    the card does not need the module's resize listener to do it: the CSS
+	//    keeps it flush to the bottom edge by construction.
+	mobileHeader(t, "[MOB-2] CONTROL · the day card under the same shrink", 390, 664)
+	r := mobileDrive(t, chrome, inner, 390, 664, []mobileStep{
+		{Op: "openCard"},
+		{Op: "card", Delay: 400},
+		{Op: "card", Delay: 300, Outer: "size(390,380)"},
+	})
+	before, after := mobileBox(r[1], "root"), mobileBox(r[2], "root")
+	t.Logf("   card at 664: top %.0f bottom %.0f · at 380: top %.0f bottom %.0f · inline top %q / %q",
+		before["top"], before["bottom"], after["top"], after["bottom"],
+		r[1].str("inlineTop"), r[2].str("inlineTop"))
+	if int(after["bottom"]) != 380 {
+		t.Errorf("the day card's bottom edge is %.0f against a 380px viewport — the control "+
+			"that used to work has stopped working", after["bottom"])
+	}
+	if after["top"] >= before["top"] {
+		t.Errorf("the day card did not move up under the shrink: %.0f -> %.0f",
+			before["top"], after["top"])
+	}
+}
+
+// mobileAllZeroDurations reports whether every comma-separated duration in a
+// computed `transition-duration` is zero. A resting editor must carry none.
+func mobileAllZeroDurations(d string) bool {
+	for _, part := range strings.Split(d, ",") {
+		p := strings.TrimSpace(part)
+		if p != "0s" && p != "0ms" && p != "" {
+			return false
+		}
+	}
+	return true
 }
