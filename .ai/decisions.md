@@ -4002,6 +4002,98 @@ lines.
   LEDGER-P6,SHELF-P7}.md`
 - Contract: `mockups/calendar-v4.html` + `mockups/renders/v4-*.png`
 
+### §29 — R2-4: a version cutover is a LINK problem before it is a route problem
+
+**C-CALV4-V2SUNSET, round 2 slice R2-4.** The operator's whole complaint was one
+sentence — *"legacy calendar still shows up"* — and it was not a bug. It was what
+the product still linked to. **ADR-048 GROWS A SECTION; calendar-v4 DOES NOT FORK
+AN ADR.**
+
+**THE SHELL WAS NEVER THE PROBLEM; THE HALLWAYS WERE.** Every route the V2 shell
+owns is still registered, still reachable, still tested. What changed is that
+about twenty links and six redirects now lead somewhere else. The snapshot is
+byte-identical at 727 lines, no file was deleted, and the operator's complaint is
+answered in full. **The version a user is on is decided by what the product links
+to, not by what it serves** — and the two had drifted a whole major version
+apart.
+
+**THE V2 "SHELL" WAS THREE SURFACES v4 NEVER REPLACED, WEARING ONE PAGE'S NAME.**
+This is the finding that turned "delete the V2 routes" into a four-stage slice
+that deletes nothing. The shell hosted nine surfaces and v4 had replaced six.
+The other three — the **week and day views** (`handler_v2.go`'s
+`case "week", "day"`, and nowhere else in the product), the **GM world-state
+console** (`gm_panel.js`, one mount) and the **sky strip** — exist ONLY inside
+it. Deleting the page deletes them. **A sunset that takes a feature out without a
+replacement is a regression with a tidy commit message**, which is why the
+operator's signature reads *"delete it, but build the replacements first"* and
+why two of the three gaps became **prerequisites with their own slices** rather
+than bookings that might never be taken. (The third needs none: R2-5 IS the sky
+strip's replacement, and it was already signed. Two new slices and one already
+covered — never three.)
+
+**THE BOOKED COST OF THE ANONYMOUS-PUBLIC FIX DID NOT EXIST.** `/apps/calendar`
+rode the authenticated group while `/calendar/v2` was public-capable, so a
+logged-out visitor to a public campaign hit `/login`. That gap was booked **three
+times, in the same copied words**, each naming *"a `routes_snapshot.txt`
+regeneration"* as the reason no earlier slice could take it. **The snapshot does
+not move.** It records METHOD, PATH and defining file and nothing about
+middleware; a group change plus a guard swap leaves all three identical. **A
+booking deferred four times on a cost nobody re-measured is the lesson**, and it
+generalises: re-scout a booking before you defer it again, because the reason it
+was deferred may have been wrong when it was written.
+
+**AND THE COROLLARY, WHICH IS THE MOST IMPORTANT SENTENCE IN THIS SECTION: THE
+SNAPSHOT IS NOT THE SECURITY ORACLE.** A byte-identical `routes_snapshot.txt`
+sitting beside an authorisation change is exactly the shape a reviewer skims
+past. The oracle for this change is a reachability matrix and a rendered-output
+assertion set, shipped as tests, not a diff.
+
+**A STALE INVENTORY IS MORE DANGEROUS THAN A MISSING ONE.** R2-4's dispatch
+carried a fourteen-row table of doors, scouted against a commit fifty-three
+commits stale. **Two of its rows were unrouted dead code** — inside
+`app_dashboard.templ`, a ~700-line template with no caller that every grep reads
+as live — and **eight live doors were missing**, including the v4 Bench's own
+four links back to the calendar it replaced, and two EGRESS doors that leave the
+application entirely: RSVP notification email and global search results. A dev
+building strictly inside that table would have edited two links nobody can click,
+watched the tests pass, and shipped a PR that answered the complaint for zero of
+the users who actually hit the Bench. **An inventory scouted against a commit is
+a measurement with an expiry date. Re-take it at signature time; do not inherit
+it.** The completeness check now ships as a test rather than as a grep pasted
+into a PR body, for the same reason.
+
+**THE ROUTE'S ROLE FLOOR WAS LOAD-BEARING FOR ONE PANEL, AND THE FLOOR MOVED
+INTO THE DATA.** Making the Bench public-capable meant `RoleNone` viewers reach a
+page whose RSVP panel prints every member's display name, role and zone — by
+design and by signature, because until now everyone who could reach the page was
+a party member. Measured against a real database before the guard was written: an
+anonymous render carried two real member names. The producer now skips the roster
+below `RolePlayer`, so the absence is in the payload rather than in a template
+branch. **When you move a gate off a route, find out what it was holding up.**
+
+**AN EMPTY USER ID MEANS NO USER — never an empty lookup key, never a sentinel.**
+The Bench is a per-user surface (a disclosure register, RSVP state, section
+preferences) and an anonymous request hands it `""`. Every per-user read is
+guarded and SKIPPED rather than run-and-empty, because a query with an empty key
+is one schema change away from matching a row, and a synthesised anonymous
+identity is a shared write target. Two anonymous renders are byte-identical. This
+is ADR-049's distinction applied at the producer.
+
+**THE EGRESS COST IS ACCEPTED, NOT OPEN.** RSVP emails and indexed search results
+already carry `/calendar/v2` URLs into the world. R2-4 **stops minting them**;
+the ones already sent keep working, because R2-4 removes no route; and
+`C-CALV4-SHELL-REMOVAL` is what finally breaks them. That slice should consider a
+permanent redirect rather than a 404 — one redirect buys back the whole
+already-mailed population. **Recorded as an accepted cost of the end state the
+operator chose, so it is not re-litigated when the removal comes up for review.**
+
+**AND ONE LINK WAS DELETED RATHER THAN RE-POINTED, WHICH IS THE ONLY EXCEPTION TO
+THIS SLICE'S OWN RULE.** The Bench's "Open calendar →" existed to leave the Bench
+for the real calendar. The Bench IS the real calendar now, so re-pointed it would
+navigate to the page it is printed on. **A self-link is not a door; it is a dead
+end wearing a door's label.** The row survives, the affordance does not, and it
+returns when `C-CALV4-BENCH-CALID` gives the link something to select.
+
 ---
 
 ## ADR-049: "no authenticated user" and "trusted system caller" are two states, not one empty string

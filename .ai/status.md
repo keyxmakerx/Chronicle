@@ -20,6 +20,47 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 R2-4 — C-CALV4-V2SUNSET: the legacy calendar stops showing up (2026-08-08)
+
+**The operator's complaint was one sentence — "legacy calendar still shows up" —
+and it was not a bug. It was what the product still linked to.** R2-4 re-pointed
+about twenty live doors and six redirect targets at the Bench, stopped two labels
+naming the version at the user, and moved `GET /apps/calendar` onto the
+public-capable group so a logged-out visitor to a PUBLIC campaign reaches it
+instead of `/login`.
+
+**IT REMOVED NOTHING.** Zero routes, zero templates, zero JS assets, zero files,
+no migration. `internal/wire/routes_snapshot.txt` is **byte-identical at 727
+lines** across all four commits. The V2 shell is still registered, still served,
+still reachable by URL — just not by click.
+
+**THE SHELL'S DELETION IS SIGNED BY THE OPERATOR** ("delete it, but build the
+replacements first", 2026-08-07) and belongs to **`C-CALV4-SHELL-REMOVAL`**,
+behind four boxes: `C-CALV4-WEEKDAY-VIEWS` merged · `C-CALV4-GM-CONSOLE` merged ·
+R2-5 merged · every door swept by R2-4 (done). The pre-computed arithmetic for
+that slice is **727 → 722**. See `.ai/todo.md` §0b and
+`internal/plugins/calendar/.ai.md` for the deletion order and its traps.
+
+**THE ROUTE MOVE IS INVISIBLE TO THE WIRE ORACLE, and that is the most important
+sentence in the PR.** The snapshot records METHOD, PATH and defining file and
+nothing about middleware, so a group change plus a guard swap leaves it
+byte-identical beside an authorisation change. The oracle here is
+`bench_anonymous_test.go` and `routes_test.go` — nineteen signed assertions,
+twelve of them against a real MariaDB.
+
+**ONE GATE MOVED FROM THE ROUTE INTO THE PRODUCER, because the route's Player
+floor was load-bearing.** The Bench's RSVP panel prints every member's display
+name, role and zone; measured before the guard was written, an anonymous render
+carried two real member names. `benchRsvpResolve` now skips the roster below
+`RolePlayer`, so the absence is in the payload rather than in a template branch.
+
+**Eight tests inverted, none softened, none deleted.** Seven were predicted by
+the dispatch; the eighth (`TestCreateCalendar_RealLifeRedirectsToV2`) pinned a
+door the dispatch moves by name. **A stated feature loss rides with them:**
+`/calendars/:calId/week` and `/day` now land on a month, because the only week
+and day views in the product live inside the shell — that is what
+`C-CALV4-WEEKDAY-VIEWS` exists to fix, and it is a PREREQUISITE of the removal.
+
 ### calendar-v4 R2-3 — C-CALV4-THEATER STOPPED AND FLAGGED at [TH-14] (2026-08-08)
 
 **The Block theater did not build, and the reason is a measurement rather than a

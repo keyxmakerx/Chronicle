@@ -19,8 +19,97 @@ Round 2 adds no data, no zone and no engine. Five slices; R2-1 has landed.
 | **R2-2a** — the day card + the editor's mechanism | click a day, unfold a card, create/edit an event against the SHIPPED event API. **Consumed R2-1's disclosure register in place** — it stayed in `calendar-bench.css` and the card's two rules were added by name inside the same reduced-motion wrapper, reusing all three `--disc-*` tokens; the speculative shared sheet was never built ([DC-6] SIGNED, first-lander clause). **Round-2 fix-forward (stages 7-8):** the editor's PUT now round-trips `is_recurring` / `recurrence_type` / `recurrence_interval` — omitting a VALUE-typed bool is a write of false, so a title-only save was un-repeating recurring events; and the payload + stylesheet guards now derive their inventories from the type and the braces rather than from a hand-written sample. **[x] shipped 2026-07-31** |
 | **R2-2b** — `C-CALV4-EDITOR-R2b` | the editor's full §5 chrome pass, **the signed editor-morph carve-out**, and **drag-create**. The stage-2 mechanism kept every `data-de-*` handle and every request body while its controls were replaced ([ER-10]). **The recurrence unit list is corrected in three directions:** the week unit is not invention and its chip came off (`weekly` MEANS every tenday on a ten-day calendar — DAYCARD §5 and the mockup are both wrong); `year` is invention offered unchipped and does not ship; and NEW — `every N months` degrades silently because `OccursOn`'s monthly branch ignores the interval, so that control is ABSENT rather than chipped. **The morph is geometric, one named class, four properties, no new token, no scale**, inside the ONE register section — `TestDayCardCSS_CarriesNoMotionOfItsOwn` is byte-unchanged, which is the proof the register did not fork. **[ER-5]'s width was MEASURED and disagreed with the prediction:** every candidate holds 0 px² overlap, so the shipped 760px is bounded by where the popover survives rather than by where it occludes; the drawing's ~1008px cannot sit beside a 300px docked Ledger inside an 1180px measure. **Drag-create landed, not severed**, on all seven [DC-11] terms with revertibility verified by deleting the commit. **Two fix rounds, both fix-forward:** round 1 closed six findings in the build and its guards; round 2 closed three that were entirely about the EVIDENCE and touched no product code — the editor's `.ed-body` FOLDS at 620px and the desktop shots were cut off at it, every shot was CREATE mode while 21 of the 22 gating stills are EDIT mode (because the shared fixture projects with no events, so no card ever had a row to Edit), and §10's 24px-floor and horizontal-fold rows were handed to a screenshot gate that measured neither. `daycard_floors_probe_test.go` now performs them. **Headless Chromium here clamps the window to a 500px minimum width**, so every 390px artefact renders in a nested browsing context and says so on its face. **[x] shipped 2026-08-02** |
 | **R2-3** — the Block theater | expand any embed to a full-tier overlay. **This is where the depth R2-1 removed from the entity embed comes back.** R2-1 deliberately shipped NO substitute — no expand chip, no "show more", no second embed — because a stopgap becomes the thing R2-3 has to delete. **BLOCKED on [TH-14], and the block is a MEASUREMENT rather than an opinion:** the scaffold must sit outside every `.cal-block-host`, inside a `cal-bench` root **and outside any HTMX-swappable region**, and no such position exists in the files the slice owns. `calendar_widget_type.go:152` wraps *all* of `EntityCalendarBlock` in `widgetbindings.BlockHost`, and `picker.templ` swaps that wrapper with `hx-swap="outerHTML"` on three live Scribe+ paths (bind `:99`, create `:54`, unbind `:80`) — so the swapped region is the whole component, one level above anything `entity_calendar_block.templ` can emit. [TH-14] rules that case *"a host restructure, not a placement, and not this slice's to take"*. The seventeen rulings otherwise stand and the design work is banked in ADR-048 §28: the two-things-called-full-tier distinction, the one-projection/two-renders measurement, and the `(CalendarSlug, HostEntity)` re-namespace. **Needs a coordinator re-sign of [TH-14] against the true swap target** — its own measurement cites the picker's inline slot at `entity_calendar_block.templ:61`, which is not the swap target. | [ ] **blocked — re-sign [TH-14]** |
-| **R2-4** — V2 sunset / the anonymous-public route move | the frozen V2 shell. R2-1 did not open `calendar_v2*` for any reason. | [ ] |
+| **R2-4** — `C-CALV4-V2SUNSET`, the V2 sunset / the anonymous-public route move | **the LINKS, not the shell.** ~20 live doors re-pointed at the Bench, six redirect targets re-aimed, two labels that named the version stopped, and `GET /apps/calendar` moved onto the public-capable group with `RequireViewAccess()` — the gap booked three times, closed. **[VS-10] signed as option (b): the route move was committed FIRST**, so no commit in the stack ever pointed a swept door at an authenticated-only route. **The shell is UNTOUCHED and REACHABLE BY URL: zero routes removed, zero files deleted, snapshot byte-identical at 727.** The dispatch's own door table was stale in BOTH directions — two of its rows are unrouted dead code (`app_dashboard.templ`, booked as `C-CAL-DASH-DEADCODE`) and eight live doors were missing, including the Bench's own four and the two EGRESS doors (RSVP notification email, global search). **The shell's DELETION IS SIGNED BY THE OPERATOR ([VS-1], 2026-08-07) — the question is WHEN, not WHETHER** — and it is `C-CALV4-SHELL-REMOVAL`'s, behind four boxes. **[x] shipped 2026-08-08** |
 | **R2-5** — the sky header | the dashed skyband placeholder in the real-world Block. Drawing pass FIRST. Reuses R2-1's register as its base motion. | [ ] |
+
+## 0b. C-CALV4-V2SUNSET (R2-4) — what it BOOKED (2026-08-08)
+
+The V2 sunset re-pointed the links and left the shell standing. Everything below
+is carried, not closed, and the first row is the one the rest hang off.
+
+- [ ] **`C-CALV4-SHELL-REMOVAL` — the slice that DELETES the V2 shell.**
+      **The end state is signed** ([VS-1], BY THE OPERATOR, 2026-08-07: *"delete
+      it, but build the replacements first"*). **What is outstanding is order,
+      not outcome — this row reads "when", never "whether".**
+
+      **ENTRY CONDITION, ALL FOUR BOXES, not partially satisfiable:**
+      - [ ] `C-CALV4-WEEKDAY-VIEWS` MERGED — v4 has a week and a day view, or
+            the slice records the signed decision that it will not
+      - [ ] `C-CALV4-GM-CONSOLE` MERGED — the GM world-state console has a v4 home
+      - [ ] R2-5 (`C-CALV4-SKY`) MERGED — the sky header ships
+      - [x] **EVERY DOOR SWEPT BY R2-4** — done 2026-08-08; the completeness
+            guard is `TestSunset_NoLiveDoorRemains`, which fails CI on a new one
+
+      **THE ARITHMETIC, PRE-COMPUTED SO THAT SLICE NEVER REGENERATES UNTIL
+      GREEN: 727 → 722.** −3 for the three `ShowV2` GETs, −1 for
+      `POST /calendar/v2/sidebar-pin`, and **−1 for `POST /calendar/v2/switch`,
+      which has NO live consumer and dies WITH the shell** — both its `hx-post`
+      sites are dead-or-shell (`app_dashboard.templ:549`, unrouted; and
+      `calendar_v2.templ:543`, inside the shell). `bench.templ` never posts to
+      it. `GET /calendar/v2/:calId/settings/:resource` **SURVIVES** (§7).
+      Regenerate ONCE, LAST, and state removals and additions separately — a net
+      count hides a swap.
+
+      **CONSIDER A PERMANENT REDIRECT rather than a 404** for the already-minted
+      `/calendar/v2` URLs. It costs that slice one redirect and buys back the
+      whole egress population (see the egress row below).
+
+- [ ] **`C-CALV4-WEEKDAY-VIEWS` — a v4 week view and day view. A PREREQUISITE,
+      not a booking.** They exist in exactly one place in the product:
+      `handler_v2.go`'s `case "week", "day"`. Since R2-4,
+      `/calendars/:calId/week` and `/day` 301 to the Bench's MONTH — a stated
+      feature loss, pinned by `TestCutover_WeekRedirectsToTheBenchAndLosesTheWeek`
+      and its day twin, both of which invert back when this lands.
+- [ ] **`C-CALV4-GM-CONSOLE` — a v4 home for the GM world-state console. A
+      PREREQUISITE, not a booking.** `calendar_v2_gmpanel.templ` + `gm_panel.js`,
+      only mount `calendar_v2.templ:152`, gated on `CanControlWorldState`. It
+      writes through `PUT /calendar/world-state`, which survives any sunset, so
+      this is a REHOUSING job rather than a backend one.
+- [ ] **The sky strip gets NO replacement slice. R2-5 IS the replacement**, and
+      it is already signed. **Two prerequisites get new slices and the third is
+      already covered — never three. Do not book a fourth.**
+- [ ] **`C-CALV4-BENCH-CALID` — the Bench learns `?calId=`, and the doors that
+      dropped a selection regain it.** `AppDashboard` reads `sort`, `y` and `m`
+      and never `calId` (measured), so every re-pointed door lands on the
+      default selection. **The five lost selections, by anchor:**
+      `calendar_settings.templ:23` (the calendar you were editing),
+      `service.go` search hits (the hit's own calendar), `rsvp_handler.go`
+      (the event's calendar), `entity_calendar_block.go` (the block's bound
+      calendar), `bench.go`'s ribbon tile (the primary), plus both post-create
+      303s (the calendar just created). **The two dropped DATE cursors ride with
+      it** ([VS-13]): `bench.go`'s Next-Up rows and
+      `entity_calendar_block.go:296`, which both carried `?year=&month=&day=`.
+      **SMALLER THAN BOOKED:** the Bench gained a `?y=&m=` MONTH cursor under
+      [GR-1] after the dispatch was signed, so half the machinery exists.
+      **It also restores the Bench's own row-grid link**, which [VS-14] removed
+      rather than re-pointed because a self-link is not a door.
+- [ ] **`C-CAL-DASH-DEADCODE` — remove `app_dashboard.templ`'s
+      retained-but-unrouted card grid.** ~700 lines rendering
+      `CalendarAppDashboardPage`, which has **no caller anywhere in
+      `internal/`**, carrying **four `/calendar/v2` references** (`:196`, `:534`,
+      `:549`, `:31`) and still pinned by `app_dashboard_test.go:135`.
+      **It is why the R2-4 dispatch's own door table counted two doors nobody
+      can click**, and it reads as live to every grep.
+      **MUST SURVIVE it:** `calendarAppDashboardEmpty`,
+      `calendarPermissionsModal` and `adaptiveCalendarWidget`, re-used by
+      `bench.templ` and `entity_calendar_block.templ`.
+- [ ] **The `CalendarV2ViewData` rename** — a V2-NAMED TYPE WITH v4 CONSUMERS.
+      `entity_calendar_block.go` builds one and `entity_calendar_block.templ`
+      takes one, so a sweep keyed on the string `calendar_v2` would try to delete
+      a type the entity embed compiles against. Mechanical, wide, its own slice,
+      **not a prerequisite of anything**.
+- [ ] **`C-CAL-V1-SUNSET` is SMALLER than it was booked as.**
+      `V1DeprecationBanner` has exactly **ONE** host — `calendar.templ:308`, the
+      V1 timeline. The setup chooser it also steered no longer exists ([WZ-13]
+      deleted `CalendarSetupPage`; `v1_deprecation_banner_test.go` asserts it
+      stays deleted). It also owns the ONE door R2-4 deliberately left on V2:
+      `calendar.templ:210`'s `dayCellEventHref`, the V1 embed's day chip.
+- [ ] **THE EGRESS COST IS ACCEPTED, NOT AN OPEN RISK — do not re-litigate it.**
+      RSVP notification emails and global search deep links **already carried
+      `/calendar/v2` URLs into the world** before R2-4. **R2-4 stops MINTING
+      them**; the ones already sent and already indexed keep resolving, because
+      R2-4 removes no route. **`C-CALV4-SHELL-REMOVAL` is what finally breaks
+      them**, and the operator accepted that in choosing the end state.
 
 ## 0a. C-CALV4-GAMEREADY — the playability slice (LANDED 2026-08-08)
 
@@ -1707,12 +1796,30 @@ divergences".
 
 Phase B, W-D: the nav Calendar tab's landing surface.
 
-- [ ] **The anonymous-public gap.** `/apps/calendar` rides the authenticated
-  group (`calendar/routes.go:179`) while `/calendar/v2` is public-capable
-  (`routes.go:147-149`), so an anonymous visitor to a **public** campaign who
-  clicks the nav Calendar tab lands on `/login`. Fixing it needs a route-group
-  change plus a `routes_snapshot.txt` regeneration, which no wave-1 slice may
-  do → its own wave-2 slice. Booked by the dispatch, not a finding.
+- [x] **The anonymous-public gap.** — **DONE 2026-08-08, `C-CALV4-V2SUNSET`
+  (R2-4) stage 2.** `GET /apps/calendar` moved from the authenticated group to
+  `pub` and `RequireRole(RolePlayer)` became `RequireViewAccess()` — the same
+  pairing the V2 read routes it replaces already carried. An anonymous visitor
+  to a PUBLIC campaign now reaches the Bench instead of `/login`.
+
+  **THE BOOKED COST DID NOT EXIST, and that is the part worth remembering.**
+  This booking was copied forward three times, in the same words, each time
+  naming "a `routes_snapshot.txt` regeneration" as the reason no wave-1 slice
+  could take it. **The snapshot never moves.** It records METHOD, PATH and
+  defining file and nothing about middleware; a group change and a guard swap
+  leave all three identical, so the file is byte-identical at 727 lines across
+  the whole slice. A booking deferred four times on a cost nobody re-measured
+  is the lesson, and it is written into ADR-048's R2-4 section as one.
+
+  **The line numbers in the original booking were also stale** — `routes.go:179`
+  was `:332` by the time it was executed, and `:147-149` was `:300-302`.
+
+  **One producer change rode with it**, because the Bench is not the read-only
+  twin of `/calendar/v2` the booking assumed: it renders a party-roster panel
+  with member display names, and the route's Player floor was the only thing
+  bounding that panel's audience. The floor moved onto the data
+  (`benchRsvpResolve` skips the roster below `RolePlayer`), so a viewer who
+  could not reach the page yesterday cannot read member names today.
 - [ ] **The retired card grid is dead code awaiting the post-wave sweep.**
   `CalendarAppDashboardData`, `CalendarAppDashboardPage`,
   `calendarAppDashboardDetail` + its "see in action" children and
@@ -2708,13 +2815,23 @@ NOT take, each with the reason it was left.
   IMPLEMENTED where wave 3 touched.** `helpers.go`'s `layersInvokerTitle` is
   still `title`-only; W-F makes that invoker live, so the state disappears on
   its own. Promote the rule to a blocking lint once both wave-3 slices land.
-- [ ] **The `/apps/calendar` anonymous-public gap is still open and still its own
-  slice.** Deliberately NOT folded into P8: moving that route onto a
-  public-capable group in the same slice that fills the page with per-member
-  roles, zones and clocks would make the security review reason about a nil
-  viewer against brand-new code, on the most person-identifying surface in the
-  product. Do it against settled code, with `buildBench`'s degrade ladder and the
-  W5a `ListVisibleCalendars` path each proven for a nil viewer.
+- [x] **The `/apps/calendar` anonymous-public gap.** — **DONE 2026-08-08,
+  `C-CALV4-V2SUNSET` (R2-4) stage 2, and P8 was RIGHT to refuse it.** Doing it
+  against settled code is exactly what found the thing a same-slice review would
+  have missed: the panel P8 built prints **every member's display name, role and
+  zone to any viewer**, by design and by signature ("every member, at every
+  role" — the audience law lives in the data). Against a RoleNone viewer that
+  is a leak, and it was MEASURED as one — an anonymous render carried two real
+  member names — before the guard was written. The floor the route was about to
+  give up now lives in `benchRsvpResolve`, which skips the roster below
+  `RolePlayer` and returns the panel's own shipped unfilled state.
+
+  The nil-viewer proofs this row asked for were also taken: every per-user read
+  in `buildBench` was already guarded on an empty key
+  (`blockLayerPrefsFor`, `benchSectionPrefsFor`, `resolveActiveCalendar`), and
+  the W5a `ListVisibleCalendars` path is exercised against a REAL MariaDB with a
+  hidden calendar, a `dm_only` event and a per-user-restricted event in the
+  fixture.
 - [ ] **Density's per-day numerator is "the busiest hour of that column".** It is
   the only per-day reduction the per-hour aggregate supports without inventing a
   rule, and each bar states its own denominator in `title`. If the drawing pass
