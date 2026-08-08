@@ -43,6 +43,50 @@ hit the table. **Playability, not polish.**
 | **[GR-17] / [GR-18]** — §9, the silently re-dated year | **[GR-17] REPRODUCED FIRST, on a real MariaDB, before a line of fix was written.** Inserting an intercalary month at position 5 moved 3 of 4 events a month later and stranded ZERO; deleting the last month stranded its events at a position nothing renders. Under **[GR-SIGN-B] (SIGNED — WARN, NEVER REFUSE)**, `SetMonths` and `ApplyImport` now return a `MonthEditImpact`, and **the count is a BEFORE/AFTER COMPARISON, not a bounds check** — a `month > len(months)` count reports 0 on the insertion case, which certifies the damage. The sentence states both numbers. Plus a read-only **stranded-events row on the Bench**, from ONE aggregate query for the whole campaign, so the state is visible after the moment of the edit. **Zero migrations, zero data writes, no stored `Month` ever rewritten.** Guarded by `months_edit_repro_test.go` + `months_edit_impact_test.go` (**four real-database tests**). | **[x] shipped** |
 | **[GR-19]** — §10, the anonymous visibility bypass | **VERIFIED ALREADY FIXED (World 1) — no second fix written, and `anonymous_visibility_test.go` untouched.** All four named functions carry a `permissions.Viewer`; ADR-049 is recorded. The audit's own four-viewer probe re-run in `anonymous_visibility_probe_test.go` and reporting **anon 1 · non-member 1 · player 1 · owner 3** ties, with calendars `[harptos]` for all three below-DM viewers. Every surviving `userID == ""` audited and confirmed "is there a user at all" — per-user persistence, RSVP identity, session lookup — never a trust decision. **No fifth site.** Mutation-proven: re-adding `\|\| v.userID == ""` to `SkipsPerUserRules` reproduces the audit's leaked numbers exactly (anon 3 ties incl. `SECRET: the traitor is Bryn`, calendars `[harptos gm-only kael-only]`) and reds **all five** anonymous tests. `.ai.md`'s stale BOOKED entry and its stale system-context line corrected. | **[x] verified** |
 
+### C-CALV4-MOBILE — the phone pass (LANDED 2026-08-08)
+
+Lane 3 of GAMEREADY, the only one of five the readiness audit returned
+NOT-READY. **CSS plus one JS module** — no markup restructuring, no template
+branch, no route, no migration, no producer field, no new page script, which is
+what made it a three-day slice rather than a rewrite.
+
+| block | what it owns | state |
+|---|---|---|
+| **[MOB-1]** | The Block's `max-height: 520px` cap lifted at the narrow tier and the Ledger given a **declared** 132px (`3 x 44`) rows box, as a `@container cal-block (max-width: 480.98px)` query in `calendar-block.css` — never a media query, because `.cal-block-host` is the query container and this sheet has no width `@media` at all. **Measured 41/220 with 0 of 5 rows fully visible at 390x664; now 132/220 with 3 of 5, at 390 AND 375 AND 360.** §SIZE CLASS's declared-height invariance is re-bought rather than dropped, by two floors instead of one cap (delta 0px selected vs unselected, 0px across Shelf panes). | **[x] shipped** |
+| **[MOB-2] / [MOB-9]** | The sheet's geometry left JavaScript. Was `top: 106px; width: 390px` written once at open time: at 390x380 (a keyboard) the box did not move and **Save sat at y[426..456] against a 380px viewport**, unreachable in a `position: fixed` box. Now `inset-block-end / inset-inline / inline-size: 100% / max-block-size: 100dvh`, plus a flex-column interior so the clamp is absorbed rather than clipping the footer. `70vh -> 70dvh`. [DC-3]'s `clear` report re-derived to describe the rendered box. `.edmorph` proven absent from the settled open state with `transition-duration: 0s`, so a keyboard cannot re-trigger the shipped morph. | **[x] shipped** |
+| **[MOB-3]** | The page lock **and its release, ruled harder than the lock**. `scrollBy(0,400)` moved the page 120 -> 520 behind both sheets at three widths; now 0 with `body { position: fixed; top: -120px }`. One derived boolean (`card \|\| editor`), never a counter that can go negative, released on the popover `toggle` event as well as the module's own paths. Five exit paths + the card→editor→close arm all restore the scroll to the pixel. | **[x] shipped** |
+| **[MOB-4] / [MOB-8]** | Five independently-scrolling regions on one phone page, none declaring `overscroll-behavior`, reduced to **two** and both contained. And the one horizontal scroller this slice adds: at week-len 20, 624px of grid inside a 364px `overflow: hidden` box — days a GM cannot reach are DATA LOSS. `.inst` scrolls the inline axis with `overscroll-behavior-x: contain`; a tenday grows no scroller it does not need; the page fold re-proven in 24 measurements. | **[x] shipped** |
+| **[MOB-5]** | The RSVP overview needed **182px of sideways drag at 390 and 202px at 360**, on the panel the operator's own go/no-go gate names. Now zero at 390/375/360 on both arms, CSS-only, `bench.templ` byte-unchanged. **The escape hatch did NOT fire** — no scroll-snap mitigation ships and `C-CALV4-RSVP-OVERVIEW-TRANSPOSE` is deliberately NOT booked. | **[x] shipped** |
+| **[MOB-6]** | `/schedule` was tuned to exactly 390 and dragged 7px at 375 and 22px at 360. Re-derived **fluidly**: the `calc()` floor stays, only `--idw` moves (76 -> 48), `--colmin` holds at its signed 24. Paint targets 24x39 -> 44x44 minimum. The budget harness gained a **360 arm beside** the byte-unchanged 390 one. | **[x] shipped** |
+| **[MOB-7] / [MOB-9b]** | The 44px floor in the block axis at ≤640 on a **short named list**; `daycardFloorPx = 24` byte-unchanged with `daycardTouchFloorPx = 44` beside it. The day cell's inline axis **refused with the arithmetic as a closed question**. Nothing above 640 moved (proved at 1280). Drag-create declared desktop-only in the module's own copy, **labelled [READ], not measured**; `touch-action` refused by name. | **[x] shipped** |
+| **[MOB-10]** | `benchShotPage` was missing the `.bsurf` wrapper, so every ≤640 ordering rule matched nothing and the entire phone evidence set was of a layout production does not render. **Fixed in stage 1, before any artefact.** Every phone number in this lane is measured in a **NESTED BROWSING CONTEXT (iframe)**, stated on the face of every probe, because headless Chromium clamps its window to ~500px. | **[x] shipped** |
+| **[MOB-S1]** | Whether a player's RSVP control precedes the calendar at ≤640. **UNSIGNED — shipped as answer A (nothing changes).** It would overturn [BR2-4]'s three signed `order` values and no other ruling depends on it. **Do not answer it; it is the operator's.** | **[ ] to sign** |
+
+**Booked by C-CALV4-MOBILE's own refusals:**
+
+- [ ] **`C-CALV4-MOBILE-SHELL`** — the app shell at phone width is **unmeasured
+  by anyone**: no Tailwind bundle could be built in the audit environment, so
+  whether the sidebar collapses, whether the topbar hamburger is a real target,
+  and whether `<main>`'s own `overflow` interacts with the Block are all
+  unknown. It matters more now than it did: [MOB-1] turned the Block from an
+  internally-scrolling 520px box into a ~668px tall one, and `<main>` is the
+  first thing that would object. **Ten minutes on a real phone against a live
+  instance either closes it or turns it into a real slice.** The headless probes
+  cannot see the app shell at all.
+- [ ] **`C-CALV4-DRAGCREATE-TOUCH`** — the touch path for drag-create.
+  [MOB-9b] declares the scope in the module's own copy and does not build the
+  path. **[READ] from code, not measured** (headless Chromium fires no touch
+  gestures): registration on `document` pointer events with no `pointerType`
+  filter, no `touch-action` anywhere, and a `pointercancel` handler that calls
+  `dragEnd(true)` — so a touch a browser decides is a pan creates nothing.
+  Ten seconds on a real phone confirms or refutes it. Joins
+  `C-CALV4-DAYPICK-A11Y`, which already inherits the keyboard half.
+- [x] **`C-CALV4-DAYCARD-WDWRAP` — RETIRED BY MEASUREMENT, not built.** The
+  booking said the weekday strip wraps "6 + 4" on a phone. Measured at 390 and
+  at 360: **10 stops, ONE row, 0 stops outside the box**, `.wdpick` right edge
+  371 @390 and 341 @360. The stills were pessimistic. Close it rather than
+  carrying it.
+
 - [ ] **A `denied_users` rule is NOT a members-only flag, and an anonymous
   visitor can legitimately outnumber the player it names.** Measured while
   re-running §10's probe: on an `everyone` event carrying

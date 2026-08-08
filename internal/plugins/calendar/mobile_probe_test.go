@@ -130,7 +130,7 @@ func mobileDrive(t *testing.T, chrome, inner string, w, h int, steps []mobileSte
 		at += s.Delay
 		fmt.Fprintf(&js, "setTimeout(function(){ %s; post(%q); }, %d);\n",
 			s.Outer, s.Op, at)
-		at += 260
+		at += 300
 		_ = i
 	}
 
@@ -155,7 +155,11 @@ func mobileDrive(t *testing.T, chrome, inner string, w, h int, steps []mobileSte
 	if win < mobileMinWindowPx {
 		win = mobileMinWindowPx
 	}
-	budget := at + 1500
+	// HEADROOM. The steps run on VIRTUAL time, so this is deterministic rather
+	// than a race — but a truncated budget would drop the tail replies and
+	// mobileDrive would fatal on the count rather than on a measurement, which
+	// reads as a flake and is not one.
+	budget := at + 3000
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, chrome,
@@ -598,7 +602,26 @@ const mobileOpsScript = `
         var dx = Math.max(0, Math.max(a.left - b.right, b.left - a.right));
         gap = Math.round(Math.max(dx, dy));
       }
-      return { list: out, xDeleteGap: gap, deleteVisible: !!(del &&
+      // C-CALV4-DAYCARD-WDWRAP, answered by measurement rather than carried:
+      // the booking says the weekday strip wraps "6 + 4" at phone width. The
+      // rows are counted from DISTINCT TOP EDGES, and "outside" is a stop whose
+      // right edge crosses its own container's.
+      var wd = el('.cal-dayeditor .wdpick');
+      var strip = { stops: 0, rows: 0, outside: 0, right: 0 };
+      if (wd) {
+        var wr = wd.getBoundingClientRect();
+        var tops = {};
+        all('.cal-dayeditor .wdpick button').forEach(function (b) {
+          var r = b.getBoundingClientRect();
+          if (r.width <= 0 && r.height <= 0) return;
+          strip.stops++;
+          tops[Math.round(r.top)] = 1;
+          if (r.right > wr.right + 0.5 || r.left < wr.left - 0.5) strip.outside++;
+        });
+        strip.rows = Object.keys(tops).length;
+        strip.right = Math.round(wr.right);
+      }
+      return { list: out, xDeleteGap: gap, wdstrip: strip, deleteVisible: !!(del &&
         del.getBoundingClientRect().height > 0) };
     },
     noop: function () { return { did: 'noop', page: fold() }; }
@@ -1650,6 +1673,19 @@ func TestMobileProbe_TheTapFloorAtAPhoneWidth(t *testing.T) {
 		// THE ✕ AND DELETE ARE HELD APART, and the report says whether the
 		// editor lane's Delete CONFIRMATION has shipped — because if it has
 		// not, this separation is the only protection there is.
+		// C-CALV4-DAYCARD-WDWRAP: a booking retired by measurement.
+		if wd, ok := r["wdstrip"].(map[string]any); ok && mobileF(wd, "stops") > 0 {
+			t.Logf("   C-CALV4-DAYCARD-WDWRAP — the weekday strip: %.0f stops, %.0f row(s), "+
+				"%.0f outside the box, .wdpick right edge %.0f. The booking said it wraps "+
+				"\"6 + 4\"; it does not.",
+				mobileF(wd, "stops"), mobileF(wd, "rows"), mobileF(wd, "outside"),
+				mobileF(wd, "right"))
+			if mobileF(wd, "outside") > 0 {
+				t.Errorf("%dpx: %.0f weekday stop(s) render outside the strip's own box",
+					w, mobileF(wd, "outside"))
+			}
+		}
+
 		gap := r.num("xDeleteGap")
 		t.Logf("   ✕ ↔ Delete edge-to-edge gap: %.0fpx (ruled >= 8) · Delete rendered %v",
 			gap, r.boolean("deleteVisible"))

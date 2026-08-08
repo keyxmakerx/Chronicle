@@ -20,6 +20,63 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — C-CALV4-MOBILE SHIPPED: the phone the GM will actually be holding (2026-08-08)
+
+**GAMEREADY's lane 3, the only one of five the readiness audit returned
+NOT-READY.** CSS plus one JS module: no markup restructuring, no template
+branch, no route, no migration, no producer field, no new page script.
+
+The founding measurement, and the one to remember: at **390x664**, on the
+calendar page, `.cal-block-host .lrows` — the list of what is actually
+happening — was **41 pixels tall against 220 of content, with ZERO of its five
+rows fully visible**. At 360 it was 24. A second Block sheared its empty-state
+sentence mid-word. It is now **132 of 220 with three rows fully inside, at 390
+and 375 and 360**, and the desktop tier is byte-unchanged (209/240, 4 of 5,
+min-height 176).
+
+Seven other things a table would have hit:
+
+- **Save was under the keyboard.** The editor sheet carried an inline
+  `top: 106px` written once at open time; shrink the viewport to 390x380 as a
+  software keyboard does and the box did not move — Save at `y[426..456]`
+  against a 380px viewport, in a `position: fixed` box no gesture can scroll.
+  The geometry now lives in CSS and re-resolves itself; Save measures inside the
+  viewport in nine arms (three widths x open/keyboard/rotation).
+- **The page scrolled out from under an open sheet** in all six measured arms.
+  It is locked now by the `position: fixed` form with the offset stored, and —
+  ruled harder than the lock — **released on all five exit paths and on the
+  card→editor→close handover**, restoring the scroll to the pixel.
+- **Five independently-scrolling regions on one phone page**, none declaring
+  `overscroll-behavior`. Two now, both contained.
+- **Days a GM could not reach.** At a 20-day week, 624px of grid inside a 364px
+  `overflow: hidden` box. The grid's own wrapper scrolls the inline axis now;
+  a tenday still grows no scroller, and the page fold is re-proven in 24
+  measurements.
+- **The operator's own gate panel needed 182px of sideways drag** at 390 and
+  202px at 360. Zero now, both arms, CSS-only, `bench.templ` byte-unchanged.
+- **`/schedule` was tuned to exactly one phone** — 0px of drag at 390, 7px at
+  375, 22px at 360. Re-derived fluidly against 360; the budget guard now runs at
+  both ends instead of one.
+- **The tap floor was 24px against a 44px standard.** A short named list of the
+  controls a person hits under time pressure now measures >= 44 in the block
+  axis at <= 640, with the desktop measurement proven identical before and after.
+
+**Evidence discipline, and it is the reason the Ledger survived to a live
+build:** `benchShotPage` was missing the `.bsurf` wrapper the product emits, so
+every one of the three signed ≤640 ordering rules matched nothing and the entire
+phone evidence set was of a layout production does not render. That was fixed
+FIRST, before any artefact. Every phone number in this lane is measured in a
+**NESTED BROWSING CONTEXT (an iframe)**, stated on the face of every probe,
+because headless Chromium here clamps its window to ~500px.
+
+**Six browser probes registered in `tools/check-browser-probes.sh`**, none of
+them env-gated, so a machine that can drive a browser must run them.
+
+**Still open, and it is the operator's:** `[MOB-S1]` — whether a player's RSVP
+control should precede the calendar at ≤640 — is UNSIGNED and shipped as
+"nothing changes". And **`C-CALV4-MOBILE-SHELL`**: the app shell at phone width
+is unmeasured by anyone, and matters more now that the Block is tall.
+
 ### calendar-v4 — C-CALV4-GAMEREADY §4 and §5 SHIPPED: the operator can arm their own gate, and the RSVP flow stopped dead-ending players (2026-08-08)
 
 **The operator's stated go/no-go for starting their game, plus the four measured
