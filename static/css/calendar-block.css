@@ -2400,6 +2400,32 @@
     overscroll-behavior-x: contain;
   }
 
+  /* ── THE BLOCK'S TWO NAMED TAP TARGETS (C-CALV4-MOBILE [MOB-7] SIGNED)
+     MEASURED at 390x664: the Layers ⋯ invoker is 28x28 and the Ledger's Month
+     tab is 49x22, against a 44px platform floor.
+
+     THEY TAKE A CONTAINER QUERY RATHER THAN A MEDIA QUERY, and that is this
+     sheet's law rather than a preference: `.cal-block-host` is the query
+     container and a viewport media query here would be the first one in the
+     file. It also happens to be the RIGHT answer — a Block in a 358px entity
+     column is finger-sized wherever the viewport is.
+
+     AND THE DAY CELL'S INLINE AXIS IS REFUSED AS A TARGET, WITH THE
+     ARITHMETIC, AS A CLOSED QUESTION RATHER THAN AN OPEN DEFECT. A cell's
+     inline size is gridWidth / week-len; the grid measures 364px at a 390
+     viewport, so a ten-day week gives 36.4px — the 36 the probe measured — and
+     44px would need week-len <= 8 (364 / 8 = 45.5). No CSS reaches it without
+     dropping days, and dropping days is [MOB-8]'s data loss arriving by
+     another door. The cell's BLOCK axis is already 53px and passes. */
+  .cal-block-host .icb.layers {
+    min-inline-size: 44px;
+    min-block-size: 44px;
+  }
+  .cal-block-host .ltab {
+    height: auto;
+    min-block-size: 44px;
+  }
+
   /* the Shelf's pane floor IS its own ceiling (:1654 max-height: 132px), so
      the zone has one declared height in all three panes. No new number. */
   /* THE SHELF DECLARES ITS HEIGHT, SO SWITCHING A TAB CANNOT SHOVE THE HOST

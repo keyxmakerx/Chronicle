@@ -1092,6 +1092,37 @@
   .cal-bench .rsvp .side { width: 100%; }
 }
 @media (max-width: 640px) {
+  /* ── THE TAP FLOOR, IN THE BLOCK AXIS, ON A NAMED LIST
+     C-CALV4-MOBILE [MOB-7] SIGNED. The list is SHORT ON PURPOSE.
+
+     MEASURED at 390x664, scoped to the calendar's own surfaces: the RSVP
+     answer trio is Yes 37x24, No 33x24, Maybe 52x24; `Ask →` is 53x24; the
+     ribbon tile's `→` link is 10x19, the smallest target measured anywhere on
+     the page. The platform floor is 44. These are the controls a person hits
+     under time pressure at a table — the other thirty-odd sub-44 controls on
+     the editor's dense desktop chrome are NOT chased, and the surface's 24px
+     floor stands unchanged above 640.
+
+     THE BLOCK AXIS ONLY. The inline axis of a day cell is arithmetically
+     unreachable (see calendar-block.css's narrow tier) and widening an inline
+     control on a phone is how a row stops fitting. */
+  .cal-bench .rsvpb .btn,
+  .cal-bench .rsvp .mrow .btn,
+  .cal-bench .rsvp .mrow .btn.xs {
+    min-block-size: 44px;
+    height: auto;
+  }
+  /* the ribbon tile's arrow was a bare inline <a>: it had no block size of its
+     own at all, which is how a link measures 10x19. Giving it a box is what
+     makes a floor mean anything on it. */
+  .cal-bench .tile .eb .ar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: 44px;
+    min-block-size: 44px;
+  }
+
   /* ── THE OVERVIEW GRID'S PHONE FORM (C-CALV4-MOBILE [MOB-5] SIGNED) ──────
      MEASURED, with the repo's own RSVP fixture, on the player arm AND the GM
      arm: `.cal-bench .rsvp .ovwrap` client 362 against scroll 520 at 390 —

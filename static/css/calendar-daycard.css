@@ -443,6 +443,41 @@
 
 .cal-dayeditor .dcbox { padding: 0; }
 
+/* ── THE SHEET'S INTERIOR ABSORBS THE CLAMP, RATHER THAN OVERFLOWING IT
+   C-CALV4-MOBILE [MOB-2], and it is a MEASURED consequence of [MOB-7] rather
+   than a tidy-up.
+
+   `max-block-size: 100dvh` bounds the BOX. It does not bound the box's
+   contents, and `.cal-dayeditor` is `overflow: hidden` — so a form taller than
+   the clamp is CLIPPED at the bottom, which is where the footer is, which is
+   where Save is. That is the same defect the inline `top` produced, arriving
+   through a different door.
+
+   MEASURED: with the editor's foot raised to a 44px tap target ([MOB-7]) and
+   the frame shrunk to 390x380, Save's rect was y[340..384] against a 380px
+   viewport — four pixels past the fold, in a box that cannot be scrolled to.
+
+   THE COLUMN IS WHAT FIXES IT: head and foot keep their intrinsic heights, and
+   `.ed-body` — which is already the sheet's scroller — takes whatever is left.
+   `[data-dc-shown]` is on the selector on purpose: without it this `display`
+   would outrank the closed state's `display: none` on source order and a shut
+   editor would be on the screen. */
+.cal-dayeditor.dcsheet[data-dc-shown] {
+  display: flex;
+  flex-direction: column;
+}
+.cal-dayeditor.dcsheet[data-dc-shown] .dcbox,
+.cal-dayeditor.dcsheet[data-dc-shown] .de-form {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cal-dayeditor.dcsheet[data-dc-shown] .ed-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
 /* The form is the box below the head: body, error line, foot. It is a column
    so the foot stays at the bottom and the error line sits directly above it,
    where a save that did not happen is read rather than scrolled to. */
@@ -742,6 +777,33 @@
 /* THE ONE-COLUMN BREAKPOINT IS A HARD REQUIREMENT, NOT A NICETY ([ER-5]).
    Below 1080px the live preview sits UNDER the form instead of beside it,
    exactly as the drawing does it — and `editor-gm-390x844.png` is that state. */
+/* ── THE EDITOR'S TAP FLOOR AT ≤640 (C-CALV4-MOBILE [MOB-7] SIGNED) ────────
+   MEASURED at 390x664: 46 of the editor's 50 visible controls are under 44px,
+   and the smallest is the head's 24x24 ✕ — which sits on the same sheet as a
+   one-click, hard-DELETE, no-undo Delete (the confirmation is the editor
+   lane's and this slice does not add it; the separation below is what this
+   slice ships).
+
+   FOUR CONTROLS, NAMED, AND THE OTHER FORTY-SIX ARE NOT CHASED. The floor is
+   the BLOCK axis so a wider control cannot push a row out of a 360px screen,
+   and it lands in THIS sheet rather than in calendar-bench.css because the day
+   card and the editor bring their own scoped stylesheet. */
+@media (max-width: 640px) {
+  .cal-dayeditor .ed-head [data-de-cancel],
+  .cal-dayeditor .ed-foot [data-de-cancel],
+  .cal-dayeditor [data-de-save],
+  .cal-dayeditor [data-de-delete] {
+    min-inline-size: 44px;
+    min-block-size: 44px;
+    height: auto;
+  }
+  /* THE ✕ AND DELETE ARE HELD APART. Two 44px targets that touch are one
+     44px target with two outcomes, and one of those outcomes is a destroyed
+     event with no undo. */
+  .cal-dayeditor .ed-foot { gap: 10px; }
+  .cal-dayeditor .ed-head { gap: 10px; }
+}
+
 @media (min-width: 1080px) {
   .cal-dayeditor .ed-body { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
 }

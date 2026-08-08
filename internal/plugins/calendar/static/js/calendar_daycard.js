@@ -2959,6 +2959,35 @@
     //     EQUIVALENT AND THIS SLICE DOES NOT INVENT ONE — it is booked with
     //     [DC-4]'s a11y follow-on, C-CALV4-DAYPICK-A11Y, because a focusable
     //     day cell that does not depend on a docked Ledger is a WIDGET change.
+    //
+    //     AND "POINTER-ONLY" IS DESKTOP-ONLY IN PRACTICE, WHICH IS DECLARED
+    //     HERE RATHER THAN LEFT TO BE DISCOVERED AT A TABLE
+    //     (C-CALV4-MOBILE [MOB-9b] SIGNED).
+    //
+    //     TOUCH IS A POINTER AND THIS PATH NAMED IT NEITHER WAY, which is the
+    //     defect. THE MULTI-DAY PATH ON A PHONE IS THE EDITOR'S END-DATE
+    //     FIELD, which already ships and is reachable by every input method.
+    //
+    //     ** THIS IS [READ] FROM CODE, NOT MEASURED, AND MUST STAY LABELLED
+    //     THAT WAY WHEREVER IT IS RESTATED.** Headless Chromium fires no touch
+    //     gestures, so nothing in this repository has observed it. The
+    //     reasoning: the registration below takes `pointerdown` /
+    //     `pointermove` / `pointerup` on `document` with NO `pointerType`
+    //     filter; no `touch-action` is declared in any of the four calendar
+    //     stylesheets; under the default `touch-action: auto` a browser that
+    //     decides a touch is a pan fires `pointercancel` and stops sending
+    //     `pointermove`; and this module's own `pointercancel` handler calls
+    //     `dragEnd(true)`. So on a phone the drag is usually swallowed as a
+    //     page scroll and creates nothing, while on a desktop it works.
+    //     Sound, and unverified — ten seconds on a real phone settles it.
+    //
+    //     `touch-action: none` ON THE DAY CELLS IS REFUSED BY NAME. It would
+    //     claim the gesture and KILL PAGE SCROLLING OVER THE MONTH GRID, which
+    //     on a phone is a worse trade than losing drag-create — and it would
+    //     put a `touch-action` declaration into the four sheets [MOB-4]
+    //     deliberately keeps free of one. The touch path is booked as
+    //     C-CALV4-DRAGCREATE-TOUCH; this ruling declares the scope, it does
+    //     not build the path.
     //  7. TEXT-SELECTION SUPPRESSION IS SCOPED TO THE ACTIVE DRAG and restored
     //     on pointerup — the V2 implementation learned that one the hard way.
     //

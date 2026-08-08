@@ -74,6 +74,30 @@ import (
 // failing row can name it.
 const daycardFloorPx = 24
 
+// daycardTouchFloorPx is a SECOND floor beside the first, never a replacement
+// for it — C-CALV4-MOBILE [MOB-7] SIGNED, "two floors, two arms, neither
+// replacing the other", which is what "strengthened, never weakened" means
+// here.
+//
+// 24 is the DENSE DESKTOP CHROME floor and it stands unchanged at every width,
+// over every visible control on the card and the editor. 44 is the PLATFORM
+// TOUCH floor and it applies at ≤640 to a NAMED, SHORT list of the controls a
+// person hits under time pressure at a table.
+//
+// MEASURED at 390x664 before it existed: 46 of the editor's 50 visible
+// controls were under 44px, the smallest being the head's 24x24 ✕ — adjacent
+// on the same sheet to a one-click, hard-DELETE, no-undo Delete. The RSVP
+// answer trio was Yes 37x24 / No 33x24 / Maybe 52x24, `Ask →` 53x24, the
+// Block's Layers invoker 28x28, the Ledger's Month tab 49x22, and the ribbon
+// tile's `→` link 10x19 — the smallest target measured anywhere on the page.
+// TestDayCardFloorsProbe was green on every one of them, because it measures
+// against 24.
+//
+// The named list is measured by TestMobileProbe_TheTapFloorAtAPhoneWidth, in
+// the same package, over the whole Bench rather than only the card — because
+// four of the named controls are not on the card at all.
+const daycardTouchFloorPx = 44
+
 type daycardFloorBox struct {
 	Sel  string  `json:"sel"`
 	Text string  `json:"text"`
@@ -542,6 +566,28 @@ func TestDayCardFloorsProbeMeasuresWhatTheSuiteHandsIt(t *testing.T) {
 	if !strings.Contains(dayCardCSS(t), "min-block-size: 24px") {
 		t.Error("calendar-daycard.css no longer declares a 24px control floor; the probe " +
 			"would be measuring against a bar the sheet does not set")
+	}
+
+	// ── THE SECOND FLOOR'S OWN SELF-PIN, IN THE SAME SHAPE AS THE FIRST'S
+	//    (C-CALV4-MOBILE [MOB-7] SIGNED) ────────────────────────────────────
+	//
+	// The two are pinned SEPARATELY and their ORDER is pinned too, because the
+	// failure this guards against is not a typo — it is somebody deciding one
+	// day that "there should really only be one floor" and quietly collapsing
+	// them. 24 is the dense desktop bar at every width; 44 is the touch bar at
+	// ≤640 on a named list; neither replaces the other.
+	if daycardTouchFloorPx != 44 {
+		t.Fatalf("the touch floor is %dpx; the platform standard and [MOB-7] both say 44",
+			daycardTouchFloorPx)
+	}
+	if daycardTouchFloorPx <= daycardFloorPx {
+		t.Fatalf("the touch floor (%d) is not above the dense floor (%d) — two floors that "+
+			"have crossed are one floor with a spare name",
+			daycardTouchFloorPx, daycardFloorPx)
+	}
+	if !strings.Contains(dayCardCSS(t), fmt.Sprintf("min-block-size: %dpx", daycardTouchFloorPx)) {
+		t.Errorf("calendar-daycard.css declares no %dpx control floor; the ≤640 arm would be "+
+			"measuring against a bar the sheet does not set", daycardTouchFloorPx)
 	}
 	// The sweep must reach BOTH widths §10 item 9 names and BOTH §10 item 11
 	// names, and it must run in edit mode — a create-mode-only sweep cannot see

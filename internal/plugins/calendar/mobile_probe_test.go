@@ -199,6 +199,16 @@ func mobileDrive(t *testing.T, chrome, inner string, w, h int, steps []mobileSte
 // four stylesheets, the real module, plus the command listener. It carries the
 // app shell's own phone padding so the Block's host width is the product's.
 func mobileInnerPage(t *testing.T, data BenchData, extraCSS string) string {
+	return mobileInnerPageWith(t, data, extraCSS, "")
+}
+
+// mobileInnerPageWith is the same page plus one script injected AFTER the
+// module and BEFORE the ops listener. It exists for the edit-mode arm, which
+// needs the capture rig's stubbed GET installed before a record is loaded —
+// the same substitution daycard_screenshot_gen_test.go discloses, and the only
+// fabrication anywhere in this file: the RECORD is canned, the chrome that
+// draws it is the shipped chrome.
+func mobileInnerPageWith(t *testing.T, data BenchData, extraCSS, extraScript string) string {
 	t.Helper()
 	css := benchCSS(t) + benchBlockSheet(t) + dayCardCSS(t) + extraCSS
 	mod := readRepoFile(t, "internal/plugins/calendar/static/js/calendar_daycard.js")
@@ -212,6 +222,7 @@ func mobileInnerPage(t *testing.T, data BenchData, extraCSS string) string {
 		benchStripLinks(renderBench(t, data)) +
 		`</div>` +
 		`<script>` + vis + `</script><script>` + mod + `</script>` +
+		`<script>` + extraScript + `</script>` +
 		`<script>` + mobileOpsScript + `</script>` +
 		`</body></html>`
 }
@@ -440,6 +451,25 @@ const mobileOpsScript = `
       var d = el('[data-dc-new]'); if (d) d.click(); settle();
       return { ok: !!el('.cal-dayeditor[data-dc-shown]') };
     },
+    // EDIT MODE, which is the only mode Delete exists in: the module reveals
+    // [data-de-delete] only once a record has an id, because a DELETE cannot
+    // name an event the POST has not returned one for.
+    openEditRow: function () {
+      var cells = all('[data-bench-block] [data-day][data-day-ord]');
+      var best = null, bestN = 0;
+      cells.forEach(function (c) {
+        c.click();
+        var n = document.querySelectorAll('[data-cal-daycard] [data-dc-edit]').length;
+        if (n > bestN) { bestN = n; best = c; }
+      });
+      if (best) {
+        best.click();
+        var door = el('[data-cal-daycard] [data-dc-edit]');
+        if (door) door.click();
+      }
+      settle();
+      return { ok: !!el('.cal-dayeditor[data-dc-shown]'), doors: bestN };
+    },
     sheet: function () {
       settle();
       var root = el('.cal-dayeditor');
@@ -526,6 +556,50 @@ const mobileOpsScript = `
       var root = el('.cal-daycard');
       if (root && root.hidePopover) { try { root.hidePopover(); } catch (e) {} }
       settle(); return { did: 'card-teardown' };
+    },
+    // ── [MOB-7] the NAMED LIST, measured by selector ────────────────────
+    targets: function () {
+      settle();
+      var named = [
+        ['RSVP Yes / No / Maybe', '.cal-bench .rsvpb .btn'],
+        ['Ask →', '.cal-bench .rsvp .mrow .btn'],
+        ['the ribbon tile arrow', '.cal-bench .tile .eb .ar'],
+        ['the Block Layers invoker', '.cal-block-host .icb.layers'],
+        ['the Ledger Month tab', '.cal-block-host .ltab'],
+        ['editor Save', '.cal-dayeditor [data-de-save]'],
+        ['editor Cancel / ✕', '.cal-dayeditor [data-de-cancel]'],
+        ['editor Delete', '.cal-dayeditor [data-de-delete]'],
+        ['a day cell', '.cal-block-host .cell']
+      ];
+      var out = [];
+      named.forEach(function (pair) {
+        var boxes = all(pair[1]).filter(function (n) {
+          var r = n.getBoundingClientRect();
+          return r.width > 0 || r.height > 0;
+        }).map(function (n) {
+          var r = n.getBoundingClientRect();
+          return { t: (n.textContent || '').trim().slice(0, 16),
+            w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10 };
+        });
+        var minH = 1e9, minW = 1e9;
+        boxes.forEach(function (b) { if (b.h < minH) minH = b.h; if (b.w < minW) minW = b.w; });
+        out.push({ label: pair[0], sel: pair[1], n: boxes.length,
+          minW: boxes.length ? minW : 0, minH: boxes.length ? minH : 0, boxes: boxes });
+      });
+      // THE ✕/DELETE GAP. They live in different rows of the same sheet, so
+      // the distance is measured as a real edge-to-edge gap rather than
+      // assumed from the DOM order.
+      var x = el('.cal-dayeditor .ed-head [data-de-cancel]');
+      var del = el('.cal-dayeditor [data-de-delete]');
+      var gap = -1;
+      if (x && del) {
+        var a = x.getBoundingClientRect(), b = del.getBoundingClientRect();
+        var dy = Math.max(0, Math.max(a.top - b.bottom, b.top - a.bottom));
+        var dx = Math.max(0, Math.max(a.left - b.right, b.left - a.right));
+        gap = Math.round(Math.max(dx, dy));
+      }
+      return { list: out, xDeleteGap: gap, deleteVisible: !!(del &&
+        del.getBoundingClientRect().height > 0) };
     },
     noop: function () { return { did: 'noop', page: fold() }; }
   };
@@ -1451,3 +1525,162 @@ const mobileScheduleOpsScript = `
   function all2(root, s) { return Array.prototype.slice.call(root.querySelectorAll(s)); }
 })();
 `
+
+// ── [MOB-7] — the tap floor, on a named list, in the block axis ───────────
+//
+// BASELINE at 390x664, scoped to the calendar's own surfaces: 46 of the
+// editor's 50 visible controls under 44px, smallest 24x24 (the head ✕); the
+// RSVP trio Yes 37x24 / No 33x24 / Maybe 52x24; `Ask →` 53x24; the Block's
+// Layers invoker 28x28; the Ledger's Month tab 49x22; the ribbon tile's `→`
+// link 10x19 — the smallest target measured anywhere on the page. The repo's
+// own TestDayCardFloorsProbe was green on all of it, because it measures
+// against 24.
+//
+// THE LIST IS SHORT ON PURPOSE and the other thirty-odd are not chased: these
+// are the controls a person hits under time pressure at a table. The 24px
+// floor stands unchanged for dense desktop chrome, which the 1280 control row
+// at the end of this test proves rather than promises.
+func TestMobileProbe_TheTapFloorAtAPhoneWidth(t *testing.T) {
+	chrome := mobileNeedChromium(t)
+	// EDIT MODE and the GM arm, because two of the named controls exist only
+	// there: `[data-de-delete]` is hidden until a record has an id, and the
+	// tie/roster chrome the editor's dense rows sit in only renders on a
+	// loaded record. The stubbed GET is the capture rig's own, disclosed here
+	// as it is disclosed there.
+	inner := mobileWriteInner(t, "targets.html",
+		mobileInnerPageWith(t, benchFxShotData(DayCardMount{
+			CanCreate: true, CanAuthorDmOnly: true, CanDelete: true,
+			CanRestrict: true, CampaignID: "camp-1"}), "", daycardStubEditRecord))
+	// THE GM's RSVP PANEL IS ITS OWN PAGE: `Ask →` is a Director's control on
+	// the roster and the editor fixture does not carry an RSVP panel at all.
+	gmInner := mobileWriteInner(t, "targets-gm.html",
+		mobileInnerPage(t, benchFxDataRsvp(true, true), ""))
+	// THE PLAYER ARM IS A SECOND PAGE, because the RSVP answer trio is a
+	// player's control and a GM's page does not carry it at all — the absence
+	// is in the data ([BR2-7]), so there is no width at which a GM sees one.
+	playerInner := mobileWriteInner(t, "targets-player.html",
+		mobileInnerPage(t, benchFxDataRsvp(false, false), ""))
+
+	steps := []mobileStep{
+		{Op: "openCard"},
+		{Op: "openEditRow", Delay: 500},
+		{Op: "targets", Delay: 900},
+	}
+	panelSteps := []mobileStep{{Op: "targets"}}
+
+	desktop := mobileDrive(t, chrome, inner, 1280, 900, steps)[2]
+	deskMin := map[string][2]float64{}
+	dl, _ := desktop["list"].([]any)
+	for _, path := range []string{playerInner, gmInner} {
+		if pd, ok := mobileDrive(t, chrome, path, 1280, 900,
+			panelSteps)[0]["list"].([]any); ok {
+			dl = append(dl, pd...)
+		}
+	}
+	// ONLY RENDERED CONTROLS ARE RECORDED. The two pages overlap by label —
+	// the GM's editor page has no RSVP trio and the player's page has no
+	// editor — so folding a 0x0 "not rendered" row over a real measurement
+	// would invent a regression out of an absence.
+	for _, raw := range dl {
+		m, _ := raw.(map[string]any)
+		if mobileF(m, "n") == 0 {
+			continue
+		}
+		deskMin[fmt.Sprint(m["label"])] = [2]float64{mobileF(m, "minW"), mobileF(m, "minH")}
+	}
+
+	for _, w := range mobileWidths {
+		h := mobileHeightFor(w)
+		mobileHeader(t, "[MOB-7] the tap floor", w, h)
+		r := mobileDrive(t, chrome, inner, w, h, steps)[2]
+		list, _ := r["list"].([]any)
+		if len(list) == 0 {
+			t.Fatalf("%dpx: nothing measured", w)
+		}
+		// The two RSVP pages contribute the controls the editor fixture does
+		// not carry: the answer trio (a player's) and `Ask →` (a Director's).
+		for _, panel := range []struct {
+			path string
+			want string
+		}{
+			{playerInner, "RSVP Yes / No / Maybe"},
+			{gmInner, "Ask →"},
+		} {
+			pr := mobileDrive(t, chrome, panel.path, w, h, panelSteps)[0]
+			pl, _ := pr["list"].([]any)
+			for _, raw := range pl {
+				m, _ := raw.(map[string]any)
+				if fmt.Sprint(m["label"]) == panel.want && mobileF(m, "n") > 0 {
+					list = append(list, raw)
+				}
+			}
+		}
+		for _, raw := range list {
+			m, _ := raw.(map[string]any)
+			label := fmt.Sprint(m["label"])
+			n, minW, minH := mobileF(m, "n"), mobileF(m, "minW"), mobileF(m, "minH")
+			t.Logf("   %-26s %-40s n=%.0f smallest %.1fx%.1f", label, m["sel"], n, minW, minH)
+			if n == 0 {
+				// A control this arm does not render is reported, never silently
+				// counted as passing.
+				t.Logf("      (not rendered in this arm — not asserted)")
+				continue
+			}
+			// THE DAY CELL IS THE ONE REFUSAL, AND IT IS A CLOSED QUESTION.
+			if label == "a day cell" {
+				if minH < float64(daycardTouchFloorPx) {
+					t.Errorf("%dpx: a day cell's BLOCK axis is %.1f, under %d — this axis is "+
+						"reachable and is asserted", w, minH, daycardTouchFloorPx)
+				}
+				t.Logf("      REFUSED AS AN INLINE TARGET, WITH THE ARITHMETIC: a cell's "+
+					"inline size is gridWidth / week-len; the grid measures 364px at a 390 "+
+					"viewport, so a ten-day week gives 36.4px — the %.1f measured here — and "+
+					"44px would need week-len <= 8 (364 / 8 = 45.5). No CSS reaches it "+
+					"without dropping days, and dropping days is [MOB-8]'s data loss "+
+					"arriving by another door. The BLOCK axis is %.1f and passes.", minW, minH)
+				continue
+			}
+			if minH < float64(daycardTouchFloorPx) {
+				t.Errorf("%dpx: %s measures %.1fx%.1f — the block axis is under the %dpx "+
+					"platform floor. [MOB-7] names this control; it is one a person hits "+
+					"under time pressure at a table", w, label, minW, minH, daycardTouchFloorPx)
+			}
+		}
+
+		// THE ✕ AND DELETE ARE HELD APART, and the report says whether the
+		// editor lane's Delete CONFIRMATION has shipped — because if it has
+		// not, this separation is the only protection there is.
+		gap := r.num("xDeleteGap")
+		t.Logf("   ✕ ↔ Delete edge-to-edge gap: %.0fpx (ruled >= 8) · Delete rendered %v",
+			gap, r.boolean("deleteVisible"))
+		if r.boolean("deleteVisible") && gap >= 0 && gap < 8 {
+			t.Errorf("%dpx: the head ✕ and Delete are %.0fpx apart — a 24x24 ✕ beside a "+
+				"one-click Delete is a destroyed event one pixel of thumb-slop away", w, gap)
+		}
+	}
+
+	// ── NOTHING ABOVE 640 MOVED, and this is the row that proves it ───────
+	mobileHeader(t, "[MOB-7] CONTROL · desktop, the same named list", 1280, 900)
+	after := mobileDrive(t, chrome, inner, 1280, 900, steps)[2]
+	al, _ := after["list"].([]any)
+	for _, path := range []string{playerInner, gmInner} {
+		if pa, ok := mobileDrive(t, chrome, path, 1280, 900,
+			panelSteps)[0]["list"].([]any); ok {
+			al = append(al, pa...)
+		}
+	}
+	for _, raw := range al {
+		m, _ := raw.(map[string]any)
+		label := fmt.Sprint(m["label"])
+		if mobileF(m, "n") == 0 {
+			continue
+		}
+		got := [2]float64{mobileF(m, "minW"), mobileF(m, "minH")}
+		t.Logf("   %-26s smallest %.1fx%.1f at 1280", label, got[0], got[1])
+		if was, ok := deskMin[label]; ok && was != got {
+			t.Errorf("the desktop measurement of %s moved from %.1fx%.1f to %.1fx%.1f — "+
+				"[MOB-7] rules that nothing above 640 changes", label,
+				was[0], was[1], got[0], got[1])
+		}
+	}
+}
