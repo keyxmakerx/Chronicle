@@ -2343,3 +2343,59 @@ honest about what it had NOT proven, which is why this was recoverable at all.
 But an environmental limit asserted once gets quoted forward by every later
 slice without being re-measured, and this one was quoted for months. **Re-measure the environment when a limit is
 load-bearing, not just the code.**
+
+## The sky header — C-CALV4-SKY (R2-5), shipped 2026-08-08
+
+The last slice of calendar-v4 round 2. The operator thawed the parked sky arc as
+a **redesign, not a restoration**, and recorded a verdict on the old
+implementation in three counts so the redesign could not inherit it. Four facts
+from this build are worth carrying forward.
+
+**1. The placeholder was reserving a seat on the wrong Block, and nothing could
+have told us.** The dashed `.skyband` strip rendered only on the **real-world**
+Block (`block.templ`'s `if d.IsRealWorld`), and that Block's Almanac is empty for
+**two independent reasons**: the register's build gate named the Shelf alone
+while the Bench builds that Block `noShelf`, and `CreateCalendar`'s real-life
+path seeds no moons, no seasons and no eras. A sky there would have carried a
+gradient and a clock and nothing else, forever. One leg would be a configuration
+accident; two is a product fact. The sky seats on the **Primary** Block — one
+sky per surface — and the placeholder is deleted from all three hosts.
+
+**2. Its deletion was invisible to the entire battery.** A repo-wide grep for
+the placeholder's copy and its function name across every `*_test.go` returned
+**zero**. It could have been deleted, nothing shipped in its place, and every
+suite stayed green. The guard is therefore **two-directional**: absence of the
+retired class AND presence of the sky's own summary. A guard that only proves an
+absence goes green on a slice that deleted the thing and shipped nothing.
+
+**3. The one un-ruleable question was a collision between two operator
+signatures.** The signed stills seat the band INSIDE the Block's box; the signed
+disclosure register's clause 4 says the Block's interior stays still, enforced
+twice, in two packages, mutation-tested. Every factual leg was measured and none
+disagreed — **every candidate home was closed by a signed guard**. That is not a
+gap in the measurement, and it is not a dev call. The operator amended clause 4
+**by name, with one sentence**, and the monopoly guard gained a **per-class
+exemption** rather than a relaxed rule: its forbidden-ancestor list is
+byte-identical, so **every other rule in the product stays exactly as
+constrained as it was**. The guard is renamed
+`TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` — a guard whose name still claims
+a monopoly it lost is how the next hand learns the wrong law.
+
+**4. The counts are numbers, measured against the SHIPPED element.** The closed
+band is **40 / 40 / 32px** against a 44 / 44 / 36 budget, read twice
+independently (the custom property that sizes it, and the laid-out box);
+anchored-edge travel across a full open is **0.0px** for all three facts at all
+three widths; the discs grow **13→40px** and **11→32px** with **33.8%** and
+**32.8%** below the horizon; **3** controls. The drawing pass's own history is
+why: five of its seven fix rounds were caught by measurement rather than by
+looking, including a **65px** sideways slide of the clock that every property
+being correctly declared could not have revealed.
+
+**And one still cannot be reproduced under the guards, which is reported rather
+than approximated.** The mock's open pane leads with *"Sunset 19:58"*. Chronicle
+persists no daylight boundary — the importer parses `sunriseTime`/`sunsetTime`
+from two foreign formats and **drops** them, and no column and no migration
+exists — so the line states the day, the month and the register's own audited
+arithmetic instead. Deriving a plausible 06:00/18:00 would be inventing world
+data on a worldbuilding platform, which is the defect `WorldStateSun.Tint`
+already refuses by shipping null.
