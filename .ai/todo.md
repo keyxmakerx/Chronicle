@@ -21,7 +21,7 @@ Round 2 adds no data, no zone and no engine. Five slices; four have landed
 | **R2-2b** — `C-CALV4-EDITOR-R2b` | the editor's full §5 chrome pass, **the signed editor-morph carve-out**, and **drag-create**. The stage-2 mechanism kept every `data-de-*` handle and every request body while its controls were replaced ([ER-10]). **The recurrence unit list is corrected in three directions:** the week unit is not invention and its chip came off (`weekly` MEANS every tenday on a ten-day calendar — DAYCARD §5 and the mockup are both wrong); `year` is invention offered unchipped and does not ship; and NEW — `every N months` degrades silently because `OccursOn`'s monthly branch ignores the interval, so that control is ABSENT rather than chipped. **The morph is geometric, one named class, four properties, no new token, no scale**, inside the ONE register section — `TestDayCardCSS_CarriesNoMotionOfItsOwn` is byte-unchanged, which is the proof the register did not fork. **[ER-5]'s width was MEASURED and disagreed with the prediction:** every candidate holds 0 px² overlap, so the shipped 760px is bounded by where the popover survives rather than by where it occludes; the drawing's ~1008px cannot sit beside a 300px docked Ledger inside an 1180px measure. **Drag-create landed, not severed**, on all seven [DC-11] terms with revertibility verified by deleting the commit. **Two fix rounds, both fix-forward:** round 1 closed six findings in the build and its guards; round 2 closed three that were entirely about the EVIDENCE and touched no product code — the editor's `.ed-body` FOLDS at 620px and the desktop shots were cut off at it, every shot was CREATE mode while 21 of the 22 gating stills are EDIT mode (because the shared fixture projects with no events, so no card ever had a row to Edit), and §10's 24px-floor and horizontal-fold rows were handed to a screenshot gate that measured neither. `daycard_floors_probe_test.go` now performs them. **Headless Chromium here clamps the window to a 500px minimum width**, so every 390px artefact renders in a nested browsing context and says so on its face. **[x] shipped 2026-08-02** |
 | **R2-3** — the Block theater | expand any embed to a full-tier overlay. **This is where the depth R2-1 removed from the entity embed comes back.** R2-1 deliberately shipped NO substitute — no expand chip, no "show more", no second embed — because a stopgap becomes the thing R2-3 has to delete. **BLOCKED on [TH-14], and the block is a MEASUREMENT rather than an opinion:** the scaffold must sit outside every `.cal-block-host`, inside a `cal-bench` root **and outside any HTMX-swappable region**, and no such position exists in the files the slice owns. `calendar_widget_type.go:152` wraps *all* of `EntityCalendarBlock` in `widgetbindings.BlockHost`, and `picker.templ` swaps that wrapper with `hx-swap="outerHTML"` on three live Scribe+ paths (bind `:99`, create `:54`, unbind `:80`) — so the swapped region is the whole component, one level above anything `entity_calendar_block.templ` can emit. [TH-14] rules that case *"a host restructure, not a placement, and not this slice's to take"*. The seventeen rulings otherwise stand and the design work is banked in ADR-048 §28: the two-things-called-full-tier distinction, the one-projection/two-renders measurement, and the `(CalendarSlug, HostEntity)` re-namespace. **Needs a coordinator re-sign of [TH-14] against the true swap target** — its own measurement cites the picker's inline slot at `entity_calendar_block.templ:61`, which is not the swap target. | [ ] **blocked — re-sign [TH-14]** |
 | **R2-4** — `C-CALV4-V2SUNSET`, the V2 sunset / the anonymous-public route move | **the LINKS, not the shell.** ~20 live doors re-pointed at the Bench, six redirect targets re-aimed, two labels that named the version stopped, and `GET /apps/calendar` moved onto the public-capable group with `RequireViewAccess()` — the gap booked three times, closed. **[VS-10] signed as option (b): the route move was committed FIRST**, so no commit in the stack ever pointed a swept door at an authenticated-only route. **The shell is UNTOUCHED and REACHABLE BY URL: zero routes removed, zero files deleted, snapshot byte-identical at 727.** The dispatch's own door table was stale in BOTH directions — two of its rows are unrouted dead code (`app_dashboard.templ`, booked as `C-CAL-DASH-DEADCODE`) and eight live doors were missing, including the Bench's own four and the two EGRESS doors (RSVP notification email, global search). **The shell's DELETION IS SIGNED BY THE OPERATOR ([VS-1], 2026-08-07) — the question is WHEN, not WHETHER** — and it is `C-CALV4-SHELL-REMOVAL`'s, behind four boxes. **[x] shipped 2026-08-08** |
-| **R2-5** — `C-CALV4-SKY`, the sky header | **a designed header band, beautiful closed, expanding into the almanac — NOT a button.** Sixteen signed blocks. **The founding measurement overturned the arc's own premise: the dashed `.skyband` placeholder was reserving a seat on the WRONG BLOCK.** It rendered on the REAL-WORLD Block, whose Almanac is empty for two independent reasons (the register's gate names the Shelf and that Block renders `noShelf`; the service's real-life create path seeds no moons, no seasons, no eras), so a sky there would have carried a gradient and a clock and nothing else, forever. The sky seats on the Bench's **PRIMARY** Block — one sky per surface — and the placeholder is DELETED from all three hosts, with a **two-directional** guard because nothing pinned it and its deletion was invisible to the whole battery. **[SKY-2] was the operator's, not the coordinator's:** the signed stills seat the band INSIDE the Block's box and the signed disclosure register said the Block's interior stays still — two operator signatures in collision. The operator amended clause 4 **by name, one sentence**, and the monopoly guard gained a **per-class exemption for `.skygrow`** with its forbidden-ancestor list **byte-unchanged**; it is renamed `TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` because a guard whose name claims a lost monopoly teaches the wrong law. **Seven transitioned properties and no eighth; exactly three `--disc-*` tokens, byte-unchanged**, with four `--sky-phase-*` sequencing tokens whose sums the guard asserts equal the two totals. Reduced motion is STRUCTURAL — one wrapper, no `reduce` block, no `!important`. The density switch is **`@container cal-block` at the Block's existing `min-width: 481px`**, so a Block in a narrow COLUMN seals on a wide VIEWPORT — intended, reported, not corrected. **The three counts are measured against the SHIPPED element in a real browser:** closed band **40 / 40 / 32px** against **44 / 44 / 36**, read twice independently; anchored-edge travel **0.0px** on all three facts at all three widths (the drawing pass's 65px clock slide is not reproduced); discs **13→40px / 11→32px** with **33.8% / 32.8%** below the horizon; **3** controls. **NO SUNRISE AND NO SUNSET IN ANY FORM** — Chronicle persists neither, and the mock's own pane head line ("Sunset 19:58") is the one signed still this build cannot reproduce under the guards, flagged rather than approximated. **[x] shipped 2026-08-08** |
+| **R2-5** — `C-CALV4-SKY`, the sky header | **a designed header band, beautiful closed, expanding into the almanac — NOT a button.** Sixteen signed blocks. **The founding measurement overturned the arc's own premise: the dashed `.skyband` placeholder was reserving a seat on the WRONG BLOCK.** It rendered on the REAL-WORLD Block, whose Almanac is empty for two independent reasons (the register's gate names the Shelf and that Block renders `noShelf`; the service's real-life create path seeds no moons, no seasons, no eras), so a sky there would have carried a gradient and a clock and nothing else, forever. The sky seats on the Bench's **PRIMARY** Block — one sky per surface — and the placeholder is DELETED from all three hosts, with a **two-directional** guard because nothing pinned it and its deletion was invisible to the whole battery. **[SKY-2] was the operator's, not the coordinator's:** the signed stills seat the band INSIDE the Block's box and the signed disclosure register said the Block's interior stays still — two operator signatures in collision. The operator amended clause 4 **by name, one sentence**, and the monopoly guard gained a **per-class exemption for `.skygrow`** with its forbidden-ancestor list **byte-unchanged**; it is renamed `TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` because a guard whose name claims a lost monopoly teaches the wrong law. **Seven transitioned properties and no eighth; exactly three `--disc-*` tokens, byte-unchanged**, with four `--sky-phase-*` sequencing tokens whose sums the guard asserts equal the two totals. Reduced motion is STRUCTURAL — one wrapper, no `reduce` block, no `!important`. The density switch is **`@container cal-block` at the Block's existing `min-width: 481px`**, so a Block in a narrow COLUMN seals on a wide VIEWPORT — intended, reported, not corrected. **The three counts are measured against the SHIPPED element in a real browser:** closed band **40 / 40 / 32px** against **44 / 44 / 36**, read twice independently; anchored-edge travel **0.0px** on all three facts at all three widths (the drawing pass's 65px clock slide is not reproduced); discs **13→40px / 11→32px** with **33.8% / 32.8%** below the horizon; **3** controls. **NO SUNRISE AND NO SUNSET IN ANY FORM** — Chronicle persists neither, and the mock's own pane head line ("Sunset 19:58") is the FIRST of TWO signed stills this build cannot reproduce under the guards, flagged rather than approximated. **FIX ROUND (stage 10):** the adversarial verifier found TWO further divergences from the same still, written down NOWHERE — the muted sub-head line was ABSENT (a differently-worded `.skynote` sat at the bottom of the Tonight panel instead) and the per-moon row was a two-item flex carrying r53's merged register sentence rather than the stills' four aligned columns. **Both were reproducible under every shipped guard and are now built.** The sub-head's *"in shadow"* half is the SECOND still-not-reproducible — `calendar.Moon` has no eclipse-node column, so the mock's `nodeWindow()` has nothing to read — and is dropped, asserted absent by name, and flagged. **The lesson: [SKY-5]'s ENUMERATED fidelity gate was fully met and probe-measured, and the enumeration is a FLOOR rather than the gate.** A standing DIVERGENCE REGISTER now lives in the plugin `.ai.md`. **[x] shipped 2026-08-08 · fix round 2026-08-08** |
 
 ## 0b. C-CALV4-V2SUNSET (R2-4) — what it BOOKED (2026-08-08)
 
@@ -69,6 +69,107 @@ is carried, not closed, and the first row is the one the rest hang off.
 - [ ] **The sky strip gets NO replacement slice. R2-5 IS the replacement**, and
       it is already signed. **Two prerequisites get new slices and the third is
       already covered — never three. Do not book a fourth.**
+
+## 0c. What the R2-5 fix round leaves on the COORDINATOR's desk (2026-08-08)
+
+None of these is a build task. Each is a signature, a re-sign, or an edit to an
+artefact this repo cannot reach — and each is written here because the last
+round's failure mode was disclosure that never travelled.
+
+- [ ] **SIGN THE SKY SUBSTITUTION, or send it back.** [SKY-5]'s enumerated
+      fidelity gate is fully met and probe-measured, but two items visible in
+      `sky-open-1440.png` sat outside that enumeration and shipped divergent
+      undisclosed. **Both are now built** (stage 10: the muted sub-head in the
+      stills' position, and the four-column Tonight row). **One half of the
+      sub-head still cannot ship**: the stills' *"Umber in shadow, days 17-21"*
+      comes from the mock's `nodeWindow()` reading `mo.node`, an eclipse-node
+      flag the demo rig invents on its own moon literals — `calendar.Moon` has
+      no node, no inclination and no ascending-node column, and no migration
+      declares one. It is **DROPPED, asserted absent by name, and flagged**, on
+      the same reasoning [SKY-6] uses to refuse sunrise. This is the **second**
+      [SKY-5] still-not-reproducible; only the sunset was flagged before. Full
+      register: `internal/plugins/calendar/.ai.md` → *"The sky pane's DIVERGENCE
+      REGISTER against the signed stills"*.
+- [ ] **BOOK THE [SKY-6] TYPE SHAPE.** The ruling says the producer *"carries
+      the fraction and the formatted time onto `BlockData` as two new fields"*;
+      what shipped is `SkyGradient` (a gradient **string**) plus `SkyClock`.
+      `internal/widgets/calendar_block` imports nothing from
+      `internal/plugins/**` by construction, so a raw fraction could only become
+      a gradient by the widget re-deriving it — which the same ruling forbids
+      and lists as a STOP-AND-FLAG — and carrying both would be the third field.
+      §20 item 1 leaves names and types unruled. **The type is forced; the shape
+      wants booking.**
+- [ ] **RECONCILE THE `data.go` BYTE-PIN AGAINST THE DISPATCH.** The fix round's
+      checklist calls any commit touching
+      `internal/widgets/calendar_block/data.go` an automatic FAIL. C-CALV4-SKY
+      supersedes that bound **by name** — dispatch line 282 and Files-you-own
+      line 1100 both read *"`data.go` TWO fields, NO THIRD ([SKY-6]) — otherwise
+      byte-pinned"*, and `bench_templ.go:1562`'s pre-existing comment already
+      says *"[SKY-6] is concurrently authorised for exactly two fields"*.
+      Exactly two shipped; a third is coded as a STOP-AND-FLAG in the struct
+      comment. **The checklist sentence appears to be the GAMEREADY-slice bound
+      carried into a slice that carves it out.**
+- [ ] **RE-SIGN [TH-14] (R2-3, the theater) — it delivered NO product code.**
+      Independently re-measured and the refutation holds:
+      `calendar_widget_type.go:152` wraps the ENTIRE output of
+      `EntityCalendarBlock` in `widgetbindings.BlockHost`, and `picker.templ`
+      targets that id with `hx-swap="outerHTML"` on three live Scribe+ paths
+      (create `:54-55`, unbind `:80-81`, bind `:99-100`). [TH-14]'s own
+      measurement cites `entity_calendar_block.templ:61` — the
+      `BindingAffordance` slot, an `hx-swap="innerHTML"` INNER target, not the
+      swap target. THEATER's "Do not touch" names `internal/app/routes.go`
+      explicitly. **So no position reachable from the slice's Files-you-own is
+      outside an HTMX-swappable region, and 16 of 17 blocks dropped.** The
+      round's own verification checklist item — drive the theater in a real
+      browser for top-layer, focus containment, Escape, focus return, DOM
+      re-namespace, tie-toggle target, switchboard absence, 60px inset,
+      own-scroll-region — **was UNEXECUTABLE: there is nothing to open.** Zero
+      theater artefacts exist on disk and there is no orphan or half-built code.
+      **This needs a re-sign, not a re-run.**
+- [ ] **FIX A STALE CROSS-REFERENCE IN AN OPERATOR-SIGNED ARTEFACT (outside
+      this repo).**
+      `Cordinator/decisions/2026-07-29-motion-disclosure-register.md` clause 4's
+      2026-08-07 amendment names the monopoly guard as
+      `TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut`. C-CALV4-SKY authorised the
+      rename and it is now `TestBenchCSS_TheNamedCarveOutsAreExactlyTwo`. **The
+      repo books record the rename** (plugin `.ai.md`, `.ai/todo.md`,
+      `.ai/status.md`); the SIGNED register does not, **so it now cites a test
+      that does not exist** — precisely the stale-signed-artefact trap this arc
+      keeps paying for. Not fixed here: the coordinator books are read-only to
+      this repo's hands and must not be pushed.
+- [ ] **CORRECT THE HANDOFF CLAIM TEXT (substance was right, quotes were not).**
+      The claim quoted the mock's head line as *"Sunset 19:58 · day 14 of
+      Emberfall"*; the signed still reads **day 14 of HEARTHWANE** — Emberfall
+      is the SEASON word on the closed strip. It quoted the shipped substitute
+      as *"Day 14 of Emberfall · 3 moons declared · none keeps the month"*; the
+      shipped line is `skyHeadLine()` = **"Day &lt;n&gt; of &lt;Month&gt; ·
+      &lt;N&gt; moons declared; the grid draws &lt;M&gt;"**. The substantive
+      point — the sunset is refused and flagged rather than approximated — was
+      correct, and no sunrise/sunset is persisted anywhere.
+
+### The three feature losses a GM will feel at a table, all dispatch-signed
+
+Each is correct per its own dispatch and each is already booked above. They are
+repeated **together** here because a live game is inside two weeks and these are
+the "passes a test, fails at a table" items — the aggregate is the risk, not any
+single row.
+
+- [ ] **No click path from the Bench to a non-active calendar.** [VS-14] made
+      the Bench's subordinate calendar ROWS non-anchors and deleted
+      "Open calendar →" (both render sites in `bench.templ`;
+      `Manage.OpenHref` deliberately left unpopulated at `bench.go:1540`). With
+      more than one calendar a GM has **no way to click through**. The row
+      *"becomes a door again in `C-CALV4-BENCH-CALID`"* — that slice is now the
+      one holding this.
+- [ ] **`/calendars/:calId/week` and `/day` bookmarks land on a MONTH grid.**
+      Week and day views exist in exactly one place in the product (`ShowV2`'s
+      `case "week", "day"`) and v4 has no replacement.
+      **`C-CALV4-WEEKDAY-VIEWS` must MERGE before shell removal** — it is
+      already box 1 of the four-box entry condition above, and this row is the
+      reminder that the loss is live *today*, not at removal time.
+- [ ] **Post-create landing for a real-life calendar is measurably poorer.** The
+      world-state features live on the V2 shell, and the create flow now lands
+      on the Bench.
 - [ ] **`C-CALV4-BENCH-CALID` — the Bench learns `?calId=`, and the doors that
       dropped a selection regain it.** `AppDashboard` reads `sort`, `y` and `m`
       and never `calId` (measured), so every re-pointed door lands on the

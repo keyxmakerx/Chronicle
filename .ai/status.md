@@ -2399,3 +2399,49 @@ exists — so the line states the day, the month and the register's own audited
 arithmetic instead. Deriving a plausible 06:00/18:00 would be inventing world
 data on a worldbuilding platform, which is the defect `WorldStateSun.Tint`
 already refuses by shipping null.
+
+## C-CALV4-SKY — the fix round, and the register that should have shipped with it (2026-08-08)
+
+The slice was verified adversarially and the finding worth carrying is not any
+one of the defects. It is that **the build checked itself against the
+enumerated half of a ruling and called that the ruling.**
+
+[SKY-5] says *"THE STILLS BIND THE RESULT"* and then lists what to measure:
+band heights, the C1/C3 density switch, disc growth, a third of each disc below
+the horizon, the seal's sweep, the trio, grayscale disc identity, reduced-motion
+identity. **Every item of that list was met and probe-measured in a real
+browser.** And the open pane still shipped with **two visible differences from
+the signed still** that the list does not name — a muted sub-head line that was
+absent, and a four-column per-moon row that had been collapsed into one merged
+sentence. Both were reproducible under every guard: markup and static CSS, no
+motion, no token, no transition. Neither was reportable instead of buildable.
+**An enumeration inside a ruling is a floor, not the gate.**
+
+**The second finding is that neither divergence was written down anywhere** —
+not in nine commit messages, not in this file, not in `.ai/todo.md`, not in the
+plugin's `.ai.md`. The mandate governing this arc says undisclosed divergence is
+a FAIL, and it is right to: a difference visible only by diffing a PNG against a
+template is a difference nobody finds. The sunset — the one divergence that
+*was* disclosed — was disclosed **four times over**, and that asymmetry is the
+tell. **What gets written down is what somebody decided was interesting, and the
+things you didn't notice are exactly the things that need a register rather than
+a decision.**
+
+**Both are now built** (stage 10) and the register lives in
+`internal/plugins/calendar/.ai.md` → *"The sky pane's DIVERGENCE REGISTER against
+the signed stills"*. It carries the two closed items, the **two** standing
+still-not-reproducible cases — the sunset **and now a second one**: the mock's
+"in shadow" window reads an eclipse-node flag its demo rig invents, and
+`calendar.Moon` has no node, no inclination and no ascending-node column, so
+deriving one would be the sunrise defect wearing different words — the
+deliberate subtractions, and the two shape deviations that were disclosed in
+their commit bodies but never travelled into the handoff claim list
+(`SkyGradient` being a gradient string rather than [SKY-6]'s "fraction", and
+`helpers.go` being off the Files-you-own list because the named
+`block_geometry.go` does not exist in that package).
+
+**A disclosure that does not travel with the claim is half a disclosure.** Both
+of those were reported honestly, in the right place, at the right time — and the
+verifier still had to re-derive them from the diff, because the summary handed
+forward did not carry them. The commit body is where a decision is *justified*;
+it is not where the next reader *looks*.
