@@ -28,14 +28,17 @@ import (
 // click must return immediately, and a dead mail server must not turn a UI
 // toggle into a timeout. context.WithTimeout (not the request context) because
 // the request's context is cancelled the moment the handler returns.
-func (h *RSVPHandler) startInviteFanOut(campaignID, campaignName string, cal *Calendar, evt *Event) {
+// `actorUserID` is the operator who armed the gate. It is carried in because the
+// per-recipient floor's send log records WHO mailed each recipient
+// (calendar_schedule_asks.actor_user_id, NOT NULL) — see fanOutInvites.
+func (h *RSVPHandler) startInviteFanOut(campaignID, campaignName string, cal *Calendar, evt *Event, actorUserID string) {
 	if h.members == nil {
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		h.fanOutInvites(ctx, campaignID, campaignName, cal, evt)
+		h.fanOutInvites(ctx, campaignID, campaignName, cal, evt, actorUserID)
 	}()
 }
 
@@ -52,7 +55,34 @@ func (h *RSVPHandler) startInviteFanOut(campaignID, campaignName string, cal *Ca
 // The in-app notification is sent to everyone who passes both gates. The EMAIL
 // additionally needs a configured SMTP service and a member email address —
 // with neither, in-app RSVP still works end to end (nil-safe by design).
-func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignName string, cal *Calendar, evt *Event) {
+// ── THE 24h PER-RECIPIENT FLOOR, REUSED AND NOT REINVENTED ─────────────────
+// C-CALV4-GAMEREADY §4 [GR-6]. Toggling Collect RSVPs off and then on re-mailed
+// the ENTIRE roster with no cooldown of any kind — and §4 makes this toggle far
+// easier to reach (it moves from the legacy V2 drawer into the v4 day card),
+// which makes that hazard worse rather than better.
+//
+// So this loop now reads the SAME floor the schedule-ask path already ships and
+// the audit verified working: the same repository read (RecentlyAskedRecipients),
+// the same SKIP-don't-refuse semantics, the same silence. A member mailed inside
+// the window is passed over; everyone else is invited normally, so a second
+// arming after somebody joins mails the new member and nobody else.
+//
+// THE 6h CAMPAIGN COOLDOWN IS DELIBERATELY NOT APPLIED. That one REFUSES the
+// whole action, and refusing to arm the operator's own go/no-go gate because
+// they armed something six hours ago is the polish-over-playability trade this
+// slice forbids.
+//
+// A CONSEQUENCE, STATED RATHER THAN DISCOVERED: because both limits are read off
+// one log, recording invite sends here means an arming also starts the 6h
+// cooldown on the separate "Ask availability" control. That is the honest
+// reading of a table whose stated purpose is "when was this roster last mailed"
+// — the roster WAS just mailed — and it only ever affects the control that
+// refuses, never this one.
+//
+// THE FLOOR APPLIES TO EMAIL ONLY. The in-app bell is not rate-limited: it is
+// free, retractable and already honest, and suppressing it would hide a real
+// state change from a member who is looking at the product.
+func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignName string, cal *Calendar, evt *Event, actorUserID string) {
 	members, err := h.members.ListMembers(ctx, campaignID)
 	if err != nil {
 		slog.Warn("calendar rsvp: member list failed for invite fan-out",
@@ -61,6 +91,21 @@ func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignNam
 	}
 
 	mailOK := h.mailer != nil && h.mailer.IsConfigured(ctx)
+
+	// Read once, outside the loop. A FAILED read degrades to an EMPTY skip set
+	// — the invite still goes out — because the operator's gate must arm even
+	// when the bookkeeping is unavailable, and the worst case is the duplicate
+	// email this floor exists to avoid rather than a party nobody invited.
+	var skip map[string]bool
+	if mailOK {
+		skip, err = h.svc.RecentlyAskedRecipients(ctx, campaignID)
+		if err != nil {
+			slog.Warn("calendar rsvp: per-recipient floor unreadable; inviting everyone",
+				slog.Any("error", err), slog.String("campaign_id", campaignID))
+			skip = nil
+		}
+	}
+
 	var notifyIDs []string
 
 	for _, m := range members {
@@ -69,7 +114,7 @@ func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignNam
 		}
 		notifyIDs = append(notifyIDs, m.UserID)
 
-		if !mailOK || m.Email == "" {
+		if !mailOK || m.Email == "" || skip[m.UserID] {
 			continue
 		}
 		tokens, err := h.svc.MintActionTokens(ctx, evt.ID, m.UserID)
@@ -82,6 +127,14 @@ func (h *RSVPHandler) fanOutInvites(ctx context.Context, campaignID, campaignNam
 		if err := h.mailer.SendHTMLMail(ctx, []string{m.Email}, subject, plain, htmlBody); err != nil {
 			slog.Warn("calendar rsvp: invite email failed",
 				slog.Any("error", err), slog.String("event_id", evt.ID))
+			continue
+		}
+		// RECORDED ONLY AFTER THE MAILER TOOK IT WITHOUT ERROR — the log's own
+		// invariant (migration 015): nothing is recorded when nothing was sent,
+		// because a floor must never suppress mail to somebody who never got any.
+		if err := h.svc.RecordScheduleAsk(ctx, campaignID, evt.ID, m.UserID, actorUserID); err != nil {
+			slog.Warn("calendar rsvp: recording the invite send failed",
+				slog.Any("error", err), slog.String("user_id", m.UserID))
 		}
 	}
 

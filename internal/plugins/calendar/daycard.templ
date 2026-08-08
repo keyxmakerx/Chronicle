@@ -349,6 +349,62 @@ templ dayCardEditor(m DayCardMount) {
 								}
 							</div>
 						}
+						if m.CanCollectRSVPs {
+							// ── COLLECT RSVPs ──────────────────────────────────
+							// C-CALV4-GAMEREADY §4 [GR-6]. THE OPERATOR'S OWN
+							// STATED GATE FOR STARTING THEIR GAME, and until now
+							// it was reachable from exactly one place in the whole
+							// product: the LEGACY V2 event drawer
+							// (calendar_v2.templ:1380), which is a committed
+							// deletion ([VS-1] SIGNED). `daycard.templ` contained
+							// ZERO occurrences of "rsvp". Meanwhile every
+							// downstream RSVP surface — the Bench session tile AND
+							// /schedule — is gated on this flag, so a campaign that
+							// could not reach the switch got a player-facing page
+							// telling them they owe an answer and giving them no
+							// buttons to answer with.
+							//
+							// It sits BESIDE THE VISIBILITY CARDS because this is
+							// the thing it modifies: the GM is already here when
+							// they create the session. The refused alternative was
+							// a sentence on the Bench pointing at V2 — copy, aimed
+							// at a page being demolished.
+							//
+							// IT WRITES THE EXISTING ROUTE AND NOTHING ELSE:
+							// PUT .../events/:eid/rsvp-collection, already shipped,
+							// already RoleScribe. Zero new routes, zero new
+							// handlers, zero new service methods.
+							<div class="fld" data-de-rsvp>
+								<span class="de-lab">
+									Collect RSVPs
+									<span class="badge gm">GM</span>
+								</span>
+								// A REAL CHECKBOX WEARING THE EXISTING `viscard`,
+								// for the reason the visibility cards are real
+								// radios: `.checked` is the read, keyboard and
+								// screen-reader behaviour are free, and nothing
+								// about the control's state lives behind a script.
+								// It reuses `.viscard`/`.vh` verbatim so this
+								// section ships NO STYLESHEET — `:has(.vh:checked)`
+								// already paints the on state.
+								//
+								// DISABLED IN CREATE MODE, WITH THE V2 DRAWER'S OWN
+								// HINT, WORD FOR WORD (calendar_v2.templ:1384).
+								// CollectRSVPs is deliberately off the shared
+								// UpdateEvent path (model.go:627-632), so it cannot
+								// ride the create payload — there is no event to
+								// collect against yet. THIS IS THE ONE PLACE A
+								// DISABLED CONTROL IS CORRECT, because it is
+								// disabled by SEQUENCE and not by PERMISSION: the
+								// audience rule is untouched and a non-Scribe sees
+								// no markup at all.
+								<label class="viscard">
+									<input type="checkbox" class="vh" data-de-rsvp-toggle disabled/>
+									<span class="nm">Ask the party who's coming</span>
+									<span class="sub" data-de-rsvp-hint>Save the event first, then invite the party</span>
+								</label>
+							</div>
+						}
 						// entity_id on create and update — both shipped writes bind
 						// it and eventEditorRecord round-trips it. The picker READS
 						// GET /campaigns/:id/entities/search, which is a cross-plugin

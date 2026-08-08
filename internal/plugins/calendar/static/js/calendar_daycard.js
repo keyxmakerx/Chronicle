@@ -948,6 +948,12 @@
       tieRes: editor.querySelector('[data-de-tieres]'),
       entity: editor.querySelector('[data-de-entity]'),
       preview: editor.querySelector('[data-de-preview]'),
+      // C-CALV4-GAMEREADY §4 [GR-6]. BOTH MAY BE null, and that IS the
+      // audience gate: below RoleScribe the producer renders no markup at all,
+      // so this module finds nothing and writes nothing. It executes the gate;
+      // it never computes one.
+      rsvp: editor.querySelector('[data-de-rsvp-toggle]'),
+      rsvpHint: editor.querySelector('[data-de-rsvp-hint]'),
       save: editor.querySelector('[data-de-save]'),
     } : null;
     // THE AUDIENCE ROSTER IS OWNER-ONLY AND IT ARRIVES ALREADY GATED ([ER-3]
@@ -2112,6 +2118,9 @@
       // Delete targets the same id the save does, so the two can never disagree
       // about which event this editor session is holding.
       if (ed.del) ed.del.hidden = !edState.eventID;
+      // …and so does the RSVP opt-in, which is why it reads edState.eventID
+      // rather than `mode`: one id, one event, every control in this session.
+      edRsvpPaint(rec);
       if (ed.head) {
         ed.head.textContent = (mode === 'edit' ? 'Edit event · ' : 'New event · ') + (day.label || '');
         ed.head.setAttribute('data-day', day.key || '');
@@ -2333,6 +2342,90 @@
         .catch(function () { edFailed('That event could not be deleted.'); });
     }
 
+    // ── COLLECT RSVPs (C-CALV4-GAMEREADY §4 [GR-6]) ──────────────────────
+    //
+    // THE OPERATOR'S OWN GATE FOR STARTING A GAME, which until this slice lived
+    // ONLY in the legacy V2 event drawer — a committed deletion. It writes the
+    // already-shipped PUT .../events/:eid/rsvp-collection and nothing else.
+
+    // rsvpCreateHint is the V2 drawer's own wording, VERBATIM
+    // (calendar_v2.templ:1384). Reused rather than rewritten because it is
+    // already the right sentence and the operator has already read it once.
+    var rsvpCreateHint = 'Save the event first, then invite the party';
+
+    // rsvpRecurringCaution is the one-line caution [GR-6] requires on a
+    // repeating event. The RSVP table is UNIQUE (event_id, user_id) with NO
+    // occurrence column (migration 013), so every occurrence of a recurring
+    // session shares ONE set of answers: after week one the tally shows last
+    // week's replies and nobody can reset them. The real fix is a schema change
+    // and is BOOKED (C-CALV4-RSVP-OCCURRENCE); until then the operator is told
+    // rather than left to find out at the table.
+    var rsvpRecurringCaution = 'This event repeats, and every occurrence shares one set of answers.';
+
+    // edRsvpPaint sets the control from the record. It is called by edOpen for
+    // every mode, and the FIRST LINE is the audience gate: below RoleScribe the
+    // producer renders no markup, so there is nothing here to paint.
+    //
+    // DISABLED IN CREATE MODE IS A SEQUENCE FACT, NOT A PERMISSION ONE.
+    // collect_rsvps is deliberately off the shared update path, so it cannot
+    // ride the create payload — there is no event id to collect against yet.
+    function edRsvpPaint(rec) {
+      if (!ed.rsvp) return;
+      var editing = !!edState.eventID;
+      ed.rsvp.disabled = !editing;
+      ed.rsvp.checked = editing && !!(rec && rec.collect_rsvps);
+      if (!ed.rsvpHint) return;
+      if (!editing) { ed.rsvpHint.textContent = rsvpCreateHint; return; }
+      ed.rsvpHint.textContent = ed.rsvp.checked
+        ? 'The party can answer in-app and by email.'
+        : 'Emails the party once, and opens answers in-app.';
+      if (rec && rec.is_recurring) {
+        ed.rsvpHint.textContent += ' ' + rsvpRecurringCaution;
+      }
+    }
+
+    // edRsvpWrite flips the opt-in through the SHIPPED endpoint.
+    //
+    // IT DOES NOT RELOAD THE PAGE, unlike save and delete: arming RSVPs changes
+    // no date, no title and no mark, so throwing the GM's open editor away to
+    // re-render an identical grid would cost them their place for nothing.
+    //
+    // THE RESPONSE IS READ, NOT ASSUMED ([GR-10]). The V2 client printed "RSVPs
+    // are open — the party has been invited." unconditionally, including when
+    // the server sent ZERO email because no SMTP is configured — so the operator
+    // armed their gate, believed the sentence, stopped checking, and found out
+    // on the day of the session. The endpoint now reports its mail state and
+    // this prints what it says, never a sentence of its own invention.
+    function edRsvpWrite() {
+      if (!ed.rsvp || !edState.eventID) return;
+      var fetcher = api();
+      var want = !!ed.rsvp.checked;
+      if (!fetcher) { ed.rsvp.checked = !want; edError('Cannot reach Chronicle right now.'); return; }
+      ed.rsvp.disabled = true;
+      fetcher(eventsBase() + '/' + edState.eventID + '/rsvp-collection', {
+        method: 'PUT', body: { enabled: want },
+      }).then(function (resp) {
+        ed.rsvp.disabled = false;
+        if (!resp || !resp.ok) {
+          // THE CONTROL GOES BACK TO WHAT THE SERVER STILL HOLDS. A checkbox
+          // left showing a state the server refused is the same lie in a
+          // smaller font.
+          ed.rsvp.checked = !want;
+          edError('That could not be changed. Try again.');
+          return null;
+        }
+        return resp.json ? resp.json() : null;
+      }).then(function (body) {
+        if (!ed.rsvpHint || !ed.rsvp.checked) { return; }
+        if (body && body.notice) { ed.rsvpHint.textContent = body.notice; return; }
+        ed.rsvpHint.textContent = 'The party can answer in-app and by email.';
+      }).catch(function () {
+        ed.rsvp.disabled = false;
+        ed.rsvp.checked = !want;
+        edError('That could not be changed. Check your connection and try again.');
+      });
+    }
+
     // edLoad fetches the full record for EDIT mode. It is the one read this
     // slice added, and it is the only thing the editor genuinely cannot get
     // from the page: the card's payload deliberately carries no description, no
@@ -2434,6 +2527,13 @@
       ed.allDay.addEventListener('change', function () {
         if (ed.timeRow) ed.timeRow.hidden = !!ed.allDay.checked;
       });
+    }
+    // The RSVP opt-in writes on CHANGE, not on click: `change` is the event a
+    // real checkbox emits for a mouse click, a spacebar press and a click on the
+    // label alike, so the keyboard path is the same path and there is nothing to
+    // route through edControl.
+    if (ed && ed.rsvp) {
+      ed.rsvp.addEventListener('change', function () { edRsvpWrite(); });
     }
     if (ed && ed.form) {
       ed.form.addEventListener('submit', function (e) { e.preventDefault(); edSave(); });

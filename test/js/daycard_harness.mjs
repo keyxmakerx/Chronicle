@@ -194,6 +194,22 @@ export function buildBenchFixture(opts) {
       el('span', { class: 'nm' }, [], '◈ Restricted'),
     ])] : []),
   ];
+  // THE COLLECT-RSVPs SECTION, MIRRORING `if m.CanCollectRSVPs` IN THE TEMPLATE
+  // (C-CALV4-GAMEREADY §4 [GR-6]). Like the visibility cards above, the fixture
+  // REPRODUCES the producer's gate rather than simulating it: with
+  // canCollectRSVPs false there is genuinely no markup, so a test cannot
+  // accidentally assert on a control a Player would never receive.
+  const canCollectRSVPs = opts.canCollectRSVPs !== false;
+  const rsvpSection = canCollectRSVPs ? [
+    el('div', { class: 'fld', 'data-de-rsvp': '' }, [
+      el('label', { class: 'viscard' }, [
+        el('input', { type: 'checkbox', class: 'vh', 'data-de-rsvp-toggle': '', disabled: '' }),
+        el('span', { class: 'nm' }, [], "Ask the party who's coming"),
+        el('span', { class: 'sub', 'data-de-rsvp-hint': '' }, [], 'Save the event first, then invite the party'),
+      ]),
+    ]),
+  ] : [];
+
   const visibility = (canGMOnly || canRestrict) ? [
     el('div', { class: 'fld', 'data-de-visibility': '' }, [
       el('div', { class: 'vis', 'data-de-vis': '' }, visCards),
@@ -263,6 +279,7 @@ export function buildBenchFixture(opts) {
               ]),
             ]),
             ...visibility,
+            ...rsvpSection,
             el('div', { class: 'fld', 'data-de-tie': '' }, [
               el('div', { class: 'frow', 'data-de-tierow': '' }),
               el('input', { type: 'search', class: 'in', 'data-de-tiesearch': '' }),
@@ -428,6 +445,16 @@ export function boot(opts) {
     calls,
     reloads: () => reloads,
     fire: (type, target, extra) => document._fire(type, { target, preventDefault() {}, ...(extra || {}) }),
+    // fireOn dispatches to the ELEMENT'S OWN listeners, which `fire` cannot
+    // reach: `fire` drives the module's DELEGATED document handler, and a
+    // handler bound with el.addEventListener (the all-day switch, the RSVP
+    // opt-in) is never registered there. Two dispatch shapes because the module
+    // genuinely uses two, and a test that could only exercise one would silently
+    // stop covering whichever control moved to the other.
+    fireOn: (type, target, extra) => {
+      const handlers = (target && target._on && target._on[type]) || [];
+      handlers.forEach((fn) => fn({ target, preventDefault() {}, ...(extra || {}) }));
+    },
     flush: () => { const q = timers.splice(0, timers.length); q.forEach((t) => t.fn()); },
     winFire: (type) => (winListeners[type] || []).forEach((fn) => fn({})),
   };

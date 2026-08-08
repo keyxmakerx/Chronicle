@@ -46,7 +46,7 @@ func TestFanOut_VisibilityGated(t *testing.T) {
 	notifier := &mockNotifier{}
 
 	newFanOutHandler(evt, dir, mailer, notifier).
-		fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt)
+		fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt, "gm-1")
 
 	got := strings.Join(mailer.sent, ",")
 	for _, blocked := range []string{"scribe@example.test", "player@example.test"} {
@@ -77,7 +77,7 @@ func TestFanOut_MembersOnly(t *testing.T) {
 	notifier := &mockNotifier{}
 
 	newFanOutHandler(evt, dir, mailer, notifier).
-		fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt)
+		fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt, "gm-1")
 
 	if len(mailer.sent) != 1 || mailer.sent[0] != "u1@example.test" {
 		t.Errorf("only members with an address are emailed; got %v", mailer.sent)
@@ -110,7 +110,7 @@ func TestFanOut_NilSafeWithoutSMTP(t *testing.T) {
 				m = tc.mailer
 			}
 			h := newFanOutHandler(evt, dir, m, notifier)
-			h.fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt)
+			h.fanOutInvites(context.Background(), "camp-1", "Vale of Ash", testCalendar(nil), evt, "gm-1")
 
 			if len(notifier.userIDs) != 1 {
 				t.Errorf("in-app notification must still fire; got %v", notifier.userIDs)

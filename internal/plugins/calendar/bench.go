@@ -177,6 +177,23 @@ type DayCardMount struct {
 	// the per-member roster on the page payload that card's allow/deny list is
 	// drawn from. A Scribe renders neither and receives neither.
 	CanRestrict bool
+	// CanCollectRSVPs is the Scribe floor of
+	// PUT .../events/:eid/rsvp-collection (routes.go:431), and it is the
+	// operator's own go/no-go gate for starting a game
+	// (C-CALV4-GAMEREADY §4 [GR-6]).
+	//
+	// THE FLOOR IS NOT CHOSEN HERE. The route already carries
+	// RequireRole(RoleScribe), and a control must never render to somebody the
+	// route will reject — so this reads the same predicate CanCreate does and
+	// no other.
+	//
+	// IT IS ITS OWN FIELD AND NOT CanCreate REUSED, for the reason [ER-3] gave
+	// about CanDelete and CanRestrict and which applies here verbatim: two
+	// floors that coincide today are a refactor away from not. Create/edit is
+	// POST|PUT .../events, this is PUT .../events/:eid/rsvp-collection, and the
+	// day either moves, a shared field would move the other one in silence —
+	// this one into the hands of the people being invited.
+	CanCollectRSVPs bool
 	// CampaignID is the API base the editor writes to. It is emitted rather
 	// than parsed out of window.location, because a surface that is not at
 	// /campaigns/:id/... would parse a wrong id and write to another campaign.
@@ -1022,6 +1039,10 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 			CanAuthorDmOnly: in.CanAuthorDmOnly,
 			CanDelete:       in.IsOwner,
 			CanRestrict:     in.IsOwner,
+			// The rsvp-collection route's own RoleScribe floor, which is the
+			// same predicate CanCreateEvents carries — read here as its own
+			// field so the two can move apart without moving together.
+			CanCollectRSVPs: in.CanCreateEvents,
 			CampaignID:      in.Campaign.ID,
 		},
 	}
@@ -2350,6 +2371,17 @@ type benchRsvpInput struct {
 	// predicate the endpoint enforces, so the control and the send cannot
 	// disagree about whether an ask is allowed.
 	AskState ScheduleAskState
+	// FantasyOnlyRSVP is the ONE cause of an empty panel the panel could not
+	// previously state about itself (C-CALV4-GAMEREADY §4 [GR-6], the copy
+	// change riding that section).
+	//
+	// benchRsvpPickSession skips any row whose calendar is not real-life, and
+	// the reasoning is sound — an in-world date has no instant and no zone, so a
+	// zone-labelled real-world time on it would be a fabrication. But a
+	// fantasy-only campaign that turns Collect RSVPs ON therefore gets NO v4
+	// RSVP surface at all and is told nothing, which reads as the feature being
+	// broken rather than as a calendar being missing.
+	FantasyOnlyRSVP bool
 }
 
 // benchRsvpBuild assembles the signed panel.
@@ -2872,6 +2904,13 @@ func benchRsvpCaptions(in benchRsvpInput, p BenchRsvp) []string {
 	// The askable state adds NO line: silence is the true state, and a caption
 	// saying "you may press this button" would be noise on the one surface that
 	// has spent three waves removing noise.
+	// THE FANTASY-ONLY SENTENCE ([GR-6]). Stated for everyone, not only the
+	// Director: a player looking at an empty panel deserves the same answer,
+	// and it discloses nothing a member of the campaign cannot already see.
+	if in.FantasyOnlyRSVP {
+		caps = append(caps, "RSVPs need a real-world calendar — this campaign's collecting "+
+			"event is on an in-world one, which has no real date to ask about.")
+	}
 	if p.Ask != nil {
 		switch {
 		case p.Ask.Badge != "":
@@ -2885,6 +2924,30 @@ func benchRsvpCaptions(in benchRsvpInput, p BenchRsvp) []string {
 		}
 	}
 	return caps
+}
+
+// benchRsvpFantasyOnly reports that the panel is empty ONLY because every
+// collecting event lives on an in-world calendar.
+//
+// It is deliberately narrow: it answers false the moment ANY collecting event
+// sits on a real-life calendar (the panel has something to show, so silence is
+// correct), and false when nothing is collecting at all (that is the
+// "nobody has armed it yet" state, which §4's new control now answers). It says
+// yes only for the one campaign shape that is doing everything right and getting
+// nothing back.
+func benchRsvpFantasyOnly(upcoming []BlockUpcoming) bool {
+	fantasy := false
+	for i := range upcoming {
+		u := &upcoming[i]
+		if u.Calendar == nil || !u.Event.CollectRSVPs {
+			continue
+		}
+		if u.Calendar.IsRealLife() {
+			return false
+		}
+		fantasy = true
+	}
+	return fantasy
 }
 
 // benchRsvpAnyNumericZone reports whether any printed zone degraded to a numeric
@@ -2973,6 +3036,7 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
 
 	session, row, anchorZone := benchRsvpPickSession(upcoming)
 	out.Session = session
+	out.FantasyOnlyRSVP = session == nil && benchRsvpFantasyOnly(upcoming)
 
 	// The zone the panel states its own times in: the viewer's own stored zone
 	// first, then the calendar's anchor, then nothing — and ViewerZoneSource

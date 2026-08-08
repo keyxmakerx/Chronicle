@@ -32,10 +32,11 @@ type rsvpIntFixture struct {
 	campaignID string
 	userID     string
 	// ownerID is the event's author — the person [GR-9]'s notification is for.
-	ownerID  string
-	eventID  string
-	h        *RSVPHandler
-	rsvpRepo RSVPRepository
+	ownerID    string
+	eventID    string
+	calendarID string
+	h          *RSVPHandler
+	rsvpRepo   RSVPRepository
 }
 
 func newRSVPIntFixture(t *testing.T) *rsvpIntFixture {
@@ -89,7 +90,7 @@ func newRSVPIntFixture(t *testing.T) *rsvpIntFixture {
 
 	return &rsvpIntFixture{
 		db: db, campaignID: campaignID, userID: userID, ownerID: ownerID,
-		eventID: evt.ID, h: h, rsvpRepo: rsvpRepo,
+		eventID: evt.ID, calendarID: cal.ID, h: h, rsvpRepo: rsvpRepo,
 	}
 }
 
@@ -337,4 +338,79 @@ func TestRSVPResult_SpentTokenStatesTheAnswer_Integration(t *testing.T) {
 			t.Errorf("an unknown token must stay indistinguishable from a spent one; body = %q", body)
 		}
 	})
+}
+
+// --- [GR-6] the 24h per-recipient floor, against the real send log ----------
+
+// TestRSVPCollect_InviteFloor_Integration is the §4 hazard-control claim, and it
+// is a claim about a TABLE: the floor is `SELECT DISTINCT recipient_user_id FROM
+// calendar_schedule_asks WHERE campaign_id = ? AND sent_at >= ?`, so a fake that
+// hands back whatever it was handed cannot tell a working floor from a floor
+// that reads the wrong campaign, the wrong window, or nothing at all.
+//
+// THE HAZARD §4 MAKES WORSE BEFORE IT MAKES IT BETTER. Toggling Collect RSVPs
+// off and on re-mailed the ENTIRE roster with no cooldown of any kind, and this
+// slice moves that toggle from a legacy drawer nobody can find into the day card
+// the GM uses constantly. Email is the one channel that cannot be retracted.
+//
+// The floor is REUSED, not reinvented: the same table, the same 24h window and
+// the same SKIP-don't-refuse semantics the schedule-ask path already ships.
+func TestRSVPCollect_InviteFloor_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("RSVP dead-end integration tests require a database; skipped under -short")
+	}
+	f := newRSVPIntFixture(t)
+	mailer := &mockMailer{configured: true}
+	f.h.SetMailSender(mailer, "https://chronicle.example.test")
+
+	ctx := context.Background()
+	cal, err := NewCalendarRepository(f.db).GetByID(ctx, f.calendarID)
+	if err != nil {
+		t.Fatalf("reading the calendar back: %v", err)
+	}
+	evt, err := NewCalendarRepository(f.db).GetEvent(ctx, f.eventID)
+	if err != nil {
+		t.Fatalf("reading the event back: %v", err)
+	}
+
+	f.h.fanOutInvites(ctx, f.campaignID, "Imix", cal, evt, f.ownerID)
+	if len(mailer.sent) != 1 {
+		t.Fatalf("the first arming must invite the party; sent %v", mailer.sent)
+	}
+	// The send was RECORDED — and only after the mailer took it, which is the
+	// log's own invariant (migration 015: nothing recorded when nothing sent).
+	var rows int
+	if err := f.db.QueryRow(
+		`SELECT COUNT(*) FROM calendar_schedule_asks WHERE campaign_id = ? AND recipient_user_id = ?`,
+		f.campaignID, f.userID).Scan(&rows); err != nil {
+		t.Fatalf("counting the send log: %v", err)
+	}
+	if rows != 1 {
+		t.Fatalf("the invite send must be recorded exactly once; got %d rows", rows)
+	}
+
+	// OFF, then ON again. Before this slice, this re-mailed everybody.
+	f.h.fanOutInvites(ctx, f.campaignID, "Imix", cal, evt, f.ownerID)
+	if len(mailer.sent) != 1 {
+		t.Errorf("a second arming inside the 24h floor re-mailed the roster; sent %v", mailer.sent)
+	}
+
+	// AND IT SKIPS RATHER THAN REFUSING. A member who joins after the first
+	// arming is invited; nobody already mailed is mailed twice. This is the
+	// clause that makes the floor usable rather than merely safe.
+	newcomerID := calTestID(t)
+	if _, err := f.db.Exec(
+		`INSERT INTO users (id, email, display_name, password_hash) VALUES (?, ?, ?, ?)`,
+		newcomerID, newcomerID+"@example.test", "Newcomer", "x"); err != nil {
+		t.Fatalf("seeding the newcomer: %v", err)
+	}
+	f.h.SetMemberDirectory(&mockMemberDir{members: []campaigns.CampaignMember{
+		{UserID: f.userID, Role: campaigns.RolePlayer, DisplayName: "Ari", Email: "ari@example.test"},
+		{UserID: newcomerID, Role: campaigns.RolePlayer, DisplayName: "New", Email: "new@example.test"},
+	}})
+	f.h.fanOutInvites(ctx, f.campaignID, "Imix", cal, evt, f.ownerID)
+	if len(mailer.sent) != 2 || mailer.sent[1] != "new@example.test" {
+		t.Errorf("the floor must SKIP the already-mailed and still invite a new member; sent %v",
+			mailer.sent)
+	}
 }

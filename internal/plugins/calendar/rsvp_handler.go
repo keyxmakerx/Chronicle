@@ -297,13 +297,44 @@ func (h *RSVPHandler) SetRSVPCollectionAPI(c echo.Context) error {
 		return err
 	}
 
-	if req.Enabled && !evt.CollectRSVPs {
+	// ── THE RESPONSE REPORTS ITS MAIL STATE ───────────────────────────────
+	// C-CALV4-GAMEREADY §5 [GR-10]. This endpoint used to answer a flat
+	// {"collect_rsvps":true} with HTTP 200 whether or not a mail server exists,
+	// and the client then printed "RSVPs are open — the party has been invited."
+	// unconditionally. With SMTP unconfigured the mail attempts were ZERO. The
+	// operator arms their gate, reads that sentence, and STOPS CHECKING — and
+	// discovers the truth when nobody answers, which is the day of the session.
+	//
+	// This is the exact condition AskAvailabilityAPI refuses loudly for, using
+	// the shared mailNotConfiguredLine constant a few lines below. The invite
+	// moment was the one place that constant was not used. It is used now, and
+	// it is the CONSTANT, never a copy of its text — one edit, one meaning,
+	// everywhere.
+	//
+	// THE ARMING STILL SUCCEEDS. Refusing the PUT with no SMTP would break the
+	// no-mail-server and fantasy-calendar operators outright: in-app answering
+	// works end to end with no mail server at all. The fix is to stop CLAIMING
+	// something that did not happen, not to stop doing the thing that did.
+	fannedOut := req.Enabled && !evt.CollectRSVPs
+	if fannedOut {
 		// Reflect the new state on the copy the fan-out reads, so recipients
 		// aren't invited to an event that still says it isn't collecting.
 		evt.CollectRSVPs = true
-		h.startInviteFanOut(cc.Campaign.ID, cc.Campaign.Name, cal, evt)
+		h.startInviteFanOut(cc.Campaign.ID, cc.Campaign.Name, cal, evt, auth.GetUserID(c))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"collect_rsvps": req.Enabled})
+
+	// `emailed` is "is mail going out for this call at all" — not "was it
+	// delivered". The fan-out is backgrounded precisely so a dead SMTP server
+	// cannot turn a UI toggle into a timeout, so per-recipient outcomes do not
+	// exist yet when this returns and the response must not pretend otherwise.
+	body := map[string]any{
+		"collect_rsvps": req.Enabled,
+		"emailed":       fannedOut && h.mailer != nil && h.mailer.IsConfigured(ctx),
+	}
+	if fannedOut && (h.mailer == nil || !h.mailer.IsConfigured(ctx)) {
+		body["notice"] = mailNotConfiguredLine
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 // mailNotConfiguredLine is spec ledger item 11's own wording, VERBATIM and

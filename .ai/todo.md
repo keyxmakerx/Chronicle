@@ -34,6 +34,8 @@ hit the table. **Playability, not polish.**
 | **[GR-SIGN-A] / [GR-4]** — §2, the date verbs | `+1 day` / `−1 day` on the same nameplate row, at the EXISTING `CanControlWorldState` gate, through the EXISTING `PUT /campaigns/:id/calendar/world-state`; plus **Set date at the stricter, existing Owner-only floor** — a co-DM steps and does not set, which is the SHIPPED asymmetry [GR-SIGN-A](b) signed rather than a defect. Permission is absence. Guarded by `bench_date_verbs_test.go` (nine-row matrix in both halves + a real-database write test) and `test/js/bench_date_verbs.test.mjs`. | **[x] shipped** |
 | **[GR-3]** — §1's second half, the editor's cross-month roll | **BLOCKED AS SIGNED — see below.** | **[!] flagged** |
 | **[GR-5]** — §3, multi-day events | Every day of a span carries a MARK, so the day card stops saying "No events on this day" for days 2..N of an event in progress. `blockEventSpansDate` in `block_projection.go` matches inside the stored `[start, end]` window, INSIDE the visibility-filtered loop. **The ribbon is refused and booked.** Guarded by `block_multiday_test.go`, including a **real-database** test whose cross-month arm found a second half nothing else could: `ListEventsForMonth` selected on the stored month, so a festival running from one month into the next was never LOADED while the second month rendered — the same lie, one layer down. `model.go`'s false "the ribbon layer renders their span" comment corrected in the same commit. | **[x] shipped** |
+| **[GR-7] / [GR-8] / [GR-9]** — §5, three of the four RSVP dead ends | (a) **VALIDATE BEFORE CONSUMING.** The emailed "Suggest another time" token was spent by `ApplyToken` BEFORE `applySuggestion` ran, so a partially-filled form — the shape the page invites, since every field looks optional — was refused with the link already dead: correcting the row answered "this RSVP link is invalid or has expired", and so did re-opening the email. One incomplete form permanently destroyed a player's only way in. The suggest branch now writes first and consumes only on success, and a refusal re-renders the FORM carrying the reason. (b) **A SPENT LINK STATES THE ANSWER.** A refresh, double-tap or prefetch after a successful answer rendered "RSVP Failed" over a row that had been recorded, on a page containing no `<a>` at all — so the player told the GM the RSVP system was broken and the GM believed them. New `AnsweredToken` service read (the `GetUserRSVP` repository method that had shipped unused) states the answer and links to `/campaigns/:id/schedule`; **the generic no-title page is preserved exactly for a removed member, a `dm_only`-flipped event and an unknown token**, all three asserted. (c) **The emailed "Out this week" notified NOBODY** while the in-app twin always did — the one decline most likely to cancel a session was the one answer the Director never heard, and the decline WAS being written as `no` the whole time, so the tally moved under them in silence. Both surfaces now pinned in ONE test. Guarded by `rsvp_deadends_int_test.go` (**three real-database tests**), the authorised amendment to `TestToken_EmptySuggestionRejected`, and `TestRSVPToken_OutWeekNotifiesOwner`. | **[x] shipped** |
+| **[GR-6] / [GR-10]** — §4 the operator's own gate, + §5's fourth dead end | **The only "Collect RSVPs" control in the entire product lived in the legacy V2 event drawer** — a committed deletion — and `daycard.templ` contained ZERO occurrences of "rsvp", while every downstream RSVP surface (the Bench session tile AND `/schedule`) is gated on the flag it sets. The control now ships in the v4 day-card event editor beside the visibility cards, at the route's OWN `RoleScribe` floor (`routes.go:431`), writing the already-shipped `PUT …/rsvp-collection`. **Zero new routes, zero new handlers, zero new service methods, zero stylesheet** (it reuses `.viscard`/`.vh`). CREATE mode is disabled carrying the V2 drawer's own hint verbatim — disabled by SEQUENCE, not by permission. The off→on fan-out **reuses the 24h per-recipient floor** the schedule-ask path already ships, because §4 makes the toggle far easier to reach and a re-arm used to re-mail the whole roster; the 6h campaign cooldown is deliberately NOT applied. And [GR-10]: the PUT now **reports its mail state** using the shared `mailNotConfiguredLine` constant, so arming with no SMTP stops printing "the party has been invited" over zero sent mail. Guarded by `rsvp_collect_control_test.go` (audience matrix, the verbatim hint, the mail-state table, the floor, the bell's exemption), `rsvp_deadends_int_test.go`'s **real-database** floor test, and `test/js/daycard_rsvp_collect.test.mjs` (10 cases). | **[x] shipped** |
 | **[GR-11] / [GR-12]** — §6, yearly recurrence + the silent 201 | `RecurrenceYearly` expands (same month + day, interval applied, cap counted as occurrences); a base day absent from a later year is **SKIPPED, never clamped**. Unsupported `recurrence_type` is a **400 in both handlers**, exact and case-sensitive, through one shared predicate so the accepted set is stated once. The editor gains the `year` unit `backed: true`. Guarded by `recurrence_yearly_test.go` (two **real-database** tests) and `test/js/daycard_editor_requests.test.mjs`. **The real database earned its keep here too:** three repository queries carried a hand-typed `recurrence_type IN (...)`, so `yearly` expanded perfectly in memory and the row was never loaded — the clause is now derived from the constant block. | **[x] shipped** |
 
 - [!] **`[GR-3]` cannot be built as ruled, and the reason is a namespace, not a
@@ -113,6 +115,58 @@ hit the table. **Playability, not polish.**
   date, so a span in progress may be absent from those surfaces. `IsMultiDay`
   and the composite-overlap idiom already exist; this is a call-site change, not
   a new dependency.
+
+- [ ] **`C-CALV4-RSVP-PER-EVENT`** — **booked by [GR-6], measured, and the
+  operator must be told rather than discover it.** `benchRsvpPickSession`
+  (`bench.go`) resolves exactly ONE event — the first upcoming row on a
+  real-life calendar with `CollectRSVPs` — and **both** the Bench session tile
+  and `/schedule` run through it. **A campaign collecting RSVPs on two events
+  can only answer one of them in v4.** The audit's own guidance is the operator
+  instruction: *for two weeks, run one collecting event at a time — that is the
+  normal case and it works well.* §4 shipped the control, not a second resolver:
+  making the panel multi-event is a surface design, not a playability floor.
+
+- [ ] **`C-CALV4-RSVP-OCCURRENCE`** — **booked by [GR-6]; needs a MIGRATION, so
+  it could not ship in a slice whose Bounds are zero migrations.**
+  `calendar_event_rsvps` is `UNIQUE (event_id, user_id)` with **no occurrence
+  column** (migration 013), so a recurring session has ONE shared RSVP set for
+  every occurrence: after week one the tally shows last week's answers and
+  nobody can reset them. **The operator instruction is load-bearing until this
+  lands: create ONE non-recurring event per session** — the day card makes that
+  cheap. What §4 shipped instead is the TELLING: the collect control prints
+  *"This event repeats, and every occurrence shares one set of answers."* on a
+  recurring event, pinned by `test/js/daycard_rsvp_collect.test.mjs`.
+
+- [ ] **`C-CALV4-RSVP-DIRECTOR`** — **booked by [GR-6], which made it
+  conditional and the condition is not met.** The Director cannot record their
+  own attendance anywhere in v4 (`bench.go` `if in.IsGM { return t }`) yet IS
+  counted in the denominator (`in.Total = len(members)`), so the count **can
+  never reach N of N**. [GR-6] admits it *"as a one-branch fix if and only if §4
+  is otherwise complete and green — otherwise book … Do not let it expand §4."*
+  §4 shipped a new control, a new mount field, a fan-out floor and a changed
+  response shape; adding a write to the Director's own row on top of that would
+  change what every existing count MEANS on the same commit, which is exactly
+  the expansion the ruling forbids. **Booked, not forgotten** — and it is
+  cosmetic at the table: the Director knows whether they are coming.
+
+- [ ] **`C-CALV4-RSVP-V2-OPTIMISTIC-LINE`** — **an ACCEPTED RESIDUAL, named by
+  [GR-10] so it is not "tidied" on the way past.** `event_grid.js` will keep
+  printing *"RSVPs are open — the party has been invited."* unconditionally,
+  because [GR-10]'s response change is **additive JSON** and the V2 client
+  ignores unknown fields. Deliberately not fixed: the V2 shell is a committed
+  deletion ([VS-1] SIGNED), opening `calendar_v2*` collides with R2-4's door
+  sweep, and after [GR-6] the operator's own path no longer goes through it.
+  **It dies with the shell.**
+
+- [ ] **`C-CALV4-RSVP-INVITE-STARTS-ASK-COOLDOWN`** — **a stated consequence of
+  [GR-6]'s ruled reuse, recorded so a future reader does not meet it as a
+  surprise.** Both send limits are read off one log (`calendar_schedule_asks`),
+  so recording invite sends there means arming Collect RSVPs also starts the
+  **6h campaign cooldown on the separate "Ask availability" control**. That is
+  the honest reading of a table whose stated purpose is *"when was this roster
+  last mailed"* — the roster WAS just mailed — and it only ever affects the
+  control that REFUSES, never the operator's own gate, which [GR-6] rules must
+  always arm. Revisit only if an operator reports it as friction.
 
 - [ ] **`C-CALV4-RECUR-YEARLY-EDITOR-INTERVAL`** — the engine honours a stored
   `recurrence_interval` for `yearly` (built that way from the first line, so it
