@@ -140,12 +140,19 @@ round's failure mode was disclosure that never travelled.
 - [ ] **CORRECT THE HANDOFF CLAIM TEXT (substance was right, quotes were not).**
       The claim quoted the mock's head line as *"Sunset 19:58 · day 14 of
       Emberfall"*; the signed still reads **day 14 of HEARTHWANE** — Emberfall
-      is the SEASON word on the closed strip. It quoted the shipped substitute
-      as *"Day 14 of Emberfall · 3 moons declared · none keeps the month"*; the
-      shipped line is `skyHeadLine()` = **"Day &lt;n&gt; of &lt;Month&gt; ·
-      &lt;N&gt; moons declared; the grid draws &lt;M&gt;"**. The substantive
-      point — the sunset is refused and flagged rather than approximated — was
-      correct, and no sunrise/sunset is persisted anywhere.
+      is the SEASON word on the closed strip. **And the correction offered for
+      the shipped line was itself wrong, which is the same defect one turn
+      later:** it gave `skyHeadLine()` as *"Day &lt;n&gt; of &lt;Month&gt; ·
+      &lt;N&gt; moons declared; the grid draws &lt;M&gt;"*, but *"N moons
+      declared; the grid draws M"* is the **moons BADGE**
+      (`helpers.go:843`) — a different surface. **MEASURED against the signed
+      fixture, `skyHeadLine()` emits `Day 14 of Deepwinter · 4 moons declared ·
+      Flint keeps the month`**: `Day <n> of <Month>` plus `almanacSkyLine()`'s
+      `<N> moons declared · <keepers|none> keeps the month`. The substantive
+      point on every side — the sunset is refused and flagged rather than
+      approximated — is correct, and no sunrise/sunset is persisted anywhere.
+      **Three hands have now quoted this line from memory and two got it wrong.
+      The string is four seconds of `t.Log` away.**
 
 ### The three feature losses a GM will feel at a table, all dispatch-signed
 

@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -382,6 +383,41 @@ func TestSky_TheTonightRowIsFourAlignedColumns(t *testing.T) {
 	}
 	if strings.Contains(pane, "in -") {
 		t.Error("a turn column printed a negative distance")
+	}
+}
+
+// TestSky_TheHeadAndSubHeadAreQuotable exists because THREE separate hands have
+// now quoted the open pane's head line from memory and TWO got it wrong — once
+// naming the season word as the month ("day 14 of Emberfall"; Emberfall is the
+// SEASON on the closed strip, the month is Hearthwane in the still), and once
+// substituting the MOONS BADGE's sentence ("N moons declared; the grid draws M",
+// `helpers.go:843`) for the head line's.
+//
+// Both substrings were already pinned, in two other files, on two other
+// surfaces. What was missing was ONE named place that prints the WHOLE line, so
+// a report can quote a test instead of a recollection. That is all this is.
+func TestSky_TheHeadAndSubHeadAreQuotable(t *testing.T) {
+	d := fxSky(t, true)
+	anchor := almanacAnchorDay(d)
+
+	const wantHead = "Day 14 of Deepwinter · 4 moons declared · Flint keeps the month"
+	const wantSub = "Alder turns full in 5 days"
+
+	if got := skyHeadLine(d, anchor); got != wantHead {
+		t.Errorf("skyHeadLine = %q, want %q", got, wantHead)
+	}
+	if got := skySubHead(d, anchor); got != wantSub {
+		t.Errorf("skySubHead = %q, want %q", got, wantSub)
+	}
+	// Composition, stated so a change to either half fails HERE rather than
+	// silently re-shaping a sentence three books quote.
+	if !strings.HasPrefix(wantHead, "Day "+strconv.Itoa(anchor)+" of "+d.Month.Name) {
+		t.Error("the head line no longer opens with the day and the MONTH")
+	}
+	if !strings.HasSuffix(wantHead, almanacSkyLine(d)) {
+		t.Error("the head line no longer closes with almanacSkyLine — if the moons " +
+			"badge's wording has been substituted here, that is the exact confusion " +
+			"this guard is named for")
 	}
 }
 
