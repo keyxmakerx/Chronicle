@@ -113,6 +113,11 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 		// orthogonal co-DM capability the server already enforces.
 		CanCreateEvents: cc.MemberRole >= campaigns.RoleScribe,
 		CanAuthorDmOnly: cc.CanAuthorDmOnly(),
+		// §2's date-verb floor (C-CALV4-GAMEREADY [GR-4]), resolved here
+		// alongside the other two for the same reason: this is where the request
+		// context is. It is the SAME predicate the world-state route already
+		// gates on — no capability is invented and no floor moves.
+		CanControlWorldState: cc.CanControlWorldState(),
 		// THE MONTH CURSOR (C-CALV4-GAMEREADY §1, [GR-1]). Two query params on
 		// this route and nowhere else: not a preference row, not a session
 		// value, not a fifth Bench section. `m` is ONE-BASED and both are

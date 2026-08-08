@@ -430,6 +430,7 @@ templ benchTickRule(ticks []BenchTick) {
 templ benchBlockView(b BenchBlock, data BenchData, role string) {
 	<div class="benchblock" data-bench-block={ role } data-calendar-id={ b.Manage.CalendarID }>
 		@benchNavTrio(b.Nav)
+		@benchDateVerbRow(b.Verbs)
 		@calblock.Block(b.Data)
 		if data.IsOwner {
 			@benchManageStrip(b.Manage)
@@ -484,6 +485,68 @@ templ benchNavTrio(n BenchNav) {
 			// already there teaches the GM that it is missing, not satisfied.
 			<a class="btn xs" data-bench-nav-today href={ templ.SafeURL(n.TodayHref) }>Today</a>
 			<a class="btn xs" data-bench-nav-next href={ templ.SafeURL(n.NextHref) } rel="next">Next ›</a>
+		</div>
+	}
+}
+
+// benchDateVerbRow is §2's date-verb surface (C-CALV4-GAMEREADY [GR-SIGN-A]
+// SIGNED, [GR-4]). See BenchDateVerbs in bench.go for the ruling, the two
+// floors and why they differ.
+//
+// PERMISSION IS ABSENCE, AND IT IS ABSENCE TWICE OVER. A viewer without
+// `CanControlWorldState` gets no step buttons; a viewer who is not the Owner
+// gets no Set-date fields; a viewer with neither gets NO ELEMENT AT ALL — not a
+// disabled control, not a tooltip, not an empty row. The whole component is
+// wrapped in that outer test for exactly that reason.
+//
+// WHY THIS ROW IS DRIVEN BY JS WHEN [GR-2]'s TRIO IS NOT, and it is a
+// measurement rather than a preference. `PUT /campaigns/:id/calendar/world-
+// state` binds `putWorldStateBody`, whose `advance` and `time` members are
+// POINTERS TO ANONYMOUS STRUCTS carrying `json` tags and no `form` tags. Echo's
+// form binder skips a tagless pointer-to-struct field outright, so a
+// form-encoded submit — which is all a plain <form> or a bare hx-put can send —
+// binds NOTHING and the endpoint answers 200 having changed no date. That is a
+// silent no-op, which is worse at a table than a missing control. Giving the
+// shipped request struct form tags would be a wire-contract change to an
+// endpoint V2's console and the sync path both use, and this slice's Bounds
+// freeze that surface. TestWorldStatePut_FormEncodedBindsNothing pins the
+// measurement so the next hand does not re-derive it.
+//
+// SO THE WRITE RIDES `calendar_daycard.js`, the plugin's registry-mounted
+// driver that is already on this page (internal/app/routes.go →
+// pluginBodyScripts → base.templ). ZERO new page scripts, zero registry edits,
+// and tools/check-page-scripts.sh stays green unedited — which it could not if
+// this shipped its own <script src>, and a <script> inside an HTMX-swapped
+// fragment would be DELETED by boot.js:163 anyway.
+templ benchDateVerbRow(v BenchDateVerbs) {
+	if v.CanStep || v.CanSet {
+		<div
+			class="manage"
+			data-bench-date-verbs
+			data-verb-url={ v.URL }
+			data-verb-csrf={ v.CSRF }
+		>
+			<span class="badge">In-world date</span>
+			if v.CanStep {
+				<button type="button" class="btn xs" data-bench-date-step="-1">&minus;1 day</button>
+				<button type="button" class="btn xs" data-bench-date-step="1">+1 day</button>
+			}
+			<span class="sp"></span>
+			if v.CanSet {
+				// Set date is OWNER-ONLY and seeded from the calendar's own
+				// current date, never from the navigated month.
+				<label class="vh" for="bench-set-y">Year</label>
+				<input id="bench-set-y" class="btn xs" type="number" size="5" data-bench-date-year value={ benchIntAttr(v.Year) }/>
+				<label class="vh" for="bench-set-m">Month</label>
+				<input id="bench-set-m" class="btn xs" type="number" size="3" min="1" data-bench-date-month value={ benchIntAttr(v.Month) }/>
+				<label class="vh" for="bench-set-d">Day</label>
+				<input id="bench-set-d" class="btn xs" type="number" size="3" min="1" data-bench-date-day value={ benchIntAttr(v.Day) }/>
+				<button type="button" class="btn xs" data-bench-date-set>Set date</button>
+			}
+			// The one honest state this row has: what the last write did. It is
+			// aria-live so the answer reaches a screen reader, and it is TEXT —
+			// no transition, no animation, nothing that moves.
+			<span class="c" data-bench-date-say role="status" aria-live="polite"></span>
 		</div>
 	}
 }

@@ -2730,11 +2730,112 @@
     });
   }
 
+  // ── §2: the Bench's date-verb row ──────────────────────────────────────────
+  //
+  // C-CALV4-GAMEREADY [GR-SIGN-A] SIGNED / [GR-4]. Two verbs — `+1 day` and
+  // `−1 day` — plus an Owner-only Set date, all three writing through the
+  // EXISTING `PUT /campaigns/:id/calendar/world-state` with the payload
+  // gm_panel.js already sends. No new route, no new capability, no floor moved.
+  //
+  // WHY IT LIVES IN THIS FILE, WHICH IS NOT ABOUT DAY CARDS. The Bounds of that
+  // slice forbid a new page script (tools/check-page-scripts.sh is a shrink-only
+  // ratchet) and forbid opening internal/app/routes.go, where the plugin's
+  // body-script REGISTRY is built — and a <script> inside an HTMX-swapped
+  // fragment is deleted outright by boot.js:163. This module is the plugin's
+  // only registry-mounted driver that is already on the Bench, so it is the only
+  // legal seat for the one thing the row cannot do declaratively: send JSON.
+  // Echo's form binder skips `putWorldStateBody`'s tagless pointer-to-struct
+  // members, so a form-encoded PUT binds nothing and silently changes no date
+  // (TestWorldStatePut_FormEncodedBindsNothing pins that measurement).
+  //
+  // IT IS COMPLETELY INDEPENDENT OF THE CARD. Its own mount, its own wired
+  // flag, its own early return. A page with a verb row and no day card wires it;
+  // a page with a card and no verb row does not.
+  //
+  // THE ROLLOVER IS THE SERVER'S. This sends `{advance:{days:±1}}` and does no
+  // date arithmetic of its own — month ends, year ends and leap geometry are
+  // already decided once, server-side, for V2's console. A second definition
+  // here is how two surfaces start disagreeing about when a year turns over.
+  function initDateVerbs() {
+    if (typeof document === 'undefined') return;
+    var row = document.querySelector('[data-bench-date-verbs]');
+    if (!row || row.dataset.dvWired === '1') return;
+    row.dataset.dvWired = '1';
+
+    var url = row.getAttribute('data-verb-url') || '';
+    var csrf = row.getAttribute('data-verb-csrf') || '';
+    var say = row.querySelector('[data-bench-date-say]');
+
+    function report(msg) { if (say) say.textContent = msg; }
+
+    function fieldInt(sel, fallback) {
+      var el = row.querySelector(sel);
+      if (!el) return fallback;
+      var n = parseInt(el.value, 10);
+      return isNaN(n) ? fallback : n;
+    }
+
+    function commit(body, btn) {
+      var fetcher = (window.Chronicle && window.Chronicle.apiFetch) ? window.Chronicle.apiFetch : null;
+      if (!fetcher || !url) { report('Cannot reach the server.'); return; }
+      if (btn) btn.disabled = true;
+      report('Working…');
+      fetcher(url, { method: 'PUT', body: body, headers: { 'X-CSRF-Token': csrf } })
+        .then(function (resp) {
+          if (!resp.ok) {
+            return resp.json().catch(function () { return {}; }).then(function (b) {
+              throw new Error((b && b.message) || 'The date was not changed.');
+            });
+          }
+          // THE PAGE RELOADS RATHER THAN PATCHING THE NAMEPLATE. The date the
+          // verbs move is printed by the Block's own projection, and this
+          // module may READ the Block's DOM but never MUTATE it (see this
+          // file's boundary header). A reload is the honest re-read; a
+          // hand-patched label would be a second copy of the date that can
+          // disagree with the grid beneath it.
+          window.location.reload();
+        })
+        .catch(function (e) {
+          report((e && e.message) || 'The date was not changed.');
+          if (btn) btn.disabled = false;
+        });
+    }
+
+    // DELEGATED AT THE DOCUMENT, exactly as this module's other click handler
+    // is: the row's own controls are re-rendered by a boosted swap, and a
+    // listener bound to the row instance would go dead the first time the page
+    // came back through the sidebar — which is the class of bug the body-script
+    // registry exists to have already fixed once.
+    document.addEventListener('click', function (ev) {
+      if (!ev.target || !ev.target.closest) return;
+      if (!ev.target.closest('[data-bench-date-verbs]')) return;
+      var step = ev.target.closest('[data-bench-date-step]');
+      if (step) {
+        var days = parseInt(step.getAttribute('data-bench-date-step'), 10);
+        if (!days) return;
+        commit({ advance: { days: days, hours: 0, minutes: 0 } }, step);
+        return;
+      }
+      var set = ev.target.closest('[data-bench-date-set]');
+      if (set) {
+        commit({
+          time: {
+            year: fieldInt('[data-bench-date-year]', 0),
+            month: fieldInt('[data-bench-date-month]', 1),
+            day: fieldInt('[data-bench-date-day]', 1),
+          },
+        }, set);
+      }
+    });
+  }
+
+  function initAll() { init(); initDateVerbs(); }
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initAll);
+    else initAll();
     // Re-init after boosted navigation (the QA2 convention) — guarded per card.
-    document.addEventListener('htmx:afterSettle', init);
-    document.addEventListener('htmx:load', init);
+    document.addEventListener('htmx:afterSettle', initAll);
+    document.addEventListener('htmx:load', initAll);
   }
 })();

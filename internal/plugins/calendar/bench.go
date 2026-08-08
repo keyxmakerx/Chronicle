@@ -575,6 +575,66 @@ type BenchBlock struct {
 	// Nav is the month cursor's control trio (C-CALV4-GAMEREADY §1, [GR-1] /
 	// [GR-2]). It is populated for the PRIMARY Block only — see benchNav.
 	Nav BenchNav
+	// Verbs is the GM-only date-verb row (C-CALV4-GAMEREADY §2, [GR-SIGN-A] /
+	// [GR-4]). Populated for the PRIMARY Block only, and empty of controls for
+	// any viewer below their floors — permission is ABSENCE.
+	Verbs BenchDateVerbs
+}
+
+// BenchDateVerbs is the v4 date-verb surface (C-CALV4-GAMEREADY §2).
+//
+// [GR-SIGN-A] SIGNED 2026-08-07 — THE SEAT. A GM-only verb row on the Block's
+// nameplate, not a fifth Bench section and not the ribbon's Today tile, because
+// the nameplate row is the only one of the three shapes that is SEVERABLE:
+// `C-CALV4-GM-CONSOLE` [GC-1] may later relocate these two verbs into whatever
+// console it rules, as GM-CONSOLE's own move, without this slice having spent
+// the fifth `benchSectionKeys` entry that [GC-1] wants. [GC-1] is NOT
+// pre-empted; §2's four-term sibling agreement stands.
+//
+// [GR-4] RULED — TWO STEP VERBS AND NO MORE. `+1 day` and `−1 day`. The other
+// four V2 verbs (+10m, +1h, Rest 8h, −1h) move the CLOCK, and v4 has no clock:
+// the nameplate prints a date only and its own header says "There is no time
+// field". A control that changes a quantity the surface does not display is
+// unusable at a table — the GM taps it, the page re-renders identically, and
+// they cannot tell whether it worked. `−1 day` is IN as the UNDO for a
+// fat-finger `+1`, on a surface where the write is immediate and the only other
+// repair is an Owner-only settings page a co-DM cannot reach.
+//
+// TWO FLOORS, AND WHERE THEY DIFFER THE RENDER DIFFERS.
+//
+//	CanStep — the EXISTING RequireCapability(CanControlWorldState) gate on
+//	          PUT /campaigns/:id/calendar/world-state (routes.go:318-320):
+//	          Owner OR DM-grantee. Unchanged, unmoved, uninvented.
+//	CanSet  — the EXISTING Owner-only floor of
+//	          PUT /campaigns/:id/calendars/:calId/settings (routes.go:169-170),
+//	          which is where set-date lives today. [GR-SIGN-A](b) includes Set
+//	          date but keeps it at that stricter floor: WIDENING WHO MAY SET THE
+//	          WORLD'S DATE IS THE OPERATOR'S CALL, not a side effect of a
+//	          playability fix.
+//
+// SO A CO-DM CAN STEP THE DATE AND CANNOT SET IT. That asymmetry is the SHIPPED
+// one, named here so it reads as deliberate rather than as an oversight. It
+// moves no server floor in either direction: the write below rides the
+// world-state endpoint a co-DM already reaches through V2's console today, and
+// the Owner gate is on the RENDER.
+//
+// PERMISSION IS ABSENCE. A viewer below a floor gets no element — never a
+// disabled control, never a tooltip, never a greyed ghost.
+type BenchDateVerbs struct {
+	CanStep bool
+	CanSet  bool
+	// URL is the EXISTING world-state PUT, carrying ?calendarId= so the verbs
+	// act on the Block they sit under rather than on whatever calendar happens
+	// to be the viewer's "active" one. Both are already shipped behaviours of
+	// that handler (resolveWorldStateCalendar), so this adds no route and no
+	// snapshot line.
+	URL  string
+	CSRF string
+	// Year / Month / Day seed the Set-date fields with the calendar's OWN
+	// current date — NOT the navigated month. Set date changes where the world
+	// is; prefilling it from wherever the GM happened to browse would make one
+	// control mean different things on different pages.
+	Year, Month, Day int
 }
 
 // BenchNav is the `‹ prev · Today · next ›` trio that navigates the month
@@ -911,6 +971,12 @@ type benchInput struct {
 	// control the server refuses.
 	CanCreateEvents bool
 	CanAuthorDmOnly bool
+	// CanControlWorldState is the date-verb row's step floor
+	// (C-CALV4-GAMEREADY [GR-4]). It is `cc.CanControlWorldState()` — Owner OR
+	// DM-grantee — passed in rather than derived from Role for the same reason
+	// the two fields above are: Role is the VISIBILITY role, and the route the
+	// verbs write through gates on the capability, not on it.
+	CanControlWorldState bool
 	// View is the month cursor, read straight off `?y=` / `?m=` and passed
 	// through UNVALIDATED (C-CALV4-GAMEREADY [GR-1]). Month is ONE-BASED, both
 	// fields are optional and independently optional, and the zero value is
@@ -1032,6 +1098,10 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, layerPrefs, in.View); b != nil {
 			data.Primary = b
 			data.Primary.Nav = benchNav(primary, b.Data, in.Campaign.ID)
+			// §2's verb row seats on the same nameplate row as the cursor, and
+			// on the PRIMARY Block only: it advances the campaign's in-world
+			// date, which is what the primary calendar is.
+			data.Primary.Verbs = benchDateVerbs(primary, in)
 		} else {
 			rows = append([]*Calendar{primary}, rows...)
 		}
@@ -1495,6 +1565,33 @@ func benchNav(cal *Calendar, d calblock.BlockData, campaignID string) BenchNav {
 		nav.PrevHref = fmt.Sprintf("%s?y=%d&m=%d", base, prevYear, prevMonth)
 	}
 	return nav
+}
+
+// benchDateVerbs builds §2's verb row for ONE calendar. See BenchDateVerbs for
+// the two floors and why they differ.
+//
+// IT COMPUTES NOTHING ABOUT THE DATE. The step is `{advance:{days:±1}}` — the
+// payload gm_panel.js already sends to the endpoint that already exists — and
+// the rollover (month end, year end, leap geometry) is the SERVER'S, exactly as
+// it is for V2's console. A client that added its own arithmetic here would be
+// a second definition of when a year turns over.
+func benchDateVerbs(cal *Calendar, in benchInput) BenchDateVerbs {
+	if cal == nil {
+		return BenchDateVerbs{}
+	}
+	if !in.CanControlWorldState && !in.IsOwner {
+		return BenchDateVerbs{}
+	}
+	return BenchDateVerbs{
+		CanStep: in.CanControlWorldState,
+		CanSet:  in.IsOwner,
+		URL: fmt.Sprintf("/campaigns/%s/calendar/world-state?calendarId=%s",
+			in.Campaign.ID, cal.ID),
+		CSRF:  in.CSRFToken,
+		Year:  cal.CurrentYear,
+		Month: cal.CurrentMonth,
+		Day:   cal.CurrentDay,
+	}
 }
 
 // benchNavLabel names the month the cursor is standing on. It is the month's

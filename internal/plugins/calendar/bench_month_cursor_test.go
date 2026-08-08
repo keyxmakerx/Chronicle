@@ -417,6 +417,11 @@ func calTestSeedNavCalendar(t *testing.T, db *sql.DB) (string, *Calendar) {
 		ID:         calTestID(t),
 		CampaignID: campaignID, Name: "Harptos of Imix", Mode: ModeFantasy,
 		IsDefault: true, CurrentYear: 1523, CurrentMonth: 1, CurrentDay: 14,
+		// The clock geometry the SERVICE defaults on its own create path
+		// (service.go:380-381). This seeds through the REPOSITORY, which
+		// applies no defaults, and SetWorldState refuses hours_per_day < 1 —
+		// so a fixture without these is a calendar the date verbs cannot move.
+		HoursPerDay: 24, MinutesPerHour: 60, SecondsPerMinute: 60,
 	}
 	if err := repo.Create(ctx, cal); err != nil {
 		t.Fatalf("create calendar: %v", err)
