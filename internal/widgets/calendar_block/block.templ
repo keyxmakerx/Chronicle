@@ -43,8 +43,22 @@ templ Block(d BlockData) {
 			}
 		>
 			@nameplate(d)
-			if d.IsRealWorld {
-				@skybandPlaceholder()
+			// THE SKY HEADER SEATS HERE — inside the Block's own box, between
+			// the nameplate and the month, exactly where the signed stills draw
+			// it and where the operator seated it on 2026-08-07 ([SKY-2]).
+			//
+			// IT IS NOT THE PLACEHOLDER'S SEAT WITH A NEW TENANT. The dashed
+			// `.skyband` that used to sit on this line rendered on the
+			// REAL-WORLD Block, whose Almanac is empty for two independent
+			// reasons — the register's build gate names the Shelf and that
+			// Block renders noShelf, and the service's real-life create path
+			// seeds no moons, no seasons and no eras — so a sky there would
+			// have carried a gradient and a clock and nothing else, forever.
+			// The gate is the PRODUCER's answer now ([SKY-1]): one sky per
+			// surface, on the Bench's Primary Block, and where there is none
+			// the Block says nothing about it.
+			if skySeated(d) {
+				@skyHeader(d)
 			}
 			<div class="body">
 				// THE SWITCHBOARD'S ANCHOR IS THE MONTH, NOT THE ⋯ BUTTON, and
@@ -107,13 +121,183 @@ templ Stylesheet() {
 	<link rel="stylesheet" href={ layouts.AssetURL(StylesheetPath) }/>
 }
 
-// skybandPlaceholder is the ONE dashed idiom in the entire product: "not built
-// yet". It reserves the pictorial night sky on real-world Blocks, which is
-// PARKED (L12, D4) and shares nothing with the moon-phase data above it.
-templ skybandPlaceholder() {
-	<div class="skyband" aria-hidden="true">
-		<span class="a">Skybox — parked</span>
-		<span class="b">the pictorial night sky lands here · parked on usage grounds · unrelated to the moon-phase data above</span>
+// ── THE SKY HEADER ──────────────────────────────────────────────────────────
+//
+// C-CALV4-SKY (R2-5). It replaces the ONE dashed idiom in the product — the
+// `.skyband` "Skybox — parked" strip, DELETED here and not relocated ([SKY-11])
+// — and it is a REDESIGN rather than a restoration: nothing is inherited from
+// the ~6,400-line V2 sky engine ([SKY-13]), and the whole surface renders from
+// server markup, custom properties and a native <details>. No canvas, no
+// requestAnimationFrame loop, no particle system, and NO JAVASCRIPT — which is
+// not a preference but this package's law (boot.js:163 sets
+// `htmx.config.allowScriptTags = false`, so a <script> in an HTMX-swapped
+// fragment is deleted).
+//
+// A REAL DISCLOSURE, NEVER `aria-hidden` ([SKY-16]). <details>/<summary> gives
+// native semantics, native keyboard operation and `aria-expanded` for free —
+// the same argument the Bench's own disclosures already make — and there is no
+// hand-rolled role="button" and no tabindex. The thing it replaces was
+// `aria-hidden="true"` with no accessible name, which is right for a dashed
+// placeholder and wrong for a header carrying the in-world time, the season and
+// the moon phases.
+//
+// THREE FACTS AND NO FOURTH ([SKY-6]): the moon phase disc(s), the in-world
+// time, and the season word — each DROPPED ENTIRELY rather than blanked when
+// its source is absent, on the Nameplate's own blockSeasonEraLabels idiom.
+// There is no sunrise and no sunset here in any form: not a tick, not a chip,
+// not a "needs backend" note, not a 06:00/18:00 default.
+//
+// COMPACT IS THE RESTING STATE. The header is NOT a fifth Bench section
+// ([SKY-10]): it takes no row in the section store, no toggle route and no
+// migration, and it defaults CLOSED at every width for every viewer and
+// remembers nothing.
+templ skyHeader(d BlockData) {
+	{{ anchor := almanacAnchorDay(d) }}
+	<details class="skygrow" data-cal-sky style={ skyStyle(d) }>
+		<summary class="skyhdr" aria-label={ skyLabel(d) }>
+			if skyDiscsReachable(d) {
+				<span class="skdiscs">
+					for _, m := range d.Month.Almanac {
+						{{ a, ok := almanacDayAt(m, anchor) }}
+						if ok {
+							<span class="skb">
+								<i
+									class={ skyDiscClass(a) }
+									style={ skyDiscStyle(a) }
+									title={ skyDiscTitle(m, a) }
+								></i>
+							</span>
+						}
+					}
+				</span>
+			}
+			// THE SPACER SITS AHEAD OF THE TIME, and that is a measured
+			// position rather than a tidy one: with the time left-packed
+			// behind a growing disc cluster the clock slid 65px sideways on
+			// every open and close — travel that is invisible to a walk of
+			// `transition-property`, which is why the mock's own round 3
+			// caught it with a probe and moved the spacer.
+			<span class="sksp"></span>
+			if d.SkyClock != "" {
+				<span class="sktime">{ d.SkyClock }</span>
+			}
+			if d.SeasonLabel != "" {
+				<span class="skseason">{ d.SeasonLabel }</span>
+			}
+			<span class="skcaret" aria-hidden="true"></span>
+		</summary>
+		<div class="skpane">
+			<div class="skpane-in">
+				<div class="skpane-pad">
+					<div class="skhead">{ skyHeadLine(d, anchor) }</div>
+					if skyDiscsReachable(d) {
+						@skyTabs(d)
+						<div class="skbody">
+							@skyTonight(d, anchor)
+							@skyMonth(d)
+							@skyMoons(d)
+						</div>
+					}
+				</div>
+			</div>
+		</div>
+	</details>
+}
+
+// skyTabs is the Tonight | Month | Moons trio — count 3's whole answer, and
+// EXACTLY THREE CONTROLS ([SKY-9]).
+//
+// THE MECHANISM IS THE ONE THE ALMANAC AND THE SHELF BOTH PROVE: one radio
+// group, visually-hidden inputs with `for`-labels, no JS and no travelling
+// indicator — the pressed look is state ON the pressed item. It is chosen for
+// the reason shelf.templ states in the code's own words: there is no JS in this
+// package and no route to fetch a panel with.
+//
+// THE DISCLOSURE AFFORDANCE DOES NOT COUNT AGAINST THE THREE, because the band
+// IS the summary. And nothing else ships: no `Sync now` (the Nameplate already
+// carries the sync pill, and a second sync control on one Block is count 3
+// repeating itself), no moon-style picker, no weather, no mood tint, no time
+// verbs, no per-moon toggles. The switchboard already owns preferences.
+templ skyTabs(d BlockData) {
+	<div class="sktabs" role="radiogroup" aria-label="Almanac view">
+		@skyTab(d, almTabTonight, "Tonight")
+		@skyTab(d, almTabMonth, "Month")
+		@skyTab(d, almTabMoons, "Moons")
+	</div>
+}
+
+templ skyTab(d BlockData, key string, label string) {
+	<input
+		type="radio"
+		class="skypick"
+		data-cal-sky-pick={ key }
+		name={ skyPickGroupName(d) }
+		id={ skyPickInputID(d, key) }
+		checked?={ key == almTabTonight }
+	/>
+	<label class="skybtn" for={ skyPickInputID(d, key) }>{ label }</label>
+}
+
+// skyTonight is the default panel: one row per declared body, written for the
+// anchored day. Every number is the producer's; nothing here is derived.
+templ skyTonight(d BlockData, anchor int) {
+	<div class="skypane-t sky-tonight" data-cal-sky-panel="tonight">
+		for _, m := range d.Month.Almanac {
+			<div class="skyrow">
+				<span class="nm">{ m.Name }</span>
+				<span class="ln">{ almanacMoonLine(m, anchor) }</span>
+			</div>
+		}
+		<div class="skynote">{ almanacLitLine(d, anchor) }</div>
+	</div>
+}
+
+// skyMonth is the lane grid — one lane per moon, one column per day of the
+// month, at the month's REAL day count and never a hardcoded thirty.
+//
+// EVERY CELL CARRIES data-day in the dayKey namespace, because a dated surface
+// inside a calendar_block template is an ANSWER partner of the grid and the
+// Ledger (guard B4), and because the retarget this panel does not yet do is one
+// ladder extension away for whichever slice pays for it.
+templ skyMonth(d BlockData) {
+	<div class="skypane-t sky-month" data-cal-sky-panel="month">
+		<div class="skylanes" style={ almanacWrapStyle(d) }>
+			for _, m := range d.Month.Almanac {
+				<div class="skylane">
+					<span class="who">{ m.Name }</span>
+					for _, a := range m.Days {
+						<span
+							class="c"
+							data-day={ dayKey(d.CalendarSlug, a.Day) }
+							data-axis="var(--text-primary)"
+							title={ almanacCellTitle(m, a) }
+						>
+							<i class="almlit" style={ almanacLitStyle(a) }></i>
+							if a.Turn != "" {
+								<i class={ almanacTurnClass(a) } aria-hidden="true"></i>
+							}
+						</span>
+					}
+				</div>
+			}
+		</div>
+		<div class="skynote">{ almanacNote(d) }</div>
+	</div>
+}
+
+// skyMoons is the register proper, and its footnote is a promise the producer
+// keeps literally: every number is computed from the calendar's real geometry.
+templ skyMoons(d BlockData) {
+	<div class="skypane-t sky-moons" data-cal-sky-panel="moons">
+		for _, m := range d.Month.Almanac {
+			<div class="skyrow">
+				<span class="nm">{ m.Name }</span>
+				<span class="ln">{ almanacMoonsLine(m) }</span>
+			</div>
+		}
+		<div class="skynote">
+			the arithmetic is printed so it can be audited — no date in the register was typed by hand
+		</div>
 	</div>
 }
 

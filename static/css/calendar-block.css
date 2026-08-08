@@ -620,35 +620,6 @@
 .cal-block-host .sync-full { display: none }
 .cal-block-host .sync-compact { display: inline }
 
-/* ── the ONE dashed idiom in the entire product: "not built yet" ─────────── */
-.cal-block-host .skyband {
-  margin: 8px 12px;
-  height: 36px;
-  border-radius: var(--r-ctl);
-  flex: none;
-  background: var(--surface-inset);
-  border: 1px dashed var(--rule-structural);
-  display: grid;
-  place-content: center;
-  text-align: center;
-  gap: 1px;
-}
-.cal-block-host .skyband .a {
-  font-weight: 650;
-  font-size: 10px;
-  line-height: 1.3;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.cal-block-host .skyband .b {
-  display: none;
-  font-weight: 500;
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--text-muted);
-}
-
 /* ── Zone B · INSTRUMENT ─────────────────────────────────────────────────── */
 /* THE BODY SCROLLS AT STD, AND THAT IS THE §15 ANSWER
    (C-CALV4-LAYERS-P9 screenshot finding).
@@ -2218,8 +2189,6 @@
   .cal-block-host .sync-full { display: inline }
   .cal-block-host .sync-compact { display: none }
 
-  .cal-block-host .skyband { height: 40px }
-  .cal-block-host .skyband .b { display: block }
 
   /* the docked Ledger sits BESIDE the month. Its 300px is the same 300px the
      full-tier column arithmetic subtracts, which is why the zone has to be
@@ -2472,7 +2441,6 @@
   .cal-block-host .np .fault { font-size: 11px; font-weight: 650 }
   .cal-block-host .sync,
   .cal-block-host .seg.tie,
-  .cal-block-host .skyband,
   .cal-block-host .needzone,
   .cal-block-host .layer-col,
   .cal-block-host .shelf { display: none }
@@ -2524,7 +2492,6 @@
   .cal-block-host .np .fault { font-size: 11px; font-weight: 650 }
   .cal-block-host .sync,
   .cal-block-host .seg.tie,
-  .cal-block-host .skyband,
   .cal-block-host .needzone,
   .cal-block-host .layer-col,
   .cal-block-host .shelf,

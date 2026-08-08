@@ -138,12 +138,12 @@ func TestBlockSky_GradientIsTheShippedFunctionReused(t *testing.T) {
 // legitimately contains both words and a package-wide ban would either be red
 // on day one or would have to carve import.go out and thereby stop being a ban.
 //
-// AND IT READS CODE, NOT COMMENTS. The producer's own doc comment explains at
-// length WHY there is no sunrise — naming the thing it refuses, which is the
-// only way that paragraph can be read — and a scanner that judged the comment
-// would force the refusal to be undocumented in order to stay green. Go source
-// is stripped by re-printing a comment-free AST; the .templ and .css files are
-// read whole, because nothing legitimately names a daylight boundary there.
+// AND IT READS CODE, NOT COMMENTS. Every file here documents WHY there is no
+// sunrise — naming the thing it refuses, which is the only way such a paragraph
+// can be read — and a scanner that judged the comment would force the refusal to
+// be UNDOCUMENTED in order to stay green, which is a worse tree. Go source is
+// stripped by re-printing a comment-free AST; .templ files lose their full-line
+// `//` comments; .css files lose their `/* … */` spans.
 func TestBlockSky_NoSunriseAndNoSunset(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join("block_projection.go"),
@@ -173,7 +173,20 @@ func skyTestSourceWithoutComments(t *testing.T, path string) string {
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	if filepath.Ext(path) != ".go" {
+	switch filepath.Ext(path) {
+	case ".css":
+		return benchCommentRe.ReplaceAllString(string(src), " ")
+	case ".templ":
+		var kept []string
+		for _, line := range strings.Split(string(src), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "//") {
+				continue
+			}
+			kept = append(kept, line)
+		}
+		return strings.Join(kept, "\n")
+	case ".go":
+	default:
 		return string(src)
 	}
 	fset := token.NewFileSet()

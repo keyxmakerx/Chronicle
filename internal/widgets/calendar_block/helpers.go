@@ -2137,3 +2137,151 @@ func graphFoot(d BlockData) string {
 // "new" a hairline and "full" a 4px block. ACHROMATIC BY LAW — the sky may never
 // borrow the event colour axis.
 func graphTurnClass(a AlmanacDay) string { return "tn " + a.Turn }
+
+// ── THE SKY HEADER ──────────────────────────────────────────────────────────
+//
+// C-CALV4-SKY (R2-5), [SKY-1] · [SKY-6] · [SKY-9] · [SKY-16] SIGNED.
+//
+// EVERY HELPER HERE IS PURE AND READS BlockData ONLY. The producer already did
+// the two things this package cannot do — it called the shipped
+// `calendar.SkybandGradient(timeOfDayFraction(cal))` and formatted the in-world
+// clock — so nothing below derives a colour, a time or a daylight boundary.
+// There is no sunrise and no sunset on this surface in any form ([SKY-6]).
+//
+// WHY THEY LIVE IN helpers.go. This is the package's one home for render
+// helpers over BlockData, and the alternatives were worse: a fourth template
+// file, or Go arithmetic inlined into markup. Reported as a bounds deviation
+// rather than taken quietly.
+
+// skySeated reports whether THIS Block carries the sky header.
+//
+// IT IS THE PRODUCER'S ANSWER, NOT A PREDICATE OF ITS OWN ([SKY-1]). The sky
+// seats on the Bench's PRIMARY Block only — one sky per surface, never one per
+// Block — and the producer fills SkyGradient on exactly that Block. So an empty
+// gradient means "this surface carries no sky", and the Block then renders no
+// band AND SAYS NOTHING ABOUT ONE, on the Almanac tab's own precedent: a
+// surface with nothing to draw is absent, not explained.
+func skySeated(d BlockData) bool { return d.SkyGradient != "" }
+
+// skyDiscsReachable is the discs' own gate. The register is the ONLY source
+// ([SKY-7]); where the calendar declares no moons the strip renders its
+// gradient, its clock and its season word and NO discs — dropped entirely
+// rather than blanked, and the expansion offers the current sky only.
+func skyDiscsReachable(d BlockData) bool { return len(d.Month.Almanac) > 0 }
+
+// skyStyle hands the producer's gradient to the sheet as a custom property.
+// The gradient is NOT re-derived here and could not be: this package has no
+// colour science and imports nothing from internal/plugins/**.
+func skyStyle(d BlockData) string { return "--sky-grad:" + d.SkyGradient }
+
+// skyDiscStyle is the phase disc's terminator, expressed as a PERCENTAGE of the
+// disc rather than in px.
+//
+// WHY A PERCENTAGE WHERE THE GRID'S moonStyle USES PIXELS. The grid's disc is
+// 10px and never changes size, so a px terminator is exact there. The sky's
+// disc GROWS — 13→40px at C1, 11→32px at C3 — and a px terminator computed
+// against one of those diameters is wrong at the other, which would make the
+// crescent thicken as the disc opened. The arithmetic is otherwise identical to
+// moonStyle's and derives from illumination alone: illum = (1 − cos 2πφ)/2, so
+// the ellipse's width is |1 − 2·illum| of the diameter, SUBTRACTING for a
+// crescent and ADDING for a gibbous. It cannot disagree with the fill.
+func skyDiscStyle(a AlmanacDay) string {
+	illum := a.Illum
+	if math.IsNaN(illum) {
+		illum = 0
+	}
+	illum = math.Max(0, math.Min(1, illum))
+	fill := "var(--surface-card)"
+	if illum > 0.5 {
+		fill = "var(--rule-structural-strong)"
+	}
+	return "--term:" + strconv.FormatFloat(math.Abs(1-2*illum)*100, 'f', 1, 64) + "%" +
+		";--termfill:" + fill
+}
+
+// skyDiscClass reuses the Block's own `.ph` disc — the house's grayscale
+// identity idiom, shape and fill and never hue — and flips the terminator to
+// the other limb while a body is waning. The producer's phase WORD is the only
+// thing that knows which limb it is; deriving it from illumination alone is
+// impossible, because a 50%-lit moon is waxing on one half of its cycle and
+// waning on the other.
+func skyDiscClass(a AlmanacDay) string {
+	if strings.Contains(strings.ToLower(a.Phase), "waning") {
+		return "ph wane"
+	}
+	return "ph"
+}
+
+// skyDiscTitle names one body and its phase on the anchored day.
+func skyDiscTitle(m AlmanacMoon, a AlmanacDay) string {
+	return m.Name + " " + strconv.Itoa(almanacIllumPct(a)) + "% " + a.Phase
+}
+
+// skyLabel is the header's ACCESSIBLE NAME, and it carries every fact the strip
+// states rather than replacing them ([SKY-16]).
+//
+// THE MOCK'S CONSTRUCTION IS NOT PORTED, AND THIS IS THE [SKY-5] SUBSTITUTION
+// THAT NEEDED THINKING ABOUT. The mock puts `aria-label="Sky and almanac"` on
+// the summary AND a visually-hidden sentence inside it. An aria-label on an
+// element replaces the accessible name computed from its subtree, so that
+// construction announces four words and silently drops the clock, the season
+// and every phase — the exact defect [SKY-16] forbids in its own sentence
+// ("every fact on the strip is real text … nothing conveyed by colour or
+// gradient alone"). So the name STARTS with the signed four words and then
+// states the facts, and the visible text stays visible text.
+func skyLabel(d BlockData) string {
+	label := "Sky and almanac"
+	var facts []string
+	if d.SkyClock != "" {
+		facts = append(facts, d.SkyClock)
+	}
+	if d.SeasonLabel != "" {
+		facts = append(facts, d.SeasonLabel)
+	}
+	anchor := almanacAnchorDay(d)
+	for _, m := range d.Month.Almanac {
+		if a, ok := almanacDayAt(m, anchor); ok {
+			facts = append(facts, skyDiscTitle(m, a))
+		}
+	}
+	if len(facts) > 0 {
+		label += " — " + strings.Join(facts, ", ")
+	}
+	return label
+}
+
+// skyHeadLine is the open pane's first line.
+//
+// THE MOCK'S HEAD LINE OPENS WITH "Sunset 19:58" AND THAT DOES NOT SHIP.
+// Chronicle persists no daylight boundary — the importer parses sunrise/sunset
+// from two foreign formats and drops them, and there is no column and no
+// migration — so the line states the day, the month and the register's own
+// audited arithmetic instead. This is the one place a signed still cannot be
+// reproduced under the guards ([SKY-5]) and it is flagged rather than
+// approximated with a derived 06:00/18:00.
+func skyHeadLine(d BlockData, anchor int) string {
+	line := "Day " + strconv.Itoa(anchor)
+	if d.Month.Name != "" {
+		line += " of " + d.Month.Name
+	}
+	if skyDiscsReachable(d) {
+		line += " · " + almanacSkyLine(d)
+	}
+	return line
+}
+
+// skyPickGroupName / skyPickInputID are the Tonight|Month|Moons radio group,
+// kept DISTINCT from the Almanac's own trio: the Shelf's Almanac panel renders
+// on the same Block with the same three tab keys, and one shared group name
+// would make the two panels fight over one selection.
+//
+// The name is `sky`, never `skyband` ([SKY-10]): the literal string "skyband"
+// is the canonical RETIRED key in bench_section_prefs_test.go and re-minting it
+// as a live noun would invert two shipped tests for a cosmetic reason.
+func skyPickGroupName(d BlockData) string {
+	return "sky-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+func skyPickInputID(d BlockData, key string) string {
+	return skyPickGroupName(d) + "-" + domToken(key)
+}
