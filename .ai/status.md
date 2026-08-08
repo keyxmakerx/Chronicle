@@ -20,6 +20,59 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — C-CALV4-GAMEREADY §4 and §5 SHIPPED: the operator can arm their own gate, and the RSVP flow stopped dead-ending players (2026-08-08)
+
+**The operator's stated go/no-go for starting their game, plus the four measured
+dead ends in the flow that gate depends on.** The engine underneath the RSVP
+system is genuinely good — the audit could not break its security or its
+arithmetic — and every fix here is at an EDGE, where it talks to a human.
+
+**§4. "Collect RSVPs" existed in exactly one place: the legacy V2 event drawer**,
+a committed deletion, wired by a script only `calendar_v2.templ` loads.
+`daycard.templ` had ZERO occurrences of "rsvp". Every downstream RSVP surface —
+the Bench session tile and `/schedule` — is gated on the flag it sets, so a
+campaign that could not reach the switch got a player-facing panel saying "You:
+no answer", three paragraphs explaining the options, and no buttons. The control
+now ships in the v4 day-card editor at the route's OWN `RoleScribe` floor,
+writing the already-shipped `PUT …/rsvp-collection`. Zero new routes, zero new
+handlers, zero new service methods, zero stylesheet.
+
+**§5, and the reason to read this entry if you touch the RSVP flow:**
+
+1. **The suggest token was consumed by a submission that was REFUSED.** A
+   partially-filled form — the shape the page invites — spent the link and then
+   rejected the write, so correcting it answered "this RSVP link is invalid or
+   has expired" and so did re-opening the email. One incomplete form permanently
+   destroyed a player's only way in. **`TestToken_EmptySuggestionRejected` had
+   asserted the refusal and never asked what the refusal cost**, which is how a
+   green suite shipped it. That is the pattern worth carrying: a guard that
+   pins the error and not the side effect is a guard with a hole in it.
+2. **A spent link said "RSVP Failed" over an answer that WAS recorded**, on a
+   page containing no `<a>` at all. Players told GMs the system was broken and
+   GMs believed them. `GetUserRSVP` had shipped on the repository, unused by
+   that path, the whole time.
+3. **The emailed "Out this week" notified NOBODY** while the in-app twin always
+   did — the one decline most likely to cancel a session was the only answer the
+   Director never heard, and it was being written as `no` all along, so the
+   tally moved under them in silence. **The two surfaces were pinned in
+   different places; in fact the in-app half was pinned NOWHERE.** They are one
+   test now.
+4. **Arming with no SMTP said "the party has been invited" over zero sent mail.**
+   The honest sentence already existed as `mailNotConfiguredLine` and was
+   already used in three other places; the invite moment was the one that
+   skipped it.
+
+**Two operator instructions that are load-bearing until their bookings land:**
+run ONE collecting event at a time (`benchRsvpPickSession` resolves exactly
+one), and create ONE NON-RECURRING event per session (the RSVP table is
+`UNIQUE (event_id, user_id)` with no occurrence column, so a repeating session
+shares one set of answers across every occurrence — the control now says so).
+
+Guarded by `rsvp_deadends_int_test.go` (**four real-database tests** — every §5
+claim is a claim about a ROW, and a mock can only report that a method was
+called), `rsvp_collect_control_test.go`, the authorised amendment to
+`TestToken_EmptySuggestionRejected`, and `test/js/daycard_rsvp_collect.test.mjs`.
+
 ### calendar-v4 — C-CALV4-GAMEREADY §3 and §6 SHIPPED: the calendar stopped lying about what is happening today, and a festival can finally repeat (2026-08-08)
 
 **Two more table blockers closed, and BOTH of them had a second half that only a
