@@ -1411,6 +1411,80 @@
     transition-duration: var(--disc-open);
   }
 
+  /* ── THE BLOCK THEATER, AS A SECOND NAMED ADDITION TO THIS REGISTER ────
+     C-CALV4-THEATER (slice R2-3), [TH-3] SIGNED. The theater mounts on an
+     ENTITY page, where there is no Bench — and the register is scoped to
+     `.cal-bench`, every prelude in this file names it, and [DC-6] refuses a
+     second register sheet as laundering. So the theater carries `cal-bench` as
+     a SECOND SCOPE ROOT (the shape schedule.templ already uses) and its two
+     rules are added HERE, by name, inside this same single wrapper.
+
+     THE PRECEDENT IS THE DAY CARD DIRECTLY ABOVE, AND THAT IS A CORRECTION.
+     The slice was drafted citing /schedule as the shipped precedent for
+     consuming this register from outside the Bench. IT IS NOT ONE: /schedule
+     carries the class and links this sheet, but it has no <details>, no `.disc`
+     and no `::details-content`, and its own guard BANS `--disc-open` there
+     rather than admitting it. /schedule inherits the TOKENS and has never
+     consumed a RULE. Carrying `cal-bench` would therefore have given the
+     theater three tokens and no motion at all — with calendar-theater.css
+     forbidden to declare a transition and this sheet sealed — while every guard
+     stayed green, which is this arc's own named failure mode.
+
+     THE THEATER BUYS NO NEW TOKEN AND NO NEW GRAMMAR. Same two properties as
+     the card (block-size + opacity), same two durations, same easing, same
+     wrapper. `content-visibility` is a <details> concern and the theater has no
+     use for it, exactly as the card does not.
+
+     THE SUBJECT IS THE INNER BOX, NOT THE <dialog>. A closed <dialog> is
+     display:none, and an element that was not rendered in the previous style
+     change has no before-change style to transition FROM — which is what
+     @starting-style exists for, and @starting-style is a standing refusal here.
+     So the reveal runs on `.tbox`, and calendar_theater.js forces ONE LAYOUT
+     FLUSH between showModal() and adding `.tbopen`. Mechanism, not decoration:
+     without that flush the reveal silently would not run, and the reader who
+     deletes it as a stray `void` needs this sentence. It is pinned by
+     test/js/theater_open_close.test.mjs, which asserts the flush happens BEFORE
+     the class rather than merely that both happened.
+
+     `overflow: hidden` HERE IS THE CLIP-REVEAL AND NOT A SCROLL DECISION.
+     [TH-16] puts the theater's scroll container INSIDE this box, on the content
+     region, precisely because a clamp or a scroll placed on the animated box
+     would make the transition run against a clamped box — either not at all or
+     to the wrong size, with every guard green. This rule clips; it declares no
+     max-block-size and no overflow-y, and calendar-theater.css declares neither
+     on `.tbox` either, which its own guard enforces.
+
+     CLAUSE 3 IS STRUCTURAL HERE TOO. Under prefers-reduced-motion `.tbox`
+     carries NO RULE AT ALL: the theater opens instantly, at full height and
+     full opacity, which is the register's "instant and complete" rather than a
+     shortened reveal. The module's close short-circuits to match, because with
+     no rule there is no transitionend to wait for and a close that waited would
+     hang the theater open.
+
+     CLAUSE 4 IS UNTOUCHED. Nothing here selects `.benchblock`,
+     `.cal-block-host` or anything inside them. The theater is a box around a
+     Block the producer already rendered; the Block's interior stays still, and
+     this slice opened no file in its package.
+
+     `.edmorph` IS NOT BORROWED. The carve-out is pinned to two files
+     product-wide by TestBenchCSS_TheNamedCarveOutsAreExactlyTwo, and these two
+     rules transition block-size and opacity only — the base allowlist. A
+     theater rule reaching for `inline-size` or `translate` would be a third
+     signature nobody has signed. */
+  .cal-bench.cal-theater .tbox {
+    block-size: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      block-size var(--disc-close) var(--disc-ease),
+      opacity var(--disc-close) var(--disc-ease);
+  }
+  .cal-bench.cal-theater .tbox.tbopen {
+    block-size: auto;
+    opacity: 1;
+    transition-duration: var(--disc-open);
+  }
+
   /* ── THE EDITOR MORPH — A NAMED CARVE-OUT ON TOP OF THIS REGISTER ──────
      C-CALV4-EDITOR-R2b, under the operator's signature of 2026-08-01
      (decisions/2026-08-01-operator-signatures-wz1-sky-editor.md §3), recorded

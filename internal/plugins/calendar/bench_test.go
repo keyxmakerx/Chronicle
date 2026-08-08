@@ -1419,6 +1419,45 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 			"prefers-reduced-motion the card must open INSTANTLY AND COMPLETELY, which "+
 			"is structural (no rule at all) and never a shortened duration", cardRule)
 	}
+
+	// ── THE THEATER CLAUSE — amended deliberately, by name ─────────────────
+	//
+	// C-CALV4-THEATER slice R2-3, [TH-3] SIGNED. Like the day card's clause
+	// above, the allowlist was not widened by a byte to admit the theater: it
+	// reuses the same two transitionable properties, the same two durations and
+	// the same easing, inside the same single no-preference wrapper.
+	//
+	// IT IS LOAD-BEARING IN A WAY THE CARD'S WAS NOT. calendar-theater.css is
+	// FORBIDDEN to declare a transition (TestTheaterCSS_CarriesNoMotionOfItsOwn),
+	// so these two rules are the ONLY place the theater's reveal can exist. The
+	// slice was drafted believing /schedule's `class="cal-bench cal-schedule"`
+	// was a precedent for consuming this register from outside the Bench; it is
+	// not — /schedule inherits the TOKENS and consumes zero RULES, and its own
+	// guard bans `--disc-open` there. Carrying the class alone would have
+	// shipped the theater three tokens and no motion at all, with every guard in
+	// this file green.
+	//
+	// So this clause fails in BOTH directions, exactly as the card's does: if
+	// the theater's rules vanish (the reveal was quietly deleted, or a later
+	// hand "tidied" a class this sheet does not otherwise mention) and if they
+	// appear outside the wrapper (reduced motion would then animate).
+	const theaterRule = ".cal-bench.cal-theater .tbox"
+	if !strings.Contains(motion, theaterRule) {
+		t.Errorf("the theater's reveal is not inside %q — calendar-theater.css may declare no "+
+			"transition at all, so this is the ONLY place the motion can live and its absence "+
+			"means the theater opens instantly at every motion setting", guard)
+	}
+	if strings.Count(code, theaterRule) != strings.Count(motion, theaterRule) {
+		t.Errorf("a `%s` rule sits OUTSIDE the reduced-motion wrapper; under "+
+			"prefers-reduced-motion the theater must open INSTANTLY AND COMPLETELY, which is "+
+			"structural (no rule at all) and never a shortened duration", theaterRule)
+	}
+	// …and the OPEN state really overrides the duration, which is what makes
+	// leaving faster than arriving on this surface too.
+	if !strings.Contains(motion, theaterRule+".tbopen") {
+		t.Error("the theater has no open-state rule, so its reveal would run at --disc-close " +
+			"in both directions and arriving would feel like leaving")
+	}
 	if !strings.Contains(motion, ".cal-bench .cal-daycard.dcopen .dcbox") {
 		t.Error("the card declares a closed state and no open one — the reveal has no " +
 			"endpoint and the register's 200ms open cannot run")
@@ -2224,6 +2263,14 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 		// setting and the register would have one consumer fewer than its own
 		// comment claims.
 		".cal-bench .cal-daycard .dcbox", ".cal-bench .cal-daycard.dcopen .dcbox",
+		// THE BLOCK THEATER's reveal (C-CALV4-THEATER, R2-3). theater.templ
+		// mounts the scaffold and calendar_theater.js toggles .tbopen on its
+		// .tbox; without these two rules the theater would appear instantly at
+		// every motion setting while calendar-theater.css — which is FORBIDDEN
+		// to declare a transition — stayed green and said nothing. That is the
+		// #568 gap with the register's monopoly on top of it, which is why the
+		// pin is here rather than in the satellite sheet's own guard.
+		".cal-bench.cal-theater .tbox", ".cal-bench.cal-theater .tbox.tbopen",
 		// The §8 two-column RSVP treatment.
 		".cal-bench .rsvp .mtable",
 		// THE SKY HEADER (C-CALV4-SKY, R2-5). block.templ names all of these
