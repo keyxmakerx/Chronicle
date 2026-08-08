@@ -212,12 +212,58 @@ func (c *Calendar) WeekLength() int {
 // (internal/plugins/sessions/model.go) so the two share semantics
 // (C-CAL-EDITOR-EXPANSION PR2). Any other / empty recurrence_type renders ONCE
 // at its stored date, so legacy rows are untouched.
+//
+// THIS BLOCK IS THE ACCEPTED SET, AND IT IS STATED EXACTLY ONCE.
+// CreateEventAPI / UpdateEventAPI validate an inbound recurrence_type against
+// these five constants plus the empty string and reject anything else with a
+// 400 (C-CALV4-GAMEREADY §6, [GR-12]) — before that guard existed the handlers
+// stored "daily", "hourly", "WEEKLY" and "🐉" with a 201 and then fired the
+// event exactly once. Adding a member here widens what the API accepts, so a
+// new constant is a wire-contract change, not a rename.
 const (
 	RecurrenceWeekly   = "weekly"   // every week, on the base date's weekday
 	RecurrenceBiWeekly = "biweekly" // every 2 weeks
 	RecurrenceMonthly  = "monthly"  // same day-of-month each month
 	RecurrenceCustom   = "custom"   // every N weeks (RecurrenceInterval)
+	// RecurrenceYearly is the festival / holy day / birthday unit — the most
+	// common recurring thing in a fantasy calendar, and the one the product
+	// could not express until C-CALV4-GAMEREADY §6 ([GR-11]). Its absence was a
+	// REGRESSION: the pre-v4 calendar was yearly-ONLY (the SQL expansion
+	// removed by recurring_cleanup_test.go), and .ai/data-model.md still
+	// documented the column as "yearly, monthly" while OccursOn dropped the
+	// value on the floor.
+	RecurrenceYearly = "yearly" // same month + day-of-month each year
 )
+
+// RecurrenceTypes is the accepted set as data, for the handlers' input
+// validation ([GR-12]). It is derived from the constants above rather than
+// re-typed, because two accepted sets in two places is how they diverge — the
+// house rule that keeps this in the handler and OUT of the service is the same
+// rule: one validator, one set.
+var RecurrenceTypes = []string{
+	RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly,
+	RecurrenceCustom, RecurrenceYearly,
+}
+
+// IsSupportedRecurrenceType reports whether t is a recurrence_type the engine
+// actually expands. The empty string is accepted and means "not recurring" —
+// calendar_daycard.js's `once` branch writes exactly that, deliberately, so the
+// type and is_recurring land consistent (a JSON null cannot clear the column).
+//
+// The comparison is EXACT AND CASE-SENSITIVE by ruling: a case-different
+// "WEEKLY" from an integration is rejected loudly rather than coerced, because
+// coercion turns an undocumented spelling into a supported one.
+func IsSupportedRecurrenceType(t string) bool {
+	if t == "" {
+		return true
+	}
+	for _, ok := range RecurrenceTypes {
+		if t == ok {
+			return true
+		}
+	}
+	return false
+}
 
 // absDayIndex returns a calendar-absolute day number for (year, month, day).
 // It is the SINGLE place the day-counter choice is made, and both recurrence
@@ -289,16 +335,23 @@ func (c *Calendar) constLenDayIndex(year, month, day int) int {
 //
 // Non-recurring events (or a legacy/empty/unknown recurrence_type) match only
 // their stored date — the prior behavior, so existing rows are untouched. The
-// four recurring types expand forward from the base date:
+// FIVE recurring types expand forward from the base date:
 //   - weekly/biweekly/custom: every (interval × week) days, base-anchored, so
 //     each instance shares the base weekday;
 //   - monthly: the same day-of-month every (interval) months, base-anchored,
-//     skipped in months too short for that day (leap-aware via MonthDays).
+//     skipped in months too short for that day (leap-aware via MonthDays);
+//   - yearly: the same month AND day-of-month every (interval) years,
+//     base-anchored, SKIPPED — never clamped — in a year whose month is too
+//     short for that day (a leap day, an intercalary day a cycle omits).
 //
-// BOTH families apply recurrence_interval. Monthly did not until C-SWEEP-R4
-// stage 22, which is why calendar_daycard.js's editor withholds the `every [N]`
-// field from the month unit — that workaround can now be lifted, booked as
-// C-CALV4-MONTHLY-INTERVAL-CONTROL.
+// ALL THREE families apply recurrence_interval. Monthly did not until
+// C-SWEEP-R4 stage 22, which is why calendar_daycard.js's editor withholds the
+// `every [N]` field from the month unit — that workaround can now be lifted,
+// booked as C-CALV4-MONTHLY-INTERVAL-CONTROL. Yearly was built with the
+// interval already applied (C-CALV4-GAMEREADY §6) precisely so it would never
+// need that fix: a stored "every 4 years" that fires annually is the same
+// class of lie stage 22 had to unwind, and the branch below is stage 22's own
+// arithmetic counted in years.
 //
 // Recurrence stops at the recurrence-end date (inclusive) and/or after
 // RecurrenceMaxOccurrences. Multi-day events are not expanded here (the ribbon
@@ -309,7 +362,7 @@ func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
 		return onBase
 	}
 	switch *e.RecurrenceType {
-	case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly, RecurrenceCustom:
+	case RecurrenceWeekly, RecurrenceBiWeekly, RecurrenceMonthly, RecurrenceCustom, RecurrenceYearly:
 		// expanded below
 	default:
 		return onBase // legacy / unknown type → single occurrence
@@ -324,6 +377,42 @@ func (e Event) OccursOn(cal *Calendar, year, month, day int) bool {
 		if target > cal.absDayIndex(*e.RecurrenceEndYear, *e.RecurrenceEndMonth, *e.RecurrenceEndDay) {
 			return false // past the recurrence-end date
 		}
+	}
+
+	// YEARLY — the festival branch (C-CALV4-GAMEREADY §6, [GR-11]).
+	//
+	// A MISSING DAY IS SKIPPED, NEVER CLAMPED, and that is the whole ruling.
+	// Where the base day does not exist in a later year — a leap day, an
+	// intercalary day a cycle omits — the occurrence simply does not happen.
+	// Clamping it forward or back would put the holy day on the WRONG DAY
+	// without telling anyone, and a GM plans around the date they authored; an
+	// absent occurrence is visibly absent and can be answered with a one-off,
+	// while a moved one is a silent wrong answer at the table. MonthDays
+	// already answers "does this day exist in this year" (it folds in
+	// LeapYearDays and the Gregorian path), so this is a lookup, not new
+	// arithmetic.
+	if *e.RecurrenceType == RecurrenceYearly {
+		if month != e.Month || day != e.Day || day > cal.MonthDays(month-1, year) {
+			return false
+		}
+		step := 1
+		if e.RecurrenceInterval != nil && *e.RecurrenceInterval > 1 {
+			step = *e.RecurrenceInterval
+		}
+		n := year - e.Year
+		if n < 0 || n%step != 0 {
+			return false
+		}
+		// The cap counts OCCURRENCES, not years — n/step is the 0-based
+		// occurrence index, the same quantity the monthly and week-based
+		// branches compare. With the default interval of 1 the two are
+		// identical, which is why "MaxOccurrences counts years" and "counts
+		// occurrences" say the same thing for every event either editor can
+		// author.
+		if e.RecurrenceMaxOccurrences != nil && n/step >= *e.RecurrenceMaxOccurrences {
+			return false
+		}
+		return true
 	}
 
 	if *e.RecurrenceType == RecurrenceMonthly {

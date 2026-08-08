@@ -661,20 +661,32 @@
   // recurrenceUnits is THE CORRECTED UNIT LIST, and it is corrected in three
   // directions the drawing got wrong.
   //
-  // `recurrence_type` accepts exactly weekly · biweekly · monthly · custom
-  // (model.go:214-217) and OccursOn sends anything else to
-  // `default: return onBase` (model.go:305-309). A WRONG UNIT IS NOT AN ERROR,
-  // IT IS A SILENT SINGLE OCCURRENCE — which is the failure a chip exists to
-  // prevent, so the chip has to land on exactly the right units.
+  // `recurrence_type` accepts exactly weekly · biweekly · monthly · custom ·
+  // yearly (model.go's Recurrence* constant block) and OccursOn sends anything
+  // else to `default: return onBase`. A WRONG UNIT IS NOT AN ERROR, IT IS A
+  // SILENT SINGLE OCCURRENCE — which is the failure a chip exists to prevent,
+  // so the chip has to land on exactly the right units. Since
+  // C-CALV4-GAMEREADY §6 [GR-12] the SERVER also refuses an unsupported type
+  // with a 400 rather than a 201, but that is a backstop for integrations; this
+  // list is still the only thing standing between the GM and a wrong unit,
+  // because a rejected save is a worse table experience than an absent option.
   //
   //  1. THE WEEK UNIT IS NOT INVENTION AND ITS CHIP COMES OFF. Week-based
   //     recurrence strides `WeekLength() × recurrenceWeeks(...)` (model.go:336,
   //     :351-361), so on a ten-day calendar `weekly` MEANS every tenday. §5 of
   //     DAYCARD and the mockup both chip this unit and both are wrong.
-  //  2. `year` IS INVENTION AND THE DRAWING OFFERS IT UNCHIPPED. There is no
-  //     yearly type; it degrades silently. It does not ship at all — an
-  //     unbacked unit in a picker is a trap, and the one thing worse than a
-  //     missing option is one that quietly does nothing.
+  //  2. `year` WAS INVENTION AND IS NOW BACKED — CORRECTED HERE, in the same
+  //     commit that built it (C-CALV4-GAMEREADY §6, [GR-11]). This note used to
+  //     read "There is no yearly type; it degrades silently. It does not ship
+  //     at all", and it was RIGHT when it was written: OccursOn had four types
+  //     and dropped everything else, so the drawing's unchipped `year` would
+  //     have been the exact trap this list exists to prevent. `RecurrenceYearly`
+  //     now expands, so the unit ships `backed: true` — and the stale sentence
+  //     goes with it, because a comment asserting an absence the product no
+  //     longer has is how the next hand re-derives the gap. A festival, a holy
+  //     day, a birthday and a coronation anniversary are the most common
+  //     recurring things in a fantasy calendar, and until §6 the editor was
+  //     honestly refusing to offer a unit the engine could not keep.
   //  3. THE LABEL IS DERIVED, NEVER A LITERAL. Chronicle's Calendar carries
   //     `Weekdays` and a `WeekLength()` and NO WEEK NOUN AT ALL, so there is no
   //     "the calendar's own week noun" to read: the honest derived label names
@@ -690,6 +702,7 @@
     var out = [];
     if (weekLen > 0) out.push({ id: 'week', label: weekLen + '-day week', backed: true });
     out.push({ id: 'month', label: 'month', backed: true });
+    out.push({ id: 'year', label: 'year', backed: true });
     out.push({ id: 'day', label: 'day', backed: false });
     out.push({ id: 'moon', label: 'moon phase', backed: false });
     return out;
@@ -745,6 +758,13 @@
     if (rec.unit === 'month') {
       return { is_recurring: true, recurrence_type: 'monthly', recurrence_interval: 0 };
     }
+    // `year` sends interval 0 for the same reason `month` does: the editor
+    // offers no `every [N]` field for it (recurrenceInterval is week-only), so
+    // writing a number the author never typed would author a rule they did not
+    // choose. The engine reads a missing/0/1 interval as "every year".
+    if (rec.unit === 'year') {
+      return { is_recurring: true, recurrence_type: 'yearly', recurrence_interval: 0 };
+    }
     if (rec.unit !== 'week') return null;
     var every = Math.floor(Number(rec.every));
     if (!isFinite(every) || every < 1) every = 1;
@@ -760,6 +780,7 @@
     if (!rec || !rec.is_recurring) return out;
     var t = rec.recurrence_type;
     if (t === 'monthly') { out.mode = 'repeats'; out.unit = 'month'; return out; }
+    if (t === 'yearly') { out.mode = 'repeats'; out.unit = 'year'; return out; }
     if (t === 'weekly' || t === 'biweekly' || t === 'custom') {
       out.mode = 'repeats';
       out.unit = 'week';
@@ -1733,11 +1754,17 @@
           b.setAttribute('aria-checked', on ? 'true' : 'false');
         });
       }
-      // THE INTERVAL FIELD IS ABSENT FOR month, NOT CHIPPED. OccursOn's monthly
-      // branch ignores RecurrenceInterval entirely, so `every 2 months` would be
-      // stored, accepted and then expanded every month — the same trap as a
-      // wrong unit. There is nothing here for a backend to add: the type has no
-      // interval.
+      // THE INTERVAL FIELD IS ABSENT FOR month AND year, NOT CHIPPED — and the
+      // reason has CHANGED, so the note is rewritten rather than extended.
+      // It used to read "OccursOn's monthly branch ignores RecurrenceInterval
+      // entirely… there is nothing here for a backend to add"; C-SWEEP-R4 stage
+      // 22 made that false for month, and C-CALV4-GAMEREADY §6 built year with
+      // the interval applied from the first line. BOTH SERVERS NOW HONOUR IT.
+      // The field stays hidden because this file has not been taught to AUTHOR
+      // one — the readout wording and the inverse in recurrenceFromRecord come
+      // with it — which is C-CALV4-MONTHLY-INTERVAL-CONTROL, booked by name.
+      // Hidden-because-unbuilt is not the same as hidden-because-broken, and
+      // the difference is the whole reason this comment exists.
       if (ed.recEvery) ed.recEvery.hidden = !recurrenceInterval(r.unit);
       if (ed.recBox) ed.recBox.hidden = !(r.mode === 'repeats' && r.unit === 'week');
       if (ed.recRead) ed.recRead.textContent = edRecReadout();
@@ -1751,6 +1778,10 @@
       var body = recurrenceBody(edUI.rec);
       if (!body || !body.is_recurring) return 'once, on this date';
       if (body.recurrence_type === 'monthly') return 'every month, on this day of the month';
+      // The yearly readout names the SKIP rule, because it is the one thing a
+      // GM cannot see from the grid: a base day that does not exist in a later
+      // year is passed over, never moved to a neighbouring day.
+      if (body.recurrence_type === 'yearly') return 'every year, on this month and day (skipped in years without that day)';
       var n = body.recurrence_interval > 0 ? body.recurrence_interval
         : (body.recurrence_type === 'biweekly' ? 2 : 1);
       return 'every ' + (n === 1 ? '' : n + ' × ') + edUI.week.len + ' days, from this date';

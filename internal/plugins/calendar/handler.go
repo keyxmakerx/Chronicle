@@ -540,6 +540,30 @@ func (h *Handler) CreateEventAPI(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request")
 	}
 
+	// AN UNSUPPORTED recurrence_type IS A 400, NOT A 201
+	// (C-CALV4-GAMEREADY §6, [GR-12]).
+	//
+	// This handler used to store "yearly", "daily", "hourly", "WEEKLY" and
+	// "🐉" with a 201 and no validation; OccursOn then sent every one of them
+	// to `default: return onBase`, so the caller got a created event that fired
+	// exactly ONCE and nothing anywhere said so. It is in a playability slice
+	// because it is the FOUNDRY SYNC MODULE'S path, not the GM's: the v4 editor
+	// cannot produce a bad value, but a case-different "WEEKLY" from an
+	// integration is a silently non-recurring event, and the operator will
+	// debug the wrong system.
+	//
+	// EXACT AND CASE-SENSITIVE — reject, never coerce. Coercing "WEEKLY" to
+	// "weekly" would make an undocumented spelling a supported one.
+	//
+	// It is HANDLER work by house rule: input validation on a bound request
+	// field, not business logic. It deliberately does NOT get a second copy in
+	// the service — two validators with two accepted sets is how they diverge,
+	// which is why both handlers share IsSupportedRecurrenceType and the set is
+	// stated exactly once, beside the constants it names.
+	if req.RecurrenceType != nil && !IsSupportedRecurrenceType(*req.RecurrenceType) {
+		return apperror.NewBadRequest("unsupported recurrence_type: " + *req.RecurrenceType)
+	}
+
 	// Get user ID from session context.
 	userID := ""
 	if session := c.Get("session"); session != nil {
@@ -798,6 +822,19 @@ func (h *Handler) UpdateEventAPI(c echo.Context) error {
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
+	}
+
+	// The same 400 as CreateEventAPI ([GR-12]) — see the long note there for
+	// why it is handler work and why it never coerces.
+	//
+	// IT VALIDATES ONLY A VALUE THE CALLER ACTUALLY SENT. RecurrenceType is a
+	// patch.Field, so ABSENT preserves the stored type and an explicit null
+	// clears it; neither is a value to reject, and rejecting an absent key
+	// would turn every partial PUT that does not mention recurrence into a 400.
+	// Get() is false for both of those states and true only for a present
+	// value, which is exactly the set this guard is about.
+	if rt, ok := req.RecurrenceType.Get(); ok && !IsSupportedRecurrenceType(rt) {
+		return apperror.NewBadRequest("unsupported recurrence_type: " + rt)
 	}
 
 	// Only co-DMs (Owner or DM-grantee) can set dm_only visibility; everyone

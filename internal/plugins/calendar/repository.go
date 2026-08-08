@@ -1102,6 +1102,35 @@ const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.de
 const eventJoins = `LEFT JOIN entities ent ON ent.id = e.entity_id
      LEFT JOIN entity_types et ON et.id = ent.entity_type_id`
 
+// recurringCandidateClause is the SQL that widens a date-bounded event query to
+// include every RECURRING row whose base date sits outside the window, because
+// Event.OccursOn — not the SQL — decides where an instance lands.
+//
+// IT IS DERIVED FROM THE Recurrence* CONSTANTS, NOT RE-TYPED, and that is the
+// whole reason it exists. The literal `IN ('weekly','biweekly','monthly',
+// 'custom')` was written out by hand in THREE places (here twice, and in
+// block_repository.go's upcoming-events query), which made the accepted set a
+// four-copy fact. When C-CALV4-GAMEREADY §6 added `yearly` to the engine, the
+// predicate expanded it correctly and the ROW WAS NEVER LOADED: every yearly
+// festival was invisible in every month but its own, and the only reason that
+// was caught is that §6's guard runs against a REAL DATABASE. Against a fake
+// repository the feature was perfectly green and completely dead.
+//
+// Adding a recurrence type is therefore a one-line change to the constant block
+// and nothing else. The values are compile-time constants under this package's
+// control and never user input, so this carries no injection surface; the
+// apostrophe doubling is belt-and-braces against a future constant that
+// contains one, which would otherwise break the query silently at runtime.
+var recurringCandidateClause = buildRecurringCandidateClause()
+
+func buildRecurringCandidateClause() string {
+	quoted := make([]string, 0, len(RecurrenceTypes))
+	for _, t := range RecurrenceTypes {
+		quoted = append(quoted, "'"+strings.ReplaceAll(t, "'", "''")+"'")
+	}
+	return "(e.is_recurring = 1 AND e.recurrence_type IN (" + strings.Join(quoted, ",") + "))"
+}
+
 // CreateEvent inserts a new event.
 func (r *calendarRepo) CreateEvent(ctx context.Context, evt *Event) error {
 	_, err := r.db.ExecContext(ctx,
@@ -1192,7 +1221,9 @@ func (r *calendarRepo) ListEventsForMonth(ctx context.Context, calendarID string
 	}
 
 	// C-CAL-EDITOR-EXPANSION PR2: fetch this month's events PLUS every
-	// recurring candidate (the four recurrence types) for the calendar — the
+	// recurring candidate (see recurringCandidateClause, which is DERIVED from
+	// the Recurrence* constants — this used to be a hand-typed list and a
+	// yearly festival was invisible because of it) for the calendar — the
 	// recurring rows may have a base date in another month/year but project
 	// into this month. The precise placement is decided in Go by
 	// Event.OccursOn (the single expansion predicate), so the SQL just widens
@@ -1205,7 +1236,7 @@ func (r *calendarRepo) ListEventsForMonth(ctx context.Context, calendarID string
 		WHERE e.calendar_id = ?
 		  AND (
 		    (e.year = ? AND e.month = ?)
-		    OR (e.is_recurring = 1 AND e.recurrence_type IN ('weekly','biweekly','monthly','custom'))
+		    OR `+recurringCandidateClause+`
 		  )
 		  %s
 		ORDER BY e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
@@ -1287,7 +1318,7 @@ func (r *calendarRepo) ListEventsForDateRange(ctx context.Context, calendarID st
 		WHERE e.calendar_id = ?
 		  AND (
 		    (e.year = ? AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?)
-		    OR (e.is_recurring = 1 AND e.recurrence_type IN ('weekly','biweekly','monthly','custom'))
+		    OR `+recurringCandidateClause+`
 		  )
 		  %s
 		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
