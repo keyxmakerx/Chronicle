@@ -328,8 +328,13 @@ func (h *Handler) BuilderCreateAPI(c echo.Context) error {
 				return builderRollback(ctx, h, cal, err)
 			}
 		}
+		// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). THE SECOND POST-CREATE LANDING,
+		// which the dispatch did not know existed — the wizard's real-time
+		// branch, twin of handler.go's, and it takes the same ruling and carries
+		// the same reduced landing (the Bench's real-world Block has a dashed
+		// skyband until R2-5 lands). Two create doors, one destination.
 		return c.Redirect(http.StatusSeeOther,
-			fmt.Sprintf("/campaigns/%s/calendar/v2/%s", cc.Campaign.ID, cal.ID))
+			fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID))
 	}
 
 	// THE SAME ApplyImport THE IMPORTER USES, from the same *ImportResult shape

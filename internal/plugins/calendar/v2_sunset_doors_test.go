@@ -117,7 +117,7 @@ func TestSunsetDoor_WidgetPopupLink(t *testing.T) {
 
 // sunsetPermittedV2Hit reports whether a file may still mention /calendar/v2,
 // and returns the reason. The list is [VS-2] SIGNED's permitted classes, as
-// amended, plus the redirect handlers this slice's LATER stage owns.
+// amended — and nothing else.
 func sunsetPermittedV2Hit(rel string) (string, bool) {
 	switch {
 	case strings.HasSuffix(rel, "_test.go"):
@@ -130,7 +130,7 @@ func sunsetPermittedV2Hit(rel string) (string, bool) {
 	case strings.HasSuffix(rel, "calendar/routes.go"):
 		return "the route registrations and their comments", true
 	case strings.HasSuffix(rel, "calendar/handler_v2.go"):
-		return "ShowV2's own doc comments, and the redirect body stage 4 owns", true
+		return "ShowV2's own doc comments and v2CalendarRedirect's, which names the week/day gap", true
 
 	// The settings surface that merely SHARES the prefix (§7, [VS-7] SIGNED).
 	// It is not a view, it does not move, and it SURVIVES the shell.
@@ -156,11 +156,11 @@ func sunsetPermittedV2Hit(rel string) (string, bool) {
 	case strings.Contains(rel, "templates/demo"):
 		return "the demo index", true
 
-	// STAGE 4's, and named so that this list SHRINKS when stage 4 lands rather
-	// than quietly absorbing them.
-	case strings.HasSuffix(rel, "calendar/handler.go"),
-		strings.HasSuffix(rel, "calendar/builder_handler.go"):
-		return "the redirect targets and the post-create landings — R2-4 stage 4", true
+	// handler.go and builder_handler.go were permitted while the sweep landed
+	// ahead of the redirects. STAGE 4 RE-POINTED ALL SIX REDIRECT TARGETS, so
+	// the exemption is GONE and this list is one class shorter than it was a
+	// commit ago. A guard that only ever grows is a guard on its way to being
+	// decorative.
 	}
 	return "", false
 }

@@ -58,52 +58,98 @@ func assertMovedPermanently(t *testing.T, rec *httptest.ResponseRecorder, want s
 	}
 }
 
-func TestCutover_ShowRedirectsToV2(t *testing.T) {
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED). It asserted
+// "/campaigns/camp-1/calendar/v2/cal-1". THE NEW CLAIM: a retired V1 view route
+// 301s to THE BENCH, the surface the product now links to everywhere.
+//
+// THE :calId IS DROPPED, and that is a real reduction: a bookmark to one
+// specific V1 calendar lands on the Bench's default selection, because
+// [VS-12] measured that AppDashboard reads `sort`, `y` and `m` and never
+// `calId`. Booked as C-CALV4-BENCH-CALID. The 301 itself is unchanged — the
+// target does not vary by requester on this leg.
+func TestCutover_ShowRedirectsToTheBench(t *testing.T) {
 	h := NewHandler(&cutoverStub{})
 	c, rec := ownerCtx(t, "cal-1")
 	if err := h.RedirectShowV2(c); err != nil {
 		t.Fatalf("RedirectShowV2: %v", err)
 	}
-	assertMovedPermanently(t, rec, "/campaigns/camp-1/calendar/v2/cal-1")
+	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
 }
 
-func TestCutover_WeekRedirectsToV2(t *testing.T) {
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED) — AND THE COMMENT MUST SAY
+// WHY THE WEEK SEGMENT VANISHES, because a feature loss must not hide inside a
+// green test.
+//
+// This asserted "/campaigns/camp-1/calendar/v2/cal-1/week". THE NEW CLAIM: it
+// lands on the Bench, which is a MONTH.
+//
+// THE SEGMENT DOES NOT MOVE — IT HAS NOWHERE TO GO. The V2 shell's
+// `case "week", "day"` (handler_v2.go) is the ONLY week view in the product.
+// v4 has none: the Block is a month, the Shelf's tabs are Month / Upcoming /
+// Filters / Almanac, and /schedule is a scheduling surface rather than a
+// calendar week. So a /week bookmark now resolves to a month grid.
+//
+// THIS IS [VS-1]'s FIRST GAP, AND IT IS A PREREQUISITE, NOT A BOOKING.
+// C-CALV4-WEEKDAY-VIEWS must MERGE before C-CALV4-SHELL-REMOVAL may start —
+// deleting the shell today would delete the only week and day views that exist.
+// When that slice lands, this test inverts once more, back toward a week.
+func TestCutover_WeekRedirectsToTheBenchAndLosesTheWeek(t *testing.T) {
 	h := NewHandler(&cutoverStub{})
 	c, rec := ownerCtx(t, "cal-1")
 	if err := h.RedirectWeekV2(c); err != nil {
 		t.Fatalf("RedirectWeekV2: %v", err)
 	}
-	assertMovedPermanently(t, rec, "/campaigns/camp-1/calendar/v2/cal-1/week")
+	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
+	if strings.Contains(rec.Header().Get("Location"), "week") {
+		t.Error("a week segment reappeared — if v4 grew a week view, re-point this redirect at " +
+			"it and say so, rather than letting the segment ride to a page that ignores it")
+	}
 }
 
-func TestCutover_DayRedirectsToV2(t *testing.T) {
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED), same claim and same reason
+// as the week above: the DAY view exists only inside the V2 shell, v4 has no
+// replacement, and C-CALV4-WEEKDAY-VIEWS is the prerequisite slice that builds
+// one. A /day bookmark lands on the Bench's month.
+func TestCutover_DayRedirectsToTheBenchAndLosesTheDay(t *testing.T) {
 	h := NewHandler(&cutoverStub{})
 	c, rec := ownerCtx(t, "cal-1")
 	if err := h.RedirectDayV2(c); err != nil {
 		t.Fatalf("RedirectDayV2: %v", err)
 	}
-	assertMovedPermanently(t, rec, "/campaigns/camp-1/calendar/v2/cal-1/day")
+	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
+	if strings.Contains(rec.Header().Get("Location"), "day") {
+		t.Error("a day segment reappeared — see the week test's reasoning")
+	}
 }
 
 // A redirect with no :calId (the dashboard-block fallthrough) lands on the bare
 // V2 shell, which resolves the active calendar itself.
-func TestCutover_ShowRedirectNoCalIdGoesToBareV2(t *testing.T) {
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED): the no-:calId fallthrough
+// lands on the Bench. It is now the SAME target as the with-:calId case above,
+// which is the honest shape — the Bench cannot honour a calendar id, so
+// pretending the two differ would be a lie in a URL.
+func TestCutover_ShowRedirectNoCalIdGoesToTheBench(t *testing.T) {
 	h := NewHandler(&cutoverStub{})
 	c, rec := ownerCtx(t, "")
 	if err := h.RedirectShowV2(c); err != nil {
 		t.Fatalf("RedirectShowV2: %v", err)
 	}
-	assertMovedPermanently(t, rec, "/campaigns/camp-1/calendar/v2")
+	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
 }
 
-// Index for a campaign WITH calendars 301s to V2 (the list/single views retire).
-func TestCutover_IndexWithCalendarsRedirectsToV2(t *testing.T) {
+// Index for a campaign WITH calendars 301s to the calendar (the list/single V1
+// views retire).
+//
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED): the destination is the
+// Bench. The cutover reasoning is untouched — only the surface that replaced
+// the V1 views has itself been replaced.
+func TestCutover_IndexWithCalendarsRedirectsToTheBench(t *testing.T) {
 	h := NewHandler(&cutoverStub{cals: []Calendar{{ID: "cal-1", CampaignID: "camp-1"}}})
 	c, rec := ownerCtx(t, "")
 	if err := h.Index(c); err != nil {
 		t.Fatalf("Index: %v", err)
 	}
-	assertMovedPermanently(t, rec, "/campaigns/camp-1/calendar/v2")
+	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
 }
 
 // Index for a campaign with ZERO calendars still renders THE CREATE FLOW rather
@@ -157,12 +203,23 @@ func TestCutover_IndexNoCalendarsIsOwnerOnly(t *testing.T) {
 		if err := h.Index(c); err != nil {
 			t.Fatalf("Index at role %d: %v", role, err)
 		}
+		// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED — the SEVENTH
+		// inversion, and the one the dispatch could not have predicted because
+		// this test did not exist when it was scouted). It required the V2
+		// shell. THE NEW CLAIM: a non-owner with zero calendars is sent to the
+		// BENCH, whose own empty state ("No calendar yet") is now the designed
+		// surface for this case.
+		//
+		// EVERYTHING THIS TEST ACTUALLY GUARDS IS UNCHANGED: the owner gate, the
+		// 302-not-301 (a permanent redirect whose target depends on the
+		// requester's ROLE is a cache poisoning waiting to happen), and the
+		// wizard markup never reaching a non-owner. Only the destination moved.
 		if rec.Code != http.StatusFound {
-			t.Errorf("role %d: status=%d want 302 to V2 — a non-owner must never "+
+			t.Errorf("role %d: status=%d want 302 — a non-owner must never "+
 				"reach the builder", role, rec.Code)
 		}
-		if loc := rec.Header().Get("Location"); loc != "/campaigns/camp-1/calendar/v2" {
-			t.Errorf("role %d: Location=%q want the V2 shell", role, loc)
+		if loc := rec.Header().Get("Location"); loc != "/campaigns/camp-1/apps/calendar" {
+			t.Errorf("role %d: Location=%q want the Bench", role, loc)
 		}
 		if body := rec.Body.String(); strings.Contains(body, "wz-shell") ||
 			strings.Contains(body, "wz-need") {
@@ -186,14 +243,20 @@ func TestCutover_ShowBuilderRendersTheWizard(t *testing.T) {
 	}
 }
 
-// The bare /calendar legacy path 301s straight to V2.
-func TestCutover_LegacyRedirectGoesToV2(t *testing.T) {
+// The bare /calendar legacy path 301s straight to the campaign's calendar.
+//
+// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-9] SIGNED). This path has pointed at
+// V1 /calendars, then at the V2 shell, and now at the Bench, and the ROUTE has
+// never moved once — which is the whole reason it exists. A bookmark made at
+// any point in that history still lands on whatever the campaign's calendar
+// currently is.
+func TestCutover_LegacyRedirectGoesToTheBench(t *testing.T) {
 	h := NewHandler(&cutoverStub{})
 	c, rec := ownerCtx(t, "")
 	if err := h.legacyRedirect(c); err != nil {
 		t.Fatalf("legacyRedirect: %v", err)
 	}
-	assertMovedPermanently(t, rec, "/campaigns/camp-1/calendar/v2")
+	assertMovedPermanently(t, rec, "/campaigns/camp-1/apps/calendar")
 }
 
 // TestCutover_RouteTablePreservesTimelineAndEmbed walks the registered route

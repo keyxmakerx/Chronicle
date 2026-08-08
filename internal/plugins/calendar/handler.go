@@ -184,17 +184,27 @@ func (h *Handler) Index(c echo.Context) error {
 		if cc.MemberRole >= campaigns.RoleOwner {
 			return h.ShowBuilder(c)
 		}
+		// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). A non-owner with zero calendars
+		// used to be sent to the V2 shell, whose empty state is the designed
+		// surface for exactly this case. The Bench has its own ("No calendar
+		// yet"), and it is the surface a non-owner should be looking at. Still
+		// 302 rather than 301: a PERMANENT redirect whose target depends on the
+		// requester's ROLE is a cache poisoning waiting to happen, and this
+		// branch is the reason that sentence is at the top of this handler.
 		return c.Redirect(http.StatusFound,
-			"/campaigns/"+cc.Campaign.ID+"/calendar/v2")
+			"/campaigns/"+cc.Campaign.ID+"/apps/calendar")
 	}
 
-	// C-CAL-V1-V2-CUTOVER: any campaign WITH calendars goes to V2 — the active
-	// calendar + the multi-cal switcher replace the V1 single/list views. Only
-	// the 0-calendar owner branch above stays on V1 (no V2 create flow yet; the
-	// V2 empty state links back here). The V1 list templates are retired in a
-	// follow-on.
+	// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). Any campaign WITH calendars goes to
+	// THE BENCH — the product's front door — rather than to the V2 shell.
+	//
+	// The cutover reasoning is unchanged and only its destination moves: the V1
+	// single/list views are retired, and the surface that replaced them has
+	// itself been replaced. Only the 0-calendar OWNER branch above stays here,
+	// because that is the create flow. Still 301: this leg's target does not
+	// depend on the requester.
 	return c.Redirect(http.StatusMovedPermanently,
-		"/campaigns/"+cc.Campaign.ID+"/calendar/v2")
+		"/campaigns/"+cc.Campaign.ID+"/apps/calendar")
 }
 
 // EmbedCalendar returns a compact calendar grid fragment for dashboard embedding.
@@ -324,9 +334,19 @@ func (h *Handler) CreateCalendar(c echo.Context) error {
 	// step is mode-agnostic (the settings editor, not the V1 view). The full
 	// V1→V2 cutover (C-CAL-V1-V2-CUTOVER) since 301'd every V1 view route to V2,
 	// so the settings landing below is itself a preserved route, not a V1 view.
+	// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED) — RE-POINTED, AND THE LANDING IS
+	// REDUCED, WHICH IS STATED RATHER THAN HIDDEN.
+	//
+	// A freshly-created REAL-LIFE calendar landed on the V2 shell BECAUSE THAT
+	// IS WHERE THE WORLDSTATE FEATURES LIVE — the comment that used to sit here
+	// said so. The Bench renders the real-world Block with a DASHED SKYBAND
+	// PLACEHOLDER, so this landing is genuinely poorer today. It is re-pointed
+	// anyway, on the signed reasoning that a newly-created calendar should land
+	// on the product's front door rather than on the surface being retired, and
+	// R2-5 (C-CALV4-SKY) is the slice that fills the band back in.
 	if mode == ModeRealLife {
 		return c.Redirect(http.StatusSeeOther,
-			fmt.Sprintf("/campaigns/%s/calendar/v2/%s", cc.Campaign.ID, cal.ID))
+			fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID))
 	}
 	return c.Redirect(http.StatusSeeOther,
 		fmt.Sprintf("/campaigns/%s/calendars/%s/settings", cc.Campaign.ID, cal.ID))

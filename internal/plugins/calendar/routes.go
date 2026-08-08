@@ -494,10 +494,14 @@ func RegisterRSVPRoutes(e *echo.Echo, h *RSVPHandler, campaignSvc campaigns.Camp
 	e.POST("/calendar-rsvp/:token", h.ApplyEventRSVPToken)
 }
 
-// legacyRedirect 301s the bare /campaigns/:id/calendar to V2 (C-CAL-V1-V2-
-// CUTOVER — was → V1 /calendars). V2 resolves the active calendar (or shows the
-// empty-state setup link). Preserves bookmarks + external links.
+// legacyRedirect 301s the bare /campaigns/:id/calendar to the campaign's
+// calendar, which since C-CALV4-V2SUNSET R2-4 is THE BENCH ([VS-2] SIGNED).
+//
+// It was → V1 /calendars, then → the V2 shell (C-CAL-V1-V2-CUTOVER), now → the
+// Bench. The route itself has never moved, which is the whole point of it:
+// bookmarks and external links made at any point in that history still land on
+// whatever the campaign's calendar currently is.
 func (h *Handler) legacyRedirect(c echo.Context) error {
 	cc := campaigns.GetCampaignContext(c)
-	return c.Redirect(301, "/campaigns/"+cc.Campaign.ID+"/calendar/v2")
+	return c.Redirect(301, "/campaigns/"+cc.Campaign.ID+"/apps/calendar")
 }
