@@ -94,12 +94,27 @@
   color: var(--text-secondary);
 }
 
+/* ── WHERE A SWIPE STOPS (C-CALV4-MOBILE [MOB-4] SIGNED) ────────────────────
+   MEASURED at 390x664, Bench idle, in a document whose own scrollHeight is
+   2251: FIVE independently-scrolling regions stacked down one phone page, and
+   `grep -n 'overscroll-behavior' ` over all four calendar stylesheets returned
+   ZERO hits. Every one of them chained its scroll to the page the moment it
+   reached its end, so a vertical swipe on the middle third of the screen did
+   something different depending on which 40-pixel band the finger landed in.
+   That is the operator's "the scrolling on mobile" in mechanical form.
+
+   `contain` is the whole declaration: the region absorbs its own swipe and
+   stops, and nothing here is `none` (which would also kill the browser's own
+   pull-to-refresh) and nothing here is `touch-action` — [MOB-9b] refuses that
+   property by name, because on the month grid it would claim the gesture and
+   kill page scrolling over the calendar. */
 .cal-daycard .dc-rows {
   display: flex;
   flex-direction: column;
   gap: 2px;
   max-block-size: min(52vh, 420px);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* One row, and its field set is the Ledger row's own (ledger.templ:155-190):
@@ -711,6 +726,10 @@
      numbers said rather than better. */
   max-block-size: min(70dvh, 620px);
   overflow-y: auto;
+  /* C-CALV4-MOBILE [MOB-4]. This one is the sharpest of the five: the editor's
+     body measured 465 client against 1229 scroll in a realistic edit — 2.6
+     screens of form in one window — over a page that was not locked. */
+  overscroll-behavior: contain;
 }
 .cal-dayeditor .ed-form-col {
   display: flex;

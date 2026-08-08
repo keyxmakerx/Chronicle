@@ -298,16 +298,24 @@ const mobileOpsScript = `
   }
 
   // scrollers is the CENSUS: every element that can actually absorb a swipe.
-  // A box counts when it overflows AND its computed overflow on that axis is
-  // not 'visible' — which is the only definition a thumb can tell apart.
+  //
+  // THE DEFINITION IS A THUMB'S, NOT A LAYOUT ENGINE'S, and both halves of it
+  // are load-bearing. A box counts when (1) it overflows on that axis, (2) its
+  // computed overflow there is 'auto' or 'scroll' — an 'overflow: hidden' box
+  // clips and cannot be swiped at all, so counting it would inflate the census
+  // with boxes no finger can reach — and (3) it is at least 24px on that axis.
+  // Without (3) the census returns 132 regions at 390, almost all of them the
+  // 1px 'span.vh' screen-reader clips that every surface here uses; a 1px box
+  // is not one of the forty-pixel bands the operator's complaint is about.
+  function scrollable(v) { return v === 'auto' || v === 'scroll'; }
   function scrollers(rootSel) {
     var root = rootSel ? el(rootSel) : document.body;
     if (!root) return [];
     var out = [];
     all(rootSel ? rootSel + ' *' : '*').forEach(function (n) {
       var cs = getComputedStyle(n);
-      var vy = cs.overflowY !== 'visible' && cs.overflowY !== 'clip';
-      var vx = cs.overflowX !== 'visible' && cs.overflowX !== 'clip';
+      var vy = scrollable(cs.overflowY) && n.clientHeight >= 24;
+      var vx = scrollable(cs.overflowX) && n.clientWidth >= 24;
       if (vy && n.scrollHeight - n.clientHeight > 1) {
         out.push({ sel: name(n), axis: 'y', c: n.clientHeight, s: n.scrollHeight,
           contain: cs.overscrollBehaviorY });
@@ -1043,5 +1051,199 @@ func TestMobileProbe_ThePageIsLockedBehindASheetAndReleasedOnEveryExit(t *testin
 	if freeAgain.num("top") <= after.num("top") {
 		t.Errorf("the page does not scroll again after the sheets closed: scrollBy(0,400) "+
 			"left it at %.0f", freeAgain.num("top"))
+	}
+}
+
+// mobileLongWeekData builds the same Bench with a week of `n` weekdays. The
+// production fixture is a TENDAY, which §CORRECTIONS proved is CLEAN at every
+// phone width — the anecdote "a tenday loses days on a narrow phone" is
+// refuted by arithmetic (300px of grid floor against a 388px body at 390 and
+// 358 at 360). The real threshold is week-len >= 13 at 390 and >= 12 at 360,
+// so the long arm is measured at 20 — the length the audit's own probe lost
+// four day cells at.
+func mobileLongWeekData(t *testing.T, n int) BenchData {
+	t.Helper()
+	data := benchFxData(true, true)
+	cal := benchFxTypedCalendar()
+	cal.Weekdays = nil
+	for i := 0; i < n; i++ {
+		cal.Weekdays = append(cal.Weekdays, Weekday{Name: fmt.Sprintf("W%02d", i+1)})
+	}
+	d := projectBlock(BlockProjectionInput{
+		Calendar: &cal, Events: benchFxShotEvents(),
+		Viewer:     BlockViewer{UserID: "u-1", Role: 3},
+		MonthIndex: cal.CurrentMonth - 1, Year: cal.CurrentYear,
+		MoonCap:    benchMoonCap,
+	})
+	d.Layers = benchBlockLayers(blockLayerPrefs{})
+	data.Primary = &BenchBlock{Data: d, Manage: benchManage(&cal, "cal-harptos", "camp-1")}
+	return data
+}
+
+// ── [MOB-4] + [MOB-8] — the scroller census, the containment, and the one
+//    horizontal scroller this slice adds ───────────────────────────────────
+//
+// BASELINE, measured at 390x664 inside a document of scrollHeight 2251:
+//
+//	.cal-block-host .lrows          41 / 220   y 732–773
+//	.cal-block-host .shelf .sp2     75 / 222   y 808–883
+//	a second .lrows                 46 /  82   y 1401–1447
+//	(+ .cal-dayeditor .ed-body 465 / 1229 once the editor opens)
+//
+// and `overscroll-behavior` returned ZERO hits across all four calendar
+// stylesheets, as did `touch-action`. A vertical swipe on the middle third of
+// the screen therefore did something different depending on which 40-pixel
+// band the finger landed in.
+//
+// DECLARING CONTAINMENT ON FIVE NESTED SCROLLERS IS A PATCH; REDUCING FIVE TO
+// TWO IS THE FIX, AND BOTH SHIP. [MOB-1] already paid for most of the census:
+// with the desktop ration lifted, `.body` and the Ledger stop being scroll
+// windows carved out of 520 pixels.
+func TestMobileProbe_TheScrollerCensusAndTheLongWeek(t *testing.T) {
+	chrome := mobileNeedChromium(t)
+	mount := DayCardMount{CanCreate: true, CanAuthorDmOnly: true, CanDelete: true,
+		CanRestrict: true, CampaignID: "camp-1"}
+	inner := mobileWriteInner(t, "census.html", mobileInnerPage(t, benchFxShotData(mount), ""))
+
+	// ── (a) THE CENSUS ────────────────────────────────────────────────────
+	mobileHeader(t, "[MOB-4] the scroller census, Bench idle", 390, 664)
+	r := mobileDrive(t, chrome, inner, 390, 664, []mobileStep{{Op: "census"}})
+	list, _ := r[0]["bench"].([]any)
+	t.Logf("   %d scrolling region(s) inside .cal-bench:", len(list))
+	for _, raw := range list {
+		m, _ := raw.(map[string]any)
+		t.Logf("      %v  axis %v  client %.0f / scroll %.0f  overscroll-behavior %v",
+			m["sel"], m["axis"], mobileF(m, "c"), mobileF(m, "s"), m["contain"])
+		if m["contain"] != "contain" {
+			t.Errorf("the scroller %v declares overscroll-behavior-%v %q — a region that "+
+				"chains its swipe to the page is one of the bands [MOB-4] exists to remove",
+				m["sel"], m["axis"], m["contain"])
+		}
+	}
+	if len(list) > 2 {
+		t.Errorf("%d scrolling regions inside .cal-bench at 390, ruled <= 2 (baseline 3). "+
+			"On a phone the PAGE is the scroller; a region earns its own only by being a "+
+			"list genuinely longer than the screen", len(list))
+	}
+
+	// ── (b) THE CONTAINMENT, DECLARED IN ALL FOUR SHEETS ──────────────────
+	for _, sheet := range []struct{ file, name string }{
+		{"calendar-block.css", "the Block"},
+		{"calendar-daycard.css", "the card and the editor"},
+		{"calendar-bench.css", "the Bench"},
+		{"calendar-schedule.css", "/schedule"},
+	} {
+		code := readRepoFile(t, filepath.Join("static", "css", sheet.file))
+		n := strings.Count(code, "overscroll-behavior")
+		t.Logf("   %s — `overscroll-behavior` declarations in %s: %d (baseline 0)",
+			sheet.name, sheet.file, n)
+		if n == 0 {
+			t.Errorf("%s declares no overscroll-behavior at all — [MOB-4](b) rules the count "+
+				"non-zero in all four sheets", sheet.file)
+		}
+		// The DECLARATION form, so a comment naming the refused property (and
+		// this slice writes one, on purpose) is not mistaken for shipping it.
+		if strings.Contains(code, "touch-action:") {
+			t.Errorf("%s declares `touch-action` — [MOB-9b] REFUSES that property by name: on "+
+				"the month grid it claims the gesture and kills page scrolling over the "+
+				"calendar, which on a phone is a worse trade than losing drag-create",
+				sheet.file)
+		}
+	}
+
+	// ── [MOB-8] THE LONG WEEK ─────────────────────────────────────────────
+	long := mobileWriteInner(t, "week20.html", mobileInnerPage(t, mobileLongWeekData(t, 20), ""))
+	ten := mobileWriteInner(t, "week10.html", mobileInnerPage(t, mobileLongWeekData(t, 10), ""))
+	for _, w := range []int{390, 375, 360} {
+		mobileHeader(t, "[MOB-8] week-len 20", w, mobileHeightFor(w))
+		lr := mobileDrive(t, chrome, long, w, mobileHeightFor(w), []mobileStep{{Op: "census"}})[0]
+		inst, grid := mobileBox(lr, "inst"), mobileBox(lr, "grid")
+		hd, _ := lr["headers"].(map[string]any)
+		t.Logf("   week-len %v — .inst client %.0f / scroll %.0f (overflow-x %s, overflow-y %s, overscroll-x %s) · .grid %.0f · %v weekday headers, last right edge %.0f · zero-width cells %.0f",
+			lr["weekLen"], inst["cw"], inst["sw"], lr.str("instOX"), lr.str("instOY"),
+			lr.str("instContainX"), grid["w"], mobileF(hd, "count"),
+			mobileF(hd, "lastRight"), mobileF(hd, "zeroCells"))
+
+		// REACHABILITY IS THE ASSERTION, NOT OVERFLOW. A box whose content is
+		// wider than itself is only a defect when the content cannot be
+		// reached, and `overflow: hidden` — the shipped state — is exactly the
+		// case where it cannot: the pixels exist in scrollWidth and no gesture
+		// arrives at them. So the two facts are asserted TOGETHER.
+		overflows := inst["sw"] > inst["cw"]+1
+		reachable := lr.str("instOX") == "auto" || lr.str("instOX") == "scroll"
+		if !overflows {
+			t.Errorf("%dpx, week-len 20: .inst reports scrollWidth %.0f against clientWidth "+
+				"%.0f — a 20-day week needs 600px of grid, so this measurement is not of the "+
+				"case the ruling is about", w, inst["sw"], inst["cw"])
+		}
+		if overflows && !reachable {
+			t.Errorf("%dpx, week-len 20: %.0fpx of grid inside a %.0fpx box whose overflow-x "+
+				"is %q — the days past the edge exist in scrollWidth and NO GESTURE REACHES "+
+				"THEM. Days a GM cannot reach are DATA LOSS, and data loss outranks gesture "+
+				"friction", w, inst["sw"], inst["cw"], lr.str("instOX"))
+		}
+		if lr.str("instContainX") != "contain" {
+			t.Errorf("%dpx: the deliberate horizontal scroller declares overscroll-behavior-x "+
+				"%q, ruled `contain`", w, lr.str("instContainX"))
+		}
+		// The block axis must NOT have become a scroller as a side effect: CSS
+		// resolves a visible/non-visible overflow pair to `auto`.
+		if inst["sh"]-inst["ch"] > 1 {
+			t.Errorf("%dpx: .inst also scrolls VERTICALLY (%.0f in %.0f) — the horizontal "+
+				"scroller has grown a second axis nobody asked for", w, inst["sh"], inst["ch"])
+		}
+		if z := mobileF(hd, "zeroCells"); z > 0 {
+			t.Errorf("%dpx, week-len 20: %.0f day cell(s) measure zero-width", w, z)
+		}
+
+		// A TENDAY GROWS NO SCROLLER IT DOES NOT NEED.
+		tr := mobileDrive(t, chrome, ten, w, mobileHeightFor(w), []mobileStep{{Op: "census"}})[0]
+		ti := mobileBox(tr, "inst")
+		t.Logf("   week-len %v (a tenday) — .inst client %.0f / scroll %.0f · .grid %.0f",
+			tr["weekLen"], ti["cw"], ti["sw"], mobileBox(tr, "grid")["w"])
+		if ti["sw"] > ti["cw"]+1 {
+			t.Errorf("%dpx: a TENDAY grew a horizontal scroller (%.0f in %.0f). A tenday's "+
+				"grid floor is 300px against a body of 388 at 390 and 358 at 360 — it fits, "+
+				"and a surface that sprouts a drag it does not need is its own defect",
+				w, ti["sw"], ti["cw"])
+		}
+	}
+
+	// ── AND THE PAGE FOLD SURVIVES IT ─────────────────────────────────────
+	//
+	// The one thing this slice could most easily break: at 360, 375, 390 and
+	// 414 the page has never dragged sideways in any measured state, and
+	// [MOB-8] is the only ruling that adds a horizontal scroller.
+	mobileHeader(t, "[MOB-8] the page fold, every width x every state", 0, 0)
+	for _, w := range []int{360, 375, 390, 414} {
+		h := mobileHeightFor(w)
+		if w == 414 {
+			h = 736
+		}
+		for _, st := range []struct {
+			label string
+			steps []mobileStep
+			pick  int
+		}{
+			{"Bench idle", []mobileStep{{Op: "noop"}}, 0},
+			{"day card open", []mobileStep{{Op: "openCard"}, {Op: "noop", Delay: 300}}, 1},
+			{"editor open", []mobileStep{{Op: "openCard"}, {Op: "openEditor", Delay: 400},
+				{Op: "noop", Delay: 400}}, 2},
+		} {
+			for _, src := range []struct{ name, path string }{
+				{"tenday", ten}, {"week-len 20", long},
+			} {
+				rr := mobileDrive(t, chrome, src.path, w, h, st.steps)[st.pick]
+				pg, _ := rr["page"].(map[string]any)
+				sw, cw := mobileF(pg, "sw"), mobileF(pg, "cw")
+				t.Logf("   %dx%d · %-14s · %-11s — document scrollWidth %.0f vs clientWidth %.0f",
+					w, h, st.label, src.name, sw, cw)
+				if sw != cw {
+					t.Errorf("%dpx, %s, %s: the DOCUMENT drags sideways (scrollWidth %.0f vs "+
+						"clientWidth %.0f). [MOB-8]'s scroller is bounded and this row is what "+
+						"catches it going wrong", w, st.label, src.name, sw, cw)
+				}
+			}
+		}
 	}
 }

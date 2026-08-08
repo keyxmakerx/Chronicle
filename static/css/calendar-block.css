@@ -1415,6 +1415,9 @@
    real invariance device. */
 .cal-block-host .lrows {
   overflow-y: auto;
+  /* C-CALV4-MOBILE [MOB-4]: this region absorbs its own swipe and stops. See
+     the containment header in calendar-daycard.css for the measurement. */
+  overscroll-behavior: contain;
   flex: 1;
   min-height: 0;
 }
@@ -1655,6 +1658,8 @@
   max-height: 132px;
   min-height: 0;
   overflow-y: auto;
+  /* C-CALV4-MOBILE [MOB-4] */
+  overscroll-behavior: contain;
 }
 
 /* ── the Shelf's tabs, and its panels ──────────────────────────────────────
@@ -2363,6 +2368,36 @@
   .cal-block-host .lrows {
     min-height: calc(3 * 44px);
     max-height: calc(3 * 44px);
+  }
+
+  /* ── LONG WEEKS: THE ONE HORIZONTAL SCROLLER THIS SLICE ADDS
+     C-CALV4-MOBILE [MOB-8] SIGNED. DAYS A GM CANNOT REACH ARE DATA LOSS, AND
+     DATA LOSS OUTRANKS GESTURE FRICTION.
+
+     MEASURED (zzaudit_weeklen_probe_test.go) at week-len 20 on a 500px
+     viewport: the grid's clientWidth is 600 against a `.body` of 498, the last
+     weekday header's right edge is 613 against a box right edge of 499, and
+     FOUR day cells measure off-edge or zero-width. `.body` is `overflow-x:
+     hidden` (:688) and that is what clips them; the builder allows up to 32
+     weekdays, a 960px floor.
+
+     AND THE THRESHOLD IS STATED BECAUSE THE ANECDOTE WAS WRONG. The grid's
+     floor is `calc(var(--week-len) * 30px)` (:757) against a `.body` measuring
+     388px at a 390 viewport and 358px at 360. A TENDAY (300px) IS CLEAN AT
+     BOTH. The real threshold is week-len >= 13 at 390 and >= 12 at 360, and an
+     acceptance row proves a tenday grows no scroller at all — a surface that
+     sprouts a drag it does not need is its own defect.
+
+     IT IS AN EXISTING ELEMENT, NOT A NEW WRAPPER. `.inst` already sits between
+     `.body` and `.grid` and already declares `overflow: hidden`; only the
+     inline axis changes. The block axis stays HIDDEN rather than becoming
+     `visible`, because CSS resolves a visible/non-visible overflow pair to
+     `auto` and the box would silently become a vertical scroller too — which
+     is the fifth region [MOB-4] just finished removing. */
+  .cal-block-host .inst {
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
   }
 
   /* the Shelf's pane floor IS its own ceiling (:1654 max-height: 132px), so

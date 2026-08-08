@@ -612,6 +612,8 @@
 
 .cal-schedule .sc-wrap {
   overflow-x: auto;
+  /* C-CALV4-MOBILE [MOB-4] */
+  overscroll-behavior: contain;
   border: 1px solid var(--rule-hairline);
   border-radius: 6px;
 }
