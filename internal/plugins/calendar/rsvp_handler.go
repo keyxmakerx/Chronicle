@@ -638,6 +638,70 @@ func escapeAttr(s string) string { return html.EscapeString(s) }
 //        the cookie and plants the matching hidden field for the POST's
 //        double-submit. Without it the confirm click would 403.
 
+// rsvpDeadTokenPage is what BOTH token routes render when resolveToken refuses.
+//
+// C-CALV4-GAMEREADY §5 [GR-8]. THE MEASURED DEAD END: after a successful POST,
+// a browser refresh, a double-tap, a mail client's prefetch, or simply
+// re-opening the link to check "did that go through?" rendered
+//
+//	RSVP Failed
+//	this RSVP link is invalid or has expired
+//
+// The answer HAD been recorded. The page just said it failed — and a player who
+// reads that tells their GM the RSVP system is broken, and the GM believes them,
+// because the product said so. Session zero then goes on debugging a system
+// that is working perfectly.
+//
+// So: when the link is spent, an answer stands on record for it, and the SAME
+// membership + event-visibility re-check resolveToken runs still passes, state
+// the answer and offer the schedule. Everything else keeps the generic page.
+//
+// THE GATE IS DELIBERATELY THE FULL ONE, NOT A CHEAPER LOOKALIKE. Widening by a
+// single condition is a leak: a member removed from the campaign, and an event
+// flipped to dm_only after the invite went out, must still get the generic page
+// that never discloses the title. That is why this re-runs memberRole and
+// CanUserViewEvent rather than trusting the token, and why a failure at ANY step
+// falls through to the same generic page rather than explaining itself.
+func (h *RSVPHandler) rsvpDeadTokenPage(ctx context.Context, tokenStr string, cause error) string {
+	generic := rsvpResultPage("RSVP Failed", apperror.UserMessage(cause, rsvpBadTokenMsg), false, "")
+
+	tok, answer, err := h.svc.AnsweredToken(ctx, tokenStr)
+	if err != nil {
+		return generic
+	}
+	evt, cal, err := h.svc.EventContext(ctx, tok.EventID, "")
+	if err != nil || !evt.CollectRSVPs {
+		return generic
+	}
+	role, ok := h.memberRole(ctx, cal.CampaignID, tok.UserID)
+	if !ok || !h.svc.CanUserViewEvent(evt, role, tok.UserID) {
+		return generic
+	}
+
+	return rsvpResultPage("You've already answered",
+		fmt.Sprintf("You're down as %q for %s.",
+			rsvpStatusLabel(answer.Status), trimForDisplay(evt.Name, 80)),
+		true, rsvpSchedulePath(cal.CampaignID))
+}
+
+// rsvpStatusLabel names a STORED status for a human. It is deliberately separate
+// from rsvpActionLabel, which names an ACTION: "Out this week" is an action that
+// stores the status "no", and telling a member they are down as "Out this week"
+// when the row says `no` would be reporting the button they pressed rather than
+// the answer the Director will count.
+func rsvpStatusLabel(status string) string {
+	switch status {
+	case RSVPYes:
+		return "Going"
+	case RSVPMaybe:
+		return "Maybe"
+	case RSVPNo:
+		return "Not going"
+	default:
+		return "Answered"
+	}
+}
+
 // RedeemEventRSVPToken renders the confirm interstitial.
 // GET /calendar-rsvp/:token
 func (h *RSVPHandler) RedeemEventRSVPToken(c echo.Context) error {
@@ -646,7 +710,7 @@ func (h *RSVPHandler) RedeemEventRSVPToken(c echo.Context) error {
 
 	tok, evt, cal, err := h.resolveToken(ctx, tokenStr)
 	if err != nil {
-		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
+		return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
 	}
 
 	action := escapeAttr("/calendar-rsvp/" + tokenStr)
@@ -675,7 +739,7 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 
 	tok, evt, cal, err := h.resolveToken(ctx, tokenStr)
 	if err != nil {
-		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
+		return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
 	}
 
 	// ── VALIDATE BEFORE CONSUMING ─────────────────────────────────────────
@@ -717,15 +781,17 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 				apperror.UserMessage(err, "Please add a time that would work, or a short note.")))
 		}
 		if _, err := h.svc.ApplyToken(ctx, tokenStr); err != nil {
-			return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed",
-				apperror.UserMessage(err, rsvpBadTokenMsg), false))
+			return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
 		}
-		return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", msg, true))
+		// THE SUCCESS PAGE CARRIES THE SAME DOOR ([GR-8]): a member who answers
+		// from their inbox should not land somewhere with no route onward.
+		return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", msg, true,
+			rsvpSchedulePath(cal.CampaignID)))
 	}
 
 	applied, err := h.svc.ApplyToken(ctx, tokenStr)
 	if err != nil {
-		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
+		return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
 	}
 
 	message := fmt.Sprintf("Your response to %q was recorded.", trimForDisplay(evt.Name, 80))
@@ -735,7 +801,8 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 	default:
 		h.notifyOwnerOfResponse(ctx, cal.CampaignID, evt, tok.UserID, statusForAction(applied.Action))
 	}
-	return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", message, true))
+	return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", message, true,
+		rsvpSchedulePath(cal.CampaignID)))
 }
 
 // parseOfferedWindows reads the emailed suggestion form's date/from/to rows.

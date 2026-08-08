@@ -236,11 +236,30 @@ func TestTokenPages_EscapeAndCarryCSRF(t *testing.T) {
 		t.Error("suggest page must carry the CSRF token")
 	}
 
-	result := rsvpResultPage("Done", evil, true)
+	result := rsvpResultPage("Done", evil, true, "")
 	if strings.Contains(result, "<script>alert(1)</script>") {
 		t.Error("result page must escape interpolated text")
 	}
 	if strings.Contains(result, "<form") {
-		t.Error("the terminal result page must offer nothing to submit")
+		t.Error("the result page must offer nothing to SUBMIT")
+	}
+	// [GR-8] gave this page a way back, and the empty href is a DECISION: the
+	// generic invalid-link page is rendered for viewers who may no longer be
+	// members, so it must still disclose nothing — not the title, and not which
+	// campaign the link belonged to.
+	if strings.Contains(result, "<a ") {
+		t.Error("a result page with no backHref must render no link at all")
+	}
+	withDoor := rsvpResultPage("Done", "You're down as Going.", true, "/campaigns/c-1/schedule")
+	if !strings.Contains(withDoor, `<a href="/campaigns/c-1/schedule"`) {
+		t.Errorf("a result page WITH a backHref must render it; got %q", withDoor)
+	}
+	if strings.Contains(withDoor, "<form") {
+		t.Error("the way back is a LINK, not a second form to maintain")
+	}
+	// The href is interpolated text like every other value on these pages.
+	if strings.Contains(rsvpResultPage("Done", "x", true, `"><script>alert(1)</script>`),
+		"<script>alert(1)</script>") {
+		t.Error("the back href must be escaped")
 	}
 }

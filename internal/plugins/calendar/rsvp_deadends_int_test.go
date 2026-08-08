@@ -79,6 +79,14 @@ func newRSVPIntFixture(t *testing.T) *rsvpIntFixture {
 	}
 }
 
+// restoreRoster puts the one-member directory back after a test has emptied it
+// to stand in for a member who has left the campaign.
+func (f *rsvpIntFixture) restoreRoster() {
+	f.h.SetMemberDirectory(&mockMemberDir{members: []campaigns.CampaignMember{
+		{UserID: f.userID, Role: campaigns.RolePlayer, DisplayName: "Ari", Email: "ari@example.test"},
+	}})
+}
+
 // mintOne mints the real action-token set and returns the one for `action`.
 func (f *rsvpIntFixture) mintOne(t *testing.T, action string) string {
 	t.Helper()
@@ -164,4 +172,116 @@ func TestRSVPSuggestToken_SurvivesRejection_Integration(t *testing.T) {
 		t.Errorf("a spent suggest link must not be redeemable a second time; body = %q",
 			rec3.Body.String())
 	}
+}
+
+// --- [GR-8] a spent link states the answer and offers a way back -------------
+
+// TestRSVPResult_SpentTokenStatesTheAnswer is the audit's second dead end, and
+// the reason it is a table blocker rather than polish.
+//
+// THE MEASURED DEFECT: after a successful POST, a second POST — a browser
+// refresh, a double-tap, a mail client prefetch, or a member simply checking
+// "did that go through?" — rendered "RSVP Failed / this RSVP link is invalid or
+// has expired". The answer WAS on record. The page just said it failed, and the
+// page contained no `<a>` at all, so there was nowhere to go and check. A player
+// who sees that tells their GM the RSVP system is broken, the GM believes them
+// because the product said so, and session zero goes on debugging something that
+// works.
+//
+// THREE CASES IN ONE TEST, AND THE TWO NEGATIVES ARE THE POINT. Widening the
+// answer page by a single condition is a disclosure: the audit verified that a
+// REMOVED MEMBER and a `dm_only`-FLIPPED EVENT get a generic invalid-link page
+// that never leaks the title, and that behaviour is preserved exactly. Both
+// negatives redeem the SAME spent token as the positive, so the only thing that
+// differs between "you're down as Going" and "invalid or has expired" is the
+// re-check — which is what makes them a control rather than three unrelated
+// assertions.
+func TestRSVPResult_SpentTokenStatesTheAnswer_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("RSVP dead-end integration tests require a database; skipped under -short")
+	}
+	f := newRSVPIntFixture(t)
+	token := f.mintOne(t, RSVPActionYes)
+
+	// The first redemption: the real one, which really records "yes".
+	first := serveToken(f.h, http.MethodPost, token, "")
+	if !strings.Contains(first.Body.String(), "Response recorded") {
+		t.Fatalf("the first redemption should succeed; body = %q", first.Body.String())
+	}
+	// The success page's own door ([GR-8]: "the same link goes on the SUCCESS
+	// page") — the page every answering member actually sees.
+	if !strings.Contains(first.Body.String(), "/campaigns/"+f.campaignID+"/schedule") {
+		t.Errorf("the SUCCESS page must offer a route back into the product; body = %q",
+			first.Body.String())
+	}
+	// The row really is there — so anything the second visit says about it is a
+	// statement about persisted state, not about a render.
+	stored, err := f.rsvpRepo.GetUserRSVP(context.Background(), f.eventID, f.userID)
+	if err != nil || stored == nil || stored.Status != RSVPYes {
+		t.Fatalf("the answer must be on record; got %+v err=%v", stored, err)
+	}
+
+	t.Run("the refresh states the answer instead of claiming failure", func(t *testing.T) {
+		rec := serveToken(f.h, http.MethodPost, token, "")
+		body := rec.Body.String()
+		if strings.Contains(body, "RSVP Failed") {
+			t.Errorf("a spent link with an answer on record must NOT report failure; body = %q", body)
+		}
+		if !strings.Contains(body, "already answered") || !strings.Contains(body, "Going") {
+			t.Errorf("the page must STATE the answer on record; body = %q", body)
+		}
+		if !strings.Contains(body, "/campaigns/"+f.campaignID+"/schedule") {
+			t.Errorf("the page must offer a way back to change it; body = %q", body)
+		}
+	})
+
+	t.Run("re-opening the emailed link (GET) says the same thing", func(t *testing.T) {
+		// The member's most likely action is not a re-POST — it is clicking the
+		// link in the email again, which is a GET.
+		body := serveToken(f.h, http.MethodGet, token, "").Body.String()
+		if !strings.Contains(body, "already answered") {
+			t.Errorf("re-opening a spent link must state the answer too; body = %q", body)
+		}
+	})
+
+	t.Run("a REMOVED MEMBER still gets the generic page", func(t *testing.T) {
+		f.h.SetMemberDirectory(&mockMemberDir{members: nil})
+		t.Cleanup(f.restoreRoster)
+		body := serveToken(f.h, http.MethodPost, token, "").Body.String()
+		if strings.Contains(body, "already answered") || strings.Contains(body, "Harvest Feast") {
+			t.Errorf("a removed member must not be told the answer or the title; body = %q", body)
+		}
+		if !strings.Contains(body, "invalid or has expired") {
+			t.Errorf("a removed member must get the GENERIC page; body = %q", body)
+		}
+	})
+
+	t.Run("a dm_only-FLIPPED EVENT still gets the generic page", func(t *testing.T) {
+		if _, err := f.db.Exec(
+			`UPDATE calendar_events SET visibility = ? WHERE id = ?`,
+			storageVisibilityDMOnly, f.eventID); err != nil {
+			t.Fatalf("flipping the event to dm_only: %v", err)
+		}
+		t.Cleanup(func() {
+			if _, err := f.db.Exec(`UPDATE calendar_events SET visibility = ? WHERE id = ?`,
+				storageVisibilityEveryone, f.eventID); err != nil {
+				t.Logf("restoring visibility: %v", err)
+			}
+		})
+		body := serveToken(f.h, http.MethodPost, token, "").Body.String()
+		if strings.Contains(body, "already answered") || strings.Contains(body, "Harvest Feast") {
+			t.Errorf("an event flipped to dm_only must not leak its title or the answer; body = %q", body)
+		}
+		if !strings.Contains(body, "invalid or has expired") {
+			t.Errorf("a flipped event must get the GENERIC page; body = %q", body)
+		}
+	})
+
+	t.Run("a token that was never minted gets the generic page", func(t *testing.T) {
+		body := serveToken(f.h, http.MethodPost,
+			strings.Repeat("a", 64), "").Body.String()
+		if !strings.Contains(body, "invalid or has expired") {
+			t.Errorf("an unknown token must stay indistinguishable from a spent one; body = %q", body)
+		}
+	})
 }

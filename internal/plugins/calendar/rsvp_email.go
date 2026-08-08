@@ -288,19 +288,45 @@ textarea{margin-bottom:1rem}
 .wrow label,.notelabel{display:block;font-size:.78rem;font-weight:600;color:#52525b;margin-bottom:.3rem}
 .wgrid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:.4rem}
 .prob{color:#b91c1c;font-weight:600}
+a{color:#4f46e5}
 @media (max-width:420px){.wgrid{grid-template-columns:1fr}}
 button{font:inherit;font-weight:600;padding:.65rem 1.6rem;border:0;border-radius:8px;background:#6366f1;color:#fff;cursor:pointer}</style>
 </head><body><div class="card">` + body + `</div></body></html>`
 }
 
-// rsvpResultPage is the terminal page: what happened, nothing to click.
-func rsvpResultPage(title, message string, success bool) string {
+// rsvpResultPage reports what happened AND offers a way back into the product.
+//
+// IT USED TO BE TERMINAL — "what happened, nothing to click" — and that was the
+// whole of C-CALV4-GAMEREADY §5 [GR-8]'s second dead end: the page contained no
+// `<a>` at all and never mentioned `/campaigns/`, so a member who answered from
+// their inbox landed on a card with no route anywhere. The success page is the
+// one every answering member sees, so it is the one that most needed a door.
+//
+// `backHref` EMPTY IS A DECISION, NOT A DEFAULT. The generic invalid-link page
+// is rendered for viewers who may no longer be members and may no longer see
+// the event, and its contract is that it discloses NOTHING — not the title, and
+// not which campaign the link belonged to. So it passes "" and keeps its shape
+// exactly as the audit verified it.
+func rsvpResultPage(title, message string, success bool, backHref string) string {
 	accent := "#ef4444"
 	if success {
 		accent = "#22c55e"
 	}
+	back := ""
+	if backHref != "" {
+		back = `<p><a href="` + escapeAttr(backHref) + `">Go to the schedule to change your answer</a></p>`
+	}
 	return rsvpPageShell(title, accent,
-		`<div class="dot"></div><h1>`+escapeAttr(title)+`</h1><p>`+escapeAttr(message)+`</p>`)
+		`<div class="dot"></div><h1>`+escapeAttr(title)+`</h1><p>`+escapeAttr(message)+`</p>`+back)
+}
+
+// rsvpSchedulePath is the one destination the token pages link back to, and it
+// is the SHIPPED campaign schedule page (`GET /campaigns/:id/schedule`,
+// routes.go) — which already owns the tri-state answer control, so a member who
+// wants to change their mind lands on the surface that can do it rather than on
+// a second inline form nobody has to maintain.
+func rsvpSchedulePath(campaignID string) string {
+	return "/campaigns/" + campaignID + "/schedule"
 }
 
 // rsvpConfirmPage is the GET interstitial: a POST form the recipient must
