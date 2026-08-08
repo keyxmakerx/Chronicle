@@ -139,12 +139,29 @@ func TestLedgerGeometry_WithoutLedgerThereIsNoLedgerDOMToLeaveAVoid(t *testing.T
 	with := renderEntityCalLayers(t, svc)
 	without := renderEntityCal(t, svc, campaigns.RoleOwner, false)
 
+	// SCOPED TO THE EMBED'S BLOCK, AND PAIRED WITH THE THEATER'S — C-CALV4-THEATER
+	// (R2-3). The entity page now carries TWO Blocks for one calendar, so a
+	// whole-page `strings.Contains` can no longer answer "does the EMBED render a
+	// Ledger": the theater's copy is seeded with the Bench's five keys and
+	// legitimately renders both zones inside a closed <dialog>. Narrowing the
+	// negative on its own would be a guard that stopped looking at half the page,
+	// so it is paired with the positive — absent HERE, present THERE — which is a
+	// strictly stronger claim than the single negative it replaces, and it is the
+	// booking [BR2-8] made turned into something a test checks.
+	withEmbed := entityEmbedSubtree(t, with)
+	withoutEmbed := entityEmbedSubtree(t, without)
+	withoutTheater := entityTheaterSubtree(t, without)
 	for _, zone := range []string{`data-zone="ledger"`, `data-zone="shelf"`} {
-		if !strings.Contains(with, zone) {
+		if !strings.Contains(withEmbed, zone) {
 			t.Fatalf("fixture invariant broken: the five-key seed did not render %s", zone)
 		}
-		if strings.Contains(without, zone) {
+		if strings.Contains(withoutEmbed, zone) {
 			t.Errorf("the three-key seed still renders %s", zone)
+		}
+		if !strings.Contains(withoutTheater, zone) {
+			t.Errorf("the THEATER is missing %s — the depth R2-1 removed comes back there, "+
+				"and a theater without the two zone-adding keys is a stretched glanceable "+
+				"month rather than a full-tier Block", zone)
 		}
 	}
 	// Nothing was left behind in its place: the "without" render is SHORTER,

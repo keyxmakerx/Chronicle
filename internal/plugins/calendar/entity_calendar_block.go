@@ -66,9 +66,26 @@ import (
 // (user_id, campaign_id) ([LYR-3] SIGNED), so turning `ledger` back on for the
 // entity page ALSO TURNS IT ON FOR THE BENCH. That is the signed grain, not a
 // bug, and it is written here so it is met in a document before it is met in a
-// browser. Depth returns properly through R2-3's Block theater; this slice
-// ships NO substitute — no expand chip, no "show more", no link to the Bench,
-// no second embed — because a stopgap becomes the thing R2-3 has to delete.
+// browser.
+//
+// AND R2-3 HAS NOW SHIPPED, SO THE PROMISE THIS PARAGRAPH CARRIED IS CLOSED
+// RATHER THAN DELETED — it is the record of a trade that was made honestly.
+// R2-1 wrote: "Depth returns properly through R2-3's Block theater; this slice
+// ships NO substitute — no expand chip, no 'show more', no link to the Bench,
+// no second embed — because a stopgap becomes the thing R2-3 has to delete."
+// It kept that promise, and R2-3 kept the other half. **The depth is back in
+// the THEATER rather than in the embed** (C-CALV4-THEATER, 2026-08-08): the
+// `Expand` control beside the header anchor opens a top-layer `<dialog>`
+// carrying a SECOND render of this same projection, seeded with
+// theaterBlockLayers — the Bench's five keys, which is exactly the three above
+// plus the two [BR2-8] removed — through resolveBlockLayers, so the switchboard
+// still wins there too. The embed below is byte-unchanged and stays glanceable,
+// which was the whole point of the trade. One calendar shown two ways.
+//
+// THE SWITCHBOARD ROUTE ABOVE IS STILL THE ONLY WAY TO MAKE THE LEDGER
+// PERMANENT, and it still costs the Bench. The theater does not change that and
+// deliberately does not offer a second way to say the same thing ([TH-5]): it
+// is a transient answer to a click, with no state to persist.
 //
 // THE GEOMETRY WARNING THIS COMMENT USED TO CARRY WAS STALE, AND IT WAS
 // MEASURED RATHER THAN ASSUMED. It read: "the full-tier column arithmetic

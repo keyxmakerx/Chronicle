@@ -3894,16 +3894,17 @@ through a class instead of an inline style. `edShow` clears both, through the
 same writer `applyPlacement` uses; `placeCard` is still not touched. *A rig that
 measures a surface no user sees will report a spotless result about it.*
 
-### §28 — R2-3: the Block theater, and the mount that has nowhere legal to stand
+### §28 — R2-3: the Block theater — stopped on a refuted premise, re-signed, and built
 
 **ADR-048 GROWS A SECTION; calendar-v4 DOES NOT FORK AN ADR.** C-CALV4-THEATER
-(round 2, slice R2-3) is the slice that was to give the depth [BR2-8] took off
-the entity embed back through an overlay. **Its seventeen coordinator rulings
-were all signed on 2026-08-07 and it did NOT build, because [TH-14] — the block
-that rules where the scaffold sits in the entity page's DOM — names a
-STOP-AND-FLAG whose condition is, measured, TRUE.** This section records the
-founding distinction the slice rests on and the measurement that stopped it, so
-that whoever re-signs it starts from a fact rather than from the scout's premise.
+(round 2, slice R2-3) gives the depth [BR2-8] took off the entity embed back
+through an overlay. **It ran in two passes.** The first stopped without building,
+because [TH-14] — the block that rules where the scaffold sits in the entity
+page's DOM — named a STOP-AND-FLAG whose condition was, measured, TRUE. The
+coordinator then **RE-SIGNED [TH-14] on 2026-08-08**, replacing its third
+constraint against the measurement, and the second pass built the slice. Points
+1-3 below are the founding facts, unchanged across both passes; 4-5 are the stop
+and why it was right; 6-8 are the re-sign and what shipped.
 
 **1. THERE ARE TWO THINGS CALLED "FULL TIER", AND THIS IS THE FOUNDING FACT.**
 The **CSS tier** is a container query and nothing else —
@@ -3963,7 +3964,8 @@ component. **Measured on this branch, that premise is false.**
 level above anything `entity_calendar_block.templ` can emit. Every position
 reachable from the files R2-3 owns is inside it, and reaching outside means
 editing either `internal/app/routes.go` beyond [TH-12]'s single registry line or
-the four-widget `BlockHost` seam. **Both are host restructures. The slice stops.**
+the four-widget `BlockHost` seam. **Both are host restructures. The first pass
+stopped there**, and the block was wrong rather than the builder.
 
 **5. THE THING THAT MAKES THIS WORTH WRITING DOWN RATHER THAN JUST RE-TRYING.**
 The failure [TH-14] names — *"a theater that opens once and then stops opening,
@@ -3979,14 +3981,52 @@ share), or sign the in-swap placement explicitly with the re-init contract as it
 argument. **What must not happen is the placement arriving as an implementation
 detail.**
 
-**6. WHAT DID LAND.** Guard B4's scope glob, widened to `*theater*` / `*Theater*`
-with its `expect_scope` rows, mutation-tested in both directions. It follows the
-glob's own precedent — `*schedule*` was in scope before `schedule.templ` existed,
-because a missing glob is invisible in review precisely at the moment the file
-arrives — so the unblocking slice inherits B4 coverage instead of having to
-remember it. Nothing else was built: no scaffold, no second render, no module, no
-sheet, no route. `internal/wire/routes_snapshot.txt` is unchanged at **727**
-lines.
+**6. WHAT THE RE-SIGN CHANGED, AND THE SHAPE IT CHOSE.** [TH-14]'s constraint 3
+is REPLACED: **the scaffold MAY sit inside the swappable region.** The argument
+is point 5's, turned from a hesitation into a ruling — opener and scaffold share
+the swapped subtree, so they die and revive together, and [TH-12]'s
+`htmx:afterSettle` re-init rewires both; there is no state in which a live opener
+points at a dead scaffold. **The one residual risk is named and guarded rather
+than argued away:** a `<dialog>` that is OPEN when its subtree is swapped is
+removed from the DOM mid-modal, stranding the top layer, leaving the document
+scroll-locked and dropping focus on a detached node. Its **required counterpart**
+is an `htmx:beforeSwap` listener that closes the theater immediately when the
+swap target contains it, pinned by `test/js/theater_swap_close.test.mjs`.
+Constraints 1 and 2 are unchanged, and both alternatives stay open: a later slice
+may move the scaffold above `BlockHost` or to the entity page's own template, and
+moving it RETIRES the guard rather than fighting it.
+
+**7. WHAT SHIPPED.** Six things, and the first pass's one: the scaffold
+(`theater.templ`) and its module (`calendar_theater.js`, mounted through the
+`pluginBodyScripts` registry — [TH-12], because
+`tools/page-script-allowlist.txt` pins `entity_calendar_block.templ` at exactly
+one page-side script and the ratchet fails above as well as below); the second
+full-tier RENDER of the one projection; the DOM re-namespace and the
+no-duplicate-`id` pin; the `Expand` control; the register consumed through a
+second scope root plus two named rules in the ONE register section; and the
+no-wider law pinned by reflect. The switchboard is suppressed on the copy
+([TH-13]) as a real absence at the producer rather than CSS hiding. Guard B4's
+scope glob had already landed in the first pass, following its own `*schedule*`
+precedent of arriving ahead of the surface.
+`internal/wire/routes_snapshot.txt` is unchanged at **727** lines and no
+migration was created.
+
+**8. THE PRECEDENT THAT WASN'T, AND WHY IT MATTERED.** [TH-3] was drafted citing
+`/schedule` as the shipped precedent for consuming the disclosure register from
+outside the Bench. **It is not one.** `/schedule` carries
+`class="cal-bench cal-schedule"` and links the sheet, but it contains no
+`<details>`, no `.disc` and no `::details-content`, and
+`TestScheduleCSS_MotionIsTheSanctionedRegisterAndNothingElse` polices it by
+BANNING `--disc-open` there rather than admitting it. **It inherits the TOKENS
+and has never consumed a RULE.** Had the slice copied it faithfully, the theater
+would have carried three duration tokens and no motion at all — with
+`calendar-theater.css` forbidden to declare a transition and `calendar-bench.css`
+on the do-not-touch list — while every guard in the tree stayed green. The real
+precedent is the DAY CARD, which added its two rules by name inside the one
+register section; the theater does the same. **The general lesson is the one this
+arc keeps re-learning: a precedent is what a surface DOES, not what it is
+CLASSED as, and the difference is only visible if somebody greps for the rule
+rather than for the class.**
 
 ### References
 

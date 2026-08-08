@@ -13,8 +13,9 @@
 
 Round 2 adds no data, no zone and no engine. **Five slices** — R2-2a and R2-2b
 are two stages of ONE slice, which is why the count below reads five and not six.
-**Four have landed** (R2-1, R2-2, R2-4, R2-5); **R2-3 is blocked on a coordinator
-re-sign and delivered no product code.**
+**All five have landed.** R2-3 stopped without building on its first pass
+(a signed STOP-AND-FLAG whose condition was measured TRUE), was unblocked by a
+coordinator re-sign of [TH-14] on 2026-08-08, and shipped on its second.
 
 **THE ROUND'S END STATE, in one line: it removed nothing.**
 `internal/wire/routes_snapshot.txt` is byte-identical at **727 lines** across
@@ -29,7 +30,7 @@ four** (§0b).
 | **R2-1** — `C-CALV4-BENCH-R2` | the disclosure primitive + register, the page measure, the two-column RSVP panel, the glanceable entity seed | **[x] shipped 2026-07-30** |
 | **R2-2a** — the day card + the editor's mechanism | click a day, unfold a card, create/edit an event against the SHIPPED event API. **Consumed R2-1's disclosure register in place** — it stayed in `calendar-bench.css` and the card's two rules were added by name inside the same reduced-motion wrapper, reusing all three `--disc-*` tokens; the speculative shared sheet was never built ([DC-6] SIGNED, first-lander clause). **Round-2 fix-forward (stages 7-8):** the editor's PUT now round-trips `is_recurring` / `recurrence_type` / `recurrence_interval` — omitting a VALUE-typed bool is a write of false, so a title-only save was un-repeating recurring events; and the payload + stylesheet guards now derive their inventories from the type and the braces rather than from a hand-written sample. **[x] shipped 2026-07-31** |
 | **R2-2b** — `C-CALV4-EDITOR-R2b` | the editor's full §5 chrome pass, **the signed editor-morph carve-out**, and **drag-create**. The stage-2 mechanism kept every `data-de-*` handle and every request body while its controls were replaced ([ER-10]). **The recurrence unit list is corrected in three directions:** the week unit is not invention and its chip came off (`weekly` MEANS every tenday on a ten-day calendar — DAYCARD §5 and the mockup are both wrong); `year` is invention offered unchipped and does not ship; and NEW — `every N months` degrades silently because `OccursOn`'s monthly branch ignores the interval, so that control is ABSENT rather than chipped. **The morph is geometric, one named class, four properties, no new token, no scale**, inside the ONE register section — `TestDayCardCSS_CarriesNoMotionOfItsOwn` is byte-unchanged, which is the proof the register did not fork. **[ER-5]'s width was MEASURED and disagreed with the prediction:** every candidate holds 0 px² overlap, so the shipped 760px is bounded by where the popover survives rather than by where it occludes; the drawing's ~1008px cannot sit beside a 300px docked Ledger inside an 1180px measure. **Drag-create landed, not severed**, on all seven [DC-11] terms with revertibility verified by deleting the commit. **Two fix rounds, both fix-forward:** round 1 closed six findings in the build and its guards; round 2 closed three that were entirely about the EVIDENCE and touched no product code — the editor's `.ed-body` FOLDS at 620px and the desktop shots were cut off at it, every shot was CREATE mode while 21 of the 22 gating stills are EDIT mode (because the shared fixture projects with no events, so no card ever had a row to Edit), and §10's 24px-floor and horizontal-fold rows were handed to a screenshot gate that measured neither. `daycard_floors_probe_test.go` now performs them. **Headless Chromium here clamps the window to a 500px minimum width**, so every 390px artefact renders in a nested browsing context and says so on its face. **[x] shipped 2026-08-02** |
-| **R2-3** — the Block theater | expand any embed to a full-tier overlay. **This is where the depth R2-1 removed from the entity embed comes back.** R2-1 deliberately shipped NO substitute — no expand chip, no "show more", no second embed — because a stopgap becomes the thing R2-3 has to delete. **BLOCKED on [TH-14], and the block is a MEASUREMENT rather than an opinion:** the scaffold must sit outside every `.cal-block-host`, inside a `cal-bench` root **and outside any HTMX-swappable region**, and no such position exists in the files the slice owns. `calendar_widget_type.go:152` wraps *all* of `EntityCalendarBlock` in `widgetbindings.BlockHost`, and `picker.templ` swaps that wrapper with `hx-swap="outerHTML"` on three live Scribe+ paths (bind `:99`, create `:54`, unbind `:80`) — so the swapped region is the whole component, one level above anything `entity_calendar_block.templ` can emit. [TH-14] rules that case *"a host restructure, not a placement, and not this slice's to take"*. The seventeen rulings otherwise stand and the design work is banked in ADR-048 §28: the two-things-called-full-tier distinction, the one-projection/two-renders measurement, and the `(CalendarSlug, HostEntity)` re-namespace. **Needs a coordinator re-sign of [TH-14] against the true swap target** — its own measurement cites the picker's inline slot at `entity_calendar_block.templ:61`, which is not the swap target. | [ ] **blocked — re-sign [TH-14]** |
+| **R2-3** — `C-CALV4-THEATER` | expand the entity embed to a full-tier overlay. **This is where the depth R2-1 removed comes back — in the THEATER rather than in the embed, which is the slice's whole thesis and not a side effect.** An `Expand` button beside the header anchor opens a top-layer `<dialog>` carrying a SECOND render of the SAME projection: `Layers` is a post-hoc display gate (`entity_calendar_block.go:253`) and the host passes neither `LedgerHidden` nor `ShelfHidden`, so the theater's Block is a struct COPY — one projection, two renders, zero extra service work — seeded with the Bench's five keys through `resolveBlockLayers`, so the switchboard still wins. The copy re-namespaces `Viewer.HostEntity`, which is CORE: every id and radio-group name is a pure function of `(CalendarSlug, HostEntity)`, so without it the theater's tie toggle is dead and pressing it re-inks the embed behind the backdrop. The embed keeps the one switchboard ([TH-13], a real absence at the producer, never CSS hiding). Motion is the ONE register's: two rules by name inside `calendar-bench.css`'s single reduced-motion wrapper, as the day card's are — **`/schedule` was NOT the precedent it was drafted as**, it inherits the tokens and consumes zero rules. The module mounts through `pluginBodyScripts` ([TH-12]), never a page `<script src>`. **[TH-14] was RE-SIGNED 2026-08-08** — the scaffold sits inside the swappable region deliberately, with an `htmx:beforeSwap` close as its required counterpart. Zero routes: snapshot byte-identical at **727**. Split out and booked: `C-CALV4-THEATER-DAYCARD`, `C-CALV4-DASH-BLOCK-V4`. | [x] **shipped 2026-08-08** |
 | **R2-4** — `C-CALV4-V2SUNSET`, the V2 sunset / the anonymous-public route move | **the LINKS, not the shell.** ~20 live doors re-pointed at the Bench, six redirect targets re-aimed, two labels that named the version stopped, and `GET /apps/calendar` moved onto the public-capable group with `RequireViewAccess()` — the gap booked three times, closed. **[VS-10] signed as option (b): the route move was committed FIRST**, so no commit in the stack ever pointed a swept door at an authenticated-only route. **The shell is UNTOUCHED and REACHABLE BY URL: zero routes removed, zero files deleted, snapshot byte-identical at 727.** The dispatch's own door table was stale in BOTH directions — two of its rows are unrouted dead code (`app_dashboard.templ`, booked as `C-CAL-DASH-DEADCODE`) and eight live doors were missing, including the Bench's own four and the two EGRESS doors (RSVP notification email, global search). **The shell's DELETION IS SIGNED BY THE OPERATOR ([VS-1], 2026-08-07) — the question is WHEN, not WHETHER** — and it is `C-CALV4-SHELL-REMOVAL`'s, behind four boxes. **[x] shipped 2026-08-08** |
 | **R2-5** — `C-CALV4-SKY`, the sky header | **a designed header band, beautiful closed, expanding into the almanac — NOT a button.** Sixteen signed blocks. **The founding measurement overturned the arc's own premise: the dashed `.skyband` placeholder was reserving a seat on the WRONG BLOCK.** It rendered on the REAL-WORLD Block, whose Almanac is empty for two independent reasons (the register's gate names the Shelf and that Block renders `noShelf`; the service's real-life create path seeds no moons, no seasons, no eras), so a sky there would have carried a gradient and a clock and nothing else, forever. The sky seats on the Bench's **PRIMARY** Block — one sky per surface — and the placeholder is DELETED from all three hosts, with a **two-directional** guard because nothing pinned it and its deletion was invisible to the whole battery. **[SKY-2] was the operator's, not the coordinator's:** the signed stills seat the band INSIDE the Block's box and the signed disclosure register said the Block's interior stays still — two operator signatures in collision. The operator amended clause 4 **by name, one sentence**, and the monopoly guard gained a **per-class exemption for `.skygrow`** with its forbidden-ancestor list **byte-unchanged**; it is renamed `TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` because a guard whose name claims a lost monopoly teaches the wrong law. **Seven transitioned properties and no eighth; exactly three `--disc-*` tokens, byte-unchanged**, with four `--sky-phase-*` sequencing tokens whose sums the guard asserts equal the two totals. Reduced motion is STRUCTURAL — one wrapper, no `reduce` block, no `!important`. The density switch is **`@container cal-block` at the Block's existing `min-width: 481px`**, so a Block in a narrow COLUMN seals on a wide VIEWPORT — intended, reported, not corrected. **The three counts are measured against the SHIPPED element in a real browser:** closed band **40 / 40 / 32px** against **44 / 44 / 36**, read twice independently; anchored-edge travel **0.0px** on all three facts at all three widths (the drawing pass's 65px clock slide is not reproduced); discs **13→40px / 11→32px** with **33.8% / 32.8%** below the horizon; **3** controls. **NO SUNRISE AND NO SUNSET IN ANY FORM** — Chronicle persists neither, and the mock's own pane head line ("Sunset 19:58") is the FIRST of TWO signed stills this build cannot reproduce under the guards, flagged rather than approximated. **FIX ROUND (stage 10):** the adversarial verifier found TWO further divergences from the same still, written down NOWHERE — the muted sub-head line was ABSENT (a differently-worded `.skynote` sat at the bottom of the Tonight panel instead) and the per-moon row was a two-item flex carrying r53's merged register sentence rather than the stills' four aligned columns. **Both were reproducible under every shipped guard and are now built.** The sub-head's *"in shadow"* half is the SECOND still-not-reproducible — `calendar.Moon` has no eclipse-node column, so the mock's `nodeWindow()` has nothing to read — and is dropped, asserted absent by name, and flagged. **The lesson: [SKY-5]'s ENUMERATED fidelity gate was fully met and probe-measured, and the enumeration is a FLOOR rather than the gate.** A standing DIVERGENCE REGISTER now lives in the plugin `.ai.md`. **[x] shipped 2026-08-08 · fix round 2026-08-08** |
 
@@ -96,6 +97,74 @@ is carried, not closed, and the first row is the one the rest hang off.
       it is already signed. **Two prerequisites get new slices and the third is
       already covered — never three. Do not book a fourth.**
 
+## 0d. C-CALV4-THEATER (R2-3) — what it BOOKED (2026-08-08)
+
+The theater shipped in five stages after [TH-14]'s re-sign. **These are the
+items it deliberately did NOT carry**, each named rather than left as an
+implication, plus the live-client checks a headless build cannot run.
+
+- [ ] **`C-CALV4-THEATER-DAYCARD` — wire the day card into the theater.**
+      **Safe by construction today, and that is the thing to preserve.**
+      `calendar_daycard.js` rides the same body-script registry the theater's
+      module does, so it is ALREADY LOADED on every entity page; it is dormant
+      only because `init()` requires both `[data-cal-daycard]` and
+      `[data-cal-daycard-payload]` and `cellFrom` resolves a Block by
+      `closest('[data-bench-block]')`. The theater emits none of the three and
+      `TestTheater_EmitsNoneOfTheDayCardsThreeMarkers` keeps it that way.
+      **That slice inherits a geometry probe**: it would be the first surface in
+      the product with TWO Ledgers on one page, which is exactly where
+      `C-CALV4-CARD-CROSSBLOCK-LEDGER` lives. It also inherits the
+      two-Blocks-one-`dayKey`-namespace hazard — both Blocks emit the same
+      `data-day`, so its queries must be scoped to one Block. Enter it by
+      CHOICE, in its own slice, with its own measurement.
+- [ ] **`C-CALV4-DASH-BLOCK-V4` — the campaign dashboard's calendar block is
+      still the V1 embed.** `dashCalendarFull` HTMX-loads
+      `GET /campaigns/:id/calendars/embed` → `EmbedCalendar` →
+      `CalendarEmbedFragment`, i.e. `calendar.templ`, not a v4 Block. **There is
+      nothing there to expand into a theater**, and the swap is its own change.
+      Booked, not smuggled.
+- [ ] **The Bench mount stays unbuilt, deliberately.** The Bench's own Block
+      already measures ≥ 900 at 1440 and 1920, so a theater there expands full
+      tier into full tier — and the Bench stacks N Blocks, so a Bench theater is
+      N theaters. `unused` is a lint at zero here and premature sharing is a lint
+      everywhere else: **do not pre-build the mount.** The eight-line mount
+      contract is in `internal/plugins/calendar/.ai.md` for whoever does.
+- [ ] **[TH-13] IS REVERSIBLE, AND IS WRITTEN DOWN AS REVERSIBLE.** The EMBED
+      keeps the switchboard and the theater renders without one. A later slice
+      may flip it — give the theater the switchboard and suppress the embed's —
+      or teach the widget to share one instance across two Blocks. **That would
+      be a real design change with its own signature, not a fix.**
+- [ ] **`_tokens.css` re-sign pass — BOOK, do not patch per file.** Two
+      inherited contract defects meet this surface too:
+      `color-mix(in oklch, var(--surface-card) 96%, var(--accent))` drifting pink
+      in light, and `.fog{background:var(--surface-inset)}` making fogged days
+      *lighter* than known days in dark. The theater is at least the fifth
+      consumer. **A per-file patch here would be the fifth divergence.**
+- [ ] **LIVE-CLIENT CHECKS THE HEADLESS BUILD CANNOT RUN.** Every one of these
+      was recorded as UNEXECUTABLE while the slice was blocked; they are
+      executable now. Open the theater from an entity page and confirm: it is in
+      the TOP LAYER over the whole page; focus is CONTAINED while open and
+      returns to the `Expand` button on all four close paths (button, Escape,
+      backdrop, and an HTMX binding swap driven from elsewhere); the theater's
+      TIE TOGGLE drives the theater's own Block and not the embed behind the
+      backdrop (the re-namespace, visually); the theater's Block carries NO `⋯`
+      switchboard while the embed's still does; `.cal-block-host` inside the
+      theater measures **≥ 900** at 1920 / 1440 / 1024 (the sheet's arithmetic
+      says 1156 / 1156 / 976, and a browser is the only thing that can confirm
+      it); the theater scrolls its own content region with the close control
+      reachable without scrolling at a **768px-high** viewport; the page behind
+      does not scroll; at **390** and **358** it is full-bleed with the zones
+      stacked and no horizontal overflow; and under
+      `prefers-reduced-motion: reduce` it opens and closes INSTANTLY AND
+      COMPLETELY with no partial frame.
+- [ ] **ONE CONTAINER-QUERY CLAIM IS REASONED, NOT OBSERVED, AND IT IS THE ONE
+      TO CHECK FIRST.** A closed `<dialog>` is `display: none`, so its container
+      queries do not compute; the theater's Block must therefore resolve to FULL
+      tier **the moment the dialog opens**, at ≥900px of host, **without a
+      visible reflow frame**. That cannot be measured headlessly and was not.
+      If a reflow frame IS visible, it is a finding to report, not a fix to
+      improvise — the register's 200ms open would need to sequence around it.
+
 ## 0c. What the R2-5 fix round leaves on the COORDINATOR's desk (2026-08-08)
 
 None of these is a build task. Each is a signature, a re-sign, or an edit to an
@@ -135,23 +204,26 @@ round's failure mode was disclosure that never travelled.
       Exactly two shipped; a third is coded as a STOP-AND-FLAG in the struct
       comment. **The checklist sentence appears to be the GAMEREADY-slice bound
       carried into a slice that carves it out.**
-- [ ] **RE-SIGN [TH-14] (R2-3, the theater) — it delivered NO product code.**
-      Independently re-measured and the refutation holds:
-      `calendar_widget_type.go:152` wraps the ENTIRE output of
-      `EntityCalendarBlock` in `widgetbindings.BlockHost`, and `picker.templ`
-      targets that id with `hx-swap="outerHTML"` on three live Scribe+ paths
-      (create `:54-55`, unbind `:80-81`, bind `:99-100`). [TH-14]'s own
-      measurement cites `entity_calendar_block.templ:61` — the
-      `BindingAffordance` slot, an `hx-swap="innerHTML"` INNER target, not the
-      swap target. THEATER's "Do not touch" names `internal/app/routes.go`
-      explicitly. **So no position reachable from the slice's Files-you-own is
-      outside an HTMX-swappable region, and 16 of 17 blocks dropped.** The
-      round's own verification checklist item — drive the theater in a real
-      browser for top-layer, focus containment, Escape, focus return, DOM
-      re-namespace, tie-toggle target, switchboard absence, 60px inset,
-      own-scroll-region — **was UNEXECUTABLE: there is nothing to open.** Zero
-      theater artefacts exist on disk and there is no orphan or half-built code.
-      **This needs a re-sign, not a re-run.**
+- [x] **RE-SIGN [TH-14] (R2-3, the theater) — DONE 2026-08-08, and the slice
+      then BUILT.** The coordinator re-signed [TH-14] against the true swap
+      target and **REPLACED constraint 3**: the scaffold MAY sit inside the
+      HTMX-swappable region, because opener and scaffold share that subtree and
+      die and revive together, and [TH-12]'s `htmx:afterSettle` re-init rewires
+      both — so the "opens once and then stops opening" failure the constraint
+      was written to prevent cannot occur. **Its required counterpart shipped
+      with it:** an `htmx:beforeSwap` listener that closes the theater when the
+      swap target contains it, pinned by `test/js/theater_swap_close.test.mjs`
+      (a dialog removed from the DOM mid-modal strands the top layer, keeps the
+      page scroll-locked and drops focus on a detached node). Constraints 1 and
+      2 unchanged. The refutation that forced the re-sign was correct and is
+      recorded in ADR-048 §28 point 4: `calendar_widget_type.go:152` wraps the
+      ENTIRE output of `EntityCalendarBlock` in `widgetbindings.BlockHost` and
+      `picker.templ` targets that id with `hx-swap="outerHTML"` on three live
+      Scribe+ paths, while [TH-14]'s own measurement cited the
+      `BindingAffordance` slot — an `hx-swap="innerHTML"` INNER target. **The
+      first pass stopping was the correct outcome, and it is why the second pass
+      started from a fact.** The live-browser verification checklist the round
+      recorded as UNEXECUTABLE is now executable and is carried below.
 - [ ] **FIX A STALE CROSS-REFERENCE IN AN OPERATOR-SIGNED ARTEFACT (outside
       this repo).**
       `Cordinator/decisions/2026-07-29-motion-disclosure-register.md` clause 4's

@@ -50,17 +50,22 @@ Arithmetic for that slice, pre-computed so it never regenerates until green:
 **727 → 722**. State removals and additions separately — a net count hides a
 swap. `.ai/todo.md` §0b holds the derivation and the traps.
 
-**ONE SLICE DELIVERED NO PRODUCT CODE, AND THAT IS THE CORRECT OUTCOME.** R2-3
-stopped at [TH-14] on a refuted premise, not on difficulty (below). Sixteen of
-its seventeen rulings are undelivered and the seventeenth — the B4 scope glob —
-shipped alone. It is **awaiting a coordinator re-sign**, and the design work is
-banked in ADR-048 §28 rather than lost. A slice that stops at a signed
-STOP-AND-FLAG has done its job; a slice that improvises past one has not.
+**ONE SLICE STOPPED WITHOUT BUILDING, WAS RE-SIGNED, AND THEN SHIPPED.** R2-3's
+first pass stopped at [TH-14] on a refuted premise, not on difficulty (below) —
+sixteen of its seventeen rulings undelivered, the seventeenth (the B4 scope
+glob) shipped alone. The coordinator **re-signed [TH-14] on 2026-08-08**,
+replacing its third constraint against the measurement the stop produced, and
+the second pass built the slice in five stages. **A slice that stops at a signed
+STOP-AND-FLAG has done its job; a slice that improvises past one has not** — and
+the record here is that stopping is what got the block corrected.
 
 **WHAT A GM CAN DO NOW THAT THEY COULD NOT.** Reach the v4 calendar of a public
 campaign while logged out; land on the Bench from every door in the product
-instead of the legacy shell; and read the sky — in-world time, moon phases and
-tonight's celestial register — on the Bench's Primary Block. **What V2 still
+instead of the legacy shell; read the sky — in-world time, moon phases and
+tonight's celestial register — on the Bench's Primary Block; and **expand any
+entity page's calendar embed into a full-tier surface over the page they are
+on**, without navigating anywhere and without changing what the embed looks like
+tomorrow. **What V2 still
 solely owns:** the week view, the day view, and the GM world-state console. All
 three are the gate above, and all three are why the shell is still standing.
 
@@ -254,41 +259,94 @@ door the dispatch moves by name. **A stated feature loss rides with them:**
 and day views in the product live inside the shell — that is what
 `C-CALV4-WEEKDAY-VIEWS` exists to fix, and it is a PREREQUISITE of the removal.
 
-### calendar-v4 R2-3 — C-CALV4-THEATER STOPPED AND FLAGGED at [TH-14] (2026-08-08)
+### calendar-v4 R2-3 — C-CALV4-THEATER: stopped, re-signed, SHIPPED (2026-08-08)
 
-**The Block theater did not build, and the reason is a measurement rather than a
-difficulty.** All seventeen coordinator rulings were signed 2026-08-07. [TH-14]
-requires the theater's scaffold to sit **outside every `.cal-block-host`**,
-**inside a `cal-bench` root** and **outside any HTMX-swappable region**, and
-rules that if the only position satisfying all three is inside the swapped
-region, that is *"a host restructure, not a placement, and it is not this
-slice's to take."*
+**Read the first paragraph even if you only want to know what the feature does,
+because the sequence is the point.** All seventeen coordinator rulings were
+signed 2026-08-07. [TH-14] required the scaffold to sit outside every
+`.cal-block-host`, inside a `cal-bench` root **and outside any HTMX-swappable
+region**, and ruled that if no position satisfies all three, that is *"a host
+restructure, not a placement, and not this slice's to take."* **Measured, the
+condition was met** — `calendar_widget_type.go:152` wraps the ENTIRE output of
+`EntityCalendarBlock` in `widgetbindings.BlockHost`, and `picker.templ` targets
+that wrapper with `hx-swap="outerHTML"` on three live Scribe+ paths, so the
+swappable region is the whole component, one level above anything the slice can
+emit; [TH-14]'s own measurement cited the picker's inline `innerHTML` slot.
+**The first pass stopped and flagged.** The coordinator re-signed [TH-14] on
+2026-08-08, **replacing constraint 3**, and the second pass built the slice.
 
-**Measured on this branch, that condition is met.**
-`calendar_widget_type.go:152` wraps the ENTIRE output of `EntityCalendarBlock` in
-`widgetbindings.BlockHost(WidgetTypeCalendar, rc.HostID, inner)`, and
-`picker.templ` targets that wrapper — `hx-target={"#" + BlockHostID(...)}`,
-`hx-swap="outerHTML"` — on three live Scribe+ paths (bind `:99`, create `:54`,
-unbind `:80`). So the swappable region is the whole component, one level ABOVE
-anything `entity_calendar_block.templ` can emit. **[TH-14]'s own measurement
-cites `entity_calendar_block.templ:61`, the picker's inline SLOT** — it took the
-swap target to be a small nested slot with safe ground beside it. That premise is
-refuted, which is why this needs a coordinator re-sign rather than a retry.
+**WHAT THE RE-SIGN RULED.** The scaffold MAY sit inside the swappable region:
+opener and scaffold share that subtree, so they die and revive together and
+[TH-12]'s `htmx:afterSettle` re-init rewires both — there is no state in which a
+live opener points at a dead scaffold. **Its required counterpart shipped with
+it:** an `htmx:beforeSwap` listener that closes the theater immediately when the
+swap target contains it, because a `<dialog>` removed from the DOM mid-modal
+strands the top layer, keeps the document scroll-locked and drops focus on a
+detached node. Constraints 1 and 2 unchanged.
 
-**What landed:** guard B4's scope glob widened to `*theater*` / `*Theater*` with
-its `expect_scope` rows, mutation-tested in both directions — the glob follows
-its own `*schedule*` precedent of landing ahead of the surface, so the unblocking
-slice inherits B4 coverage. **What did not:** no scaffold, no second render, no
-module, no sheet, no registry line, no route.
-`internal/wire/routes_snapshot.txt` unchanged at **727** lines.
+**WHAT THE FEATURE IS.** An `Expand` button beside the embed's header anchor
+opens a top-layer `<dialog>` carrying a **second render of the same
+projection**, seeded with the Bench's five layer keys. The embed behind it is
+byte-unchanged and stays glanceable. **One calendar shown two ways** — the depth
+[BR2-8] removed comes back in the theater rather than in the embed, which is the
+slice's thesis rather than a side effect.
 
-**The design work is banked in ADR-048 §28** so the re-sign starts from facts:
-the two-things-called-full-tier distinction (widening a box buys the CSS tier and
-none of the zone set), the one-projection/two-renders measurement (`Layers` is a
-post-hoc display gate at `entity_calendar_block.go:253`, so the theater's Block is
-a struct copy and the no-wider law pins structurally by reflect), and the
-`(CalendarSlug, HostEntity)` duplicate-id collision that makes the DOM
-re-namespace core rather than polish.
+**THE THREE FACTS A LATER SLICE NEEDS.**
+
+1. **There are two things called "full tier."** The CSS tier is a container
+   query and widening a box buys all of it; the ZONE SET is the producer's and
+   widening buys none of it. A wide overlay around the embed's Block would be a
+   *stretched glanceable month*, not a full-tier Block.
+2. **One projection, two renders.** `Layers` is assigned post-hoc
+   (`entity_calendar_block.go`), and the host passes neither `LedgerHidden` nor
+   `ShelfHidden`, so the projection the page already holds contains every mark
+   the theater prints. The theater's Block is a struct COPY — zero extra service
+   work — and the no-wider law is pinned STRUCTURALLY by a reflect assertion
+   over every exported field of `BlockData` rather than by a mark-set oracle,
+   which would have compared a struct to itself and passed forever.
+3. **The DOM re-namespace is core, not polish.** Every id and radio-group name
+   the Block emits is a pure function of `(CalendarSlug, Viewer.HostEntity)`, so
+   two Blocks for one calendar emit identical ones and the theater's tie toggle
+   would be visibly dead while pressing it re-inked the embed behind the
+   backdrop. The copy sets `HostEntity` to a distinct token AFTER the projection
+   has run, so no widget file is opened.
+
+**TWO EXISTING TESTS WERE RE-SCOPED RATHER THAN SOFTENED**, and it is the same
+move both times: `TestEntityCalendarBlock_HostLayerSet` and
+`TestLedgerGeometry_WithoutLedgerThereIsNoLedgerDOMToLeaveAVoid` asserted
+whole-page that no `data-zone` rendered. That claim was always about the EMBED;
+the page now carries two Blocks. Each negative is now scoped to the embed's
+subtree **and paired with the positive in the theater's** — absent here, present
+there — which is strictly stronger than the single negative it replaces.
+
+**`/schedule` WAS NOT THE PRECEDENT [TH-3] WAS DRAFTED ON**, and this is worth
+carrying because it nearly shipped a silent nothing. It carries
+`class="cal-bench cal-schedule"` and links the sheet, but it has no `<details>`,
+no `.disc` and no `::details-content`, and its own guard BANS `--disc-open`
+there. It inherits the register's TOKENS and consumes zero of its RULES. Copying
+it faithfully would have given the theater three duration tokens and no motion
+at all — `calendar-theater.css` is forbidden to declare a transition — with
+every guard in the tree green. The real precedent is the DAY CARD, and the
+theater's two rules sit by name inside the ONE register section beside it.
+
+**NUMBERS.** `internal/wire/routes_snapshot.txt` **unchanged at 727 lines**; no
+migration; `internal/widgets/calendar_block/**` untouched; `internal/app/routes.go`
+**one added line** (the `pluginBodyScripts` registry entry — [TH-12], because
+`tools/page-script-allowlist.txt` pins the templ at exactly one page-side script
+and the ratchet fails above as well as below). The theater's total horizontal
+inset around `.cal-block-host` is **48px** against [TH-1]'s 60px budget, giving
+**976px** at a 1024 viewport and **1156px** at the 1180 cap — both over the 900px
+full-tier floor, and both computed by a test from the sheet's own numbers rather
+than asserted. `static/css/calendar-bench.css` is **96,811 bytes** and is now
+linked on a third page.
+
+**Split out and booked:** `C-CALV4-THEATER-DAYCARD` (the day card inside the
+theater — it would be the first surface with two Ledgers on one page, which is
+where `C-CALV4-CARD-CROSSBLOCK-LEDGER` lives) and `C-CALV4-DASH-BLOCK-V4` (the
+campaign dashboard's calendar block is still the V1 embed, so there is no v4
+Block there to expand). `C-CALV4-DAYPICK-A11Y` **stays open**: the theater's
+five-key seed makes days focusable INSIDE itself, which is a genuine and
+unplanned accessibility improvement, but the embed behind it still has the gap.
 
 ### calendar-v4 — C-CALV4-GAMEREADY CLOSED: the calendar survives a real session (2026-08-08, stage 23)
 
