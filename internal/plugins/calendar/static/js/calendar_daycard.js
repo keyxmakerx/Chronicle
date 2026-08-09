@@ -3218,11 +3218,20 @@
 
     function report(msg) { if (say) say.textContent = msg; }
 
-    function fieldInt(sel, fallback) {
+    // AN EMPTIED BOX IS NOT A ZERO. This row shipped reading the Year field
+    // through a fieldInt helper whose fallback was zero, so a GM who cleared
+    // the field and pressed Set date moved the world to year 0 — 200, stored,
+    // no error. The V2 console had the identical fallback; a parity sweep found
+    // both. The fallback cannot be made "smarter" by picking a better number,
+    // because year 0 and negative years are LEGITIMATE on a fantasy calendar:
+    // the only correct behaviour is to refuse a coordinate that is not there
+    // and say which one. A typed "0" still parses and is still sent.
+    function coordOrNull(sel) {
       var el = row.querySelector(sel);
-      if (!el) return fallback;
-      var n = parseInt(el.value, 10);
-      return isNaN(n) ? fallback : n;
+      if (!el) return null;
+      var raw = String(el.value == null ? '' : el.value).trim();
+      if (raw === '' || !/^-?\d+$/.test(raw)) return null;
+      return parseInt(raw, 10);
     }
 
     function commit(body, btn) {
@@ -3268,13 +3277,23 @@
       }
       var set = ev.target.closest('[data-bench-date-set]');
       if (set) {
-        commit({
-          time: {
-            year: fieldInt('[data-bench-date-year]', 0),
-            month: fieldInt('[data-bench-date-month]', 1),
-            day: fieldInt('[data-bench-date-day]', 1),
-          },
-        }, set);
+        var want = [
+          { key: 'year', sel: '[data-bench-date-year]', label: 'Year' },
+          { key: 'month', sel: '[data-bench-date-month]', label: 'Month' },
+          { key: 'day', sel: '[data-bench-date-day]', label: 'Day' },
+        ];
+        var time = {};
+        for (var i = 0; i < want.length; i++) {
+          var v = coordOrNull(want[i].sel);
+          if (v === null) {
+            // The row's own aria-live line is the honest place for this: the
+            // GM sees which box is empty, and NOTHING is sent.
+            report(want[i].label + ' must be a whole number — the date was not changed.');
+            return;
+          }
+          time[want[i].key] = v;
+        }
+        commit({ time: time }, set);
       }
     });
   }

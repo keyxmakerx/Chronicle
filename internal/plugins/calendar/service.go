@@ -272,6 +272,15 @@ type WorldStateWeatherDate struct {
 	Day   int
 }
 
+// calMinStorableYear / calMaxStorableYear are the bounds of
+// `calendars.current_year INT` (migration 001). They are the ONLY limit on a
+// year: 0 and negative years are real years on a fantasy calendar, so this is a
+// storage bound and not a lore one. See the check in UpdateCalendar.
+const (
+	calMinStorableYear = -2147483648
+	calMaxStorableYear = 2147483647
+)
+
 // WorldStateTimeSet is a partial date/time set for SetWorldState. Pointer
 // fields distinguish "set to this value" from "leave unchanged".
 type WorldStateTimeSet struct {
@@ -815,6 +824,18 @@ func (s *calendarService) UpdateCalendar(ctx context.Context, calendarID string,
 	}
 	if input.CurrentDay < 1 {
 		return apperror.NewValidation("current_day must be at least 1")
+	}
+	// THE YEAR IS RANGE-CHECKED TOO, AND THE BOUND IS THE STORAGE, NOT LORE.
+	// Every other coordinate had a bound and the year had none, which is how an
+	// emptied Year box reached the database. The bound is NOT "year >= 1": year
+	// 0 and negative years are legitimate on a fantasy calendar (see
+	// BuildWorldStateSeed's header and the weather-on-date bounds check, and
+	// calendar_weather_on_date_test.go, which drives a negative year
+	// end-to-end). The only real limit is `calendars.current_year INT`, whose
+	// range a larger value silently blows out — a driver error and a 500 rather
+	// than an answer the caller can act on.
+	if input.CurrentYear < calMinStorableYear || input.CurrentYear > calMaxStorableYear {
+		return apperror.NewValidation("current_year is outside the range this calendar can store")
 	}
 	if input.CurrentHour < 0 || input.CurrentHour >= input.HoursPerDay {
 		return apperror.NewValidation("current_hour must be between 0 and hours_per_day - 1")

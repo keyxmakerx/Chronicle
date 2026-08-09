@@ -422,9 +422,17 @@ func TestPutDate_RoundTrip(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &echoed); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	want := apiDate{Year: 1493, Month: 3, Day: 15, Hour: 9, Minute: 45}
-	if echoed != want {
-		t.Errorf("echo mismatch: got %+v, want %+v", echoed, want)
+	// Year is a *int on the wire struct (absent must be distinguishable from
+	// zero — see apiDate's header), so the echo is compared field-by-field
+	// rather than by struct equality, which would compare pointer identity.
+	if echoed.Year == nil {
+		t.Fatalf("echoed year is absent; body=%s", rec.Body.String())
+	}
+	if got := (apiDate{Year: echoed.Year, Month: echoed.Month, Day: echoed.Day,
+		Hour: echoed.Hour, Minute: echoed.Minute}); *got.Year != 1493 ||
+		got.Month != 3 || got.Day != 15 || got.Hour != 9 || got.Minute != 45 {
+		t.Errorf("echo mismatch: got year=%d month=%d day=%d hour=%d minute=%d, "+
+			"want 1493/3/15 9:45", *got.Year, got.Month, got.Day, got.Hour, got.Minute)
 	}
 	if svc.calendar.CurrentMonth != 3 || svc.calendar.CurrentDay != 15 {
 		t.Errorf("service was not updated: cur month/day = %d/%d, want 3/15",

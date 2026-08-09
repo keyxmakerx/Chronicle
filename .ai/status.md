@@ -20,6 +20,31 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### An emptied Year field moved the world to year zero — FIXED (2026-08-09)
+
+A driven parity sweep, measuring in a browser against a real server, found that
+**clearing the Year input on the GM's Set date control and submitting silently
+moved the world to year 0** — 200, stored, no error. It reproduced in the legacy
+V2 console AND in the v4 Bench date-verb row shipped by `C-CALV4-GAMEREADY`
+(PR #588), both of which read the field with a `parseInt` fallback of 0. Every
+other coordinate was range-checked; year alone was not.
+
+**Year 0 is a legitimate year** on a fantasy calendar (this plugin says so in two
+places, and a negative year is already driven end-to-end in its tests), so the
+fix distinguishes ABSENT from ZERO rather than banning zero. Three places, all
+in the calendar plugin: `PUT /api/v1/…/calendar/date` (`apiDate.Year` is now a
+`*int`; an omitted year is refused — this was the server-side half no client fix
+reaches, and it is live for the Foundry module), the world-state PUT (its five
+date/time coordinates decode through `worldStateCoord`, which refuses a BLANK
+coordinate by name), and both browser writers (`coordOrNull` — refuse and say
+which box, never substitute). `UpdateCalendar` now range-checks the year against
+the `INT` column, a storage bound and explicitly not a `year >= 1` floor.
+
+Pinned by `internal/plugins/calendar/year_absent_test.go`, including two
+**headless-Chromium** probes over the real rendered surfaces and the real shipped
+JS. Full detail: `internal/plugins/calendar/.ai.md` § "An emptied Year field
+moved the world to year zero".
+
 ### calendar-v4 round 2 CLOSED — the three parity slices, and the one number that did not move (2026-08-08)
 
 **Read this before any other calendar-v4 entry.** R2-3 (`C-CALV4-THEATER`),

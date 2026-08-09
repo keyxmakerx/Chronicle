@@ -86,12 +86,23 @@ type apiCalendarSnapshot struct {
 
 // apiDate is the request and response body shape for
 // PUT /calendar/date. Echoed on success.
+//
+// YEAR IS A POINTER AND THE OTHERS ARE NOT, ON PURPOSE. Month and day are
+// already guarded by the `< 1` check in PutDate, so an absent one is refused
+// as 0. Year had no such floor — 0 and negative years are LEGITIMATE on a
+// fantasy calendar (BuildWorldStateSeed's header and the weather-on-date bounds
+// check both say so) — which meant a body that simply omitted `year` decoded to
+// 0 and moved the campaign to year 0 with a 200. There is no value-based rule
+// that can separate "the caller means year 0" from "the caller said nothing",
+// so the wire has to carry the difference. Live for the Foundry module, whose
+// push sites send `year: date.year`: an `undefined` from a calendar adapter is
+// dropped by JSON.stringify and arrives as an absent key.
 type apiDate struct {
-	Year   int `json:"year"`
-	Month  int `json:"month"`
-	Day    int `json:"day"`
-	Hour   int `json:"hour"`
-	Minute int `json:"minute"`
+	Year   *int `json:"year"`
+	Month  int  `json:"month"`
+	Day    int  `json:"day"`
+	Hour   int  `json:"hour"`
+	Minute int  `json:"minute"`
 }
 
 // apiEvent is the response shape for event GETs / POSTs / PUTs.
@@ -372,6 +383,13 @@ func (h *APIHandler) PutDate(c echo.Context) error {
 	if err != nil {
 		return h.respondError(c, err)
 	}
+	if req.Year == nil {
+		// Absent is not zero. Before this check an omitted year silently moved
+		// the world to year 0 — a GM's campaign date lost to a key that was
+		// never sent. Year 0 itself is still settable; send it explicitly.
+		return h.respondError(c, APIErrValidation(
+			"year is required — send it explicitly (year 0 is a valid year; omitting it is not)"))
+	}
 	if req.Month < 1 || req.Day < 1 {
 		return h.respondError(c, APIErrValidation("month and day must be 1-indexed (>= 1)"))
 	}
@@ -385,7 +403,7 @@ func (h *APIHandler) PutDate(c echo.Context) error {
 		Name:             cal.Name,
 		Description:      cal.Description,
 		EpochName:        cal.EpochName,
-		CurrentYear:      req.Year,
+		CurrentYear:      *req.Year,
 		CurrentMonth:     req.Month,
 		CurrentDay:       req.Day,
 		CurrentHour:      req.Hour,

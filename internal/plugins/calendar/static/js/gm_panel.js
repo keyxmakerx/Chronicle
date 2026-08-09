@@ -125,6 +125,48 @@
             return isNaN(n) ? fallback : n;
         }
 
+        // --- coordOrNull: an emptied box is NOT a zero -----------------------
+        //
+        // THE DEFECT THIS EXISTS TO PREVENT. `num(sel, 0)` read the Year field
+        // for Set date. A GM who cleared the box and pressed Set moved the world
+        // to year 0 — accepted, stored, no error, campaign date gone. `num`'s
+        // fallback is right for a control whose default is genuinely a number
+        // (the mood slider); it is wrong for a coordinate, where the fallback
+        // silently invents a date the GM never typed.
+        //
+        // WHY NOT JUST OMIT THE FIELD. Omitting it would preserve the stored
+        // year, which is quieter but still not what the GM asked for — they
+        // pressed Set date with a blank box, and the honest answer is to say so
+        // rather than to guess which of the two they meant.
+        //
+        // ZERO IS STILL SETTABLE. A typed "0" parses to 0 and is sent; only an
+        // EMPTY or unparseable box is refused. Year 0 and negative years are
+        // legitimate on a fantasy calendar, so this refuses absence, not a value.
+        function coordOrNull(sel) {
+            var el = panel.querySelector(sel);
+            if (!el) return null;
+            var raw = String(el.value == null ? '' : el.value).trim();
+            if (raw === '') return null;
+            if (!/^-?\d+$/.test(raw)) return null;
+            return parseInt(raw, 10);
+        }
+
+        // Reads the named coordinates, or reports the first empty one and
+        // returns null so the caller sends nothing at all.
+        function coords(fields) {
+            var out = {};
+            for (var i = 0; i < fields.length; i++) {
+                var v = coordOrNull(fields[i].sel);
+                if (v === null) {
+                    window.Chronicle.notify(fields[i].label +
+                        ' must be a whole number — the date was not changed.', 'error');
+                    return null;
+                }
+                out[fields[i].key] = v;
+            }
+            return out;
+        }
+
         // --- console state machine (r3, cordinator#33) -------------------
         // The console's visible state lives in THREE surfaces: data-gm-collapsed
         // (root), data-gm-sheet (root) and per-sheet [hidden] — plus aria on the
@@ -230,19 +272,27 @@
         var setTimeBtn = panel.querySelector('[data-gm-set-time]');
         if (setTimeBtn) {
             setTimeBtn.addEventListener('click', function () {
-                commit({ time: { hour: num('[data-gm-time-hour]', 0), minute: num('[data-gm-time-minute]', 0) } }, setTimeBtn);
+                var t = coords([
+                    { key: 'hour', sel: '[data-gm-time-hour]', label: 'Hour' },
+                    { key: 'minute', sel: '[data-gm-time-minute]', label: 'Minute' },
+                ]);
+                if (!t) return;
+                commit({ time: t }, setTimeBtn);
             });
         }
         var setDateBtn = panel.querySelector('[data-gm-set-date]');
         if (setDateBtn) {
             setDateBtn.addEventListener('click', function () {
-                commit({
-                    time: {
-                        year: num('[data-gm-date-year]', 0),
-                        month: num('[data-gm-date-month]', 1),
-                        day: num('[data-gm-date-day]', 1),
-                    },
-                }, setDateBtn);
+                // Every coordinate is read through coordOrNull: an emptied Year
+                // used to become 0 and an emptied Month/Day used to become 1,
+                // all three silently. None of them may be invented.
+                var t = coords([
+                    { key: 'year', sel: '[data-gm-date-year]', label: 'Year' },
+                    { key: 'month', sel: '[data-gm-date-month]', label: 'Month' },
+                    { key: 'day', sel: '[data-gm-date-day]', label: 'Day' },
+                ]);
+                if (!t) return;
+                commit({ time: t }, setDateBtn);
             });
         }
 

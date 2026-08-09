@@ -9,6 +9,32 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0a-fix. An emptied Year field moved the world to year zero — DONE (2026-08-09)
+
+- [x] **Server, `PUT /api/v1/…/calendar/date`** — `apiDate.Year` is a `*int`; an
+      absent year is a validation error instead of a silent write of year 0.
+      This was the half no client fix reaches (the Foundry module's push sites
+      send `year: date.year`, and `undefined` is dropped by `JSON.stringify`).
+- [x] **Server, world-state PUT** — the five date/time coordinates decode
+      through `worldStateCoord`: absent/null preserves, a number (zero and
+      negative included) writes, a blank or unparseable value is refused BY
+      NAME. Numeric strings are accepted, since an `<input>` holds strings.
+- [x] **`UpdateCalendar` range-checks the year** against the `INT` column. A
+      storage bound, deliberately NOT a `year >= 1` floor — year 0 and negative
+      years are legitimate on a fantasy calendar.
+- [x] **Both browser writers** (`gm_panel.js`, `calendar_daycard.js`) refuse an
+      emptied coordinate and name it, instead of substituting 0 (year) or 1
+      (month/day).
+- [x] **Pinned** by `internal/plugins/calendar/year_absent_test.go`, including
+      two headless-Chromium probes that reproduced the defect before the fix.
+- [ ] **Follow-up, chronicle-foundry-module (not this repo):** `API-CONTRACT.md`
+      § "PUT /calendar/date" should state that `year` is now REQUIRED and that
+      an absent year is a 422 rather than a silent move to year 0. No module
+      code change is needed — all four push sites already send the key — but a
+      calendar adapter returning `undefined` will now fail loudly, which is the
+      intended outcome and should be written down where the module's authors
+      will read it.
+
 ## 0. calendar-v4 round 2 — the reveal pass (open)
 
 Round 2 adds no data, no zone and no engine. **Five slices** — R2-2a and R2-2b
