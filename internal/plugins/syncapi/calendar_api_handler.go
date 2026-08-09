@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
@@ -419,17 +420,31 @@ func (h *CalendarAPIHandler) ListEvents(c echo.Context) error {
 
 	var events []calendar.Event
 
-	// Sync API uses API-key auth, not user sessions, so pass empty userID
-	// to skip per-user visibility filtering.
+	// C-AUTHZ-EMPTY-USERID / ADR-049. This used to pass userID "" with the
+	// comment "Sync API uses API-key auth, not user sessions, so pass empty
+	// userID to skip per-user visibility filtering" — the same sentinel that
+	// served anonymous web visitors dm_only rows, and here it meant a
+	// PLAYER-level caller (a read/write key, or a Player/Scribe member on the
+	// session door — resolveRole gives both role 1) was handed events whose
+	// visibility_rules restrict them to OTHER users.
+	//
+	// Every caller on this route is authenticated and every one of them has a
+	// real identity: the API key's owner, which for the session door IS the
+	// signed-in member (middleware.go's synthetic key). So the identity is
+	// passed instead of skipped. This can only NARROW what is returned — a
+	// bypass returns everything — and a sync-permission key is unaffected
+	// entirely, because resolveRole gives it Owner and CanSeeDmOnly still
+	// short-circuits.
+	viewerID := h.resolveUserID(c)
 	if month > 0 {
-		events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, month, role, "")
+		events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, month, role, viewerID)
 	} else {
 		// No month specified — return events for the entity if entity_id is provided.
 		entityID := c.QueryParam("entity_id")
 		if entityID != "" {
-			events, err = h.calendarSvc.ListEventsForEntity(ctx, entityID, role, "")
+			events, err = h.calendarSvc.ListEventsForEntity(ctx, entityID, role, viewerID)
 		} else {
-			events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, cal.CurrentMonth, role, "")
+			events, err = h.calendarSvc.ListEventsForMonth(ctx, cal.ID, year, cal.CurrentMonth, role, viewerID)
 		}
 	}
 
@@ -571,33 +586,38 @@ func (h *CalendarAPIHandler) CreateEvent(c echo.Context) error {
 }
 
 // apiUpdateEventRequest is the JSON body for updating a calendar event.
+//
+// PARTIAL: absent preserves, explicit null clears, a present value replaces
+// (sweep R4). is_recurring and all_day were value-typed here, so the Foundry
+// calendar-sync's five-key push turned recurrence and all-day off on every
+// note it touched; entity_id was a plain pointer the service cleared on nil.
 type apiUpdateEventRequest struct {
-	Name                     string   `json:"name"`
-	Description              *string  `json:"description"`
-	DescriptionHTML          *string  `json:"description_html"`
-	EntityID                 *string  `json:"entity_id"`
-	Year                     int      `json:"year"`
-	Month                    int      `json:"month"`
-	Day                      int      `json:"day"`
-	StartHour                *int     `json:"start_hour"`
-	StartMinute              *int     `json:"start_minute"`
-	EndYear                  *int     `json:"end_year"`
-	EndMonth                 *int     `json:"end_month"`
-	EndDay                   *int     `json:"end_day"`
-	EndHour                  *int     `json:"end_hour"`
-	EndMinute                *int     `json:"end_minute"`
-	IsRecurring              bool     `json:"is_recurring"`
-	RecurrenceType           *string  `json:"recurrence_type"`
-	RecurrenceInterval       *int     `json:"recurrence_interval"`
-	RecurrenceEndYear        *int     `json:"recurrence_end_year"`
-	RecurrenceEndMonth       *int     `json:"recurrence_end_month"`
-	RecurrenceEndDay         *int     `json:"recurrence_end_day"`
-	RecurrenceMaxOccurrences *int     `json:"recurrence_max_occurrences"`
-	Visibility               string   `json:"visibility"`
-	Category                 *string  `json:"category"`
-	Color                    *string  `json:"color"`
-	Icon                     *string  `json:"icon"`
-	AllDay                   bool     `json:"all_day"`
+	Name                     patch.Field[string] `json:"name"`
+	Description              patch.Field[string] `json:"description"`
+	DescriptionHTML          patch.Field[string] `json:"description_html"`
+	EntityID                 patch.Field[string] `json:"entity_id"`
+	Year                     patch.Field[int]    `json:"year"`
+	Month                    patch.Field[int]    `json:"month"`
+	Day                      patch.Field[int]    `json:"day"`
+	StartHour                patch.Field[int]    `json:"start_hour"`
+	StartMinute              patch.Field[int]    `json:"start_minute"`
+	EndYear                  patch.Field[int]    `json:"end_year"`
+	EndMonth                 patch.Field[int]    `json:"end_month"`
+	EndDay                   patch.Field[int]    `json:"end_day"`
+	EndHour                  patch.Field[int]    `json:"end_hour"`
+	EndMinute                patch.Field[int]    `json:"end_minute"`
+	IsRecurring              patch.Field[bool]   `json:"is_recurring"`
+	RecurrenceType           patch.Field[string] `json:"recurrence_type"`
+	RecurrenceInterval       patch.Field[int]    `json:"recurrence_interval"`
+	RecurrenceEndYear        patch.Field[int]    `json:"recurrence_end_year"`
+	RecurrenceEndMonth       patch.Field[int]    `json:"recurrence_end_month"`
+	RecurrenceEndDay         patch.Field[int]    `json:"recurrence_end_day"`
+	RecurrenceMaxOccurrences patch.Field[int]    `json:"recurrence_max_occurrences"`
+	Visibility               patch.Field[string] `json:"visibility"`
+	Category                 patch.Field[string] `json:"category"`
+	Color                    patch.Field[string] `json:"color"`
+	Icon                     patch.Field[string] `json:"icon"`
+	AllDay                   patch.Field[bool]   `json:"all_day"`
 }
 
 // UpdateEvent updates an existing calendar event.
@@ -884,11 +904,21 @@ func (h *CalendarAPIHandler) UpdateMonths(c echo.Context) error {
 		return apperror.NewBadRequest("invalid request body")
 	}
 
-	if err := h.calendarSvc.SetMonths(ctx, cal.ID, months); err != nil {
+	// The month-edit warning rides the API response too (C-CALV4-GAMEREADY §9
+	// [GR-18]): a sync client replacing a month list re-dates events by
+	// position exactly as the web UI does, and a machine caller that is told
+	// nothing is the same silent corruption with fewer witnesses.
+	impact, err := h.calendarSvc.SetMonths(ctx, cal.ID, months)
+	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":          "ok",
+		"events_stranded": impact.Stranded,
+		"events_shifted":  impact.Shifted,
+		"warning":         impact.Sentence(),
+	})
 }
 
 // UpdateWeekdays replaces all calendar weekdays.
@@ -1159,8 +1189,18 @@ func (h *CalendarAPIHandler) ImportCalendar(c echo.Context) error {
 		autoCreated = true
 	}
 
-	if err := h.calendarSvc.ApplyImport(ctx, cal.ID, result); err != nil {
+	// This path can land on an EXISTING calendar, so the month-edit impact
+	// ([GR-18]) is logged rather than dropped — a sync client that silently
+	// re-dates a campaign's events is the same corruption with no witness.
+	impact, err := h.calendarSvc.ApplyImport(ctx, cal.ID, result)
+	if err != nil {
 		return err
+	}
+	if impact.Any() {
+		slog.Warn("syncapi calendar import re-dated existing events",
+			slog.String("calendar_id", cal.ID),
+			slog.Int("events_stranded", impact.Stranded),
+			slog.Int("events_shifted", impact.Shifted))
 	}
 
 	status := http.StatusOK
@@ -1321,7 +1361,7 @@ func (h *CalendarAPIHandler) CreateCalendar(c echo.Context) error {
 	}
 
 	result := buildImportResultFromAPI(&req)
-	if aErr := h.calendarSvc.ApplyImport(ctx, newCal.ID, result); aErr != nil {
+	if _, aErr := h.calendarSvc.ApplyImport(ctx, newCal.ID, result); aErr != nil {
 		// Rollback the half-created calendar so the next attempt
 		// doesn't trip the 409 above on a zombie row.
 		if dErr := h.calendarSvc.DeleteCalendar(ctx, newCal.ID); dErr != nil {
@@ -1533,6 +1573,20 @@ func (h *CalendarAPIHandler) recordCalendarDateBeaconIfModule(c echo.Context, ca
 }
 
 // resolveRole returns the API key owner's role for privacy filtering.
+// resolveUserID returns the API key owner's user ID — for the session door
+// (middleware.go's synthetic key) that is the signed-in member themselves.
+// Mirrors APIHandler.resolveUserID. Empty only when there is no key at all,
+// which the route middleware makes unreachable; an empty value here is
+// therefore treated as "no user" and takes the strictest filter path, never
+// a bypass (C-AUTHZ-EMPTY-USERID / ADR-049).
+func (h *CalendarAPIHandler) resolveUserID(c echo.Context) string {
+	key := GetAPIKey(c)
+	if key == nil {
+		return ""
+	}
+	return key.UserID
+}
+
 func (h *CalendarAPIHandler) resolveRole(c echo.Context) int {
 	key := GetAPIKey(c)
 	if key == nil {

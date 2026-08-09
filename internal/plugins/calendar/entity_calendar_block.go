@@ -66,9 +66,26 @@ import (
 // (user_id, campaign_id) ([LYR-3] SIGNED), so turning `ledger` back on for the
 // entity page ALSO TURNS IT ON FOR THE BENCH. That is the signed grain, not a
 // bug, and it is written here so it is met in a document before it is met in a
-// browser. Depth returns properly through R2-3's Block theater; this slice
-// ships NO substitute — no expand chip, no "show more", no link to the Bench,
-// no second embed — because a stopgap becomes the thing R2-3 has to delete.
+// browser.
+//
+// AND R2-3 HAS NOW SHIPPED, SO THE PROMISE THIS PARAGRAPH CARRIED IS CLOSED
+// RATHER THAN DELETED — it is the record of a trade that was made honestly.
+// R2-1 wrote: "Depth returns properly through R2-3's Block theater; this slice
+// ships NO substitute — no expand chip, no 'show more', no link to the Bench,
+// no second embed — because a stopgap becomes the thing R2-3 has to delete."
+// It kept that promise, and R2-3 kept the other half. **The depth is back in
+// the THEATER rather than in the embed** (C-CALV4-THEATER, 2026-08-08): the
+// `Expand` control beside the header anchor opens a top-layer `<dialog>`
+// carrying a SECOND render of this same projection, seeded with
+// theaterBlockLayers — the Bench's five keys, which is exactly the three above
+// plus the two [BR2-8] removed — through resolveBlockLayers, so the switchboard
+// still wins there too. The embed below is byte-unchanged and stays glanceable,
+// which was the whole point of the trade. One calendar shown two ways.
+//
+// THE SWITCHBOARD ROUTE ABOVE IS STILL THE ONLY WAY TO MAKE THE LEDGER
+// PERMANENT, and it still costs the Bench. The theater does not change that and
+// deliberately does not offer a second way to say the same thing ([TH-5]): it
+// is a transient answer to a click, with no state to persist.
 //
 // THE GEOMETRY WARNING THIS COMMENT USED TO CARRY WAS STALE, AND IT WAS
 // MEASURED RATHER THAN ASSUMED. It read: "the full-tier column arithmetic
@@ -221,7 +238,7 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		}
 	}
 	if cal == nil {
-		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false)
+		return entityCalendarBlockView(cc.Campaign.ID, nil, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
 	}
 
 	// The viewer's stored layer set + their persistence endpoint, read ONCE.
@@ -231,7 +248,15 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 
 	// THE BLOCK. The spine owns the visibility gate, the one viewer-filtered
 	// pass, and both tie counts; this host owns only the layer SEED.
-	var block *calblock.BlockData
+	// theater is the SAME value with a different layer set and a different DOM
+	// namespace — a struct COPY, never a second projection ([TH-2] SIGNED). See
+	// theater.go: the spine is called with neither LedgerHidden nor
+	// ShelfHidden, block_projection builds both zone stubs unconditionally, and
+	// `d.Layers` below is a POST-HOC display gate — so the projection this host
+	// already holds contains every mark the theater will print. A second
+	// spine.Block call here is not a cost to weigh, it is a sign somebody built
+	// the refused Option B by accident.
+	var block, theater *calblock.BlockData
 	if spine := BlockSpine(); spine != nil {
 		d, err := spine.Block(ctx, BlockRequest{
 			CalendarID: cal.ID,
@@ -250,11 +275,20 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 		})
 		switch {
 		case err == nil:
+			// THE COPY IS TAKEN BEFORE d.Layers IS OVERWRITTEN — order matters
+			// only for readability, since theaterBlockCopy assigns its own
+			// Layers either way, but taking it here keeps the two renders
+			// visibly one value.
+			t := theaterBlockCopy(d, prefs)
 			d.Layers = entityBlockLayers(prefs)
 			block = &d
+			theater = &t
 		case isNotFound(err):
-			// Hidden or missing — indistinguishable on purpose (stage 9).
-			return entityCalendarBlockView(cc.Campaign.ID, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false)
+			// Hidden or missing — indistinguishable on purpose (stage 9). W5a:
+			// the theater is emitted from the same branch or not at all, so it
+			// can never become a side channel saying "there is a calendar here
+			// you may not see."
+			return entityCalendarBlockView(cc.Campaign.ID, nil, nil, nil, CalendarV2ViewData{}, nil, entityID, source, false, cc.MemberRole >= campaigns.RoleOwner)
 		}
 		// Any other error: the Block is omitted and the rest of the embed
 		// stands, which is the same shape as the pre-existing seed/ties rungs.
@@ -287,25 +321,49 @@ func EntityCalendarBlock(svc CalendarService, cc *campaigns.CampaignContext, ent
 	}
 
 	data := CalendarV2ViewData{ActiveCalendar: cal, WorldState: seed, WorldStateJSON: seedJSON}
-	return entityCalendarBlockView(cc.Campaign.ID, cal, block, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe)
+	return entityCalendarBlockView(cc.Campaign.ID, cal, block, theater, data, ties, entityID, source, cc.MemberRole >= campaigns.RoleScribe, cc.MemberRole >= campaigns.RoleOwner)
 }
 
-// entityEventHref links a linked-event row to the v2 calendar at that event's
-// date so the reader can jump to it in context.
+// entityEventHref links a linked-event row to the campaign's calendar.
+//
+// C-CALV4-V2SUNSET R2-4, [VS-13] SIGNED — AND THE DATE CURSOR IS DROPPED, WHICH
+// IS A LOSS AND IS STATED RATHER THAN HIDDEN. This link used to carry
+// ?year=&month=&day= and land the reader on that event's own day, because
+// ShowV2 parses those params. The Bench does not: AppDashboard reads `sort`,
+// `y` and `m` and nothing else, and `y`/`m` are a MONTH cursor in the in-world
+// calendar's own month list — there is no day, and no calendar selector to say
+// WHICH calendar's month list a `y`/`m` pair means. So the row now lands on the
+// Bench's own current view.
+//
+// WHY DROP IT RATHER THAN KEEP THE V2 LINK. The V1 embed's chip
+// (calendar.templ:210 dayCellEventHref) makes the opposite trade and keeps its
+// V2 target, and the difference is the ruling: a V1 surface already scheduled
+// for retirement may keep a V2 link to preserve a date, but a v4 surface
+// linking out to the legacy calendar IS the operator's complaint. The cursor
+// rides with C-CALV4-BENCH-CALID.
+//
+// RENAMED from entityEventHref's V2-named sibling discipline: this one never
+// said V2, but its target did.
 func entityEventHref(campaignID string, evt Event) string {
-	return "/campaigns/" + campaignID + "/calendar/v2?year=" +
-		itoa(evt.Year) + "&month=" + itoa(evt.Month) + "&day=" + itoa(evt.Day)
+	return "/campaigns/" + campaignID + "/apps/calendar"
 }
 
-// openCalendarV2Href is the "Open full calendar" target (C-WIDGET-BINDING-QA2
-// Part B): the V2 shell for the resolved calendar (the bound one, or the
-// campaign-active default when unbound). Empty calendarID → the active-calendar
-// V2 entry. V2 not V1 — consistent with QA1 Bug 1.
-func openCalendarV2Href(campaignID, calendarID string) string {
-	if calendarID == "" {
-		return "/campaigns/" + campaignID + "/calendar/v2"
-	}
-	return "/campaigns/" + campaignID + "/calendar/v2/" + calendarID
+// openCalendarHref is the "Open full calendar" target (C-WIDGET-BINDING-QA2
+// Part B): the campaign's calendar, which since C-CALV4-V2SUNSET R2-4 is the
+// Bench and no longer the V2 shell.
+//
+// RENAMED FROM openCalendarV2Href ([VS-2] SIGNED). A helper called
+// openCalendarV2Href returning a v4 URL is the next reader's trap.
+//
+// THE calendarID ARGUMENT IS NOW IGNORED, and it is kept rather than removed
+// because the caller's binding still knows which calendar it means. [VS-12]
+// SIGNED, measured: AppDashboard (app_dashboard.go) reads only `sort`, `y` and
+// `m` — `?calId=` is INERT on this handler, so a door carrying it would land on
+// the Bench's default selection anyway, silently. Teaching the Bench to read it
+// is C-CALV4-BENCH-CALID, booked; dropping the parameter here is the honest
+// version of what already happens.
+func openCalendarHref(campaignID, calendarID string) string {
+	return "/campaigns/" + campaignID + "/apps/calendar"
 }
 
 // entityEventRole renders the participation role label (empty → "linked").

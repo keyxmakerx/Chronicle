@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 )
 
@@ -172,7 +173,7 @@ type mockEntityRepo struct {
 	findChildrenFn   func(ctx context.Context, parentID string, role int, userID string) ([]Entity, error)
 	findAncestorsFn  func(ctx context.Context, entityID string) ([]Entity, error)
 	updateParentFn   func(ctx context.Context, entityID string, parentID *string) error
-	findBacklinksFn  func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error)
+	findBacklinksFn  func(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error)
 	setAliasesFn     func(ctx context.Context, entityID string, aliases []string) error
 	updatePrivateFn  func(ctx context.Context, entityID string, isPrivate bool) error
 	listByOwnerFn    func(ctx context.Context, campaignID, ownerUserID string) ([]Entity, error)
@@ -331,9 +332,9 @@ func (m *mockEntityRepo) ResequenceSiblings(ctx context.Context, campaignID stri
 	return nil
 }
 
-func (m *mockEntityRepo) FindBacklinks(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
+func (m *mockEntityRepo) FindBacklinks(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {
 	if m.findBacklinksFn != nil {
-		return m.findBacklinksFn(ctx, entityID, role, userID)
+		return m.findBacklinksFn(ctx, campaignID, entityID, role, userID)
 	}
 	return nil, nil
 }
@@ -751,7 +752,7 @@ func TestUpdate_Success(t *testing.T) {
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	entity, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
-		Name: "Gandalf the White",
+		Name: patch.Of("Gandalf the White"),
 	})
 
 	if err != nil {
@@ -770,7 +771,7 @@ func TestUpdate_EmptyName(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	_, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{Name: ""})
+	_, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{Name: patch.Of("")})
 	assertAppError(t, err, 400)
 }
 
@@ -791,7 +792,7 @@ func TestUpdate_RegeneratesSlugOnNameChange(t *testing.T) {
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	entity, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
-		Name: "Saruman",
+		Name: patch.Of("Saruman"),
 	})
 
 	if err != nil {
@@ -816,7 +817,7 @@ func TestUpdate_KeepsSlugWhenNameUnchanged(t *testing.T) {
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	entity, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
-		Name: "Gandalf",
+		Name: patch.Of("Gandalf"),
 	})
 
 	if err != nil {
@@ -836,8 +837,8 @@ func TestUpdate_SetsTypeLabel(t *testing.T) {
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	entity, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
-		Name:      "Rivendell",
-		TypeLabel: "Elven City",
+		Name:      patch.Of("Rivendell"),
+		TypeLabel: patch.Of("Elven City"),
 	})
 
 	if err != nil {
@@ -863,8 +864,8 @@ func TestUpdate_ClearsTypeLabelWhenEmpty(t *testing.T) {
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	entity, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
-		Name:      "Test",
-		TypeLabel: "",
+		Name:      patch.Of("Test"),
+		TypeLabel: patch.Of(""),
 	})
 
 	if err != nil {
@@ -1236,8 +1237,8 @@ func TestUpdate_SelfParent(t *testing.T) {
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	_, err := svc.Update(context.Background(), "ent-1", UpdateEntityInput{
-		Name:     "Updated",
-		ParentID: "ent-1", // Self-reference.
+		Name:     patch.Of("Updated"),
+		ParentID: patch.Of("ent-1"), // Self-reference.
 	})
 	assertAppError(t, err, 400)
 }
@@ -1266,8 +1267,8 @@ func TestUpdate_CircularParent(t *testing.T) {
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
 	_, err := svc.Update(context.Background(), "ent-A", UpdateEntityInput{
-		Name:     "A",
-		ParentID: "ent-B", // Would create A -> B -> A cycle.
+		Name:     patch.Of("A"),
+		ParentID: patch.Of("ent-B"), // Would create A -> B -> A cycle.
 	})
 	assertAppError(t, err, 400)
 }
@@ -1314,7 +1315,7 @@ func TestGetAncestors_DelegatesToRepo(t *testing.T) {
 
 func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
 	entityRepo := &mockEntityRepo{
-		findBacklinksFn: func(ctx context.Context, entityID string, role int, userID string) ([]Entity, error) {
+		findBacklinksFn: func(ctx context.Context, campaignID, entityID string, role int, userID string) ([]Entity, error) {
 			return []Entity{
 				{ID: "ref-1", Name: "Referrer One"},
 				{ID: "ref-2", Name: "Referrer Two"},
@@ -1324,7 +1325,7 @@ func TestGetBacklinks_DelegatesToRepo(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	backlinks, err := svc.GetBacklinks(context.Background(), "target-entity", 2, "")
+	backlinks, err := svc.GetBacklinks(context.Background(), "camp-1", "target-entity", 2, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1405,7 +1406,7 @@ func TestExtractMentionSnippet_Nil(t *testing.T) {
 func TestGetBacklinksWithSnippets(t *testing.T) {
 	html := `<p>See <a data-mention-id="target-1" href="/e/target-1">@Target</a> for details.</p>`
 	entityRepo := &mockEntityRepo{
-		findBacklinksFn: func(_ context.Context, _ string, _ int, _ string) ([]Entity, error) {
+		findBacklinksFn: func(_ context.Context, _, _ string, _ int, _ string) ([]Entity, error) {
 			return []Entity{
 				{ID: "ref-1", Name: "Source", EntryHTML: &html},
 			}, nil
@@ -1413,7 +1414,7 @@ func TestGetBacklinksWithSnippets(t *testing.T) {
 	}
 
 	svc := newTestService(entityRepo, &mockEntityTypeRepo{})
-	entries, err := svc.GetBacklinksWithSnippets(context.Background(), "target-1", 2, "")
+	entries, err := svc.GetBacklinksWithSnippets(context.Background(), "camp-1", "target-1", 2, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -301,11 +301,42 @@
   //
   // `clear` is measured the same way in both, so the report never flatters the
   // placement.
+  // ── THE SHEET'S GEOMETRY LEFT JAVASCRIPT (C-CALV4-MOBILE [MOB-2] SIGNED) ──
+  //
+  // This function used to return an APPLIED top and an APPLIED width, and
+  // applyPlacement wrote both onto the element as inline style. They were
+  // computed ONCE, at open time, and never again — so the moment a software
+  // keyboard shrank the layout viewport (390x664 -> 390x380, measured) the box
+  // stayed at `top: 106px` and 84px of it, including the entire footer with
+  // Save in it, sat below the fold of a `position: fixed` box that does not
+  // scroll with the page. A rotation was the same bug wearing a second hat:
+  // `width: 390px` survived onto an 844px viewport.
+  //
+  // The sheet is now `inset-block-end: 0; inset-inline: 0; inline-size: 100%;
+  // max-block-size: 100dvh` in calendar-daycard.css, which the browser
+  // re-resolves on every viewport change without being asked. So this function
+  // no longer describes where the box WILL BE PUT; it describes where the box
+  // WILL LAND, for the sake of the one consumer that still needs to know.
+  //
+  // AND THAT CONSUMER IS [DC-3]'s HONESTY CHANNEL, WHICH IS WHY THE RECT IS
+  // RE-DERIVED RATHER THAN DELETED. `clear` is the STOP-AND-FLAG [DC-3]
+  // signed. Retiring the warning along with the pixel is how a signature gets
+  // un-signed quietly, so the rect it intersects against the Ledger is the box
+  // CSS now renders — bottom-anchored, full-width, clamped to the viewport —
+  // rather than the box JS used to write. The two agree at every size the old
+  // code could reach and disagree only where the old code was wrong (a sheet
+  // taller than the viewport used to be reported at top 0 with its full
+  // height; it is now reported clamped, which is what the user sees).
+  //
+  // `applied: false` is the contract with applyPlacement: this placement has
+  // no inline geometry to write.
   function sheetPlacement(size, view, ledger, fallback) {
-    var top = Math.max(0, view.h - size.h);
+    var h = Math.min(size.h, view.h);
+    var top = Math.max(0, view.h - h);
     return {
-      left: 0, top: top, width: view.w, sheet: true, fallback: !!fallback,
-      clear: !hitsLedger({ left: 0, top: top, width: view.w, height: size.h }, ledger),
+      left: 0, top: top, width: view.w, height: h, sheet: true, applied: false,
+      fallback: !!fallback,
+      clear: !hitsLedger({ left: 0, top: top, width: view.w, height: h }, ledger),
     };
   }
 
@@ -380,15 +411,105 @@
   // The width is CLEARED when the box is not a sheet. A viewport that crosses
   // the breakpoint downward and back left the sheet's inline `width` behind,
   // pinning a desktop card to the phone's width until reload.
+  // THE SHEET ARM WRITES NO GEOMETRY AT ALL (C-CALV4-MOBILE [MOB-2] SIGNED).
+  // `.dcsheet` owns the box — bottom-anchored, full-width, clamped to 100dvh —
+  // so the three inline properties are CLEARED rather than set. Clearing is
+  // not optional housekeeping: an inline `top` left behind by a previous
+  // popover placement outranks the class's `inset-block-start: auto` and the
+  // sheet would hang in mid-air at the old number, which is the same stale-
+  // pixel defect this ruling exists to close.
   function applyPlacement(el, at, report) {
     if (!el || !at) return at;
-    el.style.left = at.left + 'px';
-    el.style.top = at.top + 'px';
-    el.style.width = at.sheet ? at.width + 'px' : '';
+    if (at.applied === false) {
+      el.style.left = '';
+      el.style.top = '';
+      el.style.width = '';
+    } else {
+      el.style.left = at.left + 'px';
+      el.style.top = at.top + 'px';
+      el.style.width = '';
+    }
     el.classList.toggle('dcsheet', !!at.sheet);
     el.setAttribute('data-dc-clear', at.clear ? '1' : '0');
     if (report) report(at);
     return at;
+  }
+
+  // ── THE PAGE LOCK, AND THE RELEASE RULED HARDER THAN THE LOCK ────────────
+  //    C-CALV4-MOBILE [MOB-3] SIGNED.
+  //
+  // MEASURED, with the day card open AND with the editor open, at 390x664,
+  // 360x640 and 390x844 — six arms, six identical results:
+  //
+  //     window.scrollBy(0, 400)  ->  document.scrollingElement.scrollTop 0 -> 400
+  //     computed overflow on <html> and <body>: "visible"
+  //
+  // Because the sheet is `position: fixed` it stays pinned while the calendar
+  // behind it scrolls away — so the card can end up describing a day that is
+  // no longer on screen. No lock code existed; `document.body.style` was
+  // written in exactly two places, both `user-select` for the drag, which is
+  // why touching body.style here is not a new boundary crossing.
+  //
+  // THE `position: fixed` FORM, NOT `overflow: hidden` ON <html>. The audit
+  // offered both and noted the second is only safe "if iOS 16 support is not
+  // needed". The standing ruling picks the one that works on every phone that
+  // could be at the table; the extra code is a stored integer.
+  //
+  // ONE DERIVED BOOLEAN, NOT TWO LOCKS AND NOT A COUNTER. The card closes AS
+  // the editor opens ([DC-7]), so two independent locks race and one of them
+  // wins, and a reference count that goes negative leaves a phone on a page
+  // that will not scroll with no visible cause and no way out but a reload. A
+  // SET is idempotent and cannot go negative: each sheet records whether IT is
+  // open and the lock is `card || editor`, recomputed on every transition.
+  //
+  // THE STATE LIVES HERE, NOT ON THE SHEET. `edHide` does
+  // `ed.root.removeAttribute('style')` — a full style wipe — so anything
+  // parked on the element is gone before the release could read it.
+  //
+  // A LOCK NEVER RELEASED IS THE WORSE BUG. The condition it fixes (a page
+  // that scrolls when it should not) is survivable; the failure mode of a bad
+  // fix is not. Every exit path is proven by
+  // TestMobileProbe_ThePageIsLockedBehindASheetAndReleasedOnEveryExit.
+  var pageLock = { on: false, y: 0, prev: null, open: { card: false, editor: false } };
+
+  // sheetOpenChanged is the ONE entry point. `which` is 'card' or 'editor'.
+  function sheetOpenChanged(which, open) {
+    pageLock.open[which] = !!open;
+    setPageLock(pageLock.open.card || pageLock.open.editor);
+  }
+
+  function setPageLock(want) {
+    if (typeof document === 'undefined' || !document.body || !document.body.style) return;
+    if (!!want === pageLock.on) return;
+    var b = document.body.style;
+    if (want) {
+      pageLock.y = (typeof window !== 'undefined' && window.pageYOffset) ||
+        (document.scrollingElement ? document.scrollingElement.scrollTop : 0) || 0;
+      // EVERY property this lock writes is remembered, so the release restores
+      // what was there rather than what this module assumes was there.
+      pageLock.prev = {
+        position: b.position, top: b.top, left: b.left,
+        right: b.right, width: b.width,
+      };
+      b.position = 'fixed';
+      b.top = (-pageLock.y) + 'px';
+      b.left = '0px';
+      b.right = '0px';
+      b.width = '100%';
+      pageLock.on = true;
+      return;
+    }
+    pageLock.on = false;
+    var prev = pageLock.prev || {};
+    b.position = prev.position || '';
+    b.top = prev.top || '';
+    b.left = prev.left || '';
+    b.right = prev.right || '';
+    b.width = prev.width || '';
+    pageLock.prev = null;
+    // THE OFFSET COMES BACK. Without this the page snaps to the top on every
+    // close, which is a second defect wearing the first one's clothes.
+    if (typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, pageLock.y);
   }
 
   // ordIsSafe gates the one attribute-selector interpolation in this module.
@@ -508,8 +629,9 @@
     //
     //   AUTHORED   → recurrenceBody's mapping is sent (every 1 → weekly,
     //                every 2 → biweekly, every N → custom + interval N;
-    //                month → monthly with no interval, because OccursOn's
-    //                monthly branch ignores the interval entirely)
+    //                month → monthly with no interval, because this editor
+    //                does not offer the field for the month unit — see
+    //                recurrenceInterval; OccursOn honours one since stage 22)
     //   UNTOUCHED  → the stored triple is round-tripped exactly as stage 2 did.
     //                `form.recurrence` is ABSENT on every existing pure-function
     //                case, so those bodies are byte-identical
@@ -660,20 +782,32 @@
   // recurrenceUnits is THE CORRECTED UNIT LIST, and it is corrected in three
   // directions the drawing got wrong.
   //
-  // `recurrence_type` accepts exactly weekly · biweekly · monthly · custom
-  // (model.go:214-217) and OccursOn sends anything else to
-  // `default: return onBase` (model.go:305-309). A WRONG UNIT IS NOT AN ERROR,
-  // IT IS A SILENT SINGLE OCCURRENCE — which is the failure a chip exists to
-  // prevent, so the chip has to land on exactly the right units.
+  // `recurrence_type` accepts exactly weekly · biweekly · monthly · custom ·
+  // yearly (model.go's Recurrence* constant block) and OccursOn sends anything
+  // else to `default: return onBase`. A WRONG UNIT IS NOT AN ERROR, IT IS A
+  // SILENT SINGLE OCCURRENCE — which is the failure a chip exists to prevent,
+  // so the chip has to land on exactly the right units. Since
+  // C-CALV4-GAMEREADY §6 [GR-12] the SERVER also refuses an unsupported type
+  // with a 400 rather than a 201, but that is a backstop for integrations; this
+  // list is still the only thing standing between the GM and a wrong unit,
+  // because a rejected save is a worse table experience than an absent option.
   //
   //  1. THE WEEK UNIT IS NOT INVENTION AND ITS CHIP COMES OFF. Week-based
   //     recurrence strides `WeekLength() × recurrenceWeeks(...)` (model.go:336,
   //     :351-361), so on a ten-day calendar `weekly` MEANS every tenday. §5 of
   //     DAYCARD and the mockup both chip this unit and both are wrong.
-  //  2. `year` IS INVENTION AND THE DRAWING OFFERS IT UNCHIPPED. There is no
-  //     yearly type; it degrades silently. It does not ship at all — an
-  //     unbacked unit in a picker is a trap, and the one thing worse than a
-  //     missing option is one that quietly does nothing.
+  //  2. `year` WAS INVENTION AND IS NOW BACKED — CORRECTED HERE, in the same
+  //     commit that built it (C-CALV4-GAMEREADY §6, [GR-11]). This note used to
+  //     read "There is no yearly type; it degrades silently. It does not ship
+  //     at all", and it was RIGHT when it was written: OccursOn had four types
+  //     and dropped everything else, so the drawing's unchipped `year` would
+  //     have been the exact trap this list exists to prevent. `RecurrenceYearly`
+  //     now expands, so the unit ships `backed: true` — and the stale sentence
+  //     goes with it, because a comment asserting an absence the product no
+  //     longer has is how the next hand re-derives the gap. A festival, a holy
+  //     day, a birthday and a coronation anniversary are the most common
+  //     recurring things in a fantasy calendar, and until §6 the editor was
+  //     honestly refusing to offer a unit the engine could not keep.
   //  3. THE LABEL IS DERIVED, NEVER A LITERAL. Chronicle's Calendar carries
   //     `Weekdays` and a `WeekLength()` and NO WEEK NOUN AT ALL, so there is no
   //     "the calendar's own week noun" to read: the honest derived label names
@@ -689,6 +823,7 @@
     var out = [];
     if (weekLen > 0) out.push({ id: 'week', label: weekLen + '-day week', backed: true });
     out.push({ id: 'month', label: 'month', backed: true });
+    out.push({ id: 'year', label: 'year', backed: true });
     out.push({ id: 'day', label: 'day', backed: false });
     out.push({ id: 'moon', label: 'moon phase', backed: false });
     return out;
@@ -696,20 +831,31 @@
 
   // recurrenceInterval says whether the `every [N]` field applies at all.
   //
-  // ONLY THE WEEK UNIT HAS AN INTERVAL. OccursOn's monthly branch ignores
-  // RecurrenceInterval entirely — it checks the day-of-month and the occurrence
-  // cap and returns — so `every 2 months` would be stored, accepted and then
-  // silently expanded EVERY month. That is the same trap as a wrong unit, one
-  // level down, and the drawing offers the field on every unit. The control is
-  // therefore ABSENT for month rather than chipped: there is nothing here for a
-  // backend to add, the type simply has no interval.
+  // ONLY THE WEEK UNIT HAS AN INTERVAL — IN THIS FILE, AND NO LONGER IN THE
+  // BACKEND. R2-2b withheld the field from the month unit because OccursOn's
+  // monthly branch ignored RecurrenceInterval entirely: it checked the
+  // day-of-month and the occurrence cap and returned, so `every 2 months` would
+  // be stored, accepted and then silently expanded EVERY month. Offering a
+  // control the server discards is the same trap as a wrong unit, one level
+  // down, so the control was made ABSENT rather than chipped.
+  //
+  // C-SWEEP-R4 STAGE 22 FIXED THE SERVER. `model.go`'s monthly branch now
+  // applies the interval and reads the occurrence cap as occurrences rather
+  // than months, so the reason this control is withheld is GONE and restoring
+  // it is a UI change with a working backend under it. It is deliberately NOT
+  // done in the same stage as the predicate fix — it is booked by name as
+  // C-CALV4-MONTHLY-INTERVAL-CONTROL (.ai/todo.md), because it also needs the
+  // `every N months` readout wording, the inverse in recurrenceFromRecord, and
+  // the daycard request pins updated together.
   function recurrenceInterval(unit) { return unit === 'week'; }
 
   // recurrenceBody maps the editor's recurrence state onto the request body,
   // and it is the mapping [ER-10] condition 2 makes the real contract.
   //
   //   every 1 → weekly · every 2 → biweekly · every N → custom + interval N
-  //   month   → monthly, no interval (see recurrenceInterval)
+  //   month   → monthly, no interval (see recurrenceInterval — the server
+  //             honours one since stage 22; this file has not been taught to
+  //             AUTHOR one yet, which is C-CALV4-MONTHLY-INTERVAL-CONTROL)
   //   an UNBACKED unit → null, meaning DO NOT AUTHOR
   //
   // NULL IS THE HONEST ANSWER FOR A CHIPPED UNIT. The caller round-trips the
@@ -733,6 +879,13 @@
     if (rec.unit === 'month') {
       return { is_recurring: true, recurrence_type: 'monthly', recurrence_interval: 0 };
     }
+    // `year` sends interval 0 for the same reason `month` does: the editor
+    // offers no `every [N]` field for it (recurrenceInterval is week-only), so
+    // writing a number the author never typed would author a rule they did not
+    // choose. The engine reads a missing/0/1 interval as "every year".
+    if (rec.unit === 'year') {
+      return { is_recurring: true, recurrence_type: 'yearly', recurrence_interval: 0 };
+    }
     if (rec.unit !== 'week') return null;
     var every = Math.floor(Number(rec.every));
     if (!isFinite(every) || every < 1) every = 1;
@@ -748,6 +901,7 @@
     if (!rec || !rec.is_recurring) return out;
     var t = rec.recurrence_type;
     if (t === 'monthly') { out.mode = 'repeats'; out.unit = 'month'; return out; }
+    if (t === 'yearly') { out.mode = 'repeats'; out.unit = 'year'; return out; }
     if (t === 'weekly' || t === 'biweekly' || t === 'custom') {
       out.mode = 'repeats';
       out.unit = 'week';
@@ -804,6 +958,10 @@
       durationMS: durationMS,
       closeDelayMS: closeDelayMS,
       placeCard: placeCard,
+      // C-CALV4-MOBILE [MOB-2]: sheetPlacement is exported so the clamped rect
+      // it reports — [DC-3]'s honesty channel after the pixel left JavaScript —
+      // is asserted directly rather than inferred through placeCard.
+      sheetPlacement: sheetPlacement,
       occlusionReporter: occlusionReporter,
       applyPlacement: applyPlacement,
       ordIsSafe: ordIsSafe,
@@ -915,6 +1073,12 @@
       tieRes: editor.querySelector('[data-de-tieres]'),
       entity: editor.querySelector('[data-de-entity]'),
       preview: editor.querySelector('[data-de-preview]'),
+      // C-CALV4-GAMEREADY §4 [GR-6]. BOTH MAY BE null, and that IS the
+      // audience gate: below RoleScribe the producer renders no markup at all,
+      // so this module finds nothing and writes nothing. It executes the gate;
+      // it never computes one.
+      rsvp: editor.querySelector('[data-de-rsvp-toggle]'),
+      rsvpHint: editor.querySelector('[data-de-rsvp-hint]'),
       save: editor.querySelector('[data-de-save]'),
     } : null;
     // THE AUDIENCE ROSTER IS OWNER-ONLY AND IT ARRIVES ALREADY GATED ([ER-3]
@@ -939,6 +1103,15 @@
     var edState = {
       open: false, timer: 0, mode: '', calId: '', eventID: '', day: null,
       prev: null, busy: false,
+      // DELETE'S TWO-STEP (C-CALV4-GAMEREADY §7 [GR-13]). `delArmed` is the
+      // "one click has landed" latch and `delTimer` is its ~4s expiry. Both
+      // live on edState rather than in a closure beside edDelete so that
+      // edClose and edOpen can clear them — an editor that reopened still
+      // armed would delete on the FIRST click of the next session.
+      delArmed: false, delTimer: 0,
+      // The save's in-flight ceiling (§7's same-handler freebie). A fetch that
+      // never resolves must become a stated failure, not a dead button.
+      saveTimer: 0,
       // THE MORPH'S MEASURED GEOMETRY, taken from the CARD at open and replayed
       // on close. Null under reduced motion and whenever a rect could not be
       // measured, which is what makes the stage-2 open path the fallback.
@@ -1079,6 +1252,9 @@
     function show() {
       if (state.timer) { clearTimeout(state.timer); state.timer = 0; }
       card.setAttribute('data-dc-shown', '');
+      // [MOB-3]: the lock follows the SHOW, not the intent, so a card that was
+      // opened by any path locks the page behind it.
+      sheetOpenChanged('card', true);
       if (typeof card.showPopover === 'function') {
         try { card.showPopover(); } catch (e) { /* already open */ }
       }
@@ -1088,9 +1264,32 @@
       state.timer = 0;
       card.removeAttribute('data-dc-shown');
       card.removeAttribute('style');
+      sheetOpenChanged('card', false);
       if (typeof card.hidePopover === 'function') {
         try { card.hidePopover(); } catch (e) { /* already closed */ }
       }
+    }
+
+    // ── THE `toggle` EVENT IS THE TRUTH ([MOB-3] SIGNED) ──────────────────
+    //
+    // `closeCard`/`edClose` are the animated INTENT and `hide`/`edHide` are the
+    // teardown, but neither sees a UA-initiated close — Escape in the engines
+    // that honour it on a manual popover, or a `hidePopover()` from anywhere
+    // else on the page. Only the element's own event sees all of them, and a
+    // lock released only on the module's happy paths is exactly the bug this
+    // clause exists to prevent. Wiring both is safe because sheetOpenChanged is
+    // a SET rather than a counter.
+    if (card && card.addEventListener) {
+      card.addEventListener('toggle', function (e) {
+        // `newState` IS TRUSTED WHEN THE ENGINE SUPPLIES IT, and the attribute
+        // is the fallback for one that does not. Reading them as an OR would
+        // make a UA-initiated close invisible: `hidePopover()` from anywhere
+        // leaves `data-dc-shown` behind, so the OR would answer "still open"
+        // for a box that is not on the screen — and the lock would never lift.
+        sheetOpenChanged('card', (e && typeof e.newState === 'string')
+          ? e.newState === 'open'
+          : card.hasAttribute('data-dc-shown'));
+      });
     }
 
     function openCard(host, cell) {
@@ -1367,6 +1566,7 @@
       if (ed.root.style) ed.root.style.width = '';
       edState.morph = null;
       ed.root.setAttribute('data-dc-shown', '');
+      sheetOpenChanged('editor', true);
       if (typeof ed.root.showPopover === 'function') {
         try { ed.root.showPopover(); } catch (e) { /* already open */ }
       }
@@ -1378,7 +1578,10 @@
       edState.morph = null;
       ed.root.classList.remove('edmorph');
       ed.root.removeAttribute('data-dc-shown');
+      // THE STYLE WIPE IS WHY THE LOCK'S STATE IS NOT PARKED ON THIS ELEMENT
+      // ([MOB-3]): anything written here is gone one line later.
       ed.root.removeAttribute('style');
+      sheetOpenChanged('editor', false);
       if (typeof ed.root.hidePopover === 'function') {
         try { ed.root.hidePopover(); } catch (e) { /* already closed */ }
       }
@@ -1387,6 +1590,10 @@
     function edClose() {
       if (!edState.open) return;
       edState.open = false;
+      // THE ARMED DELETE DIES WITH THE EDITOR (§7 [GR-13]). A sheet that
+      // closed while armed and reopened later would delete on the FIRST click
+      // of a session the user believes is fresh.
+      edDeleteDisarm();
       // `.dcopen` COMES OFF FIRST, AND THE ORDER IS THE WHOLE OF CLAUSE 2.
       // The carve-out's open-state rule is the only thing declaring
       // --disc-open, so removing the class before writing the reverse geometry
@@ -1721,11 +1928,17 @@
           b.setAttribute('aria-checked', on ? 'true' : 'false');
         });
       }
-      // THE INTERVAL FIELD IS ABSENT FOR month, NOT CHIPPED. OccursOn's monthly
-      // branch ignores RecurrenceInterval entirely, so `every 2 months` would be
-      // stored, accepted and then expanded every month — the same trap as a
-      // wrong unit. There is nothing here for a backend to add: the type has no
-      // interval.
+      // THE INTERVAL FIELD IS ABSENT FOR month AND year, NOT CHIPPED — and the
+      // reason has CHANGED, so the note is rewritten rather than extended.
+      // It used to read "OccursOn's monthly branch ignores RecurrenceInterval
+      // entirely… there is nothing here for a backend to add"; C-SWEEP-R4 stage
+      // 22 made that false for month, and C-CALV4-GAMEREADY §6 built year with
+      // the interval applied from the first line. BOTH SERVERS NOW HONOUR IT.
+      // The field stays hidden because this file has not been taught to AUTHOR
+      // one — the readout wording and the inverse in recurrenceFromRecord come
+      // with it — which is C-CALV4-MONTHLY-INTERVAL-CONTROL, booked by name.
+      // Hidden-because-unbuilt is not the same as hidden-because-broken, and
+      // the difference is the whole reason this comment exists.
       if (ed.recEvery) ed.recEvery.hidden = !recurrenceInterval(r.unit);
       if (ed.recBox) ed.recBox.hidden = !(r.mode === 'repeats' && r.unit === 'week');
       if (ed.recRead) ed.recRead.textContent = edRecReadout();
@@ -1739,6 +1952,10 @@
       var body = recurrenceBody(edUI.rec);
       if (!body || !body.is_recurring) return 'once, on this date';
       if (body.recurrence_type === 'monthly') return 'every month, on this day of the month';
+      // The yearly readout names the SKIP rule, because it is the one thing a
+      // GM cannot see from the grid: a base day that does not exist in a later
+      // year is passed over, never moved to a neighbouring day.
+      if (body.recurrence_type === 'yearly') return 'every year, on this month and day (skipped in years without that day)';
       var n = body.recurrence_interval > 0 ? body.recurrence_interval
         : (body.recurrence_type === 'biweekly' ? 2 : 1);
       return 'every ' + (n === 1 ? '' : n + ' × ') + edUI.week.len + ' days, from this date';
@@ -2042,6 +2259,13 @@
       // the box being closed and opened again, or a network blip would leave the
       // editor permanently unable to save.
       edState.busy = false;
+      // A fresh session also repaints Save live: a previous session's hung
+      // write must not hand this one a disabled button (§7's freebie).
+      edBusyPaint(false);
+      // …and neither may a half-pressed Delete (§7 [GR-13]). edClose already
+      // disarms; this covers the path that swaps one event's editor straight
+      // into another's without a close in between.
+      edDeleteDisarm();
       edState.mode = mode;
       edState.calId = cal.id;
       edState.day = day;
@@ -2069,6 +2293,9 @@
       // Delete targets the same id the save does, so the two can never disagree
       // about which event this editor session is holding.
       if (ed.del) ed.del.hidden = !edState.eventID;
+      // …and so does the RSVP opt-in, which is why it reads edState.eventID
+      // rather than `mode`: one id, one event, every control in this session.
+      edRsvpPaint(rec);
       if (ed.head) {
         ed.head.textContent = (mode === 'edit' ? 'Edit event · ' : 'New event · ') + (day.label || '');
         ed.head.setAttribute('data-day', day.key || '');
@@ -2082,12 +2309,37 @@
       // anything closes it — that rect is the morph's start geometry and the
       // one thing this path reads from outside the editor.
       var fromRect = edMorphRect(anchor);
+      // …AND SO IS THE PLACEMENT LAW'S ANCHOR, FOR THE SAME REASON AND ONE LINE
+      // LATER THAN IT USED TO BE (C-CALV4-CARD-REDUCED-ANCHOR).
+      //
+      // edPosition used to be handed the LIVE element and measure it AFTER
+      // `closeCard()`. With motion allowed that is harmless — `closeDelayMS`
+      // returns --disc-close and the card is still on screen at its own rect
+      // when the read happens. Under prefers-reduced-motion it is the whole
+      // defect: `closeDelayMS` returns 0 BY DESIGN (the sheet declares no
+      // transition, so waiting would leave a fully-styled card sitting there
+      // after it was logically closed), `hide()` therefore runs SYNCHRONOUSLY
+      // inside `closeCard()`, and it both strips the inline geometry and calls
+      // `hidePopover()`. The next getBoundingClientRect on that element answers
+      // 0×0 at 0,0 — so `placeCard` did its job perfectly over an anchor that no
+      // longer existed and put the editor at (8,8), the viewport's top-left,
+      // half a screen from the day it belongs to.
+      //
+      // FROZEN, NOT RE-READ. The rect is captured while the card is still the
+      // open box and handed to edPosition through the same one-shot shim the
+      // drag path and the morph seed already use, so there is exactly one
+      // measurement of the anchor per open and no ordering can invalidate it.
+      // `placeCard` is not touched — [ER-5]'s STOP-AND-FLAG carve-out stays
+      // closed; this is a reordering inside edOpen.
+      var anchorRect = (anchor && anchor.getBoundingClientRect)
+        ? anchor.getBoundingClientRect() : null;
       // The card leaves first: it cross-fades out on the mechanism it already
       // had, over --disc-close, while the editor grows over --disc-open.
       closeCard();
       edState.open = true;
       edShow();
-      var placed = anchor ? edPosition(anchor) : null;
+      var placed = anchorRect ? edPosition(
+        { getBoundingClientRect: function () { return anchorRect; } }) : null;
       // FORCED REFLOW, DELIBERATELY, and now it carries two jobs. The editor
       // was display:none a moment ago, so it has no rendered before-change
       // style and a transition started in the same frame would not run at all
@@ -2216,7 +2468,36 @@
     // already navigating.
     function edFailed(msg) {
       edState.busy = false;
+      edBusyPaint(false);
       edError(msg);
+    }
+
+    // ── SAVE HAS A BUSY STATE (C-CALV4-GAMEREADY §7 [GR-13], the same-handler
+    //    freebie) ─────────────────────────────────────────────────────────────
+    //
+    // `edState.busy` was invisible: it is cleared only in edFailed, because
+    // every success path ends in window.location.reload(). So a save whose
+    // fetch NEVER RESOLVES left a button that still looked live, still had
+    // `disabled === false`, carried no `aria-busy`, and sat under the PREVIOUS
+    // failure's error text. Two more taps fired zero requests and said nothing.
+    // A GM who taps Save and gets a dead button under an old error will assume
+    // the event saved.
+    //
+    // Three parts, all inside the editor's own box: paint the button disabled
+    // + `aria-busy` while the write is in flight, clear the stale error at the
+    // START of a save rather than only on the next failure, and give the fetch
+    // a ~15s ceiling so a hung request becomes a stated failure instead of a
+    // permanent one.
+    var edSaveTimeoutMs = 15000;
+
+    function edBusyPaint(on) {
+      if (!ed) return;
+      if (ed.save) {
+        ed.save.disabled = !!on;
+        if (on) ed.save.setAttribute('aria-busy', 'true');
+        else ed.save.removeAttribute('aria-busy');
+      }
+      if (!on && edState.saveTimer) { clearTimeout(edState.saveTimer); edState.saveTimer = 0; }
     }
 
     function edSave() {
@@ -2242,6 +2523,15 @@
       var body = buildEventBody(form, edState.prev, { canOfferGMOnly: !!ed.gmOnly });
       // Set AFTER validation, so a rejected title does not lock the editor.
       edState.busy = true;
+      // THE PREVIOUS FAILURE'S SENTENCE IS NOT THIS SAVE'S STATE. Clearing it
+      // here means a retry never runs under stale text that reads as if the
+      // new attempt had already failed.
+      edError('');
+      edBusyPaint(true);
+      edState.saveTimer = setTimeout(function () {
+        if (!edState.busy) return;
+        edFailed('That save is taking too long. Nothing has been confirmed — try again.');
+      }, edSaveTimeoutMs);
       fetcher(target.eventID ? eventsBase() + '/' + target.eventID : eventsBase(), {
         method: target.method, body: body,
       }).then(function (resp) {
@@ -2252,10 +2542,66 @@
       });
     }
 
+    // ── DELETE ARMS ITSELF IN PLACE (C-CALV4-GAMEREADY §7 [GR-13]) ────────
+    //
+    // The repository does `DELETE FROM calendar_events WHERE id = ?` — no soft
+    // delete, no restore path — and this button sits at a 24px tap floor on a
+    // phone, on the line ABOVE Save in the same delegated handler
+    // (`[data-de-delete]` then `[data-de-save]`). The danger is not "the user
+    // did not mean to delete"; it is "the user meant to hit Save".
+    //
+    // So the first click ARMS: the label becomes `Confirm delete` and a ~4s
+    // timer starts. A second click inside the window sends the DELETE. The
+    // timer expiring, the editor closing, or ANY other editor interaction
+    // disarms it. That turns a mis-tap into a visible label change one pixel
+    // from where the thumb was aiming, which is a better signal than a modal
+    // the user dismisses reflexively.
+    //
+    // NO DIALOG, NO `window.confirm`, NO DOM OUTSIDE THE EDITOR'S OWN BOX.
+    // This module's own boundary rule (see the delegated handler below: "EVERY
+    // CHROME CONTROL IS HANDLED INSIDE THE EDITOR'S OWN SUBTREE AND NOWHERE
+    // ELSE") forbids the first; the editor sheet is `position: fixed` and
+    // already puts Save under a software keyboard, so a second fixed layer on
+    // top of it would be a second trap rather than a confirmation.
+    //
+    // IT IS A TEXT SWAP AND NOT A TRANSITION. Nothing here animates: the ONE
+    // motion register in calendar-bench.css is untouched by design.
+    var edDeleteArmMs = 4000;
+    var edDeleteRestLabel = '';
+
+    // edDeleteDisarm returns the button to its resting label. Safe to call at
+    // any time, including when nothing is armed — every disarm path funnels
+    // here so there is exactly one place that can restore the label.
+    function edDeleteDisarm() {
+      if (edState.delTimer) { clearTimeout(edState.delTimer); edState.delTimer = 0; }
+      if (!edState.delArmed) return;
+      edState.delArmed = false;
+      if (ed && ed.del && edDeleteRestLabel) ed.del.textContent = edDeleteRestLabel;
+    }
+
+    function edDeleteArm() {
+      if (!ed || !ed.del) return;
+      if (!edDeleteRestLabel) edDeleteRestLabel = ed.del.textContent || 'Delete';
+      edState.delArmed = true;
+      // `aria-live` sits on the button itself so the swap is ANNOUNCED rather
+      // than only seen — the two-step is a state change, and a screen-reader
+      // user who cannot see the label change would otherwise meet a button
+      // that silently did nothing on the first press.
+      ed.del.setAttribute('aria-live', 'polite');
+      ed.del.textContent = 'Confirm delete';
+      if (edState.delTimer) clearTimeout(edState.delTimer);
+      edState.delTimer = setTimeout(edDeleteDisarm, edDeleteArmMs);
+    }
+
     function edDelete() {
       if (edState.busy) return;
       var fetcher = api();
       if (!fetcher || !edState.eventID) return;
+      // FIRST CLICK SENDS NOTHING. The arm happens after the fetcher and id
+      // checks so a button that could never delete anything does not pretend
+      // to arm.
+      if (!edState.delArmed) { edDeleteArm(); return; }
+      edDeleteDisarm();
       edState.busy = true;
       fetcher(eventsBase() + '/' + edState.eventID, { method: 'DELETE' })
         .then(function (resp) {
@@ -2263,6 +2609,90 @@
           edFailed('That event could not be deleted.');
         })
         .catch(function () { edFailed('That event could not be deleted.'); });
+    }
+
+    // ── COLLECT RSVPs (C-CALV4-GAMEREADY §4 [GR-6]) ──────────────────────
+    //
+    // THE OPERATOR'S OWN GATE FOR STARTING A GAME, which until this slice lived
+    // ONLY in the legacy V2 event drawer — a committed deletion. It writes the
+    // already-shipped PUT .../events/:eid/rsvp-collection and nothing else.
+
+    // rsvpCreateHint is the V2 drawer's own wording, VERBATIM
+    // (calendar_v2.templ:1384). Reused rather than rewritten because it is
+    // already the right sentence and the operator has already read it once.
+    var rsvpCreateHint = 'Save the event first, then invite the party';
+
+    // rsvpRecurringCaution is the one-line caution [GR-6] requires on a
+    // repeating event. The RSVP table is UNIQUE (event_id, user_id) with NO
+    // occurrence column (migration 013), so every occurrence of a recurring
+    // session shares ONE set of answers: after week one the tally shows last
+    // week's replies and nobody can reset them. The real fix is a schema change
+    // and is BOOKED (C-CALV4-RSVP-OCCURRENCE); until then the operator is told
+    // rather than left to find out at the table.
+    var rsvpRecurringCaution = 'This event repeats, and every occurrence shares one set of answers.';
+
+    // edRsvpPaint sets the control from the record. It is called by edOpen for
+    // every mode, and the FIRST LINE is the audience gate: below RoleScribe the
+    // producer renders no markup, so there is nothing here to paint.
+    //
+    // DISABLED IN CREATE MODE IS A SEQUENCE FACT, NOT A PERMISSION ONE.
+    // collect_rsvps is deliberately off the shared update path, so it cannot
+    // ride the create payload — there is no event id to collect against yet.
+    function edRsvpPaint(rec) {
+      if (!ed.rsvp) return;
+      var editing = !!edState.eventID;
+      ed.rsvp.disabled = !editing;
+      ed.rsvp.checked = editing && !!(rec && rec.collect_rsvps);
+      if (!ed.rsvpHint) return;
+      if (!editing) { ed.rsvpHint.textContent = rsvpCreateHint; return; }
+      ed.rsvpHint.textContent = ed.rsvp.checked
+        ? 'The party can answer in-app and by email.'
+        : 'Emails the party once, and opens answers in-app.';
+      if (rec && rec.is_recurring) {
+        ed.rsvpHint.textContent += ' ' + rsvpRecurringCaution;
+      }
+    }
+
+    // edRsvpWrite flips the opt-in through the SHIPPED endpoint.
+    //
+    // IT DOES NOT RELOAD THE PAGE, unlike save and delete: arming RSVPs changes
+    // no date, no title and no mark, so throwing the GM's open editor away to
+    // re-render an identical grid would cost them their place for nothing.
+    //
+    // THE RESPONSE IS READ, NOT ASSUMED ([GR-10]). The V2 client printed "RSVPs
+    // are open — the party has been invited." unconditionally, including when
+    // the server sent ZERO email because no SMTP is configured — so the operator
+    // armed their gate, believed the sentence, stopped checking, and found out
+    // on the day of the session. The endpoint now reports its mail state and
+    // this prints what it says, never a sentence of its own invention.
+    function edRsvpWrite() {
+      if (!ed.rsvp || !edState.eventID) return;
+      var fetcher = api();
+      var want = !!ed.rsvp.checked;
+      if (!fetcher) { ed.rsvp.checked = !want; edError('Cannot reach Chronicle right now.'); return; }
+      ed.rsvp.disabled = true;
+      fetcher(eventsBase() + '/' + edState.eventID + '/rsvp-collection', {
+        method: 'PUT', body: { enabled: want },
+      }).then(function (resp) {
+        ed.rsvp.disabled = false;
+        if (!resp || !resp.ok) {
+          // THE CONTROL GOES BACK TO WHAT THE SERVER STILL HOLDS. A checkbox
+          // left showing a state the server refused is the same lie in a
+          // smaller font.
+          ed.rsvp.checked = !want;
+          edError('That could not be changed. Try again.');
+          return null;
+        }
+        return resp.json ? resp.json() : null;
+      }).then(function (body) {
+        if (!ed.rsvpHint || !ed.rsvp.checked) { return; }
+        if (body && body.notice) { ed.rsvpHint.textContent = body.notice; return; }
+        ed.rsvpHint.textContent = 'The party can answer in-app and by email.';
+      }).catch(function () {
+        ed.rsvp.disabled = false;
+        ed.rsvp.checked = !want;
+        edError('That could not be changed. Check your connection and try again.');
+      });
     }
 
     // edLoad fetches the full record for EDIT mode. It is the one read this
@@ -2333,6 +2763,12 @@
           if (calEd && dayEd) edLoad(calEd, dayEd, editBtn.getAttribute('data-dc-edit'), card);
           return;
         }
+        // ANY CLICK THAT IS NOT ON DELETE DISARMS IT (§7 [GR-13]). This sits
+        // ABOVE the branch chain so it covers Cancel, Save, every chrome
+        // control in the editor's subtree, and every click elsewhere on the
+        // page — the arming window is for a second press on the SAME button
+        // and nothing else, so any other intent the user expresses cancels it.
+        if (edState.delArmed && !e.target.closest('[data-de-delete]')) edDeleteDisarm();
           if (e.target.closest('[data-de-cancel]')) { e.preventDefault(); edClose(); return; }
         if (e.target.closest('[data-de-delete]')) { e.preventDefault(); edDelete(); return; }
         if (e.target.closest('[data-de-save]')) { e.preventDefault(); edSave(); return; }
@@ -2358,6 +2794,17 @@
       }
     });
 
+    // The editor's half of [MOB-3]'s `toggle` truth. It is wired HERE rather
+    // than beside the card's because `ed` is built later in this mount and a
+    // listener attached against a hoisted `undefined` is a listener on nothing.
+    if (ed && ed.root && ed.root.addEventListener) {
+      ed.root.addEventListener('toggle', function (e) {
+        sheetOpenChanged('editor', (e && typeof e.newState === 'string')
+          ? e.newState === 'open'
+          : ed.root.hasAttribute('data-dc-shown'));
+      });
+    }
+
     // The all-day toggle reveals the in-world time row. It is a display switch
     // on a field the API has ALWAYS had — the mockup's `needs backend` chip
     // over start_hour/start_minute was simply wrong and it comes off rather
@@ -2366,6 +2813,13 @@
       ed.allDay.addEventListener('change', function () {
         if (ed.timeRow) ed.timeRow.hidden = !!ed.allDay.checked;
       });
+    }
+    // The RSVP opt-in writes on CHANGE, not on click: `change` is the event a
+    // real checkbox emits for a mouse click, a spacebar press and a click on the
+    // label alike, so the keyboard path is the same path and there is nothing to
+    // route through edControl.
+    if (ed && ed.rsvp) {
+      ed.rsvp.addEventListener('change', function () { edRsvpWrite(); });
     }
     if (ed && ed.form) {
       ed.form.addEventListener('submit', function (e) { e.preventDefault(); edSave(); });
@@ -2463,6 +2917,10 @@
     // Ledger) and injecting tabindex from here would be both the mutation this
     // module refuses and a control the server never rendered.
     document.addEventListener('change', function (e) {
+      // TYPING OR TOGGLING ANYTHING DISARMS DELETE (§7 [GR-13]). The click
+      // path is covered in the delegated handler above; this is the keyboard
+      // and form-control half of "any other editor interaction".
+      if (edState.delArmed) edDeleteDisarm();
       if (state.suppress) return;
       var t = e.target;
       if (!t || !t.matches || !t.matches('input.daypick[data-day-pick]')) return;
@@ -2501,6 +2959,35 @@
     //     EQUIVALENT AND THIS SLICE DOES NOT INVENT ONE — it is booked with
     //     [DC-4]'s a11y follow-on, C-CALV4-DAYPICK-A11Y, because a focusable
     //     day cell that does not depend on a docked Ledger is a WIDGET change.
+    //
+    //     AND "POINTER-ONLY" IS DESKTOP-ONLY IN PRACTICE, WHICH IS DECLARED
+    //     HERE RATHER THAN LEFT TO BE DISCOVERED AT A TABLE
+    //     (C-CALV4-MOBILE [MOB-9b] SIGNED).
+    //
+    //     TOUCH IS A POINTER AND THIS PATH NAMED IT NEITHER WAY, which is the
+    //     defect. THE MULTI-DAY PATH ON A PHONE IS THE EDITOR'S END-DATE
+    //     FIELD, which already ships and is reachable by every input method.
+    //
+    //     ** THIS IS [READ] FROM CODE, NOT MEASURED, AND MUST STAY LABELLED
+    //     THAT WAY WHEREVER IT IS RESTATED.** Headless Chromium fires no touch
+    //     gestures, so nothing in this repository has observed it. The
+    //     reasoning: the registration below takes `pointerdown` /
+    //     `pointermove` / `pointerup` on `document` with NO `pointerType`
+    //     filter; no `touch-action` is declared in any of the four calendar
+    //     stylesheets; under the default `touch-action: auto` a browser that
+    //     decides a touch is a pan fires `pointercancel` and stops sending
+    //     `pointermove`; and this module's own `pointercancel` handler calls
+    //     `dragEnd(true)`. So on a phone the drag is usually swallowed as a
+    //     page scroll and creates nothing, while on a desktop it works.
+    //     Sound, and unverified — ten seconds on a real phone settles it.
+    //
+    //     `touch-action: none` ON THE DAY CELLS IS REFUSED BY NAME. It would
+    //     claim the gesture and KILL PAGE SCROLLING OVER THE MONTH GRID, which
+    //     on a phone is a worse trade than losing drag-create — and it would
+    //     put a `touch-action` declaration into the four sheets [MOB-4]
+    //     deliberately keeps free of one. The touch path is booked as
+    //     C-CALV4-DRAGCREATE-TOUCH; this ruling declares the scope, it does
+    //     not build the path.
     //  7. TEXT-SELECTION SUPPRESSION IS SCOPED TO THE ACTIVE DRAG and restored
     //     on pointerup — the V2 implementation learned that one the hard way.
     //
@@ -2693,11 +3180,131 @@
     });
   }
 
+  // ── §2: the Bench's date-verb row ──────────────────────────────────────────
+  //
+  // C-CALV4-GAMEREADY [GR-SIGN-A] SIGNED / [GR-4]. Two verbs — `+1 day` and
+  // `−1 day` — plus an Owner-only Set date, all three writing through the
+  // EXISTING `PUT /campaigns/:id/calendar/world-state` with the payload
+  // gm_panel.js already sends. No new route, no new capability, no floor moved.
+  //
+  // WHY IT LIVES IN THIS FILE, WHICH IS NOT ABOUT DAY CARDS. The Bounds of that
+  // slice forbid a new page script (tools/check-page-scripts.sh is a shrink-only
+  // ratchet) and forbid opening internal/app/routes.go, where the plugin's
+  // body-script REGISTRY is built — and a <script> inside an HTMX-swapped
+  // fragment is deleted outright by boot.js:163. This module is the plugin's
+  // only registry-mounted driver that is already on the Bench, so it is the only
+  // legal seat for the one thing the row cannot do declaratively: send JSON.
+  // Echo's form binder skips `putWorldStateBody`'s tagless pointer-to-struct
+  // members, so a form-encoded PUT binds nothing and silently changes no date
+  // (TestWorldStatePut_FormEncodedBindsNothing pins that measurement).
+  //
+  // IT IS COMPLETELY INDEPENDENT OF THE CARD. Its own mount, its own wired
+  // flag, its own early return. A page with a verb row and no day card wires it;
+  // a page with a card and no verb row does not.
+  //
+  // THE ROLLOVER IS THE SERVER'S. This sends `{advance:{days:±1}}` and does no
+  // date arithmetic of its own — month ends, year ends and leap geometry are
+  // already decided once, server-side, for V2's console. A second definition
+  // here is how two surfaces start disagreeing about when a year turns over.
+  function initDateVerbs() {
+    if (typeof document === 'undefined') return;
+    var row = document.querySelector('[data-bench-date-verbs]');
+    if (!row || row.dataset.dvWired === '1') return;
+    row.dataset.dvWired = '1';
+
+    var url = row.getAttribute('data-verb-url') || '';
+    var csrf = row.getAttribute('data-verb-csrf') || '';
+    var say = row.querySelector('[data-bench-date-say]');
+
+    function report(msg) { if (say) say.textContent = msg; }
+
+    // AN EMPTIED BOX IS NOT A ZERO. This row shipped reading the Year field
+    // through a fieldInt helper whose fallback was zero, so a GM who cleared
+    // the field and pressed Set date moved the world to year 0 — 200, stored,
+    // no error. The V2 console had the identical fallback; a parity sweep found
+    // both. The fallback cannot be made "smarter" by picking a better number,
+    // because year 0 and negative years are LEGITIMATE on a fantasy calendar:
+    // the only correct behaviour is to refuse a coordinate that is not there
+    // and say which one. A typed "0" still parses and is still sent.
+    function coordOrNull(sel) {
+      var el = row.querySelector(sel);
+      if (!el) return null;
+      var raw = String(el.value == null ? '' : el.value).trim();
+      if (raw === '' || !/^-?\d+$/.test(raw)) return null;
+      return parseInt(raw, 10);
+    }
+
+    function commit(body, btn) {
+      var fetcher = (window.Chronicle && window.Chronicle.apiFetch) ? window.Chronicle.apiFetch : null;
+      if (!fetcher || !url) { report('Cannot reach the server.'); return; }
+      if (btn) btn.disabled = true;
+      report('Working…');
+      fetcher(url, { method: 'PUT', body: body, headers: { 'X-CSRF-Token': csrf } })
+        .then(function (resp) {
+          if (!resp.ok) {
+            return resp.json().catch(function () { return {}; }).then(function (b) {
+              throw new Error((b && b.message) || 'The date was not changed.');
+            });
+          }
+          // THE PAGE RELOADS RATHER THAN PATCHING THE NAMEPLATE. The date the
+          // verbs move is printed by the Block's own projection, and this
+          // module may READ the Block's DOM but never MUTATE it (see this
+          // file's boundary header). A reload is the honest re-read; a
+          // hand-patched label would be a second copy of the date that can
+          // disagree with the grid beneath it.
+          window.location.reload();
+        })
+        .catch(function (e) {
+          report((e && e.message) || 'The date was not changed.');
+          if (btn) btn.disabled = false;
+        });
+    }
+
+    // DELEGATED AT THE DOCUMENT, exactly as this module's other click handler
+    // is: the row's own controls are re-rendered by a boosted swap, and a
+    // listener bound to the row instance would go dead the first time the page
+    // came back through the sidebar — which is the class of bug the body-script
+    // registry exists to have already fixed once.
+    document.addEventListener('click', function (ev) {
+      if (!ev.target || !ev.target.closest) return;
+      if (!ev.target.closest('[data-bench-date-verbs]')) return;
+      var step = ev.target.closest('[data-bench-date-step]');
+      if (step) {
+        var days = parseInt(step.getAttribute('data-bench-date-step'), 10);
+        if (!days) return;
+        commit({ advance: { days: days, hours: 0, minutes: 0 } }, step);
+        return;
+      }
+      var set = ev.target.closest('[data-bench-date-set]');
+      if (set) {
+        var want = [
+          { key: 'year', sel: '[data-bench-date-year]', label: 'Year' },
+          { key: 'month', sel: '[data-bench-date-month]', label: 'Month' },
+          { key: 'day', sel: '[data-bench-date-day]', label: 'Day' },
+        ];
+        var time = {};
+        for (var i = 0; i < want.length; i++) {
+          var v = coordOrNull(want[i].sel);
+          if (v === null) {
+            // The row's own aria-live line is the honest place for this: the
+            // GM sees which box is empty, and NOTHING is sent.
+            report(want[i].label + ' must be a whole number — the date was not changed.');
+            return;
+          }
+          time[want[i].key] = v;
+        }
+        commit({ time: time }, set);
+      }
+    });
+  }
+
+  function initAll() { init(); initDateVerbs(); }
+
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initAll);
+    else initAll();
     // Re-init after boosted navigation (the QA2 convention) — guarded per card.
-    document.addEventListener('htmx:afterSettle', init);
-    document.addEventListener('htmx:load', init);
+    document.addEventListener('htmx:afterSettle', initAll);
+    document.addEventListener('htmx:load', initAll);
   }
 })();

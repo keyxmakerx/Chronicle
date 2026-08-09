@@ -397,11 +397,32 @@ func hasSuffix(s, suffix string) bool {
 
 // TestBlockMoonBaseDayIsSteppedNotRecomputed is the performance guard.
 //
-// Calendar.AbsoluteDay loops y = 0..year-1; calling it per cell costs
-// days × year × len(Months) iterations. The producer computes ONE base per
-// month and steps integer offsets. This asserts BOTH halves: that stepping is
-// exact (identical output to the per-cell form) and that it is dramatically
-// cheaper (a ratio, not a wall-clock threshold, so it is machine-independent).
+// AMENDMENT R4-S21-A (C-SWEEP-R4 stage 21, backend/cal-worldstate-year-dos).
+// This guard used to assert a RATIO: that recomputing Calendar.AbsoluteDay per
+// cell is at least 5× slower than stepping off one base. That ratio held only
+// because AbsoluteDay summed YearLengthForYear from year 0, i.e. it was O(year)
+// — and that same linearity was an unauthenticated CPU-exhaustion vector on
+// three public world-state routes (53.5 s per request at `?year=2000000000`).
+// Stage 21 replaced the year term with a closed form, so the ratio inverted and
+// the old assertion began failing on a CORRECT tree. A guard whose premise the
+// fix deliberately removes cannot be left as-is, and it must not simply be
+// deleted either.
+//
+// It is AMENDED TO THE STRONGER PROPERTY it was always a proxy for. The old
+// form tolerated an O(year) AbsoluteDay as long as this one producer stepped
+// around it; the new form forbids an O(year) AbsoluteDay outright, which no
+// producer can route around, AND keeps the exactness half untouched. So:
+//
+//  1. exactness — stepping off one base equals recomputing per day (unchanged);
+//  2. agreement — the stepped producer's illumination matches the per-cell
+//     computation disc for disc (unchanged);
+//  3. year-independence (NEW, replacing the ratio) — the per-cell form costs
+//     the same at year 2000000000 as at year 50000. Restore the loop and the
+//     50000 leg alone is ~30 AbsoluteDay walks of 50000 iterations, while the
+//     2000000000 leg does not finish inside the go test deadline at all.
+//
+// TestAbsoluteDayClosedFormIsNotLinear in absoluteday_dos_test.go pins the same
+// root property directly; this one pins that the BLOCK still gets it.
 func TestBlockMoonBaseDayIsSteppedNotRecomputed(t *testing.T) {
 	cal := blockTenDayCal()
 	cal.LeapYearEvery = 4
@@ -421,7 +442,6 @@ func TestBlockMoonBaseDayIsSteppedNotRecomputed(t *testing.T) {
 		}
 	}
 
-	naiveStart := time.Now()
 	naive := make([][]blockNaivePhase, 0, days)
 	for d := 1; d <= days; d++ {
 		abs := cal.AbsoluteDay(year, monthIdx+1, d)
@@ -431,9 +451,7 @@ func TestBlockMoonBaseDayIsSteppedNotRecomputed(t *testing.T) {
 		}
 		naive = append(naive, row)
 	}
-	naiveDur := time.Since(naiveStart)
 
-	fastStart := time.Now()
 	fastBase := monthBaseAbsoluteDay(cal, monthIdx, year)
 	for d := 1; d <= days; d++ {
 		discs := moonDiscsForDay(cal.Moons, fastBase, d, 0)
@@ -444,16 +462,32 @@ func TestBlockMoonBaseDayIsSteppedNotRecomputed(t *testing.T) {
 			}
 		}
 	}
-	fastDur := time.Since(fastStart)
 
-	// The analytic gap is `days`-fold (30 AbsoluteDay walks vs 1). Assert a
-	// conservative 5x so the guard survives a noisy CI box while still failing
-	// loudly if the per-cell loop ever comes back.
-	if naiveDur < fastDur*5 {
-		t.Fatalf("per-cell AbsoluteDay (%v) is not materially slower than the stepped "+
-			"form (%v) — the base-day optimisation has been lost", naiveDur, fastDur)
+	// Year-independence. Both legs walk a whole month of per-cell AbsoluteDay
+	// calls; the only difference is the year, so a year-linear implementation
+	// separates them by a factor of 40000. The budget is per-leg wall clock
+	// rather than a ratio between the two, because a ratio compares two numbers
+	// that a correct implementation makes equal — which is precisely how the
+	// pre-amendment form ended up asserting the bug.
+	for _, y := range []int{year, 2000000000} {
+		n := cal.MonthDays(monthIdx, y)
+		sink, elapsed, ok := absDayWithinBudget(500*time.Millisecond, func() int {
+			var acc int
+			for d := 1; d <= n; d++ {
+				acc += cal.AbsoluteDay(y, monthIdx+1, d)
+			}
+			return acc
+		})
+		if !ok {
+			t.Fatalf("a month of per-cell AbsoluteDay at year %d exceeded %v — AbsoluteDay is "+
+				"linear in the year again, which is both a Block render cost and an "+
+				"unauthenticated CPU-exhaustion vector on the world-state seed", y, elapsed)
+		}
+		if sink == 0 {
+			t.Fatal("compiler elided the call")
+		}
+		t.Logf("year %-12d: %d per-cell AbsoluteDay calls in %v", y, n, elapsed)
 	}
-	t.Logf("month of %d days at year %d: per-cell %v vs stepped %v", days, year, naiveDur, fastDur)
 }
 
 // blockNaivePhase is a local shim so the naive comparison above can hold a raw

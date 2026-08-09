@@ -119,10 +119,19 @@ type builderMonth struct {
 
 // builderMoon is one declared body. Period and offset derive every phase, turn
 // and node window — nothing is authored date by date.
+//
+// COLOUR IS CARRIED, NOT AUTHORED. No station offers a moon colour picker — the
+// Block draws phase glyphs rather than coloured discs — but the four import
+// formats DO carry one, and a field the draft cannot hold is a field the
+// wizard's front door destroys. It rides hidden through the form exactly as a
+// season's authored colour does, and Create writes it through unchanged
+// (C-SWEEP-R4 stage 24). Empty means "this payload declared none", which is a
+// different fact from any particular grey — see builderImportMoonSwatch.
 type builderMoon struct {
 	Name   string
 	Period float64
 	NewAt  float64
+	Color  string
 }
 
 // builderSeason carries its own AUTHORED colour (Season.Color) and the mono
@@ -185,6 +194,21 @@ type builderDraft struct {
 	LeapName  string
 	LeapAfter string
 	LeapNote  string
+	// LeapOffset is the leap modulus's phase — Chronicle's IsLeapYear is
+	// `(year-LeapYearOffset) % LeapYearEvery == 0`, so an offset of 0 and an
+	// offset of 3 are different calendars with the same "every N years". No
+	// station asks for it; it is CARRIED so an import that declares one does
+	// not lose it at Create (C-SWEEP-R4 stage 24).
+	LeapOffset int
+
+	// The time units. No station asks for these either — the wizard is about
+	// STRUCTURE — but Calendaria, Simple Calendar and Fantasy-Calendar all
+	// declare them and the plain importer keeps them, so the wizard's door
+	// carries them rather than stamping 24/60/60 over a 20-hour day. Zero means
+	// "unset" and resolves to the Gregorian defaults through builderTimeUnits.
+	HoursPerDay      int
+	MinutesPerHour   int
+	SecondsPerMinute int
 
 	// TimeZone is the IANA anchor, real-life only.
 	TimeZone string
@@ -433,6 +457,7 @@ const builderDraftID = "draft"
 // result MATCH, which is what "the result looks the same" actually demands
 // ([WZ-15] item 4, pre-authorised).
 func draftCalendar(d *builderDraft) *Calendar {
+	hours, minutes, seconds := builderTimeUnits(d)
 	cal := &Calendar{
 		ID:               builderDraftID,
 		CampaignID:       "",
@@ -441,10 +466,11 @@ func draftCalendar(d *builderDraft) *Calendar {
 		CurrentYear:      d.Year,
 		CurrentMonth:     1,
 		CurrentDay:       1,
-		HoursPerDay:      24,
-		MinutesPerHour:   60,
-		SecondsPerMinute: 60,
+		HoursPerDay:      hours,
+		MinutesPerHour:   minutes,
+		SecondsPerMinute: seconds,
 		LeapYearEvery:    d.LeapEvery,
+		LeapYearOffset:   d.LeapOffset,
 		Visibility:       "everyone",
 	}
 	if epoch := strings.TrimSpace(d.EpochName); epoch != "" {
@@ -466,9 +492,16 @@ func draftCalendar(d *builderDraft) *Calendar {
 		})
 	}
 	for _, m := range d.Moons {
+		// The preview promises the colour Create will actually write, which
+		// before stage 24 it did not: this hardcoded "" while Create stamped the
+		// swatch, so the wizard's own export disagreed with its own create path.
+		colour := m.Color
+		if colour == "" {
+			colour = builderImportMoonSwatch
+		}
 		cal.Moons = append(cal.Moons, Moon{
 			CalendarID: builderDraftID, Name: m.Name,
-			CycleDays: m.Period, PhaseOffset: m.NewAt, Color: "",
+			CycleDays: m.Period, PhaseOffset: m.NewAt, Color: colour,
 		})
 	}
 	for _, s := range d.Seasons {
@@ -479,10 +512,17 @@ func draftCalendar(d *builderDraft) *Calendar {
 		})
 	}
 	for i, e := range d.Eras {
-		cal.Eras = append(cal.Eras, Era{
+		// The code rides Description, in the preview exactly as at Create — the
+		// two must promise the same era or the wizard's export contradicts its
+		// own create path (C-SWEEP-R4 stage 24).
+		era := Era{
 			CalendarID: builderDraftID, Name: e.Name, StartYear: e.StartYear,
 			Color: e.Color, SortOrder: i,
-		})
+		}
+		if code := strings.TrimSpace(e.Code); code != "" {
+			era.Description = &code
+		}
+		cal.Eras = append(cal.Eras, era)
 	}
 	return cal
 }
@@ -715,15 +755,17 @@ func builderWeekSplit(week int) int {
 // doors, which is precisely what L6 ("wraps, does not replace") asks for — and
 // it makes every preset round-trip-provable against export.go's BuildExport.
 func builderImportResult(d *builderDraft) *ImportResult {
+	hours, minutes, seconds := builderTimeUnits(d)
 	res := &ImportResult{
 		Format:       FormatChronicle,
 		CalendarName: d.Name,
 		Settings: ImportedSettings{
 			CurrentYear:      d.Year,
-			HoursPerDay:      24,
-			MinutesPerHour:   60,
-			SecondsPerMinute: 60,
+			HoursPerDay:      hours,
+			MinutesPerHour:   minutes,
+			SecondsPerMinute: seconds,
 			LeapYearEvery:    d.LeapEvery,
+			LeapYearOffset:   d.LeapOffset,
 		},
 	}
 	if epoch := strings.TrimSpace(d.EpochName); epoch != "" {
@@ -739,9 +781,15 @@ func builderImportResult(d *builderDraft) *ImportResult {
 		res.Weekdays = append(res.Weekdays, WeekdayInput{Name: w, SortOrder: i})
 	}
 	for _, m := range d.Moons {
+		// The AUTHORED colour when the payload declared one; the swatch only
+		// for a moon the wizard itself created, which has no colour to carry.
+		colour := m.Color
+		if colour == "" {
+			colour = builderImportMoonSwatch
+		}
 		res.Moons = append(res.Moons, MoonInput{
 			Name: m.Name, CycleDays: m.Period, PhaseOffset: m.NewAt,
-			Color: builderImportMoonSwatch,
+			Color: colour,
 		})
 	}
 	for _, s := range d.Seasons {
@@ -752,11 +800,40 @@ func builderImportResult(d *builderDraft) *ImportResult {
 		})
 	}
 	for i, e := range d.Eras {
-		res.Eras = append(res.Eras, EraInput{
-			Name: e.Name, StartYear: e.StartYear, Color: e.Color, SortOrder: i,
-		})
+		// THE CODE GOES BACK WHERE IT CAME FROM. builderDraftFromImport reads an
+		// era's code OUT of Description (parseCalendaria puts Calendaria's
+		// `abbreviation` there) and the Eras station displays it; writing it
+		// back is the other half of that read, and without it the code was
+		// shown to the author and then dropped at Create. Chronicle's Era still
+		// has no code column — Description IS the place, in both directions.
+		era := EraInput{Name: e.Name, StartYear: e.StartYear, Color: e.Color, SortOrder: i}
+		if code := strings.TrimSpace(e.Code); code != "" {
+			era.Description = &code
+		}
+		res.Eras = append(res.Eras, era)
 	}
 	return res
+}
+
+// builderTimeUnits resolves the draft's time units, defaulting each to the
+// Gregorian value when the draft carries none.
+//
+// The defaults live HERE rather than at each use so the create path, the
+// preview calendar and the form reader cannot drift: a wizard-authored calendar
+// (no import behind it) has all three zero and must still come out 24/60/60,
+// which is what builderImportResult hardcoded before it could carry them.
+func builderTimeUnits(d *builderDraft) (hours, minutes, seconds int) {
+	hours, minutes, seconds = d.HoursPerDay, d.MinutesPerHour, d.SecondsPerMinute
+	if hours <= 0 {
+		hours = 24
+	}
+	if minutes <= 0 {
+		minutes = 60
+	}
+	if seconds <= 0 {
+		seconds = 60
+	}
+	return hours, minutes, seconds
 }
 
 // builderImportMoonSwatch is the colour every moon the wizard CREATES is given.
@@ -765,24 +842,22 @@ func builderImportResult(d *builderDraft) *ImportResult {
 // no wizard STATION asks for one, because the Block draws phase glyphs rather
 // than coloured discs.
 //
-// BUT IT IS NOT A DEFAULT WHEN THE PAYLOAD AUTHORS ONE, AND THAT IS THE PART
-// WORTH SAYING OUT LOUD. builderMoon has no Color field, so
-// builderDraftFromImport drops whatever colour the parser read and this
-// constant is stamped over the top — presets/harptos.json authors #cfd6dd /
-// #d8cbb8 / #c7cdd4 / #b9bcc4 and presets/elven.json authors #d5d0e8 / #cfd8e0,
-// and every one of them arrives at Create as #c0c0c0. The plain importer
-// PRESERVES them, so the wizard's front door is lossier than the importer it
-// wraps, which contradicts §2.2's "one code path, two front doors" in the one
-// place a door can quietly differ: what it throws away before the shared path
-// starts.
+// IT IS NO LONGER STAMPED OVER AN AUTHORED ONE (C-SWEEP-R4 stage 24). It used
+// to be: builderMoon had no Color field, so builderDraftFromImport dropped
+// whatever the parser read and this constant went over the top — presets/
+// harptos.json authors #cfd6dd / #d8cbb8 / #c7cdd4 / #b9bcc4 and presets/
+// elven.json authors #d5d0e8 / #cfd8e0, and every one of them arrived at Create
+// as #c0c0c0 while the PLAIN importer preserved them. The wizard's front door
+// was lossier than the importer it wraps, which contradicted §2.2's "one code
+// path, two front doors" in the one place a door can quietly differ: what it
+// throws away before the shared path starts.
 //
-// It is NAMED rather than inlined because it is one half of the asymmetry's
-// other end too — draftCalendar, the calendar the wizard previews and exports,
-// leaves Moon.Color empty, so the export writes "".
-// TestBuilderPresets_RoundTripThroughBuildExport asserts all three legs
-// (authored → stamped → empty) against the payload bytes, and .ai/todo.md books
-// the question of which of the three is right. It is not patched here: a moon's
-// colour is a question about what the sky MEANS in this product.
+// Now builderMoon carries the colour, it rides hidden through the form like a
+// season's, and this constant applies to exactly one case — a moon the WIZARD
+// created, which has no payload behind it and therefore no colour to keep.
+// draftCalendar uses the same fallback, so the calendar the wizard previews and
+// exports and the calendar Create writes are the same calendar; before stage 24
+// the preview wrote "" while Create wrote the swatch, and they disagreed.
 const builderImportMoonSwatch = "#c0c0c0"
 
 // builderCreateBlocked returns the reason Create is held, or "".
@@ -988,6 +1063,15 @@ func builderCarryFields(d *builderDraft, step int, importer bool) []builderField
 	// strings move with the station that owns them.
 	add("leap_every", strconv.Itoa(d.LeapEvery))
 	add("leap_add", strconv.Itoa(d.LeapAdd))
+	// NO STATION EDITS THESE FOUR, SO THEY ALWAYS RIDE HIDDEN. They are pure
+	// carried payload — the leap modulus's phase and the three time units — and
+	// every preview rebuilds the draft from the body, so a field absent here is
+	// a field that silently resets to the Gregorian default at Create. That was
+	// the wizard door's loss before C-SWEEP-R4 stage 24.
+	add("leap_offset", strconv.Itoa(d.LeapOffset))
+	add("hpd", strconv.Itoa(d.HoursPerDay))
+	add("mph", strconv.Itoa(d.MinutesPerHour))
+	add("spm", strconv.Itoa(d.SecondsPerMinute))
 	if !builderStationOwns(step, importer, "leap") {
 		add("leap_name", d.LeapName)
 		add("leap_after", d.LeapAfter)
@@ -1023,6 +1107,15 @@ func builderCarryFields(d *builderDraft, step int, importer bool) []builderField
 		for _, w := range d.Weekdays {
 			add("wd", w)
 		}
+	}
+	// A MOON'S COLOUR ALWAYS RIDES HIDDEN, like a season's, because it is
+	// AUTHORED DATA that no station offers a picker for. It is emitted OUTSIDE
+	// the station guard and one per moon, so moon_color[i] stays index-aligned
+	// with the moon list whether or not the Moons station is open — the same
+	// discipline the season block below uses, and for the same reason the month
+	// NAME list is emitted whole or not at all.
+	for _, m := range d.Moons {
+		add("moon_color", m.Color)
 	}
 	if !builderStationOwns(step, importer, "moon") {
 		for _, m := range d.Moons {

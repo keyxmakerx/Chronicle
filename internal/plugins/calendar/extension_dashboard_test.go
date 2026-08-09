@@ -68,12 +68,27 @@ func TestCalendarExtensionDashboard_ActiveCalendarNoEvents(t *testing.T) {
 	if !strings.Contains(html, "No upcoming events") {
 		t.Errorf("active branch with no events should show empty-events copy; got:\n%s", html)
 	}
-	// Operator's first V2 calendar door — must be present.
-	if !strings.Contains(html, "/campaigns/c-1/calendar/v2") {
-		t.Errorf("active branch must include the Open V2 Calendar link; got:\n%s", html)
+	// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). This required the href
+	// "/campaigns/c-1/calendar/v2" and the literal label "Open V2 Calendar" —
+	// the single most direct instance of the operator's complaint, since it is
+	// the product naming its own version number at the user. THE NEW CLAIM: the
+	// door opens the Bench and the label stops naming a version.
+	//
+	// THE ASSERTION IS KEPT, NOT DELETED. A link whose target nothing asserts is
+	// the next silent regression, and this one is the Extensions hub's only
+	// calendar door.
+	if !strings.Contains(html, "/campaigns/c-1/apps/calendar") {
+		t.Errorf("active branch must include the Open-calendar link to the Bench; got:\n%s", html)
 	}
-	if !strings.Contains(html, "Open V2 Calendar") {
+	if strings.Contains(html, "/campaigns/c-1/calendar/v2") {
+		t.Errorf("the extensions hub still links to the V2 shell; got:\n%s", html)
+	}
+	if !strings.Contains(html, "Open calendar") {
 		t.Errorf("CTA label missing; got:\n%s", html)
+	}
+	if strings.Contains(html, "Open V2 Calendar") {
+		t.Errorf("the CTA still names the version at the user — a link's text changes when its "+
+			"meaning does ([VS-2] rule 1); got:\n%s", html)
 	}
 }
 

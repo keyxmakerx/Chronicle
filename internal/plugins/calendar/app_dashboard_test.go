@@ -109,7 +109,17 @@ func TestCalendarAppPage_ReachesEveryVisibleCalendar(t *testing.T) {
 		// the attention tile even though its row prints the fault instead.
 		"Dwarven Deep-count",
 		// doors to the existing surfaces — no CRUD is reimplemented:
-		"/campaigns/camp-1/calendar/v2/cal-harptos",        // Open calendar
+		//
+		// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-14] SIGNED). This row used to
+		// require "/campaigns/camp-1/calendar/v2/cal-harptos" — the header's
+		// "Open calendar →". THE NEW CLAIM: that affordance is REMOVED, not
+		// re-pointed, because the Bench IS the calendar now and re-pointing it
+		// would have produced a link to the page you are already on. The
+		// guarantee this test's own header states — "every visible calendar is
+		// named, with a door to it and, for an owner, a door to its settings" —
+		// is preserved by the names above and the settings hrefs below; what
+		// changed is that leaving the Bench for the legacy shell is no longer
+		// one of the doors. The negative is asserted below.
 		"/campaigns/camp-1/calendars/cal-harptos/settings", // Builder / Settings
 		"/campaigns/camp-1/calendars/cal-elven/settings",   // per-row settings
 		// PIN REFRESHED by C-CALV4-WIZARD-P13 [WZ-13] SIGNED. The New-calendar
@@ -122,6 +132,15 @@ func TestCalendarAppPage_ReachesEveryVisibleCalendar(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("bench page missing %q", want)
 		}
+	}
+	// THE OTHER HALF OF THE INVERSION, asserted rather than implied: the Bench
+	// links to the legacy shell nowhere at all. This is the operator's complaint
+	// at its sharpest — the v4 front door linking back to the calendar it
+	// replaced — and it was true in FOUR places before R2-4 ([VS-2] SIGNED).
+	if strings.Contains(html, "/calendar/v2") {
+		t.Errorf("the Bench still links to the V2 shell — R2-4 swept bench.go's four doors "+
+			"(the header anchor and the row-grid card link REMOVED per [VS-14]; the ribbon's "+
+			"today tile and the Next-Up rows RE-POINTED per [VS-2]/[VS-13]); got:\n%s", html)
 	}
 }
 
@@ -357,8 +376,26 @@ func TestCalendarAppDashboard_RowsAreFullNav(t *testing.T) {
 	if strings.Contains(html, `hx-target="#cal-dash-detail"`) {
 		t.Errorf("bench doors must not HTMX-swap a detail pane (full-nav for engine scripts)")
 	}
-	if !strings.Contains(html, `href="/campaigns/camp-1/calendar/v2/cal-elven"`) {
-		t.Errorf("subordinate rows should be plain navigation links")
+	// INVERTED BY C-CALV4-V2SUNSET R2-4 ([VS-14] SIGNED). This asserted that a
+	// subordinate row was a plain href to /calendar/v2/<that calendar>. THE NEW
+	// CLAIM: the subordinate row is NOT A LINK AT ALL.
+	//
+	// WHY THE SEGMENT VANISHES RATHER THAN MOVING: [VS-12] measured that
+	// AppDashboard reads only `sort`, `y` and `m` — it never reads `calId` — so
+	// a row re-pointed at /apps/calendar would be a link from the Bench to the
+	// Bench that could not even change which calendar is selected. A self-link
+	// is not a door, it is a dead end wearing a door's label. The ROW SURVIVES
+	// intact — dot, name, fault, date, setup badge — and it becomes a door again
+	// in C-CALV4-BENCH-CALID, when there is something for the link to select.
+	//
+	// The full-nav DISCIPLINE this test is really about is unchanged and still
+	// asserted below: the Bench's only HTMX is the sort control.
+	if strings.Contains(html, `href="/campaigns/camp-1/calendar/v2/cal-elven"`) {
+		t.Errorf("a subordinate row is linking to the V2 shell again — [VS-14] removed the " +
+			"affordance rather than re-pointing it")
+	}
+	if !strings.Contains(html, `data-calendar-id="cal-elven"`) {
+		t.Errorf("the subordinate ROW itself must survive the removal of its link")
 	}
 	// The sort control's five links are the ONLY HTMX the Bench itself emits,
 	// and every one of them swaps the row section. (The app shell's own

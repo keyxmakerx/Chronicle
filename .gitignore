@@ -44,6 +44,11 @@ static/css/app.css
 # --- IDE / Editor ---
 .idea/
 .vscode/
+# Claude Code scratch worktrees — throwaway checkouts, never repo state.
+# Only the worktrees dir: .claude/ itself holds TRACKED project config
+# (.claude/hooks/session-start.sh), so ignoring the parent would silently
+# hide a real, versioned file.
+.claude/worktrees/
 *.swp
 *.swo
 *~

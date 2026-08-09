@@ -224,18 +224,37 @@ func (h *Handler) ShowV2(c echo.Context) error {
 // uses them. The timeline + standalone embed have NO V2 equivalent yet and are
 // preserved (see routes.go).
 
-// v2CalendarRedirect 301s a retired V1 calendar view to V2, preserving :calId
-// and the view segment (month is the V2 default, so "" → /calendar/v2/:calId).
+// v2CalendarRedirect 301s a retired V1 calendar view to the campaign's calendar,
+// which since C-CALV4-V2SUNSET R2-4 is THE BENCH ([VS-2] SIGNED).
+//
+// TWO THINGS THE TARGET NO LONGER PRESERVES, AND THE SECOND IS A FEATURE LOSS
+// THAT MUST NOT HIDE INSIDE A GREEN TEST:
+//
+//  1. :calId — the Bench never reads `calId` ([VS-12] SIGNED, measured against
+//     app_dashboard.go, which reads `sort`, `y` and `m`). A bookmark to a
+//     specific V1 calendar lands on the Bench's default selection.
+//
+//  2. THE VIEW SEGMENT — and it vanishes because THERE IS NOWHERE FOR IT TO GO.
+//     /calendars/:calId/week and /day used to 301 to the shell's week and day
+//     views, and those views exist in exactly one place in the product:
+//     ShowV2's `case "week", "day"` (handler_v2.go). v4 has NO week view and NO
+//     day view — the Block is a month, the Shelf's tabs are Month / Upcoming /
+//     Filters / Almanac, and /schedule is a scheduling surface, not a calendar
+//     week. So a /week bookmark now lands on a MONTH.
+//
+//     This is [VS-1]'s first gap surfacing at a URL. It is a PREREQUISITE of
+//     the shell's removal, not a booking that might never be taken:
+//     C-CALV4-WEEKDAY-VIEWS must merge before C-CALV4-SHELL-REMOVAL may start,
+//     because deleting the shell today would take the only week and day views
+//     the product has with it. The `view` parameter is kept in this signature
+//     precisely so that slice has somewhere to reconnect it.
+//
+// The retained parameter is deliberate and is not dead weight; see above.
 func (h *Handler) v2CalendarRedirect(c echo.Context, view string) error {
 	cc := campaigns.GetCampaignContext(c)
-	target := "/campaigns/" + cc.Campaign.ID + "/calendar/v2"
-	if calID := c.Param("calId"); calID != "" {
-		target += "/" + calID
-		if view != "" {
-			target += "/" + view
-		}
-	}
-	return c.Redirect(http.StatusMovedPermanently, target)
+	_ = view // see the doc comment: the segment has no v4 destination yet.
+	return c.Redirect(http.StatusMovedPermanently,
+		"/campaigns/"+cc.Campaign.ID+"/apps/calendar")
 }
 
 // RedirectShowV2 / RedirectWeekV2 / RedirectDayV2 are the route targets for the

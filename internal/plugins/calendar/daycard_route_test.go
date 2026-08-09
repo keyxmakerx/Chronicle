@@ -27,6 +27,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -211,46 +212,65 @@ func TestGetEvent_TheRecordCarriesRecurrenceSoTheEditorCanRoundTripIt(t *testing
 	}
 }
 
-// TestUpdateEvent_AnOmittedIsRecurringIsAWriteOfFalse pins the SERVICE fact the
-// fix above is built on, in the voice null_preserve_test.go's
-// TestUpdateEvent_EntityIDStillClearsOnNil uses: this is a deliberate non-fix,
-// pinned so a future sweep cannot quietly change it without revisiting why the
-// client round-trips.
+// TestUpdateEvent_IsRecurringAbsentPreserves_ExplicitFalseClears —
+// AMENDED IN SWEEP R4 (2026-08-07), and named as such.
 //
-// C-CAL-NULL-PRESERVE excluded value-typed fields ON PURPOSE — "IsRecurring —
-// bool: false IS the value, not 'absent'" — so the write path has no way to
-// tell an author clearing a repeat from a client that never mentioned it. That
-// is why the obligation lives in the client and why the record carries the
-// field. If this test ever goes red because the bool was nil-guarded, the
-// client's round-trip becomes redundant rather than wrong; read the comment on
-// eventEditorRecord before deleting anything.
-func TestUpdateEvent_AnOmittedIsRecurringIsAWriteOfFalse(t *testing.T) {
-	var written *Event
-	repo := &mockCalendarRepo{
-		getEventFn: func(_ context.Context, _ string) (*Event, error) { return seededEvent(), nil },
-		updateEventFn: func(_ context.Context, evt *Event) error {
-			written = evt
-			return nil
-		},
+// This test used to be TestUpdateEvent_AnOmittedIsRecurringIsAWriteOfFalse
+// and pinned the opposite fact as a deliberate non-fix: C-CAL-NULL-PRESERVE
+// excluded value-typed fields on the reasoning that "IsRecurring — bool:
+// false IS the value, not 'absent'", so the write path could not tell an
+// author clearing a repeat from a client that never mentioned it, and the
+// obligation lived in the client's round-trip.
+//
+// The coordinator's 2026-08-07 ruling supplies the missing distinction:
+// patch.Field carries presence, so absent and false are now different
+// things. The old expectation is inverted ON PURPOSE — it was the booked
+// hazard, live on three Foundry calendar-sync paths that push five-key
+// bodies. The client's round-trip is now redundant rather than load-bearing;
+// it is left in place because a client that sends what it means is still
+// correct, and the eventEditorRecord comment still explains why it exists.
+//
+// Both directions are pinned here so the amendment cannot be read as a
+// weakening: an explicit false STILL turns recurrence off.
+func TestUpdateEvent_IsRecurringAbsentPreserves_ExplicitFalseClears(t *testing.T) {
+	run := func(t *testing.T, in UpdateEventInput) *Event {
+		t.Helper()
+		var written *Event
+		repo := &mockCalendarRepo{
+			getEventFn: func(_ context.Context, _ string) (*Event, error) { return seededEvent(), nil },
+			updateEventFn: func(_ context.Context, evt *Event) error {
+				written = evt
+				return nil
+			},
+		}
+		if err := newTestCalendarService(repo).UpdateEvent(context.Background(), "evt-1", in); err != nil {
+			t.Fatalf("UpdateEvent: %v", err)
+		}
+		if written == nil {
+			t.Fatal("repo.UpdateEvent not called")
+		}
+		return written
 	}
-	svc := newTestCalendarService(repo)
+
 	// Exactly what a title-only save binds to when the body omits the key.
-	if err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
-		Name: "Renamed Title", Year: 1492, Month: 7, Day: 15,
-		Visibility: "everyone", IsRecurring: false,
-	}); err != nil {
-		t.Fatalf("UpdateEvent: %v", err)
-	}
-	if written == nil {
-		t.Fatal("repo.UpdateEvent not called")
-	}
-	if written.IsRecurring {
-		t.Fatal("IsRecurring is now nil-guarded — see this test's comment before " +
-			"simplifying the client's round-trip away")
+	written := run(t, UpdateEventInput{
+		Name: patch.Of("Renamed Title"), Year: patch.Of(1492), Month: patch.Of(7), Day: patch.Of(15),
+		Visibility: patch.Of("everyone"),
+	})
+	if !written.IsRecurring {
+		t.Fatal("an OMITTED is_recurring turned recurrence off; absent must preserve")
 	}
 	if written.RecurrenceType == nil || *written.RecurrenceType != "yearly" {
-		t.Fatal("recurrence_type stopped surviving the write; the half-state this fix " +
-			"is about no longer forms the way the comment describes")
+		t.Fatal("recurrence_type stopped surviving the write")
+	}
+
+	// …and an author who actually clears the repeat still clears it.
+	written = run(t, UpdateEventInput{
+		Name: patch.Of("Renamed Title"), Year: patch.Of(1492), Month: patch.Of(7), Day: patch.Of(15),
+		Visibility: patch.Of("everyone"), IsRecurring: patch.Of(false),
+	})
+	if written.IsRecurring {
+		t.Fatal("an EXPLICIT is_recurring=false must still turn recurrence off")
 	}
 }
 

@@ -670,13 +670,126 @@ func TestToken_SuggestWritesNoteAndNotifiesOwner(t *testing.T) {
 	}
 }
 
+// TestToken_EmptySuggestionRejected — AMENDED by C-CALV4-GAMEREADY §5 [GR-7],
+// which is one of exactly TWO guard amendments that dispatch authorises by name.
+//
+// WHAT IT ASSERTED BEFORE: that an empty suggestion is refused. That is still
+// asserted and still true.
+//
+// WHAT IT NOW ALSO ASSERTS, AND WHY THE OLD VERSION LET A DEFECT SHIP GREEN:
+// the refusal must leave the token UNSPENT. ApplyEventRSVPToken used to consume
+// the token BEFORE running applySuggestion, so a partially-filled form — date
+// and from with no to, which is exactly what the page invites, since every field
+// looks optional — was refused with `used_at` ALREADY SET. Correcting the row
+// and resubmitting then answered "this RSVP link is invalid or has expired", and
+// so did re-opening the link from the email. One incomplete form permanently
+// destroyed a player's only way in, and this test passed the whole time because
+// it checked the refusal and never checked what the refusal cost.
+//
+// Two directions, deliberately in ONE test so they cannot drift apart:
+//
+//	negative control — a REFUSED suggest must not mark the token used;
+//	positive control — an ACCEPTED suggest must.
+//
+// MUTATION-TESTED BOTH WAYS: restore the consume-first order and the negative
+// control goes red; delete the post-write ApplyToken call and the positive
+// control goes red.
 func TestToken_EmptySuggestionRejected(t *testing.T) {
-	repo := &mockRSVPRepo{}
-	h, _ := newTokenHandler(t, RSVPActionSuggest, repo)
-	rec := serveToken(h, http.MethodPost, "tok", "note=")
-	if !strings.Contains(rec.Body.String(), "RSVP Failed") {
-		t.Errorf("an empty suggestion with no times must be refused; body = %q", rec.Body.String())
+	marked := 0
+	repo := &mockRSVPRepo{
+		markUsedFn: func(_ context.Context, _ string) error { marked++; return nil },
 	}
+	h, _ := newTokenHandler(t, RSVPActionSuggest, repo)
+
+	rec := serveToken(h, http.MethodPost, "tok", "note=")
+	body := rec.Body.String()
+	if !strings.Contains(body, "a time that would work") {
+		t.Errorf("an empty suggestion with no times must be refused; body = %q", body)
+	}
+	// THE AMENDMENT. `used_at IS NULL` after a refusal, expressed as "the repo's
+	// consume was never called" — the mock is the single-use write.
+	if marked != 0 {
+		t.Errorf("a REFUSED suggestion must leave the token live (used_at IS NULL); "+
+			"MarkRSVPTokenUsed was called %d time(s)", marked)
+	}
+	// The refusal comes back as the FORM, not a terminal failure page: the whole
+	// point of keeping the token live is that the member can fix the row here.
+	if !strings.Contains(body, `<form method="POST"`) || !strings.Contains(body, `name="w0date"`) {
+		t.Errorf("a refused suggestion must re-render the suggest form so the "+
+			"member can correct it; body = %q", body)
+	}
+
+	// POSITIVE CONTROL. A suggestion that IS accepted still spends the link —
+	// single-use is not weakened, it is only moved after the write.
+	marked = 0
+	rec2 := serveToken(h, http.MethodPost, "tok", "note=Sundays+after+4")
+	if !strings.Contains(rec2.Body.String(), "Response recorded") {
+		t.Errorf("a complete suggestion must be recorded; body = %q", rec2.Body.String())
+	}
+	if marked != 1 {
+		t.Errorf("an ACCEPTED suggestion must consume the token exactly once; "+
+			"MarkRSVPTokenUsed was called %d time(s)", marked)
+	}
+}
+
+// TestRSVPToken_OutWeekNotifiesOwner — C-CALV4-GAMEREADY §5 [GR-9].
+//
+// THE MEASURED ASYMMETRY (audit probe P9). One member redeems the emailed "Out
+// this week" link. They are told, correctly, that they are marked unavailable
+// for the whole week. `notifier.userIDs` is EMPTY. Another member then redeems a
+// plain `yes` and the owner IS notified. Cause: the token handler's
+// `case RSVPActionOutWeek:` set its message and returned WITHOUT calling
+// notifyOwnerOfResponse, while `default:` — yes/maybe/no — called it. The in-app
+// path has always called it.
+//
+// WHY ONE MISSING LINE CANCELS A SESSION. "Out this week" is the single decline
+// most likely to end a game night, and it was the ONE answer the Director never
+// heard. They see four notifications, count four, and arrive to a table of
+// three. The asymmetry was never a design choice: the in-app branch proves the
+// intent, which is why this is a one-line fix and not a question.
+//
+// BOTH SURFACES ARE ASSERTED IN THIS ONE TEST, ON PURPOSE. The defect existed
+// precisely because the two paths were pinned in different places — in fact the
+// in-app notify was pinned NOWHERE, which is how the emailed half could lose it
+// silently. Split across two tests they can drift apart again; here, deleting
+// the notify from either surface fails the same guard.
+func TestRSVPToken_OutWeekNotifiesOwner(t *testing.T) {
+	t.Run("the EMAILED out_week path notifies the owner", func(t *testing.T) {
+		h, notifier := newTokenHandler(t, RSVPActionOutWeek, &mockRSVPRepo{})
+		rec := serveToken(h, http.MethodPost, "tok", "")
+		if !strings.Contains(rec.Body.String(), "not attending") {
+			t.Fatalf("the member should be told they are marked out; body = %q", rec.Body.String())
+		}
+		if len(notifier.userIDs) != 1 || notifier.userIDs[0] != "owner-1" {
+			t.Errorf("the emailed \"out this week\" must notify the event's owner — this is the "+
+				"one decline most likely to cancel the session; got %v", notifier.userIDs)
+		}
+	})
+
+	t.Run("the IN-APP out_week path notifies the owner", func(t *testing.T) {
+		notifier := &mockNotifier{}
+		h := newBenchWriteHandler(&mockRSVPRepo{})
+		h.SetRSVPNotifier(notifier)
+		if _, err := serveRSVPWrite(h, "action="+RSVPActionOutWeek+"&csrf_token=t",
+			echo.MIMEApplicationForm, false, campaigns.RolePlayer, "u1"); err != nil {
+			t.Fatalf("in-app out_week write: %v", err)
+		}
+		if len(notifier.userIDs) != 1 || notifier.userIDs[0] != "owner-1" {
+			t.Errorf("the in-app \"out this week\" must notify the event's owner; got %v",
+				notifier.userIDs)
+		}
+	})
+
+	// The control that makes the two rows above mean something: a plain decline
+	// already notified on BOTH surfaces before this fix, so if it were the thing
+	// that were broken, the assertions above would be measuring the wrong gap.
+	t.Run("a plain decline notified on both surfaces all along", func(t *testing.T) {
+		h, notifier := newTokenHandler(t, RSVPActionNo, &mockRSVPRepo{})
+		serveToken(h, http.MethodPost, "tok", "")
+		if len(notifier.userIDs) != 1 {
+			t.Errorf("emailed \"no\" should notify; got %v", notifier.userIDs)
+		}
+	})
 }
 
 // --- temporary offered availability (C-CAL-RSVP-P2) ---

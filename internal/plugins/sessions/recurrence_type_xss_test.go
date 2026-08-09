@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -49,9 +50,9 @@ func TestUpdateSession_RefusesUnknownRecurrenceType(t *testing.T) {
 			svc := newTestSessionService(repo)
 
 			_, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-				Name:           "Game",
-				Status:         StatusPlanned,
-				RecurrenceType: &bad,
+				Name:           patch.Of("Game"),
+				Status:         patch.Of(StatusPlanned),
+				RecurrenceType: patch.Of(bad),
 			})
 			assertAppError(t, err, 400)
 			if updateCalled {
@@ -80,10 +81,10 @@ func TestUpdateSession_AcceptsValidAndNilRecurrenceType(t *testing.T) {
 		svc := newTestSessionService(repo)
 
 		_, err := svc.UpdateSession(context.Background(), "sess-1", UpdateSessionInput{
-			Name:           "Game",
-			Status:         StatusPlanned,
-			IsRecurring:    rt != nil,
-			RecurrenceType: rt,
+			Name:           patch.Of("Game"),
+			Status:         patch.Of(StatusPlanned),
+			IsRecurring:    patch.Of(rt != nil),
+			RecurrenceType: patch.FromPtr(rt),
 		})
 		if err != nil {
 			got := "nil"

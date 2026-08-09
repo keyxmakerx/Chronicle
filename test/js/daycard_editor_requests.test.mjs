@@ -343,6 +343,13 @@ test('DELETE follows the same door id as the save, so the two cannot disagree', 
   await new Promise((r) => setImmediate(r));
 
   assert.equal(fx.editor.querySelector('[data-de-delete]').hidden, false);
+  // AMENDED — C-CALV4-GAMEREADY §7 [GR-13]. Delete now ARMS on the first click
+  // and sends on the second (two-step in place; no dialog, no window.confirm).
+  // The assertion below is UNCHANGED — this is the ruled call shape, not a
+  // relaxation: the wire claim it makes is still that DELETE targets the same
+  // door id the save would have. The arming half is pinned in its own suite,
+  // test/js/daycard_delete_twostep.test.mjs.
+  fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
   fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
   await new Promise((r) => setImmediate(r));
   assert.equal(fx.calls.find((c) => c.method === 'DELETE').url,
@@ -403,6 +410,10 @@ test('Delete uses the shipped DELETE and nothing else', async () => {
   fx.fire('click', fx.cells[3]);
   fx.fire('click', fx.card.querySelector('[data-dc-edit]'));
   await new Promise((r) => setImmediate(r));
+  // AMENDED — C-CALV4-GAMEREADY §7 [GR-13]: arm, then confirm. The assertions
+  // below are unchanged; only the call shape moved, and it moved because the
+  // ruling moved it. See test/js/daycard_delete_twostep.test.mjs.
+  fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
   fx.fire('click', fx.editor.querySelector('[data-de-delete]'));
   await new Promise((r) => setImmediate(r));
 
@@ -615,16 +626,30 @@ test('the recurrence unit list is corrected in all three directions', () => {
   // from another realm is never reference-equal to one from this file's.
   const plain = (v) => JSON.parse(JSON.stringify(v));
   const ten = P.recurrenceUnits(10);
-  assert.deepEqual(plain(ten.map((u) => u.id)), ['week', 'month', 'day', 'moon']);
+  assert.deepEqual(plain(ten.map((u) => u.id)), ['week', 'month', 'year', 'day', 'moon']);
   assert.equal(ten[0].backed, true, 'the week unit is an accepted recurrence_type');
   assert.equal(ten[1].backed, true, 'monthly is an accepted recurrence_type');
-  assert.equal(ten[2].backed, false, 'there is no daily recurrence_type');
-  assert.equal(ten[3].backed, false, 'there is no moon-phase recurrence_type');
+  assert.equal(ten[2].backed, true, 'yearly is an accepted recurrence_type (C-CALV4-GAMEREADY §6)');
+  assert.equal(ten[3].backed, false, 'there is no daily recurrence_type');
+  assert.equal(ten[4].backed, false, 'there is no moon-phase recurrence_type');
 
-  // `year` IS INVENTION AND THE DRAWING OFFERS IT UNCHIPPED. It does not ship
-  // at all: an unbacked unit in a picker is a trap, and the one thing worse
-  // than a missing option is one that quietly does nothing.
-  assert.equal(ten.filter((u) => /year/i.test(u.id) || /year/i.test(u.label)).length, 0);
+  // AMENDED BY C-CALV4-GAMEREADY §6 [GR-11] — AND THE AMENDMENT IS AN
+  // INVERSION, NOT A RELAXATION.
+  //
+  // This assertion used to read `…filter(/year/).length === 0` with the note
+  // "`year` IS INVENTION AND THE DRAWING OFFERS IT UNCHIPPED. It does not ship
+  // at all: an unbacked unit in a picker is a trap." That was CORRECT for as
+  // long as it was true — OccursOn had four types and dropped `yearly` on the
+  // floor, so offering the unit would have been the exact silent degradation
+  // the chip exists to prevent.
+  //
+  // §6 built the type, so the ONLY reason the unit was withheld is gone, and
+  // the guard now asserts the same property from the other side: the unit
+  // EXISTS and is BACKED. It is not weaker — a picker offering an unbacked
+  // `year` still fails here, which is what the original was protecting.
+  const year = ten.filter((u) => u.id === 'year');
+  assert.equal(year.length, 1, 'the year unit ships now that RecurrenceYearly expands');
+  assert.equal(year[0].backed, true, 'a year unit that is not backed is the trap the chip prevents');
 
   // THE LABEL IS DERIVED, NEVER A LITERAL, and it is re-driven at the four
   // week lengths the stills re-drive `.wdpick` at. Chronicle's Calendar carries
@@ -638,7 +663,41 @@ test('the recurrence unit list is corrected in all three directions', () => {
   // server's own stride 0 and OccursOn falls back to a single occurrence, so
   // offering the unit would be offering exactly the silent degradation the chip
   // exists to prevent.
-  assert.deepEqual(plain(P.recurrenceUnits(0).map((u) => u.id)), ['month', 'day', 'moon']);
+  assert.deepEqual(plain(P.recurrenceUnits(0).map((u) => u.id)), ['month', 'year', 'day', 'moon']);
+});
+
+// C-CALV4-GAMEREADY §6, [GR-11] — the yearly unit, end to end through the two
+// pure mappers the editor and the server meet in.
+//
+// THE INVERSE IS HALF THE GUARD. A unit that authors `yearly` but does not read
+// `yearly` back opens the editor on "once" for an event that repeats, and the
+// next title-only save silently un-repeats a festival — the exact half-state
+// C-CAL-RECURRING-PARTIAL-STATE-CLEANUP had to unwind once already.
+test('the yearly unit authors yearly and reads yearly back', () => {
+  const P = boot().pure;
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+
+  assert.deepEqual(plain(P.recurrenceBody({ mode: 'repeats', unit: 'year', every: 1 })),
+    { is_recurring: true, recurrence_type: 'yearly', recurrence_interval: 0 });
+
+  // THE INTERVAL IS NOT AUTHORED FROM HERE, and `every` is ignored rather than
+  // forwarded. The server honours a stored yearly interval, but this editor
+  // offers no `every [N]` field for the unit, so sending a number the author
+  // never typed would author a rule they did not choose.
+  assert.equal(P.recurrenceInterval('year'), false);
+  assert.deepEqual(plain(P.recurrenceBody({ mode: 'repeats', unit: 'year', every: 4 })),
+    { is_recurring: true, recurrence_type: 'yearly', recurrence_interval: 0 });
+
+  // The inverse: a stored yearly event opens ON the year unit.
+  const back = plain(P.recurrenceFromRecord({ is_recurring: true, recurrence_type: 'yearly' }, 10));
+  assert.equal(back.mode, 'repeats');
+  assert.equal(back.unit, 'year');
+
+  // And a full round trip is lossless, which is what keeps a title-only save
+  // from rewriting the rule.
+  assert.deepEqual(
+    plain(P.recurrenceBody(P.recurrenceFromRecord({ is_recurring: true, recurrence_type: 'yearly' }, 10))),
+    { is_recurring: true, recurrence_type: 'yearly', recurrence_interval: 0 });
 });
 
 test('the interval maps onto the type at the producer of the request body', () => {
@@ -713,10 +772,20 @@ test('the editor renders a chip on every unbacked unit and on no backed one', ()
   openEditorOn(fx, 3);
   const units = fx.editor.querySelectorAll('[data-unit-pick]');
   assert.ok(units.length >= 3, 'the unit list did not build');
+  // AMENDED BY C-CALV4-GAMEREADY §6 [GR-11], AND STRENGTHENED WHILE AMENDING.
+  // The backed set was written out here as `id === 'week' || id === 'month'` —
+  // a THIRD hand-typed copy of a fact that already lived in recurrenceUnits and
+  // in model.go's constant block, and it went stale the moment `yearly` shipped.
+  // It is now READ from the producer, so adding a unit can never again leave
+  // this guard asserting the old world. The property is unchanged: a chip on a
+  // backed unit is the mockup's defect, a chip missing from an unbacked one is
+  // a silent single occurrence.
+  const backedIds = new Set(boot().pure.recurrenceUnits(10).filter((u) => u.backed).map((u) => u.id));
+  assert.ok(backedIds.has('year'), 'the yearly unit must be backed since §6 built RecurrenceYearly');
   for (const u of units) {
     const id = u.getAttribute('data-unit-pick');
     const chip = u.querySelector('.badge.need');
-    const backed = id === 'week' || id === 'month';
+    const backed = backedIds.has(id);
     assert.equal(!!chip, !backed,
       'unit ' + id + ': a chip on a backed unit is the mockup’s defect; a chip ' +
       'missing from an unbacked one is a silent single occurrence');

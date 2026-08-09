@@ -52,6 +52,55 @@
     }
   };
 
+  // Widget names we have already complained about, so a page carrying twenty
+  // mounts of one dead widget logs one line, not twenty.
+  var warnedUnmatched = {};
+
+  /**
+   * Report `data-widget` names that are mounted in the DOM but have no
+   * registered implementation, once per name per page.
+   *
+   * WHY THIS EXISTS. mountElement() bails silently on an unknown name because
+   * registration legitimately races the scan (a widget script that has not run
+   * yet mounts itself on register()). That makes "this widget is not registered
+   * YET" and "this widget's JS file is shipped on no page at all" produce the
+   * identical observable: an empty div, an empty console, and a page that looks
+   * finished. Three real widgets (aliases, inventory, transaction_log) sat
+   * permanently blank on entity pages that way — full backend, full JS, in no
+   * <script src> anywhere — and nothing said a word. Called only after the load
+   * has settled, when "not yet" is no longer a live explanation.
+   *
+   * @param {Element|Document} root - Root element to scan.
+   */
+  function warnUnmatchedWidgets(root) {
+    var elements = root.querySelectorAll('[data-widget]');
+    for (var i = 0; i < elements.length; i++) {
+      var name = elements[i].getAttribute('data-widget');
+      if (!name || widgets[name] || warnedUnmatched[name]) continue;
+      warnedUnmatched[name] = true;
+      console.warn(
+        '[Chronicle] No implementation registered for data-widget="' + name +
+        '" — this mount will stay empty. Its script is probably not loaded on ' +
+        'this page (internal/templates/layouts/base.templ, or the plugin ' +
+        'body-script registry in internal/app/routes.go).'
+      );
+    }
+  }
+
+  /**
+   * Run the unmatched-widget scan once the current turn of script execution
+   * has drained, so widgets that register after the mount pass (a deferred
+   * script later in document order, an extension bundle) are counted as
+   * present rather than reported as missing.
+   *
+   * @param {Element|Document} root - Root element to scan.
+   */
+  function scheduleUnmatchedWidgetScan(root) {
+    setTimeout(function () {
+      warnUnmatchedWidgets(root);
+    }, 0);
+  }
+
   /**
    * Mount all widget elements within a root element.
    * If widgetName is provided, only mount widgets of that type.
@@ -210,9 +259,11 @@
 
   // --- Lifecycle ---
 
-  // Mount all widgets on initial page load.
+  // Mount all widgets on initial page load, then (once the load has settled)
+  // report any mount whose implementation never showed up.
   document.addEventListener('DOMContentLoaded', function () {
     mountWidgets(document);
+    scheduleUnmatchedWidgetScan(document);
   });
 
   // --- Button/nav press linger effect ---
@@ -236,6 +287,7 @@
   document.addEventListener('htmx:afterSettle', function (event) {
     if (event.detail && event.detail.target) {
       mountWidgets(event.detail.target);
+      scheduleUnmatchedWidgetScan(event.detail.target);
     }
   });
 

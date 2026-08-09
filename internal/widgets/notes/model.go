@@ -61,6 +61,38 @@ func (n *Note) IsLockedByUser(userID string) bool {
 	return n.IsLocked() && *n.LockedBy == userID
 }
 
+// CanAccess reports whether userID may read this note within campaignID: the
+// owner, a campaign-wide share (IsShared), or an explicit per-user share.
+// Per ADR-013 a private (non-shared) note is owner-only.
+//
+// This lives on the model rather than in a handler because BOTH route sets that
+// address a single note — the web widget routes (internal/widgets/notes) and the
+// REST API v1 routes (internal/plugins/syncapi) — serve the same caller
+// population and must apply the identical predicate. Neither the repository nor
+// the service filters by user on the single-resource path (`WHERE id = ?`), so
+// this is the only ownership gate; a route that forgets it is an IDOR.
+func (n *Note) CanAccess(userID, campaignID string) bool {
+	if n.CampaignID != campaignID {
+		return false
+	}
+	if n.UserID == userID || n.IsShared {
+		return true
+	}
+	for _, uid := range n.SharedWith {
+		if uid == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// IsOwnedBy reports whether userID owns this note within campaignID. Owner-only
+// operations — deleting the note, and changing its sharing/pinned state — gate
+// on this rather than on CanAccess, which also admits share recipients.
+func (n *Note) IsOwnedBy(userID, campaignID string) bool {
+	return n.CampaignID == campaignID && n.UserID == userID
+}
+
 // NoteVersion is a historical snapshot of a note's content at a point in time.
 type NoteVersion struct {
 	ID        string    `json:"id"`

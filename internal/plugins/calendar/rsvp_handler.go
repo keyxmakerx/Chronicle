@@ -297,13 +297,44 @@ func (h *RSVPHandler) SetRSVPCollectionAPI(c echo.Context) error {
 		return err
 	}
 
-	if req.Enabled && !evt.CollectRSVPs {
+	// ── THE RESPONSE REPORTS ITS MAIL STATE ───────────────────────────────
+	// C-CALV4-GAMEREADY §5 [GR-10]. This endpoint used to answer a flat
+	// {"collect_rsvps":true} with HTTP 200 whether or not a mail server exists,
+	// and the client then printed "RSVPs are open — the party has been invited."
+	// unconditionally. With SMTP unconfigured the mail attempts were ZERO. The
+	// operator arms their gate, reads that sentence, and STOPS CHECKING — and
+	// discovers the truth when nobody answers, which is the day of the session.
+	//
+	// This is the exact condition AskAvailabilityAPI refuses loudly for, using
+	// the shared mailNotConfiguredLine constant a few lines below. The invite
+	// moment was the one place that constant was not used. It is used now, and
+	// it is the CONSTANT, never a copy of its text — one edit, one meaning,
+	// everywhere.
+	//
+	// THE ARMING STILL SUCCEEDS. Refusing the PUT with no SMTP would break the
+	// no-mail-server and fantasy-calendar operators outright: in-app answering
+	// works end to end with no mail server at all. The fix is to stop CLAIMING
+	// something that did not happen, not to stop doing the thing that did.
+	fannedOut := req.Enabled && !evt.CollectRSVPs
+	if fannedOut {
 		// Reflect the new state on the copy the fan-out reads, so recipients
 		// aren't invited to an event that still says it isn't collecting.
 		evt.CollectRSVPs = true
-		h.startInviteFanOut(cc.Campaign.ID, cc.Campaign.Name, cal, evt)
+		h.startInviteFanOut(cc.Campaign.ID, cc.Campaign.Name, cal, evt, auth.GetUserID(c))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"collect_rsvps": req.Enabled})
+
+	// `emailed` is "is mail going out for this call at all" — not "was it
+	// delivered". The fan-out is backgrounded precisely so a dead SMTP server
+	// cannot turn a UI toggle into a timeout, so per-recipient outcomes do not
+	// exist yet when this returns and the response must not pretend otherwise.
+	body := map[string]any{
+		"collect_rsvps": req.Enabled,
+		"emailed":       fannedOut && h.mailer != nil && h.mailer.IsConfigured(ctx),
+	}
+	if fannedOut && (h.mailer == nil || !h.mailer.IsConfigured(ctx)) {
+		body["notice"] = mailNotConfiguredLine
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 // mailNotConfiguredLine is spec ledger item 11's own wording, VERBATIM and
@@ -560,10 +591,32 @@ func (h *RSVPHandler) displayName(ctx context.Context, campaignID, userID string
 	return "A player"
 }
 
-// rsvpEventLink is the in-app URL an RSVP notification points at: the V2
-// calendar shell for the event's own calendar.
+// rsvpEventLink is the in-app URL an RSVP notification points at: the campaign's
+// calendar, which since C-CALV4-V2SUNSET R2-4 is the Bench.
+//
+// THE SHARPEST EGRESS DOOR IN THE SLICE ([VS-2] SIGNED). This URL is put into
+// NOTIFICATION EMAIL — it leaves the application entirely and sits in an inbox
+// for as long as the recipient keeps it. Two consequences, both stated rather
+// than discovered:
+//
+//  1. From this commit no NEW /calendar/v2 URL is mailed to anyone.
+//  2. MAIL ALREADY SENT STILL CARRIES THE OLD URL, and it still works, because
+//     R2-4 removes no route ([VS-3]). C-CALV4-SHELL-REMOVAL is what finally
+//     breaks those, and it should consider a permanent redirect rather than a
+//     404 — it would cost that slice one redirect and buy back the whole
+//     already-mailed population. This is a KNOWN AND ACCEPTED cost of the end
+//     state the operator signed, not an open risk.
+//
+// It is also the single strongest argument for [VS-3]'s zero-removals ruling
+// and for [VS-10]'s option (b): a door whose blast radius is somebody's inbox
+// must never point at a route that is authenticated-only, not even between two
+// commits of the same PR.
+//
+// The calendar id is dropped with the target ([VS-12]: the Bench never reads
+// `calId`). The mail still names the event in its own text, so the reader is
+// not left guessing which one it was about.
 func rsvpEventLink(campaignID string, evt *Event) string {
-	return fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, evt.CalendarID)
+	return fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID)
 }
 
 // rsvpDateLine renders the human date line shared by the emails and the token
@@ -638,6 +691,70 @@ func escapeAttr(s string) string { return html.EscapeString(s) }
 //        the cookie and plants the matching hidden field for the POST's
 //        double-submit. Without it the confirm click would 403.
 
+// rsvpDeadTokenPage is what BOTH token routes render when resolveToken refuses.
+//
+// C-CALV4-GAMEREADY §5 [GR-8]. THE MEASURED DEAD END: after a successful POST,
+// a browser refresh, a double-tap, a mail client's prefetch, or simply
+// re-opening the link to check "did that go through?" rendered
+//
+//	RSVP Failed
+//	this RSVP link is invalid or has expired
+//
+// The answer HAD been recorded. The page just said it failed — and a player who
+// reads that tells their GM the RSVP system is broken, and the GM believes them,
+// because the product said so. Session zero then goes on debugging a system
+// that is working perfectly.
+//
+// So: when the link is spent, an answer stands on record for it, and the SAME
+// membership + event-visibility re-check resolveToken runs still passes, state
+// the answer and offer the schedule. Everything else keeps the generic page.
+//
+// THE GATE IS DELIBERATELY THE FULL ONE, NOT A CHEAPER LOOKALIKE. Widening by a
+// single condition is a leak: a member removed from the campaign, and an event
+// flipped to dm_only after the invite went out, must still get the generic page
+// that never discloses the title. That is why this re-runs memberRole and
+// CanUserViewEvent rather than trusting the token, and why a failure at ANY step
+// falls through to the same generic page rather than explaining itself.
+func (h *RSVPHandler) rsvpDeadTokenPage(ctx context.Context, tokenStr string, cause error) string {
+	generic := rsvpResultPage("RSVP Failed", apperror.UserMessage(cause, rsvpBadTokenMsg), false, "")
+
+	tok, answer, err := h.svc.AnsweredToken(ctx, tokenStr)
+	if err != nil {
+		return generic
+	}
+	evt, cal, err := h.svc.EventContext(ctx, tok.EventID, "")
+	if err != nil || !evt.CollectRSVPs {
+		return generic
+	}
+	role, ok := h.memberRole(ctx, cal.CampaignID, tok.UserID)
+	if !ok || !h.svc.CanUserViewEvent(evt, role, tok.UserID) {
+		return generic
+	}
+
+	return rsvpResultPage("You've already answered",
+		fmt.Sprintf("You're down as %q for %s.",
+			rsvpStatusLabel(answer.Status), trimForDisplay(evt.Name, 80)),
+		true, rsvpSchedulePath(cal.CampaignID))
+}
+
+// rsvpStatusLabel names a STORED status for a human. It is deliberately separate
+// from rsvpActionLabel, which names an ACTION: "Out this week" is an action that
+// stores the status "no", and telling a member they are down as "Out this week"
+// when the row says `no` would be reporting the button they pressed rather than
+// the answer the Director will count.
+func rsvpStatusLabel(status string) string {
+	switch status {
+	case RSVPYes:
+		return "Going"
+	case RSVPMaybe:
+		return "Maybe"
+	case RSVPNo:
+		return "Not going"
+	default:
+		return "Answered"
+	}
+}
+
 // RedeemEventRSVPToken renders the confirm interstitial.
 // GET /calendar-rsvp/:token
 func (h *RSVPHandler) RedeemEventRSVPToken(c echo.Context) error {
@@ -646,7 +763,7 @@ func (h *RSVPHandler) RedeemEventRSVPToken(c echo.Context) error {
 
 	tok, evt, cal, err := h.resolveToken(ctx, tokenStr)
 	if err != nil {
-		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
+		return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
 	}
 
 	action := escapeAttr("/calendar-rsvp/" + tokenStr)
@@ -654,7 +771,7 @@ func (h *RSVPHandler) RedeemEventRSVPToken(c echo.Context) error {
 	detail := evt.Name + " — " + rsvpDateLine(cal, evt)
 
 	if tok.Action == RSVPActionSuggest {
-		return c.HTML(http.StatusOK, rsvpSuggestPage(detail, action, csrf))
+		return c.HTML(http.StatusOK, rsvpSuggestPage(detail, action, csrf, ""))
 	}
 
 	msg := fmt.Sprintf("You're responding %q to %s. Tap below to confirm.", rsvpActionLabel(tok.Action), detail)
@@ -675,19 +792,32 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 
 	tok, evt, cal, err := h.resolveToken(ctx, tokenStr)
 	if err != nil {
-		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
+		return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
 	}
 
-	applied, err := h.svc.ApplyToken(ctx, tokenStr)
-	if err != nil {
-		return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed", apperror.UserMessage(err, rsvpBadTokenMsg), false))
-	}
-
-	message := fmt.Sprintf("Your response to %q was recorded.", trimForDisplay(evt.Name, 80))
-	switch applied.Action {
-	case RSVPActionOutWeek:
-		message = h.applyOutThisWeek(ctx, cal, evt, tok.UserID)
-	case RSVPActionSuggest:
+	// ── VALIDATE BEFORE CONSUMING ─────────────────────────────────────────
+	// C-CALV4-GAMEREADY §5 [GR-7]. "Suggest another time" is the ONE action
+	// whose write can still be REFUSED after the token has resolved:
+	// applySuggestion rejects a submission carrying neither a usable window nor
+	// a note. This handler used to call ApplyToken FIRST, which marks the token
+	// used — so a partially-filled row (date + from, no `to`, with an empty
+	// note) was refused with the link ALREADY DEAD. Correcting the row and
+	// resubmitting answered "this RSVP link is invalid or has expired", and so
+	// did re-opening the link from the email: one incomplete form permanently
+	// destroyed a player's only way in.
+	//
+	// So the suggest branch runs the write first and consumes ONLY on success.
+	// That is the same shape as the existing GET-never-applies rule, moved one
+	// step earlier — nothing is spent until something happened.
+	//
+	// SINGLE-USE IS NOT WEAKENED. ApplyToken still owns consumption and still
+	// consumes atomically (`used_at IS NULL`); it is safe to run LAST for this
+	// action specifically because it returns early for `suggest` (rsvp_service.go)
+	// — it marks the token used and writes no status — so the reorder changes
+	// only WHEN the link dies, never whether it can be spent twice. Two
+	// concurrent submits still land exactly one consume; the loser is told the
+	// link is spent, and the suggestion the winner wrote is on record.
+	if tok.Action == RSVPActionSuggest {
 		// The token flow's role is the member's real campaign role, resolved in
 		// resolveToken; re-resolve rather than assume, so the visibility gate
 		// inside SuggestTime is the same one every other path uses.
@@ -695,14 +825,49 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 		msg, err := h.applySuggestion(ctx, cal.CampaignID, evt, tok.UserID, role,
 			c.FormValue("note"), parseOfferedWindows(c))
 		if err != nil {
-			return c.HTML(http.StatusOK, rsvpResultPage("RSVP Failed",
-				apperror.UserMessage(err, "Please add a time that would work, or a short note."), false))
+			// THE FORM COMES BACK, carrying the reason. Not a dead end: the
+			// token is still live, which is the entire point of the reorder.
+			return c.HTML(http.StatusOK, rsvpSuggestPage(
+				evt.Name+" — "+rsvpDateLine(cal, evt),
+				escapeAttr("/calendar-rsvp/"+tokenStr),
+				middleware.GetCSRFToken(c),
+				apperror.UserMessage(err, "Please add a time that would work, or a short note.")))
 		}
-		message = msg
+		if _, err := h.svc.ApplyToken(ctx, tokenStr); err != nil {
+			return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
+		}
+		// THE SUCCESS PAGE CARRIES THE SAME DOOR ([GR-8]): a member who answers
+		// from their inbox should not land somewhere with no route onward.
+		return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", msg, true,
+			rsvpSchedulePath(cal.CampaignID)))
+	}
+
+	applied, err := h.svc.ApplyToken(ctx, tokenStr)
+	if err != nil {
+		return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
+	}
+
+	message := fmt.Sprintf("Your response to %q was recorded.", trimForDisplay(evt.Name, 80))
+	switch applied.Action {
+	case RSVPActionOutWeek:
+		message = h.applyOutThisWeek(ctx, cal, evt, tok.UserID)
+		// C-CALV4-GAMEREADY §5 [GR-9]. This branch used to return without
+		// notifying, while `default:` (yes/maybe/no) notified — so the emailed
+		// "Out this week" told the Director NOTHING, and it is the one decline
+		// most likely to cancel the session. The Director saw four
+		// notifications, counted four, and arrived to a table of three.
+		//
+		// The asymmetry was never a design choice: the IN-APP branch of
+		// SetEventRSVPAPI has always called this, with this same RSVPNo, so the
+		// intent was already written down one file over. The two surfaces are
+		// now pinned in ONE test (TestRSVPToken_OutWeekNotifiesOwner) precisely
+		// because being pinned in different places is how they drifted.
+		h.notifyOwnerOfResponse(ctx, cal.CampaignID, evt, tok.UserID, RSVPNo)
 	default:
 		h.notifyOwnerOfResponse(ctx, cal.CampaignID, evt, tok.UserID, statusForAction(applied.Action))
 	}
-	return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", message, true))
+	return c.HTML(http.StatusOK, rsvpResultPage("Response recorded", message, true,
+		rsvpSchedulePath(cal.CampaignID)))
 }
 
 // parseOfferedWindows reads the emailed suggestion form's date/from/to rows.

@@ -3,6 +3,8 @@
 package campaigns
 
 import (
+	"fmt"
+
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 )
 
@@ -13,7 +15,8 @@ templ ImportCampaignPage(csrfToken string) {
 			<div class="mb-6">
 				<h1 class="text-2xl font-bold text-fg">Import Campaign</h1>
 				<p class="text-sm text-fg-secondary mt-1">
-					Upload a previously exported Chronicle campaign JSON file to create a new campaign.
+					Upload a previously exported Chronicle campaign file to create a new campaign.
+					Both the JSON export and the ZIP export are accepted.
 				</p>
 			</div>
 			<div class="card p-6">
@@ -23,6 +26,8 @@ templ ImportCampaignPage(csrfToken string) {
 					enctype="multipart/form-data"
 					hx-post="/campaigns/import"
 					hx-encoding="multipart/form-data"
+					hx-target="#import-result"
+					hx-swap="innerHTML"
 					class="space-y-4"
 				>
 					<input type="hidden" name="csrf_token" value={ csrfToken }/>
@@ -32,11 +37,18 @@ templ ImportCampaignPage(csrfToken string) {
 							type="file"
 							id="import-file"
 							name="file"
-							accept=".json,application/json"
+							accept=".json,.zip,application/json,application/zip"
 							required
 							class="input w-full text-sm file:mr-4 file:py-1.5 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-accent file:text-white hover:file:bg-accent-hover file:cursor-pointer"
 						/>
-						<p class="text-xs text-fg-muted mt-1">Maximum file size: 10 MB. Must be a Chronicle export JSON file.</p>
+						<p class="text-xs text-fg-muted mt-1">
+							Must be a Chronicle export: a .json file (max 10 MB) or a .zip bundle (max 500 MB).
+						</p>
+						<p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+							A ZIP restores structural data only. The media files inside it are
+							<strong>not</strong> re-attached, so images in the restored campaign will point at
+							files that no longer exist until you restore them by hand.
+						</p>
 					</div>
 					<div class="flex items-center justify-end gap-3 pt-2 border-t border-edge">
 						<a href="/dashboard" class="btn-secondary text-sm">Cancel</a>
@@ -46,6 +58,71 @@ templ ImportCampaignPage(csrfToken string) {
 					</div>
 				</form>
 			</div>
+			<div id="import-result" class="mt-6"></div>
 		</div>
 	}
+}
+
+// ImportResultPage is the full-page form of the partial-import report, served
+// to a non-HTMX form post.
+templ ImportResultPage(campaignID, campaignName string, report *ImportReport) {
+	@layouts.App("Import Complete") {
+		<div class="max-w-2xl mx-auto">
+			@ImportResultPanel(campaignID, campaignName, report)
+		</div>
+	}
+}
+
+// ImportResultPanel reports a PARTIAL import: the campaign exists, but some
+// objects in the file could not be recreated.
+//
+// It exists because import is best-effort — one bad row does not abandon the
+// campaign — and until sweep R4 stage 16 that best-effort behaviour was
+// indistinguishable from a clean restore. The operator was redirected
+// straight to the new campaign with the losses in a server log they will
+// never read. A backup tool that reports success while dropping rows teaches
+// the operator to stop checking, which is the failure mode that matters.
+templ ImportResultPanel(campaignID, campaignName string, report *ImportReport) {
+	<div class="card p-6 border-l-4 border-amber-500">
+		<div class="flex items-start gap-3">
+			<i class="fa-solid fa-triangle-exclamation text-amber-500 mt-1 shrink-0"></i>
+			<div class="min-w-0 flex-1">
+				<h2 class="text-base font-semibold text-fg">Imported with losses</h2>
+				<p class="text-sm text-fg-secondary mt-1">
+					{ campaignName } was created, but { fmt.Sprintf("%d", report.Count()) } object(s) in the
+					file could not be restored: { report.Summary() }.
+				</p>
+				<p class="text-xs text-fg-muted mt-1">
+					Everything else imported normally. Check the list below before treating this as a
+					complete restore.
+				</p>
+				<ul class="mt-4 space-y-1 text-xs text-fg-body max-h-80 overflow-y-auto">
+					for _, f := range report.Failures() {
+						<li class="flex flex-wrap gap-x-2 border-b border-edge/50 pb-1">
+							if f.Count > 1 {
+								<span class="font-medium">{ fmt.Sprintf("%d %s", f.Count, pluralize(f.Kind, f.Count)) }</span>
+							} else {
+								<span class="font-medium">{ f.Kind }</span>
+							}
+							if f.Name != "" {
+								<span class="text-fg-secondary">{ f.Name }</span>
+							}
+							<span class="text-fg-muted">— { f.Reason }</span>
+						</li>
+					}
+				</ul>
+				if report.Truncated() > 0 {
+					<p class="text-xs text-fg-muted mt-2">
+						{ fmt.Sprintf("%d further failures were counted but not listed individually.", report.Truncated()) }
+					</p>
+				}
+				<div class="flex items-center gap-3 mt-5 pt-3 border-t border-edge">
+					<a href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s", campaignID)) } class="btn-primary text-sm">
+						Open { campaignName }
+					</a>
+					<a href="/campaigns/import" class="btn-secondary text-sm">Import another file</a>
+				</div>
+			</div>
+		</div>
+	</div>
 }

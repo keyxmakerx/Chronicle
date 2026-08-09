@@ -21,7 +21,17 @@ import (
 // block is the calendar-v4 Block, or nil when the spine is absent or errored —
 // in which case the surrounding embed still renders, which is the degrade
 // ladder EntityCalendarBlock documents.
-templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.BlockData, data CalendarV2ViewData, ties []EntityEventTie, entityID, source string, isScribe bool) {
+// isOwner gates the "Create calendar" CTA below. C-CALV4-GAMEREADY §8 [GR-16]
+// tail: `GET /campaigns/:id/calendars/new` is `RequireRole(RoleOwner)`, and
+// this empty state was rendering its button to Players, Scribes and anonymous
+// visitors alike — an affordance shown to an audience that cannot use it, the
+// same defect as the `Ask →` link two files over. Permission is absence.
+// theater is the SECOND, full-tier render of the SAME Block value ([TH-2]) — a
+// struct copy with a different layer set and a different DOM namespace, never a
+// second projection. nil whenever `block` is nil, which is the pre-authorised
+// mitigation: no Block to expand means no scaffold, no button and no second
+// render (the `cal == nil` and spine-error rungs of the degrade ladder).
+templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.BlockData, theater *calblock.BlockData, data CalendarV2ViewData, ties []EntityEventTie, entityID, source string, isScribe, isOwner bool) {
 	<div class="card p-0 overflow-hidden" data-entity-calendar>
 		if cal == nil {
 			// EMPTY STATE (C-CAL-EMBED-CONVERGE-POLISH item 3): no calendar yet
@@ -30,13 +40,15 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.
 			<div class="flex flex-col items-center justify-center py-10 px-4 text-center" data-entity-calendar-empty>
 				<i class="fa-solid fa-calendar-days text-3xl text-fg-muted mb-3" aria-hidden="true"></i>
 				<p class="text-sm font-medium text-fg mb-1">No calendar yet</p>
-				<p class="text-xs text-fg-secondary mb-3">Create a calendar to show world dates + this page's linked events here.</p>
-				<a
-					href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) }
-					class="btn-primary text-sm"
-				>
-					<i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Create calendar
-				</a>
+				if isOwner {
+					<p class="text-xs text-fg-secondary mb-3">Create a calendar to show world dates + this page's linked events here.</p>
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendars/new", campaignID)) }
+						class="btn-primary text-sm"
+					>
+						<i class="fa-solid fa-plus mr-1.5" aria-hidden="true"></i>Create calendar
+					</a>
+				}
 			</div>
 		} else {
 			// Header: "Open full calendar" (ALL roles → the V2 shell for the
@@ -44,13 +56,22 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.
 			// Scribe+ "Change calendar" binding control on the right.
 			<div class="flex items-center justify-between gap-2 px-3 pt-2">
 				<a
-					href={ templ.SafeURL(openCalendarV2Href(campaignID, cal.ID)) }
+					href={ templ.SafeURL(openCalendarHref(campaignID, cal.ID)) }
 					class="text-xs text-accent hover:underline"
 					data-open-calendar
 					title="Open the full calendar"
 				>
 					<i class="fa-solid fa-arrow-up-right-from-square mr-1" aria-hidden="true"></i>Open full calendar
 				</a>
+				// THE THEATER'S DOOR (C-CALV4-THEATER, [TH-9] SIGNED). Added
+				// BESIDE the anchor, never instead of it: re-pointing
+				// `Open full calendar` is R2-4's half of the V2 sunset, and
+				// doing it here would half-do that slice's work. The reasoning
+				// for the label, the ARIA and the every-viewer rule lives on
+				// theaterOpener in theater.templ.
+				if theater != nil {
+					@theaterOpener(theaterScaffoldID(theater.CalendarSlug, entityID))
+				}
 			</div>
 			// Scribe+ "Change calendar" affordance (C-WIDGET-BINDING-P4a; the
 			// bespoke markup migrated onto the shared BindingAffordance in P4b).
@@ -81,6 +102,24 @@ templ entityCalendarBlockView(campaignID string, cal *Calendar, block *calblock.
 				<div class="p-3 border-b border-edge">
 					@calblock.Block(*block)
 				</div>
+			}
+			// THE BLOCK THEATER'S SCAFFOLD (C-CALV4-THEATER, [TH-14] RE-SIGNED
+			// 2026-08-08). A SIBLING of the Block mount above — never a child
+			// of it, because `.cal-block-host .block` is `overflow: hidden` and
+			// a box inside the Block is clipped. It carries `cal-bench` itself
+			// as a second scope root ([TH-3]) so the register reaches it
+			// wherever it lands, and it sits DELIBERATELY inside the region
+			// picker.templ swaps with `hx-swap="outerHTML"` — opener and
+			// scaffold share this subtree, so they die and revive together, and
+			// the module's `htmx:beforeSwap` close is the required counterpart.
+			// theater.templ's header carries all three constraints in full.
+			if theater != nil {
+				@theaterScaffold(
+					theaterScaffoldID(theater.CalendarSlug, entityID),
+					theaterHeadingID(theater.CalendarSlug, entityID),
+					cal.Name,
+					*theater,
+				)
 			}
 			// This entity's linked events.
 			<div class="p-3">

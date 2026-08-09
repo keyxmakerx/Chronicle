@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/plugins/maps"
 )
@@ -653,19 +654,24 @@ type apiCreateMarkerRequest struct {
 }
 
 // apiUpdateMarkerRequest is the JSON body for updating a marker.
+// PARTIAL update: absent preserves, explicit null clears, a present value
+// replaces (sweep R4). foundry_id keeps its clearability here — this is the
+// surface that owns the pairing, and an explicit null still unpairs — while
+// the Chronicle web form, which never sends the key, can no longer NULL it
+// by omission.
 type apiUpdateMarkerRequest struct {
-	Name              string     `json:"name"`
-	Description       *string    `json:"description"`
-	X                 float64    `json:"x"`
-	Y                 float64    `json:"y"`
-	Icon              string     `json:"icon"`
-	Color             string     `json:"color"`
-	PinCategory       *string    `json:"pin_category"`
-	EntityID          *string    `json:"entity_id"`
-	Visibility        string     `json:"visibility"`
-	VisibilityRules   *string    `json:"visibility_rules"`
-	FoundryID         *string    `json:"foundry_id"`
-	ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
+	Name              patch.Field[string]  `json:"name"`
+	Description       patch.Field[string]  `json:"description"`
+	X                 patch.Field[float64] `json:"x"`
+	Y                 patch.Field[float64] `json:"y"`
+	Icon              patch.Field[string]  `json:"icon"`
+	Color             patch.Field[string]  `json:"color"`
+	PinCategory       patch.Field[string]  `json:"pin_category"`
+	EntityID          patch.Field[string]  `json:"entity_id"`
+	Visibility        patch.Field[string]  `json:"visibility"`
+	VisibilityRules   patch.Field[string]  `json:"visibility_rules"`
+	FoundryID         patch.Field[string]  `json:"foundry_id"`
+	ExpectedUpdatedAt *time.Time           `json:"expected_updated_at"`
 }
 
 // ListMarkers returns all markers for a map, filtered by the caller's role.

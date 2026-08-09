@@ -703,11 +703,12 @@ func TestBuilderImporter_TheFileBECOMESTheDraft(t *testing.T) {
 	}
 	html := rec.Body.String()
 
-	// The DROPPED calendar is what rendered. Its NAME is "Imported Calendar"
-	// rather than "Dropped Reckoning" because that is what the shipped
-	// parseSimpleCalendar produces for this format — import.go's parsers are
-	// not this wave's to change, and asserting what they really do is the point.
-	for _, want := range []string{"Imported Calendar", "Frostmoot", "Sunmoot", "dropped.json"} {
+	// The DROPPED calendar is what rendered, NAME included. This assertion used
+	// to expect "Imported Calendar" because parseSimpleCalendar silently threw
+	// `calendar.name` away; that parser now carries the file's own name through,
+	// so the file's identity survives the whole multipart-upload →
+	// DetectAndParse → builderDraftFromImport → Review chain.
+	for _, want := range []string{"Dropped Reckoning", "Frostmoot", "Sunmoot", "dropped.json"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("the uploaded file must BECOME the draft; %q is absent", want)
 		}

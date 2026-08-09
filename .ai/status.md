@@ -20,6 +20,698 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### An emptied Year field moved the world to year zero — FIXED (2026-08-09)
+
+A driven parity sweep, measuring in a browser against a real server, found that
+**clearing the Year input on the GM's Set date control and submitting silently
+moved the world to year 0** — 200, stored, no error. It reproduced in the legacy
+V2 console AND in the v4 Bench date-verb row shipped by `C-CALV4-GAMEREADY`
+(PR #588), both of which read the field with a `parseInt` fallback of 0. Every
+other coordinate was range-checked; year alone was not.
+
+**Year 0 is a legitimate year** on a fantasy calendar (this plugin says so in two
+places, and a negative year is already driven end-to-end in its tests), so the
+fix distinguishes ABSENT from ZERO rather than banning zero. Three places, all
+in the calendar plugin: `PUT /api/v1/…/calendar/date` (`apiDate.Year` is now a
+`*int`; an omitted year is refused — this was the server-side half no client fix
+reaches, and it is live for the Foundry module), the world-state PUT (its five
+date/time coordinates decode through `worldStateCoord`, which refuses a BLANK
+coordinate by name), and both browser writers (`coordOrNull` — refuse and say
+which box, never substitute). `UpdateCalendar` now range-checks the year against
+the `INT` column, a storage bound and explicitly not a `year >= 1` floor.
+
+Pinned by `internal/plugins/calendar/year_absent_test.go`, including two
+**headless-Chromium** probes over the real rendered surfaces and the real shipped
+JS. Full detail: `internal/plugins/calendar/.ai.md` § "An emptied Year field
+moved the world to year zero".
+
+### calendar-v4 round 2 CLOSED — the three parity slices, and the one number that did not move (2026-08-08)
+
+**Read this before any other calendar-v4 entry.** R2-3 (`C-CALV4-THEATER`),
+R2-4 (`C-CALV4-V2SUNSET`) and R2-5 (`C-CALV4-SKY`) are the reveal pass's last
+three slices. Each has its own section below. This one exists because the three
+share an end state that none of them states alone.
+
+**ROUND 2 REMOVED NOTHING.** `internal/wire/routes_snapshot.txt` is
+**byte-identical at 727 lines** across every commit of all three slices — no
+route added, none removed, no migration, no file deleted. The V2 shell is still
+registered, still served and still reachable by URL. R2-4 stopped the product
+*linking* to it; that is a different claim from retiring it, and the difference
+is the whole of `C-CALV4-SHELL-REMOVAL`.
+
+**THE SHELL-REMOVAL GATE READS ONE OF FOUR.** The end state is signed by the
+operator ([VS-1], 2026-08-07 — *"delete it, but build the replacements first"*);
+what is outstanding is order, never outcome. Precise state, and the reason the
+third box is the interesting one:
+
+| Entry condition | State 2026-08-08 |
+|---|---|
+| every door swept by R2-4 | **MET.** Done, and held by `TestSunset_NoLiveDoorRemains`, which fails CI on a new one |
+| R2-5 (`C-CALV4-SKY`) MERGED | **NOT MET — and not for a build reason.** The sky *shipped*, fix round included. The box says MERGED and PR #588 is open, so this reads NOT MET until it lands. Do not tick it from the branch |
+| `C-CALV4-WEEKDAY-VIEWS` MERGED | **NOT MET, not started.** A prerequisite, not a booking — and R2-4 made it sharper, because `/calendars/:calId/week` and `/day` now 301 to a month |
+| `C-CALV4-GM-CONSOLE` MERGED | **NOT MET, not started.** A rehousing job, not a backend one: `PUT /calendar/world-state` survives any sunset |
+
+Arithmetic for that slice, pre-computed so it never regenerates until green:
+**727 → 722**. State removals and additions separately — a net count hides a
+swap. `.ai/todo.md` §0b holds the derivation and the traps.
+
+**ONE SLICE STOPPED WITHOUT BUILDING, WAS RE-SIGNED, AND THEN SHIPPED.** R2-3's
+first pass stopped at [TH-14] on a refuted premise, not on difficulty (below) —
+sixteen of its seventeen rulings undelivered, the seventeenth (the B4 scope
+glob) shipped alone. The coordinator **re-signed [TH-14] on 2026-08-08**,
+replacing its third constraint against the measurement the stop produced, and
+the second pass built the slice in five stages. **A slice that stops at a signed
+STOP-AND-FLAG has done its job; a slice that improvises past one has not** — and
+the record here is that stopping is what got the block corrected.
+
+**WHAT A GM CAN DO NOW THAT THEY COULD NOT.** Reach the v4 calendar of a public
+campaign while logged out; land on the Bench from every door in the product
+instead of the legacy shell; read the sky — in-world time, moon phases and
+tonight's celestial register — on the Bench's Primary Block; and **expand any
+entity page's calendar embed into a full-tier surface over the page they are
+on**, without navigating anywhere and without changing what the embed looks like
+tomorrow. **What V2 still
+solely owns:** the week view, the day view, and the GM world-state console. All
+three are the gate above, and all three are why the shell is still standing.
+
+### A real MariaDB was available the whole time (2026-08-08)
+
+**The belief that this build cannot test against a database was false, and it
+cost real coverage across at least four slices.**
+
+`make docker-up` cannot work here — there is no Docker daemon, and that much is
+true and was measured correctly many times. The error was the inference drawn
+from it. **The MariaDB *server binary* is installed** (`/usr/sbin/mariadbd`,
+10.11.14) and runs directly against a scratch datadir; Docker was never the only
+way to get one. Two small things hid it, and both read as something else:
+
+- `mariadbd` **refuses to start as root** unless given `--user=root`, aborting
+  with *"Please consult the Knowledge Base to find out how to run mysqld as
+  root!"* — which reads like a permissions wall rather than a missing flag.
+- A **Unix socket path over ~107 characters** fails with a *truncated path* in
+  the error message rather than a length complaint, so a socket placed in a long
+  scratch directory looks like the server never started.
+
+**MEASURED 2026-08-08.** Server up in ~3s; `SELECT VERSION()` returns
+10.11.14-MariaDB; DDL and DML round-trip normally; and
+`TestFreshDatabase_EveryPluginSchemaApplies` — which had only ever been reasoned
+about or run once by a verifier — **RUNS AND PASSES in 1.41s against a real
+schema migrated from zero.** So the fresh-install crash fix is proven against a
+database, not against a fake.
+
+**The recipe is now `tools/start-test-db.sh`** (start / `--stop` / `--clean`),
+with `make test-db-up`, `make test-db-down` and `make test-int-local`. It listens
+on **13306, never 3306**, so it cannot collide with or be mistaken for a dev
+server, and it holds only disposable schemas.
+
+**What this unblocks.** Every "proven against fakes, not the database" caveat in
+the R3/R4 books is now a gap that can be closed rather than an environmental
+limit: the notes export round trip, the import failure tally, the sync cursor
+walk, the `calendar_active` cascade fix, and the RSVP flows. The integration
+tests that have been skipping silently — they SKIP rather than FAIL when no
+server answers, which is why nobody noticed — now run.
+
+**The lesson worth keeping.** Every one of those "no database here" notes was
+honest about what it had NOT proven, which is why this was recoverable at all.
+But an environmental limit asserted once gets quoted forward by every later
+slice without being re-measured, and this one was quoted for months. **Re-measure the environment when a limit is
+load-bearing, not just the code.**
+
+### The sky header — C-CALV4-SKY (R2-5), shipped 2026-08-08
+
+The last slice of calendar-v4 round 2. The operator thawed the parked sky arc as
+a **redesign, not a restoration**, and recorded a verdict on the old
+implementation in three counts so the redesign could not inherit it. Four facts
+from this build are worth carrying forward.
+
+**1. The placeholder was reserving a seat on the wrong Block, and nothing could
+have told us.** The dashed `.skyband` strip rendered only on the **real-world**
+Block (`block.templ`'s `if d.IsRealWorld`), and that Block's Almanac is empty for
+**two independent reasons**: the register's build gate named the Shelf alone
+while the Bench builds that Block `noShelf`, and `CreateCalendar`'s real-life
+path seeds no moons, no seasons and no eras. A sky there would have carried a
+gradient and a clock and nothing else, forever. One leg would be a configuration
+accident; two is a product fact. The sky seats on the **Primary** Block — one
+sky per surface — and the placeholder is deleted from all three hosts.
+
+**2. Its deletion was invisible to the entire battery.** A repo-wide grep for
+the placeholder's copy and its function name across every `*_test.go` returned
+**zero**. It could have been deleted, nothing shipped in its place, and every
+suite stayed green. The guard is therefore **two-directional**: absence of the
+retired class AND presence of the sky's own summary. A guard that only proves an
+absence goes green on a slice that deleted the thing and shipped nothing.
+
+**3. The one un-ruleable question was a collision between two operator
+signatures.** The signed stills seat the band INSIDE the Block's box; the signed
+disclosure register's clause 4 says the Block's interior stays still, enforced
+twice, in two packages, mutation-tested. Every factual leg was measured and none
+disagreed — **every candidate home was closed by a signed guard**. That is not a
+gap in the measurement, and it is not a dev call. The operator amended clause 4
+**by name, with one sentence**, and the monopoly guard gained a **per-class
+exemption** rather than a relaxed rule: its forbidden-ancestor list is
+byte-identical, so **every other rule in the product stays exactly as
+constrained as it was**. The guard is renamed
+`TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` — a guard whose name still claims
+a monopoly it lost is how the next hand learns the wrong law.
+
+**4. The counts are numbers, measured against the SHIPPED element.** The closed
+band is **40 / 40 / 32px** against a 44 / 44 / 36 budget, read twice
+independently (the custom property that sizes it, and the laid-out box);
+anchored-edge travel across a full open is **0.0px** for all three facts at all
+three widths; the discs grow **13→40px** and **11→32px** with **33.8%** and
+**32.8%** below the horizon; **3** controls. The drawing pass's own history is
+why: five of its seven fix rounds were caught by measurement rather than by
+looking, including a **65px** sideways slide of the clock that every property
+being correctly declared could not have revealed.
+
+**And one still cannot be reproduced under the guards, which is reported rather
+than approximated.** The mock's open pane leads with *"Sunset 19:58"*. Chronicle
+persists no daylight boundary — the importer parses `sunriseTime`/`sunsetTime`
+from two foreign formats and **drops** them, and no column and no migration
+exists — so the line states the day, the month and the register's own audited
+arithmetic instead. Deriving a plausible 06:00/18:00 would be inventing world
+data on a worldbuilding platform, which is the defect `WorldStateSun.Tint`
+already refuses by shipping null.
+
+### C-CALV4-SKY — the fix round, and the register that should have shipped with it (2026-08-08)
+
+The slice was verified adversarially and the finding worth carrying is not any
+one of the defects. It is that **the build checked itself against the
+enumerated half of a ruling and called that the ruling.**
+
+[SKY-5] says *"THE STILLS BIND THE RESULT"* and then lists what to measure:
+band heights, the C1/C3 density switch, disc growth, a third of each disc below
+the horizon, the seal's sweep, the trio, grayscale disc identity, reduced-motion
+identity. **Every item of that list was met and probe-measured in a real
+browser.** And the open pane still shipped with **two visible differences from
+the signed still** that the list does not name — a muted sub-head line that was
+absent, and a four-column per-moon row that had been collapsed into one merged
+sentence. Both were reproducible under every guard: markup and static CSS, no
+motion, no token, no transition. Neither was reportable instead of buildable.
+**An enumeration inside a ruling is a floor, not the gate.**
+
+**The second finding is that neither divergence was written down anywhere** —
+not in nine commit messages, not in this file, not in `.ai/todo.md`, not in the
+plugin's `.ai.md`. The mandate governing this arc says undisclosed divergence is
+a FAIL, and it is right to: a difference visible only by diffing a PNG against a
+template is a difference nobody finds. The sunset — the one divergence that
+*was* disclosed — was disclosed **four times over**, and that asymmetry is the
+tell. **What gets written down is what somebody decided was interesting, and the
+things you didn't notice are exactly the things that need a register rather than
+a decision.**
+
+**Both are now built** (stage 10) and the register lives in
+`internal/plugins/calendar/.ai.md` → *"The sky pane's DIVERGENCE REGISTER against
+the signed stills"*. It carries the two closed items, the **two** standing
+still-not-reproducible cases — the sunset **and now a second one**: the mock's
+"in shadow" window reads an eclipse-node flag its demo rig invents, and
+`calendar.Moon` has no node, no inclination and no ascending-node column, so
+deriving one would be the sunrise defect wearing different words — the
+deliberate subtractions, and the two shape deviations that were disclosed in
+their commit bodies but never travelled into the handoff claim list
+(`SkyGradient` being a gradient string rather than [SKY-6]'s "fraction", and
+`helpers.go` being off the Files-you-own list because the named
+`block_geometry.go` does not exist in that package).
+
+**A disclosure that does not travel with the claim is half a disclosure.** Both
+of those were reported honestly, in the right place, at the right time — and the
+verifier still had to re-derive them from the diff, because the summary handed
+forward did not carry them. The commit body is where a decision is *justified*;
+it is not where the next reader *looks*.
+
+### calendar-v4 R2-4 — C-CALV4-V2SUNSET: the legacy calendar stops showing up (2026-08-08)
+
+**The operator's complaint was one sentence — "legacy calendar still shows up" —
+and it was not a bug. It was what the product still linked to.** R2-4 re-pointed
+about twenty live doors and six redirect targets at the Bench, stopped two labels
+naming the version at the user, and moved `GET /apps/calendar` onto the
+public-capable group so a logged-out visitor to a PUBLIC campaign reaches it
+instead of `/login`.
+
+**IT REMOVED NOTHING.** Zero routes, zero templates, zero JS assets, zero files,
+no migration. `internal/wire/routes_snapshot.txt` is **byte-identical at 727
+lines** across all four commits. The V2 shell is still registered, still served,
+still reachable by URL — just not by click.
+
+**THE SHELL'S DELETION IS SIGNED BY THE OPERATOR** ("delete it, but build the
+replacements first", 2026-08-07) and belongs to **`C-CALV4-SHELL-REMOVAL`**,
+behind four boxes: `C-CALV4-WEEKDAY-VIEWS` merged · `C-CALV4-GM-CONSOLE` merged ·
+R2-5 merged · every door swept by R2-4 (done). **As of 2026-08-08 exactly ONE is
+met** — the door sweep. R2-5 shipped but PR #588 is open, and that box says
+MERGED, so it does not tick from the branch; the other two are unstarted. The
+per-box state is tabulated in the round-2 close-out entry at the top of this
+section. The pre-computed arithmetic for
+that slice is **727 → 722**. See `.ai/todo.md` §0b and
+`internal/plugins/calendar/.ai.md` for the deletion order and its traps.
+
+**THE ROUTE MOVE IS INVISIBLE TO THE WIRE ORACLE, and that is the most important
+sentence in the PR.** The snapshot records METHOD, PATH and defining file and
+nothing about middleware, so a group change plus a guard swap leaves it
+byte-identical beside an authorisation change. The oracle here is
+`bench_anonymous_test.go` and `routes_test.go` — nineteen signed assertions,
+twelve of them against a real MariaDB.
+
+**ONE GATE MOVED FROM THE ROUTE INTO THE PRODUCER, because the route's Player
+floor was load-bearing.** The Bench's RSVP panel prints every member's display
+name, role and zone; measured before the guard was written, an anonymous render
+carried two real member names. `benchRsvpResolve` now skips the roster below
+`RolePlayer`, so the absence is in the payload rather than in a template branch.
+
+**Eight tests inverted, none softened, none deleted.** Seven were predicted by
+the dispatch; the eighth (`TestCreateCalendar_RealLifeRedirectsToV2`) pinned a
+door the dispatch moves by name. **A stated feature loss rides with them:**
+`/calendars/:calId/week` and `/day` now land on a month, because the only week
+and day views in the product live inside the shell — that is what
+`C-CALV4-WEEKDAY-VIEWS` exists to fix, and it is a PREREQUISITE of the removal.
+
+### calendar-v4 R2-3 — C-CALV4-THEATER: stopped, re-signed, SHIPPED (2026-08-08)
+
+**Read the first paragraph even if you only want to know what the feature does,
+because the sequence is the point.** All seventeen coordinator rulings were
+signed 2026-08-07. [TH-14] required the scaffold to sit outside every
+`.cal-block-host`, inside a `cal-bench` root **and outside any HTMX-swappable
+region**, and ruled that if no position satisfies all three, that is *"a host
+restructure, not a placement, and not this slice's to take."* **Measured, the
+condition was met** — `calendar_widget_type.go:152` wraps the ENTIRE output of
+`EntityCalendarBlock` in `widgetbindings.BlockHost`, and `picker.templ` targets
+that wrapper with `hx-swap="outerHTML"` on three live Scribe+ paths, so the
+swappable region is the whole component, one level above anything the slice can
+emit; [TH-14]'s own measurement cited the picker's inline `innerHTML` slot.
+**The first pass stopped and flagged.** The coordinator re-signed [TH-14] on
+2026-08-08, **replacing constraint 3**, and the second pass built the slice.
+
+**WHAT THE RE-SIGN RULED.** The scaffold MAY sit inside the swappable region:
+opener and scaffold share that subtree, so they die and revive together and
+[TH-12]'s `htmx:afterSettle` re-init rewires both — there is no state in which a
+live opener points at a dead scaffold. **Its required counterpart shipped with
+it:** an `htmx:beforeSwap` listener that closes the theater immediately when the
+swap target contains it, because a `<dialog>` removed from the DOM mid-modal
+strands the top layer, keeps the document scroll-locked and drops focus on a
+detached node. Constraints 1 and 2 unchanged.
+
+**WHAT THE FEATURE IS.** An `Expand` button beside the embed's header anchor
+opens a top-layer `<dialog>` carrying a **second render of the same
+projection**, seeded with the Bench's five layer keys. The embed behind it is
+byte-unchanged and stays glanceable. **One calendar shown two ways** — the depth
+[BR2-8] removed comes back in the theater rather than in the embed, which is the
+slice's thesis rather than a side effect.
+
+**THE THREE FACTS A LATER SLICE NEEDS.**
+
+1. **There are two things called "full tier."** The CSS tier is a container
+   query and widening a box buys all of it; the ZONE SET is the producer's and
+   widening buys none of it. A wide overlay around the embed's Block would be a
+   *stretched glanceable month*, not a full-tier Block.
+2. **One projection, two renders.** `Layers` is assigned post-hoc
+   (`entity_calendar_block.go`), and the host passes neither `LedgerHidden` nor
+   `ShelfHidden`, so the projection the page already holds contains every mark
+   the theater prints. The theater's Block is a struct COPY — zero extra service
+   work — and the no-wider law is pinned STRUCTURALLY by a reflect assertion
+   over every exported field of `BlockData` rather than by a mark-set oracle,
+   which would have compared a struct to itself and passed forever.
+3. **The DOM re-namespace is core, not polish.** Every id and radio-group name
+   the Block emits is a pure function of `(CalendarSlug, Viewer.HostEntity)`, so
+   two Blocks for one calendar emit identical ones and the theater's tie toggle
+   would be visibly dead while pressing it re-inked the embed behind the
+   backdrop. The copy sets `HostEntity` to a distinct token AFTER the projection
+   has run, so no widget file is opened.
+
+**TWO EXISTING TESTS WERE RE-SCOPED RATHER THAN SOFTENED**, and it is the same
+move both times: `TestEntityCalendarBlock_HostLayerSet` and
+`TestLedgerGeometry_WithoutLedgerThereIsNoLedgerDOMToLeaveAVoid` asserted
+whole-page that no `data-zone` rendered. That claim was always about the EMBED;
+the page now carries two Blocks. Each negative is now scoped to the embed's
+subtree **and paired with the positive in the theater's** — absent here, present
+there — which is strictly stronger than the single negative it replaces.
+
+**`/schedule` WAS NOT THE PRECEDENT [TH-3] WAS DRAFTED ON**, and this is worth
+carrying because it nearly shipped a silent nothing. It carries
+`class="cal-bench cal-schedule"` and links the sheet, but it has no `<details>`,
+no `.disc` and no `::details-content`, and its own guard BANS `--disc-open`
+there. It inherits the register's TOKENS and consumes zero of its RULES. Copying
+it faithfully would have given the theater three duration tokens and no motion
+at all — `calendar-theater.css` is forbidden to declare a transition — with
+every guard in the tree green. The real precedent is the DAY CARD, and the
+theater's two rules sit by name inside the ONE register section beside it.
+
+**NUMBERS.** `internal/wire/routes_snapshot.txt` **unchanged at 727 lines**; no
+migration; `internal/widgets/calendar_block/**` untouched; `internal/app/routes.go`
+**one added line** (the `pluginBodyScripts` registry entry — [TH-12], because
+`tools/page-script-allowlist.txt` pins the templ at exactly one page-side script
+and the ratchet fails above as well as below). The theater's total horizontal
+inset around `.cal-block-host` is **48px** against [TH-1]'s 60px budget, giving
+**976px** at a 1024 viewport and **1156px** at the 1180 cap — both over the 900px
+full-tier floor, and both computed by a test from the sheet's own numbers rather
+than asserted. `static/css/calendar-bench.css` is **96,811 bytes** and is now
+linked on a third page.
+
+**THE §4 COST MEASUREMENT IS A FINDING, NOT A SHRUG.** [TH-2] says the
+wall-clock delta of `EntityCalendarBlock` "should be at the noise floor, and if
+it is not, that is a finding." **It is not.** On the ten-day fixture the entity
+page goes **19,834 → 47,339 bytes (+138.7%)** and the build+render goes
+**510 µs → 1,399 µs (+174%)**. The attribution, stated so it can be judged
+rather than taken: **this is TEMPLATE-RENDER cost, not service cost.**
+`spine.Block` is called **once** (pinned at the source by
+`TestEntityCalendarBlock_OneProjectionAndNoSecondViewerFilter`, which also
+asserts no second viewer-filter call site and no new role middleware), and the
+cost tracks BYTES at a flat rate — 25.7 µs/KB before, 29.6 µs/KB after — because
+the theater's Block renders a Ledger and a Shelf the embed does not. The byte
+delta is the slice's biggest single cost and is the price of Option A's
+zero-route, zero-fetch, instant-open story; the lever, if it is judged too high,
+is Option B (a Block-fragment route) and that needs a signed route.
+
+**NO SCREENSHOTS.** §14's visual gate could not be executed in a headless
+container — the repo's own browser probe was already failing at Step 0. Every
+geometry number above is derived from the sheet BY A TEST rather than
+photographed, which is the strongest thing available and is not the same thing
+as a still. The visual, mobile, player and keyboard-trace set is itemised in
+`.ai/todo.md` §0d.
+
+**Split out and booked:** `C-CALV4-THEATER-DAYCARD` (the day card inside the
+theater — it would be the first surface with two Ledgers on one page, which is
+where `C-CALV4-CARD-CROSSBLOCK-LEDGER` lives) and `C-CALV4-DASH-BLOCK-V4` (the
+campaign dashboard's calendar block is still the V1 embed, so there is no v4
+Block there to expand). `C-CALV4-DAYPICK-A11Y` **stays open**: the theater's
+five-key seed makes days focusable INSIDE itself, which is a genuine and
+unplanned accessibility improvement, but the embed behind it still has the gap.
+
+### calendar-v4 — C-CALV4-GAMEREADY CLOSED: the calendar survives a real session (2026-08-08, stage 23)
+
+**The playability slice is done.** It existed for one reason: the operator
+starts a real tabletop game in under two weeks, and a five-lane readiness audit
+measured 33 findings that hit the table. **This bought PLAYABILITY, not
+polish**, and it is closed at twenty-three stages on
+`claude/coordinator-handoff-stage-3-3d3s4w` (PR #588), base `c573a9cc`.
+
+**The bill, in one line each:**
+
+| § | what the GM could not do before | state |
+|---|---|---|
+| §1 | See any month but the one the campaign was standing in | **shipped** ([GR-1]/[GR-2]) |
+| §1b | Author an event into a month other than the rendered one | **[GR-3] BLOCKED AS SIGNED** — reported, not improvised |
+| §2 | Advance the in-world date without opening a page being deleted | **shipped** ([GR-SIGN-A]/[GR-4]) |
+| §3 | See a multi-day event on any day but its first | **shipped** ([GR-5]) |
+| §4 | Turn on "Collect RSVPs" at all from calendar-v4 | **shipped** ([GR-6]/[GR-10]) |
+| §5 | Four RSVP paths that dead-ended players and silenced the GM | **shipped** ([GR-7]/[GR-8]/[GR-9]) |
+| §6 | Repeat a festival yearly; the API said 201 to junk | **shipped** ([GR-11]/[GR-12]) |
+| §7 | Survive one mis-tap beside Save without destroying an event | **shipped** ([GR-13]) |
+| §8 | Follow two links that had never resolved, shipped to users | **shipped** ([GR-14]/[GR-15]/[GR-16]) |
+| §9 | Edit the month list without silently re-dating the year | **shipped** ([GR-17]/[GR-18]) |
+| §10 | (the anonymous visibility bypass) | **VERIFIED already fixed — not re-fixed** ([GR-19]) |
+| lane 3 | Use any of it on the phone they will be holding | **shipped** (C-CALV4-MOBILE, 12 blocks) |
+
+**THE ONE LESSON WORTH CARRYING OUT OF THIS SLICE: the project spent months
+believing it had no database, and the fakes lied.** `make test-db-up` runs
+MariaDB 10.11 on 13306 without Docker. Twelve DB-backed test functions now ride
+in this plugin, and **three findings were green against a fake and dead against
+a database**:
+
+- **[GR-11]** — `yearly` expanded perfectly in memory while three repository
+  queries carried a hand-typed `recurrence_type IN (…)` that never loaded the
+  row. Shipped, the feature would have been **completely inert**. The clause is
+  now derived from the constant block.
+- **[GR-5]** — `ListEventsForMonth` selected on the *stored* month, so a
+  festival crossing a month boundary was never LOADED while the second month
+  rendered. The in-month fix alone would have left the identical lie for the
+  commonest festival shape there is.
+- **[GR-17]** — the §9 finding was `[READ]`, not measured. The ruling was
+  *reproduce first*. It reproduced on a real MariaDB: inserting an intercalary
+  month at position 5 moved **3 of 4** events a month later and stranded
+  **zero** — which is why the shipped warning is a **before/after comparison**
+  and not the `month > len(months)` bounds check that would have reported 0 and
+  certified the damage.
+
+**What was NOT built, and why that is the correct outcome:**
+
+- **[GR-3]** — the editor's cross-month roll. **BLOCKED AS SIGNED and flagged
+  rather than improvised**, on two measurements: the day-card payload carries
+  no month list or `MonthDays`, and the day-key namespace is
+  `slug + "-" + day` — **not month-qualified** — and is pinned in both
+  directions. Day 1 of next month mints the same key as day 1 of this month, so
+  a date outside the rendered month **is not addressable at all**. Both fixes
+  live inside `internal/widgets/calendar_block/`, which this slice's Bounds
+  close (`data.go` byte-pinned r54). §1's first half already closes the
+  START-date half. Full measurements in `.ai/todo.md` §0a.
+- **[MOB-S1]** — the one `[COORDINATOR TO SIGN]` block. **Reported UNSIGNED and
+  shipped as answer A (nothing changes).** It is the operator's, and the next
+  hand must not answer it either.
+
+**Bounds held, and they are checkable:** `internal/wire/routes_snapshot.txt` is
+**727 lines and byte-identical** to base — **zero new routes** across
+twenty-three stages. `internal/widgets/calendar_block/data.go` byte-identical.
+Zero migrations, zero data writes, zero new page scripts
+(`check-page-scripts.sh` green *unedited*, 15 files remaining),
+`check-calendar-v4-lints.sh` green unedited, the ONE motion register in
+`calendar-bench.css` unchanged.
+
+**Correction landed with these books:** `.ai/decisions.md` asserted in three
+places that *"there is no ADR-049"*. That rule always meant *calendar-v4 does
+not fork an ADR of its own*, and it stayed true — but the **number** was
+legitimately claimed by C-SWEEP-R4 stage 9 on 2026-08-07 for an unrelated
+subject, and ADR-049 is live at `.ai/decisions.md:3901`. The flat wording cost
+a GAMEREADY stage a false STOP-AND-FLAG against a citation that was correct.
+All three now say what they mean. (Two historical entries below, at the 2026-07
+dates, still carry the old flat phrasing in their own session context; they are
+left as written because this file's later sections are a dated record.)
+
+Books: `.ai/todo.md` §0a · `internal/plugins/calendar/.ai.md`
+§"C-CALV4-GAMEREADY" · `reports/chronicle/2026-08-08-C-CALV4-GAMEREADY.md`.
+
+### calendar-v4 — C-CALV4-MOBILE SHIPPED: the phone the GM will actually be holding (2026-08-08)
+
+**GAMEREADY's lane 3, the only one of five the readiness audit returned
+NOT-READY.** CSS plus one JS module: no markup restructuring, no template
+branch, no route, no migration, no producer field, no new page script.
+
+The founding measurement, and the one to remember: at **390x664**, on the
+calendar page, `.cal-block-host .lrows` — the list of what is actually
+happening — was **41 pixels tall against 220 of content, with ZERO of its five
+rows fully visible**. At 360 it was 24. A second Block sheared its empty-state
+sentence mid-word. It is now **132 of 220 with three rows fully inside, at 390
+and 375 and 360**, and the desktop tier is byte-unchanged (209/240, 4 of 5,
+min-height 176).
+
+Seven other things a table would have hit:
+
+- **Save was under the keyboard.** The editor sheet carried an inline
+  `top: 106px` written once at open time; shrink the viewport to 390x380 as a
+  software keyboard does and the box did not move — Save at `y[426..456]`
+  against a 380px viewport, in a `position: fixed` box no gesture can scroll.
+  The geometry now lives in CSS and re-resolves itself; Save measures inside the
+  viewport in nine arms (three widths x open/keyboard/rotation).
+- **The page scrolled out from under an open sheet** in all six measured arms.
+  It is locked now by the `position: fixed` form with the offset stored, and —
+  ruled harder than the lock — **released on all five exit paths and on the
+  card→editor→close handover**, restoring the scroll to the pixel.
+- **Five independently-scrolling regions on one phone page**, none declaring
+  `overscroll-behavior`. Two now, both contained.
+- **Days a GM could not reach.** At a 20-day week, 624px of grid inside a 364px
+  `overflow: hidden` box. The grid's own wrapper scrolls the inline axis now;
+  a tenday still grows no scroller, and the page fold is re-proven in 24
+  measurements.
+- **The operator's own gate panel needed 182px of sideways drag** at 390 and
+  202px at 360. Zero now, both arms, CSS-only, `bench.templ` byte-unchanged.
+- **`/schedule` was tuned to exactly one phone** — 0px of drag at 390, 7px at
+  375, 22px at 360. Re-derived fluidly against 360; the budget guard now runs at
+  both ends instead of one.
+- **The tap floor was 24px against a 44px standard.** A short named list of the
+  controls a person hits under time pressure now measures >= 44 in the block
+  axis at <= 640, with the desktop measurement proven identical before and after.
+
+**Evidence discipline, and it is the reason the Ledger survived to a live
+build:** `benchShotPage` was missing the `.bsurf` wrapper the product emits, so
+every one of the three signed ≤640 ordering rules matched nothing and the entire
+phone evidence set was of a layout production does not render. That was fixed
+FIRST, before any artefact. Every phone number in this lane is measured in a
+**NESTED BROWSING CONTEXT (an iframe)**, stated on the face of every probe,
+because headless Chromium here clamps its window to ~500px.
+
+**Six browser probes registered in `tools/check-browser-probes.sh`**, none of
+them env-gated, so a machine that can drive a browser must run them.
+
+**Still open, and it is the operator's:** `[MOB-S1]` — whether a player's RSVP
+control should precede the calendar at ≤640 — is UNSIGNED and shipped as
+"nothing changes". And **`C-CALV4-MOBILE-SHELL`**: the app shell at phone width
+is unmeasured by anyone, and matters more now that the Block is tall.
+
+### calendar-v4 — C-CALV4-GAMEREADY §4 and §5 SHIPPED: the operator can arm their own gate, and the RSVP flow stopped dead-ending players (2026-08-08)
+
+**The operator's stated go/no-go for starting their game, plus the four measured
+dead ends in the flow that gate depends on.** The engine underneath the RSVP
+system is genuinely good — the audit could not break its security or its
+arithmetic — and every fix here is at an EDGE, where it talks to a human.
+
+**§4. "Collect RSVPs" existed in exactly one place: the legacy V2 event drawer**,
+a committed deletion, wired by a script only `calendar_v2.templ` loads.
+`daycard.templ` had ZERO occurrences of "rsvp". Every downstream RSVP surface —
+the Bench session tile and `/schedule` — is gated on the flag it sets, so a
+campaign that could not reach the switch got a player-facing panel saying "You:
+no answer", three paragraphs explaining the options, and no buttons. The control
+now ships in the v4 day-card editor at the route's OWN `RoleScribe` floor,
+writing the already-shipped `PUT …/rsvp-collection`. Zero new routes, zero new
+handlers, zero new service methods, zero stylesheet.
+
+**§5, and the reason to read this entry if you touch the RSVP flow:**
+
+1. **The suggest token was consumed by a submission that was REFUSED.** A
+   partially-filled form — the shape the page invites — spent the link and then
+   rejected the write, so correcting it answered "this RSVP link is invalid or
+   has expired" and so did re-opening the email. One incomplete form permanently
+   destroyed a player's only way in. **`TestToken_EmptySuggestionRejected` had
+   asserted the refusal and never asked what the refusal cost**, which is how a
+   green suite shipped it. That is the pattern worth carrying: a guard that
+   pins the error and not the side effect is a guard with a hole in it.
+2. **A spent link said "RSVP Failed" over an answer that WAS recorded**, on a
+   page containing no `<a>` at all. Players told GMs the system was broken and
+   GMs believed them. `GetUserRSVP` had shipped on the repository, unused by
+   that path, the whole time.
+3. **The emailed "Out this week" notified NOBODY** while the in-app twin always
+   did — the one decline most likely to cancel a session was the only answer the
+   Director never heard, and it was being written as `no` all along, so the
+   tally moved under them in silence. **The two surfaces were pinned in
+   different places; in fact the in-app half was pinned NOWHERE.** They are one
+   test now.
+4. **Arming with no SMTP said "the party has been invited" over zero sent mail.**
+   The honest sentence already existed as `mailNotConfiguredLine` and was
+   already used in three other places; the invite moment was the one that
+   skipped it.
+
+**Two operator instructions that are load-bearing until their bookings land:**
+run ONE collecting event at a time (`benchRsvpPickSession` resolves exactly
+one), and create ONE NON-RECURRING event per session (the RSVP table is
+`UNIQUE (event_id, user_id)` with no occurrence column, so a repeating session
+shares one set of answers across every occurrence — the control now says so).
+
+Guarded by `rsvp_deadends_int_test.go` (**four real-database tests** — every §5
+claim is a claim about a ROW, and a mock can only report that a method was
+called), `rsvp_collect_control_test.go`, the authorised amendment to
+`TestToken_EmptySuggestionRejected`, and `test/js/daycard_rsvp_collect.test.mjs`.
+
+### calendar-v4 — C-CALV4-GAMEREADY §3 and §6 SHIPPED: the calendar stopped lying about what is happening today, and a festival can finally repeat (2026-08-08)
+
+**Two more table blockers closed, and BOTH of them had a second half that only a
+real database could see.** That is the sentence to carry out of this entry: the
+project believed for months it had no MariaDB available, and the recurrence
+engine has been proven against fakes for its entire life. Both halves below were
+perfectly green against fakes and completely dead against a database.
+
+**§3 — a five-day festival marked ONE cell.** `blockMarksForDate`'s only
+membership test was `OccursOn`, which matches the stored date and the recurrence
+rule and nothing else, so days 2..N of a span carried no mark. The day card is
+built straight off those marks, so a GM clicking day three of a siege the party
+was standing in read **"No events on this day"** — a positive false statement,
+not an omission. `blockEventSpansDate` now matches inside the stored
+`[start, end]` window, **inside the visibility-filtered loop** so a `dm_only`
+span is absent on all of its days rather than only its first. `model.go`'s
+comment promising that *"the ribbon layer renders their span"* was FALSE in the
+code that made it — V2 had a ribbon layer, v4 never built one — and is corrected
+in the same commit. **The ribbon itself is refused and booked**
+(`C-CALV4-SPAN-RIBBON`): five identical chips are visually inferior to one bar
+and operationally identical, and the mark is the half that stops the lie.
+
+**§3's second half, found by the database:** `ListEventsForMonth` selects on
+`e.year = ? AND e.month = ?`, so a festival running from day 28 of one month to
+day 3 of the next was **never loaded** while the second month rendered. The
+projection was right and the row never arrived. The month query now carries a
+composite-overlap clause (radix 10000, because a user-authored month list can
+exceed 99 days and the house `month * 100 + day` idiom cannot).
+
+**§6 — a festival, holy day or birthday could not repeat, and the API said 201
+anyway.** `OccursOn` expanded weekly/biweekly/monthly/custom and sent everything
+else to `default: return onBase`. It was a REGRESSION — the pre-v4 calendar was
+yearly-ONLY, and `.ai/data-model.md` still documented the column as
+*"yearly, monthly"*. `RecurrenceYearly` now expands on the same month and day
+with the interval applied. **A base day absent from a later year is SKIPPED,
+never clamped:** a festival that silently moves to a different day is worse at
+the table than one that does not appear, because the GM plans around the date
+they authored and an absent occurrence is visibly absent.
+
+**§6's second half, also found by the database:** THREE repository queries
+carried a hand-typed `recurrence_type IN ('weekly','biweekly','monthly',
+'custom')`. With the engine fixed and every fake green, every yearly festival
+was still invisible in every month but its own. The clause is now DERIVED from
+the constant block, so adding a recurrence type is one line in one place.
+
+**And the silent 201 is closed at both doors.** `CreateEventAPI` and
+`UpdateEventAPI` stored `"daily"`, `"hourly"`, `"WEEKLY"` and `"🐉"` with a 201
+and no validation. Both now 400 — **exact and case-sensitive, reject never
+coerce** — through ONE shared predicate, because two accepted sets in two places
+is how they diverge. It is handler work by house rule (input validation on a
+bound field) and deliberately gets no service-level twin. On `UpdateEventAPI`
+the guard reads `patch.Field.Get()`, so an ABSENT key still preserves and an
+explicit null still clears: neither is a value, so neither is rejected.
+
+**Measured and reported rather than designed:** a recurring event that is ALSO
+multi-day. [GR-5] names it a STOP-AND-FLAG. A weekly three-day rite based on
+days 5–7 marks 5, 6, 7, 12, 19, 26 — the window is matched once at the base
+dates while the recurrence expands only the base day. Pinned by
+`TestBlockMarks_RecurringSpanIsMEASUREDNotDesigned` and booked as
+`C-CALV4-SPAN-RECURRENCE`.
+
+Bounds held and measured: `routes_snapshot.txt` still **727** lines, zero
+migrations, `internal/widgets/calendar_block/**` and every `calendar_v2*` file
+byte-unchanged, `check-page-scripts.sh` and `check-calendar-v4-lints.sh` green
+unedited, the ONE motion register untouched, `golangci-lint` 0.
+
+### calendar-v4 — C-CALV4-GAMEREADY §1 and §2 SHIPPED: the Bench can leave today, and the GM can move the date (2026-08-08)
+
+**Two blockers a five-lane readiness audit measured as hitting the table**, both
+closed on the branch that carries the R4 sweep.
+
+**§1 — the Bench could only ever render the calendar's CURRENT in-world month.**
+`benchBlock` built its `BlockRequest` with no `View` field, so `resolveView` — a
+function written FOR navigation in wave 1, whose own comment worries in prose
+about *"losing a navigated year"* — **had never once been called with one.** A
+GM preparing a session could not look at next month. The cursor is now `?y=&m=`
+on the existing route: shareable, refreshable, back-buttonable, and needing no
+store, no migration and no fifth `benchSectionKeys` entry. **No clamping logic
+shipped** — `resolveView` already had it. The control is three `<a>` elements
+computed server-side against the calendar's own month list, so no page script,
+no stylesheet and no breakpoint number were added. The cursor applies to the
+**primary Block only**: `?y=1524&m=3` is a coordinate in the in-world month
+list and would have parked the Gregorian Block beside it in March 1524.
+
+**§2 — advancing the in-world date was V2-only**, on the page
+`C-CALV4-V2SUNSET` [VS-1] has committed to deleting. `+1 day` / `−1 day` now
+seat on the same nameplate row, at the **existing** `CanControlWorldState` gate,
+through the **existing** `PUT /campaigns/:id/calendar/world-state`. **Set date
+renders only at the stricter, existing Owner-only floor** — so a co-DM steps and
+does not set, which is [GR-SIGN-A](b)'s signed, deliberate asymmetry and not an
+oversight. Permission is absence throughout. Only two verbs: the other four V2
+verbs move the **clock**, and v4 has no clock, so they would change a quantity
+the surface does not display.
+
+**THE PROJECT HAD A DATABASE ALL ALONG, AND THIS SLICE USED IT.** Three
+real-MariaDB tests ship here (`make test-db-up`, scratch schema per test, core +
+plugin migrations replayed): the cursor's month is what `candidateEvents`
+actually READS, and the verbs' whole value is that the STORED date afterwards is
+the one the GM meant — including the month rollover, which is entirely the
+server's arithmetic because the client sends only `{advance:{days:±1}}`.
+
+**One measurement worth carrying:** a form-encoded `PUT` to the world-state
+endpoint binds **nothing**. `putWorldStateBody`'s `advance` and `time` are
+tagless pointer-to-struct members, which Echo's form binder skips outright, so a
+plain `<form>` or a bare `hx-put` would answer 200 having changed no date. That
+is why the verb row is driven from the plugin's already-registry-mounted
+`calendar_daycard.js` rather than declaratively, and
+`TestWorldStatePut_FormEncodedBindsNothing` pins it so nobody re-derives it.
+
+**[GR-3] IS FLAGGED, NOT BUILT.** The editor's cross-month roll cannot be built
+as signed: the ruling assumes the day-card payload carries the calendar's month
+structure (it does not) and the day-key namespace is `slug + "-" + day` —
+**not month-qualified** — so a date outside the rendered month is not
+addressable in the key space the picker, `edDateFor`, `edUI.endKey` and guard B4
+all share. Both fixes live inside `internal/widgets/calendar_block/`, which this
+slice's Bounds close. Full measurements and what it would take are in
+`.ai/todo.md` §0a.
+
+Bounds held and measured, not promised: `routes_snapshot.txt` byte-identical at
+**727** lines, zero migrations, `internal/widgets/calendar_block/**` and every
+`calendar_v2*` file byte-unchanged, `static/css/**` byte-unchanged,
+`check-page-scripts.sh` and `check-calendar-v4-lints.sh` green **unedited**, the
+`weather` grep over the widget package and `bench.go` still empty, and
+`golangci-lint` 0.
+
 ### calendar-v4 — R2-2b SHIPPED: the editor earns its chrome (2026-08-02)
 
 **The operator's complaint, closed at last.** 2026-07-29, on the live client:
@@ -168,14 +860,20 @@ and it is browser-general.
     reopen after a sheeted placement handed the placement law the viewport
     width for a box about to render at `--de-w`. `edShow` now clears both.
 
+**`C-CALV4-CARD-REDUCED-ANCHOR` is closed (sweep R3, 2026-08-07).** R2b measured
+it at stage 19 and booked it, because [ER-5] made `placeCard` a STOP-AND-FLAG and
+[ER-6]/[ER-7] bound the slice to the morph's ordering. The fix needed neither:
+`edOpen` freezes the anchor's rect one line after the morph's own `fromRect` —
+BEFORE `closeCard()` runs `hide()` synchronously on the reduced-motion branch —
+and hands `edPosition` that frozen rect through the same one-shot
+`{getBoundingClientRect}` shim the drag-create path already used. Both motion
+modes now land on the same placement, measured in real Chromium by
+`TestDayCardReducedMotionAnchorsToItsDay`; shot 13's caption, which disclosed the
+defect, is corrected in the same commit.
+
 **Carried, not closed:** `C-CALV4-DAYMENU` (the 10 `menus-*` stills travel with
 it — a 22-of-32 fidelity split, never a shortfall); `C-CALV4-DAYPICK-A11Y`, now
-also holding drag-create's missing keyboard equivalent; **`C-CALV4-CARD-REDUCED-ANCHOR`
-— NEW at stage 19**, the editor opening at the viewport's top-left under
-`prefers-reduced-motion` because `closeCard` hides the card synchronously and
-the placement law is handed a 0×0 anchor (pre-existing, visible in the branch
-that has no morph at all, disclosed on shot 13's own caption and booked rather
-than fixed inside a signed carve-out); `C-CALV4-TOKENS-RESIGN`,
+also holding drag-create's missing keyboard equivalent; `C-CALV4-TOKENS-RESIGN`,
 booked a **sixth** time, with two of the seven defects now visible in stills the
 operator has signed; the live-authed CSRF case DAYCARD could not measure; **the
 day-of-week wrap at 390**, which is performed by no test and no image and is now
@@ -200,6 +898,13 @@ the importer with four embedded payloads read through the SAME `DetectAndParse`
 an upload meets — no preset table, no migration, no new parser, no second apply
 path. The importer front door is the existing parser behind a route with no
 `:calId`. What is new is the shell, the honesty states, and the motion.
+**The two parser gaps W-H booked rather than owned are closed (sweep R3,
+2026-08-07):** `parseCalendaria` is now deterministic (moons were never sorted
+at all and seasons tied three ways at `dayStart` 0 in `presets/elven.json`, so
+100 parses of the Elven card's own bytes gave 2 moon orders and 3 season
+orders), and `parseSimpleCalendar` carries the file's own `calendar.name`
+instead of naming every Simple Calendar import "Imported Calendar". Details in
+`.ai/todo.md` under Critical.
 
 **The three-card V1 setup chooser is RETIRED.** `GET /calendars/new` resolves to
 the wizard, so every link across the product and every external bookmark lands
@@ -299,10 +1004,25 @@ reproduced before anything was changed.
    by moving all three into the plugin body-script registry
    (`internal/app/routes.go` → `layouts.SetPluginBodyScripts` → `base.templ`),
    which emits outside the swapped region. **Class defect:** 29 more page-side
-   `<script src>` tags across 16 templs remain; `tools/check-page-scripts.sh` +
+   `<script src>` tags across 16 templs remained; `tools/check-page-scripts.sh` +
    `tools/page-script-allowlist.txt` is a whole-tree ratchet (wired into CI,
    self-testing) that lets the count only shrink, and the sweep is booked as
-   **C-HTMX-SCRIPT-SWEEP**.
+   **C-HTMX-SCRIPT-SWEEP**. **First survivor closed (sweep R3, 2026-08-07):**
+   the Characters page's `characters.js` — measured live in headless Chromium
+   against the vendored htmx 2.0.4 and boot.js's real config (direct load wires
+   the cast cards' quick-look; boosted sidebar nav never fetches the file and
+   the button does nothing), moved to the registry, ratchet lowered to
+   **28 across 15**. The other 15 are undiagnosed. **Ratchet strengthened
+   (sweep R3, 2026-08-07):** it counted one literal byte sequence,
+   `<script src=`, so `<script defer src={…}>`, `<script type="module"
+   src={…}>` and a newline-split open tag put the file into the inventory not
+   at all — the guard exited 0 with all three present, and `templ fmt` does not
+   normalise attribute order, so the evasion survived `make templ` and CI. The
+   harm is order-blind (htmx removes scripts BY TAG NAME), so the guard now is
+   too: it walks the open tag a character at a time, the same walk
+   `check-calendar-v4-lints.sh` does for B3/B4. Tree counts unchanged — the gap
+   was latent — so the allowlist needed no edit; the three forms plus an
+   inline-body decoy are fixtures in the guard's own self-test.
 
 2. **Every calendar preference write was a guaranteed FK violation.**
    `SetSidebarPinned` / `SetBlockLayers` / `SetBenchSections` inserted an empty
@@ -1075,6 +1795,607 @@ the pinned cross-slice contract `data.go` + its reflection shape pin. Its
 `.ai.md` lands with the renderer in C-CALV4-BLOCK-P1.
 
 ### Cross-cutting state (not plugin-scoped)
+
+#### 2026-08-07 — C-SWEEP-R4 stages 26–28 (the review's own findings, closed)
+
+The C-SWEEP-R4 adversarial review returned pass=false on ONE blocking item and
+one genuine test gap. Both are closed here, plus the bookkeeping the review
+flagged. Nothing in R4's substance was found false.
+
+**Stage 26 — the branch was failing its own CI.** Stage 16's ImportReport
+threading introduced four `report.Fail("calendar", …)` / `("timelines",
+"timeline", …)` labels outside the owning plugin directories, so
+`tools/check-plugin-isolation.sh` (T-B2 / M-B2.1) went red at stage 16 and
+stayed red for nine commits, including HEAD. It runs in `.github/workflows/
+ci.yml` and `make verify`. No commit claimed it passed — it simply was not run.
+The labels now route through constants in
+`internal/plugins/campaigns/import_report.go`, and guard **amendment R4-S26-A**
+adds `const_registry_files`: exact-path matching, exempting only a bare
+`Name = "slug"` declaration that is the whole line. That is strictly narrower
+than the `always_allowed_prefixes` entry the guard itself suggests, which would
+have exempted the entire file forever including any call site later added to it.
+`tools/test-plugin-isolation.sh` (new, 7 cases, wired into CI and `make verify`)
+mutation-tests the narrowness in both directions.
+
+**Stage 27 — the preview door was fixed but unpinned.** Stage 24 applied the
+same four-field fix in `builderImportResult` (commit path) and `draftCalendar`
+(preview path) and tested only the first; reverting `draftCalendar` to
+24/60/60/0 left the whole calendar suite green. `draftCalendar` feeds
+`builderPreviewBlock` and `builderMoonAlmanac`, so an unpinned regression there
+shows a preview whose leap years and moon phases disagree with the calendar
+about to be created. `TestBuilderDoorIsNotLossierThanTheImporter` now runs the
+preview leg too (and asserts the fixture can fail), and
+`TestBuilderPreviewAndCreateAgree` ties preview to Create across all five
+embedded presets as well as the odd-units payload.
+
+**Stage 28 — traceability.** Five R4 fix ids had working, biting code but were
+not greppable by id. The id now appears in the file that discharges it. Full
+index:
+
+| Fix id | Where it lives |
+|---|---|
+| `guards/probes-never-run-in-ci` | `tools/check-browser-probes.sh`, `Makefile`, `.github/workflows/ci.yml` |
+| `promises/notes-never-exported` | `internal/app/export_notes_roundtrip_test.go`, `internal/wire/export_adapter_wiring_test.go` |
+| `backend/import-silent-partial-success` | `internal/plugins/campaigns/import_report.go` + `import_report_test.go` |
+| `promises/export-zip-media-dropped` | `internal/plugins/campaigns/import_zip_media_test.go` |
+| `backend/syncapi-pull-1000-cap-no-cursor` | `internal/plugins/syncapi/sync_pull_cursor_test.go` |
+
+Two review findings are recorded rather than fixed, because neither is a defect:
+
+- **R4 stage numbers 7 and 8 do not exist.** The sequence jumps 6 → 9. A
+  numbering blemish already acknowledged in the R4 report; no work is missing.
+- **`tools/restore-drill.sh` (exit 2) and `tools/test-restore-drill.sh` (exit 1)
+  fail only where no docker daemon is reachable.** Environmental, not a
+  regression, and not caused by this branch.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 25 (deleting a calendar reset preferences it had nothing to do with)
+
+**`calendar_active` holds four facts on one row and only one of them is about a
+calendar.** `calendar_id` is the viewer's switcher choice; `sidebar_pinned`
+(007), `block_layers` (014) and `bench_sections` (016) are per (user, campaign)
+and merely piggyback on the same row — three signed decisions
+(PR #368 stop-and-flag #3, `[LYR-3 SIGNED]`, `[BR2-5 SIGNED]`) put them there
+rather than in a table of their own. `fk_calendar_active_cal` cascaded on
+DELETE, and a cascade deletes the ROW, so deleting one calendar silently reset
+every viewer's sidebar pin, layer set and Bench sections for the whole
+campaign — including viewers who had never opened the deleted calendar.
+
+**Migration 017 makes `calendar_id` NULLable and moves the FK to
+`ON DELETE SET NULL`.** The pointer is still cleared by the delete; the three
+preferences beside it survive.
+
+**The booking said every path reverses something signed, so the migration says
+what this one re-signs.** A separate prefs table is the shape three signed
+refusals already rejected. The in-service reseat has no answer when the deleted
+calendar was the campaign's LAST one — it loses the preferences in exactly the
+case that loses the most. SET NULL re-signs ONE sentence of 006's header ("its
+active-cal pointers go too") while keeping that header's actual promise verbatim:
+"the next read falls back to the new default automatically". It still does. NULL
+and "no row" resolve identically, which is what keeps this a schema change rather
+than a semantic one.
+
+**The reader moved with the schema, and had to.** Scanning a NULL into a plain
+`string` is a `database/sql` error, so the migration on its own would have traded
+a silent preference wipe for a hard 500 on every affected viewer's page.
+
+**Testing without a database.** *(CORRECTED 2026-08-08 — the premise below was
+false; see "A real MariaDB was available the whole time" at the end of this
+file. The test design described here is still sound and still runs without a
+database, but it was chosen under a belief that no alternative existed.)* No
+MariaDB was thought to run in this build (the sibling FK
+defect's tests say so already), so the pin replays the SHIPPED migration files in
+version order and asserts the END STATE — 006 declares the cascade and is
+immutable, so any test reading one file in isolation would assert either the bug
+or nothing — and carries its own mutation test proving the replay can actually
+SEE a cascade. The second half feeds the repository a real NULL through a
+driver-level stand-in.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 24 (the front door threw away what the back door kept)
+
+**The wizard is "one code path, two front doors" — and one of the doors was
+lossier.** Six authored fields died between `builderDraftFromImport` and
+`builderImportResult`: a moon's colour, an era's code, and `hours_per_day` /
+`minutes_per_hour` / `seconds_per_minute` / `leap_year_offset`. Measured on a
+Calendaria payload declaring 20/50/40 and leap offset 3:
+
+    plain importer : hours=20 min=50 sec=40 leapOffset=3 moon=#22aa55 era code="TA"
+    wizard door    : hours=24 min=60 sec=60 leapOffset=0 moon=#c0c0c0 era code=<nil>
+
+Every one of those is a field the operator authored, the wizard DISPLAYED (the
+Eras station prints the code), and then did not write.
+
+**The booked split's open question is answered HIDDEN CARRY.** The booking noted
+that carrying a moon colour or a time unit means choosing between a new visible
+control on the Moons station — an authoring surface the wizard deliberately does
+not offer — and an invisible hidden carry. Hidden carry is the option that
+changes nothing about what the wizard ASKS: the fields ride through
+`builderCarryFields` / `builderReadForm` exactly as a season's authored colour
+and a month's day count already do. `builder.templ` is untouched and **no templ
+regen was needed**, because the carry renders through the existing generic
+hidden-input loop. "A colour is never invented here" still holds — an empty
+colour stays empty, and `builderImportMoonSwatch` now covers the one case it was
+ever right for: a moon the wizard itself created.
+
+**`draftCalendar` had to move with it.** It hardcoded 24/60/60 and wrote an empty
+moon colour and no era description, so fixing only the create path would have
+left the wizard's own preview and export contradicting its own Create.
+
+**One pin amended, named R4-S24-A.**
+`TestBuilderPresets_RoundTripThroughBuildExport` asserted all three asymmetries
+by equality rather than exemption — good discipline while they were booked, and
+exactly what made this fix legible: it reds and says *"the asymmetry was fixed
+(delete the exemption) or it moved (say where)"*. Each exemption is inverted into
+the stronger claim that the authored value survives. The two "the payload must
+still author a colour / a code" guards are kept, because without them the new
+assertions would prove nothing.
+
+**The new pin has two halves, and the second is the one that matters.** A fix
+that stopped at `builderImportResult` would have passed a unit test and still
+lost everything in the product, because the wizard has no server-side draft —
+every preview rebuilds from the posted body. `TestBuilderDoorSurvivesTheFormRoundTrip`
+replays the draft through the SHIPPED writer/reader pairing at all nine stations
+in both importer modes; removing only the carry entries reds it everywhere while
+the create-side test stays green.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 23 (the Elven preset had one season, three times)
+
+**`parseCalendaria` only ever implemented one of Calendaria's two season
+shapes.** Calendaria authors a season as either a day-of-year span
+(`dayStart`/`dayEnd` from the start of the year) or a MONTH RANGE
+(`monthStart`/`monthEnd` naming whole months, the day fields narrowing the first
+and last). The parser read only the day fields, so every month-range file
+collapsed. `presets/elven.json` — the Start gallery's Elven card — is one: its
+three seasons differ ONLY in `monthStart`/`monthEnd` (0-2, 3-5, 6-7) and all
+carry `dayStart 0 / dayEnd 45`, so all three imported as `1/1 → 1/45`. Three
+identical, mutually overlapping ranges covering one of eight months; the other
+seven belonged to no season at all.
+
+**The un-signed decision in the booking was which base `monthStart` uses, and it
+is settled by measurement rather than decree.** The two real exports in
+`cordinator/references/calendars` genuinely disagree, so no constant is correct.
+The base is detected per file from the smallest `monthStart` any season declares
+— and on the three real payloads that is not a coin-flip, it is the only reading
+under which each file's seasons tile its months exactly once: `forbidden-lands`
+(8 months, starts 0/2/4/6) has no month 0 under a 1-based reading;
+`calendar-of-therin` (15 months, starts 1/4/7/10/13) leaves its FIRST month
+seasonless under a 0-based one. `monthEnd` is deliberately excluded from the
+test, because therin's trailing `monthEnd 0` means "to the end of the year" and
+would otherwise read as evidence of 0-basing — the exact one-month shift the
+booking warned about.
+
+**Nothing was re-authored and nothing preset-specific was added.**
+`presets/elven.json` is untouched, so `builder_presets.go`'s "no preset-specific
+code exists" claim still holds. A file that names no month keeps the day-of-year
+reading byte-for-byte, which is the other half of the fix: teaching the parser
+about `monthStart` must not reinterpret every season Chronicle has already
+imported. The `seasonList` sort is re-keyed off `monthStart` so stage 13's
+determinism does not regress — therin ties on every other field.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 22 (every N months fired every month)
+
+**`OccursOn`'s monthly branch ignored `recurrence_interval`.** It checked the
+day-of-month and the occurrence cap and returned, so an event authored as "every
+3 months" was accepted, persisted and then expanded EVERY month. The week-based
+branch has always applied its interval through `recurrenceWeeks`; monthly now
+does the same, counted in months. The operator settled the booked fork on
+**honour the interval**.
+
+**Nothing below interval 2 moves.** `step` is the stored interval only when it is
+greater than 1; absent, 0, 1 and negative all collapse to 1, which is
+byte-for-byte the old expansion — and that is every row the shipped editor can
+author, because `calendar_daycard.js::recurrenceBody` sends
+`recurrence_interval: 0` for the month unit.
+
+**The entangled cap bug is closed with it.** `RecurrenceMaxOccurrences` compared
+the raw whole-month offset, so "every 3 months, 4 times" stopped after 4 MONTHS —
+the 2nd occurrence — delivering half the series. It now compares `n/step`, the
+0-based occurrence index, which is the same quantity `diff/stride` is on the
+week-based branch. That half was booked as un-fixable until the fork was chosen.
+
+**Two follow-ons are booked BY NAME rather than bundled in.**
+`C-CALV4-MONTHLY-INTERVAL-CONTROL`: R2-2b withheld the `every [N]` field from the
+month unit *because* the server ignored it, and said so in the source; that reason
+is gone, so the control can return — as a UI change with its own inverse,
+readout wording and request pins. `C-CAL-MONTHLY-INTERVAL-STORED-ROWS`: rows
+already carrying `monthly` + `interval ≥ 2` are the only rows this re-spaces, and
+no reconciler can tell a leaked interval from a deliberate one by looking at the
+row, so stage 22 shipped none — what is needed first is a count from the
+operator's database.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 21 (a query string could pin a core for a minute)
+
+**`?year` on the world-state seed was an unauthenticated CPU-exhaustion vector.**
+`Calendar.AbsoluteDay` summed `YearLengthForYear` from year 0, so its cost was
+linear in the year — and the year arrives raw off a public query string on three
+routes across two plugins (`calendar/worldstate_handler.go` `GetWorldState`,
+`calendar/handler_v2.go`'s cursor, `syncapi/calendar_api_handler.go`
+`GetWorldState`), all of which funnel into `BuildWorldStateSeed` → `moonSeeds` →
+`AbsoluteDay`. Measured before the fix on a 12-month/366-day calendar:
+`?year=2000000000` burned **53.5 s of CPU in one request**; 100000000 took 2.71 s;
+250000 took 7.9 ms. No login, no campaign membership, no rate limit in between.
+
+**The fix is the algorithm, not the input** (coordinator ruling). The year term is
+now closed-form — `year·YearLength() + leapExtraDays·leapYearsBefore(year)`, where
+`leapYearsBefore` counts an arithmetic progression in O(1) — so the same calls cost
+~140 ns. **No clamp was invented**: a fantasy year number is authored data, a bound
+would have needed the same arbitrary constant repeated at all three entry points,
+and the next caller to reach `AbsoluteDay` from somewhere that is not a handler
+would still have been linear. A campaign set in year 250000 — or 2000000000 — still
+resolves exactly the date it resolved before. No context plumbing was needed for the
+same reason: after the change there is no unbounded loop left to cancel; the
+surviving month loop is bounded by `len(c.Months)`.
+
+**The risk the booking flagged was that the leap arithmetic would not be
+bit-identical**, silently shifting every moon phase and countdown.
+`TestAbsoluteDayClosedFormMatchesLoop` discharges it by keeping the ORIGINAL loop
+in the test file as an oracle and asserting equality across nine calendar shapes
+(no modulus, offsets 0/1/3, an offset larger than the modulus, a NEGATIVE offset,
+every-year leap, months with no leap days, no months at all) × 14 years including
+0 and negatives × 7 months × 4 days.
+
+**One guard was amended, and named: R4-S21-A.**
+`TestBlockMoonBaseDayIsSteppedNotRecomputed` asserted that per-cell `AbsoluteDay`
+is ≥5× slower than stepping off one base — true only *because* `AbsoluteDay` was
+linear, which is the defect. The ratio inverted and the guard failed on a correct
+tree. It is amended to the strictly stronger property it was always a proxy for:
+year-independence, which forbids an O(year) `AbsoluteDay` outright rather than
+tolerating one so long as a single producer routes around it. Both timing guards
+race their work against a timer so a restored loop FAILS in a second instead of
+hanging until the `go test` deadline.
+
+#### 2026-08-07 — C-SWEEP-R4 stages 15–19 (the backup told four lies)
+
+Four defects in the export/import/sync path, all reproduced before they were
+touched. They share one shape: **the tool reported success while losing
+data**, which is the failure mode that matters most for a self-hosted product,
+because the export is the users' only safety net and an operator who is told it
+worked stops checking.
+
+**Stage 15 — campaign export omitted every shared note.** The envelope has had
+a `notes` field and an `ExportNote` type since v1, and `ExportImportService`
+has had `SetNoteExporter`/`SetNoteImporter` since v1. Nothing ever called them.
+A nil adapter is skipped silently *by design* — some sections depend on
+optional plugins — so `Export` wrote `notes: []` and `Import` read nothing, and
+the two "intentionally not implemented in v1" comments in `export_adapters.go`
+named exactly the repository method that was missing. Wired both halves:
+`notes.ListSharedByCampaign` (the one list method in that package with **no
+per-user filter**, because the shared-note corpus is campaign data — owner-
+gated by its only caller, reachable from no HTTP route), plus the two adapters.
+`ExportNote` grew `is_folder`, `content` and `parent_index`: checklists live
+only in the legacy block content, so shipping notes without `content` would
+have lost every checkbox in the campaign, and folders are referenced by index
+the way `ExportEventConnection` already does, because note IDs are not stable
+across instances. Import re-parents in a second pass (a folder may appear after
+its children) and applies bodies through `Update` so imported HTML goes through
+the sanitizer — an imported export is untrusted input. **Personal notes stay
+out on purpose**: they belong to a user, and an export is handed to whoever
+imports it. The wiring hole itself is now pinned in `internal/wire` by an AST
+test that requires all twenty export/import setters — that is the test that
+would have caught the original.
+
+**Stage 16 — a partial import reported clean success.** Import is best-effort
+on purpose: one bad row must not abandon a half-built campaign. The other half
+was missing. Thirty-nine skip sites across the nine adapters each went to
+`slog.Warn` and nowhere else, and the handler then redirected the operator
+straight to the new campaign. `campaigns.ImportReport` now threads through the
+adapters exactly the way `*IDMap` does; every skip records section, kind, name
+and a user-safe reason, degraded-but-created rows included (an entity whose
+body failed to apply is a loss even though the entity exists). `Import` returns
+`(*Campaign, *ImportReport, error)` — a return value, not a side channel, so a
+caller that ignores a partial import has to ignore it in writing. Detail is
+capped at 200 records; **the count stays exact past the cap** and the summary
+admits "and N more", because the count is what tells the operator whether to
+trust the restore. The handler stops redirecting when anything was lost and
+renders the loss list instead. A clean import redirects exactly as before.
+
+**Stage 17 — "Export ZIP (with media)" round-tripped to nothing.** The export
+side was never broken; the zip really does hold `campaign.json` plus real
+bytes. Two things made it a lie. The import form's `accept` was
+`.json,application/json`, so the file picker would not offer the operator the
+`.zip` they had just been told to make — the handler could parse a zip, the UI
+could not deliver one, and the ZIP round-tripped to **nothing at all**, not
+even structural data. And media entries in an accepted zip were dropped with
+one `slog.Info`. **Ruling taken: stop promising, book the rest by name** —
+not "make it round-trip". Restoring the *files* is easy (`MediaService.Upload`
+already takes bytes); restoring the *references* is the job, and files without
+references is a **new** quiet lie in place of the old one — the library fills
+up and every image stays broken. Every reference is a media ID
+(`entities.image_path`, `cover_image_path`, `maps.image_id`, token
+`image_path`, and `/media/<id>` inside `entry_html` across entities, posts and
+notes), and the manifest cannot even be paired with the zip today because
+`ExportMediaFile` carries no `Filename`. Booked whole as
+**C-IMPORT-MEDIA-RESTORE** in `.ai/todo.md` with its four steps, the import-
+ordering change it forces, and its acceptance test. What shipped is honesty:
+the form accepts `.zip` and states both size caps, the settings copy says
+plainly what each export contains and what an import does *not* give back, and
+the unrestored count rides the stage-16 report ("3 media files — archived in
+the zip but not re-attached on import").
+
+**Stages 18–19 — the thousand-and-first entity could never reach the VTT.**
+`POST /api/v1/campaigns/:id/sync` walked the entity list to `syncMaxPullPages`
+and stopped, setting `has_more` truthfully with nothing in the request able to
+act on it: `since` is a **filter** over the list, not a position in it, so the
+next request re-walked the same first thousand. Kept the cap as a page size and
+added the cursor — opaque on the wire (versioned base64) so it can become a
+keyset later without breaking a client that hard-coded the arithmetic, bounded
+so a corrupt cursor cannot ask for an absurd OFFSET, and **400 on a malformed
+cursor rather than a silent reset to page 1**, since a silent reset restarts
+the walk from the top and looks like it worked while the tail stays exactly as
+unreachable. Offset paging is only safe here because entity list ordering
+became a total order in sweep R3 stage 4 (`e.id ASC` on every clause); without
+that tiebreaker this endpoint would have re-imported the duplicate/skip bug at
+scale, which is why the walk test asserts no duplicates. `docs/api/openapi.yaml`
+gained both fields and the rule about which `server_time` a client keeps: the
+one from the **first** response of a completed walk, not the last, or anything
+modified mid-walk is skipped. Stage 19 fixed the client twin in
+`Chronicle-Foundry-Module` (`0d17f9c`): `JournalSync.resyncAll` and the
+dashboard's `_buildEntityGroups` each had `while (hasMore && page <= 5)`
+inline — a silent 500-entity ceiling — now one shared
+`scripts/_entity-page-walk.mjs` bounded at 200 pages whose `truncated` flag the
+GM is actually told about. Fixing the server and leaving the client capped at
+500 would have left the operator exactly as stuck.
+
+**What these do not promise.** Nothing here was exercised against a real
+MariaDB, so the note round trip, the failure tally
+and the cursor walk are all proven against fakes that replicate the service
+contracts, not against the database. *(CORRECTED 2026-08-08: the reason given
+here — "this environment has none" — was FALSE. A real MariaDB was available
+the whole time; see the section at the end of this file. The tests below are
+still fake-backed, which is now a gap someone can close in an afternoon rather
+than an environmental limit.)* The note exporter's SQL
+(`is_shared = TRUE`, `ORDER BY created_at, id`) is read, not run. The import
+result panel's markup is asserted as a string, not rendered in a browser. And
+media restoration is **not** fixed: a ZIP import still leaves every image
+broken, and the only change is that it now says so.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 13 (the probes had never once run)
+
+**Every real-browser probe was a silent pass, twice over.** The probes are the
+only tests in the repo that look at the RENDERED result — they drive a headless
+Chromium over a built page and read geometry out of the live layout. Every other
+test asserts on the strings we emitted, which cannot see a container query
+resolve, a Shelf collide with the Ledger, or a phone breakpoint fail to swap.
+
+They all open `if testing.Short() { t.Skip }`, and `-short` is *exactly* the mode
+CI's "Build & Test" job and `make verify` run. They then skip again with no
+Chromium — and a `go test` SKIP hides inside an `ok` package line, so a machine
+with no browser produced a green run indistinguishable from a measured one.
+
+Reproduced: changing the Shelf scroller's `max-height` from 132px to 160px in
+`static/css/calendar-block.css` leaves `go test ./internal/widgets/calendar_block/
+-short` reporting `ok`.
+
+`tools/check-browser-probes.sh` runs the eight covered probes **without**
+`-short` and then requires a `--- PASS:` line from each **by name** — so a probe
+that skipped, failed, was renamed or was deleted fails the guard, and coverage
+cannot evaporate by rename. With no browser it prints a loud banner naming every
+probe that did not run and exits 0; `BROWSER_PROBES_REQUIRED=1` (set by the new
+`Browser Probes` CI job) makes that fatal instead. `TestProbe_MobileBreakpointSwap
+InRealBrowser` also needs the Tailwind CLI and is tracked as its own named
+dependency group. The guard self-tests on every run (SKIP / FAIL / ABSENT must
+each fire) in the house guard idiom. Wired into `make verify` as `make
+test-probes`.
+
+Out of scope by design: the opt-in explorers and screenshot generators
+(`DAYCARD_GEOMETRY`, `DAYCARD_FLOORS`, `DAYCARD_MORPH_TRACE`, `*_screenshot_gen`)
+— they emit artefacts and assert nothing.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 12 (a half-applied plugin migration was terminal)
+
+**A plugin migration that died on its second statement could never be finished.**
+`execPluginMigration` splits on semicolons, executes statement by statement on a
+plain `*sql.DB`, and writes the `plugin_schema_versions` row only after the LAST
+one succeeds. A failure part-way therefore left the earlier statements' effects
+in the database and *no record that anything happened*. The next boot replayed
+from statement one and died on "duplicate column name" — because most plugin
+ALTERs are not idempotent — so the operator saw an artefact of the retry instead
+of the real cause, and repairing the real cause could never help.
+
+**This is not a transaction and does not pretend to be one.** MariaDB has no
+transactional DDL: every CREATE / ALTER / DROP / RENAME commits implicitly. The
+error text says so rather than implying a rollback that did not happen.
+
+Two mechanisms, in `internal/database/plugin_migration_safety.go`:
+
+- **Pre-flight applicability check.** Every statement is validated against the
+  schema catalogue *as it will stand at that point in the migration* (the
+  simulation moves forward, so the normal "CREATE then ALTER" shape is not
+  falsely refused). If any statement cannot succeed, the migration aborts having
+  executed NOTHING — half-applied-and-unrecoverable becomes nothing-applied-and-
+  actionable. Table granularity; **fails open** if `information_schema` cannot be
+  read, because refusing every plugin migration over a metadata hiccup would be
+  worse than the bug.
+- **Partial-progress recording** in a new runtime table `plugin_migration_progress`.
+  The count of statements that DID apply is written before the error returns, so
+  the next boot resumes after them. Keyed by a sha256 of the migration text and
+  honoured only on a byte-identical match — a resume that skipped the WRONG
+  statements would be far worse than the crash-loop it replaces. Every uncertain
+  answer degrades to replaying from zero, i.e. the pre-existing behaviour.
+
+Three DB-backed regression tests (`TestPluginMigration_*`) run in the existing
+`Fresh-DB Migration Replay` job and are named in its grep-for-PASS assertion, so
+a skip fails the job. `TestFreshDatabase_EveryPluginSchemaApplies` still passes,
+which is what rules out the pre-flight falsely aborting a real migration — a
+false abort is the one outcome worse than the bug.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 11 (every fresh install shipped a dead plugin)
+
+**`foundry_vtt`'s migration 001 crashed on its FIRST statement on every
+brand-new database.** It is a consolidation migration —
+`RENAME TABLE foundry_module_campaign_tokens TO foundry_vtt_campaign_tokens` —
+and the plugin that created that source table was deleted in C-FMC-5c. A fresh
+self-hosted install therefore hit `Error 1146`, the plugin was marked DEGRADED,
+and it could never self-heal: the runner returns on the first failed migration,
+so no later migration for that plugin was ever reachable.
+
+`PreMigrationCheck` (PR #507) does **not** cover this. It only refuses when
+`foundry_module_versions` exists *and has rows*; on a fresh database the table
+does not exist, so the check returns `nil` and the doomed migration runs anyway.
+
+The reason it survived: **CI never migrated an empty database anywhere.** The
+restore drill loads a dump of an already-migrated one, and every other
+integration test assumes `make migrate-up` already ran.
+
+Migration 001 is immutable (ADR-044/045), so the repair is split:
+`foundry_vtt.ReconcileConsolidationState` records 001 as applied on any database
+where its RENAME has no source table, and new migration **002** establishes the
+post-consolidation shape with idempotent DDL. Fresh install, completed upgrade
+and an upgrade that crashed between 001's two statements all converge on the
+same schema; a database that still HAS the predecessor table is untouched and
+001 runs for real, carrying its live token rows across.
+
+Verified by replaying the real bootstrap against genuinely empty MariaDB schemas
+(`make test-freshdb`, `cmd/server/freshdb_migration_test.go`) — one from zero,
+one from the pre-consolidation shape — and wired into CI as its own
+`Fresh-DB Migration Replay` job that fails if either test merely *skips*.
+
+#### 2026-08-07 — C-SWEEP-R4 stage 9 (the anonymous dm_only leak — ADR-049)
+
+**"No authenticated user" and "trusted system caller" were the SAME value, and
+the filters read that value as trusted.** `C-AUTHZ-EMPTY-USERID`, the only
+high-severity unauthenticated confidentiality break R3 found, is closed.
+
+On a PUBLIC campaign a logged-out visitor carries `role = RoleNone` and
+`auth.GetUserID(c) == ""`, and the calendar/timeline visibility filters
+short-circuited on exactly `userID == ""` — documented in both plugins as "the
+system context". So anonymous internet traffic took the MOST privileged branch
+and was served `dm_only` calendars, `dm_only` timelines and per-user-restricted
+events and event links that a logged-in Player on the same campaign is
+correctly denied.
+
+**The fix is a type, not a check.** `internal/permissions/viewer.go`'s `Viewer`
+carries an **unexported** `system` bit with two constructors: `RequestViewer`
+(anything off an HTTP request — an empty user id means ANONYMOUS and cannot
+become trusted) and `SystemViewer` (declared at the call site). Filters ask
+`SkipsPerUserRules()`; **an anonymous viewer is neither an Owner nor a system
+caller**, so it fails closed by construction rather than by every call site
+remembering. This is the concrete form of C-CALV4-V2SUNSET **[VS-15]** — an
+empty user id is an ABSENT per-user layer, never a sentinel — which matters
+because R2-4 moves `GET /apps/calendar` onto the public group and widens this
+exact surface.
+
+**A third consumer, swept and fixed in the same stage:** the sync API's
+`GET /calendar/events` passed `""` into the same filter on purpose, so a
+Player-level API key (or a Player/Scribe member on the session door) was served
+events whose `visibility_rules` restrict them to OTHER users. It now forwards
+the caller's own identity (`resolveUserID`) — narrowing only, and a
+sync-permission key is untouched because `resolveRole` gives it Owner.
+
+**Behaviour deliberately preserved:** the two genuine trusted callers
+(`timeline_widget_type.go`'s Scribe-gated create-or-pick picker and the
+campaign timeline export adapter) now pass `permissions.SystemViewer` and see
+exactly what they saw before. **Two green tests that pinned the bug as intended
+were INVERTED, not deleted**, each keeping a system-path row. `[EU-5]`, a
+route-level anonymous-identity floor, was **booked, not taken** (`.ai/todo.md`
+§B2), as was the observation that the two per-user rate limiters skip anonymous
+traffic entirely (§B3 — a cost question, and [VS-15] forbids the per-IP key
+that would fix it).
+
+#### 2026-08-07 — C-SWEEP-R4 (the absent-means-preserve contract, done once)
+
+**The whole partial-write class is closed, product-wide, by one contract.**
+Report: `cordinator/reports/chronicle/2026-08-07-C-SWEEP-R4.md`. Six stages
+here plus one in `Chronicle-Foundry-Module`.
+
+> **An ABSENT key preserves the stored value. An EXPLICIT `null` clears it. A
+> present value replaces it.**
+
+Ruled by the coordinator on 2026-08-07, honouring the `C-SIDEBAR-REORDER-RESCUE`
+PR1 step 1 booking. Client-side echo-the-full-body was REFUSED as the primary
+fix — it leaves the endpoint armed for the next writer, and R3 proved there is
+always a next writer. Read `.ai/conventions.md` §"Partial-Update Endpoints"
+before writing any update handler.
+
+**The mechanism is `internal/patch.Field[T]`.** It records presence in
+`UnmarshalJSON`, which encoding/json only calls for keys the body actually
+carries — so "absent" and "null" stop being the same `nil`. `Ptr(cur)` merges
+onto a nullable column, `Val(cur)` onto a NOT NULL one. Services load the row
+and merge onto it; validators read the MERGED value, not the raw input.
+
+**What this changed, by endpoint** (each pinned in all three directions):
+sessions (Mark Complete no longer erases the schedule, the summary, the
+in-world date and the recurrence — and the next-occurrence generator fires
+again); entities (a sync push no longer un-parents; a `{name}` push no longer
+un-privates a hidden character to every player, on BOTH the single and batch
+doors); timeline standalone events (a rename no longer clears eight fields
+including per-player visibility rules); map markers (an edit or a drag no
+longer clears `pin_category`, `visibility_rules` or the Foundry pairing key);
+calendar events (a five-key Foundry push no longer turns off recurrence,
+all-day and the entity link).
+
+**Three previously-green pinned expectations were AMENDED**, each named in a
+comment and mutation-tested:
+`TestUpdateEvent_AnOmittedIsRecurringIsAWriteOfFalse` (inverted — it pinned
+the booked hazard as a deliberate non-fix),
+`TestUpdateEvent_EntityIDStillClearsOnNil` (name and guarantee kept, gained the
+absent-preserves half — `C-ENTITY-LINK-DESIGN` is NOT overruled, because its
+guarantee was the ability to clear, and an explicit null still clears), and
+`TestEventHandler_BindsTierAndAllDay` (stopped counting one substring twice now
+that create and update spell the binding differently).
+
+**Ratchet:** `internal/patch/partial_update_contract_test.go`. It does not try
+to detect "assigns unguarded" — that needs cross-package data flow and is
+mostly false positives. It pins the PRECONDITION: a field can only preserve an
+absence if its type can represent one. Every field of a contract-governed
+`Update*Input` must be presence-typed, and the whole-tree inventory of
+`Update*Input` structs is frozen, so a new one must be classified out loud.
+Twenty structs sit on `notYetSwept` — that list records what was LOOKED AT,
+not what is safe.
+
+**Cross-repo:** `Chronicle-Foundry-Module` `f3ffa90` rewrote `API-CONTRACT.md`
+(which had documented the opposite — "absent means public"), commented each
+narrow body as narrow ON PURPOSE, and added
+`tools/test-partial-put-contract.mjs` so nobody "hardens" them with an echo.
+The marker dialog's existing spread stays: harmless against a merging server,
+load-bearing against a pre-R4 one.
+
+
+#### 2026-08-07 — C-SWEEP-R3 (eight sweeps: security · partial-PUT · backend · frontend · promises · data · guards · backlog)
+
+**Sixteen fixes shipped in fifteen stages, twenty-five findings booked for a
+signature, four claims refuted.** Report:
+`cordinator/reports/chronicle/2026-08-07-C-SWEEP-R3.md`. The booked set is
+enumerated in `.ai/todo.md` §"Booked by sweep R3"; eight of them earned their own
+dispatch under `cordinator/dispatches/chronicle/`.
+
+**Two cross-cutting facts this sweep established, which later work should not
+re-derive:**
+
+1. **The dominant defect class in this codebase right now is the whole-replace
+   PUT.** Seven independent clients — sessions "Mark Complete" and its edit modal,
+   syncapi entity update, the Foundry actor push, the Timeline standalone-event
+   modal, the Foundry calendar-event push, and the web marker form/drag — send
+   partial bodies at endpoints that assign every field unguarded, so an omitted
+   key is a WRITE. It is invisible per-site because the request structs are a
+   patchwork: pointer fields nil-preserve, value fields (`bool`, `string`) clear,
+   and two pointers deliberately clear-on-nil. Consequences measured this sweep
+   range from lost schedules to **un-privating a hidden character entity** and
+   **NULLing the Foundry pairing key**. One ruling — absent-means-preserve with an
+   explicit-null form, per `C-SIDEBAR-REORDER-RESCUE` PR1 step 1 — closes all
+   seven; a per-client patch contradicts that booked precedent and collides with
+   the parked `C-ENTITY-LINK-DESIGN`. Booked as **`C-PARTIAL-PUT-CONTRACT`**. The
+   one member that needed no ruling (the Foundry marker config dialog) shipped in
+   stage 3, cross-repo.
+2. **"The route is authorized" is not "the object is authorized".** Four of the
+   five security fixes are the same mistake at four addresses: the middleware
+   proves campaign membership and the handler then addresses a relation, a note,
+   a calendar or an entity **by its own id** with no ownership or visibility
+   predicate at any layer below it. Two were cross-user reads of private data
+   (notes, backlinks), one was a cross-CAMPAIGN write reachable by an enumerable
+   integer PK (relations), one served a `dm_only` calendar to anyone (public
+   calendar reads). The pattern to copy is the one the fixes used: **resolve the
+   object, 404 on a campaign mismatch, then run the plugin's canonical visibility
+   gate — before the cache lookup, not after.** A fifth instance is booked and
+   unfixed: the `userID == ""` "system context" sentinel also matches an anonymous
+   visitor (**`C-AUTHZ-EMPTY-USERID`**, high).
+
+Also of record: entity `LIMIT/OFFSET` paging had **no total order**, so a walk
+returned 563 of 50,000 entities twice and missed 563 entirely on real MariaDB —
+and both **campaign-export** walk-to-exhaustion loops inherit that reader.
+Guards were strengthened twice, never weakened (the Bench CSS scope scanner now
+reads by brace, `check-page-scripts.sh` now walks the open tag), and a new
+whole-tree `check-widget-mounts.sh` ratchet proved every literal `data-widget`
+mount in the tree now has a load path.
 
 #### 2026-07-26 — C-CALV4-FOUNDATION-P0 (calendar-v4 wave 1, phase A)
 

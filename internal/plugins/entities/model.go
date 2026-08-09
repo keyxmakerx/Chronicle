@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -509,23 +510,42 @@ type CreateEntityInput struct {
 
 // UpdateEntityInput is the validated input for updating an entity.
 //
-// IsPrivate is a pointer so callers can express "don't change" (nil)
-// vs. "set to this value" (&true / &false). Before C-PERMISSIONS-INLINE-
-// COMPONENT, this was a plain bool and the form-side Update +
-// UpdateMetadataAPI handlers — which previously round-tripped the value
-// via a hidden checkbox — relied on the request always carrying the
-// current state. Removing the UI toggles in this dispatch means those
-// requests no longer carry is_private, so the service must preserve the
-// existing value when the caller omits it. The permissions widget is
-// now the sole authoritative writer of is_private.
+// This is a PARTIAL update and every field carries its own presence, per
+// the contract ruled on 2026-08-07 (sweep R4): an ABSENT key preserves the
+// stored value, an EXPLICIT null clears it, a present value replaces it.
+//
+// ParentID and TypeLabel became patch.Field in that sweep. They were plain
+// strings with "" meaning "clear", which a partial caller cannot avoid
+// sending: syncapi's apiUpdateEntityRequest had no parent_id member at all,
+// so EVERY sync push from Foundry silently detached the entity from the
+// Chronicle hierarchy, and every AI-workspace commit-update did the same.
+// Now nil/absent preserves, "" or an explicit null clears, and a value sets.
+//
+// IsPrivate stays a plain *bool: nil already means "don't change" and
+// non-nil means "set to this value", which is the same three-state contract
+// on a NOT NULL column (there is no "cleared" is_private). That predates
+// this sweep — C-PERMISSIONS-INLINE-COMPONENT made the in-app form-side
+// handlers stop carrying the field, so the service must preserve on absent;
+// the permissions widget is the sole authoritative writer. What the sweep
+// fixed is the WIRE side: syncapi bound it to a value-typed bool, so a
+// Foundry actor-sync push of {name} alone bound false and PUBLISHED a
+// hidden character entity to every player.
+//
+// ImagePath is the one value-typed field left, and it is inert: the service
+// never reads it. That is its own defect (campaign import believes it is
+// applying image paths through this input and is not) — booked in
+// .ai/todo.md rather than fixed here, because it is a different bug from
+// the class this sweep was ruled on. The cross-plugin structural ratchet in
+// internal/patch/partial_update_contract_test.go carries it as a NAMED
+// exception, so a NEW value-typed field cannot land quietly beside it.
 type UpdateEntityInput struct {
-	Name              string
-	TypeLabel         string
-	ParentID          string // Empty string = clear parent.
-	IsPrivate         *bool  // nil = preserve current; non-nil = set to *IsPrivate.
-	Entry             string
-	PlayerNotes       *string // Player-facing content (nil = don't change).
-	ImagePath         string
+	Name              patch.Field[string]
+	TypeLabel         patch.Field[string] // absent = preserve; "" or null = clear.
+	ParentID          patch.Field[string] // absent = preserve; "" or null = clear.
+	IsPrivate         *bool               // nil = preserve current; non-nil = set to *IsPrivate.
+	Entry             patch.Field[string] // absent or "" = preserve; null = clear (see service.Update).
+	PlayerNotes       *string             // Player-facing content (nil = don't change).
+	ImagePath         string              // Inert — never read. See the doc comment above.
 	FieldsData        map[string]any
 	ExpectedUpdatedAt *time.Time // Optimistic concurrency: reject if entity was modified after this timestamp.
 }
@@ -546,16 +566,30 @@ func DefaultListOptions() ListOptions {
 }
 
 // OrderByClause returns a safe SQL ORDER BY clause based on the Sort field.
+//
+// Every branch ends with `e.id ASC`. None of the leading sort columns is
+// unique — an import or a seed gives thousands of entities the same
+// updated_at/created_at, and names collide freely (only
+// uq_entities_campaign_slug is unique) — so without a tiebreaker the order
+// of tied rows is whatever the plan happens to emit. That is not stable
+// across the statements of one LIMIT/OFFSET walk: MariaDB picks a
+// priority-queue sort while LIMIT+OFFSET is small and falls back to a full
+// filesort once it is not, and the two disagree about which tied rows land
+// in a given window. Measured on MariaDB 10.11 over 50,000 entities sharing
+// one updated_at, a page-by-page walk returned 563 entities twice and 563
+// not at all; with the `e.id` tiebreaker the same walk returned each exactly
+// once. The primary key makes each sort a total order, which is what
+// OFFSET paging assumes.
 func (o ListOptions) OrderByClause() string {
 	switch o.Sort {
 	case "updated":
-		return "ORDER BY e.updated_at DESC"
+		return "ORDER BY e.updated_at DESC, e.id ASC"
 	case "created":
-		return "ORDER BY e.created_at DESC"
+		return "ORDER BY e.created_at DESC, e.id ASC"
 	case "manual":
-		return "ORDER BY e.sort_order ASC, e.name ASC"
+		return "ORDER BY e.sort_order ASC, e.name ASC, e.id ASC"
 	default:
-		return "ORDER BY e.name ASC"
+		return "ORDER BY e.name ASC, e.id ASC"
 	}
 }
 

@@ -6,6 +6,8 @@ package maps
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // VisibilityRules defines per-user visibility overrides for map content.
@@ -140,19 +142,36 @@ type CreateMarkerInput struct {
 }
 
 // UpdateMarkerInput is the validated input for updating a marker.
-// ExpectedUpdatedAt is the optimistic-concurrency token (optional).
+// ExpectedUpdatedAt is the optimistic-concurrency token (optional) and is
+// NOT a data field — it is the caller's last-known version, so it stays a
+// plain pointer.
+//
+// Everything else is a patch.Field: this is a PARTIAL update under the
+// contract ruled on 2026-08-07 (sweep R4) — an ABSENT key preserves the
+// stored value, an EXPLICIT null clears it, a present value replaces it.
+//
+// Three losses were reproduced on this one struct. The Chronicle web edit
+// form and the drag-end PUT send neither pin_category nor visibility_rules,
+// so both were erased on every edit and every drag — and one of them is
+// access-control data. Worse, the web request struct has no foundry_id
+// member at all, so every web edit NULLed the marker's Foundry pairing key,
+// which resurfaces later as DUPLICATE markers on the next sync.
+//
+// Absent-preserve resolves the fork the R3 booking could not: the web form
+// still cannot set or clear a sync pairing key (it never sends foundry_id),
+// while syncapi CAN still clear one by sending an explicit null.
 type UpdateMarkerInput struct {
-	Name              string
-	Description       *string
-	X                 float64
-	Y                 float64
-	Icon              string
-	Color             string
-	PinCategory       *string
-	EntityID          *string
-	Visibility        string
-	VisibilityRules   *string
-	FoundryID         *string
+	Name              patch.Field[string]
+	Description       patch.Field[string]
+	X                 patch.Field[float64]
+	Y                 patch.Field[float64]
+	Icon              patch.Field[string]
+	Color             patch.Field[string]
+	PinCategory       patch.Field[string]
+	EntityID          patch.Field[string]
+	Visibility        patch.Field[string]
+	VisibilityRules   patch.Field[string]
+	FoundryID         patch.Field[string]
 	ExpectedUpdatedAt *time.Time
 }
 

@@ -149,6 +149,10 @@ type CalendarRepository interface {
 	// (year/month/day/start_hour/start_minute/name) so consumers
 	// can rely on it for diffs.
 	ListAllEvents(ctx context.Context, calendarID string) ([]Event, error)
+	// StrandedEventCounts reports, per calendar in a campaign, how many events
+	// point at a month position the calendar no longer has ([GR-18]). One
+	// query for the whole campaign; calendars with none are absent.
+	StrandedEventCounts(ctx context.Context, campaignID string) (map[string]int, error)
 
 	// Event visibility.
 	UpdateEventVisibility(ctx context.Context, eventID string, visibility string, visRules *string) error
@@ -318,8 +322,23 @@ func (r *calendarRepo) SetDefault(ctx context.Context, campaignID, calendarID st
 // GetActiveCalendarID returns the user's last-selected calendar ID
 // for a campaign, or "" if no row exists yet. Service layer falls
 // back to the campaign's default calendar when this returns "".
+//
+// A NULL POINTER READS AS "" — THE SAME ANSWER AS NO ROW, DELIBERATELY.
+// Migration 017 made calendar_id nullable and moved the FK to ON DELETE SET
+// NULL, so that deleting a calendar clears the pointer WITHOUT destroying the
+// three unrelated per-viewer preferences that share this row (sidebar_pinned,
+// block_layers, bench_sections). A viewer whose chosen calendar was deleted is
+// in exactly the situation of a viewer who has never chosen one, and
+// resolveActiveCalendar's ladder — pointer, then campaign default, then first
+// by sort order — already handles that case, which is what makes 017 a schema
+// change rather than a semantic one.
+//
+// The sql.NullString is load-bearing: scanning a NULL into a plain string is a
+// driver error, so without it the read would 500 for every viewer in a campaign
+// that had ever deleted a calendar. That is the whole reason this reader changes
+// alongside the migration and not after it.
 func (r *calendarRepo) GetActiveCalendarID(ctx context.Context, userID, campaignID string) (string, error) {
-	var calendarID string
+	var calendarID sql.NullString
 	err := r.db.QueryRowContext(ctx,
 		`SELECT calendar_id FROM calendar_active WHERE user_id = ? AND campaign_id = ?`,
 		userID, campaignID).Scan(&calendarID)
@@ -329,7 +348,7 @@ func (r *calendarRepo) GetActiveCalendarID(ctx context.Context, userID, campaign
 	if err != nil {
 		return "", err
 	}
-	return calendarID, nil
+	return calendarID.String, nil // "" when NULL — see the doc comment
 }
 
 // GetSidebarPinned returns the user-per-campaign sidebar pin
@@ -356,10 +375,14 @@ func (r *calendarRepo) GetSidebarPinned(ctx context.Context, userID, campaignID 
 //
 // calendarID SEEDS THE ROW AND IS NEVER WRITTEN OVER AN EXISTING ONE. The
 // three preference writers on this table all used to insert an empty
-// calendar_id as a "fallback on first write". `calendar_active.calendar_id` is
-// `VARCHAR(36) NOT NULL` with `fk_calendar_active_cal` referencing
-// `calendars(id)` (migration 006:17,22-23), and no calendar carries that id — so
-// the INSERT tripped MariaDB errno 1452 and the whole write 500'd. InnoDB checks
+// calendar_id as a "fallback on first write". `calendar_active.calendar_id`
+// carries `fk_calendar_active_cal` referencing `calendars(id)` (migration
+// 006:17,22-23), and no calendar carries the empty id — so the INSERT tripped
+// MariaDB errno 1452 and the whole write 500'd. Migration 017 made the column
+// NULLable (ON DELETE SET NULL, so a deleted calendar clears the pointer rather
+// than destroying this row and the three preferences on it); that does NOT
+// rescue the old behaviour, because "" is not NULL and the foreign key still
+// rejects it. InnoDB checks
 // the foreign key on the attempted insert, BEFORE the duplicate-key path
 // resolves, so ON DUPLICATE KEY UPDATE never rescued it: the preference could
 // not be saved by a first-time viewer or by a returning one. That is why the
@@ -1083,6 +1106,67 @@ const eventCols = `e.id, e.calendar_id, e.entity_id, e.name, e.description, e.de
 const eventJoins = `LEFT JOIN entities ent ON ent.id = e.entity_id
      LEFT JOIN entity_types et ON et.id = ent.entity_type_id`
 
+// recurringCandidateClause is the SQL that widens a date-bounded event query to
+// include every RECURRING row whose base date sits outside the window, because
+// Event.OccursOn — not the SQL — decides where an instance lands.
+//
+// IT IS DERIVED FROM THE Recurrence* CONSTANTS, NOT RE-TYPED, and that is the
+// whole reason it exists. The literal `IN ('weekly','biweekly','monthly',
+// 'custom')` was written out by hand in THREE places (here twice, and in
+// block_repository.go's upcoming-events query), which made the accepted set a
+// four-copy fact. When C-CALV4-GAMEREADY §6 added `yearly` to the engine, the
+// predicate expanded it correctly and the ROW WAS NEVER LOADED: every yearly
+// festival was invisible in every month but its own, and the only reason that
+// was caught is that §6's guard runs against a REAL DATABASE. Against a fake
+// repository the feature was perfectly green and completely dead.
+//
+// Adding a recurrence type is therefore a one-line change to the constant block
+// and nothing else. The values are compile-time constants under this package's
+// control and never user input, so this carries no injection surface; the
+// apostrophe doubling is belt-and-braces against a future constant that
+// contains one, which would otherwise break the query silently at runtime.
+var recurringCandidateClause = buildRecurringCandidateClause()
+
+// spanningCandidateClause widens a MONTH-bounded event query to include every
+// multi-day row whose stored [start, end] window OVERLAPS that month, even
+// though its stored month is a different one — C-CALV4-GAMEREADY §3, [GR-5].
+//
+// IT IS THE SECOND HALF OF THE SAME FIX, AND ONLY A REAL DATABASE FOUND IT.
+// blockEventSpansDate makes the projection mark every day of a span, which is
+// enough for a festival that begins and ends inside one month. A festival that
+// runs from day 28 of one month to day 3 of the next has its stored `month` in
+// the FIRST month only, so `WHERE e.year = ? AND e.month = ?` never returned it
+// while the second month was being rendered — and the day card went on saying
+// "No events on this day" for days 1..3 of a festival in progress, which is
+// precisely the lie §3 exists to remove. The projection-level guard cannot see
+// this; the MariaDB guard fails on it.
+//
+// THE COMPARISON IS A COMPOSITE, AND THE RADIX IS NOT 100. The house idiom
+// elsewhere is `month * 100 + day`, which assumes no month exceeds 99 days —
+// safe for Gregorian and for every shipped fantasy preset, but this is a
+// user-authored month list and a 120-day month is expressible. The radix here
+// is 10000, so month lengths up to 9999 days compare correctly, and the month
+// bound uses day 0 / day 9999 rather than the month's real length so the clause
+// needs no per-calendar geometry.
+//
+// The four placeholders are (year, month) twice: the row's END must be at or
+// after the first of the asked-for month, and its START at or before the last.
+const spanningCandidateClause = `(
+		    e.end_year IS NOT NULL AND e.end_month IS NOT NULL AND e.end_day IS NOT NULL
+		    AND (e.end_year * 100000000 + e.end_month * 10000 + e.end_day)
+		        >= (? * 100000000 + ? * 10000 + 0)
+		    AND (e.year * 100000000 + e.month * 10000 + e.day)
+		        <= (? * 100000000 + ? * 10000 + 9999)
+		  )`
+
+func buildRecurringCandidateClause() string {
+	quoted := make([]string, 0, len(RecurrenceTypes))
+	for _, t := range RecurrenceTypes {
+		quoted = append(quoted, "'"+strings.ReplaceAll(t, "'", "''")+"'")
+	}
+	return "(e.is_recurring = 1 AND e.recurrence_type IN (" + strings.Join(quoted, ",") + "))"
+}
+
 // CreateEvent inserts a new event.
 func (r *calendarRepo) CreateEvent(ctx context.Context, evt *Event) error {
 	_, err := r.db.ExecContext(ctx,
@@ -1173,7 +1257,9 @@ func (r *calendarRepo) ListEventsForMonth(ctx context.Context, calendarID string
 	}
 
 	// C-CAL-EDITOR-EXPANSION PR2: fetch this month's events PLUS every
-	// recurring candidate (the four recurrence types) for the calendar — the
+	// recurring candidate (see recurringCandidateClause, which is DERIVED from
+	// the Recurrence* constants — this used to be a hand-typed list and a
+	// yearly festival was invisible because of it) for the calendar — the
 	// recurring rows may have a base date in another month/year but project
 	// into this month. The precise placement is decided in Go by
 	// Event.OccursOn (the single expansion predicate), so the SQL just widens
@@ -1186,12 +1272,13 @@ func (r *calendarRepo) ListEventsForMonth(ctx context.Context, calendarID string
 		WHERE e.calendar_id = ?
 		  AND (
 		    (e.year = ? AND e.month = ?)
-		    OR (e.is_recurring = 1 AND e.recurrence_type IN ('weekly','biweekly','monthly','custom'))
+		    OR `+recurringCandidateClause+`
+		    OR `+spanningCandidateClause+`
 		  )
 		  %s
 		ORDER BY e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)
 
-	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month)
+	rows, err := r.db.QueryContext(ctx, query, calendarID, year, month, year, month, year, month)
 	if err != nil {
 		return nil, err
 	}
@@ -1245,6 +1332,53 @@ func (r *calendarRepo) ListAllEvents(ctx context.Context, calendarID string) ([]
 	return scanEvents(rows)
 }
 
+// StrandedEventCounts returns, per calendar in a campaign, how many events
+// point at a month POSITION that calendar no longer has
+// (C-CALV4-GAMEREADY §9 [GR-18]).
+//
+// ONE QUERY FOR THE WHOLE CAMPAIGN, because its consumer is the Bench — a hot
+// page that already renders every listed calendar, and a per-calendar read
+// there would be N round trips on the surface a GM opens most.
+//
+// It reports the STRANDED state only, never the SHIFTED delta. Shift is
+// meaningful only against the edit that caused it; a standing surface has no
+// "before" to compare with, and inventing one would be the kind of number that
+// looks authoritative and is not. The shift count is reported at the moment of
+// the save, by the service, and nowhere else.
+//
+// Calendars with no stranded events are ABSENT from the map rather than
+// present with a zero — the caller renders a row per entry, and a zero row is
+// a row that says nothing.
+func (r *calendarRepo) StrandedEventCounts(ctx context.Context, campaignID string) (map[string]int, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT e.calendar_id, COUNT(*)
+		FROM calendar_events e
+		JOIN calendars c ON c.id = e.calendar_id
+		LEFT JOIN (
+			SELECT calendar_id, COUNT(*) AS n
+			FROM calendar_months
+			GROUP BY calendar_id
+		) m ON m.calendar_id = e.calendar_id
+		WHERE c.campaign_id = ?
+		  AND (e.month < 1 OR e.month > COALESCE(m.n, 0))
+		GROUP BY e.calendar_id`, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
 // ListEventsForDateRange returns events within a date range (same year).
 // Handles single-month or cross-month ranges within the same year.
 //
@@ -1268,7 +1402,7 @@ func (r *calendarRepo) ListEventsForDateRange(ctx context.Context, calendarID st
 		WHERE e.calendar_id = ?
 		  AND (
 		    (e.year = ? AND (e.month * 100 + e.day) >= ? AND (e.month * 100 + e.day) <= ?)
-		    OR (e.is_recurring = 1 AND e.recurrence_type IN ('weekly','biweekly','monthly','custom'))
+		    OR `+recurringCandidateClause+`
 		  )
 		  %s
 		ORDER BY e.month, e.day, COALESCE(e.start_hour, 99), COALESCE(e.start_minute, 99), e.name`, visFilter)

@@ -404,12 +404,39 @@ func TestScheduleStills_TheMatrixFitsThePhoneTheProductActuallyGives(t *testing.
 	// What the page gives it: the viewport, less the app shell's own padding,
 	// less the panel's hairline, less the body's padding, less the scroll
 	// container's hairline. Every term is a real box on the way down.
-	budget := schedulePhoneViewport - 2*schedulePagePadNarrow -
-		2*scheduleHairline - 2*bodyPad - 2*scheduleHairline
-	if grid > budget {
-		t.Errorf("the narrow matrix needs %dpx (%d ident + %d say + 7 × %d) and the page "+
-			"gives it %dpx at %dpx — the panel drags sideways and the last day clips",
-			grid, idw, sayw, colmin, budget, schedulePhoneViewport)
+	//
+	// ── AMENDED, AND IT IS A SECOND ARM RATHER THAN A MOVED THRESHOLD:
+	//    C-CALV4-MOBILE [MOB-6] SIGNED.
+	//
+	// This assertion ran at 390 and only at 390, which is exactly how "tuned
+	// for 390" came to mean "broken at 360" without anybody being told.
+	// MEASURED: `.sc-wrap` computed overflow-x `hidden` with 346 of 346 at 390
+	// but `auto` with 331 of 338 at 375 and 316 of 338 at 360 — 7px and 22px of
+	// sideways drag on the page a player uses to say when they are free.
+	//
+	// `schedulePhoneViewport` is BYTE-UNCHANGED and its row still runs. The
+	// same computation now also runs at `scheduleNarrowViewport`, so the
+	// surface has a floor rather than a favourite phone.
+	for _, vw := range []int{schedulePhoneViewport, scheduleNarrowViewport} {
+		budget := vw - 2*schedulePagePadNarrow -
+			2*scheduleHairline - 2*bodyPad - 2*scheduleHairline
+		if grid > budget {
+			t.Errorf("the narrow matrix needs %dpx (%d ident + %d say + 7 × %d) and the page "+
+				"gives it %dpx at %dpx — the panel drags sideways and the last day clips",
+				grid, idw, sayw, colmin, budget, vw)
+		}
+		t.Logf("the narrow matrix needs %dpx (%d ident + %d say + 7 × %d) against a %dpx "+
+			"budget at %dpx", grid, idw, sayw, colmin, budget, vw)
+	}
+
+	// AND `--colmin` DOES NOT PAY FOR IT. The 22px comes out of the fixed
+	// terms, never out of the day columns: this surface's own signed floor is
+	// "THE CELL IS THE TARGET (>=24x24 at every width)", and shaving it is
+	// named as a STOP-AND-FLAG rather than an option.
+	if colmin < 24 {
+		t.Errorf("--colmin is %dpx at ≤640 — the surface's own signed cell floor is 24x24 at "+
+			"every width, and the narrow budget may not be bought out of the day columns",
+			colmin)
 	}
 
 	// The fidelity harness must stand in the same phone. A shot taken in a

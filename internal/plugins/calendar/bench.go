@@ -177,6 +177,23 @@ type DayCardMount struct {
 	// the per-member roster on the page payload that card's allow/deny list is
 	// drawn from. A Scribe renders neither and receives neither.
 	CanRestrict bool
+	// CanCollectRSVPs is the Scribe floor of
+	// PUT .../events/:eid/rsvp-collection (routes.go:431), and it is the
+	// operator's own go/no-go gate for starting a game
+	// (C-CALV4-GAMEREADY §4 [GR-6]).
+	//
+	// THE FLOOR IS NOT CHOSEN HERE. The route already carries
+	// RequireRole(RoleScribe), and a control must never render to somebody the
+	// route will reject — so this reads the same predicate CanCreate does and
+	// no other.
+	//
+	// IT IS ITS OWN FIELD AND NOT CanCreate REUSED, for the reason [ER-3] gave
+	// about CanDelete and CanRestrict and which applies here verbatim: two
+	// floors that coincide today are a refactor away from not. Create/edit is
+	// POST|PUT .../events, this is PUT .../events/:eid/rsvp-collection, and the
+	// day either moves, a shared field would move the other one in silence —
+	// this one into the hands of the people being invited.
+	CanCollectRSVPs bool
 	// CampaignID is the API base the editor writes to. It is emitted rather
 	// than parsed out of window.location, because a surface that is not at
 	// /campaigns/:id/... would parse a wrong id and write to another campaign.
@@ -572,6 +589,106 @@ type BenchTick struct {
 type BenchBlock struct {
 	Data   calblock.BlockData
 	Manage BenchManage
+	// Nav is the month cursor's control trio (C-CALV4-GAMEREADY §1, [GR-1] /
+	// [GR-2]). It is populated for the PRIMARY Block only — see benchNav.
+	Nav BenchNav
+	// Verbs is the GM-only date-verb row (C-CALV4-GAMEREADY §2, [GR-SIGN-A] /
+	// [GR-4]). Populated for the PRIMARY Block only, and empty of controls for
+	// any viewer below their floors — permission is ABSENCE.
+	Verbs BenchDateVerbs
+}
+
+// BenchDateVerbs is the v4 date-verb surface (C-CALV4-GAMEREADY §2).
+//
+// [GR-SIGN-A] SIGNED 2026-08-07 — THE SEAT. A GM-only verb row on the Block's
+// nameplate, not a fifth Bench section and not the ribbon's Today tile, because
+// the nameplate row is the only one of the three shapes that is SEVERABLE:
+// `C-CALV4-GM-CONSOLE` [GC-1] may later relocate these two verbs into whatever
+// console it rules, as GM-CONSOLE's own move, without this slice having spent
+// the fifth `benchSectionKeys` entry that [GC-1] wants. [GC-1] is NOT
+// pre-empted; §2's four-term sibling agreement stands.
+//
+// [GR-4] RULED — TWO STEP VERBS AND NO MORE. `+1 day` and `−1 day`. The other
+// four V2 verbs (+10m, +1h, Rest 8h, −1h) move the CLOCK, and v4 has no clock:
+// the nameplate prints a date only and its own header says "There is no time
+// field". A control that changes a quantity the surface does not display is
+// unusable at a table — the GM taps it, the page re-renders identically, and
+// they cannot tell whether it worked. `−1 day` is IN as the UNDO for a
+// fat-finger `+1`, on a surface where the write is immediate and the only other
+// repair is an Owner-only settings page a co-DM cannot reach.
+//
+// TWO FLOORS, AND WHERE THEY DIFFER THE RENDER DIFFERS.
+//
+//	CanStep — the EXISTING RequireCapability(CanControlWorldState) gate on
+//	          PUT /campaigns/:id/calendar/world-state (routes.go:318-320):
+//	          Owner OR DM-grantee. Unchanged, unmoved, uninvented.
+//	CanSet  — the EXISTING Owner-only floor of
+//	          PUT /campaigns/:id/calendars/:calId/settings (routes.go:169-170),
+//	          which is where set-date lives today. [GR-SIGN-A](b) includes Set
+//	          date but keeps it at that stricter floor: WIDENING WHO MAY SET THE
+//	          WORLD'S DATE IS THE OPERATOR'S CALL, not a side effect of a
+//	          playability fix.
+//
+// SO A CO-DM CAN STEP THE DATE AND CANNOT SET IT. That asymmetry is the SHIPPED
+// one, named here so it reads as deliberate rather than as an oversight. It
+// moves no server floor in either direction: the write below rides the
+// world-state endpoint a co-DM already reaches through V2's console today, and
+// the Owner gate is on the RENDER.
+//
+// PERMISSION IS ABSENCE. A viewer below a floor gets no element — never a
+// disabled control, never a tooltip, never a greyed ghost.
+type BenchDateVerbs struct {
+	CanStep bool
+	CanSet  bool
+	// URL is the EXISTING world-state PUT, carrying ?calendarId= so the verbs
+	// act on the Block they sit under rather than on whatever calendar happens
+	// to be the viewer's "active" one. Both are already shipped behaviours of
+	// that handler (resolveWorldStateCalendar), so this adds no route and no
+	// snapshot line.
+	URL  string
+	CSRF string
+	// Year / Month / Day seed the Set-date fields with the calendar's OWN
+	// current date — NOT the navigated month. Set date changes where the world
+	// is; prefilling it from wherever the GM happened to browse would make one
+	// control mean different things on different pages.
+	Year, Month, Day int
+}
+
+// BenchNav is the `‹ prev · Today · next ›` trio that navigates the month
+// cursor (C-CALV4-GAMEREADY [GR-2]).
+//
+// IT IS THREE LINKS AND NOTHING ELSE. The hrefs are computed server-side
+// against the calendar's OWN month list and land back on the same
+// `/campaigns/:id/apps/calendar` route with `?y=&m=` — no new route, no new
+// producer, no JS. `boot.js:163` sets `htmx.config.allowScriptTags = false`, so
+// a <script> inside a swapped fragment is DELETED; links need none of that and
+// this slice ships no new page script.
+//
+// `Today` IS ALWAYS RENDERED AND IS NEVER DISABLED, including on the current
+// month where it is a no-op link back to the bare route — a control that
+// vanishes when you are already there teaches the GM that it is missing rather
+// than satisfied.
+//
+// PrevHref IS THE ONE THAT CAN BE EMPTY, and the reason is resolveView's own
+// sentinel, which [GR-1] forbids this slice from editing: `v.Year == 0` MEANS
+// "unset" there (block_service.go:288), so year 0 is not addressable by the
+// cursor at all. A calendar standing in month 1 of year 1 therefore has no
+// expressible previous month, and the honest render is no link rather than a
+// link that silently lands on today. Every other month has one.
+type BenchNav struct {
+	// Live is false when the calendar carries no months — there is no month to
+	// step to and the Block is already printing its own "dates cannot resolve"
+	// fault where the date would go.
+	Live bool
+	// Month / Year are the month actually rendered, read off the projection so
+	// the control and the grid can never disagree about where the cursor is.
+	Month string
+	Year  int
+	// PrevHref is "" when the previous month is unaddressable — see the type's
+	// header. TodayHref is the bare route. NextHref is always populated.
+	PrevHref  string
+	TodayHref string
+	NextHref  string
 }
 
 // BenchManage is the owner-only per-calendar management cluster, shared by the
@@ -845,8 +962,14 @@ type BenchRsvpMember struct {
 	Answer string
 	// Tone tints it: "ok" | "bad" | "" (muted).
 	Tone string
-	// AskHref is the "Ask →" repair's target when the zone is unset.
-	AskHref string
+	// AskHref is the zone repair's target when the zone is unset, and AskLabel
+	// is its words. THE TWO ARE CHOSEN TOGETHER, by benchZoneRepair, because
+	// the destination decides the sentence: the viewer's own row says
+	// "Set your zone →" and goes to /account, a GM looking at someone else's
+	// says "Ask →" and goes to the roster, and a Player looking at someone
+	// else's gets neither ([GR-15]). An empty AskHref means no control.
+	AskHref  string
+	AskLabel string
 }
 
 // --- assembly ---------------------------------------------------------------
@@ -871,6 +994,20 @@ type benchInput struct {
 	// control the server refuses.
 	CanCreateEvents bool
 	CanAuthorDmOnly bool
+	// CanControlWorldState is the date-verb row's step floor
+	// (C-CALV4-GAMEREADY [GR-4]). It is `cc.CanControlWorldState()` — Owner OR
+	// DM-grantee — passed in rather than derived from Role for the same reason
+	// the two fields above are: Role is the VISIBILITY role, and the route the
+	// verbs write through gates on the capability, not on it.
+	CanControlWorldState bool
+	// View is the month cursor, read straight off `?y=` / `?m=` and passed
+	// through UNVALIDATED (C-CALV4-GAMEREADY [GR-1]). Month is ONE-BASED, both
+	// fields are optional and independently optional, and the zero value is
+	// "the Block has not been navigated" — which is exactly what
+	// resolveView's unset branch already answers. The clamp is resolveView's
+	// and is not duplicated here: an out-of-range month lands in a real month
+	// of the requested year rather than 500ing or snapping back to today.
+	View BlockDate
 }
 
 // buildBench assembles the Bench.
@@ -908,6 +1045,10 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 			CanAuthorDmOnly: in.CanAuthorDmOnly,
 			CanDelete:       in.IsOwner,
 			CanRestrict:     in.IsOwner,
+			// The rsvp-collection route's own RoleScribe floor, which is the
+			// same predicate CanCreateEvents carries — read here as its own
+			// field so the two can move apart without moving together.
+			CanCollectRSVPs: in.CanCreateEvents,
 			CampaignID:      in.Campaign.ID,
 		},
 	}
@@ -973,8 +1114,25 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	data.NeedsSetup = benchNeedsSetup(hydrated)
 
 	if primary != nil {
-		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, layerPrefs); b != nil {
+		// THE CURSOR APPLIES TO THE PRIMARY BLOCK ONLY ([GR-1]).
+		//
+		// `?y=1524&m=3` is a coordinate in the IN-WORLD calendar's own month
+		// list; the real-world Block beside it is Gregorian, and handing it the
+		// same pair would park a real-world calendar in March 1524 every time
+		// the GM stepped their campaign's month. The finding §1 measures is
+		// "the GM cannot look at, or author into, next month" — that is the
+		// in-world calendar, which is also the only Block that carries the trio.
+		// THE SKY SEATS HERE AND NOWHERE ELSE ([SKY-1] SIGNED). The Primary is
+		// the campaign's principal calendar and the only Block on this surface
+		// whose Almanac register is built, so it is the only Block whose sky
+		// could ever carry more than a gradient and a clock.
+		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, true, layerPrefs, in.View); b != nil {
 			data.Primary = b
+			data.Primary.Nav = benchNav(primary, b.Data, in.Campaign.ID)
+			// §2's verb row seats on the same nameplate row as the cursor, and
+			// on the PRIMARY Block only: it advances the campaign's in-world
+			// date, which is what the primary calendar is.
+			data.Primary.Verbs = benchDateVerbs(primary, in)
 		} else {
 			rows = append([]*Calendar{primary}, rows...)
 		}
@@ -982,7 +1140,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	if realWorld != nil {
 		// noShelf — the signed real-world Block on the Bench renders with its
 		// Shelf docked but hidden, which is the ShelfHidden flag's whole purpose.
-		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, layerPrefs); b != nil {
+		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, false, layerPrefs, BlockDate{}); b != nil {
 			data.RealWorld = b
 		} else {
 			rows = append(rows, realWorld)
@@ -1016,7 +1174,9 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		NextUp:     data.NextUp,
 		Session:    sessionTile,
 		Sync:       benchSyncPill(ctx, spine, in.Campaign.ID, data.Primary),
-		Attention:  benchAttentionRows(hydrated, data.CampaignID),
+		// One aggregate query for the whole campaign; a failure degrades to
+		// "no stranded rows" rather than costing the Bench its render.
+		Attention: benchAttentionRows(hydrated, data.CampaignID, benchStranded(ctx, h.svc, in.Campaign.ID)),
 	})
 	return data
 }
@@ -1092,7 +1252,10 @@ func benchSyncPill(ctx context.Context, spine *BlockService, campaignID string, 
 // hidden calendar by construction (C-CALV4-SEAM-P5 stage 9) and this host must
 // not undo that, so it does not branch on which — any failure simply demotes
 // the calendar to a subordinate row.
-func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, prefs blockLayerPrefs) *BenchBlock {
+// view is the month cursor ([GR-1]). It is the request's `?y=&m=` for the
+// PRIMARY Block and the zero BlockDate for every other one — see buildBench's
+// call sites for why the real-world Block does not take it.
+func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, sky bool, prefs blockLayerPrefs, view BlockDate) *BenchBlock {
 	if spine == nil || cal == nil {
 		return nil
 	}
@@ -1100,10 +1263,16 @@ func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Cale
 		CalendarID:  cal.ID,
 		CampaignID:  cal.CampaignID,
 		Viewer:      viewer,
+		View:        view,
 		IsActive:    cal.ID == activeID,
 		ShelfHidden: noShelf,
-		MoonCap:     benchMoonCap,
-		LayerPrefs:  prefs,
+		// ONE SKY PER SURFACE, NEVER ONE PER BLOCK ([SKY-1] SIGNED). The
+		// parameter exists so the seat is decided at the ONE call site that
+		// knows which Block is the Primary, rather than by a predicate the
+		// producer would have to re-derive per Block.
+		SkyOn:      sky,
+		MoonCap:    benchMoonCap,
+		LayerPrefs: prefs,
 	})
 	if err != nil {
 		return nil
@@ -1368,9 +1537,118 @@ func benchManage(c *Calendar, activeID, campaignID string) BenchManage {
 		VisRules:     calVisRulesAttr(*c),
 		IsActive:     c.ID == activeID,
 		IsDefault:    c.IsDefault,
-		OpenHref:     fmt.Sprintf("/campaigns/%s/calendar/v2/%s", campaignID, c.ID),
+		// OpenHref IS DELIBERATELY LEFT UNPOPULATED ([VS-14] SIGNED,
+		// C-CALV4-V2SUNSET R2-4). It used to build
+		// /campaigns/:id/calendar/v2/<calId> and was rendered twice — the header's
+		// "Open calendar →" and the row-grid card link — both of which this slice
+		// REMOVES rather than re-points, because re-pointed at /apps/calendar
+		// each becomes a link to the page it is printed on. The FIELD stays:
+		// removing it is a struct change this slice does not own, and
+		// C-CALV4-BENCH-CALID repopulates it the moment the Bench can honour a
+		// `?calId=`.
 		SettingsHref: fmt.Sprintf("/campaigns/%s/calendars/%s/settings", campaignID, c.ID),
 	}
+}
+
+// benchNav computes the month cursor's trio for ONE Block
+// (C-CALV4-GAMEREADY [GR-1] / [GR-2]).
+//
+// THE CURSOR IS A URL, AND THAT IS THE WHOLE RULING. `?y=` / `?m=` on the
+// EXISTING `/apps/calendar` route, one-based month, both optional and both
+// independently optional. A URL is shareable, refreshable and back-buttonable:
+// a GM who navigates to the month of the siege can paste the link into party
+// chat, while a hidden per-viewer cursor shows different people different
+// months for reasons nobody can see and is still parked on last month next
+// week. It needs no store, no migration, no session value and NO FIFTH
+// benchSectionKeys entry.
+//
+// NO CLAMPING LOGIC LIVES HERE. resolveView (block_service.go:275) already
+// clamps a bad month into a real one and already keeps a navigated year when
+// only the month is junk — it was written for navigation in wave 1 and had
+// never been called with a view until this slice. The hrefs below are computed
+// off the calendar's own month list purely so a link never has to be clamped in
+// the first place; the server-side clamp remains the authority.
+//
+// THE STEP IS COMPUTED AGAINST cal.Months, NOT AGAINST A LITERAL TWELVE. Ten-
+// month and one-month calendars are native to this product, so "the month after
+// the last one" is month 1 of year+1 and "the month before the first one" is
+// month len(Months) of year-1.
+func benchNav(cal *Calendar, d calblock.BlockData, campaignID string) BenchNav {
+	if cal == nil || len(cal.Months) == 0 {
+		return BenchNav{}
+	}
+	base := fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID)
+	n := len(cal.Months)
+	idx := d.Month.Index
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= n {
+		idx = n - 1
+	}
+	year := d.Month.Year
+
+	prevYear, prevMonth := year, idx // idx is 0-based, so idx == the 1-based previous month
+	if idx == 0 {
+		prevYear, prevMonth = year-1, n
+	}
+	nextYear, nextMonth := year, idx+2
+	if idx == n-1 {
+		nextYear, nextMonth = year+1, 1
+	}
+
+	nav := BenchNav{
+		Live:      true,
+		Month:     d.Month.Name,
+		Year:      year,
+		TodayHref: base,
+		NextHref:  fmt.Sprintf("%s?y=%d&m=%d", base, nextYear, nextMonth),
+	}
+	// Year 0 is resolveView's "unset" sentinel, so it cannot be linked to. See
+	// BenchNav's header — this is the one direction that can be absent, and a
+	// missing link is honest where a link that lands on today is not.
+	if prevYear != 0 {
+		nav.PrevHref = fmt.Sprintf("%s?y=%d&m=%d", base, prevYear, prevMonth)
+	}
+	return nav
+}
+
+// benchDateVerbs builds §2's verb row for ONE calendar. See BenchDateVerbs for
+// the two floors and why they differ.
+//
+// IT COMPUTES NOTHING ABOUT THE DATE. The step is `{advance:{days:±1}}` — the
+// payload gm_panel.js already sends to the endpoint that already exists — and
+// the rollover (month end, year end, leap geometry) is the SERVER'S, exactly as
+// it is for V2's console. A client that added its own arithmetic here would be
+// a second definition of when a year turns over.
+func benchDateVerbs(cal *Calendar, in benchInput) BenchDateVerbs {
+	if cal == nil {
+		return BenchDateVerbs{}
+	}
+	if !in.CanControlWorldState && !in.IsOwner {
+		return BenchDateVerbs{}
+	}
+	return BenchDateVerbs{
+		CanStep: in.CanControlWorldState,
+		CanSet:  in.IsOwner,
+		URL: fmt.Sprintf("/campaigns/%s/calendar/world-state?calendarId=%s",
+			in.Campaign.ID, cal.ID),
+		CSRF:  in.CSRFToken,
+		Year:  cal.CurrentYear,
+		Month: cal.CurrentMonth,
+		Day:   cal.CurrentDay,
+	}
+}
+
+// benchNavLabel names the month the cursor is standing on. It is the month's
+// own name plus its year, and it is DERIVED FROM THE PROJECTION rather than
+// from the request, so a clamped `?m=13` is labelled with the month that was
+// actually drawn instead of the one that was asked for.
+func benchNavLabel(n BenchNav) string {
+	if n.Month == "" {
+		return fmt.Sprintf("Year %d", n.Year)
+	}
+	return fmt.Sprintf("%s %d", n.Month, n.Year)
 }
 
 // --- the ribbon -------------------------------------------------------------
@@ -1445,7 +1723,14 @@ func benchTodayTile(in benchRibbonInput) BenchTile {
 	t.Qual = benchTodayQual(in.Primary)
 	season, era := blockSeasonEraLabels(in.Primary)
 	t.Detail = strings.TrimSpace(strings.Join(benchNonEmpty(era, season), " · "))
-	t.Href = fmt.Sprintf("/campaigns/%s/calendar/v2/%s", in.CampaignID, in.Primary.ID)
+	// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED, and [VS-14] explicitly does NOT
+	// cover this one): the today tile RE-POINTS to the bare Bench rather than
+	// being removed, because a today tile that does nothing is worse than one
+	// that re-renders the page it is on — and unlike the two removed anchors,
+	// this tile is a STATEMENT OF THE DATE first and a door second. The
+	// calendar id is dropped with the target ([VS-12]: the handler never reads
+	// it), so the tile lands on the Bench's default selection.
+	t.Href = fmt.Sprintf("/campaigns/%s/apps/calendar", in.CampaignID)
 	if in.Block != nil {
 		t.Ticks = benchTicks(&in.Block.Data)
 	}
@@ -1665,7 +1950,7 @@ func benchItemCount(n int) string {
 // that is what it reports. The signed tile's second row ("2 RSVPs unanswered")
 // is not synthesised: no RSVP store exists, and inventing the row would put a
 // fabricated fact on the tile whose whole job is to be trusted.
-func benchAttentionRows(cals []Calendar, campaignID string) []BenchTileRow {
+func benchAttentionRows(cals []Calendar, campaignID string, stranded map[string]int) []BenchTileRow {
 	var out []BenchTileRow
 	for i := range cals {
 		c := &cals[i]
@@ -1676,8 +1961,44 @@ func benchAttentionRows(cals []Calendar, campaignID string) []BenchTileRow {
 				Href:  fmt.Sprintf("/campaigns/%s/calendars/%s/settings", campaignID, c.ID),
 			})
 		}
+		// STRANDED EVENTS ARE A STANDING STATE, NOT A TOAST
+		// (C-CALV4-GAMEREADY §9 [GR-18]). Editing the month list re-dates
+		// events by POSITION with no reconciliation; the ones left past the
+		// end of the new list simply stop rendering, and until this row
+		// existed nothing anywhere said so. blockDateLine reports
+		// "Date out of range" for the CALENDAR's own current date and has
+		// never reported out-of-range EVENTS.
+		//
+		// READ-ONLY. It states the number and links at the structure editor.
+		// It never offers to "fix" them: the correct new month for a moved
+		// event is not derivable, which is why the real reconciliation is
+		// booked as C-CAL-MONTHS-RECONCILE rather than guessed at here.
+		if n := stranded[c.ID]; n > 0 {
+			label := fmt.Sprintf("%s — %d events no longer land on a real month", blockCalendarName(c), n)
+			if n == 1 {
+				label = blockCalendarName(c) + " — 1 event no longer lands on a real month"
+			}
+			out = append(out, BenchTileRow{
+				Label: label,
+				Bad:   true,
+				Href:  fmt.Sprintf("/campaigns/%s/calendars/%s/settings", campaignID, c.ID),
+			})
+		}
 	}
 	return out
+}
+
+// benchStranded reads the campaign's stranded-event counts, degrading to nil.
+// A diagnostic row is never worth a failed page render.
+func benchStranded(ctx context.Context, svc CalendarService, campaignID string) map[string]int {
+	if svc == nil {
+		return nil
+	}
+	counts, err := svc.StrandedEventCounts(ctx, campaignID)
+	if err != nil {
+		return nil
+	}
+	return counts
 }
 
 // benchHorizonTile is design-ahead in full.
@@ -1786,8 +2107,20 @@ func benchNextUpRow(r *BlockUpcoming, isGM bool, campaignID string) BenchNextUpR
 		Pattern:       blockPatternFor(key),
 		Glyph:         icon,
 		GMOnly:        blockAudienceFor(&r.Event, isGM) != nil,
-		Href: fmt.Sprintf("/campaigns/%s/calendar/v2?year=%d&month=%d&day=%d",
-			campaignID, r.Date.Year, r.Date.Month, r.Date.Day),
+		// C-CALV4-V2SUNSET R2-4 ([VS-13] SIGNED) — RE-POINTED, AND THE DATE
+		// CURSOR IS DROPPED, WHICH IS A LOSS AND IS STATED IN THE REPORT.
+		//
+		// This row used to carry ?year=&month=&day= into ShowV2, which parses
+		// them and lands on that event's day. The Bench parses `y` and `m` only,
+		// they mean a MONTH in the in-world calendar's own month list, and NEXT
+		// UP is a CROSS-CALENDAR index — so a `y`/`m` pair built from one row's
+		// calendar would be a coordinate in a different calendar's reckoning
+		// whenever the Bench's primary is not that row's calendar. A wrong month
+		// is worse than the current one. It is a "jump to the next thing"
+		// affordance, not a date navigator: landing on the Bench's current month
+		// is degraded but coherent, and the cursor rides with
+		// C-CALV4-BENCH-CALID.
+		Href: fmt.Sprintf("/campaigns/%s/apps/calendar", campaignID),
 	}
 	if r.Calendar != nil {
 		row.DayKey = benchDayKey(blockCalendarSlug(r.Calendar), r.Date.Day)
@@ -2118,6 +2451,17 @@ type benchRsvpInput struct {
 	// predicate the endpoint enforces, so the control and the send cannot
 	// disagree about whether an ask is allowed.
 	AskState ScheduleAskState
+	// FantasyOnlyRSVP is the ONE cause of an empty panel the panel could not
+	// previously state about itself (C-CALV4-GAMEREADY §4 [GR-6], the copy
+	// change riding that section).
+	//
+	// benchRsvpPickSession skips any row whose calendar is not real-life, and
+	// the reasoning is sound — an in-world date has no instant and no zone, so a
+	// zone-labelled real-world time on it would be a fabrication. But a
+	// fantasy-only campaign that turns Collect RSVPs ON therefore gets NO v4
+	// RSVP surface at all and is told nothing, which reads as the feature being
+	// broken rather than as a calendar being missing.
+	FantasyOnlyRSVP bool
 }
 
 // benchRsvpBuild assembles the signed panel.
@@ -2542,7 +2886,11 @@ func benchRsvpMembers(in benchRsvpInput) []BenchRsvpMember {
 			// rendered here would be a guess presented as a fact. The signed
 			// pair is the `zone not set` badge plus an Ask link, and the clock
 			// is LITERALLY EMPTY — never "--:--", never a dash (§5).
-			row.AskHref = benchRsvpAskHref(in.CampaignID)
+			//
+			// WHICH repair depends on whose row it is ([GR-15]): the viewer's
+			// own goes to /account, a GM's view of someone else's goes to the
+			// roster, and a Player's view of someone else's gets no control.
+			row.AskHref, row.AskLabel = benchZoneRepair(in.CampaignID, in.ViewerID, m.UserID, in.IsGM)
 			out = append(out, row)
 			continue
 		}
@@ -2593,15 +2941,56 @@ func benchRsvpAnswerWord(status string) (word, tone string) {
 	}
 }
 
-// benchRsvpAskHref is the `Ask →` repair's target: the campaign's member list,
-// where an owner can see who to prod. It is a LINK to a page that exists rather
-// than a control that does nothing, which is why the repair survives at every
-// width while the Director's inert controls do not render to a player at all.
+// benchRsvpAskHref returns the campaign's member roster —
+// `GET /campaigns/:id/members` (campaigns/routes.go, `RequireRole(RolePlayer)`)
+// — which is where a GM can see who to prod.
+//
+// IT USED TO RETURN `/campaigns/<id>/settings/members`, AND ITS OWN DOC COMMENT
+// ASSERTED THE PROPERTY IT LACKED: "It is a LINK to a page that exists rather
+// than a control that does nothing." That route has never existed —
+// `/campaigns/:id/settings` is `RequireRole(RoleOwner)` and has no `/members`
+// child — and there is no catch-all, so every render of it 404'd, in the
+// PLAYER's DOM, once per roster member with no timezone (the fresh-campaign
+// state, since `users.timezone` is nullable). A comment that states an
+// invariant while the code breaks it is how the next hand re-derives the bug,
+// so C-CALV4-GAMEREADY §8 [GR-15] deleted the sentence along with the string.
+//
+// AUDIENCE IS THE OTHER HALF OF THE FIX AND IT IS NOT OPTIONAL. Fixing only
+// the target would leave a Player told to "Ask" somebody about a roster they
+// can read but not change — so this link is now produced ONLY for a GM. A
+// viewer looking at their OWN zone-less row gets `/account` and
+// `Set your zone →` instead: the one thing they can actually do. See
+// benchZoneRepair, which is the single producer of both variants.
 func benchRsvpAskHref(campaignID string) string {
 	if campaignID == "" {
 		return ""
 	}
-	return "/campaigns/" + campaignID + "/settings/members"
+	return "/campaigns/" + campaignID + "/members"
+}
+
+// benchZoneRepair decides the repair link beside a roster row whose timezone is
+// unset — the href AND the words, because the two cannot be chosen separately
+// ([GR-15]).
+//
+// Three outcomes, and the middle one is the whole point:
+//
+//   - the viewer's OWN row → `/account` · `Set your zone →`. A player being
+//     told to ask someone else to fix a field only they can fix was the third
+//     fault stacked on this control.
+//   - anyone else's row, viewed by a GM → the member roster · `Ask →`.
+//   - anyone else's row, viewed by a non-GM → NOTHING. Permission is absence:
+//     a Player is not the person who chases a roster, so no control renders.
+//
+// viewerID may be empty (an anonymous or system render), in which case no row
+// is ever "the viewer's own" and only the GM branch can fire.
+func benchZoneRepair(campaignID, viewerID, memberID string, isGM bool) (href, label string) {
+	if viewerID != "" && memberID == viewerID {
+		return "/account", "Set your zone →"
+	}
+	if !isGM {
+		return "", ""
+	}
+	return benchRsvpAskHref(campaignID), "Ask →"
 }
 
 // benchRsvpCaptions is the panel's foot. Each line states a fact the numbers
@@ -2640,6 +3029,13 @@ func benchRsvpCaptions(in benchRsvpInput, p BenchRsvp) []string {
 	// The askable state adds NO line: silence is the true state, and a caption
 	// saying "you may press this button" would be noise on the one surface that
 	// has spent three waves removing noise.
+	// THE FANTASY-ONLY SENTENCE ([GR-6]). Stated for everyone, not only the
+	// Director: a player looking at an empty panel deserves the same answer,
+	// and it discloses nothing a member of the campaign cannot already see.
+	if in.FantasyOnlyRSVP {
+		caps = append(caps, "RSVPs need a real-world calendar — this campaign's collecting "+
+			"event is on an in-world one, which has no real date to ask about.")
+	}
 	if p.Ask != nil {
 		switch {
 		case p.Ask.Badge != "":
@@ -2653,6 +3049,30 @@ func benchRsvpCaptions(in benchRsvpInput, p BenchRsvp) []string {
 		}
 	}
 	return caps
+}
+
+// benchRsvpFantasyOnly reports that the panel is empty ONLY because every
+// collecting event lives on an in-world calendar.
+//
+// It is deliberately narrow: it answers false the moment ANY collecting event
+// sits on a real-life calendar (the panel has something to show, so silence is
+// correct), and false when nothing is collecting at all (that is the
+// "nobody has armed it yet" state, which §4's new control now answers). It says
+// yes only for the one campaign shape that is doing everything right and getting
+// nothing back.
+func benchRsvpFantasyOnly(upcoming []BlockUpcoming) bool {
+	fantasy := false
+	for i := range upcoming {
+		u := &upcoming[i]
+		if u.Calendar == nil || !u.Event.CollectRSVPs {
+			continue
+		}
+		if u.Calendar.IsRealLife() {
+			return false
+		}
+		fantasy = true
+	}
+	return fantasy
 }
 
 // benchRsvpAnyNumericZone reports whether any printed zone degraded to a numeric
@@ -2698,6 +3118,33 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
 	if h.schedule == nil {
 		return benchRsvpPanel(), nil, nil
 	}
+	// ── THE PARTY ROSTER IS PLAYER-FLOOR, AND THE FLOOR LIVES HERE NOW ────────
+	//
+	// C-CALV4-V2SUNSET R2-4, [VS-5] item 8 SIGNED. Until this slice the Bench
+	// rode `cg` behind RequireRole(RolePlayer), so every viewer who could reach
+	// it was a party member and this panel's audience law — "every member, at
+	// every role, with their answer, their zone and their own local clock"
+	// (benchRsvpMembers) — was bounded by the route. [VS-4] moves the route to
+	// the public-capable group, and a RoleNone viewer (a logged-out visitor to a
+	// PUBLIC campaign, or an authenticated non-member) now arrives here.
+	//
+	// MEASURED BEFORE THE MOVE LANDED: an anonymous render carried "Kaelthorn"
+	// and "Brynwyth" — real member display names — straight out of BenchRoster.
+	// The route's floor was load-bearing for this one panel, so the floor moves
+	// onto the DATA rather than being deleted with the guard: below RolePlayer
+	// the roster is never read, the panel returns its shipped unfilled state,
+	// and dayCardMembers ([ER-3], fed from this return) is empty. The absence is
+	// in the payload, not in a template branch — a permission expressed as a
+	// template branch is one refactor away from being lost (bench.templ:597-600).
+	//
+	// in.Role is the VISIBILITY role, which is RoleNone for anonymous, for an
+	// authenticated non-member and for a site admin who never joined — all three
+	// of whom were 403'd by RequireRole(RolePlayer) yesterday. So this guard
+	// preserves today's behaviour exactly for every viewer who could already
+	// reach the page, and it is the ONLY thing it changes.
+	if in.Role < int(campaigns.RolePlayer) {
+		return benchRsvpPanel(), nil, nil
+	}
 	roster, err := h.schedule.BenchRoster(ctx, in.Campaign.ID)
 	if err != nil || len(roster) == 0 {
 		if err != nil {
@@ -2741,6 +3188,7 @@ func (h *Handler) benchRsvpResolve(ctx context.Context, in benchInput,
 
 	session, row, anchorZone := benchRsvpPickSession(upcoming)
 	out.Session = session
+	out.FantasyOnlyRSVP = session == nil && benchRsvpFantasyOnly(upcoming)
 
 	// The zone the panel states its own times in: the viewer's own stored zone
 	// first, then the calendar's anchor, then nothing — and ViewerZoneSource

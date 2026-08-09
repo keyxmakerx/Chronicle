@@ -30,6 +30,8 @@ package calendar
 import (
 	"context"
 	"testing"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // strPtr / intPtr / floatPtr are pointer-builder helpers used by the
@@ -103,11 +105,11 @@ func TestUpdateEvent_PartialUpdatePreservesUnsentFields(t *testing.T) {
 	// fields are sent (Year/Month/Day) because UpdateEvent's contract
 	// treats those as always-present.
 	input := UpdateEventInput{
-		Name:       "Renamed Title",
-		Year:       1492,
-		Month:      7,
-		Day:        15,
-		Visibility: "everyone",
+		Name:       patch.Of("Renamed Title"),
+		Year:       patch.Of(1492),
+		Month:      patch.Of(7),
+		Day:        patch.Of(15),
+		Visibility: patch.Of("everyone"),
 	}
 	if err := svc.UpdateEvent(context.Background(), "evt-1", input); err != nil {
 		t.Fatalf("UpdateEvent: %v", err)
@@ -177,10 +179,22 @@ func TestUpdateEvent_PartialUpdatePreservesUnsentFields(t *testing.T) {
 // TestUpdateEvent_EntityIDStillClearsOnNil pins the deliberate skip:
 // EntityID is NOT in the null-preserve fix. Operator direction
 // 2026-05-19 wants a holistic entity-link rework (C-ENTITY-LINK-DESIGN
-// in BACKLOG) rather than a band-aid. Until that lands, nil EntityID
-// continues to clear the link as it did pre-fix. A future contributor
-// who sweeps "all pointer fields" without re-reading the design
+// in BACKLOG) rather than a band-aid. Until that lands, an EXPLICIT null
+// EntityID continues to clear the link as it did pre-fix. A future
+// contributor who sweeps "all pointer fields" without re-reading the design
 // dispatch will break this test — that's the intent.
+//
+// AMENDED IN SWEEP R4 (2026-08-07), and named as such. The parking's
+// guarantee was that a caller can still CLEAR the link, which is exactly
+// what a nil-preserve sweep would have removed — so the test spelled
+// "clear" as `EntityID: nil`, the only spelling a plain pointer has. The
+// coordinator's ruling supplies a second one: absent preserves, an explicit
+// null clears. The guarantee is unchanged and now says only what it means;
+// what stopped is the ACCIDENTAL unlink, which every Foundry calendar-sync
+// push was performing because its five-key body never mentions entity_id.
+// The strengthened form asserts BOTH directions, so the amendment cannot be
+// read as a weakening. C-ENTITY-LINK-DESIGN is still parked; nothing here
+// pre-empts the multi-entity rework it is about.
 func TestUpdateEvent_EntityIDStillClearsOnNil(t *testing.T) {
 	var written *Event
 	repo := &mockCalendarRepo{
@@ -194,14 +208,15 @@ func TestUpdateEvent_EntityIDStillClearsOnNil(t *testing.T) {
 	}
 	svc := newTestCalendarService(repo)
 
-	// EntityID intentionally nil on input. Today this clears.
+	// An EXPLICIT null entity_id clears the link — the parked design's
+	// guarantee, unchanged.
 	input := UpdateEventInput{
-		Name:       "Renamed",
-		Year:       1492,
-		Month:      7,
-		Day:        15,
-		Visibility: "everyone",
-		EntityID:   nil,
+		Name:       patch.Of("Renamed"),
+		Year:       patch.Of(1492),
+		Month:      patch.Of(7),
+		Day:        patch.Of(15),
+		Visibility: patch.Of("everyone"),
+		EntityID:   patch.Null[string](),
 	}
 	if err := svc.UpdateEvent(context.Background(), "evt-1", input); err != nil {
 		t.Fatalf("UpdateEvent: %v", err)
@@ -210,8 +225,22 @@ func TestUpdateEvent_EntityIDStillClearsOnNil(t *testing.T) {
 		t.Fatal("repo.UpdateEvent not called")
 	}
 	if written.EntityID != nil {
-		t.Errorf("EntityID = %q, want nil. EntityID was NOT supposed to be added to the C-CAL-NULL-PRESERVE sweep — pending C-ENTITY-LINK-DESIGN. See cordinator/plans/BACKLOG.md before changing this test.",
+		t.Errorf("EntityID = %q, want nil. An EXPLICIT null must still clear the link — that is C-ENTITY-LINK-DESIGN's parked guarantee. See cordinator/plans/BACKLOG.md before changing this test.",
 			*written.EntityID)
+	}
+
+	// …and a body that never mentions entity_id must NOT unlink. This is the
+	// half that was broken: three Foundry calendar-sync paths push five-key
+	// bodies, and every one of them silently dropped the entity link.
+	written = nil
+	if err := svc.UpdateEvent(context.Background(), "evt-1", UpdateEventInput{
+		Name: patch.Of("Renamed again"), Year: patch.Of(1492), Month: patch.Of(7), Day: patch.Of(15),
+		Visibility: patch.Of("everyone"),
+	}); err != nil {
+		t.Fatalf("UpdateEvent: %v", err)
+	}
+	if written == nil || written.EntityID == nil || *written.EntityID != "ent-1" {
+		t.Errorf("an ABSENT entity_id unlinked the event; absent must preserve. got %v", written.EntityID)
 	}
 }
 
@@ -233,14 +262,14 @@ func TestUpdateEvent_ExplicitFieldsStillWrite(t *testing.T) {
 	svc := newTestCalendarService(repo)
 
 	input := UpdateEventInput{
-		Name:        "Renamed",
-		Year:        1492,
-		Month:       7,
-		Day:         15,
-		Visibility:  "dm_only",
-		Description: strPtr("NEW description"),
-		Color:       strPtr("#00ff00"),
-		Category:    strPtr("birthday"),
+		Name:        patch.Of("Renamed"),
+		Year:        patch.Of(1492),
+		Month:       patch.Of(7),
+		Day:         patch.Of(15),
+		Visibility:  patch.Of("dm_only"),
+		Description: patch.Of("NEW description"),
+		Color:       patch.Of("#00ff00"),
+		Category:    patch.Of("birthday"),
 	}
 	if err := svc.UpdateEvent(context.Background(), "evt-1", input); err != nil {
 		t.Fatalf("UpdateEvent: %v", err)

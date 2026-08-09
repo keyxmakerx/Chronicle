@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 )
 
@@ -32,6 +33,9 @@ type stubCalendarSvc struct {
 	// C-CAL-WORLDSTATE-WIRE: capture the role the world-state endpoint
 	// forwards into the seed builder (that role IS the dm_only gate).
 	onWorldState func(ctx context.Context, calID string, year, month, day, role int, userID string) (*calendar.WorldStateSeed, error)
+	// C-AUTHZ-EMPTY-USERID: capture the viewer id ListEvents forwards into the
+	// per-user visibility filter. It used to be hardcoded "" — the bypass.
+	onListEvents func(userID string)
 }
 
 // --- methods we actually use in tests ---
@@ -50,11 +54,16 @@ func (s *stubCalendarSvc) CreateCalendar(ctx context.Context, campaignID string,
 	return nil, nil
 }
 
-func (s *stubCalendarSvc) ApplyImport(ctx context.Context, calendarID string, result *calendar.ImportResult) error {
+// ApplyImport returns the month-edit impact alongside its error
+// (C-CALV4-GAMEREADY §9 [GR-18]). The stub reports a zero impact and keeps its
+// existing error hook untouched: these tests are about the API's wire contract,
+// and the count's arithmetic is pinned against a real database in the calendar
+// plugin's months_edit_impact_test.go.
+func (s *stubCalendarSvc) ApplyImport(ctx context.Context, calendarID string, result *calendar.ImportResult) (calendar.MonthEditImpact, error) {
 	if s.onApply != nil {
-		return s.onApply(ctx, calendarID, result)
+		return calendar.MonthEditImpact{}, s.onApply(ctx, calendarID, result)
 	}
-	return nil
+	return calendar.MonthEditImpact{}, nil
 }
 
 // --- interface-fill stubs (zero-value returns) ---
@@ -90,8 +99,14 @@ func (s *stubCalendarSvc) UpcomingByCalendar(context.Context, []calendar.Calenda
 	return nil, nil
 }
 func (s *stubCalendarSvc) SetDefaultCalendar(context.Context, string, string) error { return nil }
-func (s *stubCalendarSvc) SetMonths(context.Context, string, []calendar.MonthInput) error {
-	return nil
+func (s *stubCalendarSvc) SetMonths(context.Context, string, []calendar.MonthInput) (calendar.MonthEditImpact, error) {
+	return calendar.MonthEditImpact{}, nil
+}
+func (s *stubCalendarSvc) MonthEditImpact(context.Context, string, []calendar.MonthInput) (calendar.MonthEditImpact, error) {
+	return calendar.MonthEditImpact{}, nil
+}
+func (s *stubCalendarSvc) StrandedEventCounts(context.Context, string) (map[string]int, error) {
+	return nil, nil
 }
 func (s *stubCalendarSvc) SetWeekdays(context.Context, string, []calendar.WeekdayInput) error {
 	return nil
@@ -178,10 +193,16 @@ func (s *stubCalendarSvc) DeleteEvent(context.Context, string) error { return ni
 func (s *stubCalendarSvc) UpdateEventVisibility(context.Context, string, calendar.UpdateEventVisibilityInput) error {
 	return nil
 }
-func (s *stubCalendarSvc) ListEventsForMonth(context.Context, string, int, int, int, string) ([]calendar.Event, error) {
+func (s *stubCalendarSvc) ListEventsForMonth(_ context.Context, _ string, _, _, _ int, userID string) ([]calendar.Event, error) {
+	if s.onListEvents != nil {
+		s.onListEvents(userID)
+	}
 	return nil, nil
 }
-func (s *stubCalendarSvc) ListEventsForEntity(context.Context, string, int, string) ([]calendar.Event, error) {
+func (s *stubCalendarSvc) ListEventsForEntity(_ context.Context, _ string, _ int, userID string) ([]calendar.Event, error) {
+	if s.onListEvents != nil {
+		s.onListEvents(userID)
+	}
 	return nil, nil
 }
 func (s *stubCalendarSvc) ListUpcomingEvents(context.Context, string, int, int, string) ([]calendar.Event, error) {
@@ -201,8 +222,8 @@ func (s *stubCalendarSvc) ListAllEventsForCalendar(context.Context, string) ([]c
 func (s *stubCalendarSvc) SearchCalendarEvents(context.Context, string, string, int) ([]map[string]string, error) {
 	return nil, nil
 }
-func (s *stubCalendarSvc) AdvanceDate(context.Context, string, int) error          { return nil }
-func (s *stubCalendarSvc) AdvanceTime(context.Context, string, int, int) error     { return nil }
+func (s *stubCalendarSvc) AdvanceDate(context.Context, string, int) error      { return nil }
+func (s *stubCalendarSvc) AdvanceTime(context.Context, string, int, int) error { return nil }
 func (s *stubCalendarSvc) SetDate(context.Context, string, int, int, int, int, int) error {
 	return nil
 }
@@ -213,10 +234,12 @@ func (s *stubCalendarSvc) SetEventPublisher(calendar.CalendarEventPublisher) {}
 
 // C-CAL-ENTITY-TIES-DATA-MODEL added these to CalendarService; syncapi
 // doesn't use them. Zero-value returns are fine for these tests.
-func (s *stubCalendarSvc) LinkEntityToEvent(context.Context, string, string, string) error { return nil }
-func (s *stubCalendarSvc) UnlinkEntityFromEvent(context.Context, string, string) error      { return nil }
-func (s *stubCalendarSvc) LinkEntityToEra(context.Context, string, int, *string) error       { return nil }
-func (s *stubCalendarSvc) UnlinkEntityFromEra(context.Context, string, int) error            { return nil }
+func (s *stubCalendarSvc) LinkEntityToEvent(context.Context, string, string, string) error {
+	return nil
+}
+func (s *stubCalendarSvc) UnlinkEntityFromEvent(context.Context, string, string) error { return nil }
+func (s *stubCalendarSvc) LinkEntityToEra(context.Context, string, int, *string) error { return nil }
+func (s *stubCalendarSvc) UnlinkEntityFromEra(context.Context, string, int) error      { return nil }
 func (s *stubCalendarSvc) EventsForEntity(context.Context, string) ([]calendar.EntityEventTie, error) {
 	return nil, nil
 }
@@ -432,5 +455,83 @@ func TestUpdateCalendarSettings_ModeWalkForwardedAndRejected(t *testing.T) {
 	// Outcome: the validation rejection surfaces as 422, not a 500-class error.
 	if code := apperror.SafeCode(err); code != http.StatusUnprocessableEntity {
 		t.Errorf("mode-walk rejection status = %d, want 422", code)
+	}
+}
+
+// --- C-AUTHZ-EMPTY-USERID / ADR-049 ---
+
+// TestListEvents_ForwardsTheCallersOwnIdentity pins the third consumer of the
+// empty-user-id sentinel found while sweeping this class.
+//
+// ListEvents used to pass userID "" with the comment "Sync API uses API-key
+// auth, not user sessions, so pass empty userID to skip per-user visibility
+// filtering". Skipping it meant a PLAYER-level caller — a read/write key, or a
+// Player/Scribe member arriving through the session door, both role 1 — was
+// served events whose visibility_rules restrict them to OTHER users. Every
+// caller here is authenticated and carries a real identity (the key owner;
+// for the session door, the signed-in member), so the identity is forwarded
+// instead of skipped. This can only narrow the result set.
+func TestListEvents_ForwardsTheCallersOwnIdentity(t *testing.T) {
+	cases := []struct {
+		name  string
+		query string
+	}{
+		{"month branch", "year=1200&month=3"},
+		{"entity branch", "entity_id=ent-1"},
+		{"current-month branch", "year=1200"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []string
+			svc := &stubCalendarSvc{
+				onGet: func(context.Context, string) (*calendar.Calendar, error) {
+					return &calendar.Calendar{ID: "cal-1", CampaignID: "camp-1", CurrentYear: 1200, CurrentMonth: 3}, nil
+				},
+				onListEvents: func(userID string) { got = append(got, userID) },
+			}
+			h := NewCalendarAPIHandler(nil, svc)
+
+			key := readKey(PermRead, PermWrite)
+			key.UserID = "user-42"
+			c, _ := newWorldStateCtx(tc.query, key)
+
+			if err := h.ListEvents(c); err != nil {
+				t.Fatalf("ListEvents: %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("expected exactly one events read, got %d", len(got))
+			}
+			if got[0] != "user-42" {
+				t.Errorf("forwarded viewer id = %q; want the key owner's id — %q is the sentinel that skipped the per-user filter", got[0], "")
+			}
+		})
+	}
+}
+
+// TestListEvents_NoKeyForwardsNoIdentity guards the keyless shape the way
+// TestGetWorldState_NoKeyIsNotDM guards the role: route middleware rejects a
+// keyless request before the handler runs, but the fallback must be the LEAST
+// privileged value. After ADR-049 an empty viewer id no longer means "trusted"
+// anywhere, so forwarding "" here is now the strict path rather than a bypass.
+func TestListEvents_NoKeyForwardsNoIdentity(t *testing.T) {
+	var got []string
+	svc := &stubCalendarSvc{
+		onGet: func(context.Context, string) (*calendar.Calendar, error) {
+			return &calendar.Calendar{ID: "cal-1", CampaignID: "camp-1", CurrentYear: 1200, CurrentMonth: 3}, nil
+		},
+		onListEvents: func(userID string) { got = append(got, userID) },
+	}
+	h := NewCalendarAPIHandler(nil, svc)
+	c, _ := newWorldStateCtx("year=1200&month=3", nil)
+
+	if err := h.ListEvents(c); err != nil {
+		t.Fatalf("ListEvents: %v", err)
+	}
+	if len(got) != 1 || got[0] != "" {
+		t.Fatalf("keyless call forwarded %v; want a single empty id (no user)", got)
+	}
+	// And that empty id must NOT be a bypass — the property the whole slice rests on.
+	if permissions.RequestViewer(permissions.RolePlayer, got[0]).SkipsPerUserRules() {
+		t.Error("an empty viewer id must not skip the per-user visibility filter")
 	}
 }

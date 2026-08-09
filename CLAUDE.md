@@ -16,12 +16,15 @@ make tailwind-watch # Watch mode for Tailwind CSS
 make test           # Run all tests
 make test-unit      # Unit tests only
 make test-int       # Integration tests (requires running DB)
+make test-db-up     # Start a local MariaDB for tests WITHOUT Docker (port 13306)
+make test-db-down   # Stop that local test MariaDB
+make test-int-local # Integration tests against it (starts it if needed)
 make lint           # Run golangci-lint
 make migrate-up     # Apply all pending migrations
 make migrate-down   # Rollback last migration
 make migrate-create # Create new migration (NAME=description)
 make seed           # Seed dev database with sample data
-make docker-up      # Start MariaDB + Redis containers
+make docker-up      # Start MariaDB + Redis containers (needs a Docker daemon)
 make docker-down    # Stop containers
 make clean          # Remove built artifacts
 ```

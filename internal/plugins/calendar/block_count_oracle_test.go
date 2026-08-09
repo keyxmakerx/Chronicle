@@ -127,7 +127,7 @@ func oracleViewers() []struct {
 // projection, so every number below can be checked against it rather than
 // against another number the projection produced.
 func oracleVisible(events []Event, v BlockViewer) []Event {
-	return filterEventsByUser(blockCopyEvents(events), v.Role, v.UserID)
+	return filterEventsByUser(blockCopyEvents(events), v.Identity())
 }
 
 // TestOracle_TheFixtureReproducesTheSignedNumbers. If this fails, every

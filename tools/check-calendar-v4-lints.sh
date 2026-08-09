@@ -98,9 +98,31 @@ STATE_MARKERS="data-theme,data-view,data-role,data-colour,data-moonstyle,data-re
 # invisible coverage hole this function's header says it exists to prevent, and
 # `*schedule*` is already here for a file that does not exist yet on the same
 # reasoning. Nothing is loosened: no glob is removed and no rule is relaxed.
+#
+# AMENDED 2026-08-08 — coverage WIDENING, C-CALV4-THEATER/R2-3, acceptance item
+# under §12's guards table ("B4, and its GLOB"). `*theater*` and `*Theater*`
+# join the list. The Block theater is a DATED surface by construction: it
+# renders a second calendar-v4 Block, so every cell, row and Ledger line it
+# carries names a day, and its filenames
+# (internal/plugins/calendar/theater.templ, static/css/calendar-theater.css)
+# matched none of the six existing globs — B4 would have resolved to 0 and read
+# them not at all. That is the same invisible coverage hole DC2-B4-GLOB-4 closed
+# for the day card.
+#
+# THE GLOB LANDS AHEAD OF THE SURFACE, DELIBERATELY, AND THAT IS THE PRECEDENT
+# RATHER THAN AN EXCEPTION. `*schedule*` was added before schedule.templ
+# existed, for the reason this function's header states: a missing glob is
+# invisible in review, and it is invisible precisely at the moment the new file
+# arrives. R2-3's mount is BLOCKED on [TH-14] (the entity calendar block renders
+# entirely inside widgetbindings.BlockHost, which picker.templ swaps with
+# hx-swap="outerHTML" — so no position available to that slice is outside an
+# HTMX-swappable region, and the placement is a host restructure the slice was
+# not signed to take). The scope is landed anyway so that whichever slice
+# unblocks the theater inherits B4 coverage rather than having to remember it.
+# Nothing is loosened: no glob is removed and no rule is relaxed.
 b4_scope_for() {
   case "$1" in
-    *calendar_block*|*bench*|*Bench*|*daycard*|*schedule*|*Schedule*) echo 1 ;;
+    *calendar_block*|*bench*|*Bench*|*daycard*|*schedule*|*Schedule*|*theater*|*Theater*) echo 1 ;;
     *) echo 0 ;;
   esac
 }
@@ -402,6 +424,16 @@ FIXTURE
   # glob was widened, so the resolution is self-tested rather than assumed.
   expect_scope "internal/plugins/calendar/daycard.templ"       1
   expect_scope "static/css/calendar-daycard.css"               1
+  # R2-3's surfaces (C-CALV4-THEATER §12). In scope BEFORE they exist, exactly
+  # as schedule.templ was — the theater renders a second calendar-v4 Block, so
+  # every cell it carries is a dated node, and a glob that arrives with the file
+  # arrives too late to be noticed missing.
+  expect_scope "internal/plugins/calendar/theater.templ"       1
+  expect_scope "static/css/calendar-theater.css"               1
+  expect_scope "internal/plugins/calendar/Theater.templ"       1
+  # The negative that keeps the two new globs from being a prefix sweep: a
+  # filename that merely CONTAINS neither token stays out, and calendar_v2 is
+  # the frozen shell R2-4 retires.
   expect_scope "internal/plugins/calendar/calendar_v2.templ"   0
 
   expect() { # expect <label> <file> <b4scope> <want-rules|NONE>

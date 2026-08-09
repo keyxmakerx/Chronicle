@@ -943,10 +943,17 @@ templ createStandaloneEventModal(data TimelineViewData) {
 						day: self.day,
 						visibility: self.visibility
 					};
-					if (self.description) body.description = self.description;
-					if (self.category) body.category = self.category;
-					if (self.color) body.color = self.color;
-					if (self.label) body.label = self.label;
+					// Send an explicit null when the operator EMPTIED a field —
+					// under the sweep-R4 contract null clears and absent
+					// preserves, so "if (self.description)" alone meant a
+					// description could never be deleted. Every field the
+					// modal does not own (entity link, description_html,
+					// start/end times, recurrence, per-player visibility
+					// rules) stays absent, which now preserves it.
+					body.description = self.description || null;
+					body.category = self.category || null;
+					body.color = self.color || null;
+					body.label = self.label || null;
 					if (self.startHour !== null && self.startHour !== '') body.start_hour = parseInt(self.startHour);
 					if (self.startMinute !== null && self.startMinute !== '') body.start_minute = parseInt(self.startMinute);
 					if (self.endYear !== null && self.endYear !== '') body.end_year = parseInt(self.endYear);

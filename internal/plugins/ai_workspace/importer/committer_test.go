@@ -93,7 +93,7 @@ func (f *fakeCreator) Update(_ context.Context, id string, input entities.Update
 	if f.updateFn != nil {
 		return f.updateFn(id, input)
 	}
-	return &entities.Entity{ID: id, Name: input.Name}, nil
+	return &entities.Entity{ID: id, Name: input.Name.Val("")}, nil
 }
 
 func (f *fakeCreator) UpdateEntry(_ context.Context, id, entryJSON, entryHTML string) error {

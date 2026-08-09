@@ -19,8 +19,16 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 			<!-- Header -->
 			<div class="bg-surface border-b border-edge px-6 py-3 flex items-center justify-between shrink-0">
 				<div class="flex items-center gap-3">
+					// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED): the back arrow leaves for
+					// the Bench, not the V2 shell. THE CALENDAR ID IS DROPPED
+					// ([VS-12] SIGNED, measured): AppDashboard reads only `sort`,
+					// `y` and `m`, so a `?calId=` would be inert and this arrow
+					// lands on the Bench's default selection rather than on the
+					// calendar whose settings you were just editing. Named as a
+					// lost selection in the report and booked with
+					// C-CALV4-BENCH-CALID.
 					<a
-						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2/%s", cc.Campaign.ID, cal.ID)) }
+						href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
 						class="text-fg-muted hover:text-fg transition-colors"
 					>
 						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -29,6 +29,17 @@ type NoteRepository interface {
 	// (own notes + shared notes).
 	ListCampaignWide(ctx context.Context, userID, campaignID string) ([]Note, error)
 
+	// ListSharedByCampaign returns every campaign-wide-shared note in the
+	// campaign regardless of which user owns it.
+	//
+	// Deliberately has NO user filter: it exists so campaign export can
+	// capture the shared note corpus, which is campaign data rather than
+	// per-user data. Every other list method here is user-scoped and must
+	// stay that way (ADR-013). Callers of this one must be owner-gated —
+	// today the only caller is the campaign export adapter, and no HTTP
+	// route reaches it directly.
+	ListSharedByCampaign(ctx context.Context, campaignID string) ([]Note, error)
+
 	// AcquireLock attempts to set locked_by/locked_at for a note. Returns
 	// true if the lock was acquired, false if another user holds a live lock.
 	AcquireLock(ctx context.Context, noteID, userID string) (bool, error)
@@ -192,6 +203,17 @@ func (r *noteRepository) ListCampaignWide(ctx context.Context, userID, campaignI
 		FROM notes WHERE campaign_id = ? AND ` + noteVisFilter + ` AND entity_id IS NULL
 		ORDER BY pinned DESC, updated_at DESC`
 	return r.scanNotes(ctx, query, campaignID, userID, userID)
+}
+
+// ListSharedByCampaign returns all campaign-wide-shared notes for a campaign,
+// across every owner. Ordered oldest-first so an export is stable between runs
+// and folders (created before the notes filed into them) tend to precede their
+// children; the importer does not rely on that ordering.
+func (r *noteRepository) ListSharedByCampaign(ctx context.Context, campaignID string) ([]Note, error) {
+	query := `SELECT ` + noteColumns + `
+		FROM notes WHERE campaign_id = ? AND is_shared = TRUE
+		ORDER BY created_at ASC, id ASC`
+	return r.scanNotes(ctx, query, campaignID)
 }
 
 // AcquireLock tries to take the edit lock. Stale locks (older than 5 min)

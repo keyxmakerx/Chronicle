@@ -13,7 +13,10 @@
 package calendar
 
 import (
+	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -71,20 +74,98 @@ func (h *Handler) GetWorldState(c echo.Context) error {
 	return c.JSON(http.StatusOK, seed)
 }
 
+// worldStateCoord is ONE date/time coordinate on the world-state PUT, and it
+// exists because a plain `*int` could express only two of the three states a
+// coordinate actually has.
+//
+// THE DEFECT IT CLOSES. A GM cleared the Year box on Set date and submitted;
+// the world moved to year 0, HTTP 200, stored. Both browser writers read the
+// field with `parseInt(el.value, 10)` and a fallback of **0**, so "empty"
+// reached the server as a number the GM never typed — and year 0 is a
+// legitimate year on a fantasy calendar (see BuildWorldStateSeed's header and
+// the weather-on-date bounds check, which both say so explicitly), so no
+// value-based rule can tell the two apart. The fix is to keep zero settable and
+// make EMPTY expressible instead:
+//
+//	absent / null   → Set=false, Blank=false → preserve the stored value
+//	a JSON number   → Set=true                → write it, zero and negative included
+//	a numeric string→ Set=true                → write it (an <input> holds strings)
+//	"" / "  " / junk→ Blank=true              → REFUSE, naming the field
+//
+// UnmarshalJSON never returns an error, deliberately. An error here aborts
+// Echo's Bind and the handler can only answer a generic "invalid request",
+// which is the same dead end for the GM as the silent zero was: it does not
+// say which box was empty. Recording Blank lets the handler name the
+// coordinate.
+type worldStateCoord struct {
+	// Set is true when a usable number arrived.
+	Set bool
+	// Blank is true when the key arrived but held nothing usable — an empty
+	// input, whitespace, or a value that is not a number at all.
+	Blank bool
+	// Value is meaningful only when Set.
+	Value int
+}
+
+// UnmarshalJSON implements the absent/number/blank split described on the type.
+func (c *worldStateCoord) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	if s == "" || s == "null" {
+		return nil // absent-equivalent: preserve
+	}
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		var raw string
+		if err := json.Unmarshal(b, &raw); err != nil {
+			c.Blank = true
+			return nil
+		}
+		s = strings.TrimSpace(raw)
+		if s == "" {
+			c.Blank = true
+			return nil
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			c.Blank = true
+			return nil
+		}
+		c.Set, c.Value = true, n
+		return nil
+	}
+	var n int
+	if err := json.Unmarshal([]byte(s), &n); err != nil {
+		c.Blank = true
+		return nil
+	}
+	c.Set, c.Value = true, n
+	return nil
+}
+
+// Ptr renders the coordinate as the service's partial-set pointer: nil when the
+// caller did not name it, a value when they did.
+func (c worldStateCoord) Ptr() *int {
+	if !c.Set {
+		return nil
+	}
+	v := c.Value
+	return &v
+}
+
 // putWorldStateBody is the PUT request shape. All sections are optional —
-// send mood without time or vice-versa. Pointer date/time fields distinguish
-// "set" from "leave unchanged".
+// send mood without time or vice-versa. The date/time fields are
+// worldStateCoords, which distinguish "set to this value" from "leave
+// unchanged" AND from "the GM's box was empty".
 type putWorldStateBody struct {
 	Mood *struct {
 		Color     *string `json:"color"`
 		Intensity float64 `json:"intensity"`
 	} `json:"moodTint"`
 	Time *struct {
-		Year   *int `json:"year"`
-		Month  *int `json:"month"`
-		Day    *int `json:"day"`
-		Hour   *int `json:"hour"`
-		Minute *int `json:"minute"`
+		Year   worldStateCoord `json:"year"`
+		Month  worldStateCoord `json:"month"`
+		Day    worldStateCoord `json:"day"`
+		Hour   worldStateCoord `json:"hour"`
+		Minute worldStateCoord `json:"minute"`
 	} `json:"time"`
 	// Advance is the GM panel's relative-verb path (+1hr / +1day /
 	// +long-rest / step-back). Signed; full rollover server-side.
@@ -146,12 +227,26 @@ func (h *Handler) PutWorldState(c echo.Context) error {
 		input.Mood = &WorldStateMoodTint{Color: body.Mood.Color, Intensity: body.Mood.Intensity}
 	}
 	if body.Time != nil {
+		// A coordinate that arrived EMPTY is refused by name before anything is
+		// written. Substituting a number here is what moved a campaign to year 0.
+		for _, f := range []struct {
+			name  string
+			coord worldStateCoord
+		}{
+			{"year", body.Time.Year}, {"month", body.Time.Month}, {"day", body.Time.Day},
+			{"hour", body.Time.Hour}, {"minute", body.Time.Minute},
+		} {
+			if f.coord.Blank {
+				return apperror.NewValidation(f.name +
+					" must be a number — leave it out to keep the stored value")
+			}
+		}
 		input.Time = &WorldStateTimeSet{
-			Year:   body.Time.Year,
-			Month:  body.Time.Month,
-			Day:    body.Time.Day,
-			Hour:   body.Time.Hour,
-			Minute: body.Time.Minute,
+			Year:   body.Time.Year.Ptr(),
+			Month:  body.Time.Month.Ptr(),
+			Day:    body.Time.Day.Ptr(),
+			Hour:   body.Time.Hour.Ptr(),
+			Minute: body.Time.Minute.Ptr(),
 		}
 	}
 	if body.Advance != nil {

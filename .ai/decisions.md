@@ -2223,7 +2223,9 @@ groups cannot force a realign of the existing block.
 
 ### Section: the Almanac, and why the grid's moon ceiling is legitimate (W-E, C-CALV4-SHELF-P7, 2026-07-28)
 
-**Added as a SECTION and not as ADR-049, per the paragraph below.** W-F's layer
+**Added as a SECTION of ADR-048 rather than as an ADR of its own, per the
+paragraph below.** (This read "not as ADR-049" until C-CALV4-GAMEREADY stage 23;
+that number is now taken by an unrelated 2026-08-07 decision.) W-F's layer
 switchboard and preference store join it here when they land.
 
 **10. THE GRID'S THREE-MOON CEILING IS ONLY LEGITIMATE BECAUSE THE ALMANAC
@@ -3618,14 +3620,24 @@ W-F's layer switchboard and preference store became sections HERE when they
 landed — §20-§24 above, W-G's tail is §25, and W-H's builder wizard is §26.
 Round 2's reveal pass (R2-1) is a section here too, and R2-2…R2-5 will land the
 same way.
-There is no ADR-049. calendar-v4 is one architecture
-decision; competing ADRs for its later waves would fragment the rationale that a
-future re-litigation needs in one place. W-E followed this rule first (its
+**calendar-v4 never gets an ADR of its own beyond this one.** calendar-v4 is
+one architecture decision; competing ADRs for its later waves would fragment the
+rationale that a future re-litigation needs in one place. **(Corrected at
+C-CALV4-GAMEREADY stage 23: this paragraph and §27 below used to read "there is
+no ADR-049" flatly. That was true when written and is now FALSE as written —
+C-SWEEP-R4 stage 9 legitimately claimed the number ADR-049 on 2026-08-07 for an
+unrelated subject, `"no authenticated user" vs "trusted system caller"`, and it
+is live at the bottom of this file. The rule was always "calendar-v4 does not
+fork an ADR", never "the number 049 is unused"; the flat wording cost a
+GAMEREADY stage a false STOP-AND-FLAG against the dispatch's own correct
+citation.)** W-E followed this rule first (its
 Almanac decisions are §10-§14) and W-G's RSVP decisions are §15-§19.
 
 ### §27 — R2-2b: the editor's chrome, the signed morph, and drag-create
 
-**ADR-048 GROWS A SECTION; THERE IS NO ADR-049.** C-CALV4-EDITOR-R2b is the
+**ADR-048 GROWS A SECTION; calendar-v4 DOES NOT FORK AN ADR.** (Wording
+corrected at C-CALV4-GAMEREADY stage 23 — see the note above: this read "there
+is no ADR-049", which a later, unrelated slice made false.) C-CALV4-EDITOR-R2b is the
 second half of C-CALV4-DAYCARD, taken at the split point that slice's §11
 pre-authorised, and every ruling below is a decision about the same surface.
 
@@ -3882,6 +3894,140 @@ through a class instead of an inline style. `edShow` clears both, through the
 same writer `applyPlacement` uses; `placeCard` is still not touched. *A rig that
 measures a surface no user sees will report a spotless result about it.*
 
+### §28 — R2-3: the Block theater — stopped on a refuted premise, re-signed, and built
+
+**ADR-048 GROWS A SECTION; calendar-v4 DOES NOT FORK AN ADR.** C-CALV4-THEATER
+(round 2, slice R2-3) gives the depth [BR2-8] took off the entity embed back
+through an overlay. **It ran in two passes.** The first stopped without building,
+because [TH-14] — the block that rules where the scaffold sits in the entity
+page's DOM — named a STOP-AND-FLAG whose condition was, measured, TRUE. The
+coordinator then **RE-SIGNED [TH-14] on 2026-08-08**, replacing its third
+constraint against the measurement, and the second pass built the slice. Points
+1-3 below are the founding facts, unchanged across both passes; 4-5 are the stop
+and why it was right; 6-8 are the re-sign and what shipped.
+
+**1. THERE ARE TWO THINGS CALLED "FULL TIER", AND THIS IS THE FOUNDING FACT.**
+The **CSS tier** is a container query and nothing else —
+`.cal-block-host { container-type: inline-size; container-name: cal-block }`
+(`calendar-block.css:201`) against `@container cal-block (min-width: 900px)`
+(`:2197`). The **zone set** is a producer decision: `ledger` and `shelf` are
+`LayerState` keys, and a zone that was never seeded is not in the render at all.
+So **widening a box buys the whole CSS tier and none of the zone set**. Moving
+the embed's existing Block into a wide overlay produces a *stretched glanceable
+month*, not a full-tier Block — a surface that is bigger and no deeper, which is
+exactly what the operator would read as the feature not working. Any future
+theater needs its own render from its own layer seed
+(`["moons","eras","weeknums","ledger","shelf"]`, through `resolveBlockLayers` so
+the switchboard still wins), never a widened copy of the embed's.
+
+**2. AND THAT SECOND RENDER IS FREE, WHICH IS THE MEASUREMENT THE ORIGINAL COST
+PARAGRAPH GOT BACKWARDS.** `EntityCalendarBlock` calls
+`spine.Block(BlockRequest{...})` passing **neither `LedgerHidden` nor
+`ShelfHidden`**, `block_projection.go:181-182` builds both zone stubs
+unconditionally, and the host then OVERWRITES the projection's layer field at
+`entity_calendar_block.go:253` with `d.Layers = entityBlockLayers(prefs)`.
+**`Layers` is a post-hoc DISPLAY GATE**: the entity page's existing projection
+already contains every mark a theater would print. The theater's Block is a
+struct COPY of the same `BlockData` value — one copy and one extra template
+render, zero extra service work — and therefore the no-wider law ("the theater
+prints exactly the embed's mark set, differing in layer set only") is pinned
+STRUCTURALLY, by a reflect assertion that the two values differ in `Layers` and
+`Viewer.HostEntity` and in no other field. A per-day mark-set oracle would
+compare a struct to itself and pass forever.
+
+**3. THE DOM RE-NAMESPACE IS CORE, NOT POLISH.** Every id and radio-group name
+the Block emits is a pure function of `(CalendarSlug, HostEntity)` —
+`helpers.go:503` · `:954` · `:1358` · `:1587` · `:1833` · `:1857` — so two Blocks
+for the same calendar on one entity page emit **identical ids and identical
+radio-group names**, breaking the widget's own stated invariant
+(`calendar_block/.ai.md:415-419`). It is not latent: `nameplate.templ:98` gates
+the tie toggle on `HostEntity != ""` alone, so both Blocks emit it and the
+theater's `<label for=…>` resolves by document order to the EMBED's radio —
+pressing the theater's tie toggle would silently re-ink the embed behind the
+backdrop. The fix opens no widget file (`Viewer.HostEntity` is host-owned on the
+returned value), but it is a build obligation, not a tidy-up.
+
+**4. THE MEASUREMENT THAT STOPPED THE SLICE, AND WHY IT IS A REFUSAL RATHER THAN
+A DELAY.** [TH-14] rules the scaffold must sit **outside every
+`.cal-block-host`**, **inside a `cal-bench` root**, and **outside any
+HTMX-swappable region** — and rules that if the only position satisfying all
+three is inside the swapped region, that is *a host restructure, not a
+placement, and not this slice's to take*. The signature's own measurement cites
+`entity_calendar_block.templ:61` — the picker's inline slot — i.e. it took the
+swappable region to be a small nested slot with safe ground beside it inside the
+component. **Measured on this branch, that premise is false.**
+`calendar_widget_type.go:152` wraps the entire output of `EntityCalendarBlock` in
+`widgetbindings.BlockHost(WidgetTypeCalendar, rc.HostID, inner)`, and
+`picker.templ` targets that wrapper — `hx-target={"#" + BlockHostID(...)}` with
+`hx-swap="outerHTML"` — on **three live Scribe+ paths** (bind at `:99`, create at
+`:54`, unbind at `:80`). The swapped region is therefore the WHOLE component, one
+level above anything `entity_calendar_block.templ` can emit. Every position
+reachable from the files R2-3 owns is inside it, and reaching outside means
+editing either `internal/app/routes.go` beyond [TH-12]'s single registry line or
+the four-widget `BlockHost` seam. **Both are host restructures. The first pass
+stopped there**, and the block was wrong rather than the builder.
+
+**5. THE THING THAT MAKES THIS WORTH WRITING DOWN RATHER THAN JUST RE-TRYING.**
+The failure [TH-14] names — *"a theater that opens once and then stops opening,
+with every guard green"* — may well not occur here, because the scaffold and its
+opener are swapped away **together as one unit** and [TH-12]'s
+`htmx:afterSettle` re-init would wire the replacements. **That reasoning is
+exactly why the block says "not a judgement call."** A slice that talks itself
+past a signed STOP-AND-FLAG because the named symptom looks survivable is how a
+guard becomes decorative. The condition is met; the decision belongs to whoever
+re-signs [TH-14] with the true swap target in front of them, and their options
+are visible: place the scaffold above `BlockHost` (a seam change four widgets
+share), or sign the in-swap placement explicitly with the re-init contract as its
+argument. **What must not happen is the placement arriving as an implementation
+detail.**
+
+**6. WHAT THE RE-SIGN CHANGED, AND THE SHAPE IT CHOSE.** [TH-14]'s constraint 3
+is REPLACED: **the scaffold MAY sit inside the swappable region.** The argument
+is point 5's, turned from a hesitation into a ruling — opener and scaffold share
+the swapped subtree, so they die and revive together, and [TH-12]'s
+`htmx:afterSettle` re-init rewires both; there is no state in which a live opener
+points at a dead scaffold. **The one residual risk is named and guarded rather
+than argued away:** a `<dialog>` that is OPEN when its subtree is swapped is
+removed from the DOM mid-modal, stranding the top layer, leaving the document
+scroll-locked and dropping focus on a detached node. Its **required counterpart**
+is an `htmx:beforeSwap` listener that closes the theater immediately when the
+swap target contains it, pinned by `test/js/theater_swap_close.test.mjs`.
+Constraints 1 and 2 are unchanged, and both alternatives stay open: a later slice
+may move the scaffold above `BlockHost` or to the entity page's own template, and
+moving it RETIRES the guard rather than fighting it.
+
+**7. WHAT SHIPPED.** Six things, and the first pass's one: the scaffold
+(`theater.templ`) and its module (`calendar_theater.js`, mounted through the
+`pluginBodyScripts` registry — [TH-12], because
+`tools/page-script-allowlist.txt` pins `entity_calendar_block.templ` at exactly
+one page-side script and the ratchet fails above as well as below); the second
+full-tier RENDER of the one projection; the DOM re-namespace and the
+no-duplicate-`id` pin; the `Expand` control; the register consumed through a
+second scope root plus two named rules in the ONE register section; and the
+no-wider law pinned by reflect. The switchboard is suppressed on the copy
+([TH-13]) as a real absence at the producer rather than CSS hiding. Guard B4's
+scope glob had already landed in the first pass, following its own `*schedule*`
+precedent of arriving ahead of the surface.
+`internal/wire/routes_snapshot.txt` is unchanged at **727** lines and no
+migration was created.
+
+**8. THE PRECEDENT THAT WASN'T, AND WHY IT MATTERED.** [TH-3] was drafted citing
+`/schedule` as the shipped precedent for consuming the disclosure register from
+outside the Bench. **It is not one.** `/schedule` carries
+`class="cal-bench cal-schedule"` and links the sheet, but it contains no
+`<details>`, no `.disc` and no `::details-content`, and
+`TestScheduleCSS_MotionIsTheSanctionedRegisterAndNothingElse` polices it by
+BANNING `--disc-open` there rather than admitting it. **It inherits the TOKENS
+and has never consumed a RULE.** Had the slice copied it faithfully, the theater
+would have carried three duration tokens and no motion at all — with
+`calendar-theater.css` forbidden to declare a transition and `calendar-bench.css`
+on the do-not-touch list — while every guard in the tree stayed green. The real
+precedent is the DAY CARD, which added its two rules by name inside the one
+register section; the theater does the same. **The general lesson is the one this
+arc keeps re-learning: a precedent is what a surface DOES, not what it is
+CLASSED as, and the difference is only visible if somebody greps for the rule
+rather than for the class.**
+
 ### References
 
 - Master plan: cordinator `plans/2026-07-26-calendar-v4-remodel-master-plan.md`
@@ -3895,3 +4041,305 @@ measures a surface no user sees will report a spotless result about it.*
 - Wave reports: `reports/chronicle/2026-07-28-C-CALV4-{SEAM-P5,HOST-P3,BENCH-P4,
   LEDGER-P6,SHELF-P7}.md`
 - Contract: `mockups/calendar-v4.html` + `mockups/renders/v4-*.png`
+
+### §29 — R2-4: a version cutover is a LINK problem before it is a route problem
+
+**C-CALV4-V2SUNSET, round 2 slice R2-4.** The operator's whole complaint was one
+sentence — *"legacy calendar still shows up"* — and it was not a bug. It was what
+the product still linked to. **ADR-048 GROWS A SECTION; calendar-v4 DOES NOT FORK
+AN ADR.**
+
+**THE SHELL WAS NEVER THE PROBLEM; THE HALLWAYS WERE.** Every route the V2 shell
+owns is still registered, still reachable, still tested. What changed is that
+about twenty links and six redirects now lead somewhere else. The snapshot is
+byte-identical at 727 lines, no file was deleted, and the operator's complaint is
+answered in full. **The version a user is on is decided by what the product links
+to, not by what it serves** — and the two had drifted a whole major version
+apart.
+
+**THE V2 "SHELL" WAS THREE SURFACES v4 NEVER REPLACED, WEARING ONE PAGE'S NAME.**
+This is the finding that turned "delete the V2 routes" into a four-stage slice
+that deletes nothing. The shell hosted nine surfaces and v4 had replaced six.
+The other three — the **week and day views** (`handler_v2.go`'s
+`case "week", "day"`, and nowhere else in the product), the **GM world-state
+console** (`gm_panel.js`, one mount) and the **sky strip** — exist ONLY inside
+it. Deleting the page deletes them. **A sunset that takes a feature out without a
+replacement is a regression with a tidy commit message**, which is why the
+operator's signature reads *"delete it, but build the replacements first"* and
+why two of the three gaps became **prerequisites with their own slices** rather
+than bookings that might never be taken. (The third needs none: R2-5 IS the sky
+strip's replacement, and it was already signed. Two new slices and one already
+covered — never three.)
+
+**THE BOOKED COST OF THE ANONYMOUS-PUBLIC FIX DID NOT EXIST.** `/apps/calendar`
+rode the authenticated group while `/calendar/v2` was public-capable, so a
+logged-out visitor to a public campaign hit `/login`. That gap was booked **three
+times, in the same copied words**, each naming *"a `routes_snapshot.txt`
+regeneration"* as the reason no earlier slice could take it. **The snapshot does
+not move.** It records METHOD, PATH and defining file and nothing about
+middleware; a group change plus a guard swap leaves all three identical. **A
+booking deferred four times on a cost nobody re-measured is the lesson**, and it
+generalises: re-scout a booking before you defer it again, because the reason it
+was deferred may have been wrong when it was written.
+
+**AND THE COROLLARY, WHICH IS THE MOST IMPORTANT SENTENCE IN THIS SECTION: THE
+SNAPSHOT IS NOT THE SECURITY ORACLE.** A byte-identical `routes_snapshot.txt`
+sitting beside an authorisation change is exactly the shape a reviewer skims
+past. The oracle for this change is a reachability matrix and a rendered-output
+assertion set, shipped as tests, not a diff.
+
+**A STALE INVENTORY IS MORE DANGEROUS THAN A MISSING ONE.** R2-4's dispatch
+carried a fourteen-row table of doors, scouted against a commit fifty-three
+commits stale. **Two of its rows were unrouted dead code** — inside
+`app_dashboard.templ`, a ~700-line template with no caller that every grep reads
+as live — and **eight live doors were missing**, including the v4 Bench's own
+four links back to the calendar it replaced, and two EGRESS doors that leave the
+application entirely: RSVP notification email and global search results. A dev
+building strictly inside that table would have edited two links nobody can click,
+watched the tests pass, and shipped a PR that answered the complaint for zero of
+the users who actually hit the Bench. **An inventory scouted against a commit is
+a measurement with an expiry date. Re-take it at signature time; do not inherit
+it.** The completeness check now ships as a test rather than as a grep pasted
+into a PR body, for the same reason.
+
+**THE ROUTE'S ROLE FLOOR WAS LOAD-BEARING FOR ONE PANEL, AND THE FLOOR MOVED
+INTO THE DATA.** Making the Bench public-capable meant `RoleNone` viewers reach a
+page whose RSVP panel prints every member's display name, role and zone — by
+design and by signature, because until now everyone who could reach the page was
+a party member. Measured against a real database before the guard was written: an
+anonymous render carried two real member names. The producer now skips the roster
+below `RolePlayer`, so the absence is in the payload rather than in a template
+branch. **When you move a gate off a route, find out what it was holding up.**
+
+**AN EMPTY USER ID MEANS NO USER — never an empty lookup key, never a sentinel.**
+The Bench is a per-user surface (a disclosure register, RSVP state, section
+preferences) and an anonymous request hands it `""`. Every per-user read is
+guarded and SKIPPED rather than run-and-empty, because a query with an empty key
+is one schema change away from matching a row, and a synthesised anonymous
+identity is a shared write target. Two anonymous renders are byte-identical. This
+is ADR-049's distinction applied at the producer.
+
+**THE EGRESS COST IS ACCEPTED, NOT OPEN.** RSVP emails and indexed search results
+already carry `/calendar/v2` URLs into the world. R2-4 **stops minting them**;
+the ones already sent keep working, because R2-4 removes no route; and
+`C-CALV4-SHELL-REMOVAL` is what finally breaks them. That slice should consider a
+permanent redirect rather than a 404 — one redirect buys back the whole
+already-mailed population. **Recorded as an accepted cost of the end state the
+operator chose, so it is not re-litigated when the removal comes up for review.**
+
+**AND ONE LINK WAS DELETED RATHER THAN RE-POINTED, WHICH IS THE ONLY EXCEPTION TO
+THIS SLICE'S OWN RULE.** The Bench's "Open calendar →" existed to leave the Bench
+for the real calendar. The Bench IS the real calendar now, so re-pointed it would
+navigate to the page it is printed on. **A self-link is not a door; it is a dead
+end wearing a door's label.** The row survives, the affordance does not, and it
+returns when `C-CALV4-BENCH-CALID` gives the link something to select.
+
+---
+
+## ADR-049: "no authenticated user" and "trusted system caller" are two states, not one empty string
+
+**Date:** 2026-08-07 · **Status:** Accepted · **Amends:** C-CAL-DASHBOARD-W5a
+(the calendar visibility gate) and C-PERM-ANON-IDENTITY · **Consistent with:**
+C-CALV4-V2SUNSET [VS-15] · **Origin:** C-AUTHZ-EMPTY-USERID, reproduced in
+`reports/chronicle/2026-08-07-C-SWEEP-R3.md` §3 row 8.
+
+### Context
+
+The calendar and timeline visibility filters short-circuited on
+`permissions.CanSeeDmOnly(role) || userID == ""` (calendar) and
+`!CanSeeDmOnly(role) && userID != ""` (timeline). The empty user id was
+documented in both places as "the system context" — a trusted in-process
+caller with no request behind it.
+
+**An anonymous HTTP request carries exactly that value.** `auth.GetUserID(c)`
+returns `""` when there is no session, and on a PUBLIC campaign
+`AllowPublicCampaignAccess` + `RequireViewAccess` let that request reach the
+service. So the most privileged branch in the filter was the branch logged-out
+internet traffic took: `dm_only` calendars, `dm_only` timelines and
+per-user-restricted events and event links were served to a visitor who never
+logged in — content a logged-in Player on the same campaign is correctly
+denied.
+
+This was not a missing check at a call site. It was **one representation
+standing for two different states**, so every call site was correct and the
+system was still wrong. It is also about to widen: R2-4 (C-CALV4-V2SUNSET)
+moves `GET /apps/calendar` onto the public group.
+
+### Decision
+
+**The two states get two representations, and the trusted one is unforgeable
+from request data.**
+
+`internal/permissions/viewer.go` adds `Viewer`, with an **unexported** `system`
+bool and exactly two constructors:
+
+- `RequestViewer(role, userID)` — anything that came in over HTTP. An empty
+  `userID` means ANONYMOUS: no user. It cannot produce a system viewer.
+- `SystemViewer(role)` — a trusted in-process caller that has no request
+  identity, stated at the call site.
+
+Every visibility filter asks `Viewer.SkipsPerUserRules()` (`system ||
+CanSeeDmOnly(role)`) instead of testing the user id itself. **An anonymous
+viewer is neither**, so it falls to the least-privileged path by construction
+rather than by each call site remembering.
+
+Consistent with **[VS-15]**: an empty user id is an ABSENT per-user layer —
+never a sentinel, never a lookup key, never substituted with a synthesised
+identity (no `"anonymous"` user, no per-IP key).
+
+### Consequences
+
+- **Two trusted callers now say so.** `timeline_widget_type.go`'s
+  create-or-pick picker (Scribe-gated at the route) and the campaign timeline
+  export adapter pass `permissions.SystemViewer`. **Their shipped behaviour is
+  unchanged** — the picker still lists allow-list-restricted timelines — which
+  is the point: the trust was real, only its representation was shared with
+  anonymous traffic.
+- **Two green tests that pinned the bug as intended were INVERTED, not
+  deleted**, each with a comment naming this ADR, and each kept a row asserting
+  that the SYSTEM path still bypasses so the pair proves the distinction:
+  `calendar_visibility_w5a_test.go`'s `TestCalendarVisibleTo` and
+  `entity_ties_test.go`'s `…_OwnerUnfilteredAnonymousFiltered`.
+- `TimelineService.ListTimelines` / `ListTimelinesForCalendar` /
+  `ListTimelineEvents` take a `permissions.Viewer` instead of `(role, userID)`;
+  the calendar's own filters are package-private and take one too, with the
+  exported service methods building a `RequestViewer` at their boundary.
+- **Not taken here:** a route-level middleware assertion that an anonymous
+  request can never reach a filter with a trusted identity ([EU-5]). It touches
+  every public-group route and is booked, not shipped.
+
+### References
+
+- Dispatch: `dispatches/chronicle/C-AUTHZ-EMPTY-USERID.md` ([EU-1] = explicit
+  flag, [EU-2] = the picker becomes a declared system caller, [EU-3] = amend the
+  pinned rows, [EU-4] = calendar + timeline in one slice, [EU-5] = booked)
+- Pins: `internal/plugins/calendar/anonymous_visibility_test.go` ·
+  `internal/plugins/timeline/anonymous_visibility_test.go`
+
+---
+
+## ADR-050: An immutable plugin migration is repaired by a reconciler, and a half-applied one resumes instead of replaying
+
+**Date:** 2026-08-07 · **Status:** Accepted · **Extends:** ADR-044 / ADR-045
+(migration robustness, the `000030` incident) and ADR-028/030 (plugin
+migrations) · **Origin:** `C-PLUGIN-MIGRATION-RUNNER`, two defects reproduced in
+`reports/chronicle/2026-08-07-C-SWEEP-R3.md` and closed by C-SWEEP-R4
+stages 11–12.
+
+### Context
+
+Two failures in the same runner, both terminal, both invisible to CI.
+
+1. **`foundry_vtt` migration 001 crashed on every brand-new database.** It is a
+   consolidation migration — `RENAME TABLE foundry_module_campaign_tokens TO
+   foundry_vtt_campaign_tokens` — and the plugin that created the source table
+   was deleted in C-FMC-5c. A fresh install hit `Error 1146`, the plugin was
+   marked DEGRADED, and it could never self-heal, because
+   `runSinglePluginMigrations` returns on the first failed migration: no later
+   migration for that plugin is reachable, so a fresh-DB-safe `002` would never
+   run. `PreMigrationCheck` (PR #507) does not cover it — it refuses only when
+   `foundry_module_versions` exists *and has rows*, and on a fresh database the
+   table does not exist at all.
+2. **A plugin migration that failed on its second statement was unrecoverable.**
+   `execPluginMigration` splits on semicolons, runs statement by statement on a
+   plain `*sql.DB`, and writes the `plugin_schema_versions` row only after the
+   LAST statement succeeds. A mid-migration failure therefore leaves the earlier
+   statements' effects in the database and *no record that anything happened*.
+   The next boot replays from statement one and dies on "duplicate column name",
+   because most plugin ALTERs are not idempotent — so the operator sees an
+   artefact of the retry rather than the real cause, and fixing the real cause
+   cannot help.
+
+Both were invisible for the same reason: **nothing in CI ever migrated an empty
+database.** `tools/restore-drill.sh` loads a dump of an already-migrated one and
+every integration test assumes `make migrate-up` has run.
+
+### Decision
+
+**1. An immutable migration that cannot run is repaired by a Go-side reconciler
+plus a new append-only migration — never by editing the old one.**
+`foundry_vtt.ReconcileConsolidationState` records 001 as applied on any database
+where its RENAME has no source table; new migration `002_ensure_campaign_tokens`
+states the post-consolidation shape in idempotent DDL. 001 is untouched, so
+`tools/check-migration-immutability.sh` and the `migrate_test.go:402` grandfather
+stand exactly as they were, and a database that still HAS the predecessor table
+is left alone — 001 runs there for real and carries its live token rows across.
+Fresh install, completed upgrade, and an upgrade that died between 001's two
+statements all converge on one schema.
+
+This is the existing house rule ("one-time data fixes go in a reconciler, never a
+migration") extended to its schema-bootstrap twin, and it deliberately rejects the
+two alternatives: editing 001 is forbidden outright, and relaxing
+`runSinglePluginMigrations` so an unapplied earlier version is not a hard stop
+would change failure semantics for all nine registered plugins in order to fix
+one.
+
+**2. A plugin migration gets a pre-flight applicability check and partial-progress
+recording. It does NOT get a transaction, and the errors say so.** MariaDB has no
+transactional DDL: every CREATE / ALTER / DROP / RENAME commits implicitly and
+cannot be rolled back. `internal/database/plugin_migration_safety.go` therefore
+buys two specific things and claims nothing more:
+
+- **Pre-flight.** Before the first statement runs, every statement is validated
+  against the schema catalogue *as it will stand at that point in the migration*
+  (the simulation moves forward, so the ordinary CREATE-then-ALTER shape is not
+  falsely refused). If any statement cannot possibly succeed, the migration
+  aborts having executed NOTHING — converting "half-applied and unrecoverable"
+  into "nothing applied, actionable error", which is the closest thing to
+  atomicity available here. Table granularity: it catches the failures that
+  produce unrecoverable states, not every possible SQL error.
+- **Partial-progress recording** in a new runtime table
+  `plugin_migration_progress`. When a statement fails anyway, the number that DID
+  apply is recorded first, so the next boot resumes after them. Keyed by a sha256
+  of the migration text and honoured **only** on a byte-identical match —
+  migrations are immutable so this should never diverge, but a resume that skipped
+  the wrong statements would be far worse than the crash-loop it replaces, so it
+  is checked rather than assumed.
+
+**3. Every uncertain answer degrades to the pre-existing behaviour.** The
+pre-flight **fails open** when `information_schema` cannot be read, and an
+unmatched or missing progress row replays from zero. Refusing every plugin
+migration over a metadata hiccup would be worse than the bug being guarded, and
+a false abort of a real migration is the one outcome worse than the original
+defect.
+
+**4. The guard is a fresh-DB replay, and a SKIP is a failure.** `make test-freshdb`
+/ `cmd/server/freshdb_migration_test.go` replay the real bootstrap against
+genuinely empty MariaDB schemas — one from zero, one from the pre-consolidation
+shape — wired into CI as its own `Fresh-DB Migration Replay` job. The job greps
+for PASS on each named test, so a test that merely *skips* (the way this class
+hid for as long as it did) fails the job. The three DB-backed
+`TestPluginMigration_*` recovery regressions run in the same job and are named in
+the same assertion. `TestFreshDatabase_EveryPluginSchemaApplies` continuing to
+pass is what rules out the pre-flight falsely refusing a real migration.
+
+### Consequences
+
+- A plugin whose old migration is unrunnable now has a sanctioned repair that
+  does not touch the immutability guard. The cost is that the canonical schema is
+  stated in two places — the original migration and the idempotent `002` — which
+  is the price of append-only.
+- Boot-time recovery semantics changed for **all** plugins, not just
+  `foundry_vtt`: a failing migration may now abort earlier (pre-flight) or resume
+  later (progress). Both directions were chosen to be strictly safer than replay,
+  and both fall back to replay when unsure.
+- `plugin_migration_progress` is a runtime table created by the runner itself,
+  not by a migration — it must exist before any plugin migration runs, so it
+  cannot be one.
+- The non-idempotent-DDL CI ratchet the original booking imagined was **not**
+  built. All nine existing offenders are immutable, so a ratchet would have
+  needed a grandfather allowlist and a house-law amendment; the pre-flight
+  addresses the harm those offenders cause without requiring either.
+
+### References
+
+- `internal/database/plugin_migration_safety.go` (package doc states the
+  non-transaction claim in full) · `internal/database/plugin_schema.go`
+- `internal/plugins/foundry_vtt/reconcile_consolidation.go` +
+  `migrations/002_ensure_campaign_tokens.{up,down}.sql`
+- Pins: `cmd/server/freshdb_migration_test.go` ·
+  `internal/database/plugin_migration_recovery_test.go` ·
+  `internal/database/plugin_migration_safety_test.go` ·
+  `internal/plugins/foundry_vtt/reconcile_consolidation_test.go`
+- Booking: `.ai/todo.md` §"Booked by sweep R3" D · dispatch
+  `dispatches/chronicle/C-PLUGIN-MIGRATION-RUNNER.md`

@@ -192,10 +192,10 @@ func TestBuilderValidate_MonthCeilingMatchesTheSubmit(t *testing.T) {
 	// the pin cannot drift from the code it claims to agree with.
 	svc := builderStubService()
 	ctx := context.Background()
-	if err := svc.SetMonths(ctx, "c", []MonthInput{{Name: "M", Days: builderLimits.MaxMonthDays}}); err != nil {
+	if _, err := svc.SetMonths(ctx, "c", []MonthInput{{Name: "M", Days: builderLimits.MaxMonthDays}}); err != nil {
 		t.Errorf("a month at the preview ceiling must be creatable: %v", err)
 	}
-	if err := svc.SetMonths(ctx, "c", []MonthInput{{Name: "M", Days: builderLimits.MaxMonthDays + 1}}); err == nil {
+	if _, err := svc.SetMonths(ctx, "c", []MonthInput{{Name: "M", Days: builderLimits.MaxMonthDays + 1}}); err == nil {
 		t.Error("a month one past the preview ceiling must be refused at submit — " +
 			"if it is not, the two bounds have drifted apart")
 	}
@@ -217,7 +217,7 @@ func TestBuilderValidate_ZeroDaysIsPreviewableAndUncreatable(t *testing.T) {
 		t.Errorf("the block reason must name the month: %q", blocked)
 	}
 	svc := builderStubService()
-	if err := svc.SetMonths(context.Background(), "c", []MonthInput{{Name: "Ches", Days: 0}}); err == nil {
+	if _, err := svc.SetMonths(context.Background(), "c", []MonthInput{{Name: "Ches", Days: 0}}); err == nil {
 		t.Error("the SERVER must refuse a 0-day month too — the honesty state is " +
 			"enforced by the model, not offered by the client")
 	}
@@ -510,7 +510,7 @@ func TestBuilderImportResult_IsTheImporterPath(t *testing.T) {
 	// What the wizard hands ApplyImport must survive the SAME validation the
 	// four parsers' output survives.
 	svc, ctx := builderStubService(), context.Background()
-	if err := svc.SetMonths(ctx, "c", res.Months); err != nil {
+	if _, err := svc.SetMonths(ctx, "c", res.Months); err != nil {
 		t.Errorf("the produced months must pass the shipped validator: %v", err)
 	}
 	if err := svc.SetWeekdays(ctx, "c", res.Weekdays); err != nil {

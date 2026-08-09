@@ -7,6 +7,8 @@ package sessions
 import (
 	"fmt"
 	"time"
+
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // Session status constants.
@@ -137,20 +139,30 @@ type CreateSessionInput struct {
 }
 
 // UpdateSessionInput is the validated input for updating a session.
+//
+// Every field is a patch.Field: this is a PARTIAL update, and the sweep-R4
+// contract governs it — an ABSENT key preserves the stored value, an
+// EXPLICIT null clears it, a present value replaces it. Before that, every
+// field was assigned unguarded, so "Mark Complete" (which sends
+// {name,status} only) erased the schedule, the summary, the in-world date
+// and the whole recurrence config — which also silently stopped the
+// next-occurrence generator, because it keys off the STORED IsRecurring.
+// Do not re-introduce a value-typed field here; sessions_partial_update_test.go
+// reddens if you do.
 type UpdateSessionInput struct {
-	Name                string
-	Summary             *string
-	ScheduledDate       *string
-	ScheduledTime       *string
-	CalendarYear        *int
-	CalendarMonth       *int
-	CalendarDay         *int
-	Status              string
-	IsRecurring         bool
-	RecurrenceType      *string
-	RecurrenceInterval  int
-	RecurrenceDayOfWeek *int
-	RecurrenceEndDate   *string
+	Name                patch.Field[string]
+	Summary             patch.Field[string]
+	ScheduledDate       patch.Field[string]
+	ScheduledTime       patch.Field[string]
+	CalendarYear        patch.Field[int]
+	CalendarMonth       patch.Field[int]
+	CalendarDay         patch.Field[int]
+	Status              patch.Field[string]
+	IsRecurring         patch.Field[bool]
+	RecurrenceType      patch.Field[string]
+	RecurrenceInterval  patch.Field[int]
+	RecurrenceDayOfWeek patch.Field[int]
+	RecurrenceEndDate   patch.Field[string]
 }
 
 // SessionListData holds data for the session list page.

@@ -254,7 +254,7 @@ func benchFxDataRsvp(isGM, isOwner bool) BenchData {
 	d.Ribbon = benchRibbon(benchRibbonInput{
 		IsGM: isGM, CampaignID: "camp-1", NextUp: d.NextUp,
 		Sync:      calblock.SyncPill{State: blockSyncStateOK, Linked: 1, Total: 4, Full: "In sync · 1 of 4 linked"},
-		Attention: benchAttentionRows(benchFxAll(), "camp-1"),
+		Attention: benchAttentionRows(benchFxAll(), "camp-1", nil),
 		Session: &benchSessionTileInput{
 			IsGM: isGM, CampaignID: "camp-1", CalendarID: "cal-real", EventID: "evt-41",
 			Name: in.Session.Name, When: benchRsvpWhen(in.Session.DaysUntil),
@@ -293,6 +293,11 @@ func benchFxData(isGM, isOwner bool) BenchData {
 	}
 	if primary != nil {
 		data.Primary = benchFxBlock(primary, viewer, false)
+		// The month cursor's trio, exactly where buildBench puts it — on the
+		// PRIMARY Block only (C-CALV4-GAMEREADY [GR-1]/[GR-2]). The fixture
+		// carries it so every assertion in this file judges the DOM production
+		// renders, cursor and all.
+		data.Primary.Nav = benchNav(primary, data.Primary.Data, "camp-1")
 	}
 	if realWorld != nil {
 		data.RealWorld = benchFxBlock(realWorld, viewer, true)
@@ -323,7 +328,7 @@ func benchFxData(isGM, isOwner bool) BenchData {
 		IsGM: isGM, CampaignID: "camp-1", Primary: primary, Block: data.Primary,
 		NextUp:    data.NextUp,
 		Sync:      calblock.SyncPill{State: blockSyncStateOK, Linked: 1, Total: 4, Full: "In sync · 1 of 4 linked"},
-		Attention: benchAttentionRows(cals, "camp-1"),
+		Attention: benchAttentionRows(cals, "camp-1", nil),
 	})
 	return data
 }
@@ -809,12 +814,59 @@ func TestBenchRsvp_ZonelessMemberGetsTheRepairAndNoClock(t *testing.T) {
 	if rell.AskHref == "" {
 		t.Error("the `Ask →` repair must have somewhere to go")
 	}
-	html := renderBench(t, benchFxDataRsvp(false, false))
-	for _, want := range []string{`class="badge warn">zone not set`, `Ask →`} {
-		if !strings.Contains(html, want) {
-			t.Errorf("a player's DOM is missing the zone repair %q — the repair may never be "+
+	// AMENDED — C-CALV4-GAMEREADY §8 [GR-15]. This block used to assert that a
+	// PLAYER's DOM contained `Ask →`, which pinned the defect: the link went to
+	// `/campaigns/:id/settings/members`, a route that has never existed, and
+	// even a working member roster is not a Player's affordance — they were
+	// being told to ask somebody else about a page they cannot act on. The
+	// claim the original was making — "the repair may never be the thing that
+	// disappears on the smallest screen" — is preserved and now asserted where
+	// it belongs, on the GM's render; the Player's render asserts the ABSENCE
+	// that is the fix. Both directions, so neither can drift.
+	if rell.AskHref != "/campaigns/camp-1/members" {
+		t.Errorf("a GM's zone repair points at %q; it must be the campaign's real member roster",
+			rell.AskHref)
+	}
+	if rell.AskLabel != "Ask →" {
+		t.Errorf("a GM's repair on someone else's row says %q; want %q", rell.AskLabel, "Ask →")
+	}
+	gmHTML := renderBench(t, benchFxDataRsvp(true, false))
+	for _, want := range []string{`class="badge warn">zone not set`, `Ask →`, `/campaigns/camp-1/members`} {
+		if !strings.Contains(gmHTML, want) {
+			t.Errorf("a GM's DOM is missing the zone repair %q — the repair may never be "+
 				"the thing that disappears", want)
 		}
+	}
+	if strings.Contains(gmHTML, "/settings/members") {
+		t.Error("the dead `/campaigns/:id/settings/members` href is back; it 404s")
+	}
+	html := renderBench(t, benchFxDataRsvp(false, false))
+	if !strings.Contains(html, `class="badge warn">zone not set`) {
+		t.Error("a player still sees WHICH members have no zone — only the repair is re-audienced")
+	}
+	if strings.Contains(html, "Ask →") {
+		t.Error("a player was shown `Ask →` on another member's row: an affordance " +
+			"rendered to an audience that cannot use it, which is the [GR-15] defect")
+	}
+	// AND THE VIEWER'S OWN ROW REPAIRS ITSELF. u-kael is the viewer; make them
+	// the zone-less one and the control must become the one thing they can
+	// actually do.
+	own := benchFxRsvpInput(false)
+	for i := range own.Roster {
+		if own.Roster[i].UserID == own.ViewerID {
+			own.Roster[i].TZ = ""
+		}
+	}
+	var mine BenchRsvpMember
+	for _, m := range benchRsvpBuild(own).Members {
+		if m.Name == "Kael" {
+			mine = m
+		}
+	}
+	if mine.AskHref != "/account" || mine.AskLabel != "Set your zone →" {
+		t.Errorf("the viewer's own zone-less row got %q / %q; want /account and `Set your zone →` — "+
+			"telling somebody to ASK for the one field only they can set is the third fault",
+			mine.AskHref, mine.AskLabel)
 	}
 	for _, forbidden := range []string{"--:--", ">—<span", "UTC guess"} {
 		if strings.Contains(html, forbidden) {
@@ -1027,7 +1079,7 @@ func TestBench_AttentionTileStatesAllClear(t *testing.T) {
 	if clear.Headline != "all clear" || clear.Tone != "ok" {
 		t.Errorf("a healthy campaign gets the all-clear tile; got %+v", clear)
 	}
-	rows := benchAttentionRows([]Calendar{benchFxHarptos(), benchFxDwarven()}, "camp-1")
+	rows := benchAttentionRows([]Calendar{benchFxHarptos(), benchFxDwarven()}, "camp-1", nil)
 	if len(rows) != 1 || !strings.Contains(rows[0].Label, "Dwarven Deep-count") {
 		t.Fatalf("the misconfigured calendar should be the one attention row; got %+v", rows)
 	}
@@ -1243,7 +1295,7 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 	// morph needs and a scale would have avoided.
 	//
 	// WHY THE NEW CLAIM IS NOT WEAKER. The widening is keyed to a class that
-	// TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut independently pins to two
+	// TestBenchCSS_TheNamedCarveOutsAreExactlyTwo independently pins to two
 	// files product-wide, so it cannot be borrowed by a second surface without
 	// that guard going red. `transform` is still refused everywhere, including
 	// under the carve-out — `translate` is named on its own precisely so the
@@ -1254,14 +1306,50 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 	// MUTATION-TESTED: moving the morph's transition onto a rule whose prelude
 	// does not name the class turns this red; adding `transform` under the
 	// class turns this red.
+	//
+	// ── THE SKY BAND'S CLAUSE — amended deliberately, by name ─────────────
+	//
+	// C-CALV4-SKY slice R2-5, under the OPERATOR's signature of 2026-08-07
+	// ([SKY-2]) and [SKY-3] SIGNED. The SECOND named carve-out, and the shape
+	// is deliberately the morph's: a per-class widening keyed to `.skygrow`,
+	// pinned to two files by the monopoly guard below.
+	//
+	// SEVEN PROPERTIES AND NO EIGHTH. grid-template-rows · opacity ·
+	// inline-size · block-size · gap · --seal-solid · --seal-fade. Two of them
+	// (opacity, block-size) are already on the BASE allowlist and are not
+	// restated here; what the class buys is the other five. `transform` is
+	// still refused, including `scale`. `color` is NOT on the list — the caret
+	// is a CONTENT SWAP ([SKY-12]) and an eighth property arriving because
+	// `color` was quietly kept is exactly the failure that ruling names.
+	//
+	// AND NO THIRD DURATION. The mock's six duration tokens were a SEQUENCING
+	// of the register's existing two totals; they ship as four --sky-phase-*
+	// tokens whose sums are asserted equal to --disc-open and --disc-close in
+	// the clause below. The `--disc-*` count assertion stays at exactly 3,
+	// BYTE-UNCHANGED, which is the proof no third total was smuggled in.
 	const carveOut = ".edmorph"
+	const skyCarveOut = ".skygrow"
 	base := map[string]bool{"block-size": true, "opacity": true, "content-visibility": true}
 	morph := map[string]bool{"inline-size": true, "translate": true}
+	sky := map[string]bool{
+		"grid-template-rows": true, "inline-size": true, "gap": true,
+		"--seal-solid": true, "--seal-fade": true,
+	}
 	for _, rule := range benchCSSRules(motion) {
 		carved := strings.Contains(rule[0], carveOut)
+		skyed := strings.Contains(rule[0], skyCarveOut)
 		for _, decl := range benchTransitionDecls(rule[1]) {
 			for _, prop := range decl {
-				if base[prop] || (carved && morph[prop]) {
+				if base[prop] || (carved && morph[prop]) || (skyed && sky[prop]) {
+					continue
+				}
+				if skyed {
+					t.Errorf("`%s` names the sky's carve-out and transitions %q, which is "+
+						"on neither the base allowlist nor the sky's seven "+
+						"(grid-template-rows · opacity · inline-size · block-size · gap · "+
+						"--seal-solid · --seal-fade) — [SKY-3] SIGNED names seven and no "+
+						"eighth, and `color` came off the list when the caret became a "+
+						"content swap", rule[0], prop)
 					continue
 				}
 				if carved {
@@ -1274,7 +1362,7 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 				t.Errorf("transitioned property %q is not on the allowlist "+
 					"(block-size · opacity · content-visibility) — [BR2-2] SIGNED. The "+
 					"editor-morph carve-out widens it ONLY for rules whose prelude names "+
-					"%s", prop, carveOut)
+					"%s, and the sky's ONLY for %s", prop, carveOut, skyCarveOut)
 			}
 		}
 	}
@@ -1331,6 +1419,45 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 			"prefers-reduced-motion the card must open INSTANTLY AND COMPLETELY, which "+
 			"is structural (no rule at all) and never a shortened duration", cardRule)
 	}
+
+	// ── THE THEATER CLAUSE — amended deliberately, by name ─────────────────
+	//
+	// C-CALV4-THEATER slice R2-3, [TH-3] SIGNED. Like the day card's clause
+	// above, the allowlist was not widened by a byte to admit the theater: it
+	// reuses the same two transitionable properties, the same two durations and
+	// the same easing, inside the same single no-preference wrapper.
+	//
+	// IT IS LOAD-BEARING IN A WAY THE CARD'S WAS NOT. calendar-theater.css is
+	// FORBIDDEN to declare a transition (TestTheaterCSS_CarriesNoMotionOfItsOwn),
+	// so these two rules are the ONLY place the theater's reveal can exist. The
+	// slice was drafted believing /schedule's `class="cal-bench cal-schedule"`
+	// was a precedent for consuming this register from outside the Bench; it is
+	// not — /schedule inherits the TOKENS and consumes zero RULES, and its own
+	// guard bans `--disc-open` there. Carrying the class alone would have
+	// shipped the theater three tokens and no motion at all, with every guard in
+	// this file green.
+	//
+	// So this clause fails in BOTH directions, exactly as the card's does: if
+	// the theater's rules vanish (the reveal was quietly deleted, or a later
+	// hand "tidied" a class this sheet does not otherwise mention) and if they
+	// appear outside the wrapper (reduced motion would then animate).
+	const theaterRule = ".cal-bench.cal-theater .tbox"
+	if !strings.Contains(motion, theaterRule) {
+		t.Errorf("the theater's reveal is not inside %q — calendar-theater.css may declare no "+
+			"transition at all, so this is the ONLY place the motion can live and its absence "+
+			"means the theater opens instantly at every motion setting", guard)
+	}
+	if strings.Count(code, theaterRule) != strings.Count(motion, theaterRule) {
+		t.Errorf("a `%s` rule sits OUTSIDE the reduced-motion wrapper; under "+
+			"prefers-reduced-motion the theater must open INSTANTLY AND COMPLETELY, which is "+
+			"structural (no rule at all) and never a shortened duration", theaterRule)
+	}
+	// …and the OPEN state really overrides the duration, which is what makes
+	// leaving faster than arriving on this surface too.
+	if !strings.Contains(motion, theaterRule+".tbopen") {
+		t.Error("the theater has no open-state rule, so its reveal would run at --disc-close " +
+			"in both directions and arriving would feel like leaving")
+	}
 	if !strings.Contains(motion, ".cal-bench .cal-daycard.dcopen .dcbox") {
 		t.Error("the card declares a closed state and no open one — the reveal has no " +
 			"endpoint and the register's 200ms open cannot run")
@@ -1362,60 +1489,220 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 			"then take exactly as long as arriving, which is register clause 2's " +
 			"whole subject")
 	}
+
+	// ── THE SKY BAND'S OWN TWO-DIRECTIONAL CLAUSE ─────────────────────────
+	//
+	// The same shape, for the same reason: it fails if the sky's rules VANISH
+	// (the carve-out was quietly deleted and the operator's amended clause 4
+	// stopped buying anything) and if they ESCAPE the wrapper (under
+	// prefers-reduced-motion the band would then animate, and [SKY-4] says
+	// instant AND complete, structurally).
+	const skyRule = ".cal-bench .cal-block-host .skygrow .skpane"
+	if !strings.Contains(motion, skyRule) {
+		t.Errorf("the sky's pane is not inside %q — the carve-out is a named addition "+
+			"INSIDE the one register section and a band declared anywhere else would "+
+			"be the second grammar", guard)
+	}
+	// THE ESCAPE DIRECTION IS COUNTED ON TRANSITIONS, NOT ON PRELUDES, and that
+	// difference is load-bearing rather than pedantic. The morph's class exists
+	// ONLY while the morph is in flight, so its prelude appears nowhere but the
+	// wrapper and a prelude count is exact for it. The sky's class is on a
+	// resting element that also has to be LAID OUT — `.skpane` is a 0fr grid
+	// row outside the wrapper, which is the clip-reveal's box and not motion —
+	// so counting its prelude would red the structural rule the reveal needs.
+	// What must never escape is a TRANSITION.
+	skyTransitions := func(css string) int {
+		n := 0
+		for _, rule := range benchCSSRules(css) {
+			if strings.Contains(rule[0], ".skygrow") {
+				n += len(benchTransitionDecls(rule[1]))
+			}
+		}
+		return n
+	}
+	if outside, inside := skyTransitions(code), skyTransitions(motion); outside != inside {
+		t.Errorf("%d of the sky's %d transition declarations sit OUTSIDE the "+
+			"reduced-motion wrapper; [SKY-4] makes reduced motion STRUCTURAL — no rule "+
+			"at all — and never a shortened duration or a `reduce` override",
+			outside-inside, outside)
+	}
+	// CLOSE FASTER THAN OPEN, STRUCTURALLY, in the register's own idiom: the
+	// base rules carry the CLOSE timing and the [open] state overrides it.
+	if !strings.Contains(motion, ".cal-bench .cal-block-host .skygrow[open] .skpane") {
+		t.Error("the sky declares a closed pane and no open one — the reveal has no " +
+			"endpoint and the register's 200ms open cannot run")
+	}
+	if !strings.Contains(motion, ".cal-bench .cal-block-host .skygrow[open] {") &&
+		!strings.Contains(motion, ".cal-bench .cal-block-host .skygrow[open],") {
+		t.Error("the sky declares no open-state duration override on its own box — the " +
+			"seal's sweep would then take exactly as long to leave as to arrive")
+	}
+
+	// AND THE SEQUENCING TOKENS SUM TO THE TWO TOTALS, which is the whole
+	// reason a third DURATION was not bought ([SKY-3] SIGNED). The mock split
+	// its open 150/50 and its close 24/136; those are phases of 200ms and
+	// 160ms, not new durations, and the only way that sentence can be trusted
+	// is arithmetically. CHANGING THIS ASSERTION IS A STOP-AND-FLAG, NOT A FIX.
+	phase := func(token string) int {
+		t.Helper()
+		m := regexp.MustCompile(token + `\s*:\s*(\d+)ms`).FindStringSubmatch(code)
+		if m == nil {
+			t.Fatalf("%s is not defined — the sky's sequencing is undeclared", token)
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			t.Fatalf("%s is not a whole number of ms", token)
+		}
+		return n
+	}
+	if got := phase("--sky-phase-box-open") + phase("--sky-phase-reveal-open"); got != open {
+		t.Errorf("the sky's open phases sum to %dms, but --disc-open is %dms — the four "+
+			"--sky-phase-* tokens are a SEQUENCING of the register's two totals and a "+
+			"sum that does not match is a third duration wearing a phase's name",
+			got, open)
+	}
+	if got := phase("--sky-phase-reveal-close") + phase("--sky-phase-box-close"); got != closeMS {
+		t.Errorf("the sky's close phases sum to %dms, but --disc-close is %dms", got, closeMS)
+	}
 }
 
-// TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut is NEW with
-// C-CALV4-EDITOR-R2b, and it is the carve-out's MONOPOLY guard ([ER-7] SIGNED).
+// TestBenchCSS_TheNamedCarveOutsAreExactlyTwo is the carve-outs' MONOPOLY guard
+// ([ER-7] SIGNED, C-CALV4-EDITOR-R2b).
+//
+// RENAMED BY C-CALV4-SKY (R2-5) UNDER THE OPERATOR'S SIGNATURE OF 2026-08-07
+// ([SKY-2]). It was TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut, and that name
+// stated a monopoly the product no longer has: THERE ARE NOW TWO NAMED
+// CARVE-OUTS — the editor morph and the sky band — AND A THIRD REQUIRES AN
+// OPERATOR SIGNATURE. Renaming it is not cosmetic debt-paying: a guard whose
+// name still claims a monopoly it lost is how the next hand learns the wrong
+// law, and this file's own history is that a comment outlived its rules for a
+// whole wave before anyone noticed.
 //
 // WHY A SEPARATE GUARD RATHER THAN ANOTHER CLAUSE. The clause above widens an
-// allowlist for rules that name `.edmorph`. That widening is only safe if the
-// class itself cannot spread — otherwise the next surface that wants a
+// allowlist for rules that name a carve-out class. That widening is only safe
+// if the class itself cannot spread — otherwise the next surface that wants a
 // geometric transition simply adds the class to its own rule and the allowlist
-// admits it silently. So the class is pinned as narrowly as the properties are.
+// admits it silently. So each class is pinned as narrowly as its properties are.
 //
 // THREE CLAIMS, and the third is the operator's signature made mechanical:
 //
-//  1. THE MORPH'S PROPERTIES APPEAR ONLY UNDER THE CLASS, and only in this
-//     sheet. inline-size and translate are transitioned nowhere else.
-//  2. THE CLASS APPEARS IN EXACTLY TWO FILES PRODUCT-WIDE — the sheet that
-//     declares the transition and the module that adds and removes it —
+//  1. EACH CARVE-OUT'S PROPERTIES APPEAR ONLY UNDER ITS OWN CLASS, and only in
+//     this sheet. `translate` is the morph's alone; grid-template-rows, gap,
+//     --seal-solid and --seal-fade are the sky's alone; `inline-size` is the
+//     one property both geometric surfaces need and is therefore owned by both
+//     and by nothing else.
+//
+//  2. EACH CLASS APPEARS IN EXACTLY THE FILES ITS CARVE-OUT NAMES —
 //     established by WALKING the repository's authored source, not by
 //     consulting a list of files someone already suspected. Test files are
 //     excluded by construction: a guard that counted its own assertions would
 //     be counting itself, and a test cannot add a transition to a shipped
 //     surface. See benchCarveOutMentions for exactly what is walked and what
 //     is skipped.
-//  3. NO RULE NAMING THE CLASS ALSO NAMES `.benchblock`, `.cal-block-host`,
-//     `.block`, `.lrow` or `[data-cell]`. That is bound 4 of the signature —
-//     "never touch the Block's interior" — checked rather than promised.
+//
+//  3. NO RULE NAMING A CARVE-OUT CLASS ALSO NAMES `.benchblock`,
+//     `.cal-block-host`, `.block`, `.lrow` or `[data-cell]` — bound 4 of the
+//     editor signature, "never touch the Block's interior", checked rather than
+//     promised — EXCEPT for the classes on the PER-CLASS EXEMPTION LIST.
+//
+//     THE FORBIDDEN-ANCESTOR LIST ITSELF IS NOT RELAXED BY A BYTE, and that is
+//     the whole point of the exemption's shape. The operator's 2026-08-07
+//     answer seated the sky's band INSIDE the Block, which clause 4 forbade;
+//     the answer was to amend clause 4 BY NAME for the sky's band and to add
+//     `.skygrow` to this list — never to remove an entry from the ancestor
+//     list, which would have repealed clause 4 for every surface in the
+//     product. EVERY OTHER RULE STAYS EXACTLY AS CONSTRAINED AS IT WAS.
+//     Widening the ancestor list is still the unrecoverable act it always was;
+//     a THIRD exemption is a NEW OPERATOR SIGNATURE, not a dev call.
+//
+// MUTATION-TESTED, C-CALV4-SKY STAGE 8, BOTH DIRECTIONS OF THE AMENDMENT, EACH
+// REVERTED:
+//
+//	· a sky rule authored OUTSIDE `.skygrow` (`.cal-bench .cal-block-host .skb`
+//	  carrying the same transition) turns claim 1 red — the exemption is keyed
+//	  to the CLASS, not to the surface, not to the sheet, not to the word
+//	  "sky".
+//	· REMOVING `.skygrow` from the per-class exemption turns the sky's own rule
+//	  red on claim 3 — which proves the exemption is load-bearing rather than
+//	  decorative. A guard that passed with the exemption deleted would not be
+//	  guarding anything.
 //
 // MUTATION-TESTED, STAGE 7, EACH REVERTED:
-//   · `el.classList.add("edmorph")` appended to
-//     internal/plugins/calendar/static/js/gm_panel.js — a REAL third consumer
-//     one directory away — turns claim 2 red, BY NAME, on this test. Against
-//     the eight-file allowlist this replaced, the whole calendar package stayed
-//     GREEN, which is why the walk exists.
-//   · `.cal-sched .edmorph { … }` appended to static/css/calendar-schedule.css
-//     turns claim 2 red on THIS test. Against the allowlist it went red only on
-//     that sheet's own scoping guard — the right answer for the wrong reason,
-//     which is indistinguishable from luck.
-//   · `.cal-block-host` added to the morph's prelude turns claim 3 red.
-func TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut(t *testing.T) {
+//
+//	· `el.classList.add("edmorph")` appended to
+//	  internal/plugins/calendar/static/js/gm_panel.js — a REAL third consumer
+//	  one directory away — turns claim 2 red, BY NAME, on this test. Against
+//	  the eight-file allowlist this replaced, the whole calendar package stayed
+//	  GREEN, which is why the walk exists.
+//	· `.cal-sched .edmorph { … }` appended to static/css/calendar-schedule.css
+//	  turns claim 2 red on THIS test. Against the allowlist it went red only on
+//	  that sheet's own scoping guard — the right answer for the wrong reason,
+//	  which is indistinguishable from luck.
+//	· `.cal-block-host` added to the morph's prelude turns claim 3 red.
+func TestBenchCSS_TheNamedCarveOutsAreExactlyTwo(t *testing.T) {
+	// THE TWO NAMED CARVE-OUTS, AS DATA — so the claims below iterate a list
+	// rather than hard-coding one class, and so adding a third is visibly an
+	// EDIT TO A SIGNED REGISTER rather than one more `strings.Contains`.
+	type carveOutSpec struct {
+		class string // the CSS class, with its dot
+		bare  string // the bare token, as the repository walk sees it
+		props []string
+		files map[string]bool
+		// interiorExempt is the PER-CLASS EXEMPTION on claim 3, and it is the
+		// only thing the operator's 2026-08-07 answer added. The
+		// forbidden-ancestor list itself is untouched.
+		interiorExempt bool
+	}
+	carveOuts := []carveOutSpec{{
+		class: ".edmorph", bare: "edmorph",
+		props: []string{"inline-size", "translate"},
+		files: map[string]bool{
+			"static/css/calendar-bench.css":                           true,
+			"internal/plugins/calendar/static/js/calendar_daycard.js": true,
+		},
+	}, {
+		// THE SKY BAND. Its class rides the <details> the widget renders and
+		// the sheet that styles it — TWO files, and no module, because the
+		// whole surface is a native disclosure with NO JAVASCRIPT AT ALL.
+		class: ".skygrow", bare: "skygrow",
+		props: []string{"inline-size", "grid-template-rows", "gap", "--seal-solid", "--seal-fade"},
+		files: map[string]bool{
+			"static/css/calendar-bench.css":               true,
+			"internal/widgets/calendar_block/block.templ": true,
+		},
+		interiorExempt: true,
+	}}
+
 	const carveOut = ".edmorph"
 	const bare = "edmorph"
 	css := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
 
-	// (1) the two morph-only properties, only under the class, only here.
-	for _, rule := range benchCSSRules(css) {
-		if strings.Contains(rule[0], carveOut) {
-			continue
+	// (1) each carve-out's properties, only under a class that owns them, only
+	// here. `inline-size` is owned by BOTH geometric surfaces and by nothing
+	// else, so the check is "some owner names it", never "this one does".
+	owners := map[string][]string{}
+	for _, c := range carveOuts {
+		for _, p := range c.props {
+			owners[p] = append(owners[p], c.class)
 		}
+	}
+	for _, rule := range benchCSSRules(css) {
 		for _, decl := range benchTransitionDecls(rule[1]) {
 			for _, prop := range decl {
-				if prop == "inline-size" || prop == "translate" {
-					t.Errorf("`%s` transitions %q without naming the carve-out class — "+
-						"the geometric properties are the MORPH's and a second surface "+
-						"taking them is a second signature nobody signed", rule[0], prop)
+				classes, owned := owners[prop]
+				if !owned {
+					continue
+				}
+				named := false
+				for _, cls := range classes {
+					if strings.Contains(rule[0], cls) {
+						named = true
+					}
+				}
+				if !named {
+					t.Errorf("`%s` transitions %q without naming %v — the geometric "+
+						"properties belong to the NAMED carve-outs and a third surface "+
+						"taking one is a third signature nobody signed", rule[0], prop, classes)
 				}
 			}
 		}
@@ -1445,46 +1732,208 @@ func TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut(t *testing.T) {
 	// _templ.go generations are skipped because they are not authored here; the
 	// test files that assert ABOUT the carve-out are skipped for the obvious
 	// reason that they must name it to check it.
-	found := map[string]bool{}
-	for _, path := range benchCarveOutMentions(t, bare) {
-		found[path] = true
-	}
-	if len(found) == 0 {
-		t.Fatal("the repository walk found no mention of the carve-out class at all — " +
-			"the walk is not reading the tree, and every claim below would pass vacuously")
-	}
-	want := map[string]bool{
-		"static/css/calendar-bench.css": true,
-		"internal/plugins/calendar/static/js/calendar_daycard.js": true,
-	}
-	for path := range found {
-		if !want[path] {
-			t.Errorf("%s names %q — the carve-out lives in exactly two places: the sheet "+
-				"that declares the transition and the module that adds and removes the "+
-				"class. A third is a second consumer of a signature that names ONE "+
-				"transition, card→editor and back", path, bare)
+	for _, c := range carveOuts {
+		found := map[string]bool{}
+		for _, path := range benchCarveOutMentions(t, c.bare) {
+			found[path] = true
 		}
-	}
-	for path := range want {
-		if !found[path] {
-			t.Errorf("%s no longer names %q — the morph is the operator's signed ask and "+
-				"the reason this slice exists in the shape it does", path, bare)
+		if len(found) == 0 {
+			t.Fatalf("the repository walk found no mention of %q at all — the walk is "+
+				"not reading the tree, and every claim here would pass vacuously", c.bare)
+		}
+		for path := range found {
+			if !c.files[path] {
+				t.Errorf("%s names %q — that carve-out lives in exactly %d places, and a "+
+					"further one is a second consumer of a signature that names ONE "+
+					"surface", path, c.bare, len(c.files))
+			}
+		}
+		for path := range c.files {
+			if !found[path] {
+				t.Errorf("%s no longer names %q — each carve-out is an operator's signed "+
+					"ask and the reason its slice exists in the shape it does", path, c.bare)
+			}
 		}
 	}
 
-	// (3) BOUND 4, MECHANICALLY: the morph reads the CARD's rect and nothing
+	// (3) BOUND 4, MECHANICALLY: a carve-out reads its OWN box and nothing
 	// else, and no rule of it reaches into the Block.
-	for _, rule := range benchCSSRules(css) {
-		if !strings.Contains(rule[0], carveOut) {
+	//
+	// THE PER-CLASS EXEMPTION, AND WHY IT IS SHAPED LIKE THIS. The sky's band
+	// seats INSIDE the Block by the operator's own 2026-08-07 answer, so its
+	// rules necessarily name `.cal-block-host`. The answer was to exempt THAT
+	// CLASS by name — never to remove an entry from the list below, which would
+	// have repealed clause 4 for every surface in the product at once. The list
+	// is therefore byte-identical to what it was before the amendment, and it
+	// is written here rather than in the loop so a reader can see that it is.
+	forbiddenAncestors := []string{".benchblock", ".cal-block-host", ".block", ".lrow", "[data-cell]"}
+	for _, c := range carveOuts {
+		if c.interiorExempt {
 			continue
 		}
-		for _, inside := range []string{".benchblock", ".cal-block-host", ".block", ".lrow", "[data-cell]"} {
-			if strings.Contains(rule[0], inside) {
-				t.Errorf("`%s` names the carve-out AND %q — the signature's last clause is "+
-					"\"never touch the Block's interior\", and a morph that selected into "+
-					"it would be animating the one subtree this whole arc is fenced around",
-					rule[0], inside)
+		for _, rule := range benchCSSRules(css) {
+			if !strings.Contains(rule[0], c.class) {
+				continue
 			}
+			for _, inside := range forbiddenAncestors {
+				if strings.Contains(rule[0], inside) {
+					t.Errorf("`%s` names the carve-out %q AND %q — the signature's last "+
+						"clause is \"never touch the Block's interior\", and a carve-out "+
+						"that selected into it would be animating the one subtree this "+
+						"whole arc is fenced around. Only `.skygrow` is exempt, and only "+
+						"because the operator amended clause 4 by name on 2026-08-07",
+						rule[0], c.class, inside)
+				}
+			}
+		}
+	}
+	_ = carveOut
+	_ = bare
+}
+
+// TestBenchCSS_TheSkyCarveOutIsPinned is the SKY BAND's own guard — C-CALV4-SKY
+// slice R2-5, [SKY-3] SIGNED — written to the same three-claim shape as the
+// monopoly guard above and asserting the things that guard cannot.
+//
+// WHY IT IS SEPARATE FROM THE MONOPOLY GUARD RATHER THAN A CLAUSE INSIDE IT.
+// The monopoly guard answers "can this class spread?"; this one answers "is the
+// sky's carve-out still the exact seven properties, two totals and one
+// construction the operator signed?" Those are different questions with
+// different failure modes, and folding the second into the first would give one
+// test two reasons to be red — which is how a guard gets nudged until green.
+//
+// THREE CLAIMS:
+//
+//  1. THE PROPERTIES ARE THE SIGNED SEVEN AND THERE IS NO EIGHTH, and every one
+//     of them is transitioned only under `.skygrow`. `transform` is refused
+//     everywhere on this surface, INCLUDING `scale` — which is named on its own
+//     because "no transform" is the sentence people read past.
+//  2. THE CLASS IS THE MARKUP'S AND THE SHEET'S, established by the same
+//     repository walk the monopoly guard uses. There is NO third file, and in
+//     particular no JS module: the whole surface is a native <details>, and a
+//     script would be DELETED anyway inside an HTMX-swapped fragment.
+//  3. THE CONSTRUCTION IS [SKY-4]'s: no second `no-preference` wrapper, no
+//     `prefers-reduced-motion: reduce` block, and no `!important` anywhere in
+//     the sky's rules. The mock reaches the same OUTCOME by the exact inverse
+//     construction and it does not port.
+//
+// MUTATION-TESTED IN ALL THREE DIRECTIONS, C-CALV4-SKY STAGE 8, EACH REVERTED:
+//
+//	· adding `transform: scale(1.02)` under `.skygrow[open]` reds claim 1
+//	· adding `.skygrow` to a third authored file reds claim 2
+//	· adding a `@media (prefers-reduced-motion: reduce)` block reds claim 3
+//	  (and TestBenchCSS_NoMotionAtAll's wrapper count fatals beside it, which
+//	  is the belt to this braces)
+func TestBenchCSS_TheSkyCarveOutIsPinned(t *testing.T) {
+	const skyClass = ".skygrow"
+	const skyBare = "skygrow"
+	raw := benchCSS(t)
+	css := benchCommentRe.ReplaceAllString(raw, " ")
+
+	// (1) THE SEVEN, AND NO EIGHTH.
+	//
+	// It is asserted as a SET EQUALITY rather than as a subset check, because a
+	// property quietly DISAPPEARING is as much a defect as one arriving: the
+	// discs no longer growing, or the mask no longer sweeping, is the carve-out
+	// the operator signed silently ceasing to exist while every other test
+	// stays green.
+	want := map[string]bool{
+		"grid-template-rows": true, "opacity": true, "inline-size": true,
+		"block-size": true, "gap": true, "--seal-solid": true, "--seal-fade": true,
+	}
+	got := map[string]bool{}
+	for _, rule := range benchCSSRules(css) {
+		if !strings.Contains(rule[0], skyClass) {
+			continue
+		}
+		for _, decl := range benchTransitionDecls(rule[1]) {
+			for _, prop := range decl {
+				got[prop] = true
+			}
+		}
+	}
+	if len(got) == 0 {
+		t.Fatal("the sky transitions nothing at all — the carve-out the operator " +
+			"amended clause 4 to admit has stopped existing, and every claim below " +
+			"would pass vacuously")
+	}
+	for prop := range got {
+		if !want[prop] {
+			t.Errorf("the sky transitions %q, which is not one of the signed seven "+
+				"(grid-template-rows · opacity · inline-size · block-size · gap · "+
+				"--seal-solid · --seal-fade) — [SKY-3] names seven and no eighth", prop)
+		}
+	}
+	for prop := range want {
+		if !got[prop] {
+			t.Errorf("the sky no longer transitions %q — the signed seven are a LIST, "+
+				"and one going missing is the carve-out shrinking without a signature", prop)
+		}
+	}
+	// `transform` is refused, and `scale` is named on its own.
+	for _, rule := range benchCSSRules(css) {
+		if !strings.Contains(rule[0], skyClass) {
+			continue
+		}
+		// benchTransformRe, not a substring: `text-transform` is TYPOGRAPHY and
+		// the season word and every lane label are uppercase by design. A
+		// blanket substring ban would be red on day one and would then be
+		// "fixed" by deleting the ban, which is the failure mode this guard is
+		// meant to be immune to.
+		if benchTransformRe.MatchString(rule[1]) {
+			t.Errorf("`%s` declares `transform` — it is refused on this surface exactly "+
+				"as it is under the morph, and the caret is a content swap rather than "+
+				"a rotation ([SKY-12])", rule[0])
+		}
+		if strings.Contains(rule[1], "scale(") {
+			t.Errorf("`%s` declares a `scale()` — [SKY-3] refuses transform INCLUDING "+
+				"scale, and scale is named on its own because \"no transform\" is the "+
+				"sentence people read past", rule[0])
+		}
+	}
+
+	// (2) TWO FILES, WALKED. The sheet that declares the transition and the
+	// template that renders the class. No module: there is no JS in the Block's
+	// package and there structurally cannot be.
+	found := map[string]bool{}
+	for _, path := range benchCarveOutMentions(t, skyBare) {
+		found[path] = true
+	}
+	wantFiles := map[string]bool{
+		"static/css/calendar-bench.css":               true,
+		"internal/widgets/calendar_block/block.templ": true,
+	}
+	if len(found) == 0 {
+		t.Fatal("the repository walk found no mention of the sky's class at all")
+	}
+	for path := range found {
+		if !wantFiles[path] {
+			t.Errorf("%s names %q — the sky's carve-out lives in exactly two places, and "+
+				"a third would be a second surface borrowing a signature that names ONE "+
+				"band, on ONE Block, on ONE surface", path, skyBare)
+		}
+	}
+	for path := range wantFiles {
+		if !found[path] {
+			t.Errorf("%s no longer names %q — one half of the pair went missing, and a "+
+				"sheet with no markup or markup with no sheet is the #568 gap", path, skyBare)
+		}
+	}
+
+	// (3) THE CONSTRUCTION IS STRUCTURAL ([SKY-4]). Read from the RAW sheet,
+	// comments and all, because a `!important` inside a comment is still a
+	// sentence someone will copy.
+	if strings.Contains(css, "prefers-reduced-motion: reduce") ||
+		strings.Contains(css, "prefers-reduced-motion:reduce") {
+		t.Error("the sheet carries a `prefers-reduced-motion: reduce` block — the mock's " +
+			"reduce-and-override construction is a MOCK convenience for its own " +
+			"data-motion switch and does not port; reduced motion here is the ABSENCE " +
+			"of a rule, which is why there is exactly one no-preference wrapper")
+	}
+	for _, rule := range benchCSSRules(css) {
+		if strings.Contains(rule[0], skyClass) && strings.Contains(rule[1], "!important") {
+			t.Errorf("`%s` uses !important — [SKY-4] forbids it anywhere in this slice, "+
+				"because an override is precisely what reduced motion must NOT be", rule[0])
 		}
 	}
 }
@@ -1496,13 +1945,13 @@ func TestBenchCSS_TheEditorMorphIsTheOnlyCarveOut(t *testing.T) {
 // in — `static/`, `internal/`, `cmd/` and `tools/` — over `.css`, `.js`, `.mjs`,
 // `.templ` and `.go`. WHAT IT SKIPS, and why each skip is safe:
 //
-//   · `node_modules`, `vendor`, `.git`, `dist`, `bin`, `tmp` — not authored here.
-//   · `*_templ.go` — GENERATED from a `.templ` that the walk already reads, so a
-//     class in one is a class in the other and counting both would report two
-//     files for one authoring decision.
-//   · `*_test.go` and `test/js/*.test.mjs` — a test that ASSERTS about the
-//     carve-out must name it. Excluding assertions from a monopoly count is not
-//     a loophole: a test file cannot add a transition to a shipped surface.
+//	· `node_modules`, `vendor`, `.git`, `dist`, `bin`, `tmp` — not authored here.
+//	· `*_templ.go` — GENERATED from a `.templ` that the walk already reads, so a
+//	  class in one is a class in the other and counting both would report two
+//	  files for one authoring decision.
+//	· `*_test.go` and `test/js/*.test.mjs` — a test that ASSERTS about the
+//	  carve-out must name it. Excluding assertions from a monopoly count is not
+//	  a loophole: a test file cannot add a transition to a shipped surface.
 //
 // The point of a walk over a list is that it finds the file nobody thought of.
 // That is the whole difference between this and the eight-name allowlist it
@@ -1745,19 +2194,35 @@ func benchCSSDurationMS(css, token string) (int, bool) {
 // app's layered CSS, so a bare `.badge` rule in here would silently restyle the
 // whole product — which is exactly the class of bug the Block's sheet carries
 // the same warning about.
+//
+// It reads the sheet BY BRACE, not by line — the same DC2-SCOPEGUARD-LINEFORM
+// fix-forward daycard_test.go already took, applied here to the last line-form
+// scanner left in the repo. The line-form version only inspected lines ENDING
+// in `{`, and never split a comma list, so it examined 113 of this sheet's 180
+// rules and 113 of its 190 comma-list members: a one-liner `.badge { … }` and a
+// `.badge,` member of a multi-selector prelude were both invisible to it.
+// Measured, every one of the 67 unexamined rules was correctly scoped, which is
+// precisely why the hole would have stayed invisible until it wasn't.
 func TestBenchCSS_EverySelectorIsScoped(t *testing.T) {
-	code := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
-	for _, line := range strings.Split(code, "\n") {
-		l := strings.TrimSpace(line)
-		if l == "" || !strings.HasSuffix(l, "{") || strings.HasPrefix(l, "@") || strings.HasPrefix(l, "}") {
-			continue
-		}
-		sel := strings.TrimSpace(strings.TrimSuffix(l, "{"))
-		if sel == "" {
-			continue
-		}
-		if !strings.Contains(sel, ".cal-bench") {
-			t.Errorf("unscoped selector in calendar-bench.css: %q", sel)
+	sels := cssSelectors(benchCommentRe.ReplaceAllString(benchCSS(t), " "))
+	if len(sels) < 150 {
+		t.Fatalf("only %d selectors found; the parser stopped reading the sheet", len(sels))
+	}
+	for _, sel := range sels {
+		// A prelude is a comma-separated LIST; each member carries the scope on
+		// its own, so the list has to be split before it is judged.
+		for _, part := range strings.Split(sel, ",") {
+			p := strings.TrimSpace(part)
+			if p == "" {
+				continue
+			}
+			// Contains, not HasPrefix. The sheet's dark-mode rules are written
+			// `.dark .cal-bench …` — legitimately scoped, and a HasPrefix form
+			// would redden both of them today. The scope root just has to be
+			// somewhere in the compound.
+			if !strings.Contains(p, ".cal-bench") {
+				t.Errorf("unscoped selector in calendar-bench.css: %q (in prelude %q)", p, sel)
+			}
 		}
 	}
 }
@@ -1798,8 +2263,67 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 		// setting and the register would have one consumer fewer than its own
 		// comment claims.
 		".cal-bench .cal-daycard .dcbox", ".cal-bench .cal-daycard.dcopen .dcbox",
+		// THE BLOCK THEATER's reveal (C-CALV4-THEATER, R2-3). theater.templ
+		// mounts the scaffold and calendar_theater.js toggles .tbopen on its
+		// .tbox; without these two rules the theater would appear instantly at
+		// every motion setting while calendar-theater.css — which is FORBIDDEN
+		// to declare a transition — stayed green and said nothing. That is the
+		// #568 gap with the register's monopoly on top of it, which is why the
+		// pin is here rather than in the satellite sheet's own guard.
+		".cal-bench.cal-theater .tbox", ".cal-bench.cal-theater .tbox.tbopen",
 		// The §8 two-column RSVP treatment.
 		".cal-bench .rsvp .mtable",
+		// THE SKY HEADER (C-CALV4-SKY, R2-5). block.templ names all of these
+		// and this sheet is the ONLY place they are defined — the band seats in
+		// the Block but its CSS is the Bench's ([SKY-2]), so a tidying hand in
+		// calendar-block.css cannot see that anything depends on them. That is
+		// the #568 gap with an extra package boundary in the way, which is why
+		// the pin is long rather than token.
+		".cal-bench .cal-block-host .skygrow",
+		".cal-bench .cal-block-host .skygrow::before",
+		".cal-bench .cal-block-host .skygrow > summary.skyhdr",
+		".cal-bench .cal-block-host .skygrow .skdiscs",
+		".cal-bench .cal-block-host .skygrow .skb",
+		".cal-bench .cal-block-host .skygrow .sksp",
+		".cal-bench .cal-block-host .skygrow .sktime",
+		".cal-bench .cal-block-host .skygrow .skseason",
+		".cal-bench .cal-block-host .skygrow .skcaret",
+		".cal-bench .cal-block-host .skygrow .skpane",
+		".cal-bench .cal-block-host .skygrow .skpane-in",
+		".cal-bench .cal-block-host .skygrow .skpane-pad",
+		".cal-bench .cal-block-host .skygrow .skhead",
+		".cal-bench .cal-block-host .skygrow .sktabs",
+		".cal-bench .cal-block-host .skygrow .skypick",
+		".cal-bench .cal-block-host .skygrow .skybtn",
+		".cal-bench .cal-block-host .skygrow .skypane-t",
+		".cal-bench .cal-block-host .skygrow .skyrow",
+		// THE FOUR ALIGNED COLUMNS OF THE SIGNED TONIGHT ROW. Added in the
+		// C-CALV4-SKY fix round: the first pass shipped a two-item flex and the
+		// stills show four columns, so these three are as load-bearing as the
+		// name column already was. `.nx` is DECLARED here and switched on at C1
+		// — the base rule is the seal's `display:none`.
+		".cal-bench .cal-block-host .skygrow .skyrow .ph",
+		".cal-bench .cal-block-host .skygrow .skyrow .il",
+		".cal-bench .cal-block-host .skygrow .skyrow .nx",
+		".cal-bench .cal-block-host .skygrow .skynote",
+		// The sub-head's tight position under the bold head. Without it the
+		// muted line inherits the footnote's 8px and reads as a third block
+		// rather than as part of the header stack.
+		".cal-bench .cal-block-host .skygrow .skhead + .skynote",
+		".cal-bench .cal-block-host .skygrow .skylanes",
+		".cal-bench .cal-block-host .skygrow .skylane",
+		// The nameplate's hairline goes so the two read as ONE HEADER STACK —
+		// the stills' own words, and the thing a reader would restore first if
+		// nothing said it was deliberate.
+		".cal-bench .cal-block-host .block:has(.skygrow) .np",
+		// The C1/C3 density switch, on the Block's EXISTING boundary. A fifth
+		// breakpoint number is a STOP-AND-FLAG, so the number is pinned here.
+		"@container cal-block (min-width: 481px)",
+		// The seal's two registered lengths. Unregistered, the mask JUMPS
+		// instead of sweeping, and a jump at 0ms is the pop the carve-out
+		// exists to avoid.
+		"@property --seal-solid",
+		"@property --seal-fade",
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("calendar-bench.css does not define %q", want)
@@ -2031,8 +2555,92 @@ func benchShotPage(s benchShot, css, body string) string {
 		css +
 		`</style></head><body><div class="shot-wrap">` +
 		`<h1>` + s.title + `</h1><p class="shot-cap">` + s.caption + `</p>` +
-		`<div class="cal-bench">` + body + `</div>` +
+		`<div class="cal-bench"><div class="` + benchShotSurfaceClass + `" data-bench-surface>` +
+		body +
+		`</div></div>` +
 		`</div></body></html>`
+}
+
+// ── C-CALV4-MOBILE [MOB-10] — THE CAMERA WAS POINTED AT A PAGE PRODUCTION
+//
+//	DOES NOT RENDER ────────────────────────────────────────────────────────
+//
+// benchShotPage wrapped benchSurface(...) in `<div class="cal-bench">` and
+// stopped there. bench.templ emits an INNER `<div class="bsurf"
+// data-bench-surface>` (bench.templ ~:100), and every ≤640 reading-order rule
+// [BR2-4] signed is written `.cal-bench .bsurf > .phead|.sechead|.stack`
+// (calendar-bench.css ~:1539-1545). With the inner wrapper missing those
+// selectors matched NOTHING, so every phone shot this rig ever took — 03, 04,
+// 10, 11 and 22, the entire phone evidence set — showed the ribbon above the
+// calendars while the product shows the calendars first.
+//
+// THE PRODUCT WAS RIGHT AND THE CAMERA WAS WRONG, and that is why a 41px
+// Ledger reached a live build: the only pictures anyone had of the phone Bench
+// were pictures of a different layout. No acceptance row in the MOBILE slice
+// may be gated on an artefact taken before this line landed.
+//
+// benchShotSurfaceClass is a named constant rather than a literal so
+// TestBenchShotPage_StandsInTheProductsOwnSurface can pin the camera's wrapper
+// against the sheet's own selector prefix instead of against a copy of it.
+const benchShotSurfaceClass = "bsurf"
+
+// benchOrderDeclRe matches a flex `order:` declaration and NOT `border:`,
+// `scroll-behavior` or any other word ending in "order".
+var benchOrderDeclRe = regexp.MustCompile(`(^|[^-\w])order\s*:\s*-?\d`)
+
+// TestBenchShotPage_StandsInTheProductsOwnSurface derives the ancestor chain
+// the ≤640 reading-order rules require FROM THE SHEET and asserts the shot rig
+// builds that chain. It does not compare against a copy of the class name: a
+// rename of `.bsurf` in bench.templ + calendar-bench.css must red this test
+// rather than silently pass while the camera drifts again.
+//
+// RED WITHOUT THE FIX: with benchShotPage emitting only `<div class="cal-bench">`
+// the derived chain `.cal-bench .bsurf` has no `bsurf` to find and the run
+// fails naming the missing wrapper.
+func TestBenchShotPage_StandsInTheProductsOwnSurface(t *testing.T) {
+	code := benchCommentRe.ReplaceAllString(benchCSS(t), " ")
+
+	// Every ordering rule the sheet ships, by its own selector. The sheet
+	// carries three separate `@media (max-width: 640px)` blocks, so this reads
+	// the whole file rather than the first one it finds.
+	var chains []string
+	for _, r := range benchCSSRules(code) {
+		if !benchOrderDeclRe.MatchString(r[1]) {
+			continue
+		}
+		sel := strings.TrimSpace(r[0])
+		cut := strings.Index(sel, ">")
+		if cut < 0 {
+			continue
+		}
+		chains = append(chains, strings.TrimSpace(sel[:cut]))
+	}
+	if len(chains) == 0 {
+		t.Fatal("no `order:` rule found in the ≤640 block — [BR2-4] ships three of them, " +
+			"so either the reading order was retired or this test is reading the wrong block")
+	}
+
+	page := benchShotPage(
+		benchShot{title: "t", caption: "c", w: 390, h: 800, host: 358},
+		"", `<div class="stack"></div>`)
+
+	for _, chain := range chains {
+		// ".cal-bench .bsurf" → ["cal-bench", "bsurf"], in order.
+		at := 0
+		for _, part := range strings.Fields(chain) {
+			cls := strings.TrimPrefix(part, ".")
+			needle := `class="` + cls + `"`
+			i := strings.Index(page[at:], needle)
+			if i < 0 {
+				t.Fatalf("the shot rig does not build %q: no %s at or after offset %d.\n"+
+					"[MOB-10]: with the chain broken every ≤640 ordering rule matches nothing "+
+					"and every phone artefact this rig produces is of a layout production does "+
+					"not render — which is how a 41px Ledger reached a live build.",
+					chain, needle, at)
+			}
+			at += i + len(needle)
+		}
+	}
 }
 
 // benchFindChromium locates a headless Chromium the same way the Block's

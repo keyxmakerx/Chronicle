@@ -66,6 +66,14 @@ jobs:
         # join so it doesn't fail-self.
         run: ./tools/check-no-instance-hostname.sh
 
+      - name: Plugin isolation guard self-tests (R4-S26-A)
+        # The guard sat red for nine commits during sweep R4 because nothing
+        # ran it and nothing tested it. These self-tests build throwaway repos
+        # and prove the guard still bites — in particular that the
+        # const_registry_files allowance covers declarations only and not the
+        # call sites in the same file. Hermetic: needs no repo history.
+        run: ./tools/test-plugin-isolation.sh
+
       - name: Plugin isolation guard (M-B2.1 extended)
         # Per C-MODULARITY-PRELAUNCH-QUICKWINS + cordinator/decisions/2026-05-21-core-tenets.md §T-B2.
         # Diff-scoped FAIL: catches NEW plugin-name string literals introduced
@@ -129,6 +137,21 @@ jobs:
         # means the rule can fire. Sweep of the survivors: C-HTMX-SCRIPT-SWEEP.
         run: ./tools/check-page-scripts.sh
 
+      - name: Dead widget-mount ratchet
+        # boot.js binds a `data-widget="name"` mount to whatever
+        # Chronicle.register('name', …) put in its registry, and RETURNS
+        # SILENTLY when the name is absent. Nothing lazy-loads the file — no
+        # script injection, no dynamic import, no bundler. So a widget whose JS
+        # is in no <script src> anywhere is a permanently empty div, with an
+        # empty console and a page that looks finished. That is how `aliases`,
+        # `inventory` and `transaction_log` shipped fully built and permanently
+        # blank on entity pages (C-SWEEP-R3).
+        #
+        # Whole-tree ratchet against tools/widget-mount-allowlist.txt, which may
+        # only shrink. Needs no git history. Every run self-tests first, so "OK"
+        # means the rule can fire.
+        run: ./tools/check-widget-mounts.sh
+
       - name: Test
         # Includes M-B2.2 cross-plugin import guard (TestPluginImportGuard in
         # internal/wire/plugin_import_guard_test.go): fails on any NEW
@@ -170,6 +193,146 @@ jobs:
         # checks out all three repos exercises it automatically.
         continue-on-error: true
         run: ./tools/check-decision-citations.sh
+
+  # --- Fresh-database migration replay ---
+  # C-SWEEP-R4 (data/fvtt-fresh-db-rename). Until this job existed, CI never
+  # migrated an EMPTY database anywhere: the restore drill loads a dump of an
+  # already-migrated one, and every other integration test assumes
+  # `make migrate-up` already ran. So foundry_vtt's migration 001 — which
+  # RENAMEs a table the deleted foundry_modules plugin used to create — failed
+  # on its first statement on every brand-new self-hosted install, permanently
+  # disabling the Foundry integration, and the whole suite stayed green.
+  #
+  # A separate job rather than a service on "Build & Test" deliberately: the
+  # replay needs a database, the main job must keep running with none, and
+  # coupling them would let a DB hiccup redden the entire build.
+  freshdb:
+    name: Fresh-DB Migration Replay
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        # Matches the version docker-compose.yml pins for the dev database, so
+        # a migration that only fails on a different server version cannot slip
+        # through here and land on operators.
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: chronicle
+          MARIADB_DATABASE: chronicle
+          MARIADB_USER: chronicle
+          MARIADB_PASSWORD: chronicle
+        ports:
+          - 3306:3306
+        # The scratch schemas the replay creates need CREATE/DROP DATABASE, so
+        # it connects as root; the health check gates the job on readiness.
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+
+      - name: Generate templ files
+        run: templ generate
+
+      - name: Fresh-database migration replay
+        # NOT `-short`: these tests skip under it by design, which is exactly
+        # how this class of bug survived. If no server answers they SKIP, so
+        # the explicit reachability assertion below is what makes a silent skip
+        # impossible — a job that reports success having tested nothing is the
+        # failure mode this whole job exists to end.
+        env:
+          CHRONICLE_TEST_DB_DSN: root:chronicle@tcp(127.0.0.1:3306)/
+        run: |
+          go test ./cmd/server/ -v -run 'TestFreshDatabase_|TestUpgradeDatabase_' \
+            2>&1 | tee replay.log
+          go test ./internal/database/ -v -run 'TestPluginMigration_' \
+            2>&1 | tee -a replay.log
+          for want in TestFreshDatabase_EveryPluginSchemaApplies \
+                      TestUpgradeDatabase_FoundryConsolidationStillRuns \
+                      TestPluginMigration_ResumesInsteadOfCrashLooping \
+                      TestPluginMigration_PreflightRefusesBeforeApplyingAnything \
+                      TestPluginMigration_IgnoresProgressRecordedForDifferentSQL; do
+            grep -q -- "--- PASS: $want" replay.log || {
+              echo "::error::$want did not PASS — it was skipped or never ran."
+              echo "This job exists because a skipped fresh-DB replay is why"
+              echo "every new self-hosted install shipped with a dead plugin."
+              exit 1
+            }
+          done
+
+  # --- Real-browser probes ---
+  # C-SWEEP-R4 (guards/probes-never-run-in-ci). The probes are the ONLY tests
+  # in the repo that look at the RENDERED result — they drive a headless
+  # Chromium over a built page and read geometry out of the live layout. Every
+  # other test asserts on the strings we emitted, which cannot tell you whether
+  # a container query resolved, a shelf collided with the ledger, a card
+  # anchored to its day, or the phone breakpoint swapped the assembly.
+  #
+  # Not one of them had ever run here. They all begin
+  # `if testing.Short() { t.Skip }`, and "Build & Test" above runs
+  # `go test ./... -v -short`; they then skip again with no browser, and a
+  # `go test` SKIP is reported inside an `ok` package line. A rendering
+  # regression could land on main with a completely green build — proven by
+  # changing the Shelf scroller's max-height in static/css/calendar-block.css
+  # and watching `-short` stay green while the probe catches it.
+  #
+  # A separate job because it needs a browser and a CSS toolchain that the main
+  # job must not have to install, and because its runtime is dominated by the
+  # browser rather than by Go. BROWSER_PROBES_REQUIRED=1 makes a missing
+  # Chromium fatal HERE specifically: a runner whose browser install broke must
+  # redden the build, not quietly measure nothing. Locally the same script
+  # names what it could not run and exits clean.
+  probes:
+    name: Browser Probes
+    runs-on: ubuntu-latest
+    env:
+      # The layout the probes' Chromium finders glob for.
+      PLAYWRIGHT_BROWSERS_PATH: /opt/pw-browsers
+      BROWSER_PROBES_REQUIRED: '1'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1001
+
+      - name: Generate templ files
+        run: templ generate
+
+      - name: Install Chromium
+        # --with-deps pulls the shared libraries a headless Chromium needs on a
+        # bare ubuntu-latest image; without them the binary exists and every
+        # probe dies on launch instead of skipping, which the guard reports as
+        # a failure rather than an absence — correctly.
+        run: npx --yes playwright@1.49.1 install --with-deps chromium
+
+      - name: Install Tailwind CLI
+        # TestProbe_MobileBreakpointSwapInRealBrowser measures a breakpoint that
+        # only exists in the BUILT stylesheet, so it needs the CLI on top of the
+        # browser. Tracked as its own dependency by the guard so a missing
+        # Tailwind cannot take the browser-only probes down with it.
+        run: npm install --no-save --no-audit --no-fund tailwindcss@3.4.17
+
+      - name: Drive the browser probes
+        # Runs them WITHOUT -short and then requires a `--- PASS:` line from
+        # each probe by name. A probe that skipped, failed, was renamed or was
+        # deleted fails this job — the coverage cannot evaporate quietly.
+        run: ./tools/check-browser-probes.sh
 
   # --- Lint ---
   lint:

@@ -43,6 +43,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 )
 
 // TokenVerifier is the narrow contract APIHandler needs from the
@@ -85,12 +86,23 @@ type apiCalendarSnapshot struct {
 
 // apiDate is the request and response body shape for
 // PUT /calendar/date. Echoed on success.
+//
+// YEAR IS A POINTER AND THE OTHERS ARE NOT, ON PURPOSE. Month and day are
+// already guarded by the `< 1` check in PutDate, so an absent one is refused
+// as 0. Year had no such floor — 0 and negative years are LEGITIMATE on a
+// fantasy calendar (BuildWorldStateSeed's header and the weather-on-date bounds
+// check both say so) — which meant a body that simply omitted `year` decoded to
+// 0 and moved the campaign to year 0 with a 200. There is no value-based rule
+// that can separate "the caller means year 0" from "the caller said nothing",
+// so the wire has to carry the difference. Live for the Foundry module, whose
+// push sites send `year: date.year`: an `undefined` from a calendar adapter is
+// dropped by JSON.stringify and arrives as an absent key.
 type apiDate struct {
-	Year   int `json:"year"`
-	Month  int `json:"month"`
-	Day    int `json:"day"`
-	Hour   int `json:"hour"`
-	Minute int `json:"minute"`
+	Year   *int `json:"year"`
+	Month  int  `json:"month"`
+	Day    int  `json:"day"`
+	Hour   int  `json:"hour"`
+	Minute int  `json:"minute"`
 }
 
 // apiEvent is the response shape for event GETs / POSTs / PUTs.
@@ -371,6 +383,13 @@ func (h *APIHandler) PutDate(c echo.Context) error {
 	if err != nil {
 		return h.respondError(c, err)
 	}
+	if req.Year == nil {
+		// Absent is not zero. Before this check an omitted year silently moved
+		// the world to year 0 — a GM's campaign date lost to a key that was
+		// never sent. Year 0 itself is still settable; send it explicitly.
+		return h.respondError(c, APIErrValidation(
+			"year is required — send it explicitly (year 0 is a valid year; omitting it is not)"))
+	}
 	if req.Month < 1 || req.Day < 1 {
 		return h.respondError(c, APIErrValidation("month and day must be 1-indexed (>= 1)"))
 	}
@@ -384,7 +403,7 @@ func (h *APIHandler) PutDate(c echo.Context) error {
 		Name:             cal.Name,
 		Description:      cal.Description,
 		EpochName:        cal.EpochName,
-		CurrentYear:      req.Year,
+		CurrentYear:      *req.Year,
 		CurrentMonth:     req.Month,
 		CurrentDay:       req.Day,
 		CurrentHour:      req.Hour,
@@ -527,15 +546,24 @@ func (h *APIHandler) UpdateEvent(c echo.Context) error {
 	if err != nil {
 		return h.respondError(c, err)
 	}
-	descCopy := body.Description
+	// The public wire body carries six keys. Everything it does NOT carry is
+	// left ABSENT, which now preserves (sweep R4) — it used to be a write.
+	// Two of those absences were live data loss on the Foundry sync path:
+	// entity_id, which the service cleared on nil, and is_recurring, which
+	// bound false and dropped the event's recurrence config. Neither is
+	// expressible on this wire, so neither should ever have been written.
+	//
+	// AllDay stays an EXPLICIT true: these are day-resolution module notes by
+	// construction, and the service's "explicit all-day blanks the clock"
+	// rule is documented behaviour this sweep does not move.
 	if err := h.svc.UpdateEvent(c.Request().Context(), eventID, UpdateEventInput{
-		Name:        body.Name,
-		Description: &descCopy,
-		Year:        body.Year,
-		Month:       body.Month,
-		Day:         body.Day,
-		Visibility:  storageVis,
-		AllDay:      true,
+		Name:        patch.Of(body.Name),
+		Description: patch.Of(body.Description),
+		Year:        patch.Of(body.Year),
+		Month:       patch.Of(body.Month),
+		Day:         patch.Of(body.Day),
+		Visibility:  patch.Of(storageVis),
+		AllDay:      patch.Of(true),
 	}); err != nil {
 		if isAppErrorType(err, "validation_error") {
 			return h.respondError(c, APIErrValidation(err.Error()))
@@ -662,7 +690,7 @@ func (h *APIHandler) CreateCalendar(c echo.Context) error {
 	// boundary instead of re-implementing it at the API layer.
 	result := buildImportResultFromAPI(&req)
 
-	if aErr := h.svc.ApplyImport(ctx, cal.ID, result); aErr != nil {
+	if _, aErr := h.svc.ApplyImport(ctx, cal.ID, result); aErr != nil {
 		// Rollback: delete the half-imported calendar so the operator
 		// doesn't end up with a zombie row that GetCalendar would then
 		// reject as a 409 conflict on the next attempt.

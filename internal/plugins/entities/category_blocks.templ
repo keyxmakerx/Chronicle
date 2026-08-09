@@ -305,8 +305,10 @@ templ catCalendarPreview(cc *campaigns.CampaignContext, config map[string]any) {
 			<h2 class="text-sm font-semibold text-fg-secondary uppercase tracking-wider">
 				<i class="fa-solid fa-calendar-days mr-1.5"></i>Upcoming Events
 			</h2>
+			// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED): the Bench, not the shell.
+			// Cross-plugin href edit only — no new import (§12's guard).
 			<a
-				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/calendar/v2", cc.Campaign.ID)) }
+				href={ templ.SafeURL(fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID)) }
 				class="text-xs text-accent hover:underline"
 			>
 				View calendar

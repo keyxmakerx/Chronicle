@@ -1,0 +1,203 @@
+// theater.templ — C-CALV4-THEATER (slice R2-3). The scaffold and the opener.
+//
+// The producer half — the seed, the copy, the re-namespace and the two ids —
+// is theater.go, and its header carries the reasoning. This file is the markup
+// and the three placement constraints [TH-14] composes.
+
+package calendar
+
+import (
+	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
+	calblock "github.com/keyxmakerx/chronicle/internal/widgets/calendar_block"
+)
+
+// theaterOpener is the `Expand` control ([TH-9] SIGNED).
+//
+// A REAL <button>, BESIDE THE EXISTING ANCHOR, NOT INSTEAD OF IT. The embed's
+// header already carries `Open full calendar`; re-pointing that anchor is
+// R2-4's (the V2 sunset) and this slice does not touch it.
+//
+// LABELLED `Expand`, NOT `Full calendar`, AND THAT IS A RULING RATHER THAN A
+// PREFERENCE. Full tier is `@container cal-block (min-width: 900px)` and NO
+// phone viewport reaches it, so on a phone the theater is a std-tier Block with
+// its zones STACKED. That is real depth, deliberately opened — but "full" would
+// be false on a 390px screen and the affordance must not promise a tier the
+// width cannot deliver.
+//
+// EMITTED FOR EVERY VIEWER WHO RECEIVES THE EMBED, INCLUDING ANONYMOUS. The
+// theater shows what the viewer's own projection already contains and nothing
+// else, so there is no permission difference here for a role-varying control to
+// signal — and a control present for a GM and absent for a Player would INVENT
+// one, which is the inverse of the arc's absence rule and just as misleading.
+//
+// NOT SUPPRESSED BELOW A WIDTH ([TH-7] SIGNED), twice over: the theater is a
+// genuine feature on a phone, and a server-rendered attribute cannot vary by
+// viewport (ADR-048 §13 — the bound this arc has now lost to twice).
+//
+// GUARD B3: the control's data attribute ends in `-pick` and reuses none of
+// STATE_MARKERS' six nouns.
+templ theaterOpener(scaffoldID string) {
+	<button
+		type="button"
+		class="text-xs text-accent hover:underline"
+		data-theater-pick={ scaffoldID }
+		aria-haspopup="dialog"
+		aria-expanded="false"
+		aria-controls={ scaffoldID }
+		title="Expand this calendar over the page"
+	>
+		<i class="fa-solid fa-up-right-and-down-left-from-center mr-1" aria-hidden="true"></i>Expand
+	</button>
+}
+
+// theaterScaffold is the theater itself: a top-layer `<dialog>` carrying a
+// SECOND render of the Block this page already built.
+//
+// ── WHY A <dialog>, AND WHY IT IS A NAMED DIVERGENCE ([TH-1] SIGNED) ────────
+//
+// The day card chose `popover="manual"` and said why: `auto` closes
+// synchronously through the UA and the hiding `beforetoggle` is not cancelable,
+// so the register's 160ms close would be skipped on every path but the button.
+// That reasoning is sound and it applies here — but a 1180px overlay with a
+// month grid, a Ledger and a Shelf in it has dozens of focusable descendants
+// and a whole entity page behind them, and modal scale brings three
+// requirements a 340px card did not have: focus CONTAINMENT, INERTNESS of what
+// is behind, and a CANCELABLE escape. `<dialog>.showModal()` gives the first
+// two natively, and its `cancel` event IS cancelable — so the register survives
+// on every path INCLUDING the one the UA owns, which is strictly better than
+// the manual-popover workaround. The card stays exactly as it is; this is not a
+// retrofit of R2-2a and no file of its is opened.
+//
+// ── WHERE THIS SITS, AND WHY ([TH-14], RE-SIGNED 2026-08-08) ────────────────
+//
+// Three constraints compose here and all three bind at once.
+//
+//  1. OUTSIDE every `.cal-block-host`. `.cal-block-host .block` is
+//     `overflow: hidden` (calendar-block.css:503), so a box positioned inside
+//     the Block is CLIPPED — the same fact that rules out a page section and
+//     forces the top layer, and it does not stop being true because the
+//     element is later promoted. The scaffold is a SIBLING of the embed's
+//     Block mount, never a child of it.
+//
+//  2. INSIDE a `cal-bench` root — and here the dialog IS that root, carrying
+//     `cal-bench` as a SECOND SCOPE ROOT the way schedule.templ carries
+//     `class="cal-bench cal-schedule"`. TOP-LAYER PROMOTION DOES NOT CHANGE
+//     DOM ANCESTRY, so a `<dialog>` mounted outside `.cal-bench` would get no
+//     register at all; carrying the class on the element itself makes the
+//     scope independent of where the mount happens to land. bench.templ:104
+//     says this in the code's own words about the day card, and it is why that
+//     comment exists. The class name is a small lie — a theater on an entity
+//     page is not a Bench — and it is the same lie `/schedule` already tells;
+//     the product prefers it to a second disclosure register, which [DC-6]
+//     SIGNED calls laundering by name.
+//
+//  3. THE THIRD CONSTRAINT WAS `OUTSIDE ANY HTMX-SWAPPABLE REGION`, AND IT WAS
+//     REPLACED BY THE 2026-08-08 RE-SIGN. The original cited
+//     `widgetbindings.BindingAffordance` as the swappable region. That premise
+//     is REFUTED: `calendar_widget_type.go:152` wraps the ENTIRE output of
+//     EntityCalendarBlock in `widgetbindings.BlockHost`, and
+//     `internal/plugins/widgetbindings/picker.templ` targets THAT wrapper with
+//     `hx-swap="outerHTML"` on three live paths (bind, create, unbind). The
+//     swappable region is the whole component, one level ABOVE anything this
+//     file can emit, so NO position reachable from this slice satisfied the
+//     constraint as written. The build stopped there, correctly, and the block
+//     was wrong rather than the builder.
+//
+//     SO THE SCAFFOLD SITS INSIDE THE SWAPPABLE REGION, DELIBERATELY. The
+//     failure that constraint was written to prevent — an opener that outlives
+//     its scaffold, "opens once and then stops opening, with every guard
+//     green" — requires the two to be in DIFFERENT subtrees. Here they are in
+//     the SAME one: the swap replaces the whole component, so opener and
+//     scaffold die and are reborn together, and calendar_theater.js re-binds
+//     on `htmx:afterSettle` ([TH-12]) with an idempotent wiring guard. There
+//     is no state in which a live opener points at a dead scaffold.
+//
+//     THE ONE REAL RISK IS A DIALOG THAT IS OPEN WHEN ITS SUBTREE IS SWAPPED —
+//     removed from the DOM mid-modal, stranding the top layer. Narrow (while
+//     the theater is open the picker behind it is inert, so the swap must be
+//     driven from elsewhere) but real. ITS REQUIRED COUNTERPART is the
+//     module's `htmx:beforeSwap` listener, which closes the theater when the
+//     swap target contains it — pinned by a test that swaps the host with the
+//     theater open and asserts the dialog closed and focus returned.
+//
+//     Both alternatives stay available and neither is this slice's: emitting
+//     the scaffold outside `BlockHost` is a `widgetbindings` restructure —
+//     another plugin's surface — and emitting it page-level (the day card's
+//     precedent) crosses into the entity page's own template. Moving it later
+//     RETIRES the `beforeSwap` guard rather than fighting it.
+//
+// ── THE HAZARD THE NEXT SLICE WILL BREAK ON (dispatch §12) ──────────────────
+//
+// THIS PAGE NOW CARRIES TWO BLOCKS FOR THE SAME CALENDAR, so `dayKey` produces
+// the SAME `data-day` value on both. Nothing consumes it on an entity page
+// today — the day card is Bench-only and this scaffold deliberately emits none
+// of its three markers — but a future host that mounts the card AND the theater
+// together MUST scope its queries to one Block. That is the single most likely
+// way a later slice breaks on this work.
+//
+// AND THE THREE MARKERS ARE BANNED HERE BY NAME ([TH-1]). `calendar_daycard.js`
+// rides the same body-script registry this module does, so it is ALREADY LOADED
+// on every entity page; it is dormant only because its `init()` requires both
+// `[data-cal-daycard]` and `[data-cal-daycard-payload]`, and its `cellFrom`
+// resolves a Block by `closest('[data-bench-block]')`. Emitting any one of the
+// three would wake the card on a page that then holds two Blocks with two
+// different Ledger states, silently re-opening the SIGNED STOP-AND-FLAG
+// C-CALV4-CARD-CROSSBLOCK-LEDGER on a surface it was never measured against.
+// Wiring the card into the theater is C-CALV4-THEATER-DAYCARD and is entered by
+// CHOICE, in its own slice, with its own geometry probe.
+//
+// ── THE SWITCHBOARD IS ABSENT, NOT HIDDEN ([TH-13]) ─────────────────────────
+//
+// The Block below renders with `HasSwitchboard=false` and an empty
+// `PersistURL`, both cleared on the COPY in theater.go, so the widget emits no
+// `[popover]`, no `⋯` invoker and no layer sheet at all. The EMBED keeps its
+// switchboard and remains the one place a viewer says "I want the Ledger
+// permanently".
+templ theaterScaffold(scaffoldID, headingID, title string, block calblock.BlockData) {
+	// The register's home. [TH-3] SIGNED: the theater carries `cal-bench` as a
+	// second scope root and the entity page links the Bench's sheet, because
+	// there is EXACTLY ONE disclosure register in the product and a second
+	// sheet with its own `--disc-*` is laundering. The theater's OWN sheet
+	// declares no transition, no @keyframes and no `--disc-*`; its two motion
+	// rules live BY NAME inside the one register section of calendar-bench.css,
+	// exactly as the day card's do.
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-bench.css") }/>
+	<link rel="stylesheet" href={ layouts.AssetURL("/static/css/calendar-theater.css") }/>
+	<dialog
+		id={ scaffoldID }
+		class="cal-bench cal-theater"
+		data-cal-theater
+		aria-modal="true"
+		aria-labelledby={ headingID }
+	>
+		// .tbox is the REVEAL's subject and it carries no clamp of its own.
+		// The register animates its `block-size`, and [TH-16] is explicit that
+		// a scroll container or a max-block-size placed HERE would make the
+		// reveal animate against a clamped box — the transition either does not
+		// run at all or runs to the wrong size, with every guard still green.
+		// The scroll container is the content region INSIDE it.
+		<div class="tbox" data-theater-box>
+			<div class="thead">
+				<h2 class="thd" id={ headingID }>{ title }</h2>
+				<button
+					type="button"
+					class="tclose"
+					data-theater-close
+					aria-label="Close"
+					title="Close"
+				>
+					<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+				</button>
+			</div>
+			// THE CONTENT REGION — the theater's scroll container ([TH-16]).
+			// Never `.cal-block-host`: that is the container-query container,
+			// and scrolling or clamping it is a tier hazard dressed as a layout
+			// choice. The header above sits OUTSIDE it, which is what keeps the
+			// close control reachable without scrolling at the 768px floor and
+			// on a phone.
+			<div class="tbody" data-theater-scroll>
+				@calblock.Block(block)
+			</div>
+		</div>
+	</dialog>
+}

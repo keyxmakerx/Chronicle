@@ -493,8 +493,10 @@ type timelineForCalendarAdapter struct {
 
 // ListTimelinesForCalendar returns the timelines bound to a calendar as the
 // calendar plugin's lightweight TimelineRef projection.
+// The (role, userID) pair is request-derived on every caller of this adapter,
+// so it becomes a RequestViewer — never a system one (C-AUTHZ-EMPTY-USERID).
 func (a *timelineForCalendarAdapter) ListTimelinesForCalendar(ctx context.Context, calendarID string, role int, userID string) ([]calendar.TimelineRef, error) {
-	tls, err := a.svc.ListTimelinesForCalendar(ctx, calendarID, role, userID)
+	tls, err := a.svc.ListTimelinesForCalendar(ctx, calendarID, permissions.RequestViewer(role, userID))
 	if err != nil {
 		return nil, err
 	}
@@ -2824,11 +2826,24 @@ func (a *App) RegisterRoutes() {
 	// when its mount is absent, and none of them carries a permission decision (the
 	// gate is, as it always was, the producer not rendering the editor DOM and the
 	// server not honouring the route).
+	//
+	// characters.js JOINED FOR THE SAME REASON, ONE SURFACE LATER
+	// (C-HTMX-SCRIPT-SWEEP). It was a `<script src>` at the top of
+	// entities/characters.templ's body, i.e. inside the same swapped region, so
+	// every cast card's "quick look" button wired on a direct load of
+	// /campaigns/:id/characters and silently did nothing when the page was
+	// reached through the sidebar — the cards are real links, so the page looked
+	// and behaved normally right up to the click. It has no ordering dependency
+	// on anything above it and, like the Bench drivers, returns immediately when
+	// its mount (`[data-cast-peek]`) is absent, which on this registry is every
+	// page but one.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_widget.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/cal_visibility.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_permissions.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_daycard.js",
+		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_theater.js",
+		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 	}
 
 	if a.PluginHealth.IsHealthy("calendar") {
@@ -3498,6 +3513,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetTimelineExporter(&timelineExportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionExporter(&sessionExportAdapter{svc: sessionsService})
 	exportSvc.SetMapExporter(&mapExportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
+	exportSvc.SetNoteExporter(&noteExportAdapter{svc: noteSvc})
 	exportSvc.SetAddonExporter(&addonExportAdapter{svc: addonService})
 	exportSvc.SetMediaExporter(&mediaExportAdapter{svc: mediaService})
 	exportSvc.SetMediaBundler(&mediaBundleAdapter{svc: mediaService})
@@ -3506,6 +3522,7 @@ func (a *App) RegisterRoutes() {
 	exportSvc.SetTimelineImporter(&timelineImportAdapter{svc: timelineSvc})
 	exportSvc.SetSessionImporter(&sessionImportAdapter{svc: sessionsService})
 	exportSvc.SetMapImporter(&mapImportAdapter{mapSvc: mapsService, drawingSvc: drawingService})
+	exportSvc.SetNoteImporter(&noteImportAdapter{svc: noteSvc})
 	exportSvc.SetAddonImporter(&addonImportAdapter{svc: addonService})
 	exportSvc.SetGroupExporter(&groupExportAdapter{svc: groupService})
 	exportSvc.SetGroupImporter(&groupImportAdapter{svc: groupService})

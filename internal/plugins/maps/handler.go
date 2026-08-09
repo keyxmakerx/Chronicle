@@ -9,6 +9,7 @@ import (
 
 	"github.com/keyxmakerx/chronicle/internal/apperror"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/patch"
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 )
 
@@ -342,32 +343,44 @@ func (h *Handler) UpdateMarkerAPI(c echo.Context) error {
 		return err
 	}
 
+	// PARTIAL update: absent preserves, explicit null clears, a present value
+	// replaces (sweep R4). The edit form and the drag-end PUT each send a
+	// subset, and before this every key they omitted was a WRITE — which is
+	// how a drag erased pin_category and per-player visibility_rules.
+	//
+	// foundry_id is deliberately NOT a member here. A browser form has no
+	// business setting or clearing a sync pairing key; absent-preserve is
+	// what stops the web edit NULLing it, and syncapi keeps the ability to
+	// clear one by sending an explicit null.
 	var req struct {
-		Name              string     `json:"name"`
-		Description       *string    `json:"description"`
-		X                 float64    `json:"x"`
-		Y                 float64    `json:"y"`
-		Icon              string     `json:"icon"`
-		Color             string     `json:"color"`
-		PinCategory       *string    `json:"pin_category"`
-		EntityID          *string    `json:"entity_id"`
-		Visibility        string     `json:"visibility"`
-		VisibilityRules   *string    `json:"visibility_rules"`
-		ExpectedUpdatedAt *time.Time `json:"expected_updated_at"`
+		Name              patch.Field[string]  `json:"name"`
+		Description       patch.Field[string]  `json:"description"`
+		X                 patch.Field[float64] `json:"x"`
+		Y                 patch.Field[float64] `json:"y"`
+		Icon              patch.Field[string]  `json:"icon"`
+		Color             patch.Field[string]  `json:"color"`
+		PinCategory       patch.Field[string]  `json:"pin_category"`
+		EntityID          patch.Field[string]  `json:"entity_id"`
+		Visibility        patch.Field[string]  `json:"visibility"`
+		VisibilityRules   patch.Field[string]  `json:"visibility_rules"`
+		ExpectedUpdatedAt *time.Time           `json:"expected_updated_at"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request")
 	}
 
 	// Only Owners can set dm_only visibility; Scribes default to 'everyone'.
+	// The downgrade applies only to a visibility the caller actually SENT.
 	visibility := req.Visibility
-	if visibility == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
-		visibility = "everyone"
+	if v, ok := req.Visibility.Get(); ok && v == "dm_only" && cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+		visibility = patch.Of("everyone")
 	}
-	// Only Owners can set per-player visibility rules.
-	var visRules *string
-	if cc.MemberRole >= campaigns.RoleOwner || cc.IsSiteAdmin {
-		visRules = req.VisibilityRules
+	// Only Owners can set per-player visibility rules. A non-Owner's request
+	// is dropped to ABSENT, not to null: refusing a write is not authority to
+	// erase the Owner's existing rules, which is what it used to do.
+	visRules := req.VisibilityRules
+	if cc.MemberRole < campaigns.RoleOwner && !cc.IsSiteAdmin {
+		visRules = patch.Absent[string]()
 	}
 
 	return h.svc.UpdateMarker(ctx, markerID, UpdateMarkerInput{

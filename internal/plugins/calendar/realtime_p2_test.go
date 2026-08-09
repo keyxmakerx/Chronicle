@@ -106,7 +106,7 @@ func TestRealTimeP2_ApplyImportGuardedOnRealTime(t *testing.T) {
 		getByIDFn:     func(_ context.Context, _ string) (*Calendar, error) { return rt, nil },
 		applyImportFn: func(_ context.Context, _ *Calendar, _ *ImportResult) error { applied = true; return nil },
 	}
-	err := rtServiceRepo(rtRepo, rtFixedClock).ApplyImport(context.Background(), "cal-rt", &ImportResult{})
+	_, err := rtServiceRepo(rtRepo, rtFixedClock).ApplyImport(context.Background(), "cal-rt", &ImportResult{})
 	if !isAppErrorType(err, "validation_error") {
 		t.Fatalf("ApplyImport on real-time calendar: err = %v, want validation", err)
 	}
@@ -122,7 +122,7 @@ func TestRealTimeP2_ApplyImportGuardedOnRealTime(t *testing.T) {
 		getByIDFn:     func(_ context.Context, _ string) (*Calendar, error) { return manual, nil },
 		applyImportFn: func(_ context.Context, _ *Calendar, _ *ImportResult) error { manualApplied = true; return nil },
 	}
-	if err := rtServiceRepo(manualRepo, rtFixedClock).ApplyImport(context.Background(), "cal-rt", &ImportResult{}); err != nil {
+	if _, err := rtServiceRepo(manualRepo, rtFixedClock).ApplyImport(context.Background(), "cal-rt", &ImportResult{}); err != nil {
 		t.Fatalf("manual reallife import should succeed: %v", err)
 	}
 	if !manualApplied {

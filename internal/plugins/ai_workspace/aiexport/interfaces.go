@@ -3,6 +3,7 @@ package aiexport
 import (
 	"context"
 
+	"github.com/keyxmakerx/chronicle/internal/permissions"
 	"github.com/keyxmakerx/chronicle/internal/plugins/calendar"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/plugins/sessions"
@@ -57,8 +58,12 @@ type SessionLister interface {
 // returns timeline.EventLink — the join+overlay row that handles both
 // calendar-linked events and standalone timeline events uniformly.
 type TimelineLister interface {
-	ListTimelines(ctx context.Context, campaignID string, role int, userID string) ([]timeline.Timeline, error)
-	ListTimelineEvents(ctx context.Context, timelineID string, role int, userID string) ([]timeline.EventLink, error)
+	// Both take a permissions.Viewer: "no user" and "trusted system caller"
+	// stopped sharing the empty-string user id (C-AUTHZ-EMPTY-USERID, ADR-049).
+	// The export builds a RequestViewer from the operator's real id — it is not
+	// a system caller and must not become one.
+	ListTimelines(ctx context.Context, campaignID string, v permissions.Viewer) ([]timeline.Timeline, error)
+	ListTimelineEvents(ctx context.Context, timelineID string, v permissions.Viewer) ([]timeline.EventLink, error)
 }
 
 // RelationLister exposes a single entity's relations. Bidirectional

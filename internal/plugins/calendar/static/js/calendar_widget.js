@@ -72,7 +72,8 @@
             '<i class="fa-solid fa-xmark"></i>' +
           '</button>' +
         '</div>' +
-        '<a href="/campaigns/' + encodeURIComponent(this.campaignId) + '/calendar/v2" ' +
+        // C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED): the Bench, not the V2 shell.
+        '<a href="/campaigns/' + encodeURIComponent(this.campaignId) + '/apps/calendar" ' +
            'class="text-xs text-accent hover:underline">' +
           '<i class="fa-solid fa-arrow-right mr-1"></i>Edit in Calendar' +
         '</a>';

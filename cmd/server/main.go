@@ -106,6 +106,20 @@ func main() {
 		slog.Error("foundry_vtt pre-migration check failed", slog.Any("error", err))
 		os.Exit(1)
 	}
+	// C-SWEEP-R4 (data/fvtt-fresh-db-rename): the check above only guards the
+	// UPGRADE path. On a FRESH database migration 001's `RENAME TABLE
+	// foundry_module_campaign_tokens ...` has no source table — the plugin that
+	// created it was deleted — so it failed on its first statement and left the
+	// Foundry integration permanently disabled on every new self-hosted
+	// install. The reconciler records 001 as applied on any database where it
+	// can never succeed, so the runner reaches migration 002's idempotent DDL.
+	// A failure here is fatal for the same reason the check above is: it means
+	// the schema state cannot even be read, so the migration decision would be
+	// a guess.
+	if err := foundry_vtt.ReconcileConsolidationState(context.Background(), db); err != nil {
+		slog.Error("foundry_vtt consolidation reconcile failed", slog.Any("error", err))
+		os.Exit(1)
+	}
 	pluginHealth := database.NewPluginHealthRegistry()
 	pluginSchemas := registeredPlugins()
 	pluginResults := database.RunPluginMigrations(db, pluginSchemas)
@@ -261,6 +275,12 @@ func registeredPlugins() []database.PluginSchema {
 		// startup if foundry_module_versions has rows — protecting
 		// against accidental data destruction if a manual upload
 		// happened between the C-FMC-5b deploy and C-FMC-5c deploy.
-		{Slug: "foundry_vtt", MigrationsFS: mustSub(foundry_vtt.MigrationsFS, database.PluginMigrationsSubdir)},
+		//
+		// The Slug is taken from the plugin's own constant rather than a
+		// literal because foundry_vtt.ReconcileConsolidationState writes a
+		// plugin_schema_versions row under it (C-SWEEP-R4): if the two ever
+		// drifted, the reconciler's row would be invisible to the runner and
+		// the fresh-install crash would come straight back.
+		{Slug: foundry_vtt.PluginHealthKey, MigrationsFS: mustSub(foundry_vtt.MigrationsFS, database.PluginMigrationsSubdir)},
 	}
 }

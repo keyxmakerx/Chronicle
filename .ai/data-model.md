@@ -463,7 +463,7 @@ User --< CampaignMember >-- Campaign
 | end_hour | INT | NULL | Event end hour (added 000030) |
 | end_minute | INT | NULL | Event end minute (added 000030) |
 | is_recurring | TINYINT(1) | NOT NULL, DEFAULT 0 | |
-| recurrence_type | VARCHAR(20) | NULL | yearly, monthly |
+| recurrence_type | VARCHAR(20) | NULL | weekly, biweekly, monthly, custom, yearly — or NULL/'' for none. **Exactly this set**; the handlers reject anything else with a 400 (C-CALV4-GAMEREADY §6). This row read "yearly, monthly" for months while the engine expanded neither `yearly` nor the two week types it did support, so treat the `Recurrence*` constant block in `internal/plugins/calendar/model.go` as the source of truth and this row as its mirror. |
 | visibility | VARCHAR(20) | NOT NULL, DEFAULT 'everyone' | |
 | visibility_rules | JSON | NULL | Fine-grained visibility rules (added 000037) |
 | category | VARCHAR(50) | NULL | holiday, battle, quest, etc. (added 000028) |

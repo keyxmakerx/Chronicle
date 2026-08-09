@@ -38,7 +38,6 @@
 1 internal/plugins/calendar/schedule.templ
 1 internal/plugins/calendar/subresource_v2.templ
 1 internal/plugins/designlab/design_lab.templ
-1 internal/plugins/entities/characters.templ
 3 internal/plugins/maps/maps.templ
 1 internal/plugins/sessions/availability.templ
 1 internal/plugins/timeline/timeline.templ

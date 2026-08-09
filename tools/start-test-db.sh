@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Start a local MariaDB for integration tests WITHOUT Docker.
+#
+# WHY THIS EXISTS. Every integration test in this repo skips when no database
+# answers, and the skip message says "run `make docker-up`". In sandboxes and CI
+# images that have no Docker daemon, that advice is a dead end, and the project
+# concluded — in `.ai/status.md`, in several sweep reports, and in dozens of
+# "proven against fakes, not the database" caveats — that those environments
+# simply cannot test against a real database.
+#
+# THAT CONCLUSION WAS WRONG, and it cost real coverage. The absent thing is the
+# Docker *daemon*; the MariaDB *server binary* is installed
+# (/usr/sbin/mariadbd). It can be run directly against a scratch datadir. The
+# only non-obvious part is that mariadbd refuses to start as root unless you
+# say --user=root, and that a Unix socket path has a ~107 character limit, which
+# a long scratch path silently exceeds. Both are handled below.
+#
+# Measured 2026-08-08: MariaDB 10.11.14 starts this way in ~3s and round-trips
+# DDL and DML normally.
+#
+# USAGE
+#   tools/start-test-db.sh          # start (idempotent); prints the DSN to export
+#   tools/start-test-db.sh --stop   # stop it and leave the datadir
+#   tools/start-test-db.sh --clean  # stop it and delete the datadir
+#
+# The tests discover it through CHRONICLE_TEST_DB_DSN, which this script prints.
+# It listens on 13306, NOT 3306, so it can never collide with a real dev server
+# or be mistaken for one.
+
+set -euo pipefail
+
+PORT="${CHRONICLE_TEST_DB_PORT:-13306}"
+DATADIR="${CHRONICLE_TEST_DB_DATADIR:-/tmp/chronicle-testdb/data}"
+# Short by construction: a socket path over ~107 chars fails with a confusing
+# truncated-path error rather than a length error.
+SOCKET="${CHRONICLE_TEST_DB_SOCKET:-/tmp/chronicle-testdb.sock}"
+PIDFILE="/tmp/chronicle-testdb.pid"
+ERRLOG="/tmp/chronicle-testdb.err"
+
+die() { echo "error: $*" >&2; exit 1; }
+
+running() { [ -S "${SOCKET}" ] && mysql --socket="${SOCKET}" -uroot -e "SELECT 1" >/dev/null 2>&1; }
+
+stop_server() {
+  if [ -f "${PIDFILE}" ]; then
+    local pid; pid="$(cat "${PIDFILE}" 2>/dev/null || true)"
+    [ -n "${pid}" ] && kill "${pid}" 2>/dev/null || true
+    for _ in $(seq 1 20); do running || break; sleep 0.5; done
+  fi
+  pkill -f "mariadbd .*${DATADIR}" 2>/dev/null || true
+  rm -f "${PIDFILE}"
+  echo "stopped"
+}
+
+case "${1:-start}" in
+  --stop) stop_server; exit 0 ;;
+  --clean) stop_server; rm -rf "${DATADIR}"; echo "datadir removed: ${DATADIR}"; exit 0 ;;
+  start|"") ;;
+  *) die "unknown argument: $1 (expected --stop, --clean, or nothing)" ;;
+esac
+
+command -v mariadbd >/dev/null 2>&1 || command -v /usr/sbin/mariadbd >/dev/null 2>&1 \
+  || die "mariadbd not installed — this script is for images that ship the server binary without a Docker daemon"
+MARIADBD="$(command -v mariadbd 2>/dev/null || echo /usr/sbin/mariadbd)"
+
+if running; then
+  echo "already running on socket ${SOCKET} (port ${PORT})"
+else
+  if [ ! -d "${DATADIR}/mysql" ]; then
+    echo "initializing datadir at ${DATADIR} ..."
+    mkdir -p "${DATADIR}"
+    mysql_install_db --datadir="${DATADIR}" --auth-root-authentication-method=normal >/dev/null 2>&1 \
+      || die "mysql_install_db failed"
+  fi
+
+  # --user=root is REQUIRED when running as root; without it mariadbd aborts with
+  # "Please consult the Knowledge Base to find out how to run mysqld as root!",
+  # which reads like a permissions problem and is really a missing flag.
+  RUN_AS=()
+  [ "$(id -u)" -eq 0 ] && RUN_AS=(--user=root)
+
+  # --skip-grant-tables keeps this a zero-credential scratch server. It is bound
+  # to loopback on a non-default port and holds nothing but disposable schemas.
+  nohup "${MARIADBD}" "${RUN_AS[@]}" \
+    --datadir="${DATADIR}" \
+    --socket="${SOCKET}" \
+    --port="${PORT}" \
+    --bind-address=127.0.0.1 \
+    --skip-grant-tables \
+    --pid-file="${PIDFILE}" \
+    >"${ERRLOG}" 2>&1 &
+
+  for _ in $(seq 1 40); do running && break; sleep 0.5; done
+  running || { tail -5 "${ERRLOG}" >&2; die "server did not come up — see ${ERRLOG}"; }
+  echo "started MariaDB $(mysql --socket="${SOCKET}" -uroot -sN -e 'SELECT VERSION()')"
+fi
+
+cat <<EOF
+
+  export CHRONICLE_TEST_DB_DSN='root@tcp(127.0.0.1:${PORT})/'
+
+Then: go test ./... -count=1        (integration tests stop skipping)
+      make test-int
+Stop:  tools/start-test-db.sh --stop
+EOF
