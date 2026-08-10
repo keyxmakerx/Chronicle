@@ -1946,6 +1946,30 @@
   flex: none;
 }
 .cal-bench .cal-block-host .skygrow .skb .ph {
+  /* THE DISC HAS TO GENERATE A BLOCK BOX OR IT PAINTS NOTHING, and this one
+     line is the difference between the signature move of the whole slice and a
+     coloured strip with no moons in it. `.ph` is an `<i>` — inline by default —
+     and an inline non-replaced box IGNORES inline-size/block-size outright, so
+     the two declarations below were dead and the disc laid out at 0×0. Its
+     `::before` (the half-fill) and `::after` (the terminator) are absolutely
+     positioned against that box, so the phase itself had a zero-size containing
+     block and drew nothing at any density.
+
+     WHY THE ALMANAC'S COPY OF THE SAME IDIOM WORKS AND THIS ONE DID NOT: in
+     `.phrow` the `.ph` is a FLEX ITEM and the flex container blockifies it for
+     free. Here `.skdiscs` is the flex container and `.skb` is its item, so the
+     `.ph` one level further down is an ordinary inline child of a block and
+     nothing blockifies it. Sizing it in this sheet without saying so was the
+     seam between calendar-block.css (which declares the idiom) and this file
+     (which sizes it).
+
+     Measured before/after at all three densities by
+     sky_disc_paint_probe_test.go: 0×0 → 13.0/40.0px (C1) and 11.0/32.0px (C3),
+     matching the wrapper sky_measure_probe_test.go already pinned, with the
+     half-fill and terminator painting and a third of the disc crossing the
+     horizon. NOT a motion property: it buys no eighth transition and [SKY-3]
+     is untouched by this line. */
+  display: block;
   inline-size: 100%;
   block-size: 100%;
 }
