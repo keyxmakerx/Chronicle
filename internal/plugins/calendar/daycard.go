@@ -265,6 +265,14 @@ func dayCardMembers(roster []BenchRosterMember, canRestrict bool) []dayCardMembe
 // host that never docked the zone, and a viewer who switched the layer off. A
 // link to a column that is not on the page is the exact class of dishonesty
 // this arc keeps killing, so the producer states the fact.
+//
+// IT IS THE NECESSARY HALF, NOT THE WHOLE CONDITION (calv4 fix R1, item 3). The
+// door additionally requires the Ledger to be STACKED BELOW the month rather
+// than docked beside it — a runtime rect, measured in the module
+// (ledgerIsStacked), because the layout turns on a CONTAINER query over the
+// Block's own width and the server does not know it. Docked, a day click has
+// already selected that day in the column: the door would click a checked radio,
+// scroll to something on screen, and close the card.
 type dayCardCalendar struct {
 	CalendarID   string            `json:"id"`
 	Slug         string            `json:"slug"`

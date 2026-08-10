@@ -166,7 +166,11 @@
   //
   // THE LEDGER IS NEVER OCCLUDED. The card's own `Open in the Ledger` door
   // points AT that column, so covering it would be the card contradicting
-  // itself. The LEDGER'S SETTLED RECT IS A HARD EXCLUSION ZONE for the desktop
+  // itself — and since calv4 fix R1 item 3 the exclusion is the WIDER of the two
+  // rules rather than the narrower: the door now renders only on a STACKED
+  // Ledger (see ledgerIsStacked), but a DOCKED Ledger is repainted by the same
+  // click that opened the card, so covering it would hide the answer the reader
+  // just asked for. Both layouts keep the hard exclusion, for the two reasons. The LEDGER'S SETTLED RECT IS A HARD EXCLUSION ZONE for the desktop
   // popover, whether that rect is a docked right-hand column or a full-width
   // band the narrow layout has STACKED BELOW THE GRID.
   //
@@ -949,8 +953,57 @@
     return chips;
   }
 
+  // ledgerIsStacked answers the ONE question the `Open in the Ledger` door
+  // depends on: is the Ledger BELOW the month, or BESIDE it?
+  //
+  // WHY THE DOOR NEEDS AN ANSWER AT ALL — calv4 fix R1, item 3. A day cell's
+  // real hit target is the stretched `.dsel` label (instrument.templ's dayPick),
+  // which is `for` that day's own `input.daypick`. So a click on a day ALREADY
+  // selects it in the Ledger, natively, before this module runs — measured:
+  // the pointer lands on `.dsel` and the radio comes back checked. With the
+  // Ledger DOCKED beside the month and fully on screen, the door then clicks a
+  // checked radio, scrolls to something already in view, and closes the card.
+  // Only the last is an effect, and "close this card" is not what the button
+  // says — while the card closes on outside-click, on Escape and on the next
+  // day click anyway.
+  //
+  // It is NOT redundant stacked. `.cal-block-host .body` is a flex COLUMN by
+  // default and only becomes a two-column grid at
+  // `@container cal-block (min-width: 900px)`; below that the Ledger is a
+  // full-width band under the month, and jumping to it is a real service. So
+  // the door is CONDITIONED rather than deleted, and rather than renamed:
+  // there is no honest name for a docked-Ledger button whose whole net effect
+  // is closing the card.
+  //
+  // IT IS A MEASUREMENT, NOT A BREAKPOINT. The 900px lives in a container
+  // query on the BLOCK's own width, which is not the viewport and is not
+  // readable from a media query here — and this module already measures the
+  // Ledger's rect for the occlusion dodge, so the fact is one it holds anyway.
+  // Restating the number in JavaScript is how the two drift.
+  //
+  // Pure, and exported, so daycard_ledger_door_probe_test.go can drive it
+  // without a browser and the browser probe can check the DOM agrees.
+  function ledgerIsStacked(month, ledger) {
+    if (!month || !ledger) return false;
+    // The 1px slack is a sub-pixel allowance, not a tolerance for "nearly
+    // below": docked, the two boxes SHARE a top edge and this is false by
+    // hundreds of pixels.
+    return ledger.top >= month.bottom - 1;
+  }
+
+  // ledgerStackedIn is the DOM half. It returns false when either box is
+  // missing, which is the safe answer for a door: absent, not asserted.
+  function ledgerStackedIn(host) {
+    if (!host || !host.querySelector) return false;
+    var month = host.querySelector('.inst');
+    var zone = host.querySelector('[data-zone="ledger"]');
+    if (!month || !zone) return false;
+    return ledgerIsStacked(month.getBoundingClientRect(), zone.getBoundingClientRect());
+  }
+
   if (typeof window !== 'undefined') {
     window.__calDayCard = {
+      ledgerIsStacked: ledgerIsStacked,
       writeTarget: writeTarget,
       indexPayload: indexPayload,
       indexMembers: indexMembers,
@@ -1230,14 +1283,25 @@
     // the payload rather than inferred from the DOM's absence — absence has two
     // causes (a host that never docked the zone, and a viewer who switched the
     // layer off) and a link to a column that is not on the page is a lie.
+    // THE PAYLOAD FACT IS NECESSARY AND NO LONGER SUFFICIENT: a docked Ledger
+    // that sits BESIDE the month is already showing the day this card is about,
+    // so the door is additionally conditioned on the stacked layout below.
     // IT NEVER TOUCHES THE `+ New event` BUTTON, WHICH IS THE PRODUCER'S. Only
     // the Ledger door is managed here, and it is inserted BEFORE whatever the
     // server rendered rather than replacing the foot — a module that cleared
     // this container would be deciding a role gate by omission.
-    function renderFoot(cal) {
+    // AND IT IS CONDITIONED ON THE STACKED LAYOUT — calv4 fix R1, item 3. With
+    // the Ledger docked BESIDE the month the door does nothing the day click
+    // did not already do except close the card: the stretched `.dsel` label has
+    // already checked the day's radio, and the column is already on screen. See
+    // ledgerIsStacked above for the whole argument and the measurement. `host`
+    // is passed in rather than read from `state`, because openCard sets
+    // `state.host` AFTER this runs.
+    function renderFoot(cal, host) {
       var existing = foot.querySelector('[data-dc-ledger]');
       if (existing) foot.removeChild(existing);
       if (!cal || !cal.ledgerDocked) return;
+      if (!ledgerStackedIn(host)) return;
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dc-door';
@@ -1308,7 +1372,7 @@
       head.textContent = headText(day);
       head.setAttribute('data-day', day.key);
       renderRows(day, cal);
-      renderFoot(cal);
+      renderFoot(cal, host);
 
       state.open = true;
       state.key = key;

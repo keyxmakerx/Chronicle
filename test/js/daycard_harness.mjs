@@ -102,14 +102,34 @@ export function buildBenchFixture(opts) {
       ledgerRow('harptos-5', '5', 'ev-3', 'Caravan due'),
     ]),
   ]);
-  // The docked column sits to the right of the grid, which is the geometry the
-  // card must never cover.
-  ledger.rect = { left: 900, top: 200, right: 1200, bottom: 800, width: 300, height: 600 };
+  // THE MONTH IS `.inst`, AND IT IS HERE BECAUSE THE DOOR DEPENDS ON IT.
+  // `Open in the Ledger` renders only when the Ledger is STACKED BELOW the
+  // month rather than docked beside it (calv4 fix R1, item 3 — docked, the day
+  // click has already selected the day in that column), and the module answers
+  // that from the two rects. The fixture therefore carries the Block's real
+  // shape: `.body > .inst` with the grid in it, and the Ledger as its sibling.
+  //
+  // `opts.stackedLedger` picks the layout. The DEFAULT is DOCKED, which is what
+  // every pre-existing placement assertion in this harness was written against
+  // — the Ledger's rect is byte-unchanged in that branch.
+  const inst = el('div', { class: 'inst' }, [
+    el('div', { class: 'grid' }, [cells[3], cells[4], cells[5]]),
+  ]);
+  if (opts.stackedLedger) {
+    // Below 900px of BLOCK width the body is a flex column: the month ends and
+    // the Ledger begins, full width.
+    inst.rect = { left: 0, top: 200, right: 820, bottom: 620, width: 820, height: 420 };
+    ledger.rect = { left: 0, top: 620, right: 820, bottom: 1000, width: 820, height: 380 };
+  } else {
+    // The docked column sits to the right of the grid, sharing its vertical
+    // band — which is also the geometry the card must never cover.
+    inst.rect = { left: 0, top: 200, right: 900, bottom: 800, width: 900, height: 600 };
+    ledger.rect = { left: 900, top: 200, right: 1200, bottom: 800, width: 300, height: 600 };
+  }
 
   const blockHost = el('div', { class: 'cal-block-host', 'data-cal-block': '' }, [
     el('div', { class: 'block' }, [
-      el('div', { class: 'grid' }, [cells[3], cells[4], cells[5]]),
-      ledger,
+      el('div', { class: 'body' }, [inst, ledger]),
     ]),
   ]);
 
