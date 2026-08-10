@@ -421,9 +421,16 @@ func mpMS(s string) float64 {
 		var v float64
 		switch {
 		case strings.HasSuffix(p, "ms"):
-			fmt.Sscanf(p, "%fms", &v)
+			// A component that does not parse stays 0 and therefore never
+			// becomes the maximum — which is the honest reading of "this list
+			// did not contain a duration I understand".
+			if _, err := fmt.Sscanf(p, "%fms", &v); err != nil {
+				v = 0
+			}
 		case strings.HasSuffix(p, "s"):
-			fmt.Sscanf(p, "%fs", &v)
+			if _, err := fmt.Sscanf(p, "%fs", &v); err != nil {
+				v = 0
+			}
 			v *= 1000
 		}
 		if v > max {
