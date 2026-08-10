@@ -1959,6 +1959,50 @@
      partway across and content packed left would fall off it. */
   justify-content: flex-end;
 }
+/* ── THE DISCS ARE WEATHER, NOT A CONTROL (C-CALV4-MOONS [MN-4], MN-G1) ────
+   The operator has corrected this three times: "The moons should be in the
+   skypane but it's like the sun, and not interactable." The band's opening is
+   THE BAND's affordance, not the moons' — the caret is the control and the
+   discs are the scenery it reports.
+
+   A <summary> is a click target over its entire box and over every descendant,
+   so while `.skdiscs` sits inside `summary.skyhdr` (block.templ:157) each moon
+   is a hit target that toggles the pane. `pointer-events: none` ON THE CLUSTER
+   ALONE DOES NOT FIX IT and was measured not to: with the cluster transparent
+   the hit test simply falls through to the summary underneath, which is still
+   the summary, and the click still toggles. So the summary yields the hit path
+   and hands it back to the three things that ARE the band's control surface —
+   the spacer (which is the band's whole empty middle at C1), the clock, the
+   season word and the caret.
+
+   WHY NOT MOVE THE CLUSTER OUT OF THE <summary> IN THE DOM, which is the
+   obvious fix: a non-summary child of <details> lives inside
+   `::details-content` and is HIDDEN WHILE THE BAND IS CLOSED, and closed is
+   the resting state the whole surface is designed around. The cluster would
+   vanish from the band. It cannot leave.
+
+   THE COST, STATED: a `title` tooltip needs a hover, and a box that is out of
+   the hit path is never hovered — so the per-moon tooltip on the BAND stops
+   appearing. The attributes stay in the markup (they cost nothing and a future
+   DOM fix restores them), and the same per-moon text is one caret-click away
+   in the pane's own Moons tab, which is where an operator who wants it goes.
+   A hoverable moon on a <summary> is a clickable moon; there is no third
+   state, and the operator asked for the moons to stop being pressable.
+
+   KEYBOARD IS UNTOUCHED. `pointer-events` is a hit-testing property and says
+   nothing about focus or activation: the summary is still focusable, still
+   announces `aria-expanded`, and still opens on Enter/Space. [SKY-16] holds.
+   Pinned both ways by sky_scenery_probe_test.go (MN-G1 and MN-G2 in one run,
+   at all three densities, on the Harptos preset). */
+.cal-bench .cal-block-host .skygrow > summary.skyhdr {
+  pointer-events: none;
+}
+.cal-bench .cal-block-host .skygrow > summary.skyhdr > .sksp,
+.cal-bench .cal-block-host .skygrow > summary.skyhdr > .sktime,
+.cal-bench .cal-block-host .skygrow > summary.skyhdr > .skseason,
+.cal-bench .cal-block-host .skygrow > summary.skyhdr > .skcaret {
+  pointer-events: auto;
+}
 .cal-bench .cal-block-host .skygrow > summary.skyhdr::-webkit-details-marker {
   display: none;
 }

@@ -1064,6 +1064,20 @@
    grid-column:2/-1 inline so it clears the week gutter. */
 .cal-block-host .interc-row { display: none }
 .cal-block-host .interc {
+  /* THE CONTAINING BLOCK, AND IT IS A ONE-WORD DEFECT FIX (C-CALV4-MOONS,
+     MN-G2). dayPick's stretched `LABEL.dsel` is `position: absolute; inset: 0`
+     and every DAY CELL positions it, because `.cell` is `position: relative`.
+     The intercalary day carries the SAME control and this box did not, so the
+     label's containing block resolved all the way out to the initial one and
+     it painted the WHOLE VIEWPORT: measured at 1504×1113px on the Harptos
+     preset at 1440, over the sky band's caret, the nameplate and the Ledger
+     alike. That is C-CALV4-SKY-REPAIR defect (d) — "the band could not be
+     clicked open at all, because a page-sized LABEL.dsel sat on top of it" —
+     still live, and still live specifically on the intercalary path, which is
+     why the default preset was the one that showed it.
+     Pinned by sky_scenery_probe_test.go (MN-G2, a hit-tested click at the
+     caret) and by TestCSS_TheIntercalaryDayPositionsItsOwnStretchedLabel. */
+  position: relative;
   border-top: 1.5px solid var(--rule-editorial);
   background: var(--surface-inset);
   min-height: 56px;
