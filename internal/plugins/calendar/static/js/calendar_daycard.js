@@ -1380,6 +1380,22 @@
       state.host = host;
       state.ord = day.ord;
 
+      // ONE PANEL AT A TIME, THE OTHER DIRECTION (MN-G13). Declining to open
+      // over the moon panel is only half the interlock: a panel opened on row 1
+      // and a card opened on row 3 would still be two panels. The card is the
+      // one arriving, so the card closes the other.
+      //
+      // IT ACTIVATES A SHIPPED CONTROL EXACTLY AS A POINTER WOULD — the same
+      // move, and the same argument, as the `Open in the Ledger` door two
+      // hundred lines up: `.click()` on the moon group's own explicit `none`
+      // radio changes checkedness, which is IDL state and not a content
+      // attribute, so the Block's serialised DOM is unchanged and
+      // daycard_block_immutability.test.mjs stays green. Writing `checked`
+      // ourselves and dispatching a synthetic change would be this module
+      // simulating the browser instead of using it.
+      var moonOff = host.querySelector('.moonpick[data-moon-pick="none"]');
+      if (moonOff && !moonOff.checked) moonOff.click();
+
       show();
       position(cell);
       // FORCED REFLOW, DELIBERATELY. The card was display:none a moment ago, so
@@ -2787,9 +2803,36 @@
     // double-bind — the QA2 class of bug event_grid.js carries per-node guards
     // for at :250, :403 and :520.
 
+    // ── ONE PANEL AT A TIME (C-CALV4-MOONS MN-G13, coordinated with
+    //    C-CALV4-EDITOR-MODALITY-SPAN) ────────────────────────────────────
+    //
+    // The day cell's moon disc cluster became a control in C-CALV4-MOONS: it is
+    // a <label> for a hidden radio, and pressing it folds the two-tab moon
+    // panel open at the row. That label is INSIDE the cell, so without this
+    // clause the same click would also open the day card, and the two would sit
+    // over each other disagreeing — the exact failure
+    // C-CALV4-EDITOR-MODALITY-SPAN exists because of, when the editor and the
+    // card were open together.
+    //
+    // IT IS A REFUSAL TO OPEN AND NOTHING ELSE. This module still inserts no
+    // node inside `.cal-block-host`, adds and removes no class there, and
+    // animates nothing there — daycard_block_immutability.test.mjs is untouched
+    // by it. `[data-cal-moons]` is the cluster's own hook and
+    // `[data-cal-moonpanel]` is the panel's; both are the Block's namespace and
+    // both are read, never written.
+    // TWO closest() CALLS RATHER THAN ONE COMMA-SEPARATED SELECTOR: the module
+    // is exercised against test/js/daycard_dom.mjs, a hand-written DOM whose
+    // selector parser handles compound selectors and not selector LISTS. A
+    // list here parses to nothing and the interlock silently stops holding —
+    // which is the failure mode this whole file is written to avoid.
+    var MOON_CLUSTER = '[data-cal-moons]';
+    var MOON_PANEL = '[data-cal-moonpanel]';
+
     function cellFrom(target) {
       if (!target || !target.closest) return null;
       if (target.closest('[data-cal-daycard]')) return null;
+      if (target.closest(MOON_CLUSTER)) return null;
+      if (target.closest(MOON_PANEL)) return null;
       var cell = target.closest('[data-day][data-day-ord]');
       if (!cell) return null;
       var host = cell.closest('[data-bench-block]');

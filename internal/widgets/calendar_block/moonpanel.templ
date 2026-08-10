@@ -1,0 +1,186 @@
+// moonpanel.templ — the panel the day cell's disc cluster opens
+// (C-CALV4-MOONS, [MN-3] SIGNED).
+//
+// THE OPERATOR'S WORDS: "clicking anywhere on this visual aid would bring you a
+// drop down of sorts for the moons detailed info, you had like a graph, and
+// another tab was like more details etc." Both tabs were fully drawn and only
+// the container was missing ([MN-7]) — `v4-moons-graph-only.png` for the graph
+// and `v4-sky-almanac-moons.png` for the details.
+//
+// THE INTERACTION CANON IS PRINTED ON BOTH RENDERS AND IT IS EXHAUSTIVE BY ITS
+// OWN WORDING: "Nothing on this page ever moves to a new place. Things change
+// colour when you point at them, one panel folds open over the rows beneath it,
+// and menus appear where you clicked — that is the whole list." This panel is
+// the second clause: it folds open OVER the rows beneath it, at the row whose
+// cluster was pressed, and it pushes nothing down.
+//
+// EXACTLY TWO TABS ([MN-3] bound). `Graph` and `Details`. NOT a third
+// `Tonight | Month | Moons` trio — two of those already exist, on the Shelf and
+// in the sky band's pane, and a third is count-3 repeating itself.
+//
+// NO COMPOSITE, ANYWHERE, AT ANY DENSITY (L19/L24, MN-G9). There is no summed
+// "how bright is tonight" row in either tab. Three independent attempts at one
+// disagreed about the same five nights, which is why it is dead rather than
+// deferred.
+//
+// THE GRAPH TAB IS CAPPED TO `Drawn` BODIES AND THE DETAILS TAB IS UNCAPPED
+// (MN-G10). That asymmetry is the whole reason the grid's ceiling of three is
+// legitimate: the graph says "+N more in the almanac", which names a
+// DESTINATION, and the destination is real because the register carries every
+// declared body. A ceiling with nowhere to go would be a truncation.
+//
+// NO EPITHET (MN-G11). §1.5 of the dispatch: the renders' "the great pale moon"
+// is mock fixture text, `calendar.Moon` has no such column, and `AlmanacMoon`
+// carries no field for it on purpose. The Details tab prints what can be
+// audited and nothing that cannot.
+//
+// ONE PANEL PER WEEK ROW, NOT ONE PER CELL, and that is a measured choice
+// rather than a convenience. Both tabs' contents are identical for every day of
+// the month — only the MARKED column differs — so a per-cell panel would render
+// the same 30-column graph thirty times: ~230 nodes × 30 cells = ~6,900 extra
+// nodes on one Block, and ~27,600 on the Bench's four. Per row it is ~800, and
+// the day that was actually clicked is named INSIDE the panel by the generated
+// moon ladder (helpers.go, moonLadderCSS) rather than by the panel's own
+// x-position. The panel is full-row width because that is the shape
+// `v4-moons-graph-only.png` draws: thirty columns need the width.
+//
+// NO JAVASCRIPT, which is not a preference but this package's law — boot.js:163
+// sets `htmx.config.allowScriptTags = false`, so a <script> inside an
+// HTMX-swapped fragment is deleted. The tabs are one radio group with
+// visually-hidden inputs and `for`-labels, the idiom the Shelf's Almanac and the
+// band's own trio already prove.
+
+package calendar_block
+
+// moonPanelControls holds the Block's THREE SHARED RADIOS, rendered once.
+//
+// `none` is the moon group's explicit off state and it starts CHECKED, so a
+// freshly rendered Block has no panel open. Its label is the panel's ✕ — a
+// radio cannot be un-checked by re-checking it, so without this option the
+// first press on a cluster would be irreversible (dayPickAll's own precedent,
+// and the same reason the Ledger head reserves its `✕ all` slot).
+//
+// The two tab radios are shared by every panel in the Block. Per-panel radios
+// would sit in one group across rows and leave every panel but the last-touched
+// one with no tab checked — an empty panel on open.
+templ moonPanelControls(d BlockData) {
+	if moonPanelReachable(d) {
+		<input
+			type="radio"
+			class="moonpick vhctl"
+			data-moon-pick={ moonPickNone }
+			name={ moonPickGroupName(d) }
+			id={ moonPickInputID(d, moonPickNone) }
+			checked
+			aria-label={ moonPanelCloseLabel() }
+		/>
+		<input
+			type="radio"
+			class="mptab vhctl"
+			data-mp-tab={ moonTabGraph }
+			name={ moonTabGroupName(d) }
+			id={ moonTabInputID(d, moonTabGraph) }
+			checked
+			aria-label="Moon graph"
+		/>
+		<input
+			type="radio"
+			class="mptab vhctl"
+			data-mp-tab={ moonTabDetails }
+			name={ moonTabGroupName(d) }
+			id={ moonTabInputID(d, moonTabDetails) }
+			aria-label="Moon details"
+		/>
+	}
+}
+
+// moonPanel is one week row's panel. It is ABSOLUTELY POSITIONED and therefore
+// costs the row, the grid and every cell exactly zero layout (MN-G5) — which is
+// also why it needs no second exception to the month grid's no-motion law: the
+// band's amendment exists because the band's opening displaces the month, and
+// nothing here displaces anything.
+templ moonPanel(d BlockData) {
+	<div class="mpan" data-cal-moonpanel>
+		<div class="mpin">
+			<div class="mphead">
+				<span class="mptabs">
+					<label class="mpbtn" data-mp-btn="graph" for={ moonTabInputID(d, moonTabGraph) }>Graph</label>
+					<label class="mpbtn" data-mp-btn="details" for={ moonTabInputID(d, moonTabDetails) }>Details</label>
+				</span>
+				<label class="mpx" for={ moonPickInputID(d, moonPickNone) }>
+					<span class="vh">{ moonPanelCloseLabel() }</span>
+				</label>
+			</div>
+			<div class="mpbody">
+				@moonPanelGraph(d)
+				@moonPanelDetails(d)
+			</div>
+		</div>
+	</div>
+}
+
+// moonPanelGraph is `v4-moons-graph-only.png`: one lane per NAMED drawn body,
+// one illumination column per day of the month, filled square marks for turns,
+// a day axis and one footnote.
+//
+// EVERY CELL CARRIES data-day IN THE dayKey NAMESPACE, beside `data-cell` as
+// the marker guard B4 keys on, and `data-day-ord` as the LADDER key — the bare
+// ordinal, because the generated ladder lives in one static sheet shared by
+// every calendar and cannot know a slug. This is the consumer moongraphZone's
+// keys were emitted for.
+//
+// THE NUMBERS ARE THE ZONE'S OWN. graphMoons / graphBarStyle / graphCellTitle /
+// graphAxisLabel / graphFoot are reused verbatim rather than re-derived, so the
+// panel and the foot zone cannot disagree about the same night.
+templ moonPanelGraph(d BlockData) {
+	<div class="mppane mpgraph" data-cal-moon-tab="graph">
+		for _, m := range graphMoons(d) {
+			<div class="mprow">
+				<span class="nm">{ m.Name }</span>
+				for _, a := range m.Days {
+					<span
+						class="mpcell"
+						data-cell="mp"
+						data-day={ dayKey(d.CalendarSlug, a.Day) }
+						data-day-ord={ dayOrdKey(a.Day) }
+						title={ graphCellTitle(m, a) }
+					>
+						if a.Turn != "" {
+							<i class={ graphTurnClass(a) } aria-hidden="true"></i>
+						}
+						<i style={ graphBarStyle(a) } aria-hidden="true"></i>
+					</span>
+				}
+			</div>
+		}
+		<div class="mpaxis">
+			<span class="lb">day</span>
+			for day := 1; day <= d.Month.Days; day++ {
+				<b>{ graphAxisLabel(day) }</b>
+			}
+		</div>
+		<div class="mpfoot">{ graphFoot(d) }</div>
+	</div>
+}
+
+// moonPanelDetails is `v4-sky-almanac-moons.png`, minus the epithets: one row
+// per DECLARED body — uncapped, so the fourth moon appears here and the grid's
+// ceiling of three has somewhere to point at — carrying name, period, turns
+// this month and drift, over the audit footnote.
+//
+// It prints `almanacMoonsLine`, the same string the Shelf's Moons tab prints,
+// for the reason the graph reuses the zone's helpers: two surfaces stating the
+// same arithmetic differently is how they come to disagree.
+templ moonPanelDetails(d BlockData) {
+	<div class="mppane mpdetails" data-cal-moon-tab="details">
+		for _, m := range d.Month.Almanac {
+			<div class="mpdrow">
+				<span class="nm">{ m.Name }</span>
+				<span class="ln">{ almanacMoonsLine(m) }</span>
+			</div>
+		}
+		<div class="mpnote">
+			the arithmetic is printed so it can be audited — no date in the register was typed by hand
+		</div>
+	</div>
+}

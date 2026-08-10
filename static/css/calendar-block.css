@@ -130,6 +130,16 @@
   --m-swell: 1.34;
   --t-fast: 100ms;
   --t-base: 150ms;
+  /* THE MOON PANEL'S TWO TOTALS (C-CALV4-MOONS, MN-G6). The register's
+     disclosure grammar, and its numbers rather than new ones: open 200ms,
+     close 160ms, close faster than open. They are the same two totals the sky
+     band's --disc-open / --disc-close carry in calendar-bench.css, restated
+     here because that sheet is the Bench's and this panel is the Block's — NOT
+     a third and fourth duration, and the --disc-* token count is untouched at
+     3 ([SKY-3]). Close is faster STRUCTURALLY, in the register's own idiom:
+     the base rule carries the CLOSE timing and the open state overrides it. */
+  --mp-open: 200ms;
+  --mp-close: 160ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-dec: cubic-bezier(0.05, 0.7, 0.1, 1);
 
@@ -2841,6 +2851,54 @@
     transition: transform var(--t-fast) var(--ease);
   }
 
+  /* 6 — THE MOON PANEL FOLDS OPEN (C-CALV4-MOONS [MN-3], MN-G6). The canon
+     printed on every cited render grants exactly this: "one panel folds open
+     over the rows beneath it". It is the register's disclosure grammar and it
+     buys NO NEW MOTION SIGNATURE — a clip-reveal plus an opacity ramp, one
+     easing, two totals, close faster than open, and under reduced motion no
+     rule at all and therefore instant AND complete (MN-G7).
+
+     THE BUDGET GAINS THREE PROPERTIES AND EACH IS NAMED RATHER THAN SLIPPED IN
+     (motionBudget in css_contract_test.go, amended by this slice):
+
+       · clip-path — the reveal itself. It is the register's own idiom and it is
+         chosen over `block-size` precisely because a height animation on a grid
+         child is LAYOUT, which the month grid's no-motion law forbids. A clip
+         moves nothing.
+       · opacity — the content ramp, exactly as the sky band's `.skpane-pad`
+         carries it in calendar-bench.css.
+       · content-visibility, transitioned `allow-discrete`. This is [SKY-3]'s
+         EIGHTH-PROPERTY ARGUMENT REPEATED, and it is repeated because the
+         defect it fixes is the same one: a subtree that is skipped the instant
+         the state flips collapses in a SINGLE FRAME while the transition runs
+         correctly and invisibly, so the close is a cut. sky_close_probe
+         measured that on the band (152.9px → 40.0px in one frame). Holding the
+         non-hidden value for the duration is what lets the other two be SEEN on
+         the way out. It animates nothing itself; it is the mechanism.
+
+     `transform` IS REFUSED HERE, including `scale`, exactly as it is on the
+     band ([SKY-3], refused by name). Nothing on this surface grows.
+
+     TWO TOTALS AND NO THIRD: --mp-close on the way out, --mp-open on the way
+     in. The base rule carries the CLOSE timing and the open state overrides it,
+     which is how "close is faster than open" becomes structural rather than a
+     pair of numbers a future hand can transpose. */
+  .cal-block-host .mpan {
+    transition:
+      content-visibility var(--mp-close) allow-discrete,
+      opacity var(--mp-close) var(--ease),
+      clip-path var(--mp-close) var(--ease);
+  }
+  .cal-block-host .wk:has(> .cell > .moonpick:checked) > .mpan {
+    transition-duration: var(--mp-open);
+  }
+  /* THE CLUSTER'S HOVER TAKES NO TRANSITION AT ALL, and that is a refusal
+     rather than an omission. The change it makes is to the disc's inset ring,
+     which is a `box-shadow` — and canon D3 refuses animating box-shadow
+     independently of the ring it carries. So the colour change on point is
+     INSTANTANEOUS, in both motion modes, which is also the cleanest possible
+     proof that it is a colour STATE and not an animation. */
+
   /* 4 — M5. A Block nobody is pointing at costs nothing to have on screen. */
   .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .cell,
   .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .interc,
@@ -2871,6 +2929,58 @@
    Regenerate with:
      UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/
    ═══════════════════════════════════════════════════════════════════════════ */
+/* BEGIN MOON LADDER — generated */
+/* 40 ordinary + 8 intercalary keys × 1 rule. Regenerate with:
+   UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/ */
+.cal-block-host .wk:has(.moonpick[data-moon-pick="1"]:checked) .mpan .mpcell[data-day-ord="1"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="2"]:checked) .mpan .mpcell[data-day-ord="2"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="3"]:checked) .mpan .mpcell[data-day-ord="3"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="4"]:checked) .mpan .mpcell[data-day-ord="4"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="5"]:checked) .mpan .mpcell[data-day-ord="5"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="6"]:checked) .mpan .mpcell[data-day-ord="6"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="7"]:checked) .mpan .mpcell[data-day-ord="7"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="8"]:checked) .mpan .mpcell[data-day-ord="8"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="9"]:checked) .mpan .mpcell[data-day-ord="9"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="10"]:checked) .mpan .mpcell[data-day-ord="10"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="11"]:checked) .mpan .mpcell[data-day-ord="11"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="12"]:checked) .mpan .mpcell[data-day-ord="12"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="13"]:checked) .mpan .mpcell[data-day-ord="13"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="14"]:checked) .mpan .mpcell[data-day-ord="14"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="15"]:checked) .mpan .mpcell[data-day-ord="15"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="16"]:checked) .mpan .mpcell[data-day-ord="16"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="17"]:checked) .mpan .mpcell[data-day-ord="17"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="18"]:checked) .mpan .mpcell[data-day-ord="18"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="19"]:checked) .mpan .mpcell[data-day-ord="19"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="20"]:checked) .mpan .mpcell[data-day-ord="20"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="21"]:checked) .mpan .mpcell[data-day-ord="21"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="22"]:checked) .mpan .mpcell[data-day-ord="22"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="23"]:checked) .mpan .mpcell[data-day-ord="23"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="24"]:checked) .mpan .mpcell[data-day-ord="24"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="25"]:checked) .mpan .mpcell[data-day-ord="25"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="26"]:checked) .mpan .mpcell[data-day-ord="26"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="27"]:checked) .mpan .mpcell[data-day-ord="27"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="28"]:checked) .mpan .mpcell[data-day-ord="28"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="29"]:checked) .mpan .mpcell[data-day-ord="29"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="30"]:checked) .mpan .mpcell[data-day-ord="30"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="31"]:checked) .mpan .mpcell[data-day-ord="31"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="32"]:checked) .mpan .mpcell[data-day-ord="32"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="33"]:checked) .mpan .mpcell[data-day-ord="33"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="34"]:checked) .mpan .mpcell[data-day-ord="34"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="35"]:checked) .mpan .mpcell[data-day-ord="35"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="36"]:checked) .mpan .mpcell[data-day-ord="36"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="37"]:checked) .mpan .mpcell[data-day-ord="37"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="38"]:checked) .mpan .mpcell[data-day-ord="38"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="39"]:checked) .mpan .mpcell[data-day-ord="39"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="40"]:checked) .mpan .mpcell[data-day-ord="40"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="i1"]:checked) .mpan .mpcell[data-day-ord="i1"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="i2"]:checked) .mpan .mpcell[data-day-ord="i2"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="i3"]:checked) .mpan .mpcell[data-day-ord="i3"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="i4"]:checked) .mpan .mpcell[data-day-ord="i4"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="i5"]:checked) .mpan .mpcell[data-day-ord="i5"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="i6"]:checked) .mpan .mpcell[data-day-ord="i6"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="i7"]:checked) .mpan .mpcell[data-day-ord="i7"] { --answer: 1 }
+.cal-block-host .wk:has(.moonpick[data-moon-pick="i8"]:checked) .mpan .mpcell[data-day-ord="i8"] { --answer: 1 }
+/* END MOON LADDER */
 /* BEGIN ANSWER LADDER — generated */
 /* 40 ordinary + 8 intercalary keys × 3 rules. Regenerate with:
    UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/ */
@@ -3115,6 +3225,334 @@
 .cal-block-host .block:has(.grid [data-day-ord="i8"]:is(:hover, :focus-within)) .lrows .lrow[data-lday="i8"],
 .cal-block-host .block:has(.lrows .lrow[data-lday="i8"]:is(:hover, :focus-within)) .grid [data-day-ord="i8"] { --answer: 1 }
 /* END ANSWER LADDER */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §MOON LADDER — GENERATED. Do not edit the block below by hand.
+
+   The moon panel OPENS by a plain static relationship — a checked radio in the
+   week row, a panel in the same row — and needs no generated rule for that.
+   MARKING the day whose cluster was pressed is different: CSS cannot compare
+   the checked radio's `data-moon-pick` against a graph cell's `data-day-ord`,
+   so there is one static rule per DAY ORDINAL, in both key namespaces, from
+   answerLadderKeys() so it cannot drift from the bound the ANSWER ladder above
+   already declares.
+
+   THIS IS THE CONSUMER moongraphZone's KEYS WERE LAID FOR. Its own comment
+   said so in r53: "the key is emitted for the slice that pays for the ladder".
+
+   Regenerate with:
+     UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   §MOONPANEL — the day cell's disc cluster is a CONTROL, and the panel it
+   opens (C-CALV4-MOONS, [MN-2] / [MN-3] SIGNED).
+
+   THE CANON IS PRINTED ON THE RENDERS AND IT IS EXHAUSTIVE BY ITS OWN WORDING:
+   "Nothing on this page ever moves to a new place. Things change colour when
+   you point at them, one panel folds open over the rows beneath it, and menus
+   appear where you clicked — that is the whole list." This section uses two of
+   the three and adds no fourth mechanism: the cluster CHANGES COLOUR when you
+   point at it, and the panel FOLDS OPEN over the rows beneath, at the row whose
+   cluster was pressed.
+
+   [MN-6], SIGNED BY THE OPERATOR 2026-08-10: THERE IS NO HOVER EXPANSION. Their
+   words were "if it's only 3, then i say show up to 3 then, otherwise plus
+   symbol", and the three discs therefore stay ALWAYS PRESENT AND STATIC,
+   exactly as cells-zoom.png and v4-moons-both.png draw them. The
+   one-icon-expands-into-several idea is WITHDRAWN — it had no render behind it
+   and its likely origin was the sky band's grow-in-place discs remembered onto
+   the cell. Hover is a colour change and nothing else, which is also why every
+   size on this surface is a constant: there is no growth to measure.
+
+   AND NO PER-CELL "+N", IN ANY STATE (MN-G4, L30). Resting, hovered, focused or
+   open, the cluster says nothing about the ceiling. The ceiling is the
+   Nameplate's chip ("3 of 4 moons") and the destination is the graph's footnote
+   ("+1 more in the almanac"); those are the only two places a number about
+   moons appears, and an earlier render that put a +1 in all thirty cells was
+   reversed by the mock's own note as "the noisiest thing on the surface".
+
+   ZERO LAYOUT COST, AND WHY NO SECOND MOTION EXCEPTION IS NEEDED (MN-G5). The
+   month grid's no-motion law says cells, marks, moons and era bands do not
+   animate, reflow or change size, and the register's 2026-08-07 amendment names
+   the sky band as its ONE interior exception — a second is an operator
+   signature, never a dev call. The band needed one because opening the band
+   DISPLACES THE MONTH. This panel displaces nothing: it is absolutely
+   positioned out of flow, so no cell, mark, moon or era band animates, reflows
+   or changes size, and the row's, the grid's and every cell's box is
+   byte-identical before, during and after an open. The law is held rather than
+   amended.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* THE HIDDEN CONTROLS. Clipped rather than `display: none`: a display-none
+   input is not focusable, and the keyboard has to be able to land on the thing
+   the label names. Same idiom as `.vh`, on an input rather than on text. */
+.cal-block-host .vhctl {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* THE CLUSTER AS A CONTROL. It keeps `.phrow`'s box exactly — `top: 5px;
+   right: 4px`, gap 2.5px, three 10px discs — because cells-zoom.png is the
+   drawing the build starts from and the anchor does not move. What it gains is
+   a cursor, a hit path above the day-selection label, and a focus ring. */
+.cal-block-host .cell .phctl {
+  z-index: 1;
+  cursor: pointer;
+  margin: 0;
+}
+/* THE COLOUR CHANGE ON POINT, and it is ACHROMATIC. The sky may never borrow
+   the event colour axis (marks.templ:59-65), so "changes colour" here means the
+   structural ink strengthens — never a hue from the type/owner/calendar axis
+   and never --accent, which is chrome-only and must not land on a data cell. */
+.cal-block-host .cell .phctl:hover .ph,
+.cal-block-host .cell > .moonpick:focus-visible + .cnamed .phctl .ph {
+  box-shadow: inset 0 0 0 1.25px var(--text-primary);
+}
+/* The focus ring is borrowed from the input by its label, because the input the
+   keyboard actually lands on is the invisible one — dayPick's own construction.
+
+   IT IS STRUCTURAL INK AND NOT --accent, unlike `.dsel`'s, and that is canon A7
+   holding rather than an inconsistency: this control is in the MARKS LAYER, and
+   TestCSS_ChannelDiscipline forbids the marks layer from referencing --accent
+   at all. The guard matches `.phctl` through its `.ph` substring and it is
+   right to — the sky is achromatic by law, including its focus state. */
+.cal-block-host .cell > .moonpick:focus-visible + .cnamed .phctl {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+/* MN-G12 · A COARSE POINTER HAS NO HOVER, so it gets none — and it reaches the
+   panel in ONE TAP rather than a tap to reveal and a tap to act. The hit area
+   grows without the discs moving: a transparent inset pad on the label's own
+   absolutely-positioned box, so the anchor and the three diameters are
+   untouched. */
+@media (pointer: coarse) {
+  .cal-block-host .cell .phctl:hover .ph {
+    box-shadow: inset 0 0 0 1px var(--rule-structural-strong);
+  }
+  .cal-block-host .cell .phctl::before {
+    content: "";
+    position: absolute;
+    inset: -7px;
+  }
+}
+
+/* ── THE PANEL ────────────────────────────────────────────────────────────
+   Out of flow, full row width, over the rows beneath. Full width because that
+   is the shape v4-moons-graph-only.png draws: thirty columns need the width,
+   and a 420px card would squeeze the graph the panel exists to show. */
+.cal-block-host .wk {
+  position: relative;
+}
+.cal-block-host .mpan {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 100%;
+  z-index: 6;
+  /* CLOSED IS THE RESTING STATE and nothing seeds a start geometry, so a
+     reduced-motion open lands on the end state rather than on a mid-reveal one
+     (MN-G7 — instant AND complete, never shortened). */
+  content-visibility: hidden;
+  opacity: 0;
+  clip-path: inset(0 0 100% 0);
+  pointer-events: none;
+}
+.cal-block-host .wk:has(> .cell > .moonpick:checked) > .mpan {
+  content-visibility: visible;
+  opacity: 1;
+  clip-path: inset(0);
+  pointer-events: auto;
+}
+.cal-block-host .mpin {
+  background: var(--surface-card);
+  border: 1px solid var(--rule-structural);
+  border-radius: 2px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 12%);
+  padding: 8px 10px 10px;
+}
+.cal-block-host .mphead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+/* EXACTLY TWO TABS ([MN-3] bound): Graph and Details. NOT a third
+   Tonight|Month|Moons trio — two of those already exist, on the Shelf and in
+   the band's pane, and a third is count-3 repeating itself. */
+.cal-block-host .mptabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+.cal-block-host .mpbtn {
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-weight: 650;
+  font-size: 10px;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+/* THE PRESSED LOOK IS STATE ON THE PRESSED ITEM, never a travelling indicator
+   (canon A6) — the Shelf's and the band's trio are built the same way. */
+.cal-block-host .block:has(.mptab[data-mp-tab="graph"]:checked) .mpbtn[data-mp-btn="graph"],
+.cal-block-host .block:has(.mptab[data-mp-tab="details"]:checked) .mpbtn[data-mp-btn="details"] {
+  border-color: var(--rule-structural);
+  color: var(--text-primary);
+}
+.cal-block-host .block:has(.mptab[data-mp-tab="graph"]:focus-visible) .mpbtn[data-mp-btn="graph"],
+.cal-block-host .block:has(.mptab[data-mp-tab="details"]:focus-visible) .mpbtn[data-mp-btn="details"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* THE CLOSE CONTROL is the moon group's explicit `none` option wearing a label,
+   on dayPickAll's precedent: a radio cannot be un-checked by re-checking it, so
+   pressing the cluster a second time cannot close the panel and something else
+   has to. */
+.cal-block-host .mpx {
+  position: relative;
+  inline-size: 16px;
+  block-size: 16px;
+  flex: none;
+  cursor: pointer;
+}
+.cal-block-host .mpx::before,
+.cal-block-host .mpx::after {
+  content: "";
+  position: absolute;
+  inset-inline: 3px;
+  inset-block-start: 7px;
+  block-size: 1.5px;
+  background: var(--text-muted);
+}
+.cal-block-host .mpx::before { transform: rotate(45deg) }
+.cal-block-host .mpx::after { transform: rotate(-45deg) }
+.cal-block-host .mpx:hover::before,
+.cal-block-host .mpx:hover::after { background: var(--text-primary) }
+.cal-block-host .mpbody {
+  padding-top: 6px;
+}
+.cal-block-host .mppane { display: none }
+.cal-block-host .block:has(.mptab[data-mp-tab="graph"]:checked) .mpgraph,
+.cal-block-host .block:has(.mptab[data-mp-tab="details"]:checked) .mpdetails {
+  display: block;
+}
+
+/* ── THE GRAPH TAB — v4-moons-graph-only.png ──────────────────────────────
+   One lane per NAMED drawn body, one illumination column per day, filled square
+   marks for turns, a day axis and one footnote. The geometry is the foot zone's
+   own (.sfrow / .sfaxis), reused rather than re-derived so the two surfaces
+   cannot disagree about the same night.
+
+   THERE IS NO COMPOSITE ROW (L19/L24, MN-G9). No summed "how bright is tonight"
+   figure at any density. Three independent attempts at one disagreed about the
+   same five nights. */
+.cal-block-host .mprow,
+.cal-block-host .mpaxis {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-template-columns: 52px;
+}
+.cal-block-host .mprow {
+  align-items: end;
+  height: 18px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.cal-block-host .mprow .nm,
+.cal-block-host .mpaxis .lb {
+  align-self: center;
+  font-weight: 650;
+  font-size: 9.5px;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* THE MARKED COLUMN. --answer is the Block's existing ANSWER primitive and the
+   generated MOON LADDER at the foot of this sheet is what sets it — one rule
+   per day ordinal, because CSS cannot compare the checked radio's
+   `data-moon-pick` against a cell's `data-day-ord`. The wash is ACHROMATIC:
+   the sky may never borrow the event colour axis. */
+.cal-block-host .mpcell {
+  --answer: 0;
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in oklch, transparent calc(100% - 14% * var(--answer)), var(--text-primary));
+}
+.cal-block-host .mpcell i {
+  display: block;
+  width: 88%;
+  background: var(--rule-structural-strong);
+}
+.cal-block-host .mpcell .tn {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  background: var(--text-primary);
+}
+.cal-block-host .mpcell .tn.full { height: 4px }
+.cal-block-host .mpcell .tn.new { height: 1px }
+.cal-block-host .mpaxis {
+  height: 12px;
+  align-items: center;
+}
+.cal-block-host .mpaxis b {
+  font-weight: 650;
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+  color: var(--text-muted);
+}
+.cal-block-host .mpfoot,
+.cal-block-host .mpnote {
+  padding-top: 4px;
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* ── THE DETAILS TAB — v4-sky-almanac-moons.png, MINUS THE EPITHETS ───────
+   UNCAPPED (MN-G10): one row per DECLARED body, so the fourth moon appears here
+   and the grid's ceiling of three has somewhere real to point at. The renders'
+   "the great pale moon" is mock fixture text — calendar.Moon has no such column
+   and AlmanacMoon carries no field for it — so no epithet is printed rather
+   than one invented. */
+.cal-block-host .mpdrow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.cal-block-host .mpdrow .nm {
+  inline-size: 52px;
+  flex: none;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.cal-block-host .mpdrow .ln {
+  font-weight: 600;
+  color: var(--text-body);
+}
 
 /* the two strings `.badge.gm` carries in the signed set — "<N> hidden" on the
    Nameplate and "GM" on a Ledger row. Gold, because permission is gold (L22).
