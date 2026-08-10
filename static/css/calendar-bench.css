@@ -1663,7 +1663,7 @@
      the signed close does not exist at all. MEASURED, before this rule, by
      sky_close_probe_test.go: the sky went 152.9px → 40.0px (C1) and
      263.1px → 32.0px (C3) in a SINGLE FRAME, with every intermediate sample
-     across 16/50/84/118/160/320ms already at the closed height, while the
+     across 16/50/84/118/260/500ms already at the closed height, while the
      signed 160ms `grid-template-rows` transition ran correctly and invisibly.
      The probe also read the cause directly: 40ms into a 160ms close,
      ::details-content already computed `content-visibility: hidden`.
