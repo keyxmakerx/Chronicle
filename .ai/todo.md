@@ -9,6 +9,65 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-fix-R1. The six confirmed defects from the operator's first look — DONE (2026-08-10)
+
+Five landed in this repo, one in `Chronicle-Foundry-Module`. Each was measured
+before it was fixed and the measurement is in the commit.
+
+- [x] **The sky's moon discs painted nothing.** `.ph` is an `<i>` — inline — so
+  `inline-size/block-size: 100%` were dead and the disc laid out at 0×0 with its
+  `::before` half-fill and `::after` terminator positioned into a zero-size
+  containing block. One declaration: `display: block`.
+  `sky_disc_paint_probe_test.go`.
+- [x] **The sky's close was a cut, not a reveal.** `<details>` gives
+  `::details-content` `content-visibility: hidden` the instant `open` goes away,
+  so the signed 160ms collapse ran on a subtree nobody was painting.
+  `content-visibility` amended into `[SKY-3]`'s seven BY NAME, mutation-tested
+  both ways. `sky_close_probe_test.go`.
+- [x] **`Open in the Ledger` was a no-op on a docked Ledger.** The day's `.dsel`
+  label has already checked the day's radio, so the door clicked a checked radio,
+  scrolled to something on screen, and closed the card. Conditioned on the
+  stacked layout (a measured rect, not a restated breakpoint).
+  `daycard_ledger_door_probe_test.go`.
+- [x] **Every month step reloaded the whole application.** The trio had no
+  `hx-boost` ancestor and its doc comment claimed it did. Bounded boost onto
+  `#main-content`. `bench_month_nav_swap_test.go`.
+- [x] **"Builder →" opened the settings page.** One string.
+  `bench_door_labels_test.go`.
+- [x] **The Foundry mismatch banner printed a remedy nobody could follow**
+  (module-side fix; see the Chronicle debt below).
+
+### [!] What that last one BOOKED against Chronicle — a real gap, still open
+
+**There is no way to choose which calendar Chronicle serves a campaign.**
+
+- `POST /api/v1/campaigns/:cid/calendar` (`api_handler.go` `CreateCalendar`)
+  returns a structured 409 `calendar_already_exists` whenever
+  `GetCalendar(campaignID)` returns anything — and `GetByCampaignID` is
+  `… WHERE campaign_id = ? ORDER BY is_default DESC, sort_order ASC LIMIT 1`,
+  i.e. ANY calendar at all.
+- `calendarService.CreateCalendar` sets `IsDefault: isFirst`, so only the first
+  calendar a campaign ever gets is marked default. A calendar authored later in
+  the builder is not.
+- `SetDefaultCalendar` exists on the service interface (`service.go:47`,
+  implemented at `:1044`) and **has no caller** — no route, no handler, no
+  control on any page. `repo.SetDefault` is only reached by the delete path
+  promoting a survivor.
+
+Consequence: an operator whose Foundry world disagrees with the Chronicle
+calendar cannot import a replacement (409) and cannot make an authored one
+visible (not default, no way to become default). The Foundry module now prints
+the remedy that IS reachable — edit either calendar's months/weekdays — and
+books this.
+
+- [ ] **Wire `SetDefaultCalendar` to a route and a control.** The Bench already
+  renders an `is_default` badge per calendar row (`BenchManage.IsDefault`), which
+  is where the control belongs. Note `internal/wire/routes_snapshot.txt` must be
+  regenerated with it.
+- [ ] **…and/or honour `?calId=` on the syncapi calendar reads**, so the module
+  can name the calendar it wants instead of taking whatever is default.
+  (`C-CALV4-BENCH-CALID` already books the Bench's half of `?calId=`.)
+
 ## 0a-fix. An emptied Year field moved the world to year zero — DONE (2026-08-09)
 
 - [x] **Server, `PUT /api/v1/…/calendar/date`** — `apiDate.Year` is a `*int`; an
