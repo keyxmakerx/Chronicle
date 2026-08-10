@@ -464,13 +464,52 @@ templ benchBlockView(b BenchBlock, data BenchData, role string) {
 // end.
 //
 // THREE <a> ELEMENTS. Not buttons, not a form, not JS. The hrefs are computed
-// server-side (benchNav) and land on the same route, so a plain navigation —
-// or the sidebar's `hx-boost` when the page is reached that way — swaps the
-// page with no script of any kind. `boot.js:163` sets
-// `htmx.config.allowScriptTags = false`, which DELETES a <script> inside a
-// swapped fragment, and any JS would otherwise have to ride the plugin
-// body-script registry and answer to tools/check-page-scripts.sh. Links need
-// none of that.
+// server-side (benchNav) and land on the same route, so the control works with
+// no script of any kind — and keeps working: the href is what makes the cursor
+// shareable, refreshable, back-buttonable and middle-clickable, which is the
+// whole of [GR-1]. `boot.js:163` sets `htmx.config.allowScriptTags = false`,
+// which DELETES a <script> inside a swapped fragment, and any JS would
+// otherwise have to ride the plugin body-script registry and answer to
+// tools/check-page-scripts.sh. Links need none of that.
+//
+// AND THE ROW DECLARES ITS OWN BOOST, WHICH IT DID NOT USED TO — calv4 fix R1,
+// item 4. THIS COMMENT USED TO CLAIM "or the sidebar's `hx-boost` when the page
+// is reached that way", AND THAT WAS FALSE. `hx-boost` is an attribute htmx
+// resolves by walking the ANCESTORS OF THE CLICKED LINK; it does not travel with
+// a navigation. It is declared on the sidebar's own containers (app.templ 203 /
+// 363 / 456 / 495), and `<main id="main-content">` (app.templ:73) — every page's
+// entire ancestry inside the layout — declares none. MEASURED: nothing at or
+// above these three anchors declared it, so every Prev / Today / Next was a full
+// document load, re-fetching and re-parsing the sidebar, the topbar, every
+// stylesheet, every script tag and every scaffold on the page to move one month.
+//
+// THE BOOST IS BOUNDED, and the bound is the point. A bare `hx-boost` targets
+// <body> with an innerHTML swap, which re-renders the sidebar and the topbar
+// into the DOM and would leave most of the defect in place. `#main-content` is
+// the layout's own content element and is what the sidebar already selects.
+//
+// outerHTML, NOT the sidebar's innerHTML, and that is a correctness difference
+// rather than a taste one: htmx's `hx-select` appends the SELECTED ELEMENTS to
+// the swap fragment (htmx.min.js — `if(o.select){…d.appendChild(e)…}`), so
+// selecting `#main-content` and swapping innerHTML puts a <main> INSIDE the
+// <main> and nests one deeper on every step. outerHTML replaces it.
+//
+// NO `show:window:top` EITHER, which the sidebar's copy of this idiom carries.
+// Scrolling to the top is right when you have arrived somewhere new; a month
+// step is the same page with a different month in it, and throwing the reader
+// back to the breadcrumbs on every Next is the kind of small violence the
+// reload was already doing.
+//
+// The day card's payload rides `.cal-bench` (bench.templ's BenchPage), INSIDE
+// #main-content — so it is replaced by this swap and calendar_daycard.js
+// re-reads it on `htmx:afterSettle`. A month step therefore cannot leave the
+// card indexing the previous month, which a narrower swap of the Block alone
+// would have done.
+//
+// The pinned assertions live in bench_month_nav_swap_test.go, which walks the
+// rendered ancestry rather than grepping this file — "no ancestor of these three
+// declares hx-boost" is not a claim a substring search can make, and it is the
+// claim this comment got wrong for a whole slice.
 //
 // A DAY CARD OPEN ACROSS A NAVIGATION IS CLOSED BY THE SWAP, AND THAT IS
 // CORRECT — a card describing 12 Marpenoth must not survive into Uktar. There
@@ -485,7 +524,14 @@ templ benchBlockView(b BenchBlock, data BenchData, role string) {
 // [SKY-8]).
 templ benchNavTrio(n BenchNav) {
 	if n.Live {
-		<div class="manage" data-bench-nav>
+		<div
+			class="manage"
+			data-bench-nav
+			hx-boost="true"
+			hx-target="#main-content"
+			hx-select="#main-content"
+			hx-swap="outerHTML"
+		>
 			<span class="badge" data-bench-nav-month>{ benchNavLabel(n) }</span>
 			<span class="sp"></span>
 			if n.PrevHref != "" {
