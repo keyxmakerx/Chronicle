@@ -268,6 +268,14 @@ templ benchDisclosureView(d BenchDisclosure) {
 // benchHead is .phead: the title, the count line, and the control cluster.
 //
 // The signed .ctl carries "colour by: type ⌄", "Builder →" and "+ New event".
+// THE STILL'S "Builder →" SHIPS AS "Settings →" — calv4 fix R1, item 5. In the
+// still's vocabulary "the builder" meant the 10-tab STRUCTURE EDITOR, which is
+// what this control has always pointed at (builder_handler.go redirects there
+// on create for the same reason). The product then grew a route literally named
+// `/calendars/builder` — the creation wizard — and rendered its door a few
+// pixels away, so the still's word had come to name the other thing. The label
+// follows the destination page's own <h1> and the two other places the Bench
+// prints this href.
 // The colour-by axis is a PER-VIEWER PREFERENCE with no store (the Block books
 // the same control for the same reason — nameplate.templ), and there is no
 // event-create route outside the V2 shell and wave 1 adds no routes. So the
@@ -291,11 +299,32 @@ templ benchHead(data BenchData) {
 			// selected a different calendar. This is the ONE place [VS-2]'s rule
 			// "no link is deleted" is deliberately overridden, and the override
 			// is the ruling: a self-link is not a door, it is a dead end wearing
-			// a door's label. The Builder → and + New calendar controls beside it
-			// are untouched.
+			// a door's label. The settings and + New calendar controls beside it
+			// are untouched by [VS-14] (the settings door's LABEL is corrected by
+			// calv4 fix R1 item 5, below; its href is the one it always had).
+			// "SETTINGS →", NOT "BUILDER →" — calv4 fix R1, item 5. This control
+			// has always pointed at SettingsHref, which is
+			// /campaigns/:id/calendars/:calId/settings — CalendarSettingsPage,
+			// whose own <h1> reads "Calendar Settings". It was labelled
+			// "Builder →" a few pixels from the "+ New calendar" control that
+			// really does open the builder: two doors, one lie, and the header
+			// was also the only place this href had a second name (the
+			// management strip and every subordinate row already call it
+			// "Settings").
+			//
+			// THE STRING MOVED, NOT THE HREF, and that is the ruling. Re-pointing
+			// this at the builder would leave owners with two adjacent controls
+			// opening the same wizard and would DELETE the Bench's only
+			// header-level door to the primary calendar's months, weekdays,
+			// moons, seasons, eras, categories, weather, cycles and festivals.
+			// The destination was right; the word on it was not.
+			//
+			// Pinned both ways by bench_door_labels_test.go — a link that says
+			// "builder" must reach /calendars/builder, a link to /settings must
+			// not say "builder", and the builder must still be reachable at all.
 			if data.Primary != nil {
 				if data.IsOwner {
-					<a class="btn ghost" href={ templ.SafeURL(data.Primary.Manage.SettingsHref) }>Builder →</a>
+					<a class="btn ghost" href={ templ.SafeURL(data.Primary.Manage.SettingsHref) }>Settings →</a>
 				}
 			}
 			if data.IsOwner {
