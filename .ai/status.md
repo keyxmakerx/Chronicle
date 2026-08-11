@@ -61,6 +61,27 @@ from.
   — so **unset is the NORMAL state on a branch build**, not a fault, and
   resolution falls through to the stamped VCS revision. `docs/deployment.md`
   claimed otherwise and is corrected.
+- **The stamp guard itself failed on its first real run (#591's merge build,
+  run 31460213163) and taught two lessons.** The Docker job is skipped on PRs
+  (`if: github.event_name == 'push'`), so the whole deploy-hygiene change first
+  executed *after* merge — a job nothing gates on is a job nothing tested.
+  1. The step assembled `${REGISTRY}/${IMAGE_NAME}@${digest}` by hand, and
+     `IMAGE_NAME` is `keyxmakerx/Chronicle`. Docker references must be
+     lowercase and the daemon rejects rather than folds:
+     `invalid reference format: repository name (keyxmakerx/Chronicle@sha256)
+     must be lowercase`. Invisible everywhere else because metadata-action
+     lowercases its `images:` input; this was the only hand-built reference.
+     Now lowercased with `${REPO,,}`.
+  2. Inserting that step between `build-args:` and `provenance:`/`sbom:` moved
+     those two keys **inside the new step's `run:` block scalar** — YAML read
+     them as shell lines, and the run's own metadata proved it by emitting a
+     `buildx.build.provenance` object that should not exist. A silently
+     disabled setting is worse than a missing one. Both restored to the `with:`
+     map, with a comment saying to keep new steps below it, never between keys.
+  The build and push themselves were **fine** on that run, and the labels were
+  correct for the first time (`revision=d8434628…`, `created=2026-08-11T05:04Z`).
+  Whether the binary is actually stamped is still **unverified in CI** — the
+  guard never got to run.
 
 ~~Open: nothing wires `CHRONICLE_VERSION` or gives the builder `git`~~ —
 **closed the same day by the deploy-hygiene change below.** Dockerfile stage 2
