@@ -71,11 +71,31 @@ set -uo pipefail
 # Package → probes that need only a browser. Space-separated, one line each.
 
 PKG_CALENDAR_BLOCK="./internal/widgets/calendar_block/"
+# THE #590 MOONS/SKY PROBES ARE REGISTERED HERE, and their absence was itself a
+# finding (2026-08-11 observations report §7.4): six probes were written to catch
+# exactly the class of regression that then shipped — a container query that hid
+# the per-day moon discs from every phone and most desktops — and not one of them
+# ran in CI, because every one self-skips under `-short` and none was on this
+# list. The investigators had to run them by hand. A probe nobody runs is not
+# coverage, and this file exists to say so.
+#
+# TestMoonReachProbe_* are that regression's own guards, added by the fix: the
+# first measures whether the discs are on the screen at real viewport widths,
+# the second drives a genuinely coarse pointer and measures the touch target.
 PROBES_CALENDAR_BLOCK="TestProbe_ContainerQuerySizingInRealBrowser \
 TestProbe_ShelfGeometryIsInvariant \
 TestProbe_StdTierFilledShelfDoesNotCollideWithTheFilledLedger \
 TestProbe_LedgerHeightIsInvariantUnderSelection \
-TestProbe_StdTierFilledLedgerDoesNotCollide"
+TestProbe_StdTierFilledLedgerDoesNotCollide \
+TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth \
+TestMoonReachProbe_TheOpenerOnATouchDevice \
+TestMoonPanelProbe_TheFoldCostsNothingAndObeysTheRegister \
+TestMoonPanelProbe_ReducedMotionIsInstantAndComplete \
+TestSkyMeasureProbe_TheThreeCounts \
+TestSkyPaneProbe_TheStillsTwoShapes \
+TestSkyDiscPaintProbe_TheDiscsAreInkAndNotOnlyWrappers \
+TestSkySceneryProbe_TheBandsMoonsAreNotAControl \
+TestSkyCloseProbe_TheCloseRendersFrames"
 
 PKG_CALENDAR="./internal/plugins/calendar/"
 # C-CALV4-MOBILE registers its six phone probes here. Every one of them is

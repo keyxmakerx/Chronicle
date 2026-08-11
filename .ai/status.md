@@ -20,6 +20,56 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### The per-day moon discs were unreachable at almost every real width — FIXED (2026-08-11)
+
+The operator could not see moons on their calendar on a phone. The feature had
+shipped, been reviewed and been screenshotted, and no user could see it.
+
+**Cause, measured rather than reasoned.** `@moonRow` was emitted inside
+`<div class="cnamed">` (the NAMED-event subtree) and `.cnamed` is `display:none`
+until a day cell measures 84px — `@container cal-cell (min-width: 84px)`, a query
+on the CELL, not the viewport. So the three phase discs, the `.phrow.phctl`
+opener and the whole #590 moon panel behind it rendered into a hidden subtree.
+
+**The census that decided the fix** (new
+`internal/widgets/calendar_block/moon_reach_probe_test.go`, a real Chromium,
+viewport widths run through the shipped app-shell chain — `<main>`'s px-3/md:px-5,
+the 256px pinned sidebar from `md` up, `.cal-bench`'s 1180px cap):
+
+| viewport | week 7 column | week 10 column |
+|---|---|---|
+| 360 / 390 / 430 | 43.3 / 47.6 / 53.3 | 30.0 / 33.0 / 37.0 |
+| 768 / 1024 | 62.7 / 99.3 | 43.6 / 67.2 |
+| 1280 / 1440 / 1920 | 93.0 / 115.9 / 121.0 | 62.8 / 78.8 / 82.4 |
+
+Discs painted in **6 of 20** configurations, none of them a phone. **A ten-day
+week never reached 84px at any viewport on any monitor** — the `.cal-bench` cap
+tops it out at 82.4px, 1.6px short, so the feature was unreachable by
+construction for every in-world calendar with a long week.
+
+**The fix.** `@moonRow` is now a direct child of `.cell` (like `moonPick`
+already was, for the same reason), and the discs get their OWN threshold —
+`MoonRowColWidthMin = 40` in `sizing.go`, `@container cal-cell (min-width: 40px)`
+in the sheet. 40 is the midpoint of the only gap the measurements leave (37.0
+must not draw, 43.3 must) and independently clears the row's measured 35.0px.
+At underline density the row drops to `top: 26px` — below the centred numeral,
+above the underline bar — keeping the signed `right: 4px` anchor; at 84px it
+returns to `top: 5px`, pixel-identical to what shipped. After: **17 of 20**,
+including all three phone widths for a seven-day calendar. The other three are
+the deliberate degradation (a 35px row does not go in a 30px cell).
+
+**Guarded, and proven red.** Reverting the two lines fails 11 of the guard's 20
+subtests. The six pre-existing #590 moons/sky probes were passing and **had never
+run in CI** (report §7.4) — they are now registered in
+`tools/check-browser-probes.sh` alongside the two new ones.
+
+**Still open / booked, not fixed here:** the opener's touch target measures
+43.3–49.0 × 24.0px against the 44px floor and cannot reach it inside a 52px
+cell without becoming the cell; and this fix makes the discs REACHABLE, not
+PRESENT — `seedDefaults` still never calls `SetMoons`, the builder wizard still
+drops its Luna before `ApplyImport`, and the Bench's `MoonsForCalendars` still
+has no real-Moon fallback. See `.ai/todo.md` §0-moons.
+
 ### Chronicle can now fingerprint ITSELF — `host.build` / `host.runtime` (2026-08-11)
 
 Chronicle could hash every file of every installed system package and could say

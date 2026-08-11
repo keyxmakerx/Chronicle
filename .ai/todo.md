@@ -9,6 +9,50 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-moons. "I can't see the moons" — the discs are now REACHABLE (2026-08-11)
+
+The per-day moon discs shipped inside `.cnamed`, which is `display:none` below a
+84px day cell. Measured across the shipped app shell, a day cell is 30–121px and
+reaches 84px only for a SEVEN-day week at ≥1024px viewport — a ten-day week never
+reaches it at any width, because `.cal-bench` caps the Block at 1180px (82.4px
+columns, 1.6px short). Six of twenty configurations drew discs; none was a phone.
+
+- [x] `@moonRow` moved out of `.cnamed` to be a direct child of `.cell`
+- [x] `MoonRowColWidthMin = 40` (`sizing.go`) + `@container cal-cell (min-width: 40px)`,
+      read off the census gap (37.0 must not draw · 43.3 must), pinned both ways
+      by `TestCSS_SizingIsContainerQueries`
+- [x] Underline density drops the row to `top: 26px`; the signed `right: 4px`
+      anchor and the named cell's `top: 5px` are untouched
+- [x] The coarse-pointer hit pad clamped to its own cell —
+      `max(-7px, (100% - 100cqi) / 2)` — so a 49px pad cannot be wider than a
+      43.3px day
+- [x] `moon_reach_probe_test.go`: the viewport census + a real coarse-pointer arm
+      (Chromium DOES have a switch: `--blink-settings=primaryPointerType=2,
+      availablePointerTypes=2`, which `moonpanel_probe_test.go`'s comment says it
+      does not). Proven red: reverting the fix fails 11 of 20 subtests.
+- [x] The six #590 moons/sky probes registered in `tools/check-browser-probes.sh`
+      — they all PASSED and had simply never run in CI (report §7.4)
+
+### [ ] Still open — reachable is not the same as present
+
+- [ ] **The tap floor.** The opener measures 43.3–49.0 × **24.0px** against the
+      44px [MOB-7] floor. It cannot be met inside a 52px-tall, 43.3px-wide cell
+      without the control BECOMING the cell and taking that area from `.dsel`,
+      the day-selection label. Needs a drawing and a signature, not a CSS tweak.
+- [ ] **The pad still ends 3.0px past the cell's rule** on a wide cell (4px row
+      inset + 7px pad). Unchanged by this fix and pre-existing since MN-G12;
+      the clamp only removed the NEW case (a pad wider than its cell). Bounded
+      and asserted at 3.0 by `mrPadOverspillMax`.
+- [ ] **There are still no moons in the data.** `seedDefaults`
+      (`internal/plugins/calendar/service.go`) calls SetMonths / SetWeekdays /
+      SetEventCategories in both branches and never `SetMoons`; the builder
+      wizard seeds Luna (`builder_presets.go:230`), prints "Moons: 1"
+      (`builder.templ:898-899`) and returns at `builder_handler.go:337` before
+      the `ApplyImport` at `:346` that is the only moon writer; and the Bench's
+      `MoonsForCalendars` (`block_repository.go:129-153`) has no real-Moon
+      fallback, while `gregorianMoonPhase` (`worldstate.go:468`) has exactly one
+      production caller that the Bench never reaches.
+
 ## 0-host. Host self-identity — `host.build` / `host.runtime` landed (2026-08-11)
 
 - [x] `internal/hostinfo` + `host.build` / `host.runtime` diagnostics; `GET

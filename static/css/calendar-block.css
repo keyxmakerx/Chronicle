@@ -1030,7 +1030,32 @@
 }
 
 /* the sky, where the eye already is. Achromatic by law: the sky may never
-   borrow the event colour axis. */
+   borrow the event colour axis.
+
+   THE ROW HAS ITS OWN THRESHOLD, AND THAT IS THE WHOLE OF THE FIX for the
+   operator's "I can't see the moons" (2026-08-11 observations report §1.2/§7.1).
+   It used to be promoted by the 84px NAMED-EVENT query and by nothing else,
+   from inside `.cnamed` — so the discs, the opener and the panel behind them
+   were `display:none` for anyone whose day cell was narrower than 84px.
+   MEASURED (moon_reach_probe_test.go, the census against the shipped app
+   shell): a day cell is 43.3px at a 360px phone, 47.6px at a 390px phone and
+   62.8px at a 1280px desktop with a seven-day week; with a TEN-day week it is
+   30.0px on a phone and 82.4px at 1920px — that is, a ten-day calendar never
+   reached the flip at ANY viewport, on ANY monitor, because .cal-bench caps
+   the Block at 1180px. Nought discs in twenty measured configurations.
+
+   Three discs cost 35.0px of inline space; an event NAME costs a great deal
+   more. Gating them together was the category error, so the row is promoted at
+   40px and the named subtree keeps its signed 84px. 40 is not a taste: it is
+   the midpoint of the gap the measurements actually leave (37.0px is the widest
+   column that must NOT draw discs, 43.3px the narrowest that must), and it
+   independently clears the row's own measured 35.0px with 2.5px each side.
+
+   THE QUERY IS NOT DELETED, and the reason it exists is preserved: below 40px
+   a cell is genuinely too narrow for the row and degrades to the underline
+   instead of overflowing. moon_reach_probe asserts the spill is zero at every
+   width AND that some case in the census still falls back, so "delete the
+   query" cannot pass it. */
 .cal-block-host .phrow {
   position: absolute;
   top: 5px;
@@ -2159,6 +2184,41 @@
    clause was approximating — "does a named cell fit vertically" — is answered by
    real layout: .block's max-height plus the instrument's own overflow.
    ═══════════════════════════════════════════════════════════════════════════ */
+/* ── THE DISCS' OWN THRESHOLD, 40px ────────────────────────────────────────
+   Separate from the 84px flip above, and separate for a measured reason: the
+   two surfaces the old single query gated together cost wildly different
+   amounts of width. An event name needs a name's worth; three phase discs
+   measure 35.0px, full stop. See the census in .phrow's own block above for
+   the twenty measurements this number is read off.
+
+   ONE PROPERTY CHANGES, AND IT IS THE ROW, NOT THE SIDE. The anchor stays
+   `right: 4px` at both densities — cells-zoom.png puts the discs at the right
+   hand of the cell and that does not become untrue when the cell narrows. What
+   has to move is the LINE they sit on: a named cell left-aligns its numeral, so
+   the top-right corner is free, while the underline cell CENTRES its numeral
+   (`.dn { text-align: center }`) and a row at `top: 5px` would land across the
+   digits at every width a phone produces. Clearing a centred two-digit numeral
+   sideways would need a ~96px column — WIDER than the 84px named flip, which
+   would make this fix reach nobody. So the discs drop below the numeral
+   instead: the numeral occupies 2→14px, the underline bar sits at 48→51px, and
+   a 10px row centred in what is left starts at 26px.
+
+   THE BOX STAYS TIGHT TO THE DISCS. Stretching the row across the column would
+   be a bigger touch target bought out of `.dsel`, the day-selection label
+   underneath, whose own hit area [MOB-7] already records as the tightest thing
+   on the phone. The target is grown instead by the coarse-pointer pad further
+   down, which costs no layout and no other control's area.
+
+   NOTHING IS PROMOTED BELOW 40px. A 30px cell (a ten-day week on a 360px
+   phone) cannot hold a 35px row and degrades to the underline alone — which is
+   what the density query has always been for. */
+@container cal-cell (min-width: 40px) {
+  .cal-block-host .cell .phrow {
+    display: flex;
+    top: 26px;
+  }
+}
+
 @container cal-cell (min-width: 84px) {
   .cal-block-host .cell > .cnamed {
     display: block;
@@ -2176,7 +2236,16 @@
     height: 22px;
     font-size: 13px;
   }
-  .cal-block-host .cell .phrow { display: flex }
+  /* THE SIGNED CORNER IS RESTORED HERE, EXACTLY. A named cell left-aligns its
+     numeral, so the top-right anchor of cells-zoom.png is free again and the
+     row returns to it — same 5px top, same 4px right, same three discs,
+     pixel-identical to what shipped. The 40px block above changes exactly one
+     property and this undoes exactly that one: a promotion that "mostly"
+     reverts is how a signed still stops matching the product. */
+  .cal-block-host .cell .phrow {
+    display: flex;
+    top: 5px;
+  }
   .cal-block-host .cell .audmark { display: block }
 }
 
@@ -3311,9 +3380,15 @@
 /* THE COLOUR CHANGE ON POINT, and it is ACHROMATIC. The sky may never borrow
    the event colour axis (marks.templ:59-65), so "changes colour" here means the
    structural ink strengthens — never a hue from the type/owner/calendar axis
-   and never --accent, which is chrome-only and must not land on a data cell. */
+   and never --accent, which is chrome-only and must not land on a data cell.
+
+   THE FOCUS SELECTOR IS `+ .phctl`, NOT `+ .cnamed .phctl`, and it changed with
+   the row's position in the DOM: the cluster used to live inside the named
+   subtree and is now the radio's own next sibling, so that it is reachable at
+   the underline density too. Left as it was, the keyboard would have kept its
+   focus ring only at the widths that never needed the fix. */
 .cal-block-host .cell .phctl:hover .ph,
-.cal-block-host .cell > .moonpick:focus-visible + .cnamed .phctl .ph {
+.cal-block-host .cell > .moonpick:focus-visible + .phctl .ph {
   box-shadow: inset 0 0 0 1.25px var(--text-primary);
 }
 /* The focus ring is borrowed from the input by its label, because the input the
@@ -3324,7 +3399,7 @@
    TestCSS_ChannelDiscipline forbids the marks layer from referencing --accent
    at all. The guard matches `.phctl` through its `.ph` substring and it is
    right to — the sky is achromatic by law, including its focus state. */
-.cal-block-host .cell > .moonpick:focus-visible + .cnamed .phctl {
+.cal-block-host .cell > .moonpick:focus-visible + .phctl {
   outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
@@ -3332,7 +3407,26 @@
    panel in ONE TAP rather than a tap to reveal and a tap to act. The hit area
    grows without the discs moving: a transparent inset pad on the label's own
    absolutely-positioned box, so the anchor and the three diameters are
-   untouched. */
+   untouched.
+
+   THE INLINE PAD IS CLAMPED TO THE CELL, and the clamp arrived with the 40px
+   threshold above rather than being a latent tidy-up. A ±7px pad is 49px wide
+   and the narrowest cell that now draws discs measures 43.3px (a 360px phone,
+   seven-day week) — unclamped, the pad would be WIDER THAN THE DAY IT BELONGS
+   TO, and a thumb landing near a cell edge would open the panel marked on the
+   neighbouring date. `100%` here is the label's own box (35px: three diameters
+   and two gaps) and `100cqi` is the cell's content width, so
+   `(100% - 100cqi) / 2` is exactly the pad that fills the cell and no more;
+   `max()` takes whichever of the two is the SMALLER pad. At a wide cell the
+   -7px wins and NOTHING changes from what shipped. No number is written twice.
+
+   IT DOES NOT REACH ZERO OVERSPILL, AND THAT IS MEASURED AND BOOKED RATHER
+   THAN PAPERED OVER. The row is anchored 4px in from the cell's right edge and
+   the shipped pad is 7px, so on a wide cell the target ends 3.0px past the
+   rule — behaviour that has shipped since MN-G12 and is unchanged here. The
+   clamp removes the case that would have been NEW: a pad wider than its own
+   cell. moon_reach_probe_test.go measures the overspill at every width and
+   fails above the 3.0px the shipped construction already produces. */
 @media (pointer: coarse) {
   .cal-block-host .cell .phctl:hover .ph {
     box-shadow: inset 0 0 0 1px var(--rule-structural-strong);
@@ -3340,7 +3434,8 @@
   .cal-block-host .cell .phctl::before {
     content: "";
     position: absolute;
-    inset: -7px;
+    inset-block: -7px;
+    inset-inline: max(-7px, (100% - 100cqi) / 2);
   }
 }
 
