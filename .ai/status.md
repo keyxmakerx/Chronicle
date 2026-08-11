@@ -20,6 +20,49 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### Acceptance pass on the moon arc, at a REAL 390px viewport (2026-08-11)
+
+The arc's own question — *on a phone, can the operator see moon discs on their
+day cells and open the panel?* — answered by driving the **production** Block
+markup (a real-life calendar through `BlockService.Block` with the Bench's own
+arguments, rendered by `calblock.Block`) inside a reproduction of the app shell,
+at a genuine 390px CSS viewport with a real touch stack. Headless Chromium
+clamps `--window-size` to 500px, so this used CDP
+`Emulation.setDeviceMetricsOverride` + `setTouchEmulationEnabled` rather than the
+fixed-width host box the moon census uses.
+
+**YES — in one of the two configurations.** 390×844, coarse pointer: the disc
+paints 10.0×10.0px at `top:26px` / `right:4px` inside a 48.6×53.0px cell, clear
+of the numeral's ink, no spill; the opener hit-tests to the disc; one plain click
+(no hover synthesised anywhere) opens a 340×103px panel wholly inside the
+viewport; both tabs switch and the ✕ closes it. At 1280px the cell is 89.0×85.0
+at NAMED density with the row back at `top:5px` — the width that was 0.6px short
+now draws. The cramped case still degrades honestly: a ten-day week at 390px is a
+33.0px column, the row is `display:none`, 100% of the cell is `.dsel`, no
+overflow. **The two pipelines now agree on one page**: the sky band (Pipeline A,
+`gregorianMoonPhase`) and the grid cell (Pipeline B, `synthesizedRealMoon`) both
+read `Moon 3%` for 2026-08-11.
+
+**NO — on the real-world Block of a two-calendar Bench, which is the operator's
+own configuration.** `benchClassify` sends the real-world calendar to the second
+slot whenever the campaign has ANY in-world calendar; that slot is rendered with
+`noShelf=true, sky=false` (`[SKY-1]`), so `blockAlmanacRegister` is skipped and
+`moonPanelReachable` is false. Measured on production markup: **31 `.phrow`, 0
+`.phctl`, 0 `.moonpick`, 0 `.mpan`** at every width — discs the operator can see
+and cannot press, `aria-hidden="true"` so assistive tech gets nothing. Closing it
+amends `[SKY-7]` or `[SKY-1]`, both signed, so it is FLAGGED and not patched.
+
+Five further measured findings — the opener's coarse target taking 47.17% of a
+ten-day cell (and its geometric centre) from `.dsel`, proven red-then-green
+against the threshold; the panel's own 22px tabs and 16×16 sole-exit ✕ under the
+44px floor with no coarse pad; `[MOB-7]`'s tap census not naming any moon
+control; a focusable `.moonpick` with no visible ring below 40px; and the moon
+census measuring a host box rather than a viewport — are in `.ai/todo.md`
+§0-moons → "Still open — the acceptance pass at a REAL viewport". Nothing in the
+four stages was reverted or amended by this pass; every one of its own guards
+(the six #590 probes, `check-browser-probes.sh`, `check-plugin-isolation.sh`)
+re-ran green here.
+
 ### Integration pass over the four moon stages — two guards were wrong, not the code (2026-08-11)
 
 Four stages landed on `claude/coordinator-handoff-stage-3-3d3s4w` (`bb81a396`

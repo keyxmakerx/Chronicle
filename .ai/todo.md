@@ -281,6 +281,95 @@ columns, 1.6px short). Six of twenty configurations drew discs; none was a phone
       drops (seedDefaults, the wizard, the Bench's missing fallback) are
       answered; see "Done — the data now exists".
 
+### [ ] Still open — the acceptance pass at a REAL viewport (2026-08-11)
+
+An independent pass drove the PRODUCTION Block markup — a real-life calendar
+loaded through `BlockService.Block` with the Bench's own arguments, rendered by
+`calblock.Block` — inside a reproduction of the app shell, at a genuine 390px
+CSS viewport with a real touch stack (CDP `Emulation.setDeviceMetricsOverride` +
+`setTouchEmulationEnabled`; headless Chromium clamps `--window-size` to 500px,
+which is why the moon census uses a fixed-width host box instead).
+
+**THE ACCEPTANCE ANSWER IS "YES, IN ONE OF THE TWO CONFIGURATIONS."** On a
+390×844 phone the discs paint 10.0×10.0px at `top:26px` / `right:4px` inside a
+48.6×53.0px cell, clear of the numeral's ink, no spill; the opener hit-tests to
+the disc; a plain click (no hover anywhere) opens a 340×103px panel wholly
+inside the viewport; both tabs switch and the ✕ closes it. At 1280px — the width
+that was 0.6px short — the cell is 89.0×85.0 at NAMED density with the row back
+at `top:5px`. The cramped case still degrades: a ten-day week at 390px measures a
+33.0px column, the row is `display:none`, and 100% of the cell's hit area is
+`.dsel` with no overflow.
+
+- [ ] **The real-world Block beside an in-world Primary paints discs that are
+      not a control.** `moonPanelReachable` = `hasLayer("moons") &&
+      len(Month.Almanac) > 0`, and the Almanac register is gated on
+      `(!ShelfHidden || !SkyHidden)` (`block_geometry.go:773`). The Bench passes
+      `noShelf=true, sky=false` for the real-world Block (`bench.go:1143`,
+      `[SKY-1]`), so both are hidden, the register is empty, and `moonRow` takes
+      its `else` branch: `<span class="phrow" aria-hidden="true">`. Measured on
+      the production markup: **31 `.phrow`, 0 `.phctl`, 0 `.moonpick`, 0 `.mpan`**
+      — at 360/390/430/768/1024/1280/1440. `benchClassify` routes the real-world
+      calendar to that slot whenever the campaign has ANY in-world calendar, so
+      this is the configuration a worldbuilding GM actually has, and it is the
+      exact surface the 2026-08-11 complaint named. Stage 3 put moons in the
+      data; stage 1 made the row visible; the panel behind it was never reachable
+      here. **A design question, not a bug to patch:** closing it means either
+      building the register for a shelf-less, sky-less Block (amends `[SKY-7]`)
+      or seating a sky on the real-world Block (amends `[SKY-1]`, SIGNED).
+      STOP-AND-FLAG rather than done.
+- [ ] **At underline density the opener's touch target takes the cell's
+      geometric CENTRE from `.dsel`.** Sampled with `elementFromPoint` on a 1px
+      grid over one day cell, coarse pointer, production markup:
+
+      | case | cell | share resolving to the moon opener | dead centre |
+      |---|---|---|---|
+      | 7-day real-world, 390px | 48.6×53.0 | 22.04% (22×25 pad) | `.dsel` |
+      | 10-day, 768px | 44.6×53.0 | **47.17%** (44×25 — the FULL column) | the disc |
+      | 10-day, 1280px (fine ptr) | 62.3×53.0 | 12.05% (36×11) | `.phctl` |
+      | 7-day real-world, 1280px (NAMED) | 89.0×85.0 | 1.6% (11×11, top-right) | `.dsel` |
+
+      RED THEN GREEN, both directions: neutralising the `@container cal-cell
+      (min-width: 40px)` block takes all three underline rows to **0.00%** with
+      the centre back on `.dsel` and 100% of the cell `.dsel`; restoring it
+      returns 47.17%. So this arrived with the fix. The 40px block's own comment
+      says the coarse pad "costs no layout and no other control's area" —
+      measurably it costs `.dsel` 47% of a ten-day cell. `top: 26px` is the
+      exact vertical middle of a 53px cell; ADR-052 already books the underline
+      placement as an open judgement call, and this is the number that decision
+      needs. Not changed here: the row's position is a drawing question.
+- [ ] **The panel's own controls are under the 44px floor and are recorded
+      nowhere.** ADR-052 books the OPENER (24.0px) and stops there. Measured at
+      390px coarse on the open panel: the Graph/Details tabs are **60.4×22.0 /
+      68.4×22.0** and the close ✕ is **16.0×16.0**. `@media (pointer: coarse)`
+      in `calendar-block.css:3430` covers `.phctl` and nothing else, so neither
+      `.mpbtn` nor `.mpx` gets a pad. The ✕ is also the ONLY way back to "no
+      panel" — the panel is CSS-only radios, so there is no Esc and no
+      outside-click, and re-pressing a cluster cannot un-check its own radio.
+      A 16×16 sole exit on a phone is 28px under the floor.
+- [ ] **`[MOB-7]`'s tap-floor census does not know the moon controls exist.**
+      `mobile_probe_test.go`'s `targets` list names nine selectors (RSVP trio,
+      `Ask →`, ribbon arrow, Layers invoker, Ledger tab, editor Save/Cancel/
+      Delete, a day cell). None of `.phctl`, `.mpbtn`, `.mpx` is among them, so
+      the probe that exists to hold the floor is silent about the three controls
+      stage 1 put on a phone. Adding them makes it FAIL — which is the point,
+      and is why it is a booking rather than an edit.
+- [ ] **A focusable control with no visible focus indicator below 40px.**
+      `.moonpick` is `.vhctl` (1×1, `clip-path: inset(50%)`) — not
+      `display:none` — so it stays in the tab order at every column width, while
+      its ring is `.cell > .moonpick:focus-visible + .phctl`, and `.phctl` is
+      `display:none` under 40px. Measured at a 33.0px column (ten-day, 390px):
+      the radio takes focus and checking it opens a 340×139px panel that has no
+      visible trigger anywhere on the page (WCAG 2.4.7). PRE-EXISTING and
+      NARROWED by stage 1 — the same hole ran below 84px before — not introduced.
+- [ ] **`moon_reach_probe_test.go` measures a host box, never a viewport.** It
+      lays twenty fixed-width `.probe-host` divs in one 2200px window, so no
+      viewport media query fires in it and the shell arithmetic
+      (`mrHostWidth`) is asserted rather than exercised. Independently
+      re-measured, the arithmetic is RIGHT (390px → 366px host, matching), and
+      `calendar-block.css` has no width media query at all, so nothing it claims
+      is wrong. But `mobile_probe_test.go` already documents the 500px clamp and
+      solves it with an iframe in this same repo; the moon census could use it.
+
 ## 0-host. Host self-identity — `host.build` / `host.runtime` landed (2026-08-11)
 
 - [x] `internal/hostinfo` + `host.build` / `host.runtime` diagnostics; `GET
