@@ -141,6 +141,31 @@ func (a entityDiagAdapter) resolveType(ctx context.Context, campaignID, ref stri
 	return nil, nil
 }
 
+// embeddedAssetSets reports every registered plugin's //go:embed-ed static
+// filesystem for the host.embedded diagnostics. Those bytes live only inside
+// the executable, so nothing an operator can run against the container
+// filesystem will ever see them — this adapter is the only window onto them.
+//
+// It reads a.registeredPlugins THROUGH the exported accessor at CALL time, not
+// at wiring time, so it does not care whether it is wired before or after the
+// plugins register. It mirrors the mount in mountPluginStatic exactly, sharing
+// pluginStaticPrefix so the reported URL cannot drift from the served one.
+func (a *App) embeddedAssetSets() []systems.EmbeddedAssetSet {
+	regs := a.RegisteredPlugins()
+	out := make([]systems.EmbeddedAssetSet, 0, len(regs))
+	for _, p := range regs {
+		if p.StaticFS == nil {
+			continue // no embedded assets; not an error
+		}
+		out = append(out, systems.EmbeddedAssetSet{
+			Slug:      p.Slug,
+			URLPrefix: pluginStaticPrefix(p.Slug) + "/",
+			FS:        p.StaticFS,
+		})
+	}
+	return out
+}
+
 // nonEmptyField reports whether fields_data has a meaningful value for key.
 func nonEmptyField(fd map[string]any, key string) bool {
 	if fd == nil {

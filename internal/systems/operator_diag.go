@@ -69,6 +69,16 @@ func diagnosticCatalog() []Diagnostic {
 		// operator_diag_host.go.
 		hostBuildDiagnostic(),
 		hostRuntimeDiagnostic(),
+		// The asset half of the same question, defined in
+		// operator_diag_assets.go. host.embedded sits alongside host.assets
+		// because Chronicle serves its front-end from TWO places — the on-disk
+		// static root and each plugin's //go:embed-ed FS — and only one of them
+		// is reachable by a shell. Listing them apart is what stops the next
+		// empty `grep /app/static` from being read as missing code.
+		hostAssetsDiagnostic(),
+		hostAssetContainsDiagnostic(),
+		hostEmbeddedDiagnostic(),
+		hostEmbeddedContainsDiagnostic(),
 		{
 			Name:  "system.versions",
 			Title: "Loaded system versions (compact)",

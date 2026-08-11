@@ -2524,6 +2524,12 @@ func (a *App) RegisterRoutes() {
 	// systems can't import entities, so the adapter lives in the app layer.
 	systems.SetEntityDiagProvider(entityDiagAdapter{entities: entityService})
 
+	// Wire the plugin registry's embedded static filesystems so host.embedded /
+	// host.embedded-contains can list assets that exist ONLY inside the binary.
+	// The closure reads the registry when the diagnostic runs, so it does not
+	// matter that plugins register (and mountPluginStatic runs) after this line.
+	systems.SetEmbeddedAssetsProvider(a.embeddedAssetSets)
+
 	// Wire the campaigns list (admin-only ListAll) so campaigns.list can resolve a
 	// campaign id by name — the entry point for the entity.* diagnostics.
 	systems.SetCampaignListProvider(func(ctx context.Context) ([]systems.CampaignInfo, error) {

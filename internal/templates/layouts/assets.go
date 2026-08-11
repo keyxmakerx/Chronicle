@@ -174,3 +174,18 @@ var buildToken = sync.OnceValue(func() string {
 	sum := sha256.Sum256([]byte(strconv.FormatInt(info.Size(), 10) + "-" + strconv.FormatInt(info.ModTime().UnixNano(), 10)))
 	return hex.EncodeToString(sum[:])[:10]
 })
+
+// BuildToken exposes the per-BUILD fallback version for diagnostics.
+//
+// WHY it is exported. A `?v=` token that equals this value is not a content
+// hash — it is the marker that AssetURL could NOT resolve the file through any
+// registered resolver and fell back. That distinction is the whole finding for
+// an operator asking "is my new CSS being served?": a fallback token means the
+// app is looking for that asset somewhere it isn't (wrong working directory, an
+// unregistered plugin FS, a path typo), and it will keep serving a cache-busted
+// URL that busts on every deploy instead of on every change.
+//
+// The alternative — having the diagnostic recompute size+mtime of the
+// executable itself — would be a second copy of this derivation that can drift
+// from the one actually used, so the diagnostic asks rather than re-derives.
+func BuildToken() string { return buildToken() }

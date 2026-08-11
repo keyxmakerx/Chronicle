@@ -58,6 +58,60 @@ Open: nothing wires `CHRONICLE_VERSION` or gives the builder `git`, so a shipped
 image still cannot name its commit — it can only name its executable's mtime and
 uptime, which is what actually settled the incident. See `.ai/todo.md`.
 
+### …and can now account for its own ASSETS — `host.assets` / `host.embedded` (2026-08-11)
+
+The same incident had a second wrong turn: a `grep` of `/app/static` for a
+calendar feature's assets came back empty and was read as missing code. It was
+not. **Chronicle serves its front-end from two storage mechanisms that look
+nothing alike from a shell**, and only one of them is reachable by `ls`:
+
+- the **on-disk static root** — a bare relative `static` resolved against the
+  process working directory (`/app/static` in the container, `<repo>/static` in
+  dev). There is no config field and no environment variable for it anywhere in
+  the tree; `internal/app/app.go` and `internal/templates/layouts/assets.go`
+  hardcode the same literal independently.
+- each plugin's **`//go:embed`-ed FS**, which exists only *inside the binary*.
+  No `ls`, no `grep`, no `find` over the container filesystem can ever see those
+  bytes. Measured: 12 embedded files across exactly two plugins (11 calendar,
+  1 entities). The calendar's only CSS lives there, so grepping `/app/static`
+  for it will **always** return empty — the expected result, not a finding.
+
+Four diagnostics, in `internal/systems/operator_diag_assets.go`, registered
+directly after `host.build`/`host.runtime`:
+
+- `host.assets [<path-substring>]` — walks the on-disk root (**resolved**, never
+  hardcoded, and it prints the working directory it resolved against, so "the
+  app is looking in a directory that isn't there" is visible at all) and reports
+  per file size, sha256[:16], mtime, and **the exact `?v=` token
+  `layouts.AssetURL` emits** — by calling that function, not by reimplementing
+  its hashing. `FullDump` because the no-arg listing measured 89 rows / ~15 KB;
+  the gate applies to batches only, so the admin Run button is unaffected.
+- `host.asset-contains <relative-path>:<markers>` — the marker check for one
+  on-disk file. Verified end-to-end: `css/calendar-block.css:moonpick` → FOUND,
+  52 occurrences.
+- `host.embedded [<slug>]` / `host.embedded-contains <slug>:<path>:<markers>` —
+  the same for bytes that have no path to point a grep at. The plugin registry
+  arrives by dependency inversion (`SetEmbeddedAssetsProvider`, mirroring
+  `SetInstalledPackagesProvider`); an unwired provider says **"provider not
+  wired"** and explicitly *not* "no embedded assets", because for someone
+  hunting code that looks missing those are opposite conclusions.
+
+**The `?v=` column is the load-bearing part, and it is a comparison, not a
+readout.** Digests are memoised for the process lifetime (correct for caching,
+a trap for a diagnostic), so the token the app serves and the sha256 of the
+bytes on disk *right now* can disagree — and the disagreement is the finding.
+Three verdicts, measured apart: `✓ matches` (verified live — `?v=fdbff5f7d5` is
+exactly the first 10 chars of sha `fdbff5f7d5038cdc`), `STALE` (file changed
+under a running process), and `BUILD-TOKEN FALLBACK` (the app cannot resolve the
+file at all, though it is right there on disk).
+
+Running the real thing caught a defect the unit tests would not have: the shared
+fallback verdict advised "check the working directory", which is meaningless for
+bytes compiled into a binary. Embedded assets have no working directory — a
+fallback there means the plugin FS was mounted for serving but never registered
+for hashing. The verdict now states the fact and each diagnostic explains its own
+cause; a test pins that the embedded output never gives the on-disk advice.
+
 ### The operator's first look — six confirmed defects, all fixed (2026-08-10)
 
 Five in this repo, one in `Chronicle-Foundry-Module`. Each was measured before it

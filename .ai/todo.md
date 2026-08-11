@@ -46,6 +46,41 @@ to the executable's mtime. Two ways to close it, either sufficient:
   the operator chooses to paste the output, so this shipped as-is — revisit if
   that posture is stricter than assumed.
 
+## 0-host-assets. Asset accounting — `host.assets` / `host.embedded` landed (2026-08-11)
+
+- [x] `host.assets`, `host.asset-contains`, `host.embedded`,
+  `host.embedded-contains` in `internal/systems/operator_diag_assets.go`;
+  `SetEmbeddedAssetsProvider` wired from `App.embeddedAssetSets()`;
+  `layouts.BuildToken()` exported so the fallback token is *asked for*, not
+  re-derived. See `.ai/status.md` for the grep-came-back-empty incident.
+
+### [ ] Still open / worth a live check
+
+- [ ] **Not verifiable headlessly:** run `host.assets` and `host.embedded` on a
+  real container once. Everything here was measured against a source checkout,
+  where two things differ from a deployment: `static/css/app.css` is Tailwind
+  output and is **gitignored, so it does not exist in a checkout at all** (a
+  filter for it correctly matched 0 of 148 files), and the plugin FSs are
+  registered by `App.mountPluginStatic()`, which no unit test runs. The embedded
+  `?v=` column was proven correct by calling `layouts.RegisterAssetFS` exactly as
+  startup does — the token flipped from the build-token fallback to
+  `?v=c7c95346e4`, the first 10 chars of the file's sha — but that is the
+  mechanism reproduced, not the wired app observed.
+- [ ] **Consider a probe for the two-storage-mechanism trap.** `defaultProbes()`
+  has no entry pointing at `host.embedded`. An operator who reaches for a shell
+  before the diagnostics catalog will still grep `/app/static`, find nothing, and
+  draw the 2026-08-11 conclusion. A probe whose `Why` says "if this is empty, the
+  file is probably embedded — run `host.embedded`" would close the loop for
+  someone who never opens the admin page.
+- [ ] **Widget name cross-check, deliberately not built.** `internal/widgets/`
+  holds 12 Go packages with **no** static assets, while 45 widget JS files live
+  under `static/js/widgets/` — the names are not 1:1 in either direction
+  (`calendar_block` and `posts` have no same-named JS; `db_explorer.js` and
+  ~40 others have no Go package). A cross-check diagnostic would be genuinely
+  useful, but the intended mapping was never determined, and shipping one that
+  guessed would manufacture false "missing" findings — the exact failure mode
+  this workstream exists to prevent. Determine the mapping first.
+
 ## 0-fix-R1. The six confirmed defects from the operator's first look — DONE (2026-08-10)
 
 Five landed in this repo, one in `Chronicle-Foundry-Module`. Each was measured
