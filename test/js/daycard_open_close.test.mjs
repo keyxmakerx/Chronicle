@@ -135,12 +135,33 @@ test('a click INSIDE the card does not dismiss it', () => {
   assert.equal(fx.card.classList.contains('dcopen'), true);
 });
 
-test('the Ledger door is emitted only when the payload says the column is docked', () => {
-  const fx = boot();
-  fx.fire('click', fx.cells[3]);
-  assert.ok(fx.card.querySelector('[data-dc-ledger]'), 'a docked Ledger must offer the door');
+// THE DOOR NEEDS BOTH FACTS — calv4 fix R1, item 3. `ledgerDocked` on the
+// payload says the column EXISTS for this viewer, which the JS may not infer
+// from the DOM's absence (absence has two causes). The measured rects say the
+// column is STACKED BELOW the month rather than beside it, which the SERVER
+// cannot know: the layout turns on a container query over the Block's own
+// width. Neither fact is sufficient and this test states both.
+test('the Ledger door is emitted only when the column exists AND is stacked below the month', () => {
+  // (a) DOCKED — no door. The day's stretched `.dsel` label has already checked
+  // that day's radio, so the door would click a checked radio, scroll to a
+  // column already on screen, and close the card. "Close this card" is not what
+  // the button says, and the card closes on outside-click and Escape anyway.
+  const docked = boot();
+  docked.fire('click', docked.cells[3]);
+  assert.equal(docked.card.popoverOpen, true, 'the card must still open');
+  assert.equal(docked.card.querySelector('[data-dc-ledger]'), null,
+    'a docked Ledger is already showing the day the click selected — the door is a no-op there');
 
+  // (b) STACKED — the door is there. Without this arm the fix would be
+  // "delete the button", which is not the fix.
+  const stacked = boot({ stackedLedger: true });
+  stacked.fire('click', stacked.cells[3]);
+  assert.ok(stacked.card.querySelector('[data-dc-ledger]'),
+    'a Ledger stacked below the month is what the door is FOR');
+
+  // (c) NO LEDGER AT ALL — no door, whatever the geometry says.
   const off = boot({
+    stackedLedger: true,
     payload: {
       calendars: [{
         id: 'cal-1', slug: 'harptos', ledgerDocked: false,
@@ -156,7 +177,9 @@ test('the Ledger door is emitted only when the payload says the column is docked
 });
 
 test('the Ledger door activates the shipped radio and scrolls the column into view', () => {
-  const fx = boot();
+  // Driven on the STACKED layout, which is the only one that renders the door
+  // now. The BEHAVIOUR is byte-unchanged; only where it is offered moved.
+  const fx = boot({ stackedLedger: true });
   fx.fire('click', fx.cells[3]);
   const radio = fx.cells[3].querySelector('input.daypick');
   fx.fire('click', fx.card.querySelector('[data-dc-ledger]'));

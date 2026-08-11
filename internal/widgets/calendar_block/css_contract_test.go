@@ -16,9 +16,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -79,6 +79,16 @@ var motionBudget = struct {
 		"color":            true, // …and ink hue. ONLY.
 		"transform":        true, // the rail's scaleX swell — never a width (§10 defect 3)
 		"none":             true, // M5 silence, and the gold GM rail's refusal
+		// ── AMENDED BY NAME, C-CALV4-MOONS [MN-3] / MN-G6 ──────────────────
+		// The moon panel folds open, which is the canon's own second clause
+		// ("one panel folds open over the rows beneath it") printed on every
+		// render this slice was recovered from. Three properties, each argued
+		// in §MOONPANEL's motion block rather than slipped in, and each pinned
+		// to that one surface by TestCSS_TheMoonPanelIsTheOnlyAmendedSurface
+		// below — so the amendment cannot spread by being available.
+		"clip-path":          true, // the reveal. NOT block-size: a height animation on a grid child is LAYOUT
+		"opacity":            true, // the content ramp, exactly as the band's .skpane-pad carries it
+		"content-visibility": true, // [SKY-3]'s eighth-property argument, repeated: without it the close is a cut
 	},
 	keyframes: map[string]bool{
 		"m-latch": true, // centre → corners on the viewer's own explicit act
@@ -482,7 +492,7 @@ func TestCSS_SizingIsContainerQueries(t *testing.T) {
 	for _, want := range []string{
 		"container-name: cal-block",
 		"container-name: cal-cell",
-		"@container cal-block (min-width: 900px)",                          // full
+		"@container cal-block (min-width: 900px)",                           // full
 		"@container cal-block (min-width: 240px) and (max-width: 299.98px)", // mini
 		"@container cal-block (max-width: 239.98px)",                        // sub-mini
 		"@container cal-cell (min-width: 84px)",                             // density
@@ -878,6 +888,112 @@ func TestLedger_RowCarriesNoRevealToken(t *testing.T) {
 		}
 		if !strings.HasPrefix(cls, "lrow") {
 			t.Errorf("ledgerRowClass(%+v) = %q — the row class leads with `lrow`", m, cls)
+		}
+	}
+}
+
+// ── C-CALV4-MOONS: the amendment is bounded, and the ladder is generated ────
+
+// TestCSS_TheMoonPanelIsTheOnlyAmendedSurface is the OTHER HALF of the motion
+// budget amendment, and it is what makes the amendment a widening of exactly
+// one surface rather than of the sheet.
+//
+// `clip-path`, `opacity` and `content-visibility` were added to the allowlist
+// for the moon panel's fold ([MN-3], MN-G6). An allowlist entry is available to
+// every rule in the file the moment it exists, and "it was already allowed" is
+// how a bounded exception becomes a general licence — the ladder's own scoping
+// defect happened twice for the same reason (LEDGER-P6 §4.5, SHELF-P7). So each
+// of the three may be transitioned on `.mpan` and nowhere else.
+func TestCSS_TheMoonPanelIsTheOnlyAmendedSurface(t *testing.T) {
+	code := stripComments(blockCSS(t))
+	inside, _, ok := splitAtRuleBlock(code, motionBudget.guard)
+	if !ok {
+		t.Fatalf("the stylesheet has no %q block", motionBudget.guard)
+	}
+	amended := []string{"clip-path", "opacity", "content-visibility"}
+	// Walk every rule inside the guard: prelude up to `{`, then its body.
+	ruleRe := regexp.MustCompile(`(?s)([^{}]+)\{([^{}]*)\}`)
+	found := map[string]int{}
+	for _, m := range ruleRe.FindAllStringSubmatch(inside, -1) {
+		prelude, body := m[1], m[2]
+		if !strings.Contains(body, "transition") {
+			continue
+		}
+		for _, prop := range amended {
+			if !regexp.MustCompile(`transition[^;}]*\b` + regexp.QuoteMeta(prop) + `\b`).MatchString(body) {
+				continue
+			}
+			found[prop]++
+			if !strings.Contains(prelude, ".mpan") {
+				t.Errorf("%q is transitioned on a selector that is not the moon panel:\n  %s\n"+
+					"It was added to the motion budget for `.mpan`'s fold and for nothing "+
+					"else ([MN-3], MN-G6). A bounded exception that becomes generally "+
+					"available stops being bounded.", prop, strings.TrimSpace(prelude))
+			}
+		}
+	}
+	// AND THE AMENDMENT IS NOT DEAD. An allowlist entry with no rule behind it
+	// is a widening nobody is paying for, and it would survive a revert of the
+	// panel unnoticed.
+	for _, prop := range amended {
+		if found[prop] == 0 {
+			t.Errorf("%q is in the motion budget but nothing transitions it. The moon "+
+				"panel's fold is what bought this entry; if the fold is gone the entry "+
+				"goes with it (MN-G6)", prop)
+		}
+	}
+}
+
+// TestCSS_MoonLadderIsGenerated is the ANSWER ladder's regeneration idiom,
+// applied to the marking ladder [MN-3] option (a) called for. Same env var, so
+// one regeneration command keeps both blocks honest.
+//
+// Regenerate with: UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/
+func TestCSS_MoonLadderIsGenerated(t *testing.T) {
+	path := blockCSSPath(t)
+	raw := blockCSS(t)
+
+	start := strings.Index(raw, moonLadderBegin)
+	end := strings.Index(raw, moonLadderEnd)
+	if start < 0 || end < 0 || end < start {
+		t.Fatalf("the generated moon ladder's markers are missing or inverted — %q … %q "+
+			"must both appear, in that order", moonLadderBegin, moonLadderEnd)
+	}
+	got := raw[start : end+len(moonLadderEnd)]
+	want := moonLadderCSS()
+	if got == want {
+		return
+	}
+	if os.Getenv("UPDATE_ANSWER_LADDER") == "" {
+		t.Errorf("the generated MOON ladder is stale (%d bytes on disk, %d generated). "+
+			"Regenerate: UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/",
+			len(got), len(want))
+		return
+	}
+	updated := raw[:start] + want + raw[end+len(moonLadderEnd):]
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		t.Fatalf("rewrite the moon ladder: %v", err)
+	}
+	t.Logf("MOON ladder regenerated: %d bytes (%d keys × 1 rule)",
+		len(want), len(answerLadderKeys()))
+}
+
+// TestCSS_MoonLadderIsScopedToTheRow is the scoping the ladder's older sibling
+// lost TWICE (LEDGER-P6 §4.5's reveal rule; SHELF-P7's unscoped `.lrow` filter,
+// measured as an 86px height change on the commonest interaction).
+//
+// Every marking rule must start at `.wk`. A rule that said `.block:has(...)`
+// would mark the day in EVERY row's panel at once — all of them closed but one,
+// and therefore invisible, which is exactly how the other two survived review.
+func TestCSS_MoonLadderIsScopedToTheRow(t *testing.T) {
+	for _, line := range strings.Split(moonLadderCSS(), "\n") {
+		if !strings.Contains(line, "moonpick") {
+			continue
+		}
+		if !strings.HasPrefix(line, ".cal-block-host .wk:has(") {
+			t.Errorf("a moon ladder rule is not scoped to the week row:\n  %s\n"+
+				"An unscoped :has() marks the day in every row's panel at once, and the "+
+				"rows that are closed hide the fact", line)
 		}
 	}
 }

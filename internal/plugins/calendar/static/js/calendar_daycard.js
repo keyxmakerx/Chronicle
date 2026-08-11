@@ -166,7 +166,11 @@
   //
   // THE LEDGER IS NEVER OCCLUDED. The card's own `Open in the Ledger` door
   // points AT that column, so covering it would be the card contradicting
-  // itself. The LEDGER'S SETTLED RECT IS A HARD EXCLUSION ZONE for the desktop
+  // itself — and since calv4 fix R1 item 3 the exclusion is the WIDER of the two
+  // rules rather than the narrower: the door now renders only on a STACKED
+  // Ledger (see ledgerIsStacked), but a DOCKED Ledger is repainted by the same
+  // click that opened the card, so covering it would hide the answer the reader
+  // just asked for. Both layouts keep the hard exclusion, for the two reasons. The LEDGER'S SETTLED RECT IS A HARD EXCLUSION ZONE for the desktop
   // popover, whether that rect is a docked right-hand column or a full-width
   // band the narrow layout has STACKED BELOW THE GRID.
   //
@@ -949,8 +953,57 @@
     return chips;
   }
 
+  // ledgerIsStacked answers the ONE question the `Open in the Ledger` door
+  // depends on: is the Ledger BELOW the month, or BESIDE it?
+  //
+  // WHY THE DOOR NEEDS AN ANSWER AT ALL — calv4 fix R1, item 3. A day cell's
+  // real hit target is the stretched `.dsel` label (instrument.templ's dayPick),
+  // which is `for` that day's own `input.daypick`. So a click on a day ALREADY
+  // selects it in the Ledger, natively, before this module runs — measured:
+  // the pointer lands on `.dsel` and the radio comes back checked. With the
+  // Ledger DOCKED beside the month and fully on screen, the door then clicks a
+  // checked radio, scrolls to something already in view, and closes the card.
+  // Only the last is an effect, and "close this card" is not what the button
+  // says — while the card closes on outside-click, on Escape and on the next
+  // day click anyway.
+  //
+  // It is NOT redundant stacked. `.cal-block-host .body` is a flex COLUMN by
+  // default and only becomes a two-column grid at
+  // `@container cal-block (min-width: 900px)`; below that the Ledger is a
+  // full-width band under the month, and jumping to it is a real service. So
+  // the door is CONDITIONED rather than deleted, and rather than renamed:
+  // there is no honest name for a docked-Ledger button whose whole net effect
+  // is closing the card.
+  //
+  // IT IS A MEASUREMENT, NOT A BREAKPOINT. The 900px lives in a container
+  // query on the BLOCK's own width, which is not the viewport and is not
+  // readable from a media query here — and this module already measures the
+  // Ledger's rect for the occlusion dodge, so the fact is one it holds anyway.
+  // Restating the number in JavaScript is how the two drift.
+  //
+  // Pure, and exported, so daycard_ledger_door_probe_test.go can drive it
+  // without a browser and the browser probe can check the DOM agrees.
+  function ledgerIsStacked(month, ledger) {
+    if (!month || !ledger) return false;
+    // The 1px slack is a sub-pixel allowance, not a tolerance for "nearly
+    // below": docked, the two boxes SHARE a top edge and this is false by
+    // hundreds of pixels.
+    return ledger.top >= month.bottom - 1;
+  }
+
+  // ledgerStackedIn is the DOM half. It returns false when either box is
+  // missing, which is the safe answer for a door: absent, not asserted.
+  function ledgerStackedIn(host) {
+    if (!host || !host.querySelector) return false;
+    var month = host.querySelector('.inst');
+    var zone = host.querySelector('[data-zone="ledger"]');
+    if (!month || !zone) return false;
+    return ledgerIsStacked(month.getBoundingClientRect(), zone.getBoundingClientRect());
+  }
+
   if (typeof window !== 'undefined') {
     window.__calDayCard = {
+      ledgerIsStacked: ledgerIsStacked,
       writeTarget: writeTarget,
       indexPayload: indexPayload,
       indexMembers: indexMembers,
@@ -1230,14 +1283,25 @@
     // the payload rather than inferred from the DOM's absence — absence has two
     // causes (a host that never docked the zone, and a viewer who switched the
     // layer off) and a link to a column that is not on the page is a lie.
+    // THE PAYLOAD FACT IS NECESSARY AND NO LONGER SUFFICIENT: a docked Ledger
+    // that sits BESIDE the month is already showing the day this card is about,
+    // so the door is additionally conditioned on the stacked layout below.
     // IT NEVER TOUCHES THE `+ New event` BUTTON, WHICH IS THE PRODUCER'S. Only
     // the Ledger door is managed here, and it is inserted BEFORE whatever the
     // server rendered rather than replacing the foot — a module that cleared
     // this container would be deciding a role gate by omission.
-    function renderFoot(cal) {
+    // AND IT IS CONDITIONED ON THE STACKED LAYOUT — calv4 fix R1, item 3. With
+    // the Ledger docked BESIDE the month the door does nothing the day click
+    // did not already do except close the card: the stretched `.dsel` label has
+    // already checked the day's radio, and the column is already on screen. See
+    // ledgerIsStacked above for the whole argument and the measurement. `host`
+    // is passed in rather than read from `state`, because openCard sets
+    // `state.host` AFTER this runs.
+    function renderFoot(cal, host) {
       var existing = foot.querySelector('[data-dc-ledger]');
       if (existing) foot.removeChild(existing);
       if (!cal || !cal.ledgerDocked) return;
+      if (!ledgerStackedIn(host)) return;
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dc-door';
@@ -1308,13 +1372,29 @@
       head.textContent = headText(day);
       head.setAttribute('data-day', day.key);
       renderRows(day, cal);
-      renderFoot(cal);
+      renderFoot(cal, host);
 
       state.open = true;
       state.key = key;
       state.calId = calId;
       state.host = host;
       state.ord = day.ord;
+
+      // ONE PANEL AT A TIME, THE OTHER DIRECTION (MN-G13). Declining to open
+      // over the moon panel is only half the interlock: a panel opened on row 1
+      // and a card opened on row 3 would still be two panels. The card is the
+      // one arriving, so the card closes the other.
+      //
+      // IT ACTIVATES A SHIPPED CONTROL EXACTLY AS A POINTER WOULD — the same
+      // move, and the same argument, as the `Open in the Ledger` door two
+      // hundred lines up: `.click()` on the moon group's own explicit `none`
+      // radio changes checkedness, which is IDL state and not a content
+      // attribute, so the Block's serialised DOM is unchanged and
+      // daycard_block_immutability.test.mjs stays green. Writing `checked`
+      // ourselves and dispatching a synthetic change would be this module
+      // simulating the browser instead of using it.
+      var moonOff = host.querySelector('.moonpick[data-moon-pick="none"]');
+      if (moonOff && !moonOff.checked) moonOff.click();
 
       show();
       position(cell);
@@ -2723,9 +2803,36 @@
     // double-bind — the QA2 class of bug event_grid.js carries per-node guards
     // for at :250, :403 and :520.
 
+    // ── ONE PANEL AT A TIME (C-CALV4-MOONS MN-G13, coordinated with
+    //    C-CALV4-EDITOR-MODALITY-SPAN) ────────────────────────────────────
+    //
+    // The day cell's moon disc cluster became a control in C-CALV4-MOONS: it is
+    // a <label> for a hidden radio, and pressing it folds the two-tab moon
+    // panel open at the row. That label is INSIDE the cell, so without this
+    // clause the same click would also open the day card, and the two would sit
+    // over each other disagreeing — the exact failure
+    // C-CALV4-EDITOR-MODALITY-SPAN exists because of, when the editor and the
+    // card were open together.
+    //
+    // IT IS A REFUSAL TO OPEN AND NOTHING ELSE. This module still inserts no
+    // node inside `.cal-block-host`, adds and removes no class there, and
+    // animates nothing there — daycard_block_immutability.test.mjs is untouched
+    // by it. `[data-cal-moons]` is the cluster's own hook and
+    // `[data-cal-moonpanel]` is the panel's; both are the Block's namespace and
+    // both are read, never written.
+    // TWO closest() CALLS RATHER THAN ONE COMMA-SEPARATED SELECTOR: the module
+    // is exercised against test/js/daycard_dom.mjs, a hand-written DOM whose
+    // selector parser handles compound selectors and not selector LISTS. A
+    // list here parses to nothing and the interlock silently stops holding —
+    // which is the failure mode this whole file is written to avoid.
+    var MOON_CLUSTER = '[data-cal-moons]';
+    var MOON_PANEL = '[data-cal-moonpanel]';
+
     function cellFrom(target) {
       if (!target || !target.closest) return null;
       if (target.closest('[data-cal-daycard]')) return null;
+      if (target.closest(MOON_CLUSTER)) return null;
+      if (target.closest(MOON_PANEL)) return null;
       var cell = target.closest('[data-day][data-day-ord]');
       if (!cell) return null;
       var host = cell.closest('[data-bench-block]');

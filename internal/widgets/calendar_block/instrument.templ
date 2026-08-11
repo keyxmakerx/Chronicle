@@ -25,6 +25,12 @@ templ instrument(d BlockData) {
 			aria-label="Choose a day — the event list beside the month answers"
 		}
 	>
+		// THE MOON PANEL'S THREE SHARED RADIOS, rendered once for the whole
+		// Block: the group's explicit `none` (checked, so nothing is open at
+		// rest, and its label is the panel's ✕) and the Graph|Details pair every
+		// panel's labels point at. They are visually hidden and out of flow, so
+		// they take no grid row here.
+		@moonPanelControls(d)
 		if len(d.Month.Weekdays) > 0 {
 			@weekdayHeader(d.Month)
 		}
@@ -116,6 +122,15 @@ templ weekRow(d BlockData, row WeekRow) {
 		for _, c := range row.Cells {
 			@dayCell(d, c)
 		}
+		// THE MOON PANEL FOLDS OPEN HERE, over the rows beneath (C-CALV4-MOONS
+		// [MN-3]). One per row rather than one per cell: both tabs' contents are
+		// identical for every day of the month and only the MARKED column
+		// differs, so a per-cell copy would be ~6,900 extra nodes on one Block
+		// and ~27,600 on the Bench's four. It is absolutely positioned, so it
+		// takes no subgrid column and costs the row zero layout (MN-G5).
+		if moonPanelReachable(d) {
+			@moonPanel(d)
+		}
 	</div>
 }
 
@@ -171,6 +186,7 @@ templ dayCell(d BlockData, c DayCell) {
 	>
 		if c.Day > 0 {
 			@dayPick(d, dayOrdKey(c.Day), dayPickLabel("", c.Day), dayAnswers(c.Day))
+			@moonPick(d, c)
 			<div class="cnamed">
 				@dayNumeral(c, true)
 				for _, m := range chipsFor(c) {
@@ -180,7 +196,7 @@ templ dayCell(d BlockData, c DayCell) {
 					<span class="more">{ "+" + intText(moreCount(c)) + " more" }</span>
 				}
 				if hasLayer(d.Layers, "moons") {
-					@moonRow(c)
+					@moonRow(d, c)
 				}
 			</div>
 			<div class="cunder">

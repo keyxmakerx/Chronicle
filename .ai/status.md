@@ -20,6 +20,40 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### The operator's first look — six confirmed defects, all fixed (2026-08-10)
+
+Five in this repo, one in `Chronicle-Foundry-Module`. Each was measured before it
+was touched; the measurements are in the commits and in the tests, and every fix
+has a test proven red without it.
+
+1. **The sky's moon discs painted nothing at any density.** `.ph` is an `<i>`,
+   so `inline-size/block-size: 100%` were dead declarations and the disc laid out
+   at 0×0 with both pseudo-elements positioned into a zero-size containing block.
+   The wrapper was correct the whole time, which is why every shipped guard was
+   green. One declaration: `display: block`.
+2. **The sky's close rendered not one frame.** `<details>` gives
+   `::details-content` `content-visibility: hidden` the instant `open` is
+   removed. `content-visibility` is amended into `[SKY-3]`'s "seven and no
+   eighth" BY NAME, in the sheet and in the guard, mutation-tested both ways.
+3. **`Open in the Ledger` was a no-op wherever the Ledger is docked** — the
+   day's own `.dsel` label had already selected the day. Conditioned on the
+   stacked layout, from a measured rect rather than a restated breakpoint.
+4. **Every month step was a full document load.** The nav trio had no `hx-boost`
+   ancestor and its doc comment claimed the sidebar's covered it; boost is
+   resolved from the clicked link's ancestors and does not travel.
+5. **"Builder →" opened the settings page**, beside the control that opens the
+   builder. One string.
+6. **The Foundry structure-mismatch banner printed a remedy nobody could
+   follow.** Fixed module-side; the Chronicle debt behind it is booked below.
+
+**OPEN CHRONICLE DEBT from (6): there is no way to choose which calendar
+Chronicle serves a campaign.** `POST /api/v1/campaigns/:cid/calendar` 409s
+whenever the campaign has ANY calendar; `CreateCalendar` marks only the FIRST
+calendar `is_default`; the module is served `is_default DESC, sort_order ASC
+LIMIT 1`; and `SetDefaultCalendar` exists on the service interface with no route,
+no handler and no control. So an authored replacement is invisible across the
+wire. See `.ai/todo.md` § 0-fix-R1 for the two candidate fixes.
+
 ### An emptied Year field moved the world to year zero — FIXED (2026-08-09)
 
 A driven parity sweep, measuring in a browser against a real server, found that

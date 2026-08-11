@@ -62,6 +62,7 @@ func colourToken(v, fallback string) string {
 }
 
 func axisToken(v string) string { return colourToken(v, AxisFallback) }
+
 // calHueTokens is the CLOSED set of --cal channel tokens. CalHue is a TOKEN
 // NAME ("harptos"), never a colour value — the producer picks from this set
 // (blockCalHue) and the stylesheet defines a --cal-<token> for each.
@@ -1004,6 +1005,7 @@ func ledgerDocked(d BlockData) bool {
 //     The paragraph above already said "bounded to .lrows". The selector now
 //     says so as well, and TestCSS_AnswerLadderChangesNothingButVisibility
 //     pins it so a future hand cannot un-scope it by "tidying".
+//
 //  2. reveal — this day's head-context line and its "nothing on this day"
 //     line, which are rendered for every day and hidden until chosen. CSS
 //     cannot compute "3 Deepwinter · 1 event", so the server renders all of
@@ -1026,6 +1028,7 @@ func ledgerDocked(d BlockData) bool {
 //     wrong. Reverting to the UA default un-hides each one as itself and
 //     asserts nothing about layout, which is precisely the claim the ladder is
 //     allowed to make.
+//
 //  3. answer — a hovered or focused day cell lights the matching Ledger row and
 //     vice versa, by setting --answer on the PARTNER. The M1 region rule falls
 //     out of the selector's own shape: the partner is always drawn from the
@@ -2322,7 +2325,7 @@ func skySubHead(d BlockData, anchor int) string {
 // words: "tonight" at zero, then "in 1 day" / "in N days".
 //
 // The mock prints a bare plural in the head line (`in ${ft.inDays} days`) and a
-// correct singular/plural in the rows (`day${inDays === 1 ? '' : 's'}`); the
+// correct singular/plural in the rows (`day${inDays === 1 ? ” : 's'}`); the
 // correct one ships in both places, because "in 1 days" is a typo wherever it
 // appears and the stills' own fixture never exercises the one-day case.
 func almanacInDays(n int) string {
@@ -2392,4 +2395,176 @@ func skyPickGroupName(d BlockData) string {
 
 func skyPickInputID(d BlockData, key string) string {
 	return skyPickGroupName(d) + "-" + domToken(key)
+}
+
+// ── the per-date moon panel (C-CALV4-MOONS, [MN-2] / [MN-3]) ────────────────
+//
+// THE DISCS ON THE DAY CELL BECOME A CONTROL, and the panel they open is the
+// two tabs the renders already drew: `v4-moons-graph-only.png` (named lanes,
+// one illumination column per day, filled turn marks, a day axis, one
+// footnote) and `v4-sky-almanac-moons.png` (one uncapped row per declared
+// moon: name, period, turns this month, drift). [MN-7]: the CONTENTS are fully
+// drawn; only the container is new.
+//
+// TWO SURFACES, RULED APART ([MN-5]). This one is the PER-DATE cluster and it
+// is interactive. The sky band's cluster is scenery and this slice takes its
+// last affordance away (MN-G1). Neither opens the other, and nothing here
+// touches `skyHeader`.
+//
+// THERE IS NO EPITHET (MN-G11). The renders' "the great pale moon" is mock
+// fixture text: `calendar.Moon` has no such column and `AlmanacMoon` carries no
+// field for it, deliberately. The Details tab prints `almanacMoonsLine`, which
+// is the same audited arithmetic the Shelf's Moons tab prints.
+//
+// THERE IS NO PER-CELL "+N", IN ANY STATE (MN-G4, L30). Resting, hovered,
+// focused or expanded, the cluster says nothing about the ceiling. The ceiling
+// is the Nameplate's chip and the destination is the graph's footnote, and
+// those are the only two places a number about moons appears.
+
+// The panel's key namespaces. `data-moon-pick` and `data-mp-tab`, never a
+// `moonstyle` noun — guard B3: the <html> state-marker nouns are not free for
+// an interactive control to reuse.
+const (
+	moonTabGraph   = "graph"
+	moonTabDetails = "details"
+	// moonPickNone is the radio group's explicit "none" option, on dayPickAll's
+	// own precedent: a radio cannot be un-checked by another radio, so the
+	// panel's close control is this option's LABEL. Without it the first click
+	// on a cluster would be irreversible.
+	moonPickNone = "none"
+)
+
+// moonPanelReachable gates the whole control on its ingredients.
+//
+// TWO CONDITIONS AND BOTH ARE REAL. The moons layer must be on — MN-G14, and
+// `v4-bare-no-moons.png`: layer off means no discs, no chip, no graph, no
+// panel and no hit target, because absence is this product's vocabulary for
+// "there is nothing here". And the Almanac register must be non-empty, because
+// the register is what BOTH tabs are made of: a Block whose host removed the
+// Shelf has no register built, and a panel with two empty tabs is worse than a
+// cluster that stays a tooltip.
+func moonPanelReachable(d BlockData) bool {
+	return hasLayer(d.Layers, "moons") && len(d.Month.Almanac) > 0
+}
+
+// moonPickGroupName is the panel's radio group — a PURE FUNCTION OF THE DATA,
+// for dayPickGroupName's two reasons exactly: the Bench composes four Blocks
+// and two of them sharing a name would fight over one panel, while the SAME
+// Block re-rendered by an HTMX binding swap must keep the name or the swapped
+// fragment forgets which panel was open.
+//
+// ONE GROUP FOR THE WHOLE BLOCK IS ALSO THE ONE-PANEL-AT-A-TIME INTERLOCK, in
+// the markup rather than in a rule: a radio group cannot hold two checked
+// members, so two cells' panels cannot both be open however the ladder is
+// later edited.
+func moonPickGroupName(d BlockData) string {
+	return "moon-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+// moonPickInputID is one day's panel radio, addressed by its cluster label.
+func moonPickInputID(d BlockData, key string) string {
+	return moonPickGroupName(d) + "-" + domToken(key)
+}
+
+// moonTabGroupName is the Graph|Details pair, ONE PAIR PER BLOCK and not one
+// per panel. Per-panel radios would share a group name across rows and leave
+// every panel but the last-touched one with NO tab checked — an empty panel on
+// open. The labels repeat in each panel and all point at the same two inputs,
+// which is legal and is what keeps the state single.
+func moonTabGroupName(d BlockData) string {
+	return "moontab-" + domToken(d.CalendarSlug) + "-" + domToken(d.Viewer.HostEntity)
+}
+
+// moonTabInputID is one tab's DOM id.
+func moonTabInputID(d BlockData, key string) string {
+	return moonTabGroupName(d) + "-" + domToken(key)
+}
+
+// moonClusterLabel is the control's ACCESSIBLE NAME, and it exists because a
+// control that is invisible to assistive technology is not a control.
+//
+// WHAT SHIPPED BEFORE THIS SLICE: `<span class="phrow" aria-hidden="true">`
+// with a `title` on each disc. `aria-hidden` is right for a decorative cluster
+// and wrong the moment the cluster opens a panel — a screen reader got
+// NOTHING, not a name, not a role, not a tab stop. The wrapper is now a
+// <label> for a real radio, so the name below is the whole of what a keyboard
+// or screen-reader user is told, and it names the day, the bodies and their
+// illumination rather than saying "moons".
+func moonClusterLabel(c DayCell) string {
+	parts := make([]string, 0, moonCap)
+	for _, md := range moonsFor(c) {
+		parts = append(parts, moonTitle(md))
+	}
+	return "Moons on day " + strconv.Itoa(c.Day) + " — " + strings.Join(parts, ", ")
+}
+
+// moonClusterTitle is the cluster's tooltip, and it is the same sentence the
+// three per-disc titles used to carry between them. The discs lose their own
+// `title` because the cluster is now ONE control with ONE name: three tooltips
+// on the parts of a single button is three answers to one question.
+func moonClusterTitle(c DayCell) string {
+	parts := make([]string, 0, moonCap)
+	for _, md := range moonsFor(c) {
+		parts = append(parts, moonTitle(md))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// moonPanelCloseLabel names the close control. The panel's own affordance, not
+// the cluster's — clicking the cluster again cannot close it, because a radio
+// cannot be un-checked by re-checking it.
+func moonPanelCloseLabel() string { return "Close the moon panel" }
+
+// ── the moon ladder: the ANSWER extension moongraphZone's keys were laid for ─
+//
+// `moongraphZone` has emitted `data-day` in the dayKey namespace on every
+// `.sfcell` since r53, with its own comment saying so: "the key is emitted for
+// the slice that pays for the ladder". THIS IS THAT SLICE. The panel's graph
+// carries the same keys, and the ladder below lights the column for the day
+// whose cluster was pressed — so the panel does not merely open NEAR the cell,
+// it names the day inside itself.
+//
+// WHY A LADDER AT ALL, when the panel opens by a plain sibling relationship.
+// Opening is a static relationship (a checked radio in the row, a panel in the
+// same row) and needs no generated rule. MARKING IS NOT: CSS cannot compare
+// the checked radio's `data-moon-pick` against a cell's `data-day-ord`, so
+// there is one static rule per DAY ORDINAL, exactly as answerLadderCSS's third
+// rule is. It reuses answerLadderKeys(), so it covers BOTH namespaces and
+// cannot drift from the bound the sheet already declares — an intercalary day
+// carries no cluster today, and a ladder that quietly covered only the
+// ordinary namespace would be a trap for the slice that gives it one.
+const (
+	moonLadderBegin = "/* BEGIN MOON LADDER — generated */"
+	moonLadderEnd   = "/* END MOON LADDER */"
+)
+
+// moonLadderCSS renders the generated marking ladder, markers included.
+//
+// ONE RULE PER KEY AND IT SETS ONE INHERITED CUSTOM PROPERTY. The answered
+// LOOK is not repeated 48 times: `--answer` is the Block's existing ANSWER
+// primitive and the hand-written §MOONPANEL rule reads it, so the value the
+// marked column changes lives in one auditable place.
+//
+// SCOPED TO `.wk`, and that scoping is load-bearing rather than tidy. The
+// ladder's older sibling reached a surface it was never written for TWICE
+// (LEDGER-P6 §4.5's reveal rule; SHELF-P7's unscoped `.lrow` filter, measured
+// as an 86px height change). A rule that said `.block:has(...)` here would
+// mark the day in EVERY row's panel at once — all of them closed but one, and
+// therefore invisible, which is precisely how the other two survived review.
+func moonLadderCSS() string {
+	var b strings.Builder
+	b.WriteString(moonLadderBegin)
+	b.WriteString("\n/* ")
+	b.WriteString(strconv.Itoa(answerLadderDays))
+	b.WriteString(" ordinary + ")
+	b.WriteString(strconv.Itoa(answerLadderIntercalary))
+	b.WriteString(" intercalary keys × 1 rule. Regenerate with:\n")
+	b.WriteString("   UPDATE_ANSWER_LADDER=1 go test ./internal/widgets/calendar_block/ */\n")
+	for _, k := range answerLadderKeys() {
+		fmt.Fprintf(&b,
+			".cal-block-host .wk:has(.moonpick[data-moon-pick=\"%s\"]:checked) .mpan .mpcell[data-day-ord=\"%s\"] { --answer: 1 }\n",
+			k, k)
+	}
+	b.WriteString(moonLadderEnd)
+	return b.String()
 }

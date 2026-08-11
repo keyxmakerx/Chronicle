@@ -359,7 +359,9 @@ func (h *Handler) BuilderCreateAPI(c echo.Context) error {
 
 	// The front door is the 10-tab structure editor — what L6 names literally,
 	// what CreateCalendar's own caller already redirects to, and what the
-	// Bench's `Builder →` already points at.
+	// Bench's header door already points at. That door reads "Settings →" since
+	// calv4 fix R1 item 5: it had been labelled "Builder →" beside the control
+	// that opens THIS wizard, which is the surface `/calendars/builder` names.
 	return c.Redirect(http.StatusSeeOther,
 		fmt.Sprintf("/campaigns/%s/calendars/%s/settings", cc.Campaign.ID, cal.ID))
 }

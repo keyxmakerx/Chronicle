@@ -1317,7 +1317,10 @@ func TestBenchCSS_NoMotionAtAll(t *testing.T) {
 	// SEVEN PROPERTIES AND NO EIGHTH. grid-template-rows · opacity ·
 	// inline-size · block-size · gap · --seal-solid · --seal-fade. Two of them
 	// (opacity, block-size) are already on the BASE allowlist and are not
-	// restated here; what the class buys is the other five. `transform` is
+	// restated here; what the class buys is the other five. (An EIGHTH was
+	// amended in by name — `content-visibility`, for the close — and it needed
+	// no widening HERE because it was already on the base allowlist; see the
+	// amendment block in TestBenchCSS_TheSkyCarveOutIsPinned below.) `transform` is
 	// still refused, including `scale`. `color` is NOT on the list — the caret
 	// is a CONTENT SWAP ([SKY-12]) and an eighth property arriving because
 	// `color` was quietly kept is exactly the failure that ruling names.
@@ -1804,8 +1807,8 @@ func TestBenchCSS_TheNamedCarveOutsAreExactlyTwo(t *testing.T) {
 //
 // THREE CLAIMS:
 //
-//  1. THE PROPERTIES ARE THE SIGNED SEVEN AND THERE IS NO EIGHTH, and every one
-//     of them is transitioned only under `.skygrow`. `transform` is refused
+//  1. THE PROPERTIES ARE THE SIGNED SEVEN PLUS THE ONE AMENDED EIGHTH AND THERE
+//     IS NO NINTH, and every one of them is transitioned only under `.skygrow`. `transform` is refused
 //     everywhere on this surface, INCLUDING `scale` — which is named on its own
 //     because "no transform" is the sentence people read past.
 //  2. THE CLASS IS THE MARKUP'S AND THE SHEET'S, established by the same
@@ -1820,6 +1823,9 @@ func TestBenchCSS_TheNamedCarveOutsAreExactlyTwo(t *testing.T) {
 // MUTATION-TESTED IN ALL THREE DIRECTIONS, C-CALV4-SKY STAGE 8, EACH REVERTED:
 //
 //	· adding `transform: scale(1.02)` under `.skygrow[open]` reds claim 1
+//	· adding `color` under `.skygrow[open]` reds claim 1's "no ninth" arm, and
+//	  deleting the `::details-content` rules reds its "one going missing" arm
+//	  (calv4 fix R1 — the amendment that made the seven eight)
 //	· adding `.skygrow` to a third authored file reds claim 2
 //	· adding a `@media (prefers-reduced-motion: reduce)` block reds claim 3
 //	  (and TestBenchCSS_NoMotionAtAll's wrapper count fatals beside it, which
@@ -1837,9 +1843,44 @@ func TestBenchCSS_TheSkyCarveOutIsPinned(t *testing.T) {
 	// discs no longer growing, or the mask no longer sweeping, is the carve-out
 	// the operator signed silently ceasing to exist while every other test
 	// stays green.
+	//
+	// ── THE EIGHTH, AMENDED BY NAME — calv4 fix R1, item 2 ────────────────
+	//
+	// [SKY-3] SIGNED said "seven properties and no eighth". This is the eighth,
+	// and it is `content-visibility`, once, on `::details-content`.
+	//
+	// WHY THE AMENDMENT IS NOT THE THING THIS GUARD EXISTS TO REFUSE. The seven
+	// are properties the sky ANIMATES; this one animates nothing and cannot —
+	// it is discrete, it is transitioned `allow-discrete`, and its entire
+	// function is to keep the subtree RENDERED so the other seven can be seen.
+	// Without it the signed close does not exist: measured by
+	// sky_close_probe_test.go before the rule landed, the sky went 152.9px →
+	// 40.0px (C1) and 263.1px → 32.0px (C3) in a SINGLE FRAME, with
+	// ::details-content already computing `content-visibility: hidden` in the
+	// very frame `open` was removed, while the signed 160ms grid-template-rows
+	// transition ran correctly and invisibly.
+	//
+	// IT IS THE SHEET'S OWN EXISTING IDIOM, NOT A NEW ONE. The identical
+	// declaration is already carried by `.cal-bench .disc::details-content`
+	// some 300 lines above the sky's rules, every other disclosure on the page
+	// uses it, and `content-visibility` was already on the monopoly guard's
+	// BASE allowlist for exactly this reason — which is why the monopoly guard
+	// stayed green through this change and only THIS set-equality went red.
+	// The sky was authored as a `.skpane` grid-row clip-reveal and was the one
+	// disclosure in the product that closed by cutting.
+	//
+	// NO THIRD TOTAL. --disc-close out, --disc-open in, matching the register's
+	// structure exactly; the `--disc-*` count assertion is byte-unchanged.
+	//
+	// MUTATION-TESTED BOTH WAYS, calv4 fix R1, each reverted:
+	//   · deleting the `::details-content` rules reds this guard's
+	//     "no longer transitions" arm AND sky_close_probe_test.go
+	//   · adding a NINTH (`color` under `.skygrow[open]`) reds the "not one of
+	//     the signed eight" arm, so the list is still a list and not a door
 	want := map[string]bool{
 		"grid-template-rows": true, "opacity": true, "inline-size": true,
 		"block-size": true, "gap": true, "--seal-solid": true, "--seal-fade": true,
+		"content-visibility": true,
 	}
 	got := map[string]bool{}
 	for _, rule := range benchCSSRules(css) {
@@ -1859,15 +1900,21 @@ func TestBenchCSS_TheSkyCarveOutIsPinned(t *testing.T) {
 	}
 	for prop := range got {
 		if !want[prop] {
-			t.Errorf("the sky transitions %q, which is not one of the signed seven "+
+			t.Errorf("the sky transitions %q, which is not one of the signed eight "+
 				"(grid-template-rows · opacity · inline-size · block-size · gap · "+
-				"--seal-solid · --seal-fade) — [SKY-3] names seven and no eighth", prop)
+				"--seal-solid · --seal-fade · content-visibility) — [SKY-3] named seven "+
+				"and the close's `content-visibility` was amended in as the eighth, BY "+
+				"NAME. A ninth needs the same treatment: a named amendment and a "+
+				"mutation test, not a quiet addition to this map", prop)
 		}
 	}
 	for prop := range want {
 		if !got[prop] {
-			t.Errorf("the sky no longer transitions %q — the signed seven are a LIST, "+
-				"and one going missing is the carve-out shrinking without a signature", prop)
+			t.Errorf("the sky no longer transitions %q — the signed eight are a LIST, "+
+				"and one going missing is the carve-out shrinking without a signature. "+
+				"For `content-visibility` in particular, losing it does not shrink the "+
+				"motion: it makes the whole close invisible, which is what "+
+				"sky_close_probe_test.go measures", prop)
 		}
 	}
 	// `transform` is refused, and `scale` is named on its own.

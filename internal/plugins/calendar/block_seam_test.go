@@ -405,14 +405,20 @@ var seamLayerSurfaces = []struct {
 	key    string
 	marker string
 }{
-	{"moons", `class="phrow"`},           // the per-cell moon discs (the moongraph is the CURVE, a separate key)
-	{"eras", `class="bands"`},            // the era band row
-	{"weeknums", `data-weeknums`},        // the grid states the layer; the gutter labels it
-	{"ledger", `data-zone="ledger"`},     // zone C
+	// THE MARKER IS OPEN-ENDED SINCE C-CALV4-MOONS, and deliberately so: the
+	// cluster's class is `phrow` when it is decoration and `phrow phctl` when
+	// it is the control that opens the moon panel, so a closing quote here
+	// would assert which of the two shipped rather than that the LAYER
+	// rendered. Both halves of this table's contract stay exactly as strong —
+	// any cluster at all fails the absence check.
+	{"moons", `class="phrow`},        // the per-cell moon discs (the moongraph is the CURVE, a separate key)
+	{"eras", `class="bands"`},        // the era band row
+	{"weeknums", `data-weeknums`},    // the grid states the layer; the gutter labels it
+	{"ledger", `data-zone="ledger"`}, // zone C
 	{"moongraph", `data-layer="moongraph"`},
 	{"legend", `data-layer="legend"`},
 	{"horizon", `data-layer="horizon"`},
-	{"shelf", `data-zone="shelf"`},       // zone D
+	{"shelf", `data-zone="shelf"`}, // zone D
 	// THE SWITCHBOARD'S OWN ROW (C-CALV4-LAYERS-P9). Every key has a surface
 	// in the sheet as well as in the month, and the sheet's row is the ONE
 	// marker that must be present whatever the on-set is — a switchboard that
@@ -519,6 +525,29 @@ func TestSeam_EnabledLayerSetMatchesWhatRenders(t *testing.T) {
 	// The weeknums gutter label, beyond the grid's data attribute.
 	seamContain(t, inverse, `class="wknum"`,
 		"the weeknums layer labels the gutter, not just the grid")
+
+	// MN-G14 (C-CALV4-MOONS): MOONS OFF MEANS NOTHING AT ALL — no discs, no
+	// chip, no panel and NO HIT TARGET. `v4-bare-no-moons.png` draws the layer
+	// off as an empty month, because absence is this product's vocabulary for
+	// "there is nothing here" and the surface does not draw a frame saying so.
+	// The discs are covered by the row above; these three are the control the
+	// cluster became, and each is a separate way to leave a dead affordance
+	// behind.
+	for _, marker := range []string{`data-cal-moonpanel`, `class="moonpick`, `data-moon-pick`} {
+		seamNotContain(t, inverse, marker,
+			"the moons layer is off; "+marker+" must leave the DOM with the discs — a "+
+				"panel, a radio or a hit target that outlives the layer that owns it is a "+
+				"control the viewer switched off and still has (MN-G14)")
+	}
+
+	// And ON, the control really is there. An absence guard with no presence
+	// twin is how the sky band's placeholder could have been deleted with every
+	// suite green ([SKY-11]'s own lesson, applied here).
+	for _, marker := range []string{`class="phrow phctl"`, `data-cal-moonpanel`, `data-moon-pick="none"`} {
+		seamContain(t, def, marker,
+			"DEF has the moons layer on, so "+marker+" must render: the cluster is a "+
+				"control and the panel it opens is the whole of C-CALV4-MOONS [MN-3]")
+	}
 
 	// THE SHEET LISTS EVERY KEY IN BOTH HALVES. `moons` is OFF in this render
 	// and its row must still be there, or the viewer could never turn it back

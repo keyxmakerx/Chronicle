@@ -1613,7 +1613,10 @@
      rule in the product stays exactly as constrained as it was. A second
      interior exception is a NEW OPERATOR SIGNATURE, not a dev call.
 
-     SEVEN PROPERTIES AND NO EIGHTH ([SKY-3]): grid-template-rows (the pane's
+     SEVEN PROPERTIES ([SKY-3]) AND ONE AMENDED EIGHTH — the eighth is
+     `content-visibility`, named and argued in its own block below, and it is
+     the difference between the close being seen and the close being a cut.
+     A NINTH still needs a signature. The seven: grid-template-rows (the pane's
      box) · opacity (its content) · inline-size and block-size (the discs) ·
      gap (the cluster) · --seal-solid and --seal-fade (the C3 mask). The
      mock's `width`/`height` are re-expressed as the house's logical
@@ -1647,6 +1650,49 @@
      And nothing seeds a start geometry: the closed state IS the resting
      state, so a reduced-motion open lands on the end state rather than on a
      mid-morph one. */
+  /* ── THE EIGHTH PROPERTY, AMENDED BY NAME ─────────────────────────────
+     [SKY-3] SIGNED said "SEVEN PROPERTIES AND NO EIGHTH". This is the eighth,
+     and it is named here rather than slipped in: `content-visibility`, once,
+     on `::details-content`, transitioned `allow-discrete` — the identical
+     declaration `.cal-bench .disc::details-content` already carries some 300
+     lines above in this same sheet.
+
+     WHY THE AMENDMENT IS NOT A WIDENING OF THE GRAMMAR. The seven are the
+     properties the sky ANIMATES; this one animates nothing. It is the
+     mechanism that lets the other seven be SEEN on the way out, and without it
+     the signed close does not exist at all. MEASURED, before this rule, by
+     sky_close_probe_test.go: the sky went 152.9px → 40.0px (C1) and
+     263.1px → 32.0px (C3) in a SINGLE FRAME, with every intermediate sample
+     across 16/50/84/118/260/500ms already at the closed height, while the
+     signed 160ms `grid-template-rows` transition ran correctly and invisibly.
+     The probe also read the cause directly: 40ms into a 160ms close,
+     ::details-content already computed `content-visibility: hidden`.
+
+     THE CAUSE IS THE UA STYLESHEET, NOT THIS SHEET. `<details>` gives
+     `::details-content` `content-visibility: hidden` the instant `open` is
+     removed, which makes the browser SKIP the subtree's contents — so `.skpane`
+     collapses to nothing immediately no matter what it is transitioning.
+     Transitioning the property with `allow-discrete` holds the non-hidden value
+     for the whole duration, which is why every other disclosure on this page
+     already does it and why `content-visibility` is on the monopoly guard's
+     BASE allowlist. The sky was authored as a `.skpane` grid-row clip-reveal
+     and never picked it up: it was the one disclosure in the product that
+     closed by cutting.
+
+     IT IS STILL TWO TOTALS AND NO THIRD. --disc-close on the way out,
+     --disc-open on the way in, matching the register's structure exactly: the
+     base rule carries the CLOSE timing and [open] overrides it. No new token.
+
+     [SKY-4] IS UNTOUCHED: both rules are inside this one no-preference
+     wrapper, so under prefers-reduced-motion there is no rule at all and the
+     native instant-and-complete behaviour stands — which was never broken,
+     because a cut IS instant. */
+  .cal-bench .cal-block-host .skygrow::details-content {
+    transition: content-visibility var(--disc-close) allow-discrete;
+  }
+  .cal-bench .cal-block-host .skygrow[open]::details-content {
+    transition-duration: var(--disc-open);
+  }
   .cal-bench .cal-block-host .skygrow .skpane {
     transition:
       grid-template-rows var(--sky-phase-box-close) var(--disc-ease)
@@ -1913,6 +1959,50 @@
      partway across and content packed left would fall off it. */
   justify-content: flex-end;
 }
+/* ── THE DISCS ARE WEATHER, NOT A CONTROL (C-CALV4-MOONS [MN-4], MN-G1) ────
+   The operator has corrected this three times: "The moons should be in the
+   skypane but it's like the sun, and not interactable." The band's opening is
+   THE BAND's affordance, not the moons' — the caret is the control and the
+   discs are the scenery it reports.
+
+   A <summary> is a click target over its entire box and over every descendant,
+   so while `.skdiscs` sits inside `summary.skyhdr` (block.templ:157) each moon
+   is a hit target that toggles the pane. `pointer-events: none` ON THE CLUSTER
+   ALONE DOES NOT FIX IT and was measured not to: with the cluster transparent
+   the hit test simply falls through to the summary underneath, which is still
+   the summary, and the click still toggles. So the summary yields the hit path
+   and hands it back to the three things that ARE the band's control surface —
+   the spacer (which is the band's whole empty middle at C1), the clock, the
+   season word and the caret.
+
+   WHY NOT MOVE THE CLUSTER OUT OF THE <summary> IN THE DOM, which is the
+   obvious fix: a non-summary child of <details> lives inside
+   `::details-content` and is HIDDEN WHILE THE BAND IS CLOSED, and closed is
+   the resting state the whole surface is designed around. The cluster would
+   vanish from the band. It cannot leave.
+
+   THE COST, STATED: a `title` tooltip needs a hover, and a box that is out of
+   the hit path is never hovered — so the per-moon tooltip on the BAND stops
+   appearing. The attributes stay in the markup (they cost nothing and a future
+   DOM fix restores them), and the same per-moon text is one caret-click away
+   in the pane's own Moons tab, which is where an operator who wants it goes.
+   A hoverable moon on a <summary> is a clickable moon; there is no third
+   state, and the operator asked for the moons to stop being pressable.
+
+   KEYBOARD IS UNTOUCHED. `pointer-events` is a hit-testing property and says
+   nothing about focus or activation: the summary is still focusable, still
+   announces `aria-expanded`, and still opens on Enter/Space. [SKY-16] holds.
+   Pinned both ways by sky_scenery_probe_test.go (MN-G1 and MN-G2 in one run,
+   at all three densities, on the Harptos preset). */
+.cal-bench .cal-block-host .skygrow > summary.skyhdr {
+  pointer-events: none;
+}
+.cal-bench .cal-block-host .skygrow > summary.skyhdr > .sksp,
+.cal-bench .cal-block-host .skygrow > summary.skyhdr > .sktime,
+.cal-bench .cal-block-host .skygrow > summary.skyhdr > .skseason,
+.cal-bench .cal-block-host .skygrow > summary.skyhdr > .skcaret {
+  pointer-events: auto;
+}
 .cal-bench .cal-block-host .skygrow > summary.skyhdr::-webkit-details-marker {
   display: none;
 }
@@ -1946,6 +2036,30 @@
   flex: none;
 }
 .cal-bench .cal-block-host .skygrow .skb .ph {
+  /* THE DISC HAS TO GENERATE A BLOCK BOX OR IT PAINTS NOTHING, and this one
+     line is the difference between the signature move of the whole slice and a
+     coloured strip with no moons in it. `.ph` is an `<i>` — inline by default —
+     and an inline non-replaced box IGNORES inline-size/block-size outright, so
+     the two declarations below were dead and the disc laid out at 0×0. Its
+     `::before` (the half-fill) and `::after` (the terminator) are absolutely
+     positioned against that box, so the phase itself had a zero-size containing
+     block and drew nothing at any density.
+
+     WHY THE ALMANAC'S COPY OF THE SAME IDIOM WORKS AND THIS ONE DID NOT: in
+     `.phrow` the `.ph` is a FLEX ITEM and the flex container blockifies it for
+     free. Here `.skdiscs` is the flex container and `.skb` is its item, so the
+     `.ph` one level further down is an ordinary inline child of a block and
+     nothing blockifies it. Sizing it in this sheet without saying so was the
+     seam between calendar-block.css (which declares the idiom) and this file
+     (which sizes it).
+
+     Measured before/after at all three densities by
+     sky_disc_paint_probe_test.go: 0×0 → 13.0/40.0px (C1) and 11.0/32.0px (C3),
+     matching the wrapper sky_measure_probe_test.go already pinned, with the
+     half-fill and terminator painting and a third of the disc crossing the
+     horizon. NOT a motion property: it buys no eighth transition and [SKY-3]
+     is untouched by this line. */
+  display: block;
   inline-size: 100%;
   block-size: 100%;
 }
