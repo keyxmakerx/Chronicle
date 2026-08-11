@@ -100,8 +100,12 @@ func TestDiagnosticProviderCallsAreOnTheBootPath(t *testing.T) {
 		t.Fatal("could not find RegisterRoutes in internal/app — this test's assumption about the boot path is stale, re-derive it before deleting")
 	}
 
-	// Where each provider call actually sits.
+	// Where each provider call actually sits. `found` records calls in the body
+	// of a named function; `inLiteral` records calls buried inside a function
+	// literal, kept apart only so the failure can say which of the two shapes
+	// it saw instead of claiming the call does not exist.
 	found := map[string]string{}
+	inLiteral := map[string]string{}
 	for _, f := range files {
 		for _, d := range f.Decls {
 			fn, ok := d.(*ast.FuncDecl)
@@ -109,6 +113,29 @@ func TestDiagnosticProviderCallsAreOnTheBootPath(t *testing.T) {
 				continue
 			}
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				// Do NOT descend into a function literal. A provider call inside
+				// one only runs if something invokes the literal, and the AST
+				// cannot tell us that anything does: `neverRun := func() { …
+				// systems.SetXProvider(…) … }` is indistinguishable from a
+				// callback the router really runs. Recording it as boot-path
+				// wiring would certify a call that never executes — the exact
+				// defect this guard exists to catch, and a mutation it was
+				// measured passing before this skip was added.
+				//
+				// This does not hide the shipped wiring, which PASSES literals
+				// as ARGUMENTS (the route-table closure, the package lister).
+				// ast.Inspect visits the CallExpr before its arguments, so the
+				// provider call is recorded on the way in and only its argument
+				// subtree is skipped.
+				if lit, ok := n.(*ast.FuncLit); ok {
+					ast.Inspect(lit.Body, func(m ast.Node) bool {
+						if name, ok := systemsProviderCall(m); ok {
+							inLiteral[name] = fn.Name.Name
+						}
+						return true
+					})
+					return false
+				}
 				if name, ok := systemsProviderCall(n); ok {
 					found[name] = fn.Name.Name
 				}
@@ -120,6 +147,12 @@ func TestDiagnosticProviderCallsAreOnTheBootPath(t *testing.T) {
 	for name := range declaredProviders(t, filepath.Join("..", "systems")) {
 		host, ok := found[name]
 		if !ok {
+			if lit, buried := inLiteral[name]; buried {
+				t.Errorf("systems.Set%sProvider is only called from inside a function literal in %s. "+
+					"Nothing here proves that literal is ever invoked, so the provider may never be set at runtime — "+
+					"move the call into the function body itself.", name, lit)
+				continue
+			}
 			t.Errorf("systems.Set%sProvider is never called from internal/app, so it is not on any boot path", name)
 			continue
 		}

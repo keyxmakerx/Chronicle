@@ -51,9 +51,15 @@ type campaignDiagAdapter struct {
 }
 
 // calendarAddonSlug is the addon every calendar route gates on
-// (addons.RequireAddon(addonSvc, "calendar")). Disabling it makes the entire
-// feature answer as if it did not exist.
-const calendarAddonSlug = "calendar"
+// (addons.RequireAddon(addonSvc, …)). Disabling it makes the entire feature
+// answer as if it did not exist.
+//
+// It is an ALIAS of the plugin's own exported identifier, never a re-typed
+// literal. tools/check-plugin-isolation.sh (T-B2) rejects a plugin-name string
+// spelled outside the owning plugin, and it is right to: a copy here would keep
+// naming the old addon after a rename, and the diagnostic would report the
+// calendar as disabled on every campaign while the product worked fine.
+const calendarAddonSlug = calendar.PluginSlug
 
 // ── calendar.render + calendar.config ───────────────────────────────────────
 

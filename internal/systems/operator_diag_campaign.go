@@ -1149,6 +1149,23 @@ func writeConfigAddons(b *strings.Builder, f CampaignConfigFacts) {
 	b.WriteString("\nA disabled `calendar` addon removes every calendar route at the middleware, so the whole feature reads as absent rather than broken. `campaign.surfaces` lists the routes it gates.\n\n")
 }
 
+const (
+	// blockTypeCalendar is a LAYOUT BLOCK TYPE, not a reference to the calendar
+	// plugin. The two spell the same word, which is why this is a named const
+	// rather than a literal: tools/check-plugin-isolation.sh (T-B2) forbids a
+	// plugin slug spelled outside the owning plugin, and internal/systems may
+	// not import a plugin to borrow calendar.PluginSlug the way the app-layer
+	// adapter does.
+	//
+	// The block type arrives here as DATA — the app layer reads it out of a
+	// stored layout — so nothing is being coupled: this map only decides which
+	// of the types already on the page get an explanatory note. Declared under
+	// the guard's const-registry amendment (R4-S26-A), which exempts a bare
+	// const-assignment line and nothing else in the file, so a future
+	// `"calendar"` written anywhere else here still fails.
+	blockTypeCalendar = "calendar"
+)
+
 // writeConfigLayouts prints the block types placed on every layout surface.
 func writeConfigLayouts(b *strings.Builder, f CampaignConfigFacts) {
 	b.WriteString("### Placed blocks\n\n")
@@ -1174,7 +1191,7 @@ func writeConfigLayouts(b *strings.Builder, f CampaignConfigFacts) {
 		"entity_worldstate": "the world-state band — also runs the world-state pipeline, so it too shows the real Moon.",
 		"entity_calendar":   "a calendar Block embedded on an entity page. The one surface where a calendar Block and the real-Moon pipeline appear together.",
 		"calendar_full":     "a full calendar block.",
-		"calendar":          "a calendar block.",
+		blockTypeCalendar:   "a calendar block.",
 	}
 
 	for _, l := range f.Layouts {

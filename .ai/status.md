@@ -20,6 +20,75 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### Integration pass over the four moon stages — two guards were wrong, not the code (2026-08-11)
+
+Four stages landed on `claude/coordinator-handoff-stage-3-3d3s4w` (`bb81a396`
+disc reachability → `7885fa62` probes into CI → `8e5eebb1` moon data →
+`5e6abb19` campaign diagnostics). Integrating them turned up **no defect in the
+shipped behaviour and two defects in the guards meant to protect it.**
+
+**1. `check-plugin-isolation.sh` was RED and had been since `5e6abb19`.** Four
+new `"calendar"` literals outside the calendar plugin (T-B2). Fixed by
+construction, not by allowlisting the problem away:
+
+- `internal/app/operator_diag_campaign_adapter.go` now aliases the plugin's own
+  identifier — `const calendarAddonSlug = calendar.PluginSlug` — instead of
+  re-typing the string. The app layer already imports the plugin, so this is
+  exactly the "pass through the plugin-registration interface" route the guard
+  names, and it cannot go stale across a rename.
+- `internal/systems/operator_diag_campaign.go` cannot import a plugin, so the
+  one colliding string is now a named const (`blockTypeCalendar`) declared under
+  the guard's **const-registry amendment (R4-S26-A)**, which exempts a bare
+  const-assignment line and NOTHING else in that file. It is a layout BLOCK TYPE
+  that happens to spell the slug, and it arrives as data — the map only decides
+  which types already on the page get an explanatory note.
+- Its test file joins the four `operator_diag_*_test.go` fixtures already in
+  `always_allowed_prefixes`, for the reason those are there: the tests assert
+  what the diagnostics print about the CALENDAR addon specifically, so a
+  substituted slug would leave them asserting nothing.
+
+**2. The provider-wiring guard passed a mutation it should have failed.**
+`internal/app/operator_diag_wiring_test.go` correctly covers the new
+`SetCampaignDiagProvider` (it enumerates declarations, so new providers are
+picked up with no edit), and it fails on both obvious disablings. But a call
+sitting inside a **never-invoked function literal** in `RegisterRoutes` passed
+BOTH tests — the AST walk descended into literals and recorded the enclosing
+named function as the host. The boot-path walk now refuses to descend into a
+`*ast.FuncLit` and reports a literal-buried call by name. This does not hide the
+shipped wiring, which passes literals as ARGUMENTS: `ast.Inspect` visits the
+`CallExpr` before its arguments, so the call is recorded on the way in.
+
+Three mutations, each run RED then restored GREEN — see `.ai/todo.md` for the
+verbatim result lines:
+
+| mutation | before hardening | after |
+|---|---|---|
+| wiring call commented out | both tests FAIL | both FAIL |
+| wiring moved to an uncalled method | source test PASS, boot-path FAIL | same |
+| wiring inside a never-run closure | **both PASS** ← the hole | boot-path FAILS by name |
+
+**What was green and stayed green.** `go build ./...`; `go vet` on the five
+touched packages; `go test -short -count=1 ./...` (whole tree, exit 0);
+`tools/check-browser-probes.sh` (29 probes); migration-immutability,
+page-scripts, widget-mounts, instance-hostname, calendar-v4-lints,
+v2-motion-discipline, decision-citations. **No migration was written and none
+was needed.**
+
+**The mobile-probe flake is confirmed real and load-borne.** A first
+`go test -short ./...` run — piped through `grep | head`, competing for CPU —
+failed `TestMobileProbe_TheScrollerCensusAndTheLongWeek` and
+`TestMobileProbe_TheRSVPOverviewAndTheScheduleFitThePhone`, both with
+`asked for N steps and got 0 replies — the child stopped answering: []`. An
+unpiped re-run of the identical tree passed the whole suite (calendar package
+83.0s). Two DIFFERENT probes failed than the one stage 1 saw, which a
+deterministic regression cannot do. These probes are browser-gated only — no
+`-short` gate, deliberately, per their file comment — so they run in the ordinary
+unit-test lane on a machine also running every other package. Booked.
+
+The container-query decision is now **ADR-052**, with the twenty-row census
+table in it, because that number will be questioned and the measurement has to
+survive with it.
+
 ### The diagnostics can now answer "why does MY campaign look like this?" (2026-08-11)
 
 The `host.*` family answers WHICH CODE IS RUNNING. It could not answer the next

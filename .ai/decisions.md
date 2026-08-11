@@ -4449,3 +4449,130 @@ reaches the error handler**, because `recovery.go` writes its own 500 with
   `internal/systems/operator_diag_errors_test.go` ·
   `internal/systems/operator_diag_catalog_test.go`
 - Docs: `docs/operator-diagnostics.md` §"The `host.*` family"
+
+---
+
+## ADR-052: The per-day moon discs get their own container-query threshold, not the named-event one
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Supersedes:** nothing ·
+**Context:** the operator could not see moons on their phone. Investigation:
+`cordinator/reports/chronicle/2026-08-11-observations-and-diagnostic-gaps.md`
+§1.2, §7.
+
+### Context
+
+The calendar Block renders a day cell at one of two DENSITIES. Below a
+threshold a cell carries a presence underline; at or above it the cell can
+honestly carry event NAMES. The switch is a **container** query on the cell
+itself — `@container cal-cell (min-width: 84px)`, `container-name: cal-cell`
+set at `calendar-block.css:851` — not a viewport media query, because the same
+Block renders at four host widths on three surfaces and only the cell knows how
+much room it really got.
+
+The #590 per-day moon discs were authored INSIDE `.cnamed`, the named-event
+subtree. They therefore inherited that subtree's 84px gate by accident of
+nesting rather than by any decision about moons. `.cal-block-host .cell >
+.cnamed { display: none }` (`:891`) and the `.phrow` rule at `:1034-1038` meant
+that below the flip the discs, their opener and the whole moon panel rendered
+into a `display:none` subtree.
+
+**A census, not an estimate.** `internal/widgets/calendar_block/moon_reach_probe_test.go`
+drives a real Chromium through the shipped app-shell chain — `<main class="px-3
+md:px-5">`, the 256px sidebar, `.cal-bench { max-width: 1180px }` — and measures
+the day cell's own content box, which is the box `@container cal-cell` measures.
+Twenty viewport × week-length pairs. Measured column widths, BEFORE:
+
+| viewport | 7-day week | 10-day week |
+|---|---|---|
+| 360 | 43.3 | 30.0 |
+| 390 | 47.6 | 33.0 |
+| 430 | 53.3 | 37.0 |
+| 768 | 62.7 | 43.6 |
+| 1024 | 99.3 **named** | 67.2 |
+| 1280 | 93.0 **named** | 62.8 |
+| 1440 | 115.9 **named** | 78.8 |
+| 1920 | 121.0 **named** | 82.4 |
+
+Discs painted in 6 of 20 rows. **None on any phone, and none for a ten-day week
+at ANY viewport on ANY monitor** — a ten-day column tops out at 82.4px, 1.6px
+short, because `.cal-bench` caps the Block at 1180px, so 1920 and 1440 measure
+identically and an unpinned sidebar changes nothing. The feature was unreachable
+BY CONSTRUCTION for every in-world calendar with a long week, not merely on
+small screens. Note also that 1280 (93.0) is NARROWER than 1024 (99.3): the
+docked Ledger takes 300px once the host clears the 900px full-tier line, so
+widening the window could LOSE you the discs.
+
+### Decision
+
+**Give `.phrow` its own threshold. Keep 84px for the named-event row.**
+
+- `MoonRowColWidthMin = 40.0` in `internal/widgets/calendar_block/sizing.go`,
+  beside the existing `NamedColWidthMin = 84.0`, with the census in its doc
+  comment. CSS: a new `@container cal-cell (min-width: 40px)` block.
+- `instrument.templ` moves `@moonRow` out of `<div class="cnamed">` to be a
+  direct child of `.cell` — where `moonPick`'s radio already sits, for the
+  reason its own comment gives. It is absolutely positioned, so it costs no
+  layout in either subtree.
+
+**Why 40, read off the census rather than chosen.** 37.0px is the widest column
+that must NOT draw the row and 43.3px the narrowest that must, so 40 is the
+midpoint of the only gap the measurements leave. It independently clears the
+row's own MEASURED 35.0px with 2.5px each side. Both criteria agree at 40; only
+one agrees at 42. The constant is deliberately NOT derived from
+`NamedColWidthMin` — the two answer different questions and a change to one must
+not silently move the other.
+
+AFTER: identical host/column/density columns (the change moves no geometry);
+discs 3 and the panel opens in **17 of 20** rows. The three that stay at 0 are
+30.0 / 33.0 / 37.0 — a ten-day week on a phone, where a 35px row does not fit a
+30px cell. That is the query still doing its job.
+
+### Alternatives rejected
+
+1. **Lower the single shared threshold.** It would put event NAMES into a 40px
+   cell — trading an invisible feature for an illegible one.
+2. **Delete the query.** It exists so a cramped cell degrades instead of
+   overflowing. The probe now FAILS if some case does not still degrade, which
+   is what keeps this honest.
+
+### What the query still protects
+
+A ten-day week on a phone (30.0–37.0px columns) still gets no disc row, on
+purpose: three 10px discs plus gaps do not fit, and the alternative is overflow
+or overlap. The 84px gate still guards event names at full strength — the named
+cell's rendering is pixel-identical to what shipped.
+
+### Consequences and open judgement
+
+- **The underline cell's disc placement is a composition the operator has not
+  seen.** `cells-zoom.png` draws the discs at the TOP-RIGHT of a day cell, and
+  that render is a NAMED cell (numeral left-aligned). The underline cell CENTRES
+  its numeral (`.dn { text-align: center }`), so the top-right anchor collides
+  with the digits at every phone width, and clearing a centred two-digit numeral
+  sideways needs a ~96px column — WIDER than the 84px named flip, i.e. a "fix"
+  that reaches nobody. The signed `right: 4px` anchor is kept; only the ROW
+  moves, `top: 5px` → `top: 26px`, below the numeral and above the underline
+  bar. Exactly one property differs between the densities. This amends nothing
+  signed (the governing render does not draw an underline-density cell) but it
+  deserves a live look. Carried in `.ai/todo.md`.
+- **The 44px tap floor is NOT met and was not forced.** Measured on a real
+  coarse pointer, the opener's effective target is 43.3–49.0 × 24.0px — 20.0px
+  short in the block axis. It cannot be met inside this cell: an underline day
+  cell is 52.0px tall and 43.3px wide at the narrowest width that now draws
+  discs, so a 44px target would BE the cell, and it would take that area out of
+  `.dsel` underneath, whose own target [MOB-7] already records as the tightest
+  thing on the page. Raising it needs a drawing and a signature. The probe
+  prints the number at every width so the ceiling stays visible.
+- The keyboard focus ring had to follow the row out of `.cnamed`
+  (`.cell > .moonpick:focus-visible + .phctl`), and the coarse-pointer pad
+  (`inset: -7px` = 49px) is now clamped to `max(-7px, (100% - 100cqi) / 2)` so
+  one day's moon control cannot sit inside its neighbours at a 43.3px cell.
+
+### References
+
+- `internal/widgets/calendar_block/sizing.go` (`MoonRowColWidthMin`, `NamedColWidthMin`)
+- `static/css/calendar-block.css` §DENSITY — the two `@container cal-cell` blocks
+- `internal/widgets/calendar_block/instrument.templ` — `@moonRow` as a direct child of `.cell`
+- Census + guard: `internal/widgets/calendar_block/moon_reach_probe_test.go`,
+  registered in `tools/check-browser-probes.sh`
+- Data half of the same complaint: ADR pending / `internal/plugins/calendar/moon_fallback.go`

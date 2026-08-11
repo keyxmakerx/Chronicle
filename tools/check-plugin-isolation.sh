@@ -131,6 +131,12 @@ always_allowed_prefixes=(
   "internal/systems/operator_diag_deploy_test.go"
   "internal/systems/operator_diag_plugins_test.go"
   "internal/app/operator_diag_plugins_test.go"
+  # The campaign diagnostics' fixtures. Same allowance as the four test files
+  # above: these tests assert what `campaign.config` / `campaign.surfaces` print
+  # about the CALENDAR addon specifically — a disabled-addon row, and the sidebar
+  # item that links to it. Substituting a non-colliding slug would leave the test
+  # asserting nothing about the case it is named for.
+  "internal/systems/operator_diag_campaign_test.go"
 )
 
 # ---------------------------------------------------------------------------
@@ -152,12 +158,21 @@ always_allowed_prefixes=(
 #   references. Introduced when sweep R4 stage 16 threaded ImportReport through
 #   the export adapters and left this guard red for nine commits.
 #
+#   internal/systems/operator_diag_campaign.go — one LAYOUT BLOCK TYPE that
+#   spells the calendar plugin's slug (`blockTypeCalendar`). The diagnostic
+#   annotates block types it is HANDED by the app layer; internal/systems may
+#   not import a plugin, so it cannot borrow calendar.PluginSlug the way
+#   internal/app/operator_diag_campaign_adapter.go does. See the const block
+#   there. The app-layer half of the same diagnostic needs no exemption — it
+#   was fixed by aliasing the plugin's own const instead.
+#
 # Pinned by tools/test-plugin-isolation.sh, which mutation-tests the narrowness
 # in both directions (a const line passes; the same slug on any other line of
 # the same file still fails).
 # ---------------------------------------------------------------------------
 const_registry_files=(
   "internal/plugins/campaigns/import_report.go"
+  "internal/systems/operator_diag_campaign.go"
 )
 
 # ---------------------------------------------------------------------------

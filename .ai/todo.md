@@ -9,6 +9,55 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-integration. The four moon stages integrated (2026-08-11)
+
+### [x] Done
+
+- [x] **`check-plugin-isolation.sh` was RED and had been since `5e6abb19`.** Four
+      new `"calendar"` literals outside the plugin (T-B2). The guard diffs
+      `origin/main...HEAD`, so it only reddens once the work is COMMITTED — which
+      is why four stages of local green missed it. Fixed by construction:
+      `internal/app/operator_diag_campaign_adapter.go` aliases `calendar.PluginSlug`
+      (the app layer already imports the plugin); `internal/systems/operator_diag_campaign.go`
+      declares the one colliding layout BLOCK TYPE as `blockTypeCalendar` under the
+      guard's const-registry amendment (R4-S26-A — exempts a bare const line and
+      nothing else in that file), because `internal/systems` may not import a
+      plugin; the test file joins the four `operator_diag_*_test.go` fixtures
+      already in `always_allowed_prefixes`.
+- [x] **Hardened the provider-wiring guard, which passed a mutation it should
+      have failed.** `internal/app/operator_diag_wiring_test.go` already covers
+      `SetCampaignDiagProvider` with no edit (it enumerates declarations), and
+      fails on both obvious disablings — but a call inside a **never-invoked
+      function literal** in `RegisterRoutes` passed BOTH tests. The boot-path walk
+      no longer descends into a `*ast.FuncLit`, and reports a literal-buried call
+      by name. The shipped wiring is unaffected: it passes literals as ARGUMENTS,
+      and `ast.Inspect` visits the `CallExpr` before its arguments.
+- [x] **Mutation-tested it three ways, RED then GREEN.** Verbatim:
+      - comment the call out → `internal/systems declares SetCampaignDiagProvider but no non-test file in internal/app calls systems.SetCampaignDiagProvider` + `is never called from internal/app, so it is not on any boot path` — both FAIL.
+      - move it to an uncalled method → `systems.SetCampaignDiagProvider is called from mutationOrphanWiring, which RegisterRoutes does not call` — source test PASS, boot-path FAIL. (This is the division of labour working, not a hole.)
+      - wrap it in `neverRun := func() { … }` → **before**: both PASS. **after**: `systems.SetCampaignDiagProvider is only called from inside a function literal in RegisterRoutes. Nothing here proves that literal is ever invoked…` — FAIL.
+      - `routes.go` restored byte-for-byte after each (`git checkout --`), guard GREEN.
+- [x] **ADR-052** records the container-query threshold with the full twenty-row
+      census table, both alternatives rejected, and what the query still protects.
+
+### [ ] Open — carried forward, not done here
+
+- [ ] **The underline cell's disc placement wants an operator's eyes** (see
+      ADR-052 → Consequences). It amends nothing signed — `cells-zoom.png` draws a
+      NAMED cell — but it is a composition nobody has seen, and no still was ever
+      generated. One screenshot before it reaches the operator.
+- [ ] **The 44px tap floor is not met** (43.3–49.0 × 24.0px measured) and cannot
+      be met inside the day cell without taking area from `.dsel`. Needs a drawing
+      and a signature, not a CSS tweak.
+- [ ] **Nothing in these four stages has run against a live server or a real
+      phone.** No DB, so `make test-int` was not run; `campaign.surfaces` has
+      never seen a real `e.Routes()`; every pixel is headless Chromium with an
+      emulated coarse pointer.
+- [ ] **`golangci-lint` still not run** — the binary is not installed in this
+      environment. `go vet` on the touched packages is clean and `gofmt` is
+      implicit in the build, but the project's own `make lint` gate has not been
+      exercised on any of this.
+
 ## 0-campaign-diag. The catalog can answer campaign-shaped questions (2026-08-11)
 
 The 28-entry catalog scored 0 for 3 against the operator's three phone
@@ -116,6 +165,30 @@ real CPU to execute the timer callbacks, so under load the dump can happen with
 tail replies missing — and the probe then fatals on the reply count, which its
 own comment says "reads as a flake and is not one". On this evidence it IS one.
 
+**Reproduced again during the 2026-08-11 integration pass, and the blast radius
+is wider than the probe job.** A `go test -short -count=1 ./...` over the whole
+tree failed `TestMobileProbe_TheScrollerCensusAndTheLongWeek` AND
+`TestMobileProbe_TheRSVPOverviewAndTheScheduleFitThePhone` with
+`asked for N steps and got 0 replies — the child stopped answering: []`; an
+unpiped re-run of the identical tree passed everything. A DIFFERENT pair failed
+than stage 1 saw, which a deterministic regression cannot do.
+
+The wider point: these six probes are **browser-gated only, with no `-short`
+gate** — deliberately, per the file comment ("a registered probe that skips
+itself by default is a silent pass wearing a name"). That reasoning was sound
+when the probes had no CI job of their own. Now that they DO
+(`tools/check-browser-probes.sh`, which drives them explicitly), the absent
+`-short` gate means the ordinary `Build & Test` lane ALSO launches Chromium
+six times while every other package competes for the same cores — so this flake
+can redden a job that has nothing to do with pixels.
+
+- [ ] Decide whether `mobile_probe_test.go` should honour `-short` now that the
+      probe guard drives it by name. That would move the browser work onto the one
+      job that expects it, and cost nothing: `check-browser-probes.sh` does not
+      pass `-short`. **Not done here** — the file's comment is an explicit
+      argument against it, written before the guard existed, and overturning it is
+      a decision about what a probe is allowed to claim rather than an integration
+      fix.
 - [ ] Make `mobileDrive` distinguish a starved run from a measurement failure —
       e.g. retry once on a short reply count, or fail with a message that names
       CPU starvation as the likely cause instead of asserting the render is
