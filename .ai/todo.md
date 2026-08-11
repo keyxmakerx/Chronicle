@@ -126,9 +126,59 @@ to the executable's mtime. Two ways to close it, either sufficient:
   than one replica sees only the one that served their admin request. Durable
   capture is a different feature (a table, retention, a writer that cannot slow
   the error path) and should not be bolted onto this one silently.
-- [ ] **Consider a `defaultProbes()` entry** pointing at `host.errors` for the
-  operator who reaches for a shell first — the same gap noted for
-  `host.embedded` above, and closable in the same edit.
+- [x] **`defaultProbes()` now points at `host.errors`** (and at `host.embedded`,
+  `host.widgets`, `host.build`, `packages.on-disk-versions`,
+  `system.file-contains`) — closed by the widgets/plugins stage below.
+
+## 0-host-widgets. Widgets, plugins, deploy-check, probes — landed (2026-08-11)
+
+The operator asked for "calendar (and other widget) versions". Closed by:
+
+- [x] `host.widgets [<name-substring>]`, `host.plugins` in
+  `internal/systems/operator_diag_plugins.go`; `host.deploy-check [<marker,…>]`
+  in `internal/systems/operator_diag_deploy.go`; `SetHostPluginsProvider` wired
+  from `App.hostPluginRows()` (same dependency inversion as the other three
+  providers). `hostIdentityLines()` lives beside `host.build`'s own renderer and
+  shares `notStampedHeadline` with it, so the composite cannot form a second
+  opinion about what an absent VCS stamp means. `shortSHA()` consolidated the
+  four hand-rolled copies of the content-hash truncation, because these hashes
+  are compared *across* diagnostics.
+- [x] Probe library rewritten: two TRAP entries (`image-digest`,
+  `plugin-asset-grep`), four new probes, and a superseded-not-deleted rule
+  enforced by `TestSupersededProbesAreAnnotatedNotDeleted`.
+
+### [ ] Still open / worth a live check
+
+- [ ] **Not verifiable headlessly:** run `host.widgets`, `host.plugins` and
+  `host.deploy-check` on a real container once. Everything was measured against
+  a source checkout plus injected fakes; in particular `css/app.css` is
+  *generated* and therefore absent in a checkout, so the bellwether section's
+  present-file path for it has never been exercised against a real deployment.
+  Confirm too that `host.widgets` lists the calendar plugin's embedded scripts —
+  the whole point is that they are invisible to `ls`.
+- [ ] **The widget↔JS name mapping is by convention, not by contract.**
+  `host.widgets` pairs `js/<name>.js` with `css/<name>.css` inside the same
+  scope. That is the convention the tree follows today (it is how the calendar
+  plugin's `gm_panel` pair is found), but nothing enforces it, and a stylesheet
+  named differently belongs to no widget and shows only in `host.assets`. Stated
+  in the output rather than papered over.
+- [ ] **The Go widget packages under `internal/widgets/` remain unenumerable at
+  runtime**, because the source tree does not ship. If a per-widget server-side
+  registry ever exists, `host.widgets` should read it instead of walking
+  directories — the Desc and the standing note both say which it did, so the
+  swap will be visible.
+- [ ] **The plugin-slug alias fold is a heuristic.** `normalizePluginKey` folds
+  `-`/`_` and case. It is deliberately narrow and unit-tested against
+  `calendar` vs `calendar-v2` and `maps` vs `map`, but a plugin whose two
+  registries disagree in some *other* way would still render as two rows. The
+  real fix is for `PluginRegistration` to carry its `PluginHealthKey`
+  explicitly, which is a change to the registration shape and wants its own
+  decision doc.
+- [ ] **`host.deploy-check`'s marker scan is extension-bounded** (`.js`, `.css`,
+  `.html`, `.json`, `.svg`, `.txt`, `.md`, `.map`, `.mjs`, `.htm`) and reports
+  how many files it skipped for that reason. Measured against this repo it reads
+  138 of 148 files / ~3.7 MB, which is cheap — but a marker inside a format not
+  on that list will read as absent from a scope that never looked at it.
 
 ## 0-fix-R1. The six confirmed defects from the operator's first look — DONE (2026-08-10)
 

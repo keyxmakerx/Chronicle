@@ -176,6 +176,72 @@ so a later change cannot quietly move a production error response.
 Limits stated in the output itself: in memory, this process only — a restart
 empties it and each replica keeps its own.
 
+### …and can now name its WIDGETS and PLUGINS — `host.widgets` / `host.plugins` / `host.deploy-check` (2026-08-11)
+
+The operator's actual words were "calendar (and other widget) versions", and
+Chronicle could not answer that in any form. Three additions close it, plus a
+rewritten probe library.
+
+- **`host.widgets [<name-substring>]`** — one line per widget: name, which
+  storage mechanism it came from, size, sha256[:16], mtime where one exists, and
+  the `?v=` this process serves, with the same token verdicts `host.assets`
+  uses. Companion stylesheets (`js/<name>.js` ↔ `css/<name>.css`) get their own
+  sub-line, because a deploy that changes only the CSS leaves the script's hash
+  untouched and would otherwise read as a no-op.
+- **`host.plugins`** — per plugin: static mount + URL prefix + embedded asset
+  count and aggregate size, whether it contributed migrations, and applied-vs-
+  available schema version taken from the migration runner's own record rather
+  than recounted.
+- **`host.deploy-check [<marker,…>]`** — the composite. Build identity in three
+  lines, the bellwether assets, a marker search across **both** storage
+  mechanisms reported **separately**, and `packages.installed-vs-loaded`
+  delegated verbatim. This is the "paste this one thing after a deploy" check.
+
+**Three things had to be said rather than assumed, and each is printed on every
+run:**
+
+1. **Widgets have no version number.** Nothing declares one, nothing stores one,
+   and there is no server-side widget registry — a widget is a JS file that
+   registers itself with `boot.js` when the browser mounts a `data-widget`
+   element. So `host.widgets` says plainly that the honest answer is a content
+   fingerprint plus a build time, states that it WALKED two known directories
+   because there was no registry to consult, and says that the Go widget
+   packages under `internal/widgets/` cannot be enumerated from a deployment at
+   all (the source tree does not ship). Inventing a version number would have
+   been the easy, wrong answer.
+2. **Chronicle has no plugin loader.** Every plugin is compiled in and registers
+   its routes unconditionally; the two registries `host.plugins` reads are
+   *opt-in metadata* (a plugin joins one only if it needs a static mount or a
+   health hook, the other only if it owns tables). Most plugins appear in
+   neither. Without that standing note a missing row reads as a missing feature.
+3. **One plugin, two spellings.** `foundry_vtt` registers as `foundry-vtt` in
+   the metadata registry (that spelling is also its static URL prefix) and as
+   `foundry_vtt` in the schema runner and health registry. Merged literally it
+   would render as two rows — one apparently migration-less, one apparently
+   unregistered. `App.hostPluginRows()` folds `-`/`_` for the merge key only,
+   and the row prints both spellings so the alias is taught rather than hidden.
+
+**The probe library is now half warnings.** Both wrong turns of 2026-08-11 came
+from commands whose output was truthful about what it measured and misleading
+about what the reader wanted. Those probes are kept and annotated, never deleted:
+
+- `image-digest` is retitled **TRAP**, now compares the image the container RUNS
+  against the image the tag points at NOW, and states that these labels have
+  been observed six months wrong about a binary built minutes earlier — use
+  `host.build`.
+- `plugin-asset-grep` is a new **TRAP** entry: the empty grep of `/app/static`
+  for a plugin asset is the *expected* result, because those bytes are
+  `//go:embed`-ed into the executable — use `host.embedded` / `host.widgets`.
+- New: `container-restart-time` (`docker compose up -d` neither rebuilds nor
+  re-pulls when the tag already resolves locally, and compose declares both
+  `image:` and `build:` for the same service), `binary-in-container` (executable
+  mtime + container clock from outside the process), `page-asset-tokens`,
+  `plugin-schema-versions`.
+- Probes a `host.*` check now answers better (`package-version-dirs`,
+  `package-file-marker`, `chronicle-logs`, `served-widget-version`) say which
+  one to prefer, in their own text. Deleting them would leave an operator who
+  remembered the command running it with no note attached.
+
 ### The operator's first look — six confirmed defects, all fixed (2026-08-10)
 
 Five in this repo, one in `Chronicle-Foundry-Module`. Each was measured before it

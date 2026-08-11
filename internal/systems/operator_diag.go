@@ -68,6 +68,11 @@ func diagnosticCatalog() []Diagnostic {
 		// not the build the operator thinks it is. Defined in
 		// operator_diag_host.go.
 		hostBuildDiagnostic(),
+		// The composite sits second: it is the ONE thing to run after a deploy,
+		// and it assembles what host.build, host.assets, host.embedded and
+		// packages.installed-vs-loaded each answer separately. Defined in
+		// operator_diag_deploy.go.
+		hostDeployCheckDiagnostic(),
 		hostRuntimeDiagnostic(),
 		// What the server has been getting WRONG, defined in
 		// operator_diag_errors.go. Placed this high because it is the question
@@ -88,6 +93,15 @@ func diagnosticCatalog() []Diagnostic {
 		hostAssetContainsDiagnostic(),
 		hostEmbeddedDiagnostic(),
 		hostEmbeddedContainsDiagnostic(),
+		// The extension tiers, defined in operator_diag_plugins.go.
+		// host.widgets answers the operator's original question ("calendar (and
+		// other widget) versions") and host.plugins answers "is this plugin
+		// even loaded?". Both sit after the raw asset listings because both are
+		// INTERPRETATIONS of the same two storage mechanisms — a reader who
+		// disbelieves a row here should be able to drop down to host.assets /
+		// host.embedded and see the file itself.
+		hostWidgetsDiagnostic(),
+		hostPluginsDiagnostic(),
 		{
 			Name:  "system.versions",
 			Title: "Loaded system versions (compact)",
@@ -240,8 +254,8 @@ func diagnosticCatalog() []Diagnostic {
 		},
 		{
 			Name:  "probes",
-			Title: "Run-and-paste-back probe library",
-			Desc:  "docker / browser-console / SQL / admin-URL commands for state the server CAN'T self-report (served ?v=, on-disk folders, logs, image digest).",
+			Title: "Run-and-paste-back probe library (including the traps)",
+			Desc:  "docker / browser-console / SQL commands for state the server CAN'T self-report (the browser's cached ?v=, on-disk folders, logs, the Docker daemon's view). Also carries the TRAP annotations: which natural-looking shell commands return a truthful-but-misleading answer — Docker image labels have been observed months wrong about a running binary, and a grep of the container filesystem can never find a plugin's assets — and which host.* diagnostic to prefer instead.",
 			Run: func(string) string {
 				var b strings.Builder
 				renderProbesSection(&b, defaultProbes())
@@ -399,7 +413,8 @@ func renderSystemsSection(b *strings.Builder, systems []SystemHealth) {
 // renderProbesSection renders the run-and-paste-back probe library.
 func renderProbesSection(b *strings.Builder, probes []Probe) {
 	b.WriteString("## Probes — run each and paste the output back to the assistant\n\n")
-	b.WriteString("Placeholders to substitute locally: `<chronicle>` / `<db>` container names, `<media>` in-container media path (see served dir above), `<campaignId>` the campaign UUID.\n\n")
+	b.WriteString("Placeholders to substitute locally: `<chronicle>` / `<db>` container names, `<org>` the GitHub org in the image name, `<media>` in-container media path (see served dir above), `<campaignId>` the campaign UUID, `<password>` the database root password — substitute it as you run the command and do NOT paste it back with the output.\n\n")
+	b.WriteString("**Read each `Why:` before running the command.** Some probes are marked TRAP: they return an answer that is correct about what it measured and misleading about what you wanted to know, and the note says what to run instead. Others are marked superseded, meaning a `host.*` diagnostic now answers them without a shell — they are kept here, annotated, rather than removed, because an operator who remembers the command will run it either way.\n\n")
 	for _, p := range probes {
 		fmt.Fprintf(b, "### [%s] %s\n", p.Where, p.Title)
 		fmt.Fprintf(b, "_Why:_ %s\n\n", p.Why)
@@ -693,49 +708,102 @@ type Probe struct {
 }
 
 // defaultProbes is the curated probe library (state the server can't self-report).
+//
+// Two kinds of entry live here now, and the difference matters:
+//
+//   - Probes for state genuinely outside the process — the browser's view, the
+//     database, the Docker daemon.
+//   - TRAP annotations. Several natural-looking shell commands return an answer
+//     that is correct about what it measured and MISLEADING about what the
+//     reader wanted to know. Both wrong turns of the 2026-08-11 incident were
+//     of that kind: `docker inspect` labels described a different image, and a
+//     grep of the container filesystem could never have found a plugin asset
+//     because those bytes are compiled into the binary. Those probes are kept
+//     and annotated rather than removed, because the operator will type them
+//     anyway — the value is in the warning next to the output.
+//
+// A probe that a host.* diagnostic now answers better is likewise KEPT and its
+// Why says which one to prefer. Silently deleting it would leave an operator
+// who remembered it running it from memory with no note attached.
 func defaultProbes() []Probe {
 	return []Probe{
 		{
+			ID:    "image-digest",
+			Title: "TRAP — which image the container RUNS vs which image the tag points at NOW",
+			Where: ProbeDocker,
+			Command: `docker inspect --format 'container_image={{.Image}}{{"\n"}}config_image={{.Config.Image}}' <chronicle>
+docker image inspect --format 'tag_image={{.Id}}{{"\n"}}label_revision={{index .Config.Labels "org.opencontainers.image.revision"}}{{"\n"}}label_created={{index .Config.Labels "org.opencontainers.image.created"}}' ghcr.io/<org>/chronicle:latest`,
+			Why: "READ THIS BEFORE THE OUTPUT. **Docker image labels are NOT a reliable build identity on this project** — on 2026-08-11 they read revision=33f4cb07 / created=2026-02-19 and were used to declare the running binary six months stale. It had been built minutes earlier. The labels were accurate about a February image that still held the tag in the deploy host's local image store; `docker inspect <tag>` always answers for whichever image holds the tag NOW, never for the image a running container was created from. **If container_image and tag_image differ, the labels are describing something else entirely.** For the actual identity of the running binary use the `host.build` diagnostic, which reads it from inside the process. (Chronicle's own Dockerfile sets no labels and alpine inherits none, so any label you see was written by CI's docker/metadata-action about a CI build.)",
+		},
+		{
+			ID:      "container-restart-time",
+			Title:   "Was the container ever recreated for this deploy?",
+			Where:   ProbeDocker,
+			Command: `docker inspect --format 'created={{.Created}}{{"\n"}}started={{.State.StartedAt}}{{"\n"}}restarts={{.RestartCount}}' <chronicle>`,
+			Why:     "The commonest cause of 'I deployed and saw no change'. `docker compose up -d` neither rebuilds nor re-pulls when an image with that tag already exists locally, and Chronicle's compose file declares BOTH `image:` and `build:` for the same service — so the tag has two possible producers and either can be the stale one. If StartedAt predates your deploy, nothing was replaced: run `docker compose build` or `docker compose pull` explicitly, then `up -d`. Cross-check against the uptime `host.build` reports from inside the process.",
+		},
+		{
+			ID:      "binary-in-container",
+			Title:   "Executable mtime + container clock, from outside the process",
+			Where:   ProbeDocker,
+			Command: `docker exec <chronicle> sh -lc 'ls -la /usr/local/bin/chronicle; date -u'`,
+			Why:     "An independent cross-check of the executable mtime `host.build` reports — the two should agree exactly, and a disagreement means the file was replaced under the running process. `date -u` is there because every age and uptime in every diagnostic is computed against the container clock: if it is skewed, they are all wrong together, and this is the cheapest way to rule that out.",
+		},
+		{
+			ID:      "plugin-asset-grep",
+			Title:   "TRAP — grepping the container filesystem for a plugin's asset",
+			Where:   ProbeDocker,
+			Command: `docker exec <chronicle> sh -lc 'ls /app/static/js/widgets | head -20; echo "--- now the trap ---"; grep -rl calendar_widget /app/static 2>/dev/null || echo "NOT FOUND in /app/static (expected — see below)"'`,
+			Why:     "**An empty result here is the EXPECTED result and is not evidence of missing code.** Chronicle serves its front-end from two places: `/app/static` on disk, and each plugin's `//go:embed`-ed filesystem INSIDE the binary. Plugin widgets (the calendar widget among them) exist only in the second, so no `ls`, `grep` or `find` over the container filesystem can ever see them. On 2026-08-11 exactly this empty grep was read as a missing feature. Use `host.embedded` / `host.widgets` to look inside the binary, and `host.deploy-check <marker>` to search BOTH places at once and get them reported separately.",
+		},
+		{
 			ID:      "served-widget-version",
-			Title:   "Version of the widget the page actually loads",
+			Title:   "Version of the widget the BROWSER actually loaded",
 			Where:   ProbeConsole,
 			Command: `[...document.scripts].map(s=>s.src).filter(s=>/widgets\/.+\.js/.test(s))`,
-			Why:     "The ?v= on each system widget URL = the version the loader serves. If it lags Admin▸Packages, the in-memory registry never picked up the install.",
+			Why:     "The ?v= on each widget URL is the token the server emitted for the page this tab is showing. Still worth running: `host.widgets` reports what the SERVER will emit, and this reports what the browser was actually given — a difference between the two means this tab is holding an old page, not that the server is stale.",
+		},
+		{
+			ID:      "page-asset-tokens",
+			Title:   "Every versioned asset URL on the current page",
+			Where:   ProbeConsole,
+			Command: `[...document.querySelectorAll('script[src],link[rel=stylesheet]')].map(e=>e.src||e.href).filter(u=>u.includes('/static/')).sort()`,
+			Why:     "The browser-side counterpart to `host.assets` / `host.widgets`. Compare token by token: a token here that the server does not report means a cached page; a URL with no ?v= at all means the app could not resolve that file when it rendered the link, which `host.assets` flags as BUILD-TOKEN FALLBACK.",
 		},
 		{
 			ID:      "served-widget-content",
 			Title:   "Fetch a served widget and check for an expected marker",
 			Where:   ProbeConsole,
 			Command: `fetch(document.querySelector('script[src*="character-sheet"]').src).then(r=>r.text()).then(t=>console.log('bytes',t.length,'hasPlayEntrance',t.includes('playEntrance')))`,
-			Why:     "Confirms whether the bytes the browser receives are the new build (marker present) or a stale/cached copy.",
+			Why:     "Confirms whether the bytes the browser receives are the new build (marker present) or a stale/cached copy. This is the only probe here that tests the delivery path end to end — `host.asset-contains` and `host.embedded-contains` answer the same question about the server's copy, so run this one when the two disagree.",
 		},
 		{
 			ID:      "package-version-dirs",
 			Title:   "On-disk installed version folders for a system",
 			Where:   ProbeDocker,
 			Command: `docker exec <chronicle> ls -la <media>/packages/systems/`,
-			Why:     "Shows every installed version folder. Multiple folders → a stale one may shadow the newest.",
+			Why:     "Shows every installed version folder. Multiple folders → a stale one may shadow the newest. **Mostly superseded**: `packages.on-disk-versions` reports the same folders AND tags which one the DB installed and which one the loader is actually serving, which is the part this raw listing cannot tell you. Run this only when you suspect the server's own view is wrong.",
 		},
 		{
 			ID:      "package-file-marker",
 			Title:   "Which installed copy has the new code",
 			Where:   ProbeDocker,
 			Command: `docker exec <chronicle> sh -lc 'grep -rl playEntrance <media>/packages/systems/ 2>/dev/null'`,
-			Why:     "Pinpoints which on-disk version folder actually contains the new build, vs the served dir in system.versions.",
+			Why:     "Pinpoints which on-disk version folder actually contains the new build, vs the served dir in system.versions. This works because system PACKAGES are unpacked on disk — do not generalise it: the same grep against a plugin's assets always comes back empty (see the `plugin-asset-grep` trap above). `system.file-contains` answers this for the file the loader is serving, without a shell.",
 		},
 		{
 			ID:      "chronicle-logs",
-			Title:   "Recent Chronicle logs (install / rescan lines)",
+			Title:   "Recent Chronicle logs (install / rescan / panic lines)",
 			Where:   ProbeDocker,
 			Command: `docker logs --tail 200 <chronicle>`,
-			Why:     "Shows package install, 'replacing system with preferred copy', 'ignoring duplicate system', and boot rescan lines — what the loader did with the new version.",
+			Why:     "Shows package install, 'replacing system with preferred copy', 'ignoring duplicate system', and boot rescan lines — what the loader did with the new version. **Partly superseded**: `host.errors` / `host.errors-summary` now report 5xx responses and recovered panics without shell access. The log is still the only source for panic STACK TRACES, for loader lines, and for anything that happened before the last restart — the error ring is in memory and empties when the process does.",
 		},
 		{
-			ID:      "image-digest",
-			Title:   "Which Chronicle image the container runs",
-			Where:   ProbeDocker,
-			Command: `docker inspect --format '{{.Image}} {{.Config.Image}}' <chronicle>`,
-			Why:     "Confirms the backend is on the expected image — a stale image explains merged backend changes not being live.",
+			ID:      "plugin-schema-versions",
+			Title:   "Applied plugin migrations, from the database itself",
+			Where:   ProbeSQL,
+			Command: `docker exec <db> mariadb -u root -p<password> chronicle -e "SELECT plugin_slug, MAX(version) AS applied, COUNT(*) AS rows_, MAX(applied_at) AS last_applied FROM plugin_schema_versions GROUP BY plugin_slug ORDER BY plugin_slug;"`,
+			Why:     "The ground truth behind `host.plugins`'s applied-version column, which reads an in-memory registry populated once at boot. If they disagree, something changed the database after this process started. Note the slug spellings here are the migration runner's (e.g. `foundry_vtt`), not the metadata registry's (`foundry-vtt`).",
 		},
 		{
 			ID:      "packages-db-state",

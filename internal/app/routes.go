@@ -2530,6 +2530,12 @@ func (a *App) RegisterRoutes() {
 	// matter that plugins register (and mountPluginStatic runs) after this line.
 	systems.SetEmbeddedAssetsProvider(a.embeddedAssetSets)
 
+	// Wire the merged plugin registries so host.plugins can answer "is this
+	// plugin even loaded, and did its schema actually run?". Same late-binding
+	// closure as above: the metadata registry is still being filled by the
+	// registerPlugin calls further down this function.
+	systems.SetHostPluginsProvider(a.hostPluginRows)
+
 	// Wire the in-memory error ring so host.errors / host.errors-summary can
 	// answer "what broke overnight?" without shell access to the container.
 	// The ring itself is written by app.errorHandler and the panic-recovery

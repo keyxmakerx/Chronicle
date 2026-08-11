@@ -221,8 +221,7 @@ func walkStaticFiles(root string) ([]assetFile, error) {
 			if readErr != nil {
 				f.Err = readErr.Error()
 			} else {
-				sum := sha256.Sum256(data)
-				f.SHA256 = hex.EncodeToString(sum[:])[:16]
+				f.SHA256 = shortSHA(data)
 			}
 		}
 		out = append(out, f)
@@ -454,9 +453,8 @@ func renderHostAssetContainsFrom(root staticRoot, arg string) string {
 		fmt.Fprintf(&b, "- `%s` could not be read: %s\n", relPath, readErr)
 		return b.String()
 	}
-	sum := sha256.Sum256(data)
 	fmt.Fprintf(&b, "read `%s` — %d bytes · `%s` · %s\n\n",
-		full, len(data), hex.EncodeToString(sum[:])[:16], info.ModTime().UTC().Format(time.RFC3339))
+		full, len(data), shortSHA(data), info.ModTime().UTC().Format(time.RFC3339))
 	markerReport(&b, string(data), markerCSV)
 	return b.String()
 }
@@ -546,8 +544,7 @@ func renderEmbeddedSet(b *strings.Builder, s EmbeddedAssetSet, assetURL func(str
 			files++
 			return nil
 		}
-		sum := sha256.Sum256(data)
-		sha := hex.EncodeToString(sum[:])[:16]
+		sha := shortSHA(data)
 		url := strings.TrimSuffix(s.URLPrefix, "/") + "/" + p
 		token := versionToken(assetURL, url)
 		fmt.Fprintf(b, "- `%s` — %d · `%s` · `?v=%s` %s\n", p, len(data), sha, token, tokenVerdict(token, sha, buildToken))
@@ -638,15 +635,26 @@ func renderHostEmbeddedContainsFrom(provider func() []EmbeddedAssetSet, arg stri
 		b.WriteString("- Run `host.embedded " + slug + "` for the exact paths this plugin embeds — they are relative to its `static/` dir, so there is no leading `static/` or `/static/plugins/…`.\n")
 		return b.String()
 	}
-	sum := sha256.Sum256(data)
 	fmt.Fprintf(&b, "read `%s` from `%s`'s EMBEDDED filesystem (not from disk) — %d bytes · `%s`\n",
-		relPath, slug, len(data), hex.EncodeToString(sum[:])[:16])
+		relPath, slug, len(data), shortSHA(data))
 	fmt.Fprintf(&b, "served at `%s`\n\n", strings.TrimSuffix(target.URLPrefix, "/")+"/"+relPath)
 	markerReport(&b, string(data), markerCSV)
 	return b.String()
 }
 
 // ── shared helpers ─────────────────────────────────────────────────────────
+
+// shortSHA is the content identity every asset diagnostic prints: the first 16
+// hex chars of the sha256 of the bytes. It is one function rather than five
+// copies of the same three lines because these hashes are COMPARED across
+// diagnostics — an operator reads a widget's hash from host.widgets and the
+// same file's hash from host.assets and expects them to be the same string.
+// Two hand-rolled copies with different truncation lengths would break that
+// silently.
+func shortSHA(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])[:16]
+}
 
 // versionToken extracts the bare `?v=` value AssetURL would emit for urlPath.
 // Returns "" when AssetURL declined to version the URL at all (a non-/static/

@@ -238,6 +238,58 @@ func renderBuildTrustNote(out *strings.Builder) {
 	out.WriteString("- **A related trap from the same incident:** grepping `/app/static` for a plugin's assets proves nothing. Plugin assets are `//go:embed`-ed into the binary and served from there, so they are absent from the on-disk static root by design.\n")
 }
 
+// hostIdentityLines is the COMPACT three-line build identity, for callers that
+// need the answer without host.build's full account (today: host.deploy-check).
+//
+// It lives beside host.build's long renderer and shares notStampedHeadline with
+// it deliberately. The alternative — a composite assembling its own summary
+// from hostinfo — is a second opinion about what an absent VCS stamp means, and
+// the one thing this whole workstream exists to prevent is two parts of
+// Chronicle disagreeing about the identity of the binary they are both running
+// inside.
+func hostIdentityLines(b hostinfo.Build, exe hostinfo.Executable, proc hostProcess, now time.Time) []string {
+	lines := make([]string, 0, 3)
+
+	switch {
+	case !b.InfoOK:
+		lines = append(lines, "source revision: "+notStampedHeadline+" `debug.ReadBuildInfo()` returned nothing, so this binary was not produced by a module-aware Go build.")
+	case !b.Stamped:
+		lines = append(lines, "source revision: "+notStampedHeadline+" Chronicle's Docker builder stage has no `git`, and Go then skips stamping **silently** — read this as \"never recorded\", never as \"old\". `host.build` names the two ways to fix it.")
+	default:
+		rev := "`" + b.ShortRevision() + "`"
+		if b.ModifiedKnown && b.Modified {
+			rev += " **built from a DIRTY tree** — the revision does not fully describe this binary"
+		}
+		if b.RevisionTime != "" {
+			rev += " · committed " + b.RevisionTime
+		}
+		lines = append(lines, "source revision: "+rev)
+	}
+
+	switch {
+	case exe.Err != "":
+		lines = append(lines, fmt.Sprintf("executable: `%s` — **could not be inspected** (%s), so there is no build time to compare a deploy against.", exe.Path, exe.Err))
+	case exe.Path == "" || exe.ModTime.IsZero():
+		// Belt and braces: ReadExecutable always sets Err on failure, so this
+		// is unreachable in a live process. It is handled anyway because the
+		// alternative render is "0 B, written 0001-01-01T00:00:00Z" — a
+		// fabricated field wearing the format of a fact, which is the exact
+		// class of statement this entire workstream exists to eliminate.
+		lines = append(lines, "executable: _not identified_ — no path or modification time was recorded, and no error explaining why. There is no build time here to compare a deploy against.")
+	default:
+		lines = append(lines, fmt.Sprintf("executable: `%s` — %s, written %s (%s). **This mtime is the strongest evidence of build recency available**: it belongs to the file this process is executing.",
+			exe.Path, humanBytes(exe.Size), exe.ModTime.UTC().Format(time.RFC3339), relativeTo(exe.ModTime, now)))
+	}
+
+	if proc.Start.IsZero() {
+		lines = append(lines, fmt.Sprintf("process: pid %d, start time was never recorded, so uptime is unknown.", proc.PID))
+		return lines
+	}
+	lines = append(lines, fmt.Sprintf("process: up %s (started %s), pid %d. **Uptime longer than the time since your deploy means this container was never restarted** — a new image on the host changes nothing until something recreates the container.",
+		shortDuration(now.Sub(proc.Start)), proc.Start.UTC().Format(time.RFC3339), proc.PID))
+	return lines
+}
+
 // renderHostRuntime samples the live runtime. runtime.ReadMemStats briefly
 // stops the world, which is why this is a named diagnostic an operator runs on
 // purpose rather than something rendered on every admin page.

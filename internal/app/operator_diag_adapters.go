@@ -167,6 +167,97 @@ func (a *App) embeddedAssetSets() []systems.EmbeddedAssetSet {
 	return out
 }
 
+// hostPluginRows merges Chronicle's plugin registries into the flat rows
+// host.plugins reports. It is the app layer's job because internal/systems must
+// not import internal/database or the plugin packages — the same dependency
+// inversion as embeddedAssetSets.
+//
+// There are THREE registries and they contain different plugins:
+//
+//   - a.registeredPlugins (PluginRegistration): opt-in metadata. Carries the
+//     StaticFS and the health hook. Four plugins today.
+//   - a.PluginSchemas (database.PluginSchema): the plugins that own tables and
+//     handed migrations to the runner. Nine today.
+//   - a.PluginHealth: the runner's record of what those migrations DID.
+//
+// None of them is a manifest of what exists — every plugin is compiled in and
+// registers its routes unconditionally. The renderer says so on every run;
+// this function's job is only to stop the merge itself from lying.
+//
+// THE MERGE KEY IS NORMALISED, and that is not cosmetic: foundry_vtt registers
+// as `foundry-vtt` in the metadata registry (that spelling is also its static
+// URL prefix) and as `foundry_vtt` in the schema runner and health registry.
+// Keyed literally, one plugin would render as two rows — one apparently
+// migration-less, one apparently unregistered — which is exactly the kind of
+// half-true inventory this whole workstream exists to stop. The row carries
+// BOTH spellings so the reader learns the alias rather than having it hidden.
+func (a *App) hostPluginRows() []systems.HostPlugin {
+	rows := map[string]*systems.HostPlugin{}
+	get := func(key, display string) *systems.HostPlugin {
+		k := normalizePluginKey(key)
+		if r, ok := rows[k]; ok {
+			return r
+		}
+		r := &systems.HostPlugin{Slug: display}
+		rows[k] = r
+		return r
+	}
+
+	for _, p := range a.RegisteredPlugins() {
+		r := get(p.Slug, p.Slug)
+		r.Slug = p.Slug // the metadata spelling wins as the display name: it is the one in the URL prefix
+		r.InMetadataRegistry = true
+		r.HasHealthCheck = p.HealthCheck != nil
+		if p.HealthCheck != nil {
+			// Every health callback registered today is an in-memory lookup
+			// against the migration health registry, so calling them is cheap
+			// and read-only. If one ever needs to touch the network or the DB,
+			// it should be gated rather than silently made expensive here.
+			if err := p.HealthCheck(); err != nil {
+				r.HealthErr = err.Error()
+			}
+		}
+		if p.StaticFS != nil {
+			r.StaticURLPrefix = pluginStaticPrefix(p.Slug) + "/"
+			r.StaticFS = p.StaticFS
+		}
+	}
+
+	for _, s := range a.PluginSchemas {
+		r := get(s.Slug, s.Slug)
+		r.SchemaKey = s.Slug
+		r.DeclaresMigrations = true
+	}
+
+	if a.PluginHealth != nil {
+		for slug, h := range a.PluginHealth.All() {
+			r := get(slug, slug)
+			if r.SchemaKey == "" {
+				r.SchemaKey = slug
+			}
+			r.SchemaKnown = true
+			r.SchemaHealthy = h.Healthy
+			r.SchemaVersion = h.Version
+			r.SchemaLatest = h.LatestVersion
+			r.SchemaError = h.Error
+		}
+	}
+
+	out := make([]systems.HostPlugin, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, *r)
+	}
+	return out
+}
+
+// normalizePluginKey folds the two spellings Chronicle uses for the same plugin
+// (`foundry-vtt` vs `foundry_vtt`) onto one merge key. Deliberately narrow: it
+// only lowercases and unifies `_`/`-`, so two genuinely different plugins
+// cannot be collapsed by it.
+func normalizePluginKey(slug string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(slug)), "_", "-")
+}
+
 // recentErrorSnapshot reports the process error ring for the host.errors /
 // host.errors-summary diagnostics.
 //

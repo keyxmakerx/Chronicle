@@ -478,10 +478,19 @@ func TestAssetDiagnosticsAreRegistered(t *testing.T) {
 	// host.errors/host.errors-summary were inserted between host.runtime and
 	// host.assets in the errors stage — "what has it been getting wrong?" is
 	// the question an operator arrives with, and it is cheap.
+	//
+	// The widgets/plugins stage then added three more. host.deploy-check sits
+	// SECOND, immediately after host.build: it is the single check an operator
+	// runs after a deploy and it assembles what four of the others answer
+	// apart. host.widgets/host.plugins sit after the raw asset listings because
+	// both are INTERPRETATIONS of those same two storage mechanisms — a reader
+	// who disbelieves a row should be able to drop to host.assets/host.embedded
+	// and look at the file itself.
 	want := []string{
-		"host.build", "host.runtime",
+		"host.build", "host.deploy-check", "host.runtime",
 		"host.errors", "host.errors-summary",
 		"host.assets", "host.asset-contains", "host.embedded", "host.embedded-contains",
+		"host.widgets", "host.plugins",
 	}
 	if len(cat) < len(want) {
 		t.Fatalf("catalog is unexpectedly short: %d", len(cat))
