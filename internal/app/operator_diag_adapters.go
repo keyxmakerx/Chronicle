@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/observability"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
@@ -161,6 +162,36 @@ func (a *App) embeddedAssetSets() []systems.EmbeddedAssetSet {
 			Slug:      p.Slug,
 			URLPrefix: pluginStaticPrefix(p.Slug) + "/",
 			FS:        p.StaticFS,
+		})
+	}
+	return out
+}
+
+// recentErrorSnapshot reports the process error ring for the host.errors /
+// host.errors-summary diagnostics.
+//
+// The translation between observability.Entry and systems.RecentError is
+// deliberate, not incidental: internal/systems must not import the writer side
+// of the ring any more than it imports the plugins, so the app layer owns the
+// only place the two shapes meet. Same dependency inversion as
+// embeddedAssetSets and SetInstalledPackagesProvider.
+//
+// limit <= 0 means "every held entry" and is passed straight through, because
+// the summary groups over the whole ring — a frequency computed over one page
+// would be a lie about how often something is failing.
+func recentErrorSnapshot(limit int) systems.RecentErrors {
+	s := observability.Recent(limit)
+	out := systems.RecentErrors{Capacity: s.Capacity, Held: s.Held, Total: s.Total}
+	out.Entries = make([]systems.RecentError, 0, len(s.Entries))
+	for _, e := range s.Entries {
+		out.Entries = append(out.Entries, systems.RecentError{
+			Time:           e.Time,
+			Status:         e.Status,
+			Method:         e.Method,
+			Path:           e.Path,
+			PathIsTemplate: e.PathIsTemplate,
+			Kind:           string(e.Kind),
+			Err:            e.Err,
 		})
 	}
 	return out

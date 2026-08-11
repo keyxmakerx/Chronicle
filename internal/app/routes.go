@@ -2530,6 +2530,15 @@ func (a *App) RegisterRoutes() {
 	// matter that plugins register (and mountPluginStatic runs) after this line.
 	systems.SetEmbeddedAssetsProvider(a.embeddedAssetSets)
 
+	// Wire the in-memory error ring so host.errors / host.errors-summary can
+	// answer "what broke overnight?" without shell access to the container.
+	// The ring itself is written by app.errorHandler and the panic-recovery
+	// middleware and exists from process start; this only grants the read.
+	// Until this line runs the diagnostics print "provider not wired" rather
+	// than an empty list — "no errors" and "nobody is recording" must never
+	// render the same.
+	systems.SetRecentErrorsProvider(recentErrorSnapshot)
+
 	// Wire the campaigns list (admin-only ListAll) so campaigns.list can resolve a
 	// campaign id by name — the entry point for the entity.* diagnostics.
 	systems.SetCampaignListProvider(func(ctx context.Context) ([]systems.CampaignInfo, error) {

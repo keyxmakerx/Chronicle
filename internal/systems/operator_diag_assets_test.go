@@ -474,12 +474,37 @@ func TestAssetDiagnosticsAreRegistered(t *testing.T) {
 	// top, ahead of every system.*/packages.* check, for the same reason —
 	// "what is being served" is unanswerable until "by which build, from where"
 	// is settled.
-	if len(cat) < 6 {
+	//
+	// host.errors/host.errors-summary were inserted between host.runtime and
+	// host.assets in the errors stage — "what has it been getting wrong?" is
+	// the question an operator arrives with, and it is cheap.
+	want := []string{
+		"host.build", "host.runtime",
+		"host.errors", "host.errors-summary",
+		"host.assets", "host.asset-contains", "host.embedded", "host.embedded-contains",
+	}
+	if len(cat) < len(want) {
 		t.Fatalf("catalog is unexpectedly short: %d", len(cat))
 	}
-	for i, want := range []string{"host.build", "host.runtime", "host.assets", "host.asset-contains", "host.embedded", "host.embedded-contains"} {
-		if cat[i].Name != want {
-			t.Errorf("catalog[%d] = %q, want %q (host.* must lead the catalog)", i, cat[i].Name, want)
+	for i, w := range want {
+		if cat[i].Name != w {
+			t.Errorf("catalog[%d] = %q, want %q (host.* must lead the catalog)", i, cat[i].Name, w)
+		}
+	}
+	// The invariant behind that list, asserted separately so a future insertion
+	// fails with the reason rather than just an index mismatch: nothing that is
+	// not a host.* check may sit ahead of one.
+	seenNonHost := ""
+	for _, d := range cat {
+		if !strings.HasPrefix(d.Name, "host.") {
+			if seenNonHost == "" {
+				seenNonHost = d.Name
+			}
+			continue
+		}
+		if seenNonHost != "" {
+			t.Errorf("%q sits after %q — host.* must lead the catalog, because every other diagnostic describes what the server serves and is worthless if the server is not the build you think it is", d.Name, seenNonHost)
+			break
 		}
 	}
 }

@@ -69,6 +69,15 @@ func diagnosticCatalog() []Diagnostic {
 		// operator_diag_host.go.
 		hostBuildDiagnostic(),
 		hostRuntimeDiagnostic(),
+		// What the server has been getting WRONG, defined in
+		// operator_diag_errors.go. Placed this high because it is the question
+		// an operator arrives with ("what broke overnight?") and because until
+		// now the only answer was `docker logs` — i.e. shell access, which is
+		// the exact dependency this whole host.* group exists to remove. The
+		// summary is listed after the listing but is usually the better first
+		// read; its Desc says so.
+		hostErrorsDiagnostic(),
+		hostErrorsSummaryDiagnostic(),
 		// The asset half of the same question, defined in
 		// operator_diag_assets.go. host.embedded sits alongside host.assets
 		// because Chronicle serves its front-end from TWO places — the on-disk

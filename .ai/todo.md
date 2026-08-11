@@ -81,6 +81,55 @@ to the executable's mtime. Two ways to close it, either sufficient:
   guessed would manufacture false "missing" findings — the exact failure mode
   this workstream exists to prevent. Determine the mapping first.
 
+## 0-host-errors. Recent errors without a shell — `host.errors` landed (2026-08-11)
+
+- [x] `internal/observability` (new stdlib-only leaf: 256-slot mutex-guarded
+  ring, allocated at package init so it records from the first request) +
+  `host.errors [<count>]` / `host.errors-summary` in
+  `internal/systems/operator_diag_errors.go`, wired via
+  `SetRecentErrorsProvider` from `App.recentErrorSnapshot` (same dependency
+  inversion as `SetEmbeddedAssetsProvider`). Two write hooks:
+  `app.errorHandler` (additive — records, then delegates unchanged) and
+  `middleware.Recovery` (**separate on purpose**: a recovered panic writes its
+  own 500 with `c.String` and returns `nil`, so it NEVER reaches the error
+  handler; hooking only there would have hidden the most valuable error class
+  behind a diagnostic that looked like it worked).
+- [x] Policy is a named, commented function (`observability.ShouldRecord`):
+  5xx and recovered panics only. The reason is eviction, not volume — the ring
+  evicts oldest-first, so a 404 storm would silently evict the one 500 that
+  matters while the ring still looked full.
+- [x] Paths stored are route TEMPLATES (`observability.PathFor`), because
+  Chronicle routes `/rsvp/:token`, `/proposals/respond/:token`,
+  `/calendar-rsvp/:token` and `/join/:code`.
+
+### [ ] Still open / worth a live check
+
+- [ ] **Not verifiable headlessly:** trigger a real 500 and a real panic on a
+  running container, then run `host.errors` and `host.errors-summary` from the
+  admin diagnostics page. Everything here was measured through `httptest` +
+  direct renderer calls; the wiring line in `RegisterRoutes` is exercised by no
+  unit test, so "provider wired in a live process" is reasoned from the call
+  site, not observed. If it were missed, the output says **"Provider not
+  wired"** rather than showing an empty list — that failure is loud by design.
+- [ ] **Errors that never pass through either hook are still invisible here.**
+  Anything logged with `slog.Error` from a service or a background goroutine
+  (WebSocket pumps, the calendar back-catalog walk, migrations) reaches stdout
+  and nothing else. The wider fix measured during scouting is a `slog.Handler`
+  wrapper in `cmd/server/main.go` `setupLogging` that tees records at
+  `>= slog.LevelError` into the same ring — one wrapper type, one line, and it
+  would capture every error in the app rather than the two HTTP paths. Left out
+  of this stage deliberately: it widens what is stored (arbitrary log
+  attributes, not a fixed six-field summary), which needs its own pass over
+  what those attributes can carry.
+- [ ] **Multi-replica and restart blindness is stated, not solved.** The ring is
+  per-process and in-memory; both renders say so, but an operator running more
+  than one replica sees only the one that served their admin request. Durable
+  capture is a different feature (a table, retention, a writer that cannot slow
+  the error path) and should not be bolted onto this one silently.
+- [ ] **Consider a `defaultProbes()` entry** pointing at `host.errors` for the
+  operator who reaches for a shell first — the same gap noted for
+  `host.embedded` above, and closable in the same edit.
+
 ## 0-fix-R1. The six confirmed defects from the operator's first look — DONE (2026-08-10)
 
 Five landed in this repo, one in `Chronicle-Foundry-Module`. Each was measured

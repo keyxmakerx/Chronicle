@@ -112,6 +112,70 @@ fallback there means the plugin FS was mounted for serving but never registered
 for hashing. The verdict now states the fact and each diagnostic explains its own
 cause; a test pins that the embedded output never gives the on-disk advice.
 
+### …and can now show its own recent ERRORS — `host.errors` (2026-08-11)
+
+Third gap from the same incident, and the one the operator asked for by name.
+An error that fired at 2am left **no trace an admin could reach**: it went to
+`slog`, `slog` went to stdout, stdout went to the container's log driver. So
+"what broke overnight?" meant getting onto the host, finding the container, and
+running `docker logs` — the same shell dependency the rest of `host.*` removes.
+The audit plugin cannot fill this: it records USER ACTIONS, is DB-backed, and is
+scoped to both a campaign and a user, so a 500 on `/healthz` or an anonymous
+request has neither key it needs.
+
+- **`internal/observability`** (new leaf package, stdlib only — writers are
+  `internal/app` and `internal/middleware`, reader is `internal/systems`, so a
+  leaf with no Chronicle imports cannot cycle with any of them). A 256-slot
+  mutex-guarded ring, allocated at package init so it is safe from the first
+  request — an error during boot is exactly the one you most want.
+- **`host.errors [<count>]`** — newest first (default 25, max 100). Each line:
+  timestamp **plus its age** ("2m0s ago" — the first question anyone asks a
+  stack of errors is "was that just now?"), status, method, route, provenance,
+  message.
+- **`host.errors-summary`** — the same ring grouped by route + status with
+  counts and first/last seen, sorted by frequency. Three repeats of one failure
+  become one line, so the single unrelated 503 underneath is visible instead of
+  scrolled off.
+
+**Three decisions that are load-bearing, each named and commented in code:**
+
+1. **Only 5xx and recovered panics are recorded** (`observability.ShouldRecord`).
+   Not for volume — for **eviction**. The ring evicts oldest-first, so admitting
+   the routine 4xx background of any public server (crawlers, stale bookmarks,
+   expired CSRF) would let a 404 storm quietly evict the one 500 you came for,
+   while the ring still *looked* full and healthy. Both renders state the policy
+   unconditionally, because an absence of 4xx here says nothing about whether
+   4xx are happening.
+2. **Paths are route TEMPLATES, never the requested URL** (`observability.PathFor`).
+   Chronicle really does route `/rsvp/:token`, `/proposals/respond/:token`,
+   `/calendar-rsvp/:token` and `/join/:code` — a concrete path would put a live
+   credential into output whose entire purpose is to be pasted into a chat
+   window. Templates also group perfectly, which is what makes the summary work.
+   The concrete path is used only when the router matched nothing, and that case
+   is a 404, which is not recorded.
+3. **A panic is hooked SEPARATELY from the error handler, because it never
+   reaches it.** `middleware/recovery.go` writes its 500 with `c.String` and
+   returns `nil`, so Echo sees no error and `app.errorHandler` is never called.
+   Hooking only the error handler — the obvious single hook — would have left
+   the most valuable error class invisible while the diagnostic looked like it
+   was working. The panic *value* is stored; the stack stays in the log.
+
+**Empty must never read the same three ways.** "Provider not wired", "wired and
+holding zero", and "the ring wrapped and evicted 407 earlier errors" are three
+different situations with three different renders; the header always prints
+capacity, hold count and total-since-start, so "only 4 errors" is visibly
+different from "nothing is recording". That is the 2026-08-11 lesson applied
+directly: an absence of evidence got read as evidence and cost an hour.
+
+The recording is additive only — `app.errorHandler` records and then delegates
+to its existing behaviour completely unchanged, and
+`internal/app/error_handler_record_test.go` pairs every ring assertion with a
+wire assertion (status, `Content-Type`, `HX-Retarget`, `HX-Trigger`/`HX-Reswap`)
+so a later change cannot quietly move a production error response.
+
+Limits stated in the output itself: in memory, this process only — a restart
+empties it and each replica keeps its own.
+
 ### The operator's first look — six confirmed defects, all fixed (2026-08-10)
 
 Five in this repo, one in `Chronicle-Foundry-Module`. Each was measured before it
