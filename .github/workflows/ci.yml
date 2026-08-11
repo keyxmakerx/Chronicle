@@ -467,6 +467,22 @@ jobs:
           build-args: |
             CHRONICLE_VERSION=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
             VCS_REF=${{ github.sha }}
+          # Disable provenance + SBOM attestations. build-push-action
+          # generates these by default, which adds extra manifest/blob
+          # entries that ghcr.io intermittently rejects on push with
+          # "ERROR: unknown blob". We don't consume the attestations, so
+          # turning them off both fixes the flaky push and produces a
+          # cleaner single-manifest image.
+          #
+          # These two keys previously ended up INSIDE the verify step's `run:`
+          # block scalar — the new step was inserted between them and the rest
+          # of this `with:` map, so YAML read them as two more shell lines. They
+          # were dead for one build, and the run's metadata proved it by
+          # reporting a `buildx.build.provenance` object that should not have
+          # existed. A silently-disabled setting is worse than a missing one:
+          # keep any new step BELOW this map, never between its keys.
+          provenance: false
+          sbom: false
 
       # Guard against a SILENT regression, not a hypothetical one. Go skips VCS
       # stamping without a word when `git` is missing from the builder — exit 0,
@@ -481,10 +497,20 @@ jobs:
       # needs no Go toolchain in the runtime image. The push has already
       # happened by this point, so a failure here does not withhold the
       # artifact; it loudly labels it unidentifiable.
+      # `env.IMAGE_NAME` is `keyxmakerx/Chronicle`, matching the repository's
+      # own capitalisation — but a Docker reference must be lowercase, and the
+      # daemon rejects the whole string rather than folding case. Everywhere
+      # else this is invisible because metadata-action lowercases its `images:`
+      # input for us; this step is the one place the reference is assembled by
+      # hand, so it must lowercase explicitly. The first run failed here, in
+      # under a second, on `invalid reference format: repository name
+      # (keyxmakerx/Chronicle@sha256) must be lowercase`.
       - name: Verify the published binary is VCS-stamped
         run: |
           set -euo pipefail
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          REPO="${{ env.IMAGE_NAME }}"
+          IMAGE="${{ env.REGISTRY }}/${REPO,,}@${{ steps.build.outputs.digest }}"
+          echo "verifying $IMAGE"
           docker pull -q "$IMAGE"
           if docker run --rm --entrypoint grep "$IMAGE" -q -F "${{ github.sha }}" /usr/local/bin/chronicle; then
             echo "OK: binary embeds vcs.revision=${{ github.sha }}"
@@ -492,11 +518,3 @@ jobs:
             echo "::error::Published binary has no VCS stamp for ${{ github.sha }}. Go silently skips stamping when git is absent from the builder stage — check the 'apk add git' in Dockerfile stage 2. GET /api/version and host.build will report an unidentified build."
             exit 1
           fi
-          # Disable provenance + SBOM attestations. build-push-action@v6
-          # generates these by default, which adds extra manifest/blob
-          # entries that ghcr.io intermittently rejects on push with
-          # "ERROR: unknown blob". We don't consume the attestations, so
-          # turning them off both fixes the flaky push and produces a
-          # cleaner single-manifest image.
-          provenance: false
-          sbom: false
