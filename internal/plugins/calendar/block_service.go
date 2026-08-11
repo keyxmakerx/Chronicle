@@ -519,6 +519,22 @@ func (s *BlockService) hydrate(ctx context.Context, byID map[string]*Calendar) e
 		if s.realTime != nil {
 			s.realTime.ApplyRealTime(cal)
 		}
+		// THE REAL MOON, AND IT MUST COME AFTER ApplyRealTime. A real-life
+		// calendar with no authored moons gets THE Moon, phase computed from
+		// the real synodic cycle — the same fallback Pipeline A has had since
+		// C-CAL-SKY-COMPLETION A, reaching the Block spine at last (2026-08-11
+		// observations report §1.2: the two systems never met, and the Bench is
+		// the surface the navigation points at). The synthesis anchors on the
+		// calendar's CURRENT date, and for a real-time calendar that date is
+		// only the live wall clock AFTER ApplyRealTime has overwritten it —
+		// anchoring on the stored date would peg the Moon to whatever day the
+		// row was last written.
+		//
+		// It sits here rather than in MoonsForCalendars because the repository
+		// is handed ids and nothing else: the condition needs the calendar's
+		// mode, its month list and its date, all of which exist only once the
+		// rest of this loop has run.
+		applyRealMoonFallback(cal)
 	}
 	return nil
 }

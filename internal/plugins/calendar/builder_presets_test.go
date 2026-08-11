@@ -566,8 +566,16 @@ func TestBuilderPresets_RoundTripThroughBuildExport(t *testing.T) {
 			// ApplyImport, from the same function.
 			applied := builderImportResult(d)
 
-			// THE CALENDAR THE WIZARD PROMISES, exported and read back.
-			blob, err := json.Marshal(BuildExport(draftCalendar(d), nil, false))
+			// THE CALENDAR THE WIZARD PROMISES, exported and read back —
+			// minus the synthesized real Moon, which the preview shows and the
+			// create payload deliberately does not store (see
+			// builderPreviewMinusRealMoon, which asserts what it removes).
+			// Nothing in production exports a preview calendar: draftCalendar's
+			// only non-test callers are builderPreviewBlock and
+			// builderMoonAlmanac, and a REAL export runs off eagerLoad, which
+			// has no fallback — so a real-world calendar's export still carries
+			// the zero moon rows it really has.
+			blob, err := json.Marshal(BuildExport(builderPreviewMinusRealMoon(t, d), nil, false))
 			if err != nil {
 				t.Fatalf("marshal export: %v", err)
 			}

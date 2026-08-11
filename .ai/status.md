@@ -20,6 +20,81 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### The moons the product had and never delivered — three drops closed (2026-08-11)
+
+Stage 1 made the per-day discs REACHABLE and stage 2 put their probes in CI. That
+left the other half of the operator's complaint: there were no moons in the data.
+Three separate paths lost them, and they had different answers.
+
+**1. The Bench never had the real-Moon fallback Pipeline A has had all along.**
+`BuildWorldStateSeed` → `moonSeeds` gives a real-life calendar with no authored
+moons THE Moon, phase from `gregorianMoonPhase`. The Block spine's
+`MoonsForCalendars` is a bare `SELECT` with no mode branch, and the Bench never
+calls `BuildWorldStateSeed` — so the surface the nav points at showed nothing.
+
+`internal/plugins/calendar/moon_fallback.go` closes it WITHOUT a second
+astronomy: `synthesizedRealMoon` solves a `(CycleDays, PhaseOffset)` pair from
+`gregorianMoonPhase` itself, so every existing consumer of `Calendar.Moons` —
+per-day discs, the Almanac register, the moon panel — gets the real Moon through
+the code path it already had. `BlockService.hydrate` calls it AFTER
+`ApplyRealTime`, because the anchor must be the live wall-clock day, not the
+stored one.
+
+MEASURED. Phase agrees with `gregorianMoonPhase` to **2.089e-12 cycles** (5.3
+microseconds) for every date from 1901 to 2099 — the offset is solved, not
+approximated. Beyond that band the error is exactly **1 day per crossed
+non-Gregorian century boundary** (1.0 at 2100, 2.0 at 2200), because
+`Calendar.AbsoluteDay` counts with the calendar's own leap-every-4 rule and the
+true JDN does not. That bound is asserted, not assumed
+(`TestRealMoonFallback_TheAccuracyBoundIsMeasuredNotAssumed`).
+
+**2. The builder wizard's dropped "Luna" — and the fix is not to persist it.**
+`builder_presets.go` seeded `{Luna, 29.53, NewAt 6}`, Review printed "Moons: 1",
+and `builder_handler.go` returned at the [VS-2] landing before any moon writer.
+The obvious fix — write it before redirecting — is WRONG, and the measurement
+says so: against `gregorianMoonPhase` on a calendar shaped as `CreateCalendar`
+seeds one, **Luna runs 0.85 days (0.0287 cycles) behind the real sky**, stably,
+and on 2026-08-11 lands in a different named phase. Worse, ANY stored row
+switches `synthesizedRealMoon` off, so persisting Luna would have traded an exact
+Moon for a frozen approximation on every real-world calendar the wizard makes.
+
+So the card declares no moon, `draftCalendar` gives the PREVIEW the same
+synthesized Moon the Bench gets (one helper, one body), and Review prints
+"Moons: 1 — the real Moon…" because one moon is what the calendar shows. The
+four invented seasons went too: Winter 12/1–2/28 is the NORTHERN hemisphere's,
+and the real world does not have one set of seasons. The era stays (the [WZ-3]
+gate needs it) and Review now says its destination is the epoch name, not a
+`calendar_eras` row — the Eras tab is not offered for a real-life calendar, so a
+row written there could never be removed.
+
+The branch now writes `SetMoons` + `SetSeasons` before redirecting, so an author
+who walks back to those stations keeps what they declared — a drop that existed
+independently of the preset. **[VS-2] is untouched**: the landing did not move,
+the write moved earlier. `ApplyImport` is deliberately NOT used on this branch —
+it forces the date to 1/1 and `guardManualDateChange` rejects it outright once
+the timezone flags the calendar real-time.
+
+**3. `seedDefaults` still seeds no moons, and that is the ANSWER.** Re-examined
+and kept, for two different reasons per branch: on real-life a seeded row would
+REMOVE the exact Moon (the fallback requires zero rows), and on fantasy it would
+put an invented body in a GM's sky. Written into the function and pinned by
+`TestSeedDefaults_SeedsNoMoonsAndThatIsTheAnswer`.
+
+The Moons settings tab promised *"Phase icons display on the calendar."* — false
+at every shipped width until stage 1, silent about the grid's cap of three, and
+silent about the fact that an EMPTY list on a real-world calendar means THE Moon.
+Rewritten and guarded.
+
+RED THEN GREEN on all three. Reverting the `hydrate` line fails 3 of 7 fallback
+tests; restoring Luna and the early return fails 3 of 4 wizard tests with the
+0.85-day gap printed in the failure message; seeding a moon in either
+`seedDefaults` branch fails that guard; reverting the settings copy fails its
+guard in 6 places.
+
+STILL OPEN, booked in `.ai/todo.md`: the **syncapi** still serves the raw rows
+(`GET /moons` returns `[]` for a real-world calendar), so the Foundry module sees
+no moon where the web UI now shows one.
+
 ### The browser-probe guard was itself a silent pass — census + three mechanism fixes (2026-08-11)
 
 Stage 1 registered the six #590 moons/sky probes in `tools/check-browser-probes.sh`.

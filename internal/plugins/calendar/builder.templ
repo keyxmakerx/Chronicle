@@ -895,12 +895,33 @@ templ builderReviewPanel(data BuilderViewData) {
 		<dd>{ builderMonthSummary(data.Draft) }</dd>
 		<dt>Week</dt>
 		<dd>{ strconv.Itoa(len(data.Draft.Weekdays)) } days</dd>
+		// THESE THREE ROWS COUNT WHAT THE CREATED CALENDAR WILL HAVE, not what
+		// the draft happens to be carrying. They used to count the draft, and
+		// on the real-life card the draft carried a moon, four seasons and an
+		// era that the create path writes none of — so the panel headed
+		// "everything below is what Create will write" advertised a moon the
+		// operator never received (2026-08-11 observations report §1.2).
 		<dt>Moons</dt>
-		<dd>{ builderCountLabel(len(data.Draft.Moons)) }</dd>
+		<dd>
+			{ builderCountLabel(builderMoonsShown(data.Draft)) }
+			if builderRealMoonSynthesized(data.Draft) {
+				<span class="wz-lbl">{ builderRealMoonPhrase }</span>
+			}
+		</dd>
 		<dt>Seasons</dt>
 		<dd>{ builderCountLabel(len(data.Draft.Seasons)) }</dd>
 		<dt>Eras</dt>
-		<dd>{ builderCountLabel(len(data.Draft.Eras)) }</dd>
+		<dd>
+			{ builderCountLabel(len(data.Draft.Eras)) }
+			if data.Draft.Mode == ModeRealLife {
+				// The era's reachable destination on a real-life calendar is
+				// the EPOCH NAME, which CreateCalendar writes. A calendar_eras
+				// row is deliberately not written: the Eras tab sits INSIDE
+				// calendar_settings.templ's `if !cal.IsRealLife()` guard, so a
+				// row written here could never afterwards be seen or removed.
+				<span class="wz-lbl">written as the year reckoning, not as an era row — the Eras editor is not offered for a real-world calendar</span>
+			}
+		</dd>
 	</dl>
 	for i, c := range data.Checks {
 		<div class="wz-frow" style={ builderLadder(i + 1) }>

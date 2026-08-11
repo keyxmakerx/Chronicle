@@ -328,11 +328,65 @@ func (h *Handler) BuilderCreateAPI(c echo.Context) error {
 				return builderRollback(ctx, h, cal, err)
 			}
 		}
+		// THE TWO SUB-RESOURCES THE AUTHOR CAN STILL DECLARE ON THIS BRANCH, and
+		// they are written BEFORE the landing rather than lost at it.
+		//
+		// The real-life card short-circuits to Review (builderReadForm), but
+		// stations 1–7 stay navigable by `wz_step`, so an author CAN walk back
+		// to Moons or Seasons and declare something. Until now nothing on this
+		// branch wrote either, and whatever they declared was silently dropped
+		// at the redirect below — the same defect that lost the preset's moon.
+		//
+		// NOT ApplyImport, which is what the fantasy branch runs. ApplyImport
+		// rewrites the calendar row and forces the date to 1/1, and
+		// service.ApplyImport's own W8 guard (guardManualDateChange) REJECTS it
+		// outright once the timezone above has flagged the calendar real-time.
+		// SetMoons / SetSeasons carry no date and no structure: they replace
+		// exactly the list named and nothing else, which is the whole of what
+		// this branch has to say.
+		//
+		// A wizard-authored ERA is deliberately NOT written here. Its reachable
+		// destination on a real-life calendar is the epoch name, which
+		// CreateCalendar has already written from draft.EpochName; a
+		// `calendar_eras` row would be invisible and unremovable afterwards,
+		// because the Eras tab sits inside calendar_settings.templ's
+		// `if !cal.IsRealLife()` guard. Review says so in those words.
+		//
+		// Both calls run even when the list is empty. That is the point: an
+		// empty moon list is what lets synthesizedRealMoon (moon_fallback.go)
+		// put THE Moon on the calendar, and "the declaration is the truth" is
+		// the same replace-whole semantics the Settings tabs use.
+		res := builderImportResult(draft)
+		if err := h.svc.SetMoons(ctx, cal.ID, res.Moons); err != nil {
+			return builderRollback(ctx, h, cal, err)
+		}
+		if err := h.svc.SetSeasons(ctx, cal.ID, res.Seasons); err != nil {
+			return builderRollback(ctx, h, cal, err)
+		}
+		// Audited only when something was actually declared. The fantasy branch
+		// logs a second `imported` entry unconditionally because it always
+		// applies a structure; here the normal case writes two empty lists, and
+		// an audit row saying "0 moons, 0 seasons" on every real-world create
+		// is noise that makes the entries that matter harder to find.
+		if len(res.Moons) > 0 || len(res.Seasons) > 0 {
+			h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarImported, "calendar", cal.ID, cal.Name,
+				map[string]any{
+					"moons":   len(res.Moons),
+					"seasons": len(res.Seasons),
+					"via":     "builder_wizard",
+					"mode":    ModeRealLife,
+				})
+		}
 		// C-CALV4-V2SUNSET R2-4 ([VS-2] SIGNED). THE SECOND POST-CREATE LANDING,
 		// which the dispatch did not know existed — the wizard's real-time
 		// branch, twin of handler.go's, and it takes the same ruling and carries
 		// the same reduced landing (the Bench's real-world Block has a dashed
 		// skyband until R2-5 lands). Two create doors, one destination.
+		//
+		// THE RULING IS UNTOUCHED BY THE TWO WRITES ABOVE. [VS-2] fixes WHERE
+		// the author lands, not what has been persisted by the time they get
+		// there; the fix for the dropped moon was to write before redirecting,
+		// never to redirect somewhere else.
 		return c.Redirect(http.StatusSeeOther,
 			fmt.Sprintf("/campaigns/%s/apps/calendar", cc.Campaign.ID))
 	}

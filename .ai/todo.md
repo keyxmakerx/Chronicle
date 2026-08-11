@@ -91,6 +91,45 @@ columns, 1.6px short). Six of twenty configurations drew discs; none was a phone
 - [x] The six #590 moons/sky probes registered in `tools/check-browser-probes.sh`
       — they all PASSED and had simply never run in CI (report §7.4)
 
+### [x] Done — the data now exists (stage 3, 2026-08-11)
+
+- [x] **The Bench's real-Moon fallback.** `internal/plugins/calendar/moon_fallback.go`
+      — `synthesizedRealMoon` reshapes `gregorianMoonPhase`'s answer into the
+      `(CycleDays, PhaseOffset)` pair `Moon.MoonPhase` steps through, so every
+      existing reader of `Calendar.Moons` gets THE Moon with no second astronomy
+      and no per-surface branch. Called from `BlockService.hydrate` AFTER
+      `ApplyRealTime` (the anchor must be the live day). Exact to 2.089e-12
+      cycles across 1901–2099; 1 day per crossed non-Gregorian century boundary
+      beyond that, asserted rather than assumed.
+- [x] **The builder wizard.** The card declares no moon (measured: its "Luna"
+      ran 0.85 days behind the real sky AND a stored row suppresses the exact
+      one), `draftCalendar` previews the same synthesized Moon the Bench draws,
+      Review counts what Create writes, and the real-life branch now calls
+      `SetMoons`/`SetSeasons` BEFORE the [VS-2] landing so an author who walks
+      back to a station keeps what they declared. [VS-2] itself is untouched.
+- [x] **`seedDefaults`** re-examined and deliberately unchanged, with the reason
+      in the function: seeding removes the exact Moon on real-life and invents a
+      body on fantasy.
+- [x] The Moons settings tab's copy corrected — it promised phase icons that no
+      shipped width drew, never mentioned the grid's cap of three, and never
+      said that an empty list on a real-world calendar means THE Moon.
+
+### [ ] Still open — where the moon still does not reach
+
+- [ ] **The syncapi serves the raw rows.** `internal/plugins/syncapi/
+      calendar_api_handler.go` reads `cal.Moons` off the 60-method calendar
+      service (its own `eagerLoad`), not the Block spine, so `GET /moons` and the
+      date snapshot's `moon_phases` still answer `[]` for a real-world calendar.
+      The Foundry module therefore shows no moon where the web UI now shows one.
+      NOT closed here on purpose: the module can `PUT /moons`, and serving a body
+      with no row through an endpoint whose partner endpoint writes rows is a
+      contract question (which id would it echo?), not a one-line read change.
+- [ ] **Should a wizard-created real-world calendar carry seasons?** The four the
+      preset used to seed are the northern hemisphere's and are gone. Settings →
+      Seasons is reachable for a real-life calendar, so nothing is blocked — but
+      "a real-world calendar starts with no seasons" is now a stated product
+      position and should be confirmed rather than inherited from this change.
+
 ### [ ] Still open — reachable is not the same as present
 
 - [ ] **The tap floor.** The opener measures 43.3–49.0 × **24.0px** against the
@@ -101,15 +140,9 @@ columns, 1.6px short). Six of twenty configurations drew discs; none was a phone
       inset + 7px pad). Unchanged by this fix and pre-existing since MN-G12;
       the clamp only removed the NEW case (a pad wider than its cell). Bounded
       and asserted at 3.0 by `mrPadOverspillMax`.
-- [ ] **There are still no moons in the data.** `seedDefaults`
-      (`internal/plugins/calendar/service.go`) calls SetMonths / SetWeekdays /
-      SetEventCategories in both branches and never `SetMoons`; the builder
-      wizard seeds Luna (`builder_presets.go:230`), prints "Moons: 1"
-      (`builder.templ:898-899`) and returns at `builder_handler.go:337` before
-      the `ApplyImport` at `:346` that is the only moon writer; and the Bench's
-      `MoonsForCalendars` (`block_repository.go:129-153`) has no real-Moon
-      fallback, while `gregorianMoonPhase` (`worldstate.go:468`) has exactly one
-      production caller that the Bench never reaches.
+- [x] **There are moons in the data now** — closed by stage 3 above. All three
+      drops (seedDefaults, the wizard, the Bench's missing fallback) are
+      answered; see "Done — the data now exists".
 
 ## 0-host. Host self-identity — `host.build` / `host.runtime` landed (2026-08-11)
 

@@ -254,7 +254,11 @@ func TestBuilderPreviewAndCreateAgree(t *testing.T) {
 
 	for name, d := range drafts {
 		t.Run(name, func(t *testing.T) {
-			preview := draftCalendar(d)
+			// The preview WITHOUT the synthesized real Moon — the one body the
+			// preview shows and the create payload deliberately does not store.
+			// builderPreviewMinusRealMoon asserts it is exactly that before
+			// removing it, so the exemption cannot widen into a free pass.
+			preview := builderPreviewMinusRealMoon(t, d)
 			created := builderImportResult(d)
 
 			if preview.HoursPerDay != created.Settings.HoursPerDay ||
