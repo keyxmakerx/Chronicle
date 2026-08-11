@@ -9,6 +9,242 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-host. Host self-identity — `host.build` / `host.runtime` landed (2026-08-11)
+
+- [x] `internal/hostinfo` + `host.build` / `host.runtime` diagnostics; `GET
+  /api/version` falls back env → VCS revision → module version → `unknown`.
+  See `.ai/status.md` for the incident this closes.
+
+### [x] CLOSED — a shipped image can now name its commit
+
+The original defect, measured 2026-08-11: `golang:1.24-alpine`'s only `apk add`
+was `ca-certificates`, so the Docker builder had **no `git`**, and Go skipped
+VCS stamping **silently** (exit 0, no warning, no `vcs.*` keys in the binary).
+A local `go build` in this repo *was* stamped, which is why it was easy to miss.
+Both remedies below shipped, so a binary from the current Dockerfile **is**
+stamped — re-measured after the fact: `go build ./cmd/server` then
+`go version -m` reports `vcs=git`, `vcs.revision=88cc8369…`, `vcs.modified=false`.
+
+**The follow-on defect this caused, also now fixed:** the operator-facing text
+in `host.build` / `hostIdentityLines` / the `image-digest` probe still described
+the pre-fix world for several commits, so a stamped image printed a real commit
+SHA and then told the reader the builder could not produce one, and prescribed
+an `apk add --no-cache git` that had already shipped. A `contains` assertion in
+`operator_diag_host_test.go` was pinning the stale sentences in place. The
+assertions are now inverted into a `notContain` regression guard. Lesson for the
+next sweep: **when a stage changes the world, grep the diagnostics that describe
+it** — prose is the part of a diagnostic with no compiler.
+
+- [x] **Give the builder `git`** — done, `RUN apk add --no-cache git` in stage 2.
+  The fail-CLOSED risk flagged here was real and is now mitigated rather than
+  merely noted: measured in this environment, a foreign-owned checkout makes
+  `go build` fail with `error obtaining VCS status: exit status 128` (exit 1),
+  and `git config --global --add safe.directory /src` — which ships on the same
+  `RUN` — makes the identical checkout build *and* stamp. Also measured: git
+  installed with no repository present is harmless (exit 0, `(devel)`), so a
+  future `.dockerignore` excluding `.git` degrades instead of breaking.
+  **Still unobserved:** the real `docker build`, for want of a daemon here.
+  Guarded by a new CI step that greps the pushed image (by digest) for the
+  commit SHA, so a regression is loud.
+- [x] **Or wire `CHRONICLE_VERSION`** — done, and deliberately *narrow*: CI
+  passes it only for `v*` tag builds. On a `main` push `metadata-action`'s
+  version output is the literal `latest`, and reporting that as a version would
+  be a downgrade from the commit SHA the binary now stamps in by itself. Empty
+  falls through to that SHA. `docs/deployment.md`'s row is updated again.
+- [ ] **Adjacent:** `internal/database/pre_migration_backup.go` still has its own
+  `os.Getenv("CHRONICLE_VERSION")` + `"unknown"` copy of the rule. Pointing it at
+  `hostinfo.Version()` would give backup manifests the revision fallback too —
+  deliberately left alone here because it changes manifest *content*, which
+  `scripts/restore.sh` reads.
+- [ ] **Consider:** `host.build` prints `os.Hostname()`. In a container that is
+  the container id; on bare metal it can be the operator's production hostname,
+  which C-SCRUB-INSTANCE-URLS treats as sensitive. The route is admin-gated and
+  the operator chooses to paste the output, so this shipped as-is — revisit if
+  that posture is stricter than assumed.
+
+## 0-host-assets. Asset accounting — `host.assets` / `host.embedded` landed (2026-08-11)
+
+- [x] `host.assets`, `host.asset-contains`, `host.embedded`,
+  `host.embedded-contains` in `internal/systems/operator_diag_assets.go`;
+  `SetEmbeddedAssetsProvider` wired from `App.embeddedAssetSets()`;
+  `layouts.BuildToken()` exported so the fallback token is *asked for*, not
+  re-derived. See `.ai/status.md` for the grep-came-back-empty incident.
+
+### [ ] Still open / worth a live check
+
+- [ ] **Not verifiable headlessly:** run `host.assets` and `host.embedded` on a
+  real container once. Everything here was measured against a source checkout,
+  where two things differ from a deployment: `static/css/app.css` is Tailwind
+  output and is **gitignored, so it does not exist in a checkout at all** (a
+  filter for it correctly matched 0 of 148 files), and the plugin FSs are
+  registered by `App.mountPluginStatic()`, which no unit test runs. The embedded
+  `?v=` column was proven correct by calling `layouts.RegisterAssetFS` exactly as
+  startup does — the token flipped from the build-token fallback to
+  `?v=c7c95346e4`, the first 10 chars of the file's sha — but that is the
+  mechanism reproduced, not the wired app observed.
+- [ ] **Consider a probe for the two-storage-mechanism trap.** `defaultProbes()`
+  has no entry pointing at `host.embedded`. An operator who reaches for a shell
+  before the diagnostics catalog will still grep `/app/static`, find nothing, and
+  draw the 2026-08-11 conclusion. A probe whose `Why` says "if this is empty, the
+  file is probably embedded — run `host.embedded`" would close the loop for
+  someone who never opens the admin page.
+- [ ] **Widget name cross-check, deliberately not built.** `internal/widgets/`
+  holds 12 Go packages with **no** static assets, while 45 widget JS files live
+  under `static/js/widgets/` — the names are not 1:1 in either direction
+  (`calendar_block` and `posts` have no same-named JS; `db_explorer.js` and
+  ~40 others have no Go package). A cross-check diagnostic would be genuinely
+  useful, but the intended mapping was never determined, and shipping one that
+  guessed would manufacture false "missing" findings — the exact failure mode
+  this workstream exists to prevent. Determine the mapping first.
+
+## 0-host-errors. Recent errors without a shell — `host.errors` landed (2026-08-11)
+
+- [x] `internal/observability` (new stdlib-only leaf: 256-slot mutex-guarded
+  ring, allocated at package init so it records from the first request) +
+  `host.errors [<count>]` / `host.errors-summary` in
+  `internal/systems/operator_diag_errors.go`, wired via
+  `SetRecentErrorsProvider` from `App.recentErrorSnapshot` (same dependency
+  inversion as `SetEmbeddedAssetsProvider`). Two write hooks:
+  `app.errorHandler` (additive — records, then delegates unchanged) and
+  `middleware.Recovery` (**separate on purpose**: a recovered panic writes its
+  own 500 with `c.String` and returns `nil`, so it NEVER reaches the error
+  handler; hooking only there would have hidden the most valuable error class
+  behind a diagnostic that looked like it worked).
+- [x] Policy is a named, commented function (`observability.ShouldRecord`):
+  5xx and recovered panics only. The reason is eviction, not volume — the ring
+  evicts oldest-first, so a 404 storm would silently evict the one 500 that
+  matters while the ring still looked full.
+- [x] Paths stored are route TEMPLATES (`observability.PathFor`), because
+  Chronicle routes `/rsvp/:token`, `/proposals/respond/:token`,
+  `/calendar-rsvp/:token` and `/join/:code`.
+
+### [ ] Still open / worth a live check
+
+- [ ] **Not verifiable headlessly:** trigger a real 500 and a real panic on a
+  running container, then run `host.errors` and `host.errors-summary` from the
+  admin diagnostics page. Everything here was measured through `httptest` +
+  direct renderer calls; the wiring line in `RegisterRoutes` is exercised by no
+  unit test, so "provider wired in a live process" is reasoned from the call
+  site, not observed. If it were missed, the output says **"Provider not
+  wired"** rather than showing an empty list — that failure is loud by design.
+- [ ] **Errors that never pass through either hook are still invisible here.**
+  Anything logged with `slog.Error` from a service or a background goroutine
+  (WebSocket pumps, the calendar back-catalog walk, migrations) reaches stdout
+  and nothing else. The wider fix measured during scouting is a `slog.Handler`
+  wrapper in `cmd/server/main.go` `setupLogging` that tees records at
+  `>= slog.LevelError` into the same ring — one wrapper type, one line, and it
+  would capture every error in the app rather than the two HTTP paths. Left out
+  of this stage deliberately: it widens what is stored (arbitrary log
+  attributes, not a fixed six-field summary), which needs its own pass over
+  what those attributes can carry.
+- [ ] **Multi-replica and restart blindness is stated, not solved.** The ring is
+  per-process and in-memory; both renders say so, but an operator running more
+  than one replica sees only the one that served their admin request. Durable
+  capture is a different feature (a table, retention, a writer that cannot slow
+  the error path) and should not be bolted onto this one silently.
+- [x] **`defaultProbes()` now points at `host.errors`** (and at `host.embedded`,
+  `host.widgets`, `host.build`, `packages.on-disk-versions`,
+  `system.file-contains`) — closed by the widgets/plugins stage below.
+
+## 0-host-widgets. Widgets, plugins, deploy-check, probes — landed (2026-08-11)
+
+The operator asked for "calendar (and other widget) versions". Closed by:
+
+- [x] `host.widgets [<name-substring>]`, `host.plugins` in
+  `internal/systems/operator_diag_plugins.go`; `host.deploy-check [<marker,…>]`
+  in `internal/systems/operator_diag_deploy.go`; `SetHostPluginsProvider` wired
+  from `App.hostPluginRows()` (same dependency inversion as the other three
+  providers). `hostIdentityLines()` lives beside `host.build`'s own renderer and
+  shares `notStampedHeadline` with it, so the composite cannot form a second
+  opinion about what an absent VCS stamp means. `shortSHA()` consolidated the
+  four hand-rolled copies of the content-hash truncation, because these hashes
+  are compared *across* diagnostics.
+- [x] Probe library rewritten: two TRAP entries (`image-digest`,
+  `plugin-asset-grep`), four new probes, and a superseded-not-deleted rule
+  enforced by `TestSupersededProbesAreAnnotatedNotDeleted`.
+
+### [ ] Still open / worth a live check
+
+- [ ] **Not verifiable headlessly:** run `host.widgets`, `host.plugins` and
+  `host.deploy-check` on a real container once. Everything was measured against
+  a source checkout plus injected fakes; in particular `css/app.css` is
+  *generated* and therefore absent in a checkout, so the bellwether section's
+  present-file path for it has never been exercised against a real deployment.
+  Confirm too that `host.widgets` lists the calendar plugin's embedded scripts —
+  the whole point is that they are invisible to `ls`.
+- [ ] **The widget↔JS name mapping is by convention, not by contract.**
+  `host.widgets` pairs `js/<name>.js` with `css/<name>.css` inside the same
+  scope. That is the convention the tree follows today (it is how the calendar
+  plugin's `gm_panel` pair is found), but nothing enforces it, and a stylesheet
+  named differently belongs to no widget and shows only in `host.assets`. Stated
+  in the output rather than papered over.
+- [ ] **The Go widget packages under `internal/widgets/` remain unenumerable at
+  runtime**, because the source tree does not ship. If a per-widget server-side
+  registry ever exists, `host.widgets` should read it instead of walking
+  directories — the Desc and the standing note both say which it did, so the
+  swap will be visible.
+- [ ] **The plugin-slug alias fold is a heuristic.** `normalizePluginKey` folds
+  `-`/`_` and case. It is deliberately narrow and unit-tested against
+  `calendar` vs `calendar-v2` and `maps` vs `map`, but a plugin whose two
+  registries disagree in some *other* way would still render as two rows. The
+  real fix is for `PluginRegistration` to carry its `PluginHealthKey`
+  explicitly, which is a change to the registration shape and wants its own
+  decision doc.
+- [ ] **`host.deploy-check`'s marker scan is extension-bounded** (`.js`, `.css`,
+  `.html`, `.json`, `.svg`, `.txt`, `.md`, `.map`, `.mjs`, `.htm`) and reports
+  how many files it skipped for that reason. Measured against this repo it reads
+  138 of 148 files / ~3.7 MB, which is cheap — but a marker inside a format not
+  on that list will read as absent from a scope that never looked at it.
+
+## 0-host-integration. The five `host.*` stages integrated — landed (2026-08-11)
+
+The stages above shipped as five independent commits on one branch. This pass
+made them one tool and fixed what only breaks *between* stages.
+
+- [x] **Cross-stage staleness fixed.** `host.deploy-check`'s remedy section and
+  the `container-restart-time` probe both described a compose file stage 5 had
+  already changed, and told operators to run `docker compose build` — which
+  stage 5 made **fail by design** by removing `build:` from the `chronicle`
+  service. Both now describe the shipped file, tell the reader to verify their
+  own compose matches, and point at `docker-compose.build.yml`.
+- [x] **Provider wiring is proven, not assumed.** Every stage logged the same
+  gap ("compile-checked only; no test runs `RegisterRoutes`").
+  `internal/app/operator_diag_wiring_test.go` walks the AST of `internal/systems`
+  and `internal/app` and fails if a declared `Set*Provider` has no non-test call
+  site, or if that site is unreachable from `RegisterRoutes`. Mutation-tested:
+  commenting out one wiring line fails both assertions. Measured — all 8
+  providers resolve to `RegisterRoutes()`, called by `cmd/server/main.go:157`.
+- [x] **`Desc` trimmed to the one-line contract the struct documents** and capped
+  at 450 bytes by test. Each removed caveat was verified to exist already in the
+  diagnostic's own output first.
+- [x] **`tools/check-plugin-isolation.sh` un-blocked** (red since `64dec0f5`, so
+  `make verify` could not pass). Four operator-diagnostic test files allowlisted
+  by exact filename with the reasoning recorded.
+- [x] Catalog-wide guards: every `host.*` runs with an empty arg without
+  panicking or returning empty, unique names, the family forms one block ahead
+  of the rest, `FullDump` asserted in both directions.
+- [x] **ADR-051** records the observability decision;
+  `docs/operator-diagnostics.md` gains the `host.*` family and a corrected probe
+  table (it still listed the pre-stage-4 probe set).
+
+### [ ] Still open
+
+- [ ] **`./tools/check-plugin-isolation.sh` was not re-run after the fix** — the
+  sandbox refused the invocation on every retry. Verified instead by `bash -n`
+  and by exercising the guard's own prefix-matching logic against the four
+  offending paths plus two controls. **Someone should run it once**, along with
+  the rest of `make verify`, before this is treated as green.
+- [ ] **`FullDump` is set on `host.assets` and `system.health` only.**
+  `host.deploy-check` is deliberately *not* flagged even though a marker
+  argument makes it walk both scopes, because the flag is static and the no-arg
+  case is the post-deploy check that should stay one click away. If the marker
+  scan turns out to be expensive on real container storage, the fix is a
+  per-argument cost decision, which the `Diagnostic` struct cannot currently
+  express.
+- [ ] **Nothing here was observed on a container or against a database.** No
+  Docker daemon and no DB in this environment. Every "still open / live check"
+  item booked by stages 1-5 remains open and is not restated here.
+
 ## 0-fix-R1. The six confirmed defects from the operator's first look — DONE (2026-08-10)
 
 Five landed in this repo, one in `Chronicle-Foundry-Module`. Each was measured

@@ -23,6 +23,7 @@ import (
 	"github.com/keyxmakerx/chronicle/internal/database"
 	"github.com/keyxmakerx/chronicle/internal/extensions"
 	"github.com/keyxmakerx/chronicle/internal/middleware"
+	"github.com/keyxmakerx/chronicle/internal/observability"
 	"github.com/keyxmakerx/chronicle/internal/plugins/packages"
 	"github.com/keyxmakerx/chronicle/internal/plugins/settings"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
@@ -188,9 +189,18 @@ func (a *App) errorHandler(err error, c echo.Context) {
 	code := http.StatusInternalServerError
 	message := "An unexpected error occurred"
 
+	// kind records WHICH of the branches below claimed the error, purely for
+	// the in-memory error ring. On the wire a deliberate 500 from a service and
+	// a raw error that escaped a handler are indistinguishable; to whoever has
+	// to fix it they are completely different, and "raw" is the one that is
+	// almost always a bug. Default raw: an error matching neither branch is by
+	// definition the unhandled case.
+	kind := observability.KindRaw
+
 	// Check if it's our domain error type.
 	var appErr *apperror.AppError
 	if errors.As(err, &appErr) {
+		kind = observability.KindApp
 		code = appErr.Code
 		message = appErr.Message
 	} else {
@@ -198,6 +208,7 @@ func (a *App) errorHandler(err error, c echo.Context) {
 		// panic recovery).
 		var echoErr *echo.HTTPError
 		if errors.As(err, &echoErr) {
+			kind = observability.KindHTTP
 			code = echoErr.Code
 			if msg, ok := echoErr.Message.(string); ok {
 				message = msg
@@ -219,6 +230,21 @@ func (a *App) errorHandler(err error, c echo.Context) {
 			slog.String("method", c.Request().Method),
 		)
 	}
+
+	// Also record the error somewhere an admin can READ it without shell
+	// access. The log line above only reaches stdout, so answering "what broke
+	// overnight?" has always required getting onto the host and running
+	// `docker logs`; the host.errors / host.errors-summary diagnostics read
+	// this ring instead. RecordHTTPError applies its own policy (5xx only) and
+	// stores the route TEMPLATE rather than the requested path, because
+	// Chronicle routes /rsvp/:token and a concrete path would carry a live
+	// credential into pasteable output.
+	//
+	// It is placed here — after the status is known, before anything is
+	// written — deliberately: it must observe the SAME code and error the
+	// client is about to be sent, and it must not be able to change them. It
+	// returns a value only for tests; the response path below is untouched.
+	_ = observability.RecordHTTPError(code, c.Request().Method, c.Path(), c.Request().URL.Path, kind, err)
 
 	// API requests always get JSON.
 	if isAPIRequest(c) {

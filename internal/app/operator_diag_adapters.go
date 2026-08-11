@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/keyxmakerx/chronicle/internal/observability"
 	"github.com/keyxmakerx/chronicle/internal/plugins/entities"
 	"github.com/keyxmakerx/chronicle/internal/systems"
 )
@@ -139,6 +140,152 @@ func (a entityDiagAdapter) resolveType(ctx context.Context, campaignID, ref stri
 		}
 	}
 	return nil, nil
+}
+
+// embeddedAssetSets reports every registered plugin's //go:embed-ed static
+// filesystem for the host.embedded diagnostics. Those bytes live only inside
+// the executable, so nothing an operator can run against the container
+// filesystem will ever see them — this adapter is the only window onto them.
+//
+// It reads a.registeredPlugins THROUGH the exported accessor at CALL time, not
+// at wiring time, so it does not care whether it is wired before or after the
+// plugins register. It mirrors the mount in mountPluginStatic exactly, sharing
+// pluginStaticPrefix so the reported URL cannot drift from the served one.
+func (a *App) embeddedAssetSets() []systems.EmbeddedAssetSet {
+	regs := a.RegisteredPlugins()
+	out := make([]systems.EmbeddedAssetSet, 0, len(regs))
+	for _, p := range regs {
+		if p.StaticFS == nil {
+			continue // no embedded assets; not an error
+		}
+		out = append(out, systems.EmbeddedAssetSet{
+			Slug:      p.Slug,
+			URLPrefix: pluginStaticPrefix(p.Slug) + "/",
+			FS:        p.StaticFS,
+		})
+	}
+	return out
+}
+
+// hostPluginRows merges Chronicle's plugin registries into the flat rows
+// host.plugins reports. It is the app layer's job because internal/systems must
+// not import internal/database or the plugin packages — the same dependency
+// inversion as embeddedAssetSets.
+//
+// There are THREE registries and they contain different plugins:
+//
+//   - a.registeredPlugins (PluginRegistration): opt-in metadata. Carries the
+//     StaticFS and the health hook. Four plugins today.
+//   - a.PluginSchemas (database.PluginSchema): the plugins that own tables and
+//     handed migrations to the runner. Nine today.
+//   - a.PluginHealth: the runner's record of what those migrations DID.
+//
+// None of them is a manifest of what exists — every plugin is compiled in and
+// registers its routes unconditionally. The renderer says so on every run;
+// this function's job is only to stop the merge itself from lying.
+//
+// THE MERGE KEY IS NORMALISED, and that is not cosmetic: foundry_vtt registers
+// as `foundry-vtt` in the metadata registry (that spelling is also its static
+// URL prefix) and as `foundry_vtt` in the schema runner and health registry.
+// Keyed literally, one plugin would render as two rows — one apparently
+// migration-less, one apparently unregistered — which is exactly the kind of
+// half-true inventory this whole workstream exists to stop. The row carries
+// BOTH spellings so the reader learns the alias rather than having it hidden.
+func (a *App) hostPluginRows() []systems.HostPlugin {
+	rows := map[string]*systems.HostPlugin{}
+	get := func(key, display string) *systems.HostPlugin {
+		k := normalizePluginKey(key)
+		if r, ok := rows[k]; ok {
+			return r
+		}
+		r := &systems.HostPlugin{Slug: display}
+		rows[k] = r
+		return r
+	}
+
+	for _, p := range a.RegisteredPlugins() {
+		r := get(p.Slug, p.Slug)
+		r.Slug = p.Slug // the metadata spelling wins as the display name: it is the one in the URL prefix
+		r.InMetadataRegistry = true
+		r.HasHealthCheck = p.HealthCheck != nil
+		if p.HealthCheck != nil {
+			// Every health callback registered today is an in-memory lookup
+			// against the migration health registry, so calling them is cheap
+			// and read-only. If one ever needs to touch the network or the DB,
+			// it should be gated rather than silently made expensive here.
+			if err := p.HealthCheck(); err != nil {
+				r.HealthErr = err.Error()
+			}
+		}
+		if p.StaticFS != nil {
+			r.StaticURLPrefix = pluginStaticPrefix(p.Slug) + "/"
+			r.StaticFS = p.StaticFS
+		}
+	}
+
+	for _, s := range a.PluginSchemas {
+		r := get(s.Slug, s.Slug)
+		r.SchemaKey = s.Slug
+		r.DeclaresMigrations = true
+	}
+
+	if a.PluginHealth != nil {
+		for slug, h := range a.PluginHealth.All() {
+			r := get(slug, slug)
+			if r.SchemaKey == "" {
+				r.SchemaKey = slug
+			}
+			r.SchemaKnown = true
+			r.SchemaHealthy = h.Healthy
+			r.SchemaVersion = h.Version
+			r.SchemaLatest = h.LatestVersion
+			r.SchemaError = h.Error
+		}
+	}
+
+	out := make([]systems.HostPlugin, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, *r)
+	}
+	return out
+}
+
+// normalizePluginKey folds the two spellings Chronicle uses for the same plugin
+// (`foundry-vtt` vs `foundry_vtt`) onto one merge key. Deliberately narrow: it
+// only lowercases and unifies `_`/`-`, so two genuinely different plugins
+// cannot be collapsed by it.
+func normalizePluginKey(slug string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(slug)), "_", "-")
+}
+
+// recentErrorSnapshot reports the process error ring for the host.errors /
+// host.errors-summary diagnostics.
+//
+// The translation between observability.Entry and systems.RecentError is
+// deliberate, not incidental: internal/systems must not import the writer side
+// of the ring any more than it imports the plugins, so the app layer owns the
+// only place the two shapes meet. Same dependency inversion as
+// embeddedAssetSets and SetInstalledPackagesProvider.
+//
+// limit <= 0 means "every held entry" and is passed straight through, because
+// the summary groups over the whole ring — a frequency computed over one page
+// would be a lie about how often something is failing.
+func recentErrorSnapshot(limit int) systems.RecentErrors {
+	s := observability.Recent(limit)
+	out := systems.RecentErrors{Capacity: s.Capacity, Held: s.Held, Total: s.Total}
+	out.Entries = make([]systems.RecentError, 0, len(s.Entries))
+	for _, e := range s.Entries {
+		out.Entries = append(out.Entries, systems.RecentError{
+			Time:           e.Time,
+			Status:         e.Status,
+			Method:         e.Method,
+			Path:           e.Path,
+			PathIsTemplate: e.PathIsTemplate,
+			Kind:           string(e.Kind),
+			Err:            e.Err,
+		})
+	}
+	return out
 }
 
 // nonEmptyField reports whether fields_data has a meaningful value for key.

@@ -2524,6 +2524,27 @@ func (a *App) RegisterRoutes() {
 	// systems can't import entities, so the adapter lives in the app layer.
 	systems.SetEntityDiagProvider(entityDiagAdapter{entities: entityService})
 
+	// Wire the plugin registry's embedded static filesystems so host.embedded /
+	// host.embedded-contains can list assets that exist ONLY inside the binary.
+	// The closure reads the registry when the diagnostic runs, so it does not
+	// matter that plugins register (and mountPluginStatic runs) after this line.
+	systems.SetEmbeddedAssetsProvider(a.embeddedAssetSets)
+
+	// Wire the merged plugin registries so host.plugins can answer "is this
+	// plugin even loaded, and did its schema actually run?". Same late-binding
+	// closure as above: the metadata registry is still being filled by the
+	// registerPlugin calls further down this function.
+	systems.SetHostPluginsProvider(a.hostPluginRows)
+
+	// Wire the in-memory error ring so host.errors / host.errors-summary can
+	// answer "what broke overnight?" without shell access to the container.
+	// The ring itself is written by app.errorHandler and the panic-recovery
+	// middleware and exists from process start; this only grants the read.
+	// Until this line runs the diagnostics print "provider not wired" rather
+	// than an empty list — "no errors" and "nobody is recording" must never
+	// render the same.
+	systems.SetRecentErrorsProvider(recentErrorSnapshot)
+
 	// Wire the campaigns list (admin-only ListAll) so campaigns.list can resolve a
 	// campaign id by name — the entry point for the entity.* diagnostics.
 	systems.SetCampaignListProvider(func(ctx context.Context) ([]systems.CampaignInfo, error) {

@@ -12,13 +12,30 @@
 services:
   # --- Chronicle Application ---
   # The Go binary serves HTTP directly (no nginx needed).
-  # Pull from GHCR, or build locally with `docker compose build chronicle`.
   # Cosmos Cloud reverse-proxies to this container.
+  #
+  # THIS SERVICE DELIBERATELY HAS NO `build:` SECTION. It used to have one
+  # alongside `image:`, and that combination is what made a correct deploy look
+  # like a failed one on 2026-08-11: it gave a single tag two producers.
+  # `docker compose build` stamped a LOCAL build with this GHCR name, while
+  # `docker compose pull` overwrote the same name from the registry — and
+  # `docker compose up -d` did NEITHER, because an image with that tag already
+  # existed locally. The operator deployed, saw no change, and then read image
+  # labels off a months-old local image that was still holding the tag.
+  #
+  # `pull_policy: always` is the fix for the third of those: `up` is an
+  # explicit operator action and it now always fetches the published image, so
+  # the normal update path actually updates. Container restarts are handled by
+  # `restart: unless-stopped` and do not re-pull, so this costs one registry
+  # round trip per deliberate deploy, not per reboot.
+  #
+  # To build from source instead, use the override that keeps the two apart:
+  #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+  # It tags the result `chronicle:local`, so a local build can never again
+  # masquerade as the published image. See docs/deployment.md §6.
   chronicle:
     image: ghcr.io/${GITHUB_ORG:-keyxmakerx}/chronicle:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    pull_policy: always
     container_name: chronicle
     ports:
       - "8080:8080"

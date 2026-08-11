@@ -85,12 +85,18 @@ func (a *App) RegisteredPlugins() []PluginRegistration {
 // registration via echo.MustSubFS(<embedFS>, "static") on the caller
 // side, so URLs map cleanly without /static/plugins/<slug>/static/...
 // doubling.
+// pluginStaticPrefix is the single definition of where a plugin's embedded
+// assets are served. It exists so the mount and the host.embedded diagnostic
+// that REPORTS the mount cannot drift apart — a diagnostic printing a URL the
+// server does not actually serve would be worse than printing none.
+func pluginStaticPrefix(slug string) string { return "/static/plugins/" + slug }
+
 func (a *App) mountPluginStatic() {
 	for _, p := range a.registeredPlugins {
 		if p.StaticFS == nil {
 			continue
 		}
-		prefix := "/static/plugins/" + p.Slug
+		prefix := pluginStaticPrefix(p.Slug)
 		// C-ASSET-VERSIONING: register the embed FS with the asset-URL helper so
 		// layouts.AssetURL can content-hash plugin assets exactly like on-disk
 		// ones. Without this they'd still bust on deploy (via the per-build

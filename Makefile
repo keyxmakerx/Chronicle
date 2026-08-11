@@ -11,6 +11,9 @@ BUILD_DIR   := ./bin
 MAIN_PKG    := ./cmd/server
 MIGRATIONS  := ./db/migrations
 DOCKER_COMP := docker-compose.yml
+# Overlay that swaps the published GHCR image for a local source build. Kept
+# separate so the published tag has exactly one producer — see the file header.
+DOCKER_COMP_BUILD := docker-compose.build.yml
 
 # Database URL for migrations (override via env or .env file)
 DATABASE_URL ?= mysql://chronicle:chronicle@tcp(localhost:3306)/chronicle
@@ -31,8 +34,25 @@ run: ## Run the server directly (no hot reload)
 	go run $(MAIN_PKG)
 
 # --- Build ---
+# WHY `build` depends on `templ`: *_templ.go is generated and gitignored, so a
+# clean checkout contains none of it. Measured on a fresh clone of this repo,
+# the old recipe exited 2 with "no required module provides package
+# github.com/keyxmakerx/chronicle/internal/templates/pages" — and left a
+# previously-built ./bin/chronicle byte-identical on disk. A failed build that
+# leaves a plausible artifact behind is worse than one that leaves none: every
+# later check that asks "is there a binary?" instead of "did the build
+# succeed?" answers yes, and you ship the old one. That is the same class of
+# mistake as trusting an image label over the running process.
+#
+# `rm -f` first so a failure cannot masquerade as a fresh binary. Nothing here
+# passes -ldflags: the Go toolchain stamps vcs.revision/vcs.time/vcs.modified
+# into the binary automatically whenever `git` is on PATH and the main package
+# sits in a checkout (verified with `go version -m` on the output of this
+# target), and internal/hostinfo reads those stamps. A -X version variable
+# would be a SECOND source of the same fact, free to disagree with the first.
 .PHONY: build
-build: ## Build production binary
+build: templ ## Build production binary (regenerates templ first)
+	rm -f $(BUILD_DIR)/$(APP_NAME)
 	CGO_ENABLED=0 go build -o $(BUILD_DIR)/$(APP_NAME) $(MAIN_PKG)
 
 .PHONY: clean
@@ -216,13 +236,24 @@ docker-down: ## Stop all containers
 docker-logs: ## Tail container logs
 	docker compose -f $(DOCKER_COMP) logs -f
 
+# Building from source goes through the override file, which tags the result
+# `chronicle:local` instead of the GHCR name. WHY: while the base file declared
+# both `image:` and `build:`, this target tagged a local build with
+# ghcr.io/<org>/chronicle:latest — so `docker image inspect` on that tag could
+# be answering about somebody's afternoon build rather than the published one,
+# and `up -d` would then silently keep using it. That ambiguity cost an hour on
+# 2026-08-11. See docker-compose.build.yml.
 .PHONY: docker-build
-docker-build: ## Build the Chronicle Docker image
-	docker compose -f $(DOCKER_COMP) build chronicle
+docker-build: ## Build the Chronicle Docker image locally (tags chronicle:local)
+	docker compose -f $(DOCKER_COMP) -f $(DOCKER_COMP_BUILD) build chronicle
 
 .PHONY: docker-all
-docker-all: ## Start full stack (app + db + redis)
+docker-all: ## Start full stack from the PUBLISHED image (pulls first)
 	docker compose -f $(DOCKER_COMP) up -d
+
+.PHONY: docker-all-local
+docker-all-local: ## Start full stack from a LOCAL source build (chronicle:local)
+	docker compose -f $(DOCKER_COMP) -f $(DOCKER_COMP_BUILD) up -d --build
 
 # ============================================================================
 # Backup & Restore

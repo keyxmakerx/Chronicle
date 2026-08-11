@@ -20,6 +20,380 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### Chronicle can now fingerprint ITSELF — `host.build` / `host.runtime` (2026-08-11)
+
+Chronicle could hash every file of every installed system package and could say
+nothing whatsoever about its own binary. On 2026-08-11 that cost an hour of
+shell archaeology and produced a conclusion that had to be retracted: the
+container image's labels (`org.opencontainers.image.revision=33f4cb07`,
+`created=2026-02-19`) were read as evidence that the running binary was six
+months stale. It had been built minutes earlier. The labels were accurate about
+a February image still sitting in the deploy host's local image store — they
+simply were not about that process. `docker inspect <tag>` answers for whichever
+image holds the tag *now*, never for the image a running container was created
+from.
+
+**The rule this encodes: only the process can testify about itself.**
+
+- `internal/hostinfo` (new leaf package, stdlib only) reads build identity from
+  inside the process — `debug.ReadBuildInfo()`, `os.Executable` + `os.Stat`,
+  hostname, pid, a package-init start timestamp — and pairs every field that can
+  be absent with a "do we know?" flag, so "not stamped" is printable as a fact.
+- `host.build` (first entry in the operator diagnostic catalog, ahead of every
+  `system.*`/`packages.*` check, because those are worthless if the binary is
+  not the one you think it is) renders all of it plus a standing note naming the
+  Docker-label trap and the `//go:embed` grep trap from the same incident.
+- `host.runtime` is the cheap uptime / goroutines / memory / GC snapshot.
+- **Measured, and the reason `host.build` leads with the executable mtime:** Go
+  skips VCS stamping *silently* (exit 0, no warning) whenever the build ran
+  outside a checkout, without a VCS tool on PATH, or with `-buildvcs=false`.
+  That used to describe every CI image, because `golang:1.24-alpine`'s only
+  `apk add` was `ca-certificates`. **The builder now installs `git` and sets
+  `safe.directory`, so images from the current Dockerfile ARE stamped**
+  (re-measured: `go version -m` reports `vcs.revision=88cc8369…`). An unstamped
+  binary today is an older image, a context without `.git`, or a test binary.
+  Absent stamps mean "never recorded", never "old" — and the executable mtime
+  remains the fallback that needs no build-time cooperation at all.
+- `GET /api/version` now falls back env → VCS revision → main module version →
+  `unknown`. It had returned the literal `"unknown"` on every image ever
+  shipped, because back then `CHRONICLE_VERSION` was set by no Dockerfile,
+  compose file, Makefile or workflow. CI now passes it for `v*` tag builds only
+  — so **unset is the NORMAL state on a branch build**, not a fault, and
+  resolution falls through to the stamped VCS revision. `docs/deployment.md`
+  claimed otherwise and is corrected.
+
+~~Open: nothing wires `CHRONICLE_VERSION` or gives the builder `git`~~ —
+**closed the same day by the deploy-hygiene change below.** Dockerfile stage 2
+now installs `git`, so the toolchain stamps `vcs.revision` by itself and
+`/api/version` reaches the revision branch of that fallback instead of
+`unknown`. Verified by building the real `internal/hostinfo` chain: with the
+env var unset, `hostinfo.Version()` returns `b1fe69e0a1a7-dirty`; with
+`CHRONICLE_VERSION=v1.2.3` set, it returns `v1.2.3`.
+
+### Deploy hygiene — the four things that made a correct deploy look like a failed one (2026-08-11)
+
+Companion to the two sections above. Those made Chronicle able to *answer*
+"what am I running"; this made the deploy path stop *producing* the question.
+No migration, no Go code — `Dockerfile`, `Makefile`, `docker-compose.yml`,
+`docker-compose.build.yml` (new), `.github/workflows/ci.yml`,
+`docs/deployment.md`.
+
+- **The OCI labels were never wrong — the inference was.** Verified against
+  `docker/metadata-action`'s own `src/meta.ts`: `revision` is `context.sha`
+  (the commit built) and `created` is `new Date()` in the `Meta` constructor
+  (real build time). Both correct. Overriding `created` with a commit
+  timestamp — the obvious-looking "fix" — would have made it wrong for the
+  first time. What was missing was that a *locally* built image carried **no**
+  `org.opencontainers.*` labels at all (`metadata-action` labels only what CI
+  builds; `alpine:3.20`'s `config.Labels` is null, so nothing is inherited).
+  The Dockerfile now sets an ARG-driven label floor for every image however
+  built, and both label sites carry the "a label describes an image, never a
+  process" warning where the mistaken reader is already looking.
+  **Do not put `{{ }}` in a custom label passed to `metadata-action`** — it
+  compiles them through Handlebars (`setGlobalExp`), so the `docker inspect
+  --format` template lives in the docs instead.
+- **The binary now names its own commit.** `apk add git` in stage 2 — no
+  `-ldflags`, no version variable, deliberately no second source of a fact
+  `internal/hostinfo` already resolves. `safe.directory` ships with it because
+  installing git converts a class of git error from "no stamp" into **"no
+  image"**: measured, a foreign-owned checkout gives `error obtaining VCS
+  status: exit status 128` and a failed build, and the exception clears it.
+  CI passes `CHRONICLE_VERSION` **only for `v*` tag builds** — on `main` the
+  metadata version is the literal `latest`, which would be a downgrade from
+  the SHA. A new CI step greps the pushed image (addressed by digest) for the
+  commit SHA, so if anyone drops the `apk add git`, the silent failure becomes
+  a loud one.
+- **`make build` was not a production build.** On a clean clone it exited 2
+  (`*_templ.go` is generated and gitignored) **and left a previously-built
+  `./bin/chronicle` byte-identical on disk** — measured by planting a fake
+  binary in a fresh clone. It now depends on `templ` and `rm -f`s the target
+  first, so a failure cannot leave a plausible artifact behind.
+- **`docker compose up -d` was not an upgrade.** The `chronicle` service
+  declared both `image:` and `build:`, giving one tag two producers, and `up`
+  neither rebuilds nor re-pulls when the tag already exists locally. `build:`
+  moved to `docker-compose.build.yml`, which tags local builds
+  `chronicle:local` so they can never masquerade as the published image;
+  the base file gained `pull_policy: always`. `make docker-all-local` is the
+  from-source path. Two places in `docs/deployment.md` that told operators to
+  run `docker compose build --no-cache chronicle` — i.e. to walk into the trap
+  — now point at `pull` or the override.
+
+### …and can now account for its own ASSETS — `host.assets` / `host.embedded` (2026-08-11)
+
+The same incident had a second wrong turn: a `grep` of `/app/static` for a
+calendar feature's assets came back empty and was read as missing code. It was
+not. **Chronicle serves its front-end from two storage mechanisms that look
+nothing alike from a shell**, and only one of them is reachable by `ls`:
+
+- the **on-disk static root** — a bare relative `static` resolved against the
+  process working directory (`/app/static` in the container, `<repo>/static` in
+  dev). There is no config field and no environment variable for it anywhere in
+  the tree; `internal/app/app.go` and `internal/templates/layouts/assets.go`
+  hardcode the same literal independently.
+- each plugin's **`//go:embed`-ed FS**, which exists only *inside the binary*.
+  No `ls`, no `grep`, no `find` over the container filesystem can ever see those
+  bytes. Measured: 12 embedded files across exactly two plugins (11 calendar,
+  1 entities). The calendar's only CSS lives there, so grepping `/app/static`
+  for it will **always** return empty — the expected result, not a finding.
+
+Four diagnostics, in `internal/systems/operator_diag_assets.go`, registered
+directly after `host.build`/`host.runtime`:
+
+- `host.assets [<path-substring>]` — walks the on-disk root (**resolved**, never
+  hardcoded, and it prints the working directory it resolved against, so "the
+  app is looking in a directory that isn't there" is visible at all) and reports
+  per file size, sha256[:16], mtime, and **the exact `?v=` token
+  `layouts.AssetURL` emits** — by calling that function, not by reimplementing
+  its hashing. `FullDump` because the no-arg listing measured 89 rows / ~15 KB;
+  the gate applies to batches only, so the admin Run button is unaffected.
+- `host.asset-contains <relative-path>:<markers>` — the marker check for one
+  on-disk file. Verified end-to-end: `css/calendar-block.css:moonpick` → FOUND,
+  52 occurrences.
+- `host.embedded [<slug>]` / `host.embedded-contains <slug>:<path>:<markers>` —
+  the same for bytes that have no path to point a grep at. The plugin registry
+  arrives by dependency inversion (`SetEmbeddedAssetsProvider`, mirroring
+  `SetInstalledPackagesProvider`); an unwired provider says **"provider not
+  wired"** and explicitly *not* "no embedded assets", because for someone
+  hunting code that looks missing those are opposite conclusions.
+
+**The `?v=` column is the load-bearing part, and it is a comparison, not a
+readout.** Digests are memoised for the process lifetime (correct for caching,
+a trap for a diagnostic), so the token the app serves and the sha256 of the
+bytes on disk *right now* can disagree — and the disagreement is the finding.
+Three verdicts, measured apart: `✓ matches` (verified live — `?v=fdbff5f7d5` is
+exactly the first 10 chars of sha `fdbff5f7d5038cdc`), `STALE` (file changed
+under a running process), and `BUILD-TOKEN FALLBACK` (the app cannot resolve the
+file at all, though it is right there on disk).
+
+Running the real thing caught a defect the unit tests would not have: the shared
+fallback verdict advised "check the working directory", which is meaningless for
+bytes compiled into a binary. Embedded assets have no working directory — a
+fallback there means the plugin FS was mounted for serving but never registered
+for hashing. The verdict now states the fact and each diagnostic explains its own
+cause; a test pins that the embedded output never gives the on-disk advice.
+
+### …and can now show its own recent ERRORS — `host.errors` (2026-08-11)
+
+Third gap from the same incident, and the one the operator asked for by name.
+An error that fired at 2am left **no trace an admin could reach**: it went to
+`slog`, `slog` went to stdout, stdout went to the container's log driver. So
+"what broke overnight?" meant getting onto the host, finding the container, and
+running `docker logs` — the same shell dependency the rest of `host.*` removes.
+The audit plugin cannot fill this: it records USER ACTIONS, is DB-backed, and is
+scoped to both a campaign and a user, so a 500 on `/healthz` or an anonymous
+request has neither key it needs.
+
+- **`internal/observability`** (new leaf package, stdlib only — writers are
+  `internal/app` and `internal/middleware`, reader is `internal/systems`, so a
+  leaf with no Chronicle imports cannot cycle with any of them). A 256-slot
+  mutex-guarded ring, allocated at package init so it is safe from the first
+  request — an error during boot is exactly the one you most want.
+- **`host.errors [<count>]`** — newest first (default 25, max 100). Each line:
+  timestamp **plus its age** ("2m0s ago" — the first question anyone asks a
+  stack of errors is "was that just now?"), status, method, route, provenance,
+  message.
+- **`host.errors-summary`** — the same ring grouped by route + status with
+  counts and first/last seen, sorted by frequency. Three repeats of one failure
+  become one line, so the single unrelated 503 underneath is visible instead of
+  scrolled off.
+- **`Entry.Path` is now bounded and flattened (2026-08-11 follow-up).** Path is
+  *usually* a route template this codebase wrote, so it looked safe and went
+  unguarded while its sibling `Err` got both `truncate()` and `singleLine()`.
+  But `PathFor`'s fallback stores raw request bytes, and that branch IS
+  reachable — `RecordPanic` calls `Ring.Record` **directly and never consults
+  `ShouldRecord`**, so any panic in the global middleware chain records
+  whatever URL was requested, and Echo runs every `e.Use` middleware for
+  unmatched paths. Measured over a real TCP server: a 1 MiB GET stored 349,526
+  bytes with 349,525 real newlines in ONE entry (~90 MB across a full 256-slot
+  ring), and `/a%0A%0A**INJECTED-HEADING**%0A-%20fake%20bullet` rendered as a
+  real heading and a real bullet — attacker text escaping the code span and the
+  list, inside a document whose stated purpose is to be pasted into an AI
+  assistant the operator then acts on. Fixed with `maxPathLen` at the store and
+  `safePath()` (flatten + neutralise backticks) at both render sites. **The
+  comment that justified the old code asserted the case could not arise**
+  ("an unmatched request is a 404, which the default policy does not record"),
+  and both halves were false — which is why nobody went looking. That comment
+  now documents the two reachable routes instead.
+
+**Three decisions that are load-bearing, each named and commented in code:**
+
+1. **Only 5xx and recovered panics are recorded** (`observability.ShouldRecord`).
+   Not for volume — for **eviction**. The ring evicts oldest-first, so admitting
+   the routine 4xx background of any public server (crawlers, stale bookmarks,
+   expired CSRF) would let a 404 storm quietly evict the one 500 you came for,
+   while the ring still *looked* full and healthy. Both renders state the policy
+   unconditionally, because an absence of 4xx here says nothing about whether
+   4xx are happening.
+2. **Paths are route TEMPLATES, never the requested URL** (`observability.PathFor`).
+   Chronicle really does route `/rsvp/:token`, `/proposals/respond/:token`,
+   `/calendar-rsvp/:token` and `/join/:code` — a concrete path would put a live
+   credential into output whose entire purpose is to be pasted into a chat
+   window. Templates also group perfectly, which is what makes the summary work.
+   The concrete path is used only when the router matched nothing, and that case
+   is a 404, which is not recorded.
+3. **A panic is hooked SEPARATELY from the error handler, because it never
+   reaches it.** `middleware/recovery.go` writes its 500 with `c.String` and
+   returns `nil`, so Echo sees no error and `app.errorHandler` is never called.
+   Hooking only the error handler — the obvious single hook — would have left
+   the most valuable error class invisible while the diagnostic looked like it
+   was working. The panic *value* is stored; the stack stays in the log.
+
+**Empty must never read the same three ways.** "Provider not wired", "wired and
+holding zero", and "the ring wrapped and evicted 407 earlier errors" are three
+different situations with three different renders; the header always prints
+capacity, hold count and total-since-start, so "only 4 errors" is visibly
+different from "nothing is recording". That is the 2026-08-11 lesson applied
+directly: an absence of evidence got read as evidence and cost an hour.
+
+The recording is additive only — `app.errorHandler` records and then delegates
+to its existing behaviour completely unchanged, and
+`internal/app/error_handler_record_test.go` pairs every ring assertion with a
+wire assertion (status, `Content-Type`, `HX-Retarget`, `HX-Trigger`/`HX-Reswap`)
+so a later change cannot quietly move a production error response.
+
+Limits stated in the output itself: in memory, this process only — a restart
+empties it and each replica keeps its own.
+
+### …and can now name its WIDGETS and PLUGINS — `host.widgets` / `host.plugins` / `host.deploy-check` (2026-08-11)
+
+The operator's actual words were "calendar (and other widget) versions", and
+Chronicle could not answer that in any form. Three additions close it, plus a
+rewritten probe library.
+
+- **`host.widgets [<name-substring>]`** — one line per widget: name, which
+  storage mechanism it came from, size, sha256[:16], mtime where one exists, and
+  the `?v=` this process serves, with the same token verdicts `host.assets`
+  uses. Companion stylesheets (`js/<name>.js` ↔ `css/<name>.css`) get their own
+  sub-line, because a deploy that changes only the CSS leaves the script's hash
+  untouched and would otherwise read as a no-op.
+- **`host.plugins`** — per plugin: static mount + URL prefix + embedded asset
+  count and aggregate size, whether it contributed migrations, and applied-vs-
+  available schema version taken from the migration runner's own record rather
+  than recounted.
+- **`host.deploy-check [<marker,…>]`** — the composite. Build identity in three
+  lines, the bellwether assets, a marker search across **all three** storage
+  mechanisms reported **separately**, and `packages.installed-vs-loaded`
+  delegated verbatim. This is the "paste this one thing after a deploy" check.
+- **The third marker scope was a fix, not a feature (2026-08-11).** It shipped
+  knowing only two scopes — on-disk static root and embedded plugin FS — and
+  then asserted a three-scope conclusion: "absent from BOTH means this build
+  does not contain it: either the deploy did not land or the marker is
+  misspelled." Chronicle is **Templ-first**, so most UI markers an operator can
+  copy out of page source are compiled into Go string literals in the
+  executable and are in neither of those scopes by design. Measured against the
+  real repo: `data-cal-moon-tab` (a real attribute in
+  `internal/widgets/calendar_block/moonpanel.templ`) reported ✗ in both scopes
+  and the flagship post-deploy check declared a correct deploy failed, while
+  `grep -a` found the string in the built binary. `scanExecutableForMarkers`
+  now streams the executable in 1 MiB chunks with an overlap so a
+  boundary-straddling marker is still found — measured 54.8 MB in 0.03 s — and
+  the all-absent verdict is printed **only when all three scopes were actually
+  read**. This was the incident's own error re-created inside the diagnostic
+  written to prevent it.
+
+**Three things had to be said rather than assumed, and each is printed on every
+run:**
+
+1. **Widgets have no version number.** Nothing declares one, nothing stores one,
+   and there is no server-side widget registry — a widget is a JS file that
+   registers itself with `boot.js` when the browser mounts a `data-widget`
+   element. So `host.widgets` says plainly that the honest answer is a content
+   fingerprint plus a build time, states that it WALKED two known directories
+   because there was no registry to consult, and says that the Go widget
+   packages under `internal/widgets/` cannot be enumerated from a deployment at
+   all (the source tree does not ship). Inventing a version number would have
+   been the easy, wrong answer.
+2. **Chronicle has no plugin loader.** Every plugin is compiled in and registers
+   its routes unconditionally; the two registries `host.plugins` reads are
+   *opt-in metadata* (a plugin joins one only if it needs a static mount or a
+   health hook, the other only if it owns tables). Most plugins appear in
+   neither. Without that standing note a missing row reads as a missing feature.
+3. **One plugin, two spellings.** `foundry_vtt` registers as `foundry-vtt` in
+   the metadata registry (that spelling is also its static URL prefix) and as
+   `foundry_vtt` in the schema runner and health registry. Merged literally it
+   would render as two rows — one apparently migration-less, one apparently
+   unregistered. `App.hostPluginRows()` folds `-`/`_` for the merge key only,
+   and the row prints both spellings so the alias is taught rather than hidden.
+
+**The probe library is now half warnings.** Both wrong turns of 2026-08-11 came
+from commands whose output was truthful about what it measured and misleading
+about what the reader wanted. Those probes are kept and annotated, never deleted:
+
+- `image-digest` is retitled **TRAP**, now compares the image the container RUNS
+  against the image the tag points at NOW, and states that these labels have
+  been observed six months wrong about a binary built minutes earlier — use
+  `host.build`.
+- `plugin-asset-grep` is a new **TRAP** entry: the empty grep of `/app/static`
+  for a plugin asset is the *expected* result, because those bytes are
+  `//go:embed`-ed into the executable — use `host.embedded` / `host.widgets`.
+- New: `container-restart-time` (`docker compose up -d` neither rebuilds nor
+  re-pulls when the tag already resolves locally, and compose declares both
+  `image:` and `build:` for the same service), `binary-in-container` (executable
+  mtime + container clock from outside the process), `page-asset-tokens`,
+  `plugin-schema-versions`.
+- Probes a `host.*` check now answers better (`package-version-dirs`,
+  `package-file-marker`, `chronicle-logs`, `served-widget-version`) say which
+  one to prefer, in their own text. Deleting them would leave an operator who
+  remembered the command running it with no note attached.
+
+### `host.*` INTEGRATED — one catalog, not five bolt-ons (2026-08-11)
+
+The five sections above landed as five separate stages on one branch. This is
+the pass that made them a single tool, and it found the defects that only exist
+*between* stages — the kind no stage's own tests can see.
+
+- **A stage-4 diagnostic was telling operators to run a command stage 5 had
+  deliberately broken.** `host.deploy-check`'s remedy section and the
+  `container-restart-time` probe both said Chronicle's compose file "declares
+  BOTH `image:` and `build:`" and told the reader to run `docker compose build`.
+  Stage 5 had removed `build:` from the `chronicle` service and added
+  `pull_policy: always`, so that command now **fails by design**. Both texts now
+  describe the shipped compose file, tell the reader to verify their own file
+  matches (a lingering `build:` block means they are on the old shape), and
+  point at the `docker-compose.build.yml` override for source builds. This is
+  the highest-stakes prose in the feature — it is the remedy an operator reads
+  at the worst moment — and it had gone stale within one commit.
+- **Every provider is now PROVEN wired, not reasoned wired.** All five stages
+  recorded the same gap: `systems.Set*Provider` wiring was compile-checked only,
+  because no unit test executes `RegisterRoutes`. An unwired provider is worse
+  than a missing diagnostic — `host.plugins` would report no plugins and it
+  reads like a finding. `internal/app/operator_diag_wiring_test.go` walks the
+  **AST** of both packages and fails if any declared setter has no non-test call
+  site, or if that call site is not reachable from `RegisterRoutes`. Measured:
+  all 8 providers resolve to `RegisterRoutes()`, which `cmd/server/main.go:157`
+  calls. **The first version of that test was itself broken** — it grepped raw
+  source, so commenting out the wiring line still passed. Walking the AST is not
+  fastidiousness; it is the difference between a guard and a decoration.
+- **The catalog is a menu again.** The 11 `host.*` entries arrived carrying
+  their incident narrative in `Desc` — up to 588 bytes against the pre-existing
+  catalog's 177-byte mean — which pushed the menu an AI reads to choose from
+  8.9 KB to 13 KB of functions spec. `Desc` is documented on the struct as
+  *one-line*. Every trimmed caveat was verified to already exist, usually more
+  fully, in the diagnostic's own output, so nothing was lost from where a reader
+  acts on it. Now capped at 450 bytes by test.
+- **`tools/check-plugin-isolation.sh` is green again.** It had been red since
+  stage 2 (commit `64dec0f5`), so `make verify` could not pass on this branch.
+  The four flagged files are operator-diagnostic *test fixtures* using real
+  plugin slugs as data — the guard's own remedy text names that case as
+  legitimate. Allowlisted by exact filename, with the reasoning recorded:
+  renaming the fixtures was rejected because the incident being guarded was
+  specifically about the **calendar** plugin's embedded assets.
+- New catalog-wide guards in `internal/systems/operator_diag_catalog_test.go`:
+  every `host.*` diagnostic runs with an empty arg (none panics, none returns
+  empty, each output self-identifies), names are unique, the family forms one
+  uninterrupted block ahead of the rest, and `FullDump` is asserted **in both
+  directions** by name.
+- Observability recorded as **ADR-051** (what is recorded, what is deliberately
+  not, and why the ring is in-memory rather than persisted).
+  `docs/operator-diagnostics.md` gains the `host.*` family and its probe table
+  is corrected — it was still listing the pre-stage-4 probe set.
+
+**Not verified:** no Docker daemon and no database in this environment, so
+nothing here was observed on a real container. `./tools/check-plugin-isolation.sh`
+could not be re-executed after the fix (the sandbox refused the invocation); the
+change is verified by `bash -n` plus exercising the guard's own matching logic
+against the four paths, not by a clean run of the guard itself.
+
 ### The operator's first look — six confirmed defects, all fixed (2026-08-10)
 
 Five in this repo, one in `Chronicle-Foundry-Module`. Each was measured before it
