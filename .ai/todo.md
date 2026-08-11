@@ -9,6 +9,407 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-integration. The four moon stages integrated (2026-08-11)
+
+### [x] Done
+
+- [x] **`check-plugin-isolation.sh` was RED and had been since `5e6abb19`.** Four
+      new `"calendar"` literals outside the plugin (T-B2). The guard diffs
+      `origin/main...HEAD`, so it only reddens once the work is COMMITTED — which
+      is why four stages of local green missed it. Fixed by construction:
+      `internal/app/operator_diag_campaign_adapter.go` aliases `calendar.PluginSlug`
+      (the app layer already imports the plugin); `internal/systems/operator_diag_campaign.go`
+      declares the one colliding layout BLOCK TYPE as `blockTypeCalendar` under the
+      guard's const-registry amendment (R4-S26-A — exempts a bare const line and
+      nothing else in that file), because `internal/systems` may not import a
+      plugin; the test file joins the four `operator_diag_*_test.go` fixtures
+      already in `always_allowed_prefixes`.
+- [x] **Hardened the provider-wiring guard, which passed a mutation it should
+      have failed.** `internal/app/operator_diag_wiring_test.go` already covers
+      `SetCampaignDiagProvider` with no edit (it enumerates declarations), and
+      fails on both obvious disablings — but a call inside a **never-invoked
+      function literal** in `RegisterRoutes` passed BOTH tests. The boot-path walk
+      no longer descends into a `*ast.FuncLit`, and reports a literal-buried call
+      by name. The shipped wiring is unaffected: it passes literals as ARGUMENTS,
+      and `ast.Inspect` visits the `CallExpr` before its arguments.
+- [x] **Mutation-tested it three ways, RED then GREEN.** Verbatim:
+      - comment the call out → `internal/systems declares SetCampaignDiagProvider but no non-test file in internal/app calls systems.SetCampaignDiagProvider` + `is never called from internal/app, so it is not on any boot path` — both FAIL.
+      - move it to an uncalled method → `systems.SetCampaignDiagProvider is called from mutationOrphanWiring, which RegisterRoutes does not call` — source test PASS, boot-path FAIL. (This is the division of labour working, not a hole.)
+      - wrap it in `neverRun := func() { … }` → **before**: both PASS. **after**: `systems.SetCampaignDiagProvider is only called from inside a function literal in RegisterRoutes. Nothing here proves that literal is ever invoked…` — FAIL.
+      - `routes.go` restored byte-for-byte after each (`git checkout --`), guard GREEN.
+- [x] **ADR-052** records the container-query threshold with the full twenty-row
+      census table, both alternatives rejected, and what the query still protects.
+
+### [ ] Open — carried forward, not done here
+
+- [ ] **The underline cell's disc placement wants an operator's eyes** (see
+      ADR-052 → Consequences). It amends nothing signed — `cells-zoom.png` draws a
+      NAMED cell — but it is a composition nobody has seen, and no still was ever
+      generated. One screenshot before it reaches the operator.
+- [ ] **The 44px tap floor is not met** (43.3–49.0 × 24.0px measured) and cannot
+      be met inside the day cell without taking area from `.dsel`. Needs a drawing
+      and a signature, not a CSS tweak.
+- [ ] **Nothing in these four stages has run against a live server or a real
+      phone.** No DB, so `make test-int` was not run; `campaign.surfaces` has
+      never seen a real `e.Routes()`; every pixel is headless Chromium with an
+      emulated coarse pointer.
+- [ ] **`golangci-lint` still not run** — the binary is not installed in this
+      environment. `go vet` on the touched packages is clean and `gofmt` is
+      implicit in the build, but the project's own `make lint` gate has not been
+      exercised on any of this.
+
+## 0-campaign-diag. The catalog can answer campaign-shaped questions (2026-08-11)
+
+The 28-entry catalog scored 0 for 3 against the operator's three phone
+observations. Four diagnostics close the gap, in the ranked order of
+`cordinator/reports/chronicle/2026-08-11-observations-and-diagnostic-gaps.md` §4.
+Full account in `.ai/status.md`.
+
+### [x] Done
+
+- [x] `calendar.render <campaignId>[:<userId>]` — the Bench's render trace: the
+      PRIMARY/REAL-WORLD seats and the clause that chose each, `SkyOn` /
+      `ShelfHidden` per seat, stored-vs-rendered moons, the Almanac gate with
+      its arithmetic printed, the four disclosures with their PROVENANCE, and
+      the viewer's membership AND visibility roles (they differ, and the page
+      reads both).
+- [x] `calendar.config <campaignId>[:<calId>]` — per calendar, with stored moon
+      rows and rendered moons as SEPARATE numbers, so a synthesized real Moon is
+      never mistaken for a row Settings → Moons can edit.
+- [x] `campaign.surfaces <campaignId>` — the declared surface map CHECKED
+      against the live Echo route table in both directions (a declared route the
+      binary lacks, and a registered calendar GET nobody classified), plus the
+      sidebar destination read from the map the sidebar itself renders from
+      (`layouts.AddonSidebarPath`).
+- [x] The frozen V2 shell is classified by HANDLER and printed with the router's
+      own path, so `[VS-2]`'s `TestSunset_NoLiveDoorRemains` stays intact and no
+      signed exemption list was amended. Two other repo-wide guards fired on the
+      first draft and were also answered by changing the construction, not the
+      test: `TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` and
+      `…TheSkyCarveOutIsPinned` — the sky band's class name is a two-file signed
+      carve-out, so the diagnostic distinguishes the two things called "skybox"
+      in words instead of naming the selector.
+- [x] `campaign.config <campaignId>` — `campaign_addons` plus every placed block
+      type, including blocks nested inside container blocks on an entity
+      template (a top-level-only flattener would report "no skybox" while one
+      sat inside a tab).
+- [x] Catalog hygiene (§5): `host.deploy-check`'s Desc and marker section now
+      refuse the render reading and name `calendar.render`; the batch spec's
+      purpose line names both axes.
+- [x] The mirror is guarded: twelve pinned producer source lines, proven to fire
+      on a simulated `[SKY-1]` amendment and on a `benchClassify` clause change.
+- [x] `host.seams` and `campaign.members` were CUT per §4, and stay cut. The
+      catalog is a menu an AI reads to choose from; an entry nobody picks makes
+      every other entry harder to find. `host.seams`' motivating case (a nil
+      schedule reader) is folded into `calendar.render`'s own gate trace.
+
+### [ ] Open — what these four still cannot say
+
+- [ ] **The RSVP panel's four gates are not traced.** `calendar.render` reports
+      the disclosure state and the role, which covers two of the report's four
+      causes; it does not report `h.schedule == nil`, an empty roster, or
+      "no upcoming event on a real-life calendar has `collect_rsvps=1`"
+      (§7.3). Those live in `benchRsvpResolve` and would need either an export
+      or a provider method on the calendar plugin — out of scope for a stage
+      that may not touch `internal/plugins/calendar/`.
+- [ ] **No live-server verification.** Every assertion here is against
+      fixtures plus the plugin's own source. Nobody has run these four against
+      a running Chronicle with a real campaign; the route cross-check in
+      particular has only ever seen a synthetic table. Run
+      `campaign.surfaces <id>` on a live instance and confirm no row reports
+      NOT REGISTERED and no handler disagreement appears.
+- [ ] **`calendar.render` re-derives rather than calls.** The honest fix is an
+      exported render-trace on the calendar plugin, which would delete the
+      mirror and its twelve pins outright. Booked, not done.
+
+## 0-probes. The browser-probe guard is now a census, and its matcher works (2026-08-11)
+
+`tools/check-browser-probes.sh` covered 23 probes; the repo has 29 asserting
+browser probes. More importantly the guard's matcher credited a FAILED probe as
+PASS. Both fixed. Full account in `.ai/status.md`.
+
+### [x] Done
+
+- [x] Census of every browser probe: 39 tests reach a Chromium finder, 10 are
+      env-gated generators/explorers (excluded by policy), 29 assert. Six were
+      unregistered after stage 1 and are now registered — the three
+      `TestBuilderProbe_*`, `TestDaycardLedgerDoor_*` and both `TestYearProbe_*`.
+- [x] `probe_verdict()` anchors on `^--- <VERDICT>: <name> (` — the unanchored
+      substring match let an indented subtest PASS satisfy a probe whose own
+      verdict was FAIL, and let a longer probe name satisfy a shorter one.
+- [x] `run_group` now requires a clean `go test` exit as well as the PASS lines;
+      the exit code had been discarded entirely.
+- [x] The SKIPPED diagnostic reads the line BEFORE the verdict, which is where
+      `go test -v` puts `t.Skip`'s message.
+- [x] Self-test fixtures are now real `go test -v` output rather than
+      hand-written to match the code, plus a case per hole.
+- [x] Confirmed the `Browser Probes` CI job has no `if:` and so runs on
+      `pull_request` — it does NOT have the `Docker Image` job's hole.
+- [x] `census_check()` retakes the census on every run, source-only, and fails
+      on drift in either direction (an unregistered asserting probe, or a list
+      entry the tree no longer has). Both directions proven to fire.
+
+### [!] Open — the mobile probes are load-sensitive, and that is now CI's problem
+
+`TestMobileProbe_TheScrollerCensusAndTheLongWeek`,
+`…TheRSVPOverviewAndTheScheduleFitThePhone` and `…TheTapFloorAtAPhoneWidth`
+failed once during a full guard run on this 4-core box with
+`asked for N steps and got fewer replies — the child stopped answering`, then
+passed on re-run with the identical `-run` set. Not a rendering failure and not
+caused by the six added probes (the same 14 pass in isolation, and
+`NarrowLaneHoldsItsGate` + the three of them pass together).
+
+The cause is the harness: `mobileDrive` (`mobile_probe_test.go:122`) drives
+Chromium with `--virtual-time-budget` + `--dump-dom`. Virtual time still needs
+real CPU to execute the timer callbacks, so under load the dump can happen with
+tail replies missing — and the probe then fatals on the reply count, which its
+own comment says "reads as a flake and is not one". On this evidence it IS one.
+
+**Reproduced again during the 2026-08-11 integration pass, and the blast radius
+is wider than the probe job.** A `go test -short -count=1 ./...` over the whole
+tree failed `TestMobileProbe_TheScrollerCensusAndTheLongWeek` AND
+`TestMobileProbe_TheRSVPOverviewAndTheScheduleFitThePhone` with
+`asked for N steps and got 0 replies — the child stopped answering: []`; an
+unpiped re-run of the identical tree passed everything. A DIFFERENT pair failed
+than stage 1 saw, which a deterministic regression cannot do.
+
+The wider point: these six probes are **browser-gated only, with no `-short`
+gate** — deliberately, per the file comment ("a registered probe that skips
+itself by default is a silent pass wearing a name"). That reasoning was sound
+when the probes had no CI job of their own. Now that they DO
+(`tools/check-browser-probes.sh`, which drives them explicitly), the absent
+`-short` gate means the ordinary `Build & Test` lane ALSO launches Chromium
+six times while every other package competes for the same cores — so this flake
+can redden a job that has nothing to do with pixels.
+
+- [ ] Decide whether `mobile_probe_test.go` should honour `-short` now that the
+      probe guard drives it by name. That would move the browser work onto the one
+      job that expects it, and cost nothing: `check-browser-probes.sh` does not
+      pass `-short`. **Not done here** — the file's comment is an explicit
+      argument against it, written before the guard existed, and overturning it is
+      a decision about what a probe is allowed to claim rather than an integration
+      fix.
+- [x] **DONE (2026-08-11, verifier round).** Make `mobileDrive` distinguish a
+      starved run from a measurement failure. It does not retry — a retry would
+      hide the load problem rather than report it — it **stops claiming a
+      verdict it did not measure**, on both sides of the seam:
+      - `mobile_probe_test.go` declares `browserHarnessMarker =
+        "BROWSER HARNESS FAILURE (no pixel was measured)"` and leads all five of
+        `mobileDrive`'s dead-child fatals with it (dump-dom failure, no
+        transcript element, unparseable transcript, unparseable reply, short
+        reply count). Each now says in words that nothing was measured and that
+        this is not evidence about the layout, and names the cheap
+        disambiguation: re-run the probe alone.
+      - `tools/check-browser-probes.sh` printed
+        `FAILED <name> — the rendered result is wrong. This is the guard
+        working.` for **every** failure without exception. That default is gone.
+        It now extracts the probe's own `=== RUN` → `--- FAIL` region, prints a
+        distinct **"THE BROWSER CHILD DIED OR STOPPED ANSWERING · NO PIXEL WAS
+        MEASURED"** verdict when the marker is present, and otherwise says only
+        that an assertion failed — then **quotes the probe's own words** in both
+        branches, so the reader gets the reason rather than the script's guess.
+      - The two literals are one string in two languages, so `marker_check()`
+        fails the run (source-only, no browser) if the Go side is reworded and
+        the shell side is not. Proven red: renaming the Go constant reddens the
+        self-test; reverting the FAILED branch to its old single line reddens
+        three self-test assertions. Both restored green.
+- [ ] Watch the `Browser Probes` job for this signature on the GitHub runner
+      (2 cores, weaker than this box) before trusting it as a required check.
+
+### [ ] Not verified — branch protection
+
+Whether `Browser Probes` is a **required** status check on `main` could not be
+checked from this environment (no `gh` CLI, no API access). The job existing and
+running on PRs does not by itself block a merge. Someone with repo admin should
+confirm it — and `Build & Test`, `Lint`, `Fresh-DB Migration Replay` with it.
+
+## 0-moons. "I can't see the moons" — the discs are now REACHABLE (2026-08-11)
+
+The per-day moon discs shipped inside `.cnamed`, which is `display:none` below a
+84px day cell. Measured across the shipped app shell, a day cell is 30–121px and
+reaches 84px only for a SEVEN-day week at ≥1024px viewport — a ten-day week never
+reaches it at any width, because `.cal-bench` caps the Block at 1180px (82.4px
+columns, 1.6px short). Six of twenty configurations drew discs; none was a phone.
+
+- [x] `@moonRow` moved out of `.cnamed` to be a direct child of `.cell`
+- [x] `MoonRowColWidthMin = 40` (`sizing.go`) + `@container cal-cell (min-width: 40px)`,
+      read off the census gap (37.0 must not draw · 43.3 must), pinned both ways
+      by `TestCSS_SizingIsContainerQueries`
+- [x] Underline density drops the row to `top: 26px`; the signed `right: 4px`
+      anchor and the named cell's `top: 5px` are untouched
+- [x] The coarse-pointer hit pad clamped to its own cell —
+      `max(-7px, (100% - 100cqi) / 2)` — so a 49px pad cannot be wider than a
+      43.3px day
+- [x] `moon_reach_probe_test.go`: the viewport census + a real coarse-pointer arm
+      (Chromium DOES have a switch: `--blink-settings=primaryPointerType=2,
+      availablePointerTypes=2`, which `moonpanel_probe_test.go`'s comment says it
+      does not). Proven red: reverting the fix fails 11 of 20 subtests.
+- [x] The six #590 moons/sky probes registered in `tools/check-browser-probes.sh`
+      — they all PASSED and had simply never run in CI (report §7.4)
+
+### [x] Done — the data now exists (stage 3, 2026-08-11)
+
+- [x] **The Bench's real-Moon fallback.** `internal/plugins/calendar/moon_fallback.go`
+      — `synthesizedRealMoon` reshapes `gregorianMoonPhase`'s answer into the
+      `(CycleDays, PhaseOffset)` pair `Moon.MoonPhase` steps through, so every
+      existing reader of `Calendar.Moons` gets THE Moon with no second astronomy
+      and no per-surface branch. Called from `BlockService.hydrate` AFTER
+      `ApplyRealTime` (the anchor must be the live day). Exact to 2.089e-12
+      cycles across 1901–2099; 1 day per crossed non-Gregorian century boundary
+      beyond that, asserted rather than assumed.
+- [x] **The builder wizard.** The card declares no moon (measured: its "Luna"
+      ran 0.85 days behind the real sky AND a stored row suppresses the exact
+      one), `draftCalendar` previews the same synthesized Moon the Bench draws,
+      Review counts what Create writes, and the real-life branch now calls
+      `SetMoons`/`SetSeasons` BEFORE the [VS-2] landing so an author who walks
+      back to a station keeps what they declared. [VS-2] itself is untouched.
+- [x] **`seedDefaults`** re-examined and deliberately unchanged, with the reason
+      in the function: seeding removes the exact Moon on real-life and invents a
+      body on fantasy.
+- [x] The Moons settings tab's copy corrected — it promised phase icons that no
+      shipped width drew, never mentioned the grid's cap of three, and never
+      said that an empty list on a real-world calendar means THE Moon.
+
+### [ ] Still open — where the moon still does not reach
+
+- [ ] **The syncapi serves the raw rows.** `internal/plugins/syncapi/
+      calendar_api_handler.go` reads `cal.Moons` off the 60-method calendar
+      service (its own `eagerLoad`), not the Block spine, so `GET /moons` and the
+      date snapshot's `moon_phases` still answer `[]` for a real-world calendar.
+      The Foundry module therefore shows no moon where the web UI now shows one.
+      NOT closed here on purpose: the module can `PUT /moons`, and serving a body
+      with no row through an endpoint whose partner endpoint writes rows is a
+      contract question (which id would it echo?), not a one-line read change.
+- [ ] **Should a wizard-created real-world calendar carry seasons?** The four the
+      preset used to seed are the northern hemisphere's and are gone. Settings →
+      Seasons is reachable for a real-life calendar, so nothing is blocked — but
+      "a real-world calendar starts with no seasons" is now a stated product
+      position and should be confirmed rather than inherited from this change.
+
+### [ ] Still open — reachable is not the same as present
+
+- [ ] **The tap floor.** The opener measures 43.3–49.0 × **24.0px** against the
+      44px [MOB-7] floor. It cannot be met inside a 52px-tall, 43.3px-wide cell
+      without the control BECOMING the cell and taking that area from `.dsel`,
+      the day-selection label. Needs a drawing and a signature, not a CSS tweak.
+- [ ] **The pad still ends 3.0px past the cell's rule** on a wide cell (4px row
+      inset + 7px pad). Unchanged by this fix and pre-existing since MN-G12;
+      the clamp only removed the NEW case (a pad wider than its cell). Bounded
+      and asserted at 3.0 by `mrPadOverspillMax`.
+- [x] **There are moons in the data now** — closed by stage 3 above. All three
+      drops (seedDefaults, the wizard, the Bench's missing fallback) are
+      answered; see "Done — the data now exists".
+
+### [ ] Still open — the acceptance pass at a REAL viewport (2026-08-11)
+
+An independent pass drove the PRODUCTION Block markup — a real-life calendar
+loaded through `BlockService.Block` with the Bench's own arguments, rendered by
+`calblock.Block` — inside a reproduction of the app shell, at a genuine 390px
+CSS viewport with a real touch stack (CDP `Emulation.setDeviceMetricsOverride` +
+`setTouchEmulationEnabled`; headless Chromium clamps `--window-size` to 500px,
+which is why the moon census uses a fixed-width host box instead).
+
+**THE ACCEPTANCE ANSWER IS "YES, IN ONE OF THE TWO CONFIGURATIONS."** On a
+390×844 phone the discs paint 10.0×10.0px at `top:26px` / `right:4px` inside a
+48.6×53.0px cell, clear of the numeral's ink, no spill; the opener hit-tests to
+the disc; a plain click (no hover anywhere) opens a 340×103px panel wholly
+inside the viewport; both tabs switch and the ✕ closes it. At 1280px — the width
+that was 0.6px short — the cell is 89.0×85.0 at NAMED density with the row back
+at `top:5px`. The cramped case still degrades: a ten-day week at 390px measures a
+33.0px column, the row is `display:none`, and 100% of the cell's hit area is
+`.dsel` with no overflow.
+
+- [ ] **The real-world Block beside an in-world Primary paints discs that are
+      not a control.** `moonPanelReachable` = `hasLayer("moons") &&
+      len(Month.Almanac) > 0`, and the Almanac register is gated on
+      `(!ShelfHidden || !SkyHidden)` (`block_geometry.go:773`). The Bench passes
+      `noShelf=true, sky=false` for the real-world Block (`bench.go:1143`,
+      `[SKY-1]`), so both are hidden, the register is empty, and `moonRow` takes
+      its `else` branch: `<span class="phrow" aria-hidden="true">`. Measured on
+      the production markup: **31 `.phrow`, 0 `.phctl`, 0 `.moonpick`, 0 `.mpan`**
+      — at 360/390/430/768/1024/1280/1440. `benchClassify` routes the real-world
+      calendar to that slot whenever the campaign has ANY in-world calendar, so
+      this is the configuration a worldbuilding GM actually has, and it is the
+      exact surface the 2026-08-11 complaint named. Stage 3 put moons in the
+      data; stage 1 made the row visible; the panel behind it was never reachable
+      here. **A design question, not a bug to patch:** closing it means either
+      building the register for a shelf-less, sky-less Block (amends `[SKY-7]`)
+      or seating a sky on the real-world Block (amends `[SKY-1]`, SIGNED).
+      STOP-AND-FLAG rather than done.
+
+      **THE ACCESSIBILITY THIRD OF THIS WAS SPLIT OFF AND FIXED (2026-08-11,
+      verifier round), because it needs no ruling amended.** The `else` branch
+      shipped `<span class="phrow" aria-hidden="true">` with a `title` per disc —
+      and `aria-hidden` takes the whole subtree out of the accessibility tree, so
+      those titles reached nobody either. Measured before: **30 rows, 30
+      `aria-hidden` openers, 0 accessible names.** That was defensible while the
+      branch was a corner case for a host that had removed the Shelf; it stopped
+      being defensible when the branch became the operator's own Block and the
+      real-Moon fallback put a moon in every cell of it, making these discs the
+      ONLY moon information there. `aria-hidden` is right for a graphic that
+      duplicates adjacent text and wrong for a graphic that IS the text.
+      The row now takes the control branch's information architecture **minus the
+      control**: one `moonClusterLabel` name on the row, one `moonClusterTitle`
+      tooltip on the row, discs `aria-hidden` and title-free. Measured after:
+      **0 `aria-hidden` openers, 30 accessible names, and `phctl` / `moonpick` /
+      `data-cal-moons` still 0** — nothing became reachable, which the new
+      `TestMoonPanel_TheDecorativeClusterIsStillAnnounced` asserts explicitly so
+      the a11y fix cannot be mistaken for the design change above. Proven red by
+      reverting the branch (both guards fail, one per row).
+      **Still open here: the panel. Only the announcement was fixed.**
+- [ ] **At underline density the opener's touch target takes the cell's
+      geometric CENTRE from `.dsel`.** Sampled with `elementFromPoint` on a 1px
+      grid over one day cell, coarse pointer, production markup:
+
+      | case | cell | share resolving to the moon opener | dead centre |
+      |---|---|---|---|
+      | 7-day real-world, 390px | 48.6×53.0 | 22.04% (22×25 pad) | `.dsel` |
+      | 10-day, 768px | 44.6×53.0 | **47.17%** (44×25 — the FULL column) | the disc |
+      | 10-day, 1280px (fine ptr) | 62.3×53.0 | 12.05% (36×11) | `.phctl` |
+      | 7-day real-world, 1280px (NAMED) | 89.0×85.0 | 1.6% (11×11, top-right) | `.dsel` |
+
+      RED THEN GREEN, both directions: neutralising the `@container cal-cell
+      (min-width: 40px)` block takes all three underline rows to **0.00%** with
+      the centre back on `.dsel` and 100% of the cell `.dsel`; restoring it
+      returns 47.17%. So this arrived with the fix. The 40px block's own comment
+      says the coarse pad "costs no layout and no other control's area" —
+      measurably it costs `.dsel` 47% of a ten-day cell. `top: 26px` is the
+      exact vertical middle of a 53px cell; ADR-052 already books the underline
+      placement as an open judgement call, and this is the number that decision
+      needs. Not changed here: the row's position is a drawing question.
+- [ ] **The panel's own controls are under the 44px floor and are recorded
+      nowhere.** ADR-052 books the OPENER (24.0px) and stops there. Measured at
+      390px coarse on the open panel: the Graph/Details tabs are **60.4×22.0 /
+      68.4×22.0** and the close ✕ is **16.0×16.0**. `@media (pointer: coarse)`
+      in `calendar-block.css:3430` covers `.phctl` and nothing else, so neither
+      `.mpbtn` nor `.mpx` gets a pad. The ✕ is also the ONLY way back to "no
+      panel" — the panel is CSS-only radios, so there is no Esc and no
+      outside-click, and re-pressing a cluster cannot un-check its own radio.
+      A 16×16 sole exit on a phone is 28px under the floor.
+- [ ] **`[MOB-7]`'s tap-floor census does not know the moon controls exist.**
+      `mobile_probe_test.go`'s `targets` list names nine selectors (RSVP trio,
+      `Ask →`, ribbon arrow, Layers invoker, Ledger tab, editor Save/Cancel/
+      Delete, a day cell). None of `.phctl`, `.mpbtn`, `.mpx` is among them, so
+      the probe that exists to hold the floor is silent about the three controls
+      stage 1 put on a phone. Adding them makes it FAIL — which is the point,
+      and is why it is a booking rather than an edit.
+- [ ] **A focusable control with no visible focus indicator below 40px.**
+      `.moonpick` is `.vhctl` (1×1, `clip-path: inset(50%)`) — not
+      `display:none` — so it stays in the tab order at every column width, while
+      its ring is `.cell > .moonpick:focus-visible + .phctl`, and `.phctl` is
+      `display:none` under 40px. Measured at a 33.0px column (ten-day, 390px):
+      the radio takes focus and checking it opens a 340×139px panel that has no
+      visible trigger anywhere on the page (WCAG 2.4.7). PRE-EXISTING and
+      NARROWED by stage 1 — the same hole ran below 84px before — not introduced.
+- [ ] **`moon_reach_probe_test.go` measures a host box, never a viewport.** It
+      lays twenty fixed-width `.probe-host` divs in one 2200px window, so no
+      viewport media query fires in it and the shell arithmetic
+      (`mrHostWidth`) is asserted rather than exercised. Independently
+      re-measured, the arithmetic is RIGHT (390px → 366px host, matching), and
+      `calendar-block.css` has no width media query at all, so nothing it claims
+      is wrong. But `mobile_probe_test.go` already documents the 500px clamp and
+      solves it with an iframe in this same repo; the moon census could use it.
+
 ## 0-host. Host self-identity — `host.build` / `host.runtime` landed (2026-08-11)
 
 - [x] `internal/hostinfo` + `host.build` / `host.runtime` diagnostics; `GET

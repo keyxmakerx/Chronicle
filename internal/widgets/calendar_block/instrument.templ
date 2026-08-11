@@ -161,6 +161,22 @@ func weekKey(slug string, r WeekRow) string {
 // ["moons"], the moongraph key owns the CURVE, not the discs), so the row is
 // gated on the registry like every other layer-owned surface — a cell that
 // carries Moons the viewer switched off must not draw them.
+//
+// THE DISC ROW IS A DIRECT CHILD OF THE CELL, NOT OF `.cnamed`, and that is
+// the fix for the defect this feature shipped with: it lived inside the NAMED
+// subtree, `.cnamed` is `display:none` until a cell measures 84px, and a day
+// cell only reaches 84px for a SEVEN-day week at a viewport of 1024px or more.
+// On a phone it is 30–53px, and a TEN-day week tops out at 82.4px on any
+// monitor. So the whole moon chain — three discs, the `.phrow.phctl` opener
+// and the panel behind it — rendered into a hidden subtree for the operator's
+// phone and for every in-world calendar with a long week, at every width.
+// Measured before and after in moon_reach_probe_test.go.
+//
+// Three discs are ~35px wide and an event NAME is not, so the two do not
+// belong behind one threshold; the sheet now gives the row its own, lower one.
+// The row costs no layout in either subtree — it is absolutely positioned
+// against the cell, exactly as `moonPick`'s radio is already a direct child
+// for the same "findable whichever subtree is showing" reason.
 // data-day-ord is the LADDER key beside data-day: the bare ordinal, because the
 // generated ladder lives in one static sheet shared by every calendar and
 // cannot know a slug. It is what lets a hovered cell light its Ledger row.
@@ -187,6 +203,9 @@ templ dayCell(d BlockData, c DayCell) {
 		if c.Day > 0 {
 			@dayPick(d, dayOrdKey(c.Day), dayPickLabel("", c.Day), dayAnswers(c.Day))
 			@moonPick(d, c)
+			if hasLayer(d.Layers, "moons") {
+				@moonRow(d, c)
+			}
 			<div class="cnamed">
 				@dayNumeral(c, true)
 				for _, m := range chipsFor(c) {
@@ -194,9 +213,6 @@ templ dayCell(d BlockData, c DayCell) {
 				}
 				if moreCount(c) > 0 {
 					<span class="more">{ "+" + intText(moreCount(c)) + " more" }</span>
-				}
-				if hasLayer(d.Layers, "moons") {
-					@moonRow(d, c)
 				}
 			</div>
 			<div class="cunder">

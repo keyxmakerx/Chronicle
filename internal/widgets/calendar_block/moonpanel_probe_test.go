@@ -441,8 +441,21 @@ func mpMS(s string) float64 {
 }
 
 // TestMoonPanelCSS_CoarsePointerHasNoHoverAndABiggerTarget is MN-G12's other
-// half, browser-free because Chromium has no CLI switch for a coarse pointer
-// and a probe that cannot emulate the condition cannot assert it.
+// half, read off the stylesheet.
+//
+// THIS COMMENT USED TO SAY "browser-free because Chromium has no CLI switch for
+// a coarse pointer, and a probe that cannot emulate the condition cannot assert
+// it". THAT WAS WRONG, and it cost this feature a real measurement: Blink's
+// pointer settings are settable from the command line
+// (`--blink-settings=primaryPointerType=2,availablePointerTypes=2`, verified
+// against chromium-1194), and `matchMedia('(pointer: coarse)')` reads true under
+// it. TestMoonReachProbe_TheOpenerOnATouchDevice now drives that arm for real
+// and measures the target, the overspill and the one-tap open.
+//
+// THIS TEST STAYS ANYWAY, because the two ask different questions: this one
+// asserts the RULES EXIST in the sheet at all — a deleted media block would make
+// the browser arm measure a fine pointer's geometry and report it as a touch
+// device's without noticing.
 //
 // TWO CLAIMS, both about the same media block: a coarse pointer gets NO hover
 // state (there is no hover on touch, and a "hover" that latches on tap is the

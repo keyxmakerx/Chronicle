@@ -13,6 +13,7 @@
 package calendar_block
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -496,10 +497,33 @@ func TestCSS_SizingIsContainerQueries(t *testing.T) {
 		"@container cal-block (min-width: 240px) and (max-width: 299.98px)", // mini
 		"@container cal-block (max-width: 239.98px)",                        // sub-mini
 		"@container cal-cell (min-width: 84px)",                             // density
+		"@container cal-cell (min-width: 40px)",                             // the moon row's own
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("the stylesheet is missing %q", want)
 		}
+	}
+	// BOTH CELL THRESHOLDS ARE READ OUT OF GO, so the sheet and sizing.go cannot
+	// drift the way they could while the discs shared the named row's query and
+	// nothing named the number twice.
+	for _, pin := range []struct {
+		px   float64
+		what string
+	}{
+		{NamedColWidthMin, "the named-event density flip"},
+		{MoonRowColWidthMin, "the moon row's own promotion"},
+	} {
+		q := fmt.Sprintf("@container cal-cell (min-width: %gpx)", pin.px)
+		if !strings.Contains(code, q) {
+			t.Errorf("%s is %g in Go and the sheet declares no %q — the two thresholds are "+
+				"the same contract written in two languages", pin.what, pin.px, q)
+		}
+	}
+	if NamedColWidthMin <= MoonRowColWidthMin {
+		t.Errorf("the moon row's threshold (%g) must stay BELOW the named row's (%g). They "+
+			"exist as two numbers precisely because three 10px discs cost less width than an "+
+			"event name; collapsing them is the defect the split was made to fix",
+			MoonRowColWidthMin, NamedColWidthMin)
 	}
 	// std is the BASELINE rather than a query, so a Block rendered before its
 	// container is measured degrades to the middle class, not the widest.

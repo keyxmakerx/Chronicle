@@ -468,9 +468,36 @@ templ moonsSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken s
 	<div class="space-y-4">
 		<div>
 			<h2 class="text-lg font-semibold text-fg mb-1">Moons</h2>
+			// THE COPY SAYS WHERE, HOW MANY, AND WHAT AN EMPTY LIST MEANS.
+			//
+			// It used to read "Phase icons display on the calendar." — one
+			// sentence with three problems. The discs were unreachable at every
+			// real width until the container query was fixed (the day cell had
+			// to reach 84px and measured 83.4px on a 1280px desktop); the grid
+			// caps at three per day with the rest in the Almanac, which the
+			// sentence did not mention; and on a real-world calendar an EMPTY
+			// list is not "no moon", it is THE Moon, computed — the exact
+			// confusion behind "I don't see the real moon on the real calendar"
+			// (2026-08-11).
+			//
+			// The width caveat is measured, not hedged: after the fix the row
+			// draws at a 40px day column, and the census puts a day cell at
+			// 43.3px for a seven-day week on a 360px phone. The only shipped
+			// configurations below the threshold are long weeks at phone width
+			// (a ten-day week measures 30.0-37.0px), which is what "except in
+			// very narrow columns" names.
 			<p class="text-sm text-fg-secondary">
-				Add moons with cycle lengths for phase tracking. Phase icons display on the calendar.
+				Add moons with cycle lengths for phase tracking. Up to three phase discs draw in the
+				top-right of each day of this calendar's month grid — except in very narrow columns,
+				where the day keeps its underline instead — and a fourth and beyond appear in the Almanac.
 			</p>
+			if cal.IsRealLife() {
+				<p class="text-sm text-fg-secondary mt-1">
+					This is a real-world calendar, so with no moons listed here it already shows
+					<strong class="text-fg">the Moon</strong> — its phase computed from the real
+					synodic cycle for each date. Adding a moon below replaces it.
+				</p>
+			}
 		</div>
 		<div x-data={ moonsData(cal.Moons) }>
 			<div class="space-y-2 mb-4">

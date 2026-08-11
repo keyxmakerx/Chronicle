@@ -20,6 +20,458 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### Verifier round on the moon arc — two guards stopped overclaiming (2026-08-11)
+
+Three verifiers audited the arc and returned three findings. One had expired,
+one was two defects wearing one label, one was real.
+
+**1. The concurrent revert of stage 1's fix — GONE, verified rather than
+assumed.** A peer lane's red-then-green had left `calendar-block.css` and
+`instrument.templ` reverted in the shared checkout while the verifier was
+running, and the standing `git add -A` would have committed it. Re-checked at
+the start of this round: `git status` clean, `@container cal-cell
+(min-width: 40px)` present at `calendar-block.css:2215`, `@moonRow` a direct
+child of `.cell` at `instrument.templ:207`, and `templ generate` regenerates all
+934 files with no tracked change — so the generated tree matches the fixed
+sources, not the reverted ones. Nothing to restore. Recorded because "it
+resolved itself" and "someone restored it" look identical afterwards, and
+because a second lane sharing one checkout can do this again.
+
+**2. The Bench's real-world Block: one label, two defects.** The finding was
+"the discs paint but are not a control: no opener, no panel, and `aria-hidden`
+so assistive tech gets nothing." Those are separable, and only one of them needs
+a signature:
+
+- *The panel is unreachable there.* Still true, still **BOOKED, not done** —
+  closing it amends `[SKY-7]` (build the Almanac register for a shelf-less,
+  sky-less Block) or `[SKY-1]` SIGNED (seat a sky on the real-world Block).
+- *The row was invisible to assistive technology.* **FIXED**, and it needed no
+  ruling touched. Measured before: 30 rows, 30 `<span class="phrow"
+  aria-hidden="true">` openers, 0 accessible names — `aria-hidden` removes the
+  subtree, so the per-disc `title`s inside reached nobody either. The branch's
+  own header already argued the principle for controls ("a control invisible to
+  assistive technology is not a control"); it holds for information, and on this
+  Block the discs ARE the only moon information. The row now carries the control
+  branch's architecture minus the control: one `moonClusterLabel` name, one
+  `moonClusterTitle` tooltip, discs `aria-hidden` and title-free. Measured
+  after: 0 hidden openers, 30 names, and `phctl` / `moonpick` / `data-cal-moons`
+  still **0** — asserted explicitly, so the fix cannot drift into the design
+  change above.
+- One guard was silently weakened by that markup change and is now hardened:
+  `TestLayers_DefaultIsMoonsAndTheInvokerIsInert` pinned the literal
+  `class="phrow"` **with** its closing quote. Demonstrated: with moons forced on
+  and 30 rows rendering, the old literal PASSES "the discs must leave". It now
+  pins `class="phrow` and fires.
+
+**3. The probe guard called a dead browser a rendering verdict — FIXED.**
+`check-browser-probes.sh` printed `FAILED <name> — the rendered result is wrong.
+This is the guard working.` for *every* failure, including `mobileDrive`'s known
+starvation shape, where Chromium is starved of its `--virtual-time-budget`, the
+transcript comes back short and **no pixel is measured at all**. That default is
+gone. `mobile_probe_test.go` now declares `browserHarnessMarker` and leads all
+five dead-child fatals with it; the script extracts each failing probe's own
+`=== RUN` → `--- FAIL` region, prints a distinct "THE BROWSER CHILD DIED OR
+STOPPED ANSWERING · NO PIXEL WAS MEASURED" verdict when the marker is there, and
+otherwise claims only that an assertion failed — quoting the probe's own words
+in both branches. `marker_check()` fails the run, source-only, if the two
+literals drift apart. Proven red both ways: reverting the FAILED branch reddens
+three self-test assertions; renaming the Go constant reddens `marker_check`.
+
+Not done, and named: the six mobile probes still have no `-short` gate, so the
+ordinary Build & Test lane still launches Chromium under full parallel load.
+That is a decision about what a probe may claim, not an integration fix, and it
+stays in `.ai/todo.md` §0-probes.
+
+### Acceptance pass on the moon arc, at a REAL 390px viewport (2026-08-11)
+
+The arc's own question — *on a phone, can the operator see moon discs on their
+day cells and open the panel?* — answered by driving the **production** Block
+markup (a real-life calendar through `BlockService.Block` with the Bench's own
+arguments, rendered by `calblock.Block`) inside a reproduction of the app shell,
+at a genuine 390px CSS viewport with a real touch stack. Headless Chromium
+clamps `--window-size` to 500px, so this used CDP
+`Emulation.setDeviceMetricsOverride` + `setTouchEmulationEnabled` rather than the
+fixed-width host box the moon census uses.
+
+**YES — in one of the two configurations.** 390×844, coarse pointer: the disc
+paints 10.0×10.0px at `top:26px` / `right:4px` inside a 48.6×53.0px cell, clear
+of the numeral's ink, no spill; the opener hit-tests to the disc; one plain click
+(no hover synthesised anywhere) opens a 340×103px panel wholly inside the
+viewport; both tabs switch and the ✕ closes it. At 1280px the cell is 89.0×85.0
+at NAMED density with the row back at `top:5px` — the width that was 0.6px short
+now draws. The cramped case still degrades honestly: a ten-day week at 390px is a
+33.0px column, the row is `display:none`, 100% of the cell is `.dsel`, no
+overflow. **The two pipelines now agree on one page**: the sky band (Pipeline A,
+`gregorianMoonPhase`) and the grid cell (Pipeline B, `synthesizedRealMoon`) both
+read `Moon 3%` for 2026-08-11.
+
+**NO — on the real-world Block of a two-calendar Bench, which is the operator's
+own configuration.** `benchClassify` sends the real-world calendar to the second
+slot whenever the campaign has ANY in-world calendar; that slot is rendered with
+`noShelf=true, sky=false` (`[SKY-1]`), so `blockAlmanacRegister` is skipped and
+`moonPanelReachable` is false. Measured on production markup: **31 `.phrow`, 0
+`.phctl`, 0 `.moonpick`, 0 `.mpan`** at every width — discs the operator can see
+and cannot press, `aria-hidden="true"` so assistive tech gets nothing. Closing it
+amends `[SKY-7]` or `[SKY-1]`, both signed, so it is FLAGGED and not patched.
+
+Five further measured findings — the opener's coarse target taking 47.17% of a
+ten-day cell (and its geometric centre) from `.dsel`, proven red-then-green
+against the threshold; the panel's own 22px tabs and 16×16 sole-exit ✕ under the
+44px floor with no coarse pad; `[MOB-7]`'s tap census not naming any moon
+control; a focusable `.moonpick` with no visible ring below 40px; and the moon
+census measuring a host box rather than a viewport — are in `.ai/todo.md`
+§0-moons → "Still open — the acceptance pass at a REAL viewport". Nothing in the
+four stages was reverted or amended by this pass; every one of its own guards
+(the six #590 probes, `check-browser-probes.sh`, `check-plugin-isolation.sh`)
+re-ran green here.
+
+### Integration pass over the four moon stages — two guards were wrong, not the code (2026-08-11)
+
+Four stages landed on `claude/coordinator-handoff-stage-3-3d3s4w` (`bb81a396`
+disc reachability → `7885fa62` probes into CI → `8e5eebb1` moon data →
+`5e6abb19` campaign diagnostics). Integrating them turned up **no defect in the
+shipped behaviour and two defects in the guards meant to protect it.**
+
+**1. `check-plugin-isolation.sh` was RED and had been since `5e6abb19`.** Four
+new `"calendar"` literals outside the calendar plugin (T-B2). Fixed by
+construction, not by allowlisting the problem away:
+
+- `internal/app/operator_diag_campaign_adapter.go` now aliases the plugin's own
+  identifier — `const calendarAddonSlug = calendar.PluginSlug` — instead of
+  re-typing the string. The app layer already imports the plugin, so this is
+  exactly the "pass through the plugin-registration interface" route the guard
+  names, and it cannot go stale across a rename.
+- `internal/systems/operator_diag_campaign.go` cannot import a plugin, so the
+  one colliding string is now a named const (`blockTypeCalendar`) declared under
+  the guard's **const-registry amendment (R4-S26-A)**, which exempts a bare
+  const-assignment line and NOTHING else in that file. It is a layout BLOCK TYPE
+  that happens to spell the slug, and it arrives as data — the map only decides
+  which types already on the page get an explanatory note.
+- Its test file joins the four `operator_diag_*_test.go` fixtures already in
+  `always_allowed_prefixes`, for the reason those are there: the tests assert
+  what the diagnostics print about the CALENDAR addon specifically, so a
+  substituted slug would leave them asserting nothing.
+
+**2. The provider-wiring guard passed a mutation it should have failed.**
+`internal/app/operator_diag_wiring_test.go` correctly covers the new
+`SetCampaignDiagProvider` (it enumerates declarations, so new providers are
+picked up with no edit), and it fails on both obvious disablings. But a call
+sitting inside a **never-invoked function literal** in `RegisterRoutes` passed
+BOTH tests — the AST walk descended into literals and recorded the enclosing
+named function as the host. The boot-path walk now refuses to descend into a
+`*ast.FuncLit` and reports a literal-buried call by name. This does not hide the
+shipped wiring, which passes literals as ARGUMENTS: `ast.Inspect` visits the
+`CallExpr` before its arguments, so the call is recorded on the way in.
+
+Three mutations, each run RED then restored GREEN — see `.ai/todo.md` for the
+verbatim result lines:
+
+| mutation | before hardening | after |
+|---|---|---|
+| wiring call commented out | both tests FAIL | both FAIL |
+| wiring moved to an uncalled method | source test PASS, boot-path FAIL | same |
+| wiring inside a never-run closure | **both PASS** ← the hole | boot-path FAILS by name |
+
+**What was green and stayed green.** `go build ./...`; `go vet` on the five
+touched packages; `go test -short -count=1 ./...` (whole tree, exit 0);
+`tools/check-browser-probes.sh` (29 probes); migration-immutability,
+page-scripts, widget-mounts, instance-hostname, calendar-v4-lints,
+v2-motion-discipline, decision-citations. **No migration was written and none
+was needed.**
+
+**The mobile-probe flake is confirmed real and load-borne.** A first
+`go test -short ./...` run — piped through `grep | head`, competing for CPU —
+failed `TestMobileProbe_TheScrollerCensusAndTheLongWeek` and
+`TestMobileProbe_TheRSVPOverviewAndTheScheduleFitThePhone`, both with
+`asked for N steps and got 0 replies — the child stopped answering: []`. An
+unpiped re-run of the identical tree passed the whole suite (calendar package
+83.0s). Two DIFFERENT probes failed than the one stage 1 saw, which a
+deterministic regression cannot do. These probes are browser-gated only — no
+`-short` gate, deliberately, per their file comment — so they run in the ordinary
+unit-test lane on a machine also running every other package. Booked.
+
+The container-query decision is now **ADR-052**, with the twenty-row census
+table in it, because that number will be questioned and the measurement has to
+survive with it.
+
+### The diagnostics can now answer "why does MY campaign look like this?" (2026-08-11)
+
+The `host.*` family answers WHICH CODE IS RUNNING. It could not answer the next
+question up, and on 2026-08-11 that cost a five-lane source investigation to
+answer three sentences from an operator's phone. Measured against the 28-entry
+catalog, those three questions scored **0 for 3**: every diagnostic read process
+state, on-disk or embedded bytes, or entity rows, and not one read
+`campaign_addons`, `campaigns.dashboard_layout` / `sidebar_config`, the
+`calendars` / `calendar_moons` tables, the route table, or any render decision.
+
+Four diagnostics close it, in the ranked order the report set
+(`cordinator/reports/chronicle/2026-08-11-observations-and-diagnostic-gaps.md`
+§4), all in `internal/systems/operator_diag_campaign.go`:
+
+- **`calendar.render <campaignId>[:<userId>]`** — the Bench's render trace for
+  one viewer: which calendar took the PRIMARY vs REAL-WORLD seat *and by which
+  clause*, `SkyOn` / `ShelfHidden` per seat, stored vs rendered moons, whether
+  the Almanac register was built *with its gate arithmetic printed*, the four
+  disclosure sections with their PROVENANCE (a stored row vs `[BR2-4]`'s
+  closed-by-default nil branch), and the viewer's two roles.
+- **`calendar.config <campaignId>[:<calId>]`** — per calendar: mode, is_default,
+  tracks_real_time, and counts of months / weekdays / **moons** / seasons /
+  eras, plus which calendar each surface resolves to.
+- **`campaign.surfaces <campaignId>`** — every user-facing calendar route,
+  flagged CURRENT / LEGACY-PRESERVED / LEGACY-REDIRECT, **checked against the
+  live Echo table** (Echo records the handler's runtime name, so a declared
+  handler that disagrees with the binary is printed and the binary wins), plus
+  where the sidebar's Calendar item links — read from `layouts.AddonSidebarPath`,
+  the same map the sidebar renders hrefs from, never a copied string.
+  **The frozen V2 shell is DISCOVERED, not declared.** `[VS-2]` SIGNED sunset it
+  as a clickable destination and `TestSunset_NoLiveDoorRemains` walks `internal/`
+  for its path prefix; writing those paths into a map here would have added four
+  hits. Rather than amend a signed exemption list, the shell's rows are keyed on
+  the HANDLER the router reports and print the router's own path. That is the
+  better construction anyway: a declared path is a claim this repo makes, a
+  discovered one is a fact read off the running server — and the row vanishes on
+  its own if the route is ever really removed.
+- **`campaign.config <campaignId>`** — enabled addons and the block TYPES placed
+  in `dashboard_layout` / `owner_dashboard_layout` and on entity templates. The
+  only way to establish whether a legacy `skybox` block was hand-placed.
+
+**THE ONE THING A LATER READER MUST KNOW: `calendar.render` MIRRORS the
+producer, it does not call it.** `benchClassify`, `resolveBenchSections`, the
+`[SKY-1]` seat arguments and the Almanac gate are unexported in
+`internal/plugins/calendar`, and `internal/systems` must not import a plugin.
+Two things keep the mirror honest, and neither is optional:
+`operator_diag_campaign_mirror_test.go` pins twelve exact source lines and fails
+when one moves (proven to fire: inverting the real-world seat's `true, false` to
+`false, true` — i.e. amending `[SKY-1]` — turns it red with the ruling named in
+the failure text), and the trace declares itself a mirror in its own output
+every time it runs.
+
+**Catalog hygiene, from the same report §5.** `host.deploy-check`'s marker
+section would have answered *"✓ found in the executable"* to *"is RSVP on my
+calendar?"* — true, and the wrong answer, and the same mistake one layer up from
+the incident its own file header records. Its `Desc` and the marker section now
+say that a hit **proves the byte shipped and proves nothing about whether it
+renders**, list the six ways a shipped marker reaches no user, and name
+`calendar.render` / `campaign.config`. `FunctionsSpecJSON`'s purpose line — what
+an assistant reads to decide whether to reach for the tool at all — now names
+both axes rather than only the served-bytes one.
+
+**Wiring.** `systems.SetCampaignDiagProvider` is injected in `RegisterRoutes`
+right after `calendar.InstallBlockSpine`, and the pre-existing
+`TestEveryDiagnosticProviderIsWiredInAppSource` /
+`TestDiagnosticProviderCallsAreOnTheBootPath` cover it automatically (proven:
+removing the setter call turns both red). The adapter
+(`internal/app/operator_diag_campaign_adapter.go`) reproduces the Bench's own
+loaders — the owner/player list split, then the spine's batched
+`EagerLoadCalendars`, which is the only loader that applies the real-Moon
+fallback — so the moon count it reports is the one the Block draws.
+
+### The moons the product had and never delivered — three drops closed (2026-08-11)
+
+Stage 1 made the per-day discs REACHABLE and stage 2 put their probes in CI. That
+left the other half of the operator's complaint: there were no moons in the data.
+Three separate paths lost them, and they had different answers.
+
+**1. The Bench never had the real-Moon fallback Pipeline A has had all along.**
+`BuildWorldStateSeed` → `moonSeeds` gives a real-life calendar with no authored
+moons THE Moon, phase from `gregorianMoonPhase`. The Block spine's
+`MoonsForCalendars` is a bare `SELECT` with no mode branch, and the Bench never
+calls `BuildWorldStateSeed` — so the surface the nav points at showed nothing.
+
+`internal/plugins/calendar/moon_fallback.go` closes it WITHOUT a second
+astronomy: `synthesizedRealMoon` solves a `(CycleDays, PhaseOffset)` pair from
+`gregorianMoonPhase` itself, so every existing consumer of `Calendar.Moons` —
+per-day discs, the Almanac register, the moon panel — gets the real Moon through
+the code path it already had. `BlockService.hydrate` calls it AFTER
+`ApplyRealTime`, because the anchor must be the live wall-clock day, not the
+stored one.
+
+MEASURED. Phase agrees with `gregorianMoonPhase` to **2.089e-12 cycles** (5.3
+microseconds) for every date from 1901 to 2099 — the offset is solved, not
+approximated. Beyond that band the error is exactly **1 day per crossed
+non-Gregorian century boundary** (1.0 at 2100, 2.0 at 2200), because
+`Calendar.AbsoluteDay` counts with the calendar's own leap-every-4 rule and the
+true JDN does not. That bound is asserted, not assumed
+(`TestRealMoonFallback_TheAccuracyBoundIsMeasuredNotAssumed`).
+
+**2. The builder wizard's dropped "Luna" — and the fix is not to persist it.**
+`builder_presets.go` seeded `{Luna, 29.53, NewAt 6}`, Review printed "Moons: 1",
+and `builder_handler.go` returned at the [VS-2] landing before any moon writer.
+The obvious fix — write it before redirecting — is WRONG, and the measurement
+says so: against `gregorianMoonPhase` on a calendar shaped as `CreateCalendar`
+seeds one, **Luna runs 0.85 days (0.0287 cycles) behind the real sky**, stably,
+and on 2026-08-11 lands in a different named phase. Worse, ANY stored row
+switches `synthesizedRealMoon` off, so persisting Luna would have traded an exact
+Moon for a frozen approximation on every real-world calendar the wizard makes.
+
+So the card declares no moon, `draftCalendar` gives the PREVIEW the same
+synthesized Moon the Bench gets (one helper, one body), and Review prints
+"Moons: 1 — the real Moon…" because one moon is what the calendar shows. The
+four invented seasons went too: Winter 12/1–2/28 is the NORTHERN hemisphere's,
+and the real world does not have one set of seasons. The era stays (the [WZ-3]
+gate needs it) and Review now says its destination is the epoch name, not a
+`calendar_eras` row — the Eras tab is not offered for a real-life calendar, so a
+row written there could never be removed.
+
+The branch now writes `SetMoons` + `SetSeasons` before redirecting, so an author
+who walks back to those stations keeps what they declared — a drop that existed
+independently of the preset. **[VS-2] is untouched**: the landing did not move,
+the write moved earlier. `ApplyImport` is deliberately NOT used on this branch —
+it forces the date to 1/1 and `guardManualDateChange` rejects it outright once
+the timezone flags the calendar real-time.
+
+**3. `seedDefaults` still seeds no moons, and that is the ANSWER.** Re-examined
+and kept, for two different reasons per branch: on real-life a seeded row would
+REMOVE the exact Moon (the fallback requires zero rows), and on fantasy it would
+put an invented body in a GM's sky. Written into the function and pinned by
+`TestSeedDefaults_SeedsNoMoonsAndThatIsTheAnswer`.
+
+The Moons settings tab promised *"Phase icons display on the calendar."* — false
+at every shipped width until stage 1, silent about the grid's cap of three, and
+silent about the fact that an EMPTY list on a real-world calendar means THE Moon.
+Rewritten and guarded.
+
+RED THEN GREEN on all three. Reverting the `hydrate` line fails 3 of 7 fallback
+tests; restoring Luna and the early return fails 3 of 4 wizard tests with the
+0.85-day gap printed in the failure message; seeding a moon in either
+`seedDefaults` branch fails that guard; reverting the settings copy fails its
+guard in 6 places.
+
+STILL OPEN, booked in `.ai/todo.md`: the **syncapi** still serves the raw rows
+(`GET /moons` returns `[]` for a real-world calendar), so the Foundry module sees
+no moon where the web UI now shows one.
+
+### The browser-probe guard was itself a silent pass — census + three mechanism fixes (2026-08-11)
+
+Stage 1 registered the six #590 moons/sky probes in `tools/check-browser-probes.sh`.
+Stage 2 asked whether the list was now complete and whether the guard's own
+mechanism worked. Neither was true.
+
+**The census, which replaces recollection.** Every top-level `func Test…` whose
+body reaches a Chromium finder (`findProbeChromium` / `findChromium` /
+`benchFindChromium` / `mobileNeedChromium` / `builderShotChromium`) is a browser
+probe. There are **39**. Ten are opt-in generators/explorers, each gated behind
+its own env var, and are excluded by the guard's stated policy. The other **29
+assert**, and six of those were still unregistered after stage 1:
+
+| probe | package | what it measures |
+|---|---|---|
+| `TestBuilderProbe_TheMonthDidNotMove` | calendar | switching preset does not move the month |
+| `TestBuilderProbe_TheLadderActuallyRuns` | calendar | the wizard's step ladder scrolls to its cap |
+| `TestBuilderProbe_NarrowLaneHoldsItsGate` | calendar | 11 wizard screens × 7 widths hold their gate |
+| `TestDaycardLedgerDoor_ItOnlyRendersWhereItDoesSomething` | calendar | the Ledger door, docked vs stacked |
+| `TestYearProbe_BenchDateVerbRow` | calendar | emptied-year refusal in `calendar_daycard.js` |
+| `TestYearProbe_V2GMConsole` | calendar | emptied-year refusal in `gm_panel.js` |
+
+The two `TestYearProbe_*` are the sharpest case: they are the **only** browser
+probes in the repo with no `testing.Short()` gate, so they DO run in CI's
+"Build & Test" job — which installs no browser, so they skip there, inside an
+`ok` package line. A green job that measured nothing and told nobody.
+
+**Three defects in the guard's own mechanism**, all found by testing the guard
+rather than reading it:
+
+1. **A FAILED probe was reported as PASS.** `assert_probes_passed` grepped the
+   unanchored substring `--- PASS: <name>`. A table-driven probe that fails
+   prints `--- FAIL: TestX (3.10s)` at the margin and
+   `    --- PASS: TestX/w1024_week7` beneath it — and that indented subtest line
+   *contains* the substring, so the PASS branch matched and the FAIL branch was
+   never reached. Every #590 probe and stage 1's own reachability probe are
+   `t.Run`-per-viewport tables, and a real regression fails *some* widths, never
+   all — exactly the shape the matcher waved through. Reverting stage 1's fix
+   makes its probe fail 11 of 20 subtests; the guard would have said PASS.
+2. **A probe name was satisfied by a longer name starting with it.** `TestFoo`
+   was green because `TestFooOnATouchDevice` passed, so deleting the short one
+   would never have hit the ABSENT branch.
+3. **The skip reason printed was never the skip reason.** `go test -v` writes
+   `t.Skip`'s message *before* the verdict; the sed read the line *after* it —
+   in real output `PASS`, `ok …` or the next `=== RUN`.
+
+All three sat under a green self-test because the **fixtures had been
+hand-written to match the code instead of copied from `go test`**. They are now
+the real emitted shape, and the self-test carries a case for each hole.
+
+**Fixes.** `probe_verdict()` anchors on `^--- <VERDICT>: <name> (` — left margin
+(rules out subtests) plus the duration paren (rules out prefix collisions).
+`run_group` now also requires a clean `go test` exit, which was previously
+discarded outright: with `-run` narrowed to the covered probes, a non-zero exit
+alongside a full set of PASS lines means a panic after the last verdict, a
+TestMain/teardown fault, or a build failure — not the clean measurement the
+lines appear to report.
+
+**And the census is now retaken on every run** (`census_check()`), because the
+real defect was never a wrong list — it was an UNKNOWN one, maintained by memory
+across lanes that each added probes and registered them by hand or didn't. It is
+source-only, so it fires on a laptop with no browser, and it reports both
+directions: an asserting probe that is registered nowhere (UNREGISTERED) and a
+list entry the tree no longer has (NOT IN TREE). Its two honest limits are
+written into the code: it keys on the five known Chromium-finder names, and it
+classifies a probe that reads `os.Getenv(` as an opt-in generator.
+
+**Proof, on real output rather than fixtures.** Flipping one expectation in
+`TestDaycardLedgerDoor_*` — a two-subtest probe — produced exactly the shadow
+shape: `--- FAIL:` at the margin, one subtest FAIL, one subtest PASS. Fed to the
+old matcher it reports **PASS**; to the new one, **FAILED**. The full script on
+that tree exits 1 and names the probe; restored, all 29 probes run and pass and
+it exits 0.
+
+**CI wiring is sound and was checked**, because the `Docker Image` job's
+`if: github.event_name == 'push' || … 'workflow_dispatch'` is how a Dockerfile
+change reached main unexecuted. The `Browser Probes` job carries **no `if:`**,
+so it runs on `pull_request` as well as push, with `BROWSER_PROBES_REQUIRED=1`.
+NOT verified: whether it is a *required* check in branch protection — no `gh`
+CLI and no API access from this environment. See `.ai/todo.md`.
+
+### The per-day moon discs were unreachable at almost every real width — FIXED (2026-08-11)
+
+The operator could not see moons on their calendar on a phone. The feature had
+shipped, been reviewed and been screenshotted, and no user could see it.
+
+**Cause, measured rather than reasoned.** `@moonRow` was emitted inside
+`<div class="cnamed">` (the NAMED-event subtree) and `.cnamed` is `display:none`
+until a day cell measures 84px — `@container cal-cell (min-width: 84px)`, a query
+on the CELL, not the viewport. So the three phase discs, the `.phrow.phctl`
+opener and the whole #590 moon panel behind it rendered into a hidden subtree.
+
+**The census that decided the fix** (new
+`internal/widgets/calendar_block/moon_reach_probe_test.go`, a real Chromium,
+viewport widths run through the shipped app-shell chain — `<main>`'s px-3/md:px-5,
+the 256px pinned sidebar from `md` up, `.cal-bench`'s 1180px cap):
+
+| viewport | week 7 column | week 10 column |
+|---|---|---|
+| 360 / 390 / 430 | 43.3 / 47.6 / 53.3 | 30.0 / 33.0 / 37.0 |
+| 768 / 1024 | 62.7 / 99.3 | 43.6 / 67.2 |
+| 1280 / 1440 / 1920 | 93.0 / 115.9 / 121.0 | 62.8 / 78.8 / 82.4 |
+
+Discs painted in **6 of 20** configurations, none of them a phone. **A ten-day
+week never reached 84px at any viewport on any monitor** — the `.cal-bench` cap
+tops it out at 82.4px, 1.6px short, so the feature was unreachable by
+construction for every in-world calendar with a long week.
+
+**The fix.** `@moonRow` is now a direct child of `.cell` (like `moonPick`
+already was, for the same reason), and the discs get their OWN threshold —
+`MoonRowColWidthMin = 40` in `sizing.go`, `@container cal-cell (min-width: 40px)`
+in the sheet. 40 is the midpoint of the only gap the measurements leave (37.0
+must not draw, 43.3 must) and independently clears the row's measured 35.0px.
+At underline density the row drops to `top: 26px` — below the centred numeral,
+above the underline bar — keeping the signed `right: 4px` anchor; at 84px it
+returns to `top: 5px`, pixel-identical to what shipped. After: **17 of 20**,
+including all three phone widths for a seven-day calendar. The other three are
+the deliberate degradation (a 35px row does not go in a 30px cell).
+
+**Guarded, and proven red.** Reverting the two lines fails 11 of the guard's 20
+subtests. The six pre-existing #590 moons/sky probes were passing and **had never
+run in CI** (report §7.4) — they are now registered in
+`tools/check-browser-probes.sh` alongside the two new ones.
+
+**Still open / booked, not fixed here:** the opener's touch target measures
+43.3–49.0 × 24.0px against the 44px floor and cannot reach it inside a 52px
+cell without becoming the cell; and this fix makes the discs REACHABLE, not
+PRESENT — `seedDefaults` still never calls `SetMoons`, the builder wizard still
+drops its Luna before `ApplyImport`, and the Bench's `MoonsForCalendars` still
+has no real-Moon fallback. See `.ai/todo.md` §0-moons.
+
 ### Chronicle can now fingerprint ITSELF — `host.build` / `host.runtime` (2026-08-11)
 
 Chronicle could hash every file of every installed system package and could say

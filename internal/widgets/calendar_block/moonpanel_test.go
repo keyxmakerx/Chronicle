@@ -274,13 +274,96 @@ func TestMoonPanel_TheControlIsAbsentWhereThePanelCannotBeBuilt(t *testing.T) {
 		t.Error("with no Almanac register the cluster still renders as a control. A button " +
 			"that opens two empty tabs is worse than a tooltip")
 	}
-	if !strings.Contains(body, `<span class="phrow" aria-hidden="true">`) {
+	if !strings.Contains(body, `<span class="phrow" title=`) {
 		t.Error("…and the discs must still DRAW. Losing the control is not losing the sky: " +
 			"the moons layer is on and cells-zoom.png's three discs are the resting state")
 	}
-	if !strings.Contains(body, `title="`) {
-		t.Error("the decorative cluster keeps its per-disc titles — it is a tooltip again, " +
-			"which is what it was before the control existed")
+	if strings.Contains(body, `<span class="phrow" aria-hidden="true">`) {
+		t.Error("the non-control cluster is `aria-hidden`, so every disc on this Block is " +
+			"outside the accessibility tree and the per-disc `title`s inside it reach " +
+			"nobody. That was tolerable while this branch was a corner case; it is now " +
+			"the Bench's real-world Block ([SKY-1] renders it noShelf + sky=false, which " +
+			"empties the Almanac register) and the real-Moon fallback puts a moon in " +
+			"every cell of it. These discs are the ONLY moon information on that Block, " +
+			"and a graphic that IS the information cannot be hidden like one that " +
+			"merely decorates adjacent text")
+	}
+}
+
+// TestMoonPanel_TheDecorativeClusterIsStillAnnounced is the other half of the
+// honesty idiom, and it is the half that was missing.
+//
+// "A CONTROL INVISIBLE TO ASSISTIVE TECHNOLOGY IS NOT A CONTROL" is already
+// this file's rule (moonClusterLabel's header). The same sentence holds for
+// information: on a Block where the panel cannot be built the discs are not an
+// affordance, but they are still the phase of every body on every day — and on
+// the Bench's real-world Block they are the ONLY moon information present.
+//
+// SO THIS ASSERTS THE SHAPE, NOT MERELY THE ABSENCE OF `aria-hidden`: one name
+// per row naming the day and the bodies, one tooltip per row carrying the same
+// sentence, and the discs themselves hidden and title-free — three tooltips on
+// the parts of one cluster being three answers to one question, which is the
+// argument moonClusterTitle exists for and does not stop being true because
+// this cluster opens nothing.
+//
+// AND IT ASSERTS THAT NO CONTROL APPEARED. The fix above must not have quietly
+// bought reachability, because reachability here needs [SKY-7] or [SKY-1]
+// amended and neither is this code's to amend.
+func TestMoonPanel_TheDecorativeClusterIsStillAnnounced(t *testing.T) {
+	d := fxAlmanac(t, true)
+	d.Month.Almanac = nil
+	body := flatten(render(t, d))
+
+	rows := regexp.MustCompile(`<span class="phrow"[^>]*>`).FindAllString(body, -1)
+	if len(rows) == 0 {
+		t.Fatal("no decorative cluster rendered at all — the guard has no subject and " +
+			"would pass vacuously")
+	}
+	for i, r := range rows {
+		if strings.Contains(r, `aria-hidden`) {
+			t.Errorf("decorative cluster %d is hidden from assistive technology: %s", i, r)
+		}
+		if !strings.Contains(r, `title="`) {
+			t.Errorf("decorative cluster %d carries no tooltip: %s", i, r)
+		}
+	}
+
+	// The accessible name is the control branch's own sentence — day, bodies,
+	// illumination — not the word "moons".
+	if !strings.Contains(body, `<span class="phrow" title="Alder 4% · Umber 89%`) {
+		t.Error("the cluster's tooltip is not moonClusterTitle's sentence. Two surfaces " +
+			"stating the same nights differently is how they come to disagree")
+	}
+	if !strings.Contains(body, `<span class="vh">Moons on day 14 — Alder 4%, Umber 89%`) {
+		t.Error("the cluster carries no accessible name. `title` alone does not survive " +
+			"a screen reader's preferences and never survived `aria-hidden` at all — the " +
+			"name is what a non-sighted reader is actually told")
+	}
+
+	// The discs are the parts, not three separate answers.
+	discs := regexp.MustCompile(`<i class="ph[^"]*"[^>]*>`).FindAllString(body, -1)
+	if len(discs) == 0 {
+		t.Fatal("no discs rendered — the row is announced but empty")
+	}
+	for i, dsc := range discs {
+		if strings.Contains(dsc, `title=`) {
+			t.Errorf("disc %d keeps a `title` of its own: %s — three tooltips on the parts "+
+				"of one cluster is three answers to one question", i, dsc)
+		}
+		if !strings.Contains(dsc, `aria-hidden="true"`) {
+			t.Errorf("disc %d is not hidden: %s — the row carries the name; the discs "+
+				"repeating it would announce every day three times", i, dsc)
+		}
+	}
+
+	// AND NOTHING BECAME A CONTROL.
+	for _, marker := range []string{"phctl", "data-cal-moons", "data-cal-moonpanel", "moonpick"} {
+		if strings.Contains(body, marker) {
+			t.Errorf("the accessibility fix also emitted %q — this Block still cannot build "+
+				"an Almanac register, so a control here would open two empty tabs. "+
+				"Reachability needs [SKY-7] or [SKY-1] amended, and that is booked, not done",
+				marker)
+		}
 	}
 }
 

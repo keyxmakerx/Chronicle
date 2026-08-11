@@ -84,11 +84,42 @@ templ underline(c DayCell) {
 // never a per-cell "+N", in any state including hovered, focused and expanded
 // (MN-G4; moongraph.templ:23, L30). The hover shows MORE OF THE SAME THREE.
 //
-// WHERE THE PANEL IS NOT REACHABLE the cluster stays exactly what it was: a
-// decorative row with a tooltip. A Block whose host removed the Shelf has no
-// Almanac register built, and a cluster that opened two empty tabs would be a
-// dead affordance — the honesty idiom is to emit no control at all rather than
-// one that does nothing (dayPick's own rule past the ladder's bound).
+// WHERE THE PANEL IS NOT REACHABLE the cluster is NOT a control, and it does
+// not pretend to be one. A Block whose host removed the Shelf has no Almanac
+// register built, and a cluster that opened two empty tabs would be a dead
+// affordance — the honesty idiom is to emit no control at all rather than one
+// that does nothing (dayPick's own rule past the ladder's bound). So: a <span>,
+// no `for`, no radio, no `data-cal-moons` hook, no pointer cursor.
+//
+// BUT IT IS STILL INFORMATION, AND INFORMATION INVISIBLE TO ASSISTIVE
+// TECHNOLOGY IS NOT INFORMATION — the same sentence this file already argues
+// about controls, applied to the other branch. What this branch shipped was
+// `<span class="phrow" aria-hidden="true">` with a `title` per disc: the
+// `aria-hidden` takes the whole subtree out of the accessibility tree, so those
+// titles reach nobody either. A screen reader was told NOTHING about the moons.
+//
+// THAT WAS DEFENSIBLE WHILE THIS BRANCH WAS A CORNER CASE AND STOPPED BEING SO.
+// It is now the operator's own surface: the Bench renders the real-world Block
+// with `noShelf=true, sky=false` ([SKY-1] SIGNED, bench.go), which empties the
+// Almanac register (block_geometry.go — `(!ShelfHidden || !SkyHidden)` fails
+// both halves), and the real-Moon fallback now puts a moon in every one of that
+// Block's cells. So on a campaign with an in-world calendar AND a real-world
+// one, this branch draws THE ONLY moon information on the Block — thirty discs
+// conveying phase, announced to no one. `aria-hidden` is right for a graphic
+// that duplicates adjacent text and wrong for a graphic that IS the text.
+//
+// THE SHAPE IS THE CONTROL BRANCH'S, MINUS THE CONTROL: one accessible name on
+// the row (moonClusterLabel — day, bodies, illumination), one tooltip on the
+// row (moonClusterTitle — the same sentence), and the discs `aria-hidden` with
+// no `title` of their own. The per-disc titles are not "lost": three tooltips
+// on the parts of one cluster are three answers to one question, which is the
+// argument moonClusterTitle was written for, and it does not become a different
+// argument because the cluster here opens nothing.
+//
+// WHAT THIS DELIBERATELY DOES NOT DO is give that Block a panel. Making the
+// row a control there needs either an Almanac register built for a shelf-less,
+// sky-less Block ([SKY-7]) or a sky seated on the real-world Block ([SKY-1]) —
+// both signed, neither this file's to amend. Booked, not done.
 templ moonRow(d BlockData, c DayCell) {
 	if len(c.Moons) > 0 {
 		if moonPanelReachable(d) {
@@ -104,9 +135,10 @@ templ moonRow(d BlockData, c DayCell) {
 				}
 			</label>
 		} else {
-			<span class="phrow" aria-hidden="true">
+			<span class="phrow" title={ moonClusterTitle(c) }>
+				<span class="vh">{ moonClusterLabel(c) }</span>
 				for _, md := range moonsFor(c) {
-					<i class={ moonWaneClass(md) } style={ moonStyle(md) } title={ moonTitle(md) }></i>
+					<i class={ moonWaneClass(md) } style={ moonStyle(md) } aria-hidden="true"></i>
 				}
 			</span>
 		}

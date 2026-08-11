@@ -211,6 +211,16 @@ func builderPresetDraft(key string) (*builderDraft, error) {
 // and so Review's counts are true. The era is Chronicle's own "AD" epoch, which
 // is what lets the real-life card clear the wizard's era gate honestly rather
 // than by exemption.
+//
+// "SO REVIEW'S COUNTS ARE TRUE" IS A LAW THIS FUNCTION HAD STOPPED OBEYING, and
+// it is why the moon and the seasons are gone (see below). Review printed
+// "Moons: 1 · Seasons: 4 · Eras: 1" over a create path that writes none of the
+// three, and the operator was shown a moon they never got (2026-08-11
+// observations report §1.2). What survives here is what Create can honour:
+// months and weekdays, which seedDefaults seeds, and the era — whose reachable
+// destination is the calendar's EPOCH NAME, written by CreateCalendar from
+// draft.EpochName, and not a `calendar_eras` row. The Review panel says so in
+// those words rather than printing a count that means something else.
 func builderRealLifeDraft(p builderPreset) *builderDraft {
 	d := &builderDraft{
 		Preset: p.Key, Mode: ModeRealLife, Name: "Real world",
@@ -227,13 +237,40 @@ func builderRealLifeDraft(p builderPreset) *builderDraft {
 	}
 	d.Weekdays = append(d.Weekdays,
 		"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
-	d.Moons = []builderMoon{{Name: "Luna", Period: 29.53, NewAt: 6}}
-	d.Seasons = []builderSeason{
-		{Name: "Winter", ColorName: "frost", Color: "oklch(0.65 0.05 240)", StartMonth: 12, StartDay: 1, EndMonth: 2, EndDay: 28},
-		{Name: "Spring", ColorName: "sedge", Color: "oklch(0.65 0.10 140)", StartMonth: 3, StartDay: 1, EndMonth: 5, EndDay: 31},
-		{Name: "Summer", ColorName: "brass", Color: "oklch(0.72 0.12 85)", StartMonth: 6, StartDay: 1, EndMonth: 8, EndDay: 31},
-		{Name: "Autumn", ColorName: "russet", Color: "oklch(0.58 0.12 40)", StartMonth: 9, StartDay: 1, EndMonth: 11, EndDay: 30},
-	}
+	// NO AUTHORED MOON, AND THAT IS HOW THE REAL ONE GETS THROUGH.
+	//
+	// This card used to seed `{Name: "Luna", Period: 29.53, NewAt: 6}`. Two
+	// things were wrong with it and the second is the serious one.
+	//
+	// MEASURED. Against Chronicle's own gregorianMoonPhase, on a real-life
+	// calendar shaped exactly as CreateCalendar seeds one, Luna reads 0.0287
+	// cycles — 0.85 DAYS — behind the real sky, and the error is stable across
+	// dates (2026-08-11: Luna 0.9150, the real Moon 0.9437; 2026-12-25: 0.5205
+	// against 0.5491). On 2026-08-11 the two even land in different named
+	// phases. A rounded 29.53 and a hand-picked offset are an APPROXIMATION of
+	// the real Moon, and it was about to be printed on a calendar whose entire
+	// claim is that it tracks the real world.
+	//
+	// AND IT WOULD HAVE SUPPRESSED THE EXACT ONE. synthesizedRealMoon
+	// (moon_fallback.go) gives a real-life calendar with ZERO authored moons
+	// THE Moon, solved from gregorianMoonPhase and exact to 5 microseconds of
+	// phase — but only while `len(Moons) == 0`, because one authored row
+	// replaces the default whole (an operator's declaration must win outright).
+	// Persisting Luna here would therefore have traded an exact Moon for an
+	// approximate one, permanently, on every calendar this card creates.
+	//
+	// So the card declares no moon and Create writes none. Review still says
+	// "Moons: 1", because one moon is what the calendar shows.
+	//
+	// NO SEASONS EITHER, for a different reason. The four this card used to
+	// seed — Winter 12/1–2/28, Spring 3/1–5/31, Summer 6/1–8/31, Autumn
+	// 9/1–11/30 — are the NORTHERN hemisphere's, and the real world does not
+	// have one set of seasons. Seeding them would hand a GM in Sydney a
+	// calendar that calls December "Winter", which is worldbuilding this
+	// product invented on their behalf. A real-world calendar's seasons are the
+	// author's to declare, and Settings → Seasons is reachable for a real-life
+	// calendar (calendar_settings.templ:102 sits OUTSIDE the !IsRealLife guard),
+	// so declining here closes no door.
 	d.Eras = []builderEra{{
 		Name: "Common Era", Code: "AD", ColorName: "slate",
 		Color: "oklch(0.55 0.03 260)", StartYear: 1,

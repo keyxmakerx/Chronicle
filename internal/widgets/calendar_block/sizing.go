@@ -55,6 +55,31 @@ const (
 // still lands on the same side of it under both).
 const NamedColWidthMin = 84.0
 
+// MoonRowColWidthMin is the SECOND density threshold — the one the per-day moon
+// discs get for themselves, in MEASURED COLUMN pixels. In CSS it is
+// `@container cal-cell (min-width: 40px)`.
+//
+// WHY THERE ARE TWO. The discs shipped behind NamedColWidthMin, sharing one
+// query with the named-event subtree they happened to be nested inside, and
+// that gate was never right for them: three phase discs measure 35.0px of
+// inline space and an event NAME measures a great deal more. The consequence
+// was not a cramped cell but an absent feature — a census of twenty real
+// viewport/week-length pairs (moon_reach_probe_test.go) found the discs painted
+// in six, none of them a phone, and none of them a ten-day week at any monitor
+// size, because .cal-bench caps the Block at 1180px and a ten-day column tops
+// out at 82.4px there.
+//
+// WHY 40. It is read off that census rather than chosen: 37.0px is the widest
+// column that must NOT draw the row (a ten-day week on a 430px phone) and
+// 43.3px the narrowest that must (a seven-day week on a 360px phone), so 40 is
+// the midpoint of the only gap the measurements leave. It independently clears
+// the row's own measured 35.0px with 2.5px of clearance each side.
+//
+// It is deliberately NOT derived from NamedColWidthMin. The two answer
+// different questions and a future change to one must not silently move the
+// other.
+const MoonRowColWidthMin = 40.0
+
 // Chrome the full-tier column arithmetic subtracts (calendar-v4.html:1429-1434).
 //
 //   - instPad      — the instrument's own horizontal padding.

@@ -524,7 +524,50 @@ func draftCalendar(d *builderDraft) *Calendar {
 		}
 		cal.Eras = append(cal.Eras, era)
 	}
+	// THE PREVIEW DRAWS THE MOON THE CREATED CALENDAR WILL HAVE. A real-life
+	// draft with no authored moon gets the synthesized real Moon here, through
+	// the SAME helper the Block spine's loader uses (moon_fallback.go), because
+	// "the calendar the wizard previews and exports and the calendar Create
+	// writes are the same calendar" is this file's own law — the one
+	// builderImportMoonSwatch's comment records stage 24 restoring for colour.
+	// Before this line the wizard previewed a moon named "Luna" phased 0.85
+	// days off the sky, and the calendar it created showed THE Moon.
+	//
+	// It runs last, after cal.Moons is filled from the draft, so an authored
+	// moon suppresses it exactly as an authored row suppresses it on the Bench.
+	applyRealMoonFallback(cal)
 	return cal
+}
+
+// builderRealMoonSynthesized reports whether the calendar this draft creates
+// will show the synthesized real Moon rather than an authored one — a real-life
+// draft that declares no moon of its own.
+//
+// It exists so the four surfaces that state the moon situation — the preset
+// card's fact line, the preview column's sub-line and stats readout, and
+// Review's checks and count — cannot drift into saying "no moons" about a
+// calendar that shows one. That sentence was true for every draft until the
+// fallback landed, and it is now false for exactly this case.
+func builderRealMoonSynthesized(d *builderDraft) bool {
+	return d != nil && d.Mode == ModeRealLife && len(d.Moons) == 0
+}
+
+// builderRealMoonPhrase is the ONE wording for that situation. One constant so
+// the wizard cannot describe the same body two ways on two panels of one page.
+const builderRealMoonPhrase = "the real Moon — phase computed from the real synodic cycle, not stored"
+
+// builderMoonsShown is how many moons the created calendar will actually draw:
+// the authored count, or 1 for the synthesized real Moon. Review prints this
+// rather than len(Draft.Moons), because Review's contract is "everything below
+// is what Create will write".
+func builderMoonsShown(d *builderDraft) int {
+	if builderRealMoonSynthesized(d) {
+		return 1
+	}
+	if d == nil {
+		return 0
+	}
+	return len(d.Moons)
 }
 
 // builderPreviewBlock projects the draft through the SHIPPED producer.
@@ -1492,7 +1535,9 @@ func builderPresetMeta(p builderPreset) string {
 		return ""
 	}
 	moons := "no moons"
-	if n := len(d.Moons); n == 1 {
+	if builderRealMoonSynthesized(d) {
+		moons = "the real Moon"
+	} else if n := len(d.Moons); n == 1 {
 		moons = "1 moon"
 	} else if n > 1 {
 		moons = fmt.Sprintf("%d moons", n)
@@ -1517,7 +1562,9 @@ func builderPreviewSub(d *builderDraft) string {
 	// "3 of 4 moons drawn" over a month with none. The count is about the
 	// grid's CEILING, which is true at every width, and what the column does
 	// and does not paint is stated under the month where it happens.
-	if n := len(d.Moons); n > builderMoonCap {
+	if builderRealMoonSynthesized(d) {
+		out += " · the real Moon"
+	} else if n := len(d.Moons); n > builderMoonCap {
 		out += fmt.Sprintf(" · %d moons, %d within the grid's ceiling", n, builderMoonCap)
 	} else if n > 0 {
 		out += " · " + builderPlural(n, "moon")
@@ -1570,7 +1617,13 @@ func builderStatsFor(d *builderDraft) []builderStat {
 		leap = fmt.Sprintf("+%d every %d years", d.LeapAdd, d.LeapEvery)
 	}
 	moons := "none declared — the sky layer stays absent"
-	if n := len(d.Moons); n > builderMoonCap {
+	if builderRealMoonSynthesized(d) {
+		// NOT "none declared". Nothing is declared and one moon is drawn, and
+		// the old sentence would have been read as "your real-world calendar
+		// has no moon" — which is the operator's original complaint, printed
+		// by the wizard this time.
+		moons = builderRealMoonPhrase
+	} else if n := len(d.Moons); n > builderMoonCap {
 		moons = fmt.Sprintf("%d drawn · %d almanac-only", builderMoonCap, n-builderMoonCap)
 	} else if n > 0 {
 		moons = fmt.Sprintf("%d drawn", n)
@@ -1718,6 +1771,9 @@ func builderChecksFor(d *builderDraft) []builderCheck {
 	}
 
 	switch n := len(d.Moons); {
+	case builderRealMoonSynthesized(d):
+		out = append(out, builderCheck{Kind: "ok", Text: "Moons: 1 — " + builderRealMoonPhrase +
+			". Adding one in Settings replaces it"})
 	case n > builderMoonCap:
 		var extra []string
 		for _, m := range d.Moons[builderMoonCap:] {

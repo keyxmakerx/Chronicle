@@ -438,6 +438,30 @@ func (s *calendarService) CreateCalendar(ctx context.Context, campaignID string,
 
 // seedDefaults populates a newly created calendar with mode-appropriate months,
 // weekdays, and time settings. For real-life mode, also syncs wall clock time.
+//
+// IT SEEDS NO MOONS, IN EITHER BRANCH, AND THAT IS THE ANSWER RATHER THAN THE
+// OMISSION IT LOOKED LIKE (2026-08-11 observations report §1.2 named it as the
+// reason "every calendar in the product is born moonless"). Both branches were
+// re-examined and both keep their refusal, for two different reasons:
+//
+//   - REAL-LIFE: zero rows is the CORRECT state, not a gap. synthesizedRealMoon
+//     (moon_fallback.go) gives a real-life calendar with no authored moons THE
+//     Moon, solved from gregorianMoonPhase and exact to microseconds of phase —
+//     but only while `len(Moons) == 0`, because an authored row must replace the
+//     default whole. A seeded row here would therefore REMOVE the real Moon from
+//     every real-world calendar the product creates and put an approximation in
+//     its place. Seeding is not the neutral option on this branch; it is the
+//     harmful one.
+//   - FANTASY: a moon seeded here would be a body with an invented name and an
+//     invented period, sitting in a GM's sky and dated into their sessions,
+//     which nobody asked for. Chronicle's own header on the Block says the same
+//     thing about real-life seeding (block.templ) and the fallback above makes
+//     the same refusal for the same reason. An in-world sky is authored, and
+//     Settings → Moons is where.
+//
+// So the moon count a new calendar starts with is 0 stored and — for real-life
+// only — 1 shown. If that ever needs to change, it is a product decision about
+// invented content, not a missing call.
 func (s *calendarService) seedDefaults(ctx context.Context, cal *Calendar) error {
 	if cal.Mode == ModeRealLife {
 		// Gregorian months with correct day counts.

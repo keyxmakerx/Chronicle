@@ -103,11 +103,14 @@ func TestSkyCloseProbe_TheCloseRendersFrames(t *testing.T) {
 	if chrome == "" {
 		t.Skip("no Chromium binary found (set CHROMIUM_BIN) — a skipped probe is NOT a pass")
 	}
-	node, nodePath := findProbePlaywright()
+	node, pwEntry := findProbePlaywright()
 	if node == "" {
 		t.Skip("no Node with Playwright resolvable — this probe needs a REAL animation " +
 			"clock and the package's virtual-time harness has none. A skipped probe is NOT a pass")
 	}
+	// Printed on every run, pass or fail. Without it a resolution failure names
+	// no path and the reader is left guessing which of the candidate roots won.
+	t.Logf("driving %s with playwright at %s", node, pwEntry)
 
 	hosts := []struct {
 		name    string
@@ -179,8 +182,11 @@ func TestSkyCloseProbe_TheCloseRendersFrames(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, node, driverPath, "file://"+pagePath, chrome)
-	cmd.Env = append(os.Environ(), "NODE_PATH="+nodePath)
+	cmd := exec.CommandContext(ctx, node, driverPath, "file://"+pagePath, chrome, pwEntry)
+	// NODE_PATH is left set as a belt-and-braces for playwright's OWN internal
+	// requires (playwright-core and friends), which still resolve by name from
+	// inside the module. The driver no longer depends on it for the entry.
+	cmd.Env = append(os.Environ(), "NODE_PATH="+filepath.Dir(filepath.Dir(pwEntry)))
 	out, err := cmd.Output()
 	if err != nil {
 		var stderr string
@@ -267,10 +273,19 @@ func TestSkyCloseProbe_TheCloseRendersFrames(t *testing.T) {
 // skyCloseDriver opens the probe page in a REAL-clock Chromium and prints the
 // payload. It exists because this package's `--virtual-time-budget` harness
 // cannot advance an animation clock — see this file's header.
+// The driver takes playwright's ABSOLUTE entry path as an argument rather than
+// requiring it by name. WHY: the driver is written to t.TempDir() — outside the
+// repo — so Node's upward node_modules walk from /tmp can never reach the
+// checkout's, leaving NODE_PATH as the only route. That route resolved for the
+// pre-flight `node -e` check and then failed for this file on CI's Node 20
+// (`Cannot find module 'playwright'`, 2026-08-11), and the difference could not
+// be reproduced on Node 22. Rather than bet on NODE_PATH semantics varying by
+// runtime and module system, the caller resolves the path once, where a failure
+// is legible, and hands it over. Absolute path, no search.
 const skyCloseDriver = `import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
-const [url, exe] = process.argv.slice(2);
+const [url, exe, pwEntry] = process.argv.slice(2);
+const { chromium } = require(pwEntry);
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1400 } });
 await page.goto(url);
@@ -310,11 +325,28 @@ func findProbePlaywright() (node, nodePath string) {
 		if root == "" {
 			continue
 		}
-		cmd := exec.Command(node, "-e", "require.resolve('playwright')")
+		// Ask for the RESOLVED PATH, not merely whether resolution succeeds.
+		// The old form ran `require.resolve` for its exit code and threw the
+		// answer away, so the caller knew a module existed somewhere but not
+		// where — and when the driver later failed to find the same name, the
+		// log named neither the root that won nor the path it produced. Three
+		// separate wrong fixes were shipped against that blindness on
+		// 2026-08-11. Capturing the path makes the next failure legible AND
+		// removes the driver's own need to search.
+		cmd := exec.Command(node, "-p", "require.resolve('playwright')")
 		cmd.Env = append(os.Environ(), "NODE_PATH="+root)
-		if err := cmd.Run(); err == nil {
-			return node, root
+		out, err := cmd.Output()
+		if err != nil {
+			continue
 		}
+		entry := strings.TrimSpace(string(out))
+		if entry == "" {
+			continue
+		}
+		if abs, absErr := filepath.Abs(entry); absErr == nil {
+			entry = abs
+		}
+		return node, entry
 	}
 	return "", ""
 }

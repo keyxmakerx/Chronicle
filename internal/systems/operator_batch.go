@@ -163,8 +163,13 @@ func buildFunctionsSpec() FunctionsSpec {
 		example = append(example, BatchCall{Name: "packages.installed-vs-loaded"})
 	}
 	return FunctionsSpec{
-		V:        batchSpecVersion,
-		Purpose:  "Read-only Chronicle operator diagnostics. Each function fingerprints what the server is ACTUALLY serving (versions, file hashes, install-vs-loaded state) — for tracking down deploy/serve mismatches and sync issues.",
+		V: batchSpecVersion,
+		// The purpose line is what an assistant reads to decide whether to
+		// reach for this tool at all, so it has to name BOTH axes. It named
+		// only the served-bytes one, and on 2026-08-11 that cost an operator
+		// three unanswered questions: a marker search can prove a feature
+		// shipped and can never say whether it renders on their page.
+		Purpose:  "Read-only Chronicle operator diagnostics, on two axes. WHICH CODE IS RUNNING: what the server is ACTUALLY serving (build identity, file hashes, install-vs-loaded state) — for deploy/serve mismatches. WHY THIS CAMPAIGN LOOKS LIKE THIS: the calendar.* / campaign.* functions read one campaign's own render decisions, calendar data, routes and placed blocks. A marker found in the build proves it SHIPPED, never that it RENDERS — for the second question use calendar.render / campaign.config.",
 		HowToUse: "Compose ONE request_format object naming the functions you want, then tell the operator to paste it into Admin ▸ Diagnostics ▸ AI Workspace. It is reviewed and approved by a human, executed read-only and secret-redacted, and the compact result pasted back to you. Heavy/full-dump functions require \"full_dump\": true — request that only when a targeted function won't do.",
 		Request: BatchRequest{
 			V:        batchSpecVersion,
