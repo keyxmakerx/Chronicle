@@ -1,0 +1,54 @@
+# ============================================================================
+# Chronicle Docker Compose — LOCAL BUILD OVERRIDE
+# ============================================================================
+# Use this ONLY when you want to run Chronicle from your working tree instead
+# of from the published GHCR image:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build chronicle
+#
+# `make docker-build` and `make docker-all-local` wrap those two commands.
+#
+# WHY THIS IS A SEPARATE FILE. docker-compose.yml used to carry both `image:`
+# and `build:` on the chronicle service, which gave one tag two producers:
+# `docker compose build` tagged a local build with the GHCR name, `docker
+# compose pull` overwrote it from the registry, and `docker compose up -d` did
+# neither when an image already held the tag. On 2026-08-11 that combination
+# produced a deploy that appeared to do nothing, and then an hour of diagnosis
+# from the OCI labels of a months-old local image that still held `:latest` —
+# labels which were accurate about that image and irrelevant to the running
+# container.
+#
+# So the override does two things the merged-in version could not:
+#
+#   1. It renames the image. A local build is `chronicle:local`, never
+#      `ghcr.io/<org>/chronicle:latest`. The published tag has exactly one
+#      producer — CI — and `docker image inspect` on it can no longer be
+#      answering about somebody's afternoon build.
+#   2. It sets `pull_policy: build`, cancelling the base file's
+#      `pull_policy: always`. Without this, compose would try to pull
+#      `chronicle:local` from Docker Hub and fail.
+#
+# The build args below are the same ones CI passes (see .github/workflows/
+# ci.yml). They are optional — an unstamped local image is fine, and the binary
+# still self-identifies via the VCS revision Go embeds during the Docker build
+# (Dockerfile stage 2 installs git precisely so that works). Passing them just
+# makes `docker image inspect chronicle:local` agree with the binary.
+# ============================================================================
+
+services:
+  chronicle:
+    image: chronicle:local
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Left empty unless you export them first, e.g.
+        #   export VCS_REF=$(git rev-parse HEAD)
+        #   export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        # Empty is honest: it records that this image's provenance was not
+        # captured, rather than inventing a plausible-looking value.
+        VCS_REF: ${VCS_REF:-}
+        BUILD_DATE: ${BUILD_DATE:-}
+        CHRONICLE_VERSION: ${CHRONICLE_VERSION:-}

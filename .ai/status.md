@@ -54,9 +54,61 @@ from.
   shipped, because `CHRONICLE_VERSION` is set by no Dockerfile, compose file,
   Makefile or workflow. `docs/deployment.md` claimed otherwise and is corrected.
 
-Open: nothing wires `CHRONICLE_VERSION` or gives the builder `git`, so a shipped
-image still cannot name its commit — it can only name its executable's mtime and
-uptime, which is what actually settled the incident. See `.ai/todo.md`.
+~~Open: nothing wires `CHRONICLE_VERSION` or gives the builder `git`~~ —
+**closed the same day by the deploy-hygiene change below.** Dockerfile stage 2
+now installs `git`, so the toolchain stamps `vcs.revision` by itself and
+`/api/version` reaches the revision branch of that fallback instead of
+`unknown`. Verified by building the real `internal/hostinfo` chain: with the
+env var unset, `hostinfo.Version()` returns `b1fe69e0a1a7-dirty`; with
+`CHRONICLE_VERSION=v1.2.3` set, it returns `v1.2.3`.
+
+### Deploy hygiene — the four things that made a correct deploy look like a failed one (2026-08-11)
+
+Companion to the two sections above. Those made Chronicle able to *answer*
+"what am I running"; this made the deploy path stop *producing* the question.
+No migration, no Go code — `Dockerfile`, `Makefile`, `docker-compose.yml`,
+`docker-compose.build.yml` (new), `.github/workflows/ci.yml`,
+`docs/deployment.md`.
+
+- **The OCI labels were never wrong — the inference was.** Verified against
+  `docker/metadata-action`'s own `src/meta.ts`: `revision` is `context.sha`
+  (the commit built) and `created` is `new Date()` in the `Meta` constructor
+  (real build time). Both correct. Overriding `created` with a commit
+  timestamp — the obvious-looking "fix" — would have made it wrong for the
+  first time. What was missing was that a *locally* built image carried **no**
+  `org.opencontainers.*` labels at all (`metadata-action` labels only what CI
+  builds; `alpine:3.20`'s `config.Labels` is null, so nothing is inherited).
+  The Dockerfile now sets an ARG-driven label floor for every image however
+  built, and both label sites carry the "a label describes an image, never a
+  process" warning where the mistaken reader is already looking.
+  **Do not put `{{ }}` in a custom label passed to `metadata-action`** — it
+  compiles them through Handlebars (`setGlobalExp`), so the `docker inspect
+  --format` template lives in the docs instead.
+- **The binary now names its own commit.** `apk add git` in stage 2 — no
+  `-ldflags`, no version variable, deliberately no second source of a fact
+  `internal/hostinfo` already resolves. `safe.directory` ships with it because
+  installing git converts a class of git error from "no stamp" into **"no
+  image"**: measured, a foreign-owned checkout gives `error obtaining VCS
+  status: exit status 128` and a failed build, and the exception clears it.
+  CI passes `CHRONICLE_VERSION` **only for `v*` tag builds** — on `main` the
+  metadata version is the literal `latest`, which would be a downgrade from
+  the SHA. A new CI step greps the pushed image (addressed by digest) for the
+  commit SHA, so if anyone drops the `apk add git`, the silent failure becomes
+  a loud one.
+- **`make build` was not a production build.** On a clean clone it exited 2
+  (`*_templ.go` is generated and gitignored) **and left a previously-built
+  `./bin/chronicle` byte-identical on disk** — measured by planting a fake
+  binary in a fresh clone. It now depends on `templ` and `rm -f`s the target
+  first, so a failure cannot leave a plausible artifact behind.
+- **`docker compose up -d` was not an upgrade.** The `chronicle` service
+  declared both `image:` and `build:`, giving one tag two producers, and `up`
+  neither rebuilds nor re-pulls when the tag already exists locally. `build:`
+  moved to `docker-compose.build.yml`, which tags local builds
+  `chronicle:local` so they can never masquerade as the published image;
+  the base file gained `pull_policy: always`. `make docker-all-local` is the
+  from-source path. Two places in `docs/deployment.md` that told operators to
+  run `docker compose build --no-cache chronicle` — i.e. to walk into the trap
+  — now point at `pull` or the override.
 
 ### …and can now account for its own ASSETS — `host.assets` / `host.embedded` (2026-08-11)
 

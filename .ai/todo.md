@@ -24,17 +24,22 @@ local `go build` in this repo *is* stamped, which is why this is easy to miss.
 So `host.build` on a shipped image honestly prints "not stamped" and falls back
 to the executable's mtime. Two ways to close it, either sufficient:
 
-- [ ] **Give the builder `git`** — `RUN apk add --no-cache git` in the builder
-  stage; stamps then appear with no other change. **This is fail-CLOSED and
-  must be treated as one:** measured, a `git` that is present but *errors*
-  (e.g. "dubious ownership") makes `go build` fail outright with
-  `error obtaining VCS status`, where an absent `git` merely skipped. The build
-  runs as root over root-owned `COPY`d files, so it should not fire — but that
-  was reasoned, not observed (no Docker daemon in the authoring environment).
-- [ ] **Or wire `CHRONICLE_VERSION`** — `ARG`/`--build-arg` in CI, exported in
-  the runtime stage. It already has highest precedence in `hostinfo.Version()`,
-  so nothing else needs to change. `docs/deployment.md` is now accurate that
-  nothing sets it today.
+- [x] **Give the builder `git`** — done, `RUN apk add --no-cache git` in stage 2.
+  The fail-CLOSED risk flagged here was real and is now mitigated rather than
+  merely noted: measured in this environment, a foreign-owned checkout makes
+  `go build` fail with `error obtaining VCS status: exit status 128` (exit 1),
+  and `git config --global --add safe.directory /src` — which ships on the same
+  `RUN` — makes the identical checkout build *and* stamp. Also measured: git
+  installed with no repository present is harmless (exit 0, `(devel)`), so a
+  future `.dockerignore` excluding `.git` degrades instead of breaking.
+  **Still unobserved:** the real `docker build`, for want of a daemon here.
+  Guarded by a new CI step that greps the pushed image (by digest) for the
+  commit SHA, so a regression is loud.
+- [x] **Or wire `CHRONICLE_VERSION`** — done, and deliberately *narrow*: CI
+  passes it only for `v*` tag builds. On a `main` push `metadata-action`'s
+  version output is the literal `latest`, and reporting that as a version would
+  be a downgrade from the commit SHA the binary now stamps in by itself. Empty
+  falls through to that SHA. `docs/deployment.md`'s row is updated again.
 - [ ] **Adjacent:** `internal/database/pre_migration_backup.go` still has its own
   `os.Getenv("CHRONICLE_VERSION")` + `"unknown"` copy of the rule. Pointing it at
   `hostinfo.Version()` would give backup manifests the revision fallback too —

@@ -401,6 +401,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Where the OCI labels come from — verified against metadata-action's own
+      # source (src/meta.ts), because on 2026-08-11 an hour was spent reasoning
+      # from these labels and nobody had read what produces them:
+      #
+      #   org.opencontainers.image.revision = this.context.sha
+      #                                       -> the commit being built. Correct.
+      #   org.opencontainers.image.created  = this.date.toISOString(), where
+      #                                       this.date = new Date() in the Meta
+      #                                       constructor -> the moment the action
+      #                                       ran, i.e. real build time. Correct.
+      #
+      # THE LABELS WERE NEVER WRONG. The February revision/created pair that
+      # triggered the incident described, accurately, a February CI image that
+      # was still holding the :latest tag in the deploy host's local image
+      # store. `docker inspect <tag>` reports whichever image holds that tag
+      # NOW; a running container keeps the image ID it was CREATED FROM. The
+      # two were different images and nothing in the output said so. The defect
+      # was in the deploy path (docker-compose.yml declaring both image: and
+      # build:, and `up -d` neither rebuilding nor re-pulling) and in
+      # Chronicle's inability to self-report — both fixed elsewhere in this
+      # change. Nothing here needed "correcting"; overriding `created` with a
+      # commit timestamp, the obvious-looking fix, would have made it wrong for
+      # the first time.
+      #
+      # The one label we DO override is description: the action's default is
+      # the GitHub repo description, and it would otherwise clobber the
+      # Dockerfile's copy of the "labels describe an image, not a process"
+      # warning on exactly the CI-built images an operator inspects.
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v6
@@ -414,14 +442,56 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             # Tag with short SHA for traceability
             type=sha,prefix=
+          # NOTE: metadata-action compiles every custom label through
+          # Handlebars (meta.ts: setGlobalExp -> handlebars.compile), so this
+          # string must contain no {{ }} braces. That rules out spelling the
+          # `docker inspect --format` template inline; docs/deployment.md §6
+          # carries the exact command instead.
+          labels: |
+            org.opencontainers.image.description=Self-hosted TTRPG worldbuilding platform. These labels describe an IMAGE, not a running container - docker inspect on a tag answers for whichever image holds that tag now, which may not be the image a running container was created from. To identify a RUNNING Chronicle, ask the process - GET /api/version, or Admin > Diagnostics > host.build. See docs/deployment.md section 6.
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # CHRONICLE_VERSION names a RELEASE, and only a tag is one. On a
+          # main-branch push metadata-action's `version` output is the literal
+          # "latest", which is a tag name, not a version — feeding that to
+          # GET /api/version would be a downgrade from the commit SHA the
+          # binary now stamps in by itself. Empty here falls through to that
+          # SHA (see internal/hostinfo), which is the honest answer.
+          build-args: |
+            CHRONICLE_VERSION=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+            VCS_REF=${{ github.sha }}
+
+      # Guard against a SILENT regression, not a hypothetical one. Go skips VCS
+      # stamping without a word when `git` is missing from the builder — exit 0,
+      # no warning, an anonymous binary — and that is exactly how every image
+      # before this change shipped unable to identify itself. If someone drops
+      # the `apk add git` from the Dockerfile, this step is what says so.
+      #
+      # It inspects the image that was actually PUSHED, addressed by digest so
+      # there is no chance of checking a different artifact than the one
+      # published — the precise ambiguity that caused the incident. Go writes
+      # vcs.revision into the binary as plain text, so grep is sufficient and
+      # needs no Go toolchain in the runtime image. The push has already
+      # happened by this point, so a failure here does not withhold the
+      # artifact; it loudly labels it unidentifiable.
+      - name: Verify the published binary is VCS-stamped
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+          docker pull -q "$IMAGE"
+          if docker run --rm --entrypoint grep "$IMAGE" -q -F "${{ github.sha }}" /usr/local/bin/chronicle; then
+            echo "OK: binary embeds vcs.revision=${{ github.sha }}"
+          else
+            echo "::error::Published binary has no VCS stamp for ${{ github.sha }}. Go silently skips stamping when git is absent from the builder stage — check the 'apk add git' in Dockerfile stage 2. GET /api/version and host.build will report an unidentified build."
+            exit 1
+          fi
           # Disable provenance + SBOM attestations. build-push-action@v6
           # generates these by default, which adds extra manifest/blob
           # entries that ghcr.io intermittently rejects on push with

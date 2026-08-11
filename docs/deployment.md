@@ -143,7 +143,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `BACKUP_REQUIRED` | `0` | When `1` or `true`, the in-process pre-migration capture is mandatory: any failure (mysqldump missing, dump zero bytes, manifest write fails) aborts startup before migrations apply. Use in production. The default fail-open behavior (warn + proceed) preserves the legacy semantics for development setups that don't have `mariadb-client` installed. |
 | `BACKUP_SCRIPT_PATH` | `/app/scripts/backup.sh` | Used by the admin "Run backup" button. |
 | `RESTORE_SCRIPT_PATH` | `/app/scripts/restore.sh` | Used by the admin restore page. |
-| `CHRONICLE_VERSION` | (unset) | Names the build explicitly. Read by `GET /api/version` (highest precedence, then the VCS revision compiled into the binary, then `unknown`), by the `host.build` admin diagnostic, and stamped into the pre-migration manifest's `chronicle_version=` line (which still falls back to the literal `unknown` on its own). **Nothing sets it today** — no Dockerfile, compose file, Makefile or workflow — so it is unset on every shipped image; an earlier version of this row claimed it was "set by Docker build args / release pipeline", which was never true. Unset is fine; run `host.build` to see what the binary reports about itself instead. |
+| `CHRONICLE_VERSION` | (empty, except on tag builds) | Names the build explicitly. Read by `GET /api/version` (highest precedence, then the VCS revision compiled into the binary, then the main module version, then `unknown`), by the `host.build` admin diagnostic, and stamped into the pre-migration manifest's `chronicle_version=` line. CI passes it as a Docker build arg **only for `v*` tag builds**, where it is the tag name — a `main`-branch push leaves it empty on purpose, because that build's metadata version is the literal `latest`, which is a tag and not a version. Empty is the normal case and is not a gap: the binary now carries its own commit SHA (Dockerfile stage 2 installs `git` so the Go toolchain stamps `vcs.revision`), and `/api/version` falls through to it. Set it yourself only if you want a human-chosen name in that field. Historical note: before this, the variable was set by nothing anywhere, so `GET /api/version` returned the literal string `unknown` on every image ever shipped. |
 | `MYSQL_ROOT_PASSWORD` | (compose) | Compose-only; sets root password for the bundled MariaDB. |
 | `MYSQL_PASSWORD` | (compose) | Compose-only; must match `DB_PASSWORD`. |
 
@@ -154,7 +154,54 @@ make backup                                            # 1. operator snapshot
 docker compose pull                                    # 2. fetch new images
 docker compose up -d --no-deps chronicle               # 3. swap chronicle only
 docker compose logs -f chronicle                       # 4. watch the boot
+curl -s localhost:8080/api/version                     # 5. confirm what is RUNNING
 ```
+
+Step 5 is not ceremony. It is the only step that reports the software you are
+actually running, and it exists because on 2026-08-11 steps 1–4 completed
+successfully and the deploy still appeared to do nothing.
+
+**Why `docker compose up -d` alone is not an upgrade.** It will not rebuild and
+it will not re-pull when an image with that tag already exists locally — it
+starts what is already on the host. The compose file now sets
+`pull_policy: always` on the `chronicle` service so `up` does fetch the
+published image, but keep the explicit `docker compose pull` in the sequence:
+it is the step whose output tells you whether anything new arrived.
+
+**Never build a local image onto the published tag.** The `chronicle` service
+deliberately has no `build:` section. Before that, `docker compose build`
+tagged a local build `ghcr.io/<org>/chronicle:latest`, so the published tag had
+two producers and nothing downstream could tell them apart. To run from source,
+use the override, which tags the result `chronicle:local` instead:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# or: make docker-all-local
+```
+
+### Which image is actually running?
+
+Ask the process first — it is the only thing that can testify about itself:
+
+```sh
+curl -s localhost:8080/api/version        # commit SHA (or the tag on a release build)
+# Admin > Diagnostics > host.build        # binary path, size, mtime, uptime, VCS stamp
+```
+
+Only if you need the image identity as well:
+
+```sh
+docker inspect --format '{{.Image}}' chronicle                  # the container's REAL image ID
+docker image inspect --format '{{.Id}}' ghcr.io/keyxmakerx/chronicle:latest   # what the TAG points at now
+```
+
+**If those two IDs differ, the tag has moved and any label you read off it is
+describing a different artifact than the one you are running.** That is exactly
+the trap that cost an hour: `org.opencontainers.image.revision` on the local
+`:latest` said `33f4cb07` (a real commit, from February), the labels were
+internally consistent and truthful, and the running container had been created
+from an entirely different image. An image label is a claim made by whoever
+last wrote that tag. It is never a claim about a process.
 
 In step 4 you should see, in order:
 
@@ -167,7 +214,9 @@ health check summary passed=K warnings=0 failures=0
 ```
 
 If you see `pre-migration backup skipped: mysqldump not found`, your image
-predates 0.0.1; rebuild with `docker compose build --no-cache chronicle`.
+predates 0.0.1. Pull a current one (`docker compose pull chronicle`), or, if
+you are running from source, rebuild via the override:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml build --no-cache chronicle`.
 
 If `failures=0` doesn't appear and the chronicle container exits, the
 release is broken — go to §7.
@@ -490,7 +539,9 @@ per §7.
 
 Source: `internal/database/healthcheck.go` `PreMigrationBackup`. The
 chronicle image was built before 0.0.1 and is missing `mariadb-client`.
-Rebuild with `docker compose build --no-cache chronicle` and retry.
+Pull a current image (`docker compose pull chronicle`) and retry; if you run
+from source, rebuild via the override instead —
+`docker compose -f docker-compose.yml -f docker-compose.build.yml build --no-cache chronicle`.
 Until you do, your upgrades have no automatic safety net.
 
 ### `pre-migration backup failed (non-fatal)`
