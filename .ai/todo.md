@@ -185,6 +185,55 @@ The operator asked for "calendar (and other widget) versions". Closed by:
   138 of 148 files / ~3.7 MB, which is cheap — but a marker inside a format not
   on that list will read as absent from a scope that never looked at it.
 
+## 0-host-integration. The five `host.*` stages integrated — landed (2026-08-11)
+
+The stages above shipped as five independent commits on one branch. This pass
+made them one tool and fixed what only breaks *between* stages.
+
+- [x] **Cross-stage staleness fixed.** `host.deploy-check`'s remedy section and
+  the `container-restart-time` probe both described a compose file stage 5 had
+  already changed, and told operators to run `docker compose build` — which
+  stage 5 made **fail by design** by removing `build:` from the `chronicle`
+  service. Both now describe the shipped file, tell the reader to verify their
+  own compose matches, and point at `docker-compose.build.yml`.
+- [x] **Provider wiring is proven, not assumed.** Every stage logged the same
+  gap ("compile-checked only; no test runs `RegisterRoutes`").
+  `internal/app/operator_diag_wiring_test.go` walks the AST of `internal/systems`
+  and `internal/app` and fails if a declared `Set*Provider` has no non-test call
+  site, or if that site is unreachable from `RegisterRoutes`. Mutation-tested:
+  commenting out one wiring line fails both assertions. Measured — all 8
+  providers resolve to `RegisterRoutes()`, called by `cmd/server/main.go:157`.
+- [x] **`Desc` trimmed to the one-line contract the struct documents** and capped
+  at 450 bytes by test. Each removed caveat was verified to exist already in the
+  diagnostic's own output first.
+- [x] **`tools/check-plugin-isolation.sh` un-blocked** (red since `64dec0f5`, so
+  `make verify` could not pass). Four operator-diagnostic test files allowlisted
+  by exact filename with the reasoning recorded.
+- [x] Catalog-wide guards: every `host.*` runs with an empty arg without
+  panicking or returning empty, unique names, the family forms one block ahead
+  of the rest, `FullDump` asserted in both directions.
+- [x] **ADR-051** records the observability decision;
+  `docs/operator-diagnostics.md` gains the `host.*` family and a corrected probe
+  table (it still listed the pre-stage-4 probe set).
+
+### [ ] Still open
+
+- [ ] **`./tools/check-plugin-isolation.sh` was not re-run after the fix** — the
+  sandbox refused the invocation on every retry. Verified instead by `bash -n`
+  and by exercising the guard's own prefix-matching logic against the four
+  offending paths plus two controls. **Someone should run it once**, along with
+  the rest of `make verify`, before this is treated as green.
+- [ ] **`FullDump` is set on `host.assets` and `system.health` only.**
+  `host.deploy-check` is deliberately *not* flagged even though a marker
+  argument makes it walk both scopes, because the flag is static and the no-arg
+  case is the post-deploy check that should stay one click away. If the marker
+  scan turns out to be expensive on real container storage, the fix is a
+  per-argument cost decision, which the `Diagnostic` struct cannot currently
+  express.
+- [ ] **Nothing here was observed on a container or against a database.** No
+  Docker daemon and no DB in this environment. Every "still open / live check"
+  item booked by stages 1-5 remains open and is not restated here.
+
 ## 0-fix-R1. The six confirmed defects from the operator's first look — DONE (2026-08-10)
 
 Five landed in this repo, one in `Chronicle-Foundry-Module`. Each was measured

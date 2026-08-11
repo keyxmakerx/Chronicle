@@ -94,7 +94,7 @@ func hostErrorsDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:    "host.errors",
 		Title:   "Recent server errors this process recorded (no shell, no docker logs)",
-		Desc:    "THE 'what broke overnight?' check. Newest first: time + age, status, method, route template, error. Records 5xx and recovered panics ONLY — a 404 storm must not evict the one 500 that matters. In-memory and per-process: a restart empties it. Optional argument = how many to show (default 25, max 100).",
+		Desc:    "THE 'what broke overnight?' check. Newest first: time + age, status, method, route template, error. Records 5xx and recovered panics only, in memory, per process — so a restart empties it. Optional argument = how many to show (default 25, max 100).",
 		ArgHint: "[<count>]",
 		Run:     renderHostErrors,
 	}
@@ -107,7 +107,7 @@ func hostErrorsSummaryDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:  "host.errors-summary",
 		Title: "Recent server errors GROUPED by route + status (one line per failure mode)",
-		Desc:  "The same ring as host.errors, grouped by route template + status with counts and first/last seen, sorted by frequency. Use this first: it turns a repeating error into one line and makes a single odd failure visible instead of scrolled off the bottom.",
+		Desc:  "The same ring as host.errors, grouped by route template + status with counts and first/last seen, most frequent first. Usually the better first read: it collapses a repeating error into one line so a single odd failure stays visible.",
 		Run:   func(string) string { return renderHostErrorsSummary() },
 	}
 }

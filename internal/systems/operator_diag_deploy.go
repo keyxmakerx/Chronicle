@@ -76,7 +76,7 @@ func hostDeployCheckDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:    "host.deploy-check",
 		Title:   "Did my deploy land? — build identity, bellwether assets, marker search, package state",
-		Desc:    "THE one thing to run after a deploy. Four sections: (1) which binary this process is, in three lines; (2) the fingerprint + mtime + served `?v=` of the assets that move on almost every build; (3) for each comma-separated marker you pass, whether it is present in the on-disk static root AND inside the binary's embedded plugin assets, reported separately — a marker found only in the embedded scope is exactly the result a `grep /app/static` misreports as missing code; (4) the installed-vs-loaded system package summary. Argument is optional: without it, sections 1, 2 and 4 still run.",
+		Desc:    "THE one thing to run after a deploy. Combines the build identity, the fingerprint + mtime + served `?v=` of the assets that move on almost every build, and the installed-vs-loaded package summary. Pass comma-separated markers to also search for them across BOTH the on-disk static root and the binary's embedded assets, reported separately. The argument is optional.",
 		ArgHint: "[<marker[,marker2]>]",
 		Run:     renderHostDeployCheck,
 	}
@@ -140,7 +140,8 @@ func renderHostDeployCheckFrom(src deployCheckSources, arg string) string {
 
 	b.WriteString("### If this says the deploy did NOT land\n\n")
 	b.WriteString("- The executable mtime in section 1 is the strongest single signal: it is when the file this process is executing was written. If it predates your deploy, the container is running an older binary no matter what any tag or label says.\n")
-	b.WriteString("- `docker compose up -d` alone neither rebuilds nor re-pulls when an image with that tag already exists locally, and Chronicle's compose file declares BOTH `image:` and `build:` for the same service — so the tag has two possible producers and either can be the stale one. Force the one you meant: `docker compose build` or `docker compose pull`, then `up -d`.\n")
+	b.WriteString("- Check how the image got here. Historically `docker compose up -d` neither rebuilt nor re-pulled when an image with that tag already existed locally, and the `chronicle` service declared BOTH `image:` and `build:` — one tag with two producers, which is what made a correct deploy look like a failed one on 2026-08-11. The shipped compose file no longer does that: the service has **no `build:` section** and sets `pull_policy: always`, so `up -d` fetches the published image. **Confirm your own compose file matches** — if the `chronicle` service still has a `build:` block, you are running the old shape and a local build can still be masquerading as the published tag. Run `docker compose pull` explicitly anyway: its output is what tells you whether anything new arrived.\n")
+	b.WriteString("- To run from source, use the override that keeps the two apart — `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build` (or `make docker-all-local`), which tags the result `chronicle:local`. Plain `docker compose build chronicle` now fails by design, because the published tag has exactly one producer.\n")
 	b.WriteString("- If the binary is new but a feature is still absent, the front-end and the back-end can be out of step: compare section 2's mtimes against section 1's. A binary newer than the static tree means the image shipped stale assets.\n")
 
 	return b.String()

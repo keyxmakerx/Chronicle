@@ -255,7 +255,7 @@ func diagnosticCatalog() []Diagnostic {
 		{
 			Name:  "probes",
 			Title: "Run-and-paste-back probe library (including the traps)",
-			Desc:  "docker / browser-console / SQL commands for state the server CAN'T self-report (the browser's cached ?v=, on-disk folders, logs, the Docker daemon's view). Also carries the TRAP annotations: which natural-looking shell commands return a truthful-but-misleading answer — Docker image labels have been observed months wrong about a running binary, and a grep of the container filesystem can never find a plugin's assets — and which host.* diagnostic to prefer instead.",
+			Desc:  "docker / browser-console / SQL commands for state the server CAN'T self-report (the browser's cached ?v=, on-disk folders, logs, the Docker daemon's view). Also carries the TRAP annotations: which natural-looking shell commands return a truthful-but-misleading answer, and which host.* diagnostic to prefer instead.",
 			Run: func(string) string {
 				var b strings.Builder
 				renderProbesSection(&b, defaultProbes())
@@ -740,7 +740,7 @@ docker image inspect --format 'tag_image={{.Id}}{{"\n"}}label_revision={{index .
 			Title:   "Was the container ever recreated for this deploy?",
 			Where:   ProbeDocker,
 			Command: `docker inspect --format 'created={{.Created}}{{"\n"}}started={{.State.StartedAt}}{{"\n"}}restarts={{.RestartCount}}' <chronicle>`,
-			Why:     "The commonest cause of 'I deployed and saw no change'. `docker compose up -d` neither rebuilds nor re-pulls when an image with that tag already exists locally, and Chronicle's compose file declares BOTH `image:` and `build:` for the same service — so the tag has two possible producers and either can be the stale one. If StartedAt predates your deploy, nothing was replaced: run `docker compose build` or `docker compose pull` explicitly, then `up -d`. Cross-check against the uptime `host.build` reports from inside the process.",
+			Why:     "The commonest cause of 'I deployed and saw no change'. If StartedAt predates your deploy, nothing was replaced — no new image matters until something recreates the container. By default `docker compose up -d` neither rebuilds nor re-pulls when an image with that tag already exists locally: it just starts what is already on the host. Chronicle's compose file now sets `pull_policy: always` on the `chronicle` service so `up -d` does fetch the published image, and it no longer declares `build:` alongside `image:` — that combination gave one tag two producers and is what made a correct deploy look like a failed one on 2026-08-11. **Verify your own compose file matches**: a lingering `build:` block means you are still on the old shape and the default behaviour above applies. Run `docker compose pull` explicitly regardless — its output is the part that tells you whether anything new arrived. Build from source only via `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`, which tags the result `chronicle:local`. Cross-check against the uptime `host.build` reports from inside the process.",
 		},
 		{
 			ID:      "binary-in-container",

@@ -168,10 +168,59 @@ just that, and pastes back a small, targeted result. The full dump
 (`system.health`) still exists but is **opt-in** — requested by name only when a
 targeted diagnostic won't do.
 
+### The `host.*` family — Chronicle fingerprinting ITSELF
+
+Every `system.*` and `packages.*` diagnostic below describes **what is being
+served**. None of them can tell you **which build is doing the serving**. Until
+2026-08-11 nothing could: Chronicle could fingerprint every installed system
+package down to the byte and was completely blind to its own binary, its assets,
+and its own recent errors.
+
+That blindness cost an hour of shell archaeology and produced two wrong
+conclusions, both of which the `host.*` family exists to make unreachable:
+
+1. **A Docker image label was read as the identity of a running process.** The
+   labels said `revision=33f4cb07` / `created=2026-02-19`, so the binary was
+   declared six months stale. It had been built minutes earlier. `docker inspect
+   <tag>` answers for whichever image holds that tag *now*, never for the image a
+   running container was created from — and the labels were perfectly accurate
+   about a February image still sitting in the deploy host's local image store.
+   **`host.build` reads the identity from inside the process instead**, where
+   nothing can have relabelled it.
+2. **An empty `grep /app/static` was read as missing code.** Chronicle serves its
+   front-end from **two storage mechanisms**: the on-disk static root, and each
+   plugin's `//go:embed`-ed filesystem compiled *into the binary* and served at
+   `/static/plugins/<slug>/`. Only the first is reachable by `ls` or `grep`, so an
+   empty grep for a plugin asset is the **expected** result, not evidence.
+   **`host.embedded` lists what is inside the binary**, and `host.assets` /
+   `host.widgets` report the two scopes separately rather than conflating them.
+
+| `name`                   | Arg                                  | What you get |
+|--------------------------|--------------------------------------|--------------|
+| `host.build`             | —                                    | **THE "did my deploy actually land?" check.** Source revision from the compiled-in VCS stamps (or an explicit *"not stamped"* when the builder recorded none — **absent is not stale**), `CHRONICLE_VERSION`, the running executable's path/size/mtime, Go toolchain, process start + uptime, hostname, PID. Ends with *which of these to trust* and why image labels are not evidence. |
+| `host.deploy-check`      | `[<marker[,marker2]>]`               | **The one thing to run after a deploy.** Build identity + the bellwether assets that move on almost every build + the installed-vs-loaded package summary. Pass markers to also search for them across **both** the on-disk root and the embedded assets, reported separately. |
+| `host.runtime`           | —                                    | Uptime, goroutines, NumCPU/GOMAXPROCS, a compact memory slice and GC activity — "is it leaking / wedged / thrashing GC?" |
+| `host.errors`            | `[<count>]`                          | **THE "what broke overnight?" check.** Newest first: time + age, status, method, route template, error. See ADR-051 for what is and is not recorded. |
+| `host.errors-summary`    | —                                    | The same ring grouped by route + status with counts and first/last seen. Usually the better first read. |
+| `host.assets`            | `[<path-substring>]`                 | **THE "is my new CSS/JS actually being served?" check.** Per file: size, sha256[:16], mtime, and the exact `?v=` served — flagging any file whose served token does not match its bytes on disk. `FullDump` (it hashes every file it lists). |
+| `host.asset-contains`    | `<relpath>:<marker[,marker2]>`       | Marker check for one on-disk file. Confirms the served build's **content**, not just its hash. Traversal outside the static root is refused. |
+| `host.embedded`          | `[<plugin-slug>]`                    | Every `//go:embed`-ed plugin asset this binary serves. **These files are not on disk** — an empty `grep` is the expected result, not a finding. |
+| `host.embedded-contains` | `<slug>:<relpath>:<marker[,…]>`      | The marker check for assets compiled into the binary — the only way to ask "does the shipped build contain X?" when the bytes cannot be grepped. |
+| `host.widgets`           | `[<name-substring>]`                 | **Widgets carry no version number**, so identity is a content fingerprint + build time. Walks both storage mechanisms and says which one each result came from. |
+| `host.plugins`           | —                                    | Per plugin: static mount + URL prefix, embedded asset count/size, whether it contributed migrations, applied-vs-available schema version. **Chronicle has no plugin loader** — a missing row is not a missing feature. |
+
+> **Providers.** `host.embedded`, `host.widgets`, `host.plugins`, `host.errors`
+> and `host.errors-summary` read app-layer state through provider injection
+> (`systems.Set*Provider`, wired in `RegisterRoutes`). An unwired provider prints
+> **"provider not wired"** and explicitly denies meaning "there are none" — the
+> two must never render the same. `internal/app/operator_diag_wiring_test.go`
+> fails CI if any declared provider has no call site on the boot path.
+
 ### Current diagnostics
 
 These are the named diagnostics in the catalog today (from
-`diagnosticCatalog()`), ordered cheapest / most common first:
+`diagnosticCatalog()`), ordered cheapest / most common first. The `host.*` family
+above sorts ahead of everything here, for the reason given above.
 
 | `name`            | Arg           | What you get |
 |-------------------|---------------|--------------|
@@ -210,14 +259,25 @@ Placeholders you substitute locally: `<chronicle>` / `<db>` container names,
 
 The probes today (from `defaultProbes()`):
 
+Two probes are labelled **TRAP**. They are kept, not deleted, because an
+operator reaches for these commands whether or not the library lists them — so
+the library's job is to print the command *together with the way it misleads*
+and name the `host.*` diagnostic that answers better. A probe that a `host.*`
+diagnostic now supersedes says so in its own text rather than disappearing.
+
 | ID | Where | What it tells you |
 |----|-------|-------------------|
+| `image-digest`          | docker | **TRAP.** Which image the container RUNS vs which image the tag points at NOW. If those differ the labels describe something else entirely — this is the exact command that produced the wrong "six months stale" conclusion. Prefer `host.build`. |
+| `plugin-asset-grep`     | docker | **TRAP.** Grepping the container filesystem for a plugin's asset. It returns empty for every `//go:embed`-ed asset, which is most plugin front-end code. An empty result is not evidence. Prefer `host.embedded` / `host.embedded-contains`. |
+| `container-restart-time`| docker | Was the container ever recreated for this deploy? If `StartedAt` predates it, nothing was replaced — a new image changes nothing until something recreates the container. |
+| `binary-in-container`   | docker | Executable mtime + container clock, from outside the process — an independent cross-check of `host.build`, and the cheapest way to rule out clock skew (every age and uptime is computed against that clock). |
 | `served-widget-version` | browser-console | The `?v=` on each served widget URL = the version the loader serves. If it lags Admin▸Packages, the in-memory registry never picked up the install. |
+| `page-asset-tokens`     | browser-console | Every versioned asset URL on the current page — what the browser is *actually* holding, which no server-side diagnostic can see. |
 | `served-widget-content` | browser-console | Fetches a served widget and checks for an expected marker — confirms whether the bytes the browser receives are the new build or a stale/cached copy. |
 | `package-version-dirs`  | docker | Lists every installed version folder on disk. Multiple folders → a stale one may shadow the newest. |
 | `package-file-marker`   | docker | `grep -rl` for a new-build marker across the install dirs — pinpoints which on-disk version folder actually contains the new code. |
 | `chronicle-logs`        | docker | Recent Chronicle logs: package install, "replacing system with preferred copy", "ignoring duplicate system", and boot rescan lines — what the loader did with the new version. |
-| `image-digest`          | docker | Which Chronicle image the container runs — a stale image explains merged backend changes not being live. |
+| `plugin-schema-versions`| sql | Applied plugin migrations, from the database itself — cross-check against `host.plugins`, which reads the migration runner's in-process health record. |
 | `packages-db-state`     | sql | The `packages` table's view of installed/pinned system versions + install paths — cross-check against `packages.installed-vs-loaded`. |
 | `entity-type-tree`      | sql | Entity types + per-type entity counts for a campaign — surfaces duplicate preset categories and guides a merge/reconcile. |
 | `sync-mapping-orphans`  | sql | Sync mappings pointing at deleted entities — broken links that fail on the next sync. |

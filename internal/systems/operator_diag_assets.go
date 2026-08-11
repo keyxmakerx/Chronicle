@@ -91,7 +91,7 @@ func hostAssetsDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:  "host.assets",
 		Title: "On-disk static assets: what is there, and what `?v=` the app serves for each",
-		Desc:  "THE 'is my new CSS/JS actually being served?' check. Resolves the static root the way the process does (working directory + `static`, never a hardcoded /app/static), then per file: size, sha256[:16], mtime, and the exact `?v=` cache-buster layouts.AssetURL emits — flagging any file whose served token does NOT match its bytes on disk. No argument = css/js only (the files that carry features) plus a count of the rest; PASS A PATH SUBSTRING to filter, which is almost always what you want.",
+		Desc:  "THE 'is my new CSS/JS actually being served?' check. Resolves the static root the way the process does, then per file: size, sha256[:16], mtime, and the exact `?v=` cache-buster served — flagging any file whose served token does NOT match its bytes on disk. No argument = css/js only; pass a path substring to narrow.",
 		ArgHint: "[<path-substring>]",
 		// FullDump because the no-argument listing is genuinely large: measured
 		// against this repo's static root it is 89 rows / ~15 KB, the same order
@@ -110,7 +110,7 @@ func hostAssetContainsDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:    "host.asset-contains",
 		Title:   "Check ONE on-disk static file for marker string(s)",
-		Desc:    "Reads one file under the static root (clamped: `..` traversal and absolute paths are refused, and the output says which rule refused them) and reports whether each comma-separated marker is present, plus the file's sha256[:16] and mtime. Confirms the served build's CONTENT, not just its hash — e.g. `css/calendar-block.css:moonpick`.",
+		Desc:    "Reads one file under the static root and reports whether each comma-separated marker is present, plus the file's sha256[:16] and mtime. Confirms the served build's CONTENT, not just its hash — e.g. `css/calendar-block.css:moonpick`. Traversal outside the root is refused.",
 		ArgHint: "<relative-path>:<marker[,marker2]>",
 		Run:     renderHostAssetContains,
 	}
@@ -121,7 +121,7 @@ func hostEmbeddedDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:  "host.embedded",
 		Title: "Plugin assets compiled INTO the binary (invisible to ls and grep)",
-		Desc:  "Lists every //go:embed-ed plugin static file the running binary serves, with size, sha256[:16] and the URL it is served at. THESE FILES ARE NOT ON DISK: they exist only inside the executable, so `ls /app/static` will not list them and `grep -r` over the container filesystem will find nothing — an empty grep here is not evidence of missing code. Use this whenever a plugin feature looks absent from the filesystem. Optional argument filters to one plugin slug.",
+		Desc:  "Lists every //go:embed-ed plugin static file this binary serves, with size, sha256[:16] and its served URL. THESE FILES ARE NOT ON DISK — they live inside the executable, so `ls` and `grep` over the container filesystem find nothing, and an empty grep is not evidence of missing code. Use it whenever a plugin feature looks absent from the filesystem. Optional argument filters to one plugin slug.",
 		ArgHint: "[<plugin-slug>]",
 		Run:     renderHostEmbedded,
 	}
@@ -133,7 +133,7 @@ func hostEmbeddedContainsDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:    "host.embedded-contains",
 		Title:   "Check ONE embedded plugin asset for marker string(s)",
-		Desc:    "The marker check for assets compiled into the binary — the only way to ask 'does the shipped build of this plugin file contain X?', since the bytes are not on disk to grep. Path is relative to the plugin's static root (e.g. `calendar:js/gm_panel.js:moonPhase`); `..` and absolute paths are refused.",
+		Desc:    "The marker check for assets compiled into the binary — the only way to ask whether the shipped build of a plugin file contains X, since the bytes are not on disk to grep. Path is relative to the plugin's static root, e.g. `calendar:js/gm_panel.js:moonPhase`.",
 		ArgHint: "<plugin-slug>:<relative-path>:<marker[,marker2]>",
 		Run:     renderHostEmbeddedContains,
 	}

@@ -96,6 +96,30 @@ tl_prefix="internal/plugins/tim""eline/"
 # Allowlisted files that may legitimately reference any plugin slug
 # (e.g. the plugin registry, CI tools, docs)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Amendment HOSTDIAG-1 (host.* operator diagnostics, 2026-08-11) — the four
+# operator-diagnostic test files listed at the end of the array below.
+#
+# They are the unit tests for host.embedded / host.widgets / host.plugins /
+# host.deploy-check, whose whole job is to REPORT ON plugins: which registered,
+# which mounted an embedded static FS, and what is inside it. Their fixtures
+# therefore carry plugin slugs ("calendar", "foundry-vtt") as DATA — a URL
+# segment, a map key, an expected output string — which is exactly the "URL
+# segment in a test fixture" case this guard's own remedy text names as
+# legitimate. None of the four imports a plugin package or calls into one, so
+# there is no cross-plugin COUPLING here, which is what the guard exists to stop.
+#
+# Renaming the fixtures to neutral slugs was considered and rejected: the
+# 2026-08-11 incident these diagnostics exist to prevent was specifically a grep
+# for the CALENDAR plugin's assets returning empty, because those assets are
+# //go:embed-ed into the binary rather than on disk. A fixture called
+# "fakeplugin" would still exercise the code path but would stop documenting the
+# case it was built from.
+#
+# Listed as full filenames. Matching here is by PREFIX, so these are effectively
+# exact — deliberately not the directory, which would exempt every future test
+# in internal/systems.
+# ---------------------------------------------------------------------------
 always_allowed_prefixes=(
   "internal/app/routes.go"
   "internal/app/plugins.go"
@@ -103,6 +127,10 @@ always_allowed_prefixes=(
   "tools/"
   ".github/"
   "cmd/"
+  "internal/systems/operator_diag_assets_test.go"
+  "internal/systems/operator_diag_deploy_test.go"
+  "internal/systems/operator_diag_plugins_test.go"
+  "internal/app/operator_diag_plugins_test.go"
 )
 
 # ---------------------------------------------------------------------------

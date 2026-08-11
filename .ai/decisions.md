@@ -4343,3 +4343,109 @@ pass is what rules out the pre-flight falsely refusing a real migration.
   `internal/plugins/foundry_vtt/reconcile_consolidation_test.go`
 - Booking: `.ai/todo.md` §"Booked by sweep R3" D · dispatch
   `dispatches/chronicle/C-PLUGIN-MIGRATION-RUNNER.md`
+
+---
+
+## ADR-051: The server records its own recent errors in a bounded in-memory ring, not a table
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Supersedes:** nothing ·
+**Context:** the 2026-08-11 "I deployed and saw no change" incident and the
+`host.*` operator-diagnostics family it produced.
+
+### Context
+
+Chronicle could fingerprint every installed system package down to the byte and
+was **completely blind to itself**. Nothing reported the host binary, its
+commit, its build time, its uptime, its served or embedded assets, or its recent
+errors. Diagnosing a routine deploy took an hour of shell archaeology and
+produced two confident wrong conclusions — a Docker image label read as the
+identity of a running process, and an empty `grep /app/static` read as missing
+code (the assets were `//go:embed`-ed into the binary).
+
+The error half of that blindness had its own shape. An error that fired at 2am
+left **no trace an admin could reach**: it went to `slog`, `slog` went to
+stdout, stdout went to the container log driver. Answering "what broke
+overnight?" required shell access, `docker logs`, and knowing which container —
+i.e. exactly the dependency the whole `host.*` family exists to remove.
+
+The audit plugin cannot serve this purpose. It records **user actions**, is
+DB-backed, and is keyed by campaign AND user — so a 500 on `/healthz`, or any
+anonymous request, has neither key it needs.
+
+### Decision
+
+A new leaf package `internal/observability` holds a **fixed 256-slot,
+mutex-guarded ring** of recent server errors, allocated at package init so it
+records from the first request rather than being nil until wiring runs. It is
+read through the diagnostics catalog as `host.errors` and `host.errors-summary`.
+
+**1. What is recorded — 5xx responses and recovered panics, and nothing else.**
+The policy is a named function (`ShouldRecord`), not an inline condition, so it
+can be read and argued with in one place. The reason is **eviction, not
+volume**: the ring evicts oldest-first, so a 404 storm would silently evict the
+one 500 that matters. Each entry holds time, status, method, route template,
+a `Kind`, and the error string. `Kind` separates an `*apperror.AppError` raised
+deliberately (`KindApp`) from a raw error that escaped a handler (`KindRaw`) —
+identical on the wire, completely different to whoever fixes it.
+
+**2. What is deliberately NOT recorded.** No headers, no bodies, no query
+strings, no user or campaign id. Above all **not the requested path**: `PathFor`
+stores the route **TEMPLATE**, because Chronicle really routes `/rsvp/:token`,
+`/proposals/respond/:token`, `/calendar-rsvp/:token` and `/join/:code`, and a
+concrete path would put a live credential into a buffer whose entire purpose is
+to be pasted into a chat window. This is also what lets the summary collapse a
+thousand failures on one route into one line. The error string is capped at 300
+bytes (truncation marked) because a wrapped driver error can carry a failed
+statement including bound values; it additionally passes through the existing
+`redactSecrets` at render. That is **defence in depth, not a guarantee** — the
+stored error string remains the weakest privacy link and is bounded rather than
+solved.
+
+**3. Why in-memory rather than persisted.** A table would need a migration, a
+retention policy, a write on the error path, and would fail exactly when the
+database is the thing that is broken — the case an error diagnostic most needs
+to survive. The ring is ~50 KB allocated once, cannot fail, and cannot slow the
+error path. The cost is real and is **stated in the output rather than hidden**:
+a restart empties it, and each replica keeps its own, so an operator running
+more than one replica sees only the one that served their admin request.
+
+**4. Three renders that must never look alike.** "Provider not wired", "wired
+and holding zero", and "the ring wrapped, N evicted" are distinct outputs. An
+unwired provider says so **and explicitly denies meaning "no errors have
+occurred"** — a diagnostic that reports a fake clean bill of health is worse
+than no diagnostic, because it looks like an answer.
+
+**5. Two write hooks, because one is not enough.** `app.errorHandler` records
+and then delegates to its existing behaviour completely unchanged. Separately,
+`middleware.Recovery` records the panic value — a recovered panic **never
+reaches the error handler**, because `recovery.go` writes its own 500 with
+`c.String` and returns nil, so Echo sees no error at all.
+
+### Consequences
+
+- An admin can answer "what broke overnight?" from the admin UI, with no shell.
+- **Errors outside the two HTTP hooks are still invisible here.** Anything logged
+  with `slog.Error` from a service or a background goroutine (WebSocket pumps,
+  the calendar back-catalog walk, migrations) reaches stdout and nothing else.
+  A `slog.Handler` wrapper teeing records at `>= LevelError` into the same ring
+  was measured and deliberately **not** built: it widens what is stored from a
+  fixed six-field summary to arbitrary log attributes, which needs its own pass
+  over what those attributes can carry. Booked in `.ai/todo.md`.
+- The ring is not an audit trail and must never be cited as one. It is a
+  recent-errors window for an operator standing in front of a running server.
+- `internal/observability` is a **leaf**: standard library only, no Chronicle
+  imports. Writers are `internal/app` and `internal/middleware`; the reader is
+  `internal/systems` via provider injection. No cycle is possible.
+
+### References
+
+- `internal/observability/errorlog.go` (package doc states the non-durability
+  claim in full) · `internal/systems/operator_diag_errors.go`
+- Write hooks: `internal/app/app.go` (`errorHandler`) ·
+  `internal/middleware/recovery.go`
+- Wiring: `systems.SetRecentErrorsProvider` in `App.RegisterRoutes`, pinned on
+  the boot path by `internal/app/operator_diag_wiring_test.go`
+- Pins: `internal/observability/errorlog_test.go` ·
+  `internal/systems/operator_diag_errors_test.go` ·
+  `internal/systems/operator_diag_catalog_test.go`
+- Docs: `docs/operator-diagnostics.md` §"The `host.*` family"

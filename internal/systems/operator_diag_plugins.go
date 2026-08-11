@@ -121,7 +121,7 @@ func hostPluginsDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:  "host.plugins",
 		Title: "Plugins this binary registered — static mounts, migrations, schema health",
-		Desc:  "Per plugin: slug, whether it mounted an embedded static filesystem (and at what URL prefix), how many assets that holds and their total size, whether it contributed migrations, and the applied-vs-available schema version from the migration runner. Note Chronicle has no plugin loader — every plugin is compiled in and registered unconditionally, so these registries are opt-in metadata and a missing row is NOT a missing feature.",
+		Desc:  "Per plugin: slug, whether it mounted an embedded static filesystem (and at what URL prefix), its asset count and total size, whether it contributed migrations, and the applied-vs-available schema version. Chronicle has no plugin loader — every plugin is compiled in and registered unconditionally — so a missing row is NOT a missing feature.",
 		Run:   func(string) string { return renderHostPlugins() },
 	}
 }
@@ -131,7 +131,7 @@ func hostWidgetsDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:    "host.widgets",
 		Title:   "Widget assets this process serves, with the fingerprint that stands in for a version",
-		Desc:    "THE 'what version of the calendar (and other) widgets am I running?' check — and widgets carry NO version number, so the honest answer is a content fingerprint plus a build time. Per widget: where its asset lives (central on-disk `static/js/widgets/` vs compiled INTO the binary by a plugin), size, sha256[:16], mtime where one exists, and the `?v=` token this process serves. There is no server-side widget registry, so this walks those two known locations and says which one each result came from. Optional argument = a name substring.",
+		Desc:    "THE 'which version of the calendar (and other) widgets am I running?' check — widgets carry NO version number, so the honest answer is a content fingerprint plus a build time. Per widget: where its asset lives, size, sha256[:16], mtime, and the served `?v=`. Walks BOTH storage mechanisms: on-disk `static/js/widgets/` and each plugin's embedded `js/`. Optional name substring.",
 		ArgHint: "[<name-substring>]",
 		Run:     renderHostWidgets,
 	}

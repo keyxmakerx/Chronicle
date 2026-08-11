@@ -36,7 +36,7 @@ func hostBuildDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:  "host.build",
 		Title: "Which Chronicle binary is this process? (commit, build stamps, executable, uptime)",
-		Desc:  "THE 'did my deploy actually land?' check. Source revision from the compiled-in VCS stamps (or an explicit 'not stamped' when the builder recorded none), CHRONICLE_VERSION, the running executable's path/size/mtime, Go toolchain, process start + uptime, hostname, PID — plus which of those to trust and why Docker image labels are not evidence.",
+		Desc:  "THE 'did my deploy actually land?' check: source revision, CHRONICLE_VERSION, the running executable's path/size/mtime, Go toolchain, process start + uptime, hostname, PID. Read from inside the process, so it answers where Docker image labels cannot — the output says which fields to trust and why.",
 		Run:   func(string) string { return renderHostBuild() },
 	}
 }

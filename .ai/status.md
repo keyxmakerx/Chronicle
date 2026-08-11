@@ -294,6 +294,64 @@ about what the reader wanted. Those probes are kept and annotated, never deleted
   one to prefer, in their own text. Deleting them would leave an operator who
   remembered the command running it with no note attached.
 
+### `host.*` INTEGRATED — one catalog, not five bolt-ons (2026-08-11)
+
+The five sections above landed as five separate stages on one branch. This is
+the pass that made them a single tool, and it found the defects that only exist
+*between* stages — the kind no stage's own tests can see.
+
+- **A stage-4 diagnostic was telling operators to run a command stage 5 had
+  deliberately broken.** `host.deploy-check`'s remedy section and the
+  `container-restart-time` probe both said Chronicle's compose file "declares
+  BOTH `image:` and `build:`" and told the reader to run `docker compose build`.
+  Stage 5 had removed `build:` from the `chronicle` service and added
+  `pull_policy: always`, so that command now **fails by design**. Both texts now
+  describe the shipped compose file, tell the reader to verify their own file
+  matches (a lingering `build:` block means they are on the old shape), and
+  point at the `docker-compose.build.yml` override for source builds. This is
+  the highest-stakes prose in the feature — it is the remedy an operator reads
+  at the worst moment — and it had gone stale within one commit.
+- **Every provider is now PROVEN wired, not reasoned wired.** All five stages
+  recorded the same gap: `systems.Set*Provider` wiring was compile-checked only,
+  because no unit test executes `RegisterRoutes`. An unwired provider is worse
+  than a missing diagnostic — `host.plugins` would report no plugins and it
+  reads like a finding. `internal/app/operator_diag_wiring_test.go` walks the
+  **AST** of both packages and fails if any declared setter has no non-test call
+  site, or if that call site is not reachable from `RegisterRoutes`. Measured:
+  all 8 providers resolve to `RegisterRoutes()`, which `cmd/server/main.go:157`
+  calls. **The first version of that test was itself broken** — it grepped raw
+  source, so commenting out the wiring line still passed. Walking the AST is not
+  fastidiousness; it is the difference between a guard and a decoration.
+- **The catalog is a menu again.** The 11 `host.*` entries arrived carrying
+  their incident narrative in `Desc` — up to 588 bytes against the pre-existing
+  catalog's 177-byte mean — which pushed the menu an AI reads to choose from
+  8.9 KB to 13 KB of functions spec. `Desc` is documented on the struct as
+  *one-line*. Every trimmed caveat was verified to already exist, usually more
+  fully, in the diagnostic's own output, so nothing was lost from where a reader
+  acts on it. Now capped at 450 bytes by test.
+- **`tools/check-plugin-isolation.sh` is green again.** It had been red since
+  stage 2 (commit `64dec0f5`), so `make verify` could not pass on this branch.
+  The four flagged files are operator-diagnostic *test fixtures* using real
+  plugin slugs as data — the guard's own remedy text names that case as
+  legitimate. Allowlisted by exact filename, with the reasoning recorded:
+  renaming the fixtures was rejected because the incident being guarded was
+  specifically about the **calendar** plugin's embedded assets.
+- New catalog-wide guards in `internal/systems/operator_diag_catalog_test.go`:
+  every `host.*` diagnostic runs with an empty arg (none panics, none returns
+  empty, each output self-identifies), names are unique, the family forms one
+  uninterrupted block ahead of the rest, and `FullDump` is asserted **in both
+  directions** by name.
+- Observability recorded as **ADR-051** (what is recorded, what is deliberately
+  not, and why the ring is in-memory rather than persisted).
+  `docs/operator-diagnostics.md` gains the `host.*` family and its probe table
+  is corrected — it was still listing the pre-stage-4 probe set.
+
+**Not verified:** no Docker daemon and no database in this environment, so
+nothing here was observed on a real container. `./tools/check-plugin-isolation.sh`
+could not be re-executed after the fix (the sandbox refused the invocation); the
+change is verified by `bash -n` plus exercising the guard's own matching logic
+against the four paths, not by a clean run of the guard itself.
+
 ### The operator's first look — six confirmed defects, all fixed (2026-08-10)
 
 Five in this repo, one in `Chronicle-Foundry-Module`. Each was measured before it
