@@ -9,6 +9,64 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-probes. The browser-probe guard is now a census, and its matcher works (2026-08-11)
+
+`tools/check-browser-probes.sh` covered 23 probes; the repo has 29 asserting
+browser probes. More importantly the guard's matcher credited a FAILED probe as
+PASS. Both fixed. Full account in `.ai/status.md`.
+
+### [x] Done
+
+- [x] Census of every browser probe: 39 tests reach a Chromium finder, 10 are
+      env-gated generators/explorers (excluded by policy), 29 assert. Six were
+      unregistered after stage 1 and are now registered — the three
+      `TestBuilderProbe_*`, `TestDaycardLedgerDoor_*` and both `TestYearProbe_*`.
+- [x] `probe_verdict()` anchors on `^--- <VERDICT>: <name> (` — the unanchored
+      substring match let an indented subtest PASS satisfy a probe whose own
+      verdict was FAIL, and let a longer probe name satisfy a shorter one.
+- [x] `run_group` now requires a clean `go test` exit as well as the PASS lines;
+      the exit code had been discarded entirely.
+- [x] The SKIPPED diagnostic reads the line BEFORE the verdict, which is where
+      `go test -v` puts `t.Skip`'s message.
+- [x] Self-test fixtures are now real `go test -v` output rather than
+      hand-written to match the code, plus a case per hole.
+- [x] Confirmed the `Browser Probes` CI job has no `if:` and so runs on
+      `pull_request` — it does NOT have the `Docker Image` job's hole.
+- [x] `census_check()` retakes the census on every run, source-only, and fails
+      on drift in either direction (an unregistered asserting probe, or a list
+      entry the tree no longer has). Both directions proven to fire.
+
+### [!] Open — the mobile probes are load-sensitive, and that is now CI's problem
+
+`TestMobileProbe_TheScrollerCensusAndTheLongWeek`,
+`…TheRSVPOverviewAndTheScheduleFitThePhone` and `…TheTapFloorAtAPhoneWidth`
+failed once during a full guard run on this 4-core box with
+`asked for N steps and got fewer replies — the child stopped answering`, then
+passed on re-run with the identical `-run` set. Not a rendering failure and not
+caused by the six added probes (the same 14 pass in isolation, and
+`NarrowLaneHoldsItsGate` + the three of them pass together).
+
+The cause is the harness: `mobileDrive` (`mobile_probe_test.go:122`) drives
+Chromium with `--virtual-time-budget` + `--dump-dom`. Virtual time still needs
+real CPU to execute the timer callbacks, so under load the dump can happen with
+tail replies missing — and the probe then fatals on the reply count, which its
+own comment says "reads as a flake and is not one". On this evidence it IS one.
+
+- [ ] Make `mobileDrive` distinguish a starved run from a measurement failure —
+      e.g. retry once on a short reply count, or fail with a message that names
+      CPU starvation as the likely cause instead of asserting the render is
+      wrong. A guard that goes red for a reason other than the one it prints
+      will get muted, which costs more than the coverage is worth.
+- [ ] Watch the `Browser Probes` job for this signature on the GitHub runner
+      (2 cores, weaker than this box) before trusting it as a required check.
+
+### [ ] Not verified — branch protection
+
+Whether `Browser Probes` is a **required** status check on `main` could not be
+checked from this environment (no `gh` CLI, no API access). The job existing and
+running on PRs does not by itself block a merge. Someone with repo admin should
+confirm it — and `Build & Test`, `Lint`, `Fresh-DB Migration Replay` with it.
+
 ## 0-moons. "I can't see the moons" — the discs are now REACHABLE (2026-08-11)
 
 The per-day moon discs shipped inside `.cnamed`, which is `display:none` below a

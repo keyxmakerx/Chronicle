@@ -32,10 +32,12 @@
 #     usual names on PATH, then the Playwright cache layouts
 #     ($PLAYWRIGHT_BROWSERS_PATH, /opt/pw-browsers, ~/.cache/ms-playwright).
 #   * With a browser present it runs the probes WITHOUT `-short` and then
-#     REQUIRES a `--- PASS:` line for every probe by name. A probe that skipped,
-#     was renamed, was deleted, or never ran fails this guard. That is the half
+#     REQUIRES a TOP-LEVEL `--- PASS: <name> (` line for every probe by name,
+#     AND a clean exit from `go test`. A probe that skipped, failed, was
+#     renamed, was deleted or never ran fails this guard. That is the half
 #     that makes "never a silent pass" true: once the machine can run a probe,
-#     not running it is an error.
+#     not running it is an error. The anchoring is load-bearing — see
+#     probe_verdict() for the two log shapes an unanchored match let through.
 #   * With no browser it prints a LOUD banner NAMING every probe that did not
 #     run and why, and exits 0 — a named skip, not a silent one — unless
 #     BROWSER_PROBES_REQUIRED=1, which CI sets so that a runner whose browser
@@ -51,11 +53,16 @@
 # (DAYCARD_GEOMETRY, DAYCARD_FLOORS, DAYCARD_MORPH_TRACE, the *_screenshot_gen
 # tests). Those are measurement tools that emit artefacts for a human to look
 # at; they assert nothing, so requiring them would be requiring noise. This
-# guard covers the probes that FAIL when the rendered result is wrong.
+# guard covers the probes that FAIL when the rendered result is wrong. The list
+# is now a CENSUS rather than a recollection — see PROBES_CALENDAR for how it
+# was taken and how to retake it when a lane adds a probe.
 #
-# SELF-TEST: every run first exercises the PASS/SKIP assertion against synthetic
-# `go test` logs, so "OK" always means the rule can actually fire — a guard that
-# cannot fail is worse than no guard. Run just the self-test with:
+# SELF-TEST: every run first exercises the PASS/SKIP/FAIL/ABSENT assertion
+# against synthetic `go test` logs, so "OK" always means the rule can actually
+# fire — a guard that cannot fail is worse than no guard. The fixtures are the
+# real shape `go test -v` emits, copied from a run: the previous ones were
+# hand-written to match the code, which is how a matcher that credited a FAILED
+# probe as PASS sat under a green self-test. Run just the self-test with:
 # --self-test-only
 #
 # Exit codes:
@@ -103,6 +110,36 @@ PKG_CALENDAR="./internal/plugins/calendar/"
 # skips itself by default is precisely the silent pass this guard exists to
 # kill, and because the mobile lane's findings are all RENDERED numbers that no
 # string assertion can see.
+#
+# THE REMAINING SIX WERE FOUND BY CENSUS, NOT BY MEMORY. Registering the #590
+# probes by name left the list still incomplete, because nobody had ever
+# enumerated the browser probes — each lane added its own and registered (or
+# forgot) them by hand. The census: every top-level `func Test…` whose body
+# reaches a Chromium finder (findProbeChromium / findChromium /
+# benchFindChromium / mobileNeedChromium / builderShotChromium) is a browser
+# probe. That is 39 tests. Ten are the opt-in generators and explorers excluded
+# above by policy — each gated behind its own env var (BENCH_SCREENSHOTS,
+# BUILDER_SCREENSHOTS, BUILDER_CLIPS, DAYCARD_SHOTS ×2, DAYCARD_GEOMETRY,
+# DAYCARD_FLOORS, DAYCARD_MORPH_TRACE, MOON_SHOTS, BLOCK_SCREENSHOTS). The other
+# 29 assert, so all 29 belong here.
+#
+#   TestBuilderProbe_*        the wizard's narrow lane, its step ladder, and
+#                             that switching preset does not move the month.
+#   TestDaycardLedgerDoor_*   the Ledger door renders only where it does
+#                             something — docked vs stacked, measured.
+#   TestYearProbe_*           the emptied-year refusal in calendar_daycard.js
+#                             and gm_panel.js. NOTE these two are the only
+#                             browser probes in the repo with NO
+#                             `testing.Short()` gate: they run under CI's
+#                             `-short` job and skip there for want of a
+#                             browser, which is the silent pass in its purest
+#                             form — a green "Build & Test" that measured
+#                             nothing and said so to no one.
+#
+# THE CENSUS IS NOW RETAKEN ON EVERY RUN — see census_check() below. Adding a
+# browser probe and forgetting this file is the mistake that produced the gap in
+# the first place, and asking the next person to remember is how it recurs. The
+# check is source-only, so it fires on a machine with no browser too.
 PROBES_CALENDAR="TestDayCardReducedMotionAnchorsToItsDay \
 TestDayCardMorphInterpolates \
 TestMobileProbe_TheLedgerShowsThreeRowsOnAPhone \
@@ -110,10 +147,100 @@ TestMobileProbe_TheSheetStaysReachableWhenTheViewportShrinks \
 TestMobileProbe_ThePageIsLockedBehindASheetAndReleasedOnEveryExit \
 TestMobileProbe_TheScrollerCensusAndTheLongWeek \
 TestMobileProbe_TheRSVPOverviewAndTheScheduleFitThePhone \
-TestMobileProbe_TheTapFloorAtAPhoneWidth"
+TestMobileProbe_TheTapFloorAtAPhoneWidth \
+TestBuilderProbe_TheMonthDidNotMove \
+TestBuilderProbe_TheLadderActuallyRuns \
+TestBuilderProbe_NarrowLaneHoldsItsGate \
+TestDaycardLedgerDoor_ItOnlyRendersWhereItDoesSomething \
+TestYearProbe_BenchDateVerbRow \
+TestYearProbe_V2GMConsole"
 
 # Needs the Tailwind CLI on top of the browser.
 PROBES_CALENDAR_TAILWIND="TestProbe_MobileBreakpointSwapInRealBrowser"
+
+# --- the census --------------------------------------------------------------
+#
+# THE LISTS ABOVE ARE CHECKED AGAINST THE TREE, NOT TRUSTED.
+#
+# The gap this guard was extended to close was not a wrong list, it was an
+# UNKNOWN one: probes accumulated lane by lane and nobody had ever enumerated
+# them, so "is this complete?" had no answer and the six that were missing had
+# been missing for as long as they had existed. A list maintained by memory
+# drifts the moment someone adds a probe in a hurry; a list checked against the
+# tree cannot.
+#
+# THE RULE. A browser probe is a top-level `func Test…` whose body reaches one
+# of the five Chromium finders. Of those, the ones that ALSO read `os.Getenv(`
+# are the opt-in generators and explorers — that is the shape of their gate
+# (`if os.Getenv("MOON_SHOTS") == "" { t.Skip(…) }`) — and they are excluded by
+# the policy stated at the top of this file. Everything else asserts and must be
+# registered.
+#
+# TWO HONEST LIMITS, because a guard that oversells itself is the thing this
+# file exists to prevent:
+#   * It keys on the five finder names. A probe that launches Chromium through
+#     some sixth helper is invisible to the census AND absent from the lists, so
+#     it produces no error — it is simply not seen. Add new finders here.
+#   * A probe that reads an env var for any reason other than an opt-in gate
+#     would be misclassified as a generator and silently excluded. Don't; if a
+#     probe needs configuration, give it a default rather than a gate.
+census_check() {
+  local found registered unregistered vanished
+  found="$(
+    grep -rl 'findProbeChromium\|findChromium\|benchFindChromium\|mobileNeedChromium\|builderShotChromium' \
+      --include='*_test.go' . 2>/dev/null |
+    while IFS= read -r f; do
+      awk '
+        function emit() {
+          if (body !~ /findProbeChromium|findChromium|benchFindChromium|mobileNeedChromium|builderShotChromium/) return
+          if (body ~ /os\.Getenv\(/) return   # opt-in generator/explorer
+          print cur
+        }
+        /^func /{ if (cur != "") emit()
+                  n = $2; sub(/\(.*/, "", n)
+                  if ($0 ~ /^func Test/) { cur = n; body = "" } else { cur = "" }
+                  next }
+                { if (cur != "") body = body "\n" $0 }
+        /^}/    { if (cur != "") { emit(); cur = "" } }
+      ' "$f"
+    done | sort -u
+  )"
+  registered="$(printf '%s\n' ${PROBES_CALENDAR_BLOCK} ${PROBES_CALENDAR} ${PROBES_CALENDAR_TAILWIND} | sort -u)"
+
+  unregistered="$(comm -23 <(printf '%s\n' "${found}") <(printf '%s\n' "${registered}"))"
+  vanished="$(comm -13 <(printf '%s\n' "${found}") <(printf '%s\n' "${registered}"))"
+
+  local bad=0 n
+  if [[ -n "${unregistered}" ]]; then
+    bad=1
+    echo
+    echo "############################################################"
+    echo "# A BROWSER PROBE EXISTS THAT THIS GUARD DOES NOT RUN       #"
+    echo "############################################################"
+    for n in ${unregistered}; do
+      echo "  UNREGISTERED  ${n}"
+    done
+    echo
+    echo "  It drives a real browser and asserts on what it measures, but it is"
+    echo "  on none of this file's lists, so CI never runs it: every probe here"
+    echo "  self-skips under \`-short\`, which is the mode \"Build & Test\" uses."
+    echo "  Add it to the list for its package — in the commit that adds it."
+  fi
+  if [[ -n "${vanished}" ]]; then
+    bad=1
+    echo
+    echo "############################################################"
+    echo "# THIS GUARD DEMANDS A PROBE THE TREE NO LONGER HAS         #"
+    echo "############################################################"
+    for n in ${vanished}; do
+      echo "  NOT IN TREE   ${n}"
+    done
+    echo
+    echo "  Renamed or deleted. Update the list in the same commit, or fix the"
+    echo "  rename — a demand for a probe that cannot exist is not coverage."
+  fi
+  return "${bad}"
+}
 
 # --- dependency discovery ----------------------------------------------------
 #
@@ -155,6 +282,39 @@ find_tailwind() {
 
 # --- the comparison core -----------------------------------------------------
 
+# probe_verdict <logfile> <PASS|SKIP|FAIL> <probe name>
+#
+# A PROBE'S VERDICT IS ITS TOP-LEVEL RESULT LINE AND NOTHING ELSE.
+#
+# `go test -v` writes a top-level verdict flush against the left margin and
+# indents each subtest's verdict by four spaces per level, always following the
+# name with ` (duration)`. Anchoring on both — `^--- PASS: <name> (` — is what
+# separates the probe's own verdict from two lines that merely contain its name.
+# The unanchored `grep -- "--- PASS: ${name}"` this replaces could not, and
+# credited a red probe as green in both of these real shapes:
+#
+#   * A SUBTEST OF A FAILED PROBE. A table-driven probe that fails prints
+#     `--- FAIL: TestX (3.10s)` at the margin and `    --- PASS: TestX/w1024 …`
+#     beneath it. That second line CONTAINS the substring "--- PASS: TestX", so
+#     the old grep matched, the `elif` for FAIL was never reached, and the guard
+#     printed `PASS  TestX` for a probe the browser had just measured as broken.
+#     This is not a hypothetical shape: every #590 moons/sky probe and stage 1's
+#     own reachability probe are `t.Run`-per-viewport tables, and a real
+#     regression fails SOME widths, never all of them — precisely the case the
+#     old matcher waved through. The guard existed to end silent passes and had
+#     one of its own.
+#   * A LONGER NAME THAT STARTS WITH THIS ONE. `TestMoonReachProbe_TheOpener`
+#     was satisfied by `TestMoonReachProbe_TheOpenerOnATouchDevice`, so deleting
+#     the shorter probe would have taken its coverage with it in silence — the
+#     exact failure the ABSENT branch exists to catch.
+#
+# BRE is used deliberately: `(` and `-` are literal in it, and Go test names are
+# `[A-Za-z0-9_/]` so they carry no BRE metacharacter to escape.
+probe_verdict() {
+  local log="$1" verdict="$2" name="$3"
+  grep -q -- "^--- ${verdict}: ${name} (" "${log}"
+}
+
 # assert_probes_passed <logfile> <probe names…>
 #
 # Prints one diagnostic line per probe that did not PASS and returns 1 if any
@@ -164,15 +324,25 @@ assert_probes_passed() {
   local log="$1"; shift
   local missing=0 name
   for name in "$@"; do
-    if grep -q -- "--- PASS: ${name}" "${log}"; then
+    if probe_verdict "${log}" PASS "${name}"; then
       continue
     fi
     missing=1
-    if grep -q -- "--- SKIP: ${name}" "${log}"; then
+    if probe_verdict "${log}" SKIP "${name}"; then
       echo "  SKIPPED  ${name} — the machine can drive a browser, so a skip here is a"
       echo "           real gap, not an absent dependency. Its skip reason:"
-      sed -n "/--- SKIP: ${name}/,+1p" "${log}" | tail -n 1 | sed 's/^/           /'
-    elif grep -q -- "--- FAIL: ${name}" "${log}"; then
+      # PRECEDING line, not the following one. `go test -v` writes t.Skip's
+      # message from inside the test, so it lands BEFORE the verdict:
+      #     === RUN   TestX
+      #         x_test.go:699: browser probe: skipped under -short
+      #     --- SKIP: TestX (0.00s)
+      # The `,+1p` this replaces read the line AFTER the verdict, which in real
+      # output is `PASS`, `ok …` or the next `=== RUN` — so the guard reported
+      # a reason that was never the reason. It went unnoticed because the
+      # self-test's fixture had been hand-written to match the sed rather than
+      # copied from `go test`; the fixtures below are now the real shape.
+      grep -B 1 -- "^--- SKIP: ${name} (" "${log}" | head -n 1 | sed 's/^/           /'
+    elif probe_verdict "${log}" FAIL "${name}"; then
       echo "  FAILED   ${name} — the rendered result is wrong. This is the guard working."
     else
       echo "  ABSENT   ${name} — never ran. Renamed or deleted? Update this guard's list"
@@ -189,13 +359,18 @@ self_test() {
   dir="$(mktemp -d)"
   trap 'rm -rf "${dir}"' RETURN
 
-  printf -- '--- PASS: TestA (1.00s)\n--- PASS: TestB (1.00s)\nok\n' > "${dir}/green.log"
+  # EVERY FIXTURE BELOW IS THE REAL SHAPE `go test -v` EMITS, copied from a run,
+  # not hand-written to match the code. The previous skip fixture put t.Skip's
+  # message after the verdict; go puts it before, so the guard's own self-test
+  # was certifying a diagnostic that could never fire correctly in production.
+  printf -- '=== RUN   TestA\n--- PASS: TestA (1.00s)\n=== RUN   TestB\n--- PASS: TestB (1.00s)\nPASS\nok\n' \
+    > "${dir}/green.log"
   if ! assert_probes_passed "${dir}/green.log" TestA TestB > /dev/null; then
     echo "  self-test FAILED: two passing probes were reported as a problem" >&2
     fail=1
   fi
 
-  printf -- '--- PASS: TestA (1.00s)\n--- SKIP: TestB (0.00s)\n    x.go:1: browser probe: no Chromium\n' \
+  printf -- '=== RUN   TestA\n--- PASS: TestA (1.00s)\n=== RUN   TestB\n    x_test.go:1: browser probe: no Chromium\n--- SKIP: TestB (0.00s)\nPASS\nok\n' \
     > "${dir}/skip.log"
   local out
   out="$(assert_probes_passed "${dir}/skip.log" TestA TestB)" && {
@@ -205,14 +380,47 @@ self_test() {
   }
   [[ "${out}" == *"SKIPPED  TestB"* ]] || {
     echo "  self-test FAILED: the SKIPPED diagnostic did not name the probe" >&2; fail=1; }
+  [[ "${out}" == *"browser probe: no Chromium"* ]] || {
+    echo "  self-test FAILED: the SKIPPED diagnostic did not quote t.Skip's own" >&2
+    echo "                    message — it reads the line BEFORE the verdict" >&2; fail=1; }
 
-  printf -- '--- PASS: TestA (1.00s)\n--- FAIL: TestB (1.00s)\n' > "${dir}/fail.log"
+  printf -- '=== RUN   TestA\n--- PASS: TestA (1.00s)\n=== RUN   TestB\n--- FAIL: TestB (1.00s)\nFAIL\n' \
+    > "${dir}/fail.log"
   out="$(assert_probes_passed "${dir}/fail.log" TestA TestB)" && {
     echo "  self-test FAILED: a FAILING probe passed the guard" >&2; fail=1; }
   [[ "${out}" == *"FAILED   TestB"* ]] || {
     echo "  self-test FAILED: the FAILED diagnostic did not name the probe" >&2; fail=1; }
 
-  printf -- '--- PASS: TestA (1.00s)\nok\n' > "${dir}/gone.log"
+  # THE SUBTEST SHADOW. A table-driven probe that fails SOME of its cases — what
+  # a real rendering regression actually looks like — prints its own FAIL at the
+  # margin and an indented PASS for each case that still worked. The guard used
+  # to grep for the unanchored substring "--- PASS: TestB", find it inside
+  # "    --- PASS: TestB/w1024_week7", and report the probe green. Stage 1's
+  # reachability probe fails 11 of 20 subtests when its fix is reverted, so this
+  # fixture is that revert's exact log shape.
+  printf -- '=== RUN   TestB\n=== RUN   TestB/w1024_week7\n=== RUN   TestB/w390_week7\n    b_test.go:551: discs 0, want 3\n--- FAIL: TestB (3.10s)\n    --- PASS: TestB/w1024_week7 (0.20s)\n    --- FAIL: TestB/w390_week7 (0.20s)\nFAIL\n' \
+    > "${dir}/subtest.log"
+  out="$(assert_probes_passed "${dir}/subtest.log" TestB)" && {
+    echo "  self-test FAILED: a probe whose OWN verdict was FAIL passed the guard" >&2
+    echo "                    on the strength of one passing subtest — a red probe" >&2
+    echo "                    reported green is worse than no probe" >&2
+    fail=1; }
+  [[ "${out}" == *"FAILED   TestB"* ]] || {
+    echo "  self-test FAILED: the subtest-shadow case was caught but misreported" >&2; fail=1; }
+
+  # THE PREFIX COLLISION. A registered probe must not be satisfied by a
+  # DIFFERENT probe whose name merely starts with it, or deleting the short one
+  # takes its coverage with it and the ABSENT branch never fires.
+  printf -- '=== RUN   TestBOnATouchDevice\n--- PASS: TestBOnATouchDevice (2.00s)\nPASS\nok\n' \
+    > "${dir}/prefix.log"
+  out="$(assert_probes_passed "${dir}/prefix.log" TestB)" && {
+    echo "  self-test FAILED: a probe that never ran was credited to a longer" >&2
+    echo "                    probe name that happens to start with it" >&2
+    fail=1; }
+  [[ "${out}" == *"ABSENT   TestB"* ]] || {
+    echo "  self-test FAILED: the prefix-collision case was caught but misreported" >&2; fail=1; }
+
+  printf -- '=== RUN   TestA\n--- PASS: TestA (1.00s)\nPASS\nok\n' > "${dir}/gone.log"
   out="$(assert_probes_passed "${dir}/gone.log" TestA TestB)" && {
     echo "  self-test FAILED: a probe that never ran passed the guard — a renamed" >&2
     echo "                    probe would take its coverage with it unnoticed" >&2
@@ -235,6 +443,12 @@ if [[ "${1:-}" == "--self-test-only" ]]; then
 fi
 
 # --- run ---------------------------------------------------------------------
+
+# THE CENSUS RUNS FIRST, AND ON EVERY MACHINE. It reads source only, so it costs
+# nothing and — unlike everything below it — does not need a browser. A probe
+# added without being registered is caught on the developer's laptop rather than
+# discovered months later by an operator who cannot see the moons.
+census_check || exit 1
 
 CHROME="$(find_chromium)" || CHROME=""
 TAILWIND="$(find_tailwind)" || TAILWIND=""
@@ -278,7 +492,23 @@ run_group() {
   # NOT -short: skipping under it is exactly how these probes stayed unmeasured.
   # -count=1 so a cached PASS from a previous tree can never stand in for a run.
   go test "${pkg}" -count=1 -v -run "^(${pattern})$" > "${LOG}" 2>&1
+  local gostatus=$?
   if ! assert_probes_passed "${LOG}" ${names}; then
+    echo "  (full output below)"
+    sed 's/^/  | /' "${LOG}"
+    return 1
+  fi
+  # AND the run itself has to have been clean. `go test`'s exit code was
+  # previously discarded outright, so the guard's verdict rested entirely on the
+  # per-probe lines. With `-run` narrowed to the covered probes, the ways this
+  # can be non-zero while every one of them still printed PASS are a panic that
+  # took the binary down after the last verdict, a TestMain/teardown fault, or a
+  # build failure in the package — none of which is the clean measurement the
+  # PASS lines appear to report. Report the run, not just the lines.
+  if (( gostatus != 0 )); then
+    echo "  UNCLEAN  ${pkg} — every covered probe printed PASS, but \`go test\`"
+    echo "           exited ${gostatus}. A panic, a teardown fault or a build"
+    echo "           failure can end a run after its last verdict was printed."
     echo "  (full output below)"
     sed 's/^/  | /' "${LOG}"
     return 1

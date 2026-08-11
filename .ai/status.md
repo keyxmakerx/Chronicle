@@ -20,6 +20,87 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### The browser-probe guard was itself a silent pass — census + three mechanism fixes (2026-08-11)
+
+Stage 1 registered the six #590 moons/sky probes in `tools/check-browser-probes.sh`.
+Stage 2 asked whether the list was now complete and whether the guard's own
+mechanism worked. Neither was true.
+
+**The census, which replaces recollection.** Every top-level `func Test…` whose
+body reaches a Chromium finder (`findProbeChromium` / `findChromium` /
+`benchFindChromium` / `mobileNeedChromium` / `builderShotChromium`) is a browser
+probe. There are **39**. Ten are opt-in generators/explorers, each gated behind
+its own env var, and are excluded by the guard's stated policy. The other **29
+assert**, and six of those were still unregistered after stage 1:
+
+| probe | package | what it measures |
+|---|---|---|
+| `TestBuilderProbe_TheMonthDidNotMove` | calendar | switching preset does not move the month |
+| `TestBuilderProbe_TheLadderActuallyRuns` | calendar | the wizard's step ladder scrolls to its cap |
+| `TestBuilderProbe_NarrowLaneHoldsItsGate` | calendar | 11 wizard screens × 7 widths hold their gate |
+| `TestDaycardLedgerDoor_ItOnlyRendersWhereItDoesSomething` | calendar | the Ledger door, docked vs stacked |
+| `TestYearProbe_BenchDateVerbRow` | calendar | emptied-year refusal in `calendar_daycard.js` |
+| `TestYearProbe_V2GMConsole` | calendar | emptied-year refusal in `gm_panel.js` |
+
+The two `TestYearProbe_*` are the sharpest case: they are the **only** browser
+probes in the repo with no `testing.Short()` gate, so they DO run in CI's
+"Build & Test" job — which installs no browser, so they skip there, inside an
+`ok` package line. A green job that measured nothing and told nobody.
+
+**Three defects in the guard's own mechanism**, all found by testing the guard
+rather than reading it:
+
+1. **A FAILED probe was reported as PASS.** `assert_probes_passed` grepped the
+   unanchored substring `--- PASS: <name>`. A table-driven probe that fails
+   prints `--- FAIL: TestX (3.10s)` at the margin and
+   `    --- PASS: TestX/w1024_week7` beneath it — and that indented subtest line
+   *contains* the substring, so the PASS branch matched and the FAIL branch was
+   never reached. Every #590 probe and stage 1's own reachability probe are
+   `t.Run`-per-viewport tables, and a real regression fails *some* widths, never
+   all — exactly the shape the matcher waved through. Reverting stage 1's fix
+   makes its probe fail 11 of 20 subtests; the guard would have said PASS.
+2. **A probe name was satisfied by a longer name starting with it.** `TestFoo`
+   was green because `TestFooOnATouchDevice` passed, so deleting the short one
+   would never have hit the ABSENT branch.
+3. **The skip reason printed was never the skip reason.** `go test -v` writes
+   `t.Skip`'s message *before* the verdict; the sed read the line *after* it —
+   in real output `PASS`, `ok …` or the next `=== RUN`.
+
+All three sat under a green self-test because the **fixtures had been
+hand-written to match the code instead of copied from `go test`**. They are now
+the real emitted shape, and the self-test carries a case for each hole.
+
+**Fixes.** `probe_verdict()` anchors on `^--- <VERDICT>: <name> (` — left margin
+(rules out subtests) plus the duration paren (rules out prefix collisions).
+`run_group` now also requires a clean `go test` exit, which was previously
+discarded outright: with `-run` narrowed to the covered probes, a non-zero exit
+alongside a full set of PASS lines means a panic after the last verdict, a
+TestMain/teardown fault, or a build failure — not the clean measurement the
+lines appear to report.
+
+**And the census is now retaken on every run** (`census_check()`), because the
+real defect was never a wrong list — it was an UNKNOWN one, maintained by memory
+across lanes that each added probes and registered them by hand or didn't. It is
+source-only, so it fires on a laptop with no browser, and it reports both
+directions: an asserting probe that is registered nowhere (UNREGISTERED) and a
+list entry the tree no longer has (NOT IN TREE). Its two honest limits are
+written into the code: it keys on the five known Chromium-finder names, and it
+classifies a probe that reads `os.Getenv(` as an opt-in generator.
+
+**Proof, on real output rather than fixtures.** Flipping one expectation in
+`TestDaycardLedgerDoor_*` — a two-subtest probe — produced exactly the shadow
+shape: `--- FAIL:` at the margin, one subtest FAIL, one subtest PASS. Fed to the
+old matcher it reports **PASS**; to the new one, **FAILED**. The full script on
+that tree exits 1 and names the probe; restored, all 29 probes run and pass and
+it exits 0.
+
+**CI wiring is sound and was checked**, because the `Docker Image` job's
+`if: github.event_name == 'push' || … 'workflow_dispatch'` is how a Dockerfile
+change reached main unexecuted. The `Browser Probes` job carries **no `if:`**,
+so it runs on `pull_request` as well as push, with `BROWSER_PROBES_REQUIRED=1`.
+NOT verified: whether it is a *required* check in branch protection — no `gh`
+CLI and no API access from this environment. See `.ai/todo.md`.
+
 ### The per-day moon discs were unreachable at almost every real width — FIXED (2026-08-11)
 
 The operator could not see moons on their calendar on a phone. The feature had
