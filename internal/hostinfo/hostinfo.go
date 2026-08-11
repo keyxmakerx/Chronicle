@@ -69,11 +69,13 @@ type Build struct {
 	InfoOK bool
 
 	// Stamped is true when the toolchain embedded VCS settings (vcs.revision).
-	// It is false in two very different situations that must never be
+	// It is false in several very different situations that must never be
 	// conflated with "the binary is old": the build environment had no VCS
-	// tool on PATH (Chronicle's golang:1.24-alpine builder has no git, and Go
-	// skips stamping SILENTLY in that case), or the build ran outside a
-	// checkout. Absent is absent, not stale.
+	// tool on PATH (Go skips stamping SILENTLY in that case), the build ran
+	// outside a checkout, or -buildvcs=false was passed. Chronicle's Docker
+	// builder installs git and sets safe.directory, so images from the current
+	// Dockerfile ARE stamped; an unstamped one predates that change or was
+	// built from a context without .git. Absent is absent, not stale.
 	Stamped bool
 
 	Revision     string // full git SHA from vcs.revision, "" when not stamped
@@ -178,9 +180,10 @@ func ReadExecutable() Executable {
 //
 // Precedence — CHRONICLE_VERSION, then the compiled-in VCS revision, then the
 // main module version, then the "unknown" sentinel. Before this existed the
-// endpoint read the env var alone, and since nothing in any Dockerfile,
-// Makefile or workflow has ever set that variable, EVERY shipped image
-// answered the literal string "unknown".
+// endpoint read the env var alone, and because no Dockerfile, Makefile or
+// workflow set that variable, EVERY shipped image answered the literal string
+// "unknown". CI now passes it for tag builds only, so the VCS revision is what
+// answers for an ordinary branch build.
 func Version() string { return VersionFrom(os.Getenv(EnvVersion), ReadBuild()) }
 
 // VersionFrom is the pure precedence. It is exported for two reasons: it is

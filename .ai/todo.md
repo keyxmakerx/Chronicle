@@ -15,14 +15,25 @@
   /api/version` falls back env → VCS revision → module version → `unknown`.
   See `.ai/status.md` for the incident this closes.
 
-### [ ] Still open — a shipped image cannot name its commit
+### [x] CLOSED — a shipped image can now name its commit
 
-Measured 2026-08-11: `golang:1.24-alpine`'s only `apk add` is
-`ca-certificates`, so the Docker builder has **no `git`**, and Go skips VCS
-stamping **silently** (exit 0, no warning, no `vcs.*` keys in the binary). A
-local `go build` in this repo *is* stamped, which is why this is easy to miss.
-So `host.build` on a shipped image honestly prints "not stamped" and falls back
-to the executable's mtime. Two ways to close it, either sufficient:
+The original defect, measured 2026-08-11: `golang:1.24-alpine`'s only `apk add`
+was `ca-certificates`, so the Docker builder had **no `git`**, and Go skipped
+VCS stamping **silently** (exit 0, no warning, no `vcs.*` keys in the binary).
+A local `go build` in this repo *was* stamped, which is why it was easy to miss.
+Both remedies below shipped, so a binary from the current Dockerfile **is**
+stamped — re-measured after the fact: `go build ./cmd/server` then
+`go version -m` reports `vcs=git`, `vcs.revision=88cc8369…`, `vcs.modified=false`.
+
+**The follow-on defect this caused, also now fixed:** the operator-facing text
+in `host.build` / `hostIdentityLines` / the `image-digest` probe still described
+the pre-fix world for several commits, so a stamped image printed a real commit
+SHA and then told the reader the builder could not produce one, and prescribed
+an `apk add --no-cache git` that had already shipped. A `contains` assertion in
+`operator_diag_host_test.go` was pinning the stale sentences in place. The
+assertions are now inverted into a `notContain` regression guard. Lesson for the
+next sweep: **when a stage changes the world, grep the diagnostics that describe
+it** — prose is the part of a diagnostic with no compiler.
 
 - [x] **Give the builder `git`** — done, `RUN apk add --no-cache git` in stage 2.
   The fail-CLOSED risk flagged here was real and is now mitigated rather than

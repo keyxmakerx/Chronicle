@@ -8,10 +8,13 @@ import (
 )
 
 // TestBuildFrom covers the parse, and covers the DEGRADED paths first because
-// those are the ones that ship: measured 2026-08-11, Chronicle's Docker builder
-// (golang:1.24-alpine, whose only `apk add` is ca-certificates) has no git, and
-// Go then skips VCS stamping silently. A test that only exercised the stamped
-// path would pass forever while the real binary reported nothing.
+// they still ship: Go skips VCS stamping SILENTLY whenever the build ran
+// outside a checkout, without a VCS tool on PATH, or with -buildvcs=false, and
+// every `go test` binary is unstamped for the first of those reasons. (The
+// Docker builder was given git on 2026-08-11, so images from the current
+// Dockerfile take the stamped path — measured, `go version -m` reports
+// vcs.revision.) A test that only exercised the stamped path would pass forever
+// while a real binary reported nothing.
 func TestBuildFrom(t *testing.T) {
 	tests := []struct {
 		name string

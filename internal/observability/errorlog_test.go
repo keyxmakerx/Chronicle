@@ -333,3 +333,41 @@ func TestConcurrentRecordAndSnapshot(t *testing.T) {
 		}
 	}
 }
+
+// TestRecordBoundsPath is the regression guard for an unbounded field that hid
+// behind a usually-short one.
+//
+// Path is normally a route template this codebase wrote, so it looked harmless
+// and went unbounded while its sibling Err was truncated from the start. But
+// PathFor's fallback branch stores raw request bytes, that branch IS reachable
+// (a panic in global middleware on an unmatched route records unconditionally,
+// because RecordPanic never consults ShouldRecord), and net/http accepts a
+// request line up to ~1 MiB. Measured before the fix: a 1 MiB GET put 349,526
+// bytes into ONE entry, so a full ring retained ~90 MB — in a buffer whose only
+// purpose is to be small enough to paste into a chat window.
+func TestRecordBoundsPath(t *testing.T) {
+	r := NewRing(4)
+	long := "/" + strings.Repeat("a", maxPathLen*50)
+	r.Record(Entry{Status: 500, Path: long})
+
+	stored := r.Snapshot(1).Entries[0].Path
+	if len(stored) >= len(long) {
+		t.Errorf("path was not truncated: stored %d bytes of %d", len(stored), len(long))
+	}
+	// The bound has to be the bound, not merely "shorter". truncate appends a
+	// marker, so allow for it.
+	if len(stored) > maxPathLen+len("…[truncated]") {
+		t.Errorf("path exceeded the bound: stored %d bytes, cap is %d", len(stored), maxPathLen)
+	}
+	if !strings.Contains(stored, "truncated") {
+		t.Errorf("truncation was not marked, so a clipped path reads as a whole one: %q", stored)
+	}
+
+	// A real route template must survive untouched — a bound that mangles
+	// ordinary output would be traded for a bound nobody trusts.
+	const real = "/campaigns/:id/entities/:slug"
+	r.Record(Entry{Status: 500, Path: real})
+	if got := r.Snapshot(1).Entries[0].Path; got != real {
+		t.Errorf("an ordinary route template was altered: got %q, want %q", got, real)
+	}
+}

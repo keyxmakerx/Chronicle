@@ -197,7 +197,7 @@ func writeErrorLine(out *strings.Builder, e RecentError, now time.Time) {
 		relativeTo(e.Time, now),
 		e.Status,
 		orDash(e.Method),
-		orDash(e.Path),
+		safePath(orDash(e.Path)),
 		templateMarker(e),
 		kindLabel(e.Kind),
 	)
@@ -377,7 +377,7 @@ func writeErrorGroup(out *strings.Builder, g errorGroup, now time.Time) {
 		marker = " _(raw path — the router matched no route)_"
 	}
 	fmt.Fprintf(out, "- **%d×** · **%d** %s `%s`%s · %s\n",
-		g.Count, g.Status, methods, orDash(g.Path), marker, kindLabel(strings.Join(g.Kinds, "+")))
+		g.Count, g.Status, methods, safePath(orDash(g.Path)), marker, kindLabel(strings.Join(g.Kinds, "+")))
 	fmt.Fprintf(out, "  - first seen %s (%s) · last seen %s (%s)\n",
 		g.First.UTC().Format(time.RFC3339), relativeTo(g.First, now),
 		g.Last.UTC().Format(time.RFC3339), relativeTo(g.Last, now))
@@ -427,6 +427,31 @@ func singleLine(s string) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.ReplaceAll(s, "\t", " ")
 	return strings.TrimSpace(s)
+}
+
+// safePath prepares a recorded path for rendering INSIDE a markdown code span.
+//
+// WHY it is needed at all: a path is usually a route template this codebase
+// wrote, but when the router matched nothing the stored value is raw request
+// bytes chosen by whoever sent the request (see observability.PathFor). This
+// output is markdown whose stated purpose is to be pasted into a chat window or
+// an AI assistant that the operator then acts on, so a path that can inject
+// markdown structure is a path that can put words in this diagnostic's mouth.
+//
+// Measured before the fix: a request to `/a%0A%0A**INJECTED-HEADING**%0A-%20fake`
+// is percent-decoded by net/http into URL.Path, stored verbatim, and rendered
+// as a real heading and a real bullet — the attacker's text escaped both the
+// code span and the list and read as diagnostic output.
+//
+// Two transformations, both display-only (the stored value is untouched):
+//   - flatten newlines/tabs, so the value cannot leave its bullet. This is
+//     exactly what singleLine already does for the sibling Err field.
+//   - replace backticks, because there is no escape sequence for a backtick
+//     inside a single-backtick span; leaving one in lets the remainder of the
+//     value render as markdown. A replacement is honest here in a way it would
+//     not be for a message, since the reader is already told this is a raw path.
+func safePath(s string) string {
+	return strings.ReplaceAll(singleLine(s), "`", "'")
 }
 
 // orDash keeps an absent value from rendering as empty backticks, which reads

@@ -30,8 +30,11 @@ func stampedBuild() hostinfo.Build {
 	}
 }
 
-// unstampedBuild is what EVERY image built by the current Docker builder
-// reports: golang:1.24-alpine has no git, so Go skips VCS stamping silently.
+// unstampedBuild is what a binary built without VCS metadata reports: no
+// checkout, no VCS tool on PATH, or -buildvcs=false, in any of which cases Go
+// skips stamping SILENTLY. Images from the current Dockerfile are stamped, but
+// this path still ships — every `go test` binary takes it, as does any image
+// built before the builder was given git — so it stays the primary case here.
 func unstampedBuild() hostinfo.Build {
 	return hostinfo.Build{
 		InfoOK:      true,
@@ -176,8 +179,9 @@ func TestRenderHostBuildDegradedPaths(t *testing.T) {
 			contains: []string{
 				notStampedHeadline,
 				"Absent is not stale",
-				"no `git`",
-				"apk add --no-cache git",
+				// The section must still name what DOES cause absence, or
+				// "not stamped" is a dead end for the reader.
+				"-buildvcs=false",
 				// the always-available fallback must still be there
 				"path: `/chronicle`",
 				"mtime:",
@@ -186,6 +190,18 @@ func TestRenderHostBuildDegradedPaths(t *testing.T) {
 				"working tree at build: clean",
 				"revision: ``",
 				"commit time: \n",
+				// REGRESSION GUARD, and the reason this list exists at all.
+				// Stages 1-4 wrote "Chronicle's builder has no git, install it"
+				// into the operator-facing text; stage 5 then installed git in
+				// the Dockerfile, and the assertion that used to live in
+				// `contains` above went on pinning the claim after it became
+				// false. A diagnostic that prints a real revision and then says
+				// the builder cannot produce one is worse than silence — it is
+				// the exact "reason from a stale claim instead of from
+				// evidence" failure this whole workstream exists to prevent.
+				"there is no `git`",
+				"apk add --no-cache git",
+				"which is Chronicle's builder today",
 			},
 		},
 		{

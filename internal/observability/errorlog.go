@@ -46,6 +46,17 @@ const DefaultCapacity = 256
 // reader never mistakes a clipped message for the whole one.
 const maxErrLen = 300
 
+// maxPathLen bounds a stored path. A route TEMPLATE is always short, but the
+// fallback concrete path is raw request bytes, and net/http will happily hand
+// us a request line up to ~1 MiB. Unbounded, a handful of cheap requests that
+// trip a panic on an unmatched route retain the whole thing: measured, a 1 MiB
+// GET stored 349,526 bytes in ONE entry, and DefaultCapacity of those is ~90 MB
+// of live heap held by a buffer whose entire purpose is to be small enough to
+// paste. 200 bytes is longer than any real Chronicle route and short enough
+// that a full ring stays trivial (~51 KB). truncate marks the cut, so a clipped
+// path never reads as a complete one.
+const maxPathLen = 200
+
 // Kind classifies WHERE an error came from, which is often more diagnostic than
 // the status code: a 500 raised deliberately by a service (KindApp) and a 500
 // that is a raw unwrapped error escaping a handler (KindRaw) look identical on
@@ -107,10 +118,24 @@ type Entry struct {
 // window. So when the router matched a route, the TEMPLATE is stored: it groups
 // perfectly, it names the handler, and it cannot contain a secret.
 //
-// The concrete path is used only when there is no template, which in practice
-// means the router matched nothing — and an unmatched request is a 404, which
-// the default policy does not record at all. The boolean is returned so callers
-// can label which one they got.
+// The concrete path is used only when there is no template, which means the
+// router matched nothing. That branch IS reachable and the code must treat it
+// as hostile — an earlier version of this comment claimed it was not ("an
+// unmatched request is a 404, which the default policy does not record"), and
+// both halves were measured false:
+//
+//   - RecordPanic calls Ring.Record DIRECTLY and never consults ShouldRecord,
+//     so ANY panic in the global middleware chain is recorded regardless of
+//     status; Echo runs every e.Use middleware for unmatched URLs.
+//   - A 5xx raised by global middleware on an unmatched path (internal/
+//     middleware/csrf.go returns a real apperror.NewInternal) is a 5xx, so the
+//     policy records it and there is no template to store.
+//
+// So the returned string may be raw request bytes: unbounded in length, full of
+// newlines, and chosen by whoever sent the request. Ring.Record bounds it and
+// the diagnostic renderers flatten it. The boolean is returned so callers can
+// label which one they got — and it is also the signal that the value is
+// untrusted.
 func PathFor(routeTemplate, rawPath string) (string, bool) {
 	if t := strings.TrimSpace(routeTemplate); t != "" {
 		return t, true
@@ -177,6 +202,12 @@ func (r *Ring) Record(e Entry) {
 		e.Time = time.Now()
 	}
 	e.Err = truncate(e.Err, maxErrLen)
+	// Path is bounded here for the same reason Err is, and it was missed for a
+	// long time because the field is USUALLY a short route template. The
+	// fallback branch of PathFor stores attacker-controlled request bytes, and
+	// that branch is reachable (see PathFor's own note), so the bound cannot be
+	// left to the caller.
+	e.Path = truncate(e.Path, maxPathLen)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.buf[r.next] = e

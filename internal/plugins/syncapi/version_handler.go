@@ -22,13 +22,14 @@ import (
 // binary → the main module version → the literal "unknown".
 //
 // WHY the fallback chain exists: the endpoint used to read CHRONICLE_VERSION
-// and nothing else, and that variable is set by no Dockerfile, no compose file,
-// no Makefile and no workflow — so every image ever shipped answered the
-// literal string "unknown", and the Foundry dashboard displayed it. The VCS
-// revision fills the gap on any binary built where `git` was available.
-// "unknown" is still returned, honestly, when nothing identifies the build at
-// all (which is the case for images from the current Docker builder, since
-// golang:1.24-alpine ships no git and Go then skips stamping silently).
+// and nothing else, and for years that variable was set by no Dockerfile, no
+// compose file, no Makefile and no workflow — so every image ever shipped
+// answered the literal string "unknown", and the Foundry dashboard displayed
+// it. Both inputs are now real: CI passes CHRONICLE_VERSION for tag builds, and
+// the Docker builder installs git so the toolchain stamps the VCS revision into
+// every other image. "unknown" is still returned, honestly, when nothing
+// identifies the build at all — a binary built outside a checkout, or one from
+// an image that predates those changes.
 func VersionHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"version": hostinfo.Version()})
 }

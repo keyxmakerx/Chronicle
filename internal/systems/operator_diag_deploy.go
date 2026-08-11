@@ -20,13 +20,25 @@
 // deploy landed.
 //
 // The marker search is the part that closes BOTH wrong turns from the incident
-// at once: it looks in the on-disk static root AND inside the binary's embedded
-// plugin filesystems, and prints a line per scope. A marker found only in the
-// embedded scope is the exact result that a `grep /app/static` reported as
+// at once. It reports a line per scope across all THREE places a shipped string
+// can live: the on-disk static root, the binary's embedded plugin filesystems,
+// and the compiled-in strings of the executable itself. A marker found only in
+// the embedded scope is the exact result that a `grep /app/static` reported as
 // "missing code".
+//
+// The third scope was added after the first two shipped, because two scopes
+// were not enough to justify the conclusion the section printed. Chronicle is
+// Templ-first, so markup lives in compiled Go string literals and appears in
+// NEITHER of the other scopes — and the section nevertheless told the operator
+// that absence from both meant the deploy had not landed. Measured against this
+// repo, that fired on a real attribute (`data-cal-moon-tab`) which `grep -a`
+// finds in the built binary. Re-creating the incident's own error inside the
+// diagnostic written to prevent it is the worst available outcome, so the scope
+// is searched rather than the conclusion merely softened.
 package systems
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -71,12 +83,24 @@ const maxMarkers = 10
 // The interesting answer is "is it there and where", not a full concordance.
 const maxMarkerHits = 8
 
+// executableScanChunk is the streaming read size for the executable scan. The
+// binary is tens of megabytes and must never be held in memory whole, so it is
+// read in chunks with an overlap large enough that a marker straddling a chunk
+// boundary is still found.
+const executableScanChunk = 1 << 20 // 1 MiB
+
+// maxExecutableScanBytes bounds the executable scan. Chronicle's binary is
+// ~57 MB (measured), so this is far above any real case and exists only so that
+// a pathological file cannot turn an admin diagnostic into an unbounded read.
+// When it clamps, the scan SAYS so — a bound nobody is told about is the defect.
+const maxExecutableScanBytes = 512 << 20 // 512 MiB
+
 // hostDeployCheckDiagnostic is the composite.
 func hostDeployCheckDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:    "host.deploy-check",
 		Title:   "Did my deploy land? — build identity, bellwether assets, marker search, package state",
-		Desc:    "THE one thing to run after a deploy. Combines the build identity, the fingerprint + mtime + served `?v=` of the assets that move on almost every build, and the installed-vs-loaded package summary. Pass comma-separated markers to also search for them across BOTH the on-disk static root and the binary's embedded assets, reported separately. The argument is optional.",
+		Desc:    "THE one thing to run after a deploy. Combines the build identity, the fingerprint + mtime + served `?v=` of the assets that move on almost every build, and the installed-vs-loaded package summary. Optional comma-separated markers are searched across all three places a shipped string can live — static root, embedded plugin assets, and the executable's compiled-in strings (where Templ markup lives) — reported separately.",
 		ArgHint: "[<marker[,marker2]>]",
 		Run:     renderHostDeployCheck,
 	}
@@ -214,15 +238,26 @@ func writeMarkerSection(b *strings.Builder, src deployCheckSources, arg string) 
 
 	disk, diskNote := scanDiskForMarkers(src.Root, markers)
 	embed, embedNote := scanEmbeddedForMarkers(src.Embedded, markers)
+	exec, execNote := scanExecutableForMarkers(src.Exe, markers)
 
-	fmt.Fprintf(b, "%s\n\n%s\n\n", diskNote, embedNote)
+	fmt.Fprintf(b, "%s\n\n%s\n\n%s\n\n", diskNote, embedNote, execNote)
 	for _, m := range markers {
 		fmt.Fprintf(b, "- **`%s`**\n", m)
 		writeMarkerScope(b, "on-disk static root", disk[m], disk != nil)
 		writeMarkerScope(b, "embedded in the binary", embed[m], embed != nil)
+		writeMarkerScope(b, "compiled into the executable", exec[m], exec != nil)
 	}
 	b.WriteString("\n**A marker found only in the embedded scope is not missing.** Those bytes live inside the executable and are served from memory, so `ls` and `grep` over the container filesystem cannot see them — that is the expected result, and reading it as absent code is the mistake that cost an hour on 2026-08-11.\n")
-	b.WriteString("**A marker absent from BOTH scopes** means this build genuinely does not contain it: either the deploy did not land (check section 1) or the marker is misspelled.\n\n")
+	b.WriteString("**A marker found only in the executable scope is not missing either — for most UI markers that is the EXPECTED place, and the only place.** Chronicle is Templ-first: markup written in a `.templ` file is compiled into Go string literals inside this binary, so a `data-` attribute or a CSS class you copied out of page source is normally in neither the static tree nor an embedded filesystem. Absent from those two is the correct result for it, not a finding.\n")
+	b.WriteString("_A hit in the executable scope proves the byte sequence is somewhere in the binary — usually the template that emits it, but any Go string literal counts, including this diagnostic's own source. Prefer a marker distinctive enough that this cannot mislead._\n")
+	// The all-absent conclusion is only sound when all three scopes were
+	// actually READ. Asserting it over an unscanned scope is precisely the
+	// absence-of-evidence error the rest of this file is built to refuse.
+	if disk != nil && embed != nil && exec != nil {
+		b.WriteString("**A marker absent from ALL THREE scopes** means this build genuinely does not contain it: either the deploy did not land (check section 1) or the marker is misspelled.\n\n")
+		return
+	}
+	b.WriteString("**At least one scope could not be scanned** (see its note above), so nothing in this section is evidence that the build lacks a marker. Resolve the unscanned scope before concluding that anything is missing.\n\n")
 }
 
 // writeMarkerScope prints one scope's result for one marker. `scanned` false
@@ -344,6 +379,97 @@ func scanEmbeddedForMarkers(provider func() []EmbeddedAssetSet, markers []string
 		})
 	}
 	return hits, fmt.Sprintf("_Embedded scope: scanned %d text file(s) across %d plugin filesystem(s) INSIDE the binary (skipped %d non-text)._", scanned, len(sets), skippedExt)
+}
+
+// scanExecutableForMarkers searches the running binary's own bytes.
+//
+// WHY this scope exists — it is the one that was missing, and its absence made
+// the flagship post-deploy diagnostic assert the opposite of the truth.
+// Chronicle is TEMPL-FIRST: markup authored in a `.templ` file is compiled into
+// Go string literals inside the executable. It is therefore in neither of the
+// other two scopes by design — not on the static filesystem, not in a plugin's
+// embedded FS. Most markers an operator can actually copy out of page source (a
+// `data-` attribute, a CSS class emitted by a template) live only here.
+//
+// Measured on this repo: with only the disk and embedded scopes, searching for
+// `data-cal-moon-tab` — a real attribute in internal/widgets/calendar_block/
+// moonpanel.templ — reported "not found" in both and the diagnostic concluded
+// the deploy had not landed, while `grep -a` on the built binary found it. That
+// is the same shape as the 2026-08-11 mistake this file exists to prevent: a
+// scope that was never searched being reported as evidence of absence.
+//
+// Returns nil when the executable could not be read, so the caller prints
+// "not scanned" rather than "not found".
+func scanExecutableForMarkers(exe hostinfo.Executable, markers []string) (map[string][]string, string) {
+	const cannot = " This is not \"the marker is absent from this build\"._"
+	if exe.Path == "" {
+		return nil, "_Executable scope NOT scanned: this process could not name its own executable" +
+			func() string {
+				if exe.Err != "" {
+					return " (" + exe.Err + ")"
+				}
+				return ""
+			}() + ", so the strings compiled into it cannot be searched." + cannot
+	}
+	f, err := os.Open(exe.Path)
+	if err != nil {
+		return nil, fmt.Sprintf("_Executable scope NOT scanned: `%s` could not be opened (%v).%s", exe.Path, err, cannot)
+	}
+	defer func() { _ = f.Close() }()
+
+	// The overlap must be one byte short of the longest marker: that is the
+	// most of a marker that can sit on the far side of a chunk boundary.
+	overlap := 0
+	for _, m := range markers {
+		if len(m) > overlap {
+			overlap = len(m)
+		}
+	}
+	if overlap > 0 {
+		overlap--
+	}
+
+	buf := make([]byte, executableScanChunk+overlap)
+	hits := map[string][]string{}
+	found := map[string]bool{}
+	var total int64
+	carry := 0
+	clamped := false
+	for {
+		n, readErr := f.Read(buf[carry:])
+		if n > 0 {
+			total += int64(n)
+			window := buf[:carry+n]
+			for _, m := range markers {
+				if !found[m] && bytes.Contains(window, []byte(m)) {
+					found[m] = true
+					// One label, because there is only one file: the
+					// executable this process is running.
+					hits[m] = append(hits[m], exe.Path)
+				}
+			}
+			if carry+n > overlap {
+				copy(buf, window[carry+n-overlap:])
+				carry = overlap
+			} else {
+				carry += n
+			}
+		}
+		if total >= maxExecutableScanBytes {
+			clamped = true
+			break
+		}
+		if readErr != nil {
+			break
+		}
+	}
+
+	note := fmt.Sprintf("_Executable scope: scanned %s of `%s` — the strings compiled INTO this binary, which is where Templ markup and every Go string literal live._", humanBytes(total), exe.Path)
+	if clamped {
+		note = fmt.Sprintf("_Executable scope: scanned only the first %s of `%s` (the %s cap), so a marker reported absent here may sit beyond the cap._",
+			humanBytes(total), exe.Path, humanBytes(maxExecutableScanBytes))
+	}
+	return hits, note
 }
 
 // recordMarkerHits appends label to every marker that content contains.

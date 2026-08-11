@@ -437,3 +437,70 @@ func TestErrorDiagnosticsRunThroughCatalog(t *testing.T) {
 		}
 	}
 }
+
+// TestRawPathCannotInjectMarkdown is the regression guard for the render half
+// of the raw-path problem.
+//
+// A path stored on the fallback branch is attacker-chosen, net/http
+// percent-DECODES it into URL.Path, and this output is markdown an operator
+// pastes into a chat window or an AI assistant and then acts on. Measured
+// before the fix, a request to `/a%0A%0A**INJECTED-HEADING**%0A-%20fake%20bullet`
+// rendered as a real heading and a real bullet: the attacker's text escaped the
+// code span AND the list, and read as this diagnostic's own output. The sibling
+// Err field had been flattened from the start; Path had not.
+func TestRawPathCannotInjectMarkdown(t *testing.T) {
+	// Exactly what url.URL.Path holds after net/http decodes that request.
+	const hostile = "/a\n\n**INJECTED-HEADING**\n- fake bullet"
+	entries := []RecentError{
+		{Time: errNow, Status: 500, Method: "GET", Path: hostile, PathIsTemplate: false, Kind: "panic", Err: "panic: boom"},
+	}
+	snap := RecentErrors{Capacity: 256, Held: 1, Total: 1, Entries: entries}
+
+	for _, tc := range []struct {
+		name string
+		got  string
+	}{
+		{"host.errors", renderHostErrorsFrom(snap, true, defaultErrorRows, "", errStart, errNow)},
+		{"host.errors-summary", renderHostErrorsSummaryFrom(snap, true, errStart, errNow)},
+	} {
+		// The line the path is on must stay ONE line. Anything else means the
+		// value left its bullet.
+		if strings.Contains(tc.got, "\n**INJECTED-HEADING**") {
+			t.Errorf("%s: injected text reached column 0 as a heading:\n%s", tc.name, tc.got)
+		}
+		if strings.Contains(tc.got, "\n- fake bullet") {
+			t.Errorf("%s: injected text reached column 0 as a list item:\n%s", tc.name, tc.got)
+		}
+		// Flattened, not dropped: an operator still needs to see what was
+		// requested, and silently discarding it would trade one dishonesty for
+		// another.
+		if !strings.Contains(tc.got, "INJECTED-HEADING") {
+			t.Errorf("%s: the path was dropped rather than flattened:\n%s", tc.name, tc.got)
+		}
+	}
+}
+
+// TestRawPathCannotEscapeCodeSpan covers the other half of the same breakout: a
+// backtick has no escape sequence inside a single-backtick span, so one in a
+// raw path would close the span and let the remainder render as markdown.
+func TestRawPathCannotEscapeCodeSpan(t *testing.T) {
+	entries := []RecentError{
+		{Time: errNow, Status: 500, Method: "GET", Path: "/a`x`**bold**", PathIsTemplate: false, Kind: "http", Err: "boom"},
+	}
+	snap := RecentErrors{Capacity: 256, Held: 1, Total: 1, Entries: entries}
+
+	for _, tc := range []struct {
+		name string
+		got  string
+	}{
+		{"host.errors", renderHostErrorsFrom(snap, true, defaultErrorRows, "", errStart, errNow)},
+		{"host.errors-summary", renderHostErrorsSummaryFrom(snap, true, errStart, errNow)},
+	} {
+		// Every backtick in the output should be one the renderer wrote. The
+		// path contributes none, so the count must stay even and the injected
+		// pair must be gone.
+		if strings.Contains(tc.got, "/a`x`") {
+			t.Errorf("%s: a backtick from the path survived into the code span:\n%s", tc.name, tc.got)
+		}
+	}
+}

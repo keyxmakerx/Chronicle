@@ -1,6 +1,7 @@
 package systems
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,11 +54,37 @@ func embeddedOnlySet() []EmbeddedAssetSet {
 	}}
 }
 
+// deployTestExecutable writes a stand-in for the running binary holding a
+// marker that exists ONLY there. That is the TEMPL case, and it is the one the
+// two-scope search could not see: markup authored in a .templ file is compiled
+// into Go string literals, so it is in neither the static tree nor an embedded
+// filesystem — and the diagnostic used to call that a failed deploy.
+//
+// The body is deliberately not valid ELF. The scan is a byte search, so what
+// matters is that a real file on disk is read in chunks; a fake header keeps
+// the fixture honest about being binary without needing a linker.
+func deployTestExecutable(t *testing.T) hostinfo.Executable {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "chronicle")
+	body := "\x7fELF\x00\x00fake\x00" +
+		`<div data-cal-moon-tab="graph" class="templ-only-marker">` +
+		"\x00\x00trailing padding\x00"
+	if err := os.WriteFile(path, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hostinfo.Executable{Path: path, Size: info.Size(), ModTime: info.ModTime()}
+}
+
 func deploySources(t *testing.T) deployCheckSources {
 	t.Helper()
 	return deployCheckSources{
 		Root:       deployTestRoot(t),
 		Embedded:   embeddedOnlySet,
+		Exe:        deployTestExecutable(t),
 		AssetURL:   func(u string) string { return u + "?v=deadbeef01" },
 		BuildToken: "buildtok01",
 		Packages: func() string {
@@ -121,8 +148,92 @@ func TestDeployCheckMarkerScopesAreReportedSeparately(t *testing.T) {
 	if !strings.Contains(out, "**`neither-place`**") {
 		t.Errorf("every requested marker must get a line:\n%s", out)
 	}
-	if !strings.Contains(out, "absent from BOTH scopes") {
-		t.Errorf("the output must say what absence from both scopes means:\n%s", out)
+	if !strings.Contains(out, "absent from ALL THREE scopes") {
+		t.Errorf("the output must say what absence from every scope means:\n%s", out)
+	}
+	// Each marker gets one line per scope, and there are three scopes.
+	if n := strings.Count(out, "compiled into the executable"); n != 2 {
+		t.Errorf("the executable scope must be reported for each of the 2 markers, got %d:\n%s", n, out)
+	}
+}
+
+// TestDeployCheckMarkerFoundOnlyInExecutableIsNotMissing is THE test for the
+// scope that was missing, and it pins the exact defect it was added to close.
+//
+// Chronicle is Templ-first, so a `data-` attribute an operator copies out of
+// page source is compiled into the binary and appears in NEITHER other scope.
+// With only the disk and embedded scopes, this marker rendered as absent from
+// both and the diagnostic asserted the deploy had not landed — measured against
+// the real repo with the real static root and the real embed.FS, while `grep -a`
+// on the built binary found the same string. The flagship post-deploy check
+// telling the operator their correct deploy failed is the 2026-08-11 mistake
+// wearing this diagnostic's own clothes.
+func TestDeployCheckMarkerFoundOnlyInExecutableIsNotMissing(t *testing.T) {
+	out := renderHostDeployCheckFrom(deploySources(t), "data-cal-moon-tab")
+
+	if !strings.Contains(out, "✗ on-disk static root: not found") {
+		t.Errorf("a Templ marker is not on the static filesystem:\n%s", out)
+	}
+	if !strings.Contains(out, "✗ embedded in the binary: not found") {
+		t.Errorf("a Templ marker is not in an embedded plugin FS either:\n%s", out)
+	}
+	if !strings.Contains(out, "✓ compiled into the executable: found in 1 file(s)") {
+		t.Errorf("the executable scope must find a marker compiled into the binary:\n%s", out)
+	}
+	if !strings.Contains(out, "found only in the executable scope is not missing") {
+		t.Errorf("the output must state that this exact combination is NOT a missing feature:\n%s", out)
+	}
+	// The false conclusion must be gone: absence from the two old scopes is
+	// no longer allowed to imply a failed deploy.
+	if strings.Contains(out, "absent from BOTH scopes") {
+		t.Errorf("the two-scope verdict survived, and it is wrong for every Templ marker:\n%s", out)
+	}
+}
+
+// TestExecutableScanSpansChunkBoundaries pins the streaming read. The binary is
+// tens of megabytes and is deliberately never held in memory whole, so a marker
+// that straddles a chunk boundary is the case a naive chunked scan misses — and
+// it would miss it SILENTLY, reporting "not found" for a string that is present.
+func TestExecutableScanSpansChunkBoundaries(t *testing.T) {
+	const marker = "STRADDLES-THE-BOUNDARY"
+	path := filepath.Join(t.TempDir(), "chronicle")
+
+	// Place the marker so it starts a few bytes before the first chunk ends.
+	body := make([]byte, 0, executableScanChunk+len(marker)+16)
+	body = append(body, bytes.Repeat([]byte{'x'}, executableScanChunk-len(marker)/2)...)
+	body = append(body, marker...)
+	body = append(body, bytes.Repeat([]byte{'y'}, 16)...)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	hits, note := scanExecutableForMarkers(hostinfo.Executable{Path: path}, []string{marker})
+	if hits == nil {
+		t.Fatalf("the scan reported the scope unscannable: %s", note)
+	}
+	if len(hits[marker]) != 1 {
+		t.Errorf("a marker straddling a chunk boundary was missed — a silent false 'not found':\nnote: %s", note)
+	}
+}
+
+// TestExecutableScanUnreadableIsNotAbsence pins the distinction for the new
+// scope too: a binary this process cannot open must never render as "the marker
+// is not in this build".
+func TestExecutableScanUnreadableIsNotAbsence(t *testing.T) {
+	for _, exe := range []hostinfo.Executable{
+		{Path: "", Err: "readlink /proc/self/exe: permission denied"},
+		{Path: filepath.Join(t.TempDir(), "does-not-exist")},
+	} {
+		hits, note := scanExecutableForMarkers(exe, []string{"anything"})
+		if hits != nil {
+			t.Errorf("an unreadable executable must return nil hits so the caller says 'not scanned', got %v", hits)
+		}
+		if !strings.Contains(note, "NOT scanned") {
+			t.Errorf("the note must say the scope was not scanned, got: %s", note)
+		}
+		if !strings.Contains(note, "not \"the marker is absent from this build\"") {
+			t.Errorf("the note must deny the absence reading, got: %s", note)
+		}
 	}
 }
 
@@ -133,10 +244,17 @@ func TestDeployCheckUnscannedScopeIsNotAbsence(t *testing.T) {
 	src := deploySources(t)
 	src.Embedded = nil // the provider is unwired
 	src.Root = staticRoot{CWD: "/x", Path: "/x/static", StatErr: "no such file or directory"}
+	src.Exe = hostinfo.Executable{Err: "readlink /proc/self/exe: permission denied"}
 
 	out := renderHostDeployCheckFrom(src, "moonPhase")
-	if strings.Count(out, "_not scanned_") != 2 {
-		t.Errorf("both unreadable scopes must report 'not scanned', got:\n%s", out)
+	if strings.Count(out, "_not scanned_") != 3 {
+		t.Errorf("all three unreadable scopes must report 'not scanned', got:\n%s", out)
+	}
+	if !strings.Contains(out, "At least one scope could not be scanned") {
+		t.Errorf("with nothing scanned, the verdict must refuse to conclude anything:\n%s", out)
+	}
+	if strings.Contains(out, "absent from ALL THREE scopes") {
+		t.Errorf("the all-absent verdict must NOT be asserted over unscanned scopes:\n%s", out)
 	}
 	if strings.Contains(out, "not found") {
 		t.Errorf("nothing was scanned, so nothing may be reported as not found:\n%s", out)

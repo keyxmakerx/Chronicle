@@ -44,15 +44,23 @@ from.
   not the one you think it is) renders all of it plus a standing note naming the
   Docker-label trap and the `//go:embed` grep trap from the same incident.
 - `host.runtime` is the cheap uptime / goroutines / memory / GC snapshot.
-- **Measured, and the reason `host.build` leads with the executable mtime:**
-  images built by CI carry **no** VCS stamps. `golang:1.24-alpine`'s only
-  `apk add` is `ca-certificates`, so the builder has no `git`, and Go then skips
-  stamping *silently* (exit 0, no warning). A local `go build` here **is**
-  stamped. Absent stamps mean "never recorded", never "old".
+- **Measured, and the reason `host.build` leads with the executable mtime:** Go
+  skips VCS stamping *silently* (exit 0, no warning) whenever the build ran
+  outside a checkout, without a VCS tool on PATH, or with `-buildvcs=false`.
+  That used to describe every CI image, because `golang:1.24-alpine`'s only
+  `apk add` was `ca-certificates`. **The builder now installs `git` and sets
+  `safe.directory`, so images from the current Dockerfile ARE stamped**
+  (re-measured: `go version -m` reports `vcs.revision=88cc8369…`). An unstamped
+  binary today is an older image, a context without `.git`, or a test binary.
+  Absent stamps mean "never recorded", never "old" — and the executable mtime
+  remains the fallback that needs no build-time cooperation at all.
 - `GET /api/version` now falls back env → VCS revision → main module version →
   `unknown`. It had returned the literal `"unknown"` on every image ever
-  shipped, because `CHRONICLE_VERSION` is set by no Dockerfile, compose file,
-  Makefile or workflow. `docs/deployment.md` claimed otherwise and is corrected.
+  shipped, because back then `CHRONICLE_VERSION` was set by no Dockerfile,
+  compose file, Makefile or workflow. CI now passes it for `v*` tag builds only
+  — so **unset is the NORMAL state on a branch build**, not a fault, and
+  resolution falls through to the stamped VCS revision. `docs/deployment.md`
+  claimed otherwise and is corrected.
 
 ~~Open: nothing wires `CHRONICLE_VERSION` or gives the builder `git`~~ —
 **closed the same day by the deploy-hygiene change below.** Dockerfile stage 2
@@ -188,6 +196,24 @@ request has neither key it needs.
   counts and first/last seen, sorted by frequency. Three repeats of one failure
   become one line, so the single unrelated 503 underneath is visible instead of
   scrolled off.
+- **`Entry.Path` is now bounded and flattened (2026-08-11 follow-up).** Path is
+  *usually* a route template this codebase wrote, so it looked safe and went
+  unguarded while its sibling `Err` got both `truncate()` and `singleLine()`.
+  But `PathFor`'s fallback stores raw request bytes, and that branch IS
+  reachable — `RecordPanic` calls `Ring.Record` **directly and never consults
+  `ShouldRecord`**, so any panic in the global middleware chain records
+  whatever URL was requested, and Echo runs every `e.Use` middleware for
+  unmatched paths. Measured over a real TCP server: a 1 MiB GET stored 349,526
+  bytes with 349,525 real newlines in ONE entry (~90 MB across a full 256-slot
+  ring), and `/a%0A%0A**INJECTED-HEADING**%0A-%20fake%20bullet` rendered as a
+  real heading and a real bullet — attacker text escaping the code span and the
+  list, inside a document whose stated purpose is to be pasted into an AI
+  assistant the operator then acts on. Fixed with `maxPathLen` at the store and
+  `safePath()` (flatten + neutralise backticks) at both render sites. **The
+  comment that justified the old code asserted the case could not arise**
+  ("an unmatched request is a 404, which the default policy does not record"),
+  and both halves were false — which is why nobody went looking. That comment
+  now documents the two reachable routes instead.
 
 **Three decisions that are load-bearing, each named and commented in code:**
 
@@ -245,9 +271,25 @@ rewritten probe library.
   available schema version taken from the migration runner's own record rather
   than recounted.
 - **`host.deploy-check [<marker,…>]`** — the composite. Build identity in three
-  lines, the bellwether assets, a marker search across **both** storage
+  lines, the bellwether assets, a marker search across **all three** storage
   mechanisms reported **separately**, and `packages.installed-vs-loaded`
   delegated verbatim. This is the "paste this one thing after a deploy" check.
+- **The third marker scope was a fix, not a feature (2026-08-11).** It shipped
+  knowing only two scopes — on-disk static root and embedded plugin FS — and
+  then asserted a three-scope conclusion: "absent from BOTH means this build
+  does not contain it: either the deploy did not land or the marker is
+  misspelled." Chronicle is **Templ-first**, so most UI markers an operator can
+  copy out of page source are compiled into Go string literals in the
+  executable and are in neither of those scopes by design. Measured against the
+  real repo: `data-cal-moon-tab` (a real attribute in
+  `internal/widgets/calendar_block/moonpanel.templ`) reported ✗ in both scopes
+  and the flagship post-deploy check declared a correct deploy failed, while
+  `grep -a` found the string in the built binary. `scanExecutableForMarkers`
+  now streams the executable in 1 MiB chunks with an overlap so a
+  boundary-straddling marker is still found — measured 54.8 MB in 0.03 s — and
+  the all-absent verdict is printed **only when all three scopes were actually
+  read**. This was the incident's own error re-created inside the diagnostic
+  written to prevent it.
 
 **Three things had to be said rather than assumed, and each is printed on every
 run:**

@@ -124,9 +124,10 @@ func renderBuildRevision(out *strings.Builder, b hostinfo.Build) {
 		return
 	case !b.Stamped:
 		fmt.Fprintf(out, "- %s\n", notStampedHeadline)
-		out.WriteString("- Go records `vcs.revision` / `vcs.time` / `vcs.modified` only when the build ran inside a checkout **with the VCS tool on PATH**. Chronicle's Docker builder stage (`golang:1.24-alpine`) installs only `ca-certificates` — there is no `git` — and Go then skips stamping **silently**: no warning, exit 0. So an image built by CI carries no revision.\n")
+		out.WriteString("- Go records `vcs.revision` / `vcs.time` / `vcs.modified` only when the build ran inside a checkout **with the VCS tool on PATH**, and when it cannot it skips stamping **silently**: no warning, exit 0.\n")
 		out.WriteString("- **Absent is not stale.** This says the fact was never recorded, not that the code is old. Use the executable mtime below for build recency instead.\n")
-		out.WriteString("- To make it available: either give the builder stage `git` (`RUN apk add --no-cache git`; stamps then appear automatically — but note that a `git` which is present and *errors* makes `go build` fail outright, so this is a fail-closed change), or pass the commit in explicitly via a `--build-arg` + `-ldflags -X`, or set `CHRONICLE_VERSION`.\n\n")
+		out.WriteString("- Chronicle's Docker builder stage installs `git` and configures `safe.directory` for the build context, so an image produced by that Dockerfile **does** stamp. An unstamped binary is therefore one of: an image built before the builder had `git`; a build whose context carried no `.git` (a source tarball, or a `COPY` that excluded it); a build run with `-buildvcs=false`; or a `go test` / `go run` binary.\n")
+		out.WriteString("- `CHRONICLE_VERSION` (below) names a release independently of the stamps, and is the one identifier a build can carry without a checkout.\n\n")
 		return
 	}
 	fmt.Fprintf(out, "- revision: `%s`\n", b.Revision)
@@ -148,12 +149,14 @@ func renderBuildRevision(out *strings.Builder, b hostinfo.Build) {
 
 // renderBuildEnvVersion prints CHRONICLE_VERSION and, crucially, what the
 // public /api/version endpoint will therefore answer — the env var is that
-// endpoint's highest-precedence input and has never been set in any shipped
-// image, which is why the endpoint answered "unknown" for its whole life.
+// endpoint's highest-precedence input, and for years it was set by nothing at
+// all, which is why the endpoint answered "unknown" for its whole life. CI now
+// passes it for tag builds only, so "unset" remains the ordinary reading on a
+// branch build and must not be rendered as a fault.
 func renderBuildEnvVersion(out *strings.Builder, envVersion string, b hostinfo.Build) {
 	out.WriteString("### CHRONICLE_VERSION\n\n")
 	if strings.TrimSpace(envVersion) == "" {
-		out.WriteString("- `CHRONICLE_VERSION`: **(unset)** — nothing in any Dockerfile, Makefile or workflow sets it today.\n")
+		out.WriteString("- `CHRONICLE_VERSION`: **(unset)** — and unset is the NORMAL case, not a misconfiguration. The Dockerfile declares it as a build arg defaulting to empty, and CI passes a value only for `v*` tag builds; a branch push deliberately leaves it empty so that the moving tag `latest` is never reported as though it were a version. Resolution falls through to the VCS revision above.\n")
 	} else {
 		fmt.Fprintf(out, "- `CHRONICLE_VERSION`: `%s`\n", envVersion)
 	}
@@ -231,8 +234,8 @@ func renderBuildProcess(out *strings.Builder, proc hostProcess, now time.Time) {
 func renderBuildTrustNote(out *strings.Builder) {
 	out.WriteString("### Which of these to trust\n\n")
 	out.WriteString("- **Statements this process makes about itself — trustworthy.** Executable path/size/mtime, Go version, GOOS/GOARCH, pid, hostname, start time and uptime. They are read from inside the running process; nothing can have relabelled them.\n")
-	out.WriteString("- **Trustworthy when present, meaningless when absent — the VCS stamps.** Compiled in by the toolchain, so they cannot drift; but silently omitted when the build environment has no `git`, which is Chronicle's builder today. Read \"not stamped\" as \"never recorded\", never as \"old\".\n")
-	out.WriteString("- **NOT evidence about this process — Docker image labels.** `org.opencontainers.image.revision` and `.created` from `docker inspect <tag>` describe whichever image holds that tag *now*, which need not be the image this container was created from. On 2026-08-11 those labels read `revision=33f4cb07` / `created=2026-02-19` and were used to declare this binary six months stale; the binary had been built minutes earlier, and the labels were an accurate description of a February image still sitting in the deploy host's local image store. Chronicle's own `Dockerfile` sets no labels at all and `alpine` inherits none, so any label you see was written by CI's `docker/metadata-action`, about a CI build.\n")
+	out.WriteString("- **Trustworthy when present, meaningless when absent — the VCS stamps.** Compiled in by the toolchain, so they cannot drift; but silently omitted when the build ran outside a checkout or without a VCS tool on PATH. Read \"not stamped\" as \"never recorded\", never as \"old\".\n")
+	out.WriteString("- **NOT evidence about this process — Docker image labels.** `org.opencontainers.image.revision` and `.created` from `docker inspect <tag>` describe whichever image holds that tag *now*, which need not be the image this container was created from. On 2026-08-11 those labels read `revision=33f4cb07` / `created=2026-02-19` and were used to declare this binary six months stale; the binary had been built minutes earlier, and the labels were an accurate description of a February image still sitting in the deploy host's local image store. Chronicle's own `Dockerfile` now declares an `org.opencontainers.image.*` floor whose `revision` / `created` / `version` come from build args that **default to empty**, and CI overwrites them with real values. So a label here may describe a CI build, or be blank because the image was built locally — and a blank or stale label is still a statement about an IMAGE, never about this process.\n")
 	out.WriteString("- **If you must correlate with Docker**, compare the image the container actually runs against the image the tag currently points at — if these differ, the labels are describing something else:\n")
 	out.WriteString("\n```\ndocker inspect --format '{{.Image}}' <chronicle>\ndocker image inspect --format '{{.Id}} {{index .Config.Labels \"org.opencontainers.image.revision\"}}' ghcr.io/<org>/chronicle:latest\n```\n\n")
 	out.WriteString("- **A related trap from the same incident:** grepping `/app/static` for a plugin's assets proves nothing. Plugin assets are `//go:embed`-ed into the binary and served from there, so they are absent from the on-disk static root by design.\n")
@@ -254,7 +257,7 @@ func hostIdentityLines(b hostinfo.Build, exe hostinfo.Executable, proc hostProce
 	case !b.InfoOK:
 		lines = append(lines, "source revision: "+notStampedHeadline+" `debug.ReadBuildInfo()` returned nothing, so this binary was not produced by a module-aware Go build.")
 	case !b.Stamped:
-		lines = append(lines, "source revision: "+notStampedHeadline+" Chronicle's Docker builder stage has no `git`, and Go then skips stamping **silently** — read this as \"never recorded\", never as \"old\". `host.build` names the two ways to fix it.")
+		lines = append(lines, "source revision: "+notStampedHeadline+" The toolchain stamps only when the build ran inside a checkout with a VCS tool on PATH, and skips it **silently** otherwise — read this as \"never recorded\", never as \"old\". Chronicle's current Dockerfile does stamp, so an unstamped binary here is most likely an image built before that change. `host.build` lists the other causes.")
 	default:
 		rev := "`" + b.ShortRevision() + "`"
 		if b.ModifiedKnown && b.Modified {
