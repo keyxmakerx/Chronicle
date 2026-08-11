@@ -66,6 +66,27 @@ import (
 // same number daycard_floors_probe_test.go measured and named.
 const mobileMinWindowPx = 500
 
+// browserHarnessMarker is the phrase every fatal in mobileDrive that reports a
+// DEAD BROWSER CHILD carries, as opposed to a fatal that reports a measured
+// pixel being wrong.
+//
+// WHY A MARKER RATHER THAN PROSE. `tools/check-browser-probes.sh` prints one
+// line per failing probe and it used to print, for EVERY failure without
+// exception, "the rendered result is wrong. This is the guard working." That
+// is an assertion about pixels, and this file has a failure mode in which no
+// pixel is ever measured: under heavy parallel load Chromium can be starved of
+// its `--virtual-time-budget` and stop answering, so the frame's transcript
+// comes back short (or empty, or truncated mid-JSON) and mobileDrive fatals on
+// the COUNT. Reported as a rendering verdict, that sends the next person to
+// hunt a layout regression that never happened — and these probes only started
+// gating a CI job in this arc, so the misreport is new and reaches people who
+// have no history with the flake.
+//
+// THE SCRIPT GREPS FOR THIS EXACT PHRASE to tell the two apart, and
+// `marker_check()` in that script fails the run if this literal disappears
+// from this file. Two files, one string: do not reword one side alone.
+const browserHarnessMarker = "BROWSER HARNESS FAILURE (no pixel was measured)"
+
 // mobileWidths are the three phone widths every acceptance row in
 // C-CALV4-MOBILE is stated at.
 var mobileWidths = []int{390, 375, 360}
@@ -170,11 +191,16 @@ func mobileDrive(t *testing.T, chrome, inner string, w, h int, steps []mobileSte
 	)
 	raw, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("chromium dump-dom at %dx%d: %v", w, h, err)
+		t.Fatalf("%s: chromium dump-dom at %dx%d never returned a document: %v — "+
+			"the browser child failed to run, so nothing was rendered and nothing "+
+			"measured. This is not evidence about the layout.",
+			browserHarnessMarker, w, h, err)
 	}
 	m := mobileResultRe.FindSubmatch(raw)
 	if m == nil {
-		t.Fatalf(`no <pre id="mob"> in the dump at %dx%d`, w, h)
+		t.Fatalf(`%s: no <pre id="mob"> in the dump at %dx%d — the child never wrote `+
+			`a transcript, so no step was ever measured. This is not evidence about `+
+			`the layout.`, browserHarnessMarker, w, h)
 	}
 	body := string(m[1])
 	for _, sub := range [][2]string{{"&quot;", `"`}, {"&amp;", "&"}, {"&lt;", "<"}, {"&gt;", ">"}, {"&#39;", "'"}} {
@@ -182,19 +208,37 @@ func mobileDrive(t *testing.T, chrome, inner string, w, h int, steps []mobileSte
 	}
 	var wire []string
 	if err := json.Unmarshal([]byte(body), &wire); err != nil {
-		t.Fatalf("frame payload at %dx%d is not a JSON array: %v\n%s", w, h, err, body)
+		t.Fatalf("%s: frame payload at %dx%d is not a JSON array: %v — the transcript "+
+			"was cut off mid-write, so the steps that did run cannot be read back. "+
+			"This is not evidence about the layout.\n%s",
+			browserHarnessMarker, w, h, err, body)
 	}
 	out := make([]mobileReply, 0, len(wire))
 	for _, s := range wire {
 		var r mobileReply
 		if err := json.Unmarshal([]byte(s), &r); err != nil {
-			t.Fatalf("reply %q is not JSON: %v", s, err)
+			t.Fatalf("%s: reply %q is not JSON: %v — a truncated reply is a cut-off "+
+				"transcript, not a measurement. This is not evidence about the layout.",
+				browserHarnessMarker, s, err)
 		}
 		out = append(out, r)
 	}
 	if len(out) != len(steps) {
-		t.Fatalf("asked for %d steps and got %d replies — the child stopped answering:\n%s",
-			len(steps), len(out), body)
+		// THE STARVATION CASE, AND IT MUST NOT READ AS A LAYOUT VERDICT. The steps
+		// run on VIRTUAL time, so a short transcript is not a race the probe lost —
+		// it is the child being starved out of its `--virtual-time-budget` (or
+		// killed) before it answered, which happens when several Chromiums and a
+		// full `go test` share a box. NOTHING WAS MEASURED in that case: the missing
+		// replies are missing measurements, not wrong ones, so a message claiming
+		// the rendered result is wrong would be an assertion about pixels nobody
+		// looked at. Say what is known — the child stopped answering — and name the
+		// cheap disambiguation, which is to run this probe on its own.
+		t.Fatalf("%s: asked for %d steps and got %d replies — the child stopped "+
+			"answering. This says NOTHING about whether the layout regressed; no "+
+			"step past the %dth was ever measured. The known cause is Chromium "+
+			"starved of its virtual-time budget under parallel load — re-run this "+
+			"probe alone before concluding a regression.\n%s",
+			browserHarnessMarker, len(steps), len(out), len(out), body)
 	}
 	return out
 }

@@ -492,7 +492,14 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 		"a Block with no Almanac register must render no graph at all")
 	mustNotContain(t, zones, `data-zone="ledger"`, "the ledger layer is not enabled here")
 	mustNotContain(t, zones, `data-zone="shelf"`, "the shelf layer is not enabled here")
-	mustNotContain(t, zones, `class="phrow"`, "the moons layer is not enabled here; the discs must leave")
+	// `class="phrow` WITHOUT the closing quote, deliberately. The row has three
+	// shipped openers — `class="phrow phctl"` where the panel is reachable,
+	// `class="phrow" title=…` where it is not, and the bare `class="phrow"` this
+	// assertion used to name, which no branch emits any more. Pinning the exact
+	// closing quote meant the guard matched one historical spelling and would
+	// have passed vacuously the moment either branch grew an attribute — which
+	// is precisely what happened when the non-control branch took its tooltip.
+	mustNotContain(t, zones, `class="phrow`, "the moons layer is not enabled here; the discs must leave")
 }
 
 // ── no motion ───────────────────────────────────────────────────────────────

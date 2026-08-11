@@ -189,11 +189,30 @@ can redden a job that has nothing to do with pixels.
       argument against it, written before the guard existed, and overturning it is
       a decision about what a probe is allowed to claim rather than an integration
       fix.
-- [ ] Make `mobileDrive` distinguish a starved run from a measurement failure —
-      e.g. retry once on a short reply count, or fail with a message that names
-      CPU starvation as the likely cause instead of asserting the render is
-      wrong. A guard that goes red for a reason other than the one it prints
-      will get muted, which costs more than the coverage is worth.
+- [x] **DONE (2026-08-11, verifier round).** Make `mobileDrive` distinguish a
+      starved run from a measurement failure. It does not retry — a retry would
+      hide the load problem rather than report it — it **stops claiming a
+      verdict it did not measure**, on both sides of the seam:
+      - `mobile_probe_test.go` declares `browserHarnessMarker =
+        "BROWSER HARNESS FAILURE (no pixel was measured)"` and leads all five of
+        `mobileDrive`'s dead-child fatals with it (dump-dom failure, no
+        transcript element, unparseable transcript, unparseable reply, short
+        reply count). Each now says in words that nothing was measured and that
+        this is not evidence about the layout, and names the cheap
+        disambiguation: re-run the probe alone.
+      - `tools/check-browser-probes.sh` printed
+        `FAILED <name> — the rendered result is wrong. This is the guard
+        working.` for **every** failure without exception. That default is gone.
+        It now extracts the probe's own `=== RUN` → `--- FAIL` region, prints a
+        distinct **"THE BROWSER CHILD DIED OR STOPPED ANSWERING · NO PIXEL WAS
+        MEASURED"** verdict when the marker is present, and otherwise says only
+        that an assertion failed — then **quotes the probe's own words** in both
+        branches, so the reader gets the reason rather than the script's guess.
+      - The two literals are one string in two languages, so `marker_check()`
+        fails the run (source-only, no browser) if the Go side is reworded and
+        the shell side is not. Proven red: renaming the Go constant reddens the
+        self-test; reverting the FAILED branch to its old single line reddens
+        three self-test assertions. Both restored green.
 - [ ] Watch the `Browser Probes` job for this signature on the GitHub runner
       (2 cores, weaker than this box) before trusting it as a required check.
 
@@ -317,6 +336,27 @@ at `top:5px`. The cramped case still degrades: a ten-day week at 390px measures 
       building the register for a shelf-less, sky-less Block (amends `[SKY-7]`)
       or seating a sky on the real-world Block (amends `[SKY-1]`, SIGNED).
       STOP-AND-FLAG rather than done.
+
+      **THE ACCESSIBILITY THIRD OF THIS WAS SPLIT OFF AND FIXED (2026-08-11,
+      verifier round), because it needs no ruling amended.** The `else` branch
+      shipped `<span class="phrow" aria-hidden="true">` with a `title` per disc —
+      and `aria-hidden` takes the whole subtree out of the accessibility tree, so
+      those titles reached nobody either. Measured before: **30 rows, 30
+      `aria-hidden` openers, 0 accessible names.** That was defensible while the
+      branch was a corner case for a host that had removed the Shelf; it stopped
+      being defensible when the branch became the operator's own Block and the
+      real-Moon fallback put a moon in every cell of it, making these discs the
+      ONLY moon information there. `aria-hidden` is right for a graphic that
+      duplicates adjacent text and wrong for a graphic that IS the text.
+      The row now takes the control branch's information architecture **minus the
+      control**: one `moonClusterLabel` name on the row, one `moonClusterTitle`
+      tooltip on the row, discs `aria-hidden` and title-free. Measured after:
+      **0 `aria-hidden` openers, 30 accessible names, and `phctl` / `moonpick` /
+      `data-cal-moons` still 0** — nothing became reachable, which the new
+      `TestMoonPanel_TheDecorativeClusterIsStillAnnounced` asserts explicitly so
+      the a11y fix cannot be mistaken for the design change above. Proven red by
+      reverting the branch (both guards fail, one per row).
+      **Still open here: the panel. Only the announcement was fixed.**
 - [ ] **At underline density the opener's touch target takes the cell's
       geometric CENTRE from `.dsel`.** Sampled with `elementFromPoint` on a 1px
       grid over one day cell, coarse pointer, production markup:

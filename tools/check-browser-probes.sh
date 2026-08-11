@@ -315,6 +315,64 @@ probe_verdict() {
   grep -q -- "^--- ${verdict}: ${name} (" "${log}"
 }
 
+# HARNESS_MARKER — the one literal that separates "a pixel was measured and it
+# was wrong" from "the browser child died and nothing was measured at all".
+#
+# WHY IT EXISTS. This guard used to print, for every failing probe without
+# exception, "the rendered result is wrong. This is the guard working." That is
+# a claim about pixels, and the mobile rig has a failure mode in which no pixel
+# is ever measured: under parallel load Chromium is starved of its
+# `--virtual-time-budget`, the frame's transcript comes back short, and
+# mobileDrive fatals on the reply COUNT. Reported as a rendering verdict, the
+# first person to see a red Browser Probes job is told the moons regressed —
+# and, because this job only started gating in the moon arc, that person has no
+# history with the flake to correct the guard with.
+#
+# Go writes it (mobile_probe_test.go's browserHarnessMarker), this file greps
+# for it, and marker_check() below fails the run if the two drift apart.
+HARNESS_MARKER='BROWSER HARNESS FAILURE'
+
+# probe_fail_region <logfile> <name>
+#
+# The lines a probe printed between its own `=== RUN` and its own `--- FAIL`
+# verdict — i.e. its reason, in its own words. Anchored on both ends for
+# probe_verdict's reasons: an unanchored scan would pick up a longer probe's
+# name or a subtest's indented verdict. Go test names are `[A-Za-z0-9_/]`, so
+# the name carries no regex metacharacter.
+probe_fail_region() {
+  local log="$1" name="$2"
+  awk -v n="${name}" '
+    $0 == "=== RUN   " n { inside = 1; next }
+    inside && index($0, "--- FAIL: " n " (") == 1 { exit }
+    inside { print }
+  ' "${log}"
+}
+
+# marker_check — the Go literal and the shell literal are the same string.
+#
+# A guard whose grep silently stops matching is worse than no guard: it does not
+# error, it just quietly reclassifies every starvation as a rendering verdict
+# again. Source-only, so it runs on a machine with no browser, next to the
+# census.
+marker_check() {
+  local src="internal/plugins/calendar/mobile_probe_test.go"
+  if [[ ! -f "${src}" ]]; then
+    echo "check-browser-probes: ${src} is gone, so the harness-marker pairing cannot" >&2
+    echo "  be checked. The FAILED branch below would report a dead browser child as" >&2
+    echo "  a rendering regression. Re-point marker_check at the rig's new home." >&2
+    return 1
+  fi
+  if ! grep -q -- "${HARNESS_MARKER}" "${src}"; then
+    echo "check-browser-probes: ${src} no longer contains \"${HARNESS_MARKER}\"." >&2
+    echo "  This guard greps for that literal to tell a browser child that DIED from" >&2
+    echo "  a rendering result that is WRONG. With the two out of step every" >&2
+    echo "  starvation is announced as \"the rendered result is wrong\" — the exact" >&2
+    echo "  false verdict the pairing exists to prevent. Re-align both in one commit." >&2
+    return 1
+  fi
+  return 0
+}
+
 # assert_probes_passed <logfile> <probe names…>
 #
 # Prints one diagnostic line per probe that did not PASS and returns 1 if any
@@ -343,7 +401,24 @@ assert_probes_passed() {
       # copied from `go test`; the fixtures below are now the real shape.
       grep -B 1 -- "^--- SKIP: ${name} (" "${log}" | head -n 1 | sed 's/^/           /'
     elif probe_verdict "${log}" FAIL "${name}"; then
-      echo "  FAILED   ${name} — the rendered result is wrong. This is the guard working."
+      # THE DEFAULT LINE NO LONGER ASSERTS A CAUSE IT CANNOT SEE. It states the
+      # verdict and then QUOTES the probe's own words, so the reader gets the
+      # reason rather than this script's guess at it. The harness branch above is
+      # the one case the script can positively identify.
+      local region
+      region="$(probe_fail_region "${log}" "${name}")"
+      if printf '%s\n' "${region}" | grep -q -- "${HARNESS_MARKER}"; then
+        echo "  FAILED   ${name} — THE BROWSER CHILD DIED OR STOPPED ANSWERING."
+        echo "           NO PIXEL WAS MEASURED, so this says nothing about whether the"
+        echo "           rendering regressed — it is not evidence for or against a"
+        echo "           layout change. Known cause: Chromium starved of its"
+        echo "           virtual-time budget under parallel load. Re-run this probe on"
+        echo "           its own before concluding anything. Its own words:"
+      else
+        echo "  FAILED   ${name} — an assertion about the RENDERED result failed. This"
+        echo "           is the guard working. Its own words:"
+      fi
+      printf '%s\n' "${region}" | grep -m 3 -- '_test\.go:[0-9]' | cut -c1-200 | sed 's/^ */           /'
     else
       echo "  ABSENT   ${name} — never ran. Renamed or deleted? Update this guard's list"
       echo "           in the same commit, or the coverage disappears silently."
@@ -384,12 +459,48 @@ self_test() {
     echo "  self-test FAILED: the SKIPPED diagnostic did not quote t.Skip's own" >&2
     echo "                    message — it reads the line BEFORE the verdict" >&2; fail=1; }
 
-  printf -- '=== RUN   TestA\n--- PASS: TestA (1.00s)\n=== RUN   TestB\n--- FAIL: TestB (1.00s)\nFAIL\n' \
+  printf -- '=== RUN   TestA\n--- PASS: TestA (1.00s)\n=== RUN   TestB\n    b_test.go:551: discs 0, want 3\n--- FAIL: TestB (1.00s)\nFAIL\n' \
     > "${dir}/fail.log"
   out="$(assert_probes_passed "${dir}/fail.log" TestA TestB)" && {
     echo "  self-test FAILED: a FAILING probe passed the guard" >&2; fail=1; }
   [[ "${out}" == *"FAILED   TestB"* ]] || {
     echo "  self-test FAILED: the FAILED diagnostic did not name the probe" >&2; fail=1; }
+  [[ "${out}" == *"assertion about the RENDERED result failed"* ]] || {
+    echo "  self-test FAILED: a probe that failed an ASSERTION was not reported as" >&2
+    echo "                    one — the rendering branch of the verdict is dead" >&2; fail=1; }
+  [[ "${out}" == *"discs 0, want 3"* ]] || {
+    echo "  self-test FAILED: the FAILED diagnostic did not quote the probe's own" >&2
+    echo "                    words, so the reader gets this script's guess at the" >&2
+    echo "                    cause instead of the probe's statement of it" >&2; fail=1; }
+
+  # THE STARVATION CASE, WHICH IS NOT A RENDERING VERDICT.
+  #
+  # This fixture is the real shape `go test -v` emits when mobileDrive's child is
+  # starved of its virtual-time budget: a t.Fatalf carrying browserHarnessMarker,
+  # then the probe's own FAIL. Before this branch existed the guard announced it
+  # as "the rendered result is wrong. This is the guard working." — a claim about
+  # pixels made when the browser never answered and no pixel was read. The two
+  # assertions below are the whole point: the harness line must fire, AND the
+  # rendering claim must NOT.
+  printf -- '=== RUN   TestB\n    mobile_probe_test.go:196: BROWSER HARNESS FAILURE (no pixel was measured): asked for 3 steps and got 2 replies — the child stopped answering.\n--- FAIL: TestB (12.00s)\nFAIL\n' \
+    > "${dir}/harness.log"
+  out="$(assert_probes_passed "${dir}/harness.log" TestB)" && {
+    echo "  self-test FAILED: a harness failure passed the guard — a probe that never" >&2
+    echo "                    measured anything must not count as a measurement" >&2; fail=1; }
+  [[ "${out}" == *"BROWSER CHILD DIED OR STOPPED ANSWERING"* ]] || {
+    echo "  self-test FAILED: a starved browser child was not identified as one" >&2; fail=1; }
+  [[ "${out}" == *"assertion about the RENDERED result failed"* ]] && {
+    echo "  self-test FAILED: a starved browser child was reported as a RENDERING" >&2
+    echo "                    verdict. Nothing was measured, so that is an assertion" >&2
+    echo "                    about pixels nobody looked at — the exact false verdict" >&2
+    echo "                    this branch exists to end" >&2; fail=1; }
+
+  # …and the marker is not a phrase this file invented for its own fixture: the
+  # Go rig must still carry it, or the grep above matches nothing in production
+  # while this self-test stays green off its own hand-written string.
+  marker_check || {
+    echo "  self-test FAILED: the harness marker is not in the Go rig, so the branch" >&2
+    echo "                    proved above can never fire on a real log" >&2; fail=1; }
 
   # THE SUBTEST SHADOW. A table-driven probe that fails SOME of its cases — what
   # a real rendering regression actually looks like — prints its own FAIL at the
@@ -449,6 +560,11 @@ fi
 # added without being registered is caught on the developer's laptop rather than
 # discovered months later by an operator who cannot see the moons.
 census_check || exit 1
+
+# AND SO DOES THE MARKER PAIRING, for the same reason: source-only, no browser,
+# and a drift here silently turns every starvation back into a false rendering
+# verdict rather than erroring.
+marker_check || exit 1
 
 CHROME="$(find_chromium)" || CHROME=""
 TAILWIND="$(find_tailwind)" || TAILWIND=""

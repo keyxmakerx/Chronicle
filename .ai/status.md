@@ -20,6 +20,68 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### Verifier round on the moon arc — two guards stopped overclaiming (2026-08-11)
+
+Three verifiers audited the arc and returned three findings. One had expired,
+one was two defects wearing one label, one was real.
+
+**1. The concurrent revert of stage 1's fix — GONE, verified rather than
+assumed.** A peer lane's red-then-green had left `calendar-block.css` and
+`instrument.templ` reverted in the shared checkout while the verifier was
+running, and the standing `git add -A` would have committed it. Re-checked at
+the start of this round: `git status` clean, `@container cal-cell
+(min-width: 40px)` present at `calendar-block.css:2215`, `@moonRow` a direct
+child of `.cell` at `instrument.templ:207`, and `templ generate` regenerates all
+934 files with no tracked change — so the generated tree matches the fixed
+sources, not the reverted ones. Nothing to restore. Recorded because "it
+resolved itself" and "someone restored it" look identical afterwards, and
+because a second lane sharing one checkout can do this again.
+
+**2. The Bench's real-world Block: one label, two defects.** The finding was
+"the discs paint but are not a control: no opener, no panel, and `aria-hidden`
+so assistive tech gets nothing." Those are separable, and only one of them needs
+a signature:
+
+- *The panel is unreachable there.* Still true, still **BOOKED, not done** —
+  closing it amends `[SKY-7]` (build the Almanac register for a shelf-less,
+  sky-less Block) or `[SKY-1]` SIGNED (seat a sky on the real-world Block).
+- *The row was invisible to assistive technology.* **FIXED**, and it needed no
+  ruling touched. Measured before: 30 rows, 30 `<span class="phrow"
+  aria-hidden="true">` openers, 0 accessible names — `aria-hidden` removes the
+  subtree, so the per-disc `title`s inside reached nobody either. The branch's
+  own header already argued the principle for controls ("a control invisible to
+  assistive technology is not a control"); it holds for information, and on this
+  Block the discs ARE the only moon information. The row now carries the control
+  branch's architecture minus the control: one `moonClusterLabel` name, one
+  `moonClusterTitle` tooltip, discs `aria-hidden` and title-free. Measured
+  after: 0 hidden openers, 30 names, and `phctl` / `moonpick` / `data-cal-moons`
+  still **0** — asserted explicitly, so the fix cannot drift into the design
+  change above.
+- One guard was silently weakened by that markup change and is now hardened:
+  `TestLayers_DefaultIsMoonsAndTheInvokerIsInert` pinned the literal
+  `class="phrow"` **with** its closing quote. Demonstrated: with moons forced on
+  and 30 rows rendering, the old literal PASSES "the discs must leave". It now
+  pins `class="phrow` and fires.
+
+**3. The probe guard called a dead browser a rendering verdict — FIXED.**
+`check-browser-probes.sh` printed `FAILED <name> — the rendered result is wrong.
+This is the guard working.` for *every* failure, including `mobileDrive`'s known
+starvation shape, where Chromium is starved of its `--virtual-time-budget`, the
+transcript comes back short and **no pixel is measured at all**. That default is
+gone. `mobile_probe_test.go` now declares `browserHarnessMarker` and leads all
+five dead-child fatals with it; the script extracts each failing probe's own
+`=== RUN` → `--- FAIL` region, prints a distinct "THE BROWSER CHILD DIED OR
+STOPPED ANSWERING · NO PIXEL WAS MEASURED" verdict when the marker is there, and
+otherwise claims only that an assertion failed — quoting the probe's own words
+in both branches. `marker_check()` fails the run, source-only, if the two
+literals drift apart. Proven red both ways: reverting the FAILED branch reddens
+three self-test assertions; renaming the Go constant reddens `marker_check`.
+
+Not done, and named: the six mobile probes still have no `-short` gate, so the
+ordinary Build & Test lane still launches Chromium under full parallel load.
+That is a decision about what a probe may claim, not an integration fix, and it
+stays in `.ai/todo.md` §0-probes.
+
 ### Acceptance pass on the moon arc, at a REAL 390px viewport (2026-08-11)
 
 The arc's own question — *on a phone, can the operator see moon discs on their
