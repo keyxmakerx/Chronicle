@@ -321,6 +321,27 @@ jobs:
         # a failure rather than an absence — correctly.
         run: npx --yes playwright@1.49.1 install --with-deps chromium
 
+      - name: Install the Playwright MODULE (not just the browsers)
+        # The step above installs the BROWSER BINARIES. `npx --yes` runs
+        # Playwright out of a transient npx cache and leaves nothing behind that
+        # `require('playwright')` can resolve, so a probe that needs to DRIVE a
+        # browser from Node — rather than launch one and read a DOM — found no
+        # module and skipped itself.
+        #
+        # That is what reddened this job the first time it ran (2026-08-11):
+        # TestSkyCloseProbe_TheCloseRendersFrames needs a REAL animation clock,
+        # which the package's virtual-time harness cannot provide, so it drives
+        # Chromium through Playwright directly. findProbePlaywright
+        # (sky_close_probe_test.go:286) looks in $NODE_PATH, `npm root -g` and
+        # the repo's own node_modules; this install puts it in the third.
+        #
+        # Pinned to the same 1.49.1 as the browser install above — a module and
+        # a browser build that disagree is a debugging session nobody wants.
+        # The postinstall re-resolves against PLAYWRIGHT_BROWSERS_PATH and finds
+        # the binaries the previous step already placed there, so it downloads
+        # nothing.
+        run: npm install --no-save --no-audit --no-fund playwright@1.49.1
+
       - name: Install Tailwind CLI
         # TestProbe_MobileBreakpointSwapInRealBrowser measures a breakpoint that
         # only exists in the BUILT stylesheet, so it needs the CLI on top of the
