@@ -20,6 +20,78 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### The diagnostics can now answer "why does MY campaign look like this?" (2026-08-11)
+
+The `host.*` family answers WHICH CODE IS RUNNING. It could not answer the next
+question up, and on 2026-08-11 that cost a five-lane source investigation to
+answer three sentences from an operator's phone. Measured against the 28-entry
+catalog, those three questions scored **0 for 3**: every diagnostic read process
+state, on-disk or embedded bytes, or entity rows, and not one read
+`campaign_addons`, `campaigns.dashboard_layout` / `sidebar_config`, the
+`calendars` / `calendar_moons` tables, the route table, or any render decision.
+
+Four diagnostics close it, in the ranked order the report set
+(`cordinator/reports/chronicle/2026-08-11-observations-and-diagnostic-gaps.md`
+§4), all in `internal/systems/operator_diag_campaign.go`:
+
+- **`calendar.render <campaignId>[:<userId>]`** — the Bench's render trace for
+  one viewer: which calendar took the PRIMARY vs REAL-WORLD seat *and by which
+  clause*, `SkyOn` / `ShelfHidden` per seat, stored vs rendered moons, whether
+  the Almanac register was built *with its gate arithmetic printed*, the four
+  disclosure sections with their PROVENANCE (a stored row vs `[BR2-4]`'s
+  closed-by-default nil branch), and the viewer's two roles.
+- **`calendar.config <campaignId>[:<calId>]`** — per calendar: mode, is_default,
+  tracks_real_time, and counts of months / weekdays / **moons** / seasons /
+  eras, plus which calendar each surface resolves to.
+- **`campaign.surfaces <campaignId>`** — every user-facing calendar route,
+  flagged CURRENT / LEGACY-PRESERVED / LEGACY-REDIRECT, **checked against the
+  live Echo table** (Echo records the handler's runtime name, so a declared
+  handler that disagrees with the binary is printed and the binary wins), plus
+  where the sidebar's Calendar item links — read from `layouts.AddonSidebarPath`,
+  the same map the sidebar renders hrefs from, never a copied string.
+  **The frozen V2 shell is DISCOVERED, not declared.** `[VS-2]` SIGNED sunset it
+  as a clickable destination and `TestSunset_NoLiveDoorRemains` walks `internal/`
+  for its path prefix; writing those paths into a map here would have added four
+  hits. Rather than amend a signed exemption list, the shell's rows are keyed on
+  the HANDLER the router reports and print the router's own path. That is the
+  better construction anyway: a declared path is a claim this repo makes, a
+  discovered one is a fact read off the running server — and the row vanishes on
+  its own if the route is ever really removed.
+- **`campaign.config <campaignId>`** — enabled addons and the block TYPES placed
+  in `dashboard_layout` / `owner_dashboard_layout` and on entity templates. The
+  only way to establish whether a legacy `skybox` block was hand-placed.
+
+**THE ONE THING A LATER READER MUST KNOW: `calendar.render` MIRRORS the
+producer, it does not call it.** `benchClassify`, `resolveBenchSections`, the
+`[SKY-1]` seat arguments and the Almanac gate are unexported in
+`internal/plugins/calendar`, and `internal/systems` must not import a plugin.
+Two things keep the mirror honest, and neither is optional:
+`operator_diag_campaign_mirror_test.go` pins twelve exact source lines and fails
+when one moves (proven to fire: inverting the real-world seat's `true, false` to
+`false, true` — i.e. amending `[SKY-1]` — turns it red with the ruling named in
+the failure text), and the trace declares itself a mirror in its own output
+every time it runs.
+
+**Catalog hygiene, from the same report §5.** `host.deploy-check`'s marker
+section would have answered *"✓ found in the executable"* to *"is RSVP on my
+calendar?"* — true, and the wrong answer, and the same mistake one layer up from
+the incident its own file header records. Its `Desc` and the marker section now
+say that a hit **proves the byte shipped and proves nothing about whether it
+renders**, list the six ways a shipped marker reaches no user, and name
+`calendar.render` / `campaign.config`. `FunctionsSpecJSON`'s purpose line — what
+an assistant reads to decide whether to reach for the tool at all — now names
+both axes rather than only the served-bytes one.
+
+**Wiring.** `systems.SetCampaignDiagProvider` is injected in `RegisterRoutes`
+right after `calendar.InstallBlockSpine`, and the pre-existing
+`TestEveryDiagnosticProviderIsWiredInAppSource` /
+`TestDiagnosticProviderCallsAreOnTheBootPath` cover it automatically (proven:
+removing the setter call turns both red). The adapter
+(`internal/app/operator_diag_campaign_adapter.go`) reproduces the Bench's own
+loaders — the owner/player list split, then the spine's batched
+`EagerLoadCalendars`, which is the only loader that applies the real-Moon
+fallback — so the moon count it reports is the one the Block draws.
+
 ### The moons the product had and never delivered — three drops closed (2026-08-11)
 
 Stage 1 made the per-day discs REACHABLE and stage 2 put their probes in CI. That

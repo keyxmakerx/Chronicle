@@ -100,7 +100,7 @@ func hostDeployCheckDiagnostic() Diagnostic {
 	return Diagnostic{
 		Name:    "host.deploy-check",
 		Title:   "Did my deploy land? — build identity, bellwether assets, marker search, package state",
-		Desc:    "THE one thing to run after a deploy. Combines the build identity, the fingerprint + mtime + served `?v=` of the assets that move on almost every build, and the installed-vs-loaded package summary. Optional comma-separated markers are searched across all three places a shipped string can live — static root, embedded plugin assets, and the executable's compiled-in strings (where Templ markup lives) — reported separately.",
+		Desc:    "THE one thing to run after a deploy: build identity, the fingerprint + mtime + served `?v=` of the assets that move on almost every build, the installed-vs-loaded package summary, and an optional marker search across the static root, the embedded plugin assets and the executable. **A marker hit proves the byte SHIPPED and nothing about whether it RENDERS** — for \"is it on my page?\" run `calendar.render`.",
 		ArgHint: "[<marker[,marker2]>]",
 		Run:     renderHostDeployCheck,
 	}
@@ -250,6 +250,12 @@ func writeMarkerSection(b *strings.Builder, src deployCheckSources, arg string) 
 	b.WriteString("\n**A marker found only in the embedded scope is not missing.** Those bytes live inside the executable and are served from memory, so `ls` and `grep` over the container filesystem cannot see them — that is the expected result, and reading it as absent code is the mistake that cost an hour on 2026-08-11.\n")
 	b.WriteString("**A marker found only in the executable scope is not missing either — for most UI markers that is the EXPECTED place, and the only place.** Chronicle is Templ-first: markup written in a `.templ` file is compiled into Go string literals inside this binary, so a `data-` attribute or a CSS class you copied out of page source is normally in neither the static tree nor an embedded filesystem. Absent from those two is the correct result for it, not a finding.\n")
 	b.WriteString("_A hit in the executable scope proves the byte sequence is somewhere in the binary — usually the template that emits it, but any Go string literal counts, including this diagnostic's own source. Prefer a marker distinctive enough that this cannot mislead._\n")
+	// The failure this file's own header records is "a label was read as
+	// evidence". A marker hit read as "the feature works" is the SAME mistake
+	// one layer up, and it is the most likely wrong answer an assistant would
+	// give to "is RSVP on my calendar?" — so the refusal is printed here, where
+	// somebody is looking at a ✓, rather than only in the Desc.
+	b.WriteString("\n**A HIT PROVES THE BYTE SHIPPED. IT PROVES NOTHING ABOUT WHETHER IT RENDERS.** A marker can be present in the build and still reach no user: it can sit behind a role floor, inside a collapsed disclosure, in a layer the viewer turned off, under a CSS rule that hides it at their width, on a Block the producer did not seat, or behind a campaign addon that is switched off. Every one of those has happened here. Do NOT answer \"is this feature on my page?\" from this section — run **`calendar.render <campaignId>:<userId>`** for a calendar surface, or **`campaign.config`** for an addon or a placed block. This section answers only \"did the deploy land\".\n")
 	// The all-absent conclusion is only sound when all three scopes were
 	// actually READ. Asserting it over an unscanned scope is precisely the
 	// absence-of-evidence error the rest of this file is built to refuse.

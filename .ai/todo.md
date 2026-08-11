@@ -9,6 +9,70 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-campaign-diag. The catalog can answer campaign-shaped questions (2026-08-11)
+
+The 28-entry catalog scored 0 for 3 against the operator's three phone
+observations. Four diagnostics close the gap, in the ranked order of
+`cordinator/reports/chronicle/2026-08-11-observations-and-diagnostic-gaps.md` §4.
+Full account in `.ai/status.md`.
+
+### [x] Done
+
+- [x] `calendar.render <campaignId>[:<userId>]` — the Bench's render trace: the
+      PRIMARY/REAL-WORLD seats and the clause that chose each, `SkyOn` /
+      `ShelfHidden` per seat, stored-vs-rendered moons, the Almanac gate with
+      its arithmetic printed, the four disclosures with their PROVENANCE, and
+      the viewer's membership AND visibility roles (they differ, and the page
+      reads both).
+- [x] `calendar.config <campaignId>[:<calId>]` — per calendar, with stored moon
+      rows and rendered moons as SEPARATE numbers, so a synthesized real Moon is
+      never mistaken for a row Settings → Moons can edit.
+- [x] `campaign.surfaces <campaignId>` — the declared surface map CHECKED
+      against the live Echo route table in both directions (a declared route the
+      binary lacks, and a registered calendar GET nobody classified), plus the
+      sidebar destination read from the map the sidebar itself renders from
+      (`layouts.AddonSidebarPath`).
+- [x] The frozen V2 shell is classified by HANDLER and printed with the router's
+      own path, so `[VS-2]`'s `TestSunset_NoLiveDoorRemains` stays intact and no
+      signed exemption list was amended. Two other repo-wide guards fired on the
+      first draft and were also answered by changing the construction, not the
+      test: `TestBenchCSS_TheNamedCarveOutsAreExactlyTwo` and
+      `…TheSkyCarveOutIsPinned` — the sky band's class name is a two-file signed
+      carve-out, so the diagnostic distinguishes the two things called "skybox"
+      in words instead of naming the selector.
+- [x] `campaign.config <campaignId>` — `campaign_addons` plus every placed block
+      type, including blocks nested inside container blocks on an entity
+      template (a top-level-only flattener would report "no skybox" while one
+      sat inside a tab).
+- [x] Catalog hygiene (§5): `host.deploy-check`'s Desc and marker section now
+      refuse the render reading and name `calendar.render`; the batch spec's
+      purpose line names both axes.
+- [x] The mirror is guarded: twelve pinned producer source lines, proven to fire
+      on a simulated `[SKY-1]` amendment and on a `benchClassify` clause change.
+- [x] `host.seams` and `campaign.members` were CUT per §4, and stay cut. The
+      catalog is a menu an AI reads to choose from; an entry nobody picks makes
+      every other entry harder to find. `host.seams`' motivating case (a nil
+      schedule reader) is folded into `calendar.render`'s own gate trace.
+
+### [ ] Open — what these four still cannot say
+
+- [ ] **The RSVP panel's four gates are not traced.** `calendar.render` reports
+      the disclosure state and the role, which covers two of the report's four
+      causes; it does not report `h.schedule == nil`, an empty roster, or
+      "no upcoming event on a real-life calendar has `collect_rsvps=1`"
+      (§7.3). Those live in `benchRsvpResolve` and would need either an export
+      or a provider method on the calendar plugin — out of scope for a stage
+      that may not touch `internal/plugins/calendar/`.
+- [ ] **No live-server verification.** Every assertion here is against
+      fixtures plus the plugin's own source. Nobody has run these four against
+      a running Chronicle with a real campaign; the route cross-check in
+      particular has only ever seen a synthetic table. Run
+      `campaign.surfaces <id>` on a live instance and confirm no row reports
+      NOT REGISTERED and no handler disagreement appears.
+- [ ] **`calendar.render` re-derives rather than calls.** The honest fix is an
+      exported render-trace on the calendar plugin, which would delete the
+      mirror and its twelve pins outright. Booked, not done.
+
 ## 0-probes. The browser-probe guard is now a census, and its matcher works (2026-08-11)
 
 `tools/check-browser-probes.sh` covered 23 probes; the repo has 29 asserting

@@ -3152,6 +3152,38 @@ func (a *App) RegisterRoutes() {
 	}
 	calendarBlockSpine.SetSyncLinkProbe(&calendarSyncLinkAdapter{svc: syncService})
 	calendar.InstallBlockSpine(calendarBlockSpine)
+
+	// Wire the PER-CAMPAIGN read window into the operator diagnostics, so the
+	// catalog can answer "why does MY campaign look like this?" and not only
+	// "which code is running". It sits HERE rather than beside the other
+	// systems.Set*Provider calls because it needs the calendar service and the
+	// Block spine, and the spine is installed on the line above — the diagnostic
+	// reads through calendar.BlockSpine() at call time anyway, so a degraded
+	// plugin reports "spine not installed" instead of a plausible empty page.
+	//
+	// The route table is passed as a CLOSURE, evaluated when the diagnostic
+	// runs. Two reasons: routes are still being registered below this line, and
+	// the closure keeps Echo out of the adapter file (CLAUDE.md — no Echo types
+	// outside handler files).
+	systems.SetCampaignDiagProvider(campaignDiagAdapter{
+		campaigns: campaignService,
+		addons:    addonService,
+		calendars: calendarService,
+		entities:  entityService,
+		routes: func() []systems.RouteFact {
+			live := e.Routes()
+			out := make([]systems.RouteFact, 0, len(live))
+			for _, r := range live {
+				out = append(out, systems.RouteFact{Method: r.Method, Path: r.Path, Handler: r.Name})
+			}
+			return out
+		},
+		// Read from the same map sidebarAddonLink renders hrefs from, never
+		// re-typed here — a copied path would keep reporting the old
+		// destination after the real one moved.
+		sidebarCalendarPath: layouts.AddonSidebarPath("calendar"),
+	})
+
 	// And the enable-state checker the hub fragment route consults
 	// to render the disabled-extension placeholder. addonService
 	// already exposes IsEnabledForCampaign with the canonical narrow
