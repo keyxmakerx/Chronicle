@@ -63,6 +63,12 @@ type Diagnostic struct {
 // diagnosticCatalog is the registry. Ordered cheapest/most-common first.
 func diagnosticCatalog() []Diagnostic {
 	return []Diagnostic{
+		// host.* comes FIRST: every diagnostic below describes what the server
+		// is serving, and all of them are worthless if the server itself is
+		// not the build the operator thinks it is. Defined in
+		// operator_diag_host.go.
+		hostBuildDiagnostic(),
+		hostRuntimeDiagnostic(),
 		{
 			Name:  "system.versions",
 			Title: "Loaded system versions (compact)",

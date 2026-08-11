@@ -9,6 +9,43 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-host. Host self-identity — `host.build` / `host.runtime` landed (2026-08-11)
+
+- [x] `internal/hostinfo` + `host.build` / `host.runtime` diagnostics; `GET
+  /api/version` falls back env → VCS revision → module version → `unknown`.
+  See `.ai/status.md` for the incident this closes.
+
+### [ ] Still open — a shipped image cannot name its commit
+
+Measured 2026-08-11: `golang:1.24-alpine`'s only `apk add` is
+`ca-certificates`, so the Docker builder has **no `git`**, and Go skips VCS
+stamping **silently** (exit 0, no warning, no `vcs.*` keys in the binary). A
+local `go build` in this repo *is* stamped, which is why this is easy to miss.
+So `host.build` on a shipped image honestly prints "not stamped" and falls back
+to the executable's mtime. Two ways to close it, either sufficient:
+
+- [ ] **Give the builder `git`** — `RUN apk add --no-cache git` in the builder
+  stage; stamps then appear with no other change. **This is fail-CLOSED and
+  must be treated as one:** measured, a `git` that is present but *errors*
+  (e.g. "dubious ownership") makes `go build` fail outright with
+  `error obtaining VCS status`, where an absent `git` merely skipped. The build
+  runs as root over root-owned `COPY`d files, so it should not fire — but that
+  was reasoned, not observed (no Docker daemon in the authoring environment).
+- [ ] **Or wire `CHRONICLE_VERSION`** — `ARG`/`--build-arg` in CI, exported in
+  the runtime stage. It already has highest precedence in `hostinfo.Version()`,
+  so nothing else needs to change. `docs/deployment.md` is now accurate that
+  nothing sets it today.
+- [ ] **Adjacent:** `internal/database/pre_migration_backup.go` still has its own
+  `os.Getenv("CHRONICLE_VERSION")` + `"unknown"` copy of the rule. Pointing it at
+  `hostinfo.Version()` would give backup manifests the revision fallback too —
+  deliberately left alone here because it changes manifest *content*, which
+  `scripts/restore.sh` reads.
+- [ ] **Consider:** `host.build` prints `os.Hostname()`. In a container that is
+  the container id; on bare metal it can be the operator's production hostname,
+  which C-SCRUB-INSTANCE-URLS treats as sensitive. The route is admin-gated and
+  the operator chooses to paste the output, so this shipped as-is — revisit if
+  that posture is stricter than assumed.
+
 ## 0-fix-R1. The six confirmed defects from the operator's first look — DONE (2026-08-10)
 
 Five landed in this repo, one in `Chronicle-Foundry-Module`. Each was measured

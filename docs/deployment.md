@@ -143,7 +143,7 @@ Every env var Chronicle reads. **Bold = required in production.**
 | `BACKUP_REQUIRED` | `0` | When `1` or `true`, the in-process pre-migration capture is mandatory: any failure (mysqldump missing, dump zero bytes, manifest write fails) aborts startup before migrations apply. Use in production. The default fail-open behavior (warn + proceed) preserves the legacy semantics for development setups that don't have `mariadb-client` installed. |
 | `BACKUP_SCRIPT_PATH` | `/app/scripts/backup.sh` | Used by the admin "Run backup" button. |
 | `RESTORE_SCRIPT_PATH` | `/app/scripts/restore.sh` | Used by the admin restore page. |
-| `CHRONICLE_VERSION` | `unknown` | Stamped into the pre-migration manifest's `chronicle_version=` line. Set by Docker build args / release pipeline; unset is fine for development. |
+| `CHRONICLE_VERSION` | (unset) | Names the build explicitly. Read by `GET /api/version` (highest precedence, then the VCS revision compiled into the binary, then `unknown`), by the `host.build` admin diagnostic, and stamped into the pre-migration manifest's `chronicle_version=` line (which still falls back to the literal `unknown` on its own). **Nothing sets it today** — no Dockerfile, compose file, Makefile or workflow — so it is unset on every shipped image; an earlier version of this row claimed it was "set by Docker build args / release pipeline", which was never true. Unset is fine; run `host.build` to see what the binary reports about itself instead. |
 | `MYSQL_ROOT_PASSWORD` | (compose) | Compose-only; sets root password for the bundled MariaDB. |
 | `MYSQL_PASSWORD` | (compose) | Compose-only; must match `DB_PASSWORD`. |
 

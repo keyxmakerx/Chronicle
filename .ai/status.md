@@ -20,6 +20,44 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### Chronicle can now fingerprint ITSELF — `host.build` / `host.runtime` (2026-08-11)
+
+Chronicle could hash every file of every installed system package and could say
+nothing whatsoever about its own binary. On 2026-08-11 that cost an hour of
+shell archaeology and produced a conclusion that had to be retracted: the
+container image's labels (`org.opencontainers.image.revision=33f4cb07`,
+`created=2026-02-19`) were read as evidence that the running binary was six
+months stale. It had been built minutes earlier. The labels were accurate about
+a February image still sitting in the deploy host's local image store — they
+simply were not about that process. `docker inspect <tag>` answers for whichever
+image holds the tag *now*, never for the image a running container was created
+from.
+
+**The rule this encodes: only the process can testify about itself.**
+
+- `internal/hostinfo` (new leaf package, stdlib only) reads build identity from
+  inside the process — `debug.ReadBuildInfo()`, `os.Executable` + `os.Stat`,
+  hostname, pid, a package-init start timestamp — and pairs every field that can
+  be absent with a "do we know?" flag, so "not stamped" is printable as a fact.
+- `host.build` (first entry in the operator diagnostic catalog, ahead of every
+  `system.*`/`packages.*` check, because those are worthless if the binary is
+  not the one you think it is) renders all of it plus a standing note naming the
+  Docker-label trap and the `//go:embed` grep trap from the same incident.
+- `host.runtime` is the cheap uptime / goroutines / memory / GC snapshot.
+- **Measured, and the reason `host.build` leads with the executable mtime:**
+  images built by CI carry **no** VCS stamps. `golang:1.24-alpine`'s only
+  `apk add` is `ca-certificates`, so the builder has no `git`, and Go then skips
+  stamping *silently* (exit 0, no warning). A local `go build` here **is**
+  stamped. Absent stamps mean "never recorded", never "old".
+- `GET /api/version` now falls back env → VCS revision → main module version →
+  `unknown`. It had returned the literal `"unknown"` on every image ever
+  shipped, because `CHRONICLE_VERSION` is set by no Dockerfile, compose file,
+  Makefile or workflow. `docs/deployment.md` claimed otherwise and is corrected.
+
+Open: nothing wires `CHRONICLE_VERSION` or gives the builder `git`, so a shipped
+image still cannot name its commit — it can only name its executable's mtime and
+uptime, which is what actually settled the incident. See `.ai/todo.md`.
+
 ### The operator's first look — six confirmed defects, all fixed (2026-08-10)
 
 Five in this repo, one in `Chronicle-Foundry-Module`. Each was measured before it
