@@ -68,17 +68,24 @@
 .cal-bench {
   color-scheme: light dark;
 
-  --surface-page: oklch(0.985 0.002 260);
-  --surface-card: oklch(1 0 0);
-  --surface-inset: oklch(0.965 0.003 260);
-  --text-primary: oklch(0.22 0.015 265);
-  --text-body: oklch(0.38 0.014 265);
-  --text-secondary: oklch(0.55 0.012 265);
-  --text-muted: oklch(0.68 0.010 265);
+  /* RE-DERIVED with calendar-block.css, value for value, and mirrored here for
+     the reason the header above already gives: the Bench chrome and the Blocks
+     standing on it have to read as ONE surface. The page ground gains
+     separation from the card on purpose — 1.04:1 before, 1.08:1 now — because
+     the reference lifts its panels off the ground rather than floating them on
+     an almost identical white. */
+  --surface-page: oklch(0.970 0.008 88);
+  --surface-card: oklch(0.995 0.003 92);
+  --surface-inset: oklch(0.960 0.007 88);
+  --text-primary: oklch(0.235 0.014 75);
+  --text-body: oklch(0.400 0.012 75);
+  --text-secondary: oklch(0.545 0.011 78);
+  --text-muted: oklch(0.655 0.010 80);
 
-  --rule-hairline: oklch(0.915 0.004 265);
-  --rule-structural: oklch(0.855 0.006 265);
-  --rule-structural-strong: oklch(0.775 0.008 265);
+  /* measured L: 0.900 -> 0.840 -> 0.755, monotonically DARKER each step. */
+  --rule-hairline: oklch(0.900 0.006 85);
+  --rule-structural: oklch(0.840 0.008 82);
+  --rule-structural-strong: oklch(0.755 0.010 80);
 
   /* the ONE token inherited from the host page, because the campaign accent IS
      chrome. It never touches event data (canon A7). */
@@ -87,12 +94,21 @@
   --ok: oklch(0.60 0.15 150);
   --warn: oklch(0.65 0.15 65);
   --bad: oklch(0.58 0.19 25);
-  --gold: oklch(0.70 0.13 85);
+  /* the same measured gold as the Block's: 4.97:1 on the card, 4.63:1 on the
+     page ground this sheet actually paints. The old 0.70 measured 2.70:1. */
+  --gold: oklch(0.540 0.108 76);
 
   --cal-harptos: oklch(0.55 0.12 200);
   --cal-real: oklch(0.55 0.18 270);
   --cal-elven: oklch(0.58 0.15 300);
   --cal-dwarven: oklch(0.62 0.10 70);
+
+  /* the display face, declared once and outside both theme blocks because a
+     typeface is not a theme. Same system stack as the Block's — a serif did
+     not exist anywhere in this product before this stage, so there was
+     nothing to reuse and nothing is downloaded to introduce it. */
+  --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino,
+    Georgia, "DejaVu Serif", "Times New Roman", serif;
 
   --r-badge: 2px;
   --r-chip: 4px;
@@ -127,24 +143,27 @@
    (tailwind.config.js darkMode:'class', static/js/theme.js).
    ─────────────────────────────────────────────────────────────────────────── */
 .dark .cal-bench {
-  --surface-page: oklch(0.175 0.011 265);
-  --surface-card: oklch(0.215 0.012 265);
-  --surface-inset: oklch(0.255 0.013 265);
-  --text-primary: oklch(0.975 0.002 265);
-  --text-body: oklch(0.855 0.008 265);
-  --text-secondary: oklch(0.705 0.012 265);
-  --text-muted: oklch(0.565 0.012 265);
+  /* deeper and warmer, mirroring the Block. The page ground is the deepest
+     thing the product paints: #0d0b08 measured. */
+  --surface-page: oklch(0.152 0.007 78);
+  --surface-card: oklch(0.190 0.008 78);
+  --surface-inset: oklch(0.232 0.009 78);
+  --text-primary: oklch(0.968 0.004 88);
+  --text-body: oklch(0.848 0.006 86);
+  --text-secondary: oklch(0.700 0.009 84);
+  --text-muted: oklch(0.560 0.009 82);
 
-  --rule-hairline: oklch(0.295 0.012 265);
-  --rule-structural: oklch(0.375 0.014 265);
-  --rule-structural-strong: oklch(0.475 0.014 265);
+  /* measured L: 0.278 -> 0.362 -> 0.462, monotonically LIGHTER each step. */
+  --rule-hairline: oklch(0.278 0.009 78);
+  --rule-structural: oklch(0.362 0.010 78);
+  --rule-structural-strong: oklch(0.462 0.011 78);
 
   --accent: var(--color-accent, oklch(0.72 0.16 272));
 
   --ok: oklch(0.72 0.16 150);
   --warn: oklch(0.78 0.15 70);
   --bad: oklch(0.68 0.18 25);
-  --gold: oklch(0.80 0.13 88);
+  --gold: oklch(0.815 0.130 88);
 
   --cal-harptos: oklch(0.70 0.11 200);
   --cal-real: oklch(0.70 0.15 272);
@@ -174,11 +193,17 @@
   flex-wrap: wrap;
   margin: 2px 0 16px;
 }
+/* THE PAGE TITLE — the display register at its largest. Tracking goes from
+   -0.02em to 0: negative tracking is a sans-serif device (Inter at 26px needs
+   the pull), and a serif set tight closes its own counters. Weight 700 -> 650
+   for the same reason it does on the Block's nameplate. */
 .cal-bench .phead h1 {
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 650;
   font-size: 26px;
   line-height: 1.15;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
+  color: var(--gold);
   margin: 0;
 }
 .cal-bench .phead p {
@@ -416,6 +441,17 @@
   padding-bottom: 6px;
   border-bottom: 1px solid var(--rule-hairline);
   margin: 0 0 12px;
+}
+/* A SECTION HEAD, and the only .cap on this sheet that gets the gold register.
+   The Bench's bare .cap is a TILE EYEBROW and there are six of them in the
+   ribbon alone; gold on all six would leave the page with no title at all.
+   Same reasoning as the Block's — one gold heading per surface, the rest of
+   the display register in muted ink. Uppercase is already on .cap and stays
+   (see the Ledger head in calendar-block.css for why not small-caps). */
+.cal-bench .sechead .cap {
+  font-family: var(--font-display);
+  letter-spacing: 0.10em;
+  color: var(--gold);
 }
 .cal-bench .sechead .c,
 .cal-bench .c {
@@ -1313,12 +1349,13 @@
 /* The summary's own title takes the .sechead treatment, because that is what it
    replaced: this IS the section head now, not a label above one. */
 .cal-bench .disc > summary .cap {
+  font-family: var(--font-display);
   font-weight: 650;
   font-size: 10px;
   line-height: 1;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.10em;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--gold);
 }
 
 /* The panel's own bottom margin is carried by .disc now; a doubled gap between
