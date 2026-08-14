@@ -20,6 +20,37 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 refinement, stage 4 — the arc was FILMED, and filming found things (2026-08-14)
+
+Branch `claude/coordinator-handoff-stage-3-3d3s4w`. Stages 1-3 (palette, the
+chest lid, the Ledger day panel) were photographed at a real 1280x800 and a real
+390x844 — device-metrics override plus touch emulation, because this Chromium
+clamps `--window-size` to 500px — in both themes, over production markup, with
+the two open/close envelopes sampled frame by frame. **No product file changed
+in that stage and no image is committed**; the artefacts are the deliverable and
+they live outside the repo.
+
+Three things came back that source-reading had not:
+
+1. **The sky pane's four phase words are painted inside a moon disc** — a
+   `.ph` class collision, visible in every screenshot of the opened band, and
+   **inherited rather than caused**: it renders identically against `b9f248da`.
+2. **On the chosen day the moon discs invert** — stage 1's selection tint made
+   the cell lighter than the discs standing on it.
+3. **`calendar-block.css` is NOT motion-free**, and `TestCSS_NoMotionAtAll`
+   never claimed it was — it is an allowlist over a declared four-item budget,
+   and a day tap starts four transitions. A brief that says "the grid does not
+   animate" is describing a sheet this repo does not have.
+
+All three are booked in `.ai/todo.md` with the measured numbers.
+`C1` (the shipped `block-size` lid) and `C2` (a `transform: translateY(-100%)`
+candidate built as a throwaway page that touches no tracked file) were filmed
+side by side for the operator's decision: the shipped lid settles the band at
+244.88px and never leaves it; the candidate settles 12px taller and its clock,
+season word and four moons come to rest **on top of the nameplate**, because
+`.skygrow` declares no overflow clip. [SKY-3] refuses `transform` by name
+already; the film shows what the refusal is buying.
+
 ### Verifier round on the moon arc — two guards stopped overclaiming (2026-08-11)
 
 Three verifiers audited the arc and returned three findings. One had expired,

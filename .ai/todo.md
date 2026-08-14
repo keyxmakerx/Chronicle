@@ -3908,3 +3908,55 @@ dispatch does not go looking for a backlog entry that should not exist:**
   item and is already booked above as **`C-CALV4-MONTHLY-INTERVAL-CONTROL`**.
   Do not re-create the engine booking from the dispatch text.
 
+
+### calendar-v4 refinement — found by FILMING it, stage 4 (2026-08-14)
+
+Two items, both **measured in a real headless Chromium over production markup**
+(`templ Block(BlockData)` from the package's own `fxSky` fixture, seated in
+`.cal-bench > .bsurf`, both shipped stylesheets, 1280x800 dpr2). Neither is a
+reading of the source and neither was fixed in that stage, which only films.
+
+- [ ] **`C-CALV4-SKY-PHASE-WORD-CLASH` — the sky pane's phase words are drawn
+  inside a moon disc.** `block.templ`'s `skyTonight` emits the phase word as
+  `<span class="ph">`, and `calendar-block.css:1184` styles `.cal-block-host
+  .ph` as the per-day moon DISC primitive — 10px square, `overflow: hidden`,
+  pill radius, `--surface-card` ground, a 1px inset ring, plus a `::before`
+  that fills the right half with `--rule-structural-strong`. The bench sheet's
+  own `.cal-bench .cal-block-host .skygrow .skyrow .ph` (calendar-bench.css:
+  2380) sets `flex/overflow/white-space/text-overflow` and resets **none** of
+  that paint. MEASURED, dark, 1280x800: the word "waxing gibbous" computes
+  `909 x 10px`, `overflow: hidden`, `border-radius: 9999px`,
+  `background: oklch(0.19 0.008 78)`, `box-shadow: … 1px inset`,
+  `::before { clip-path: inset(0 0 0 50%) }`. All four Tonight rows.
+  **NOT CAUSED BY THIS ARC** — re-rendered against `b9f248da` (the commit
+  before stage 1) the geometry is identical to the pixel; only the colour moved
+  with the palette. The fix is a reset on the bench rule, or a rename of one of
+  the two `.ph` uses. Evidence: `X1-phase-word-collision.png`,
+  `R4-chest-open-{desktop,phone}.png`.
+
+- [ ] **`C-CALV4-CELL-DISC-INVERTS-WHEN-CHOSEN` — on the chosen day the moon
+  discs read as holes, not rings.** Stage 1 gave the selected cell
+  `background: color-mix(in oklch, var(--surface-card) 92%, var(--gold))`
+  (calendar-block.css:982). MEASURED: chosen cell ground
+  `oklch(0.24 0.01776 78.8)`, plain cell ground transparent over the card, and
+  `.ph`'s own ground `oklch(0.19 0.008 78)` in BOTH. So the disc is 0.05 L
+  darker than the cell it sits on only when that cell is chosen, and the mark
+  inverts its read on the one cell a reader is looking at. Cosmetic, one
+  token deep, and a deliberate decision either way — booked rather than
+  silently "fixed", because the discs are on the marks layer (canon A7) and
+  the obvious repair is to paint them from the cell's own ground.
+  Evidence: `R5-cell-zoom.png` (chosen cell beside a plain one, at 8x).
+
+**And one correction to a stated constraint, recorded so the next brief does
+not repeat it.** "ZERO MOTION in `calendar-block.css` — the grid does not
+animate; hover/selection change INSTANTLY" is **false against the shipped
+sheet, and `TestCSS_NoMotionAtAll` does not assert it.** That test is an
+ALLOWLIST (css_contract_test.go:112-160): refusals, then "everything that moves
+lives inside the one `prefers-reduced-motion: no-preference` block", then a
+property allowlist, then a keyframes allowlist. §MOTION in calendar-block.css:
+3074 declares a four-item budget and names it a budget. MEASURED: one tap on a
+day cell starts **four** transitions — `background-color` on `.cell` (150ms),
+`background-color` on the matching `.lrow` (150ms), `transform` on that row's
+`.rail` (150ms), and the `m-latch` clip-path animation on `.cell::after`
+(100ms). The Ledger's CONTENT is complete in frame 0; it is the COLOUR that
+takes 150ms. Evidence: `C3-day-selection-sheet.png`.
