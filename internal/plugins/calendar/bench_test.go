@@ -2329,7 +2329,16 @@ func TestBenchCSS_DefinesWhatTheMarkupNames(t *testing.T) {
 		".cal-bench .cal-block-host .skygrow",
 		".cal-bench .cal-block-host .skygrow::before",
 		".cal-bench .cal-block-host .skygrow > summary.skyhdr",
-		".cal-bench .cal-block-host .skygrow .skdiscs",
+		// THE LID'S OPEN HEIGHT (C-CALV4-SKY-CHEST stage 2). The chest opens by
+		// the lid collapsing its own block-size; without this rule the band
+		// would keep its closed height and the pane would simply appear below
+		// an unmoved header — the whole "transform-free lid" gone, silently,
+		// with every motion guard still green because the transition would
+		// still be declared and would have nothing to interpolate.
+		".cal-bench .cal-block-host .skygrow[open] > summary.skyhdr",
+		// The moons, painted INTO the sky rather than seated in the lid's row.
+		// `.skscene` is the out-of-flow scenery layer that replaced `.skdiscs`.
+		".cal-bench .cal-block-host .skygrow .skscene",
 		".cal-bench .cal-block-host .skygrow .skb",
 		".cal-bench .cal-block-host .skygrow .sksp",
 		".cal-bench .cal-block-host .skygrow .sktime",

@@ -12,7 +12,7 @@
 // width/height, and `.skygrow .skb .ph` sets `inline-size/block-size: 100%`;
 // none of that blockifies anything. In `.phrow` the `.ph` is a FLEX ITEM and is
 // blockified by the flex container, which is why the almanac's discs paint. In
-// `.skb` it is not: `.skdiscs` is the flex container and `.skb` is its item, so
+// `.skb` it is not: `.skscene` is the flex container and `.skb` is its item, so
 // `.ph` one level further down stays inline, lays out at 0×0, and its `::before`
 // (the half-fill) and `::after` (the terminator) are absolutely positioned into
 // a zero-size containing block. The signature move of the whole slice — greyscale
@@ -84,7 +84,7 @@ type skyDiscPaintReading struct {
 const skyDiscPaintScript = `function(root){
   var sky = root.querySelector('details.skygrow');
   var band = sky && sky.querySelector('summary.skyhdr');
-  var wrap = sky && sky.querySelector('.skdiscs .skb');
+  var wrap = sky && sky.querySelector('.skscene .skb');
   var disc = wrap && wrap.querySelector('.ph');
   var rect = function(el){ return el ? el.getBoundingClientRect() : null; };
   var r1 = function(v){ return Math.round(v * 10) / 10; };
@@ -119,7 +119,7 @@ const skyDiscPaintScript = `function(root){
     beforeH: before ? px(before.height) : -1,
     afterH:  after  ? px(after.height)  : -1,
     discBelowHorizonPct: crossing,
-    discs: sky.querySelectorAll('.skdiscs .skb .ph').length
+    discs: sky.querySelectorAll('.skscene .skb .ph').length
   };
 }`
 
@@ -295,10 +295,19 @@ func TestSkyDiscPaintProbe_TheDiscsAreInkAndNotOnlyWrappers(t *testing.T) {
 
 			// (4) THE INK CROSSES THE HORIZON. The claim the stills make is
 			// about what a reader sees, and a reader sees the disc, not `.skb`.
-			if r.DiscBelowHorizonPct < 20 || r.DiscBelowHorizonPct > 45 {
-				t.Errorf("%.1f%% of the PAINTED disc lands below the band's bottom edge, "+
-					"want roughly a third (20–45%%) — \"a third of each disc ends below "+
-					"the horizon line at BOTH densities\" is a claim about ink",
+			//
+			// THE WINDOW MOVED WITH sky_measure_probe's, and for the same
+			// arithmetic reason (C-CALV4-SKY-CHEST stage 2): the horizon is the
+			// LID's bottom edge and the lid now collapses on open, so the same
+			// unmoved moon hangs further below it. The two probes must keep
+			// agreeing about the same number — that is the whole reason this
+			// one restates the other's figures instead of deriving its own —
+			// so the window is copied here deliberately rather than widened
+			// independently.
+			if r.DiscBelowHorizonPct < 33 || r.DiscBelowHorizonPct > 80 {
+				t.Errorf("%.1f%% of the PAINTED disc lands below the lid's bottom edge, "+
+					"want 33–80%% — \"the moons cross the horizon at BOTH densities\" is a "+
+					"claim about ink, and the figure is forced by the lid's collapse",
 					r.DiscBelowHorizonPct)
 			}
 		})

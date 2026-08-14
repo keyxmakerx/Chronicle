@@ -52,8 +52,34 @@ type skyReading struct {
 	Host int `json:"host"`
 	// COUNT 2 — the closed band, read TWICE INDEPENDENTLY: once from the
 	// custom property that sizes it, once from the laid-out box.
+	//
+	// `BandRectPx` IS SAMPLED CLOSED, WHICH IT WAS NOT BEFORE. Until
+	// C-CALV4-SKY-CHEST stage 2 this field was filled by the final `read(root)`
+	// call — which runs with the band OPEN — and compared against `--bandh`,
+	// the CLOSED token. It agreed for the whole life of the probe only because
+	// the band had one height in both states. The moment the lid started
+	// collapsing on open (40→28 / 32→22, measured) the two readings disagreed
+	// by exactly the collapse, and the failure was the probe's, not the
+	// sheet's. It now reads the state its own header names, and the OPEN
+	// height is a second reading with its own token.
 	BandTokenPx float64 `json:"bandTokenPx"`
 	BandRectPx  float64 `json:"bandRectPx"`
+	// THE LID, OPEN — the chest's own movement, in pixels. --lidh sizes it and
+	// the laid-out box is read separately, on the same discipline as the pair
+	// above.
+	LidTokenPx  float64 `json:"lidTokenPx"`
+	LidOpenPx   float64 `json:"lidOpenPx"`
+	// THE SCENERY'S SEAT, closed and open. `SceneToFacts` is the inline gap
+	// between the moons and the nearest of the lid's own facts — the moons are
+	// painted BEHIND the text (z-index: -1), so a negative number is a real
+	// overlap and not a paint-order accident. `SceneReach` is how far the
+	// scenery's leading edge sits from the band's TRAILING edge, which is the
+	// axis --seal-solid is measured on: at the seal the sky stops at 210px and
+	// a moon beyond that is painted on masked-out nothing.
+	SceneToFactsClosed float64 `json:"sceneToFactsClosed"`
+	SceneToFactsOpen   float64 `json:"sceneToFactsOpen"`
+	SceneReachClosed   float64 `json:"sceneReachClosed"`
+	SealSolidPx        float64 `json:"sealSolidPx"`
 	// The density this host actually resolved to.
 	Density string `json:"density"`
 	// The OPEN total, which count 2 is also about: the pane is the thing being
@@ -90,16 +116,29 @@ const skyProbeScript = `function(root){
     if (!r) return -1;
     return Math.round((wide ? r.left : r.right) * 10) / 10;
   };
+  var r1 = function(v){ return Math.round(v * 10) / 10; };
   var sample = function(){
     var d = read(sky && sky.querySelector('.skb'));
+    var b = read(band);
+    var scene = read(sky && sky.querySelector('.skscene'));
+    // The first of the lid's own facts on the inline axis. The scenery LEADS
+    // and the facts FOLLOW at BOTH densities — that is the reference bar's own
+    // arrangement and the seat is authored to keep it — so the gap is read
+    // from the same pair of edges either way, and a density that inverted the
+    // order would show up here as a large negative rather than being papered
+    // over by a conditional.
+    var fact = read(sky && sky.querySelector('.sktime'));
     return {
       time:   anchor('.sktime'),
       season: anchor('.skseason'),
-      disc:   anchor('.skdiscs'),
-      discSize: d ? Math.round(d.height * 10) / 10 : -1,
+      disc:   anchor('.skscene'),
+      discSize: d ? r1(d.height) : -1,
       discBottom: d ? d.bottom : 0,
-      bandBottom: read(band) ? read(band).bottom : 0,
-      total: read(sky) ? Math.round(read(sky).height * 10) / 10 : -1
+      bandBottom: b ? b.bottom : 0,
+      bandH: b ? r1(b.height) : -1,
+      sceneToFacts: (scene && fact) ? r1(fact.left - scene.right) : -1,
+      sceneReach: (scene && b) ? r1(b.right - scene.left) : -1,
+      total: read(sky) ? r1(read(sky).height) : -1
     };
   };
   if (!root.__skyClosed) { root.__skySample = sample; return null; }
@@ -109,10 +148,17 @@ const skyProbeScript = `function(root){
     ? Math.round((open.discBottom - open.bandBottom) / open.discSize * 1000) / 10
     : -1;
   var bandToken = parseFloat(getComputedStyle(sky).getPropertyValue('--bandh'));
+  var lidToken = parseFloat(getComputedStyle(sky).getPropertyValue('--lidh'));
   return {
     host: Math.round(root.getBoundingClientRect().width),
     bandTokenPx: bandToken,
-    bandRectPx: Math.round(read(band).height * 10) / 10,
+    bandRectPx: closed.bandH,
+    lidTokenPx: lidToken,
+    lidOpenPx: open.bandH,
+    sceneToFactsClosed: closed.sceneToFacts,
+    sceneToFactsOpen: open.sceneToFacts,
+    sceneReachClosed: closed.sceneReach,
+    sealSolidPx: root.__skySealSolid,
     density: getComputedStyle(band).justifyContent === 'flex-end' ? 'C3 seal' : 'C1 horizon',
     skyClosedTotalPx: closed.total,
     skyOpenTotalPx: open.total,
@@ -141,10 +187,11 @@ func TestSkyMeasureProbe_TheThreeCounts(t *testing.T) {
 		density string
 		budget  float64 // the closed-band ceiling this width answers to
 		wantPx  float64 // the signed still's measured height
+		wantLid float64 // --lidh: what the lid collapses TO on open
 	}{
-		{"1440 viewport / wide column", 1440, "C1 horizon", 44, 40},
-		{"768 viewport / wide column", 768, "C1 horizon", 44, 40},
-		{"390 viewport / the Bench's 358px column", 358, "C3 seal", 36, 32},
+		{"1440 viewport / wide column", 1440, "C1 horizon", 44, 40, 28},
+		{"768 viewport / wide column", 768, "C1 horizon", 44, 40, 28},
+		{"390 viewport / the Bench's 358px column", 358, "C3 seal", 36, 32, 22},
 	}
 
 	d := fxSky(t, true)
@@ -177,6 +224,12 @@ func TestSkyMeasureProbe_TheThreeCounts(t *testing.T) {
 		// 600ms of virtual time is three envelopes.
 		`hosts.forEach(function(root){read(root);` +
 		`root.__skyClosed=root.__skySample();` +
+		// THE SEAL'S REACH IS READ CLOSED, which is the only state it means
+		// anything in: --seal-solid sweeps to 100% on open, so a reading taken
+		// afterwards would say the sky covers everything and the scenery could
+		// never be found off it.
+		`root.__skySealSolid=parseFloat(getComputedStyle(` +
+		`root.querySelector('details.skygrow')).getPropertyValue('--seal-solid'));` +
 		`root.querySelector('details.skygrow').setAttribute('open','');});` +
 		`setTimeout(function(){` +
 		`hosts.forEach(function(root){root.__skyOpen=root.__skySample();});` +
@@ -213,11 +266,15 @@ func TestSkyMeasureProbe_TheThreeCounts(t *testing.T) {
 		r := readings[i]
 		t.Run(h.name, func(t *testing.T) {
 			t.Logf("host %dpx · %s · closed band %.1fpx (token %.0fpx) · "+
-				"sky closed %.1fpx → open %.1fpx · discs %.1f→%.1fpx, %.1f%% below the "+
-				"horizon · controls %d",
+				"LID open %.1fpx (token %.0fpx) · sky closed %.1fpx → open %.1fpx · "+
+				"discs %.1f→%.1fpx, %.1f%% below the horizon · scenery-to-facts "+
+				"%.1f→%.1fpx, reach %.1fpx of a %.0f seal · controls %d",
 				r.Host, r.Density, r.BandRectPx, r.BandTokenPx,
+				r.LidOpenPx, r.LidTokenPx,
 				r.SkyClosedTotalPx, r.SkyOpenTotalPx,
-				r.DiscSizeClosed, r.DiscSizeOpen, r.DiscBelowHorizonPct, r.Controls)
+				r.DiscSizeClosed, r.DiscSizeOpen, r.DiscBelowHorizonPct,
+				r.SceneToFactsClosed, r.SceneToFactsOpen,
+				r.SceneReachClosed, r.SealSolidPx, r.Controls)
 
 			// COUNT 2 — big and bulky. TWO INDEPENDENT READINGS, and they must
 			// AGREE: a token that says 40 while the box lays out at 52 is the
@@ -244,6 +301,77 @@ func TestSkyMeasureProbe_TheThreeCounts(t *testing.T) {
 			if r.SkyOpenTotalPx <= r.SkyClosedTotalPx {
 				t.Errorf("the sky opens to %.1fpx from a closed %.1fpx — the expansion has "+
 					"no height and the pane is not revealing", r.SkyOpenTotalPx, r.SkyClosedTotalPx)
+			}
+
+			// ── THE LID (C-CALV4-SKY-CHEST stage 2) ────────────────────────
+			// The chest opens by the lid giving up its own height, and that is
+			// the whole reason this surface needs no `transform`: the pane and
+			// everything in it rises by exactly the pixels the lid loses. The
+			// same two-readings discipline applies — the token that sizes it
+			// and the box that results are read separately, because "the lid
+			// collapses" is a claim about a laid-out box and a declaration is
+			// not a box.
+			if r.LidTokenPx != h.wantLid {
+				t.Errorf("--lidh = %.0fpx, want %.0fpx", r.LidTokenPx, h.wantLid)
+			}
+			if diff := r.LidOpenPx - r.LidTokenPx; diff > 0.6 || diff < -0.6 {
+				t.Errorf("the lid's two readings disagree: token %.1fpx vs laid-out %.1fpx",
+					r.LidTokenPx, r.LidOpenPx)
+			}
+			if rise := r.BandRectPx - r.LidOpenPx; rise < 6 {
+				t.Errorf("the lid gives up %.1fpx on open (%.1f → %.1f) — under about six "+
+					"the chest does not read as opening at all, and this surface has no "+
+					"`transform` to fall back on ([SKY-3] refuses it by name)",
+					rise, r.BandRectPx, r.LidOpenPx)
+			}
+			// AND THE RISE IS THE WHOLE OF THE DIFFERENCE, not a coincidence:
+			// the sky's open total must have grown by the pane's height MINUS
+			// the lid's collapse. Stated as an inequality rather than an exact
+			// figure, because the pane's own height is content-dependent and is
+			// not this probe's subject.
+			if r.SkyOpenTotalPx-r.SkyClosedTotalPx <= r.BandRectPx-r.LidOpenPx {
+				t.Errorf("the sky grew %.1fpx while the lid gave up %.1fpx — the lid is "+
+					"collapsing faster than the pane is revealing, which is a header "+
+					"eating itself rather than a chest opening",
+					r.SkyOpenTotalPx-r.SkyClosedTotalPx, r.BandRectPx-r.LidOpenPx)
+			}
+
+			// ── THE SCENERY IS ON THE SKY, AND BEHIND THE FACTS ────────────
+			// Two failures the move into the sky could produce, neither of
+			// which any string in the sheet would show:
+			//
+			//  (a) the moons painted OVER the clock. They sit at z-index -1 so
+			//      the text wins the paint, but a moon behind the clock's
+			//      glyphs is still a moon nobody can read, and at the seal the
+			//      band is only ~336px wide with the facts taking ~130 of it.
+			//  (b) the moons painted OFF the sky. At C3 the field stops at
+			//      --seal-solid (210px measured from the trailing edge) and
+			//      everything past it is masked to nothing — a moon out there
+			//      is drawn on page white. This is the one number the seat's
+			//      inset was chosen against, so it is measured, not trusted.
+			for _, s := range []struct {
+				state string
+				gap   float64
+			}{{"closed", r.SceneToFactsClosed}, {"open", r.SceneToFactsOpen}} {
+				if s.gap < 4 {
+					t.Errorf("%s: the scenery's inline gap to the lid's clock is %.1fpx — "+
+						"the moons are painted behind the lid's own facts (z-index: -1), so "+
+						"this is a moon under the text rather than a moon in the sky",
+						s.state, s.gap)
+				}
+			}
+			if r.Density == "C3 seal" {
+				if r.SceneReachClosed > r.SealSolidPx {
+					t.Errorf("the scenery's leading edge sits %.1fpx in from the band's "+
+						"trailing edge while the sky's solid reach is only %.0fpx — at the "+
+						"seal the field is masked out past that line, so the moons are "+
+						"painted on page white rather than on sky",
+						r.SceneReachClosed, r.SealSolidPx)
+				}
+				if r.SceneReachClosed <= 0 {
+					t.Errorf("the scenery's reach reads %.1fpx — the cluster was not found "+
+						"or lies outside the band entirely", r.SceneReachClosed)
+				}
 			}
 
 			// COUNT 1 — the anchored-edge travel. Every fact has ONE anchored
@@ -276,11 +404,37 @@ func TestSkyMeasureProbe_TheThreeCounts(t *testing.T) {
 			if r.DiscSizeOpen <= r.DiscSizeClosed {
 				t.Errorf("the discs do not grow: %.1f → %.1fpx", r.DiscSizeClosed, r.DiscSizeOpen)
 			}
-			if r.DiscBelowHorizonPct < 25 || r.DiscBelowHorizonPct > 45 {
-				t.Errorf("%.1f%% of each open disc lands below the horizon line, want about a "+
-					"third — the discs grow DOWNWARD onto the pane's own paper, and the "+
-					"arrival is a change of scale and of ground rather than a caption",
-					r.DiscBelowHorizonPct)
+			// THE WINDOW MOVED, AND IT MOVED BY ARITHMETIC RATHER THAN BY
+			// TASTE — C-CALV4-SKY-CHEST stage 2. It was 25–45%, and 33.8%/32.8%
+			// was measured against a lid that had ONE height in both states.
+			// The moon's own geometry is byte-unchanged: same top anchor
+			// ((--bandh − --dsz0) / 2), same 13→40 / 11→32 diameters. What
+			// moved is the line it is measured against — the horizon is the
+			// lid's bottom edge, and the lid now collapses 12px (C1) / 10px
+			// (C3) on open, so the same moon necessarily hangs further below
+			// it. The new figures are forced, not chosen:
+			//
+			//	C1  (13.5 + 40 − 28) / 40 = 63.8%     measured 63.8%
+			//	C3  (10.5 + 32 − 22) / 32 = 64.1%     measured 64.1%
+			//
+			// THE CLAIM THAT SURVIVES is the one the still was making: the moon
+			// is not penned inside the strip — it crosses, it grows downward
+			// onto the pane's own paper, and it stays a moon in a sky rather
+			// than dropping out the bottom of the field. So the window is a
+			// window and not a point, and it is bounded at BOTH ends: under a
+			// third and the moon is an ornament sitting on a bar again; past
+			// four fifths and it has fallen through the sky's lower dissolve.
+			//
+			// A LATER HAND CHANGING --lidh MUST COME BACK HERE. That is the
+			// intended coupling: the two numbers are one geometry, and a
+			// silently re-timed lid that left this window alone would be
+			// claiming a crossing the build no longer has.
+			if r.DiscBelowHorizonPct < 33 || r.DiscBelowHorizonPct > 80 {
+				t.Errorf("%.1f%% of each open disc lands below the horizon line, want "+
+					"33–80%% — the moons grow DOWNWARD past the lid's bottom edge onto the "+
+					"pane's own paper, and with the lid collapsing %0.1fpx on open the "+
+					"figure is arithmetic: (top anchor + open diameter − open lid) / "+
+					"open diameter", r.DiscBelowHorizonPct, r.BandRectPx-r.LidOpenPx)
 			}
 
 			// COUNT 3 — from the LIVE DOM this time, not from the markup string.

@@ -110,11 +110,18 @@ func TestSky_SeatsOnlyWhereTheProducerPutIt(t *testing.T) {
 // TestSky_TheClosedStripStatesThreeFacts walks the SUMMARY's own subtree, which
 // is the closed strip. Three facts and no fourth, each dropped entirely rather
 // than blanked when its source is absent.
+//
+// AMENDED — C-CALV4-SKY-CHEST stage 2. Fact 1 is still HERE and is still the
+// summary's own subtree: the moons cannot leave the <summary> (a non-summary
+// child of <details> is hidden while closed). What changed is that they are no
+// longer a SLOT in the lid's flex row — `.skscene` is out-of-flow scenery
+// painted onto the sky. The class name moved with the meaning, and this guard
+// moved with it rather than being relaxed to "some moon markup, anywhere".
 func TestSky_TheClosedStripStatesThreeFacts(t *testing.T) {
 	band := skyTestSummary(t, render(t, fxSky(t, true)))
 
 	for _, want := range []string{
-		`class="skdiscs"`,  // fact 1 · the phase discs
+		`class="skscene"`,  // fact 1 · the phases, painted into the sky
 		`class="sktime"`,   // fact 2 · the in-world time
 		`19:42`,            //          …as of render, real text
 		`class="skseason"`, // fact 3 · the season word
@@ -158,7 +165,7 @@ func TestSky_AbsentFactsAreDroppedRatherThanBlanked(t *testing.T) {
 	if !strings.Contains(body, `class="skyhdr"`) || !strings.Contains(body, "19:42") {
 		t.Fatal("a moonless, seasonless calendar lost its sky entirely")
 	}
-	for _, gone := range []string{`class="skdiscs"`, `class="skseason"`, `class="sktabs"`} {
+	for _, gone := range []string{`class="skscene"`, `class="skseason"`, `class="sktabs"`} {
 		if strings.Contains(body, gone) {
 			t.Errorf("the strip rendered %q with nothing behind it — an absent fact is "+
 				"DROPPED, never blanked, on the Nameplate's own blockSeasonEraLabels idiom",
@@ -243,6 +250,53 @@ func TestSky_IsARealDisclosureWithAnAccessibleName(t *testing.T) {
 	if !strings.Contains(sky, `title="Alder 68% waxing gibbous"`) {
 		t.Error("a phase disc carries no phase word — identity is shape and fill and a " +
 			"stated word, never hue and never shape alone")
+	}
+}
+
+// TestSky_ThePhaseWordSurvivesTheMoveIntoTheSky is C-CALV4-SKY-CHEST stage 2's
+// own guard, and it is written because the move had one way to go quietly
+// wrong: the moons stopped being a seated fact in the lid's row, and a slice
+// that also dropped their `title` would have left the phase stated NOWHERE a
+// reader could reach without opening the chest.
+//
+// THREE INDEPENDENT STATEMENTS, ASSERTED AS THREE, because any one of them
+// alone is one refactor from silence:
+//
+//	1. the summary's ACCESSIBLE NAME (skyLabel) names every declared body and
+//	   its phase — this is the one a screen reader gets, closed;
+//	2. the scenery's per-body `title` — the sighted reader's, and it is the
+//	   one the move could most easily have dropped;
+//	3. the open pane's Tonight row — running text, four aligned columns.
+//
+// It is deliberately NOT satisfied by the shape of the disc. The house rule is
+// "shape and fill AND a stated word, never shape alone".
+func TestSky_ThePhaseWordSurvivesTheMoveIntoTheSky(t *testing.T) {
+	d := fxSky(t, true)
+	body := render(t, d)
+	sky := skyTestDetails(t, body)
+	band := skyTestSummary(t, body)
+
+	const phase = "waxing gibbous"
+
+	// (1) the accessible name, read off the CLOSED band.
+	label := skyTestAttr(t, sky, `<summary class="skyhdr" aria-label="`)
+	if !strings.Contains(label, phase) {
+		t.Errorf("the closed lid's accessible name %q no longer states a phase — the "+
+			"moons left the lid's content row and the name is what carries them now", label)
+	}
+
+	// (2) the scenery's own per-body title, INSIDE the summary (i.e. reachable
+	// while the chest is closed), not merely somewhere in the pane.
+	if !strings.Contains(band, `title="Alder 68% `+phase+`"`) {
+		t.Error("the sky's scenery carries no per-body `title` — moving the moons out " +
+			"of the lid's row must not also move their only sighted statement out of " +
+			"the closed state")
+	}
+
+	// (3) the pane's running text, which is where an operator who wants the
+	// detail goes ("we have the like menu for the moons and such anyways").
+	if !strings.Contains(skyTightened(sky), `<span class="ph">`+phase+`</span>`) {
+		t.Errorf("the open pane's Tonight row no longer prints %q as running text", phase)
 	}
 }
 
