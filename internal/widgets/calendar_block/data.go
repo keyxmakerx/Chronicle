@@ -12,6 +12,13 @@
 // precedent). Changing a field name or type is a STOP-AND-FLAG, not a
 // judgement call: it desynchronises a parallel chat you cannot see.
 //
+// AMENDED r55 (2026-08-14, calendar-v4 refinement stage 3). One additive field
+// for the Ledger's day panel: LedgerStub.CanCreate — the create door's gate,
+// which is the viewer's authoring floor AND the host's "an editor is mounted
+// here", neither of them derivable inside a plugin-agnostic widget. Same shape
+// as r54's PersistURL: producer-built, zero value means the affordance is
+// absent. Nothing renamed, nothing retyped.
+//
 // AMENDED r54 (2026-07-28). One field for the wave-3 switchboard (W-F):
 // LayerState.PersistURL — the campaign-scoped endpoint the switchboard posts a
 // layer choice to, built by the producer (the widget has no router and renders
@@ -448,6 +455,30 @@ type LayerState struct {
 type LedgerStub struct {
 	NeedsBackend bool
 	Hidden       bool // the real-world Block on the Bench renders with noShelf
+
+	// CanCreate gates the day panel's `+ New event` door, and it is ONE FIELD
+	// carrying TWO producer facts because both must hold and neither is
+	// derivable here:
+	//
+	//  1. the VIEWER's authoring floor — the create route's RoleScribe, read
+	//     off cc.MemberRole. It is NOT ViewerContext.IsGM and must never be
+	//     confused with it: IsGM is the VISIBILITY role, under which a
+	//     DM-granted player reads as Owner while the create route still
+	//     refuses them (bench.go's benchInput says so in full);
+	//  2. the HOST's statement that a day-card EDITOR is mounted on this page.
+	//     The door has no write path of its own — it opens the editor the day
+	//     card already ships, which is mounted by bench.templ alone. A Block
+	//     rendered anywhere else (the entity embed, a widget binding) can still
+	//     dock the Ledger through a stored layer preference, and a door there
+	//     would be a control that silently does nothing.
+	//
+	// ZERO VALUE IS NO DOOR, exactly as BlockRequest.SkyOn's is no sky and
+	// LayerState.PersistURL's is no switchboard: the one host that wants it says
+	// so, and every other caller is correct by default.
+	//
+	// AMENDED r55 (2026-08-14, calendar-v4 refinement stage 3). Additive only —
+	// no field renamed, no type changed.
+	CanCreate bool
 }
 
 type ShelfStub struct {

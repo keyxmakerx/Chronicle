@@ -86,6 +86,21 @@ type BlockProjectionInput struct {
 	// Block on the Bench renders with noShelf.
 	LedgerHidden bool
 	ShelfHidden  bool
+	// CanCreate lights the Ledger day panel's `+ New event` door
+	// (LedgerStub.CanCreate, r55). Written the positive way round, exactly as
+	// SkyOn is and for the identical reason: the door opens the DAY CARD'S
+	// EDITOR, which bench.templ mounts and no other host does, so "no door" is
+	// the zero value and every other caller — the builder preview, the entity
+	// embed, a widget binding, the subordinate rows — is correct by saying
+	// nothing.
+	//
+	// IT IS NOT DERIVED FROM Viewer.Role HERE, and that is the point. Role is
+	// the VISIBILITY role, under which a DM-granted player reads as Owner while
+	// the create route compares cc.MemberRole and refuses them (benchInput says
+	// so in full). Deriving the door's gate from the visibility role would offer
+	// a control the server rejects — two different questions, two different
+	// fields.
+	CanCreate bool
 	// SkyOn asks for the sky header on THIS Block (C-CALV4-SKY, [SKY-1]
 	// SIGNED). It is written the positive way round on purpose: the sky seats
 	// on the Bench's PRIMARY Block only — one sky per surface, never one per
@@ -193,7 +208,7 @@ func projectBlock(in BlockProjectionInput) calblock.BlockData {
 		// legend / horizon / moongraph keep their UNCONDITIONAL chips inside
 		// their layer gates (block.templ) because no filling wave is named for
 		// them, and the unconditional chip is the honest state today.
-		Ledger:       calblock.LedgerStub{NeedsBackend: false, Hidden: in.LedgerHidden},
+		Ledger:       calblock.LedgerStub{NeedsBackend: false, Hidden: in.LedgerHidden, CanCreate: in.CanCreate},
 		Shelf:        calblock.ShelfStub{NeedsBackend: false, Hidden: in.ShelfHidden},
 	}
 	data.DateLabel, data.Fault = blockDateLine(cal)

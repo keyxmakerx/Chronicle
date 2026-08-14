@@ -1006,10 +1006,25 @@ func ledgerDocked(d BlockData) bool {
 //     says so as well, and TestCSS_AnswerLadderChangesNothingButVisibility
 //     pins it so a future hand cannot un-scope it by "tidying".
 //
-//  2. reveal — this day's head-context line and its "nothing on this day"
-//     line, which are rendered for every day and hidden until chosen. CSS
-//     cannot compute "3 Deepwinter · 1 event", so the server renders all of
+//  2. reveal — this day's head-context line, its DAY PANEL and its "nothing on
+//     this day" line, which are rendered for every day and hidden until chosen.
+//     CSS cannot compute "3 Deepwinter · 1 event", so the server renders all of
 //     them and the ladder picks one.
+//
+//     THE THIRD SURFACE IS STAGE 3'S, AND IT IS A WIDENING — SAID OUT LOUD.
+//     `.ldp.lday` joins `.lctx` and `.lzero.lday` in this rule and in the guard
+//     that polices it (TestCSS_AnswerLadderChangesNothingButVisibility). Two
+//     things make it a widening of exactly one surface rather than of the rule:
+//     the guard names the third selector EXPLICITLY rather than loosening its
+//     match, so a fourth still fails; and `.ldp` is a token nothing else in the
+//     Block carries, which is the lock TestLedger_RowCarriesNoRevealToken exists
+//     to keep (the row wearing a reveal token is what shipped once already).
+//
+//     It is also the extension almanacAnchorDay BOOKED rather than approximated:
+//     "the retarget is one ladder extension away for whichever slice pays for
+//     it". This slice pays for it, for the Ledger — and the cost it quoted is
+//     why the panel prints ONE folded moon line per day rather than one row per
+//     moon per day.
 //
 //     IT NAMES ITS TWO SURFACES AND REVERTS RATHER THAN SETTING A BOX, and
 //     both halves of that are a fix, not a style. The rule was first written
@@ -1054,8 +1069,9 @@ func answerLadderCSS() string {
 			k, k)
 		fmt.Fprintf(&b,
 			".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lhead .lctx[data-lday=\"%s\"],\n"+
+				".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .ldp.lday[data-lday=\"%s\"],\n"+
 				".cal-block-host .block:has(.daypick[data-day-pick=\"%s\"]:checked) .lzero.lday[data-lday=\"%s\"] { display: revert }\n",
-			k, k, k, k)
+			k, k, k, k, k, k)
 		fmt.Fprintf(&b,
 			".cal-block-host .block:has(.grid [data-day-ord=\"%s\"]:is(:hover, :focus-within)) .lrows .lrow[data-lday=\"%s\"],\n"+
 				".cal-block-host .block:has(.lrows .lrow[data-lday=\"%s\"]:is(:hover, :focus-within)) .grid [data-day-ord=\"%s\"] { --answer: 1 }\n",
@@ -1114,14 +1130,47 @@ type ledgerLine struct {
 	Mark Mark
 }
 
-// ledgerContext is one day's head line and, when the day is empty, its own
-// "nothing here" line. Both are rendered for EVERY selectable day and revealed
-// by the ladder, because CSS cannot compute "3 Deepwinter · 1 event".
+// ledgerContext is one day's head line, its DAY PANEL, and — when the day is
+// empty — its own "nothing here" line. All three are rendered for EVERY
+// selectable day and revealed by the ladder, because CSS cannot compute
+// "3 Deepwinter · 1 event".
 type ledgerContext struct {
 	Ord   string
 	Label string // "3 Deepwinter" / the intercalary day's own name
 	Text  string // the head line: Label + " · N events"
 	Empty bool   // this day carries no marks, so it needs a .lzero of its own
+
+	// ── STAGE 3: the day panel's three added facts ──────────────────────────
+
+	// Key is the ANSWER key (dayKey / intercalaryKey) — the SAME namespace the
+	// grid cell, the Ledger row and the day card's payload use. The panel's
+	// create door names its own day with it rather than relying on whatever day
+	// the card was last opened on, which is the difference between creating on
+	// the day the viewer is looking at and creating on a stale one.
+	Key string
+
+	// Date is the panel's header line: the day plus the month's resolved YEAR
+	// ("4 Deepwinter, 1492"). It is deliberately NOT BlockData.DateLabel, which
+	// is the producer's era-aware formatting of TODAY and says nothing about a
+	// day the viewer chose; and it is deliberately not era-qualified, because
+	// this widget has no era geometry and the Ledger's own promise is that it
+	// "works before eras are defined". Ordinal day + month name + the year the
+	// month was resolved for are three facts already on MonthGeometry.
+	Date string
+
+	// Weekday is the day's weekday NAME. EMPTY for an intercalary day, which
+	// sits outside every tenday by construction, and empty when the calendar
+	// declares no weekday names — in both cases the sub-line drops rather than
+	// printing a blank.
+	Weekday string
+
+	// Moon is the day's phase line, one segment per DECLARED body. Empty when
+	// the calendar declares no moons, when the Almanac register was not built
+	// for this render (it is gated on the Shelf and the sky), and for every
+	// intercalary day — the register is indexed by ordinal day of the RENDERED
+	// month, so Midwinter 1 would silently read Deepwinter 1's illumination.
+	// Wrong is worse than absent.
+	Moon string
 }
 
 // ledgerView is everything Zone C draws, computed once per render.
@@ -1184,7 +1233,8 @@ func newLedgerView(d BlockData) ledgerView {
 	// control, so a context for it could never be revealed — emitting one would
 	// be dead markup on every render of a long month.
 	for day := 1; day <= d.Month.Days; day++ {
-		if _, ok := cells[day]; !ok || !dayAnswers(day) {
+		c, ok := cells[day]
+		if !ok || !dayAnswers(day) {
 			continue
 		}
 		ord := dayOrdKey(day)
@@ -1193,6 +1243,13 @@ func newLedgerView(d BlockData) ledgerView {
 			Ord: ord, Label: label,
 			Text:  label + " · " + eventCountLabel(perDay[ord]),
 			Empty: perDay[ord] == 0,
+			// The three panel facts. All three come from the SAME cell walk the
+			// rows come from, which is the whole reason this function exists —
+			// a second pass over the month is the two-computations defect.
+			Key:     dayKey(d.CalendarSlug, day),
+			Date:    ledgerDateLine(d, label),
+			Weekday: ledgerWeekdayName(d.Month, c),
+			Moon:    ledgerMoonLine(d, day),
 		})
 	}
 	for _, ic := range d.Month.Intercalary {
@@ -1208,10 +1265,93 @@ func newLedgerView(d BlockData) ledgerView {
 			Ord: ord, Label: label,
 			Text:  label + " · " + eventCountLabel(perDay[ord]),
 			Empty: perDay[ord] == 0,
+			Key:   intercalaryKey(d.CalendarSlug, ic.Day),
+			Date:  ledgerDateLine(d, label),
+			// NO WEEKDAY AND NO MOON, and both absences are the same fact stated
+			// twice: an intercalary day is outside every tenday and outside the
+			// Almanac register's ordinal index. Printing either would be printing
+			// the neighbouring ordinary day's answer under this day's name.
 		})
 	}
 	return v
 }
+
+// ledgerDateLine is the day panel's header — the reference's `4 June, 735`.
+//
+// THE YEAR IS MonthGeometry.Year AND NOTHING IS INFERRED FROM IT. That field is
+// "one month, already resolved for a specific year" (data.go), so it is a fact
+// the producer already committed to; the era, the epoch and the reckoning are
+// NOT derivable here and are not printed. A calendar in the FAULT case — no
+// eras, dates cannot resolve — still gets a correct line, which is the same
+// promise ledgerZeroAll's second sentence makes.
+//
+// A zero year drops the segment rather than printing ", 0".
+func ledgerDateLine(d BlockData, label string) string {
+	if d.Month.Year == 0 {
+		return label
+	}
+	return label + ", " + intText(d.Month.Year)
+}
+
+// ledgerWeekdayName is the day panel's muted sub-line.
+//
+// It reads the CELL's own column against the month's declared weekday names —
+// never `day % 7`, never `day % len(Weekdays)`. The lead offset, the five-column
+// rule and any producer-side irregularity are already resolved into DayCell.Col
+// by buildMonthGeometry, and re-deriving the weekday from the ordinal would be a
+// second computation of a number the geometry already carries (and would be
+// wrong the moment a month does not begin on column 1).
+//
+// Empty when the calendar declares no weekday names or the column is out of
+// range, so the sub-line drops rather than printing a blank.
+func ledgerWeekdayName(m MonthGeometry, c DayCell) string {
+	if c.Col < 1 || c.Col > len(m.Weekdays) {
+		return ""
+	}
+	return m.Weekdays[c.Col-1].Name
+}
+
+// ledgerMoonLine is the day panel's phase readout — the reference's moon glyph,
+// as the word and the percentage rather than as a second disc.
+//
+// EVERY DECLARED BODY, NOT ONE (stage 2's ruling, one surface down). The
+// reference sky has one moon because Earth has one; Harptos declares four, and a
+// panel that printed "the moon" would be the grid's three-moon ceiling defect
+// again — a body configured in the database and drawn nowhere.
+//
+// IT IS THE ALMANAC'S OWN ARITHMETIC, REUSED, not a second derivation:
+// almanacDayAt + almanacIllumPct are the functions the Tonight readout and the
+// Month lane already share, so the panel and the Almanac cannot disagree about
+// what a day's illumination is. The register is UNCAPPED, so a body past the
+// grid's moonCap appears here too.
+//
+// ACHROMATIC BY LAW. This returns text; the sheet inks it --text-muted and the
+// sky may never borrow the event colour axis (moongraph_test, almanac_test).
+//
+// Empty when the calendar declares no moons or the register was not built for
+// this render — the Almanac's build gate names the Shelf and the sky, so a Block
+// with neither carries no register and the panel simply omits the row.
+func ledgerMoonLine(d BlockData, day int) string {
+	var parts []string
+	for _, m := range d.Month.Almanac {
+		a, ok := almanacDayAt(m, day)
+		if !ok {
+			continue
+		}
+		parts = append(parts, m.Name+" "+strconv.Itoa(almanacIllumPct(a))+"% "+a.Phase)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// ledgerCanCreate reports whether the day panel draws the create door.
+//
+// TWO FACTS, AND BOTH ARE THE PRODUCER'S. LedgerStub.CanCreate is the viewer's
+// authoring floor AND the host's statement that a day-card editor is mounted on
+// this page (data.go); ledgerDocked is the zone gate every other day-selection
+// control already rides. A door in a Ledger with no editor behind it is a
+// control that silently does nothing, which is the one thing this component's
+// honesty idiom refuses harder than an absence.
+func ledgerCanCreate(d BlockData) bool { return d.Ledger.CanCreate && ledgerDocked(d) }
 
 // ledgerZeroAll is the UNSELECTED empty state. Its second sentence is
 // load-bearing and not decoration: it is the reason the Ledger renders in the

@@ -870,17 +870,37 @@ func TestCSS_AnswerLadderChangesNothingButVisibility(t *testing.T) {
 					"emits the SAME row primitive, and choosing a day then reflows the Block.", sel)
 			}
 			// A reveal names its surfaces. `.lrow` is never one of them.
+			//
+			// WIDENED BY ONE, EXPLICITLY, AT STAGE 3. `.ldp.lday[` — the
+			// Ledger's day panel — is the third surface that is display:none
+			// at rest, and it is added HERE, BY NAME, rather than by relaxing
+			// the match. That distinction is the whole guard: the list is an
+			// allowlist of specific tokens, so a FOURTH surface still fails
+			// this test and has to be argued for, exactly as this one was
+			// (helpers.go, answerLadderCSS rule 2). A loosened predicate —
+			// "any selector carrying .lday" — would have let the row back in
+			// the moment anyone re-added the token to ledgerRowClass, which is
+			// the defect TestLedger_RowCarriesNoRevealToken exists to lock
+			// from the other side.
+			revealSurfaces := []string{".lctx[", ".lzero.lday[", ".ldp.lday["}
 			if prop == "display" && val != "none" {
 				for _, part := range strings.Split(sel, ",") {
 					part = strings.TrimSpace(part)
 					if part == "" {
 						continue
 					}
-					if !strings.Contains(part, ".lctx[") && !strings.Contains(part, ".lzero.lday[") {
-						t.Errorf("a ladder reveal rule targets %q — a reveal may only name the two "+
-							"surfaces that are display:none at rest (.lhead .lctx and .lzero.lday). "+
-							"Anything wider reaches the Ledger row, which is visible at rest and is "+
-							"filtered by attribute, never revealed by class.", part)
+					named := false
+					for _, s := range revealSurfaces {
+						if strings.Contains(part, s) {
+							named = true
+							break
+						}
+					}
+					if !named {
+						t.Errorf("a ladder reveal rule targets %q — a reveal may only name the three "+
+							"surfaces that are display:none at rest (%v). Anything wider reaches the "+
+							"Ledger row, which is visible at rest and is filtered by attribute, never "+
+							"revealed by class.", part, revealSurfaces)
 					}
 				}
 			}

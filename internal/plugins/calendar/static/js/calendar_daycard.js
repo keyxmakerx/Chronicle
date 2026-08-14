@@ -2853,12 +2853,51 @@
         var newBtn = e.target.closest('[data-dc-new]');
         if (newBtn) {
           e.preventDefault();
-          var calNew = index[state.calId];
-          var dayNew = calNew && calNew.days[state.key];
+          // A DOOR THAT NAMES ITS OWN DAY IS BELIEVED; ONE THAT DOES NOT FALLS
+          // BACK TO THE OPEN CARD.
+          //
+          // The card's `+ New event` is INSIDE the card and can only ever mean
+          // the day the card is showing, so it names nothing and `state` is
+          // correct for it. The LEDGER's door (calendar-v4 refinement stage 3,
+          // the day panel) is not: the Ledger is a docked column that repaints
+          // by CSS, so a viewer can move the chosen day with the keyboard, or
+          // dismiss the card entirely, and `state.key` would still hold
+          // whatever day the card was last opened on. closeCard() clears
+          // `state.open` and deliberately keeps the rest, so the stale read
+          // does not even look empty — it looks like a valid day, and the
+          // event lands on the wrong date. The door therefore carries
+          // `data-day` in the ANSWER key namespace and this reads it.
+          //
+          // The calendar comes from the door's own Block host for the same
+          // reason: the Bench composes four Blocks and `state.calId` names the
+          // one the card last opened, not the one the door lives in.
+          // A KEYED DOOR IS RESOLVED ENTIRELY FROM ITSELF — never half from the
+          // door and half from `state`. Mixing them is the latent version of
+          // the same bug: this day, that calendar. When a keyed door cannot
+          // find its Block host the calendar resolves empty and nothing opens,
+          // which is the correct answer to "a door somewhere this module cannot
+          // place" and is unreachable in practice, because the producer lights
+          // the door only where an editor is mounted (LedgerStub.CanCreate).
+          var ownKey = newBtn.getAttribute('data-day') || '';
+          var ownHost = ownKey ? newBtn.closest('[data-bench-block]') : null;
+          var calIdNew = ownKey
+            ? (ownHost ? (ownHost.getAttribute('data-calendar-id') || '') : '')
+            : state.calId;
+          var keyNew = ownKey || state.key;
+          var calNew = index[calIdNew];
+          var dayNew = calNew && calNew.days[keyNew];
           if (calNew && dayNew) {
+            // THE ANCHOR IS A BOX THAT IS ACTUALLY ON SCREEN. edOpen measures
+            // the anchor once, for both the placement law and the morph seed,
+            // and a CLOSED card measures 0x0 at 0,0 — which lands the editor at
+            // the viewport's top-left, half a screen from the day it belongs to.
+            // That is the C-CALV4-CARD-REDUCED-ANCHOR defect exactly, reached
+            // by a different path: the card's own door is only ever pressed
+            // with the card open, but the LEDGER's door is normally pressed
+            // with it closed. So it anchors to itself.
             edOpen('create', calNew, dayNew, {
               year: dayNew.year, month: dayNew.month, day: dayNew.day, all_day: true,
-            }, card);
+            }, state.open ? card : newBtn);
           }
           return;
         }

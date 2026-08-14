@@ -157,6 +157,10 @@ type BlockRequest struct {
 	// Block on the Bench renders with noShelf).
 	LedgerHidden bool
 	ShelfHidden  bool
+	// CanCreate lights the Ledger day panel's create door. Zero value is NO
+	// DOOR — the door opens the day card's editor, and bench.templ is the one
+	// host that mounts one. See BlockProjectionInput.CanCreate.
+	CanCreate bool
 	// SkyOn asks for the sky header on this Block (C-CALV4-SKY, [SKY-1]
 	// SIGNED). Zero value is NO SKY: the header seats on the Bench's PRIMARY
 	// Block only, so the one host that wants it says so and every other caller
@@ -255,6 +259,7 @@ func (s *BlockService) Block(ctx context.Context, req BlockRequest) (calblock.Bl
 		IsActive:     req.IsActive,
 		LedgerHidden: req.LedgerHidden,
 		ShelfHidden:  req.ShelfHidden,
+		CanCreate:    req.CanCreate,
 		SkyOn:        req.SkyOn,
 		MoonCap:      req.MoonCap,
 	}), nil

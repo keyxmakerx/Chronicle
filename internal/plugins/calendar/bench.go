@@ -1126,7 +1126,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 		// the campaign's principal calendar and the only Block on this surface
 		// whose Almanac register is built, so it is the only Block whose sky
 		// could ever carry more than a gradient and a clock.
-		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, true, layerPrefs, in.View); b != nil {
+		if b := h.benchBlock(ctx, spine, primary, viewer, activeID, false, true, layerPrefs, in.View, in.CanCreateEvents); b != nil {
 			data.Primary = b
 			data.Primary.Nav = benchNav(primary, b.Data, in.Campaign.ID)
 			// §2's verb row seats on the same nameplate row as the cursor, and
@@ -1140,7 +1140,7 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 	if realWorld != nil {
 		// noShelf — the signed real-world Block on the Bench renders with its
 		// Shelf docked but hidden, which is the ShelfHidden flag's whole purpose.
-		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, false, layerPrefs, BlockDate{}); b != nil {
+		if b := h.benchBlock(ctx, spine, realWorld, viewer, activeID, true, false, layerPrefs, BlockDate{}, in.CanCreateEvents); b != nil {
 			data.RealWorld = b
 		} else {
 			rows = append(rows, realWorld)
@@ -1255,7 +1255,13 @@ func benchSyncPill(ctx context.Context, spine *BlockService, campaignID string, 
 // view is the month cursor ([GR-1]). It is the request's `?y=&m=` for the
 // PRIMARY Block and the zero BlockDate for every other one — see buildBench's
 // call sites for why the real-world Block does not take it.
-func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, sky bool, prefs blockLayerPrefs, view BlockDate) *BenchBlock {
+// canCreate is benchInput.CanCreateEvents, passed through to the Ledger day
+// panel's create door (r55). It rides the SAME field the day card's own
+// `+ New event` button is gated on (DayCardMount.CanCreate, built from
+// in.CanCreateEvents a hundred lines up), because the Ledger's door IS that
+// control — one handle, one listener, one route. Two gates read from one
+// predicate cannot drift; two predicates for one control would.
+func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Calendar, viewer BlockViewer, activeID string, noShelf bool, sky bool, prefs blockLayerPrefs, view BlockDate, canCreate bool) *BenchBlock {
 	if spine == nil || cal == nil {
 		return nil
 	}
@@ -1271,6 +1277,7 @@ func (h *Handler) benchBlock(ctx context.Context, spine *BlockService, cal *Cale
 		// knows which Block is the Primary, rather than by a predicate the
 		// producer would have to re-derive per Block.
 		SkyOn:      sky,
+		CanCreate:  canCreate,
 		MoonCap:    benchMoonCap,
 		LayerPrefs: prefs,
 	})
