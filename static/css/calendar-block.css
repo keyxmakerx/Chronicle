@@ -47,43 +47,23 @@
    TOKENS — light. The rule ramp is the load-bearing part: on light each step
    is DARKER than the last, on dark each is LIGHTER. That is verified in both
    directions here, which --color-border / --color-border-light was not.
-
-   RE-DERIVED (stage 1 of the reference refinement). The NAMES are frozen —
-   identity_triple_test.go reads --cal-* by name and the whole sheet reads the
-   rest — so every change below is a VALUE change inside the existing block.
-   The neutral family rotates from hue 260/265 (cool) to 75-92 (warm) at the
-   SAME chroma magnitudes it already carried, which is a temperature change
-   rather than a saturation one: the sky and the moons stay as achromatic as
-   they were, because "achromatic" here means they never borrow --axis or
-   --accent (moongraph_test.go, almanac_test.go), and a 0.009-chroma warm grey
-   is no more chromatic than the 0.012-chroma cool grey it replaces.
-
-   A SECOND, MEASURED CONSEQUENCE OF WARMING THE GROUNDS: --gold sits at hue
-   76-88, so `color-mix(in oklch, var(--surface-card) N%, var(--gold))` now
-   interpolates across ~15° of hue instead of the almost exactly 180° it
-   crossed against a 265-hue ground. The old mix took the long way round the
-   wheel and came back PINK (measured: #fef4f6 at 92%); the selected day's
-   ground below depends on that no longer being true.
    ─────────────────────────────────────────────────────────────────────────── */
 .cal-block-host {
   color-scheme: light dark;
 
-  /* surfaces + ink. Warm paper rather than clinical white: pure oklch(1 0 0)
-     is the one value in the old block that could not be warmed at all. */
-  --surface-card: oklch(0.995 0.003 92);
-  --surface-inset: oklch(0.960 0.007 88);
-  --text-primary: oklch(0.235 0.014 75);
-  --text-body: oklch(0.400 0.012 75);
-  --text-secondary: oklch(0.545 0.011 78);
-  --text-muted: oklch(0.655 0.010 80);
+  /* surfaces + ink */
+  --surface-card: oklch(1 0 0);
+  --surface-inset: oklch(0.965 0.003 260);
+  --text-primary: oklch(0.22 0.015 265);
+  --text-body: oklch(0.38 0.014 265);
+  --text-secondary: oklch(0.55 0.012 265);
+  --text-muted: oklch(0.68 0.010 265);
 
-  /* the rule ramp. Measured L: 0.900 -> 0.840 -> 0.755, monotonically DARKER
-     each step, which is the light-theme direction of the greyscale identity
-     channel. Hairline is a hairline: 1.33:1 against the card. */
-  --rule-hairline: oklch(0.900 0.006 85);
-  --rule-structural: oklch(0.840 0.008 82);
-  --rule-structural-strong: oklch(0.755 0.010 80);
-  --rule-editorial: oklch(0.755 0.010 80);
+  /* the rule ramp */
+  --rule-hairline: oklch(0.915 0.004 265);
+  --rule-structural: oklch(0.855 0.006 265);
+  --rule-structural-strong: oklch(0.775 0.008 265);
+  --rule-editorial: oklch(0.775 0.008 265);
 
   /* chrome accent. The ONE token inherited from the host page, because the
      campaign accent IS chrome. It NEVER touches event data: the marks layer is
@@ -95,14 +75,9 @@
   --warn: oklch(0.65 0.15 65);
   --bad: oklch(0.58 0.19 25);
   --fog: oklch(0.65 0.03 250);
-  /* THE GOLD REGISTER, and it is DARKER on light than it used to be for a
-     measured reason: at oklch(0.70 0.13 85) gold read 2.70:1 against the card,
-     which is under 3:1 — it could not legally carry heading text and it was
-     already carrying the GM badge's 10px label. At 0.540 it measures 4.97:1 on
-     the card, 4.63:1 on the Bench's page ground and 4.49:1 on the inset. */
-  --gold: oklch(0.540 0.108 76);
-  --today-ink: oklch(0.235 0.014 75);
-  --today-ink-on: oklch(0.995 0.003 92);
+  --gold: oklch(0.70 0.13 85);
+  --today-ink: oklch(0.22 0.015 265);
+  --today-ink-on: oklch(0.99 0 0);
 
   /* event type hues (axis) */
   --ev-social: oklch(0.55 0.17 258);
@@ -127,29 +102,8 @@
   --cal-dwarven: oklch(0.62 0.10 70);
 
   /* elevation: REST IS ALWAYS NONE. --elev-1 exists only inside the hover
-     ring's box-shadow list (see .surf.act:hover) so it can never appear alone.
-     Warmed with the grounds: a cool shadow under a warm card is the seam that
-     makes a re-derived palette look half-applied. */
-  --elev-1: 0 1px 2px oklch(0.24 0.02 75/.07), 0 1px 3px oklch(0.24 0.02 75/.09);
-
-  /* THE DISPLAY FACE — new here, and new because the product had none.
-     Measured before introducing it: `grep -rn serif static/css/*.css
-     tailwind.config.js` finds exactly one serif in the whole tree, and it is
-     the `sans-serif` tail of the Inter stack. There was nothing to reuse.
-
-     It is a SYSTEM STACK and nothing else: no @font-face, no webfont, no
-     network request, so it cannot break the rendering-canvas exemption's
-     "self-contained" promise, and it renders in the headless engine the
-     probes and the screenshot generator drive. `serif` is the last resort
-     rather than the only entry so a Linux CI box lands on DejaVu Serif and a
-     Mac lands on ui-serif, instead of on whatever the engine defaults to.
-
-     It is declared ONCE, outside both theme blocks: a typeface is not a
-     theme. Body text stays Inter — the display face is the HEADING register
-     only (the month/Block title and the section heads), which is the whole of
-     what the reference spends a serif on. */
-  --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino,
-    Georgia, "DejaVu Serif", "Times New Roman", serif;
+     ring's box-shadow list (see .surf.act:hover) so it can never appear alone. */
+  --elev-1: 0 1px 2px oklch(0.2 0.02 260/.06), 0 1px 3px oklch(0.2 0.02 260/.08);
 
   /* radius: canon scale. 9px does not exist. */
   --r-badge: 2px;
@@ -202,23 +156,17 @@
    (tailwind.config.js darkMode:'class', static/js/theme.js).
    ─────────────────────────────────────────────────────────────────────────── */
 .dark .cal-block-host {
-  /* DEEPER as well as warmer — the reference is dark-dominant and its grounds
-     sit well below the old 0.215 card. Measured: card #16130f, inset #201d18. */
-  --surface-card: oklch(0.190 0.008 78);
-  --surface-inset: oklch(0.232 0.009 78);
-  /* the inks stay MUTED GREY, which is why the chroma drops as it warms:
-     0.011 at hue 84 is a warm grey, 0.011 at hue 60 would be beige. */
-  --text-primary: oklch(0.968 0.004 88);
-  --text-body: oklch(0.848 0.006 86);
-  --text-secondary: oklch(0.700 0.009 84);
-  --text-muted: oklch(0.560 0.009 82);
+  --surface-card: oklch(0.215 0.012 265);
+  --surface-inset: oklch(0.255 0.013 265);
+  --text-primary: oklch(0.975 0.002 265);
+  --text-body: oklch(0.855 0.008 265);
+  --text-secondary: oklch(0.705 0.012 265);
+  --text-muted: oklch(0.565 0.012 265);
 
-  /* measured L: 0.278 -> 0.362 -> 0.462, monotonically LIGHTER each step —
-     the dark-theme direction of the same greyscale identity channel. */
-  --rule-hairline: oklch(0.278 0.009 78);
-  --rule-structural: oklch(0.362 0.010 78);
-  --rule-structural-strong: oklch(0.462 0.011 78);
-  --rule-editorial: oklch(0.462 0.011 78);
+  --rule-hairline: oklch(0.295 0.012 265);
+  --rule-structural: oklch(0.375 0.014 265);
+  --rule-structural-strong: oklch(0.475 0.014 265);
+  --rule-editorial: oklch(0.475 0.014 265);
 
   --accent: var(--color-accent, oklch(0.72 0.16 272));
 
@@ -226,12 +174,9 @@
   --warn: oklch(0.78 0.15 70);
   --bad: oklch(0.68 0.18 25);
   --fog: oklch(0.55 0.03 250);
-  /* gold goes UP on dark, not down: 10.36:1 against the deepened card. This is
-     the register the reference spends on its month title and its selected day,
-     and on dark it is the brightest thing on the surface after the ink. */
-  --gold: oklch(0.815 0.130 88);
-  --today-ink: oklch(0.968 0.004 88);
-  --today-ink-on: oklch(0.170 0.008 78);
+  --gold: oklch(0.80 0.13 88);
+  --today-ink: oklch(0.97 0.002 265);
+  --today-ink-on: oklch(0.18 0.012 265);
 
   --ev-social: oklch(0.66 0.16 258);
   --ev-quest: oklch(0.70 0.17 25);
@@ -621,19 +566,10 @@
   padding: 1px 3px;
   margin-inline-start: -2px;
 }
-/* THE BLOCK'S TITLE — the display face's first and largest appearance.
-   Weight drops 700 -> 650 because the serif carries more colour per stroke
-   than Inter does at the same nominal weight, and 700 in a Palatino/Georgia
-   class face at 14px fills in. The box is UNCHANGED: still nowrap, still
-   ellipsis, still `flex: 0 1 auto` off a 52px floor, so a wider serif
-   truncates exactly where the sans did rather than growing the nameplate. */
 .cal-block-host .np .nm {
-  font-family: var(--font-display);
-  font-weight: 650;
+  font-weight: 700;
   font-size: 14px;
   line-height: 1.2;
-  letter-spacing: .005em;
-  color: var(--gold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -812,23 +748,15 @@
   grid-template-columns: subgrid;
   grid-column: 1 / -1;
 }
-/* The weekday header joins the display register but NOT the gold one. It is a
-   RULER, and the reference keeps its weekday strip muted grey with exactly one
-   gold thing per view (the month title). Gold on ten repeating column labels
-   would out-shout the title it is supposed to sit under.
-   20px rather than 18px is the density change: the reference's grid breathes
-   above the first week row, and the header is the only band in the month whose
-   height is not load-bearing for the cell arithmetic. */
 .cal-block-host .grid .hd b {
-  height: 20px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-display);
   font-weight: 650;
   font-size: 10px;
   line-height: 1;
-  letter-spacing: .10em;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
@@ -867,21 +795,16 @@
   grid-template-columns: subgrid;
   grid-column: 1 / -1;
 }
-/* The era band is the month's other label row, so it takes the same display
-   register as the weekday ruler above it — and the same refusal of gold, for
-   the same reason. Its 16px height is untouched: the band is column-aligned
-   subgrid furniture and its height is part of the row arithmetic. */
 .cal-block-host .band {
   grid-row: 1;
   height: 16px;
   display: flex;
   align-items: center;
-  padding: 0 6px;
-  font-family: var(--font-display);
+  padding: 0 5px;
   font-weight: 650;
   font-size: 10px;
   line-height: 1;
-  letter-spacing: .10em;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--text-secondary);
   overflow: hidden;
@@ -949,38 +872,10 @@
 .cal-block-host .cell.fog .dn { color: var(--text-muted) }
 /* selection is IDENTITY, not elevation: an inset ring and a tint, no shadow.
    The :has() branch is the CSS-only day pick (W-B): the cell's own hidden radio
-   IS the selected state, so no class has to be moved by anything.
-
-   THE RING IS GOLD, and this is the one deliberate widening of what gold means
-   in this product. It was --accent, and the mechanism is untouched — same
-   two selectors, same ::after, same inset ring, same tint, nothing rebuilt.
-   Read the trade before changing it back or spreading it further:
-
-     · The reference gives the chosen day a gold border and a lifted ground,
-       and the operator signed that. --gold was already in the token block, so
-       the register is reached without leaving our palette.
-     · L22 ("permission is gold") is DILUTED by this, and that is the cost. It
-       is not erased: every permission mark carries a SHAPE as well as the hue
-       — the dogear's triangle, the restricted diamond, the Ledger's 3px gold
-       rail, the bordered `GM` badge — and none of them is a 1.5px ring around
-       a whole cell. Colour was never the only channel there, which is the only
-       reason this is affordable at all.
-     · --accent is NOT freed up by this and must not be spent on event data:
-       canon A7 forbids the marks layer from referencing it either way. It
-       still means "chrome" — the focus ring below is still accent.
-
-   THE TINT IS 8%, NOT 4%, and it lifts in the direction each theme lifts.
-   Measured against the plain cell it sits beside: 1.112:1 on light (the mix
-   goes DOWN from the warm paper, which is what a light theme reads as chosen)
-   and 1.122:1 on dark (the mix goes UP out of the ground, which is what the
-   reference's "lifted" means on its own dark grid). Two directions, one
-   declaration, because the ground token already differs.
-
-   Still no shadow, still no border-width change, still nothing moved — canon
-   D3's "selection is identity, not elevation" is unchanged by a hue swap. */
+   IS the selected state, so no class has to be moved by anything. */
 .cal-block-host .cell.sel,
 .cal-block-host .cell:has(> .daypick:checked) {
-  background: color-mix(in oklch, var(--surface-card) 92%, var(--gold));
+  background: color-mix(in oklch, var(--surface-card) 96%, var(--accent));
 }
 .cal-block-host .cell.sel::after,
 .cal-block-host .cell:has(> .daypick:checked)::after {
@@ -989,31 +884,19 @@
   inset: 0;
   pointer-events: none;
   border-radius: 1px;
-  box-shadow: inset 0 0 0 1.5px var(--gold);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
-/* the two subtrees. Baseline is the underline; the cell query promotes.
-
-   DENSITY, toward the reference's calmer grid: the HORIZONTAL padding grows
-   and the vertical does not. That asymmetry is deliberate and it is the whole
-   safe budget — the 52px and 84px declared heights are read by the cell
-   arithmetic and by the reach probes (a day cell that loses interior height
-   drops its underline or its moon row), while the horizontal inset is spare
-   room in every measured column. */
+/* the two subtrees. Baseline is the underline; the cell query promotes. */
 .cal-block-host .cell > .cnamed { display: none }
 .cal-block-host .cell > .cunder {
   display: block;
   height: 52px;
   overflow: hidden;
-  padding: 2px 3px 0;
+  padding: 2px 2px 0;
 }
-/* the numeral loses a step of weight. At 600 it was the heaviest ink in the
-   grid and competed with the marks under it; the reference's day numbers are
-   quiet and the marks are what carry. Tabular figures are inherited from the
-   host and NOT overridden here — a calendar is made almost entirely of
-   numbers and the display face's old-style figures have no business in it. */
 .cal-block-host .cell .dn {
-  font-weight: 560;
+  font-weight: 600;
   font-size: 12px;
   line-height: 1;
   color: var(--text-body);
@@ -1490,22 +1373,13 @@
   flex-wrap: nowrap;
   border-bottom: 1px solid var(--rule-hairline);
 }
-/* THE LEDGER'S SECTION HEAD — the display register's small-caps voice.
-   `text-transform: uppercase` was already here and stays, deliberately, rather
-   than being swapped for `font-variant-caps: all-small-caps`: none of the
-   faces in --font-display ships true small capitals, so the variant would be
-   SYNTHESISED (the engine scales the caps down and the stems go thin), and a
-   synthesised small cap at 10px is a smear. Uppercase + the display face +
-   wider tracking is the same register with none of that risk.
-   Tracking goes .06em -> .10em because a serif at 10px needs the air. */
 .cal-block-host .lhead .t {
-  font-family: var(--font-display);
   font-weight: 650;
   font-size: 10px;
   line-height: 1.3;
-  letter-spacing: .10em;
+  letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--text-secondary);
 }
 .cal-block-host .lhead .c {
   font-weight: 500;
@@ -2476,8 +2350,7 @@
     display: block;
     height: 84px;
     overflow: hidden;
-    /* horizontal only, same budget as .cunder's: 84px is load-bearing. */
-    padding: 6px 6px 5px;
+    padding: 6px 4px 5px;
   }
   .cal-block-host .cell > .cunder { display: none }
   .cal-block-host .cell > .cnamed > .dn {
