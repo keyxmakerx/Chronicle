@@ -403,6 +403,111 @@ func moonsFor(c DayCell) []MoonDisc {
 	return c.Moons[:moonCap]
 }
 
+// moonDiscClass is the resting/expanded split, and it is the whole of
+// C-CALV4-SPEC §4 expressed in one class.
+//
+// THE PRIMARY BODY IS ALWAYS SILHOUETTED (spec §4, first bullet: "visible at
+// rest, not hover-gated"). Index 0 therefore keeps the bare `.ph` and is
+// painted at every column width the grid can produce. Every LATER body is
+// `.ph.phx` — the same disc, hidden at rest and revealed by the cluster's
+// :hover / :focus-visible rules, which is the "expands to show up to three"
+// half of the same bullet.
+//
+// WHICH BODY IS PRIMARY IS THE PRODUCER'S ORDER, not a new decision here.
+// DayCell.Moons already arrives ordered and moonsFor already caps it at
+// moonCap; taking index 0 adds no second opinion about which moon matters.
+func moonDiscClass(md MoonDisc, i int) string {
+	cls := moonWaneClass(md)
+	if i > 0 {
+		cls += " phx"
+	}
+	return cls
+}
+
+// moonPlusNeeded answers whether the hover expansion ends in a `+`.
+//
+// IT READS MoonsDeclared, NOT len(c.Moons), for the reason data.go states about
+// the Nameplate chip: the per-cell slice is already capped at moonCap, so
+// deriving "are there more" from it would put moonCap's arithmetic in a second
+// place and answer `false` for every calendar. The declared total is the only
+// figure that knows a fourth body exists.
+//
+// THIS IS A NARROWING OF MN-G4, NOT ITS DELETION, and it is the operator's own
+// 2026-08-15 answer to their own open question (C-CALV4-SPEC §4: "Hover →
+// expands to show up to three, with a `+` if the calendar has more"). MN-G4's
+// argument was NOISE — "a marker repeated in every cell was the noisiest thing
+// on the surface" — and that argument is about the RESTING month, where thirty
+// `+1`s appeared at once. At rest this cell now shows ONE silhouette and no
+// `+` at all, so the resting month is quieter than the one MN-G4 was written
+// against, not noisier; the `+` exists only inside the single hovered cell.
+// The resting ban is still enforced, by TestMoonPanel_NoCellCarriesAPlusAboutMoons
+// and by the browser probe, which measures it painted rather than trusting the
+// class.
+func moonPlusNeeded(d BlockData) bool {
+	return hasLayer(d.Layers, "moons") && d.Month.MoonsDeclared > moonCap
+}
+
+// cellEraToken is the era's hue for ONE day cell, or "" when no era covers it.
+//
+// ERAS ARE A BACKGROUND TINT ON THE CELL FILL (C-CALV4-SPEC §1's open question,
+// closed by the operator on 2026-08-15). The reasoning is recorded in the spec
+// and is a constraint rather than a taste: the cell edge already carries two
+// meanings — gold means SELECTED, and the raised "pop" is itself an edge
+// treatment — so a third edge meaning would make all three ambiguous. A
+// low-chroma background wash reads as GROUPING, which is what an era is.
+//
+// IT READS THE SAME EraBand THE BAND ROW DRAWS, rather than a new field, so the
+// tint and the band above it can never disagree about where an era starts. The
+// band's own geometry is the source: StartCol is 1-based within the week and
+// Span is a column count, exactly as bandStyle consumes them, and the same
+// defensive clamps are applied here so a producer's zero cannot mean two
+// different columns in two files.
+//
+// THE HUE GOES THROUGH bandToken, the SAME allowlist the band uses. A raw
+// colour must never reach a style attribute (identity_triple_test.go's rule for
+// --cal, applied to the same class of channel).
+func cellEraToken(row WeekRow, c DayCell) string {
+	if c.Day <= 0 {
+		return ""
+	}
+	for _, b := range row.Bands {
+		start := b.StartCol
+		if start < 1 {
+			start = 1
+		}
+		span := b.Span
+		if span < 1 {
+			span = 1
+		}
+		if c.Col >= start && c.Col < start+span {
+			return bandToken(b.BandHue)
+		}
+	}
+	return ""
+}
+
+// cellStyle composes the two custom properties a day cell can carry: its datum
+// hue (--axis, unchanged) and its era hue (--erahue).
+//
+// ONE STYLE ATTRIBUTE, NOT TWO. templ renders one `style` per element, so the
+// era tint could not be added as a second attribute without silently dropping
+// whichever came last — the kind of defect that renders correctly on every
+// fixture that happens to set only one of the two.
+func cellStyle(d BlockData, row WeekRow, c DayCell) string {
+	parts := make([]string, 0, 2)
+	if a := cellAxis(c); a != "" {
+		parts = append(parts, "--axis:"+axisToken(a))
+	}
+	// Gated on the eras LAYER, like every other layer-owned surface: a viewer
+	// who switched eras off must not get the tint either.
+	if hasLayer(d.Layers, "eras") {
+		if e := cellEraToken(row, c); e != "" {
+			parts = append(parts, "--erahue:"+e)
+		}
+	}
+	return strings.Join(parts, ";")
+}
+
 // moonStyle derives the terminator geometry for one disc.
 //
 // A real terminator, not a pie fill (L25): the lit half plus an ellipse of width

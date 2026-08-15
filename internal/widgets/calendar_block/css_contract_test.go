@@ -497,21 +497,25 @@ func TestCSS_SizingIsContainerQueries(t *testing.T) {
 		"@container cal-block (min-width: 240px) and (max-width: 299.98px)", // mini
 		"@container cal-block (max-width: 239.98px)",                        // sub-mini
 		"@container cal-cell (min-width: 84px)",                             // density
-		"@container cal-cell (min-width: 40px)",                             // the moon row's own
+		"@container cal-cell (min-width: 30px)",                             // the silhouette
+		"@container cal-cell (min-width: 35px)",                             // the date's full size
+		"@container cal-cell (min-width: 75px)",                             // the moon expansion
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("the stylesheet is missing %q", want)
 		}
 	}
-	// BOTH CELL THRESHOLDS ARE READ OUT OF GO, so the sheet and sizing.go cannot
-	// drift the way they could while the discs shared the named row's query and
-	// nothing named the number twice.
+	// ALL FOUR CELL THRESHOLDS ARE READ OUT OF GO, so the sheet and sizing.go
+	// cannot drift the way they could while the discs shared the named row's
+	// query and nothing named the number twice.
 	for _, pin := range []struct {
 		px   float64
 		what string
 	}{
 		{NamedColWidthMin, "the named-event density flip"},
-		{MoonRowColWidthMin, "the moon row's own promotion"},
+		{MoonSilhouetteColWidthMin, "the always-visible primary silhouette"},
+		{CellCompactColWidthMin, "the date's full type size"},
+		{MoonExpandColWidthMin, "the moon cluster's hover/focus expansion"},
 	} {
 		q := fmt.Sprintf("@container cal-cell (min-width: %gpx)", pin.px)
 		if !strings.Contains(code, q) {
@@ -519,11 +523,56 @@ func TestCSS_SizingIsContainerQueries(t *testing.T) {
 				"the same contract written in two languages", pin.what, pin.px, q)
 		}
 	}
-	if NamedColWidthMin <= MoonRowColWidthMin {
-		t.Errorf("the moon row's threshold (%g) must stay BELOW the named row's (%g). They "+
-			"exist as two numbers precisely because three 10px discs cost less width than an "+
-			"event name; collapsing them is the defect the split was made to fix",
-			MoonRowColWidthMin, NamedColWidthMin)
+	// ── THE LADDER IS ORDERED, AND EACH RUNG ANSWERS A DIFFERENT QUESTION ───
+	//
+	// silhouette < date < expansion < names. Collapsing any adjacent pair is
+	// the category error the original single 40px query WAS: one disc, a date,
+	// three discs and an event name cost wildly different amounts of width, and
+	// gating two of them together means the cheaper one is refused at widths it
+	// would fit in — which is how the operator's ten-day phone drew nothing.
+	for _, ord := range []struct {
+		lo, hi     float64
+		loN, hiN   string
+		collapsing string
+	}{
+		{MoonSilhouetteColWidthMin, CellCompactColWidthMin,
+			"the silhouette", "the date's full size",
+			"one 8px disc costs less than a 12px date plus a 10px disc"},
+		{CellCompactColWidthMin, MoonExpandColWidthMin,
+			"the date's full size", "the expansion",
+			"a 45px expanded row costs far more than a 16.7px date"},
+		{MoonExpandColWidthMin, NamedColWidthMin,
+			"the expansion", "the named-event flip",
+			"three discs and a `+` cost less than an event NAME"},
+	} {
+		if ord.lo >= ord.hi {
+			t.Errorf("%s (%g) must stay BELOW %s (%g). They are separate numbers because %s; "+
+				"collapsing them is the defect the split was made to fix",
+				ord.loN, ord.lo, ord.hiN, ord.hi, ord.collapsing)
+		}
+	}
+	// ── THE 40px QUERY IS ASSERTED ABSENT: IT IS THE SHIPPED DEFECT ─────────
+	//
+	// It gated all three discs together, and the operator's ten-day Harptos
+	// column measures 30.0px on a 360px phone, 33.0px at 390px and 37.0px at
+	// 430px — all three under 40. That one query is exactly why the moons were
+	// invisible on the only calendar they use.
+	if strings.Contains(code, "@container cal-cell (min-width: 40px)") {
+		t.Error("the sheet still carries `@container cal-cell (min-width: 40px)` — the " +
+			"single all-or-nothing moon query. A ten-day week measures 30.0px on a phone, " +
+			"so that query is what made the operator's own calendar draw no moons at all")
+	}
+	// ── AND THE SILHOUETTE'S THRESHOLD IS TIED TO THE GRID'S OWN FLOOR ──────
+	//
+	// MoonSilhouetteColWidthMin is the std tier's column floor, not a taste. If
+	// a future change lowers `.grid`'s min-width, a column can become narrower
+	// than the silhouette plus the date — which is a moon lying ACROSS a date
+	// rather than a missing moon, and that is the worse of the two defects.
+	if !strings.Contains(code, "min-width: calc(var(--week-len) * 30px)") {
+		t.Errorf("the grid no longer declares the 30px-per-column floor that "+
+			"MoonSilhouetteColWidthMin (%g) is read off. Lower it and a column can be "+
+			"narrower than the silhouette plus the date",
+			MoonSilhouetteColWidthMin)
 	}
 	// std is the BASELINE rather than a query, so a Block rendered before its
 	// container is measured degrades to the middle class, not the widest.

@@ -120,7 +120,7 @@ templ weekRow(d BlockData, row WeekRow) {
 			}
 		</span>
 		for _, c := range row.Cells {
-			@dayCell(d, c)
+			@dayCell(d, row, c)
 		}
 		// THE MOON PANEL FOLDS OPEN HERE, over the rows beneath (C-CALV4-MOONS
 		// [MN-3]). One per row rather than one per cell: both tabs' contents are
@@ -185,7 +185,7 @@ func weekKey(slug string, r WeekRow) string {
 // as the sub-mini tick rule already takes it (tickDays). A partner without its
 // own identity borrows the datum's — never --accent (canon A7). A cell with no
 // marks carries none and the ANSWER wash falls back to the structural rule.
-templ dayCell(d BlockData, c DayCell) {
+templ dayCell(d BlockData, row WeekRow, c DayCell) {
 	<div
 		class={ cellClass(c, d.Month.WeekLen) }
 		if c.Day > 0 {
@@ -193,8 +193,8 @@ templ dayCell(d BlockData, c DayCell) {
 			data-day={ dayKey(d.CalendarSlug, c.Day) }
 			data-day-ord={ dayOrdKey(c.Day) }
 		}
-		if cellAxis(c) != "" {
-			style={ axisStyle(cellAxis(c)) }
+		if cellStyle(d, row, c) != "" {
+			style={ cellStyle(d, row, c) }
 		}
 		if c.Tied {
 			data-tied
@@ -220,8 +220,32 @@ templ dayCell(d BlockData, c DayCell) {
 				@underline(c)
 			</div>
 			@gmMarks(c)
+			@availabilitySlot()
 		}
 	</div>
+}
+
+// availabilitySlot is STEP THREE'S FLOOR, RESERVED AND NOT BUILT.
+//
+// C-CALV4-SPEC §6 puts an availability strip along the cell's bottom edge —
+// one segment per player on desktop, collapsing to a single state-coloured dot
+// on a phone, with the Ledger naming who. That is step THREE of five and is
+// explicitly not this slice's to build.
+//
+// WHAT IS BUILT HERE IS THE SPACE, AND ONLY THE SPACE. The element is empty,
+// `aria-hidden`, carries no owner hue and no data. What it does is hold
+// `--avail-h` of the cell's bottom edge out of every other mark's reach: the
+// underline cluster is anchored ABOVE it and the moon silhouette sits in the
+// opposite corner, so when step three fills this box it changes one element's
+// contents and relayouts nothing. Reserving it now is the whole point —
+// discovering the strip has nowhere to go is a relayout of the cell, which is
+// a second pass over every geometric assertion in this package.
+//
+// IT IS DELIBERATELY NOT GATED ON DATA. A slot that appeared only for days with
+// RSVPs would move the underline on some days and not others, which is the
+// reflow the reservation exists to prevent.
+templ availabilitySlot() {
+	<span class="avail" aria-hidden="true"></span>
 }
 
 // dayPick is one day's selection control: a visually-hidden radio plus the
@@ -312,6 +336,13 @@ templ intercalaryRows(d BlockData) {
 				for _, m := range ic.Marks {
 					@namedChip(m)
 				}
+				// A FESTIVAL DAY IS A DAY, so it reserves the same slot. Canonical
+				// Harptos carries these outside every tenday and people are
+				// available or not on them exactly as on any other date — an
+				// intercalary row that step three could not paint would be a hole
+				// in the availability surface at precisely the days a group is
+				// most likely to be planning around.
+				@availabilitySlot()
 			</div>
 		</div>
 	}

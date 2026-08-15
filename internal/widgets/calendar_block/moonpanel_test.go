@@ -46,14 +46,38 @@ func TestMoonPanel_TheCeilingIsThreeAndItIsDeclaredOnce(t *testing.T) {
 // ── MN-G4 · no per-cell "+N", in any state ──────────────────────────────────
 
 // TestMoonPanel_NoCellCarriesAPlusAboutMoons is the ruling three renders, one
-// mock comment and one shipped header all make.
+// mock comment and one shipped header all make — NARROWED, on the operator's
+// own instruction, and narrowed rather than deleted.
 //
-// `v4-moons-phases-only.png` and `v4-sky-moons-capped.png` DID draw a per-cell
-// `+1`, on all thirty cells. They are superseded: the mock's own `skyInCell()`
-// note calls it "a marker repeated in every cell was the noisiest thing on the
-// surface" and removes it, `cells-zoom.png` and `v4-moons-both.png` draw three
-// discs and no `+1`, and moongraph.templ:23 states it as a ruling. The ceiling
-// is the Nameplate's chip and the destination is the graph's footnote.
+// WHAT IT USED TO SAY, AND WHY. `v4-moons-phases-only.png` and
+// `v4-sky-moons-capped.png` DID draw a per-cell `+1`, on all thirty cells. They
+// were superseded: the mock's own `skyInCell()` note calls it "a marker
+// repeated in every cell was the noisiest thing on the surface" and removes it,
+// `cells-zoom.png` and `v4-moons-both.png` draw discs and no `+1`, and
+// moongraph.templ:23 stated it as a ruling — no per-cell `+N`, in ANY state
+// including hovered.
+//
+// WHAT CHANGED. C-CALV4-SPEC §4, recorded from the operator on 2026-08-15 after
+// seven rejected design rounds: "Hover → expands to show up to three, with a
+// `+` if the calendar has more." That is the operator overruling the hover
+// clause of their own earlier ruling, and it is theirs to overrule.
+//
+// WHAT SURVIVES, AND IT IS THE PART THAT CARRIED THE ARGUMENT. MN-G4's reason
+// was NOISE — thirty ceiling markers on one surface at once — and that is an
+// argument about the RESTING month. At rest this cell now paints ONE silhouette
+// and no `+` at all, so the resting month is quieter than the three-disc row
+// this replaced, let alone the thirty `+1`s the ruling was written against. So:
+//
+//   - the `+` may exist in the markup, because there is no JS in this Block and
+//     every state must already be in the DOM for the cascade to switch;
+//   - it must be `display: none` at rest, asserted from the stylesheet here and
+//     MEASURED PAINTED by moon_reach_probe_test.go, which walks every dated
+//     cell at twenty viewport/week-length pairs and fails if any of them shows
+//     a `+` with nothing hovered or focused;
+//   - and it must stay a BARE `+`, never `+N`. That distinction is the whole of
+//     what is left of the ruling: a bare `+` says "there are more" and a number
+//     states the CEILING, and the ceiling is still declared exactly once, in the
+//     Nameplate's chip.
 //
 // IT WALKS THE CLUSTER'S SUBTREE, NOT THE CELL. A cell legitimately carries
 // `+4 more` for its events — that is the chip overflow and it has nothing to do
@@ -66,17 +90,64 @@ func TestMoonPanel_NoCellCarriesAPlusAboutMoons(t *testing.T) {
 		t.Fatal("no disc cluster rendered as a control — the guard has no subject and " +
 			"would pass vacuously")
 	}
+	// The fixture declares four moons against a ceiling of three, so every
+	// cluster MUST carry the marker — an absence here would mean the spec's
+	// hover expansion has quietly lost its `+`.
+	digits := regexp.MustCompile(`\+\s*\d`)
+	withPlus := 0
 	for i, c := range clusters {
 		if strings.Contains(c, "+") {
-			t.Errorf("disc cluster %d carries a `+`:\n%s\nThe ceiling is declared ONCE, in "+
-				"the Nameplate — never thirty times in the grid (L30, [MN-1])", i, c)
+			withPlus++
+		}
+		// THE SURVIVING BAN: a NUMBER about moons, anywhere in the cluster.
+		if m := digits.FindString(c); m != "" {
+			t.Errorf("disc cluster %d carries %q — a per-cell `+N`:\n%s\nThe `+` the operator "+
+				"asked for says THERE ARE MORE. The ceiling is a number, and it is declared "+
+				"ONCE, in the Nameplate — never thirty times in the grid (L30, [MN-1])",
+				i, m, c)
+		}
+		// …and the marker it does carry is the one the sheet can hide.
+		if strings.Contains(c, "+") && !strings.Contains(c, `class="phplus"`) {
+			t.Errorf("disc cluster %d carries a loose `+` outside `.phplus`:\n%s\nOnly "+
+				"`.phplus` is hidden at rest, so a `+` anywhere else in the cluster is a "+
+				"marker painted on all thirty cells — exactly what MN-G4 forbids", i, c)
 		}
 	}
+	if withPlus != len(clusters) {
+		t.Errorf("%d of %d clusters carry the `+`, want all of them — this fixture declares "+
+			"4 moons against a ceiling of 3, so C-CALV4-SPEC §4's \"with a `+` if the "+
+			"calendar has more\" applies to every cell", withPlus, len(clusters))
+	}
+
+	// ── THE RESTING BAN, READ OFF THE SHEET ─────────────────────────────────
+	//
+	// The markup half above cannot see state. This is the other half: the `+`
+	// and the second and third discs are display:none until the cluster is
+	// hovered or its radio focused. moon_reach_probe_test.go measures the same
+	// claim PAINTED, at twenty viewport/week-length pairs — the two together
+	// are why "the `+` is in the DOM" is not the same as "the operator sees
+	// thirty of them".
+	css := stripComments(blockCSS(t))
+	flat := strings.Join(strings.Fields(css), " ")
+	for _, want := range []string{
+		".cal-block-host .phx, .cal-block-host .phplus { display: none }",
+	} {
+		if !strings.Contains(flat, strings.Join(strings.Fields(want), " ")) {
+			t.Errorf("the stylesheet does not hide the expansion at rest (%q). Without it "+
+				"every cell paints three discs and a `+` at all times, which is the noise "+
+				"MN-G4 was written against", want)
+		}
+	}
+	if !strings.Contains(flat, ".phctl:hover .phplus") {
+		t.Error("nothing reveals the `+` on hover — C-CALV4-SPEC §4 asks for it on the " +
+			"expansion, and a marker that is in the DOM but never shown is not the feature")
+	}
+
 	// AND THE CHIP STILL SAYS IT, once, where it belongs. An absence guard with
 	// no presence twin would stay green on a slice that deleted both.
 	if got := moonsBadgeText(fxAlmanac(t, true)); got != "3 of 4 moons" {
-		t.Errorf("the Nameplate chip reads %q, want %q — the `+` the operator remembers is "+
-			"real and this is where it lives", got, "3 of 4 moons")
+		t.Errorf("the Nameplate chip reads %q, want %q — the NUMBER the operator remembers "+
+			"is real and this is where it lives", got, "3 of 4 moons")
 	}
 }
 

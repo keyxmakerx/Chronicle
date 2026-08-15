@@ -120,6 +120,28 @@ templ underline(c DayCell) {
 // row a control there needs either an Almanac register built for a shelf-less,
 // sky-less Block ([SKY-7]) or a sky seated on the real-world Block ([SKY-1]) —
 // both signed, neither this file's to amend. Booked, not done.
+// ── C-CALV4-SPEC §4, THE RESTING SILHOUETTE ─────────────────────────────────
+//
+// WHAT CHANGED AND WHY. The row used to paint all three discs at rest, gated
+// behind a 40px column query — and the operator's own calendar is Harptos, a
+// TEN-day week, whose column is 30.0px on a 360px phone and 37.0px on a 430px
+// one. Three discs measure 35.0px, so the query was doing exactly what it was
+// designed to do and the operator saw NOTHING, at every phone width, on the
+// only calendar they use. The census is in moon_reach_probe_test.go.
+//
+// The spec's answer is not "make three discs fit in 30px" — they do not. It is
+// to change what RESTS: one silhouette always, the other two on point. A single
+// 8px disc costs a fraction of what three cost, so it clears the std tier's
+// 30px column floor with the date beside it, and the expansion gets its own,
+// much higher threshold (75px) for the widths that can actually hold it.
+// sizing.go carries all three numbers and the measurements they are read off.
+//
+// THE `+` IS EMITTED IN THE MARKUP AND HIDDEN AT REST. It has to be in the DOM
+// rather than conjured on hover because there is no JS in this Block at all
+// (boot.js:163 disables script tags in swapped fragments — see sizing.go), so
+// every state this cell has must already be present and switched by the
+// cascade. `moonPlusNeeded` explains why this narrows MN-G4 rather than
+// deleting it.
 templ moonRow(d BlockData, c DayCell) {
 	if len(c.Moons) > 0 {
 		if moonPanelReachable(d) {
@@ -130,15 +152,21 @@ templ moonRow(d BlockData, c DayCell) {
 				title={ moonClusterTitle(c) }
 			>
 				<span class="vh">{ moonClusterLabel(c) }</span>
-				for _, md := range moonsFor(c) {
-					<i class={ moonWaneClass(md) } style={ moonStyle(md) } aria-hidden="true"></i>
+				for i, md := range moonsFor(c) {
+					<i class={ moonDiscClass(md, i) } style={ moonStyle(md) } aria-hidden="true"></i>
+				}
+				if moonPlusNeeded(d) {
+					<b class="phplus" aria-hidden="true">+</b>
 				}
 			</label>
 		} else {
 			<span class="phrow" title={ moonClusterTitle(c) }>
 				<span class="vh">{ moonClusterLabel(c) }</span>
-				for _, md := range moonsFor(c) {
-					<i class={ moonWaneClass(md) } style={ moonStyle(md) } aria-hidden="true"></i>
+				for i, md := range moonsFor(c) {
+					<i class={ moonDiscClass(md, i) } style={ moonStyle(md) } aria-hidden="true"></i>
+				}
+				if moonPlusNeeded(d) {
+					<b class="phplus" aria-hidden="true">+</b>
 				}
 			</span>
 		}

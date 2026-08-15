@@ -149,6 +149,12 @@
   --bandhue: var(--rule-structural);
   --week-len: 10;
   --gut: 0px;
+  /* --avail-h is STEP THREE'S RESERVED FLOOR (C-CALV4-SPEC §6): the height of
+     the availability strip on each cell's bottom edge, held empty here. It is
+     declared at the ROOT rather than on .cell because two different day
+     surfaces read it — the day cell and the intercalary festival day — and two
+     literals is how the event marks end up sitting on the strip. */
+  --avail-h: 4px;
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -736,13 +742,31 @@
 
    THERE IS NO LITERAL 7 HERE. --week-len is written per month by the producer
    and defaults to 10 on the Block. */
+/* THE GRID IS THE GROUND THE CELLS SIT ON, and that is what makes them pop.
+   C-CALV4-SPEC §1 defines the reference's "popped out" as three things and
+   names all three: "a fill slightly lighter than the page, a defined edge, and
+   enough internal padding that the cell feels like an object rather than a
+   table division". Not a shadow — the spec does not ask for one and --elev-1's
+   own note here says rest is always none.
+
+   "LIGHTER THAN THE PAGE" IS A RELATION, SO IT INVERTS WITH THE THEME. On
+   light, the page is white (.block is --surface-card) and nothing is lighter
+   than white, so the GROUND has to darken instead: the grid takes
+   --surface-inset and the cells keep --surface-card. On dark, --surface-inset
+   is the LIGHTER of the pair (0.255 vs 0.215), so the two swap and the cell is
+   still the lighter of the two. Both arms use tokens that already exist at
+   both themes; no hue is re-derived and no token is added, because a palette
+   pass is exactly what the operator rejected ("I was referring to spacing,
+   layout and such … not the colors"). */
 .cal-block-host .grid {
   display: grid;
   min-width: calc(var(--week-len) * 30px);
   grid-template-columns: var(--gut, 0px) repeat(var(--week-len), minmax(0, 1fr));
   grid-auto-rows: auto;
   align-content: start;
+  background: var(--surface-inset);
 }
+.dark .cal-block-host .grid { background: var(--surface-card) }
 .cal-block-host .grid > * {
   display: grid;
   grid-template-columns: subgrid;
@@ -846,14 +870,29 @@
 /* EACH CELL IS THE DENSITY QUERY CONTAINER. Padding lives on the two subtrees,
    not here, so the container's content box is the real column box (less its
    1px rule) and the 84px flip measures what the eye measures. */
+/* THE CELL'S OWN PADDING STAYS 0, AND THAT IS LOAD-BEARING RATHER THAN
+   LEFTOVER. `container-type: inline-size` measures this element's CONTENT box,
+   so a padding here would shrink every container query's subject and move both
+   density flips by twice the padding — silently, on every signed still. The
+   spec's "internal padding" is therefore spent on the two subtrees (.cnamed /
+   .cunder), which is where it already lived, and on the corner insets below.
+   `100cqi` in the coarse-pointer pad reads the same box for the same reason.
+
+   THE DEFINED EDGE IS THE RULE, ONE RAMP STEP UP. The cells were --rule-hairline
+   on a transparent fill, which is the "table division" the spec contrasts
+   against; they are now --rule-structural against a lighter fill, which is a
+   defined edge in the RULED idiom the operator chose ("Bordered, not
+   borderless … the ruled treatment over Tiles' gap-structure"). The ramp is
+   unchanged and still monotonic in both themes — hairline < structural <
+   structural-strong — and the five-column rule below still sits a full step
+   above its neighbours, which is the whole point of it. */
 .cal-block-host .cell {
   container-type: inline-size;
   container-name: cal-cell;
   position: relative;
   padding: 0;
-  border-right: 1px solid var(--rule-hairline);
-  border-bottom: 1px solid var(--rule-hairline);
-  background: transparent;
+  border-right: 1px solid var(--rule-structural);
+  border-bottom: 1px solid var(--rule-structural);
 }
 .cal-block-host .cell:hover {
   background: color-mix(in oklch, transparent 95%, var(--text-primary));
@@ -889,27 +928,71 @@
 
 /* the two subtrees. Baseline is the underline; the cell query promotes. */
 .cal-block-host .cell > .cnamed { display: none }
+/* THE INTERNAL PADDING IS THE SPEC'S THIRD INGREDIENT, and it is spent here
+   rather than on .cell because .cell is the query container (see above).
+
+   THE BLOCK AXIS GROWS UNCONDITIONALLY (2px → 3px) and the INLINE axis grows
+   only where there is room for it (2px here, 3px from CellCompactColWidthMin
+   up, §DENSITY). That asymmetry is the 30px ten-day column paying for itself:
+   inline space is what the date and the silhouette are competing for, and the
+   cell that has least of it is the one that can least afford to spend it on
+   padding. Above 35px of column the inline padding arrives with the date's full
+   type size, and the cell reads as the object the spec asks for rather than a
+   table division. */
 .cal-block-host .cell > .cunder {
   display: block;
   height: 52px;
   overflow: hidden;
-  padding: 2px 2px 0;
+  padding: 3px 2px 0;
 }
+/* ── CORNER ARCHITECTURE ───────────────────────────────────────────────────
+   C-CALV4-SPEC §1: "The corners are the information architecture: date in one,
+   ambient marks in another, event marks in a third. Keep them in corners; do
+   not centre anything."
+
+       ┌──────────────┐
+       │ 17        ◗  │   top-left  DATE      · top-right AMBIENT (the moon)
+       │              │
+       │ ▄▄▄          │   bottom-left EVENT MARKS (the underline cluster)
+       │══════════════│   bottom EDGE, reserved: availability (step three)
+       └──────────────┘
+
+   THE NUMERAL WAS CENTRED AND IS NOW TOP-LEFT, and that is not only the spec
+   being followed — it is what makes the always-visible moon possible at all.
+   A centred numeral owns the middle of the top line, which is why the shipped
+   sheet had to drop the disc row to `top: 26px` at underline density and
+   restore it to `top: 5px` at named density: two anchors, one for each side of
+   a threshold. With the date in the top-LEFT corner the top-RIGHT corner is
+   free at EVERY width, so the moon has ONE anchor and the density query no
+   longer has to move it. One fewer moving part, and the reason the silhouette
+   can be promoted all the way down to the narrowest column the grid produces. */
 .cal-block-host .cell .dn {
   font-weight: 600;
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1;
   color: var(--text-body);
   display: block;
-  text-align: center;
+  text-align: left;
 }
 .cal-block-host .cell .dnw {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
 }
 /* TODAY is a non-accent ink stamp. The campaign accent is chrome-only; calv3
    put a filled accent-indigo today pill on a DATA cell. */
+/* TODAY is a non-accent ink stamp, and it is THE WIDEST THING A DATE CAN BE —
+   which is why it, and not the digits, sets the corner architecture's inline
+   budget. Two digits at 12px measure ~13px; this stamp measured 18.0px, and in
+   a 30px ten-day column an 18px stamp plus a 12px moon-and-inset leaves nothing
+   between them. The probe caught it by walking EVERY dated cell rather than the
+   first one: day 3 cleared and day 14 — the fixture's today — overlapped by
+   32px².
+
+   The stamp therefore steps with the column, exactly as the disc diameter does:
+   13px here, 14px from CellCompactColWidthMin up, and the signed 22px once the
+   cell is wide enough to carry event NAMES (§DENSITY's 84px block, unchanged).
+   Every size is measured rather than chosen; sizing.go carries the arithmetic. */
 .cal-block-host .cell .today {
   display: inline-grid;
   place-items: center;
@@ -917,9 +1000,9 @@
   background: var(--today-ink);
   color: var(--today-ink-on);
   font-weight: 650;
-  width: 18px;
-  height: 18px;
-  font-size: 11px;
+  width: 13px;
+  height: 13px;
+  font-size: 9px;
 }
 
 /* NAMED chip: a 3px patterned rail, a non-colour token, and a label. A glyph
@@ -970,11 +1053,42 @@
 
 /* UNDERLINE density: ONE bar, never a stack. A stack encodes a magnitude the
    data does not have and reads as a progress meter. */
+/* ── THE THIRD CORNER, AND THE FLOOR RESERVED BELOW IT ─────────────────────
+   --avail-h IS A RESERVATION, NOT A FEATURE. C-CALV4-SPEC §6 puts a per-player
+   availability strip on the cell's bottom EDGE (a segmented bar on desktop, one
+   state-coloured dot on a phone). That is step THREE of five and is not built
+   here. What is built here is the space it will occupy, declared once as a
+   token so the underline above it and the slot itself cannot drift apart.
+
+   THE UNDERLINE MOVES UP BY EXACTLY THAT MUCH, AND LEFT. Up, so the availability
+   strip has an edge to live on that no other mark is already using; left, so the
+   event marks read as the spec's THIRD CORNER rather than as a full-width rule.
+   `right: auto` with a max-width is what turns the stretched bar into a corner
+   cluster: the segments keep their flex distribution and their --dash identity
+   patterns exactly, so tie-mode ink, the eight locked patterns and the greyscale
+   channel are all untouched — only the box they are laid out in is smaller and
+   anchored to a corner.
+
+   WHEN STEP THREE FILLS THE SLOT IT RELAYOUTS NOTHING. That is the entire value
+   of reserving it: the strip's box already exists, at its final size, in its
+   final place, and step three changes what is painted inside it. */
+.cal-block-host .avail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--avail-h);
+  pointer-events: none;
+  /* NO FILL AT REST. An empty reservation must be invisible — a painted
+     placeholder is a feature nobody built, and the operator would read it as
+     one. Step three paints the segments here. */
+}
 .cal-block-host .ul {
   position: absolute;
-  left: 2px;
-  right: 2px;
-  bottom: 1px;
+  left: 4px;
+  right: auto;
+  max-inline-size: min(60%, 26px);
+  bottom: calc(var(--avail-h) + 2px);
   height: 3px;
   display: flex;
   gap: 1px;
@@ -1056,23 +1170,80 @@
    instead of overflowing. moon_reach_probe asserts the spill is zero at every
    width AND that some case in the census still falls back, so "delete the
    query" cannot pass it. */
+/* ── THE RESTING SILHOUETTE (C-CALV4-SPEC §4) ──────────────────────────────
+   THE ROW IS PROMOTED AT 30px INSTEAD OF 40px, and that ten-pixel move is the
+   defect fix. The grid's std-tier floor is `--week-len * 30px`, one silhouette
+   costs 8px, and 8px fits in 30px with the date beside it — so the primary body
+   is now painted at every column width a person's device can produce. The
+   operator's ten-day Harptos calendar drew NOTHING on a phone before this
+   (30.0px, 33.0px and 37.0px of column, all under the old 40); it now draws its
+   primary moon at 360px, 390px and 430px. The promotion itself is in §DENSITY,
+   with the measurements it is read off.
+
+   THE ANCHOR IS TOP-RIGHT AT EVERY DENSITY, and it no longer moves. The shipped
+   sheet had two anchors — `top: 26px` at underline density and `top: 5px` at
+   named — because a CENTRED numeral owned the top line. The numeral is now
+   top-left (see .dn), so the top-right corner is free at every width and the
+   density query has one less thing to change. */
 .cal-block-host .phrow {
   position: absolute;
-  top: 5px;
+  top: 4px;
   right: 4px;
   display: none;
   gap: 2.5px;
   align-items: center;
+  /* THE DISC DIAMETER IS A TOKEN ON THE ROW, NOT A LITERAL ON THE DISC,
+     because a container query cannot style its own container: `.cell` is the
+     query container, so anything the query changes must be declared on a
+     DESCENDANT. The row is the nearest one that owns all three discs. */
+  --phsize: 8px;
 }
 .cal-block-host .ph {
   position: relative;
-  width: 10px;
-  height: 10px;
+  width: var(--phsize);
+  height: var(--phsize);
   border-radius: var(--r-full);
   flex: none;
   background: var(--surface-card);
   overflow: hidden;
   box-shadow: inset 0 0 0 1px var(--rule-structural-strong);
+}
+/* ── THE EXPANSION, HIDDEN AT REST ─────────────────────────────────────────
+   `.phx` is every body AFTER the primary and `.phplus` is the "there are more"
+   marker. Both are in the DOM at every width and both are `display: none`
+   until the cluster is hovered or its radio is focused.
+
+   THE HIDING IS THE RESTING CONTRACT, and it is what keeps MN-G4 true where
+   MN-G4's argument actually applies: at rest the month shows ONE disc per cell
+   and NO `+` anywhere, which is quieter than the three-disc row this replaces,
+   let alone the thirty `+1`s MN-G4 was written against.
+
+   NO TRANSITION, DELIBERATELY, AND IT IS THE DESIGN RATHER THAN AN OMISSION.
+   §MOTION's budget is background-colour, ink and one transform on ANSWERING
+   surfaces, inside the reduced-motion guard; a `display` change cannot be
+   transitioned at all and must not grow a companion that can. The expansion is
+   INSTANT. C-CALV4-SPEC §4's "it's got to be either hover over or
+   animated/dynamically moving stuff" is satisfied by the first arm of its own
+   `either/or`: this responds to the pointer, which is the dynamism asked for.
+   The ANIMATED half of that sentence is the moon SECTION opening, which is a
+   different surface with its own signed budget (--mp-open / --mp-close). */
+.cal-block-host .phx,
+.cal-block-host .phplus { display: none }
+/* THE `+` IS A GLYPH IN THE MARKS LAYER, so it is achromatic and structural,
+   like the discs it follows. `line-height: 1` and the explicit block size stop
+   it from setting the row's height taller than a disc, which would move the
+   primary silhouette when the row expanded — a hover that shifts the thing you
+   are pointing at is the motion this file forbids, arriving through the back
+   door of an inline box. */
+.cal-block-host .phplus {
+  flex: none;
+  font-weight: 700;
+  font-size: 9px;
+  line-height: 1;
+  block-size: var(--phsize);
+  display: none;
+  align-items: center;
+  color: var(--rule-structural-strong);
 }
 .cal-block-host .ph::before {
   content: "";
@@ -2256,13 +2427,71 @@
    every value below interpolates between the two, so the state is a colour
    change and nothing else: no shadow gained or lost, no border thickness
    changed, nothing moved (canon A5). */
+/* --cellbase IS THE SURFACE THE WASH IS MIXED INTO, and it exists so the day
+   cell can carry an opaque fill (the spec's "pop") WITHOUT this expression
+   being written twice. At --answer: 0 the mix is `--cellbase 100%`, i.e.
+   exactly the base and nothing else, so the resting cell is its own fill; at
+   --answer: 1 it is 80% base + 20% datum hue.
+
+   THE DEFAULT IS `transparent`, WHICH IS EXACTLY WHAT SHIPPED, so `.lrow` — the
+   Ledger row, the third surface on this selector — is byte-identical to before
+   and the answer ladder is untouched. Only the two DAY surfaces below opt into
+   a fill. */
 .cal-block-host .cell,
 .cal-block-host .interc,
 .cal-block-host .lrow {
   --answer: 0;
+  --cellbase: transparent;
   background-color: color-mix(in oklch,
-    transparent calc(100% - 20% * var(--answer)),
+    var(--cellbase) calc(100% - 20% * var(--answer)),
     var(--axis, var(--rule-structural-strong)));
+}
+
+/* ── THE POP FILL, AND THE ERA TINT FOLDED INTO IT ─────────────────────────
+   ERAS ARE A BACKGROUND TINT (C-CALV4-SPEC §2, closed by the operator on
+   2026-08-15: "highlight around the edge? or the background … your decision").
+   Background, because the cell edge already carries two meanings — gold means
+   SELECTED, and the raised pop is itself an edge treatment — and a third would
+   make all three ambiguous. A low-chroma background wash reads as GROUPING,
+   which is what an era is.
+
+   IT IS NEVER TEXT AND NEVER THE BORDER. Both are refusals, not omissions: the
+   era's NAME is printed once, on the band above the row, and repeating it in
+   thirty cells is the noise MN-G4 already ruled against for moons.
+
+   `var(--erahue, var(--surface-card))` IS THE OFF SWITCH, and it needs no class
+   and no second attribute. A cell with no era sets no --erahue, the fallback
+   makes the mix `surface-card into surface-card`, and the result is the plain
+   fill — so "has an era" is expressed once, in the producer's own EraBand data,
+   and cannot drift out of step with a marker class. The eras LAYER gate lives
+   in Go (cellStyle), so a viewer who switched eras off simply gets no property.
+
+   8% IS THE LOW-CHROMA PART. It is a RATIO against tokens that already exist,
+   not a new colour: --erahue is the same allowlisted --cal-* / band token the
+   band row draws with, mixed 8% into the same surface the cell already had. No
+   hue is invented and the palette is untouched. */
+/* THE INTERCALARY DAY TAKES THE SAME FILL, and that is a consistency fix the
+   grid's new ground forced into the open. `.interc` declared
+   `background: var(--surface-inset)` and had been silently losing it to the
+   answer wash below ever since that wash landed — equal specificity, later
+   rule. It was therefore transparent, and transparent USED to mean the Block's
+   white card. Now that the grid has a ground of its own, transparent would mean
+   the ground, and the festival row would vanish into it on light. It is a day
+   surface, so it takes the day surface's fill; the 1.5px editorial rule along
+   its top is what marks it as a different KIND of row, which is the job that
+   rule already had. It carries no --erahue, so the fallback resolves the mix to
+   the plain fill. */
+.cal-block-host .cell,
+.cal-block-host .interc {
+  --cellbase: color-mix(in oklch,
+    var(--surface-card) 92%,
+    var(--erahue, var(--surface-card)));
+}
+.dark .cal-block-host .cell,
+.dark .cal-block-host .interc {
+  --cellbase: color-mix(in oklch,
+    var(--surface-inset) 92%,
+    var(--erahue, var(--surface-inset)));
 }
 /* the answered day's numeral inks in the datum's hue too — a second cue in the
    SAME channel, so primary-vs-partner stays a channel distinction and the echo
@@ -2310,39 +2539,115 @@
    clause was approximating — "does a named cell fit vertically" — is answered by
    real layout: .block's max-height plus the instrument's own overflow.
    ═══════════════════════════════════════════════════════════════════════════ */
-/* ── THE DISCS' OWN THRESHOLD, 40px ────────────────────────────────────────
-   Separate from the 84px flip above, and separate for a measured reason: the
-   two surfaces the old single query gated together cost wildly different
-   amounts of width. An event name needs a name's worth; three phase discs
-   measure 35.0px, full stop. See the census in .phrow's own block above for
-   the twenty measurements this number is read off.
+/* ── THE CELL'S THREE COLUMN THRESHOLDS ────────────────────────────────────
+   THERE USED TO BE ONE, AT 40px, AND ONE WAS THE DEFECT. It gated the whole
+   three-disc row together, so a column that could not hold three discs got
+   none — and the operator's own calendar is Harptos, a TEN-day week, whose
+   column measures 30.0px at a 360px phone, 33.0px at 390px and 37.0px at
+   430px. All three sit under 40. The query was working exactly as designed and
+   the operator saw no moons at all, at every phone width, on the only calendar
+   they use.
 
-   ONE PROPERTY CHANGES, AND IT IS THE ROW, NOT THE SIDE. The anchor stays
-   `right: 4px` at both densities — cells-zoom.png puts the discs at the right
-   hand of the cell and that does not become untrue when the cell narrows. What
-   has to move is the LINE they sit on: a named cell left-aligns its numeral, so
-   the top-right corner is free, while the underline cell CENTRES its numeral
-   (`.dn { text-align: center }`) and a row at `top: 5px` would land across the
-   digits at every width a phone produces. Clearing a centred two-digit numeral
-   sideways would need a ~96px column — WIDER than the 84px named flip, which
-   would make this fix reach nobody. So the discs drop below the numeral
-   instead: the numeral occupies 2→14px, the underline bar sits at 48→51px, and
-   a 10px row centred in what is left starts at 26px.
+   C-CALV4-SPEC §4 splits the surface in two, so one threshold becomes three.
+   Each answers a DIFFERENT question, which is exactly what the single 40px
+   query got wrong — one disc, a date and three-discs-plus-a-`+` cost wildly
+   different amounts of width, and gating them together refuses the cheap one at
+   widths it would fit in:
 
-   THE BOX STAYS TIGHT TO THE DISCS. Stretching the row across the column would
-   be a bigger touch target bought out of `.dsel`, the day-selection label
-   underneath, whose own hit area [MOB-7] already records as the tightest thing
-   on the phone. The target is grown instead by the coarse-pointer pad further
-   down, which costs no layout and no other control's area.
+     · 30px — THE PRIMARY SILHOUETTE. The std tier's column floor, so every
+       device a person holds clears it. Below it (the mini tier, whose floor is
+       24px) a ten-column month cannot hold a date and a moon on one line at
+       all, and degrades.
 
-   NOTHING IS PROMOTED BELOW 40px. A 30px cell (a ten-day week on a 360px
-   phone) cannot hold a 35px row and degrades to the underline alone — which is
-   what the density query has always been for. */
-@container cal-cell (min-width: 40px) {
-  .cal-block-host .cell .phrow {
-    display: flex;
-    top: 26px;
-  }
+     · 35px — THE DATE'S FULL TYPE SIZE. Where a 12px date and a 10px disc both
+       fit. Below it the DATE steps down, never the moon: the spec makes the
+       silhouette unconditional, so it is the type size that yields.
+
+     · 75px — THE HOVER/FOCUS EXPANSION. Three discs and a `+` measure 45.0px
+       and do not fit beside a date until here. Below it, pointing at the
+       cluster shows the primary alone and the moon SECTION — one tap away, at
+       every width — carries the rest. That is an honest degradation: the
+       information has a reachable home, which is the test the old query failed.
+
+   ALL THREE ARE MEASURED, NOT CHOSEN. sizing.go carries the census they are read
+   off, and moon_reach_probe_test.go re-measures them in a browser at eight
+   viewports for BOTH a seven-day and a ten-day week — walking every dated cell,
+   because the date's ink width varies across the month and it is the two-digit
+   days that collide first.
+
+   THE DIAMETER STEPS AT 35px, NOT AT 75px, AND THAT IS DELIBERATE: 8px where the
+   column is narrow, 10px — the signed diameter, unchanged — from 35 up. Stepping
+   it at the EXPANSION threshold instead would resize the disc already under the
+   pointer at the moment two more appeared, which is movement in a sheet that
+   forbids it. */
+
+/* ── 30px · THE SILHOUETTE ─────────────────────────────────────────────────
+   30 IS THE STD TIER'S COLUMN FLOOR, and the boundary is real rather than
+   decorative. `.grid` declares `min-width: calc(var(--week-len) * 30px)`, so a
+   std-tier column is 30px before the grid overflows its host instead of
+   shrinking further — the 360px / ten-day census row measures exactly 30.0px,
+   which is that floor being hit. Every viewport the operator can hold is at or
+   above it.
+
+   THE MINI TIER LOWERS THAT FLOOR TO 24px (see §SIZE CLASS, which rewrites
+   `.grid`'s min-width), and that is what this query degrades. A ten-column
+   month in a 240–300px host measures 24.0–28.3px and cannot hold a date and a
+   moon on the same line at all — so it draws no moon, in a tier that already
+   drops the weekday header, the era bands, the dogear and the event names for
+   the same reason. A seven-column month at the same tier measures up to 40.4px,
+   clears the threshold, and keeps its silhouette.
+
+   THAT IS WHY THIS IS A QUERY AND NOT A BASELINE. Written as an unconditional
+   `display: flex` it would put an 8px disc across the date of every ten-day
+   mini-tier Block — swapping "no moon" for "a moon on top of the date", which
+   is the worse of the two defects. */
+@container cal-cell (min-width: 30px) {
+  .cal-block-host .cell .phrow { display: flex }
+}
+
+/* ── 35px · THE DATE'S FULL SIZE ───────────────────────────────────────────
+   A SECOND, SMALLER STEP, AND IT IS THE COST OF PUTTING TWO THINGS ON ONE
+   LINE. The date sits at the cell's left and the silhouette at its right, so
+   the two fit only if `padding + date ink + clearance + disc + inset` is less
+   than the column. Measured, at the underline density:
+
+     padding 3 + date ink 16.7 + clearance 2 + disc 10 + inset 4  =  35.7
+
+   …so a 12px date and a 10px disc need ~36px of column. The census leaves a
+   clean gap around that number — 33.0px (a ten-day week at 390px) is the widest
+   column that cannot afford both, 37.0px (ten-day at 430px) the narrowest that
+   can — and 35 is the midpoint of it, which is the same method the retired 40px
+   threshold was derived by.
+
+   BELOW IT THE DATE STEPS DOWN, NOT THE MOON. That is the spec's priority
+   order, not a convenience: C-CALV4-SPEC §4 makes the primary silhouette
+   unconditional, so when something has to give at 30–33px it is the date's
+   type size (10px, and a 13px today stamp) rather than the moon's presence.
+   The mini tier already sets this precedent at 11px.
+
+   NOTHING RESIZES AT THE EXPANSION THRESHOLD, DELIBERATELY. The disc diameter
+   steps HERE and not at 75px below, so that pointing at a cluster reveals two
+   more discs without changing the size of the one already under the pointer.
+   A primary that grew from 8px to 10px on hover would be movement in a sheet
+   that forbids it. */
+@container cal-cell (min-width: 35px) {
+  .cal-block-host .cell .phrow { --phsize: 10px }
+  .cal-block-host .cell > .cunder { padding: 3px 3px 0 }
+  .cal-block-host .cell .dn { font-size: 12px }
+  .cal-block-host .cell .today { width: 14px; height: 14px; font-size: 10px }
+}
+
+@container cal-cell (min-width: 75px) {
+  /* THE EXPANSION, ON POINT OR ON FOCUS. Hover for a mouse; :focus-visible on
+     the cluster's own radio for the keyboard, which is the same pair the disc
+     ink change already uses. A coarse pointer has neither and is not meant to:
+     MN-G12's ruling is that a touch device reaches the panel in ONE TAP rather
+     than a tap to reveal and a tap to act, and the panel is where the detail
+     lives. */
+  .cal-block-host .cell .phctl:hover .phx,
+  .cal-block-host .cell > .moonpick:focus-visible + .phctl .phx { display: block }
+  .cal-block-host .cell .phctl:hover .phplus,
+  .cal-block-host .cell > .moonpick:focus-visible + .phctl .phplus { display: flex }
 }
 
 @container cal-cell (min-width: 84px) {
@@ -2362,16 +2667,13 @@
     height: 22px;
     font-size: 13px;
   }
-  /* THE SIGNED CORNER IS RESTORED HERE, EXACTLY. A named cell left-aligns its
-     numeral, so the top-right anchor of cells-zoom.png is free again and the
-     row returns to it — same 5px top, same 4px right, same three discs,
-     pixel-identical to what shipped. The 40px block above changes exactly one
-     property and this undoes exactly that one: a promotion that "mostly"
-     reverts is how a signed still stops matching the product. */
-  .cal-block-host .cell .phrow {
-    display: flex;
-    top: 5px;
-  }
+  /* THE SIGNED CORNER, AND IT IS NOW THE ONLY CORNER. cells-zoom.png puts the
+     discs at the top-right of the cell; that anchor used to be restored HERE
+     and undone at the underline density, because a centred numeral owned the
+     top line. The numeral is top-left at both densities now, so the row never
+     moves and this block no longer has an anchor to restore — only the 5px
+     line the named cell's taller padding puts it on. */
+  .cal-block-host .cell .phrow { top: 5px }
   .cal-block-host .cell .audmark { display: block }
 }
 
@@ -2680,7 +2982,13 @@
     padding: 1px 1px 0;
   }
   .cal-block-host .cell .dn { font-size: 11px }
-  .cal-block-host .cell .today { width: 16px; height: 16px; font-size: 10px }
+  /* 13px, NOT 16px, and it is the corner architecture rather than a tidy-up: at
+     this tier the grid's column floor drops to 24px, so a SEVEN-day month can
+     still clear the 30px silhouette threshold (up to 40.4px of column) while
+     carrying a today stamp — and a 16px stamp against this tier's 1px inline
+     padding would put the stamp under the moon. It matches the narrow baseline
+     stamp above rather than declaring a third size. */
+  .cal-block-host .cell .today { width: 13px; height: 13px; font-size: 9px }
   .cal-block-host .cell .dogear { display: none }
   .cal-block-host .ul { height: 2px; left: 1px; right: 1px }
 

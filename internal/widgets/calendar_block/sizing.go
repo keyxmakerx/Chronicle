@@ -55,30 +55,125 @@ const (
 // still lands on the same side of it under both).
 const NamedColWidthMin = 84.0
 
-// MoonRowColWidthMin is the SECOND density threshold — the one the per-day moon
-// discs get for themselves, in MEASURED COLUMN pixels. In CSS it is
-// `@container cal-cell (min-width: 40px)`.
+// ── THE CELL'S THREE COLUMN THRESHOLDS ──────────────────────────────────────
 //
-// WHY THERE ARE TWO. The discs shipped behind NamedColWidthMin, sharing one
-// query with the named-event subtree they happened to be nested inside, and
-// that gate was never right for them: three phase discs measure 35.0px of
-// inline space and an event NAME measures a great deal more. The consequence
-// was not a cramped cell but an absent feature — a census of twenty real
-// viewport/week-length pairs (moon_reach_probe_test.go) found the discs painted
-// in six, none of them a phone, and none of them a ten-day week at any monitor
-// size, because .cal-bench caps the Block at 1180px and a ten-day column tops
-// out at 82.4px there.
+// THERE USED TO BE ONE, AT 40px, AND ONE WAS THE DEFECT.
 //
-// WHY 40. It is read off that census rather than chosen: 37.0px is the widest
-// column that must NOT draw the row (a ten-day week on a 430px phone) and
-// 43.3px the narrowest that must (a seven-day week on a 360px phone), so 40 is
-// the midpoint of the only gap the measurements leave. It independently clears
-// the row's own measured 35.0px with 2.5px of clearance each side.
+// The single `MoonRowColWidthMin = 40` gated the whole three-disc row: a column
+// that could not hold three discs got NONE. That was defensible while the discs
+// were an all-or-nothing ornament, and it stopped being defensible the moment
+// C-CALV4-SPEC §4 made the primary body an ALWAYS-VISIBLE silhouette.
 //
-// It is deliberately NOT derived from NamedColWidthMin. The two answer
-// different questions and a future change to one must not silently move the
-// other.
-const MoonRowColWidthMin = 40.0
+// It was also, measured against the operator's actual calendar, already wrong.
+// Harptos is a TEN-day week. Its column measures 30.0px at a 360px phone,
+// 33.0px at 390px and 37.0px at 430px — every one of them under 40 — so the
+// operator's phone drew no moons at all, at any width, on the only calendar
+// they use. The census below is the measurement; both columns of it are
+// re-measured in a browser by moon_reach_probe_test.go.
+//
+//	viewport   7-day column   10-day column
+//	   360px       43.3            30.0
+//	   390px       47.6            33.0
+//	   430px       53.3            37.0
+//	   768px       62.7            43.6
+//	  1024px       99.3            67.2
+//	  1280px       93.0            62.8
+//	  1440px      115.9            78.8
+//	  1920px      121.0            82.4
+//
+// (1024 exceeds 1280 because the pinned 256px sidebar takes layout width from
+// the `md` breakpoint up while .cal-bench's 1180px cap has not yet bitten.)
+//
+// MoonSilhouetteColWidthMin is the width the ALWAYS-VISIBLE primary silhouette
+// needs. In CSS it is `@container cal-cell (min-width: 30px)`.
+//
+// WHY 30, AND WHY IT IS A REAL BOUNDARY RATHER THAN A FORMALITY. It is the STD
+// tier's column FLOOR: `.grid` declares `min-width: calc(var(--week-len) *
+// 30px)`, so a std-tier column is 30px before the grid overflows its host
+// instead of shrinking further, and the 360px / ten-day census row measures
+// exactly 30.0px — that floor being hit. Every viewport a person can hold is at
+// or above it, which is what makes "always visible" true where the operator
+// lives.
+//
+// The MINI tier rewrites that floor to 24px (§SIZE CLASS), and that is the case
+// this threshold degrades. A ten-column month in a 240–300px host measures
+// 24.0–28.3px and cannot hold a date and a moon on one line at all, so it draws
+// no moon — in a tier that already drops the weekday header, the era bands, the
+// dogear and the event names for exactly the same reason. A SEVEN-column month
+// at the same tier reaches 40.4px, clears this threshold and keeps its
+// silhouette.
+//
+// Written as an unconditional baseline instead, an 8px disc would land across
+// the date of every ten-day mini-tier Block — trading "no moon" for "a moon on
+// top of the date", which is the worse of the two defects.
+const MoonSilhouetteColWidthMin = 30.0
+
+// CellCompactColWidthMin is where the DATE gets its full type size back. In CSS
+// it is `@container cal-cell (min-width: 35px)`.
+//
+// WHY 35. The date sits at the cell's left and the silhouette at its right, so
+// both fit only when
+//
+//	left padding 3 + date ink 16.7 + clearance 2 + disc 10 + right inset 4 = 35.7
+//
+// Every figure there is measured in the browser rather than assumed. The date's
+// ink is 16.7px — two digits at 12px/600 — and NOT the ~14px an earlier pass of
+// this very file guessed; the today STAMP was wider still at the 18px it used to
+// be, which is how the first build of this cell put a moon across day 14 while
+// day 3 looked fine. The census leaves a clean gap around 35.7: 33.0px (ten-day
+// at a 390px phone) is the widest column that cannot afford both and 37.0px
+// (ten-day at 430px) the narrowest that can, so 35 is that gap's midpoint — the
+// same method the retired 40px number was derived by.
+//
+// BELOW IT THE DATE STEPS DOWN, NOT THE MOON, and that ordering is the spec's
+// rather than a convenience: C-CALV4-SPEC §4 makes the silhouette
+// unconditional, so at 30–33px it is the date's type size that yields (10px,
+// with a 13px today stamp). The mini tier already sets that precedent at 11px.
+const CellCompactColWidthMin = 35.0
+
+// MoonExpandColWidthMin is the width the HOVER/FOCUS EXPANSION needs — up to
+// three discs plus the `+` when the calendar declares more. In CSS it is
+// `@container cal-cell (min-width: 75px)`.
+//
+// WHY 75. Measured, and the first attempt at it was wrong in a way only the
+// browser could show:
+//
+//	3 discs × 10px           30.0
+//	2 gaps  ×  2.5px          5.0
+//	the trailing gap          2.5
+//	the `+` glyph             7.5   (9px/700 in the Block's stack)
+//	                        ─────
+//	the expanded row         45.0   ← measured, not summed
+//	right inset               4.0
+//	clearance                 2.0
+//	the date's ink           16.7   (12px/600, two digits)
+//	left padding              3.0
+//	                        ─────
+//	                         70.7
+//
+// A first pass put this at 62, on the arithmetic for a row with NO `+` (35.0px
+// measured), and the probe immediately found the expanded row lying across the
+// date at 62.8px and 67.2px — both ten-day weeks, by 82px² and 38px². The `+`
+// is not optional decoration: it costs 10px of inline space, and the threshold
+// has to cover the widest form the row can take rather than the commonest.
+//
+// The census leaves the gap 67.2px → 78.8px around 70.7, and 75 sits inside it
+// with 4.3px of margin over the requirement and 3.8px under the next real
+// measurement.
+//
+// BELOW IT THE SILHOUETTE STILL RESTS THERE AND THE PANEL STILL OPENS IN ONE
+// TAP. That is what makes this a degradation rather than the old defect wearing
+// a new number: the information has a reachable home at every width, which is
+// exactly the test the 40px query failed.
+//
+// NOTHING RESIZES AT THIS THRESHOLD. The disc diameter steps at
+// CellCompactColWidthMin instead, so revealing two more discs never changes the
+// size of the one already under the pointer — which would be movement, in a
+// sheet that forbids it, arriving through a hover rule.
+//
+// None of the three is derived from NamedColWidthMin. They answer different
+// questions and a change to one must not silently move the others.
+const MoonExpandColWidthMin = 75.0
 
 // Chrome the full-tier column arithmetic subtracts (calendar-v4.html:1429-1434).
 //
