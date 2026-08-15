@@ -102,6 +102,29 @@ PKG_CALENDAR_BLOCK="./internal/widgets/calendar_block/"
 # the GM fold do not share one, the second that the era tint carries the era and
 # keeps the cell above its ground in both themes. Both replace string assertions
 # that were green while the surface they described was blank.
+#
+# TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid is the third, and it was
+# added because the SECOND one's shape was the lesson and nobody applied it: the
+# era tint got a floor AND a ceiling, and in the same change the tile's own 1px
+# edge shipped at --rule-structural with neither — 36.1 from the ground on light
+# and 39.7 on dark, the loudest step in a grid whose stated purpose that change
+# was to soften. It bands the tile edge in both themes and asserts the loudness
+# ORDER of the grid's three rules. A step with a floor and no ceiling is how the
+# last two loud things shipped.
+#
+# TestTilePaintProbe_TheTileIsOnTheScreen is the fourth, and it exists because
+# the THIRD one passed on a grid that was drawing nothing. A stray `*/` orphaned
+# a comment paragraph, the orphan parsed as a selector prelude and swallowed
+# `.cal-block-host .cell` whole; `isolation: isolate` went with it, the
+# z-index:-1 tile fell behind the grid ground, `container-type` reverted to
+# `normal` and every @container query died — the moon silhouette off at every
+# width, thirty day cells painting flat ground. The edge probe reported a
+# healthy band throughout, because getComputedStyle answers what the CASCADE
+# resolved and not what the compositor DREW, and its one plausible reading came
+# from `.interc`, the single surface still painting. This one decodes a PNG:
+# three flat runs through a tile's top edge, and the gutter's ground between two
+# neighbours. Proven red against exactly that regression before it was
+# registered here.
 PROBES_CALENDAR_BLOCK="TestProbe_ContainerQuerySizingInRealBrowser \
 TestProbe_ShelfGeometryIsInvariant \
 TestProbe_StdTierFilledShelfDoesNotCollideWithTheFilledLedger \
@@ -111,6 +134,8 @@ TestProbe_AtThePhoneWidthTheLedgerStillSitsBelowTheMonth \
 TestProbe_DayPanelAppearsOnTapAndCostsTheLedgerNothing \
 TestCellProbe_EveryCornerPaintsAndNoTwoShareOne \
 TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop \
+TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid \
+TestTilePaintProbe_TheTileIsOnTheScreen \
 TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth \
 TestMoonReachProbe_TheOpenerOnATouchDevice \
 TestMoonPanelProbe_TheFoldCostsNothingAndObeysTheRegister \

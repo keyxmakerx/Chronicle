@@ -32,8 +32,15 @@ import (
 //	--axis    the event axis. The marks layer is the ONLY layer that may read it
 //	          and it is FORBIDDEN from referencing --accent.
 //	--cal     calendar identity (the Nameplate dot, the mini rail).
-//	--bandhue the era tint, driven by the ERA and never hardcoded per calendar
+//	--erahue  the era tint, driven by the ERA and never hardcoded per calendar
 //	          (calendar-v4.html:1566 hardcodes Harptos and is a known defect).
+//	          IT IS --erahue AND NOT --bandhue. The era's channel used to be
+//	          stamped on the caption row above each week as --bandhue; that row
+//	          was deleted at C-CALV4-TILES §3 and the channel moved onto each
+//	          DAY CELL as --erahue, where §ANSWERED turns it into the cell's own
+//	          fill. `--bandhue` no longer exists in either stylesheet. The Go
+//	          field is still called EraBand.BandHue, and that mismatch is the
+//	          reason this line says so out loud.
 //
 // None of the three is @property-registered as animatable. That is a recorded
 // REFUSAL (canon A7), not an omission.
@@ -136,8 +143,8 @@ func blockStyle(d BlockData) string {
 }
 
 // NOTE ON THE WEEK-NUMBER GUTTER. It is column 1 of the SAME grid and every row
-// is a subgrid across it, so header / era band / cells / intercalary can never
-// drift out of alignment. Its WIDTH is not decided here: the mockup drops the
+// is a subgrid across it, so header / cells / intercalary can never drift out of
+// alignment. Its WIDTH is not decided here: the mockup drops the
 // gutter below 481px of host, and that is a host measurement the producer cannot
 // make. The Block emits `data-weeknums` (the viewer's layer choice, a fact) and
 // the stylesheet opens the track only where it fits — see §GUTTER in
@@ -149,25 +156,11 @@ func blockStyle(d BlockData) string {
 // remove, and "does a week number mean anything on this calendar" is a producer
 // decision expressed by enabling the layer.
 
-// bandStyle places one era band inside its week row's subgrid.
-//
-// StartCol is 1-based within the week; +1 steps over the gutter track.
-func bandStyle(b EraBand) string {
-	start := b.StartCol
-	if start < 1 {
-		start = 1
-	}
-	span := b.Span
-	if span < 1 {
-		span = 1
-	}
-	return fmt.Sprintf("grid-column:%d/span %d;--bandhue:%s", start+1, span, bandToken(b.BandHue))
-}
-
-// halfRuleStyle places the five-column ruler at the half boundary.
-func halfRuleStyle(col int) string {
-	return fmt.Sprintf("grid-column:%d/span 1", col+1)
-}
+// bandStyle and halfRuleStyle WERE HERE and are deleted with the band row
+// (C-CALV4-TILES §3). Both placed an element in a grid the renderer no longer
+// emits; the `unused` lint has no _test.go exclusion, so a helper kept "in case"
+// reds the build. `bandToken` stays — cellEraToken still resolves the era's hue
+// through the same allowlist, and that hue is now the era's only surface.
 
 // axisStyle is the only style a mark ever carries.
 func axisStyle(a string) string { return "--axis:" + axisToken(a) }
@@ -773,9 +766,13 @@ func cellClass(c DayCell, week int) string {
 	if c.Half {
 		cls = append(cls, "half")
 	}
-	if week > 0 && c.Col == week {
-		cls = append(cls, "lastcol")
-	}
+	// `lastcol` IS GONE (C-CALV4-TILES §1). Its only consumer was
+	// `.cell.lastcol { border-right: 0 }`, which suppressed the shared
+	// right-hand hairline on the month's last column so the grid did not draw a
+	// rule against its own edge. The tile replaced that hairline with a rounded
+	// fill inset inside each cell, so there is nothing left to suppress — and a
+	// class stamped on every tenth cell with no rule behind it is a marker the
+	// next reader has to chase before finding out it does nothing.
 	// Fogged is wave-1-dead by ruling: there is no queryable knowledge horizon
 	// on main, so producers leave it false and the .cell.fog rule ships unused.
 	// The branch stays so W-F does not have to re-touch every cell.
@@ -795,25 +792,10 @@ func weekdayClass(w Weekday) string {
 	return ""
 }
 
-func bandClass(b EraBand) string {
-	cls := []string{"band"}
-	if b.Edge {
-		cls = append(cls, "edge")
-	}
-	// The mockup DECLARES .band.half and never applies it to a band. Wave 1
-	// applies it (see instrument.templ's .halfrule note) — a ramp step that
-	// stops at the era band is a visible seam.
-	if b.Half {
-		cls = append(cls, "half")
-	}
-	if b.OpenLeft {
-		cls = append(cls, "contL")
-	}
-	if b.OpenRight {
-		cls = append(cls, "contR")
-	}
-	return strings.Join(cls, " ")
-}
+// bandClass WAS HERE and is deleted with the band row (C-CALV4-TILES §3). It
+// classed an element nothing emits any more. EraBand.Edge / .Half / .OpenLeft /
+// .OpenRight stay on the struct — they are the producer's month geometry, and
+// the pin is a shape pin — but no renderer reads them today.
 
 // weekLabel is the gutter's week number. It is a POSITION in the month, not a
 // date, so it carries no data-day.

@@ -5,8 +5,10 @@
 //
 //	A NAMEPLATE   identity, the date line (or the fault where the date would go),
 //	              the sync pill, the era stamp, the layers invoker
-//	B INSTRUMENT  the month grid — ten-day weeks native, per-week-row era bands,
-//	              the five-column rule, the intercalary row, the sub-mini tick rule
+//	B INSTRUMENT  the month grid — ten-day weeks native, the era as a soft tint
+//	              on the day cells (C-CALV4-TILES §3: no caption row, no era text
+//	              in the grid at all), the five-column rule, the intercalary row,
+//	              the sub-mini tick rule
 //	C LEDGER      docked, never a drawer. Wave 1 ships it at its real width with
 //	              the signed `needs backend` chip; W-B fills it
 //	D SHELF       the foot. Same deal; W-E fills it

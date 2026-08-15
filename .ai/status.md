@@ -20,6 +20,51 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — the day cell became a TILE, and the era stopped shouting (2026-08-15)
+
+Branch `claude/coordinator-handoff-stage-3-3d3s4w`. C-CALV4-TILES, driven by the
+operator's four asks after seeing the ruled cell at their own phone width:
+micro-separation, no era NAME in the grid, a SOFT era colour, and a way to edit
+eras and their colours. The reference screenshot was measured pixel by pixel
+first (`Cordinator/dispatches/chronicle/C-CALV4-TILE-RECIPE.md`) rather than
+described — three flat steps (page → fill +13, fill → border +14) and a 3px
+gutter, which is the whole of "popped out".
+
+**The tile is a PSEUDO-ELEMENT, and that is the load-bearing decision.** `.cell`
+is the grid item, the `container-type: inline-size` subject AND the positioning
+context for six absolutely-positioned children at once. A real `column-gap` plus
+a 1px border comes out of the query subject: 33.0px → **29.0px** at a 366px host
+on a ten-day week, under `MoonSilhouetteColWidthMin = 30`, which turns the
+always-visible moon back off on the only calendar the operator uses. Drawing the
+tile on `.cell::before` (inset 1.5px, `z-index:-1`, `isolation: isolate` on the
+cell) costs the track nothing and gains a pixel — measured 34.0px, 30/30 cells
+inked.
+
+**Two guards were added because their absence is what shipped the defects.** The
+era tint had a separation FLOOR and no ceiling, which is how 19/255 (light) and
+29/255 (dark) passed a green suite; it is now a band, 4–12. The tile's own edge
+then shipped inside that same softness change at `--rule-structural` — 50/255 on
+light, the loudest step in the grid — with neither, and now has one too.
+
+**And a painted-pixel probe, because a computed-style probe cannot see a grid
+that draws nothing.** A stray `*/` orphaned a comment, the orphan parsed as a
+selector prelude and swallowed `.cal-block-host .cell` whole; every
+`@container` query died and thirty cells painted flat ground while the edge
+probe reported a healthy band. `tile_paint_probe_test.go` decodes the PNG —
+three flat runs through a tile's top edge plus the gutter's ground — and was
+proven red against exactly that regression before being registered.
+
+Era editing already existed (Owner-only, calendar settings → Eras, with a colour
+picker); what was missing was honesty, since the tint keeps only the hue angle.
+The editor now previews the tint the grid will actually paint, in both themes,
+evaluated through the same relative-colour expression, with a test that reads
+the lightness/chroma constants back out of the stylesheet.
+
+**Booked, not built:** the era colour has no legend naming the era (the band row
+was the only place a per-week era name appeared); past-day dimming, the weather
+glyph + temperature in the cell, and a gold weekday header — all in the
+reference, none in the four asks.
+
 ### calendar-v4 refinement, stage 4 — the arc was FILMED, and filming found things (2026-08-14)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. Stages 1-3 (palette, the

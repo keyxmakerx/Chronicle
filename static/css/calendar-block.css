@@ -143,10 +143,16 @@
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-dec: cubic-bezier(0.05, 0.7, 0.1, 1);
 
-  /* channel defaults, so a Block whose producer omits one still renders */
+  /* channel defaults, so a Block whose producer omits one still renders.
+     --bandhue WAS DECLARED HERE AND IS DELETED (C-CALV4-TILES §6). Its only
+     consumer was the `.band` rule of the era caption row; that row went and the
+     default outlived it, read by nobody (`grep -rn 'var(--bandhue)' static/css/`
+     → zero). Dispatch §6 says dead rules are DELETED rather than left, and this
+     sheet has no unused-property guard, so a dead default would sit here
+     forever looking like a live channel. The era's colour now arrives per cell
+     as --erahue and is turned into a fill by --eratint (§ANSWERED). */
   --cal: var(--rule-structural-strong);
   --axis: var(--own-none);
-  --bandhue: var(--rule-structural);
   --week-len: 10;
   --gut: 0px;
   /* --avail-h is STEP THREE'S RESERVED FLOOR (C-CALV4-SPEC §6): the height of
@@ -813,58 +819,31 @@
   overflow: hidden;
 }
 
-/* ── era / season band, subgrid-aligned to the columns ───────────────────── */
-.cal-block-host .bands {
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-column: 1 / -1;
-}
-.cal-block-host .band {
-  grid-row: 1;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  padding: 0 5px;
-  font-weight: 650;
-  font-size: 10px;
-  line-height: 1;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  overflow: hidden;
-  white-space: nowrap;
-  /* --bandhue is driven by the ERA, never hardcoded per calendar */
-  background: color-mix(in oklch, transparent 94%, var(--bandhue));
-}
-.cal-block-host .band .bl {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* the editorial rule at a MID-MONTH era boundary */
-.cal-block-host .band.edge { border-left: 1.5px solid var(--rule-editorial) }
-/* .band.half (stamped from EraBand.Half) is a SEMANTIC marker — the half
-   column lands inside this band — and draws NOTHING here. A band is one grid
-   item spanning many columns, so its own border-right lands at the band's
-   edge, wherever that happens to be, never reliably at the half column. The
-   .halfrule ruler below owns the rule at the half column (P5 §3.5). */
-.cal-block-host .band .sfx {
-  font-weight: 500;
-  font-size: 10px;
-  line-height: 1;
-  color: var(--text-muted);
-  text-transform: none;
-  letter-spacing: 0;
-  margin-left: 6px;
-}
-/* THE FIVE-COLUMN RULE, carried across the band row. A ramp step that stops at
-   the era band is a visible seam; a band is one grid item spanning many columns
-   so its own border-right cannot land at the boundary. This ruler can. */
-.cal-block-host .halfrule {
-  grid-row: 1;
-  align-self: stretch;
-  border-right: 1px solid var(--rule-structural-strong);
-  pointer-events: none;
-}
+/* ── THE ERA BAND ROW IS GONE (C-CALV4-TILES §3) ──────────────────────────
+   The 16px full-width caption row, its `.bl` era name, its `.sfx` season suffix
+   and the `.halfrule` ruler that only ever existed inside it were deleted here
+   and in instrument.templ. The operator's instruction was that the era "should
+   be a color of the dates background and that's it", and the reference has no
+   era text anywhere in the grid.
+
+   THE ERA'S COLOUR IS THE PER-CELL TINT in §ANSWERED, which reads `row.Bands`
+   directly — which is why `EraBand` the struct and `.Bands` the data both
+   survive untouched.
+
+   "NOTHING IS LOST" STOOD HERE AND WAS NOT TRUE (corrected 2026-08-15). The
+   Nameplate's badge reads BlockData.EraLabel, a DIFFERENT field from the
+   EraBand.Label this row printed and not kept in step with it ("RoW" against
+   "Reckoning of Wards" in the package's own fixture), and it names ONE era
+   where the row named each week's. The season renders in ONE place by default,
+   not two: `.skseason` sits inside the sky header, which is gated on a seated
+   sky and renders zero times outside the Bench's primary Block. THE ERA COLOUR
+   HAS NO LEGEND NAMING THE ERA — booked as a real unbuilt gap in
+   C-CALV4-TILES §7, not papered over here.
+
+   THE FIVE-COLUMN RULE SURVIVES TOO, as `.cell.half`'s own border-right drawn in
+   the gutter between two tiles. `.halfrule` existed only because a band is one
+   grid item spanning many columns and could not draw a rule at an interior
+   boundary; with no band row there is no such item and no need for a ruler. */
 
 /* ── the day cell ────────────────────────────────────────────────────────── */
 /* EACH CELL IS THE DENSITY QUERY CONTAINER. Padding lives on the two subtrees,
@@ -878,21 +857,67 @@
    .cunder), which is where it already lived, and on the corner insets below.
    `100cqi` in the coarse-pointer pad reads the same box for the same reason.
 
-   THE DEFINED EDGE IS THE RULE, ONE RAMP STEP UP. The cells were --rule-hairline
-   on a transparent fill, which is the "table division" the spec contrasts
-   against; they are now --rule-structural against a lighter fill, which is a
-   defined edge in the RULED idiom the operator chose ("Bordered, not
-   borderless … the ruled treatment over Tiles' gap-structure"). The ramp is
-   unchanged and still monotonic in both themes — hairline < structural <
-   structural-strong — and the five-column rule below still sits a full step
-   above its neighbours, which is the whole point of it. */
+   THE DEFINED EDGE IS A TILE DRAWN INSIDE THE CELL, AND IT IS A PSEUDO-ELEMENT
+   BECAUSE EVERY OTHER CONSTRUCTION COSTS THE CONTAINER QUERY (C-CALV4-TILES §1).
+   `.cell` is simultaneously the grid item, the `container-type: inline-size`
+   subject and the positioning context for six absolutely-positioned children, so
+   a `column-gap` on `.grid`, or a margin plus a border here, comes straight out
+   of the query subject. Measured at a 366px host with a ten-day week:
+
+     today's shared 1px right rule   33.0px
+     gap:3px + a 1px all-round border 29.0px   ← below MoonSilhouetteColWidthMin
+     the tile on .cell::before        34.0px
+
+   30px is the floor the ALWAYS-VISIBLE moon silhouette needs, so the obvious
+   construction turns the moon back off on the operator's own phone — the exact
+   defect this arc was opened to fix — and it would ship green, because the three
+   probes that measure it are skipped under `-short`, which is what `make verify`
+   and ci.yml run. The tile is therefore drawn INSIDE the cell box and costs the
+   track nothing: the subject GAINS a pixel, because the shared hairline goes.
+
+   `isolation: isolate` is what keeps `z-index: -1` inside the cell. Without a
+   stacking context here the tile would fall through to the nearest one and paint
+   BEHIND `.grid`'s ground, i.e. nowhere. Inside it, the painting order puts the
+   tile above the cell's own background and below every child — which is also why
+   the cell must carry no opaque background of its own any more: one would fill
+   the 3px gutter the tile's 1.5px inset opens on each side, and the ground would
+   never show. The whole fill chain therefore moved to `::before` (§ANSWERED). */
 .cal-block-host .cell {
   container-type: inline-size;
   container-name: cal-cell;
   position: relative;
   padding: 0;
-  border-right: 1px solid var(--rule-structural);
-  border-bottom: 1px solid var(--rule-structural);
+  isolation: isolate;
+}
+/* THE TILE. Radius is --r-ctl (6px, the canon scale — no new value); the fill
+   and the era tint arrive from --cellbase in §ANSWERED, where the chain is
+   explained once, and so does the EDGE.
+
+   THE EDGE IS --tile-rule, WHICH IS DERIVED, NOT BORROWED. It used to be
+   `var(--rule-structural)` — a general STRUCTURAL rule token — and that made
+   it the loudest step in the grid: 36.1 from the ground on light and 39.7 on
+   dark, a 50/255 fill→rule step against the reference's +14, on a surface the
+   operator asked to make soft. A tile edge is not a structural rule. The
+   derivation, its one law across both themes, and the numbers it lands on are
+   all in §ANSWERED beside --cellbase, because the fill and the edge are now
+   one expression and splitting the explanation is how the two drift apart.
+
+   THE FIVE-COLUMN RULE BELOW IS UNCHANGED and is now a much clearer step above
+   this one, which is the whole point of that rule; the selected tile's edge is
+   likewise untouched --accent. Both are measured against this one by
+   TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid.
+
+   THE INTERCALARY DAY TAKES THE SAME TILE. It shares the fill chain, and a
+   festival day drawn as bare ground between two tiles reads as a hole in the
+   month rather than as a different KIND of row. */
+.cal-block-host .cell::before,
+.cal-block-host .interc::before {
+  content: "";
+  position: absolute;
+  inset: 1.5px;
+  z-index: -1;
+  border-radius: var(--r-ctl);
+  border: 1px solid var(--tile-rule);
 }
 /* THE HOVER WASH IS A LAYER OVER THE FILL, NOT A REPLACEMENT FOR IT. This rule
    is older than the fill and was written when `.cell` was `background:
@@ -906,38 +931,83 @@
    hue survives the hover and the darkening is uniform across tinted and
    untinted cells. The wash itself is unchanged: 5% of --text-primary, which
    inverts with the theme exactly as it always did. Still no transition —
-   hover here is instant, and §MOTION is not opened by this. */
-.cal-block-host .cell:hover {
+   hover here is instant, and §MOTION is not opened by this.
+
+   IT MOVED ONTO THE TILE WITH THE FILL. On the cell it would paint the whole
+   border box, gutters included, so a hovered day would close the 3px of ground
+   on all four sides and read as the one cell in the month that is not a tile. */
+.cal-block-host .cell:hover::before {
   background-image:
     linear-gradient(color-mix(in oklch, transparent 95%, var(--text-primary)),
                     color-mix(in oklch, transparent 95%, var(--text-primary)));
 }
 /* THE FIVE-COLUMN RULE: humans cannot count to ten across identical columns;
-   5+5 is instant. Highest-value single addition to a ten-wide grid. */
+   5+5 is instant. Highest-value single addition to a ten-wide grid.
+
+   IT SURVIVES THE TILE AS THE ONE REMAINING BORDER ON `.cell`, and it is drawn
+   in the 3px gutter between two tiles rather than against either of them. That
+   costs column 5 — and only column 5 — one pixel of container-query subject,
+   which is exactly what every column paid before the tile landed. */
 .cal-block-host .cell.half,
 .cal-block-host .grid .hd b.half {
   border-right: 1px solid var(--rule-structural-strong);
 }
-.cal-block-host .cell.lastcol { border-right: 0 }
 .cal-block-host .cell.out .dn { opacity: .4 }
 /* WAVE-1 DEAD BY RULING: there is no queryable knowledge horizon on main, so
-   DayCell.Fogged is always false and this rule ships unused. W-F wires it. */
-.cal-block-host .cell.fog { background: var(--surface-inset) }
+   DayCell.Fogged is always false and this rule ships unused. W-F wires it.
+   It paints the TILE, like every other day-surface fill: on the cell it would
+   fill the gutters and the fogged day would be the one cell with no tile. */
+.cal-block-host .cell.fog::before { background-color: var(--surface-inset) }
 .cal-block-host .cell.fog .dn { color: var(--text-muted) }
 /* selection is IDENTITY, not elevation: an inset ring and a tint, no shadow.
    The :has() branch is the CSS-only day pick (W-B): the cell's own hidden radio
-   IS the selected state, so no class has to be moved by anything. */
-.cal-block-host .cell.sel,
-.cal-block-host .cell:has(> .daypick:checked) {
-  background: color-mix(in oklch, var(--surface-card) 96%, var(--accent));
+   IS the selected state, so no class has to be moved by anything.
+
+   SELECTION USED TO EAT THE ERA TINT, and the mechanism was the `background:`
+   SHORTHAND: it resets background-color, it out-specified the fill chain, and
+   it named --surface-card, so a selected day dropped its era hue and painted
+   the untinted surface plus a wash of accent. Two eras, one selected day, and
+   the day that left its era was the one the reader was pointing at.
+
+   Selection now moves onto the TILE and is lifted FROM --cellbase, so whatever
+   the cell's resting fill is — plain surface or era tint — the selected fill is
+   that same colour at a different lightness. Relative colour syntax rather than
+   a mix, for the reason §ANSWERED sets out at length: `color-mix` in oklch
+   interpolates the HUE ANGLE, so mixing towards the accent rotates the era's
+   hue away from itself. `calc(l ± …)` keeps `c` and `h` untouched by
+   construction, which is what makes "a selected day keeps its era hue" a
+   property of the expression rather than of the numbers in it.
+
+   THE DIRECTION INVERTS WITH THE THEME, like every other step in this file. On
+   light the resting fill is at or just under white and the ground is BELOW it,
+   so the selected fill darkens — but by less than the fill's own clearance over
+   the ground, or selection would sink the day into the page. On dark it lifts,
+   which is the direction the reference itself moves (+6/255 over the normal
+   fill).
+
+   THE EDGE IS --accent AND NOT --gold, deliberately. The reference's selected
+   border is gold because gold IS that product's accent; here canon A7 makes
+   --accent mean SELECTED and nothing else, and a second selection colour would
+   put the meaning in two places. */
+.cal-block-host .cell.sel::before,
+.cal-block-host .cell:has(> .daypick:checked)::before {
+  border-color: var(--accent);
+  background-color: oklch(from var(--cellbase) calc(l - 0.015) c h);
 }
+.dark .cal-block-host .cell.sel::before,
+.dark .cal-block-host .cell:has(> .daypick:checked)::before {
+  background-color: oklch(from var(--cellbase) calc(l + 0.03) c h);
+}
+/* the ring follows the TILE's inset and radius, not the cell's box: a square
+   ring at inset 0 would trace the grid track the tile no longer fills, and the
+   latch below would close it around a rectangle nothing else in the cell draws */
 .cal-block-host .cell.sel::after,
 .cal-block-host .cell:has(> .daypick:checked)::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 1.5px;
   pointer-events: none;
-  border-radius: 1px;
+  border-radius: var(--r-ctl);
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
@@ -1358,8 +1428,17 @@
      Pinned by sky_scenery_probe_test.go (MN-G2, a hit-tested click at the
      caret) and by TestCSS_TheIntercalaryDayPositionsItsOwnStretchedLabel. */
   position: relative;
+  /* the same stacking context the day cell takes, and for the same reason: it
+     is what keeps this surface's `z-index: -1` tile inside it instead of behind
+     the grid's ground, where it would paint nothing at all */
+  isolation: isolate;
   border-top: 1.5px solid var(--rule-editorial);
-  background: var(--surface-inset);
+  /* NO BACKGROUND HERE. This box used to declare `background: var(--surface-inset)`
+     and had been silently losing it to the answer wash's background-color ever
+     since that landed (equal specificity, later rule). Now that the fill lives on
+     the TILE the shorthand would start WINNING again — and an opaque background on
+     this element fills the 1.5px gutter the tile opens, so the festival day would
+     be the one day surface with no ground around it. */
   min-height: 56px;
   display: flex;
   align-items: center;
@@ -2510,12 +2589,25 @@
    THE DEFAULT IS `transparent`, WHICH IS EXACTLY WHAT SHIPPED, so `.lrow` — the
    Ledger row, the third surface on this selector — is byte-identical to before
    and the answer ladder is untouched. Only the two DAY surfaces below opt into
-   a fill. */
+   a fill.
+
+   THE TWO DAY SURFACES PAINT THEIR TILE AND NOT THEMSELVES (C-CALV4-TILES §1).
+   `.cell` and `.interc` are grid items whose whole box is the track; an opaque
+   fill on either closes the 3px of ground the tile's inset opens and the
+   micro-separation disappears. The expression is otherwise the one that
+   shipped, and it is one expression rather than two because a second copy is
+   how the answered fill and the resting fill drift apart. `--cellbase` and
+   `--answer` are declared on the ELEMENT — the answer ladder sets `--answer` on
+   the cell — and inherit into the pseudo-element from there. */
 .cal-block-host .cell,
 .cal-block-host .interc,
 .cal-block-host .lrow {
   --answer: 0;
   --cellbase: transparent;
+}
+.cal-block-host .cell::before,
+.cal-block-host .interc::before,
+.cal-block-host .lrow {
   background-color: color-mix(in oklch,
     var(--cellbase) calc(100% - 20% * var(--answer)),
     var(--axis, var(--rule-structural-strong)));
@@ -2568,30 +2660,79 @@
    HUE, which is exactly what relative colour syntax says: read the era, keep
    `h`, pin `l` to the surface and `c` to a fixed low number.
 
-   LOW-CHROMA IS NOW A NUMBER RATHER THAN A RATIO, and a smaller one: 0.022 on
-   light, 0.03 on dark, against band inks that carry 0.10–0.15. Dark takes the
-   larger of the two because chroma reads weaker at low lightness, and both were
-   picked off the measurement below rather than by eye. Pinning the chroma also
-   makes two eras differ by HUE ALONE, which is the channel that identifies them
-   — a mix let a paler era read as a weaker version of a stronger one. No hue is
-   invented, no token is added to the palette and --erahue is still the same
-   allowlisted band token; what changed is which of its three components the
-   cell borrows.
+   LOW-CHROMA IS NOW A NUMBER RATHER THAN A RATIO, and a smaller one: 0.010 on
+   light, 0.012 on dark, against band inks that carry 0.10–0.15. Dark takes the
+   larger of the two because chroma reads weaker at low lightness. Pinning the
+   chroma also makes two eras differ by HUE ALONE, which is the channel that
+   identifies them — a mix let a paler era read as a weaker version of a
+   stronger one. No hue is invented, no token is added to the palette and
+   --erahue is still the same allowlisted band token; what changed is which of
+   its three components the cell borrows.
+
+   THE CHROMA CAME DOWN FROM 0.022/0.030 AND THAT IS THE ERA'S WHOLE REMEDY
+   (C-CALV4-TILES §3). With the caption row deleted the tint is the only thing
+   left saying "era", and the shipped numbers separated two eras by 19/255 on
+   light and 29/255 on dark — 1.5× and 2.2× the reference's ENTIRE page-to-cell
+   pop step of 13/255. At that strength the grid reads as coloured panels rather
+   than as a month with a grouping on it, which is exactly the "it should be
+   soft" the operator asked for and did not get. Softness now has a CEILING as
+   well as a floor: cell_probe_test.go asserts the era-to-era separation inside
+   a BAND of 4–12/255 in a real engine, in both themes. The missing ceiling is
+   how 29/255 shipped past a green suite.
 
    THE LIGHTNESS IS PINNED JUST INSIDE THE SURFACE, NOT AT IT. 0.99 rather than
    1.0 on light, because chroma at L=1 is white by definition and gamut-maps
    back to no hue at all; 0.27 rather than 0.255 on dark for the mirror reason.
 
-   MEASURED, both themes, in cell_probe_test.go (the assertion that was missing
-   while the mix shipped):
+   MEASURED, both themes, and QUOTED FROM THE PROBE'S OWN OUTPUT rather than
+   from memory — `go test -run TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop -v`,
+   Chromium 141, deviceScaleFactor 1, the fxAlmanac fixture. NOTHING TESTS A
+   COMMENT, so the numbers printed here are the ones the next hand trusts, and
+   the six that stood here before this line was written were not the six the
+   probe produces: four of them (253.8 / 253.4 / 36.3 / 36.2) are values that
+   probe has never printed, and the light separation was written as 9.0/255
+   when the probe prints 11.0 — i.e. the headroom under the 12 ceiling was
+   stated as 3 when it is 1. Verbatim, at the softened chroma:
 
-     light   ground 242.9 · no era 255.0 · era A 251.0 · era B 250.1
-             worst-channel separation between the two eras 19/255 (was 2)
-     dark    ground  25.0 · no era  34.8 · era A  38.0 · era B  37.5
-             worst-channel separation 29/255 (was 5)
+     light   ground 242.9 · no era 255.0
+             era oklch(0.55 0.12 200) rgb(244,254,254) lum 251.9 (+8.9 vs ground)
+             era oklch(0.62 0.10 70)  rgb(255,251,245) lum 251.4 (+8.5 vs ground)
+             worst-channel separation between the two eras 11.0/255
+     dark    ground  25.0 · no era  34.8
+             era oklch(0.55 0.12 200) rgb(32,40,41)   lum 38.4 (+13.4 vs ground)
+             era oklch(0.62 0.10 70)  rgb(42,38,32)   lum 38.4 (+13.4 vs ground)
+             worst-channel separation 10.0/255
 
    Every tinted cell is on the raised side of its own ground in both themes, and
-   the two eras are as far apart as the band row already had them. */
+   both separations sit inside the 4–12 band the probe now asserts — with ONE
+   unit of headroom on light, not three.
+
+   ── THE TILE'S RULE, MEASURED THE SAME WAY ─────────────────────────────────
+   The tile's 1px EDGE is derived here too (--tile-rule, below), and
+   TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid reads it back off the
+   layout in the same four hosts. Every figure below is a LUMINANCE distance
+   from the grid's own ground, quoted from that probe's output. Before the
+   derivation the edge was the shared --rule-structural token:
+
+                 tile rule BEFORE          tile rule AFTER
+     light       rgb(205,207,211)          rgb(230,230,230)     untinted
+                 36.1 below the ground     12.9 below the ground
+     dark        rgb(61,65,73)             rgb(46,49,56)        untinted
+                 39.7 above the ground     23.9 above the ground
+
+   The tinted tiles carry the era's hue on their EDGE as well as their fill —
+   light rgb(220,229,229) 15.8 / rgb(231,226,220) 16.3, dark rgb(46,55,55) 28.1
+   / rgb(57,52,46) 27.6 — which is why the derivation reads --cellbase rather
+   than the ground token: a tinted tile then reads as ONE soft object instead
+   of a coloured field inside a grey box. All six readings sit inside the 8–32
+   band the probe asserts (12.9–16.3 light, 23.9–28.1 dark).
+
+   The two rules that are SUPPOSED to be loud were left alone and are asserted
+   to stay louder: the five-column rule is still --rule-structural-strong at
+   61.2 (light) / 66.7 (dark) from the ground — a +44.9 / +38.6 gap over the
+   loudest tile edge — and the SELECTED tile's edge is still --accent at full
+   strength, 132.4 / 132.6, a +116.1 / +104.5 gap. Selection is identity and is
+   allowed to be the loudest thing in the grid. */
 /* THE INTERCALARY DAY TAKES THE SAME FILL, and that is a consistency fix the
    grid's new ground forced into the open. `.interc` declared
    `background: var(--surface-inset)` and had been silently losing it to the
@@ -2603,15 +2744,66 @@
    its top is what marks it as a different KIND of row, which is the job that
    rule already had. It carries no --erahue, so the fallback resolves the mix to
    the plain fill. */
+/* ── --tile-rule — THE TILE'S EDGE, DERIVED, NOT BORROWED ──────────────────
+   THE TILE EDGE IS NOT A STRUCTURAL RULE AND MUST NOT BORROW ONE. It shipped
+   as `var(--rule-structural)`, the general STRUCTURAL rule token, inside a
+   change whose stated purpose was softness. Measured in Chromium: 36.1 from
+   the ground on light and 39.7 on dark, i.e. a fill→rule step of 50/255 on
+   light and 29–32/255 on dark against the reference's +14 — 3.6× and 2.3× —
+   and roughly THREE TIMES the era separation the same tile is framing, on the
+   one surface the operator asked to make soft. It was the loudest step in the
+   grid.
+
+   THE LAW, AND IT IS ONE LAW FOR BOTH THEMES:
+   THE TILE RULE SITS ONE POP STEP ON THE FAR SIDE OF THE GROUND FROM THE FILL.
+
+   The reference's number cannot simply be copied, because the two themes have
+   different room to move:
+
+     dark   the fill is ABOVE the ground (25.0 → 34.8) with headroom left, so
+            the rule travels further ABOVE the fill and reads as a LIT EDGE —
+            +0.058 of lightness, measured rgb(46,49,56): fill +14, ground +24.
+            That is the reference's own construction, its own direction and
+            very nearly its own number.
+     light  the fill is ABOVE the ground too (242.9 → 255.0) but CLAMPED AT
+            WHITE, so "further from the ground" has nowhere to go. A border 14
+            darker than a white fill lands on 241 — which IS the ground (242.9)
+            — and the edge disappears. So the rule crosses the ground instead
+            and sits one pop step BELOW it: −0.075 of lightness, measured
+            rgb(230,230,230), ground −12.9, fill −25.
+
+   IT IS DERIVED FROM --cellbase RATHER THAN FROM THE GROUND TOKEN, and that is
+   the reason it is a derivation at all. --cellbase already carries the era's
+   hue (§ANSWERED), so a tinted tile gets a tinted EDGE for free — measured
+   rgb(220,229,229) / rgb(231,226,220) on light and rgb(46,55,55) /
+   rgb(57,52,46) on dark — and reads as ONE soft object instead of a coloured
+   field inside a grey box. Relative colour syntax rather than a mix, for the
+   reason stated at length above: `color-mix` in oklch interpolates the hue
+   ANGLE; `calc(l ± …)` leaves c and h untouched by construction.
+
+   NO NEW PALETTE ENTRY, AND THE --rule-* RAMP IS UNTOUCHED. Other surfaces in
+   this sheet read that ramp and it is monotonic for their sake; quieting the
+   tile by editing --rule-structural would have quieted every one of them. The
+   FIVE-COLUMN RULE deliberately keeps --rule-structural-strong and stays
+   obviously louder (61.2 vs 12.9 from the ground on light, 66.7 vs 23.9 on
+   dark), and the SELECTED tile's edge stays --accent at full strength (132.4 /
+   132.6) — selection is identity and is allowed to be loud.
+
+   BANDED IN A REAL ENGINE, BOTH THEMES, because the absence of a band is the
+   actual defect here: this step had a floor of nothing and a ceiling of
+   nothing, which is exactly how the era tint's own 29/255 shipped one change
+   earlier. See TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid. */
 .cal-block-host .cell,
 .cal-block-host .interc {
-  --eratint: oklch(from var(--erahue) 0.99 0.022 h);
+  --eratint: oklch(from var(--erahue) 0.99 0.010 h);
   --cellbase: var(--eratint, var(--surface-card));
+  --tile-rule: oklch(from var(--cellbase) calc(l - 0.075) c h);
 }
 .dark .cal-block-host .cell,
 .dark .cal-block-host .interc {
-  --eratint: oklch(from var(--erahue) 0.27 0.03 h);
+  --eratint: oklch(from var(--erahue) 0.27 0.012 h);
   --cellbase: var(--eratint, var(--surface-inset));
+  --tile-rule: oklch(from var(--cellbase) calc(l + 0.058) c h);
 }
 /* the answered day's numeral inks in the datum's hue too — a second cue in the
    SAME channel, so primary-vs-partner stays a channel distinction and the echo
@@ -3088,10 +3280,9 @@
 
   .cal-block-host .inst { padding: 0 8px 4px }
   .cal-block-host .grid { min-width: calc(var(--week-len) * 24px) }
-  /* no weekday header and no era bands: neither fits, and a truncated era name
-     is worse than an absent one */
+  /* no weekday header: it does not fit. (The era band row it used to drop
+     alongside is gone from every tier — C-CALV4-TILES §3.) */
   .cal-block-host .hd,
-  .cal-block-host .bands,
   .cal-block-host .interc-row { display: none }
 
   /* density is forced, not measured — mini can never afford names */
@@ -3431,9 +3622,13 @@
        content change and it is bounded to .lrows.
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: no-preference) {
-  /* 1 — colour only, on the surfaces that answer each other. */
-  .cal-block-host .cell,
-  .cal-block-host .interc,
+  /* 1 — colour only, on the surfaces that answer each other. The two day
+     surfaces are transitioned on their TILE, because that is where the fill
+     moved (C-CALV4-TILES §1); left on the element the declaration would still
+     parse, still pass every property check here, and interpolate a
+     background-color nothing paints — the answered day would simply snap. */
+  .cal-block-host .cell::before,
+  .cal-block-host .interc::before,
   .cal-block-host .lrow {
     transition: background-color var(--t-base) var(--ease), color var(--t-base) var(--ease);
   }
@@ -3527,8 +3722,8 @@
      proof that it is a colour STATE and not an animation. */
 
   /* 4 — M5. A Block nobody is pointing at costs nothing to have on screen. */
-  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .cell,
-  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .interc,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .cell::before,
+  .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .interc::before,
   .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .lrow,
   .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .cell .dn,
   .cal-block-host .block:not(:hover):not(:focus-within):not([data-swapping]) .lrow .rail {

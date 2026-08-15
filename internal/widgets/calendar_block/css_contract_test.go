@@ -447,38 +447,77 @@ func TestCSS_NoLiteralWeekLength(t *testing.T) {
 	}
 }
 
-// TestCSS_BandHalfDrawsNoRightEdge. EraBand.Half means the half column lands
-// INSIDE this band (r51, data.go) — but a band is one grid item spanning many
-// columns, so its own border-right lands at the band's edge, wherever that
-// happens to be, never reliably at the half column. Only the dedicated
-// .halfrule ruler may draw the five-column rule across the band row (P5 §3.5);
-// the half class on a band is a semantic marker and draws nothing.
-func TestCSS_BandHalfDrawsNoRightEdge(t *testing.T) {
+// TestCSS_TheFiveColumnRuleHasExactlyTwoOwners.
+//
+// RE-POINTED FROM TestCSS_BandHalfDrawsNoRightEdge (C-CALV4-TILES §3), and the
+// claim it makes is the same one, one construction later. That test said: an
+// era band is ONE grid item spanning many columns, so `.band.half`'s own
+// border-right lands at the band's right edge — column 10 on a full-width band,
+// column 7 on the Harptos row-1 split — never reliably at the counting
+// boundary; therefore only the dedicated `.halfrule` ruler may draw the rule
+// across the band row.
+//
+// The band row is deleted, so the spanning item is gone, and with it both the
+// problem and the ruler that solved it. Every row of the grid is now one item
+// per column, which puts the rule back where it can simply be a border: on
+// `.cell.half` and on the weekday header's `b.half`. Exactly two owners, at
+// --rule-structural-strong — which is now a much CLEARER step above the tile's
+// own edge than it was, because the tile edge stopped borrowing
+// --rule-structural and became the derived --tile-rule. Measured from the grid
+// ground: 61.2 vs 16.3 on light, 66.7 vs 28.1 on dark. That step IS the
+// counting aid, and TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid asserts
+// it in a real engine rather than inferring it from the ramp's token order.
+//
+// THE ABSENCES ARE ASSERTED TOO. A `.halfrule` rule left behind would style an
+// element nothing emits, and a THIRD owner would double-draw the boundary at a
+// width where both happen to be visible.
+func TestCSS_TheFiveColumnRuleHasExactlyTwoOwners(t *testing.T) {
 	code := stripComments(blockCSS(t))
 	blockRe := regexp.MustCompile(`(?s)([^;{}]*)\{([^}]*)\}`)
 	// The border shorthand sets all four sides, so it would smuggle the right
 	// edge back in without the literal "border-right" ever appearing.
 	borderShorthand := regexp.MustCompile(`(^|[;\s])border\s*:`)
-	sawRuler := false
+
+	var owners []string
 	for _, m := range blockRe.FindAllStringSubmatch(code, -1) {
 		sel, body := strings.TrimSpace(m[1]), m[2]
 		if strings.Contains(sel, ".halfrule") {
-			// The ruler element is the ONE place the rule may be drawn — and
-			// must keep being drawn, or deleting it becomes the next "fix".
-			if strings.Contains(body, "border-right: 1px solid var(--rule-structural-strong)") {
-				sawRuler = true
-			}
+			t.Errorf("%q styles the deleted five-column ruler. `.halfrule` existed only "+
+				"inside the era band row; that row is gone and nothing emits the element, "+
+				"so this rule can never match — and there is no unused-selector guard in "+
+				"this package, so it would pass CI forever", sel)
+		}
+		if strings.Contains(sel, ".band") && !strings.Contains(sel, ".lband") {
+			t.Errorf("%q styles the deleted era band row (C-CALV4-TILES §3) — the era is a "+
+				"tint on the day cells and nothing else", sel)
+		}
+		if !strings.Contains(sel, ".half") {
 			continue
 		}
-		if strings.Contains(sel, ".band") && strings.Contains(sel, ".half") &&
-			(strings.Contains(body, "border-right") || borderShorthand.MatchString(body)) {
-			t.Errorf("%q draws a border on the band's own edge — the half class marks the band, "+
-				"it draws nothing; the .halfrule ruler owns the rule at the half column", sel)
+		if strings.Contains(body, "border-right: 1px solid var(--rule-structural-strong)") {
+			owners = append(owners, sel)
+			continue
+		}
+		if strings.Contains(body, "border-right") || borderShorthand.MatchString(body) {
+			t.Errorf("%q draws a right edge that is NOT the five-column rule's strong step. "+
+				"The rule reads as a counting aid only because it is a full ramp step above "+
+				"its neighbours; a second, weaker right edge on a .half selector is a "+
+				"boundary drawn twice at two strengths", sel)
 		}
 	}
-	if !sawRuler {
-		t.Error("the .halfrule ruler lost its structural border-right — it is the only element " +
-			"that draws the five-column rule across the band row")
+
+	if len(owners) != 1 {
+		t.Fatalf("the five-column rule is declared in %d places (%v); it is declared once, "+
+			"for both of its owners, so the cell and the header can never disagree about "+
+			"where the boundary is", len(owners), owners)
+	}
+	flat := strings.Join(strings.Fields(owners[0]), " ")
+	for _, want := range []string{".cal-block-host .cell.half", ".cal-block-host .grid .hd b.half"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("%q is not one of the five-column rule's owners (%q). The ramp step must "+
+				"reach the day cells AND the weekday header — a step that stops at one of "+
+				"them is a visible seam", want, flat)
+		}
 	}
 }
 
@@ -690,7 +729,7 @@ func TestCSS_ChannelDiscipline(t *testing.T) {
 	// …and none of the three inherited colour channels is @property-registered
 	// as animatable. That is a recorded REFUSAL, not an omission.
 	if strings.Contains(code, "@property") {
-		t.Error("canon A7 is a REFUSAL: --axis / --cal / --bandhue are never @property-registered " +
+		t.Error("canon A7 is a REFUSAL: --axis / --cal / --erahue are never @property-registered " +
 			"as animatable colours. Interpolating one is a per-frame style recalculation across " +
 			"up to 900 gradient-backed nodes.")
 	}

@@ -9,6 +9,55 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-tiles. The day cell became a tile, and the era went soft (2026-08-15)
+
+C-CALV4-TILES. Dispatch: `Cordinator/dispatches/chronicle/C-CALV4-TILES.md`;
+the reference measured in `C-CALV4-TILE-RECIPE.md`.
+
+### [x] Done
+
+- **The tile.** `.cell::before`, inset 1.5px, `--r-ctl` 6px radius, `z-index:-1`
+  inside `isolation: isolate`. 3px of grid ground between neighbours on both
+  axes, measured in paint. The container-query subject GAINED a pixel (33.0 →
+  34.0 at a 366px ten-day host) instead of losing four, which is what a real
+  `column-gap` would have cost — and 29.0px is under the 30px moon floor.
+- **The era band rows are gone** — `bandRow`, `.bl`, `.sfx`, `.halfrule`, every
+  `.band*` rule, `bandStyle`/`bandClass`/`halfRuleStyle`, `--bandhue`.
+  `EraBand` the DATA stays: `cellStyle` reads `row.Bands` for the tint.
+- **The five-column rule survives** on `.cell.half`'s own border-right, drawn in
+  the gutter. Two owners now, asserted to be exactly two.
+- **The tint went soft** — chroma 0.022 → 0.010 (light), 0.030 → 0.012 (dark);
+  measured separation 11/255 light, 10/255 dark.
+- **Selection stopped eating the tint.** The `background:` shorthand was
+  replacing the fill chain; selection moved onto the tile and now lifts from
+  `--cellbase`, so a selected day keeps its era hue. Guarded.
+- **Two bands where there were two floors**: the era separation [4,12] and the
+  tile rule [8,32] from the ground, both in a real engine, both themes.
+- **A painted-pixel probe** (`tile_paint_probe_test.go`), because the tile-rule
+  probe passed on a grid drawing nothing. Decodes the PNG; proven red first.
+- **The era editor tells the truth** — a live preview of the tint the grid will
+  actually paint, both themes, plus a test that reads the L/C constants back out
+  of `calendar-block.css` so the mirror cannot drift.
+
+### [ ] Open — booked here rather than dropped
+
+- **The era colour has no legend naming the era.** The deleted band row was the
+  only surface that named the era PER WEEK ROW; the Nameplate badge carries
+  `BlockData.EraLabel` (a different field, "RoW" against "Reckoning of Wards" in
+  the fixture) and names one era for the whole calendar. A month spanning two
+  eras now shows two tint groups and names neither. `EraBand.Label` and
+  `.Suffix` have zero readers and are kept for this.
+- **`calendar_eras.color` is `VARCHAR(20)` with zero headroom** —
+  `oklch(0.55 0.12 200)` is exactly 20 characters. Nothing today writes longer,
+  but `oklch(… / 60%)` or a `deg` suffix truncates silently. Needs a migration
+  before anyone widens the accepted colour syntax.
+- **From the reference, not in the operator's four asks:** past-day dimming, a
+  weather glyph + temperature in the cell's bottom-left, a gold weekday header
+  on bare ground.
+- **Hover still moves the thing you pointed at** — the moon cluster is anchored
+  right and grows leftward, so the primary silhouette slides 35.05px away from
+  the pointer at a 900px host. Operator's call, unanswered.
+
 ## 0-integration. The four moon stages integrated (2026-08-11)
 
 ### [x] Done

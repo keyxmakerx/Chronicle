@@ -166,9 +166,17 @@ func TestGrid_TenDayWeeksAreNative(t *testing.T) {
 	}
 }
 
-// TestFiveColumnRule_ReachesCellHeaderAndBand. Humans cannot count to ten across
+// TestFiveColumnRule_ReachesCellAndHeader. Humans cannot count to ten across
 // identical columns; 5+5 is instant.
-func TestFiveColumnRule_ReachesCellHeaderAndBand(t *testing.T) {
+//
+// RE-POINTED AT C-CALV4-TILES §3, NOT WEAKENED. The band row is deleted, and
+// with it the `.halfrule` ruler this test used to count — that element existed
+// only because an era band was ONE grid item spanning many columns and could
+// not draw a rule at an interior boundary. With every row now one item per
+// column the rule has exactly two owners again, `.cell.half` and `.hd b.half`,
+// and both are asserted here. The claim is unchanged: the ramp step reaches the
+// header AND the cells, once per week row, and a seven-day week has none.
+func TestFiveColumnRule_ReachesCellAndHeader(t *testing.T) {
 	d := fxHarptos(true)
 	body := render(t, d)
 
@@ -181,70 +189,109 @@ func TestFiveColumnRule_ReachesCellHeaderAndBand(t *testing.T) {
 	if n := strings.Count(body, `class="cell half"`); n != len(d.Month.Rows) {
 		t.Errorf("%d cells carry the half rule; want one per week row (%d)", n, len(d.Month.Rows))
 	}
-	// band row — the deviation the dispatch asked for. The mockup DECLARES
-	// .band.half and never applies it; a ramp step that stops at the era band is
-	// a visible seam.
-	if n := strings.Count(body, `class="halfrule"`); n != len(d.Month.Rows) {
-		t.Errorf("%d band rows carry the five-column ruler; want one per week row (%d)", n, len(d.Month.Rows))
-	}
-	mustContain(t, body, `class="halfrule" style="grid-column:6/span 1;"`,
-		"the ruler sits on the boundary after column 5, stepping over the gutter track")
+	// AND THE RULER IS GONE, asserted rather than merely un-counted. A test that
+	// only stopped counting `.halfrule` would stay green on a build that kept
+	// emitting it into a grid with no band row to hold it.
+	mustNotContain(t, body, `class="halfrule"`,
+		"the five-column ruler died with the band row it lived in — .cell.half owns the rule now")
 
 	// A seven-day week has no ramp step at all.
 	g := fxGregorian()
 	if got := halfColumn(g.Month); got != 0 {
 		t.Errorf("halfColumn on a seven-day week = %d; want 0", got)
 	}
-	mustNotContain(t, render(t, g), `class="halfrule"`, "a seven-day week needs no counting aid")
+	mustNotContain(t, render(t, g), `class="cell half"`, "a seven-day week needs no counting aid")
 }
 
-// TestEraBands_PerWeekRow. An era spanning days 1..17 cannot be one band across
-// three rows — `span 17` silently wrecks the grid.
-func TestEraBands_PerWeekRow(t *testing.T) {
+// TestEraBandRow_IsGoneAndTheTintIsWhatSurvives.
+//
+// THIS IS THE REPLACEMENT FOR TestEraBands_PerWeekRow, WHICH IS DELETED because
+// its subject no longer exists (C-CALV4-TILES §3): it counted `class="bands"`
+// and asserted the per-row `span` arithmetic of a caption row the operator
+// asked to have removed — "the era name shouldn't be there we were just gonna
+// have it be a color of the dates background and that's it".
+//
+// A DELETION NEEDS A TWO-DIRECTIONAL GUARD OR IT IS NOT A GUARD. Asserting only
+// that the row is absent goes green on a build that also lost the era entirely,
+// which is the whole risk of deleting the surface an era was most visible on.
+// So: the row and its parts are ABSENT, and the tint that replaces them is
+// PRESENT, on the same render, from the same fixture that used to prove the
+// bands.
+func TestEraBandRow_IsGoneAndTheTintIsWhatSurvives(t *testing.T) {
 	d := fxHarptos(true)
 	body := render(t, d)
 
-	if n := strings.Count(body, `class="bands"`); n != len(d.Month.Rows) {
-		t.Errorf("%d band rows; want one per week row (%d)", n, len(d.Month.Rows))
-	}
-	for _, span := range []string{"span 10", "span 7", "span 3"} {
-		mustContain(t, body, span, "the era is re-cut per row, never spanned across rows")
-	}
-	if strings.Contains(body, "span 17") || strings.Contains(body, "span 13") {
-		t.Error("an era was spanned across week rows — that silently wrecks the subgrid")
-	}
-
-	// --bandhue comes from the ERA, not from the calendar. Two eras, two hues,
-	// and neither is the calendar's own --cal-harptos.
-	mustContain(t, body, "--bandhue:oklch(0.55 0.12 200)", "era 1's own hue")
-	mustContain(t, body, "--bandhue:oklch(0.62 0.10 70)", "era 2's own hue")
-	if strings.Contains(body, "--bandhue:var(--cal-harptos)") {
-		t.Error("--bandhue is hardcoded to the calendar hue — that is calendar-v4.html:1566's defect")
+	for _, gone := range []string{
+		`class="bands"`,    // the row
+		`class="band`,      // one era's caption within it
+		`class="sfx"`,      // the season suffix that rode on row 0
+		`class="halfrule"`, // the ruler that only ever existed inside the row
+		"--bandhue:",       // the row's own channel; the cell reads --erahue
+	} {
+		mustNotContain(t, body, gone,
+			"the era band row is deleted — the era is a tint on the day cells and nothing else")
 	}
 
-	// the editorial rule at the MID-MONTH boundary, once
-	if n := strings.Count(body, "band edge"); n != 1 {
-		t.Errorf("%d edge rules; the fixture has exactly one mid-month era boundary", n)
+	// …AND THE ERA IS STILL IN THE GRID. `.Bands` is still populated and
+	// cellStyle still reads it: deleting the DATA would delete the colour, which
+	// is now the only thing inside the month that says "era".
+	if n := strings.Count(body, "--erahue:"); n == 0 {
+		t.Fatal("no cell carries --erahue. The band row was removed because the tint was " +
+			"supposed to carry the era on its own; a month with neither has lost the era " +
+			"altogether, which is the failure this arm exists for")
+	}
+	// Two eras, two hues, and neither is the calendar's own identity hue. This
+	// is the claim the band row used to make about --bandhue, made where the era
+	// actually lands now.
+	mustContain(t, body, "--erahue:oklch(0.55 0.12 200)", "era 1's own hue reaches the cells")
+	mustContain(t, body, "--erahue:oklch(0.62 0.10 70)", "era 2's own hue reaches the cells")
+	if strings.Contains(body, "--erahue:var(--cal-harptos)") {
+		t.Error("--erahue is hardcoded to the calendar hue — that is calendar-v4.html:1566's " +
+			"defect, moved one channel over")
 	}
 }
 
-// TestSeasonSuffix_Row0Only (§9 deviation 3). The season is also stated in the
-// Nameplate; repeating it above every week row turns the era band into a caption
-// instead of a boundary.
-func TestSeasonSuffix_Row0Only(t *testing.T) {
+// TestSeasonLabel_RendersOutsideTheGrid.
+//
+// RE-POINTED, NOT DELETED (C-CALV4-TILES §3). This test was the only place
+// asserting that a season name reaches the rendered Block at all: it counted
+// `class="sfx"`, the suffix the era band row printed on row 0, and its argument
+// was that the season is ALSO stated in the Nameplate so repeating it above
+// every week row would turn a boundary into a caption.
+//
+// The band row is gone, so the suffix is gone with it — and the argument's own
+// premise is what now carries the claim. The season must still render, outside
+// the grid, and the grid must carry no season text at all. Deleting this test
+// instead would have removed the only guard that the season survives its own
+// surface being deleted.
+func TestSeasonLabel_RendersOutsideTheGrid(t *testing.T) {
 	d := fxHarptos(true)
-	// Deliberately give EVERY row a suffix: the renderer, not the producer, is
-	// what must enforce row 0.
+	// Deliberately give every band a suffix. The producer may still populate the
+	// field — the pin is a shape pin and EraBand.Suffix is still on it — and the
+	// claim is that NO renderer prints it into the month.
 	for ri := range d.Month.Rows {
 		for bi := range d.Month.Rows[ri].Bands {
-			d.Month.Rows[ri].Bands[bi].Suffix = "Long Night"
+			d.Month.Rows[ri].Bands[bi].Suffix = "Harvestmere"
 		}
 	}
 	body := render(t, d)
-	if n := strings.Count(body, `class="sfx"`); n != 1 {
-		t.Errorf("%d season suffixes rendered; the season belongs to row 0 only", n)
+
+	// The Nameplate states it, from BlockData.SeasonLabel.
+	if d.SeasonLabel == "" {
+		t.Fatal("the fixture carries no SeasonLabel — every arm below would be vacuous")
 	}
-	mustContain(t, body, `<span class="sfx">· Long Night</span>`, "the suffix form")
+	mustContain(t, body, `<span class="sub season">`+d.SeasonLabel+`</span>`,
+		"the Nameplate's season line is where the season is stated")
+
+	// And the grid states it nowhere. `Suffix` is not a renderer surface any
+	// more; a build that started printing it again would be re-creating the
+	// caption the operator asked to have removed.
+	if strings.Contains(body, "Harvestmere") {
+		t.Error("EraBand.Suffix reached the rendered Block. The season belongs to the " +
+			"Nameplate and to the sky header — not to the month, which is a boundary " +
+			"surface and not a caption surface")
+	}
+	mustNotContain(t, body, `class="sfx"`, "the suffix element died with the band row")
 }
 
 // TestIntercalary_ClearsTheGutter. The row that a 30-day / ten-day-week month
@@ -416,7 +463,12 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 	mustContain(t, body, "data-open-layers", "the ⋯ invoker is emitted")
 	mustContain(t, body, "disabled", "the switchboard is W-F, so the invoker renders inert")
 	mustContain(t, body, `class="ph`, "the default surface is a month with its moon phases")
-	mustNotContain(t, body, `class="bands"`, "eras are off by default")
+	// THE ERAS-LAYER MARKER IS `--erahue:` SINCE C-CALV4-TILES §3. It used to be
+	// `class="bands"` — the band row — and that row is deleted, so the marker
+	// moved to the only surface the layer still has: the per-cell tint. It is a
+	// STRONGER marker than the row was, because the row could be absent for a
+	// month with no eras while a live layer with era data always stamps a cell.
+	mustNotContain(t, body, "--erahue:", "eras are off by default")
 	mustNotContain(t, body, "data-weeknums", "week numbers are off by default")
 	mustNotContain(t, body, `class="wknum"`, "week numbers are off by default")
 	// …and NOTHING else (data.go: DEF = ["moons"]). The Ledger and Shelf zones
@@ -438,7 +490,7 @@ func TestLayers_DefaultIsMoonsAndTheInvokerIsInert(t *testing.T) {
 		PersistURL:     "/campaigns/camp-1/calendar/prefs",
 	}
 	on := render(t, d)
-	mustContain(t, on, `class="bands"`, "the eras layer draws its bands")
+	mustContain(t, on, "--erahue:", "the eras layer tints its day cells")
 	// The gutter's WIDTH is a container query (the mockup drops it below 481px of
 	// host, which the producer cannot measure); the markup states the viewer's
 	// layer choice and nothing more. Writing --gut inline would beat the query.

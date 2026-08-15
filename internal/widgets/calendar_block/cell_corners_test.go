@@ -70,14 +70,15 @@ func TestCell_EraIsABackgroundTintAndNeverTextOrBorder(t *testing.T) {
 	}
 	if tinted == 0 {
 		t.Fatal("no cell carries --erahue. C-CALV4-SPEC §2 puts the era on the cell FILL, " +
-			"and the fixture's rows carry era bands — so every dated cell an era covers " +
+			"and the fixture's rows carry era data — so every dated cell an era covers " +
 			"should be tinted")
 	}
 
-	// THE HUE GOES THROUGH THE SAME ALLOWLIST THE BAND USES. A bare colour must
-	// never reach a style attribute (identity_triple_test.go's rule, applied to
-	// the same class of channel), and reusing bandToken is what stops the tint
-	// and the band above it from ever disagreeing about an era's hue.
+	// THE HUE GOES THROUGH bandToken's ALLOWLIST. A bare colour must never reach
+	// a style attribute (identity_triple_test.go's rule, applied to the same
+	// class of channel). The allowlist outlived the band row it was named for
+	// (C-CALV4-TILES §3): the tint is the era's only surface now, so the token
+	// gate is the only thing between a producer's string and a `style`.
 	for _, c := range cells {
 		if !strings.Contains(c, "--erahue:") {
 			continue
@@ -89,25 +90,43 @@ func TestCell_EraIsABackgroundTintAndNeverTextOrBorder(t *testing.T) {
 
 	// ── AND NEITHER REJECTED TREATMENT SHIPPED ──────────────────────────────
 	//
-	// NEVER TEXT. The era's NAME is printed once, on the band above the row.
-	// Repeating it in thirty cells is the noise MN-G4 already ruled against for
-	// moons, and it is the first thing a later hand reaches for.
+	// NEVER TEXT. Since C-CALV4-TILES §3 the era's name is not in the grid AT
+	// ALL — the caption row that used to print it once per week is deleted, and
+	// the Nameplate's era badge is where the name lives. Repeating it in thirty
+	// cells was always the noise MN-G4 ruled against for moons; with no band row
+	// left to point at, a cell that grew era text would be the only place the
+	// grid names an era, which is worse than the repetition ever was.
 	for i, c := range cells {
 		if strings.Contains(c, "data-era-label") || strings.Contains(c, "erartext") {
-			t.Errorf("cell %d carries era TEXT (%s). The era's name belongs on the band, "+
-				"once per row — C-CALV4-SPEC §2 and the constraint it inherits: colour, "+
-				"never text, in the grid", i, c)
+			t.Errorf("cell %d carries era TEXT (%s). The era's name belongs on the "+
+				"Nameplate's era badge and nowhere in the month — C-CALV4-SPEC §2 and the "+
+				"constraint it inherits: colour, never text, in the grid", i, c)
 		}
 	}
-	// NEVER THE BORDER. The cell's border already means SELECTED (gold) and the
-	// pop is an edge treatment; a third edge meaning makes all three ambiguous.
+	// THE ERA IS NEVER AN EDGE *MEANING*, and that claim is narrower than it
+	// used to be — narrowed on purpose rather than quietly weakened.
+	//
+	// WHAT IT MEANT BEFORE: no border may read --erahue at all, because the
+	// edge already carries SELECTED and the pop, and a third edge meaning makes
+	// all three ambiguous.
+	//
+	// WHAT IT MEANS NOW: no border may read --erahue DIRECTLY. Since the tile's
+	// edge became --tile-rule — one pop step off --cellbase — a tinted tile's
+	// edge does carry the era's hue, and that is deliberate: it is what makes a
+	// tinted tile read as ONE soft object instead of a coloured field inside a
+	// grey box. The hue arrives there as a property of the SURFACE, at the
+	// surface's own lightness and pinned chroma, which is not an edge meaning;
+	// `border-color: var(--erahue)` would be, and is still refused. The two are
+	// distinguishable in exactly the way the regex below distinguishes them.
 	css := stripComments(blockCSS(t))
 	flat := strings.Join(strings.Fields(css), " ")
 	eraBorderRe := regexp.MustCompile(`border[^;{}]*var\(--erahue`)
 	if m := eraBorderRe.FindString(flat); m != "" {
-		t.Errorf("--erahue reaches a BORDER property (%q). The operator's answer was "+
-			"BACKGROUND, because the edge already carries `selected` and the pop — a third "+
-			"edge meaning makes all three ambiguous", m)
+		t.Errorf("--erahue reaches a BORDER property DIRECTLY (%q). The operator's answer "+
+			"was BACKGROUND: the edge already carries `selected` and the pop, and an era "+
+			"drawn as an edge in its own right makes all three ambiguous. The era may reach "+
+			"the tile's edge only the way it reaches the tile's fill — through --cellbase, "+
+			"at the surface's lightness and the pinned soft chroma", m)
 	}
 	// It reaches the FILL, through --cellbase, and it has an OFF SWITCH that
 	// needs no marker class: a cell with no --erahue makes --eratint
@@ -153,7 +172,7 @@ func TestCell_EraTintIsGatedOnTheErasLayer(t *testing.T) {
 	}
 	if strings.Contains(off, "--erahue:") {
 		t.Error("the eras layer is OFF and cells still carry --erahue. A viewer who switched " +
-			"eras off must get no era band AND no era tint; a surface that survives its own " +
+			"eras off must get no era tint at all; a surface that survives its own " +
 			"layer toggle is the exception that makes the toggle untrustworthy")
 	}
 }
@@ -251,6 +270,19 @@ func TestCell_NothingIsCentred(t *testing.T) {
 // is lighter, so the GROUND darkens instead; on dark --surface-inset is the
 // lighter of the pair and the two swap. Both arms are asserted, because a build
 // that reads as raised on light and sunken on dark is the defect this catches.
+//
+// ── RE-POINTED AT THE TILE (C-CALV4-TILES §1) ──────────────────────────────
+// This test used to pin two literal `border-right` strings, which is exactly
+// what the ruled treatment was. The treatment is now a TILE — a rounded fill
+// drawn inside the cell box with 1.5px of ground showing on every side — and
+// the pins move with it: the pseudo-element, its inset, its radius, its rule,
+// and the two things that make the ground SHOW.
+//
+// THE ONE PIN THAT MATTERS MOST IS AN ABSENCE. `.cell` must carry no background
+// and no all-round border of its own. Either one closes the 3px gutter between
+// two tiles — silently, because the cell would still look like a cell — and
+// takes the micro-separation the operator asked for with it. The gutter is the
+// whole point; a tile with no gap around it is just a rounded table division.
 func TestCell_PopsAgainstItsOwnGround(t *testing.T) {
 	css := stripComments(blockCSS(t))
 	flat := strings.Join(strings.Fields(css), " ")
@@ -270,19 +302,94 @@ func TestCell_PopsAgainstItsOwnGround(t *testing.T) {
 		}
 	}
 
-	// THE DEFINED EDGE, one ramp step up from the hairline the cells used to
-	// carry. The ramp itself must stay monotonic: hairline < structural <
-	// structural-strong, with the five-column rule still a full step above its
-	// neighbours, which is the whole point of that rule.
-	if !strings.Contains(flat, "border-right: 1px solid var(--rule-structural);") {
-		t.Error("the cell's rule is not --rule-structural. It was --rule-hairline on a " +
-			"transparent fill, which IS the \"table division\" the spec contrasts against")
+	// ── THE TILE IS A PSEUDO-ELEMENT, AND IT IS DRAWN INSIDE THE CELL ───────
+	tileRe := regexp.MustCompile(`(?s)\.cal-block-host \.cell::before,\s*\.cal-block-host \.interc::before \{([^}]*)\}`)
+	m := tileRe.FindStringSubmatch(css)
+	if m == nil {
+		t.Fatal("there is no `.cell::before, .interc::before` tile rule. The day cell's " +
+			"separation is drawn INSIDE its own box precisely because .cell is the " +
+			"container-query subject: a gap or a margin on the grid item costs the track " +
+			"a pixel, and at a 366px host with a ten-day week that takes the column from " +
+			"34.0px to 29.0px — under MoonSilhouetteColWidthMin, which turns the " +
+			"always-visible moon back off on the operator's own phone")
 	}
+	tile := m[1]
+	for _, want := range []struct{ decl, why string }{
+		{"position: absolute",
+			"the tile is out of flow, so it contributes nothing to the cell's layout"},
+		{"inset: 1.5px",
+			"1.5px on each of two neighbours is the reference's measured 3px of ground " +
+				"between two cells — and it costs the container query NOTHING, because it " +
+				"is inside the cell's own box"},
+		{"z-index: -1",
+			"the tile paints behind the cell's content and in front of the grid ground"},
+		{"border-radius: var(--r-ctl)",
+			"6px, the existing canon radius token — the reference measures ~6px and no " +
+				"new scale value is introduced"},
+		{"border: 1px solid var(--tile-rule)",
+			"the reference's third step, and it is DERIVED rather than borrowed. It was " +
+				"`var(--rule-structural)` — the general STRUCTURAL rule token — which " +
+				"made the tile edge the loudest step in the grid: 36.1 from the ground " +
+				"on light and 39.7 on dark, a 50/255 fill→rule step against the " +
+				"reference's +14, inside a change whose stated purpose was softness. " +
+				"--tile-rule is one pop step off --cellbase, so it also carries the era's " +
+				"hue and a tinted tile reads as one soft object. The --rule-* ramp is " +
+				"untouched because other surfaces read it, and the band is measured in a " +
+				"real engine by TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid"},
+	} {
+		if !strings.Contains(tile, want.decl) {
+			t.Errorf("the tile rule is missing %q — %s", want.decl, want.why)
+		}
+	}
+	// --r-ctl IS VERIFIED, NOT ASSUMED. The tile's radius is written as the token
+	// because the recipe measured ~6px in the reference; if the canon scale ever
+	// moved, the token would silently take the tile with it.
+	if !strings.Contains(flat, "--r-ctl: 6px") {
+		t.Error("--r-ctl is no longer 6px. The tile's radius is written as that token " +
+			"because the reference measures ~6px; a moved token moves the tile silently")
+	}
+
+	// ── THE GROUND MUST SHOW, WHICH MEANS `.cell` PAINTS NOTHING ITSELF ─────
+	cellRe := regexp.MustCompile(`(?s)\.cal-block-host \.cell \{([^}]*)\}`)
+	cm := cellRe.FindStringSubmatch(css)
+	if cm == nil {
+		t.Fatal("no `.cal-block-host .cell` rule at all — every arm below is vacuous")
+	}
+	cell := cm[1]
+	if strings.Contains(cell, "background") {
+		t.Error("`.cell` declares a background again. Its box IS the grid track, so an " +
+			"opaque fill here covers the 1.5px the tile insets on every side and the 3px " +
+			"gutter between two tiles disappears. The fill belongs on ::before (§ANSWERED)")
+	}
+	for _, dead := range []string{"border-right: 1px solid var(--rule-structural);",
+		"border-bottom: 1px solid var(--rule-structural);"} {
+		if strings.Contains(cell, dead) {
+			t.Errorf("`.cell` still carries %q. The shared hairline was the RULED treatment "+
+				"the tile replaces, and it also costs the container-query subject a pixel "+
+				"on every column", dead)
+		}
+	}
+	if !strings.Contains(cell, "isolation: isolate") {
+		t.Error("`.cell` is not a stacking context. Without one the tile's `z-index: -1` " +
+			"escapes to the nearest ancestor context and paints BEHIND `.grid`'s ground, " +
+			"i.e. nowhere — a cell with no fill at all, which reads as a working build " +
+			"on a theme whose ground and fill are close together")
+	}
+
+	// THE FIVE-COLUMN RULE IS THE ONE BORDER THAT SURVIVES, and it is still a
+	// full ramp step above the tile's own rule — the whole point of it.
 	if !strings.Contains(flat, ".cal-block-host .cell.half, .cal-block-host .grid .hd b.half "+
 		"{ border-right: 1px solid var(--rule-structural-strong); }") {
-		t.Error("the five-column rule is no longer a full ramp step above the cell rule — " +
+		t.Error("the five-column rule is no longer a full ramp step above the tile rule — " +
 			"humans cannot count to ten across identical columns, and that rule is the " +
 			"highest-value single addition to a ten-wide grid")
+	}
+	// `.cell.lastcol` existed only to cancel the shared right-hand hairline. With
+	// no hairline it cancels nothing, and a rule that cancels nothing is a rule a
+	// later hand has to reason about.
+	if strings.Contains(flat, ".cal-block-host .cell.lastcol") {
+		t.Error("`.cell.lastcol` still has a rule. It suppressed the shared border-right " +
+			"on the last column; there is no shared border any more, so it is dead")
 	}
 
 	// THE CELL'S OWN PADDING STAYS 0. `container-type: inline-size` measures the
@@ -290,12 +397,13 @@ func TestCell_PopsAgainstItsOwnGround(t *testing.T) {
 	// subject and move all four thresholds by twice the padding — silently, on
 	// every signed still. The spec's "internal padding" is spent on the
 	// subtrees, which is where it already lived.
-	cellRe := regexp.MustCompile(`(?s)\.cal-block-host \.cell \{([^}]*)\}`)
-	if m := cellRe.FindStringSubmatch(css); m != nil {
-		if !strings.Contains(m[1], "padding: 0") {
-			t.Error("`.cell` has grown a padding. It is the container query's subject, so a " +
-				"padding here moves the silhouette, date, expansion and density thresholds " +
-				"all at once, and moves them invisibly")
-		}
+	if !strings.Contains(cell, "padding: 0") {
+		t.Error("`.cell` has grown a padding. It is the container query's subject, so a " +
+			"padding here moves the silhouette, date, expansion and density thresholds " +
+			"all at once, and moves them invisibly")
+	}
+	if !strings.Contains(cell, "container-type: inline-size") {
+		t.Error("`.cell` is no longer the density container — the whole sizing story " +
+			"depends on it measuring the real column box")
 	}
 }

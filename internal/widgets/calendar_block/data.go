@@ -261,8 +261,30 @@ type WeekRow struct {
 }
 
 type EraBand struct {
+	// Label HAS ZERO READERS IN THIS WIDGET, and that is not an oversight —
+	// read this before wiring anything to it.
+	//
+	// Its only reader was `bandRow` in instrument.templ, the 16px era caption
+	// row above each week. C-CALV4-TILES §3 DELETED THAT ROW (last present at
+	// 3278f054; the deletion is part of the C-CALV4-TILES change itself, not of
+	// an earlier commit), because the operator asked for the era to be "a color
+	// of the dates background and that's it". Nothing has rendered this string
+	// since. `Suffix` — the season, printed on row 0 of the same row — is in
+	// exactly the same position and for the same reason.
+	//
+	// THE FIELDS STAY, deliberately, on two grounds: the producer-side pin
+	// (block_geometry_test.go) asserts what the producer puts here, and a
+	// LEGEND naming each era beside its colour is the obvious next surface —
+	// booked in C-CALV4-TILES §7 as a real, unbuilt gap, because the era's
+	// colour currently has nothing anywhere that names it.
+	//
+	// WHAT THE ERA STILL RENDERS AS TEXT IS `BlockData.EraLabel`, A DIFFERENT
+	// FIELD, on the Nameplate. The two are not the same string and are not kept
+	// in step: in this package's own fixture they read "Reckoning of Wards" /
+	// "Age of the Emberfall" here and "RoW" there. Do not treat the badge as
+	// this field's surface.
 	Label     string
-	Suffix    string // the season, folded in as a suffix on row 0 ONLY (§9 dev 3)
+	Suffix    string // the season, row 0 ONLY (§9 dev 3) — unread, see Label
 	StartCol  int    // 1-based, relative to the week gutter
 	Span      int
 	BandHue   string // --bandhue; driven by the ERA, never hardcoded per calendar

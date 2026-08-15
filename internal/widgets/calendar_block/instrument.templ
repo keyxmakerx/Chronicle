@@ -6,10 +6,25 @@
 // and the header, the era bands, the cells and the intercalary row are all
 // subgrids across the SAME tracks, so nothing can drift out of alignment.
 //
-// ERA BANDS ARE PER WEEK ROW. An era spanning days 1–17 cannot be one band
-// across three rows — `span 17` silently wrecks the grid (design-notes §9
-// deviation 2). It is a band on each row it touches, column-aligned, with a
-// 1.5px editorial rule at a mid-month boundary.
+// THE ERA IS A TINT ON THE DAY CELLS AND NOTHING ELSE (C-CALV4-TILES §3). The
+// caption row that used to sit above each week — the era's NAME, its season
+// suffix and the `.halfrule` ruler that only ever existed inside it — is gone:
+// the operator asked for the era to be "a color of the dates background and
+// that's it", and the reference carries no era text anywhere in the grid.
+//
+// `EraBand` THE DATA SURVIVES AND MUST. `cellStyle` reads `row.Bands` to work
+// out which era covers a given day and stamps `--erahue` on the cell; deleting
+// the band data would delete the colour, which is now the only thing left
+// saying "era" inside the month.
+//
+// AND THE NAME IS GENUINELY GONE — this comment used to claim it was "only
+// repeated" elsewhere and that was wrong (corrected 2026-08-15). The Nameplate
+// badge reads BlockData.EraLabel, a DIFFERENT field from the EraBand.Label this
+// row printed and not kept in step with it, and it names the calendar's ONE
+// current era rather than each week's. `EraBand.Label` and `EraBand.Suffix`
+// have no reader in this widget at all now; data.go says so at the declaration.
+// The era colour having no legend that names the era is booked as a real
+// unbuilt gap in C-CALV4-TILES §7.
 
 package calendar_block
 
@@ -35,7 +50,6 @@ templ instrument(d BlockData) {
 			@weekdayHeader(d.Month)
 		}
 		for _, row := range d.Month.Rows {
-			@bandRow(d, row)
 			@weekRow(d, row)
 		}
 		@intercalaryRows(d)
@@ -57,53 +71,20 @@ templ weekdayHeader(m MonthGeometry) {
 	</div>
 }
 
-// bandRow is one week's worth of era bands.
+// THE FIVE-COLUMN RULE HAS ONE OWNER AGAIN, AND IT IS `.cell.half`.
 //
-// THE SEASON IS A SUFFIX ON ROW 0 ONLY (§9 deviation 3) — it is also stated in
-// the Nameplate, and repeating it above every week row would make the era band
-// a caption instead of a boundary. The row-0 guard is enforced here rather than
-// trusted to the producer, because a suffix that leaks onto row 1 is the kind of
-// thing that reads as intentional in review.
+// `.halfrule` existed for one reason: an era band is a single grid item
+// spanning many columns, so its own border-right could only land at the band's
+// right edge — column 10 on a full-width band, column 7 on the Harptos row-1
+// split — never reliably at the counting boundary. A zero-width ruler item
+// placed on the half column itself was the way to draw a rule across a row made
+// of spanning items.
 //
-// --bandhue is driven by the ERA. calendar-v4.html:1566 hardcodes the Harptos
-// hue on every band and is a known defect; EraBand.BandHue is the fix.
-templ bandRow(d BlockData, row WeekRow) {
-	if hasLayer(d.Layers, "eras") && len(row.Bands) > 0 {
-		<div class="bands">
-			<span class="gut"></span>
-			for _, b := range row.Bands {
-				<div class={ bandClass(b) } style={ bandStyle(b) } title={ b.Label }>
-					<span class="bl">{ b.Label }</span>
-					if row.Index == 0 && b.Suffix != "" {
-						<span class="sfx">{ "· " + b.Suffix }</span>
-					}
-				</div>
-			}
-			@halfRule(d.Month)
-		</div>
-	}
-}
-
-// halfRule is the five-column rule, carried across the era band row.
-//
-// DELIBERATE DEVIATION, flagged rather than silent: the mockup DECLARES
-// `.band.half` (calendar-v4.html:624) and never applies it to a band, so the
-// strong ramp step stops dead at the era band in every signed still. The
-// dispatch asks for it to be applied. Applying the class alone cannot draw the
-// rule where it belongs — a band is one grid item spanning many columns, so its
-// border-right lands at the band's own right edge, which is column 10 on a
-// full-width band and column 7 on the Harptos row-1 split. This ruler is a
-// zero-width grid item placed on the half column itself, so the step is
-// continuous at exactly the boundary whatever the bands are doing. `.band.half`
-// is still STAMPED from EraBand.Half, but as a semantic marker only — since
-// §3.5 the class draws nothing (its border-right landed the rule at the band's
-// own right edge, wherever the band happened to end); this ruler is the rule's
-// single owner (TestCSS_BandHalfDrawsNoRightEdge).
-templ halfRule(m MonthGeometry) {
-	if halfColumn(m) > 0 {
-		<i class="halfrule" style={ halfRuleStyle(halfColumn(m)) } aria-hidden="true"></i>
-	}
-}
+// With the band row deleted there is no spanning item and no problem to solve:
+// every row of the grid is now one item per column, and `.cell.half`'s own
+// border-right lands exactly on the boundary. The weekday header's `b.half`
+// carries the same rule and always did. Nothing about the ramp step changed —
+// only the number of elements needed to draw it.
 
 // weekRow is one row of day cells, plus the week-number gutter.
 //

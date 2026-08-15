@@ -70,10 +70,17 @@ type cpSwatch struct {
 }
 
 // cpEra is one era's tint, grouped by the --erahue the producer stamped.
+//
+// Rule is the tile's 1px EDGE on that era's cells, read off `::before`. It is
+// here rather than beside the fill because the edge is derived FROM the fill
+// (--tile-rule reads --cellbase), so an era whose fill carried its hue and
+// whose edge did not would be a build where the derivation had been replaced
+// by a flat token again — which is exactly what shipped.
 type cpEra struct {
 	Hue   string   `json:"hue"`
 	Cells int      `json:"cells"`
 	Fill  cpSwatch `json:"fill"`
+	Rule  cpSwatch `json:"rule"`
 }
 
 type cpReading struct {
@@ -88,6 +95,17 @@ type cpReading struct {
 	NoEra    cpSwatch `json:"noEra"`
 	HasNoEra bool     `json:"hasNoEra"`
 	Eras     []cpEra  `json:"eras"`
+
+	// ── THE THREE RULES OF THE GRID, IN LOUDNESS ORDER ────────────────────
+	//
+	// NoEraRule is the untinted day surface's tile edge; FiveColRule is
+	// `.cell.half`'s border-right, the counting aid; the selected edge is per
+	// era in Sel[].BorderPx. All three are read as PIXELS rather than as token
+	// names, because "one step off the fill" is a claim about what the engine
+	// paints and the token it happens to be written as cannot answer it.
+	NoEraRule   cpSwatch `json:"noEraRule"`
+	FiveColRule cpSwatch `json:"fiveColRule"`
+	HasFiveCol  bool     `json:"hasFiveCol"`
 
 	// ── THE THIRD CORNER ──────────────────────────────────────────────────
 	// Cells carrying marks, the narrowest strip found, the narrowest SEGMENT
@@ -134,6 +152,39 @@ type cpReading struct {
 	HoverRule           string   `json:"hoverRule"`
 	Hovered             cpSwatch `json:"hovered"`
 	HoveredOnEra        string   `json:"hoveredOnEra"`
+
+	// ── SELECTION, MEASURED ON A TINTED DAY ───────────────────────────────
+	//
+	// C-CALV4-TILES §4. Selection used to be written as the `background:`
+	// SHORTHAND against --surface-card, at higher specificity than the fill
+	// chain, so a selected day silently dropped its era tint — and the day
+	// that left its era was the one the reader had just pointed at. Nothing
+	// in the suite could see it: the markup was identical and the stylesheet
+	// said what it meant to say. So it is read back out of the layout, on a
+	// cell that carries an era, with its own radio actually checked.
+	// ONE ENTRY PER ERA, not one overall. A single selected cell can only be
+	// compared with its own resting state, and on dark that comparison is not
+	// enough: the shipped shorthand mixed --surface-card with the blue accent,
+	// which happens to carry the same R−B sign as the teal era, so a
+	// same-cell test passed on two of four hosts while the defect was live on
+	// all four. TWO selected eras cannot agree by accident — under the
+	// shorthand they are the same pixel, because neither reads --cellbase.
+	Sel []cpSelection `json:"sel"`
+}
+
+// cpSelection is one era's day, read at rest and with its own radio checked.
+//
+// BorderPx is the selected edge as a PIXEL. Border (the CSS string) is enough
+// to prove selection changed the edge at all; only the pixel can be compared
+// with the tile rule's own distance from the ground, which is what "selection
+// is allowed to be loud, the tile edge is not" actually asserts.
+type cpSelection struct {
+	Hue        string   `json:"hue"`
+	Rest       cpSwatch `json:"rest"`
+	RestBorder string   `json:"restBorder"`
+	Fill       cpSwatch `json:"fill"`
+	Border     string   `json:"border"`
+	BorderPx   cpSwatch `json:"borderPx"`
 }
 
 // cpScript is the whole measurement, run once per host.
@@ -187,6 +238,23 @@ function(host){
     if (!el) return { css: '', r: 0, g: 0, b: 0, lum: -1 };
     return over(getComputedStyle(el)[prop || 'backgroundColor'], null);
   };
+  // THE DAY SURFACE'S FILL LIVES ON ITS TILE (C-CALV4-TILES §1), so every
+  // reading of "what colour is this cell" has to ask the pseudo-element.
+  // Asking the element instead now answers a transparent black for every cell
+  // in the month, which would read as "the fill is gone" rather than as "the
+  // probe is looking in the wrong place" — the two are indistinguishable in
+  // the payload, which is why this helper exists rather than an inline call.
+  var tileSwatch = function(el){
+    if (!el) return { css: '', r: 0, g: 0, b: 0, lum: -1 };
+    return over(getComputedStyle(el, '::before').backgroundColor, null);
+  };
+  // AND ITS EDGE. Same pseudo-element, same reason. borderTopColor rather than
+  // the shorthand because a shorthand read is a string; this has to be a pixel,
+  // and all four sides of the tile carry the same declaration.
+  var tileRuleSwatch = function(el){
+    if (!el) return { css: '', r: 0, g: 0, b: 0, lum: -1 };
+    return over(getComputedStyle(el, '::before').borderTopColor, null);
+  };
 
   var out = {
     label: host.getAttribute('data-label') || '',
@@ -194,6 +262,8 @@ function(host){
     host: r2(root.getBoundingClientRect().width), columnW: 0,
     ground: swatch(root.querySelector('.grid')),
     noEra: { css: '', r: 0, g: 0, b: 0, lum: -1 }, hasNoEra: false, eras: [],
+    noEraRule: { css: '', r: 0, g: 0, b: 0, lum: -1 },
+    fiveColRule: { css: '', r: 0, g: 0, b: 0, lum: -1 }, hasFiveCol: false,
     underShown: false, namedShown: false, chipCells: 0,
     markCells: 0, ulMinW: -1, ulMaxW: 0, segMinW: -1, segsMeasured: 0, segsInked: 0,
     ulSpill: 0, ulClearance: 1e9,
@@ -202,7 +272,8 @@ function(host){
     audPaired: 0, audTested: 0,
     discHits: 0, discHitFirst: '',
     hoverDeclaresColour: false, hoverRule: '', hoveredOnEra: '',
-    hovered: { css: '', r: 0, g: 0, b: 0, lum: -1 }
+    hovered: { css: '', r: 0, g: 0, b: 0, lum: -1 },
+    sel: []
   };
 
   var cells = [].slice.call(root.querySelectorAll('.cell[data-day]'));
@@ -239,12 +310,59 @@ function(host){
   for (var i = 0; i < cells.length; i++) {
     var hue = (cells[i].style.getPropertyValue('--erahue') || '').trim();
     if (!hue) continue;
-    if (!byHue[hue]) byHue[hue] = { hue: hue, cells: 0, fill: swatch(cells[i]) };
+    if (!byHue[hue]) {
+      byHue[hue] = { hue: hue, cells: 0, fill: tileSwatch(cells[i]), rule: tileRuleSwatch(cells[i]) };
+    }
     byHue[hue].cells++;
   }
   for (var k in byHue) { if (byHue.hasOwnProperty(k)) out.eras.push(byHue[k]) }
   var interc = root.querySelector('.interc');
-  if (interc && vis(box(interc))) { out.noEra = swatch(interc); out.hasNoEra = true }
+  if (interc && vis(box(interc))) { out.noEra = tileSwatch(interc); out.hasNoEra = true }
+  // THE UNTINTED TILE'S EDGE IS READ WITHOUT THE VISIBILITY GATE THE FILL
+  // TAKES, and deliberately. The fill's gate exists because "the ground shows
+  // between two tiles" is a claim about a DRAWN surface; the rule's band is a
+  // claim about a COMPUTED colour, and the intercalary row is display:none at
+  // the narrow hosts. Gating it the same way would silently reduce the band to
+  // the two wide hosts — half the census, on the arm where a too-loud edge is
+  // hardest to see. The tinted arms below are measured on cells that are drawn
+  // at every host, so the drawn case is covered either way.
+  if (interc) { out.noEraRule = tileRuleSwatch(interc) }
+  // THE FIVE-COLUMN RULE is a border on .cell itself, not on the tile: it is
+  // drawn in the 3px gutter BETWEEN two tiles, which is the whole reason it
+  // survived the tile construction as the one remaining border on the element.
+  var halfCell = root.querySelector('.cell.half');
+  if (halfCell) {
+    out.fiveColRule = over(getComputedStyle(halfCell).borderRightColor, null);
+    out.hasFiveCol = true;
+  }
+
+  // ── SELECTION, ON A TINTED DAY, WITH ITS OWN RADIO CHECKED ─────────────
+  //
+  // The day pick is a hidden radio read by :has(), so a selected day is
+  // produced here exactly the way a click produces one — no class is moved
+  // and no state is faked. The resting fill is read from the SAME cell first,
+  // so the two readings cannot be about two different eras. It is unchecked
+  // again immediately, because one radio group serves the whole month and a
+  // day left checked would silently unselect the next era's day.
+  var selSeen = {};
+  for (var s = 0; s < cells.length; s++) {
+    var eh = (cells[s].style.getPropertyValue('--erahue') || '').trim();
+    var pick = cells[s].querySelector('.daypick');
+    if (!eh || !pick || selSeen[eh]) continue;
+    selSeen[eh] = true;
+    var rec = {
+      hue: eh,
+      rest: tileSwatch(cells[s]),
+      restBorder: getComputedStyle(cells[s], '::before').borderTopColor,
+      fill: null, border: '', borderPx: { css: '', r: 0, g: 0, b: 0, lum: -1 }
+    };
+    pick.checked = true;
+    rec.fill = tileSwatch(cells[s]);
+    rec.border = getComputedStyle(cells[s], '::before').borderTopColor;
+    rec.borderPx = tileRuleSwatch(cells[s]);
+    pick.checked = false;
+    out.sel.push(rec);
+  }
 
   // ── THE CORNERS, WALKED OVER EVERY DATED CELL ───────────────────────────
   for (var n = 0; n < cells.length; n++) {
@@ -363,7 +481,7 @@ function(host){
     var rules;
     try { rules = document.styleSheets[si].cssRules } catch (e) { continue }
     for (var ri = 0; ri < rules.length; ri++) {
-      if (rules[ri].selectorText === '.cal-block-host .cell:hover') { target = rules[ri]; break }
+      if (rules[ri].selectorText === '.cal-block-host .cell:hover::before') { target = rules[ri]; break }
     }
   }
   if (target) {
@@ -395,7 +513,7 @@ function(host){
       var resolved = getComputedStyle(probe).backgroundColor;
       probe.remove();
       out.hoveredOnEra = (tinted.style.getPropertyValue('--erahue') || '').trim();
-      out.hovered = over(getComputedStyle(tinted).backgroundColor, resolved);
+      out.hovered = over(getComputedStyle(tinted, '::before').backgroundColor, resolved);
     }
   }
   return out;
@@ -682,10 +800,28 @@ func TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop(t *testing.T) {
 	// merely fails to be darker. 2.0 of 255 is about the smallest step that is
 	// a step rather than rounding.
 	const popMargin = 2.0
-	// Two eras are DIFFERENT if any sRGB channel differs by this much. The
-	// shipped tint managed 2; the band above the row, which got its hue right,
-	// manages tens.
-	const eraSeparation = 8.0
+
+	// ── SOFTNESS IS A BAND, AND THE MISSING HALF WAS THE CEILING ────────────
+	//
+	// This was `eraSeparation = 8.0`, a FLOOR with nothing above it, and that
+	// is precisely how a tint separating two eras by 19/255 on light and 29/255
+	// on dark shipped through a green suite. The reference's ENTIRE page-to-cell
+	// pop step is 13/255 (C-CALV4-TILE-RECIPE §1), so 29 is 2.2× the strongest
+	// step anywhere in the reference grid — at that strength the era stops
+	// reading as a grouping laid over a month and starts reading as two
+	// different calendars side by side. The operator's word for what they wanted
+	// was "soft", and a one-sided assertion cannot express soft: every number
+	// above the floor passed, including every number that was too loud.
+	//
+	// So the assertion is a BAND. Below the floor two eras are the same colour
+	// and the tint is not grouping anything; above the ceiling it is shouting.
+	// Both ends are measured in a real engine, in both themes, because chroma
+	// reads weaker at low lightness and the two arms carry different numbers
+	// (0.010 light, 0.012 dark) for exactly that reason.
+	const (
+		eraSeparationMin = 4.0
+		eraSeparationMax = 12.0
+	)
 
 	for i, c := range cpCases() {
 		r := readings[i]
@@ -695,6 +831,33 @@ func TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop(t *testing.T) {
 					"between them is what this test is for", len(r.Eras))
 			}
 			t.Logf("ground %s lum %.1f", r.Ground.CSS, r.Ground.Lum)
+
+			// ── THE GROUND AND THE FILL MUST BE DIFFERENT COLOURS ─────────
+			//
+			// C-CALV4-TILES §2. The tile construction only produces the
+			// reference's "popped out" if the 3px it opens shows something
+			// DIFFERENT from what the tile is filled with. The two tokens
+			// already differ in both themes (--surface-inset vs --surface-card,
+			// which swap between light and dark), but nothing asserted it, and
+			// a build that pointed both at the same token would ship a grid of
+			// invisible tiles: perfect geometry, no separation, and every
+			// geometric probe in this package still green.
+			//
+			// Measured as sRGB on the untinted day surface, so the era tint is
+			// not doing the work.
+			if r.HasNoEra {
+				d := maxf(maxf(absf(r.NoEra.R-r.Ground.R), absf(r.NoEra.G-r.Ground.G)),
+					absf(r.NoEra.B-r.Ground.B))
+				t.Logf("ground vs untinted tile fill: worst channel %.1f/255", d)
+				if d < popMargin {
+					t.Errorf("the grid's ground and the tile's fill differ by %.1f/255 on their "+
+						"widest channel. The tile's whole construction is that 3px of GROUND "+
+						"shows between two fills; ground and fill at the same value is a month "+
+						"of invisible tiles, and every geometric assertion in this package "+
+						"stays green through it", d)
+				}
+			}
+
 			if r.HasNoEra {
 				t.Logf("day surface with NO era: rgb(%.0f,%.0f,%.0f) lum %.1f (%+.1f vs ground)",
 					r.NoEra.R, r.NoEra.G, r.NoEra.B, r.NoEra.Lum, r.NoEra.Lum-r.Ground.Lum)
@@ -726,21 +889,133 @@ func TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop(t *testing.T) {
 					x, y := r.Eras[a], r.Eras[b]
 					d := maxf(maxf(absf(x.Fill.R-y.Fill.R), absf(x.Fill.G-y.Fill.G)),
 						absf(x.Fill.B-y.Fill.B))
-					t.Logf("era separation %s vs %s: worst channel %.1f/255", x.Hue, y.Hue, d)
-					if d < eraSeparation {
-						t.Errorf("eras %s and %s render %.1f/255 apart on their widest channel. "+
-							"A tint that cannot distinguish two eras is not grouping, and it is "+
-							"what an oklch mix from a hue-0 white produces: it rotates a few "+
-							"degrees off white and never adopts the era's hue at all",
-							x.Hue, y.Hue, d)
+					t.Logf("era separation %s vs %s: worst channel %.1f/255 (band %.0f–%.0f)",
+						x.Hue, y.Hue, d, eraSeparationMin, eraSeparationMax)
+					if d < eraSeparationMin {
+						t.Errorf("eras %s and %s render %.1f/255 apart on their widest channel, "+
+							"below the %.0f floor. A tint that cannot distinguish two eras is not "+
+							"grouping, and it is what an oklch mix from a hue-0 white produces: it "+
+							"rotates a few degrees off white and never adopts the era's hue at all",
+							x.Hue, y.Hue, d, eraSeparationMin)
+					}
+					if d > eraSeparationMax {
+						t.Errorf("eras %s and %s render %.1f/255 apart on their widest channel, "+
+							"above the %.0f ceiling. The reference's ENTIRE page-to-cell pop step "+
+							"is 13/255, so an era-to-era difference at this strength reads as two "+
+							"different calendars rather than as a grouping over one month — and "+
+							"the era is now the ONLY thing the grid says about eras, so it is the "+
+							"loudest thing on the surface. THIS ARM IS THE ONE THAT WAS MISSING: "+
+							"the assertion was a bare floor, and 19/255 on light and 29/255 on "+
+							"dark shipped straight through it",
+							x.Hue, y.Hue, d, eraSeparationMax)
+					}
+				}
+			}
+
+			// ── A SELECTED DAY KEEPS ITS ERA (C-CALV4-TILES §4) ──────────
+			//
+			// WHAT SHIPPED. `.cell.sel` / `:has(> .daypick:checked)` declared
+			// `background: color-mix(in oklch, var(--surface-card) 96%,
+			// var(--accent))` — a SHORTHAND, so it reset background-color; at
+			// higher specificity than the fill chain; and naming --surface-card
+			// rather than --cellbase. A selected day therefore painted the
+			// UNTINTED surface plus a wash of accent, i.e. it left its era, and
+			// the day that left its era was the one the reader had just pointed
+			// at. Nothing could see it: the markup is identical either way.
+			//
+			// TWO ERAS ARE MEASURED, NOT ONE, AND THAT IS THE LOAD-BEARING PART.
+			// Comparing a selected cell only with its own resting state passes on
+			// dark, because --surface-card mixed with the blue accent happens to
+			// carry the same R−B sign as the fixture's teal era — measured, with
+			// the shorthand restored: light flips the cast −10.0 → +4.0 and reds,
+			// dark goes −9.0 → −13.0 and stays green. TWO selected eras cannot
+			// agree by accident: under the shorthand neither reads --cellbase, so
+			// both paint the SAME pixel, and the difference between them goes to
+			// zero in every theme. Verified red on all four hosts by restoring
+			// the declaration.
+			if len(r.Sel) < 2 {
+				t.Errorf("%d era(s) offered a day carrying a selection control. The fixture "+
+					"must dock the Ledger (which is what emits the day-pick radios) and span "+
+					"TWO eras, or the cross-era arm below has nothing to compare and the "+
+					"same-cell arms pass on a theme where they cannot discriminate",
+					len(r.Sel))
+			}
+			for _, s := range r.Sel {
+				restCast := s.Rest.R - s.Rest.B
+				selCast := s.Fill.R - s.Fill.B
+				t.Logf("selection on era %s: rest rgb(%.0f,%.0f,%.0f) cast %+.1f border %s → "+
+					"selected rgb(%.0f,%.0f,%.0f) cast %+.1f border %s",
+					s.Hue, s.Rest.R, s.Rest.G, s.Rest.B, restCast, s.RestBorder,
+					s.Fill.R, s.Fill.G, s.Fill.B, selCast, s.Border)
+
+				if restCast*selCast <= 0 {
+					t.Errorf("era %s: the colour cast flips or vanishes when the day is SELECTED "+
+						"(rest %+.1f, selected %+.1f). Selection is written against --cellbase "+
+						"precisely so that whatever the resting fill is — plain surface or era "+
+						"tint — the selected fill is that same colour at another lightness",
+						s.Hue, restCast, selCast)
+				}
+				if absf(s.Fill.Lum-s.Rest.Lum) < 1.0 {
+					t.Errorf("era %s: a selected day fills at lum %.1f against a resting %.1f — "+
+						"the two are the same surface, so selection is carried by the edge alone",
+						s.Hue, s.Fill.Lum, s.Rest.Lum)
+				}
+				if s.Border == s.RestBorder {
+					t.Errorf("era %s: the tile's rule is %s both at rest and when selected. "+
+						"Selection is IDENTITY: the edge is the accent, and nothing else in the "+
+						"grid is", s.Hue, s.Border)
+				}
+			}
+			// THE CROSS-ERA ARM. Two SELECTED days in two different eras must
+			// still be as far apart as two resting ones — and no further.
+			//
+			// THE CEILING HERE IS THE RESTING PAIR'S OWN SEPARATION PLUS A
+			// ROUNDING ALLOWANCE, not the 4–12 band above, and that is
+			// deliberate rather than a loosened assertion. The band is a claim
+			// about how loud the TINT is; this is a claim about what SELECTION
+			// is allowed to do to it, which is: change lightness, and nothing
+			// else. Measured, the light arm lands at 12.0 against a resting
+			// 11.0 — reusing the band's own ceiling would put the assertion
+			// exactly on its boundary, where a rounding wobble reds a correct
+			// build and teaches the next hand to widen the number.
+			for a := 0; a < len(r.Sel); a++ {
+				for b := a + 1; b < len(r.Sel); b++ {
+					x, y := r.Sel[a], r.Sel[b]
+					selD := maxf(maxf(absf(x.Fill.R-y.Fill.R), absf(x.Fill.G-y.Fill.G)),
+						absf(x.Fill.B-y.Fill.B))
+					restD := maxf(maxf(absf(x.Rest.R-y.Rest.R), absf(x.Rest.G-y.Rest.G)),
+						absf(x.Rest.B-y.Rest.B))
+					t.Logf("era separation %s vs %s: at rest %.1f/255 · SELECTED %.1f/255",
+						x.Hue, y.Hue, restD, selD)
+					if selD < eraSeparationMin {
+						t.Errorf("two SELECTED days in different eras render %.1f/255 apart "+
+							"(they are %.1f apart at rest), below the %.0f floor two resting days "+
+							"must clear. The selected fill is not reading --cellbase: it is "+
+							"painting ONE colour for every era, which is exactly what "+
+							"`background: color-mix(…var(--surface-card)…)` did — selection eats "+
+							"the tint, on the one day the reader is pointing at",
+							selD, restD, eraSeparationMin)
+					}
+					if selD > restD+2.0 {
+						t.Errorf("two SELECTED days in different eras render %.1f/255 apart "+
+							"against %.1f at rest. Selection may change LIGHTNESS only; a wider "+
+							"separation when selected means the expression is touching chroma or "+
+							"hue as well, and the softness ceiling stops holding for a chosen day",
+							selD, restD)
 					}
 				}
 			}
 
 			// ── THE HOVER WASH IS A LAYER, NOT A REPLACEMENT ─────────────
 			t.Logf("hover rule: %s", r.HoverRule)
+			if r.HoverRule == "" {
+				t.Error("no `.cal-block-host .cell:hover::before` rule was found in the parsed " +
+					"CSSOM. The wash moved onto the TILE with the fill (C-CALV4-TILES §1) — on " +
+					"the cell it would paint the whole border box and close the 3px gutter, so " +
+					"a hovered day would be the one cell in the month that is not a tile")
+			}
 			if r.HoverDeclaresColour {
-				t.Error("`.cell:hover` declares a background COLOUR (or the shorthand, which " +
+				t.Error("`.cell:hover::before` declares a background COLOUR (or the shorthand, which " +
 					"resets one). It out-specifies the cell's own fill, so a hovered cell drops " +
 					"both the pop and the era and composites 5% ink straight onto the grid " +
 					"ground — measured 12 below the ground it should be above. The wash belongs " +
@@ -771,6 +1046,207 @@ func TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop(t *testing.T) {
 							"reader is looking at; losing its era there is losing it where it "+
 							"matters", restCast, hoverCast)
 					}
+				}
+			}
+		})
+	}
+}
+
+// ── THE TILE'S RULE HAS A CEILING NOW, AND THE MISSING CEILING WAS THE DEFECT ─
+
+// cpGroundGap is one surface's distance from the grid ground, in luminance.
+//
+// LUMINANCE AND NOT WORST-CHANNEL, and the choice is load-bearing. The tile's
+// edge is derived from --cellbase, so on a tinted day it carries the era's HUE
+// as well as its lightness — a worst-channel reading of a hued edge charges it
+// for chroma, which is the one component the softness law is not about. The
+// question here is "how far off the ground does this edge sit", and that is a
+// lightness question.
+func cpGroundGap(s, ground cpSwatch) float64 { return absf(s.Lum - ground.Lum) }
+
+// TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid.
+//
+// WHY THIS EXISTS AT ALL, STATED PLAINLY: A STEP WITH A FLOOR AND NO CEILING IS
+// HOW THE LAST TWO LOUD THINGS SHIPPED.
+//
+//	· The era tint had `eraSeparation = 8.0` as a FLOOR and nothing above it, so
+//	  a tint separating two eras by 19/255 (light) and 29/255 (dark) sailed
+//	  through a fully green suite — 1.5× and 2.2× the reference's ENTIRE
+//	  page-to-cell pop step. C-CALV4-TILES §3 turned it into a band, 4–12.
+//	· The tile's own RULE then shipped inside that same change — a change whose
+//	  stated purpose was softness — at --rule-structural, a general STRUCTURAL
+//	  rule token. Measured: a 50/255 fill→rule step on light and 29–32/255 on
+//	  dark, 3.6× and 2.3× the reference's +14, and roughly 3× the era separation
+//	  the tile is framing. It had a floor of nothing and a ceiling of nothing.
+//	  Every geometric probe in this package stayed green, because geometry is
+//	  not what was wrong.
+//
+// A tile edge is not a structural rule and must not borrow one. So:
+//
+// THE LAW — THE TILE RULE SITS ONE POP STEP ON THE FAR SIDE OF THE GROUND FROM
+// THE FILL, and it is expressed AGAINST THE GROUND so that one law covers both
+// themes. It cannot be expressed against the fill, because the two themes have
+// different room to move:
+//
+//	dark   the fill is ABOVE the ground (25.0 → 34.8) with headroom left, so
+//	       the rule goes further ABOVE the fill and reads as a lit edge —
+//	       the reference's own construction, +14 over the fill.
+//	light  the fill is ABOVE the ground too (242.9 → 255.0) but CLAMPED AT
+//	       WHITE, so "further away from the ground" has nowhere to go. Copying
+//	       the reference's +14 in the other direction lands the rule on 241,
+//	       which IS the ground (242.9), and the edge vanishes. The rule
+//	       therefore crosses the ground and sits one pop step BELOW it.
+//
+// Both arms are then the same sentence — the rule is about one pop step off the
+// ground, on whichever side the fill is not — and the band below is that
+// sentence with numbers. It is deliberately wide because it spans two themes
+// whose pop steps differ (+12.1 light, +9.8 dark) and because a hued edge sits
+// a little further out than a neutral one; the values that made this test
+// necessary are 36.1 (light) and 39.8 (dark) and both are outside it.
+func TestCellProbe_TheTileRuleIsTheQuietestRuleInTheGrid(t *testing.T) {
+	if testing.Short() {
+		t.Skip("browser probe: skipped under -short (CI's mode) — a skipped run is NOT a pass")
+	}
+	chrome := findProbeChromium()
+	if chrome == "" {
+		t.Skip("browser probe: no Chromium binary found")
+	}
+	readings := cpRun(t, chrome, cpCases())
+
+	// THE BAND. Floor: an edge closer than this to the ground it sits in is an
+	// edge nobody can see, and the tile's whole construction is a fill, a rule
+	// and a gutter — losing the rule leaves two of three. Ceiling: twice the
+	// reference's pop step plus the room a hued edge needs. Measured, all six
+	// readings per theme: 12.9–16.3 on light, 23.9–28.1 on dark.
+	const (
+		tileRuleVsGroundMin = 8.0
+		tileRuleVsGroundMax = 32.0
+	)
+
+	for i, c := range cpCases() {
+		r := readings[i]
+		t.Run(c.label, func(t *testing.T) {
+			t.Logf("ground %s lum %.1f", r.Ground.CSS, r.Ground.Lum)
+
+			// Every tile edge in the host: the untinted day surface and each
+			// era's. The tinted ones are what a viewer actually sees on the
+			// operator's calendar, which is covered end to end by two eras.
+			type ruleReading struct {
+				what string
+				sw   cpSwatch
+			}
+			rules := []ruleReading{{"untinted tile", r.NoEraRule}}
+			for _, e := range r.Eras {
+				rules = append(rules, ruleReading{"tile on era " + e.Hue, e.Rule})
+			}
+			if len(rules) < 2 {
+				t.Fatal("no era tile edges were read — the fixture spans two eras, so this " +
+					"census is empty and every arm below is vacuous")
+			}
+
+			loudestTile := 0.0
+			for _, rr := range rules {
+				if rr.sw.Lum < 0 {
+					t.Errorf("%s: no edge colour was resolved at all. The tile's rule lives on "+
+						"`::before`; a reading of -1 means the probe found no pseudo-element, "+
+						"not that the edge is subtle", rr.what)
+					continue
+				}
+				gap := cpGroundGap(rr.sw, r.Ground)
+				if gap > loudestTile {
+					loudestTile = gap
+				}
+				t.Logf("%s: rgb(%.0f,%.0f,%.0f) lum %.1f · %.1f from the ground (band %.0f–%.0f)",
+					rr.what, rr.sw.R, rr.sw.G, rr.sw.B, rr.sw.Lum, gap,
+					tileRuleVsGroundMin, tileRuleVsGroundMax)
+				if gap < tileRuleVsGroundMin {
+					t.Errorf("%s sits %.1f from the ground in luminance, below the %.0f floor. "+
+						"Softening a rule until it disappears is not softness — the tile is a "+
+						"fill, a rule and a gutter, and an invisible rule leaves two of three. "+
+						"This is the failure mode of copying the reference's dark +14 onto "+
+						"light: 14 below white is 241, and the ground is 242.9",
+						rr.what, gap, tileRuleVsGroundMin)
+				}
+				if gap > tileRuleVsGroundMax {
+					t.Errorf("%s sits %.1f from the ground in luminance, above the %.0f ceiling. "+
+						"THIS IS THE ARM THAT DID NOT EXIST, and its absence is the actual "+
+						"defect it guards: the tile edge shipped at --rule-structural — 36.1 "+
+						"from the ground on light and 39.7 on dark, a 50/255 fill→rule step and "+
+						"3× the era separation the tile is framing — inside a change whose "+
+						"stated purpose was softness, past a suite that banded the era tint and "+
+						"left this step with a floor of nothing and a ceiling of nothing. A tile "+
+						"edge is not a STRUCTURAL rule and must not borrow the structural token",
+						rr.what, gap, tileRuleVsGroundMax)
+				}
+			}
+
+			// ── THE ORDER OF THE THREE RULES ──────────────────────────────
+			//
+			// Softening the tile is only correct if the two rules that are
+			// SUPPOSED to be loud stay loud. Both are measured rather than
+			// asserted by token name, because "one full ramp step above" is a
+			// claim about paint.
+			if !r.HasFiveCol {
+				t.Error("no `.cell.half` was found, so the five-column rule was never measured. " +
+					"It is the counting aid on a ten-day week — humans cannot count to ten " +
+					"across identical columns — and the whole point of softening the tile " +
+					"edge is that this rule stays a step above it")
+			} else {
+				fiveGap := cpGroundGap(r.FiveColRule, r.Ground)
+				t.Logf("five-column rule: rgb(%.0f,%.0f,%.0f) lum %.1f · %.1f from the ground "+
+					"(loudest tile edge %.1f · gap %+.1f)", r.FiveColRule.R, r.FiveColRule.G,
+					r.FiveColRule.B, r.FiveColRule.Lum, fiveGap, loudestTile, fiveGap-loudestTile)
+				if fiveGap <= loudestTile {
+					t.Errorf("the five-column rule sits %.1f from the ground and the loudest tile "+
+						"edge sits %.1f. The counting aid reads as a counting aid ONLY because "+
+						"it is a step above every other rule in the grid; at or below the tile's "+
+						"own edge it is one more hairline among thirty, and 5+5 stops being "+
+						"instant", fiveGap, loudestTile)
+				}
+			}
+
+			for _, s := range r.Sel {
+				if s.BorderPx.Lum < 0 {
+					t.Errorf("era %s: the SELECTED edge resolved to no colour, so the arm below "+
+						"proved nothing", s.Hue)
+					continue
+				}
+				selGap := cpGroundGap(s.BorderPx, r.Ground)
+				t.Logf("selected edge on era %s: %s rgb(%.0f,%.0f,%.0f) · %.1f from the ground "+
+					"(loudest tile edge %.1f · gap %+.1f)", s.Hue, s.Border,
+					s.BorderPx.R, s.BorderPx.G, s.BorderPx.B, selGap, loudestTile,
+					selGap-loudestTile)
+				if selGap <= loudestTile {
+					t.Errorf("era %s: the SELECTED tile's edge sits %.1f from the ground and the "+
+						"resting tile edge sits %.1f. Selection is IDENTITY and is allowed to be "+
+						"loud — it is the one thing in the grid that may be — so softening the "+
+						"resting edge must never be done by softening this one too. --accent at "+
+						"full strength, always", s.Hue, selGap, loudestTile)
+				}
+			}
+
+			// ── THE EDGE CARRIES THE ERA'S HUE, AND THAT IS WHY IT IS
+			//    DERIVED FROM --cellbase RATHER THAN FROM THE GROUND ───────
+			//
+			// A tint on the fill inside a grey box reads as a coloured field
+			// in a frame; a tint on the fill AND the edge reads as one soft
+			// object. Deriving --tile-rule from --cellbase gets that for free
+			// and is the reason the derivation is written that way — so it is
+			// asserted, or the next hand "simplifies" it back to a flat token
+			// and loses the property with no test to say so.
+			for _, e := range r.Eras {
+				if e.Rule.Lum < 0 {
+					continue
+				}
+				fillCast := e.Fill.R - e.Fill.B
+				ruleCast := e.Rule.R - e.Rule.B
+				t.Logf("era %s: fill cast %+.1f (R-B) · edge cast %+.1f", e.Hue, fillCast, ruleCast)
+				if fillCast*ruleCast <= 0 {
+					t.Errorf("era %s: the tile's FILL casts %+.1f and its EDGE casts %+.1f — the "+
+						"edge does not carry the era's hue. --tile-rule is derived from "+
+						"--cellbase precisely so a tinted tile is one soft object rather than a "+
+						"coloured field inside a grey box; an edge on a flat token puts the box "+
+						"back", e.Hue, fillCast, ruleCast)
 				}
 			}
 		})
