@@ -89,11 +89,28 @@ PKG_CALENDAR_BLOCK="./internal/widgets/calendar_block/"
 # TestMoonReachProbe_* are that regression's own guards, added by the fix: the
 # first measures whether the discs are on the screen at real viewport widths,
 # the second drives a genuinely coarse pointer and measures the touch target.
+#
+# THE LEDGER DAY-PANEL PAIR WERE UNREGISTERED FROM THE DAY THEY LANDED (stage 3,
+# 3a23667b) and the census caught them — which is the census doing its job and
+# also the reason it exists: they drove a browser, asserted on what they
+# measured, and CI ran neither. Note what an unregistered probe costs: the guard
+# aborts on the census BEFORE running a single probe, so one forgotten name
+# takes down the whole file's coverage, not just its own.
+#
+# TestCellProbe_* are C-CALV4-SPEC §1's own guards, added with the day cell's
+# corner fixes: the first measures that each corner PAINTS and that the moon and
+# the GM fold do not share one, the second that the era tint carries the era and
+# keeps the cell above its ground in both themes. Both replace string assertions
+# that were green while the surface they described was blank.
 PROBES_CALENDAR_BLOCK="TestProbe_ContainerQuerySizingInRealBrowser \
 TestProbe_ShelfGeometryIsInvariant \
 TestProbe_StdTierFilledShelfDoesNotCollideWithTheFilledLedger \
 TestProbe_LedgerHeightIsInvariantUnderSelection \
 TestProbe_StdTierFilledLedgerDoesNotCollide \
+TestProbe_AtThePhoneWidthTheLedgerStillSitsBelowTheMonth \
+TestProbe_DayPanelAppearsOnTapAndCostsTheLedgerNothing \
+TestCellProbe_EveryCornerPaintsAndNoTwoShareOne \
+TestCellProbe_TheEraTintCarriesTheEraAndKeepsThePop \
 TestMoonReachProbe_TheDiscsAreOnTheScreenAtAPhoneWidth \
 TestMoonReachProbe_TheOpenerOnATouchDevice \
 TestMoonPanelProbe_TheFoldCostsNothingAndObeysTheRegister \

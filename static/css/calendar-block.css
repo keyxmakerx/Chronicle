@@ -894,8 +894,23 @@
   border-right: 1px solid var(--rule-structural);
   border-bottom: 1px solid var(--rule-structural);
 }
+/* THE HOVER WASH IS A LAYER OVER THE FILL, NOT A REPLACEMENT FOR IT. This rule
+   is older than the fill and was written when `.cell` was `background:
+   transparent`: as a SHORTHAND it also resets background-color, so the moment
+   the cell gained a fill the hovered cell stopped showing it — the 5% ink
+   composited over the GRID GROUND instead, which measured 231.0 against a
+   242.9 ground, and took the era tint with it. A hovered cell read grey and
+   era-less while its neighbours read tinted and raised.
+
+   `background-image` puts the same wash on top of the same fill, so the era's
+   hue survives the hover and the darkening is uniform across tinted and
+   untinted cells. The wash itself is unchanged: 5% of --text-primary, which
+   inverts with the theme exactly as it always did. Still no transition —
+   hover here is instant, and §MOTION is not opened by this. */
 .cal-block-host .cell:hover {
-  background: color-mix(in oklch, transparent 95%, var(--text-primary));
+  background-image:
+    linear-gradient(color-mix(in oklch, transparent 95%, var(--text-primary)),
+                    color-mix(in oklch, transparent 95%, var(--text-primary)));
 }
 /* THE FIVE-COLUMN RULE: humans cannot count to ten across identical columns;
    5+5 is instant. Highest-value single addition to a ten-wide grid. */
@@ -1063,11 +1078,31 @@
    THE UNDERLINE MOVES UP BY EXACTLY THAT MUCH, AND LEFT. Up, so the availability
    strip has an edge to live on that no other mark is already using; left, so the
    event marks read as the spec's THIRD CORNER rather than as a full-width rule.
-   `right: auto` with a max-width is what turns the stretched bar into a corner
-   cluster: the segments keep their flex distribution and their --dash identity
-   patterns exactly, so tie-mode ink, the eight locked patterns and the greyscale
-   channel are all untouched — only the box they are laid out in is smaller and
-   anchored to a corner.
+   The segments keep their flex distribution and their --dash identity patterns
+   exactly, so tie-mode ink, the eight locked patterns and the greyscale channel
+   are all untouched — only the box they are laid out in is smaller and anchored
+   to a corner.
+
+   THE THIRD TERM IS THE GM FOLD'S ROOM, and it is unconditional on purpose. The
+   fold now owns the bottom-RIGHT corner (see .dogear), 11px of it, and at the
+   narrowest columns the grid produces — 30px at the std tier's floor — a 60%
+   strip would run under its box. `100% - 17px` is the 4px left inset plus the
+   fold's 11px plus 2px of clearance, and it binds only where the cell is too
+   narrow to hold both. It is written unconditionally rather than behind
+   `:has(> .dogear)` because a strip whose LENGTH changed from day to day would
+   encode a magnitude the data does not have — the same argument that makes this
+   one bar rather than a stack.
+
+   AND THE BOX IS GIVEN A WIDTH, NOT A MAXIMUM. `right: auto` with only a
+   `max-inline-size` shipped for one commit and PAINTED NOTHING: an absolutely
+   positioned box with `left` set and `right: auto` shrink-to-fits, every
+   `.ulseg` is `flex: 1` with `flex-basis: 0`, `min-width: 0` and EMPTY content,
+   so the row's intrinsic width is 0 and a maximum can only cap a width that was
+   never there. Measured 0.00px on every cell carrying events, at 390px and at
+   1920px, with a clipped screenshot byte-identical to the same clip with the
+   strip hidden. `inline-size` is the fix and it is one keyword: a percentage of
+   the cell's own padding box (the column), capped at 26px so a wide cell gets a
+   cluster rather than a rule. A maximum is not a size.
 
    WHEN STEP THREE FILLS THE SLOT IT RELAYOUTS NOTHING. That is the entire value
    of reserving it: the strip's box already exists, at its final size, in its
@@ -1087,7 +1122,7 @@
   position: absolute;
   left: 4px;
   right: auto;
-  max-inline-size: min(60%, 26px);
+  inline-size: min(60%, 26px, 100% - 17px);
   bottom: calc(var(--avail-h) + 2px);
   height: 3px;
   display: flex;
@@ -1104,38 +1139,77 @@
 }
 
 /* three unrelated conditions, three distinct marks, one printed legend */
+/* ── THE FOLD TAKES THE FOURTH CORNER ──────────────────────────────────────
+   IT WAS TOP-RIGHT AND THAT CORNER NOW BELONGS TO THE MOON. C-CALV4-SPEC §1
+   gives the date, the ambient marks and the event marks a corner each; §4 then
+   makes the primary moon silhouette UNCONDITIONAL, which pins the ambient
+   corner to the top-right at every density. The fold was in that corner too,
+   and the two collided in both channels at once:
+
+     · INK — the crease is an 11px box rotated 45° about the corner, so it
+       reaches 7.78px along the diagonal, and the disc's own centre sits at
+       (8, 8) from the same corner with a radius of 4-5. The gold line ran
+       through the middle of the disc on every dm_only day (measured on days 5,
+       8 and 26 of the operator's own ten-day fixture, and visible unretouched
+       in the phone capture).
+     · HIT — the fold's box was 20×20, two and a half times its ink, sits above
+       `.dsel` on purpose (cv4:2775-2782 excludes it from day selection) and is
+       emitted AFTER the moon control, so it won the hit test and then did
+       nothing with it. The measured target on those days was 0.0 × 0.0px: no
+       moon panel, no day selection, the tap simply consumed.
+
+   WHICH ONE MOVES, AND WHY IT IS THIS ONE. The silhouette is on 100% of dated
+   cells and its anchor is load-bearing — the whole 30/35/75 threshold ladder is
+   read off "the top-right corner is free at every width". The fold is on ~10%
+   of them and a dog-ear is idiomatic at ANY corner of a page; bottom corners
+   are the ones people actually turn down. So the fold takes the FOURTH corner,
+   which is the only one the spec does not spend, and the collision is resolved
+   by separation rather than by shrinking either mark.
+
+   IT SITS ON THE AVAILABILITY LINE, NOT ON THE PAPER'S EDGE. `bottom` is
+   --avail-h, the same reserved floor the event marks are offset above, so the
+   corner it folds is the corner of the surface the marks share and step three's
+   strip stays clear of gold. Its box is now its INK (11×11 contains the 7px
+   flap and the 7.78px crease) instead of a 20×20 dead zone, and at the narrowest
+   column the grid produces — 33px — the crease clears the event-mark cluster's
+   right edge by 3.2px. */
 .cal-block-host .dogear {
   position: absolute;
-  top: 0;
   right: 0;
-  width: 20px;
-  height: 20px;
+  bottom: var(--avail-h);
+  width: 11px;
+  height: 11px;
 }
 .cal-block-host .dogear::after {
   content: "";
   position: absolute;
-  top: 0;
   right: 0;
-  border-top: 7px solid color-mix(in oklch, var(--gold) 55%, transparent);
+  bottom: 0;
+  border-bottom: 7px solid color-mix(in oklch, var(--gold) 55%, transparent);
   border-left: 7px solid transparent;
 }
 .cal-block-host .dogear::before {
   content: "";
   position: absolute;
-  top: 0;
   right: 0;
+  bottom: 0;
   width: 11px;
   height: 11px;
-  border-top: 1px solid var(--gold);
-  transform: rotate(-45deg);
-  transform-origin: top right;
+  border-bottom: 1px solid var(--gold);
+  transform: rotate(45deg);
+  transform-origin: bottom right;
 }
-/* a gold DIAMOND — never a circle, because circles are moons (L22) */
+/* a gold DIAMOND — never a circle, because circles are moons (L22) — and it
+   moves ALONG the bottom edge rather than off it. The fold now owns the corner
+   itself, and the diamond's nearest edge used to fall 2.6px inside the crease's
+   reach; 15px of inset puts the two permission marks side by side on one line
+   instead of on top of each other. It is only ever drawn at named density
+   (≥84px of column), where 15px is a sixth of the cell. */
 .cal-block-host .audmark {
   display: none;
   position: absolute;
-  right: 4px;
-  bottom: 4px;
+  right: 15px;
+  bottom: var(--avail-h);
   width: 7px;
   height: 7px;
   border: 1px solid var(--gold);
@@ -2459,17 +2533,65 @@
    era's NAME is printed once, on the band above the row, and repeating it in
    thirty cells is the noise MN-G4 already ruled against for moons.
 
-   `var(--erahue, var(--surface-card))` IS THE OFF SWITCH, and it needs no class
-   and no second attribute. A cell with no era sets no --erahue, the fallback
-   makes the mix `surface-card into surface-card`, and the result is the plain
-   fill — so "has an era" is expressed once, in the producer's own EraBand data,
-   and cannot drift out of step with a marker class. The eras LAYER gate lives
-   in Go (cellStyle), so a viewer who switched eras off simply gets no property.
+   `var(--eratint, <the plain fill>)` IS THE OFF SWITCH, and it needs no class
+   and no second attribute. A cell with no era sets no --erahue, so --eratint's
+   own `var(--erahue)` fails, --eratint computes to the guaranteed-invalid value
+   and every reader falls back to the plain fill — so "has an era" is expressed
+   once, in the producer's own EraBand data, and cannot drift out of step with a
+   marker class. The eras LAYER gate lives in Go (cellStyle), so a viewer who
+   switched eras off simply gets no property.
 
-   8% IS THE LOW-CHROMA PART. It is a RATIO against tokens that already exist,
-   not a new colour: --erahue is the same allowlisted --cal-* / band token the
-   band row draws with, mixed 8% into the same surface the cell already had. No
-   hue is invented and the palette is untouched. */
+   ── IT IS A HUE HELD AT THE SURFACE'S LIGHTNESS, NOT A MIX TOWARDS THE HUE ──
+   WHAT SHIPPED WAS `color-mix(in oklch, var(--surface-card) 92%, var(--erahue))`
+   AND IT FAILED TWICE, for one reason. color-mix in oklch interpolates the HUE
+   ANGLE, and --surface-card is `oklch(1 0 0)` — chroma zero, but hue 0, which
+   is NOT a missing component and therefore not powerless. So an 8% mix rotates
+   8% of the way from hue 0 along the SHORT arc and lands nowhere near the era:
+
+     · IT CARRIED NO ERA. The teal era `oklch(0.55 0.12 200)` computed to
+       `oklch(0.964 0.0096 347.2)` — pink, because the short arc from 0 to 200
+       runs backwards. Measured cell fills: era A rgb(248,241,244), era B
+       rgb(250,243,244). Two eras, one colour, 2/255 apart. The band above the
+       row got this right by accident of idiom (alpha over the fill preserves
+       the hue exactly), so tint and band agreed about WHERE an era starts and
+       disagreed about what colour it is.
+     · IT CANCELLED THE POP. The mix also drags LIGHTNESS 8% towards an L=0.55
+       hue, and on light there are only ~12 units of luminance between the grid
+       ground and white. Measured: ground 242.9, untinted cell 255.0, era-B
+       244.6, era-A 242.7 — DARKER than the ground it is supposed to sit above.
+       The spec's first ingredient was measurably absent for a whole month.
+
+   ALPHA-OVER-THE-FILL DOES NOT FIX THE SECOND ONE. Compositing an era at 8%
+   over white is arithmetically the same linear blend; it keeps the hue and
+   still spends the whole 12-unit budget, because every band token is an L≈0.55
+   ink. The tint has to keep the SURFACE's lightness and take only the era's
+   HUE, which is exactly what relative colour syntax says: read the era, keep
+   `h`, pin `l` to the surface and `c` to a fixed low number.
+
+   LOW-CHROMA IS NOW A NUMBER RATHER THAN A RATIO, and a smaller one: 0.022 on
+   light, 0.03 on dark, against band inks that carry 0.10–0.15. Dark takes the
+   larger of the two because chroma reads weaker at low lightness, and both were
+   picked off the measurement below rather than by eye. Pinning the chroma also
+   makes two eras differ by HUE ALONE, which is the channel that identifies them
+   — a mix let a paler era read as a weaker version of a stronger one. No hue is
+   invented, no token is added to the palette and --erahue is still the same
+   allowlisted band token; what changed is which of its three components the
+   cell borrows.
+
+   THE LIGHTNESS IS PINNED JUST INSIDE THE SURFACE, NOT AT IT. 0.99 rather than
+   1.0 on light, because chroma at L=1 is white by definition and gamut-maps
+   back to no hue at all; 0.27 rather than 0.255 on dark for the mirror reason.
+
+   MEASURED, both themes, in cell_probe_test.go (the assertion that was missing
+   while the mix shipped):
+
+     light   ground 242.9 · no era 255.0 · era A 251.0 · era B 250.1
+             worst-channel separation between the two eras 19/255 (was 2)
+     dark    ground  25.0 · no era  34.8 · era A  38.0 · era B  37.5
+             worst-channel separation 29/255 (was 5)
+
+   Every tinted cell is on the raised side of its own ground in both themes, and
+   the two eras are as far apart as the band row already had them. */
 /* THE INTERCALARY DAY TAKES THE SAME FILL, and that is a consistency fix the
    grid's new ground forced into the open. `.interc` declared
    `background: var(--surface-inset)` and had been silently losing it to the
@@ -2483,15 +2605,13 @@
    the plain fill. */
 .cal-block-host .cell,
 .cal-block-host .interc {
-  --cellbase: color-mix(in oklch,
-    var(--surface-card) 92%,
-    var(--erahue, var(--surface-card)));
+  --eratint: oklch(from var(--erahue) 0.99 0.022 h);
+  --cellbase: var(--eratint, var(--surface-card));
 }
 .dark .cal-block-host .cell,
 .dark .cal-block-host .interc {
-  --cellbase: color-mix(in oklch,
-    var(--surface-inset) 92%,
-    var(--erahue, var(--surface-inset)));
+  --eratint: oklch(from var(--erahue) 0.27 0.03 h);
+  --cellbase: var(--eratint, var(--surface-inset));
 }
 /* the answered day's numeral inks in the datum's hue too — a second cue in the
    SAME channel, so primary-vs-partner stays a channel distinction and the echo
@@ -2990,7 +3110,11 @@
      stamp above rather than declaring a third size. */
   .cal-block-host .cell .today { width: 13px; height: 13px; font-size: 9px }
   .cal-block-host .cell .dogear { display: none }
-  .cal-block-host .ul { height: 2px; left: 1px; right: 1px }
+  /* `inline-size: auto` is REQUIRED here, not tidiness: the baseline now gives
+     the strip a real width, and left + right + width is over-constrained — the
+     browser would drop `right` and this tier would silently keep the corner
+     cluster instead of the full-width bar it asks for. */
+  .cal-block-host .ul { height: 2px; left: 1px; right: 1px; inline-size: auto }
 
   .cal-block-host .minirail { display: block }
   .cal-block-host .foot { display: flex }
@@ -3854,8 +3978,15 @@
    right: 4px`, gap 2.5px, three 10px discs — because cells-zoom.png is the
    drawing the build starts from and the anchor does not move. What it gains is
    a cursor, a hit path above the day-selection label, and a focus ring. */
+/* IT OUTRANKS THE DECORATIONS, and that is the second half of the dogear fix.
+   `.dogear` and `.audmark` are also z-index 1 and are emitted AFTER this label,
+   so on a tie they won the hit test and — being `aria-hidden`, non-interactive
+   spans — swallowed the tap without acting on it. An element the spec makes
+   UNCONDITIONAL must not be the one element a later-painted ornament can make
+   unreachable, whatever corner either of them ends up in, so the control is
+   raised a step above the marks layer rather than trusting DOM order. */
 .cal-block-host .cell .phctl {
-  z-index: 1;
+  z-index: 2;
   cursor: pointer;
   margin: 0;
 }

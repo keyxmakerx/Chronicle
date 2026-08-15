@@ -109,12 +109,33 @@ func TestCell_EraIsABackgroundTintAndNeverTextOrBorder(t *testing.T) {
 			"BACKGROUND, because the edge already carries `selected` and the pop — a third "+
 			"edge meaning makes all three ambiguous", m)
 	}
-	// It reaches the FILL, through --cellbase, and low-chroma rather than flat.
-	if !strings.Contains(flat, "--erahue, var(--surface-card)") &&
-		!strings.Contains(flat, "--erahue,var(--surface-card)") {
-		t.Error("the era tint's OFF SWITCH is missing. `var(--erahue, <the plain fill>)` is " +
+	// It reaches the FILL, through --cellbase, and it has an OFF SWITCH that
+	// needs no marker class: a cell with no --erahue makes --eratint
+	// guaranteed-invalid, and every reader falls back to the plain fill.
+	//
+	// WHETHER THE OFF SWITCH WORKS is measured in cell_probe_test.go, on the
+	// intercalary day — the one day surface no era covers — by reading its fill
+	// back out of the layout. What is asserted here is only that the fallback
+	// is WRITTEN, because a fallback nobody wrote resolves an un-tinted cell to
+	// nothing at all, and "nothing" is a transparent cell that looks plausible.
+	if !strings.Contains(flat, "var(--eratint, var(--surface-card))") &&
+		!strings.Contains(flat, "var(--eratint,var(--surface-card))") {
+		t.Error("the era tint's OFF SWITCH is missing. `var(--eratint, <the plain fill>)` is " +
 			"what makes a cell with no era render its plain fill without needing a marker " +
 			"class — and without it an un-tinted cell resolves to nothing at all")
+	}
+	// AND IT IS A HUE HELD AT THE SURFACE'S LIGHTNESS, not a mix towards the
+	// hue. An oklch color-mix interpolates the HUE ANGLE from --surface-card's
+	// hue 0, which is how a teal era rendered pink and two eras rendered 2/255
+	// apart; it also drags lightness 8% towards an L≈0.55 ink, which is how the
+	// tint cancelled the pop on light. Both are measured in cell_probe_test.go;
+	// this refuses the specific construction that produced them.
+	if regexp.MustCompile(`color-mix\([^)]*var\(--erahue`).MatchString(flat) {
+		t.Error("--erahue is being color-mixed into the fill again. `color-mix(in oklch, …)` " +
+			"interpolates the hue ANGLE and the LIGHTNESS: from a hue-0 white it rotates a few " +
+			"degrees off white instead of adopting the era's hue, and it spends the whole " +
+			"12-unit budget between the grid ground and the cell fill. Take the era's `h` and " +
+			"pin `l` and `c` — see the note beside the rule")
 	}
 }
 
@@ -152,60 +173,31 @@ func TestCell_OutOfRangeCellsCarryNoEra(t *testing.T) {
 }
 
 // ── §6 · THE AVAILABILITY SLOT IS RESERVED, NOT BUILT ───────────────────────
-
-// TestCell_AvailabilitySlotIsReservedAndEmpty.
 //
-// C-CALV4-SPEC §6 puts a per-player availability strip on the cell's bottom edge
-// — segmented on desktop, one state-coloured dot on a phone, with the Ledger
-// naming who. That is STEP THREE of five and is explicitly not this slice's to
-// build. What this slice owes step three is the SPACE, at its final size, in its
-// final place, so that filling it changes one element's contents and relayouts
-// nothing.
+// TestCell_AvailabilitySlotIsReservedAndEmpty USED TO LIVE HERE AND IS DELETED,
+// NOT MOVED — replaced by a measurement in cell_probe_test.go, which is a
+// different test rather than the same one relocated.
 //
-// THE TEST IS THEREFORE AS MUCH ABOUT WHAT IS ABSENT AS PRESENT. A slot that
-// arrived carrying owner hues, or data, or a visible fill, would be a feature
-// nobody built and the operator would read it as one.
-func TestCell_AvailabilitySlotIsReservedAndEmpty(t *testing.T) {
-	body := render(t, fxHarptos(true))
-
-	slots := strings.Count(body, `<span class="avail" aria-hidden="true"></span>`)
-	if slots == 0 {
-		t.Fatal("no cell reserves an availability slot. Step three has to land a strip on " +
-			"the bottom edge of every cell; discovering then that the edge is taken is a " +
-			"relayout of the cell, and a second pass over every geometric assertion here")
-	}
-	// One per DATED cell, and on every one of them. A slot that appeared only
-	// for days that happen to have RSVPs would move the underline on some days
-	// and not others — the reflow the reservation exists to prevent.
-	dated := strings.Count(body, "data-day-ord=")
-	if slots != dated {
-		t.Errorf("%d availability slots for %d dated cells. The reservation is unconditional "+
-			"BY DESIGN: gating it on data would make the cell's interior reflow from day to "+
-			"day", slots, dated)
-	}
-	// It is EMPTY and carries no owner hue. The strip is step three's.
-	availRe := regexp.MustCompile(`<span class="avail"[^>]*>.*?</span>`)
-	for i, s := range availRe.FindAllString(body, -1) {
-		if strings.Contains(s, "--own") || strings.Contains(s, "style=") {
-			t.Errorf("availability slot %d already carries a fill or a hue (%s). It is a "+
-				"RESERVATION — painting it now ships a feature nobody built", i, s)
-		}
-	}
-
-	css := stripComments(blockCSS(t))
-	flat := strings.Join(strings.Fields(css), " ")
-	// The slot's height is a token, declared once, so the underline above it and
-	// the slot itself cannot drift apart.
-	if !strings.Contains(flat, "--avail-h:") {
-		t.Error("the slot's height is not a token. It is read in two places — the slot's " +
-			"own height and the underline's offset above it — and two literals is how the " +
-			"event marks end up sitting on the availability strip")
-	}
-	if !strings.Contains(flat, "bottom: calc(var(--avail-h)") {
-		t.Error("the underline does not clear the reserved slot. `.ul` has to be offset by " +
-			"--avail-h, or step three's strip lands on top of the event marks")
-	}
-}
+// WHY IT HAD TO GO. It proved the reservation by counting
+// `<span class="avail" aria-hidden="true"></span>` in the markup this package
+// had just emitted, and proved that the event marks cleared it with
+// `strings.Contains(flat, "bottom: calc(var(--avail-h)")`. Both questions are
+// "does this file agree with itself", and both were answered yes while the
+// event-mark strip above the slot was 0.00px wide and painted nothing at all.
+// It was green on its first outing over a live regression — which is exactly
+// the pattern the commit that wrote it had correctly diagnosed one paragraph
+// earlier, in `wantRow := r.ColumnW >= MoonRowColWidthMin`.
+//
+// WHAT REPLACES IT asks a browser: does the slot have a rect at the cell's
+// bottom edge, is it really empty, does the strip above it have WIDTH, are its
+// segments INKED, and is the gap between them non-negative. Those are the
+// claims; none of them can be answered by the markup or the stylesheet, and all
+// four are answered per theme and per density.
+//
+// The slot's markup contract — one per dated cell, empty, no owner hue — is
+// still asserted, in instrument_test's own rendering tests and by the probe's
+// `availCells == datedCells` and `availInked == 0` arms. What is gone is the
+// idea that counting our own spans was ever evidence.
 
 // ── §1 · THE CORNER ARCHITECTURE ────────────────────────────────────────────
 

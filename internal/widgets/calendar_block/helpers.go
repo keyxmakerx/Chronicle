@@ -825,10 +825,18 @@ func weekLabel(r WeekRow) string {
 //
 // Three unrelated conditions, three distinct marks, one printed legend:
 //
-//	dogear   a filled gold notch, top-right  — a dm_only event is on this day
-//	audmark  a gold DIAMOND, bottom-right    — a restricted audience is on this day
-//	                                           (never a circle: circles are moons, L22)
-//	fog      a flat surface step             — past the knowledge horizon
+//	dogear   a folded gold corner, bottom-right — a dm_only event is on this day
+//	audmark  a gold DIAMOND, beside the fold    — a restricted audience is on this day
+//	                                              (never a circle: circles are moons, L22)
+//	fog      a flat surface step                — past the knowledge horizon
+//
+// THE FOLD USED TO BE TOP-RIGHT AND MOVED TO THE FOURTH CORNER. C-CALV4-SPEC §4
+// makes the primary moon silhouette unconditional and the sheet's whole density
+// ladder is read off the top-right corner being free, so the two marks were
+// occupying one corner: the crease ran through the middle of the disc and the
+// fold's 20×20 box — 2½ times its ink, and above `.dsel` on purpose — won the
+// hit test and consumed the tap. The reasoning is in calendar-block.css beside
+// the rule; cell_probe_test.go measures the separation rather than asserting it.
 //
 // Both gold marks are GM/co-DM only, and they are absent rather than greyed for
 // everyone else. For a player the producer leaves AudienceMark nil and the mark
