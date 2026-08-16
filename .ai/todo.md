@@ -9,6 +9,63 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-rsvp. RSVP + availability made runnable (C-RSVP-ROBUST, 2026-08-16)
+
+Twelve defects in the RSVP and availability systems. Every fix carries a guard
+proved RED before green. Detail: `internal/plugins/sessions/.ai.md` and
+`internal/plugins/calendar/.ai.md`.
+
+### [x] Done
+
+- **The overlay could not RETURN in the DST-midnight zones**, and the goroutine
+  allocated until the OOM killer took the instance (41 MB → 2.6 GB in ten
+  seconds, measured live, and it kept going after the client disconnected). One
+  authenticated GET with `?tz=America/Havana`, or a Cuban/Chilean/Azorean
+  viewer's own profile zone twice a year. Fixed with `timeutil.StartOfCivilDay`
+  plus a hard fuse in the split loop.
+- **A member's timezone lives in two columns and the product read one.**
+  `member_availability.tz` is what the "Your timezone" control writes; nothing
+  read it. `CampaignMemberZones` (one read per roster) is now the first source,
+  reaching the calendar through `AvailabilityExceptionWriter.MemberZone`.
+- **Offered windows relabelled the member's existing hours** into the caller's
+  zone — a four-hour real-time move with no edit by them. The day is now written
+  in the zone its source rows were authored in; the OFFER is converted.
+- **`POST /availability/exceptions` deleted the rest of the member's day.**
+  "I'm ALSO free 07:00–08:00" left them busy every evening. It composes now.
+- **`/rsvp/:token`**: membership re-checked on both halves; genuinely single-use
+  (consume-before-apply + `used_at IS NULL`); `UpdateAttendeeStatus` is an upsert,
+  ending the same-second "attendee not found" 404 and the late joiner who had no
+  RSVP control at all.
+- **"Out this week" resolved the week in UTC** — a whole week wrong for Auckland
+  and Pago Pago. It resolves in the member's zone and names it.
+- **The emailed suggest form named no zone**; it does now, including the no-zone
+  case, which names UTC and where to fix it.
+- **Arming Collect RSVPs claimed `emailed:true` while the shared 24h floor
+  suppressed every send.** `planInviteFanOut` reports what will really happen and
+  names the reason when it is nothing; the arming transition is now the write's
+  own answer, so two Scribes cannot double-mail the roster.
+- **Closing collection turned every live link into "RSVP Failed"**, including for
+  a member who had answered yes. `collect_rsvps` is out of the reassurance gate;
+  the visibility gate is untouched and pinned in both leak directions.
+
+### [ ] Open — booked here rather than dropped
+
+- **An RSVP note cannot be cleared once written.** `normalizeRSVPNote` maps "" to
+  nil and `UpsertRSVP`'s `COALESCE(VALUES(note), note)` then preserves, while
+  `SuggestTime` refuses an empty note by design — so there is no write path that
+  could clear the column. Needs a control that does not exist plus a decision
+  about whether answering "Going" should clear a note left with an earlier
+  "maybe". Probe kept in `internal/plugins/calendar/zz_scout_probe_test.go`.
+- **`overlayMembers` still issues one `GetUser` per member who has NOT set an
+  availability-page zone.** The campaign-wide zone read removed the N+1 for
+  everyone who has; eliminating it entirely needs a batch user lookup that
+  `auth.AuthService` does not expose. Correctness is unaffected.
+- **Recommended on a live client** (cannot be unit-tested): open the Bench during
+  a spring-forward week with a profile zone of America/Havana and confirm the
+  page renders; confirm a player who sets only the availability page's "Your
+  timezone" gets a clock on the Bench instead of a repair chip; confirm a member
+  who joined after a session was created sees RSVP buttons on it.
+
 ## 0-anchor. Fantasy days now have real dates (2026-08-16)
 
 C-CALV4-ANCHOR, migration 018. The prerequisite `C-CALV4-TILES` §8.6 booked, and

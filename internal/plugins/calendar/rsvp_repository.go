@@ -26,7 +26,10 @@ type RSVPRepository interface {
 	// part of eventCols); this is the write half, deliberately kept OFF the
 	// shared UpdateEvent path so the drawer's lossless quick-save — which
 	// re-sends the whole stored event shape — can never clobber the flag.
-	SetCollectRSVPs(ctx context.Context, eventID string, enabled bool) error
+	// SetCollectRSVPs flips the per-event opt-in and reports whether THIS call
+	// was the one that changed it — the fan-out trigger must be the write, not a
+	// separate earlier read.
+	SetCollectRSVPs(ctx context.Context, eventID string, enabled bool) (changed bool, err error)
 
 	// Tokens.
 	CreateRSVPToken(ctx context.Context, t *EventRSVPToken) error
@@ -164,14 +167,29 @@ func (r *rsvpRepo) ListRSVPsForEvent(ctx context.Context, eventID string) ([]Eve
 	return out, rows.Err()
 }
 
-// SetCollectRSVPs flips the per-event opt-in.
-func (r *rsvpRepo) SetCollectRSVPs(ctx context.Context, eventID string, enabled bool) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE calendar_events SET collect_rsvps = ? WHERE id = ?`, enabled, eventID)
+// SetCollectRSVPs flips the per-event opt-in and reports whether it changed.
+//
+// The `collect_rsvps <> ?` predicate makes the OFF→ON transition atomic, so the
+// invite fan-out is triggered by the WRITE rather than by a separate earlier
+// read. Without it, two Scribes arming the gate at the same moment both read
+// collect_rsvps=0, both decided they had caused the transition, and both started
+// a fan-out — double-mailing the roster, because the 24h per-recipient floor's
+// rows are written only AFTER each send returns and so absorb nothing in a tight
+// race.
+func (r *rsvpRepo) SetCollectRSVPs(ctx context.Context, eventID string, enabled bool) (bool, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE calendar_events SET collect_rsvps = ? WHERE id = ? AND collect_rsvps <> ?`,
+		enabled, eventID, enabled)
 	if err != nil {
-		return fmt.Errorf("setting collect_rsvps: %w", err)
+		return false, fmt.Errorf("setting collect_rsvps: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		// The driver can't report. Treat it as "already in this state" rather
+		// than as a transition: over-reporting a transition mails the roster.
+		return false, nil
+	}
+	return n > 0, nil
 }
 
 // CreateRSVPToken inserts one emailed action link.

@@ -159,7 +159,7 @@ func TestOfferedWindows_DoNotMoveTheMemberInTheDirectorsOverlay(t *testing.T) {
 	}
 	// And they must NOT have acquired their working afternoon.
 	if a[1*100+18] && !b[1*100+18] {
-		t.Errorf("the member became free at 18:00 UTC Tuesday (14:00 their time) — "+
+		t.Errorf("the member became free at 18:00 UTC Tuesday (14:00 their time) — " +
 			"their hours moved four hours earlier in real time")
 	}
 }

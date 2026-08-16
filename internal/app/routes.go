@@ -642,8 +642,14 @@ func (a *calendarAvailabilityAdapter) ExceptionDates(ctx context.Context, campai
 // scheduler's own "Out this week" button loops over client-side
 // (static/js/availability.js fireOutWeek). Reusing it means the per-user
 // exception cap (C-SCHED-P2 0d) is re-checked on every day for free.
-func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) error {
+// It returns THE DATES IT ACTUALLY WROTE alongside any error. There is no
+// transaction spanning the week, so a failure part-way (the per-user exception
+// cap, a transient DB error) leaves the earlier days committed; returning the
+// prefix lets the caller tell the member which days really changed instead of
+// reporting all-or-nothing at a member who is half-blocked.
+func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) ([]string, error) {
 	tz := a.userTZ(ctx, campaignID, userID)
+	written := make([]string, 0, len(dates))
 	for _, d := range dates {
 		req := sessions.ReplaceDayExceptionsRequest{
 			OnDate: d,
@@ -651,10 +657,11 @@ func (a *calendarAvailabilityAdapter) MarkDaysUnavailable(ctx context.Context, c
 			Blocks: []sessions.ExceptionBlockDTO{{StartMinute: 0, EndMinute: 1440, State: "unavailable"}},
 		}
 		if err := a.svc.ReplaceMyDayExceptions(ctx, campaignID, userID, req); err != nil {
-			return err
+			return written, err
 		}
+		written = append(written, d)
 	}
-	return nil
+	return written, nil
 }
 
 // OfferAvailableWindows records TEMPORARY availability a member offered from an

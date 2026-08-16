@@ -40,8 +40,10 @@ type RSVPService interface {
 	// Summary builds the counts (+ optional per-person detail) for one event.
 	Summary(ctx context.Context, evt *Event, userID string, role int, includeDetail bool) (*EventRSVPSummary, error)
 
-	// SetCollection flips the per-event opt-in (Scribe+ at the route).
-	SetCollection(ctx context.Context, eventID string, enabled bool) error
+	// SetCollection flips the per-event opt-in (Scribe+ at the route) and
+	// reports whether THIS call caused the change — the invite fan-out rides
+	// that signal, so it has to come from the write.
+	SetCollection(ctx context.Context, eventID string, enabled bool) (changed bool, err error)
 
 	// MintActionTokens creates one single-use link per emailed action for a
 	// recipient, returned as action → token.
@@ -321,12 +323,13 @@ func (s *rsvpService) AnswersByUser(ctx context.Context, evt *Event, userID stri
 	return out, nil
 }
 
-// SetCollection flips the per-event opt-in.
-func (s *rsvpService) SetCollection(ctx context.Context, eventID string, enabled bool) error {
-	if err := s.repo.SetCollectRSVPs(ctx, eventID, enabled); err != nil {
-		return apperror.NewInternal(err)
+// SetCollection flips the per-event opt-in, reporting whether it changed.
+func (s *rsvpService) SetCollection(ctx context.Context, eventID string, enabled bool) (bool, error) {
+	changed, err := s.repo.SetCollectRSVPs(ctx, eventID, enabled)
+	if err != nil {
+		return false, apperror.NewInternal(err)
 	}
-	return nil
+	return changed, nil
 }
 
 // normalizeRSVPNote trims, length-checks, and nils-out an empty note. Returning

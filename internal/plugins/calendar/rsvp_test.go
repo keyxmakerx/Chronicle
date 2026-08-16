@@ -13,6 +13,7 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,14 +30,17 @@ import (
 // --- mocks ---
 
 type mockRSVPRepo struct {
-	upsertFn      func(ctx context.Context, r *EventRSVP) error
-	setNoteFn     func(ctx context.Context, eventID, userID, note string) error
-	getUserFn     func(ctx context.Context, eventID, userID string) (*EventRSVP, error)
-	listFn        func(ctx context.Context, eventID string) ([]EventRSVP, error)
-	setCollectFn  func(ctx context.Context, eventID string, enabled bool) error
-	createTokenFn func(ctx context.Context, t *EventRSVPToken) error
-	findTokenFn   func(ctx context.Context, token string) (*EventRSVPToken, error)
-	markUsedFn    func(ctx context.Context, token string) error
+	upsertFn     func(ctx context.Context, r *EventRSVP) error
+	setNoteFn    func(ctx context.Context, eventID, userID, note string) error
+	getUserFn    func(ctx context.Context, eventID, userID string) (*EventRSVP, error)
+	listFn       func(ctx context.Context, eventID string) ([]EventRSVP, error)
+	setCollectFn func(ctx context.Context, eventID string, enabled bool) error
+	// collectAlreadySet makes SetCollectRSVPs report "no change" — the losing
+	// side of two Scribes arming the gate at the same moment.
+	collectAlreadySet bool
+	createTokenFn     func(ctx context.Context, t *EventRSVPToken) error
+	findTokenFn       func(ctx context.Context, token string) (*EventRSVPToken, error)
+	markUsedFn        func(ctx context.Context, token string) error
 	// Schedule-ask send bookkeeping (C-CALV4-RSVP-P8B).
 	recordAskFn func(ctx context.Context, a *ScheduleAsk) error
 	lastAskFn   func(ctx context.Context, campaignID string) (time.Time, error)
@@ -67,11 +71,19 @@ func (m *mockRSVPRepo) ListRSVPsForEvent(ctx context.Context, eventID string) ([
 	}
 	return nil, nil
 }
-func (m *mockRSVPRepo) SetCollectRSVPs(ctx context.Context, eventID string, enabled bool) error {
+
+// SetCollectRSVPs reports whether THIS call changed the column, mirroring the
+// real repository's `collect_rsvps <> ?` predicate. It answers "changed" by
+// default — the ordinary case is an operator flipping the toggle — and
+// collectAlreadySet models the racing caller that lost: the column was already
+// in the requested state, so this call caused nothing and must not trigger a
+// fan-out.
+func (m *mockRSVPRepo) SetCollectRSVPs(ctx context.Context, eventID string, enabled bool) (bool, error) {
+	changed := !m.collectAlreadySet
 	if m.setCollectFn != nil {
-		return m.setCollectFn(ctx, eventID, enabled)
+		return changed, m.setCollectFn(ctx, eventID, enabled)
 	}
-	return nil
+	return changed, nil
 }
 func (m *mockRSVPRepo) CreateRSVPToken(ctx context.Context, t *EventRSVPToken) error {
 	if m.createTokenFn != nil {
@@ -181,12 +193,16 @@ func (m *mockNotifier) NotifyRSVP(_ context.Context, userIDs []string, _, messag
 }
 
 type mockAvailability struct {
-	existing []string
-	written  []string
-	forUser  string
-	offered  []RSVPAvailabilityWindow
-	offerErr error
-	zone     string
+	existing  []string
+	written   []string
+	forUser   string
+	offered   []RSVPAvailabilityWindow
+	offerErr  error
+	zone      string
+	failAfter int
+	// failAll makes every day fail, committing nothing — distinct from
+	// failAfter, which commits a prefix.
+	failAll bool
 }
 
 func (m *mockAvailability) OfferAvailableWindows(_ context.Context, _, userID string, w []RSVPAvailabilityWindow) error {
@@ -201,10 +217,21 @@ func (m *mockAvailability) OfferAvailableWindows(_ context.Context, _, userID st
 func (m *mockAvailability) ExceptionDates(_ context.Context, _, _ string) ([]string, error) {
 	return m.existing, nil
 }
-func (m *mockAvailability) MarkDaysUnavailable(_ context.Context, _, userID string, dates []string) error {
+
+// MarkDaysUnavailable writes every date unless failAfter is set, in which case
+// it commits that many and then fails — the partial-write case that has no
+// transaction behind it in production.
+func (m *mockAvailability) MarkDaysUnavailable(_ context.Context, _, userID string, dates []string) ([]string, error) {
 	m.forUser = userID
+	if m.failAll {
+		return nil, errors.New("availability writer unavailable")
+	}
+	if m.failAfter > 0 && m.failAfter < len(dates) {
+		m.written = append(m.written, dates[:m.failAfter]...)
+		return append([]string(nil), dates[:m.failAfter]...), errors.New("exception cap reached")
+	}
 	m.written = append(m.written, dates...)
-	return nil
+	return append([]string(nil), dates...), nil
 }
 
 // zone is the member's own IANA zone, "" meaning they have set none anywhere —

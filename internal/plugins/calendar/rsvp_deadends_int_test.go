@@ -70,7 +70,7 @@ func newRSVPIntFixture(t *testing.T) *rsvpIntFixture {
 	rsvpRepo := NewRSVPRepository(db)
 	// The opt-in the whole token flow is gated on: resolveToken refuses a link
 	// to an event that is not collecting.
-	if err := rsvpRepo.SetCollectRSVPs(ctx, evt.ID, true); err != nil {
+	if _, err := rsvpRepo.SetCollectRSVPs(ctx, evt.ID, true); err != nil {
 		t.Fatalf("set collect_rsvps: %v", err)
 	}
 

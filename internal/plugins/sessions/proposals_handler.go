@@ -352,10 +352,15 @@ func (h *Handler) getProposalForEmail(ctx context.Context, campaignID, proposalI
 // (option, user, response) so the response records with no login. Slots are
 // rendered in the member's own stored zone.
 func (h *Handler) sendProposalEmail(ctx context.Context, campaignID, campaignName string, proposal *SlotProposal, options []ProposalOptionView, m campaigns.CampaignMember) {
-	memberTZ := "UTC"
-	if u, err := h.userDir.GetUser(ctx, m.UserID); err == nil && u != nil && u.Timezone != nil {
-		memberTZ = *u.Timezone
-	}
+	// THROUGH tokenUserTZ, NEVER A SECOND READING. Inlining the lookup here with
+	// only a nil check let a users.timezone stored as '' (not NULL) through, so
+	// the email header printed "times in " with a blank zone and the plain body
+	// printed "Times shown in ." — while renderLocalSlotForTZ fell back to UTC
+	// for the actual clock values, and the confirm page the member lands on said
+	// UTC. Two surfaces disagreeing about the same slot, with one of them naming
+	// no zone at all. tokenUserTZ already rejects the empty string; this is the
+	// same question, so it is the same call.
+	memberTZ := h.tokenUserTZ(ctx, m.UserID)
 
 	var optionsHTML, optionsText string
 	for _, ov := range options {

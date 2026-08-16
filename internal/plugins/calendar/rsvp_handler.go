@@ -61,8 +61,15 @@ type AvailabilityExceptionWriter interface {
 	// has any availability exception. Used to SKIP hand-authored days.
 	ExceptionDates(ctx context.Context, campaignID, userID string) ([]string, error)
 	// MarkDaysUnavailable writes a full-day (0–1440) 'unavailable' exception for
-	// each supplied date.
-	MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) error
+	// each supplied date, and returns THE DATES IT ACTUALLY WROTE.
+	//
+	// The written list is not decoration. There is no transaction spanning the
+	// week — the implementation loops one day-replace per date, any of which can
+	// fail on the per-user exception cap or a transient DB error — so a failure
+	// on day 4 of 7 leaves days 1-3 committed. Reporting all-or-nothing told a
+	// member who was half-blocked that nothing had happened, naming no days, and
+	// the RSVP itself was already recorded, so the two halves disagreed.
+	MarkDaysUnavailable(ctx context.Context, campaignID, userID string, dates []string) (written []string, err error)
 	// OfferAvailableWindows records TEMPORARY availability the member is offering
 	// for specific dates. ADDITIVE: the implementation composes the rest of each
 	// day around the offer, so saying "I could also do Tuesday evening" can never
@@ -299,7 +306,13 @@ func (h *RSVPHandler) SetRSVPCollectionAPI(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return apperror.NewBadRequest("invalid request body")
 	}
-	if err := h.svc.SetCollection(ctx, evt.ID, req.Enabled); err != nil {
+	// THE TRANSITION IS THE WRITE'S ANSWER, NOT AN EARLIER READ'S. `changed` is
+	// true only for the call that actually flipped the column, so two Scribes
+	// arming the gate at the same moment cannot both start an invite fan-out and
+	// double-mail the roster (the floor's rows are written only after each send
+	// returns, so it absorbs nothing in a tight race).
+	changed, err := h.svc.SetCollection(ctx, evt.ID, req.Enabled)
+	if err != nil {
 		return err
 	}
 
@@ -321,7 +334,7 @@ func (h *RSVPHandler) SetRSVPCollectionAPI(c echo.Context) error {
 	// no-mail-server and fantasy-calendar operators outright: in-app answering
 	// works end to end with no mail server at all. The fix is to stop CLAIMING
 	// something that did not happen, not to stop doing the thing that did.
-	fannedOut := req.Enabled && !evt.CollectRSVPs
+	fannedOut := req.Enabled && changed
 	if fannedOut {
 		// Reflect the new state on the copy the fan-out reads, so recipients
 		// aren't invited to an event that still says it isn't collecting.
@@ -333,14 +346,55 @@ func (h *RSVPHandler) SetRSVPCollectionAPI(c echo.Context) error {
 	// delivered". The fan-out is backgrounded precisely so a dead SMTP server
 	// cannot turn a UI toggle into a timeout, so per-recipient outcomes do not
 	// exist yet when this returns and the response must not pretend otherwise.
+	//
+	// BUT "IS MAIL GOING OUT AT ALL" IS NOT ANSWERED BY "IS SMTP CONFIGURED".
+	// The fan-out also applies the 24h per-recipient floor, which reads the same
+	// send log the "Ask availability" control writes — so a Director who asked
+	// the roster this morning and armed collection this afternoon mails NOBODY
+	// while this endpoint said emailed:true with no notice at all. The plan is
+	// computed from the same two decisions the fan-out makes, so the answer is
+	// about this send rather than about the server.
+	mailOK := h.mailer != nil && h.mailer.IsConfigured(ctx)
 	body := map[string]any{
 		"collect_rsvps": req.Enabled,
-		"emailed":       fannedOut && h.mailer != nil && h.mailer.IsConfigured(ctx),
+		"emailed":       false,
 	}
-	if fannedOut && (h.mailer == nil || !h.mailer.IsConfigured(ctx)) {
-		body["notice"] = mailNotConfiguredLine
+	if fannedOut {
+		switch {
+		case !mailOK:
+			body["notice"] = mailNotConfiguredLine
+		default:
+			plan := h.planInviteFanOut(ctx, cc.Campaign.ID, evt, true)
+			body["emailed"] = plan.WillEmail > 0
+			if plan.WillEmail == 0 {
+				body["notice"] = noRecipientsLine(plan)
+			}
+		}
 	}
 	return c.JSON(http.StatusOK, body)
+}
+
+// noRecipientsLine explains WHY an arming that should have mailed the party
+// mailed nobody. A bare `emailed:false` is better than a lie and still leaves
+// the operator guessing, and the guess they reach for is "the mail server is
+// broken" — which sends them to the wrong place entirely when the real answer
+// is a rate limit they tripped themselves with a different button.
+func noRecipientsLine(plan invitePlan) string {
+	switch {
+	case plan.Visible == 0:
+		return "RSVPs are open, but nobody was emailed — no campaign member can see this event."
+	case plan.SkippedByFloor > 0 && plan.NoAddress == 0:
+		return "RSVPs are open, but nobody was emailed: everyone who can see this event was " +
+			"already emailed in the last 24 hours (the per-person limit the Ask availability " +
+			"control shares). They can still answer in-app, and arming this again tomorrow will mail them."
+	case plan.NoAddress > 0 && plan.SkippedByFloor == 0:
+		return "RSVPs are open, but nobody was emailed — no member who can see this event has " +
+			"an email address on file. They can still answer in-app."
+	default:
+		return "RSVPs are open, but nobody was emailed: everyone who can see this event was " +
+			"either emailed in the last 24 hours or has no email address on file. " +
+			"They can still answer in-app."
+	}
 }
 
 // mailNotConfiguredLine is spec ledger item 11's own wording, VERBATIM and
@@ -715,12 +769,26 @@ func escapeAttr(s string) string { return html.EscapeString(s) }
 // membership + event-visibility re-check resolveToken runs still passes, state
 // the answer and offer the schedule. Everything else keeps the generic page.
 //
-// THE GATE IS DELIBERATELY THE FULL ONE, NOT A CHEAPER LOOKALIKE. Widening by a
-// single condition is a leak: a member removed from the campaign, and an event
-// flipped to dm_only after the invite went out, must still get the generic page
-// that never discloses the title. That is why this re-runs memberRole and
-// CanUserViewEvent rather than trusting the token, and why a failure at ANY step
-// falls through to the same generic page rather than explaining itself.
+// THE GATE IS DELIBERATELY THE FULL VISIBILITY ONE, NOT A CHEAPER LOOKALIKE.
+// Widening by a single condition is a leak: a member removed from the campaign,
+// and an event flipped to dm_only after the invite went out, must still get the
+// generic page that never discloses the title. That is why this re-runs
+// memberRole and CanUserViewEvent rather than trusting the token, and why a
+// failure at ANY step falls through to the same generic page rather than
+// explaining itself.
+//
+// COLLECT_RSVPS IS NOT PART OF THAT GATE, AND USED TO BE. It is not a
+// visibility rule — it is the operator's go/no-go toggle for taking NEW answers
+// — so requiring it here meant that closing collection after the head count (a
+// natural thing to do; it is a toggle on the day card) turned every live link in
+// every inbox back into "RSVP Failed — this RSVP link is invalid or has
+// expired", including for a member who answered YES, is still on the roster, and
+// only re-opened the link to check it went through. That is verbatim the
+// sentence [GR-8] exists to stop players seeing, and the documented consequence
+// — "a player who reads that tells their GM the RSVP system is broken, and the
+// GM believes them" — applies unchanged. Reporting a recorded answer to the
+// member who gave it discloses nothing that member is not entitled to, whatever
+// the toggle says.
 func (h *RSVPHandler) rsvpDeadTokenPage(ctx context.Context, tokenStr string, cause error) string {
 	generic := rsvpResultPage("RSVP Failed", apperror.UserMessage(cause, rsvpBadTokenMsg), false, "")
 
@@ -729,7 +797,7 @@ func (h *RSVPHandler) rsvpDeadTokenPage(ctx context.Context, tokenStr string, ca
 		return generic
 	}
 	evt, cal, err := h.svc.EventContext(ctx, tok.EventID, "")
-	if err != nil || !evt.CollectRSVPs {
+	if err != nil {
 		return generic
 	}
 	role, ok := h.memberRole(ctx, cal.CampaignID, tok.UserID)
@@ -777,17 +845,15 @@ func (h *RSVPHandler) RedeemEventRSVPToken(c echo.Context) error {
 	detail := evt.Name + " — " + rsvpDateLine(cal, evt)
 
 	if tok.Action == RSVPActionSuggest {
-		return c.HTML(http.StatusOK, rsvpSuggestPage(detail, action, csrf, ""))
+		return c.HTML(http.StatusOK, rsvpSuggestPage(detail, action, csrf, "",
+			h.memberZone(ctx, cal.CampaignID, tok.UserID)))
 	}
 
 	msg := fmt.Sprintf("You're responding %q to %s. Tap below to confirm.", rsvpActionLabel(tok.Action), detail)
 	if tok.Action == RSVPActionOutWeek {
 		// The confirm page must name the SAME week the apply will write, in the
 		// same zone, or the preview is a different claim from the action.
-		memberTZ := ""
-		if h.availability != nil {
-			memberTZ = h.availability.MemberZone(ctx, cal.CampaignID, tok.UserID)
-		}
+		memberTZ := h.memberZone(ctx, cal.CampaignID, tok.UserID)
 		_, dates := rsvpWeekDates(cal, evt, nowUTC(), memberTZ)
 		msg = fmt.Sprintf("This declines %s and marks you unavailable for the whole week of %s%s "+
 			"(days you've already customised are left alone). Tap below to confirm.",
@@ -844,7 +910,8 @@ func (h *RSVPHandler) ApplyEventRSVPToken(c echo.Context) error {
 				evt.Name+" — "+rsvpDateLine(cal, evt),
 				escapeAttr("/calendar-rsvp/"+tokenStr),
 				middleware.GetCSRFToken(c),
-				apperror.UserMessage(err, "Please add a time that would work, or a short note.")))
+				apperror.UserMessage(err, "Please add a time that would work, or a short note."),
+				h.memberZone(ctx, cal.CampaignID, tok.UserID)))
 		}
 		if _, err := h.svc.ApplyToken(ctx, tokenStr); err != nil {
 			return c.HTML(http.StatusOK, h.rsvpDeadTokenPage(ctx, tokenStr, err))
@@ -982,6 +1049,18 @@ func (h *RSVPHandler) memberRole(ctx context.Context, campaignID, userID string)
 	return 0, false
 }
 
+// memberZone is the ONE place the RSVP flows ask what zone a member is in.
+//
+// Nil-safe: with no availability seam wired it answers "" — not "UTC" — so
+// every caller keeps disclosing the absence rather than presenting a guess as a
+// fact. See AvailabilityExceptionWriter.MemberZone.
+func (h *RSVPHandler) memberZone(ctx context.Context, campaignID, userID string) string {
+	if h.availability == nil {
+		return ""
+	}
+	return h.availability.MemberZone(ctx, campaignID, userID)
+}
+
 // applyOutThisWeek writes the member's own full-day unavailable exceptions for
 // the event's week and returns the message shown back to them.
 //
@@ -996,7 +1075,7 @@ func (h *RSVPHandler) applyOutThisWeek(ctx context.Context, cal *Calendar, evt *
 	}
 	// The week is the MEMBER'S week — see rsvpWeekDates. "" means they have set
 	// no zone anywhere, which falls back to UTC and is disclosed below.
-	memberTZ := h.availability.MemberZone(ctx, cal.CampaignID, userID)
+	memberTZ := h.memberZone(ctx, cal.CampaignID, userID)
 	weekStart, dates := rsvpWeekDates(cal, evt, nowUTC(), memberTZ)
 
 	existing, err := h.availability.ExceptionDates(ctx, cal.CampaignID, userID)
@@ -1019,16 +1098,28 @@ func (h *RSVPHandler) applyOutThisWeek(ctx context.Context, cal *Calendar, evt *
 		toWrite = append(toWrite, d)
 	}
 
+	written := toWrite
 	if len(toWrite) > 0 {
-		if err := h.availability.MarkDaysUnavailable(ctx, cal.CampaignID, userID, toWrite); err != nil {
+		var werr error
+		written, werr = h.availability.MarkDaysUnavailable(ctx, cal.CampaignID, userID, toWrite)
+		if werr != nil {
 			slog.Warn("calendar rsvp: writing availability exceptions failed",
-				slog.Any("error", err), slog.String("campaign_id", cal.CampaignID))
-			return base + " Your calendar availability could not be updated — please set it by hand."
+				slog.Any("error", werr), slog.String("campaign_id", cal.CampaignID))
+			if len(written) == 0 {
+				return base + " Your calendar availability could not be updated — please set it by hand."
+			}
+			// PARTIAL. Saying "nothing happened" to a member who is half-blocked
+			// is the worse error of the two: they believe they are still free on
+			// days that now read as unavailable in the Director's overlay.
+			return fmt.Sprintf("%s Only part of your week could be updated: you're marked "+
+				"unavailable for %s%s, and the remaining day(s) could not be saved — "+
+				"please set those by hand on the availability page.",
+				base, strings.Join(written, ", "), weekZoneSuffix(memberTZ))
 		}
 	}
 
 	msg := fmt.Sprintf("%s You're marked unavailable for %d of the 7 days in the week of %s%s.",
-		base, len(toWrite), weekStart, weekZoneSuffix(memberTZ))
+		base, len(written), weekStart, weekZoneSuffix(memberTZ))
 	if skipped > 0 {
 		msg += fmt.Sprintf(" %d day(s) already had your own custom availability and were left alone.", skipped)
 	}

@@ -20,6 +20,57 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### RSVP + availability made runnable (C-RSVP-ROBUST, 2026-08-16)
+
+Branch `claude/coordinator-handoff-stage-3-3d3s4w`. Twelve defects across
+`internal/plugins/sessions`, `internal/plugins/calendar`'s RSVP lane, and
+`internal/timeutil`. Every fix carries a guard that was proved RED before green.
+Full detail in `internal/plugins/sessions/.ai.md` → "C-RSVP-ROBUST" and
+`internal/plugins/calendar/.ai.md` → "C-RSVP-ROBUST (the RSVP lane)".
+
+**The one that mattered most: one authenticated GET killed the instance.**
+`splitToViewerDays` used `time.Date(y,mo,d,0,0,0,0,loc).AddDate(0,0,1)` as the
+end of the viewer's local day. In a zone whose DST jump lands ON midnight —
+America/Havana, America/Santiago, Atlantic/Azores — local 00:00 does not exist,
+Go normalises it backwards, and the loop's only advance assigned `cur` the value
+it already held while appending a segment every iteration. Measured live at
+41 MB → 2.6 GB RSS in ten seconds, still climbing after the client disconnected.
+Reachable on demand by any Player via `?tz=`, and by accident twice a year for a
+Cuban, Chilean or Azorean table through the Bench's own viewer-zone projection.
+The boundary now goes through the new `timeutil.StartOfCivilDay`, and the loop
+carries a fuse — a projection loop that cannot terminate is not a rendering bug,
+it is an OOM of the whole self-hosted instance.
+
+**The cross-cutting one: a member's timezone lives in TWO columns.** The
+availability page's control is labelled "Your timezone" and writes
+`member_availability.tz` and nothing else; `users.timezone` is only ever written
+by `PUT /account/timezone`, which that page never calls. Everything that
+reported a member's zone read the second column only, so a player who set their
+zone was shown as "zone not set" on the Bench forever, their own heatmap
+rendered in UTC, their emailed "out this week" blocked the wrong week, and their
+offered windows were stamped UTC over New York hours.
+`sessions.SessionService.CampaignMemberZones` (one read per roster) is now the
+first source everywhere, exposed to the calendar through
+`calendar.AvailabilityExceptionWriter.MemberZone`. **Empty stays a first-class
+state** — surfaces disclose absence rather than guessing UTC.
+
+**Also fixed:** the session RSVP token now re-checks membership on both halves
+and is genuinely single-use (consume-before-apply + `used_at IS NULL`);
+`UpdateAttendeeStatus` is an upsert, which ends both the same-second "attendee
+not found" 404 and the late-joiner who had no RSVP control at all; the
+`POST /availability/exceptions` endpoint composes the day instead of deleting it;
+"out this week" resolves the member's week and names the zone; the emailed
+suggest form states the zone its times are read in; arming Collect RSVPs no
+longer claims `emailed:true` when the shared 24h floor suppressed every send, and
+the arming transition is now the write's own answer so two Scribes cannot
+double-mail the roster.
+
+**Left deliberately:** an RSVP note still cannot be cleared (needs a control that
+does not exist plus a product decision — see the probe left in
+`internal/plugins/calendar/zz_scout_probe_test.go`), and `overlayMembers` still
+issues one `GetUser` per member who has NOT set an availability-page zone
+(a full fix needs a batch user read that `auth` does not expose).
+
 ### calendar-v4 — fantasy days now have real dates (C-CALV4-ANCHOR, migration 018, 2026-08-16)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. **One stored pair per

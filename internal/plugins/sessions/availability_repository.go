@@ -138,6 +138,15 @@ func scanExceptions(rows *sql.Rows) ([]AvailabilityException, error) {
 
 // AddException inserts (or upserts, on the unique block key) a per-date
 // override for a member.
+//
+// NO PRODUCTION CALLER, AND THAT IS THE POINT. Writing ONE exception row for a
+// date silently deletes the rest of that date, because exception rows fully
+// REPLACE the recurring pattern for their date (effectiveBlocks,
+// availability_overlay.go). AddMyException used to call this and turned "I'm
+// ALSO free 07:00–08:00" into a member who was free for one hour at 7am and busy
+// every evening. It now composes the whole day and writes it through
+// ReplaceDayExceptions instead. Kept for completeness of the repository's CRUD
+// surface — if you reach for it, you almost certainly want ReplaceDayExceptions.
 func (r *sessionRepository) AddException(ctx context.Context, e *AvailabilityException) error {
 	const q = `INSERT INTO availability_exceptions
 		(id, campaign_id, user_id, on_date, start_minute, end_minute, state, tz, updated_at)

@@ -195,7 +195,15 @@ func TestRSVPCollect_ReportsMailState(t *testing.T) {
 			// the one that transition begins from.
 			evt := testEvent(func(e *Event) { e.CollectRSVPs = tc.alreadyOnRow })
 			h := NewRSVPHandler(newTestRSVPService(&mockRSVPRepo{}, evt, testCalendar(nil)))
-			h.SetMemberDirectory(&mockMemberDir{})
+			// FIXTURE GROWN, ASSERTIONS UNCHANGED. `emailed` no longer means
+			// "SMTP is configured" — it means "mail is going out for THIS call",
+			// which is also false when the roster is empty or everyone is inside
+			// the 24h per-recipient floor. An empty directory (what this used to
+			// pass) is now a genuine nobody-was-emailed case, so the SMTP-working
+			// row needs a real addressable member to still be about SMTP.
+			h.SetMemberDirectory(&mockMemberDir{members: []campaigns.CampaignMember{
+				{UserID: "player-1", Email: "p1@example.test", Role: campaigns.RolePlayer},
+			}})
 			if tc.mailer != nil {
 				h.SetMailSender(tc.mailer, "https://chronicle.example.test")
 			}
