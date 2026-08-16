@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -1034,6 +1035,123 @@ func (h *Handler) UpdateErasAPI(c echo.Context) error {
 	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarErasSet, "calendar", cal.ID, cal.Name,
 		map[string]any{"count": len(eras)})
 	return nil
+}
+
+// anchorRequest is the settings form's body for the real-date anchor.
+//
+// FOUR OPTIONAL FIELDS, ONE MEANING. All four absent (or the real date blank)
+// is the CLEAR — an owner removing the pin — and any other subset is a mistake
+// the service refuses. They are strings rather than ints because this binds an
+// HTML form: an empty `<input type="number">` binds as 0 with Echo's binder,
+// and 0 is a real-looking year, so "the owner cleared the field" and "the owner
+// typed zero" would arrive identical. Parsing them here keeps that distinction.
+type anchorRequest struct {
+	Year     string `form:"anchor_year" json:"anchor_year"`
+	Month    string `form:"anchor_month" json:"anchor_month"`
+	Day      string `form:"anchor_day" json:"anchor_day"`
+	RealDate string `form:"anchor_real_date" json:"anchor_real_date"`
+}
+
+// UpdateAnchorAPI sets or clears the calendar's real-date anchor.
+// PUT /campaigns/:id/calendars/:calId/anchor
+//
+// OWNER-ONLY, like every other structural write on this page, and for a
+// stronger reason than most: the anchor silently re-dates every schedulable
+// thing at once. See audit.ActionCalendarAnchorSet.
+func (h *Handler) UpdateAnchorAPI(c echo.Context) error {
+	cc := campaigns.GetCampaignContext(c)
+	ctx := c.Request().Context()
+	calID := c.Param("calId")
+
+	cal, err := h.requireCalendarInCampaign(c, calID, cc.Campaign.ID)
+	if err != nil {
+		return respondSettingsError(c, err)
+	}
+
+	var req anchorRequest
+	if err := c.Bind(&req); err != nil {
+		return respondSettingsError(c, apperror.NewBadRequest("invalid request"))
+	}
+
+	anchor, err := parseAnchorRequest(req)
+	if err != nil {
+		return respondSettingsError(c, apperror.NewValidation(err.Error()))
+	}
+	if err := h.svc.SetRealDateAnchor(ctx, cal.ID, anchor); err != nil {
+		return respondSettingsError(c, err)
+	}
+
+	// The audit detail carries the VALUES, not just "changed". A day's drift in
+	// the anchor moves every session on the calendar and looks, from every
+	// other surface, like the sessions moved themselves.
+	detail := map[string]any{"cleared": anchor == nil}
+	if anchor != nil {
+		detail["in_world"] = fmt.Sprintf("%d-%d-%d", anchor.Year, anchor.Month, anchor.Day)
+		detail["real_date"] = anchor.RealDate.Format("2006-01-02")
+	}
+	h.logCalendarAudit(c, cc.Campaign.ID, audit.ActionCalendarAnchorSet, "calendar", cal.ID, cal.Name, detail)
+	return nil
+}
+
+// parseAnchorRequest turns the form's four strings into an anchor, nil for a
+// clear, or an error naming which field is the problem.
+//
+// ALL FOUR OR NONE IS ENFORCED HERE, AT THE EDGE. A partial anchor is not a
+// weaker anchor, it is an unanswerable one, and the error has to say which
+// field is missing — an owner staring at a form that says "invalid" cannot act
+// on it.
+func parseAnchorRequest(req anchorRequest) (*RealDateAnchor, error) {
+	y, m, d, rd := strings.TrimSpace(req.Year), strings.TrimSpace(req.Month),
+		strings.TrimSpace(req.Day), strings.TrimSpace(req.RealDate)
+
+	filled := 0
+	for _, s := range []string{y, m, d, rd} {
+		if s != "" {
+			filled++
+		}
+	}
+	if filled == 0 {
+		return nil, nil // the clear
+	}
+	if filled < 4 {
+		missing := []string{}
+		for _, f := range []struct{ v, name string }{
+			{y, "in-world year"}, {m, "in-world month"}, {d, "in-world day"}, {rd, "real-world date"},
+		} {
+			if f.v == "" {
+				missing = append(missing, f.name)
+			}
+		}
+		return nil, fmt.Errorf("an anchor needs all four fields — still missing: %s. "+
+			"Clear every field to remove the anchor instead", strings.Join(missing, ", "))
+	}
+
+	num := func(s, name string) (int, error) {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, fmt.Errorf("%s must be a whole number, not %q", name, s)
+		}
+		return n, nil
+	}
+	yi, err := num(y, "in-world year")
+	if err != nil {
+		return nil, err
+	}
+	mi, err := num(m, "in-world month")
+	if err != nil {
+		return nil, err
+	}
+	di, err := num(d, "in-world day")
+	if err != nil {
+		return nil, err
+	}
+	// `<input type="date">` submits ISO-8601 and nothing else, so one layout is
+	// the whole contract rather than a guess-list.
+	t, err := time.Parse("2006-01-02", rd)
+	if err != nil {
+		return nil, fmt.Errorf("the real-world date must be YYYY-MM-DD, not %q", rd)
+	}
+	return &RealDateAnchor{Year: yi, Month: mi, Day: di, RealDate: t}, nil
 }
 
 // --- C-CAL-WCF-UI: weather / cycles / festivals settings handlers ---

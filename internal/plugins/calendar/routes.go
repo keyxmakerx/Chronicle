@@ -173,6 +173,10 @@ func RegisterRoutes(e *echo.Echo, h *Handler, campaignSvc campaigns.CampaignServ
 	cg.PUT("/calendars/:calId/moons", h.UpdateMoonsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calId/seasons", h.UpdateSeasonsAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calId/eras", h.UpdateErasAPI, campaigns.RequireRole(campaigns.RoleOwner))
+	// C-CALV4-ANCHOR: the real-date anchor. Owner-only like every structural
+	// write here, and for a stronger reason — the anchor re-dates every
+	// schedulable thing on the calendar at once.
+	cg.PUT("/calendars/:calId/anchor", h.UpdateAnchorAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.GET("/calendars/:calId/event-categories", h.GetEventCategoriesAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	cg.PUT("/calendars/:calId/event-categories", h.UpdateEventCategoriesAPI, campaigns.RequireRole(campaigns.RoleOwner))
 	// C-CAL-WCF-UI: internal UI bindings for weather, cycles, festivals.

@@ -1266,6 +1266,18 @@ type ledgerContext struct {
 	// month, so Midwinter 1 would silently read Deepwinter 1's illumination.
 	// Wrong is worse than absent.
 	Moon string
+
+	// RealDate is the Gregorian date this day falls on, already formatted by the
+	// producer (DayCell.RealDate). Empty when the campaign's calendar carries no
+	// real-date anchor — which is every calendar until an owner sets one, so the
+	// panel drops the line rather than printing a placeholder.
+	//
+	// IT IS THE DAY PANEL'S LINE AND NOT THE GRID CELL'S. At 34px of column the
+	// cell has room for a numeral, a moon and up to three marks, and a
+	// fifteen-character date is not among the things that fit; in the panel it
+	// sits under a date the viewer just chose and answers the one question a GM
+	// scheduling a session is asking — which real weekend is that.
+	RealDate string
 }
 
 // ledgerView is everything Zone C draws, computed once per render.
@@ -1345,6 +1357,10 @@ func newLedgerView(d BlockData) ledgerView {
 			Date:    ledgerDateLine(d, label),
 			Weekday: ledgerWeekdayName(d.Month, c),
 			Moon:    ledgerMoonLine(d, day),
+			// Off the SAME cell the rows came from — no second walk, and no
+			// arithmetic here: the producer already resolved it or already
+			// declined to (C-CALV4-ANCHOR).
+			RealDate: c.RealDate,
 		})
 	}
 	for _, ic := range d.Month.Intercalary {

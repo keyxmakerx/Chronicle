@@ -114,6 +114,14 @@ func (s *stubCalendarSvc) SetWeekdays(context.Context, string, []calendar.Weekda
 func (s *stubCalendarSvc) SetMoons(context.Context, string, []calendar.MoonInput) error { return nil }
 func (s *stubCalendarSvc) SetSeasons(context.Context, string, []calendar.Season) error  { return nil }
 func (s *stubCalendarSvc) SetEras(context.Context, string, []calendar.EraInput) error   { return nil }
+
+// SetRealDateAnchor (C-CALV4-ANCHOR) is on the service interface but has NO
+// syncapi route: the anchor is set in Chronicle's own settings page, and the
+// Foundry module reads its consequence (which real date a day falls on) rather
+// than writing the pin. Stubbed to satisfy the interface, deliberately inert.
+func (s *stubCalendarSvc) SetRealDateAnchor(context.Context, string, *calendar.RealDateAnchor) error {
+	return nil
+}
 func (s *stubCalendarSvc) CreateEra(context.Context, string, calendar.EraInput) (*calendar.Era, error) {
 	return nil, nil
 }

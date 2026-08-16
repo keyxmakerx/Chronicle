@@ -2637,7 +2637,8 @@
    almanac_test). It WRAPS rather than truncating — a calendar declaring four
    moons must not lose the fourth to an ellipsis, which is L21's second half one
    surface down. */
-.cal-block-host .ldp .ldm {
+.cal-block-host .ldp .ldm,
+.cal-block-host .ldp .ldrd {
   display: block;
   margin-block-start: 5px;
   font-weight: 500;
@@ -2645,11 +2646,19 @@
   line-height: 1.35;
   color: var(--text-muted);
 }
-.cal-block-host .ldp .ldmg {
+.cal-block-host .ldp .ldmg,
+.cal-block-host .ldp .ldrdg {
   font-style: normal;
   margin-inline-end: 4px;
   color: var(--text-secondary);
 }
+/* THE REAL DATE SHARES THE MOON LINE'S TYPE EXACTLY (C-CALV4-ANCHOR), and that
+   is the ruling rather than an economy. Both are the same kind of thing: a
+   quiet fact ABOUT the day the viewer chose, sitting under the in-world date
+   that is the headline. Giving the real date its own weight or colour would
+   make it compete with the date it is annotating — and it is the one line in
+   this panel that is not about the fiction, so it is the last thing that should
+   shout. Nothing else is added: no rule, no ground, no separate margin. */
 /* THE CREATE DOOR WEARS THE DAY CARD'S OWN DOOR, on purpose: it IS that
    control (same `data-dc-new` handle, same listener, same route, same
    server-side gate), so it reads as the same control rather than as a second

@@ -167,3 +167,23 @@ func (r *calendarRepo) SetMoodTint(ctx context.Context, calendarID string, color
 		color, intensity, calendarID)
 	return err
 }
+
+// SetRealDateAnchor writes migration 018's four columns together (nil clears).
+//
+// ALL FOUR IN ONE STATEMENT, ALWAYS. They are one fact, and a write that could
+// leave three set and one NULL would produce a row HasRealAnchor() rejects —
+// i.e. an anchor the owner set and the product silently ignores, which is the
+// worst of the three possible states.
+func (r *calendarRepo) SetRealDateAnchor(ctx context.Context, calendarID string, a *RealDateAnchor) error {
+	var y, m, d any
+	var real any
+	if a != nil {
+		y, m, d, real = a.Year, a.Month, a.Day, dateOnlyUTC(a.RealDate)
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE calendars
+		    SET anchor_year = ?, anchor_month = ?, anchor_day = ?, anchor_real_date = ?
+		  WHERE id = ?`,
+		y, m, d, real, calendarID)
+	return err
+}

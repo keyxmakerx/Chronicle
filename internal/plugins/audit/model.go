@@ -74,6 +74,13 @@ const (
 	ActionCalendarMoonsSet           = "calendar.moons_set"
 	ActionCalendarSeasonsSet         = "calendar.seasons_set"
 	ActionCalendarErasSet            = "calendar.eras_set"
+	// ActionCalendarAnchorSet records a change to the real-date anchor
+	// (C-CALV4-ANCHOR). It is audited rather than treated as a preference
+	// because it silently re-dates EVERY schedulable thing on the calendar at
+	// once: change it by a day and every session, every availability lookup and
+	// every "next game is on…" answer moves with it, with nothing on screen to
+	// say why. Who moved it and when is the only way that is diagnosable.
+	ActionCalendarAnchorSet = "calendar.anchor_set"
 	ActionCalendarCategoriesSet      = "calendar.categories_set"
 	ActionCalendarVisibilityChanged  = "calendar.visibility_changed"
 	ActionCalendarEraCreated         = "calendar.era_created"

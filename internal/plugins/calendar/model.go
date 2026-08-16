@@ -104,8 +104,24 @@ type Calendar struct {
 	// is P2 (RC-4). Read/written by the repository; consumed server-side only.
 	TracksRealTime bool    `json:"-"`
 	RealTimeZone   *string `json:"-"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	// The real-date anchor (C-CALV4-ANCHOR, migration 018): one in-world date
+	// and the Gregorian date it equals, from which every other day follows by
+	// AbsoluteDay arithmetic. See real_date_anchor.go for the whole idea and
+	// for why the NAMED date is stored rather than a day count.
+	//
+	// ALL FOUR OR NONE — a partial anchor maps nothing, so HasRealAnchor()
+	// requires the set and the service refuses to write a subset.
+	//
+	// Serialized, unlike the real-time pair above: this is a fact about the
+	// world the owner authored, and the Foundry module and the export both have
+	// a legitimate need to know which real date a session lands on. It carries
+	// no zone and no time — see real_date_anchor.go on why that is deliberate.
+	AnchorYear     *int       `json:"anchor_year,omitempty"`
+	AnchorMonth    *int       `json:"anchor_month,omitempty"`
+	AnchorDay      *int       `json:"anchor_day,omitempty"`
+	AnchorRealDate *time.Time `json:"anchor_real_date,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 
 	// Eager-loaded sub-resources (populated by service, not by every query).
 	Months          []Month         `json:"months,omitempty"`

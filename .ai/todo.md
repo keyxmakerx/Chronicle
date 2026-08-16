@@ -9,6 +9,56 @@
 <!-- Legend: [ ] Not started  [~] In progress  [x] Complete  [!] Blocked      -->
 <!-- ====================================================================== -->
 
+## 0-anchor. Fantasy days now have real dates (2026-08-16)
+
+C-CALV4-ANCHOR, migration 018. The prerequisite `C-CALV4-TILES` §8.6 booked, and
+the reason the availability strip shipped dormant.
+
+### [x] Done
+
+- **One anchor per calendar** — an in-world y/m/d plus the real date it equals.
+  `Calendar.AbsoluteDay` already did the counting; this is what it counts from.
+- **The NAMED date is stored, not a day count.** A stored count survives a
+  structure edit by holding the count fixed and sliding the in-world date the
+  anchor names; the named day is what an owner means.
+- **`Validate` runs against the calendar it is stored on** — the only place a
+  phantom in-world date is catchable, because `AbsoluteDay` returns a number for
+  month 14 day 40 quite happily and mis-dates everything else forever.
+- **All four columns or none**, enforced at the struct, on read, and in the form
+  parser; all four empty is the CLEAR.
+- **`FromAbsoluteDay`**, the exported inverse — bounded correction loop, reports
+  rather than approximating. Moon phases, seasons and eras all compute forward
+  today; this is the "which day is index N" they could not ask.
+- **Surfaced** as `Sat 3 Oct 2026` in the Ledger day panel (`.ldrd`), sharing the
+  moon line's type. Not in the grid cell — 34px has no room.
+- **Settings → Real dates**, fantasy-only, Owner-only, with the consequence
+  stated back on the page and a one-click "use today and the calendar's current
+  day". Audited with its values (`calendar.anchor_set`).
+- **Un-anchored emits nothing**, asserted over a whole rendered month — every
+  calendar in the product is un-anchored today, so this is the common path.
+
+### [ ] Open — booked here rather than dropped
+
+- **The availability lanes are still not wired.** The strip's CSS and markup ship
+  complete; what is missing is the join. `DayCell` needs an availability field,
+  `block_projection.go` needs to fetch `member_availability` +
+  `availability_exceptions` through the sessions service interface (never the
+  repo — rule 8), and the recurring pattern is keyed to a Gregorian
+  `day_of_week`, which the anchor now makes derivable. **This is the next
+  slice.**
+- **Nothing re-dates when an anchor changes.** Moving it by a day moves every
+  session, every availability lookup and every "next game is on…" at once, with
+  nothing on screen to say why. The audit entry carries the values so it is at
+  least diagnosable; a confirmation step naming the consequence is not built.
+- **The Bench's `/schedule` panel still frames itself in real weeks only.** It is
+  correct — it is a real-world surface — but with an anchor set it could now name
+  the in-world date beside "week of 20 Jul 2026", and does not.
+- **`TestBenchRoute_SnapshotIsUnmoved` was re-pointed** (727 → 728). It shipped as
+  a bare total-line pin guarding a slice that had already landed, so it fired on
+  any future route anywhere. It now also asserts the V2 shell's six routes BY
+  PATH, which is what the count was standing in for and cannot be satisfied by an
+  unrelated addition.
+
 ## 0-runes. The four corners, the runes, and three dead colour channels (2026-08-16)
 
 C-CALV4-TILES §9/§10. Built in two lanes with an adversarial prover that decodes

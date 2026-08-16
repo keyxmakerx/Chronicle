@@ -749,6 +749,18 @@ func buildMonthGeometry(cal *Calendar, in blockMonthGeometryInput) calblock.Mont
 				cell.Day = d
 				cell.IsToday = d == geo.TodayDay
 				cell.Moons = moonDiscsForDay(moons, moonBase, d, in.MoonCap)
+				// The real date this in-world day falls on (C-CALV4-ANCHOR).
+				// Empty on an un-anchored calendar, which is every calendar
+				// until an owner sets one — RealDateFor refuses rather than
+				// guessing, and the empty string is what the widget renders as
+				// "not known".
+				//
+				// Computed per cell rather than stepped off a base like the
+				// moons: the moons step because a phase is a function of a day
+				// COUNT, whereas this must survive an intercalary day and a
+				// month boundary, and RealDateFor already walks the structure
+				// correctly. A month is at most a few dozen cells.
+				cell.RealDate = blockRealDateLabel(cal, in.Year, in.MonthIndex+1, d)
 			}
 			row.Cells = append(row.Cells, cell)
 		}
@@ -780,4 +792,28 @@ func buildMonthGeometry(cal *Calendar, in blockMonthGeometryInput) calblock.Mont
 			geo.Days, anchor, in.MoonCap)
 	}
 	return geo
+}
+
+// blockRealDateLabel is the display label for the real date an in-world day
+// falls on, or "" when the calendar carries no anchor (C-CALV4-ANCHOR).
+//
+// THE EMPTY STRING IS THE COMMON CASE AND IT IS THE HONEST ONE. Every calendar
+// is un-anchored until an owner pins one, and RealDateFor refuses rather than
+// guessing an epoch — so a caller that substituted today's date, or the zero
+// time, would be printing a fabricated fact on a day card. DayCell.RealDate's
+// contract is "empty means not known".
+//
+// THE FORMAT IS SHORT ON PURPOSE. It sits under an in-world date that is
+// already the headline, in a panel with a moon line and an event list, and its
+// job is orientation rather than precision: "Sat 3 Oct 2026" answers "which
+// weekend is that" at a glance, which is the question a GM scheduling a session
+// is actually asking. The WEEKDAY is included for the same reason and is the
+// GREGORIAN one — it is a fact about the real world, and the fantasy tenday it
+// sits in is already named beside it.
+func blockRealDateLabel(cal *Calendar, year, month, day int) string {
+	rd, ok := cal.RealDateFor(year, month, day)
+	if !ok {
+		return ""
+	}
+	return rd.Format("Mon 2 Jan 2006")
 }

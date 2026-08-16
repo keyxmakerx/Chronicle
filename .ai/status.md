@@ -20,6 +20,58 @@ If you're an AI session looking for "what shipped last week", read the Cordinato
 
 ## For AI sessions
 
+### calendar-v4 — fantasy days now have real dates (C-CALV4-ANCHOR, migration 018, 2026-08-16)
+
+Branch `claude/coordinator-handoff-stage-3-3d3s4w`. **One stored pair per
+calendar — an in-world date and the real date it equals — after which every day
+follows by counting.** `Calendar.AbsoluteDay` already did the counting; what was
+missing was somewhere to count *from*.
+
+**Why it is the thing that was blocking.** Chronicle keeps availability on a
+REAL axis and always has (`member_availability` on a Gregorian `day_of_week`,
+`availability_exceptions` on a Gregorian `on_date`, both DST-correct). The Block
+renders FANTASY days. Nothing joined them, which is why the availability strip
+shipped complete and **dormant** last slice. `epoch_name` is a label;
+`tracks_real_time` is about `reallife` mode deriving *today*; the builder's
+`wz-anchor` is a structural-resolution check wearing the same word. There was no
+candidate to reuse.
+
+**The NAMED date is stored, not a day count**, and that is the whole design
+decision. Both work until the owner edits the structure — and then a stored count
+holds the *count* fixed and slides the in-world date the anchor names, while the
+named day keeps its real date and the days around it re-flow. *"The campaign began
+on Marpenoth 14, which was 3 October"* is a fact about a named day.
+
+**The one bad input that cannot be caught downstream:** the arithmetic NEVER
+FAILS on a phantom date. `AbsoluteDay(1492, 2, 40)` returns a number quite
+happily, so an anchor on a day the calendar does not have mis-dates every other
+day, silently and permanently. `Validate` checks against **the calendar it is
+being stored on** — month count, that month's length, in that year, leap
+included — at the service, which is the only place it is catchable.
+
+**All four columns or none**, enforced three times deliberately: one struct at
+every write boundary (three-of-four is unrepresentable), `HasRealAnchor()` on
+read (a hand-edited row degrades to *not anchored*, never to a wrong answer), and
+the form parser (which names the missing field). All four empty is the CLEAR.
+
+**Un-anchored answers nothing, everywhere.** Every calendar in the product is
+un-anchored right now, so the empty string is the common case and `RealDateFor`
+refuses rather than guessing an epoch. A whole rendered month emits zero real
+dates on an un-anchored calendar, asserted.
+
+Surfaces as `Sat 3 Oct 2026` under the in-world date in the Ledger's day panel —
+not in the grid cell, where 34px of column has no room for it. Set in calendar
+settings → **Real dates**, fantasy-only, Owner-only, with a *"use today and the
+calendar's current day"* one-click for the overwhelmingly common case, and the
+consequence stated back on the page rather than left to be discovered by saving
+and looking (the eras editor's lesson). Audited with its VALUES, because a day's
+drift moves every session at once and looks, from every other surface, like the
+sessions moved themselves.
+
+**Booked:** the availability lanes are still not wired — the anchor was the
+prerequisite, the join onto `DayCell` is the next slice. Nothing re-dates when an
+anchor changes.
+
 ### calendar-v4 — the cell's four corners, the runes, and three colour channels that were not carrying colour (2026-08-16)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. C-CALV4-TILES §9, built in

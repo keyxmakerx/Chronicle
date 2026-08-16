@@ -209,6 +209,16 @@ func TestDayCell_ShapePinned(t *testing.T) {
 		{name: "Intercalary", kind: reflect.Bool},
 		{name: "Moons", kind: reflect.Slice, typeName: "MoonDisc"},
 		{name: "Marks", kind: reflect.Slice, typeName: "Mark"},
+		// RealDate is the Gregorian date this in-world day falls on, formatted
+		// by the producer (C-CALV4-ANCHOR). It sits with the day's other FACTS
+		// rather than being appended, because that is where it reads — and the
+		// shift it caused in this pin is the pin doing its job: nothing
+		// constructs DayCell with an unkeyed literal, so the move is safe, and
+		// the guard made it a decision instead of an accident.
+		//
+		// EMPTY IS THE COMMON CASE. Every calendar is un-anchored until an owner
+		// pins one, and the producer emits "" rather than guessing an epoch.
+		{name: "RealDate", kind: reflect.String},
 		{name: "MoreCount", kind: reflect.Int},
 		{name: "Tied", kind: reflect.Bool},
 		// Fogged exists so W-F does not have to re-touch every cell. Wave-1
@@ -393,7 +403,12 @@ func fullyPopulated() BlockData {
 			Eclipse:    true,
 			Terminator: "M12,0 A8,12 0 0 1 12,24",
 		}},
-		Marks:     []Mark{mark},
+		Marks: []Mark{mark},
+		// The producer's own format ("Mon 2 Jan 2006"), not a placeholder: this
+		// fixture is what several tests render, and a fake-looking date here
+		// would make a real formatting regression indistinguishable from the
+		// fixture always having looked like that.
+		RealDate:  "Sat 3 Oct 2026",
 		MoreCount: 3,
 		Tied:      true,
 		Fogged:    true, // fixture only — wave-1 producers leave this false

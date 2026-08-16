@@ -7,6 +7,8 @@ package calendar
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/keyxmakerx/chronicle/internal/plugins/campaigns"
 	"github.com/keyxmakerx/chronicle/internal/templates/layouts"
 	"github.com/keyxmakerx/chronicle/internal/timeutil"
@@ -62,6 +64,9 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 				@settingsTab("seasons", "fa-solid fa-leaf", "Seasons")
 				if !cal.IsRealLife() {
 					@settingsTab("eras", "fa-solid fa-landmark", "Eras")
+					// C-CALV4-ANCHOR. Fantasy only: a real-life calendar's days
+					// ARE real dates, so there is nothing to pin.
+					@settingsTab("anchor", "fa-solid fa-anchor", "Real dates")
 				}
 				@settingsTab("categories", "fa-solid fa-tag", "Categories")
 				if !cal.IsRealLife() {
@@ -106,6 +111,11 @@ templ CalendarSettingsPage(cc *campaigns.CampaignContext, cal *Calendar, csrfTok
 					<div x-show="tab === 'eras'" x-cloak class="h-full overflow-y-auto">
 						<div class="max-w-3xl mx-auto px-6 py-6">
 							@erasSettingsTab(cc, cal, csrfToken)
+						</div>
+					</div>
+					<div x-show="tab === 'anchor'" x-cloak class="h-full overflow-y-auto">
+						<div class="max-w-3xl mx-auto px-6 py-6">
+							@anchorSettingsTab(cc, cal, csrfToken)
 						</div>
 					</div>
 				}
@@ -813,6 +823,130 @@ templ erasSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken st
 	</div>
 }
 
+// anchorSettingsTab pins one in-world date to one real date (C-CALV4-ANCHOR).
+//
+// FANTASY ONLY. A real-life calendar's days ARE real dates; there is nothing to
+// pin and a form offering to pin them would imply otherwise.
+templ anchorSettingsTab(cc *campaigns.CampaignContext, cal *Calendar, csrfToken string) {
+	{{ ay, am, ad, ar := anchorFieldValues(cal) }}
+	{{ todayLine := anchorTodayLine(cal, time.Now()) }}
+	{{ currentLine := anchorCurrentDayLine(cal) }}
+	<div class="space-y-4">
+		<div>
+			<h2 class="text-lg font-semibold text-fg mb-1">Real-world anchor</h2>
+			<p class="text-sm text-fg-secondary">
+				Pin one day of your world to one real date. Every other day follows by counting,
+				so Chronicle can answer <em>"when is our next session, in-world"</em> and line your
+				players' availability up against the calendar you actually play on.
+			</p>
+		</div>
+		// THE STATE IS STATED BEFORE THE FORM, not after it. Unanchored is a
+		// real and common state — every existing calendar is one — and an owner
+		// arriving here needs to know which they are looking at before they
+		// start typing into fields that may already hold something.
+		if todayLine != "" {
+			<div class="card p-3 border-l-2 border-accent space-y-1">
+				<p class="text-sm text-fg">{ todayLine }</p>
+				if currentLine != "" {
+					<p class="text-sm text-fg-secondary">{ currentLine }</p>
+				}
+			</div>
+		} else {
+			<div class="card p-3 border-l-2 border-edge">
+				<p class="text-sm text-fg-secondary">
+					This calendar has no anchor, so its days have no real dates. Nothing is
+					broken — the calendar works exactly as it does now — but availability and
+					session scheduling cannot line up against it until one is set.
+				</p>
+			</div>
+		}
+		<div x-data={ fmt.Sprintf(`{ saving: false, saved: false, error: '',
+			y: %s, m: %s, d: %s, real: %s,
+			useToday() {
+				const t = new Date();
+				const p = n => String(n).padStart(2, '0');
+				this.real = t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate());
+				this.y = %s; this.m = %s; this.d = %s;
+			} }`,
+			jsStr(ay), jsStr(am), jsStr(ad), jsStr(ar),
+			jsStr(fmt.Sprint(cal.CurrentYear)), jsStr(fmt.Sprint(cal.CurrentMonth)), jsStr(fmt.Sprint(cal.CurrentDay))) }>
+			<div class="card p-4 space-y-3">
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+					<div>
+						<label class="block text-xs font-medium text-fg-secondary mb-1.5">In your world</label>
+						<div class="grid grid-cols-3 gap-2">
+							<div>
+								<label class="block text-[10px] text-fg-muted mb-0.5">Year</label>
+								<input type="number" x-model="y" class="input text-sm w-full" placeholder="1492"/>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-muted mb-0.5">Month</label>
+								<select x-model="m" class="input text-sm w-full">
+									<option value="">—</option>
+									for i, mo := range cal.Months {
+										<option value={ fmt.Sprint(i + 1) }>{ fmt.Sprintf("%d · %s", i+1, mo.Name) }</option>
+									}
+								</select>
+							</div>
+							<div>
+								<label class="block text-[10px] text-fg-muted mb-0.5">Day</label>
+								<input type="number" x-model="d" class="input text-sm w-full" placeholder="14"/>
+							</div>
+						</div>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-fg-secondary mb-1.5">was this real date</label>
+						<input type="date" x-model="real" class="input text-sm w-full"/>
+						<button type="button" class="text-xs text-accent hover:underline mt-1.5" @click="useToday()">
+							<i class="fa-solid fa-wand-magic-sparkles mr-1"></i>
+							Use today, and the calendar's current day
+						</button>
+					</div>
+				</div>
+				<p class="text-[11px] text-fg-muted">
+					The <strong class="text-fg-secondary">named day</strong> is what is stored, not a day count —
+					so if you later correct a month's length, this day keeps its real date and the days
+					around it re-flow. Clearing all four fields removes the anchor.
+				</p>
+				<div class="flex items-center justify-end gap-2">
+					<span x-show="saved" x-transition class="text-xs text-green-500">Saved — reload to see what it resolves to</span>
+					<span x-show="error" x-transition class="text-xs text-red-500" x-text="error"></span>
+					<button
+						type="button"
+						class="btn-secondary text-sm"
+						:disabled="saving"
+						@click="y = ''; m = ''; d = ''; real = ''"
+					>Clear</button>
+					<button
+						type="button"
+						class="btn-primary text-sm"
+						:disabled="saving"
+						@click={ fmt.Sprintf(`
+							saving = true; saved = false; error = '';
+							Chronicle.apiFetch('/campaigns/%s/calendars/%s/anchor', {
+								method: 'PUT',
+								body: { anchor_year: String(y), anchor_month: String(m),
+								        anchor_day: String(d), anchor_real_date: String(real) }
+							}).then(async r => {
+								if (!r.ok) {
+									const b = await r.json().catch(() => ({}));
+									throw new Error(b.message || 'Save failed');
+								}
+								saved = true;
+							})
+							.catch(e => { error = e.message; })
+							.finally(() => { saving = false; })
+						`, cc.Campaign.ID, cal.ID) }
+					>
+						<span x-show="!saving">Save anchor</span>
+						<span x-show="saving">Saving...</span>
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
 // --- Helper functions for JSON serialization into x-data attributes ---
 
 // generalSettingsData returns the Alpine.js x-data JSON string for general settings.
@@ -1091,4 +1225,74 @@ func categoriesData(cats []EventCategory) string {
 func jsStr(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// --- C-CALV4-ANCHOR: the real-date anchor editor ---
+
+// anchorFieldValues returns the four form values, empty when unanchored.
+//
+// Strings, not ints, all the way to the input — for the reason anchorRequest
+// gives: an empty `<input type="number">` binds as 0, and 0 is a real-looking
+// year, so a cleared field and a typed zero would arrive identical.
+func anchorFieldValues(cal *Calendar) (year, month, day, real string) {
+	if !cal.HasRealAnchor() {
+		return "", "", "", ""
+	}
+	return fmt.Sprint(*cal.AnchorYear), fmt.Sprint(*cal.AnchorMonth), fmt.Sprint(*cal.AnchorDay),
+		cal.AnchorRealDate.UTC().Format("2006-01-02")
+}
+
+// anchorInWorldLabel renders an in-world date the way the product speaks it —
+// "Marpenoth 14, 1492" — rather than as three numbers.
+//
+// A month index outside the calendar prints as a bare number instead of
+// panicking or inventing a name: this is a display helper, and the place that
+// refuses an out-of-range month is RealDateAnchor.Validate, once, at the write.
+func anchorInWorldLabel(cal *Calendar, year, month, day int) string {
+	if month >= 1 && month <= len(cal.Months) {
+		return fmt.Sprintf("%s %d, %d", cal.Months[month-1].Name, day, year)
+	}
+	return fmt.Sprintf("%d-%d-%d", year, month, day)
+}
+
+// anchorTodayLine is the consequence, computed on the server and shown back.
+//
+// THE ERAS EDITOR'S LESSON, APPLIED. That editor shipped a colour picker whose
+// painted result was nothing like the pick, and "what was missing is that
+// nothing told the author, who could learn any of it only by saving and
+// looking". An anchor has the same shape of failure and a worse blast radius:
+// it is four numbers whose only visible consequence is which real day every
+// session lands on. So the form states what it currently resolves to.
+//
+// COMPUTED IN GO, NOT MIRRORED INTO JAVASCRIPT. The alternative was a live
+// preview that updates as the owner types, which needs AbsoluteDay, the leap
+// rule and the month table re-implemented in the browser — a second
+// implementation of the one piece of arithmetic in this feature that must not
+// drift. Save-then-see costs a round trip and cannot be wrong.
+//
+// Returns "" when the calendar is unanchored, which the template renders as the
+// empty state rather than as a sentence about nothing.
+func anchorTodayLine(cal *Calendar, now time.Time) string {
+	y, m, d, ok := cal.InWorldDateFor(now)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("Today, %s, is %s in your world.",
+		now.Format("2 January 2006"), anchorInWorldLabel(cal, y, m, d))
+}
+
+// anchorCurrentDayLine is the same fact from the other end: the day the
+// campaign is standing on, and the real date it falls on.
+//
+// BOTH DIRECTIONS ARE SHOWN because an owner checking an anchor checks it
+// against whichever they know. One line would make them do the other conversion
+// in their head, which is the arithmetic they came here to avoid.
+func anchorCurrentDayLine(cal *Calendar) string {
+	rd, ok := cal.RealDateFor(cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("The calendar's current day, %s, falls on %s.",
+		anchorInWorldLabel(cal, cal.CurrentYear, cal.CurrentMonth, cal.CurrentDay),
+		rd.Format("Monday 2 January 2006"))
 }

@@ -306,6 +306,21 @@ type DayCell struct {
 	Intercalary bool
 	Moons       []MoonDisc
 	Marks       []Mark
+	// RealDate is the Gregorian date this in-world day falls on, ALREADY
+	// FORMATTED for display ("Sat 3 Oct 2026"). Empty when the campaign's
+	// calendar carries no real-date anchor, which is every calendar until an
+	// owner sets one — so the empty string is the common case and every reader
+	// must treat it as "not known", never as "today".
+	//
+	// A STRING, AND FORMATTED BY THE PRODUCER, because this widget has no
+	// calendar model and must not grow one. The mapping needs the month table,
+	// the leap rule and the stored anchor (calendar.RealDateFor); re-deriving
+	// any of that here would be a second implementation of the one piece of
+	// arithmetic in this feature that must not drift.
+	//
+	// PRESENTATION ONLY — nothing keys off it. When availability lands it will
+	// arrive as its own structured field; a display label is not a join key.
+	RealDate string
 	// MoreCount is OVERLAPPING, not additive: Marks holds the FULL viewer-visible
 	// list for the day, and MoreCount is how many of those are not drawn as
 	// chips. The day's event total is len(Marks) — NEVER len(Marks)+MoreCount.

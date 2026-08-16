@@ -626,6 +626,7 @@ PUT	/calendar/settings	internal/plugins/syncapi/routes.go
 PUT	/calendar/weather	internal/plugins/syncapi/routes.go
 PUT	/calendar/weekdays	internal/plugins/syncapi/routes.go
 PUT	/calendar/world-state	internal/plugins/calendar/routes.go
+PUT	/calendars/:calId/anchor	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/cycles	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/eras	internal/plugins/calendar/routes.go
 PUT	/calendars/:calId/event-categories	internal/plugins/calendar/routes.go

@@ -216,22 +216,66 @@ func TestBenchRoute_IsRegisteredOnThePublicGroupWithViewAccess(t *testing.T) {
 }
 
 // TestBenchRoute_SnapshotIsUnmoved is [VS-5] item 3, asserted as a NEGATIVE.
-// R2-4 removes and adds nothing, so the count is stated rather than derived: a
-// diff in either direction is a STOP-AND-FLAG, INCLUDING a move toward the 722
-// that C-CALV4-SHELL-REMOVAL will eventually reach.
+//
+// ── WHAT THIS GUARD IS ACTUALLY FOR, RESTATED (C-CALV4-ANCHOR, 2026-08-16) ──
+//
+// It shipped as a bare total-line pin at 727, whose stated purpose was that
+// R2-4 "removes and adds nothing" and that a move toward 722 belongs to
+// C-CALV4-SHELL-REMOVAL. R2-4 shipped a week ago and cannot add a route
+// retroactively, so from the moment it landed the pin stopped guarding R2-4 and
+// started guarding EVERY FUTURE SLICE — it fires on any route added anywhere in
+// the product, for a reason that has nothing to do with the route.
+//
+// The concern underneath it is real and is NOT a count: the V2 shell's six
+// routes must not start disappearing before C-CALV4-SHELL-REMOVAL takes them
+// deliberately, and the Bench's own route must stay where R2-4 moved it. Those
+// two are now asserted BY PATH, which is strictly stronger than a total — a
+// slice that deleted one shell route and added one elsewhere would have kept
+// the count at 727 and passed.
+//
+// The total is kept as well, because an unreviewed route is a real risk and the
+// snapshot's own message tells you how to regenerate it. It is a STOP-AND-FLAG,
+// not a prohibition: moving it means saying which route moved it and why.
+//
+//	727 → 728 (2026-08-16, C-CALV4-ANCHOR): PUT /calendars/:calId/anchor, the
+//	real-date anchor's owner-only write. Owner-gated like every other structural
+//	write on that page; no auth surface widened.
 func TestBenchRoute_SnapshotIsUnmoved(t *testing.T) {
-	const wantLines = 727
+	const wantLines = 728
 	raw, err := os.ReadFile(filepath.Join("..", "..", "wire", "routes_snapshot.txt"))
 	if err != nil {
 		t.Fatalf("reading the wire snapshot: %v", err)
 	}
-	if got := strings.Count(string(raw), "\n"); got != wantLines {
-		t.Errorf("routes_snapshot.txt is %d lines, want %d — R2-4 adds and removes NO route, "+
-			"and the 727 → 722 diff belongs to C-CALV4-SHELL-REMOVAL", got, wantLines)
+	snap := string(raw)
+	if got := strings.Count(snap, "\n"); got != wantLines {
+		t.Errorf("routes_snapshot.txt is %d lines, want %d.\n"+
+			"A route was added or removed. That is allowed — it is a STOP-AND-FLAG, not a "+
+			"prohibition — but the slice that does it must say WHICH route and why, in this "+
+			"test's comment, and regenerate the snapshot:\n"+
+			"  UPDATE_ROUTES_SNAPSHOT=1 go test ./internal/wire/...", got, wantLines)
 	}
 	// The snapshot records the path WITHOUT the group prefix: "GET\t/apps/calendar".
-	if !strings.Contains(string(raw), "GET\t/apps/calendar\t") {
+	if !strings.Contains(snap, "GET\t/apps/calendar\t") {
 		t.Error("the Bench's path left the snapshot — the route move must not touch METHOD or PATH")
+	}
+	// THE SHELL IS STILL WHOLE. This is what the count was standing in for, and
+	// unlike the count it cannot be satisfied by an unrelated addition
+	// elsewhere. C-CALV4-SHELL-REMOVAL takes these SIX together, behind its own
+	// four boxes; any of them going early is the regression [VS-5] item 3 named.
+	for _, r := range []string{
+		"GET\t/calendar/v2\t",
+		"GET\t/calendar/v2/:calId\t",
+		"GET\t/calendar/v2/:calId/:view\t",
+		"GET\t/calendar/v2/:calId/settings/:resource\t",
+		"POST\t/calendar/v2/sidebar-pin\t",
+		"POST\t/calendar/v2/switch\t",
+	} {
+		if !strings.Contains(snap, r) {
+			t.Errorf("the V2 shell route %q has left the snapshot. The shell's deletion is "+
+				"SIGNED but it is C-CALV4-SHELL-REMOVAL's, taken as a whole and behind its "+
+				"four boxes — a route going early strands whoever still has the URL",
+				strings.ReplaceAll(strings.TrimSuffix(r, "\t"), "\t", " "))
+		}
 	}
 }
 

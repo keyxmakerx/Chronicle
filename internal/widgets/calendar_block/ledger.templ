@@ -204,6 +204,17 @@ templ ledgerDayPanel(d BlockData, c ledgerContext) {
 				>+ New event</button>
 			}
 		</div>
+		if c.RealDate != "" {
+			// C-CALV4-ANCHOR. Dropped entirely when the calendar carries no
+			// anchor — which is every calendar until an owner sets one — rather
+			// than printed as a placeholder or an em dash. The whole reason the
+			// mapping refuses instead of guessing is so this line is either a
+			// fact or absent.
+			<span class="ldrd">
+				<i class="ldrdg" aria-hidden="true">⌛</i>
+				{ c.RealDate }
+			</span>
+		}
 		if c.Moon != "" {
 			<span class="ldm">
 				<i class="ldmg" aria-hidden="true">☾</i>
