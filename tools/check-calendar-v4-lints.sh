@@ -120,9 +120,25 @@ STATE_MARKERS="data-theme,data-view,data-role,data-colour,data-moonstyle,data-re
 # not signed to take). The scope is landed anyway so that whichever slice
 # unblocks the theater inherits B4 coverage rather than having to remember it.
 # Nothing is loosened: no glob is removed and no rule is relaxed.
+# AMENDED 2026-08-16 — coverage WIDENING, C-CALV4-WEEKDAY-VIEWS. `*weekday*` and
+# `*weekview*` / `*dayview*` join the list. The week and day views are DATED
+# SURFACES by construction — every column, every all-day cell, every hour lane
+# and every event block names a day — and the slice's own files
+# (internal/plugins/calendar/bench_weekday.templ) already match `*bench*` because
+# they are a Bench surface and are named as one.
+#
+# THE THREE NEW GLOBS ARE THEREFORE FOR THE FILE THAT DOES NOT EXIST YET, which
+# is this function's stated precedent rather than an exception: `*schedule*` and
+# `*theater*` were both landed ahead of their files because "a missing glob is
+# invisible in review, and it is invisible precisely at the moment the new file
+# arrives". A later hand splitting the surface into `weekview.templ` or
+# `static/css/calendar-dayview.css` — the two obvious names — would otherwise
+# land it SILENTLY OUT OF SCOPE. Nothing is loosened: no glob is removed and no
+# rule is relaxed.
 b4_scope_for() {
   case "$1" in
     *calendar_block*|*bench*|*Bench*|*daycard*|*schedule*|*Schedule*|*theater*|*Theater*) echo 1 ;;
+    *weekday*|*Weekday*|*weekview*|*Weekview*|*WeekView*|*dayview*|*Dayview*|*DayView*) echo 1 ;;
     *) echo 0 ;;
   esac
 }
@@ -431,6 +447,14 @@ FIXTURE
   expect_scope "internal/plugins/calendar/theater.templ"       1
   expect_scope "static/css/calendar-theater.css"               1
   expect_scope "internal/plugins/calendar/Theater.templ"       1
+  # C-CALV4-WEEKDAY-VIEWS' surfaces. The shipped file matches *bench* already —
+  # asserted here so the shipped name's coverage is proven and not assumed — and
+  # the three speculative names are in scope BEFORE they exist, exactly as
+  # schedule.templ and theater.templ were.
+  expect_scope "internal/plugins/calendar/bench_weekday.templ" 1
+  expect_scope "internal/plugins/calendar/weekday_view.templ"  1
+  expect_scope "internal/plugins/calendar/weekview.templ"      1
+  expect_scope "static/css/calendar-dayview.css"               1
   # The negative that keeps the two new globs from being a prefix sweep: a
   # filename that merely CONTAINS neither token stays out, and calendar_v2 is
   # the frozen shell R2-4 retires.

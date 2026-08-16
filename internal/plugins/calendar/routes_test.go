@@ -240,6 +240,14 @@ func TestBenchRoute_IsRegisteredOnThePublicGroupWithViewAccess(t *testing.T) {
 //	727 → 728 (2026-08-16, C-CALV4-ANCHOR): PUT /calendars/:calId/anchor, the
 //	real-date anchor's owner-only write. Owner-gated like every other structural
 //	write on that page; no auth surface widened.
+//
+//	728 → 728 (2026-08-16, C-CALV4-WEEKDAY-VIEWS): NO CHANGE, stated because the
+//	slice is exactly the kind that would normally move it. The v4 week and day
+//	views were seated as `?view=week|day` + `?d=` on the EXISTING
+//	GET /apps/calendar rather than as sibling routes, precisely so this line
+//	does not move and C-CALV4-SHELL-REMOVAL's pre-computed 728 → 723 arithmetic
+//	stays valid. A future hand who reads "the week view has no route" and
+//	assumes an oversight should read bench_weekday.go's header instead.
 func TestBenchRoute_SnapshotIsUnmoved(t *testing.T) {
 	const wantLines = 728
 	raw, err := os.ReadFile(filepath.Join("..", "..", "wire", "routes_snapshot.txt"))

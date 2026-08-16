@@ -53,12 +53,21 @@ func benchVerbFxData(t *testing.T, isGM, isOwner, canControl bool) BenchData {
 		t.Fatal("fixture lost its primary calendar")
 	}
 	if data.Primary != nil {
-		data.Primary.Verbs = benchDateVerbs(primary, benchInput{
+		in := benchInput{
 			Campaign:             &campaigns.Campaign{ID: "camp-1", Name: "Imix"},
 			IsOwner:              isOwner,
 			CanControlWorldState: canControl,
+			CanAuthorDmOnly:      canControl,
 			CSRFToken:            "fx-csrf",
-		})
+		}
+		data.Primary.Verbs = benchDateVerbs(primary, in)
+		// THE CONSOLE IS FED FROM THE SAME benchInput AS THE VERB ROW
+		// (C-CALV4-GM-CONSOLE), which is the whole point of this fixture: the
+		// two surfaces now sit on ONE page and share a floor decision, so a row
+		// of this matrix has to render both or it is measuring a page that does
+		// not exist. benchFxData's own console is keyed to isOwner and cannot
+		// express the co-DM row; this one can, and does.
+		data.GMConsole = benchGMConsole(primary, in)
 	}
 	return data
 }
@@ -133,21 +142,84 @@ func TestBenchDateVerbs_ExactlyTwoStepVerbs(t *testing.T) {
 // keeps the remaining EIGHT. Each token below is one of them; a hit here means
 // this slice quietly took scope it agreed not to, including the whole sensitive
 // half whose audience [GC-2] exists to rule.
+//
+// ── RE-POINTED, NOT LOOSENED (C-CALV4-GM-CONSOLE) ───────────────────────────
+//
+// THE BOUNDARY MOVED BECAUSE THE CONSOLE ARRIVED. This assertion used to read
+// the WHOLE Bench page, and it could, because the eight families had no home on
+// it: `C-CALV4-GM-CONSOLE` was unbuilt and the only mount was the doomed V2
+// shell. That slice has now landed and the eight families are on this page ON
+// PURPOSE, in benchGMConsoleView. A page-wide denial would therefore now be
+// asserting the opposite of the shipped design, and the two honest options were
+// to delete it or to re-point it. It is re-pointed.
+//
+// WHAT IT MEASURES NOW IS THE SAME CLAIM, EXACTLY: §2's verb row is a NARROW
+// SUBSET. The scope is the `[data-bench-date-verbs]` ELEMENT rather than the
+// document, which is the element the claim was always about — the console
+// carrying a weather catalog says nothing about whether the verb row grew one.
+//
+// AND IT IS STRICTLY STRONGER THAN THE OLD FORM, because the second half is
+// new: each family is now asserted PRESENT in the console. The old test could
+// have passed on a page that had lost the families altogether; this one cannot.
 func TestBenchDateVerbs_TheOtherEightFamiliesAreAbsent(t *testing.T) {
 	html := renderBench(t, benchVerbFxData(t, true, true, true))
+	row := benchVerbRowHTML(t, html)
 	for _, forbidden := range []string{
 		"weather", "Weather", // weather today / weather for a day
-		"moodTint", "mood-tint", // mood tint
-		"dm_only-trigger", "trigger-event", // world/celestial event triggers
-		"reset-sky", "resetSky", // reset sky
+		"moodTint", "mood-tint", "data-gm-mood", // mood tint
+		"dm_only-trigger", "trigger-event", "data-gm-event-tile", // world/celestial triggers
+		"reset-sky", "resetSky", "data-gm-reset", // reset sky
 		"data-bench-date-hours", "data-bench-date-minutes", // the clock verbs
-		"Rest 8h", "+10m", "+1h", "Set time", // ditto, by label
+		"Rest 8h", "+10m", "+1h", "Set time", "data-gm-advance", // ditto, by label
 	} {
-		if strings.Contains(html, forbidden) {
-			t.Errorf("%q reached the Bench — that family is C-CALV4-GM-CONSOLE's, "+
+		if strings.Contains(row, forbidden) {
+			t.Errorf("%q reached the §2 verb ROW — that family is C-CALV4-GM-CONSOLE's, "+
 				"and §2 is a NARROW SUBSET by written agreement", forbidden)
 		}
 	}
+	// THE OTHER HALF OF THE BOUNDARY: the families are not absent from the
+	// PRODUCT, they are somewhere else on the page. Without this, the test above
+	// would go green on a Bench that had simply lost the console.
+	// `data-gm-event-clear` (the per-event × chip) is deliberately NOT in this
+	// list: those chips are built by the driver from the world-state seed, so
+	// the server renders only the container they land in. Their commit is
+	// covered in test/js/gm_panel_bench.test.mjs, where the DOM they live in
+	// actually exists.
+	for _, want := range []string{
+		"data-gm-weather-tile", "data-gm-event-tile", "data-gm-mood",
+		"data-gm-mood-clear", "data-gm-events-clear", "data-gm-active-events",
+		"data-gm-reset", "data-gm-advance",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("%q is on neither surface — C-CALV4-GM-CONSOLE rehoused these onto "+
+				"the Bench, so their absence is a lost control and not a clean boundary", want)
+		}
+	}
+}
+
+// benchVerbRowHTML returns the `[data-bench-date-verbs]` element's own markup.
+//
+// The row nests no <div> of its own — spans, buttons, labels and inputs only —
+// so the first `</div>` after the marker closes it. The bounds are CHECKED
+// rather than sliced blind: a bare strings.Index bound panics on a markup change
+// instead of failing with a sentence (COMMON §3).
+func benchVerbRowHTML(t *testing.T, html string) string {
+	t.Helper()
+	i := strings.Index(html, benchVerbRowMarker)
+	if i < 0 {
+		t.Fatalf("no %s element in the rendered Bench — the fixture lost the verb row, "+
+			"and a scope test with nothing in scope proves nothing", benchVerbRowMarker)
+	}
+	open := strings.LastIndex(html[:i], "<div")
+	if open < 0 {
+		t.Fatalf("%s is not inside a <div> — the row's shape changed and this "+
+			"extractor must change with it", benchVerbRowMarker)
+	}
+	end := strings.Index(html[open:], "</div>")
+	if end < 0 {
+		t.Fatalf("%s's element is unterminated", benchVerbRowMarker)
+	}
+	return html[open : open+end]
 }
 
 // --- the matrix: what the SERVER accepts ------------------------------------

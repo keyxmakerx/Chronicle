@@ -288,6 +288,7 @@ TestBuilderProbe_NarrowLaneHoldsItsGate \
 TestDaycardLedgerDoor_ItOnlyRendersWhereItDoesSomething \
 TestYearProbe_BenchDateVerbRow \
 TestYearProbe_V2GMConsole \
+TestYearProbe_BenchGMConsole \
 TestDefaultCategories_NoneCollidesWithTheGMGold"
 
 # Needs the Tailwind CLI on top of the browser.

@@ -522,3 +522,58 @@ func TestWorldStateCoord_AbsentBlankZero(t *testing.T) {
 		}
 	}
 }
+
+// TestYearProbe_BenchGMConsole drives the SAME writer over the REHOUSED console
+// (C-CALV4-GM-CONSOLE): the real `benchGMConsoleView` markup, the real shipped
+// `gm_panel.js`, and a real headless Chromium — with NO `[data-cal-v2-root]`
+// anywhere on the page.
+//
+// IT IS NOT A THIRD COPY OF THE SAME MEASUREMENT. The two probes above pin the
+// year refusal in two DIFFERENT writers; this one pins it in the same writer on
+// a DIFFERENT MOUNT, and the mount is the thing that was nearly wrong. The
+// driver used to read its endpoint, calendar and CSRF token off the V2 shell's
+// page root and RETURN when it was absent — so on this page it would have
+// rendered a console that never wrote at all. Every string assertion in Go and
+// every stub-DOM assertion in test/js/ is written independently of the markup
+// or independently of the driver; only this probe holds BOTH real ends at once,
+// which is where a mistyped `data-gm-*` on either side would hide.
+//
+// Registered in tools/check-browser-probes.sh's PROBES_CALENDAR census, so a
+// machine that HAS a browser is required to run it.
+func TestYearProbe_BenchGMConsole(t *testing.T) {
+	chrome := findChromium()
+	if chrome == "" {
+		t.Skip("year probe (Bench GM console): no Chromium binary found (set CHROMIUM_BIN) — " +
+			"the rehoused console's write path was NOT measured in this run")
+	}
+	cal := gmTestCalendar()
+	var console strings.Builder
+	if err := benchGMConsoleView(benchGMConsole(cal, benchInput{
+		Campaign:             &campaigns.Campaign{ID: "camp-1", Name: "Imix"},
+		IsOwner:              true,
+		CanControlWorldState: true,
+		CanAuthorDmOnly:      true,
+		CSRFToken:            "fx",
+	})).Render(context.Background(), &console); err != nil {
+		t.Fatalf("render Bench GM console: %v", err)
+	}
+	if !strings.Contains(console.String(), "data-gm-set-date") {
+		t.Fatal("the fixture rendered no Set-date control — the probe would measure nothing")
+	}
+
+	page := `<!doctype html><html><head><meta charset="utf-8"></head><body>` +
+		`<pre id="yp">[]</pre>` +
+		// A .cal-bench wrapper and NOTHING ELSE. No [data-cal-v2-root]: that is
+		// the whole point of the probe.
+		`<div class="cal-bench">` + console.String() + `</div>` +
+		`<script>var YEAR_SEL='[data-gm-date-year]',SET_SEL='[data-gm-set-date]',` +
+		`SAY_SEL='#no-such-say';` + yearProbeDriver + `</script>` +
+		`<script>` + readRepoFile(t, "internal/plugins/calendar/static/js/gm_panel.js") + `</script>` +
+		`</body></html>`
+
+	file := filepath.Join(t.TempDir(), "year-probe-bench-console.html")
+	if err := os.WriteFile(file, []byte(page), 0o644); err != nil {
+		t.Fatalf("write probe page: %v", err)
+	}
+	assertYearProbe(t, "Bench GM console", runYearProbe(t, chrome, file))
+}

@@ -120,6 +120,17 @@ templ BenchPage(cc *campaigns.CampaignContext, data BenchData) {
 					@dayCardEditor(data.DayCard)
 				}
 			}
+			// THE GM WORLD-STATE CONSOLE (C-CALV4-GM-CONSOLE), mounted ONCE, in
+			// the same seat and for the same three reasons as the day card
+			// above: one per page rather than one per Block, OUTSIDE every
+			// .cal-block-host (whose `.block` clips), and INSIDE .cal-bench so
+			// the `.cal-bench …` scoping every rule it needs already carries
+			// keeps working. Unlike the card it is NOT gated on DayCardJSON —
+			// its own producer field is the gate, and it is empty for everyone
+			// below the world-state capability. See bench_gmconsole.templ for
+			// the seat argument, the two floors, and the one control that did
+			// not move (Pause).
+			@benchGMConsoleView(data.GMConsole)
 		</div>
 		// W5b: the per-calendar permissions editor. Owners only — players never
 		// receive the editor DOM nor the PUT route. Retained verbatim from the
@@ -467,11 +478,38 @@ templ benchTickRule(ticks []BenchTick) {
 
 // benchBlockView is one .stack entry: the Block, then the owner-only management
 // strip. The strip is a documented addition — see BenchBlock's doc comment.
+// THE VIEW SWITCH AND THE WEEK/DAY SURFACE SEAT HERE (C-CALV4-WEEKDAY-VIEWS),
+// inside the SAME `.benchblock` wrapper the nav trio and the management strip
+// already extend in both directions — because that wrapper is what
+// calendar_daycard.js resolves a clicked day against
+// (`cell.closest('[data-bench-block]')` → `data-calendar-id`). A week column
+// placed outside it would open no card.
+//
+// THE WEEK REPLACES THE BLOCK RATHER THAN STACKING ABOVE IT. A view switch that
+// left the month grid, the docked Ledger and the Shelf underneath would not be
+// a switch; it would be a second panel, and the proportion rule this file is
+// graded against exists precisely to stop the Bench decaying into stacked
+// panels. What is lost while a week is on screen — the nameplate, the sky, the
+// Ledger, the Shelf — is one click away on the Month pill, and every OTHER
+// surface on the page (the ribbon and its Today tile, the sync pill, RSVP, Next
+// up, the subordinate rows, the day card) is byte-identical in all three views.
+//
+// The switch renders in the MONTH view too. A control that only appears once
+// you have already left the month is not reachable.
 templ benchBlockView(b BenchBlock, data BenchData, role string) {
 	<div class="benchblock" data-bench-block={ role } data-calendar-id={ b.Manage.CalendarID }>
 		@benchNavTrio(b.Nav)
 		@benchDateVerbRow(b.Verbs)
-		@calblock.Block(b.Data)
+		if b.Week != nil {
+			@benchWeekSurface(*b.Week)
+		} else {
+			if b.Switch.Live {
+				<div class="wkswitchrow">
+					@benchViewSwitchView(b.Switch)
+				</div>
+			}
+			@calblock.Block(b.Data)
+		}
 		if data.IsOwner {
 			@benchManageStrip(b.Manage)
 		}
@@ -563,14 +601,24 @@ templ benchNavTrio(n BenchNav) {
 		>
 			<span class="badge" data-bench-nav-month>{ benchNavLabel(n) }</span>
 			<span class="sp"></span>
+			// THE ARIA LABELS NAME THE UNIT (C-CALV4-WEEKDAY-VIEWS). "Prev" is
+			// the same word on a month, a week and a day view and moves the
+			// reader by three different amounts; a screen reader that only hears
+			// "Prev" cannot tell which. benchNavUnitLabel reads BenchNav.Unit, so
+			// the label and the step come from one fact and cannot desynchronise
+			// — which is exactly how V2 shipped a grid of ten columns whose Next
+			// moved seven days.
+			//
+			// They sit AFTER href on purpose: bench_month_cursor_test.go pins
+			// `data-bench-nav-today href="…"` as an adjacent pair.
 			if n.PrevHref != "" {
-				<a class="btn xs" data-bench-nav-prev href={ templ.SafeURL(n.PrevHref) } rel="prev">‹ Prev</a>
+				<a class="btn xs" data-bench-nav-prev href={ templ.SafeURL(n.PrevHref) } aria-label={ "Previous " + benchNavUnitLabel(n.Unit) } rel="prev">‹ Prev</a>
 			}
 			// `Today` renders on the current month too, where it is a no-op
 			// link back to the bare route. A control that vanishes when you are
 			// already there teaches the GM that it is missing, not satisfied.
-			<a class="btn xs" data-bench-nav-today href={ templ.SafeURL(n.TodayHref) }>Today</a>
-			<a class="btn xs" data-bench-nav-next href={ templ.SafeURL(n.NextHref) } rel="next">Next ›</a>
+			<a class="btn xs" data-bench-nav-today href={ templ.SafeURL(n.TodayHref) } aria-label="Today">Today</a>
+			<a class="btn xs" data-bench-nav-next href={ templ.SafeURL(n.NextHref) } aria-label={ "Next " + benchNavUnitLabel(n.Unit) } rel="next">Next ›</a>
 		</div>
 	}
 }

@@ -324,6 +324,28 @@ func benchFxData(isGM, isOwner bool) BenchData {
 		},
 		dayCardSource{Block: data.Primary, Calendar: primary},
 		dayCardSource{Block: data.RealWorld, Calendar: realWorld})
+	// THE GM WORLD-STATE CONSOLE, exactly where buildBench puts it — beside the
+	// primary Block's own projection and only when that Block rendered
+	// (C-CALV4-GM-CONSOLE). The fixture carries it for the third time and the
+	// third identical reason: every assertion in this file must judge the DOM
+	// PRODUCTION renders, console and all, rather than a Bench that quietly
+	// predates it. It is fed through the real producer so the fixture cannot
+	// drift from the two floors.
+	//
+	// isOwner stands in for CanControlWorldState here because this fixture has
+	// no third role knob and an Owner always holds the capability. The co-DM row
+	// — capability WITHOUT Owner, which is where the two floors visibly differ —
+	// is exercised by benchVerbFxData, which feeds the same producer the real
+	// benchInput.
+	if data.Primary != nil {
+		data.GMConsole = benchGMConsole(primary, benchInput{
+			Campaign:             &campaigns.Campaign{ID: "camp-1", Name: "Imix"},
+			IsOwner:              isOwner,
+			CanControlWorldState: isOwner,
+			CanAuthorDmOnly:      isOwner,
+			CSRFToken:            "fx-csrf",
+		})
+	}
 	data.Ribbon = benchRibbon(benchRibbonInput{
 		IsGM: isGM, CampaignID: "camp-1", Primary: primary, Block: data.Primary,
 		NextUp:    data.NextUp,

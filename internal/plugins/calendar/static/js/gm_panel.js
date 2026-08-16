@@ -32,14 +32,54 @@
         // freshly-swapped panel once, never the same node twice.
         if (panel.dataset.gmWired === '1') return;
         panel.dataset.gmWired = '1';
-        var root = document.querySelector('[data-cal-v2-root]');
-        if (!root) return;
-        var campaignID = root.dataset.calV2CampaignId;
-        var calendarID = root.dataset.calV2CalendarId;
-        var csrfToken = root.dataset.calV2CsrfToken;
+        // --- WHERE THE ENDPOINT COMES FROM (C-CALV4-GM-CONSOLE) --------------
+        //
+        // THE DEFECT THIS ORDER EXISTS TO PREVENT. This driver used to read
+        // campaignID / calendarID / CSRF off `[data-cal-v2-root]` and RETURN
+        // when it was absent. That attribute exists on calendar_v2.templ and
+        // nowhere else, so the console rehoused onto the Bench would have
+        // rendered, looked perfect, and done nothing — the silent-death class
+        // the body-script registry already exists to have fixed once.
+        //
+        // A MOUNT THAT CARRIES ITS OWN ENDPOINT IS THE SHIPPED PATTERN: the
+        // Bench's date-verb row reads `data-verb-url` / `data-verb-csrf` off
+        // `[data-bench-date-verbs]` (calendar_daycard.js's initDateVerbs). The
+        // page root is now the FALLBACK, kept so the V2 console keeps working
+        // byte-for-byte until the shell is deleted.
+        var url = panel.getAttribute('data-gm-url') || '';
+        var csrfToken = panel.getAttribute('data-gm-csrf') || '';
+        if (!url) {
+            var root = document.querySelector('[data-cal-v2-root]');
+            if (!root) return;
+            var campaignID = root.dataset.calV2CampaignId;
+            var calendarID = root.dataset.calV2CalendarId;
+            csrfToken = root.dataset.calV2CsrfToken;
+            url = '/campaigns/' + campaignID + '/calendar/world-state' +
+                (calendarID ? '?calendarId=' + calendarID : '');
+        }
 
-        var url = '/campaigns/' + campaignID + '/calendar/world-state' +
-            (calendarID ? '?calendarId=' + calendarID : '');
+        // STANDALONE = "there is no sky engine on this page" — one fact with
+        // two consequences, declared by the markup rather than sniffed for.
+        //
+        // window.__calSetWorldState / __calWorldState / __calTimeControl are all
+        // defined by static/js/cal-almanac.js, which the Bench does not load
+        // ([SKY-13] refused the engine there by argument). So on a standalone
+        // mount (1) nothing hands this console an opening seed and it pulls one
+        // itself on first open, and (2) a date move changes markup the page
+        // rendered SERVER-SIDE — the Bench's nameplate, its sky clock and
+        // gradient, the today ring — which no seed can repaint, so the page is
+        // re-read. That second call is the one calendar_daycard.js's date verbs
+        // already made and wrote down: a hand-patched label would be a second
+        // copy of the date that can disagree with the grid beneath it.
+        //
+        // The attribute is ABSENT on the V2 console, whose commit path below is
+        // therefore unchanged in every branch.
+        //
+        // Read through getAttribute rather than hasAttribute: a bare boolean
+        // attribute answers "" (which is not null) and an absent one answers
+        // null, so the test is exact — and getAttribute is the one accessor
+        // every DOM stub in test/js/ already provides.
+        var standalone = panel.getAttribute('data-gm-standalone') !== null;
 
         // --- transition translucency (the sky shows through while it changes) ---
         var fadeTimer = null;
@@ -49,9 +89,18 @@
             fadeTimer = setTimeout(function () { panel.removeAttribute('data-gm-transition'); }, 1400);
         }
 
+        // The last seed this console has actually seen. It exists because the
+        // intensity slider needs the CURRENT wash colour to re-commit at a new
+        // strength, and it used to read that off `window.__calWorldState` — an
+        // ENGINE global. On a standalone mount there is no engine, so the
+        // slider silently did nothing. The driver now remembers what the server
+        // last told it and falls back to the engine's copy.
+        var lastSeed = null;
+
         // --- console state sync from a fresh seed ---
         function syncFromSeed(seed) {
             if (!seed) return;
+            lastSeed = seed;
             // Active weather tile ring.
             var wtype = (seed.weather && seed.weather.type) || 'clear';
             panel.querySelectorAll('[data-gm-weather-tile]').forEach(function (tile) {
@@ -79,7 +128,21 @@
             var empty = panel.querySelector('[data-gm-active-empty]');
             if (empty) empty.style.display = (seed.events && seed.events.length) ? 'none' : '';
             // Header clock from the seed's time-of-day.
-            var clock = panel.querySelector('[data-gm-clock]');
+            //
+            // NOT ON A STANDALONE MOUNT, and this is a correctness guard rather
+            // than an optimisation. The arithmetic below assumes a 24-HOUR DAY
+            // and prints unpadded `H:MM`; Chronicle's calendars may have any
+            // hours-per-day, and the Bench renders this readout server-side
+            // through Calendar.FormatCurrentTime (which knows the real geometry
+            // and pads). Repainting it here would make a ten-hour-day calendar
+            // print a wrong time after a WEATHER tap. The server value cannot
+            // go stale on that page anyway: every write that moves the clock
+            // re-reads the whole page a few lines below, and the page prints
+            // the same date in three other places, so a clock that drifted
+            // alone would be the one thing disagreeing with everything around
+            // it. (The V2 console has no server-rendered clock to keep, which
+            // is why the branch is conditional rather than deleted.)
+            var clock = standalone ? null : panel.querySelector('[data-gm-clock]');
             if (clock && typeof seed.timeOfDay === 'number') {
                 var mins = Math.floor(seed.timeOfDay * 24 * 60);
                 var h = Math.floor(mins / 60) % 24, m = mins % 60;
@@ -89,6 +152,35 @@
         // First-paint sync (server rendered the chips; this aligns the rest,
         // e.g. the active weather ring after a boosted-nav re-init).
         try { syncFromSeed(window.__calWorldState); } catch (e) {}
+
+        // --- the opening seed, PULLED ON FIRST OPEN (standalone mounts only) --
+        //
+        // THE BENCH PRODUCER CARRIES NO WORLD STATE, by decision rather than by
+        // omission (bench_gmconsole.go's header): building the seed costs three
+        // reads on a page every player lands on, for a console that defaults
+        // COLLAPSED and that most page loads never open. So the console asks
+        // for it itself, the first time it is opened, from the SAME url it
+        // writes to — `GET /calendar/world-state` is Player+ and public-capable
+        // and returns the identical seed the PUT echoes back.
+        //
+        // Without this the active-weather ring would be empty and, worse, the
+        // per-event × chips would not exist until the GM happened to make some
+        // other change — a control that is absent until you no longer need it.
+        //
+        // A FAILURE IS SILENT ON PURPOSE. The seed is decoration on a console
+        // whose every control writes without it; a red toast for a read the GM
+        // did not ask for would be noise at the table.
+        var seedPulled = false;
+        function pullSeed() {
+            if (!standalone || seedPulled) return;
+            seedPulled = true;
+            try {
+                window.Chronicle.apiFetch(url, { method: 'GET' })
+                    .then(function (resp) { return resp && resp.ok ? resp.json() : null; })
+                    .then(function (seed) { if (seed) syncFromSeed(seed); })
+                    .catch(function () {});
+            } catch (e) {}
+        }
 
         // PUT a writable world-state slice, then re-render the band + console
         // from the authoritative response seed (or reload as a fallback).
@@ -105,11 +197,29 @@
                 }
                 return resp.json();
             }).then(function (seed) {
+                // A DATE MOVE ON A STANDALONE MOUNT IS RE-READ, NOT REPAINTED.
+                // `advance` and `time` are the only two bodies that move the
+                // world's clock, and on the Bench the clock is printed in
+                // server markup the seed cannot touch (the Block's nameplate,
+                // its sky gradient and SkyClock, the today ring). Patching the
+                // console's own readout and leaving the page beneath it stale
+                // would be two copies of the date that can disagree.
+                if (standalone && body && (body.advance || body.time)) {
+                    window.location.reload();
+                    return;
+                }
                 if (seed && window.__calSetWorldState) {
                     window.__calSetWorldState(seed); // re-render the ambient band in place
                     syncFromSeed(seed);
+                } else if (seed && standalone) {
+                    // No engine here BY DESIGN, so there is no ambient band to
+                    // re-render — but the console still repaints itself (active
+                    // weather ring, event chips, clock) from the authoritative
+                    // response. Reloading the whole page for a weather tile tap
+                    // mid-session is what this branch exists to avoid.
+                    syncFromSeed(seed);
                 } else {
-                    window.location.reload(); // engine not ready → page-load read
+                    window.location.reload(); // engine expected but not ready → page-load read
                 }
             }).catch(function (e) {
                 window.Chronicle.notify((e && e.message) || 'Update failed', 'error');
@@ -179,6 +289,10 @@
         var openBtn = panel.querySelector('[data-gm-panel-open]');
         function applyState(collapsed, sheet) {
             if (collapsed) sheet = '';
+            // Opening is the ONLY moment the seed is worth paying for, and
+            // applyState is the only writer, so it is also the only place the
+            // pull can be hung without a second path missing it.
+            if (!collapsed) pullSeed();
             panel.setAttribute('data-gm-collapsed', collapsed ? 'true' : 'false');
             panel.setAttribute('data-gm-sheet', sheet || '');
             if (toggleBtn) toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
@@ -355,9 +469,12 @@
         var intensitySlider = panel.querySelector('[data-gm-mood-intensity-slider]');
         if (intensitySlider) {
             intensitySlider.addEventListener('change', function () {
-                // Re-commit the current color (custom picker's value) at the new
-                // strength only when a wash is actually active.
-                var ws = window.__calWorldState;
+                // Re-commit the current color at the new strength only when a
+                // wash is actually active. The DRIVER'S OWN last seed is read
+                // first and the engine global second: `window.__calWorldState`
+                // is defined by cal-almanac.js, so on a standalone mount it is
+                // never there and this control silently did nothing.
+                var ws = lastSeed || window.__calWorldState;
                 var active = ws && ws.moodTint && ws.moodTint.color;
                 if (active) commit({ moodTint: { color: active, intensity: moodIntensity() } });
             });

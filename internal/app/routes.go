@@ -2896,12 +2896,31 @@ func (a *App) RegisterRoutes() {
 	// on anything above it and, like the Bench drivers, returns immediately when
 	// its mount (`[data-cast-peek]`) is absent, which on this registry is every
 	// page but one.
+	// gm_panel.js JOINED FOR THE SAME REASON, ONE SURFACE LATER AGAIN
+	// (C-CALV4-GM-CONSOLE). The GM world-state console was rehoused from
+	// calendar_v2.templ onto the Bench, and the Bench has NO legal page-side
+	// seat for it: tools/check-page-scripts.sh is a whole-tree, shrink-only
+	// ratchet and tools/page-script-allowlist.txt has no bench.templ line, so a
+	// `<script src>` there fails CI by design — which is the guard doing its job,
+	// because that script would also be DELETED out of every boosted swap. This
+	// registry is the only mount that behaves identically on a direct load and
+	// through the sidebar.
+	//
+	// IT STAYS ON calendar_v2.templ TOO, until the shell is deleted. Loading the
+	// same classic script from two tags on that one page executes it twice, and
+	// the second run is INERT by construction: init()'s per-element
+	// `panel.dataset.gmWired` guard returns before anything is bound, and the
+	// document-level Esc/tap-outside handlers are wired after it, so they are
+	// registered exactly once. The page tag is listed inside #main-content and
+	// this one after {children...}, and deferred scripts run in document order,
+	// so the page's copy is the one that wins.
 	pluginBodyScripts := []string{
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_widget.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/cal_visibility.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_permissions.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_daycard.js",
 		"/static/plugins/" + calendar.PluginSlug + "/js/calendar_theater.js",
+		"/static/plugins/" + calendar.PluginSlug + "/js/gm_panel.js",
 		"/static/plugins/" + entities.PluginSlug + "/js/characters.js",
 	}
 

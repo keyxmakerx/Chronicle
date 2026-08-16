@@ -140,6 +140,15 @@ type BenchData struct {
 	// (calendar_v2_quickedit.templ:9-14: "server-gated ... markup-level gate,
 	// not CSS"), and it is what makes the player assertion provable.
 	DayCard DayCardMount
+
+	// GMConsole is the rehoused GM world-state console (C-CALV4-GM-CONSOLE).
+	//
+	// It is a PAGE-LEVEL field and not a member of BenchBlock even though it
+	// drives the primary calendar, because there is exactly ONE console per page
+	// and it is mounted outside every Block — the same construction, for the same
+	// reasons, as DayCardJSON above. Its zero value renders nothing at all, which
+	// is what a player, a Scribe and a logged-out visitor receive.
+	GMConsole BenchGMConsole
 }
 
 // DayCardMount carries the day-card editor's role gates and its API base.
@@ -596,6 +605,24 @@ type BenchBlock struct {
 	// [GR-4]). Populated for the PRIMARY Block only, and empty of controls for
 	// any viewer below their floors — permission is ABSENCE.
 	Verbs BenchDateVerbs
+
+	// Week is the WEEK or DAY surface (C-CALV4-WEEKDAY-VIEWS). Non-nil ONLY on
+	// the primary Block and ONLY when `?view=week|day` asked for it; nil is the
+	// month, which is every render that does not name a view.
+	//
+	// WHEN IT IS SET, IT IS DRAWN INSTEAD OF THE BLOCK, and the month projection
+	// in Data is still built and still used: the ribbon's Today tile reads its
+	// tick rule off it, benchSyncPill reuses its pill, and benchNav reads the
+	// resolved month name off it. Paying for one month projection the primary
+	// slot does not draw is the price of keeping every OTHER surface on the page
+	// identical in all three views — a Bench that silently lost its ribbon
+	// because the reader clicked `Week` would be a worse trade.
+	//
+	// Switch is populated in EVERY view including the month, because the control
+	// has to be reachable from the month to be a switch at all.
+	Week *BenchWeekView
+	// Switch is the Month | Week | Day control. See BenchViewSwitch.
+	Switch BenchViewSwitch
 }
 
 // BenchDateVerbs is the v4 date-verb surface (C-CALV4-GAMEREADY §2).
@@ -689,6 +716,36 @@ type BenchNav struct {
 	PrevHref  string
 	TodayHref string
 	NextHref  string
+
+	// Unit is WHICH UNIT the trio steps in: "" (month), "week" or "day"
+	// (C-CALV4-WEEKDAY-VIEWS). It is a field rather than a second struct
+	// because the trio's markup, its boost and its "Today is never disabled"
+	// rule are identical in all three units — only the step and the labels
+	// differ, and the labels are ARIA-LOAD-BEARING.
+	//
+	// V2's shell navigated by CLICKING the aria-labels ('Previous week' /
+	// 'Next week' / 'Today'), so they were not decoration there. The v4 trio is
+	// three ordinary <a> links with no keyboard driver, so nothing clicks them
+	// by label — but the labels still have to NAME THE UNIT, because "Prev" on a
+	// week view and "Prev" on a month view move a screen-reader user by
+	// different amounts and the control must say which. benchNavUnitLabel is
+	// the one place that mapping lives.
+	Unit string
+}
+
+// benchNavUnitLabel names the unit a nav control steps in, for the trio's
+// aria-labels ("Previous week", "Next day"). It is derived from BenchNav.Unit
+// so the three labels and the actual step come from ONE fact — a hand that
+// changes the step and forgets a label cannot desynchronise them.
+func benchNavUnitLabel(unit string) string {
+	switch unit {
+	case benchViewWeek:
+		return "week"
+	case benchViewDay:
+		return "day"
+	default:
+		return "month"
+	}
 }
 
 // BenchManage is the owner-only per-calendar management cluster, shared by the
@@ -1007,7 +1064,19 @@ type benchInput struct {
 	// resolveView's unset branch already answers. The clamp is resolveView's
 	// and is not duplicated here: an out-of-range month lands in a real month
 	// of the requested year rather than 500ing or snapping back to today.
+	//
+	// C-CALV4-WEEKDAY-VIEWS adds `Day` to the same struct and the same rules:
+	// read straight off `?d=`, one-based, independently optional, zero meaning
+	// "no day answered". The month Block ignores it (resolveView has no day),
+	// and the week/day surface clamps it through benchWeekCursor — which
+	// delegates the year/month half back to resolveView rather than re-deriving
+	// it, so the clamp authority does not fork.
 	View BlockDate
+	// ViewKind is `?view=` already normalised to "" | "week" | "day"
+	// (C-CALV4-WEEKDAY-VIEWS). It is NORMALISED at the handler rather than
+	// passed raw, unlike View: an unknown view is the month, and letting the
+	// raw string travel would mean every consumer re-deciding what "weeek" means.
+	ViewKind string
 }
 
 // buildBench assembles the Bench.
@@ -1133,6 +1202,25 @@ func (h *Handler) buildBench(ctx context.Context, in benchInput) BenchData {
 			// on the PRIMARY Block only: it advances the campaign's in-world
 			// date, which is what the primary calendar is.
 			data.Primary.Verbs = benchDateVerbs(primary, in)
+			// THE WEEK / DAY VIEW SEATS ON THE PRIMARY BLOCK AND NOWHERE ELSE
+			// (C-CALV4-WEEKDAY-VIEWS), on the SAME seat rule the cursor and the
+			// sky already use ([GR-1] / [SKY-1]): the Bench stacks a primary
+			// Block, a real-world Block and N subordinate rows, and a view
+			// switch scoped to anything wider would grow N week views on one
+			// page. It is also the only Block whose cursor `?y=&m=&d=` addresses
+			// — the real-world calendar beside it is Gregorian and would be
+			// parked in the in-world month every time the GM stepped.
+			h.benchWeekSeat(ctx, spine, primary, viewer, in, data.Primary)
+			// THE GM CONSOLE DRIVES THE PRIMARY CALENDAR AND IS BUILT HERE
+			// (C-CALV4-GM-CONSOLE), on the SAME seat rule as the cursor, the sky
+			// and the verb row: the primary is the campaign's principal in-world
+			// calendar, and it is the one whose date, weather and sky the GM
+			// means when they reach for a console. It is assigned inside this
+			// branch on purpose — a calendar the spine could not project is
+			// DEMOTED TO A ROW below, and a console floating over a page whose
+			// principal Block failed to render would be driving a calendar the
+			// viewer cannot see.
+			data.GMConsole = benchGMConsole(primary, in)
 		} else {
 			rows = append([]*Calendar{primary}, rows...)
 		}

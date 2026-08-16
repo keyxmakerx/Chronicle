@@ -619,6 +619,88 @@ type dayCardSource struct {
 	Calendar *Calendar
 }
 
+// buildDayCardCalendarFromWeek is the WEEK/DAY view's half of the same payload
+// (C-CALV4-WEEKDAY-VIEWS).
+//
+// ── WHY THE PAYLOAD FOLLOWS THE VIEW ───────────────────────────────────────
+//
+// The card is opened from any element carrying `[data-day][data-day-ord]`
+// inside a `[data-bench-block][data-calendar-id]`, and it looks the day up BY
+// KEY. When the primary slot draws a week instead of a month, the keys on the
+// page are the WEEK's — so a payload still keyed to the month would make every
+// column a dead click, which is the exact "nothing happens" complaint the day
+// card was built to answer.
+//
+// ── IT IS THE SAME SET, FROM THE SAME PASS ─────────────────────────────────
+//
+// [DC-2]'s agreement law says the card's set for a day is EXACTLY what the
+// surface shows for that day. Here that is provable the same way it is for the
+// month: these rows are re-serialised from the columns the surface just
+// rendered — the single viewer-filtered pass WeekDayView performed — and not
+// from a second read. AllDay and Timed are two views of ONE walk, so
+// concatenating them cannot produce an event the column does not draw.
+//
+// ── AND IT CARRIES NO MORE THAN [DC-1] ALLOWS ──────────────────────────────
+//
+// dayCardEvents is the ONE mapper, reused verbatim: id, title, time, the
+// (axis, pattern, glyph) triple, the gold rail and the audience label. No
+// description, no recurrence, no visibility rules — the week view holds richer
+// Event data than the month grid does (it reads hours off the row) and NONE of
+// it reaches the payload.
+func buildDayCardCalendarFromWeek(w BenchWeekView, cal *Calendar, canAuthor bool) dayCardCalendar {
+	out := dayCardCalendar{
+		CalendarID: w.CalendarID,
+		Slug:       w.CalendarSlug,
+		// FALSE, ALWAYS, AND IT IS A FACT RATHER THAN A DEFAULT. The `Open in
+		// the Ledger` door is emitted only when a Ledger is docked for this
+		// viewer, and the week/day surface docks none — it draws an hour axis
+		// where the Block draws its four zones. A door to a column that is not
+		// on the page is the dishonesty dayCardCalendar's own header refuses.
+		LedgerDocked: false,
+		Categories:   dayCardCategories(cal, canAuthor),
+	}
+	for _, d := range w.Days {
+		events := make([]dayCardEvent, 0, d.Count)
+		for _, e := range d.AllDay {
+			events = append(events, dayCardEvents([]calblock.Mark{e.Mark})...)
+		}
+		for _, e := range d.Timed {
+			events = append(events, dayCardEvents([]calblock.Mark{e.Mark})...)
+		}
+		out.Days = append(out.Days, dayCardDay{
+			Key:     d.DayKey,
+			Ord:     d.DayOrd,
+			Day:     d.Day,
+			Label:   dayCardWeekLabel(d),
+			Weekday: d.Weekday,
+			// THE COLUMN'S OWN COORDINATES, never the cursor's. A week can
+			// straddle a month and a year, so an editor pre-filled from the
+			// surface's month would write the event to the wrong date on every
+			// column past the boundary — the same defect dayCardDay's Year/Month
+			// comment already records for intercalary days, one unit larger.
+			Year:   d.Year,
+			Month:  d.Month,
+			Events: events,
+		})
+	}
+	return out
+}
+
+// dayCardWeekLabel is the card head's dated line for a week/day column. It
+// prints the day, the month name and the year — the same three facts
+// dayCardLabel prints, taken from the COLUMN rather than from a single rendered
+// month, because these columns do not share one.
+func dayCardWeekLabel(d BenchWeekDay) string {
+	label := strconv.Itoa(d.Day)
+	if name := strings.TrimSpace(d.MonthName); name != "" {
+		label += " " + name
+	}
+	if d.Year != 0 {
+		label += " " + strconv.Itoa(d.Year)
+	}
+	return label
+}
+
 // dayCardSeed is the VIEWER-LEVEL half of the payload: the two facts that
 // decide what editor seed data this page carries, kept together so a call site
 // cannot pass one and forget the other.
@@ -647,6 +729,15 @@ func dayCardPayloadJSON(seed dayCardSeed, sources ...dayCardSource) string {
 	p := dayCardPayload{Members: dayCardMembers(seed.Roster, seed.CanRestrict)}
 	for _, src := range sources {
 		if src.Block == nil {
+			continue
+		}
+		// THE VIEW DECIDES THE KEYS (C-CALV4-WEEKDAY-VIEWS). A Block drawing a
+		// week/day surface put the WEEK's `data-day` keys on the page, so the
+		// payload for that calendar must be the week's days or every column is a
+		// dead click. One branch, at the one place the payload is assembled.
+		if src.Block.Week != nil {
+			p.Calendars = append(p.Calendars,
+				buildDayCardCalendarFromWeek(*src.Block.Week, src.Calendar, seed.CanAuthor))
 			continue
 		}
 		p.Calendars = append(p.Calendars, buildDayCardCalendar(src.Block.Data, src.Calendar, seed.CanAuthor))

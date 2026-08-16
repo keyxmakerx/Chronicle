@@ -129,7 +129,20 @@ func (h *Handler) AppDashboard(c echo.Context) error {
 		View: BlockDate{
 			Year:  atoiOr(c.QueryParam("y"), 0),
 			Month: atoiOr(c.QueryParam("m"), 0),
+			// THE DAY HALF OF THE CURSOR (C-CALV4-WEEKDAY-VIEWS). Same family,
+			// same rules, same route: one-based, independently optional, and 0
+			// meaning "no day answered". The month Block ignores it entirely
+			// (resolveView has no day to clamp); the week/day surface clamps it
+			// in benchWeekCursor, which delegates the year/month half straight
+			// back to resolveView so the clamp authority does not fork.
+			Day: atoiOr(c.QueryParam("d"), 0),
 		},
+		// `?view=week|day` — the THIRD member of the same param family and the
+		// whole seat of C-CALV4-WEEKDAY-VIEWS. No route is added, so
+		// internal/wire/routes_snapshot.txt is byte-identical. Normalised here
+		// rather than passed raw because an unknown view is the MONTH, and a raw
+		// string would make every consumer re-decide that.
+		ViewKind: normalizeBenchView(c.QueryParam("view")),
 	})
 	return h.renderAppDashboard(c, cc, data)
 }
