@@ -78,3 +78,15 @@ Desktop.ini
 
 # --- Uploads (user-generated content in dev) ---
 uploads/
+
+# --- Runtime data directory (C-SWEEP, 2026-08-16) ---
+#
+# The server creates ./data at boot when run from the repo root: MediaRoot
+# defaults there and the media-signing SECRET is written to data/.signing-secret.
+# Neither is source. Untracked-but-not-ignored is the dangerous middle state —
+# it survives every `git status` review as noise and then rides along on the
+# first `git add -A`, which is how a signing key reaches a public remote.
+#
+# Verified at the time of writing: nothing under data/ had ever been committed
+# on any branch (`git log --all -- data/` was empty). This keeps it that way.
+data/

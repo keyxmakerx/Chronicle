@@ -169,6 +169,21 @@ PKG_CALENDAR_BLOCK="./internal/widgets/calendar_block/"
 # the gapped tile gave the chip a coloured surround and the pink stopped hiding.
 # Fixed by mixing in sRGB, which has no hue channel to wrap. Proven red.
 #
+# TestDefaultCategories_NoneCollidesWithTheGMGold guards the six colours EVERY NEW
+# CALENDAR is seeded with, measured through the surface that renders them. Below
+# 84px of column the rune's shape is decorative (the glyph comes from position in
+# the day, not type), so colour is the only channel separating event types — and a
+# GM-only day strikes every rune gold, putting a seventh competitor in that space.
+# The shipped Holiday default inked 28/255 from that gold, i.e. one colour at
+# 9x12px. It reads DefaultEventCategories() itself so it cannot drift from what
+# ships, and produces the gold via the shipped `:has(> .dogear)` rule rather than
+# restating the expression.
+#
+# IT WAS ADDED WITHOUT BEING REGISTERED HERE, AND THIS GUARD CAUGHT THAT — the
+# census aborted with "a browser probe exists that this guard does not run",
+# which is exactly its job. An unregistered probe self-skips under -short and
+# reads as coverage while being none.
+#
 # TestRuneProbe_* are C-CALV4-TILES §9.1/§9.2/§9.3's, four of them, and each
 # measures something no string in this repo can see:
 #
@@ -272,7 +287,8 @@ TestBuilderProbe_TheLadderActuallyRuns \
 TestBuilderProbe_NarrowLaneHoldsItsGate \
 TestDaycardLedgerDoor_ItOnlyRendersWhereItDoesSomething \
 TestYearProbe_BenchDateVerbRow \
-TestYearProbe_V2GMConsole"
+TestYearProbe_V2GMConsole \
+TestDefaultCategories_NoneCollidesWithTheGMGold"
 
 # Needs the Tailwind CLI on top of the browser.
 PROBES_CALENDAR_TAILWIND="TestProbe_MobileBreakpointSwapInRealBrowser"
