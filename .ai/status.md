@@ -71,6 +71,46 @@ does not exist plus a product decision — see the probe left in
 issues one `GetUser` per member who has NOT set an availability-page zone
 (a full fix needs a batch user read that `auth` does not expose).
 
+### The availability engine could kill the server, and now cannot (2026-08-16)
+
+An overnight hardening pass on RSVP and availability, plus an attempt at the
+remaining v4 migration work that **deliberately did not ship**.
+
+**THE HEADLINE IS A DENIAL OF SERVICE.** `splitToViewerDays` never terminated
+when the viewer's timezone has no local midnight on a DST spring-forward day —
+`time.Date` normalises 00:00 backwards into the previous local day, so the "next
+midnight" sat behind the cursor and the loop appended forever. Measured live:
+**41 MB → 2.6 GB RSS in ten seconds, still climbing, and it does not stop when
+the client disconnects.** One authenticated GET. Reachable deliberately (the
+overlay API takes a caller-supplied `?tz=`) and by accident twice a year for any
+Cuban or Chilean director.
+
+**The fix is an invariant, and that mattered more than it sounds.** The audit
+named two bad zones; an independent sweep of all 497 tzdata zones found a third
+(`Atlantic/Azores`). A fix validated against the two-zone report would have
+passed review and still hung. Because the repair is structural —
+`timeutil.StartOfCivilDay` plus a bounded loop plus an explicit advance guard —
+the re-sweep is clean: **544,215 (zone, day) pairs, 0 wrong, worst iteration
+count 4.**
+
+Eleven more RSVP defects fixed alongside it, including an emailed "Out this
+week" that resolved in UTC (a Pacific/Auckland player blocked the week that had
+already ended), a member who joined after a session being unable to RSVP at all,
+and an ex-member's emailed link still working for the token's full 7-day life.
+
+**THE v4 WEEK/DAY VIEWS AND GM CONSOLE WERE BUILT AND NOT SHIPPED.** Preserved in
+history, reverted off the tip. A week view whose grid erases itself on horizontal
+scroll, a phone GM console with 0 of 4 controls in the viewport, six feature
+losses against the V2 views, and — the instructive one — **both features could be
+unplugged with the entire suite staying green**, because every new test fed a
+hand-built fixture rather than going through the page builder.
+
+**THE MIGRATION GATE IS UNDER-COUNTED and is now corrected in `.ai/todo.md`.**
+It lists two remaining prerequisites; seven things actually die with the V2
+shell, including the Ledger/Timeline view (a whole fourth view with no v4 home)
+and active-calendar switching, whose loss is a one-way trap for anyone with more
+than one calendar. **The shell is not being deleted.**
+
 ### calendar-v4 — fantasy days now have real dates (C-CALV4-ANCHOR, migration 018, 2026-08-16)
 
 Branch `claude/coordinator-handoff-stage-3-3d3s4w`. **One stored pair per

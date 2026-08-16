@@ -66,6 +66,77 @@ proved RED before green. Detail: `internal/plugins/sessions/.ai.md` and
   timezone" gets a clock on the Bench instead of a repair chip; confirm a member
   who joined after a session was created sees RSVP buttons on it.
 
+## 0-rsvp. The availability engine could kill the server (2026-08-16)
+
+An overnight hardening pass. Twelve defects found by audit, five critical. What
+landed is below; what did NOT land is in `0-notready` beneath it.
+
+### [x] Done — the one that mattered most
+
+- **A DENIAL OF SERVICE, FIXED.** `splitToViewerDays` could never terminate when
+  the viewer's timezone has no local midnight on a DST spring-forward day:
+  `time.Date` normalises 00:00 BACKWARDS into the previous local day, so the
+  "next midnight" sat behind the cursor and the loop appended a segment forever.
+  **Measured live at 41 MB → 2.6 GB RSS in ten seconds, still climbing, and it
+  does not stop when the client disconnects** — one authenticated GET OOM-kills
+  the server. Reachable deliberately (`?tz=` is caller-supplied on the overlay
+  API) and by accident twice a year for any Cuban or Chilean director.
+- **The fix is an INVARIANT, not a zone list.** `timeutil.StartOfCivilDay`
+  returns the first REAL instant of a civil date; the loop is bounded; and there
+  is an explicit advance guard. **This distinction was load-bearing:** the audit
+  named `America/Havana` and `America/Santiago`; an independent sweep of all 497
+  tzdata zones × 2025–2027 found **`Atlantic/Azores` as well**. A fix validated
+  against the two-zone report would have passed review and still hung.
+  Re-swept after the fix: **544,215 (zone, day) pairs, 0 wrong; no
+  non-termination anywhere; worst iteration count 4.**
+- **"Out this week" from an emailed link now uses the member's own zone.** It
+  resolved in UTC, so a Pacific/Auckland player tapping it on Monday morning
+  blocked *the week that had already ended*, from a one-tap link with no undo.
+- Plus: exception-compose no longer erases the rest of a member's day, offered
+  windows keep the zone they were authored in, session RSVP tokens are
+  single-use and re-check membership, a member who joins after a session was
+  created can now RSVP, and pressing Going twice no longer answers "attendee not
+  found".
+
+### [ ] Open
+
+- **The overlay-level DST guard is weaker than its name.**
+  `TestOverlay_TerminatesInMidnightJumpZones` does NOT fail when
+  `StartOfCivilDay` is reverted to the defective expression — the loop's
+  belt-and-braces advance guard holds it green. The fix IS guarded, but at the
+  `internal/timeutil` layer (three tests there fail correctly on revert).
+  Verified by reverting the helper and running both. Worth either strengthening
+  the overlay test or renaming it to what it actually proves.
+- **`make test-int-local` exits 1 — PRE-EXISTING, not from this pass.**
+  `internal/plugins/entities` and `internal/plugins/timeline` fail with
+  `Error 1046 (3D000): No database selected`. The documented integration command
+  has been red, and was masked for as long as the tests were skipping.
+- **The row-level guards skip under `make test`.** All five `TestDB_*` need
+  `CHRONICLE_TEST_DB_DSN`, which only `make test-int-local` sets. A run using
+  the documented default reports success having executed none of them.
+
+## 0-notready. The v4 week/day views and GM console did NOT ship (2026-08-16)
+
+Built overnight, **preserved in history and reverted off the branch tip.**
+Recover with a revert of the revert. Four adversarial provers found:
+
+- **CRITICAL:** the week view's hour grid is a second horizontal scroll
+  container (`overflow-y: auto` + `overflow-x: visible` computes overflow-x to
+  auto). Scrolling sideways **erases the timed-event grid**; at 390px it reaches
+  zero visible.
+- **SERIOUS:** the phone GM console renders 0 of 4 sheet buttons inside the
+  viewport.
+- **HIGH:** six feature losses against the V2 views — one calendar per campaign
+  instead of all, no event descriptions in the day view, no event detail or RSVP
+  from the surface, a co-DM loses Set time/Set date.
+- **HIGH, and the lesson:** BOTH features can be UNPLUGGED and the whole suite
+  stays green — 25 Go tests, a Chromium probe and 16 JS tests all feed
+  hand-built fixtures instead of going through the page builder. **Nothing
+  covered the seam that mounts them.**
+
+**This costs nothing today** because the V2 shell is not being deleted, so its
+week view, day view and GM console still work.
+
 ## 0-anchor. Fantasy days now have real dates (2026-08-16)
 
 C-CALV4-ANCHOR, migration 018. The prerequisite `C-CALV4-TILES` §8.6 booked, and
@@ -994,8 +1065,41 @@ is carried, not closed, and the first row is the one the rest hang off.
       it, but build the replacements first"*). **What is outstanding is order,
       not outcome — this row reads "when", never "whether".**
 
+      **THE GATE WAS UNDER-COUNTED, AND THAT IS THE HEADLINE (2026-08-16).**
+      A sweep for "is there a third prerequisite nobody wrote down" found
+      **SEVEN** things that die with the shell, not the two this gate lists.
+      Reproduced from source, each with its only live host:
+
+      1. **The V2 LEDGER / "Timeline" view** — the calendar's FOURTH V2 view
+         (`calendar_v2_ledger.go`, `ledgerView` at calendar_v2.templ:1066,
+         `case "ledger"` in ShowV2). No v4 home. **This is a third
+         prerequisite, not a footnote.**
+      2. **ACTIVE-CALENDAR SWITCHING.** `POST /calendar/v2/switch` is already
+         in the removal arithmetic as −1 "no live consumer", but the
+         CONSEQUENCE is recorded nowhere: `SwitchActiveCalendar` becomes
+         unreachable from any UI, so **an owner with 2+ calendars can never
+         change which one is active again** — and the world-state PUT's
+         no-`?calendarId=` branch resolves exactly that per-user active
+         calendar. A one-way trap.
+      3. **The real-time LIVE WALL CLOCK** (C-REAL-CALENDAR-P3) and the
+         viewer-zone EVENT-TIME HINTS — both driven from
+         `calendar_v2_shell.js`, whose only live host is the shell.
+      4. **Create-entity-from-event** — the route survives, its only UI
+         (`event_grid.js` `[data-action-create-entity]`) does not.
+      5. **Event↔entity MULTI-TIE UI** and its three routes — already booked
+         under [ER-4], so a known loss rather than a hidden one.
+      6. **Drag-to-MOVE an event to another day** — the Bench's day card has
+         drag-CREATE only.
+      7. **Four smaller V2-only affordances, none booked:** the `?` shortcuts
+         modal, event quick-peek, the day-detail popover, and quick-edit.
+
+      **NOT an orphan, worth knowing:** `cal-almanac.js` and the sky engine
+      SURVIVE — three entity blocks still load them. The engine is off the
+      Bench by deliberate refusal ([SKY-13]), not by absence.
+
       **ENTRY CONDITION, ALL FOUR BOXES, not partially satisfiable.**
-      **AS OF 2026-08-08 THE GATE READS ONE OF FOUR:**
+      **AS OF 2026-08-16 THE GATE READS TWO OF FOUR — and the four boxes are
+      themselves incomplete, see above:**
       - [ ] `C-CALV4-WEEKDAY-VIEWS` MERGED — v4 has a week and a day view, or
             the slice records the signed decision that it will not.
             **NOT MET, NOT STARTED.** R2-4 sharpened this one rather than
@@ -1006,7 +1110,10 @@ is carried, not closed, and the first row is the one the rest hang off.
       - [ ] `C-CALV4-GM-CONSOLE` MERGED — the GM world-state console has a v4
             home. **NOT MET, NOT STARTED.** A REHOUSING job, not a backend one:
             `PUT /calendar/world-state` survives any sunset
-      - [ ] R2-5 (`C-CALV4-SKY`) MERGED — the sky header ships.
+      - [x] **R2-5 (`C-CALV4-SKY`) MERGED — MET as of 2026-08-16.** Verified
+            on `origin/main` (PR #588 and everything up to #593 have landed;
+            `git log origin/main` carries the sky stages). The box ticked
+            itself exactly as this row predicted.
             **NOT MET — AND NOT FOR A BUILD REASON.** The sky SHIPPED
             2026-08-08, fix round included, and is on
             `claude/coordinator-handoff-stage-3-3d3s4w`. **This box says MERGED
